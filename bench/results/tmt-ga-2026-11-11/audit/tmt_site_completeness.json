@@ -1,0 +1,50 @@
+[
+  {
+    "dataset": "PXD004541_fr02",
+    "psms": 11870,
+    "missing_Nterm_TMT": 0,
+    "unmodified_K_PSMs": 0,
+    "nonTMT_K_PSMs": 0,
+    "PSMs_with_K": 7558,
+    "K_sites": 7956,
+    "TMT_K_sites": 7956,
+    "unmodified_K_sites": 0,
+    "examples": []
+  },
+  {
+    "dataset": "PXD037999",
+    "psms": 8270,
+    "missing_Nterm_TMT": 0,
+    "unmodified_K_PSMs": 0,
+    "nonTMT_K_PSMs": 0,
+    "PSMs_with_K": 5340,
+    "K_sites": 6108,
+    "TMT_K_sites": 6108,
+    "unmodified_K_sites": 0,
+    "examples": []
+  },
+  {
+    "dataset": "PXD000001",
+    "psms": 2642,
+    "missing_Nterm_TMT": 0,
+    "unmodified_K_PSMs": 0,
+    "nonTMT_K_PSMs": 0,
+    "PSMs_with_K": 1690,
+    "K_sites": 1806,
+    "TMT_K_sites": 1806,
+    "unmodified_K_sites": 0,
+    "examples": []
+  },
+  {
+    "dataset": "PXD004541_fr09",
+    "psms": 11072,
+    "missing_Nterm_TMT": 0,
+    "unmodified_K_PSMs": 0,
+    "nonTMT_K_PSMs": 0,
+    "PSMs_with_K": 7593,
+    "K_sites": 7905,
+    "TMT_K_sites": 7905,
+    "unmodified_K_sites": 0,
+    "examples": []
+  }
+]

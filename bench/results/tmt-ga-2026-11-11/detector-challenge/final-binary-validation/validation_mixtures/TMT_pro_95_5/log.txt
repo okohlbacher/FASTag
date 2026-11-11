@@ -1,0 +1,6 @@
+Modifications: Carbamidomethyl (C, fixed)
+Acquisition check: DDA (no repeating window scheme (periodicity 0.02 over 111 repeat gaps, cycle 151, 913 distinct precursor m/z, 0% uncharged, 1024 MS2 probed))
+Subsampling: tagging 1 of 1024 input spectra (seed 1)
+TMT pseudo-filter (auto): on; TMT6_10_two_site_evidence; probed=1024; eligible=747, threshold=20, veto_min=8, TMT_N=494, TMT_K=296, TMTpro_N=10, TMTpro_K=7; reporters=off
+1 MS2 spectra, 9 tags
+FASTag took 0.18 s (wall), 0.26 s (CPU), 0.06 s (system), 0.20 s (user); Peak Memory Usage: 35 MB.

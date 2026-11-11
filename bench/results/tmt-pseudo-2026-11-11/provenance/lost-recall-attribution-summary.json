@@ -1,0 +1,125 @@
+{
+  "scope": "all baseline-to-auto lost paper_flank any50 spectra, label_blind, rep1",
+  "rounding_note": "Rules evaluated on TSV flanks rounded to 4 decimals; all classified matches have margins reported.",
+  "datasets": [
+    {
+      "dataset": "PXD004541_fr02",
+      "lost_spectra": 35,
+      "baseline_paper_correct_tags": 35,
+      "auto_paper_correct_tags": 0,
+      "baseline_strict_correct_tags": 0,
+      "tag_rule_counts": {
+        "c_K": 35
+      },
+      "spectrum_rule_union_counts": {
+        "c_K": 35
+      }
+    },
+    {
+      "dataset": "PXD037999",
+      "lost_spectra": 55,
+      "baseline_paper_correct_tags": 55,
+      "auto_paper_correct_tags": 0,
+      "baseline_strict_correct_tags": 0,
+      "tag_rule_counts": {
+        "c_K": 55
+      },
+      "spectrum_rule_union_counts": {
+        "c_K": 55
+      }
+    },
+    {
+      "dataset": "PXD000001",
+      "lost_spectra": 9,
+      "baseline_paper_correct_tags": 9,
+      "auto_paper_correct_tags": 0,
+      "baseline_strict_correct_tags": 0,
+      "tag_rule_counts": {
+        "c_K": 9
+      },
+      "spectrum_rule_union_counts": {
+        "c_K": 9
+      }
+    },
+    {
+      "dataset": "PXD004541_fr09",
+      "lost_spectra": 25,
+      "baseline_paper_correct_tags": 25,
+      "auto_paper_correct_tags": 0,
+      "baseline_strict_correct_tags": 0,
+      "tag_rule_counts": {
+        "c_K": 25
+      },
+      "spectrum_rule_union_counts": {
+        "c_K": 25
+      }
+    }
+  ],
+  "total_lost_spectra": 124,
+  "total_correct_tags": 124,
+  "minimum_c_K_window_margin_Da": 0.0006320000000241636,
+  "examples": [
+    {
+      "dataset": "PXD004541_fr02",
+      "key": "scan=8236",
+      "tag": "AASK",
+      "rank": 10,
+      "nterm_mass": 543.3225,
+      "cterm_mass": 229.1628,
+      "peptide": "[+229.16293]-VTGGAASK[+229.16293]",
+      "evalue": 0.00740193,
+      "gapped": 0,
+      "rules": "c_K",
+      "strict_correct": false,
+      "c_K_window_margin": 0.005867999999992208
+    },
+    {
+      "dataset": "PXD037999",
+      "key": "scan=15823",
+      "tag": "TDSK",
+      "rank": 1,
+      "nterm_mass": 810.4038,
+      "cterm_mass": 229.1644,
+      "peptide": "[+229.16293]-HSEVETDSK[+229.16293]",
+      "evalue": 0.025466,
+      "gapped": 0,
+      "rules": "c_K",
+      "strict_correct": false,
+      "c_K_window_margin": 0.004532000000011522
+    },
+    {
+      "dataset": "PXD000001",
+      "key": "scan=1321",
+      "tag": "PGLK",
+      "rank": 1,
+      "nterm_mass": 579.346,
+      "cterm_mass": 229.1604,
+      "peptide": "[+229.16293]-GHRPGLK[+229.16293]",
+      "evalue": 0.185701,
+      "gapped": 0,
+      "rules": "c_K",
+      "strict_correct": false,
+      "c_K_window_margin": 0.003467999999997801
+    },
+    {
+      "dataset": "PXD004541_fr09",
+      "key": "scan=10977",
+      "tag": "DEAK",
+      "rank": 1,
+      "nterm_mass": 489.283,
+      "cterm_mass": 229.1631,
+      "peptide": "[+229.16293]-LM[+15.994915]DEAK[+229.16293]",
+      "evalue": 0.00552184,
+      "gapped": 0,
+      "rules": "c_K",
+      "strict_correct": false,
+      "c_K_window_margin": 0.005832000000026255
+    }
+  ],
+  "interpretation": "All 124 lost-recall spectra lose exactly one sequence-and-flank-correct baseline tag through the bare terminal K rule. None pass strict modified-residue scoring; no G/A rule explains a lost-recall spectrum. This supports testing a G/A-only ablation, but that ablation has not been benchmarked.",
+  "mechanism_checks": {
+    "forward_C_terminal_match_with_correct_N_flank": 124,
+    "truth_ends_TMT_lysine": 124,
+    "maximum_N_flank_error_Da": 0.02177199999982804
+  }
+}

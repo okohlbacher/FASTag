@@ -64,6 +64,7 @@
 #include "SpectrumSampler.h"
 #include "TagFDR.h"
 #include "TagRecon.h"
+#include "TmtPseudoFilter.h"
 #include "TaxDeconv.h"
 #include "TaxIndex.h"
 #include "TaxStats.h"
@@ -322,6 +323,7 @@ class TOPPFASTag : public TOPPBase
         p.setMetaValue("complement_tolerance (auto) measured", compl_auto_rec_.measured);
       p.setMetaValue("complement_tolerance (auto) probe", compl_auto_rec_.probe);
     }
+    if (!tmt_filter_rec_.empty()) p.setMetaValue("tmt_pseudo_filter resolved", tmt_filter_rec_);
     return p;
   }
 
@@ -335,6 +337,7 @@ class TOPPFASTag : public TOPPBase
     std::string probe;   ///< the probe's statistics, as logged
   };
   ComplAutoRecord compl_auto_rec_;
+  std::string tmt_filter_rec_;
 
 public:
   // toolhandler_test = false: FASTag lives outside the OpenMS tree and so is
@@ -397,6 +400,12 @@ protected:
     // One gap only. Each additional gap multiplies the branching and asserts
     // another unobserved split, and a two-gap tag would be mostly inference.
     setMaxInt_("gaps", 1);
+    registerStringOption_("tmt_pseudo_filter", "off|auto|on", "off",
+                          "Experimental TMT6/10 G/A pseudo-residue filter before the tag cap; auto probes "
+                          "N-terminal and lysine mass signatures, on asserts TMT6/10 labeling", false);
+    setValidStrings_("tmt_pseudo_filter", ListUtils::create<std::string>("off,auto,on"));
+    registerFlag_("tmt_reporter_filter", "Also reject b/y tags anchored on singly charged TMT6/10 "
+                  "reporter ions; requires tmt_pseudo_filter auto or on and the same active TMT gate", false);
     // Negated, because a TOPP flag is false unless given and deisotoping is on
     // by default. `-no_deisotope` follows TOPPBase's own `-no_progress`.
     registerFlag_("no_deisotope",
@@ -1826,6 +1835,11 @@ protected:
         OPENMS_LOG_ERROR << "-stream cannot be combined with -complement_tolerance_unit auto." << std::endl;
         return ILLEGAL_PARAMETERS;
       }
+      if (getStringOption_("tmt_pseudo_filter") == "auto")
+      {
+        OPENMS_LOG_ERROR << "-stream cannot be combined with -tmt_pseudo_filter auto; use on only for known TMT6/10 input." << std::endl;
+        return ILLEGAL_PARAMETERS;
+      }
       for (const StreamRefusal& r : stream_refusals)
         if (optionNonDefault_(r.option))
         {
@@ -1927,6 +1941,19 @@ protected:
     // The CLI's defaults (src/CliParam.h), then every option over them; the
     // modifications are resolved from the options below.
     FASTag::Param p = FASTag::cliDefaultParam(/*resolve_mods=*/false);
+    const std::string tmt_mode = getStringOption_("tmt_pseudo_filter");
+    p.tmt_pseudo_filter = tmt_mode == "on";
+    p.tmt_reporter_filter = getFlag_("tmt_reporter_filter");
+    if (p.tmt_reporter_filter && tmt_mode == "off")
+    {
+      OPENMS_LOG_ERROR << "-tmt_reporter_filter requires -tmt_pseudo_filter auto or on." << std::endl;
+      return ILLEGAL_PARAMETERS;
+    }
+    if (tmt_mode == "on")
+    {
+      tmt_filter_rec_ = "on; forced_TMT6_10; reporters=" + std::string(p.tmt_reporter_filter ? "on" : "off");
+      std::cerr << "TMT pseudo-filter: " << tmt_filter_rec_ << std::endl;
+    }
     p.tag_length = lengths.front();
     p.max_extension = getIntOption_("extension");
     p.max_gaps = getIntOption_("gaps");
@@ -3044,6 +3071,8 @@ protected:
     }
     // The run rows every report starts with (src/RunMeta.h), filled once.
     FASTag::RunReport::RunMeta run_meta;
+    run_meta.tmt_filter_mode = tmt_mode;
+    run_meta.tmt_filter_resolved = tmt_filter_rec_;
     run_meta.version = FASTAG_VERSION;
     run_meta.input = File::basename(in);
     run_meta.fragment_tolerance = p.frag_tol;
@@ -3267,6 +3296,11 @@ protected:
     {
       OPENMS_LOG_ERROR << "-complement_tolerance_unit auto needs mzML or MGF input; mzPeak input is "
                           "read in one pass. Give -complement_tolerance_unit Da or fragment." << std::endl;
+      return ILLEGAL_PARAMETERS;
+    }
+    if (tmt_mode == "auto" && mzpeak_in)
+    {
+      OPENMS_LOG_ERROR << "-tmt_pseudo_filter auto needs random-access mzML or MGF input; use on only for known TMT6/10 input." << std::endl;
       return ILLEGAL_PARAMETERS;
     }
     // #9: what each reader does with profile MS2 (src/Centroid.h). mzPeak
@@ -3781,6 +3815,60 @@ protected:
       compl_auto_rec_.source = source;
       compl_auto_rec_.measured = est.ok ? full(est.tol) : std::string();
       compl_auto_rec_.probe = probe_txt.str() + (est.ok ? std::string() : "; " + est.why);
+    }
+
+    // Resolve the experimental gate once, before any production tag is
+    // selected. A fixed, deterministic probe is independent of worker order.
+    if (tmt_mode == "auto")
+    {
+      namespace TP = FASTag::TmtPseudo;
+      TP::ProbeCounts counts;
+      std::size_t probed = 0;
+      if (p.tol_ppm)
+      {
+        const auto mask = FASTag::sampleByCount(n_total, std::min<std::size_t>(n_total, 4 * TP::kProbeCount), 0x544D5431u);
+        std::vector<std::size_t> candidates;
+        for (std::size_t i = 0; i < n_total; ++i)
+        {
+          if (!mask[i]) continue;
+          const MSSpectrum s = read_spectrum(i);
+          if (s.getMSLevel() == 2 && !s.empty() && !s.getPrecursors().empty()
+              && s.getPrecursors().front().getCharge() > 0) candidates.push_back(i);
+        }
+        FASTag::Param probe = p;
+        probe.tag_length = 4;
+        probe.max_extension = 0;
+        probe.max_gaps = 0;
+        probe.max_tag_count = 50;
+        probe.max_evalue = 1.0;
+        probe.tmt_pseudo_filter = false;
+        probe.tmt_reporter_filter = false;
+        probe.diversity = false;
+        probe.per_residue_conf = false;
+        probe.ion_pair = FASTag::IonSeries::ionPair(FASTag::IonSeries::Series::BY);
+        const FASTag::Tables probe_tables(probe);
+        PeakPickerHiRes tmt_picker;
+        for (const std::size_t i : FASTag::ComplTol::pickProbe(candidates, TP::kProbeCount, 0x544D5432u))
+        {
+          MSSpectrum s = read_spectrum(i);
+          const bool photo = photo_ax && FASTag::IonSeries::photoActivated(s);
+          const auto series = FASTag::IonSeries::seriesInRun(ion_mode, FASTag::IonSeries::activationClass(s), ion_column, photo);
+          if (series != FASTag::IonSeries::Series::BY) continue;
+          if (pick_in_loop) FC::apply(s, tmt_picker, pick_mzml);
+          s.sortByPosition();
+          const Precursor& pc = s.getPrecursors().front();
+          counts.add(FASTag::tagSpectrum(s, pc.getMZ(), pc.getCharge(), probe, probe_tables));
+          ++probed;
+        }
+      }
+      p.tmt_pseudo_filter = counts.detected(p.tol_ppm);
+      for (FASTag::Param& lp : len_params) lp.tmt_pseudo_filter = p.tmt_pseudo_filter;
+      // Other ion series remain unfiltered, even in a mixed-activation run.
+      tmt_filter_rec_ = std::string(p.tmt_pseudo_filter ? "on" : "off") + "; " + counts.reason(p.tol_ppm)
+        + "; probed=" + std::to_string(probed) + "; " + counts.summary()
+        + "; reporters=" + (p.tmt_reporter_filter && p.tmt_pseudo_filter ? "on" : "off");
+      run_meta.tmt_filter_resolved = tmt_filter_rec_;
+      std::cerr << "TMT pseudo-filter (auto): " << tmt_filter_rec_ << std::endl;
     }
 
     const auto t_tables_a = std::chrono::steady_clock::now();

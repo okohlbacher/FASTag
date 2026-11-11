@@ -1,0 +1,4750 @@
+{
+  "results": "results-ga-v1",
+  "reference": "frozen Sage PSMs, paper_flank scorer",
+  "note": "Exploratory window/isotope candidates; counts do not establish safe filtering. TSV masses have 4 decimal places.",
+  "tables": [
+    {
+      "dataset": "PXD004541_fr02",
+      "chemistry": "label_blind",
+      "arm": "auto",
+      "truth_psms": 11870,
+      "tagged_psms": 11870,
+      "top1_paper_correct": 10755,
+      "top1_strict_correct": 10628,
+      "top1_wrong": 1115,
+      "top1_wrong_gapped": 142,
+      "endpoint_lowercase_rows": 0,
+      "patterns": {
+        "current_GA": {
+          "rows": 0,
+          "spectra": 0,
+          "paper_correct_rows": 0,
+          "paper_correct_spectra": 0,
+          "top1_rows": 0,
+          "top1_paper_correct": 0,
+          "top1_wrong": 0,
+          "gapped_rows": 0,
+          "examples_wrong": [],
+          "examples_correct": []
+        },
+        "lowercase_GA_bypass": {
+          "rows": 0,
+          "spectra": 0,
+          "paper_correct_rows": 0,
+          "paper_correct_spectra": 0,
+          "top1_rows": 0,
+          "top1_paper_correct": 0,
+          "top1_wrong": 0,
+          "gapped_rows": 0,
+          "examples_wrong": [],
+          "examples_correct": []
+        },
+        "N_tail_020_to_050": {
+          "rows": 23,
+          "spectra": 18,
+          "paper_correct_rows": 0,
+          "paper_correct_spectra": 0,
+          "top1_rows": 0,
+          "top1_paper_correct": 0,
+          "top1_wrong": 0,
+          "gapped_rows": 6,
+          "examples_wrong": [
+            {
+              "key": "scan=9120",
+              "rank": 12,
+              "tag": "AELD",
+              "charge": 1,
+              "nterm_mass": 158.0868,
+              "cterm_mass": 370.1956,
+              "evalue": 84.5287,
+              "gapped": 1,
+              "peptide": "[+229.16293]-GMYYGR",
+              "correct": false
+            },
+            {
+              "key": "scan=10597",
+              "rank": 15,
+              "tag": "AMGW",
+              "charge": 1,
+              "nterm_mass": 158.149,
+              "cterm_mass": 670.3391,
+              "evalue": 18.131,
+              "gapped": 0,
+              "peptide": "[+229.16293]-M[+15.994915]NLSAIQDR",
+              "correct": false
+            },
+            {
+              "key": "scan=34129",
+              "rank": 20,
+              "tag": "AM[Oxidation]VE",
+              "charge": 1,
+              "nterm_mass": 158.1569,
+              "cterm_mass": 1012.5636,
+              "evalue": 12.638,
+              "gapped": 0,
+              "peptide": "[+229.16293]-FVELPGAEMGK[+229.16293]",
+              "correct": false
+            },
+            {
+              "key": "scan=33394",
+              "rank": 24,
+              "tag": "GM[Oxidation]ND",
+              "charge": 1,
+              "nterm_mass": 172.1647,
+              "cterm_mass": 839.4067,
+              "evalue": 15.3609,
+              "gapped": 0,
+              "peptide": "[+229.16293]-FNDYFEFPR",
+              "correct": false
+            },
+            {
+              "key": "scan=31880",
+              "rank": 27,
+              "tag": "GM[Oxidation]VV",
+              "charge": 1,
+              "nterm_mass": 172.1617,
+              "cterm_mass": 1084.5613,
+              "evalue": 2.45869,
+              "gapped": 0,
+              "peptide": "[+229.16293]-FVVLETGGEAGITR",
+              "correct": false
+            }
+          ],
+          "examples_correct": []
+        },
+        "C_tail_006_to_020": {
+          "rows": 0,
+          "spectra": 0,
+          "paper_correct_rows": 0,
+          "paper_correct_spectra": 0,
+          "top1_rows": 0,
+          "top1_paper_correct": 0,
+          "top1_wrong": 0,
+          "gapped_rows": 0,
+          "examples_wrong": [],
+          "examples_correct": []
+        },
+        "modified_GA_endpoint_near_unmodified_anchor": {
+          "rows": 0,
+          "spectra": 0,
+          "paper_correct_rows": 0,
+          "paper_correct_spectra": 0,
+          "top1_rows": 0,
+          "top1_paper_correct": 0,
+          "top1_wrong": 0,
+          "gapped_rows": 0,
+          "examples_wrong": [],
+          "examples_correct": []
+        },
+        "N_isotope_-2": {
+          "rows": 79,
+          "spectra": 74,
+          "paper_correct_rows": 0,
+          "paper_correct_spectra": 0,
+          "top1_rows": 0,
+          "top1_paper_correct": 0,
+          "top1_wrong": 0,
+          "gapped_rows": 74,
+          "examples_wrong": [
+            {
+              "key": "scan=15294",
+              "rank": 5,
+              "tag": "AFEL",
+              "charge": 1,
+              "nterm_mass": 156.1226,
+              "cterm_mass": 429.2245,
+              "evalue": 0.199972,
+              "gapped": 1,
+              "peptide": "[+229.16293]-SMIEISR",
+              "correct": false
+            },
+            {
+              "key": "scan=6535",
+              "rank": 9,
+              "tag": "AFDC",
+              "charge": 1,
+              "nterm_mass": 156.1216,
+              "cterm_mass": 397.2159,
+              "evalue": 0.14579,
+              "gapped": 1,
+              "peptide": "[+229.16293]-ADC[+57.021465]DISR",
+              "correct": false
+            },
+            {
+              "key": "scan=20547",
+              "rank": 10,
+              "tag": "AMVP",
+              "charge": 1,
+              "nterm_mass": 156.1279,
+              "cterm_mass": 504.3268,
+              "evalue": 4.5951,
+              "gapped": 1,
+              "peptide": "[+229.16293]-EVPFK[+229.16293]",
+              "correct": false
+            },
+            {
+              "key": "scan=19302",
+              "rank": 11,
+              "tag": "AFAE",
+              "charge": 1,
+              "nterm_mass": 156.1235,
+              "cterm_mass": 423.3036,
+              "evalue": 4.12648,
+              "gapped": 1,
+              "peptide": "[+229.16293]-LVEAISR",
+              "correct": false
+            },
+            {
+              "key": "scan=8701",
+              "rank": 13,
+              "tag": "AMED",
+              "charge": 1,
+              "nterm_mass": 156.128,
+              "cterm_mass": 557.3745,
+              "evalue": 1.43846,
+              "gapped": 1,
+              "peptide": "[+229.16293]-EEDVTK[+229.16293]",
+              "correct": false
+            }
+          ],
+          "examples_correct": []
+        },
+        "N_isotope_-1": {
+          "rows": 270,
+          "spectra": 142,
+          "paper_correct_rows": 0,
+          "paper_correct_spectra": 0,
+          "top1_rows": 0,
+          "top1_paper_correct": 0,
+          "top1_wrong": 0,
+          "gapped_rows": 198,
+          "examples_wrong": [
+            {
+              "key": "scan=14770",
+              "rank": 4,
+              "tag": "ATEV",
+              "charge": 1,
+              "nterm_mass": 157.1056,
+              "cterm_mass": 571.3902,
+              "evalue": 0.526522,
+              "gapped": 0,
+              "peptide": "[+229.16293]-VSGLGEK[+229.16293]",
+              "correct": false
+            },
+            {
+              "key": "scan=11739",
+              "rank": 5,
+              "tag": "AFKD",
+              "charge": 1,
+              "nterm_mass": 157.1264,
+              "cterm_mass": 358.2211,
+              "evalue": 0.338484,
+              "gapped": 0,
+              "peptide": "[+229.16293]-FAGDK[+229.16293]",
+              "correct": false
+            },
+            {
+              "key": "scan=11212",
+              "rank": 8,
+              "tag": "AKFD",
+              "charge": 1,
+              "nterm_mass": 157.1278,
+              "cterm_mass": 441.26,
+              "evalue": 0.164897,
+              "gapped": 0,
+              "peptide": "[+229.16293]-VMDQK[+229.16293]",
+              "correct": false
+            },
+            {
+              "key": "scan=18742",
+              "rank": 9,
+              "tag": "AFLN",
+              "charge": 1,
+              "nterm_mass": 157.1288,
+              "cterm_mass": 471.2468,
+              "evalue": 9.4189,
+              "gapped": 1,
+              "peptide": "[+229.16293]-LPYDVTR",
+              "correct": false
+            },
+            {
+              "key": "scan=15316",
+              "rank": 10,
+              "tag": "AVYY",
+              "charge": 1,
+              "nterm_mass": 157.127,
+              "cterm_mass": 415.2418,
+              "evalue": 4.24817,
+              "gapped": 1,
+              "peptide": "[+229.16293]-GFYDK[+229.16293]",
+              "correct": false
+            }
+          ],
+          "examples_correct": []
+        },
+        "N_isotope_1": {
+          "rows": 65,
+          "spectra": 58,
+          "paper_correct_rows": 0,
+          "paper_correct_spectra": 0,
+          "top1_rows": 0,
+          "top1_paper_correct": 0,
+          "top1_wrong": 0,
+          "gapped_rows": 48,
+          "examples_wrong": [
+            {
+              "key": "scan=19349",
+              "rank": 7,
+              "tag": "GQWY",
+              "charge": 1,
+              "nterm_mass": 173.1263,
+              "cterm_mass": 458.3054,
+              "evalue": 0.991077,
+              "gapped": 1,
+              "peptide": "[+229.16293]-EWYTK[+229.16293]",
+              "correct": false
+            },
+            {
+              "key": "scan=14381",
+              "rank": 9,
+              "tag": "AMLQ",
+              "charge": 1,
+              "nterm_mass": 159.1419,
+              "cterm_mass": 473.2871,
+              "evalue": 0.360633,
+              "gapped": 0,
+              "peptide": "[+229.16293]-AAAFEK[+229.16293]",
+              "correct": false
+            },
+            {
+              "key": "scan=14381",
+              "rank": 10,
+              "tag": "GMLQ",
+              "charge": 1,
+              "nterm_mass": 173.1572,
+              "cterm_mass": 473.2874,
+              "evalue": 0.492703,
+              "gapped": 0,
+              "peptide": "[+229.16293]-AAAFEK[+229.16293]",
+              "correct": false
+            },
+            {
+              "key": "scan=13878",
+              "rank": 13,
+              "tag": "GQQE",
+              "charge": 1,
+              "nterm_mass": 173.1529,
+              "cterm_mass": 324.236,
+              "evalue": 0.532788,
+              "gapped": 1,
+              "peptide": "[+229.16293]-LEQLAR",
+              "correct": false
+            },
+            {
+              "key": "scan=22180",
+              "rank": 14,
+              "tag": "GQLP",
+              "charge": 1,
+              "nterm_mass": 173.1264,
+              "cterm_mass": 541.3795,
+              "evalue": 18.1231,
+              "gapped": 1,
+              "peptide": "[+229.16293]-EIPLAK[+229.16293]",
+              "correct": false
+            }
+          ],
+          "examples_correct": []
+        },
+        "N_isotope_2": {
+          "rows": 29,
+          "spectra": 28,
+          "paper_correct_rows": 0,
+          "paper_correct_spectra": 0,
+          "top1_rows": 0,
+          "top1_paper_correct": 0,
+          "top1_wrong": 0,
+          "gapped_rows": 29,
+          "examples_wrong": [
+            {
+              "key": "scan=6425",
+              "rank": 11,
+              "tag": "GPVS",
+              "charge": 1,
+              "nterm_mass": 174.1533,
+              "cterm_mass": 243.1352,
+              "evalue": 274.816,
+              "gapped": 1,
+              "peptide": "[+229.16293]-VVSSR",
+              "correct": false
+            },
+            {
+              "key": "scan=8046",
+              "rank": 11,
+              "tag": "GPCY",
+              "charge": 1,
+              "nterm_mass": 174.1572,
+              "cterm_mass": 227.1376,
+              "evalue": 2.64051,
+              "gapped": 1,
+              "peptide": "[+229.16293]-VC[+57.021465]YAR",
+              "correct": false
+            },
+            {
+              "key": "scan=7142",
+              "rank": 13,
+              "tag": "GWAT",
+              "charge": 1,
+              "nterm_mass": 174.1414,
+              "cterm_mass": 357.2588,
+              "evalue": 15.9568,
+              "gapped": 1,
+              "peptide": "[+229.16293]-TSATK[+229.16293]",
+              "correct": false
+            },
+            {
+              "key": "scan=20567",
+              "rank": 13,
+              "tag": "GWDF",
+              "charge": 1,
+              "nterm_mass": 174.1437,
+              "cterm_mass": 470.3407,
+              "evalue": 20.0513,
+              "gapped": 1,
+              "peptide": "[+229.16293]-TSDFLK[+229.16293]",
+              "correct": false
+            },
+            {
+              "key": "scan=14552",
+              "rank": 17,
+              "tag": "GPNL",
+              "charge": 1,
+              "nterm_mass": 174.1569,
+              "cterm_mass": 486.3003,
+              "evalue": 3.06681,
+              "gapped": 1,
+              "peptide": "[+229.16293]-VNLEK[+229.16293]",
+              "correct": false
+            }
+          ],
+          "examples_correct": []
+        }
+      },
+      "gapped_top1_wrong_with_tied_correct_spelling": 37,
+      "gapped_tied_adjacent_swaps": 27,
+      "gapped_tie_examples": [
+        {
+          "key": "scan=5626",
+          "wrong_tag": "DTQG",
+          "correct_tag": "TDQG",
+          "correct_rank": 4,
+          "adjacent_swap": true
+        },
+        {
+          "key": "scan=6305",
+          "wrong_tag": "DENT",
+          "correct_tag": "DESQ",
+          "correct_rank": 3,
+          "adjacent_swap": false
+        },
+        {
+          "key": "scan=7594",
+          "wrong_tag": "DESP",
+          "correct_tag": "EDSP",
+          "correct_rank": 2,
+          "adjacent_swap": true
+        },
+        {
+          "key": "scan=8293",
+          "wrong_tag": "DNTT",
+          "correct_tag": "DSQT",
+          "correct_rank": 3,
+          "adjacent_swap": false
+        },
+        {
+          "key": "scan=9089",
+          "wrong_tag": "PADV",
+          "correct_tag": "PGEV",
+          "correct_rank": 4,
+          "adjacent_swap": false
+        },
+        {
+          "key": "scan=9252",
+          "wrong_tag": "PTAT",
+          "correct_tag": "TPAT",
+          "correct_rank": 2,
+          "adjacent_swap": true
+        },
+        {
+          "key": "scan=9466",
+          "wrong_tag": "PVTS",
+          "correct_tag": "VPTS",
+          "correct_rank": 2,
+          "adjacent_swap": true
+        },
+        {
+          "key": "scan=9625",
+          "wrong_tag": "CPVT",
+          "correct_tag": "CVPT",
+          "correct_rank": 2,
+          "adjacent_swap": true
+        }
+      ],
+      "posthoc_rank1_replay": {
+        "tails": {
+          "gained": 0,
+          "lost": 0,
+          "gained_keys": [],
+          "lost_keys": [],
+          "emptied_spectra": 0
+        },
+        "isotopes": {
+          "gained": 0,
+          "lost": 0,
+          "gained_keys": [],
+          "lost_keys": [],
+          "emptied_spectra": 0
+        },
+        "tails_and_isotopes": {
+          "gained": 0,
+          "lost": 0,
+          "gained_keys": [],
+          "lost_keys": [],
+          "emptied_spectra": 0
+        }
+      }
+    },
+    {
+      "dataset": "PXD004541_fr02",
+      "chemistry": "label_aware",
+      "arm": "auto",
+      "truth_psms": 11870,
+      "tagged_psms": 11870,
+      "top1_paper_correct": 10748,
+      "top1_strict_correct": 10740,
+      "top1_wrong": 1122,
+      "top1_wrong_gapped": 156,
+      "endpoint_lowercase_rows": 0,
+      "patterns": {
+        "current_GA": {
+          "rows": 0,
+          "spectra": 0,
+          "paper_correct_rows": 0,
+          "paper_correct_spectra": 0,
+          "top1_rows": 0,
+          "top1_paper_correct": 0,
+          "top1_wrong": 0,
+          "gapped_rows": 0,
+          "examples_wrong": [],
+          "examples_correct": []
+        },
+        "lowercase_GA_bypass": {
+          "rows": 0,
+          "spectra": 0,
+          "paper_correct_rows": 0,
+          "paper_correct_spectra": 0,
+          "top1_rows": 0,
+          "top1_paper_correct": 0,
+          "top1_wrong": 0,
+          "gapped_rows": 0,
+          "examples_wrong": [],
+          "examples_correct": []
+        },
+        "N_tail_020_to_050": {
+          "rows": 21,
+          "spectra": 16,
+          "paper_correct_rows": 0,
+          "paper_correct_spectra": 0,
+          "top1_rows": 0,
+          "top1_paper_correct": 0,
+          "top1_wrong": 0,
+          "gapped_rows": 4,
+          "examples_wrong": [
+            {
+              "key": "scan=9120",
+              "rank": 12,
+              "tag": "AELD",
+              "charge": 1,
+              "nterm_mass": 158.0868,
+              "cterm_mass": 370.1956,
+              "evalue": 66.1814,
+              "gapped": 1,
+              "peptide": "[+229.16293]-GMYYGR",
+              "correct": false
+            },
+            {
+              "key": "scan=10597",
+              "rank": 15,
+              "tag": "AMGW",
+              "charge": 1,
+              "nterm_mass": 158.149,
+              "cterm_mass": 670.3391,
+              "evalue": 15.9515,
+              "gapped": 0,
+              "peptide": "[+229.16293]-M[+15.994915]NLSAIQDR",
+              "correct": false
+            },
+            {
+              "key": "scan=10597",
+              "rank": 17,
+              "tag": "AMGP",
+              "charge": 1,
+              "nterm_mass": 158.1491,
+              "cterm_mass": 759.3656,
+              "evalue": 18.2496,
+              "gapped": 0,
+              "peptide": "[+229.16293]-M[+15.994915]NLSAIQDR",
+              "correct": false
+            },
+            {
+              "key": "scan=34129",
+              "rank": 20,
+              "tag": "AM[Oxidation]VE",
+              "charge": 1,
+              "nterm_mass": 158.1569,
+              "cterm_mass": 1012.5636,
+              "evalue": 11.4322,
+              "gapped": 0,
+              "peptide": "[+229.16293]-FVELPGAEMGK[+229.16293]",
+              "correct": false
+            },
+            {
+              "key": "scan=13162",
+              "rank": 22,
+              "tag": "GRSK",
+              "charge": 1,
+              "nterm_mass": 172.1635,
+              "cterm_mass": 1558.7136,
+              "evalue": 4.1508,
+              "gapped": 0,
+              "peptide": "[+229.16293]-EEEDK[+229.16293]DDEEK[+229.16293]PK[+229.16293]",
+              "correct": false
+            }
+          ],
+          "examples_correct": []
+        },
+        "C_tail_006_to_020": {
+          "rows": 15,
+          "spectra": 8,
+          "paper_correct_rows": 0,
+          "paper_correct_spectra": 0,
+          "top1_rows": 0,
+          "top1_paper_correct": 0,
+          "top1_wrong": 0,
+          "gapped_rows": 14,
+          "examples_wrong": [
+            {
+              "key": "scan=30272",
+              "rank": 11,
+              "tag": "PCKA",
+              "charge": 1,
+              "nterm_mass": 1018.6253,
+              "cterm_mass": 140.1078,
+              "evalue": 53.9753,
+              "gapped": 1,
+              "peptide": "[+229.16293]-RFEK[+229.16293]PLEEK[+229.16293]",
+              "correct": false
+            },
+            {
+              "key": "scan=30272",
+              "rank": 12,
+              "tag": "PKCA",
+              "charge": 1,
+              "nterm_mass": 1018.6253,
+              "cterm_mass": 140.1078,
+              "evalue": 53.9753,
+              "gapped": 1,
+              "peptide": "[+229.16293]-RFEK[+229.16293]PLEEK[+229.16293]",
+              "correct": false
+            },
+            {
+              "key": "scan=27197",
+              "rank": 21,
+              "tag": "CCKG",
+              "charge": 1,
+              "nterm_mass": 473.2758,
+              "cterm_mass": 154.1248,
+              "evalue": 112.583,
+              "gapped": 1,
+              "peptide": "[+229.16293]-FPC[+57.021465]LEEK[+229.16293]",
+              "correct": false
+            },
+            {
+              "key": "scan=27197",
+              "rank": 22,
+              "tag": "CKCG",
+              "charge": 1,
+              "nterm_mass": 473.2758,
+              "cterm_mass": 154.1248,
+              "evalue": 112.583,
+              "gapped": 1,
+              "peptide": "[+229.16293]-FPC[+57.021465]LEEK[+229.16293]",
+              "correct": false
+            },
+            {
+              "key": "scan=22180",
+              "rank": 29,
+              "tag": "LAKG",
+              "charge": 1,
+              "nterm_mass": 357.1977,
+              "cterm_mass": 154.1246,
+              "evalue": 367.681,
+              "gapped": 1,
+              "peptide": "[+229.16293]-EIPLAK[+229.16293]",
+              "correct": false
+            }
+          ],
+          "examples_correct": []
+        },
+        "modified_GA_endpoint_near_unmodified_anchor": {
+          "rows": 0,
+          "spectra": 0,
+          "paper_correct_rows": 0,
+          "paper_correct_spectra": 0,
+          "top1_rows": 0,
+          "top1_paper_correct": 0,
+          "top1_wrong": 0,
+          "gapped_rows": 0,
+          "examples_wrong": [],
+          "examples_correct": []
+        },
+        "N_isotope_-2": {
+          "rows": 96,
+          "spectra": 90,
+          "paper_correct_rows": 0,
+          "paper_correct_spectra": 0,
+          "top1_rows": 0,
+          "top1_paper_correct": 0,
+          "top1_wrong": 0,
+          "gapped_rows": 92,
+          "examples_wrong": [
+            {
+              "key": "scan=15294",
+              "rank": 5,
+              "tag": "AFEL",
+              "charge": 1,
+              "nterm_mass": 156.1226,
+              "cterm_mass": 429.2245,
+              "evalue": 0.171877,
+              "gapped": 1,
+              "peptide": "[+229.16293]-SMIEISR",
+              "correct": false
+            },
+            {
+              "key": "scan=6535",
+              "rank": 9,
+              "tag": "AFDC",
+              "charge": 1,
+              "nterm_mass": 156.1216,
+              "cterm_mass": 397.2159,
+              "evalue": 0.132332,
+              "gapped": 1,
+              "peptide": "[+229.16293]-ADC[+57.021465]DISR",
+              "correct": false
+            },
+            {
+              "key": "scan=20547",
+              "rank": 9,
+              "tag": "AMVP",
+              "charge": 1,
+              "nterm_mass": 156.1279,
+              "cterm_mass": 504.3268,
+              "evalue": 3.93551,
+              "gapped": 1,
+              "peptide": "[+229.16293]-EVPFK[+229.16293]",
+              "correct": false
+            },
+            {
+              "key": "scan=19302",
+              "rank": 11,
+              "tag": "AFAE",
+              "charge": 1,
+              "nterm_mass": 156.1235,
+              "cterm_mass": 423.3036,
+              "evalue": 3.474,
+              "gapped": 1,
+              "peptide": "[+229.16293]-LVEAISR",
+              "correct": false
+            },
+            {
+              "key": "scan=8701",
+              "rank": 12,
+              "tag": "AMED",
+              "charge": 1,
+              "nterm_mass": 156.128,
+              "cterm_mass": 557.3745,
+              "evalue": 1.09432,
+              "gapped": 1,
+              "peptide": "[+229.16293]-EEDVTK[+229.16293]",
+              "correct": false
+            }
+          ],
+          "examples_correct": []
+        },
+        "N_isotope_-1": {
+          "rows": 295,
+          "spectra": 160,
+          "paper_correct_rows": 0,
+          "paper_correct_spectra": 0,
+          "top1_rows": 0,
+          "top1_paper_correct": 0,
+          "top1_wrong": 0,
+          "gapped_rows": 226,
+          "examples_wrong": [
+            {
+              "key": "scan=14770",
+              "rank": 4,
+              "tag": "ATEV",
+              "charge": 1,
+              "nterm_mass": 157.1056,
+              "cterm_mass": 571.3902,
+              "evalue": 0.394348,
+              "gapped": 0,
+              "peptide": "[+229.16293]-VSGLGEK[+229.16293]",
+              "correct": false
+            },
+            {
+              "key": "scan=18742",
+              "rank": 9,
+              "tag": "AFLN",
+              "charge": 1,
+              "nterm_mass": 157.1288,
+              "cterm_mass": 471.2468,
+              "evalue": 8.13952,
+              "gapped": 1,
+              "peptide": "[+229.16293]-LPYDVTR",
+              "correct": false
+            },
+            {
+              "key": "scan=11435",
+              "rank": 10,
+              "tag": "ALYT",
+              "charge": 1,
+              "nterm_mass": 157.1283,
+              "cterm_mass": 441.2608,
+              "evalue": 4.42436,
+              "gapped": 1,
+              "peptide": "[+229.16293]-MVTEK[+229.16293]",
+              "correct": false
+            },
+            {
+              "key": "scan=15316",
+              "rank": 10,
+              "tag": "AVYY",
+              "charge": 1,
+              "nterm_mass": 157.127,
+              "cterm_mass": 415.2418,
+              "evalue": 3.52368,
+              "gapped": 1,
+              "peptide": "[+229.16293]-GFYDK[+229.16293]",
+              "correct": false
+            },
+            {
+              "key": "scan=16603",
+              "rank": 10,
+              "tag": "AYVA",
+              "charge": 1,
+              "nterm_mass": 157.1271,
+              "cterm_mass": 604.3246,
+              "evalue": 0.717814,
+              "gapped": 0,
+              "peptide": "[+229.16293]-YMVADK[+229.16293]",
+              "correct": false
+            }
+          ],
+          "examples_correct": []
+        },
+        "N_isotope_1": {
+          "rows": 80,
+          "spectra": 68,
+          "paper_correct_rows": 0,
+          "paper_correct_spectra": 0,
+          "top1_rows": 0,
+          "top1_paper_correct": 0,
+          "top1_wrong": 0,
+          "gapped_rows": 64,
+          "examples_wrong": [
+            {
+              "key": "scan=19349",
+              "rank": 5,
+              "tag": "GQWY",
+              "charge": 1,
+              "nterm_mass": 173.1263,
+              "cterm_mass": 458.3054,
+              "evalue": 0.762229,
+              "gapped": 1,
+              "peptide": "[+229.16293]-EWYTK[+229.16293]",
+              "correct": false
+            },
+            {
+              "key": "scan=14381",
+              "rank": 8,
+              "tag": "AMLQ",
+              "charge": 1,
+              "nterm_mass": 159.1419,
+              "cterm_mass": 473.2871,
+              "evalue": 0.284793,
+              "gapped": 0,
+              "peptide": "[+229.16293]-AAAFEK[+229.16293]",
+              "correct": false
+            },
+            {
+              "key": "scan=14381",
+              "rank": 9,
+              "tag": "GMLQ",
+              "charge": 1,
+              "nterm_mass": 173.1572,
+              "cterm_mass": 473.2874,
+              "evalue": 0.389089,
+              "gapped": 0,
+              "peptide": "[+229.16293]-AAAFEK[+229.16293]",
+              "correct": false
+            },
+            {
+              "key": "scan=13878",
+              "rank": 13,
+              "tag": "GQQE",
+              "charge": 1,
+              "nterm_mass": 173.1529,
+              "cterm_mass": 324.236,
+              "evalue": 0.49404,
+              "gapped": 1,
+              "peptide": "[+229.16293]-LEQLAR",
+              "correct": false
+            },
+            {
+              "key": "scan=22180",
+              "rank": 13,
+              "tag": "GQLP",
+              "charge": 1,
+              "nterm_mass": 173.1264,
+              "cterm_mass": 541.3795,
+              "evalue": 18.6265,
+              "gapped": 1,
+              "peptide": "[+229.16293]-EIPLAK[+229.16293]",
+              "correct": false
+            }
+          ],
+          "examples_correct": []
+        },
+        "N_isotope_2": {
+          "rows": 42,
+          "spectra": 39,
+          "paper_correct_rows": 0,
+          "paper_correct_spectra": 0,
+          "top1_rows": 0,
+          "top1_paper_correct": 0,
+          "top1_wrong": 0,
+          "gapped_rows": 42,
+          "examples_wrong": [
+            {
+              "key": "scan=6425",
+              "rank": 11,
+              "tag": "GPVS",
+              "charge": 1,
+              "nterm_mass": 174.1533,
+              "cterm_mass": 243.1352,
+              "evalue": 241.706,
+              "gapped": 1,
+              "peptide": "[+229.16293]-VVSSR",
+              "correct": false
+            },
+            {
+              "key": "scan=8046",
+              "rank": 11,
+              "tag": "GPCY",
+              "charge": 1,
+              "nterm_mass": 174.1572,
+              "cterm_mass": 227.1376,
+              "evalue": 1.92444,
+              "gapped": 1,
+              "peptide": "[+229.16293]-VC[+57.021465]YAR",
+              "correct": false
+            },
+            {
+              "key": "scan=7142",
+              "rank": 12,
+              "tag": "GWAT",
+              "charge": 1,
+              "nterm_mass": 174.1414,
+              "cterm_mass": 357.2588,
+              "evalue": 13.1275,
+              "gapped": 1,
+              "peptide": "[+229.16293]-TSATK[+229.16293]",
+              "correct": false
+            },
+            {
+              "key": "scan=20567",
+              "rank": 12,
+              "tag": "GWDF",
+              "charge": 1,
+              "nterm_mass": 174.1437,
+              "cterm_mass": 470.3407,
+              "evalue": 16.5128,
+              "gapped": 1,
+              "peptide": "[+229.16293]-TSDFLK[+229.16293]",
+              "correct": false
+            },
+            {
+              "key": "scan=14552",
+              "rank": 17,
+              "tag": "GPNL",
+              "charge": 1,
+              "nterm_mass": 174.1569,
+              "cterm_mass": 486.3003,
+              "evalue": 2.60468,
+              "gapped": 1,
+              "peptide": "[+229.16293]-VNLEK[+229.16293]",
+              "correct": false
+            }
+          ],
+          "examples_correct": []
+        }
+      },
+      "gapped_top1_wrong_with_tied_correct_spelling": 41,
+      "gapped_tied_adjacent_swaps": 31,
+      "gapped_tie_examples": [
+        {
+          "key": "scan=5626",
+          "wrong_tag": "DTQG",
+          "correct_tag": "TDQG",
+          "correct_rank": 4,
+          "adjacent_swap": true
+        },
+        {
+          "key": "scan=6305",
+          "wrong_tag": "DENT",
+          "correct_tag": "DESQ",
+          "correct_rank": 3,
+          "adjacent_swap": false
+        },
+        {
+          "key": "scan=7594",
+          "wrong_tag": "DESP",
+          "correct_tag": "EDSP",
+          "correct_rank": 2,
+          "adjacent_swap": true
+        },
+        {
+          "key": "scan=7920",
+          "wrong_tag": "PQKG",
+          "correct_tag": "QPKG",
+          "correct_rank": 2,
+          "adjacent_swap": true
+        },
+        {
+          "key": "scan=8293",
+          "wrong_tag": "DNTT",
+          "correct_tag": "DSQT",
+          "correct_rank": 3,
+          "adjacent_swap": false
+        },
+        {
+          "key": "scan=9089",
+          "wrong_tag": "PADV",
+          "correct_tag": "PGEV",
+          "correct_rank": 4,
+          "adjacent_swap": false
+        },
+        {
+          "key": "scan=9252",
+          "wrong_tag": "PTAT",
+          "correct_tag": "TPAT",
+          "correct_rank": 2,
+          "adjacent_swap": true
+        },
+        {
+          "key": "scan=9466",
+          "wrong_tag": "PVTS",
+          "correct_tag": "VPTS",
+          "correct_rank": 2,
+          "adjacent_swap": true
+        }
+      ],
+      "posthoc_rank1_replay": {
+        "tails": {
+          "gained": 0,
+          "lost": 0,
+          "gained_keys": [],
+          "lost_keys": [],
+          "emptied_spectra": 0
+        },
+        "isotopes": {
+          "gained": 0,
+          "lost": 0,
+          "gained_keys": [],
+          "lost_keys": [],
+          "emptied_spectra": 0
+        },
+        "tails_and_isotopes": {
+          "gained": 0,
+          "lost": 0,
+          "gained_keys": [],
+          "lost_keys": [],
+          "emptied_spectra": 0
+        }
+      }
+    },
+    {
+      "dataset": "PXD037999",
+      "chemistry": "label_blind",
+      "arm": "auto",
+      "truth_psms": 8270,
+      "tagged_psms": 8184,
+      "top1_paper_correct": 6815,
+      "top1_strict_correct": 6481,
+      "top1_wrong": 1369,
+      "top1_wrong_gapped": 711,
+      "endpoint_lowercase_rows": 0,
+      "patterns": {
+        "current_GA": {
+          "rows": 0,
+          "spectra": 0,
+          "paper_correct_rows": 0,
+          "paper_correct_spectra": 0,
+          "top1_rows": 0,
+          "top1_paper_correct": 0,
+          "top1_wrong": 0,
+          "gapped_rows": 0,
+          "examples_wrong": [],
+          "examples_correct": []
+        },
+        "lowercase_GA_bypass": {
+          "rows": 0,
+          "spectra": 0,
+          "paper_correct_rows": 0,
+          "paper_correct_spectra": 0,
+          "top1_rows": 0,
+          "top1_paper_correct": 0,
+          "top1_wrong": 0,
+          "gapped_rows": 0,
+          "examples_wrong": [],
+          "examples_correct": []
+        },
+        "N_tail_020_to_050": {
+          "rows": 8,
+          "spectra": 6,
+          "paper_correct_rows": 0,
+          "paper_correct_spectra": 0,
+          "top1_rows": 1,
+          "top1_paper_correct": 0,
+          "top1_wrong": 1,
+          "gapped_rows": 1,
+          "examples_wrong": [
+            {
+              "key": "scan=28458",
+              "rank": 1,
+              "tag": "ADVF",
+              "charge": 1,
+              "nterm_mass": 158.1498,
+              "cterm_mass": 586.2853,
+              "evalue": 6.45613,
+              "gapped": 0,
+              "peptide": "[+229.16293]-SC[+57.021465]QFVAVR",
+              "correct": false
+            },
+            {
+              "key": "scan=47926",
+              "rank": 14,
+              "tag": "AM[Oxidation]LV",
+              "charge": 1,
+              "nterm_mass": 158.1536,
+              "cterm_mass": 770.4299,
+              "evalue": 0.962291,
+              "gapped": 0,
+              "peptide": "[+229.16293]-FIVYSYK[+229.16293]",
+              "correct": false
+            },
+            {
+              "key": "scan=47926",
+              "rank": 17,
+              "tag": "AYPV",
+              "charge": 1,
+              "nterm_mass": 158.1534,
+              "cterm_mass": 770.4335,
+              "evalue": 16.9132,
+              "gapped": 0,
+              "peptide": "[+229.16293]-FIVYSYK[+229.16293]",
+              "correct": false
+            },
+            {
+              "key": "scan=28458",
+              "rank": 21,
+              "tag": "ADHH",
+              "charge": 1,
+              "nterm_mass": 158.15,
+              "cterm_mass": 558.304,
+              "evalue": 1540.29,
+              "gapped": 1,
+              "peptide": "[+229.16293]-SC[+57.021465]QFVAVR",
+              "correct": false
+            },
+            {
+              "key": "scan=52565",
+              "rank": 34,
+              "tag": "AWFS",
+              "charge": 1,
+              "nterm_mass": 158.1468,
+              "cterm_mass": 805.5024,
+              "evalue": 2.90219,
+              "gapped": 0,
+              "peptide": "[+229.16293]-VSFSFSLTK[+229.16293]",
+              "correct": false
+            }
+          ],
+          "examples_correct": []
+        },
+        "C_tail_006_to_020": {
+          "rows": 1,
+          "spectra": 1,
+          "paper_correct_rows": 0,
+          "paper_correct_spectra": 0,
+          "top1_rows": 0,
+          "top1_paper_correct": 0,
+          "top1_wrong": 0,
+          "gapped_rows": 1,
+          "examples_wrong": [
+            {
+              "key": "scan=52645",
+              "rank": 26,
+              "tag": "PGWG",
+              "charge": 1,
+              "nterm_mass": 914.6423,
+              "cterm_mass": 154.1161,
+              "evalue": 908.193,
+              "gapped": 1,
+              "peptide": "[+229.16293]-DAGPLLISLK[+229.16293]",
+              "correct": false
+            }
+          ],
+          "examples_correct": []
+        },
+        "modified_GA_endpoint_near_unmodified_anchor": {
+          "rows": 0,
+          "spectra": 0,
+          "paper_correct_rows": 0,
+          "paper_correct_spectra": 0,
+          "top1_rows": 0,
+          "top1_paper_correct": 0,
+          "top1_wrong": 0,
+          "gapped_rows": 0,
+          "examples_wrong": [],
+          "examples_correct": []
+        },
+        "N_isotope_-2": {
+          "rows": 13,
+          "spectra": 11,
+          "paper_correct_rows": 0,
+          "paper_correct_spectra": 0,
+          "top1_rows": 1,
+          "top1_paper_correct": 0,
+          "top1_wrong": 1,
+          "gapped_rows": 13,
+          "examples_wrong": [
+            {
+              "key": "scan=28925",
+              "rank": 1,
+              "tag": "AMLE",
+              "charge": 1,
+              "nterm_mass": 156.1237,
+              "cterm_mass": 626.3611,
+              "evalue": 84.3557,
+              "gapped": 1,
+              "peptide": "[+229.16293]-ASAVSELSPR",
+              "correct": false
+            },
+            {
+              "key": "scan=54256",
+              "rank": 4,
+              "tag": "AFFL",
+              "charge": 1,
+              "nterm_mass": 156.124,
+              "cterm_mass": 494.3435,
+              "evalue": 0.0145602,
+              "gapped": 1,
+              "peptide": "[+229.16293]-GIILFISR",
+              "correct": false
+            },
+            {
+              "key": "scan=28925",
+              "rank": 11,
+              "tag": "AMLF",
+              "charge": 1,
+              "nterm_mass": 156.1215,
+              "cterm_mass": 608.3375,
+              "evalue": 1067.63,
+              "gapped": 1,
+              "peptide": "[+229.16293]-ASAVSELSPR",
+              "correct": false
+            },
+            {
+              "key": "scan=33654",
+              "rank": 14,
+              "tag": "AMEA",
+              "charge": 1,
+              "nterm_mass": 156.137,
+              "cterm_mass": 975.4805,
+              "evalue": 0.648623,
+              "gapped": 1,
+              "peptide": "[+229.16293]-EEAENTLQSFR",
+              "correct": false
+            },
+            {
+              "key": "scan=37531",
+              "rank": 15,
+              "tag": "AMVS",
+              "charge": 1,
+              "nterm_mass": 156.1344,
+              "cterm_mass": 769.4931,
+              "evalue": 18.0074,
+              "gapped": 1,
+              "peptide": "[+229.16293]-EVSVELAK[+229.16293]",
+              "correct": false
+            }
+          ],
+          "examples_correct": []
+        },
+        "N_isotope_-1": {
+          "rows": 383,
+          "spectra": 258,
+          "paper_correct_rows": 0,
+          "paper_correct_spectra": 0,
+          "top1_rows": 2,
+          "top1_paper_correct": 0,
+          "top1_wrong": 2,
+          "gapped_rows": 173,
+          "examples_wrong": [
+            {
+              "key": "scan=28731",
+              "rank": 1,
+              "tag": "ASTD",
+              "charge": 1,
+              "nterm_mass": 157.1253,
+              "cterm_mass": 754.4548,
+              "evalue": 26.7722,
+              "gapped": 1,
+              "peptide": "[+229.16293]-QLSSGVSEIR",
+              "correct": false
+            },
+            {
+              "key": "scan=33905",
+              "rank": 1,
+              "tag": "ANNF",
+              "charge": 2,
+              "nterm_mass": 157.126,
+              "cterm_mass": 1050.6628,
+              "evalue": 1.53132,
+              "gapped": 1,
+              "peptide": "[+229.16293]-K[+229.16293]GPQSLFNAPR",
+              "correct": false
+            },
+            {
+              "key": "scan=25123",
+              "rank": 3,
+              "tag": "GGME",
+              "charge": 2,
+              "nterm_mass": 171.1534,
+              "cterm_mass": 1246.6365,
+              "evalue": 185.472,
+              "gapped": 1,
+              "peptide": "[+229.16293]-MK[+229.16293]DTDSEEEIR",
+              "correct": false
+            },
+            {
+              "key": "scan=27293",
+              "rank": 3,
+              "tag": "ANYS",
+              "charge": 1,
+              "nterm_mass": 157.1246,
+              "cterm_mass": 505.2569,
+              "evalue": 0.436144,
+              "gapped": 1,
+              "peptide": "[+229.16293]-MYSYPAR",
+              "correct": false
+            },
+            {
+              "key": "scan=25123",
+              "rank": 4,
+              "tag": "GGMQ",
+              "charge": 2,
+              "nterm_mass": 171.1484,
+              "cterm_mass": 1247.6255,
+              "evalue": 232.484,
+              "gapped": 1,
+              "peptide": "[+229.16293]-MK[+229.16293]DTDSEEEIR",
+              "correct": false
+            }
+          ],
+          "examples_correct": []
+        },
+        "N_isotope_1": {
+          "rows": 11,
+          "spectra": 11,
+          "paper_correct_rows": 0,
+          "paper_correct_spectra": 0,
+          "top1_rows": 0,
+          "top1_paper_correct": 0,
+          "top1_wrong": 0,
+          "gapped_rows": 11,
+          "examples_wrong": [
+            {
+              "key": "scan=33681",
+              "rank": 5,
+              "tag": "GNYF",
+              "charge": 1,
+              "nterm_mass": 173.1284,
+              "cterm_mass": 444.2926,
+              "evalue": 2.76454,
+              "gapped": 1,
+              "peptide": "[+229.16293]-DYFSK[+229.16293]",
+              "correct": false
+            },
+            {
+              "key": "scan=38583",
+              "rank": 7,
+              "tag": "GGVN",
+              "charge": 1,
+              "nterm_mass": 173.1564,
+              "cterm_mass": 612.3256,
+              "evalue": 0.496029,
+              "gapped": 1,
+              "peptide": "[+229.16293]-GAWSNVLR",
+              "correct": false
+            },
+            {
+              "key": "scan=34812",
+              "rank": 12,
+              "tag": "GQLT",
+              "charge": 1,
+              "nterm_mass": 173.1274,
+              "cterm_mass": 527.3652,
+              "evalue": 1.0507,
+              "gapped": 1,
+              "peptide": "[+229.16293]-ELTGLK[+229.16293]",
+              "correct": false
+            },
+            {
+              "key": "scan=43831",
+              "rank": 12,
+              "tag": "GGDF",
+              "charge": 1,
+              "nterm_mass": 173.1574,
+              "cterm_mass": 473.2863,
+              "evalue": 15.8531,
+              "gapped": 1,
+              "peptide": "[+229.16293]-VYFDLR",
+              "correct": false
+            },
+            {
+              "key": "scan=35509",
+              "rank": 21,
+              "tag": "GNLL",
+              "charge": 1,
+              "nterm_mass": 173.1286,
+              "cterm_mass": 516.2682,
+              "evalue": 35.8627,
+              "gapped": 1,
+              "peptide": "[+229.16293]-DLLSSVSR",
+              "correct": false
+            }
+          ],
+          "examples_correct": []
+        },
+        "N_isotope_2": {
+          "rows": 15,
+          "spectra": 15,
+          "paper_correct_rows": 0,
+          "paper_correct_spectra": 0,
+          "top1_rows": 0,
+          "top1_paper_correct": 0,
+          "top1_wrong": 0,
+          "gapped_rows": 15,
+          "examples_wrong": [
+            {
+              "key": "scan=26826",
+              "rank": 14,
+              "tag": "GPLN",
+              "charge": 1,
+              "nterm_mass": 174.1582,
+              "cterm_mass": 428.2973,
+              "evalue": 37.8523,
+              "gapped": 1,
+              "peptide": "[+229.16293]-VINAK[+229.16293]",
+              "correct": false
+            },
+            {
+              "key": "scan=25014",
+              "rank": 16,
+              "tag": "GPLV",
+              "charge": 1,
+              "nterm_mass": 174.1596,
+              "cterm_mass": 285.1468,
+              "evalue": 168.895,
+              "gapped": 1,
+              "peptide": "[+229.16293]-VLVER",
+              "correct": false
+            },
+            {
+              "key": "scan=39563",
+              "rank": 18,
+              "tag": "GPFG",
+              "charge": 1,
+              "nterm_mass": 174.1624,
+              "cterm_mass": 713.4308,
+              "evalue": 1.56404,
+              "gapped": 1,
+              "peptide": "[+229.16293]-VFGNEIK[+229.16293]",
+              "correct": false
+            },
+            {
+              "key": "scan=32557",
+              "rank": 23,
+              "tag": "GPLA",
+              "charge": 1,
+              "nterm_mass": 174.1623,
+              "cterm_mass": 762.4284,
+              "evalue": 168.398,
+              "gapped": 1,
+              "peptide": "[+229.16293]-VLANQYK[+229.16293]",
+              "correct": false
+            },
+            {
+              "key": "scan=22468",
+              "rank": 24,
+              "tag": "GPEA",
+              "charge": 1,
+              "nterm_mass": 174.1558,
+              "cterm_mass": 811.5731,
+              "evalue": 43.8297,
+              "gapped": 1,
+              "peptide": "[+229.16293]-VEAK[+229.16293]PK[+229.16293]",
+              "correct": false
+            }
+          ],
+          "examples_correct": []
+        }
+      },
+      "gapped_top1_wrong_with_tied_correct_spelling": 210,
+      "gapped_tied_adjacent_swaps": 135,
+      "gapped_tie_examples": [
+        {
+          "key": "scan=7504",
+          "wrong_tag": "GASA",
+          "correct_tag": "GGTA",
+          "correct_rank": 2,
+          "adjacent_swap": false
+        },
+        {
+          "key": "scan=11923",
+          "wrong_tag": "SYDS",
+          "correct_tag": "SYSD",
+          "correct_rank": 2,
+          "adjacent_swap": true
+        },
+        {
+          "key": "scan=12102",
+          "wrong_tag": "AENV",
+          "correct_tag": "AEVN",
+          "correct_rank": 2,
+          "adjacent_swap": true
+        },
+        {
+          "key": "scan=12575",
+          "wrong_tag": "QVSV",
+          "correct_tag": "QVVS",
+          "correct_rank": 2,
+          "adjacent_swap": true
+        },
+        {
+          "key": "scan=13331",
+          "wrong_tag": "TGNT",
+          "correct_tag": "TGSQ",
+          "correct_rank": 3,
+          "adjacent_swap": false
+        },
+        {
+          "key": "scan=14170",
+          "wrong_tag": "QLSS",
+          "correct_tag": "QSLS",
+          "correct_rank": 2,
+          "adjacent_swap": true
+        },
+        {
+          "key": "scan=15257",
+          "wrong_tag": "SSNT",
+          "correct_tag": "SSQS",
+          "correct_rank": 2,
+          "adjacent_swap": false
+        },
+        {
+          "key": "scan=15461",
+          "wrong_tag": "DTGT",
+          "correct_tag": "SEGT",
+          "correct_rank": 3,
+          "adjacent_swap": false
+        }
+      ],
+      "posthoc_rank1_replay": {
+        "tails": {
+          "gained": 0,
+          "lost": 0,
+          "gained_keys": [],
+          "lost_keys": [],
+          "emptied_spectra": 0
+        },
+        "isotopes": {
+          "gained": 0,
+          "lost": 0,
+          "gained_keys": [],
+          "lost_keys": [],
+          "emptied_spectra": 0
+        },
+        "tails_and_isotopes": {
+          "gained": 0,
+          "lost": 0,
+          "gained_keys": [],
+          "lost_keys": [],
+          "emptied_spectra": 0
+        }
+      }
+    },
+    {
+      "dataset": "PXD037999",
+      "chemistry": "label_aware",
+      "arm": "auto",
+      "truth_psms": 8270,
+      "tagged_psms": 8176,
+      "top1_paper_correct": 6751,
+      "top1_strict_correct": 6748,
+      "top1_wrong": 1425,
+      "top1_wrong_gapped": 762,
+      "endpoint_lowercase_rows": 0,
+      "patterns": {
+        "current_GA": {
+          "rows": 0,
+          "spectra": 0,
+          "paper_correct_rows": 0,
+          "paper_correct_spectra": 0,
+          "top1_rows": 0,
+          "top1_paper_correct": 0,
+          "top1_wrong": 0,
+          "gapped_rows": 0,
+          "examples_wrong": [],
+          "examples_correct": []
+        },
+        "lowercase_GA_bypass": {
+          "rows": 0,
+          "spectra": 0,
+          "paper_correct_rows": 0,
+          "paper_correct_spectra": 0,
+          "top1_rows": 0,
+          "top1_paper_correct": 0,
+          "top1_wrong": 0,
+          "gapped_rows": 0,
+          "examples_wrong": [],
+          "examples_correct": []
+        },
+        "N_tail_020_to_050": {
+          "rows": 9,
+          "spectra": 7,
+          "paper_correct_rows": 0,
+          "paper_correct_spectra": 0,
+          "top1_rows": 1,
+          "top1_paper_correct": 0,
+          "top1_wrong": 1,
+          "gapped_rows": 1,
+          "examples_wrong": [
+            {
+              "key": "scan=28458",
+              "rank": 1,
+              "tag": "ADVF",
+              "charge": 1,
+              "nterm_mass": 158.1498,
+              "cterm_mass": 586.2853,
+              "evalue": 5.42315,
+              "gapped": 0,
+              "peptide": "[+229.16293]-SC[+57.021465]QFVAVR",
+              "correct": false
+            },
+            {
+              "key": "scan=47926",
+              "rank": 12,
+              "tag": "AM[Oxidation]LV",
+              "charge": 1,
+              "nterm_mass": 158.1536,
+              "cterm_mass": 770.4299,
+              "evalue": 0.743898,
+              "gapped": 0,
+              "peptide": "[+229.16293]-FIVYSYK[+229.16293]",
+              "correct": false
+            },
+            {
+              "key": "scan=47926",
+              "rank": 15,
+              "tag": "AYPV",
+              "charge": 1,
+              "nterm_mass": 158.1534,
+              "cterm_mass": 770.4335,
+              "evalue": 13.0747,
+              "gapped": 0,
+              "peptide": "[+229.16293]-FIVYSYK[+229.16293]",
+              "correct": false
+            },
+            {
+              "key": "scan=28458",
+              "rank": 17,
+              "tag": "ADHH",
+              "charge": 1,
+              "nterm_mass": 158.15,
+              "cterm_mass": 558.304,
+              "evalue": 1293.85,
+              "gapped": 1,
+              "peptide": "[+229.16293]-SC[+57.021465]QFVAVR",
+              "correct": false
+            },
+            {
+              "key": "scan=50358",
+              "rank": 23,
+              "tag": "AM[Oxidation]MK",
+              "charge": 1,
+              "nterm_mass": 158.1511,
+              "cterm_mass": 1318.8848,
+              "evalue": 0.357355,
+              "gapped": 0,
+              "peptide": "[+229.16293]-FMK[+229.16293]PGK[+229.16293]VVLVLAGR",
+              "correct": false
+            }
+          ],
+          "examples_correct": []
+        },
+        "C_tail_006_to_020": {
+          "rows": 1,
+          "spectra": 1,
+          "paper_correct_rows": 0,
+          "paper_correct_spectra": 0,
+          "top1_rows": 0,
+          "top1_paper_correct": 0,
+          "top1_wrong": 0,
+          "gapped_rows": 1,
+          "examples_wrong": [
+            {
+              "key": "scan=52645",
+              "rank": 26,
+              "tag": "PGWG",
+              "charge": 1,
+              "nterm_mass": 914.6423,
+              "cterm_mass": 154.1161,
+              "evalue": 854.77,
+              "gapped": 1,
+              "peptide": "[+229.16293]-DAGPLLISLK[+229.16293]",
+              "correct": false
+            }
+          ],
+          "examples_correct": []
+        },
+        "modified_GA_endpoint_near_unmodified_anchor": {
+          "rows": 0,
+          "spectra": 0,
+          "paper_correct_rows": 0,
+          "paper_correct_spectra": 0,
+          "top1_rows": 0,
+          "top1_paper_correct": 0,
+          "top1_wrong": 0,
+          "gapped_rows": 0,
+          "examples_wrong": [],
+          "examples_correct": []
+        },
+        "N_isotope_-2": {
+          "rows": 15,
+          "spectra": 12,
+          "paper_correct_rows": 0,
+          "paper_correct_spectra": 0,
+          "top1_rows": 1,
+          "top1_paper_correct": 0,
+          "top1_wrong": 1,
+          "gapped_rows": 15,
+          "examples_wrong": [
+            {
+              "key": "scan=28925",
+              "rank": 1,
+              "tag": "AMLE",
+              "charge": 1,
+              "nterm_mass": 156.1237,
+              "cterm_mass": 626.3611,
+              "evalue": 84.3557,
+              "gapped": 1,
+              "peptide": "[+229.16293]-ASAVSELSPR",
+              "correct": false
+            },
+            {
+              "key": "scan=54256",
+              "rank": 4,
+              "tag": "AFFL",
+              "charge": 1,
+              "nterm_mass": 156.124,
+              "cterm_mass": 494.3435,
+              "evalue": 0.0172076,
+              "gapped": 1,
+              "peptide": "[+229.16293]-GIILFISR",
+              "correct": false
+            },
+            {
+              "key": "scan=28925",
+              "rank": 11,
+              "tag": "AMLF",
+              "charge": 1,
+              "nterm_mass": 156.1215,
+              "cterm_mass": 608.3375,
+              "evalue": 1067.63,
+              "gapped": 1,
+              "peptide": "[+229.16293]-ASAVSELSPR",
+              "correct": false
+            },
+            {
+              "key": "scan=33654",
+              "rank": 14,
+              "tag": "AMEA",
+              "charge": 1,
+              "nterm_mass": 156.137,
+              "cterm_mass": 975.4805,
+              "evalue": 0.512492,
+              "gapped": 1,
+              "peptide": "[+229.16293]-EEAENTLQSFR",
+              "correct": false
+            },
+            {
+              "key": "scan=37531",
+              "rank": 14,
+              "tag": "AMVS",
+              "charge": 1,
+              "nterm_mass": 156.1344,
+              "cterm_mass": 769.4931,
+              "evalue": 16.6398,
+              "gapped": 1,
+              "peptide": "[+229.16293]-EVSVELAK[+229.16293]",
+              "correct": false
+            }
+          ],
+          "examples_correct": []
+        },
+        "N_isotope_-1": {
+          "rows": 418,
+          "spectra": 304,
+          "paper_correct_rows": 0,
+          "paper_correct_spectra": 0,
+          "top1_rows": 2,
+          "top1_paper_correct": 0,
+          "top1_wrong": 2,
+          "gapped_rows": 189,
+          "examples_wrong": [
+            {
+              "key": "scan=28731",
+              "rank": 1,
+              "tag": "ASTD",
+              "charge": 1,
+              "nterm_mass": 157.1253,
+              "cterm_mass": 754.4548,
+              "evalue": 25.4336,
+              "gapped": 1,
+              "peptide": "[+229.16293]-QLSSGVSEIR",
+              "correct": false
+            },
+            {
+              "key": "scan=33905",
+              "rank": 1,
+              "tag": "ANNF",
+              "charge": 2,
+              "nterm_mass": 157.126,
+              "cterm_mass": 1050.6628,
+              "evalue": 1.69251,
+              "gapped": 1,
+              "peptide": "[+229.16293]-K[+229.16293]GPQSLFNAPR",
+              "correct": false
+            },
+            {
+              "key": "scan=25123",
+              "rank": 3,
+              "tag": "GGME",
+              "charge": 2,
+              "nterm_mass": 171.1534,
+              "cterm_mass": 1246.6365,
+              "evalue": 247.295,
+              "gapped": 1,
+              "peptide": "[+229.16293]-MK[+229.16293]DTDSEEEIR",
+              "correct": false
+            },
+            {
+              "key": "scan=27293",
+              "rank": 3,
+              "tag": "ANYS",
+              "charge": 1,
+              "nterm_mass": 157.1246,
+              "cterm_mass": 505.2569,
+              "evalue": 0.415859,
+              "gapped": 1,
+              "peptide": "[+229.16293]-MYSYPAR",
+              "correct": false
+            },
+            {
+              "key": "scan=53400",
+              "rank": 3,
+              "tag": "ALFV",
+              "charge": 1,
+              "nterm_mass": 157.127,
+              "cterm_mass": 544.3417,
+              "evalue": 0.0806361,
+              "gapped": 0,
+              "peptide": "[+229.16293]-IFVWK[+229.16293]",
+              "correct": false
+            }
+          ],
+          "examples_correct": []
+        },
+        "N_isotope_1": {
+          "rows": 12,
+          "spectra": 12,
+          "paper_correct_rows": 0,
+          "paper_correct_spectra": 0,
+          "top1_rows": 0,
+          "top1_paper_correct": 0,
+          "top1_wrong": 0,
+          "gapped_rows": 12,
+          "examples_wrong": [
+            {
+              "key": "scan=33681",
+              "rank": 4,
+              "tag": "GNYF",
+              "charge": 1,
+              "nterm_mass": 173.1284,
+              "cterm_mass": 444.2926,
+              "evalue": 2.80913,
+              "gapped": 1,
+              "peptide": "[+229.16293]-DYFSK[+229.16293]",
+              "correct": false
+            },
+            {
+              "key": "scan=38583",
+              "rank": 7,
+              "tag": "GGVN",
+              "charge": 1,
+              "nterm_mass": 173.1564,
+              "cterm_mass": 612.3256,
+              "evalue": 0.437673,
+              "gapped": 1,
+              "peptide": "[+229.16293]-GAWSNVLR",
+              "correct": false
+            },
+            {
+              "key": "scan=43831",
+              "rank": 11,
+              "tag": "GGDF",
+              "charge": 1,
+              "nterm_mass": 173.1574,
+              "cterm_mass": 473.2863,
+              "evalue": 12.6072,
+              "gapped": 1,
+              "peptide": "[+229.16293]-VYFDLR",
+              "correct": false
+            },
+            {
+              "key": "scan=34812",
+              "rank": 13,
+              "tag": "GQLT",
+              "charge": 1,
+              "nterm_mass": 173.1274,
+              "cterm_mass": 527.3652,
+              "evalue": 1.00294,
+              "gapped": 1,
+              "peptide": "[+229.16293]-ELTGLK[+229.16293]",
+              "correct": false
+            },
+            {
+              "key": "scan=35509",
+              "rank": 21,
+              "tag": "GNLL",
+              "charge": 1,
+              "nterm_mass": 173.1286,
+              "cterm_mass": 516.2682,
+              "evalue": 30.1247,
+              "gapped": 1,
+              "peptide": "[+229.16293]-DLLSSVSR",
+              "correct": false
+            }
+          ],
+          "examples_correct": []
+        },
+        "N_isotope_2": {
+          "rows": 15,
+          "spectra": 15,
+          "paper_correct_rows": 0,
+          "paper_correct_spectra": 0,
+          "top1_rows": 0,
+          "top1_paper_correct": 0,
+          "top1_wrong": 0,
+          "gapped_rows": 15,
+          "examples_wrong": [
+            {
+              "key": "scan=26826",
+              "rank": 14,
+              "tag": "GPLN",
+              "charge": 1,
+              "nterm_mass": 174.1582,
+              "cterm_mass": 428.2973,
+              "evalue": 34.3311,
+              "gapped": 1,
+              "peptide": "[+229.16293]-VINAK[+229.16293]",
+              "correct": false
+            },
+            {
+              "key": "scan=25014",
+              "rank": 16,
+              "tag": "GPLV",
+              "charge": 1,
+              "nterm_mass": 174.1596,
+              "cterm_mass": 285.1468,
+              "evalue": 149.025,
+              "gapped": 1,
+              "peptide": "[+229.16293]-VLVER",
+              "correct": false
+            },
+            {
+              "key": "scan=39563",
+              "rank": 17,
+              "tag": "GPFG",
+              "charge": 1,
+              "nterm_mass": 174.1624,
+              "cterm_mass": 713.4308,
+              "evalue": 1.0979,
+              "gapped": 1,
+              "peptide": "[+229.16293]-VFGNEIK[+229.16293]",
+              "correct": false
+            },
+            {
+              "key": "scan=22538",
+              "rank": 19,
+              "tag": "GPGS",
+              "charge": 1,
+              "nterm_mass": 174.1521,
+              "cterm_mass": 543.3649,
+              "evalue": 961.026,
+              "gapped": 1,
+              "peptide": "[+229.16293]-VGSSVK[+229.16293]",
+              "correct": false
+            },
+            {
+              "key": "scan=29841",
+              "rank": 21,
+              "tag": "GPLG",
+              "charge": 1,
+              "nterm_mass": 174.1537,
+              "cterm_mass": 960.4176,
+              "evalue": 167.637,
+              "gapped": 1,
+              "peptide": "[+229.16293]-VIGSGC[+57.021465]NLDSAR",
+              "correct": false
+            }
+          ],
+          "examples_correct": []
+        }
+      },
+      "gapped_top1_wrong_with_tied_correct_spelling": 225,
+      "gapped_tied_adjacent_swaps": 147,
+      "gapped_tie_examples": [
+        {
+          "key": "scan=7504",
+          "wrong_tag": "GASA",
+          "correct_tag": "GGTA",
+          "correct_rank": 2,
+          "adjacent_swap": false
+        },
+        {
+          "key": "scan=11923",
+          "wrong_tag": "SYDS",
+          "correct_tag": "SYSD",
+          "correct_rank": 2,
+          "adjacent_swap": true
+        },
+        {
+          "key": "scan=12102",
+          "wrong_tag": "AENV",
+          "correct_tag": "AEVN",
+          "correct_rank": 2,
+          "adjacent_swap": true
+        },
+        {
+          "key": "scan=12575",
+          "wrong_tag": "QVSV",
+          "correct_tag": "QVVS",
+          "correct_rank": 2,
+          "adjacent_swap": true
+        },
+        {
+          "key": "scan=13331",
+          "wrong_tag": "TGNT",
+          "correct_tag": "TGSQ",
+          "correct_rank": 3,
+          "adjacent_swap": false
+        },
+        {
+          "key": "scan=14170",
+          "wrong_tag": "QLSS",
+          "correct_tag": "QSLS",
+          "correct_rank": 2,
+          "adjacent_swap": true
+        },
+        {
+          "key": "scan=15257",
+          "wrong_tag": "SSNT",
+          "correct_tag": "SSQS",
+          "correct_rank": 2,
+          "adjacent_swap": false
+        },
+        {
+          "key": "scan=15461",
+          "wrong_tag": "DTGT",
+          "correct_tag": "SEGT",
+          "correct_rank": 3,
+          "adjacent_swap": false
+        }
+      ],
+      "posthoc_rank1_replay": {
+        "tails": {
+          "gained": 0,
+          "lost": 0,
+          "gained_keys": [],
+          "lost_keys": [],
+          "emptied_spectra": 0
+        },
+        "isotopes": {
+          "gained": 0,
+          "lost": 0,
+          "gained_keys": [],
+          "lost_keys": [],
+          "emptied_spectra": 0
+        },
+        "tails_and_isotopes": {
+          "gained": 0,
+          "lost": 0,
+          "gained_keys": [],
+          "lost_keys": [],
+          "emptied_spectra": 0
+        }
+      }
+    },
+    {
+      "dataset": "PXD000001",
+      "chemistry": "label_blind",
+      "arm": "auto",
+      "truth_psms": 2642,
+      "tagged_psms": 2637,
+      "top1_paper_correct": 2211,
+      "top1_strict_correct": 2185,
+      "top1_wrong": 426,
+      "top1_wrong_gapped": 92,
+      "endpoint_lowercase_rows": 0,
+      "patterns": {
+        "current_GA": {
+          "rows": 0,
+          "spectra": 0,
+          "paper_correct_rows": 0,
+          "paper_correct_spectra": 0,
+          "top1_rows": 0,
+          "top1_paper_correct": 0,
+          "top1_wrong": 0,
+          "gapped_rows": 0,
+          "examples_wrong": [],
+          "examples_correct": []
+        },
+        "lowercase_GA_bypass": {
+          "rows": 0,
+          "spectra": 0,
+          "paper_correct_rows": 0,
+          "paper_correct_spectra": 0,
+          "top1_rows": 0,
+          "top1_paper_correct": 0,
+          "top1_wrong": 0,
+          "gapped_rows": 0,
+          "examples_wrong": [],
+          "examples_correct": []
+        },
+        "N_tail_020_to_050": {
+          "rows": 12,
+          "spectra": 9,
+          "paper_correct_rows": 0,
+          "paper_correct_spectra": 0,
+          "top1_rows": 0,
+          "top1_paper_correct": 0,
+          "top1_wrong": 0,
+          "gapped_rows": 1,
+          "examples_wrong": [
+            {
+              "key": "scan=2912",
+              "rank": 17,
+              "tag": "GEKM",
+              "charge": 1,
+              "nterm_mass": 172.1148,
+              "cterm_mass": 866.5102,
+              "evalue": 18.3935,
+              "gapped": 0,
+              "peptide": "[+229.16293]-EQMPDSPLK[+229.16293]",
+              "correct": false
+            },
+            {
+              "key": "scan=3716",
+              "rank": 18,
+              "tag": "ANDL",
+              "charge": 1,
+              "nterm_mass": 158.148,
+              "cterm_mass": 801.4418,
+              "evalue": 2.90557,
+              "gapped": 0,
+              "peptide": "[+229.16293]-GGFTVELNGIR",
+              "correct": false
+            },
+            {
+              "key": "scan=2904",
+              "rank": 19,
+              "tag": "GQNV",
+              "charge": 1,
+              "nterm_mass": 172.1658,
+              "cterm_mass": 889.5032,
+              "evalue": 19.7307,
+              "gapped": 0,
+              "peptide": "[+229.16293]-EIVPSYGQK[+229.16293]",
+              "correct": false
+            },
+            {
+              "key": "scan=3505",
+              "rank": 20,
+              "tag": "AEVD",
+              "charge": 1,
+              "nterm_mass": 158.1498,
+              "cterm_mass": 827.4195,
+              "evalue": 10.8962,
+              "gapped": 0,
+              "peptide": "[+229.16293]-ENEPFDVALR",
+              "correct": false
+            },
+            {
+              "key": "scan=3716",
+              "rank": 21,
+              "tag": "ADNL",
+              "charge": 1,
+              "nterm_mass": 158.148,
+              "cterm_mass": 801.4417,
+              "evalue": 5.26925,
+              "gapped": 0,
+              "peptide": "[+229.16293]-GGFTVELNGIR",
+              "correct": false
+            }
+          ],
+          "examples_correct": []
+        },
+        "C_tail_006_to_020": {
+          "rows": 1,
+          "spectra": 1,
+          "paper_correct_rows": 0,
+          "paper_correct_spectra": 0,
+          "top1_rows": 0,
+          "top1_paper_correct": 0,
+          "top1_wrong": 0,
+          "gapped_rows": 0,
+          "examples_wrong": [
+            {
+              "key": "scan=1534",
+              "rank": 7,
+              "tag": "AEQG",
+              "charge": 1,
+              "nterm_mass": 591.3579,
+              "cterm_mass": 154.1379,
+              "evalue": 10.5597,
+              "gapped": 0,
+              "peptide": "[+229.16293]-AGEATDK[+229.16293]",
+              "correct": false
+            }
+          ],
+          "examples_correct": []
+        },
+        "modified_GA_endpoint_near_unmodified_anchor": {
+          "rows": 0,
+          "spectra": 0,
+          "paper_correct_rows": 0,
+          "paper_correct_spectra": 0,
+          "top1_rows": 0,
+          "top1_paper_correct": 0,
+          "top1_wrong": 0,
+          "gapped_rows": 0,
+          "examples_wrong": [],
+          "examples_correct": []
+        },
+        "N_isotope_-2": {
+          "rows": 4,
+          "spectra": 4,
+          "paper_correct_rows": 0,
+          "paper_correct_spectra": 0,
+          "top1_rows": 0,
+          "top1_paper_correct": 0,
+          "top1_wrong": 0,
+          "gapped_rows": 4,
+          "examples_wrong": [
+            {
+              "key": "scan=1708",
+              "rank": 12,
+              "tag": "AFQD",
+              "charge": 1,
+              "nterm_mass": 156.1356,
+              "cterm_mass": 431.2464,
+              "evalue": 870.043,
+              "gapped": 1,
+              "peptide": "[+229.16293]-GYDQVTR",
+              "correct": false
+            },
+            {
+              "key": "scan=2281",
+              "rank": 12,
+              "tag": "AFNE",
+              "charge": 1,
+              "nterm_mass": 156.1289,
+              "cterm_mass": 509.3218,
+              "evalue": 0.22052,
+              "gapped": 1,
+              "peptide": "[+229.16293]-NLAENISR",
+              "correct": false
+            },
+            {
+              "key": "scan=4354",
+              "rank": 14,
+              "tag": "AFEL",
+              "charge": 1,
+              "nterm_mass": 156.1293,
+              "cterm_mass": 591.4018,
+              "evalue": 3.29169,
+              "gapped": 1,
+              "peptide": "[+229.16293]-LPGILELSR",
+              "correct": false
+            },
+            {
+              "key": "scan=3022",
+              "rank": 44,
+              "tag": "AMTL",
+              "charge": 1,
+              "nterm_mass": 156.1291,
+              "cterm_mass": 453.2815,
+              "evalue": 23.8807,
+              "gapped": 1,
+              "peptide": "[+229.16293]-ELIIGDR",
+              "correct": false
+            }
+          ],
+          "examples_correct": []
+        },
+        "N_isotope_-1": {
+          "rows": 39,
+          "spectra": 25,
+          "paper_correct_rows": 0,
+          "paper_correct_spectra": 0,
+          "top1_rows": 0,
+          "top1_paper_correct": 0,
+          "top1_wrong": 0,
+          "gapped_rows": 32,
+          "examples_wrong": [
+            {
+              "key": "scan=2107",
+              "rank": 13,
+              "tag": "AVAV",
+              "charge": 1,
+              "nterm_mass": 157.1304,
+              "cterm_mass": 630.3775,
+              "evalue": 7.27746,
+              "gapped": 0,
+              "peptide": "[+229.16293]-VAVTGNK[+229.16293]",
+              "correct": false
+            },
+            {
+              "key": "scan=1774",
+              "rank": 16,
+              "tag": "ADTE",
+              "charge": 1,
+              "nterm_mass": 157.1421,
+              "cterm_mass": 586.3205,
+              "evalue": 54.5899,
+              "gapped": 1,
+              "peptide": "[+229.16293]-NFGGEQAAR",
+              "correct": false
+            },
+            {
+              "key": "scan=2938",
+              "rank": 19,
+              "tag": "ARSV",
+              "charge": 1,
+              "nterm_mass": 157.1215,
+              "cterm_mass": 482.3073,
+              "evalue": 490.647,
+              "gapped": 1,
+              "peptide": "[+229.16293]-VATVSLPR",
+              "correct": false
+            },
+            {
+              "key": "scan=3804",
+              "rank": 19,
+              "tag": "ASLT",
+              "charge": 1,
+              "nterm_mass": 157.1302,
+              "cterm_mass": 594.3735,
+              "evalue": 21.5293,
+              "gapped": 1,
+              "peptide": "[+229.16293]-VGINELLR",
+              "correct": false
+            },
+            {
+              "key": "scan=4377",
+              "rank": 20,
+              "tag": "AEPE",
+              "charge": 1,
+              "nterm_mass": 157.1405,
+              "cterm_mass": 975.54,
+              "evalue": 4.421,
+              "gapped": 0,
+              "peptide": "[+229.16293]-QPELTDMVIFR",
+              "correct": false
+            }
+          ],
+          "examples_correct": []
+        },
+        "N_isotope_1": {
+          "rows": 13,
+          "spectra": 9,
+          "paper_correct_rows": 0,
+          "paper_correct_spectra": 0,
+          "top1_rows": 0,
+          "top1_paper_correct": 0,
+          "top1_wrong": 0,
+          "gapped_rows": 11,
+          "examples_wrong": [
+            {
+              "key": "scan=3306",
+              "rank": 15,
+              "tag": "ANVL",
+              "charge": 1,
+              "nterm_mass": 159.1117,
+              "cterm_mass": 628.4224,
+              "evalue": 8.87553,
+              "gapped": 0,
+              "peptide": "[+229.16293]-DVIASIK[+229.16293]",
+              "correct": false
+            },
+            {
+              "key": "scan=4176",
+              "rank": 27,
+              "tag": "GRSL",
+              "charge": 1,
+              "nterm_mass": 173.1488,
+              "cterm_mass": 415.2475,
+              "evalue": 106.077,
+              "gapped": 1,
+              "peptide": "[+229.16293]-FGLSLVR",
+              "correct": false
+            },
+            {
+              "key": "scan=1211",
+              "rank": 32,
+              "tag": "ANQQ",
+              "charge": 1,
+              "nterm_mass": 159.1093,
+              "cterm_mass": 542.3355,
+              "evalue": 2.26872,
+              "gapped": 0,
+              "peptide": "[+229.16293]-NGQAANK[+229.16293]",
+              "correct": false
+            },
+            {
+              "key": "scan=3970",
+              "rank": 32,
+              "tag": "ALNL",
+              "charge": 1,
+              "nterm_mass": 159.1179,
+              "cterm_mass": 665.3927,
+              "evalue": 193.276,
+              "gapped": 1,
+              "peptide": "[+229.16293]-LDIPVVVDR",
+              "correct": false
+            },
+            {
+              "key": "scan=3970",
+              "rank": 33,
+              "tag": "ANLL",
+              "charge": 1,
+              "nterm_mass": 159.1179,
+              "cterm_mass": 665.3927,
+              "evalue": 193.276,
+              "gapped": 1,
+              "peptide": "[+229.16293]-LDIPVVVDR",
+              "correct": false
+            }
+          ],
+          "examples_correct": []
+        },
+        "N_isotope_2": {
+          "rows": 12,
+          "spectra": 9,
+          "paper_correct_rows": 0,
+          "paper_correct_spectra": 0,
+          "top1_rows": 0,
+          "top1_paper_correct": 0,
+          "top1_wrong": 0,
+          "gapped_rows": 5,
+          "examples_wrong": [
+            {
+              "key": "scan=2095",
+              "rank": 7,
+              "tag": "GGAE",
+              "charge": 1,
+              "nterm_mass": 174.1284,
+              "cterm_mass": 1092.6239,
+              "evalue": 6.3065,
+              "gapped": 0,
+              "peptide": "[+229.16293]-IDK[+229.16293]PDADPDR",
+              "correct": false
+            },
+            {
+              "key": "scan=3078",
+              "rank": 18,
+              "tag": "ALTD",
+              "charge": 1,
+              "nterm_mass": 160.1277,
+              "cterm_mass": 612.4245,
+              "evalue": 9.29864,
+              "gapped": 0,
+              "peptide": "[+229.16293]-M[+15.994915]IGLVGK[+229.16293]",
+              "correct": false
+            },
+            {
+              "key": "scan=2086",
+              "rank": 21,
+              "tag": "GWAQ",
+              "charge": 1,
+              "nterm_mass": 174.1341,
+              "cterm_mass": 973.5771,
+              "evalue": 0.314343,
+              "gapped": 1,
+              "peptide": "[+229.16293]-EK[+229.16293]FEQAAATR",
+              "correct": false
+            },
+            {
+              "key": "scan=3667",
+              "rank": 21,
+              "tag": "GPPL",
+              "charge": 1,
+              "nterm_mass": 174.1618,
+              "cterm_mass": 822.4335,
+              "evalue": 27.5577,
+              "gapped": 1,
+              "peptide": "[+229.16293]-VPLPPLTEER",
+              "correct": false
+            },
+            {
+              "key": "scan=3128",
+              "rank": 22,
+              "tag": "AEPL",
+              "charge": 1,
+              "nterm_mass": 160.1252,
+              "cterm_mass": 584.3936,
+              "evalue": 3.91885,
+              "gapped": 0,
+              "peptide": "[+229.16293]-ALAALQK[+229.16293]",
+              "correct": false
+            }
+          ],
+          "examples_correct": []
+        }
+      },
+      "gapped_top1_wrong_with_tied_correct_spelling": 17,
+      "gapped_tied_adjacent_swaps": 12,
+      "gapped_tie_examples": [
+        {
+          "key": "scan=1182",
+          "wrong_tag": "RNVQ",
+          "correct_tag": "RVNQ",
+          "correct_rank": 2,
+          "adjacent_swap": true
+        },
+        {
+          "key": "scan=2518",
+          "wrong_tag": "GASV",
+          "correct_tag": "GTGV",
+          "correct_rank": 4,
+          "adjacent_swap": false
+        },
+        {
+          "key": "scan=2617",
+          "wrong_tag": "VPVD",
+          "correct_tag": "VVPD",
+          "correct_rank": 2,
+          "adjacent_swap": true
+        },
+        {
+          "key": "scan=3169",
+          "wrong_tag": "NMPD",
+          "correct_tag": "NPMD",
+          "correct_rank": 2,
+          "adjacent_swap": true
+        },
+        {
+          "key": "scan=3183",
+          "wrong_tag": "VDDF",
+          "correct_tag": "VDFD",
+          "correct_rank": 2,
+          "adjacent_swap": true
+        },
+        {
+          "key": "scan=3516",
+          "wrong_tag": "LPEL",
+          "correct_tag": "PLEL",
+          "correct_rank": 2,
+          "adjacent_swap": true
+        },
+        {
+          "key": "scan=3571",
+          "wrong_tag": "LPDV",
+          "correct_tag": "PLDV",
+          "correct_rank": 2,
+          "adjacent_swap": true
+        },
+        {
+          "key": "scan=4011",
+          "wrong_tag": "FEPQ",
+          "correct_tag": "FPEQ",
+          "correct_rank": 2,
+          "adjacent_swap": true
+        }
+      ],
+      "posthoc_rank1_replay": {
+        "tails": {
+          "gained": 0,
+          "lost": 0,
+          "gained_keys": [],
+          "lost_keys": [],
+          "emptied_spectra": 0
+        },
+        "isotopes": {
+          "gained": 0,
+          "lost": 0,
+          "gained_keys": [],
+          "lost_keys": [],
+          "emptied_spectra": 0
+        },
+        "tails_and_isotopes": {
+          "gained": 0,
+          "lost": 0,
+          "gained_keys": [],
+          "lost_keys": [],
+          "emptied_spectra": 0
+        }
+      }
+    },
+    {
+      "dataset": "PXD000001",
+      "chemistry": "label_aware",
+      "arm": "auto",
+      "truth_psms": 2642,
+      "tagged_psms": 2636,
+      "top1_paper_correct": 2207,
+      "top1_strict_correct": 2207,
+      "top1_wrong": 429,
+      "top1_wrong_gapped": 106,
+      "endpoint_lowercase_rows": 0,
+      "patterns": {
+        "current_GA": {
+          "rows": 0,
+          "spectra": 0,
+          "paper_correct_rows": 0,
+          "paper_correct_spectra": 0,
+          "top1_rows": 0,
+          "top1_paper_correct": 0,
+          "top1_wrong": 0,
+          "gapped_rows": 0,
+          "examples_wrong": [],
+          "examples_correct": []
+        },
+        "lowercase_GA_bypass": {
+          "rows": 0,
+          "spectra": 0,
+          "paper_correct_rows": 0,
+          "paper_correct_spectra": 0,
+          "top1_rows": 0,
+          "top1_paper_correct": 0,
+          "top1_wrong": 0,
+          "gapped_rows": 0,
+          "examples_wrong": [],
+          "examples_correct": []
+        },
+        "N_tail_020_to_050": {
+          "rows": 11,
+          "spectra": 8,
+          "paper_correct_rows": 0,
+          "paper_correct_spectra": 0,
+          "top1_rows": 0,
+          "top1_paper_correct": 0,
+          "top1_wrong": 0,
+          "gapped_rows": 3,
+          "examples_wrong": [
+            {
+              "key": "scan=3716",
+              "rank": 18,
+              "tag": "ANDL",
+              "charge": 1,
+              "nterm_mass": 158.148,
+              "cterm_mass": 801.4418,
+              "evalue": 2.62704,
+              "gapped": 0,
+              "peptide": "[+229.16293]-GGFTVELNGIR",
+              "correct": false
+            },
+            {
+              "key": "scan=2904",
+              "rank": 19,
+              "tag": "GQNV",
+              "charge": 1,
+              "nterm_mass": 172.1658,
+              "cterm_mass": 889.5032,
+              "evalue": 17.9638,
+              "gapped": 0,
+              "peptide": "[+229.16293]-EIVPSYGQK[+229.16293]",
+              "correct": false
+            },
+            {
+              "key": "scan=3505",
+              "rank": 20,
+              "tag": "AEVD",
+              "charge": 1,
+              "nterm_mass": 158.1498,
+              "cterm_mass": 827.4195,
+              "evalue": 10.0301,
+              "gapped": 0,
+              "peptide": "[+229.16293]-ENEPFDVALR",
+              "correct": false
+            },
+            {
+              "key": "scan=3716",
+              "rank": 21,
+              "tag": "ADNL",
+              "charge": 1,
+              "nterm_mass": 158.148,
+              "cterm_mass": 801.4417,
+              "evalue": 4.76414,
+              "gapped": 0,
+              "peptide": "[+229.16293]-GGFTVELNGIR",
+              "correct": false
+            },
+            {
+              "key": "scan=3234",
+              "rank": 36,
+              "tag": "AWEM",
+              "charge": 1,
+              "nterm_mass": 158.1459,
+              "cterm_mass": 713.3661,
+              "evalue": 13.5556,
+              "gapped": 0,
+              "peptide": "[+229.16293]-SVEMMSPELR",
+              "correct": false
+            }
+          ],
+          "examples_correct": []
+        },
+        "C_tail_006_to_020": {
+          "rows": 1,
+          "spectra": 1,
+          "paper_correct_rows": 0,
+          "paper_correct_spectra": 0,
+          "top1_rows": 0,
+          "top1_paper_correct": 0,
+          "top1_wrong": 0,
+          "gapped_rows": 0,
+          "examples_wrong": [
+            {
+              "key": "scan=1534",
+              "rank": 8,
+              "tag": "AEQG",
+              "charge": 1,
+              "nterm_mass": 591.3579,
+              "cterm_mass": 154.1379,
+              "evalue": 8.67966,
+              "gapped": 0,
+              "peptide": "[+229.16293]-AGEATDK[+229.16293]",
+              "correct": false
+            }
+          ],
+          "examples_correct": []
+        },
+        "modified_GA_endpoint_near_unmodified_anchor": {
+          "rows": 0,
+          "spectra": 0,
+          "paper_correct_rows": 0,
+          "paper_correct_spectra": 0,
+          "top1_rows": 0,
+          "top1_paper_correct": 0,
+          "top1_wrong": 0,
+          "gapped_rows": 0,
+          "examples_wrong": [],
+          "examples_correct": []
+        },
+        "N_isotope_-2": {
+          "rows": 4,
+          "spectra": 4,
+          "paper_correct_rows": 0,
+          "paper_correct_spectra": 0,
+          "top1_rows": 0,
+          "top1_paper_correct": 0,
+          "top1_wrong": 0,
+          "gapped_rows": 4,
+          "examples_wrong": [
+            {
+              "key": "scan=1708",
+              "rank": 12,
+              "tag": "AFQD",
+              "charge": 1,
+              "nterm_mass": 156.1356,
+              "cterm_mass": 431.2464,
+              "evalue": 919.76,
+              "gapped": 1,
+              "peptide": "[+229.16293]-GYDQVTR",
+              "correct": false
+            },
+            {
+              "key": "scan=2281",
+              "rank": 12,
+              "tag": "AFNE",
+              "charge": 1,
+              "nterm_mass": 156.1289,
+              "cterm_mass": 509.3218,
+              "evalue": 0.207835,
+              "gapped": 1,
+              "peptide": "[+229.16293]-NLAENISR",
+              "correct": false
+            },
+            {
+              "key": "scan=4354",
+              "rank": 14,
+              "tag": "AFEL",
+              "charge": 1,
+              "nterm_mass": 156.1293,
+              "cterm_mass": 591.4018,
+              "evalue": 3.02376,
+              "gapped": 1,
+              "peptide": "[+229.16293]-LPGILELSR",
+              "correct": false
+            },
+            {
+              "key": "scan=3022",
+              "rank": 44,
+              "tag": "AMTL",
+              "charge": 1,
+              "nterm_mass": 156.1291,
+              "cterm_mass": 453.2815,
+              "evalue": 24.7652,
+              "gapped": 1,
+              "peptide": "[+229.16293]-ELIIGDR",
+              "correct": false
+            }
+          ],
+          "examples_correct": []
+        },
+        "N_isotope_-1": {
+          "rows": 44,
+          "spectra": 28,
+          "paper_correct_rows": 0,
+          "paper_correct_spectra": 0,
+          "top1_rows": 0,
+          "top1_paper_correct": 0,
+          "top1_wrong": 0,
+          "gapped_rows": 38,
+          "examples_wrong": [
+            {
+              "key": "scan=2555",
+              "rank": 8,
+              "tag": "ARSK",
+              "charge": 1,
+              "nterm_mass": 157.1316,
+              "cterm_mass": 775.4508,
+              "evalue": 1.78339,
+              "gapped": 1,
+              "peptide": "[+229.16293]-LEK[+229.16293]PASYK[+229.16293]",
+              "correct": false
+            },
+            {
+              "key": "scan=3700",
+              "rank": 8,
+              "tag": "AKLC",
+              "charge": 1,
+              "nterm_mass": 157.1225,
+              "cterm_mass": 339.2127,
+              "evalue": 0.929849,
+              "gapped": 1,
+              "peptide": "[+229.16293]-GAC[+45.98772]LLPK[+229.16293]",
+              "correct": false
+            },
+            {
+              "key": "scan=2555",
+              "rank": 9,
+              "tag": "ASRK",
+              "charge": 1,
+              "nterm_mass": 157.1316,
+              "cterm_mass": 775.4508,
+              "evalue": 1.78339,
+              "gapped": 1,
+              "peptide": "[+229.16293]-LEK[+229.16293]PASYK[+229.16293]",
+              "correct": false
+            },
+            {
+              "key": "scan=2107",
+              "rank": 13,
+              "tag": "AVAV",
+              "charge": 1,
+              "nterm_mass": 157.1304,
+              "cterm_mass": 630.3775,
+              "evalue": 5.93205,
+              "gapped": 0,
+              "peptide": "[+229.16293]-VAVTGNK[+229.16293]",
+              "correct": false
+            },
+            {
+              "key": "scan=1774",
+              "rank": 16,
+              "tag": "ADTE",
+              "charge": 1,
+              "nterm_mass": 157.1421,
+              "cterm_mass": 586.3205,
+              "evalue": 52.0134,
+              "gapped": 1,
+              "peptide": "[+229.16293]-NFGGEQAAR",
+              "correct": false
+            }
+          ],
+          "examples_correct": []
+        },
+        "N_isotope_1": {
+          "rows": 21,
+          "spectra": 15,
+          "paper_correct_rows": 0,
+          "paper_correct_spectra": 0,
+          "top1_rows": 0,
+          "top1_paper_correct": 0,
+          "top1_wrong": 0,
+          "gapped_rows": 17,
+          "examples_wrong": [
+            {
+              "key": "scan=3306",
+              "rank": 15,
+              "tag": "ANVL",
+              "charge": 1,
+              "nterm_mass": 159.1117,
+              "cterm_mass": 628.4224,
+              "evalue": 7.90064,
+              "gapped": 0,
+              "peptide": "[+229.16293]-DVIASIK[+229.16293]",
+              "correct": false
+            },
+            {
+              "key": "scan=4108",
+              "rank": 20,
+              "tag": "GKDF",
+              "charge": 1,
+              "nterm_mass": 173.1497,
+              "cterm_mass": 496.2904,
+              "evalue": 2.85284,
+              "gapped": 1,
+              "peptide": "[+229.16293]-DLGFDVIK[+229.16293]",
+              "correct": false
+            },
+            {
+              "key": "scan=1211",
+              "rank": 23,
+              "tag": "ANQQ",
+              "charge": 1,
+              "nterm_mass": 159.1093,
+              "cterm_mass": 542.3355,
+              "evalue": 1.82645,
+              "gapped": 0,
+              "peptide": "[+229.16293]-NGQAANK[+229.16293]",
+              "correct": false
+            },
+            {
+              "key": "scan=4176",
+              "rank": 24,
+              "tag": "GRSL",
+              "charge": 1,
+              "nterm_mass": 173.1488,
+              "cterm_mass": 415.2475,
+              "evalue": 78.77,
+              "gapped": 1,
+              "peptide": "[+229.16293]-FGLSLVR",
+              "correct": false
+            },
+            {
+              "key": "scan=3970",
+              "rank": 27,
+              "tag": "ALNL",
+              "charge": 1,
+              "nterm_mass": 159.1179,
+              "cterm_mass": 665.3927,
+              "evalue": 171.801,
+              "gapped": 1,
+              "peptide": "[+229.16293]-LDIPVVVDR",
+              "correct": false
+            }
+          ],
+          "examples_correct": []
+        },
+        "N_isotope_2": {
+          "rows": 13,
+          "spectra": 10,
+          "paper_correct_rows": 0,
+          "paper_correct_spectra": 0,
+          "top1_rows": 0,
+          "top1_paper_correct": 0,
+          "top1_wrong": 0,
+          "gapped_rows": 6,
+          "examples_wrong": [
+            {
+              "key": "scan=2095",
+              "rank": 9,
+              "tag": "GGAE",
+              "charge": 1,
+              "nterm_mass": 174.1284,
+              "cterm_mass": 1092.6239,
+              "evalue": 5.73749,
+              "gapped": 0,
+              "peptide": "[+229.16293]-IDK[+229.16293]PDADPDR",
+              "correct": false
+            },
+            {
+              "key": "scan=3078",
+              "rank": 17,
+              "tag": "ALTD",
+              "charge": 1,
+              "nterm_mass": 160.1277,
+              "cterm_mass": 612.4245,
+              "evalue": 8.39546,
+              "gapped": 0,
+              "peptide": "[+229.16293]-M[+15.994915]IGLVGK[+229.16293]",
+              "correct": false
+            },
+            {
+              "key": "scan=2086",
+              "rank": 19,
+              "tag": "GWAQ",
+              "charge": 1,
+              "nterm_mass": 174.1341,
+              "cterm_mass": 973.5771,
+              "evalue": 0.294782,
+              "gapped": 1,
+              "peptide": "[+229.16293]-EK[+229.16293]FEQAAATR",
+              "correct": false
+            },
+            {
+              "key": "scan=3128",
+              "rank": 21,
+              "tag": "AEPL",
+              "charge": 1,
+              "nterm_mass": 160.1252,
+              "cterm_mass": 584.3936,
+              "evalue": 3.55633,
+              "gapped": 0,
+              "peptide": "[+229.16293]-ALAALQK[+229.16293]",
+              "correct": false
+            },
+            {
+              "key": "scan=3667",
+              "rank": 21,
+              "tag": "GPPL",
+              "charge": 1,
+              "nterm_mass": 174.1618,
+              "cterm_mass": 822.4335,
+              "evalue": 24.7628,
+              "gapped": 1,
+              "peptide": "[+229.16293]-VPLPPLTEER",
+              "correct": false
+            }
+          ],
+          "examples_correct": []
+        }
+      },
+      "gapped_top1_wrong_with_tied_correct_spelling": 16,
+      "gapped_tied_adjacent_swaps": 11,
+      "gapped_tie_examples": [
+        {
+          "key": "scan=2555",
+          "wrong_tag": "EKAP",
+          "correct_tag": "EKPA",
+          "correct_rank": 2,
+          "adjacent_swap": true
+        },
+        {
+          "key": "scan=2617",
+          "wrong_tag": "VPVD",
+          "correct_tag": "VVPD",
+          "correct_rank": 2,
+          "adjacent_swap": true
+        },
+        {
+          "key": "scan=3169",
+          "wrong_tag": "NMPD",
+          "correct_tag": "NPMD",
+          "correct_rank": 2,
+          "adjacent_swap": true
+        },
+        {
+          "key": "scan=3183",
+          "wrong_tag": "VDDF",
+          "correct_tag": "VDFD",
+          "correct_rank": 2,
+          "adjacent_swap": true
+        },
+        {
+          "key": "scan=3516",
+          "wrong_tag": "LPEL",
+          "correct_tag": "PLEL",
+          "correct_rank": 2,
+          "adjacent_swap": true
+        },
+        {
+          "key": "scan=3571",
+          "wrong_tag": "LPDV",
+          "correct_tag": "PLDV",
+          "correct_rank": 2,
+          "adjacent_swap": true
+        },
+        {
+          "key": "scan=4232",
+          "wrong_tag": "NLLS",
+          "correct_tag": "NLVT",
+          "correct_rank": 4,
+          "adjacent_swap": false
+        },
+        {
+          "key": "scan=4338",
+          "wrong_tag": "GDPV",
+          "correct_tag": "GPDV",
+          "correct_rank": 2,
+          "adjacent_swap": true
+        }
+      ],
+      "posthoc_rank1_replay": {
+        "tails": {
+          "gained": 0,
+          "lost": 0,
+          "gained_keys": [],
+          "lost_keys": [],
+          "emptied_spectra": 0
+        },
+        "isotopes": {
+          "gained": 0,
+          "lost": 0,
+          "gained_keys": [],
+          "lost_keys": [],
+          "emptied_spectra": 0
+        },
+        "tails_and_isotopes": {
+          "gained": 0,
+          "lost": 0,
+          "gained_keys": [],
+          "lost_keys": [],
+          "emptied_spectra": 0
+        }
+      }
+    },
+    {
+      "dataset": "PXD004541_fr09",
+      "chemistry": "label_blind",
+      "arm": "auto",
+      "truth_psms": 11072,
+      "tagged_psms": 11071,
+      "top1_paper_correct": 9937,
+      "top1_strict_correct": 9856,
+      "top1_wrong": 1134,
+      "top1_wrong_gapped": 195,
+      "endpoint_lowercase_rows": 0,
+      "patterns": {
+        "current_GA": {
+          "rows": 0,
+          "spectra": 0,
+          "paper_correct_rows": 0,
+          "paper_correct_spectra": 0,
+          "top1_rows": 0,
+          "top1_paper_correct": 0,
+          "top1_wrong": 0,
+          "gapped_rows": 0,
+          "examples_wrong": [],
+          "examples_correct": []
+        },
+        "lowercase_GA_bypass": {
+          "rows": 0,
+          "spectra": 0,
+          "paper_correct_rows": 0,
+          "paper_correct_spectra": 0,
+          "top1_rows": 0,
+          "top1_paper_correct": 0,
+          "top1_wrong": 0,
+          "gapped_rows": 0,
+          "examples_wrong": [],
+          "examples_correct": []
+        },
+        "N_tail_020_to_050": {
+          "rows": 16,
+          "spectra": 12,
+          "paper_correct_rows": 0,
+          "paper_correct_spectra": 0,
+          "top1_rows": 0,
+          "top1_paper_correct": 0,
+          "top1_wrong": 0,
+          "gapped_rows": 7,
+          "examples_wrong": [
+            {
+              "key": "scan=11516",
+              "rank": 16,
+              "tag": "ASCH",
+              "charge": 1,
+              "nterm_mass": 158.1697,
+              "cterm_mass": 641.3753,
+              "evalue": 11.6936,
+              "gapped": 0,
+              "peptide": "[+229.16293]-M[+15.994915]IYASSK[+229.16293]",
+              "correct": false
+            },
+            {
+              "key": "scan=10571",
+              "rank": 24,
+              "tag": "AFHD",
+              "charge": 2,
+              "nterm_mass": 158.1028,
+              "cterm_mass": 896.5379,
+              "evalue": 76.7371,
+              "gapped": 1,
+              "peptide": "[+229.16293]-IDGSNTVDHK[+229.16293]",
+              "correct": false
+            },
+            {
+              "key": "scan=21379",
+              "rank": 26,
+              "tag": "GM[Oxidation]SP",
+              "charge": 1,
+              "nterm_mass": 172.1718,
+              "cterm_mass": 654.4329,
+              "evalue": 15.1101,
+              "gapped": 0,
+              "peptide": "[+229.16293]-FSPVTPK[+229.16293]",
+              "correct": false
+            },
+            {
+              "key": "scan=34833",
+              "rank": 27,
+              "tag": "AM[Oxidation]EW",
+              "charge": 1,
+              "nterm_mass": 158.1535,
+              "cterm_mass": 1051.5388,
+              "evalue": 8.39487,
+              "gapped": 0,
+              "peptide": "[+229.16293]-FEWELPLDEAQR",
+              "correct": false
+            },
+            {
+              "key": "scan=34833",
+              "rank": 28,
+              "tag": "GM[Oxidation]EW",
+              "charge": 1,
+              "nterm_mass": 172.1688,
+              "cterm_mass": 1051.5392,
+              "evalue": 9.03843,
+              "gapped": 0,
+              "peptide": "[+229.16293]-FEWELPLDEAQR",
+              "correct": false
+            }
+          ],
+          "examples_correct": []
+        },
+        "C_tail_006_to_020": {
+          "rows": 2,
+          "spectra": 2,
+          "paper_correct_rows": 0,
+          "paper_correct_spectra": 0,
+          "top1_rows": 0,
+          "top1_paper_correct": 0,
+          "top1_wrong": 0,
+          "gapped_rows": 2,
+          "examples_wrong": [
+            {
+              "key": "scan=23663",
+              "rank": 26,
+              "tag": "EAQG",
+              "charge": 1,
+              "nterm_mass": 1147.5433,
+              "cterm_mass": 154.1112,
+              "evalue": 64.8969,
+              "gapped": 1,
+              "peptide": "[+229.16293]-SYSPYDM[+15.994915]LESIR",
+              "correct": false
+            },
+            {
+              "key": "scan=9339",
+              "rank": 28,
+              "tag": "SLCG",
+              "charge": 1,
+              "nterm_mass": 580.3196,
+              "cterm_mass": 154.1379,
+              "evalue": 135.159,
+              "gapped": 1,
+              "peptide": "[+229.16293]-HVDSLSQR",
+              "correct": false
+            }
+          ],
+          "examples_correct": []
+        },
+        "modified_GA_endpoint_near_unmodified_anchor": {
+          "rows": 0,
+          "spectra": 0,
+          "paper_correct_rows": 0,
+          "paper_correct_spectra": 0,
+          "top1_rows": 0,
+          "top1_paper_correct": 0,
+          "top1_wrong": 0,
+          "gapped_rows": 0,
+          "examples_wrong": [],
+          "examples_correct": []
+        },
+        "N_isotope_-2": {
+          "rows": 64,
+          "spectra": 57,
+          "paper_correct_rows": 0,
+          "paper_correct_spectra": 0,
+          "top1_rows": 0,
+          "top1_paper_correct": 0,
+          "top1_wrong": 0,
+          "gapped_rows": 59,
+          "examples_wrong": [
+            {
+              "key": "scan=11613",
+              "rank": 5,
+              "tag": "ADWQ",
+              "charge": 1,
+              "nterm_mass": 156.1201,
+              "cterm_mass": 531.3132,
+              "evalue": 1.01353,
+              "gapped": 0,
+              "peptide": "[+229.16293]-DWQDGK[+229.16293]",
+              "correct": false
+            },
+            {
+              "key": "scan=11613",
+              "rank": 6,
+              "tag": "GDWQ",
+              "charge": 1,
+              "nterm_mass": 170.135,
+              "cterm_mass": 531.314,
+              "evalue": 2.31709,
+              "gapped": 0,
+              "peptide": "[+229.16293]-DWQDGK[+229.16293]",
+              "correct": false
+            },
+            {
+              "key": "scan=20079",
+              "rank": 6,
+              "tag": "AFAL",
+              "charge": 1,
+              "nterm_mass": 156.1231,
+              "cterm_mass": 492.3269,
+              "evalue": 1.65512,
+              "gapped": 1,
+              "peptide": "[+229.16293]-APIIAVTR",
+              "correct": false
+            },
+            {
+              "key": "scan=11643",
+              "rank": 8,
+              "tag": "ATAV",
+              "charge": 1,
+              "nterm_mass": 156.1233,
+              "cterm_mass": 740.3519,
+              "evalue": 3.03599,
+              "gapped": 0,
+              "peptide": "[+229.16293]-TAVC[+57.021465]DIPPR",
+              "correct": false
+            },
+            {
+              "key": "scan=11643",
+              "rank": 10,
+              "tag": "GTAV",
+              "charge": 1,
+              "nterm_mass": 170.1392,
+              "cterm_mass": 740.3516,
+              "evalue": 3.33363,
+              "gapped": 0,
+              "peptide": "[+229.16293]-TAVC[+57.021465]DIPPR",
+              "correct": false
+            }
+          ],
+          "examples_correct": []
+        },
+        "N_isotope_-1": {
+          "rows": 353,
+          "spectra": 200,
+          "paper_correct_rows": 0,
+          "paper_correct_spectra": 0,
+          "top1_rows": 0,
+          "top1_paper_correct": 0,
+          "top1_wrong": 0,
+          "gapped_rows": 240,
+          "examples_wrong": [
+            {
+              "key": "scan=13949",
+              "rank": 8,
+              "tag": "ATYE",
+              "charge": 1,
+              "nterm_mass": 157.1248,
+              "cterm_mass": 586.371,
+              "evalue": 11.3673,
+              "gapped": 0,
+              "peptide": "[+229.16293]-TYEDIK[+229.16293]",
+              "correct": false
+            },
+            {
+              "key": "scan=23116",
+              "rank": 9,
+              "tag": "ALLS",
+              "charge": 1,
+              "nterm_mass": 157.1231,
+              "cterm_mass": 608.357,
+              "evalue": 5.36318,
+              "gapped": 0,
+              "peptide": "[+229.16293]-IISSYK[+229.16293]",
+              "correct": false
+            },
+            {
+              "key": "scan=25971",
+              "rank": 9,
+              "tag": "ALAS",
+              "charge": 1,
+              "nterm_mass": 157.1245,
+              "cterm_mass": 620.3922,
+              "evalue": 1.52035,
+              "gapped": 0,
+              "peptide": "[+229.16293]-LASYVK[+229.16293]",
+              "correct": false
+            },
+            {
+              "key": "scan=17584",
+              "rank": 11,
+              "tag": "ALLS",
+              "charge": 1,
+              "nterm_mass": 157.125,
+              "cterm_mass": 573.3509,
+              "evalue": 1.09944,
+              "gapped": 0,
+              "peptide": "[+229.16293]-LLSSQK[+229.16293]",
+              "correct": false
+            },
+            {
+              "key": "scan=24181",
+              "rank": 11,
+              "tag": "GRES",
+              "charge": 1,
+              "nterm_mass": 171.1456,
+              "cterm_mass": 667.3918,
+              "evalue": 0.231526,
+              "gapped": 0,
+              "peptide": "[+229.16293]-IGNSYFK[+229.16293]",
+              "correct": false
+            }
+          ],
+          "examples_correct": []
+        },
+        "N_isotope_1": {
+          "rows": 69,
+          "spectra": 52,
+          "paper_correct_rows": 0,
+          "paper_correct_spectra": 0,
+          "top1_rows": 0,
+          "top1_paper_correct": 0,
+          "top1_wrong": 0,
+          "gapped_rows": 45,
+          "examples_wrong": [
+            {
+              "key": "scan=12147",
+              "rank": 9,
+              "tag": "AAVD",
+              "charge": 1,
+              "nterm_mass": 159.1283,
+              "cterm_mass": 503.2492,
+              "evalue": 1.34608,
+              "gapped": 0,
+              "peptide": "[+229.16293]-AQSFAER",
+              "correct": false
+            },
+            {
+              "key": "scan=12147",
+              "rank": 12,
+              "tag": "GAVD",
+              "charge": 1,
+              "nterm_mass": 173.1435,
+              "cterm_mass": 503.2496,
+              "evalue": 2.06513,
+              "gapped": 0,
+              "peptide": "[+229.16293]-AQSFAER",
+              "correct": false
+            },
+            {
+              "key": "scan=20357",
+              "rank": 14,
+              "tag": "GAEM",
+              "charge": 1,
+              "nterm_mass": 173.1461,
+              "cterm_mass": 568.3341,
+              "evalue": 0.611736,
+              "gapped": 0,
+              "peptide": "[+229.16293]-AC[+57.021465]TELGIR",
+              "correct": false
+            },
+            {
+              "key": "scan=21469",
+              "rank": 14,
+              "tag": "GNLL",
+              "charge": 1,
+              "nterm_mass": 173.127,
+              "cterm_mass": 865.3558,
+              "evalue": 39.5534,
+              "gapped": 1,
+              "peptide": "[+229.16293]-DIISDTSGDFR",
+              "correct": false
+            },
+            {
+              "key": "scan=20827",
+              "rank": 17,
+              "tag": "AWLV",
+              "charge": 1,
+              "nterm_mass": 159.1181,
+              "cterm_mass": 346.2228,
+              "evalue": 19.0815,
+              "gapped": 0,
+              "peptide": "[+229.16293]-YVITIR",
+              "correct": false
+            }
+          ],
+          "examples_correct": []
+        },
+        "N_isotope_2": {
+          "rows": 33,
+          "spectra": 32,
+          "paper_correct_rows": 0,
+          "paper_correct_spectra": 0,
+          "top1_rows": 0,
+          "top1_paper_correct": 0,
+          "top1_wrong": 0,
+          "gapped_rows": 33,
+          "examples_wrong": [
+            {
+              "key": "scan=12529",
+              "rank": 20,
+              "tag": "GHLD",
+              "charge": 1,
+              "nterm_mass": 174.1393,
+              "cterm_mass": 642.336,
+              "evalue": 0.897082,
+              "gapped": 1,
+              "peptide": "[+229.16293]-TAVC[+57.021465]DIPPR",
+              "correct": false
+            },
+            {
+              "key": "scan=16299",
+              "rank": 20,
+              "tag": "GPFS",
+              "charge": 1,
+              "nterm_mass": 174.1582,
+              "cterm_mass": 414.277,
+              "evalue": 165.447,
+              "gapped": 1,
+              "peptide": "[+229.16293]-VFSGK[+229.16293]",
+              "correct": false
+            },
+            {
+              "key": "scan=16439",
+              "rank": 21,
+              "tag": "GNKY",
+              "charge": 1,
+              "nterm_mass": 174.1295,
+              "cterm_mass": 399.2233,
+              "evalue": 14.4482,
+              "gapped": 1,
+              "peptide": "[+229.16293]-MLYAATR",
+              "correct": false
+            },
+            {
+              "key": "scan=17548",
+              "rank": 24,
+              "tag": "GPMD",
+              "charge": 1,
+              "nterm_mass": 174.157,
+              "cterm_mass": 418.1984,
+              "evalue": 262.167,
+              "gapped": 1,
+              "peptide": "[+229.16293]-VMDDFR",
+              "correct": false
+            },
+            {
+              "key": "scan=19896",
+              "rank": 24,
+              "tag": "GELY",
+              "charge": 1,
+              "nterm_mass": 174.1431,
+              "cterm_mass": 602.3585,
+              "evalue": 1.34423,
+              "gapped": 1,
+              "peptide": "[+229.16293]-MIYASSK[+229.16293]",
+              "correct": false
+            }
+          ],
+          "examples_correct": []
+        }
+      },
+      "gapped_top1_wrong_with_tied_correct_spelling": 44,
+      "gapped_tied_adjacent_swaps": 40,
+      "gapped_tie_examples": [
+        {
+          "key": "scan=8858",
+          "wrong_tag": "PTSS",
+          "correct_tag": "TPSS",
+          "correct_rank": 2,
+          "adjacent_swap": true
+        },
+        {
+          "key": "scan=8881",
+          "wrong_tag": "LPTA",
+          "correct_tag": "LTPA",
+          "correct_rank": 2,
+          "adjacent_swap": true
+        },
+        {
+          "key": "scan=9271",
+          "wrong_tag": "NPSP",
+          "correct_tag": "NSPP",
+          "correct_rank": 2,
+          "adjacent_swap": true
+        },
+        {
+          "key": "scan=10516",
+          "wrong_tag": "HEAY",
+          "correct_tag": "HEYA",
+          "correct_rank": 4,
+          "adjacent_swap": true
+        },
+        {
+          "key": "scan=10956",
+          "wrong_tag": "EPEA",
+          "correct_tag": "PEEA",
+          "correct_rank": 2,
+          "adjacent_swap": true
+        },
+        {
+          "key": "scan=10959",
+          "wrong_tag": "TELL",
+          "correct_tag": "TLEL",
+          "correct_rank": 2,
+          "adjacent_swap": true
+        },
+        {
+          "key": "scan=12017",
+          "wrong_tag": "PYYA",
+          "correct_tag": "YPYA",
+          "correct_rank": 2,
+          "adjacent_swap": true
+        },
+        {
+          "key": "scan=13030",
+          "wrong_tag": "ADDT",
+          "correct_tag": "ADSE",
+          "correct_rank": 3,
+          "adjacent_swap": false
+        }
+      ],
+      "posthoc_rank1_replay": {
+        "tails": {
+          "gained": 0,
+          "lost": 0,
+          "gained_keys": [],
+          "lost_keys": [],
+          "emptied_spectra": 0
+        },
+        "isotopes": {
+          "gained": 0,
+          "lost": 0,
+          "gained_keys": [],
+          "lost_keys": [],
+          "emptied_spectra": 0
+        },
+        "tails_and_isotopes": {
+          "gained": 0,
+          "lost": 0,
+          "gained_keys": [],
+          "lost_keys": [],
+          "emptied_spectra": 0
+        }
+      }
+    },
+    {
+      "dataset": "PXD004541_fr09",
+      "chemistry": "label_aware",
+      "arm": "auto",
+      "truth_psms": 11072,
+      "tagged_psms": 11071,
+      "top1_paper_correct": 9927,
+      "top1_strict_correct": 9926,
+      "top1_wrong": 1144,
+      "top1_wrong_gapped": 204,
+      "endpoint_lowercase_rows": 0,
+      "patterns": {
+        "current_GA": {
+          "rows": 0,
+          "spectra": 0,
+          "paper_correct_rows": 0,
+          "paper_correct_spectra": 0,
+          "top1_rows": 0,
+          "top1_paper_correct": 0,
+          "top1_wrong": 0,
+          "gapped_rows": 0,
+          "examples_wrong": [],
+          "examples_correct": []
+        },
+        "lowercase_GA_bypass": {
+          "rows": 0,
+          "spectra": 0,
+          "paper_correct_rows": 0,
+          "paper_correct_spectra": 0,
+          "top1_rows": 0,
+          "top1_paper_correct": 0,
+          "top1_wrong": 0,
+          "gapped_rows": 0,
+          "examples_wrong": [],
+          "examples_correct": []
+        },
+        "N_tail_020_to_050": {
+          "rows": 17,
+          "spectra": 12,
+          "paper_correct_rows": 0,
+          "paper_correct_spectra": 0,
+          "top1_rows": 0,
+          "top1_paper_correct": 0,
+          "top1_wrong": 0,
+          "gapped_rows": 7,
+          "examples_wrong": [
+            {
+              "key": "scan=11516",
+              "rank": 16,
+              "tag": "ASCH",
+              "charge": 1,
+              "nterm_mass": 158.1697,
+              "cterm_mass": 641.3753,
+              "evalue": 10.2002,
+              "gapped": 0,
+              "peptide": "[+229.16293]-M[+15.994915]IYASSK[+229.16293]",
+              "correct": false
+            },
+            {
+              "key": "scan=41797",
+              "rank": 19,
+              "tag": "GM[Oxidation]VA",
+              "charge": 1,
+              "nterm_mass": 172.1647,
+              "cterm_mass": 785.4745,
+              "evalue": 0.440539,
+              "gapped": 0,
+              "peptide": "[+229.16293]-FVAELWK[+229.16293]",
+              "correct": false
+            },
+            {
+              "key": "scan=21379",
+              "rank": 22,
+              "tag": "GM[Oxidation]SP",
+              "charge": 1,
+              "nterm_mass": 172.1718,
+              "cterm_mass": 654.4329,
+              "evalue": 13.5043,
+              "gapped": 0,
+              "peptide": "[+229.16293]-FSPVTPK[+229.16293]",
+              "correct": false
+            },
+            {
+              "key": "scan=10571",
+              "rank": 24,
+              "tag": "AFHD",
+              "charge": 2,
+              "nterm_mass": 158.1028,
+              "cterm_mass": 896.5379,
+              "evalue": 68.9454,
+              "gapped": 1,
+              "peptide": "[+229.16293]-IDGSNTVDHK[+229.16293]",
+              "correct": false
+            },
+            {
+              "key": "scan=21379",
+              "rank": 26,
+              "tag": "AM[Oxidation]SP",
+              "charge": 1,
+              "nterm_mass": 158.1522,
+              "cterm_mass": 654.4369,
+              "evalue": 16.9647,
+              "gapped": 0,
+              "peptide": "[+229.16293]-FSPVTPK[+229.16293]",
+              "correct": false
+            }
+          ],
+          "examples_correct": []
+        },
+        "C_tail_006_to_020": {
+          "rows": 10,
+          "spectra": 7,
+          "paper_correct_rows": 0,
+          "paper_correct_spectra": 0,
+          "top1_rows": 0,
+          "top1_paper_correct": 0,
+          "top1_wrong": 0,
+          "gapped_rows": 8,
+          "examples_wrong": [
+            {
+              "key": "scan=26107",
+              "rank": 10,
+              "tag": "FVKG",
+              "charge": 1,
+              "nterm_mass": 356.2135,
+              "cterm_mass": 154.1249,
+              "evalue": 4.61719,
+              "gapped": 0,
+              "peptide": "[+229.16293]-QFVPIK[+229.16293]",
+              "correct": false
+            },
+            {
+              "key": "scan=41215",
+              "rank": 18,
+              "tag": "DTKG",
+              "charge": 1,
+              "nterm_mass": 724.471,
+              "cterm_mass": 154.1243,
+              "evalue": 14.2661,
+              "gapped": 0,
+              "peptide": "[+229.16293]-LFVVDHVIK[+229.16293]",
+              "correct": false
+            },
+            {
+              "key": "scan=9339",
+              "rank": 26,
+              "tag": "SLCG",
+              "charge": 1,
+              "nterm_mass": 580.3196,
+              "cterm_mass": 154.1379,
+              "evalue": 104.363,
+              "gapped": 1,
+              "peptide": "[+229.16293]-HVDSLSQR",
+              "correct": false
+            },
+            {
+              "key": "scan=23663",
+              "rank": 26,
+              "tag": "EAQG",
+              "charge": 1,
+              "nterm_mass": 1147.5433,
+              "cterm_mass": 154.1112,
+              "evalue": 60.6414,
+              "gapped": 1,
+              "peptide": "[+229.16293]-SYSPYDM[+15.994915]LESIR",
+              "correct": false
+            },
+            {
+              "key": "scan=21101",
+              "rank": 42,
+              "tag": "QAKG",
+              "charge": 1,
+              "nterm_mass": 341.239,
+              "cterm_mass": 154.1249,
+              "evalue": 514.528,
+              "gapped": 1,
+              "peptide": "[+229.16293]-IQPLAK[+229.16293]",
+              "correct": false
+            }
+          ],
+          "examples_correct": []
+        },
+        "modified_GA_endpoint_near_unmodified_anchor": {
+          "rows": 0,
+          "spectra": 0,
+          "paper_correct_rows": 0,
+          "paper_correct_spectra": 0,
+          "top1_rows": 0,
+          "top1_paper_correct": 0,
+          "top1_wrong": 0,
+          "gapped_rows": 0,
+          "examples_wrong": [],
+          "examples_correct": []
+        },
+        "N_isotope_-2": {
+          "rows": 68,
+          "spectra": 60,
+          "paper_correct_rows": 0,
+          "paper_correct_spectra": 0,
+          "top1_rows": 0,
+          "top1_paper_correct": 0,
+          "top1_wrong": 0,
+          "gapped_rows": 63,
+          "examples_wrong": [
+            {
+              "key": "scan=11613",
+              "rank": 4,
+              "tag": "ADWQ",
+              "charge": 1,
+              "nterm_mass": 156.1201,
+              "cterm_mass": 531.3132,
+              "evalue": 0.839575,
+              "gapped": 0,
+              "peptide": "[+229.16293]-DWQDGK[+229.16293]",
+              "correct": false
+            },
+            {
+              "key": "scan=11613",
+              "rank": 5,
+              "tag": "GDWQ",
+              "charge": 1,
+              "nterm_mass": 170.135,
+              "cterm_mass": 531.314,
+              "evalue": 1.9194,
+              "gapped": 0,
+              "peptide": "[+229.16293]-DWQDGK[+229.16293]",
+              "correct": false
+            },
+            {
+              "key": "scan=20079",
+              "rank": 6,
+              "tag": "AFAL",
+              "charge": 1,
+              "nterm_mass": 156.1231,
+              "cterm_mass": 492.3269,
+              "evalue": 1.48794,
+              "gapped": 1,
+              "peptide": "[+229.16293]-APIIAVTR",
+              "correct": false
+            },
+            {
+              "key": "scan=11643",
+              "rank": 8,
+              "tag": "ATAV",
+              "charge": 1,
+              "nterm_mass": 156.1233,
+              "cterm_mass": 740.3519,
+              "evalue": 2.86427,
+              "gapped": 0,
+              "peptide": "[+229.16293]-TAVC[+57.021465]DIPPR",
+              "correct": false
+            },
+            {
+              "key": "scan=11643",
+              "rank": 10,
+              "tag": "GTAV",
+              "charge": 1,
+              "nterm_mass": 170.1392,
+              "cterm_mass": 740.3516,
+              "evalue": 3.14508,
+              "gapped": 0,
+              "peptide": "[+229.16293]-TAVC[+57.021465]DIPPR",
+              "correct": false
+            }
+          ],
+          "examples_correct": []
+        },
+        "N_isotope_-1": {
+          "rows": 413,
+          "spectra": 236,
+          "paper_correct_rows": 0,
+          "paper_correct_spectra": 0,
+          "top1_rows": 0,
+          "top1_paper_correct": 0,
+          "top1_wrong": 0,
+          "gapped_rows": 282,
+          "examples_wrong": [
+            {
+              "key": "scan=13949",
+              "rank": 7,
+              "tag": "ATYE",
+              "charge": 1,
+              "nterm_mass": 157.1248,
+              "cterm_mass": 586.371,
+              "evalue": 9.85798,
+              "gapped": 0,
+              "peptide": "[+229.16293]-TYEDIK[+229.16293]",
+              "correct": false
+            },
+            {
+              "key": "scan=25417",
+              "rank": 8,
+              "tag": "AHPA",
+              "charge": 1,
+              "nterm_mass": 157.1234,
+              "cterm_mass": 618.4129,
+              "evalue": 34.6775,
+              "gapped": 1,
+              "peptide": "[+229.16293]-HPALFK[+229.16293]",
+              "correct": false
+            },
+            {
+              "key": "scan=14443",
+              "rank": 9,
+              "tag": "ALYF",
+              "charge": 1,
+              "nterm_mass": 157.125,
+              "cterm_mass": 486.3013,
+              "evalue": 0.864528,
+              "gapped": 1,
+              "peptide": "[+229.16293]-LPPDEK[+229.16293]",
+              "correct": false
+            },
+            {
+              "key": "scan=23116",
+              "rank": 9,
+              "tag": "ALLS",
+              "charge": 1,
+              "nterm_mass": 157.1231,
+              "cterm_mass": 608.357,
+              "evalue": 4.59829,
+              "gapped": 0,
+              "peptide": "[+229.16293]-IISSYK[+229.16293]",
+              "correct": false
+            },
+            {
+              "key": "scan=25971",
+              "rank": 9,
+              "tag": "ALAS",
+              "charge": 1,
+              "nterm_mass": 157.1245,
+              "cterm_mass": 620.3922,
+              "evalue": 1.34444,
+              "gapped": 0,
+              "peptide": "[+229.16293]-LASYVK[+229.16293]",
+              "correct": false
+            }
+          ],
+          "examples_correct": []
+        },
+        "N_isotope_1": {
+          "rows": 83,
+          "spectra": 67,
+          "paper_correct_rows": 0,
+          "paper_correct_spectra": 0,
+          "top1_rows": 0,
+          "top1_paper_correct": 0,
+          "top1_wrong": 0,
+          "gapped_rows": 63,
+          "examples_wrong": [
+            {
+              "key": "scan=12147",
+              "rank": 9,
+              "tag": "AAVD",
+              "charge": 1,
+              "nterm_mass": 159.1283,
+              "cterm_mass": 503.2492,
+              "evalue": 1.28524,
+              "gapped": 0,
+              "peptide": "[+229.16293]-AQSFAER",
+              "correct": false
+            },
+            {
+              "key": "scan=12147",
+              "rank": 12,
+              "tag": "GAVD",
+              "charge": 1,
+              "nterm_mass": 173.1435,
+              "cterm_mass": 503.2496,
+              "evalue": 1.97179,
+              "gapped": 0,
+              "peptide": "[+229.16293]-AQSFAER",
+              "correct": false
+            },
+            {
+              "key": "scan=20357",
+              "rank": 14,
+              "tag": "GAEM",
+              "charge": 1,
+              "nterm_mass": 173.1461,
+              "cterm_mass": 568.3341,
+              "evalue": 0.603855,
+              "gapped": 0,
+              "peptide": "[+229.16293]-AC[+57.021465]TELGIR",
+              "correct": false
+            },
+            {
+              "key": "scan=21469",
+              "rank": 14,
+              "tag": "GNLL",
+              "charge": 1,
+              "nterm_mass": 173.127,
+              "cterm_mass": 865.3558,
+              "evalue": 38.2126,
+              "gapped": 1,
+              "peptide": "[+229.16293]-DIISDTSGDFR",
+              "correct": false
+            },
+            {
+              "key": "scan=20827",
+              "rank": 15,
+              "tag": "AWLV",
+              "charge": 1,
+              "nterm_mass": 159.1181,
+              "cterm_mass": 346.2228,
+              "evalue": 17.1984,
+              "gapped": 0,
+              "peptide": "[+229.16293]-YVITIR",
+              "correct": false
+            }
+          ],
+          "examples_correct": []
+        },
+        "N_isotope_2": {
+          "rows": 37,
+          "spectra": 36,
+          "paper_correct_rows": 0,
+          "paper_correct_spectra": 0,
+          "top1_rows": 0,
+          "top1_paper_correct": 0,
+          "top1_wrong": 0,
+          "gapped_rows": 37,
+          "examples_wrong": [
+            {
+              "key": "scan=16299",
+              "rank": 12,
+              "tag": "GPFS",
+              "charge": 1,
+              "nterm_mass": 174.1582,
+              "cterm_mass": 414.277,
+              "evalue": 123.384,
+              "gapped": 1,
+              "peptide": "[+229.16293]-VFSGK[+229.16293]",
+              "correct": false
+            },
+            {
+              "key": "scan=12529",
+              "rank": 20,
+              "tag": "GHLD",
+              "charge": 1,
+              "nterm_mass": 174.1393,
+              "cterm_mass": 642.336,
+              "evalue": 0.845636,
+              "gapped": 1,
+              "peptide": "[+229.16293]-TAVC[+57.021465]DIPPR",
+              "correct": false
+            },
+            {
+              "key": "scan=15740",
+              "rank": 21,
+              "tag": "GELG",
+              "charge": 1,
+              "nterm_mass": 174.1393,
+              "cterm_mass": 515.3285,
+              "evalue": 60.3009,
+              "gapped": 1,
+              "peptide": "[+229.16293]-MLGTGK[+229.16293]",
+              "correct": false
+            },
+            {
+              "key": "scan=16481",
+              "rank": 22,
+              "tag": "GPFS",
+              "charge": 1,
+              "nterm_mass": 174.1562,
+              "cterm_mass": 414.2818,
+              "evalue": 274.834,
+              "gapped": 1,
+              "peptide": "[+229.16293]-VFSGK[+229.16293]",
+              "correct": false
+            },
+            {
+              "key": "scan=19896",
+              "rank": 23,
+              "tag": "GELY",
+              "charge": 1,
+              "nterm_mass": 174.1431,
+              "cterm_mass": 602.3585,
+              "evalue": 1.16459,
+              "gapped": 1,
+              "peptide": "[+229.16293]-MIYASSK[+229.16293]",
+              "correct": false
+            }
+          ],
+          "examples_correct": []
+        }
+      },
+      "gapped_top1_wrong_with_tied_correct_spelling": 47,
+      "gapped_tied_adjacent_swaps": 43,
+      "gapped_tie_examples": [
+        {
+          "key": "scan=8858",
+          "wrong_tag": "PTSS",
+          "correct_tag": "TPSS",
+          "correct_rank": 2,
+          "adjacent_swap": true
+        },
+        {
+          "key": "scan=8881",
+          "wrong_tag": "LPTA",
+          "correct_tag": "LTPA",
+          "correct_rank": 2,
+          "adjacent_swap": true
+        },
+        {
+          "key": "scan=9271",
+          "wrong_tag": "NPSP",
+          "correct_tag": "NSPP",
+          "correct_rank": 2,
+          "adjacent_swap": true
+        },
+        {
+          "key": "scan=10516",
+          "wrong_tag": "HEAY",
+          "correct_tag": "HEYA",
+          "correct_rank": 4,
+          "adjacent_swap": true
+        },
+        {
+          "key": "scan=10956",
+          "wrong_tag": "EPEA",
+          "correct_tag": "PEEA",
+          "correct_rank": 2,
+          "adjacent_swap": true
+        },
+        {
+          "key": "scan=10959",
+          "wrong_tag": "TELL",
+          "correct_tag": "TLEL",
+          "correct_rank": 2,
+          "adjacent_swap": true
+        },
+        {
+          "key": "scan=12017",
+          "wrong_tag": "PYYA",
+          "correct_tag": "YPYA",
+          "correct_rank": 2,
+          "adjacent_swap": true
+        },
+        {
+          "key": "scan=12270",
+          "wrong_tag": "EPSG",
+          "correct_tag": "ESPG",
+          "correct_rank": 2,
+          "adjacent_swap": true
+        }
+      ],
+      "posthoc_rank1_replay": {
+        "tails": {
+          "gained": 0,
+          "lost": 0,
+          "gained_keys": [],
+          "lost_keys": [],
+          "emptied_spectra": 0
+        },
+        "isotopes": {
+          "gained": 0,
+          "lost": 0,
+          "gained_keys": [],
+          "lost_keys": [],
+          "emptied_spectra": 0
+        },
+        "tails_and_isotopes": {
+          "gained": 0,
+          "lost": 0,
+          "gained_keys": [],
+          "lost_keys": [],
+          "emptied_spectra": 0
+        }
+      }
+    },
+    {
+      "dataset": "PXD003531",
+      "chemistry": "control",
+      "arm": "auto",
+      "truth_psms": 8254,
+      "tagged_psms": 8253,
+      "top1_paper_correct": 5538,
+      "top1_strict_correct": 5506,
+      "top1_wrong": 2715,
+      "top1_wrong_gapped": 284,
+      "endpoint_lowercase_rows": 0,
+      "patterns": {
+        "current_GA": {
+          "rows": 0,
+          "spectra": 0,
+          "paper_correct_rows": 0,
+          "paper_correct_spectra": 0,
+          "top1_rows": 0,
+          "top1_paper_correct": 0,
+          "top1_wrong": 0,
+          "gapped_rows": 0,
+          "examples_wrong": [],
+          "examples_correct": []
+        },
+        "lowercase_GA_bypass": {
+          "rows": 0,
+          "spectra": 0,
+          "paper_correct_rows": 0,
+          "paper_correct_spectra": 0,
+          "top1_rows": 0,
+          "top1_paper_correct": 0,
+          "top1_wrong": 0,
+          "gapped_rows": 0,
+          "examples_wrong": [],
+          "examples_correct": []
+        },
+        "N_tail_020_to_050": {
+          "rows": 5,
+          "spectra": 3,
+          "paper_correct_rows": 1,
+          "paper_correct_spectra": 1,
+          "top1_rows": 0,
+          "top1_paper_correct": 0,
+          "top1_wrong": 0,
+          "gapped_rows": 2,
+          "examples_wrong": [
+            {
+              "key": "scan=12150",
+              "rank": 12,
+              "tag": "GPLM[Oxidation]",
+              "charge": 1,
+              "nterm_mass": 172.0963,
+              "cterm_mass": 1171.5544,
+              "evalue": 0.0341539,
+              "gapped": 0,
+              "peptide": "TAGPLESSETEEASQLK",
+              "correct": false
+            },
+            {
+              "key": "scan=7365",
+              "rank": 26,
+              "tag": "AVGY",
+              "charge": 1,
+              "nterm_mass": 158.076,
+              "cterm_mass": 529.2264,
+              "evalue": 11.4436,
+              "gapped": 1,
+              "peptide": "ASAVSELS[+79.96633]PR",
+              "correct": false
+            },
+            {
+              "key": "scan=7365",
+              "rank": 27,
+              "tag": "AVYG",
+              "charge": 1,
+              "nterm_mass": 158.076,
+              "cterm_mass": 529.2264,
+              "evalue": 11.4436,
+              "gapped": 1,
+              "peptide": "ASAVSELS[+79.96633]PR",
+              "correct": false
+            },
+            {
+              "key": "scan=10714",
+              "rank": 28,
+              "tag": "AVDE",
+              "charge": 1,
+              "nterm_mass": 158.1001,
+              "cterm_mass": 1015.4201,
+              "evalue": 11.8652,
+              "gapped": 0,
+              "peptide": "YSPTS[+79.96633]PTYSPTTPK",
+              "correct": false
+            }
+          ],
+          "examples_correct": [
+            {
+              "key": "scan=12150",
+              "rank": 2,
+              "tag": "GPLE",
+              "charge": 1,
+              "nterm_mass": 172.0937,
+              "cterm_mass": 1189.5498,
+              "evalue": 2.57365e-07,
+              "gapped": 0,
+              "peptide": "TAGPLESSETEEASQLK",
+              "correct": true
+            }
+          ]
+        },
+        "C_tail_006_to_020": {
+          "rows": 10,
+          "spectra": 10,
+          "paper_correct_rows": 0,
+          "paper_correct_spectra": 0,
+          "top1_rows": 0,
+          "top1_paper_correct": 0,
+          "top1_wrong": 0,
+          "gapped_rows": 10,
+          "examples_wrong": [
+            {
+              "key": "scan=8245",
+              "rank": 3,
+              "tag": "APAG",
+              "charge": 1,
+              "nterm_mass": 949.3597,
+              "cterm_mass": 154.1113,
+              "evalue": 0.0456037,
+              "gapped": 1,
+              "peptide": "GGGT[+79.96633]PDANSLAPPGK",
+              "correct": false
+            },
+            {
+              "key": "scan=5311",
+              "rank": 9,
+              "tag": "PS[Phospho]LG",
+              "charge": 1,
+              "nterm_mass": 372.207,
+              "cterm_mass": 154.1111,
+              "evalue": 0.395523,
+              "gapped": 1,
+              "peptide": "ATVTPS[+79.96633]PVK",
+              "correct": false
+            },
+            {
+              "key": "scan=23042",
+              "rank": 18,
+              "tag": "PTPG",
+              "charge": 1,
+              "nterm_mass": 1120.5851,
+              "cterm_mass": 154.1111,
+              "evalue": 11.8646,
+              "gapped": 1,
+              "peptide": "VINEPTAAALAYGLDK",
+              "correct": false
+            },
+            {
+              "key": "scan=13995",
+              "rank": 23,
+              "tag": "EDAG",
+              "charge": 1,
+              "nterm_mass": 2698.0273,
+              "cterm_mass": 154.1116,
+              "evalue": 90.3298,
+              "gapped": 1,
+              "peptide": "DLGHPVEEEDELESGDQEDEDDESEDPGK",
+              "correct": false
+            },
+            {
+              "key": "scan=13154",
+              "rank": 26,
+              "tag": "LALG",
+              "charge": 1,
+              "nterm_mass": 566.1428,
+              "cterm_mass": 154.1115,
+              "evalue": 38.4864,
+              "gapped": 1,
+              "peptide": "SLS[+79.96633]DPIPQ[+0.984016]R",
+              "correct": false
+            }
+          ],
+          "examples_correct": []
+        },
+        "modified_GA_endpoint_near_unmodified_anchor": {
+          "rows": 0,
+          "spectra": 0,
+          "paper_correct_rows": 0,
+          "paper_correct_spectra": 0,
+          "top1_rows": 0,
+          "top1_paper_correct": 0,
+          "top1_wrong": 0,
+          "gapped_rows": 0,
+          "examples_wrong": [],
+          "examples_correct": []
+        },
+        "N_isotope_-2": {
+          "rows": 10,
+          "spectra": 6,
+          "paper_correct_rows": 2,
+          "paper_correct_spectra": 2,
+          "top1_rows": 0,
+          "top1_paper_correct": 0,
+          "top1_wrong": 0,
+          "gapped_rows": 8,
+          "examples_wrong": [
+            {
+              "key": "scan=3594",
+              "rank": 5,
+              "tag": "AEQE",
+              "charge": 1,
+              "nterm_mass": 156.1039,
+              "cterm_mass": 940.475,
+              "evalue": 0.0520569,
+              "gapped": 1,
+              "peptide": "RAQEEAERLEADR",
+              "correct": false
+            },
+            {
+              "key": "scan=29551",
+              "rank": 16,
+              "tag": "GTDM[Oxidation]",
+              "charge": 1,
+              "nterm_mass": 170.116,
+              "cterm_mass": 1093.6303,
+              "evalue": 0.149876,
+              "gapped": 0,
+              "peptide": "GLGTDEDTLIEILASR",
+              "correct": false
+            },
+            {
+              "key": "scan=4017",
+              "rank": 37,
+              "tag": "AGLE",
+              "charge": 1,
+              "nterm_mass": 156.1065,
+              "cterm_mass": 943.3926,
+              "evalue": 5.1172,
+              "gapped": 1,
+              "peptide": "RQLEEAEEEAQ[+0.984016]R",
+              "correct": false
+            },
+            {
+              "key": "scan=2360",
+              "rank": 43,
+              "tag": "AHPD",
+              "charge": 1,
+              "nterm_mass": 156.1079,
+              "cterm_mass": 998.3593,
+              "evalue": 3.64356,
+              "gapped": 1,
+              "peptide": "RAAEDDEDDDVDTK",
+              "correct": false
+            },
+            {
+              "key": "scan=2360",
+              "rank": 44,
+              "tag": "APHD",
+              "charge": 1,
+              "nterm_mass": 156.1079,
+              "cterm_mass": 998.3593,
+              "evalue": 3.64356,
+              "gapped": 1,
+              "peptide": "RAAEDDEDDDVDTK",
+              "correct": false
+            }
+          ],
+          "examples_correct": [
+            {
+              "key": "scan=3594",
+              "rank": 6,
+              "tag": "AQEE",
+              "charge": 1,
+              "nterm_mass": 156.1039,
+              "cterm_mass": 940.475,
+              "evalue": 0.0520569,
+              "gapped": 1,
+              "peptide": "RAQEEAERLEADR",
+              "correct": true
+            },
+            {
+              "key": "scan=29463",
+              "rank": 8,
+              "tag": "GTDE",
+              "charge": 1,
+              "nterm_mass": 170.1165,
+              "cterm_mass": 1187.5888,
+              "evalue": 0.000102665,
+              "gapped": 0,
+              "peptide": "GLGTDEDSLIEIIC[+57.021465]SR",
+              "correct": true
+            }
+          ]
+        },
+        "N_isotope_-1": {
+          "rows": 4,
+          "spectra": 3,
+          "paper_correct_rows": 0,
+          "paper_correct_spectra": 0,
+          "top1_rows": 0,
+          "top1_paper_correct": 0,
+          "top1_wrong": 0,
+          "gapped_rows": 3,
+          "examples_wrong": [
+            {
+              "key": "scan=6661",
+              "rank": 6,
+              "tag": "GDFD",
+              "charge": 1,
+              "nterm_mass": 171.1238,
+              "cterm_mass": 528.2566,
+              "evalue": 1.34936,
+              "gapped": 0,
+              "peptide": "YIDQEELN[+0.984016]K",
+              "correct": false
+            },
+            {
+              "key": "scan=12937",
+              "rank": 42,
+              "tag": "GDNE",
+              "charge": 1,
+              "nterm_mass": 171.1288,
+              "cterm_mass": 859.459,
+              "evalue": 12.4993,
+              "gapped": 1,
+              "peptide": "LETNEFQQLQSK",
+              "correct": false
+            },
+            {
+              "key": "scan=17589",
+              "rank": 45,
+              "tag": "AVKT",
+              "charge": 1,
+              "nterm_mass": 157.1116,
+              "cterm_mass": 1352.6379,
+              "evalue": 1402.38,
+              "gapped": 1,
+              "peptide": "ARVDVERDNLLDDLQR",
+              "correct": false
+            },
+            {
+              "key": "scan=17589",
+              "rank": 46,
+              "tag": "AVTK",
+              "charge": 1,
+              "nterm_mass": 157.1116,
+              "cterm_mass": 1352.6379,
+              "evalue": 1402.38,
+              "gapped": 1,
+              "peptide": "ARVDVERDNLLDDLQR",
+              "correct": false
+            }
+          ],
+          "examples_correct": []
+        },
+        "N_isotope_1": {
+          "rows": 0,
+          "spectra": 0,
+          "paper_correct_rows": 0,
+          "paper_correct_spectra": 0,
+          "top1_rows": 0,
+          "top1_paper_correct": 0,
+          "top1_wrong": 0,
+          "gapped_rows": 0,
+          "examples_wrong": [],
+          "examples_correct": []
+        },
+        "N_isotope_2": {
+          "rows": 2,
+          "spectra": 1,
+          "paper_correct_rows": 0,
+          "paper_correct_spectra": 0,
+          "top1_rows": 0,
+          "top1_paper_correct": 0,
+          "top1_wrong": 0,
+          "gapped_rows": 2,
+          "examples_wrong": [
+            {
+              "key": "scan=6805",
+              "rank": 34,
+              "tag": "GGYN",
+              "charge": 1,
+              "nterm_mass": 174.1405,
+              "cterm_mass": 253.1435,
+              "evalue": 83.0717,
+              "gapped": 1,
+              "peptide": "LASYLDR",
+              "correct": false
+            },
+            {
+              "key": "scan=6805",
+              "rank": 40,
+              "tag": "GGYL",
+              "charge": 1,
+              "nterm_mass": 174.1405,
+              "cterm_mass": 254.1024,
+              "evalue": 111.554,
+              "gapped": 1,
+              "peptide": "LASYLDR",
+              "correct": false
+            }
+          ],
+          "examples_correct": []
+        }
+      },
+      "gapped_top1_wrong_with_tied_correct_spelling": 77,
+      "gapped_tied_adjacent_swaps": 60,
+      "gapped_tie_examples": [
+        {
+          "key": "scan=1939",
+          "wrong_tag": "EPQV",
+          "correct_tag": "PEQV",
+          "correct_rank": 2,
+          "adjacent_swap": true
+        },
+        {
+          "key": "scan=1988",
+          "wrong_tag": "QNEQ",
+          "correct_tag": "QNQE",
+          "correct_rank": 2,
+          "adjacent_swap": true
+        },
+        {
+          "key": "scan=2109",
+          "wrong_tag": "EPPS",
+          "correct_tag": "PEPS",
+          "correct_rank": 2,
+          "adjacent_swap": true
+        },
+        {
+          "key": "scan=2323",
+          "wrong_tag": "DQKS",
+          "correct_tag": "ENKS",
+          "correct_rank": 2,
+          "adjacent_swap": false
+        },
+        {
+          "key": "scan=2404",
+          "wrong_tag": "ADAE",
+          "correct_tag": "GEAE",
+          "correct_rank": 4,
+          "adjacent_swap": false
+        },
+        {
+          "key": "scan=2434",
+          "wrong_tag": "DSAN",
+          "correct_tag": "DSGQ",
+          "correct_rank": 2,
+          "adjacent_swap": false
+        },
+        {
+          "key": "scan=2476",
+          "wrong_tag": "DGET",
+          "correct_tag": "GDET",
+          "correct_rank": 2,
+          "adjacent_swap": true
+        },
+        {
+          "key": "scan=2725",
+          "wrong_tag": "PSEA",
+          "correct_tag": "SPEA",
+          "correct_rank": 2,
+          "adjacent_swap": true
+        }
+      ],
+      "posthoc_rank1_replay": {
+        "tails": {
+          "gained": 0,
+          "lost": 0,
+          "gained_keys": [],
+          "lost_keys": [],
+          "emptied_spectra": 0
+        },
+        "isotopes": {
+          "gained": 0,
+          "lost": 0,
+          "gained_keys": [],
+          "lost_keys": [],
+          "emptied_spectra": 0
+        },
+        "tails_and_isotopes": {
+          "gained": 0,
+          "lost": 0,
+          "gained_keys": [],
+          "lost_keys": [],
+          "emptied_spectra": 0
+        }
+      }
+    }
+  ]
+}
