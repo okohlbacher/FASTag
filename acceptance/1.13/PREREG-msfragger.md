@@ -137,3 +137,13 @@ speed-up see similar load, but single wall-clock values are noisy. G1 uses the m
   (rule above); every PXD that any arm or DEV set staged, ran, reserved or reported stays excluded.
 - PXD010982 (MF01) is also on the census second-draw exclusion list (`census/inputs2/excl_pxd_draw2.txt`). No file
   of any branch, no report and no data file on the cluster shows a use; census drew it as `not_needed`. It stays.
+
+## Staging result (added with the staged manifest, before any run)
+
+Staged 2026-11-10; `manifests/msfragger-heldout.tsv` now carries sha256 of every raw and mzML file
+(`msfragger/inputs/staged_chosen.tsv`, `staged_backup.tsv`). 7 chosen files passed the check. PXD001725 (MF06): the
+chosen file and the backup file both downloaded completely (size correct, second download identical), but
+ThermoRawFileParser 2.0.0 reports "Empty RAW file" for both. By the rule above the project is dropped without a
+redraw. **The test runs on 7 runs from 7 projects** (`msfragger/inputs/list.tsv`); C1 is judged on these 7, the
+evaluable-run minimum stays 6. This is one run fewer than the 8 the task asks for and is reported as a deviation.
+Nothing else in this document changed.

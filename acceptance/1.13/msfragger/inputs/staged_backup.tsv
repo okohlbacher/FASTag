@@ -1,0 +1,2 @@
+accession	file	bytes	pride_sha1	status	raw_sha256	mzml	mzml_bytes	mzml_sha256	ms2	ms2_ftms_hcd	ms2_charged	check
+PXD001725	130708_M687_002.raw	2430590426	-	no_pride_sha1,size_ok,second_download_same	0baaa9b5676b72b9c86d1f3766627d9c73b989a46f3e6f9e905011a44b8cf104	PXD001725/130708_M687_002.mzML	-	-	-	-	-	FAIL
