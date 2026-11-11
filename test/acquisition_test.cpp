@@ -387,14 +387,88 @@ namespace
       r.insert(r.end(), d.begin(), d.end());
       expectNot(r, Mode::DIALike, "18 polysiloxane head then DDA");
     }
-    // 19. Cyclic charged wide-window counterexample: WARN, not refuse.
+    // 19. Cyclic wide-window scheme with measured (mixed) charges: WARN, not
+    // refuse.
     {
       std::vector<Ms2Meta> r;
       for (int c = 0; c < 3; ++c)
-        for (int k = 0; k < 5; ++k) r.push_back(meta(400 + 25 * k, 12.5, 12.5, 2));
+        for (int k = 0; k < 5; ++k) r.push_back(meta(400 + 25 * k, 12.5, 12.5, 2 + (c + k) % 2));
       const A::AcqCall c = A::classifyAcquisition(r);
       check(c.mode == Mode::DIALike && c.warn, std::string("19 charged DIA-like warns: ") + name(c.mode) + " (" + c.why + ")");
+      check(c.placeholder_charge == 0, "19 mixed charges are no placeholder");
       check(!A::warningMessage(c, "x.mzML").empty(), "19 a warning text");
+    }
+    // 19b. (1.13) The same scheme with one charge on every MS2 is raw DIA with
+    // a method default charge (E7-03 DIA_orbitrap.03: 41 windows, all 2+):
+    // refused. One other charge in 100 MS2 leaves it a placeholder; 2 do not.
+    {
+      std::vector<Ms2Meta> r = scheme(tiled(350, 20, 40), 10, 2);
+      A::AcqCall c = A::classifyAcquisition(r);
+      check(c.mode == Mode::DIA && !c.warn && c.placeholder_charge == 2,
+            std::string("19b placeholder charge is raw DIA: ") + name(c.mode) + " (" + c.why + ")");
+      check(c.why.find("all MS2 carry the same charge 2+") != std::string::npos, "19b the reason names the charge: " + c.why);
+      check(A::refusalMessage(c, "x.mzML").find("all others 2+, a method default") != std::string::npos,
+            "19b the refusal names the charge: " + A::refusalMessage(c, "x.mzML"));
+      check(A::refusalSentinel(c) == "FASTAG_REFUSED reason=raw_dia windows=40 median_width=20", "19b sentinel: " + A::refusalSentinel(c));
+      for (std::size_t i = 0; i < r.size(); i += 100) r[i].charge = 3;  // 1%: still a placeholder
+      c = A::classifyAcquisition(r);
+      check(c.mode == Mode::DIA && c.placeholder_charge == 2, std::string("19b 99% one charge: ") + name(c.mode));
+      for (std::size_t i = 1; i < r.size(); i += 100) r[i].charge = 3;  // 2%: measured charges
+      c = A::classifyAcquisition(r);
+      check(c.mode == Mode::DIALike && c.warn && c.placeholder_charge == 0, std::string("19b 98% one charge warns: ") + name(c.mode));
+    }
+    // 19c. (1.13) Closed window set without a single cycle (E7-03
+    // DIA_orbitrap.12): 38 uncharged 16 Th windows in blocks of 12, each block
+    // acquired twice. The commonest gap is 12, not 38, so the run is not
+    // periodic; it is refused as a closed, tiling window set.
+    {
+      const std::vector<std::pair<double, double>> w = tiled(400, 16, 38);
+      std::vector<Ms2Meta> r;
+      while (r.size() < 4000)
+        for (std::size_t b = 0; b < w.size(); b += 12)
+          for (int rep = 0; rep < 2; ++rep)
+            for (std::size_t k = b; k < std::min(w.size(), b + 12); ++k)
+            {
+              const double t = 0.5 * (w[k].first + w[k].second);
+              r.push_back(meta(t, 8, 8, 0));
+            }
+      const A::AcqCall c = A::classifyAcquisition(r);
+      check(!c.periodic && c.closed && c.mode == Mode::DIA,
+            std::string("19c block-repeated scheme is raw DIA: ") + name(c.mode) + " (" + c.why + ")");
+      check(c.cycle == 12 && c.n_win == 38, "19c cycle 12 of 38 windows");
+      check(c.why.find("keeps returning to the same 38 isolation windows") != std::string::npos, "19c reason: " + c.why);
+      check(A::refusalMessage(c, "x.mzML").find("keeps returning to the same 38 isolation windows") != std::string::npos,
+            "19c refusal text");
+      // With measured charges it only warns; with one charge it is refused.
+      std::vector<Ms2Meta> z = r;
+      for (std::size_t i = 0; i < z.size(); ++i) z[i].charge = 2 + static_cast<int>(i % 3);
+      check(A::classifyAcquisition(z).mode == Mode::DIALike, "19c mixed charges warn");
+      for (Ms2Meta& m : z) m.charge = 3;
+      check(A::classifyAcquisition(z).mode == Mode::DIA, "19c one charge is refused");
+    }
+    // 19d. (1.13) A closed set is not enough on its own. Unscheduled targets
+    // that recur in no fixed order and do not tile a range stay non-DIA
+    // (PRM runs of E7-03); so does DDA on few precursors with recorded narrow
+    // windows whose m/z keep recurring (E7-03 WWA_DDA.04: 166 m/z, 24 visits).
+    {
+      std::mt19937 rng19(20261110);  // its own generator: the later cases keep their draws
+      std::uniform_int_distribution<int> pick(0, 39);
+      std::vector<Ms2Meta> r;
+      for (int i = 0; i < 4000; ++i) r.push_back(meta(400.0 + 17.3 * pick(rng19), 0.8, 0.8, 0));
+      A::AcqCall c = A::classifyAcquisition(r);
+      check(c.closed && c.mode != Mode::DIA && c.mode != Mode::DIALike,
+            std::string("19d closed, not tiling: ") + name(c.mode) + " (" + c.why + ")");
+      // DDA whose windows happen to cover the range, most m/z seen once or
+      // twice: not closed.
+      const std::vector<Ms2Meta> d = dda(rng19, 4000, 1.0, 400, 1000);
+      c = A::classifyAcquisition(d);
+      check(!c.closed && c.mode == Mode::DDA, std::string("19d DDA is not closed: ") + name(c.mode));
+      // Too few visits: 500 tiling windows seen 8 times each in random order.
+      std::vector<Ms2Meta> f;
+      std::uniform_int_distribution<int> pick5(0, 499);
+      for (int i = 0; i < 4000; ++i) f.push_back(meta(400.0 + 2.0 * pick5(rng19), 1, 1, 0));
+      c = A::classifyAcquisition(f);
+      check(!c.closed && c.mode != Mode::DIA, std::string("19d 8 visits are not a closed set: ") + name(c.mode));
     }
     // 20. Pseudo-DDA with repeated feature m/z: passes on provenance; the
     // same run without it is raw DIA.
