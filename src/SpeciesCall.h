@@ -59,6 +59,7 @@ namespace FASTag::SpeciesCall
     double alpha = 0.01;        ///< q-value threshold
     double tau = 0.0;           ///< minimum share of the run's units
     uint64_t n_min = 10;        ///< minimum observed spectra of a present genus
+    uint64_t reagent_n_min = 8; ///< -species_reagents: minimum tags in the listed reagent proteins (optional key)
     int decoys = 0;             ///< D the file was calibrated with; 0 = not stated
     std::string version;        ///< free text, e.g. "1.12.0-provisional"
     std::string training_sha256;///< sha256 of the training run list, or "none"
@@ -66,7 +67,7 @@ namespace FASTag::SpeciesCall
 
   /// Read a key<TAB>value table ('#' comments, blank lines ignored). Keys
   /// alpha, tau and n_min are required; decoys, version and training_sha256
-  /// are optional; any other key is an error, so a typo cannot silently keep
+  /// and reagent_n_min are optional; any other key is an error, so a typo cannot silently keep
   /// a default. Returns false and sets *err on a missing file, a missing or
   /// unknown key, or a value out of range (alpha in (0,1], tau in [0,1],
   /// n_min >= 1, decoys >= 0).
@@ -112,10 +113,13 @@ namespace FASTag::SpeciesCall
     double share = 0.0;
     double lod = -1.0;             ///< detection limit as a share; < 0 = not applicable
     bool tested = false;           ///< observed >= Taxonomy::kObservedFloor
+    bool reagent = false;          ///< -species_reagents: the group has listed reagent proteins
+    uint64_t reagent_tags = 0;     ///< distinct unexplained tags in its listed reagent proteins
+    double reagent_expected = 0.0; ///< the same count on the decoy tags, per replicate
     Call call = Call::NotDetected;
     std::string reason;            ///< pass, low_resolution, few_spectra, unstable,
                                    ///< near_neighbour, not_significant, low_share,
-                                   ///< few_genus_spectra
+                                   ///< few_genus_spectra; explain: explained, reagent
   };
 
   /// P(X >= o) for X ~ Poisson(lambda); 1 for o == 0.
@@ -183,4 +187,34 @@ namespace FASTag::SpeciesCall
                                      const std::vector<TagHit>& target,
                                      const std::vector<std::vector<TagHit>>& decoys,
                                      const RunInput& run, const Params& params);
+
+  // ---- reagent organisms (-species_reagents, experimental, after 1.13.1) ----
+  //
+  // The explain call tests a genus on all its tags against the random matches
+  // of its whole proteome. A protein reagent (porcine trypsin, BSA, casein,
+  // serum) gives some tens of tags from a few proteins: far below that null,
+  // although each of them is specific. callReagents() tests the tags lying
+  // in the LISTED reagent proteins of a group against the decoy tags lying in
+  // the same proteins. Only tags no called group explains count (a tag whose
+  // index support holds a called group is homology, not reagent). Greedy as
+  // callExplain(): the group with the smallest Poisson p is called present
+  // with reason "reagent" when p * m <= alpha (m = candidate groups with
+  // >= reagent_n_min tags), and then explains tags like any called group. A reagent
+  // call says the protein reagent is in the sample, not the organism.
+
+  /// One evaluated tag lying in a listed reagent protein of @p group
+  /// (replicate < 0), or one whose decoy replicate @p replicate does.
+  struct ReagentHit
+  {
+    uint32_t tag = 0;              ///< id of the target tag
+    uint32_t group = 0;            ///< group of the reagent protein
+    int replicate = -1;            ///< < 0: the target tag; j >= 0: its decoy j
+    std::vector<uint32_t> groups;  ///< groups of the target tag's index support (may be empty)
+  };
+
+  /// Fills reagent, reagent_tags and reagent_expected of the groups in
+  /// @p hits and turns not_detected groups that pass into present / "reagent".
+  /// A target hit counts only if its index support holds the group. @p st is
+  /// the result of callExplain(); no_call rows are never changed.
+  void callReagents(std::vector<GenusStat>& st, const std::vector<ReagentHit>& hits, int decoys, const Params& params);
 }
