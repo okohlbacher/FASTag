@@ -99,6 +99,14 @@ byte) chooses the cleavage rule of the shortlist's placements and of
 - `auto`: the model the protease check calls, when the call is confident
   (Compatible or NonTryptic above); an inconclusive check is Trypsin, as 1.12
   assumes. A call of the `unspecific` model is the unspecific rule.
+  With any value but `trypsin` the check's Asp-N model expects aspartate at
+  half of the N-terminal tag ends instead of all (the rest follows the
+  background), so Asp-N beats `unspecific` from about 21 % D instead of 50 %
+  (post-1.13.1, development runs only, no held-out test yet: 33 to 78 % D in
+  four Asp-N digests that are now called, 15 % in a fifth that still calls
+  `unspecific`, at most 10 % in 124 runs of other digests with 100 or more
+  N-terminal tag ends). `-digest_out` and the default `trypsin` check are
+  unchanged.
 - `chymotrypsin`, `lys-c`, `arg-c`, `asp-n`, `glu-c`, `lys-n`: that rule.
   When the check confidently calls another protease whose cleavage sites do
   not nest with the rule's (one site set within the other, same side, same

@@ -2925,6 +2925,10 @@ protected:
         sl_models.bg_c = sl_models.bg_n = FD::composition(sl_db_residues, true);
         sl_models.has_bg = true;
       }
+      // post-1.13.1 (aspn): an Asp-N digest has D at a third of its counted
+      // N-terminal tag ends, not at all of them; without this it is called
+      // `unspecific`. Only the experimental non-trypsin placement path.
+      if (sl_nontryptic) FD::softenNterm(sl_models, "Asp-N", FD::kNtermSiteShare);
       if (!search_config_out.empty())
       {
         sl_plan.database = fasta_out.empty() ? recon_db : fasta_out;
