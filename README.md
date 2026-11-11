@@ -579,7 +579,7 @@ MGF→mzML direction is exact.
 | `-search_precursor_tolerance <f>` / `-search_precursor_unit <ppm\|Da>` | 10 / ppm | Precursor tolerance written to the configuration |
 | `-search_isotope_errors <n>` | -1 | Precursor isotope errors 0..n (at most 3); 0 = none; -1 = by engine: none for Sage and Comet, 0..3 for MSFragger (set on development runs only, no held-out test) |
 | `-search_decoy_prefix <s>` | `rev_` (Sage, MSFragger) / `DECOY_` (Comet) | Prefix of the decoys the engine generates (MSFragger: the decoys FASTag appends to `-fasta_out`, or the ones the input database holds) |
-| `-search_shifts <none\|variable\|offsets\|both>` | none | Experimental (1.12): add the run's mass-gap peaks (the `-massgap_out` peaks, computed without writing it) to `-search_config_out` as variable modifications or Comet mass offsets (see Mass shifts as search configuration). Candidates for an FDR-controlling engine, NOT identifications; failed both held-out tests (see Held-out acceptance). Needs `-search_config_out` and a database; `offsets` needs `-search_engine comet` or `msfragger` (MSFragger keeps negative offsets and has 16 variable slots; with a Da precursor window it gets no offsets, MSFragger 4.4.1 exits 1 on them) |
+| `-search_shifts <none\|variable\|offsets\|both>` | none | Experimental (1.12): add the run's mass-gap peaks (the `-massgap_out` peaks, computed without writing it) to `-search_config_out` as variable modifications or Comet mass offsets (see Mass shifts as search configuration). Candidates for an FDR-controlling engine, NOT identifications; failed both held-out tests (see Held-out acceptance); on development runs 0 to +80 % PSMs over a search with the same isotope errors (see Mass shifts as search configuration). Needs `-search_config_out` and a database; `offsets` needs `-search_engine comet` or `msfragger` (MSFragger keeps negative offsets and has 16 variable slots; with a Da precursor window it gets no offsets, MSFragger 4.4.1 exits 1 on them) |
 | `-search_shifts_out <file>` | none | With `-search_shifts`: one row per mass-gap peak with its explanation and the action taken (`variable`, `offset`, `fixed`, `skipped_isotope`, `expected_label`, `label_incomplete`, `fixed_mod_questionable`, `skipped_silac`, `deferred_alkylation_call`, `already_searched`, `dropped_cap`, `dropped_engine`, `dropped_mode`) |
 | `-shift_max_variable <n>` / `-shift_max_offsets <n>` | 3 / 10 | Advanced: gap peaks exported as variable modifications / as offsets besides 0, most spectra first |
 | `-shift_expand_sites` | off | Advanced, unvalidated: add the residues `-recon_localize` places a variable shift on to that modification (needs `-recon_localize`) |
@@ -871,7 +871,26 @@ RESULT-item17r.md) FAILED as well: +7.7 to +36.8 % PSMs with Comet and +6.5
 to +25.2 % with Sage on all four runs, but Comet's entrapment FDP rose from
 0.88 to 1.28 % on the TMT run, and only 5 of 32 (Comet) and 3 of 11 (Sage)
 admissible open-search peaks were recovered. Part of the gain is the isotope
-error setting (0..1 against 0 in the base search). The option does not
+error setting (0..1 against 0 in the base search). Both FAIL results stand.
+Measured afterwards on development runs only (the eight held-out runs, now
+spent, and two earlier development runs; no new held-out test): against a
+base search with the same isotope error setting the option gives, with
+Comet, +0.8 % (PXD073763, TMTpro), +1.5 % (PXD000001, TMT6), +2.6 %
+(PXD065251, SILAC), +4.9 % (PXD004541, TMT10, two fractions), +7.4 %
+(PXD049248, label-free), +9.9 % (PXD063151, label-free), +13.6 % (PXD014764,
+SILAC), +38.3 % (PXD037999, TMT10) and +80.3 % (PXD003531, label-free) PSMs
+at 1 % FDR; with Sage 0.0, +1.3, +2.1 to +2.5 (three runs), +3.0, +7.4,
++7.9, +25.4 and +64.7 % in the same runs. The isotope error setting alone
+gives +1.7 to +54 % (Comet), which is most of the gain reported above on
+six of the ten runs. Entrapment FDP at 1 % FDR, mean of 10 entrapment
+databases: PXD037999 (isotope setting unchanged) Comet 1.09 % without and
+1.21 % with the option, Sage 1.21 and 1.05 %; PXD003531 Comet 0.93 %
+without, 1.21 % with isotope errors 0..2 alone and 1.19 % with the option,
+Sage 0.95, 1.11 and 1.04 %. The rise on PXD003531 comes with the isotope
+errors, not with the shifts; the 0.88 -> 1.28 % of the second held-out test
+was one entrapment database (standard deviation between databases 0.1 to
+0.3 points). The Comet search takes 1.1 to 17 times as long with the option.
+The option does not
 replace an open search and stays experimental. Offsets need a narrow precursor
 tolerance, which the configuration sets explicitly. See
 [doc/SHORTLIST.md](doc/SHORTLIST.md#mass-shifts-as-engine-configuration-112-17).
