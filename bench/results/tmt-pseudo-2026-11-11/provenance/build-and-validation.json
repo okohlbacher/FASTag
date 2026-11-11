@@ -1,0 +1,42 @@
+{
+  "baseline_commit": "d16328b4a7f9746055dcc1623918867ff7ee6b93",
+  "source_sha256": {
+    "src/FASTag.cpp": "6b286db8992156b8155fb3f824acc60a7675975c59eb42ae1749e2407dccc30a",
+    "src/FASTagger.cpp": "2eb2ef6dc92d51c790235e3a626a70392b186d413098a9968171a6609dfde3f5",
+    "src/FASTagger.h": "b378265e7bc08b9a31dea533a0210f15c16ea5ab9f02837c549ade4d50d3dd0a",
+    "src/TmtPseudoFilter.h": "21d036bc956d0e91417a5db8eb2ed40a8d76ab894f4f42ba32beb10c6ea0e34f",
+    "src/RunMeta.h": "16f08cc322d037e282fe5240e394bda34dfec60aaafcca6a5f898e4876686faa",
+    "test/tmt_pseudo_test.cpp": "27dddb1381a17f8c56688115f053cb130c34e60681295186551abc65246a9f18",
+    "CMakeLists.txt": "95655438db62505c0fe0d4edbd3fb6c8e5b2ff88dcc703bda0ad8ad0b2d9efd9"
+  },
+  "local_binary": "/Users/kohlbach/Claude/OpenMS - XERCES Replacement/fastag-tmt-build/FASTag",
+  "local_binary_sha256": "685e906c06faf02d82285f4700ca2ef8bc72d1067e1f98b0d8e0a301d2cd46b5",
+  "linux_binary": "/ceph/ibmi/abi/oliver/fastag-tmt-filter-20261111/bin/FASTag-feature",
+  "linux_binary_sha256": "81d2d34df21c1d3f752e947fcded203ace1b3ee820190d4bd8ad8d17672b07eb",
+  "local_compiler": "AppleClang 21.0.0.21000401",
+  "linux_compiler": "GCC 14.4.0",
+  "build_type": "Release",
+  "local_openmp": "5.1",
+  "linux_openmp": "4.5",
+  "OpenMS": "3.7.0",
+  "linux_openms_prefix": "/ceph/ibmi/abi/oliver/opt/openms-develop-70cebcd144",
+  "local_openms_dir": "/Users/kohlbach/.cache/cmake/diaspextract-openms-develop",
+  "checks": {
+    "local_tmt_unit": "pass",
+    "linux_tmt_unit": "pass",
+    "local_baseline_identity": "126 comparisons:122same4added,2taxdbsame",
+    "linux_baseline_identity": "pass",
+    "GUI_typecheck": "pass",
+    "GUI_param_tests": "25pass",
+    "permission_recheck": "taxindex_test and cli_guards_test pass outside sandbox",
+    "full_local_suite": "85 unique tests passed, with 2 sandbox-only failures rerun successfully; 4 optional skips (89 discovered)",
+    "full_local_wall_seconds": 187.56,
+    "optional_skips": [
+      "search_engine_smoke_test",
+      "mzpeak_e2e",
+      "mzpeak_validate",
+      "mzml_to_mgf_test"
+    ]
+  },
+  "implementation_commit": "7eadc4e"
+}

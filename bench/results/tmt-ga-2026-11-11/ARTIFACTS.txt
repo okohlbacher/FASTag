@@ -1,0 +1,53 @@
+FASTag G/A-only filtering and adversarial reference audit, 11 November 2026
+
+Open report.html for the integrated results and scientific limitations.
+The primary references were frozen before the experiment and never relabeled.
+
+summary.tsv                 Final per-file accuracy and measured runtime.
+paired_changes.tsv          Individual gains and losses relative to baseline.
+spectrum_outcomes.tsv.gz    All reference-spectrum outcomes, including misses.
+manifest.json               Input, truth, binary, scorer hashes and arguments.
+timings.jsonl               All commands, output hashes, load and process times.
+score-reuse.json            Exact-output verification before score reuse.
+iteration1/                 Complete compact results before the veto refinement.
+provenance/                 Build, focused checks and full-run validation.
+figures/                    Editable SVG and publication PNG/PDF exports.
+detector-challenge/         Real-file controls, synthetic mixtures and final gate.
+audit/                      Independent search, raw-peak evidence and failure strata.
+
+Some audit scripts retain absolute paths to the frozen local/remote input data.
+They are preserved analysis records, not a second general benchmark framework.
+Raw mzML files and the complete tag TSVs are deliberately stored externally.
+The raw peaks for the selected diagnostic cases are in audit/spectrum_support.json.
+The complete audit archive also includes independent search tables omitted here;
+audit/truth_audit_provenance.json inventories that archive, not just this subset.
+
+Durable research data:
+  /ceph/ibmi/abi/oliver/fastag-tmt-filter-20261111/
+  /ceph/ibmi/abi/oliver/fastag-tmt-filter-benchmark-20261111/truth-audit/
+  /ceph/ibmi/abi/oliver/fastag-tmt-ga-review-20261111/detector-challenge/
+
+Both iterations' raw outputs are archived as:
+  /ceph/ibmi/abi/oliver/fastag-tmt-filter-20261111/ga-iterations-20261111.tar.zst
+SHA256: db986f807148cf070a241bbde1e5310021d1f8ad4646e7d0064447467f26f2c9
+The archive passed zstd integrity verification (23,926,435,840 expanded bytes).
+
+Main reproduction:
+  provenance/build-ga-v2.sh
+  provenance/run-ga-v2.sh
+  python bench/reuse_identical_scores.py PREVIOUS_RESULTS FINAL_RESULTS
+
+The last command aborts on any changed output, reference, scorer, or repetition.
+For changed outputs, score anew with bench/tmt_pseudo_filter.py --steps score
+using the original manifest's datasets, binaries and settings instead of reuse.
+
+Render from the repository root, with matplotlib and numpy installed:
+  python bench/plot_tmt_ga.py bench/results/tmt-ga-2026-11-11
+  python bench/plot_tmt_truth_cases.py \
+    bench/results/tmt-ga-2026-11-11/audit/spectrum_support.json \
+    bench/results/tmt-ga-2026-11-11/figures
+  python bench/report_tmt_ga.py bench/results/tmt-ga-2026-11-11
+
+Interpretation: the detector establishes evidence for TMT6/10 presence, not
+labeling purity. Recall@50 and rank-1 refer to length-4 tags under the documented
+sequence/flank rule, not downstream peptide-identification sensitivity or FDR.

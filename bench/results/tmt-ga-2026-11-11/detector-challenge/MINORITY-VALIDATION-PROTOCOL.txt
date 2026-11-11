@@ -1,0 +1,32 @@
+Frozen before executing or viewing the new five mixture files, 2026-11-11.
+
+Motivation: the initial 90:10 TMT:TMTpro mixture was not vetoed by the current
+rule: pro_N=29, pro_K=16, but both need >=20. Four independent high-resolution
+TMT files plus eight original benchmark TMT chemistry panels have <=2 pro_N
+and <=1 pro_K. Their positive decisions survive the candidate rule below.
+
+Candidate fixed now: keep the TMT positive threshold max(20,ceil(eligible/100))
+and eligible>=100 unchanged; for the conflicting ~304-Da veto, require BOTH
+pro_N and pro_K >= max(5,ceil(eligible/100)). Retain the Da abstention.
+No further threshold or sampling adjustment based on these new outcomes.
+
+New source projects: PXD021560 (TMT) and PXD039509 (TMTpro). They were not in
+the initial synthetic mixtures. Both have frozen, checked input SHA-256 values
+in manifest.json. Their pure-file counts were previously inspected; only the
+new sampling and mixture outcomes are withheld. This is a small mechanistic
+validation, not a fresh randomly sampled population-level held-out verdict.
+
+Same 1,024-MS2 sampling procedure as the first mixture experiment, with new
+sampling seed1948 and ordering seed403. Cases: pure TMT, pure TMTpro,
+TMT:TMTpro 512:512, 922:102, and 973:51. Mixtures contain independently acquired
+spectra; they are not experimental co-isolations or chemical dilutions.
+
+Required outcomes: retain pure TMT on, pure TMTpro off, and veto the 50:50 and
+90:10 mixtures under the candidate rule. The 95:5 mixture is an exploratory
+detection-limit check and will be reported whether it passes or fails.
+
+Run the unchanged frozen binary to obtain diagnostic counts. Apply the old
+and candidate decision rules offline, which is sufficient because the rule
+does not alter the pre-filter probe or its counts. Production source remains
+unchanged during this test. Preserve all commands, generated MGF hashes,
+per-case logs, and the offline rule evaluation. No runtime claim is made.

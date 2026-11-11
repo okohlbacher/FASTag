@@ -1,0 +1,30 @@
+{
+  "iteration": "ga-v1",
+  "commit": "81bf267",
+  "core_checks": "fastag_test, cli_param_test, tmt_pseudo_test, runmeta_test passed; standalone baseline_identity skipped; full-data default identity checked in benchmark",
+  "gui_checks": "25 parameter tests passed",
+  "source_sha256": {
+    "src/TmtPseudoFilter.h": "6ce1249e61873d69c3fe4c7a755983c1d62d5226cad714d523b5febcabcde3dd",
+    "src/FASTag.cpp": "0a387ecd8eb2170a5fb4334334b999a007319506b8083789e01bf1c0e374f7c1",
+    "test/tmt_pseudo_test.cpp": "437a7b25bf36f8eb389ab8b4415f5cc92646d70b71aa5eca555445b9d5e49c73",
+    "bench/tmt_pseudo_filter.py": "cdfbb6730f59eb32a32bf7673edb5e44fbe234e0ece2e174db3c2a2c9c87bfd5",
+    "doc/TMT-GA-ITERATION-PROTOCOL.txt": "d85463517eebbca17c1de598c82d6e97fa36169ebc780c234a0fbe22743a73a8"
+  },
+  "local_binary_sha256": "7618896e7ee907cbd2b8c5258aa260ed82912f65f0fd4070b24c303e89e1bc6b",
+  "node_before": {
+    "dax": {
+      "cores": 384,
+      "load1": 1.63
+    },
+    "data": {
+      "cores": 224,
+      "load1": 89.18
+    },
+    "spock": {
+      "cores": 224,
+      "load1": 19.22
+    }
+  },
+  "linux_binary_sha256": "3a012cf23504ea6457c7cbfadabbda073a141fe3bfb5a7bab4d9c427ba057025",
+  "linux_checks": "tmt_pseudo_test passed"
+}

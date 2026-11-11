@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: MIT
 
 #include "FASTagger.h"
+#include "TmtPseudoFilter.h"
 #include "AveragineDeisotoper.h"
 #include "PeakGrid.h"
 
@@ -1239,6 +1240,7 @@ namespace FASTag
       return shared >= std::min(pa.size(), pb.size()) - 1;
     };
 
+    const TmtPseudo::Filter tmt_filter(p);
     for (const uint32_t i : by_rank)
     {
       ScoredTag& cand = scored[i];
@@ -1258,6 +1260,9 @@ namespace FASTag
       if (p.max_evalue > 0 && t.evalue > p.max_evalue * gap_penalty) break;
       const double raw = t.gapped ? t.evalue / gap_penalty : t.evalue;
       if (p.max_evalue > 0 && raw > p.max_evalue) continue;
+      // After multiplicity/scoring, before deduplication and the output cap:
+      // a removed artifact frees a slot without altering surviving E-values.
+      if (tmt_filter.rejects(t)) continue;
       if (!seen.emplace(t.seq, t.charge, t.nterm_mass, t.cterm_mass).second) continue;
       if (!p.diversity || p.max_tag_count <= 0)
       {

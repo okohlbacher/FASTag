@@ -1,0 +1,7 @@
+Modifications: Carbamidomethyl (C, fixed)
+'/scratch/kohlbach/fastag-labeldisc/heldout3/in/PXD021560/Rono_TMT_6plex.mzML' has no index, or one that no longer matches the file (edited after it was written?); found its 83294 spectra by scanning it instead (0.1 s). Re-index it, e.g. with FileConverter, to skip the scan.
+Acquisition check: DDA (no repeating window scheme (periodicity 0.01 over 1774 repeat gaps, cycle 209, 2218 distinct precursor m/z, 0% uncharged, 4000 MS2 probed))
+Subsampling: tagging 1 of 83294 input spectra (seed 1)
+TMT pseudo-filter (auto): on; TMT6_10_two_site_evidence; probed=1024; eligible=776, threshold=20, veto_min=8, TMT_N=500, TMT_K=308, TMTpro_N=0, TMTpro_K=0; reporters=off
+1 MS2 spectra, 50 tags
+FASTag took 0.42 s (wall), 0.63 s (CPU), 0.27 s (system), 0.36 s (user); Peak Memory Usage: 43 MB.

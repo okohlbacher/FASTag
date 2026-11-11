@@ -64,6 +64,7 @@
 #include "SpectrumSampler.h"
 #include "TagFDR.h"
 #include "TagRecon.h"
+#include "TmtPseudoFilter.h"
 #include "TaxDeconv.h"
 #include "TaxIndex.h"
 #include "TaxStats.h"
@@ -143,6 +144,9 @@ namespace
   double g_t_probe = 0, g_t_tables = 0; ///< tolerance probe, null tables
   /// When main_() finished a file run; what follows it is teardown.
   std::chrono::steady_clock::time_point g_t_main_end;
+  /// -shortlist_specificity is on the command line (set by main()): TOPPBase
+  /// does not tell an explicit `full` from the default. post-1.13.1 (aspn).
+  bool g_cli_shortlist_specificity = false;
 
   /// Thrown by the tagging loop at the first MS2 with an ion mobility per
   /// peak when -out_spectra is mzPeak, which cannot store it.
@@ -319,6 +323,7 @@ class TOPPFASTag : public TOPPBase
         p.setMetaValue("complement_tolerance (auto) measured", compl_auto_rec_.measured);
       p.setMetaValue("complement_tolerance (auto) probe", compl_auto_rec_.probe);
     }
+    if (!tmt_filter_rec_.empty()) p.setMetaValue("tmt_pseudo_filter resolved", tmt_filter_rec_);
     return p;
   }
 
@@ -332,6 +337,7 @@ class TOPPFASTag : public TOPPBase
     std::string probe;   ///< the probe's statistics, as logged
   };
   ComplAutoRecord compl_auto_rec_;
+  std::string tmt_filter_rec_;
 
 public:
   // toolhandler_test = false: FASTag lives outside the OpenMS tree and so is
@@ -394,6 +400,12 @@ protected:
     // One gap only. Each additional gap multiplies the branching and asserts
     // another unobserved split, and a two-gap tag would be mostly inference.
     setMaxInt_("gaps", 1);
+    registerStringOption_("tmt_pseudo_filter", "off|auto|on", "off",
+                          "Experimental TMT6/10 G/A pseudo-residue filter before the tag cap; auto probes "
+                          "N-terminal and lysine mass signatures, on asserts TMT6/10 labeling", false);
+    setValidStrings_("tmt_pseudo_filter", ListUtils::create<std::string>("off,auto,on"));
+    registerFlag_("tmt_reporter_filter", "Also reject b/y tags anchored on singly charged TMT6/10 "
+                  "reporter ions; requires tmt_pseudo_filter auto or on and the same active TMT gate", false);
     // Negated, because a TOPP flag is false unless given and deisotoping is on
     // by default. `-no_deisotope` follows TOPPBase's own `-no_progress`.
     registerFlag_("no_deisotope",
@@ -989,12 +1001,14 @@ protected:
                           "protease the tag ends call (trypsin when inconclusive). A protease name, or "
                           "'unspecific': that rule. Except for 'trypsin', windows are found by flank mass and "
                           "kept by the rule and -shortlist_specificity; only exact placements count. "
-                          "Experimental; auto passed its held-out test (9 runs, 5 proteases: median protein recall 0.25 against the full search, +0.12 over the trypsin shortlist); a named rule and unspecific have no held-out test", false, true);
+                          "Experimental; auto passed its held-out test (9 runs, 5 proteases: median protein recall 0.25 against the full search, +0.12 over the trypsin shortlist); a named rule and unspecific have no held-out test. After 1.13.1 an Asp-N call of 'auto' is exported semi-specific unless -shortlist_specificity is given (development runs only, no held-out test)", false, true);
     setValidStrings_("shortlist_protease",
                      ListUtils::create<std::string>("trypsin,auto,unspecific,lys-c,arg-c,asp-n,glu-c,chymotrypsin,lys-n"));
     registerStringOption_("shortlist_specificity", "<mode>", "full",
                           "With -shortlist_protease other than trypsin: 'full' both window ends at a cleavage "
-                          "site (or a protein terminus), 'semi' at least one, 'none' any window", false, true);
+                          "site (or a protein terminus), 'semi' at least one, 'none' any window. When it is "
+                          "not given and -shortlist_protease auto calls Asp-N, 'semi' is used (development "
+                          "runs only, no held-out test); a named asp-n stays 'full'", false, true);
     setValidStrings_("shortlist_specificity", ListUtils::create<std::string>("full,semi,none"));
     registerOutputFile_("search_config_out", "<file>", "",
                         "Search-engine configuration for -fasta_out (or the input database): Sage JSON, "
@@ -1039,7 +1053,8 @@ protected:
                           "Add the run's mass-gap peaks to -search_config_out: 'variable' as variable "
                           "modifications, 'offsets' as Comet mass offsets, 'both'. Isotope errors, fixed "
                           "labels and caps are applied; -search_shifts_out lists every decision. "
-                          "Experimental: failed both held-out tests (doc/SHORTLIST.md)", false);
+                          "Experimental: failed both held-out tests; on development runs 0 to +80 % PSMs over a "
+                          "search with the same isotope errors at 1.0 to 1.2 % entrapment FDP (doc/SHORTLIST.md, README)", false);
     setValidStrings_("search_shifts", ListUtils::create<std::string>("none,variable,offsets,both"));
     registerOutputFile_("search_shifts_out", "<file>", "",
                         "One row per mass-gap peak: its explanation and what -search_shifts did with it", false);
@@ -1832,6 +1847,11 @@ protected:
         OPENMS_LOG_ERROR << "-stream cannot be combined with -complement_tolerance_unit auto." << std::endl;
         return ILLEGAL_PARAMETERS;
       }
+      if (getStringOption_("tmt_pseudo_filter") == "auto")
+      {
+        OPENMS_LOG_ERROR << "-stream cannot be combined with -tmt_pseudo_filter auto; use on only for known TMT6/10 input." << std::endl;
+        return ILLEGAL_PARAMETERS;
+      }
       for (const StreamRefusal& r : stream_refusals)
         if (optionNonDefault_(r.option))
         {
@@ -1933,6 +1953,19 @@ protected:
     // The CLI's defaults (src/CliParam.h), then every option over them; the
     // modifications are resolved from the options below.
     FASTag::Param p = FASTag::cliDefaultParam(/*resolve_mods=*/false);
+    const std::string tmt_mode = getStringOption_("tmt_pseudo_filter");
+    p.tmt_pseudo_filter = tmt_mode == "on";
+    p.tmt_reporter_filter = getFlag_("tmt_reporter_filter");
+    if (p.tmt_reporter_filter && tmt_mode == "off")
+    {
+      OPENMS_LOG_ERROR << "-tmt_reporter_filter requires -tmt_pseudo_filter auto or on." << std::endl;
+      return ILLEGAL_PARAMETERS;
+    }
+    if (tmt_mode == "on")
+    {
+      tmt_filter_rec_ = "on; forced_TMT6_10; reporters=" + std::string(p.tmt_reporter_filter ? "on" : "off");
+      std::cerr << "TMT pseudo-filter: " << tmt_filter_rec_ << std::endl;
+    }
     p.tag_length = lengths.front();
     p.max_extension = getIntOption_("extension");
     p.max_gaps = getIntOption_("gaps");
@@ -2938,6 +2971,10 @@ protected:
         sl_models.bg_c = sl_models.bg_n = FD::composition(sl_db_residues, true);
         sl_models.has_bg = true;
       }
+      // post-1.13.1 (aspn): an Asp-N digest has D at a third of its counted
+      // N-terminal tag ends, not at all of them; without this it is called
+      // `unspecific`. Only the experimental non-trypsin placement path.
+      if (sl_nontryptic) FD::softenNterm(sl_models, "Asp-N", FD::kNtermSiteShare);
       if (!search_config_out.empty())
       {
         sl_plan.database = fasta_out.empty() ? recon_db : fasta_out;
@@ -3060,6 +3097,8 @@ protected:
     }
     // The run rows every report starts with (src/RunMeta.h), filled once.
     FASTag::RunReport::RunMeta run_meta;
+    run_meta.tmt_filter_mode = tmt_mode;
+    run_meta.tmt_filter_resolved = tmt_filter_rec_;
     run_meta.version = FASTAG_VERSION;
     run_meta.input = File::basename(in);
     run_meta.fragment_tolerance = p.frag_tol;
@@ -3283,6 +3322,11 @@ protected:
     {
       OPENMS_LOG_ERROR << "-complement_tolerance_unit auto needs mzML or MGF input; mzPeak input is "
                           "read in one pass. Give -complement_tolerance_unit Da or fragment." << std::endl;
+      return ILLEGAL_PARAMETERS;
+    }
+    if (tmt_mode == "auto" && mzpeak_in)
+    {
+      OPENMS_LOG_ERROR << "-tmt_pseudo_filter auto needs random-access mzML or MGF input; use on only for known TMT6/10 input." << std::endl;
       return ILLEGAL_PARAMETERS;
     }
     // #9: what each reader does with profile MS2 (src/Centroid.h). mzPeak
@@ -3797,6 +3841,60 @@ protected:
       compl_auto_rec_.source = source;
       compl_auto_rec_.measured = est.ok ? full(est.tol) : std::string();
       compl_auto_rec_.probe = probe_txt.str() + (est.ok ? std::string() : "; " + est.why);
+    }
+
+    // Resolve the experimental gate once, before any production tag is
+    // selected. A fixed, deterministic probe is independent of worker order.
+    if (tmt_mode == "auto")
+    {
+      namespace TP = FASTag::TmtPseudo;
+      TP::ProbeCounts counts;
+      std::size_t probed = 0;
+      if (p.tol_ppm)
+      {
+        const auto mask = FASTag::sampleByCount(n_total, std::min<std::size_t>(n_total, 4 * TP::kProbeCount), 0x544D5431u);
+        std::vector<std::size_t> candidates;
+        for (std::size_t i = 0; i < n_total; ++i)
+        {
+          if (!mask[i]) continue;
+          const MSSpectrum s = read_spectrum(i);
+          if (s.getMSLevel() == 2 && !s.empty() && !s.getPrecursors().empty()
+              && s.getPrecursors().front().getCharge() > 0) candidates.push_back(i);
+        }
+        FASTag::Param probe = p;
+        probe.tag_length = 4;
+        probe.max_extension = 0;
+        probe.max_gaps = 0;
+        probe.max_tag_count = 50;
+        probe.max_evalue = 1.0;
+        probe.tmt_pseudo_filter = false;
+        probe.tmt_reporter_filter = false;
+        probe.diversity = false;
+        probe.per_residue_conf = false;
+        probe.ion_pair = FASTag::IonSeries::ionPair(FASTag::IonSeries::Series::BY);
+        const FASTag::Tables probe_tables(probe);
+        PeakPickerHiRes tmt_picker;
+        for (const std::size_t i : FASTag::ComplTol::pickProbe(candidates, TP::kProbeCount, 0x544D5432u))
+        {
+          MSSpectrum s = read_spectrum(i);
+          const bool photo = photo_ax && FASTag::IonSeries::photoActivated(s);
+          const auto series = FASTag::IonSeries::seriesInRun(ion_mode, FASTag::IonSeries::activationClass(s), ion_column, photo);
+          if (series != FASTag::IonSeries::Series::BY) continue;
+          if (pick_in_loop) FC::apply(s, tmt_picker, pick_mzml);
+          s.sortByPosition();
+          const Precursor& pc = s.getPrecursors().front();
+          counts.add(FASTag::tagSpectrum(s, pc.getMZ(), pc.getCharge(), probe, probe_tables));
+          ++probed;
+        }
+      }
+      p.tmt_pseudo_filter = counts.detected(p.tol_ppm);
+      for (FASTag::Param& lp : len_params) lp.tmt_pseudo_filter = p.tmt_pseudo_filter;
+      // Other ion series remain unfiltered, even in a mixed-activation run.
+      tmt_filter_rec_ = std::string(p.tmt_pseudo_filter ? "on" : "off") + "; " + counts.reason(p.tol_ppm)
+        + "; probed=" + std::to_string(probed) + "; " + counts.summary()
+        + "; reporters=" + (p.tmt_reporter_filter && p.tmt_pseudo_filter ? "on" : "off");
+      run_meta.tmt_filter_resolved = tmt_filter_rec_;
+      std::cerr << "TMT pseudo-filter (auto): " << tmt_filter_rec_ << std::endl;
     }
 
     const auto t_tables_a = std::chrono::steady_clock::now();
@@ -5991,7 +6089,12 @@ protected:
         std::string sl_withheld;  // what the placement check withheld, for the TSV header
         if (sl_nontryptic)
         {
-          sl_choice = FASTag::Cleavage::choose(sl_protease, sl_spec, verdict);
+          // post-1.13.1 (aspn): an Asp-N call under `auto` is semi-specific
+          // unless the user chose the specificity (on the command line, or a
+          // value other than the default from an INI).
+          sl_choice = FASTag::Cleavage::choose(sl_protease, sl_spec, verdict,
+                                               g_cli_shortlist_specificity ||
+                                                   optionNonDefault_("shortlist_specificity"));
           std::string withheld;
           if (!fasta_out.empty()) withheld = "-fasta_out";
           if (!search_config_out.empty()) withheld += (withheld.empty() ? "" : " or ") + std::string("-search_config_out");
@@ -6015,6 +6118,12 @@ protected:
             OPENMS_LOG_ERROR << "Shortlist placement: " << sl_choice.reason
                              << ", so the shortlist may not describe this run. Not writing " << withheld
                              << " (-shortlist_force overrides)." << std::endl;
+          if (sl_choice.auto_unspecific)
+            OPENMS_LOG_WARN << "Shortlist export: the tag ends call no protease (unspecific), so the shortlist and "
+                               "the exported search are unspecific. An unspecific search of the shortlist can take "
+                               "longer and more memory than a full search with the true protease; if the protease "
+                               "is known, name it with -shortlist_protease (and -shortlist_specificity semi)."
+                            << std::endl;
           handoff_refused = sl_choice.refuse && !force && !withheld.empty();
           if (handoff_refused) sl_withheld = withheld;
           sl_plan.enzyme = FASTag::Cleavage::engineEnzyme(*sl_choice.rule, sl_choice.specificity);
@@ -7447,6 +7556,7 @@ int main(int argc, const char** argv)
   {
     if (std::strcmp(argv[i], "-threads") == 0 || std::strcmp(argv[i], "-ini") == 0) explicit_threads = true;
     if (std::strcmp(argv[i], "--help") == 0 || std::strcmp(argv[i], "--helphelp") == 0) help = true;
+    if (std::strcmp(argv[i], "-shortlist_specificity") == 0) g_cli_shortlist_specificity = true;
   }
   // ...and not for a bare `FASTag` either: with no arguments TOPPBase prints
   // the usage, and an injected pair would turn that into "in and out are
