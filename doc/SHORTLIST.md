@@ -197,8 +197,8 @@ is left under the name, and no configuration is written.
   Without a template a fragment is written whose header says to merge it.
 - The database in the configuration is `-fasta_out`, else the input database
   (WARN when that holds decoys, since the engine adds its own).
-- **MSFragger** (`-search_engine msfragger`, experimental since 1.13, no
-  held-out test, pinned 4.4.1): see "MSFragger configuration" below.
+- **MSFragger** (`-search_engine msfragger`, experimental since 1.13, held-out
+  test FAILED, pinned 4.4.1): see "MSFragger configuration" below.
 
 Engine acceptance (`test/search_engine_smoke_test.sh` with `FASTAG_SAGE_BIN`
 and `FASTAG_COMET_BIN`, mandatory with `FASTAG_ENGINES_REQUIRED=1`) runs on
@@ -224,6 +224,31 @@ configuration by hand before relying on it.
 
 ## MSFragger configuration (1.13, backlog #18)
 
+**Held-out test: FAIL** (7 runs from 7 PRIDE projects, PREREG-msfragger.md,
+scored once on 2026-11-10; FASTag 1.12.2 at 9365ff1, MSFragger 4.4.1). The
+search on the exported shortlist FASTA and `fragger.params` was compared with
+MSFragger's closed-search defaults on the full human proteome at 1% FDR.
+C1 PASS: MSFragger ran on the unedited export in 7 of 7 runs. C2 FAIL: the
+shortlist search kept 48.6 to 73.2% of the spectra the full search identified
+(median 61.3%; criterion at least 80% in every run). G1 PASS: 2.03 to 3.91
+times as fast (median 3.38). G2 FAIL: entrapment FDP 1.27% pooled (limit
+1.5%), 2.09% in one run (limit 2.0%). The exported parameters on the full
+proteome kept 46 to 82%, the shortlist alone 81 to 95%.
+
+The export of that test wrote `isotope_error 0`. On two development runs
+(PXD003531, PXD014764) this was the largest single cause: with MSFragger's
+`0/1/2/3` the kept share rose from 47.5 to 72.2% and from 47.3 to 56.3%, at
+unchanged speed and an entrapment FDP under 1%. `0/1/2/3` is therefore the
+default for MSFragger since then (`-search_isotope_errors -1`; Sage and Comet
+keep none). **This default was set on development runs only and has no
+held-out test**; the held-out numbers above describe the export before it.
+On the same two runs, on top of it, `-recon_missed_cleavages 2` added 1.6 and 9.5 points
+(entrapment FDP up to 1.4%), `-search_precursor_tolerance 20` 4.8 and 0.8, and
+`Acetyl (Protein N-term)` in `-variable_modifications` 1.8 and 0.7; these are
+not defaults. MSFragger's mass calibration (`calibrate_mass 2`) added nothing
+and cost a third of the speed. With all of them the share was 80.6% and 67.8%;
+the shortlist itself limits it to 88.3% and 77.2% on these runs.
+
 `-search_engine msfragger` writes a complete `fragger.params` for MSFragger
 4.4.1 (`java -jar MSFragger-4.4.1.jar fragger.params <spectra>`), keys in the
 order of the engine's own `--config closed` file
@@ -242,7 +267,9 @@ values:
 - fragment: `fragment_mass_tolerance`/`fragment_mass_units`; `calibrate_mass 0`
   so the exported tolerances are the ones searched (set 2 for MSFragger's own
   calibration);
-- `isotope_error` `0`, or `0/1/../n` for `-search_isotope_errors n`;
+- `isotope_error` `0/1/2/3` (MSFragger's own default; FASTag's default since the
+  held-out test, see below), or `0/1/../n` for `-search_isotope_errors n`
+  (`0` for 0);
 - `mass_offsets`: 0 always first, then the `-search_shifts` offsets at 4
   decimals, `/`-separated; negative offsets are kept (Comet's are dropped);
   `localize_delta_mass 1` when offsets are exported, as the file recommends.

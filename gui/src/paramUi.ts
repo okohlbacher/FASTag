@@ -1041,13 +1041,13 @@ export const PARAM_UI: Record<string, ParamUi> = {
   search_engine: {
     hidden: OPT_IN_1_12,
     help: {
-      text: 'The search engine the settings are written for: Sage, Comet or MSFragger (experimental, no held-out test; needs decoys in the database).'
+      text: 'The search engine the settings are written for: Sage, Comet or MSFragger (experimental; its held-out test failed: the shortlist search kept 49 to 73% of the spectra a full MSFragger search identifies, criterion 80%; needs decoys in the database).'
     }
   },
   search_isotope_errors: {
     hidden: OPT_IN_1_12,
     help: {
-      text: 'How many precursor isotope errors the search engine should consider.'
+      text: 'How many precursor isotope errors the search engine should consider; -1 leaves it to the engine: none for Sage and Comet, up to 3 for MSFragger.'
     }
   },
   search_precursor_tolerance: {

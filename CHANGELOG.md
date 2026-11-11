@@ -53,8 +53,25 @@
   the isotope error setting (0..1 against 0 in the base search). The test
   did not measure the fix. The option stays experimental and does not
   replace an open search.
+- **`-search_engine msfragger` (backlog #18): held-out result, FAIL; the
+  exported `isotope_error` changes.** On 7 runs from 7 PRIDE projects
+  (`acc113r/msfragger`, PREREG-msfragger.md, scored once; FASTag 1.12.2 at
+  9365ff1, MSFragger 4.4.1) MSFragger ran on the unedited export in 7 of 7
+  runs (C1 PASS) and was 2.03 to 3.91 times as fast as on the full human
+  proteome (median 3.38, G1 PASS), but kept only 48.6 to 73.2% of the spectra
+  the full search with MSFragger's defaults identified (median 61.3%;
+  criterion 80% in every run, C2 FAIL), and the entrapment FDP was 1.27%
+  pooled but 2.09% in one run (limit 2.0%, G2 FAIL). On two development runs
+  the largest single cause was the exported `isotope_error 0`: with
+  MSFragger's own `0/1/2/3` the kept share rose from 47.5 to 72.2%
+  (PXD003531) and from 47.3 to 56.3% (PXD014764) at unchanged speed,
+  entrapment FDP under 1%. `-search_isotope_errors` therefore has the new
+  default -1 = by engine: `0/1/2/3` for MSFragger, none for Sage and Comet as
+  before (their configurations are unchanged; an explicit 0 is kept). This
+  default is set on development runs only and has no held-out test. The
+  option stays experimental (doc/SHORTLIST.md, "MSFragger configuration").
 - **MSFragger configuration (backlog #18): `-search_engine msfragger`,
-  experimental, no held-out test.** `-search_config_out` writes a complete
+  experimental; held-out test FAILED (entry above).** `-search_config_out` writes a complete
   `fragger.params` for MSFragger 4.4.1. MSFragger needs decoys in the
   database: with `-fasta_out` FASTag appends reversed `rev_` decoys, without
   it the input database must be a target-decoy database. `num_threads` is
