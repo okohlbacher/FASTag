@@ -198,3 +198,48 @@ sha256 at the freeze:
     1b8ba1285adca0a44ef07663a7b62a43186a573df920e5011841a0ea7d21fe56  labeldisc3/scripts/run_parammedic.py
     0e4b8a562043bf3a9dfd4c1d1093fd52aa2a1b6427016ef169f807997a9bc49b  labeldisc3/scripts/select_heldout3.py
     aa79fd96660499379e507c62f1bd0f9fff905e5257f61a4909bdb49b45d61f7f  labeldisc3/scripts/stage_pride_labeldisc3.sh
+
+## Addendum 2: truth audit (freeze commit 2, before any FASTag or Param-Medic run on a selected run)
+
+Audited manifest: `labeldisc3/manifests/audited.tsv` (185 projects, 163 with include = yes). Only include = yes rows are run and scored.
+
+| class | selected | included | excluded, with reason |
+|---|---|---|---|
+| TMT | 24 | 18 | 5 reporter scan disagrees, 1 reporter scan not assessable |
+| TMTpro | 22 | 18 | 4 reporter scan disagrees |
+| iTRAQ4 | 13 | 8 | 2 reporter scan disagrees, 2 not assessable, 1 download failed |
+| iTRAQ8 | 14 | 11 | 3 reporter scan disagrees |
+| SILAC | 26 | 22 | 4 manual (3 pulsed SILAC, 1 spike-in SILAC; `manifests/manual_exclusions.tsv`) |
+| dimethyl | 22 | 22 | |
+| label-free | 64 | 64 | |
+
+iTRAQ4 (8) and iTRAQ8 (11) are below the 15 runs asked for; the selection had no further eligible projects to draw on after the freeze
+("No run is replaced after the audit"). Criterion R scores the two together (19 runs), as fixed above.
+
+Staging record (`manifests/stage1.tsv`, `stage1.r2.tsv`, `stage1.r3.tsv`, `stage2.tsv`, `stage2b.tsv`, `stage3.tsv`; later tables override earlier rows):
+
+- The first pass left 58 downloads failed (PRIDE refused connections, 403, closed transfers; other jobs were downloading from the same host).
+  The same files were fetched again with the same checks (`scripts/retry_stage.sh`); 57 then passed.
+- Backups used (rank 1): PXD043085 (the rank 0 raw file is empty) and PXD034116 (the rank 0 raw file is not readable, two identical downloads).
+- PXD027668 is excluded: all three files (rank 0, 1, 2) differ from the SHA-1 that PRIDE lists, each after four downloads.
+- The reporter scans were run with `scripts/scan_all.sh`; the scan results are in `manifests/scan_json.tgz`.
+
+Deviations so far:
+
+1. `.gitignore` ignores `*.tsv`, so freeze commit 1 holds the manifests only as the sha256 values listed above. The files are added in this
+   commit and still have those sha256 values.
+2. `retry_stage.sh` and `scan_all.sh` were written after freeze commit 1 (harness only: same downloads, same checks, same scan).
+
+sha256:
+
+    d6ece0bad217df9ff516cd3da451dc27359b54a0befd09ff9343a5254fd69dbf  labeldisc3/manifests/audited.tsv
+    b135b11696a927572767bb5e096bbcd22bb7fad381fced945fbb648f8071de1d  labeldisc3/manifests/manual_exclusions.tsv
+    7dec7182de19bb94058b025fc6bd9f3286b83239aa5c1a158e25564b0f9e680d  labeldisc3/manifests/scan_json.tgz
+    1cdd44f223c30809c8ed9307cce36a309fb27c447421269ce1051ed7395d4fe0  labeldisc3/manifests/stage1.tsv
+    968d297e4cda85c1050b9998d26129e3b73ffe863b488d85e1b79da3e87a065e  labeldisc3/manifests/stage1.r2.tsv
+    a436dc15a4e32c46f0d8588759f6ae0b803e047f8677bcecb59ae46b1bcb5040  labeldisc3/manifests/stage1.r3.tsv
+    b6714bbd255a0adaaa8be48f300db7279fb98b1258272ffee19ab12dc62b850a  labeldisc3/manifests/stage2.tsv
+    9bb90a8c07c86be60c906b6a617985e49050eb49adc20d6c2e8b0ab5f6340cc7  labeldisc3/manifests/stage2b.tsv
+    6d913b1bf209d625811d17d20fc4836767b6d8fd9c3fef8f7b0f06dee5ad1e8b  labeldisc3/manifests/stage3.tsv
+    3333d36647e3b270f376b447a1ccc83552ade3c8af6c63126cd6f8a177d995c1  labeldisc3/scripts/retry_stage.sh
+    7b75484bead05c0004c80186ac1d38fab6a3c175460f902449c3cfa141e32df7  labeldisc3/scripts/scan_all.sh

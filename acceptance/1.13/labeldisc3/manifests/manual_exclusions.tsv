@@ -1,0 +1,5 @@
+pxd	reason
+PXD004726	pulsed SILAC (protein turnover; medium/heavy chase), outside the vocabulary like the pulsed-SILAC projects dropped by the regex
+PXD012322	pulsed SILAC (heavy label marks newly synthesised protein), outside the vocabulary
+PXD018193	pulsed SILAC (actively synthesised proteins), outside the vocabulary
+PXD039190	spike-in SILAC (heavy cell-line lysate mixed into tissue lysate), outside the vocabulary
