@@ -926,13 +926,14 @@ error setting (0..1 against 0 in the base search). Both FAIL results stand.
 Measured afterwards on development runs only (the eight held-out runs, now
 spent, and two earlier development runs; no new held-out test): against a
 base search with the same isotope error setting the option gives, with
-Comet, +0.8 % (PXD073763, TMTpro), +1.5 % (PXD000001, TMT6), +2.6 %
-(PXD065251, SILAC), +4.9 % (PXD004541, TMT10, two fractions), +7.4 %
-(PXD049248, label-free), +9.9 % (PXD063151, label-free), +13.6 % (PXD014764,
+Comet, +0.2 % (PXD000001, TMT6), +0.8 % (PXD073763, TMTpro), +2.2 %
+(PXD065251, SILAC), +4.5 and +4.8 % (PXD004541, TMT10, two fractions), +6.8 %
+(PXD049248, label-free), +10.1 % (PXD063151, label-free), +13.6 % (PXD014764,
 SILAC), +38.3 % (PXD037999, TMT10) and +80.3 % (PXD003531, label-free) PSMs
-at 1 % FDR; with Sage 0.0, +1.3, +2.1 to +2.5 (three runs), +3.0, +7.4,
-+7.9, +25.4 and +64.7 % in the same runs. The isotope error setting alone
-gives +1.7 to +54 % (Comet), which is most of the gain reported above on
+at 1 % FDR; with Sage 0.0, +1.3, +2.5 to +2.8 (three runs), +3.1, +7.8,
++7.9, +25.4 and +64.7 % in the same runs (means over 3 entrapment databases,
+10 for PXD037999 and PXD003531, 1 for PXD014764). The isotope error setting
+alone gives +1.3 to +54 % (Comet), which is most of the gain reported above on
 six of the ten runs. Entrapment FDP at 1 % FDR, mean of 10 entrapment
 databases: PXD037999 (isotope setting unchanged) Comet 1.09 % without and
 1.21 % with the option, Sage 1.21 and 1.05 %; PXD003531 Comet 0.93 %

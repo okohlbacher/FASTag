@@ -8,11 +8,12 @@ Documentation only, no change to the program's results.
   over 10 databases.** Development runs only (the spent held-out runs and two
   earlier development runs); the two held-out FAIL results stand and no new
   held-out test was run. Against a base search with the same isotope error
-  setting the option gives +0.8 to +80.3 % PSMs with Comet and 0.0 to
-  +64.7 % with Sage at 1 % FDR (ten runs: PXD003531, PXD049248, PXD063151,
+  setting the option gives +0.2 to +80.3 % PSMs with Comet and 0.0 to
+  +64.7 % with Sage at 1 % FDR (means over 3 to 10 entrapment databases,
+  1 for PXD014764) (ten runs: PXD003531, PXD049248, PXD063151,
   PXD014764, PXD065251, PXD004541 fr02 and fr09, PXD037999, PXD000001,
   PXD073763; at least +2 % on eight of ten with each engine). The isotope
-  error setting alone gives +1.7 to +54 % (Comet). Entrapment FDP at 1 % FDR,
+  error setting alone gives +1.3 to +54 % (Comet). Entrapment FDP at 1 % FDR,
   mean of 10 entrapment databases: PXD037999 Comet 1.09 % (base) and 1.21 %
   (option), Sage 1.21 and 1.05 %; PXD003531 Comet 0.93 % (base), 1.21 %
   (base with isotope errors 0..2), 1.19 % (option), Sage 0.95, 1.11, 1.04 %.
