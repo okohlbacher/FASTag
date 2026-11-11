@@ -1,0 +1,2 @@
+run	role	protease	accession	file	bytes	pride_sha1	status	raw_sha256	mzml	mzml_bytes	mzml_sha256	ms2	ms2_ftms_hcd	ms2_charged	check
+R12	chosen	Lys-C	PXD048926	Hela20ng_S2_nDDMcoat_DDM_LysC_DigDil_43minDDA_20221129_1.raw	370469806	-	no_pride_sha1,size_ok,second_download_same	5aea5f09b1691559f80ac74b366e246bb2ab04f2a36b3d0f5f35a2806b121f1e	raw/PXD048926/Hela20ng_S2_nDDMcoat_DDM_LysC_DigDil_43minDDA_20221129_1.mzML	204218648	dadc04eeb0e224df5f5c7c018b7fd8566e401ed991e08cb84b2201ce1d214967	13798	13798	13798	ok

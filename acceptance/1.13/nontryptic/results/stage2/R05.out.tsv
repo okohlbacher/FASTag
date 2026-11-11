@@ -1,0 +1,2 @@
+run	role	protease	accession	file	bytes	pride_sha1	status	raw_sha256	mzml	mzml_bytes	mzml_sha256	ms2	ms2_ftms_hcd	ms2_charged	check
+R05	chosen	Glu-C	PXD008333	SP_RG_GluC_12h_shotgun.raw	610034128	3852845c9bdd1532cb205f1efbda3212694ffcf7	sha1_ok	4e492ef55c84a4026d8962f5d0d78b5c92f0feeb3c73c9fe803665a007fdf3f5	raw/PXD008333/SP_RG_GluC_12h_shotgun.mzML	249480756	8cc1206db10149976f0297a8b3c934762b0a5145ebe593b8e64b0e7ed7e71260	21264	21264	21264	ok

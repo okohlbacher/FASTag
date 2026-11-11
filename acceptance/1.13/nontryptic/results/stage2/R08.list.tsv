@@ -1,0 +1,3 @@
+run	role	protease	accession	file	bytes	pride_sha1	url	n_candidates
+R08	chosen	Lys-C	PXD006465	170325_HF02_XuPing_CNHPP_A_LysC_2_F1_R1.raw	982992683	b106c974a6d0f04ebfe28b1ac4d94517a467cf90	https://ftp.pride.ebi.ac.uk/pride/data/archive/2017/10/PXD006465/170325_HF02_XuPing_CNHPP_A_LysC_2_F1_R1.raw	21
+R08	backup	Lys-C	PXD006465	170325_HF02_XuPing_CNHPP_C_LysC_4_F1_R1.raw	921849613	631b55ce6536a92f85d5af631aee4a223d1e3f48	https://ftp.pride.ebi.ac.uk/pride/data/archive/2017/10/PXD006465/170325_HF02_XuPing_CNHPP_C_LysC_4_F1_R1.raw	21

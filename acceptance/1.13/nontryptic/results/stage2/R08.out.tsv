@@ -1,0 +1,2 @@
+run	role	protease	accession	file	bytes	pride_sha1	status	raw_sha256	mzml	mzml_bytes	mzml_sha256	ms2	ms2_ftms_hcd	ms2_charged	check
+R08	chosen	Lys-C	PXD006465	170325_HF02_XuPing_CNHPP_A_LysC_2_F1_R1.raw	982992683	b106c974a6d0f04ebfe28b1ac4d94517a467cf90	sha1_ok	22bbade043629575e085dc65ebedb14696257e3804577ab5332602b70f79d81f	raw/PXD006465/170325_HF02_XuPing_CNHPP_A_LysC_2_F1_R1.mzML	591336876	27cda0190935fa98b167e6652d053ca1af694797a8ea74894b8ceb1e2da85375	69246	69246	69246	ok

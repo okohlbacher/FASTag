@@ -1,0 +1,10 @@
+Modifications: Carbamidomethyl (C, fixed), Oxidation (M, variable)
+Recon index: 20416 proteins, 11414601 residues, 13 isobaric rules; min tag length 8 (derived)
+Shortlist protease check: non_tryptic (unspecific fits the tag ends best, not a trypsin-compatible protease (by 0.641 log-likelihood per tag end)).
+Shortlist placement: unspecific, none specificity (auto: the tag ends call unspecific).
+Shortlist placement: 6986 of 6986 placements by flank mass fit the rule.
+Shortlist: 309 of 651 proteins with evidence kept, not FDR-controlled -> sl.tsv
+Reduced FASTA: 309 entries (no decoys) -> red.fasta
+Search configuration (sage, database red.fasta) -> sage.json
+135843 MS2 spectra, 2136085 tags
+FASTag took 4.22 s (wall), 29.62 s (CPU), 2.51 s (system), 27.11 s (user); Peak Memory Usage: 466 MB.

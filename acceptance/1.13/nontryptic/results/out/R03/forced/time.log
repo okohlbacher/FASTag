@@ -1,0 +1,26 @@
+'/scratch/kohlbach/b113/nontryptic/heldout/raw/PXD064794/210812_WTC11Blue2_AspN1_HCDorbi_2hr_C8.mzML' has no index, or one that no longer matches the file (edited after it was written?); found its 145006 spectra by scanning it instead (0.06 s). Re-index it, e.g. with FileConverter, to skip the scan.
+Acquisition check: DDA (no repeating window scheme (periodicity 0.01 over 1595 repeat gaps, cycle 677, 2404 distinct precursor m/z, 0% uncharged, 4000 MS2 probed))
+Shortlist protease check: unspecific fits the tag ends best, not a trypsin-compatible protease (by 0.641 log-likelihood per tag end); -shortlist_force writes the hand-off outputs anyway.
+	Command being timed: "/scratch/kohlbach/b113/nontryptic/heldout/build/FASTag -in /scratch/kohlbach/b113/nontryptic/heldout/raw/PXD064794/210812_WTC11Blue2_AspN1_HCDorbi_2hr_C8.mzML -recon_fasta /scratch/kohlbach/b113/nontryptic/heldout/db/Homo_sapiens.fasta -extension 3 -recon_missed_cleavages 2 -fixed_modifications Carbamidomethyl (C) -variable_modifications Oxidation (M) -search_isotope_errors 1 -threads 8 -out t.tsv -shortlist_out sl.tsv -fasta_out red.fasta -search_config_out sage.json -shortlist_force"
+	User time (seconds): 30.11
+	System time (seconds): 4.17
+	Percent of CPU this job got: 605%
+	Elapsed (wall clock) time (h:mm:ss or m:ss): 0:05.66
+	Average shared text size (kbytes): 0
+	Average unshared data size (kbytes): 0
+	Average stack size (kbytes): 0
+	Average total size (kbytes): 0
+	Maximum resident set size (kbytes): 451708
+	Average resident set size (kbytes): 0
+	Major (requiring I/O) page faults: 0
+	Minor (reclaiming a frame) page faults: 295681
+	Voluntary context switches: 589
+	Involuntary context switches: 235
+	Swaps: 0
+	File system inputs: 3876488
+	File system outputs: 427675
+	Socket messages sent: 0
+	Socket messages received: 0
+	Signals delivered: 0
+	Page size (bytes): 4096
+	Exit status: 0

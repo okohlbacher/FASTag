@@ -1,0 +1,7 @@
+Modifications: Carbamidomethyl (C, fixed), Oxidation (M, variable)
+Recon index: 20416 proteins, 11414601 residues, 13 isobaric rules; min tag length 8 (derived)
+Shortlist: 9 of 28 proteins with evidence kept, not FDR-controlled -> sl.tsv
+Reduced FASTA: 9 entries (no decoys) -> red.fasta
+Search configuration (sage, database red.fasta) -> sage.json
+135843 MS2 spectra, 2136085 tags
+FASTag took 5.55 s (wall), 34.17 s (CPU), 4.10 s (system), 30.07 s (user); Peak Memory Usage: 441 MB.

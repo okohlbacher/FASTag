@@ -1,0 +1,26 @@
+'/scratch/kohlbach/b113/nontryptic/heldout/raw/PXD048926/Hela100ng_S2_nDDMcoat_DDM_GluC_DilDig_43minDDA_20221129_3.mzML' has no index, or one that no longer matches the file (edited after it was written?); found its 15625 spectra by scanning it instead (0.01 s). Re-index it, e.g. with FileConverter, to skip the scan.
+Acquisition check: DDA (no repeating window scheme (periodicity 0 over 2206 repeat gaps, cycle 81, 1793 distinct precursor m/z, 0% uncharged, 4000 MS2 probed))
+Shortlist protease check: Glu-C fits the tag ends best, not a trypsin-compatible protease (by 3.18 log-likelihood per tag end); -shortlist_force writes the hand-off outputs anyway.
+	Command being timed: "/scratch/kohlbach/b113/nontryptic/heldout/build/FASTag -in /scratch/kohlbach/b113/nontryptic/heldout/raw/PXD048926/Hela100ng_S2_nDDMcoat_DDM_GluC_DilDig_43minDDA_20221129_3.mzML -recon_fasta /scratch/kohlbach/b113/nontryptic/heldout/db/Homo_sapiens.fasta -extension 3 -recon_missed_cleavages 2 -fixed_modifications Carbamidomethyl (C) -variable_modifications Oxidation (M) -search_isotope_errors 1 -threads 8 -out t.tsv -shortlist_out sl.tsv -fasta_out red.fasta -search_config_out sage.json -shortlist_force"
+	User time (seconds): 28.66
+	System time (seconds): 1.20
+	Percent of CPU this job got: 663%
+	Elapsed (wall clock) time (h:mm:ss or m:ss): 0:04.50
+	Average shared text size (kbytes): 0
+	Average unshared data size (kbytes): 0
+	Average stack size (kbytes): 0
+	Average total size (kbytes): 0
+	Maximum resident set size (kbytes): 247264
+	Average resident set size (kbytes): 0
+	Major (requiring I/O) page faults: 2
+	Minor (reclaiming a frame) page faults: 165648
+	Voluntary context switches: 263
+	Involuntary context switches: 174
+	Swaps: 0
+	File system inputs: 1289395
+	File system outputs: 126911
+	Socket messages sent: 0
+	Socket messages received: 0
+	Signals delivered: 0
+	Page size (bytes): 4096
+	Exit status: 0

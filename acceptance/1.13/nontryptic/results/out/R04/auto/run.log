@@ -1,0 +1,10 @@
+Modifications: Carbamidomethyl (C, fixed), Oxidation (M, variable)
+Recon index: 20416 proteins, 11414601 residues, 13 isobaric rules; min tag length 8 (derived)
+Shortlist protease check: non_tryptic (Glu-C fits the tag ends best, not a trypsin-compatible protease (by 1.11 log-likelihood per tag end)).
+Shortlist placement: Glu-C, full specificity (auto: the tag ends call Glu-C).
+Shortlist placement: 1440 of 2397 placements by flank mass fit the rule.
+Shortlist: 113 of 384 proteins with evidence kept, not FDR-controlled -> sl.tsv
+Reduced FASTA: 113 entries (no decoys) -> red.fasta
+Search configuration (sage, database red.fasta) -> sage.json
+49778 MS2 spectra, 1154566 tags
+FASTag took 2.47 s (wall), 15.78 s (CPU), 1.70 s (system), 14.08 s (user); Peak Memory Usage: 305 MB.

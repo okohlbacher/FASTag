@@ -1,0 +1,2 @@
+run	role	protease	accession	file	bytes	pride_sha1	status	raw_sha256	mzml	mzml_bytes	mzml_sha256	ms2	ms2_ftms_hcd	ms2_charged	check
+R10	chosen	Chymotrypsin	PXD064794	210713_WT11Blue2Chymo1_2_HCDonly2hr_C6.raw	1039821434	-	no_pride_sha1,size_ok,second_download_same	ce35394877532d11c6549127d702abf0625310dfc2840ec7184b943cc70a0191	raw/PXD064794/210713_WT11Blue2Chymo1_2_HCDonly2hr_C6.mzML	1050255410	d28bfc50b8e744925613647f51dd039a472ae0face06f1c137032e7412edbea0	138617	138617	138617	ok

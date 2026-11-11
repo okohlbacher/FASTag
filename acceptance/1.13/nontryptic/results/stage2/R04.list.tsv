@@ -1,0 +1,3 @@
+run	role	protease	accession	file	bytes	pride_sha1	url	n_candidates
+R04	chosen	Glu-C	PXD015759	GluC35.raw	538814874	b8c3517b13a26b7975603e276ff6536110c35db4	https://ftp.pride.ebi.ac.uk/pride/data/archive/2019/11/PXD015759/GluC35.raw	36
+R04	backup	Glu-C	PXD015759	GluC16.raw	598250059	40fa6fb520efc6cd51fc5f953a3bbdd1dd20f5a3	https://ftp.pride.ebi.ac.uk/pride/data/archive/2019/11/PXD015759/GluC16.raw	36

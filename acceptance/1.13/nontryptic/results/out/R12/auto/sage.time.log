@@ -1,0 +1,32 @@
+[2026-11-11T01:28:52Z INFO  sage] generated 3162660 fragments, 138509 peptides in 125ms
+[2026-11-11T01:28:52Z INFO  sage] processing files 0 .. 1 
+[2026-11-11T01:28:54Z INFO  sage] - file IO:     2063 ms
+[2026-11-11T01:28:55Z INFO  sage] - search:       531 ms (25936 spectra/s)
+[2026-11-11T01:28:55Z INFO  sage] discovered 3273 target peptide-spectrum matches at 1% FDR
+[2026-11-11T01:28:55Z INFO  sage] discovered 3142 target peptides at 1% FDR
+[2026-11-11T01:28:55Z INFO  sage] discovered 453 target proteins at 1% FDR
+[2026-11-11T01:28:55Z INFO  sage] finished in 3s
+[2026-11-11T01:28:55Z INFO  sage] cite: "Sage: An Open-Source Tool for Fast Proteomics Searching and Quantification at Scale" https://doi.org/10.1021/acs.jproteome.3c00486
+	Command being timed: "/ceph/ibmi/abi/oliver/opt/sage-0.14.7/sage-v0.14.7-x86_64-unknown-linux-gnu/sage sage.run.json -o sage"
+	User time (seconds): 8.15
+	System time (seconds): 4.13
+	Percent of CPU this job got: 264%
+	Elapsed (wall clock) time (h:mm:ss or m:ss): 0:04.65
+	Average shared text size (kbytes): 0
+	Average unshared data size (kbytes): 0
+	Average stack size (kbytes): 0
+	Average total size (kbytes): 0
+	Maximum resident set size (kbytes): 241160
+	Average resident set size (kbytes): 0
+	Major (requiring I/O) page faults: 14
+	Minor (reclaiming a frame) page faults: 119305
+	Voluntary context switches: 57185
+	Involuntary context switches: 123
+	Swaps: 0
+	File system inputs: 399313
+	File system outputs: 5375
+	Socket messages sent: 0
+	Socket messages received: 0
+	Signals delivered: 0
+	Page size (bytes): 4096
+	Exit status: 0

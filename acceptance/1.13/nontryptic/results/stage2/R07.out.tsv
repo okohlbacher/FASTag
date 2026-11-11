@@ -1,0 +1,2 @@
+run	role	protease	accession	file	bytes	pride_sha1	status	raw_sha256	mzml	mzml_bytes	mzml_sha256	ms2	ms2_ftms_hcd	ms2_charged	check
+R07	chosen	Lys-C	PXD015759	LysC29.raw	689950913	d4788d6429bcd081fba78e28ad560359b87e986b	sha1_ok	4534902806c4a9646e6aaf5ea4dec30d9b489fc2d4308e17a3c0aaeac3a4846f	raw/PXD015759/LysC29.mzML	530118543	fd2933107d604343cad4f90b5b8dab027bf4f20fe4a187fd5237e92f3339ad2f	52754	52754	52754	ok

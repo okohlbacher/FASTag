@@ -1,0 +1,2 @@
+run	role	protease	accession	file	bytes	pride_sha1	status	raw_sha256	mzml	mzml_bytes	mzml_sha256	ms2	ms2_ftms_hcd	ms2_charged	check
+R06	chosen	Glu-C	PXD048926	Hela100ng_S2_nDDMcoat_DDM_GluC_DilDig_43minDDA_20221129_3.raw	552689513	-	no_pride_sha1,size_ok,second_download_same	05bad1b029f095c7e54a8bf5accd26356656749e0ebe166cf66104cff2cc09f9	raw/PXD048926/Hela100ng_S2_nDDMcoat_DDM_GluC_DilDig_43minDDA_20221129_3.mzML	280502639	344f9f71d3c7bb7826b76467167b79ad30f10ded2b9a75acceda4186eef052fa	13713	13713	13713	ok

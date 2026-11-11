@@ -1,0 +1,10 @@
+Modifications: Carbamidomethyl (C, fixed), Oxidation (M, variable)
+Recon index: 20416 proteins, 11414601 residues, 13 isobaric rules; min tag length 8 (derived)
+Shortlist protease check: compatible (Arg-C fits the tag ends best).
+Shortlist placement: Arg-C, full specificity (auto: the tag ends call Arg-C).
+Shortlist placement: 33881 of 56936 placements by flank mass fit the rule.
+Shortlist: 908 of 1407 proteins with evidence kept, not FDR-controlled -> sl.tsv
+Reduced FASTA: 908 entries (no decoys) -> red.fasta
+Search configuration (sage, database red.fasta) -> sage.json
+25431 MS2 spectra, 1151754 tags
+FASTag took 3.12 s (wall), 20.51 s (CPU), 0.99 s (system), 19.52 s (user); Peak Memory Usage: 322 MB.

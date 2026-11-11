@@ -1,0 +1,2 @@
+run	role	protease	accession	file	bytes	pride_sha1	status	raw_sha256	mzml	mzml_bytes	mzml_sha256	ms2	ms2_ftms_hcd	ms2_charged	check
+R04	chosen	Glu-C	PXD015759	GluC35.raw	538814874	b8c3517b13a26b7975603e276ff6536110c35db4	sha1_ok	0ccb75b600b5f72d8e738a3dc097a4ade0e05e581e00bcdde647af5395f39246	raw/PXD015759/GluC35.mzML	412270406	9d44f1506897f3033bd1e3a77d24aadfc3225b1214aece00a71741029172cc93	49778	49778	49778	ok

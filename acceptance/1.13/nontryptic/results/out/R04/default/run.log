@@ -1,0 +1,5 @@
+Modifications: Carbamidomethyl (C, fixed), Oxidation (M, variable)
+Recon index: 20416 proteins, 11414601 residues, 13 isobaric rules; min tag length 8 (derived)
+Shortlist: 4 of 37 proteins with evidence kept, not FDR-controlled -> sl.tsv
+49778 MS2 spectra, 1154566 tags
+FASTag took 2.61 s (wall), 16.77 s (CPU), 2.15 s (system), 14.62 s (user); Peak Memory Usage: 296 MB.

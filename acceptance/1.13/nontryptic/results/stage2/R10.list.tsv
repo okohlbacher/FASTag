@@ -1,0 +1,3 @@
+run	role	protease	accession	file	bytes	pride_sha1	url	n_candidates
+R10	chosen	Chymotrypsin	PXD064794	210713_WT11Blue2Chymo1_2_HCDonly2hr_C6.raw	1039821434	-	https://ftp.pride.ebi.ac.uk/pride/data/archive/2025/06/PXD064794/210713_WT11Blue2Chymo1_2_HCDonly2hr_C6.raw	36
+R10	backup	Chymotrypsin	PXD064794	210713_WT11Blue2Chymo1_2_HCDonly2hr_D2.raw	786058234	-	https://ftp.pride.ebi.ac.uk/pride/data/archive/2025/06/PXD064794/210713_WT11Blue2Chymo1_2_HCDonly2hr_D2.raw	36
