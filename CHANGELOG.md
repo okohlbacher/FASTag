@@ -1,6 +1,17 @@
 # Changelog
 
-## Unreleased
+## 1.13.0 (2026-11-10)
+
+Experimental options from the 1.13 backlog, each with its held-out result
+stated; all are off by default and the defaults of 1.12 are unchanged, with
+one exception: `-search_isotope_errors` now defaults to -1 (by engine), which
+changes only the MSFragger export. Passed their held-out tests:
+`-ion_series_hybrid both`, `-shortlist_protease auto`, the revised
+`-check_header_charge` rule, the revised raw-DIA check, the census triage
+evaluation and `-alkylation_tags_out`. Failed or inconclusive, kept as
+experimental with the result documented: `-label_discovery_out`,
+`-label_call_min_tags 0`, a/x ion series, `-search_engine msfragger`,
+`-search_shifts`, `-species_call explain`, `-complement_tolerance_unit auto`.
 
 - **`-label_discovery_out`, report formats 2 to 4: third held-out test, FAIL.**
   No code change. On 163 runs from 163 new PRIDE projects
