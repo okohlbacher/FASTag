@@ -107,6 +107,13 @@ byte) chooses the cleavage rule of the shortlist's placements and of
   `unspecific`, at most 10 % in 124 runs of other digests with 100 or more
   N-terminal tag ends). `-digest_out` and the default `trypsin` check are
   unchanged.
+  An Asp-N call is placed and exported at `semi` specificity unless
+  `-shortlist_specificity` is given on the command line (or is `semi` or
+  `none` in an INI; an INI's `full` is the default and does not count); the
+  placement line says "semi-specific unless -shortlist_specificity is
+  given". Every other call keeps `-shortlist_specificity` (default `full`).
+  Post-1.13.1, development runs only, no held-out test (numbers under
+  Held-out result).
 - `chymotrypsin`, `lys-c`, `arg-c`, `asp-n`, `glu-c`, `lys-n`: that rule.
   When the check confidently calls another protease whose cleavage sites do
   not nest with the rule's (one site set within the other, same side, same
@@ -218,6 +225,26 @@ it keeps 0.25, 0.29 and 0.64 at about the time of the full search. When `auto` c
 the exported search is unspecific and can be slower than a full search; capping the peptide length of that search
 (50 to 30, 25, 20 or 16 residues) did not reach the time of the full search without losing identifications, so
 there is no cap.
+
+For that reason `auto` exports an Asp-N call semi-specific (`-shortlist_specificity` not given; a named `asp-n`
+stays `full`). Development runs only, no held-out test. The three development runs called Asp-N, Sage 0.14.7 with
+8 threads on a loaded node (compare within a run); kept = share of the proteins of the full search (Asp-N, at least
+2 PSMs at q <= 0.01) in the reduced FASTA:
+
+| run | export | proteins | kept | Sage s | RSS GB |
+|---|---|---|---|---|---|
+| PXD064794 | unspecific (1.13.1 `auto`) | 309 | 0.25 | 162 | 17.9 |
+| | Asp-N, full | 165 | 0.18 | 13 | 0.3 |
+| | Asp-N, semi (`auto` now) | 290 | 0.25 | 27 | 1.7 |
+| | full search, no shortlist | proteome | 1 | 25 | 2.0 |
+| PXD068586 | unspecific (1.13.1 `auto`) | 564 | 0.34 | 181 | 20.8 |
+| | Asp-N, full | 136 | 0.19 | 12 | 0.3 |
+| | Asp-N, semi (`auto` now) | 395 | 0.29 | 26 | 1.7 |
+| | full search, no shortlist | proteome | 1 | 25 | 1.8 |
+| PXD051338 | unspecific (1.13.1 `auto`) | 48 | 0.66 | 7.0 | 0.8 |
+| | Asp-N, full | 40 | 0.57 | 5.6 | 0.1 |
+| | Asp-N, semi (`auto` now) | 46 | 0.64 | 4.6 | 0.2 |
+| | full search, no shortlist | proteome | 1 | 6.0 | 0.4 |
 
 ## Reduced FASTA
 

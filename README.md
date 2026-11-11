@@ -571,8 +571,8 @@ MGF→mzML direction is exact.
 | `-shortlist_top <n>` | 0 | Advanced: keep at most this many proteins, ties at the cut kept; 0 = no cap |
 | `-shortlist_decoy_affix <list>` | `DECOY_ decoy_ rev_ REV_ reverse_ XXX_ shuffled_ random_ _DECOY _rev` | Advanced: accession prefixes and suffixes that mark a decoy entry |
 | `-shortlist_force` | off | Advanced: write `-fasta_out` and `-search_config_out` although the tag ends call a non-tryptic protease |
-| `-shortlist_protease <trypsin\|auto\|unspecific\|lys-c\|arg-c\|asp-n\|glu-c\|chymotrypsin\|lys-n>` | trypsin | Experimental (1.13), advanced; `auto` **passed** its held-out test (see Held-out acceptance), a named rule and `unspecific` have none: cleavage rule of the shortlist's placements and of `-search_config_out` (Sage, Comet or MSFragger). `trypsin` is 1.12 (tryptic windows, a non-tryptic run refused); `auto` takes the protease the tag ends call (trypsin when inconclusive; after 1.13.1 Asp-N is called from 21 % D at the N-terminal tag ends, which has no held-out test; a WARN when the call is `unspecific`, whose exported search can be slower than a full search); a name or `unspecific` takes that rule. Otherwise windows are found by flank mass, only exact placements count, and a named rule the run's call contradicts is refused unless `-shortlist_force` (see doc/SHORTLIST.md) |
-| `-shortlist_specificity <full\|semi\|none>` | full | Experimental (1.13), advanced; `semi` and `none` have no held-out test (the test of `-shortlist_protease auto` ran at `full`): with a `-shortlist_protease` other than trypsin, both window ends at a cleavage site (`full`), at least one (`semi`, Sage `semi_enzymatic`, Comet `num_enzyme_termini = 1`) or none; missed cleavages up to `-recon_missed_cleavages` |
+| `-shortlist_protease <trypsin\|auto\|unspecific\|lys-c\|arg-c\|asp-n\|glu-c\|chymotrypsin\|lys-n>` | trypsin | Experimental (1.13), advanced; `auto` **passed** its held-out test (see Held-out acceptance), a named rule and `unspecific` have none: cleavage rule of the shortlist's placements and of `-search_config_out` (Sage, Comet or MSFragger). `trypsin` is 1.12 (tryptic windows, a non-tryptic run refused); `auto` takes the protease the tag ends call (trypsin when inconclusive; after 1.13.1 Asp-N is called from 21 % D at the N-terminal tag ends and an Asp-N call is exported semi-specific unless `-shortlist_specificity` is given, both on development runs only, no held-out test; a WARN when the call is `unspecific`, whose exported search can be slower than a full search); a name or `unspecific` takes that rule. Otherwise windows are found by flank mass, only exact placements count, and a named rule the run's call contradicts is refused unless `-shortlist_force` (see doc/SHORTLIST.md) |
+| `-shortlist_specificity <full\|semi\|none>` | full | Experimental (1.13), advanced; `semi` and `none` have no held-out test (the test of `-shortlist_protease auto` ran at `full`): with a `-shortlist_protease` other than trypsin, both window ends at a cleavage site (`full`), at least one (`semi`, Sage `semi_enzymatic`, Comet `num_enzyme_termini = 1`) or none; missed cleavages up to `-recon_missed_cleavages`. Not given, an Asp-N call of `-shortlist_protease auto` uses `semi` (after 1.13.1; development runs only, no held-out test: on three Asp-N runs the shortlist keeps 0.25, 0.29, 0.64 of the full search's proteins, Sage 27, 26, 5 s and 1.7, 1.7, 0.2 GB, against 0.18, 0.19, 0.57, 13, 12, 6 s and 0.3, 0.3, 0.1 GB at `full` and 0.25, 0.34, 0.66, 162, 181, 7 s and 17.9, 20.8, 0.8 GB for the unspecific export of 1.13.1); a named `asp-n` stays `full` |
 | `-search_config_out <file>` | none | Experimental: a Sage configuration (JSON), Comet parameters or a complete MSFragger `fragger.params` for `-fasta_out`, or for the input database without it |
 | `-search_engine <sage\|comet\|msfragger>` | sage | Engine of `-search_config_out`; `comet` is unverified against the Comet binary; `msfragger` (experimental, 1.13; held-out test **FAILED**, see Held-out acceptance) is checked against MSFragger 4.4.1 and needs decoys in the database: with `-fasta_out` FASTag appends reversed `rev_` decoys, without it the input database must be a target-decoy database; its `num_threads` is `-threads` (0 = every CPU) (see doc/SHORTLIST.md) |
 | `-search_config_template <file>` | none | Comet only (Sage and MSFragger files are written complete): a `comet -p` file the managed keys are merged into; without it a fragment is written |
@@ -829,7 +829,9 @@ exits with `ILLEGAL_PARAMETERS` unless `-shortlist_force` (a run asking for
 shortlist's tags on windows found by flank mass and keeps those that fit the
 called (or named) cleavage rule at `-shortlist_specificity`, and writes that
 rule into the engine configuration, so non-tryptic runs get their FASTA and
-configuration instead of being refused. Only tags at or
+configuration instead of being refused. After 1.13.1 an Asp-N call of `auto`
+is placed and exported semi-specific unless `-shortlist_specificity` is
+given (development runs only, no held-out test). Only tags at or
 above the placement floor place (`-recon_min_length`, derived as 8 residues on
 the human proteome), so give `-extension` (3 on the gate runs). See [doc/SHORTLIST.md](doc/SHORTLIST.md).
 
@@ -1532,7 +1534,10 @@ validated on held-out data. No 1.12 option is validated on low-resolution
 ion_trap set of #6 item06-H1-r2) are a failure and a descriptive result.
 Of the 1.13 options, `-shortlist_protease` with a named rule or
 `unspecific` and `-shortlist_specificity semi` and `none` (checked on
-development runs only) are experimental and have no held-out test.
+development runs only) are experimental and have no held-out test; neither
+have the Asp-N call of `auto` from 21 % D and its semi-specific export, both
+added after 1.13.1 (the held-out result of `auto` describes the 1.13.1 rule
+at `full`).
 
 ### Ranking, and the synthetic benchmark
 

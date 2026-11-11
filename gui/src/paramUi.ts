@@ -1137,7 +1137,7 @@ export const PARAM_UI: Record<string, ParamUi> = {
   shortlist_specificity: {
     hidden: EXPERIMENTAL_1_13,
     help: {
-      text: 'How many window ends must be cleavage sites of the -shortlist_protease rule: both (full), one (semi) or none.'
+      text: 'How many window ends must be cleavage sites of the -shortlist_protease rule: both (full), one (semi) or none. Left at full with auto, a run called Asp-N is still placed and exported semi-specific (development runs only, no held-out test); a named asp-n stays full.'
     }
   },
   shortlist_gapped: {

@@ -143,6 +143,9 @@ namespace
   double g_t_probe = 0, g_t_tables = 0; ///< tolerance probe, null tables
   /// When main_() finished a file run; what follows it is teardown.
   std::chrono::steady_clock::time_point g_t_main_end;
+  /// -shortlist_specificity is on the command line (set by main()): TOPPBase
+  /// does not tell an explicit `full` from the default. post-1.13.1 (aspn).
+  bool g_cli_shortlist_specificity = false;
 
   /// Thrown by the tagging loop at the first MS2 with an ion mobility per
   /// peak when -out_spectra is mzPeak, which cannot store it.
@@ -989,12 +992,14 @@ protected:
                           "protease the tag ends call (trypsin when inconclusive). A protease name, or "
                           "'unspecific': that rule. Except for 'trypsin', windows are found by flank mass and "
                           "kept by the rule and -shortlist_specificity; only exact placements count. "
-                          "Experimental; auto passed its held-out test (9 runs, 5 proteases: median protein recall 0.25 against the full search, +0.12 over the trypsin shortlist); a named rule and unspecific have no held-out test", false, true);
+                          "Experimental; auto passed its held-out test (9 runs, 5 proteases: median protein recall 0.25 against the full search, +0.12 over the trypsin shortlist); a named rule and unspecific have no held-out test. After 1.13.1 an Asp-N call of 'auto' is exported semi-specific unless -shortlist_specificity is given (development runs only, no held-out test)", false, true);
     setValidStrings_("shortlist_protease",
                      ListUtils::create<std::string>("trypsin,auto,unspecific,lys-c,arg-c,asp-n,glu-c,chymotrypsin,lys-n"));
     registerStringOption_("shortlist_specificity", "<mode>", "full",
                           "With -shortlist_protease other than trypsin: 'full' both window ends at a cleavage "
-                          "site (or a protein terminus), 'semi' at least one, 'none' any window", false, true);
+                          "site (or a protein terminus), 'semi' at least one, 'none' any window. When it is "
+                          "not given and -shortlist_protease auto calls Asp-N, 'semi' is used (development "
+                          "runs only, no held-out test); a named asp-n stays 'full'", false, true);
     setValidStrings_("shortlist_specificity", ListUtils::create<std::string>("full,semi,none"));
     registerOutputFile_("search_config_out", "<file>", "",
                         "Search-engine configuration for -fasta_out (or the input database): Sage JSON, "
@@ -5970,7 +5975,12 @@ protected:
         std::string sl_withheld;  // what the placement check withheld, for the TSV header
         if (sl_nontryptic)
         {
-          sl_choice = FASTag::Cleavage::choose(sl_protease, sl_spec, verdict);
+          // post-1.13.1 (aspn): an Asp-N call under `auto` is semi-specific
+          // unless the user chose the specificity (on the command line, or a
+          // value other than the default from an INI).
+          sl_choice = FASTag::Cleavage::choose(sl_protease, sl_spec, verdict,
+                                               g_cli_shortlist_specificity ||
+                                                   optionNonDefault_("shortlist_specificity"));
           std::string withheld;
           if (!fasta_out.empty()) withheld = "-fasta_out";
           if (!search_config_out.empty()) withheld += (withheld.empty() ? "" : " or ") + std::string("-search_config_out");
@@ -7432,6 +7442,7 @@ int main(int argc, const char** argv)
   {
     if (std::strcmp(argv[i], "-threads") == 0 || std::strcmp(argv[i], "-ini") == 0) explicit_threads = true;
     if (std::strcmp(argv[i], "--help") == 0 || std::strcmp(argv[i], "--helphelp") == 0) help = true;
+    if (std::strcmp(argv[i], "-shortlist_specificity") == 0) g_cli_shortlist_specificity = true;
   }
   // ...and not for a bare `FASTag` either: with no arguments TOPPBase prints
   // the usage, and an injected pair would turn that into "in and out are
