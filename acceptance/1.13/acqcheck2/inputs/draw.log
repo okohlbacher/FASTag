@@ -1,0 +1,34 @@
+#pool	DIA_orbitrap	1936 projects
+#pool	DIA_astral	0 projects
+#pool	PRM	233 projects
+#pool	WWA_DDA	4 projects
+#pool	DDA_qexactive	2972 projects
+#pool	DDA_exploris	1727 projects
+#pool	DDA_tribrid	7728 projects
+#pool	DDA_astral	0 projects
+PXD041100	DIA_orbitrap	skip	no usable raw file (format, size <= 6 GiB, name)
+PXD058193	DIA_orbitrap	skip	no usable raw file (format, size <= 6 GiB, name)
+PXD075625	DIA_orbitrap	skip	no usable raw file (format, size <= 6 GiB, name)
+PXD058412	DIA_orbitrap	skip	no usable raw file (format, size <= 6 GiB, name)
+PXD064065	DIA_orbitrap	skip	no usable raw file (format, size <= 6 GiB, name)
+PXD023584	DIA_orbitrap	skip	no usable raw file (format, size <= 6 GiB, name)
+PXD073278	DIA_orbitrap	skip	no usable raw file (format, size <= 6 GiB, name)
+PXD051406	DIA_orbitrap	skip	no usable raw file (format, size <= 6 GiB, name)
+PXD072756	DIA_orbitrap	skip	no usable raw file (format, size <= 6 GiB, name)
+PXD063657	DIA_orbitrap	skip	no usable raw file (format, size <= 6 GiB, name)
+PXD062429	DIA_orbitrap	skip	no usable raw file (format, size <= 6 GiB, name)
+PXD067752	DIA_orbitrap	skip	no usable raw file (format, size <= 6 GiB, name)
+PXD014847	DIA_orbitrap	skip	no usable raw file (format, size <= 6 GiB, name)
+#drawn	DIA_orbitrap	45 of 45
+#drawn	DIA_astral	0 of 12
+PXD003136	PRM	skip	no usable raw file (format, size <= 6 GiB, name)
+#drawn	PRM	8 of 8
+#drawn	WWA_DDA	4 of 6
+PXD008900	DDA_qexactive	skip	no usable raw file (format, size <= 6 GiB, name)
+#drawn	DDA_qexactive	14 of 14
+PXD046191	DDA_exploris	skip	no usable raw file (format, size <= 6 GiB, name)
+PXD030209	DDA_exploris	skip	no usable raw file (format, size <= 6 GiB, name)
+#drawn	DDA_exploris	14 of 14
+PXD066803	DDA_tribrid	skip	no usable raw file (format, size <= 6 GiB, name)
+#drawn	DDA_tribrid	14 of 14
+#drawn	DDA_astral	0 of 14
