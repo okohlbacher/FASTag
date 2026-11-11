@@ -1053,7 +1053,7 @@ export const PARAM_UI: Record<string, ParamUi> = {
   search_engine: {
     hidden: OPT_IN_1_12,
     help: {
-      text: 'The search engine the settings are written for: Sage, Comet or MSFragger (experimental; its held-out test failed: the shortlist search kept 49 to 73% of the spectra a full MSFragger search identifies, criterion 80%; needs decoys in the database).'
+      text: 'The search engine the settings are written for: Sage, Comet or MSFragger (experimental; needs decoys in the database). With MSFragger the shortlist uses the configuration that passed its second held-out test (gapped placements, E-value 10, minimum tag length 6, 2 missed cleavages; each unless set); the first held-out test, with the 1.13 shortlist, failed.'
     }
   },
   search_isotope_errors: {

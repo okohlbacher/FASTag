@@ -279,7 +279,8 @@ is left under the name, and no configuration is written.
 - The database in the configuration is `-fasta_out`, else the input database
   (WARN when that holds decoys, since the engine adds its own).
 - **MSFragger** (`-search_engine msfragger`, experimental since 1.13, first held-out
-  test FAILED, second test with the shortlist recipe PASSED, pinned 4.4.1): see "MSFragger configuration" below.
+  test FAILED, second test with the shortlist recipe PASSED and that recipe the
+  default since, pinned 4.4.1): see "MSFragger configuration" below.
 
 Engine acceptance (`test/search_engine_smoke_test.sh` with `FASTAG_SAGE_BIN`
 and `FASTAG_COMET_BIN`, mandatory with `FASTAG_ENGINES_REQUIRED=1`) runs on
@@ -348,9 +349,10 @@ default minimum length 8 on the right protein, or a tag with one flank off by
 an isotope or modification mass. `-shortlist_gapped` and a lower
 `-recon_min_length` admit these: 95 to 98% (mean 97%) with the recipe of the
 last row, at 2.7 times as many proteins (3,594 of 20,414 on average) and a
-search time 9% longer. They are not defaults (`-recon_min_length` also changes
-the reconciliation output); give them with the export when the kept share
-matters. MSFragger's mass calibration (`calibrate_mass 2`) and `stricttrypsin`
+search time 9% longer. After the second held-out test (below) they are the
+defaults under `-search_engine msfragger` with `-search_config_out`
+(`-recon_min_length` and `-recon_missed_cleavages` then also change
+`-recon_out`); Sage and Comet keep 1.13.1's values. MSFragger's mass calibration (`calibrate_mass 2`) and `stricttrypsin`
 added nothing on the two first runs and are not exported. All of this was
 set on development runs; the entrapment
 differences between the rows are within the noise of 8 to 290 entrapment hits
@@ -369,7 +371,20 @@ exceed the limit). One run had 10 identifications in the full search and is
 not evaluable. The test covers the recipe and the export defaults together,
 not each alone. With the default shortlist (informational, no criterion) the
 kept share is 0.526 to 0.946, below 0.80 in 5 of 9 runs: the recipe is needed
-for this result and is not a default.
+for this result. The first held-out test (FAIL, above) stays as it was: it
+tested the 1.13 export with the default shortlist.
+
+**MSFragger shortlist defaults.** Since this test, `-search_engine msfragger`
+with `-search_config_out` runs the tested configuration: `-shortlist_gapped`
+on (tryptic shortlist only; `-shortlist_gapped` is a flag and cannot be
+switched off there), `-shortlist_max_evalue 10`, `-recon_min_length 6`,
+`-recon_missed_cleavages 2`. Each applies unless the option is given on the
+command line, or set in an INI to a value other than its 1.13.1 default (an
+INI value equal to that default cannot be told from it, as for
+`-shortlist_specificity`). The log line `MSFragger defaults (...)` and the
+shortlist header line `# msfragger defaults (...)` name the values applied;
+the reconciler's line says `min tag length 6 (msfragger default)`. Sage,
+Comet and a run without `-search_config_out` are unchanged.
 
 `-search_engine msfragger` writes a complete `fragger.params` for MSFragger
 4.4.1 (`java -jar MSFragger-4.4.1.jar fragger.params <spectra>`), keys in the

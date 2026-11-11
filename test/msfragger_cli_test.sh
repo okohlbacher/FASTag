@@ -21,7 +21,16 @@
 #      build's (FASTAG_IDENTITY_REQUIRED=1: fail when it is unset);
 #   g. a Da precursor window: -search_shifts both exports no mass offset (each
 #      is dropped_engine, MSFragger 4.4.1 exits 1 on them) and keeps -threads
-#      as num_threads; -search_shifts offsets is refused.
+#      as num_threads; -search_shifts offsets is refused;
+#   h. the by-engine export defaults (isotope errors, missed cleavages,
+#      precursor window, N-terminal acetylation);
+#   i. the msfragger shortlist defaults (post-1.13.1): without the four options
+#      the shortlist and exports equal a run that gives the held-out-tested
+#      values -shortlist_gapped -shortlist_max_evalue 10 -recon_min_length 6
+#      -recon_missed_cleavages 2, log and shortlist header say so; Sage keeps
+#      1.13.1's values; a value on the command line or in an INI wins.
+# Cases a, b and f give the four options explicitly (1.13.1 values, gapped on:
+# a flag cannot be given off), so Sage and MSFragger runs share one shortlist.
 # Exits 77 (ctest SKIP) when the binary cannot start.
 set -u
 BIN="$1"
@@ -43,7 +52,8 @@ fail() { echo "FAIL: $*" >&2; exit 1; }
 ARGS=(-in "$IN" -recon_fasta "$DB" -tag_length 4 -extension 1 -fragment_tolerance 0.5
       -fragment_tolerance_unit Da -fixed_modifications 'Carbamidomethyl (C)'
       -variable_modifications 'Oxidation (M)' 'Acetyl (Protein N-term)'
-      -search_precursor_tolerance 15 -search_isotope_errors 2 -search_missed_cleavages 1 -threads 2)
+      -search_precursor_tolerance 15 -search_isotope_errors 2 -search_missed_cleavages 1 -threads 2
+      -shortlist_gapped -shortlist_max_evalue 0.1 -recon_min_length 0 -recon_missed_cleavages 1)
 run() {
   local d=$1; shift
   mkdir -p "$d"
@@ -140,7 +150,7 @@ echo "e: mass_offsets $off ($n_off offsets)"
 # The in-silico chymotryptic MGF at 20 ppm, so the protease check is scored
 # against the database background (a Da run is never scored).
 SK=(-in "$FIX/chymo_insilico.mgf" -recon_fasta "$TMP/skew.fasta" -fragment_tolerance 20 -fragment_tolerance_unit ppm
-    -shortlist_force -threads 2)
+    -shortlist_force -threads 2 -shortlist_gapped -shortlist_max_evalue 0.1 -recon_min_length 0 -recon_missed_cleavages 1)
 runf() { local d=$1 bin=$2; shift 2; mkdir -p "$d"; ( cd "$d" && "$bin" "${SK[@]}" -out t.tsv -shortlist_out sl.tsv "$@" > run.log 2>&1 ) || { cat "$d/run.log" >&2; fail "f: $(basename "$d") exit non-zero"; }; }
 runf "$TMP/fs" "$BIN" -fasta_out red.fasta -search_config_out sage.json
 runf "$TMP/fm" "$BIN" -fasta_out red.fasta -search_config_out f.params -search_engine msfragger
@@ -226,4 +236,40 @@ grep -q '"missed_cleavages": 1,' "$TMP/h3/sage.json" && grep -q '"ppm": \[-10, 1
   || fail "h: the Sage default missed cleavages or precursor tolerance changed"
 grep -q '42\.01' "$TMP/h3/sage.json" && fail "h: Sage got protein N-terminal acetylation by default"
 echo "h: isotope error, missed cleavage, tolerance and acetylation defaults by engine"
+# ---- i: the msfragger shortlist defaults
+REC=(-shortlist_gapped -shortlist_max_evalue 10 -recon_min_length 6 -recon_missed_cleavages 2)
+I=(-recon_out r.tsv -search_config_out cfg)
+runh "$TMP/i1" "${I[@]}" -search_engine msfragger
+runh "$TMP/i2" "${I[@]}" -search_engine msfragger "${REC[@]}"
+for f in t.tsv r.tsv red.fasta cfg; do cmp -s "$TMP/i1/$f" "$TMP/i2/$f" || fail "i: $f differs from the explicit held-out recipe"; done
+diff <(grep -v '^# msfragger defaults' "$TMP/i1/sl.tsv") "$TMP/i2/sl.tsv" > /dev/null || fail "i: sl.tsv differs from the explicit recipe"
+grep -q '^# settings: max_evalue 10, min_spectra 2, gapped yes,' "$TMP/i1/sl.tsv" || fail "i: shortlist header settings"
+grep -qx '# msfragger defaults (the configuration of its second held-out test): -shortlist_gapped on, -shortlist_max_evalue 10, -recon_min_length 6, -recon_missed_cleavages 2' \
+  "$TMP/i1/sl.tsv" || fail "i: shortlist header lacks the msfragger defaults line"
+grep -q 'MSFragger defaults (the configuration of its second held-out test): -shortlist_gapped on, -shortlist_max_evalue 10, -recon_min_length 6, -recon_missed_cleavages 2;' \
+  "$TMP/i1/run.log" || fail "i: no log line for the msfragger defaults"
+grep -q 'min tag length 6 (msfragger default)' "$TMP/i1/run.log" || fail "i: recon min length not logged as msfragger default"
+grep -q 'msfragger defaults\|MSFragger defaults' "$TMP/i2/sl.tsv" "$TMP/i2/run.log" && fail "i: defaults reported although all four were given"
+# Sage without the options: 1.13.1's values, no defaults line
+runh "$TMP/i3" "${I[@]}"
+grep -q '^# settings: max_evalue 0.1, min_spectra 2, gapped no,' "$TMP/i3/sl.tsv" || fail "i: Sage shortlist settings changed"
+grep -q -i 'msfragger defaults' "$TMP/i3/sl.tsv" "$TMP/i3/run.log" && fail "i: msfragger defaults applied to Sage"
+grep -q 'min tag length [0-9]* (derived)' "$TMP/i3/run.log" || fail "i: Sage recon min length not derived"
+# -search_engine msfragger without -search_config_out: no defaults
+runh "$TMP/i4" -recon_out r.tsv -search_engine msfragger
+grep -q -i 'msfragger defaults' "$TMP/i4/sl.tsv" "$TMP/i4/run.log" && fail "i: msfragger defaults without -search_config_out"
+# explicit values win, the rest stay msfragger defaults
+runh "$TMP/i5" "${I[@]}" -search_engine msfragger -shortlist_max_evalue 0.1 -recon_min_length 0 -recon_missed_cleavages 1
+grep -q '^# settings: max_evalue 0.1, min_spectra 2, gapped yes,' "$TMP/i5/sl.tsv" || fail "i: explicit -shortlist_max_evalue lost"
+grep -qx '# msfragger defaults (the configuration of its second held-out test): -shortlist_gapped on' "$TMP/i5/sl.tsv" \
+  || fail "i: header lists a default the command line set"
+grep -q 'min tag length [0-9]* (derived)' "$TMP/i5/run.log" || fail "i: explicit -recon_min_length 0 lost"
+# an INI value wins too
+( cd "$TMP/i5" && "$BIN" -write_ini x.ini > /dev/null 2>&1 ) || fail "i: -write_ini"
+sed 's/name="recon_min_length" value="0"/name="recon_min_length" value="7"/' "$TMP/i5/x.ini" > "$TMP/i5/y.ini"
+grep -q 'name="recon_min_length" value="7"' "$TMP/i5/y.ini" || fail "i: INI edit"
+runh "$TMP/i6" "${I[@]}" -search_engine msfragger -ini "$TMP/i5/y.ini"
+grep -q 'min tag length 7 (set)' "$TMP/i6/run.log" || fail "i: the INI -recon_min_length 7 lost"
+grep -q -- '-recon_min_length' <(grep '^# msfragger defaults' "$TMP/i6/sl.tsv") && fail "i: header lists the INI value as a default"
+echo "i: msfragger shortlist defaults, explicit values and INI win"
 echo "msfragger_cli_test: all checks passed"

@@ -2,6 +2,15 @@
 
 ## Unreleased (after 1.13.1)
 
+- **`-search_engine msfragger`: the held-out-tested shortlist configuration
+  is the default.** With `-search_config_out`, `-shortlist_gapped` is on
+  (tryptic shortlist), `-shortlist_max_evalue` 10, `-recon_min_length` 6 and
+  `-recon_missed_cleavages` 2, each unless given on the command line or in an
+  INI (the mechanism of `-shortlist_specificity`). This is the configuration
+  of the second held-out test (PASS, entry below); the first held-out test
+  (FAIL, 1.13) stands for the 1.13 shortlist. The log and the shortlist
+  header name the values applied. Sage, Comet and runs without
+  `-search_config_out` are unchanged.
 - **`-search_engine msfragger`: three more export values follow MSFragger's
   own closed-search defaults.** 2 missed cleavages (new
   `-search_missed_cleavages`, default -1 = by engine; with
@@ -28,9 +37,8 @@
   hit in that run would exceed it). One run had too few identifications to
   evaluate (10 in the full search). The test covers recipe and export
   defaults together. With the default shortlist (informational) the kept
-  share is 0.526 to 0.946, below 0.80 in 5 of 9 runs. The shortlist options
-  are not defaults; the first held-out FAIL (1.13 export, default
-  shortlist) stands.
+  share is 0.526 to 0.946, below 0.80 in 5 of 9 runs. The first held-out
+  FAIL (1.13 export, default shortlist) stands.
 - `-shortlist_protease` other than trypsin: the shortlist's protease check
   calls Asp-N from 21 % D at the N-terminal tag ends (was 50 %; tag ends of
   Asp-N digests show 33-78 % D, other digests at most 10 %). On the 176
