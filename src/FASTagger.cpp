@@ -399,18 +399,16 @@ namespace FASTag
       if (!work.empty())
       {
         work.sortByPosition();
-        std::vector<Peak1D> uniq;
-        uniq.reserve(work.size());
-        for (const auto& pk : work)
+        size_t w = 0;   // in place: work[0, w) is the collapsed prefix
+        for (size_t i = 0; i < work.size(); ++i)
         {
-          if (!uniq.empty() && pk.getMZ() == uniq.back().getMZ())
+          if (w > 0 && work[i].getMZ() == work[w - 1].getMZ())
           {
-            if (pk.getIntensity() > uniq.back().getIntensity()) uniq.back() = pk;
+            if (work[i].getIntensity() > work[w - 1].getIntensity()) work[w - 1] = work[i];
           }
-          else uniq.push_back(pk);
+          else work[w++] = work[i];
         }
-        work.clear(false);
-        for (const auto& pk : uniq) work.push_back(pk);
+        work.resize(w);
       }
 
       // Optional: collapse isotope clusters before anything competes for the
@@ -474,37 +472,37 @@ namespace FASTag
         // slots. Merge a moved peak into a neighbour within the
         // deisotoping tolerance, keeping the stronger, as exact duplicates are
         // collapsed above. Two unmoved peaks are never merged.
-        static thread_local std::vector<std::pair<Peak1D, bool>> merged;
-        merged.clear();
-        for (const auto& pk : work)
+        // In place: work[0, w) is the merged prefix, last_moved belongs to work[w - 1].
+        size_t w = 0;
+        bool last_moved = false;
+        for (size_t i = 0; i < work.size(); ++i)
         {
+          const Peak1D pk = work[i];
           const bool moved = !std::binary_search(before.begin(), before.end(), pk.getMZ());
-          if (!merged.empty())
+          if (w > 0)
           {
-            auto& last = merged.back();
+            Peak1D& last = work[w - 1];
             const double tol = p.tol_ppm ? pk.getMZ() * deiso_tol * 1e-6 : deiso_tol;
-            if ((moved || last.second) && pk.getMZ() - last.first.getMZ() <= tol)
+            if ((moved || last_moved) && pk.getMZ() - last.getMZ() <= tol)
             {
-              if (pk.getIntensity() > last.first.getIntensity()) last.first = pk;
-              last.second = last.second || moved;
+              if (pk.getIntensity() > last.getIntensity()) last = pk;
+              last_moved = last_moved || moved;
               continue;
             }
           }
-          merged.emplace_back(pk, moved);
+          work[w++] = pk;
+          last_moved = moved;
         }
-        if (merged.size() != work.size())
-        {
-          work.clear(false);
-          for (const auto& m : merged) work.push_back(m.first);
-        }
+        work.resize(w);
       }
 
       // order, keep and kept are scratch reused across spectra (thread_local:
       // each OMP thread prepares its own), so they keep their capacity.
-      static thread_local std::vector<size_t> order;
+      // 32-bit indices: a spectrum has far fewer than 2^32 peaks.
+      static thread_local std::vector<uint32_t> order;
       order.resize(work.size());
-      std::iota(order.begin(), order.end(), 0);
-      std::sort(order.begin(), order.end(), [&](size_t a, size_t b) {
+      std::iota(order.begin(), order.end(), 0u);
+      std::sort(order.begin(), order.end(), [&](uint32_t a, uint32_t b) {
         if (work[a].getIntensity() != work[b].getIntensity())
           return work[a].getIntensity() > work[b].getIntensity();
         return work[a].getMZ() > work[b].getMZ();
@@ -531,10 +529,10 @@ namespace FASTag
       if (p.peaks_per_window > 0)
       {
         std::map<long, int> used;
-        static thread_local std::vector<size_t> keep;
+        static thread_local std::vector<uint32_t> keep;
         keep.clear();
         keep.reserve(std::min(order.size(), cap));
-        for (size_t i : order)
+        for (uint32_t i : order)
         {
           const long w = static_cast<long>(work[i].getMZ() / PEAK_WINDOW_MZ);
           int& n = used[w];
