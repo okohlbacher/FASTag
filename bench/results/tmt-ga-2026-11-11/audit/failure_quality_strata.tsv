@@ -1,0 +1,361 @@
+dataset	chemistry	rule	trait	flag	metric	n	failures	failure_rate
+PXD000001	label_aware	paper_flank	low_fragments_le6	False	any50	2634	102	0.0387243735763098
+PXD000001	label_aware	paper_flank	low_fragments_le6	False	rank1	2634	430	0.16324981017463933
+PXD000001	label_aware	paper_flank	low_fragments_le6	True	any50	8	4	0.5
+PXD000001	label_aware	paper_flank	low_fragments_le6	True	rank1	8	5	0.625
+PXD000001	label_aware	paper_flank	q_gt_005	False	any50	2585	69	0.026692456479690523
+PXD000001	label_aware	paper_flank	q_gt_005	False	rank1	2585	386	0.1493230174081238
+PXD000001	label_aware	paper_flank	q_gt_005	True	any50	57	37	0.6491228070175439
+PXD000001	label_aware	paper_flank	q_gt_005	True	rank1	57	49	0.8596491228070176
+PXD000001	label_aware	paper_flank	TMT_on_Y	False	any50	2614	102	0.03902065799540933
+PXD000001	label_aware	paper_flank	TMT_on_Y	False	rank1	2614	425	0.16258607498087221
+PXD000001	label_aware	paper_flank	TMT_on_Y	True	any50	28	4	0.14285714285714285
+PXD000001	label_aware	paper_flank	TMT_on_Y	True	rank1	28	10	0.35714285714285715
+PXD000001	label_aware	paper_flank	independent_same_modified_peptide	False	any50	435	90	0.20689655172413793
+PXD000001	label_aware	paper_flank	independent_same_modified_peptide	False	rank1	435	211	0.4850574712643678
+PXD000001	label_aware	paper_flank	independent_same_modified_peptide	True	any50	2207	16	0.007249660172179429
+PXD000001	label_aware	paper_flank	independent_same_modified_peptide	True	rank1	2207	224	0.10149524241051201
+PXD000001	label_aware	paper_flank	independent_accepted_disagreement	False	any50	2625	98	0.037333333333333336
+PXD000001	label_aware	paper_flank	independent_accepted_disagreement	False	rank1	2625	420	0.16
+PXD000001	label_aware	paper_flank	independent_accepted_disagreement	True	any50	17	8	0.47058823529411764
+PXD000001	label_aware	paper_flank	independent_accepted_disagreement	True	rank1	17	15	0.8823529411764706
+PXD000001	label_aware	strict_mass	low_fragments_le6	False	any50	2634	102	0.0387243735763098
+PXD000001	label_aware	strict_mass	low_fragments_le6	False	rank1	2634	430	0.16324981017463933
+PXD000001	label_aware	strict_mass	low_fragments_le6	True	any50	8	4	0.5
+PXD000001	label_aware	strict_mass	low_fragments_le6	True	rank1	8	5	0.625
+PXD000001	label_aware	strict_mass	q_gt_005	False	any50	2585	69	0.026692456479690523
+PXD000001	label_aware	strict_mass	q_gt_005	False	rank1	2585	386	0.1493230174081238
+PXD000001	label_aware	strict_mass	q_gt_005	True	any50	57	37	0.6491228070175439
+PXD000001	label_aware	strict_mass	q_gt_005	True	rank1	57	49	0.8596491228070176
+PXD000001	label_aware	strict_mass	TMT_on_Y	False	any50	2614	102	0.03902065799540933
+PXD000001	label_aware	strict_mass	TMT_on_Y	False	rank1	2614	425	0.16258607498087221
+PXD000001	label_aware	strict_mass	TMT_on_Y	True	any50	28	4	0.14285714285714285
+PXD000001	label_aware	strict_mass	TMT_on_Y	True	rank1	28	10	0.35714285714285715
+PXD000001	label_aware	strict_mass	independent_same_modified_peptide	False	any50	435	90	0.20689655172413793
+PXD000001	label_aware	strict_mass	independent_same_modified_peptide	False	rank1	435	211	0.4850574712643678
+PXD000001	label_aware	strict_mass	independent_same_modified_peptide	True	any50	2207	16	0.007249660172179429
+PXD000001	label_aware	strict_mass	independent_same_modified_peptide	True	rank1	2207	224	0.10149524241051201
+PXD000001	label_aware	strict_mass	independent_accepted_disagreement	False	any50	2625	98	0.037333333333333336
+PXD000001	label_aware	strict_mass	independent_accepted_disagreement	False	rank1	2625	420	0.16
+PXD000001	label_aware	strict_mass	independent_accepted_disagreement	True	any50	17	8	0.47058823529411764
+PXD000001	label_aware	strict_mass	independent_accepted_disagreement	True	rank1	17	15	0.8823529411764706
+PXD000001	label_blind	paper_flank	low_fragments_le6	False	any50	2634	99	0.03758542141230068
+PXD000001	label_blind	paper_flank	low_fragments_le6	False	rank1	2634	426	0.16173120728929385
+PXD000001	label_blind	paper_flank	low_fragments_le6	True	any50	8	4	0.5
+PXD000001	label_blind	paper_flank	low_fragments_le6	True	rank1	8	5	0.625
+PXD000001	label_blind	paper_flank	q_gt_005	False	any50	2585	68	0.02630560928433269
+PXD000001	label_blind	paper_flank	q_gt_005	False	rank1	2585	384	0.1485493230174081
+PXD000001	label_blind	paper_flank	q_gt_005	True	any50	57	35	0.6140350877192983
+PXD000001	label_blind	paper_flank	q_gt_005	True	rank1	57	47	0.8245614035087719
+PXD000001	label_blind	paper_flank	TMT_on_Y	False	any50	2614	99	0.03787299158377965
+PXD000001	label_blind	paper_flank	TMT_on_Y	False	rank1	2614	422	0.16143840856924255
+PXD000001	label_blind	paper_flank	TMT_on_Y	True	any50	28	4	0.14285714285714285
+PXD000001	label_blind	paper_flank	TMT_on_Y	True	rank1	28	9	0.32142857142857145
+PXD000001	label_blind	paper_flank	independent_same_modified_peptide	False	any50	435	87	0.2
+PXD000001	label_blind	paper_flank	independent_same_modified_peptide	False	rank1	435	207	0.47586206896551725
+PXD000001	label_blind	paper_flank	independent_same_modified_peptide	True	any50	2207	16	0.007249660172179429
+PXD000001	label_blind	paper_flank	independent_same_modified_peptide	True	rank1	2207	224	0.10149524241051201
+PXD000001	label_blind	paper_flank	independent_accepted_disagreement	False	any50	2625	95	0.03619047619047619
+PXD000001	label_blind	paper_flank	independent_accepted_disagreement	False	rank1	2625	416	0.15847619047619046
+PXD000001	label_blind	paper_flank	independent_accepted_disagreement	True	any50	17	8	0.47058823529411764
+PXD000001	label_blind	paper_flank	independent_accepted_disagreement	True	rank1	17	15	0.8823529411764706
+PXD000001	label_blind	strict_mass	low_fragments_le6	False	any50	2634	108	0.04100227790432802
+PXD000001	label_blind	strict_mass	low_fragments_le6	False	rank1	2634	452	0.1716021260440395
+PXD000001	label_blind	strict_mass	low_fragments_le6	True	any50	8	4	0.5
+PXD000001	label_blind	strict_mass	low_fragments_le6	True	rank1	8	5	0.625
+PXD000001	label_blind	strict_mass	q_gt_005	False	any50	2585	75	0.029013539651837523
+PXD000001	label_blind	strict_mass	q_gt_005	False	rank1	2585	408	0.15783365570599614
+PXD000001	label_blind	strict_mass	q_gt_005	True	any50	57	37	0.6491228070175439
+PXD000001	label_blind	strict_mass	q_gt_005	True	rank1	57	49	0.8596491228070176
+PXD000001	label_blind	strict_mass	TMT_on_Y	False	any50	2614	108	0.041315990818668706
+PXD000001	label_blind	strict_mass	TMT_on_Y	False	rank1	2614	447	0.17100229533282327
+PXD000001	label_blind	strict_mass	TMT_on_Y	True	any50	28	4	0.14285714285714285
+PXD000001	label_blind	strict_mass	TMT_on_Y	True	rank1	28	10	0.35714285714285715
+PXD000001	label_blind	strict_mass	independent_same_modified_peptide	False	any50	435	96	0.2206896551724138
+PXD000001	label_blind	strict_mass	independent_same_modified_peptide	False	rank1	435	220	0.5057471264367817
+PXD000001	label_blind	strict_mass	independent_same_modified_peptide	True	any50	2207	16	0.007249660172179429
+PXD000001	label_blind	strict_mass	independent_same_modified_peptide	True	rank1	2207	237	0.1073855913004078
+PXD000001	label_blind	strict_mass	independent_accepted_disagreement	False	any50	2625	104	0.039619047619047616
+PXD000001	label_blind	strict_mass	independent_accepted_disagreement	False	rank1	2625	442	0.16838095238095238
+PXD000001	label_blind	strict_mass	independent_accepted_disagreement	True	any50	17	8	0.47058823529411764
+PXD000001	label_blind	strict_mass	independent_accepted_disagreement	True	rank1	17	15	0.8823529411764706
+PXD003531	control	paper_flank	low_fragments_le6	False	any50	8235	496	0.06023072252580449
+PXD003531	control	paper_flank	low_fragments_le6	False	rank1	8235	2707	0.3287188828172435
+PXD003531	control	paper_flank	low_fragments_le6	True	any50	19	5	0.2631578947368421
+PXD003531	control	paper_flank	low_fragments_le6	True	rank1	19	9	0.47368421052631576
+PXD003531	control	paper_flank	q_gt_005	False	any50	8107	420	0.051807080300974466
+PXD003531	control	paper_flank	q_gt_005	False	rank1	8107	2588	0.31923029480695697
+PXD003531	control	paper_flank	q_gt_005	True	any50	147	81	0.5510204081632653
+PXD003531	control	paper_flank	q_gt_005	True	rank1	147	128	0.8707482993197279
+PXD003531	control	paper_flank	TMT_on_Y	False	any50	8254	501	0.060697843469832806
+PXD003531	control	paper_flank	TMT_on_Y	False	rank1	8254	2716	0.3290525805669978
+PXD003531	control	paper_flank	TMT_on_Y	True	any50	0	0	
+PXD003531	control	paper_flank	TMT_on_Y	True	rank1	0	0	
+PXD003531	control	paper_flank	independent_same_modified_peptide	False	any50	8254	501	0.060697843469832806
+PXD003531	control	paper_flank	independent_same_modified_peptide	False	rank1	8254	2716	0.3290525805669978
+PXD003531	control	paper_flank	independent_same_modified_peptide	True	any50	0	0	
+PXD003531	control	paper_flank	independent_same_modified_peptide	True	rank1	0	0	
+PXD003531	control	paper_flank	independent_accepted_disagreement	False	any50	8254	501	0.060697843469832806
+PXD003531	control	paper_flank	independent_accepted_disagreement	False	rank1	8254	2716	0.3290525805669978
+PXD003531	control	paper_flank	independent_accepted_disagreement	True	any50	0	0	
+PXD003531	control	paper_flank	independent_accepted_disagreement	True	rank1	0	0	
+PXD003531	control	strict_mass	low_fragments_le6	False	any50	8235	524	0.06363084395871281
+PXD003531	control	strict_mass	low_fragments_le6	False	rank1	8235	2739	0.33260473588342443
+PXD003531	control	strict_mass	low_fragments_le6	True	any50	19	5	0.2631578947368421
+PXD003531	control	strict_mass	low_fragments_le6	True	rank1	19	9	0.47368421052631576
+PXD003531	control	strict_mass	q_gt_005	False	any50	8107	443	0.05464413469840878
+PXD003531	control	strict_mass	q_gt_005	False	rank1	8107	2615	0.32256074996916245
+PXD003531	control	strict_mass	q_gt_005	True	any50	147	86	0.5850340136054422
+PXD003531	control	strict_mass	q_gt_005	True	rank1	147	133	0.9047619047619048
+PXD003531	control	strict_mass	TMT_on_Y	False	any50	8254	529	0.06409013811485341
+PXD003531	control	strict_mass	TMT_on_Y	False	rank1	8254	2748	0.33292948873273565
+PXD003531	control	strict_mass	TMT_on_Y	True	any50	0	0	
+PXD003531	control	strict_mass	TMT_on_Y	True	rank1	0	0	
+PXD003531	control	strict_mass	independent_same_modified_peptide	False	any50	8254	529	0.06409013811485341
+PXD003531	control	strict_mass	independent_same_modified_peptide	False	rank1	8254	2748	0.33292948873273565
+PXD003531	control	strict_mass	independent_same_modified_peptide	True	any50	0	0	
+PXD003531	control	strict_mass	independent_same_modified_peptide	True	rank1	0	0	
+PXD003531	control	strict_mass	independent_accepted_disagreement	False	any50	8254	529	0.06409013811485341
+PXD003531	control	strict_mass	independent_accepted_disagreement	False	rank1	8254	2748	0.33292948873273565
+PXD003531	control	strict_mass	independent_accepted_disagreement	True	any50	0	0	
+PXD003531	control	strict_mass	independent_accepted_disagreement	True	rank1	0	0	
+PXD004541_fr02	label_aware	paper_flank	low_fragments_le6	False	any50	11867	84	0.007078452852447965
+PXD004541_fr02	label_aware	paper_flank	low_fragments_le6	False	rank1	11867	1119	0.0942951040701104
+PXD004541_fr02	label_aware	paper_flank	low_fragments_le6	True	any50	3	2	0.6666666666666666
+PXD004541_fr02	label_aware	paper_flank	low_fragments_le6	True	rank1	3	3	1.0
+PXD004541_fr02	label_aware	paper_flank	q_gt_005	False	any50	11053	47	0.004252239211073917
+PXD004541_fr02	label_aware	paper_flank	q_gt_005	False	rank1	11053	897	0.08115443770921922
+PXD004541_fr02	label_aware	paper_flank	q_gt_005	True	any50	817	39	0.04773561811505508
+PXD004541_fr02	label_aware	paper_flank	q_gt_005	True	rank1	817	225	0.27539779681762544
+PXD004541_fr02	label_aware	paper_flank	TMT_on_Y	False	any50	11870	86	0.007245155855096883
+PXD004541_fr02	label_aware	paper_flank	TMT_on_Y	False	rank1	11870	1122	0.0945240101095198
+PXD004541_fr02	label_aware	paper_flank	TMT_on_Y	True	any50	0	0	
+PXD004541_fr02	label_aware	paper_flank	TMT_on_Y	True	rank1	0	0	
+PXD004541_fr02	label_aware	paper_flank	independent_same_modified_peptide	False	any50	11870	86	0.007245155855096883
+PXD004541_fr02	label_aware	paper_flank	independent_same_modified_peptide	False	rank1	11870	1122	0.0945240101095198
+PXD004541_fr02	label_aware	paper_flank	independent_same_modified_peptide	True	any50	0	0	
+PXD004541_fr02	label_aware	paper_flank	independent_same_modified_peptide	True	rank1	0	0	
+PXD004541_fr02	label_aware	paper_flank	independent_accepted_disagreement	False	any50	11870	86	0.007245155855096883
+PXD004541_fr02	label_aware	paper_flank	independent_accepted_disagreement	False	rank1	11870	1122	0.0945240101095198
+PXD004541_fr02	label_aware	paper_flank	independent_accepted_disagreement	True	any50	0	0	
+PXD004541_fr02	label_aware	paper_flank	independent_accepted_disagreement	True	rank1	0	0	
+PXD004541_fr02	label_aware	strict_mass	low_fragments_le6	False	any50	11867	86	0.007246987444172916
+PXD004541_fr02	label_aware	strict_mass	low_fragments_le6	False	rank1	11867	1127	0.0949692424370102
+PXD004541_fr02	label_aware	strict_mass	low_fragments_le6	True	any50	3	2	0.6666666666666666
+PXD004541_fr02	label_aware	strict_mass	low_fragments_le6	True	rank1	3	3	1.0
+PXD004541_fr02	label_aware	strict_mass	q_gt_005	False	any50	11053	48	0.004342712385777617
+PXD004541_fr02	label_aware	strict_mass	q_gt_005	False	rank1	11053	903	0.08169727675744141
+PXD004541_fr02	label_aware	strict_mass	q_gt_005	True	any50	817	40	0.04895960832313342
+PXD004541_fr02	label_aware	strict_mass	q_gt_005	True	rank1	817	227	0.2778457772337821
+PXD004541_fr02	label_aware	strict_mass	TMT_on_Y	False	any50	11870	88	0.007413647851727043
+PXD004541_fr02	label_aware	strict_mass	TMT_on_Y	False	rank1	11870	1130	0.09519797809604044
+PXD004541_fr02	label_aware	strict_mass	TMT_on_Y	True	any50	0	0	
+PXD004541_fr02	label_aware	strict_mass	TMT_on_Y	True	rank1	0	0	
+PXD004541_fr02	label_aware	strict_mass	independent_same_modified_peptide	False	any50	11870	88	0.007413647851727043
+PXD004541_fr02	label_aware	strict_mass	independent_same_modified_peptide	False	rank1	11870	1130	0.09519797809604044
+PXD004541_fr02	label_aware	strict_mass	independent_same_modified_peptide	True	any50	0	0	
+PXD004541_fr02	label_aware	strict_mass	independent_same_modified_peptide	True	rank1	0	0	
+PXD004541_fr02	label_aware	strict_mass	independent_accepted_disagreement	False	any50	11870	88	0.007413647851727043
+PXD004541_fr02	label_aware	strict_mass	independent_accepted_disagreement	False	rank1	11870	1130	0.09519797809604044
+PXD004541_fr02	label_aware	strict_mass	independent_accepted_disagreement	True	any50	0	0	
+PXD004541_fr02	label_aware	strict_mass	independent_accepted_disagreement	True	rank1	0	0	
+PXD004541_fr02	label_blind	paper_flank	low_fragments_le6	False	any50	11867	67	0.005645908822785877
+PXD004541_fr02	label_blind	paper_flank	low_fragments_le6	False	rank1	11867	1112	0.09370523299907306
+PXD004541_fr02	label_blind	paper_flank	low_fragments_le6	True	any50	3	2	0.6666666666666666
+PXD004541_fr02	label_blind	paper_flank	low_fragments_le6	True	rank1	3	3	1.0
+PXD004541_fr02	label_blind	paper_flank	q_gt_005	False	any50	11053	40	0.003618926988148014
+PXD004541_fr02	label_blind	paper_flank	q_gt_005	False	rank1	11053	892	0.08070207183570072
+PXD004541_fr02	label_blind	paper_flank	q_gt_005	True	any50	817	29	0.03549571603427173
+PXD004541_fr02	label_blind	paper_flank	q_gt_005	True	rank1	817	223	0.2729498164014688
+PXD004541_fr02	label_blind	paper_flank	TMT_on_Y	False	any50	11870	69	0.0058129738837405225
+PXD004541_fr02	label_blind	paper_flank	TMT_on_Y	False	rank1	11870	1115	0.09393428812131424
+PXD004541_fr02	label_blind	paper_flank	TMT_on_Y	True	any50	0	0	
+PXD004541_fr02	label_blind	paper_flank	TMT_on_Y	True	rank1	0	0	
+PXD004541_fr02	label_blind	paper_flank	independent_same_modified_peptide	False	any50	11870	69	0.0058129738837405225
+PXD004541_fr02	label_blind	paper_flank	independent_same_modified_peptide	False	rank1	11870	1115	0.09393428812131424
+PXD004541_fr02	label_blind	paper_flank	independent_same_modified_peptide	True	any50	0	0	
+PXD004541_fr02	label_blind	paper_flank	independent_same_modified_peptide	True	rank1	0	0	
+PXD004541_fr02	label_blind	paper_flank	independent_accepted_disagreement	False	any50	11870	69	0.0058129738837405225
+PXD004541_fr02	label_blind	paper_flank	independent_accepted_disagreement	False	rank1	11870	1115	0.09393428812131424
+PXD004541_fr02	label_blind	paper_flank	independent_accepted_disagreement	True	any50	0	0	
+PXD004541_fr02	label_blind	paper_flank	independent_accepted_disagreement	True	rank1	0	0	
+PXD004541_fr02	label_blind	strict_mass	low_fragments_le6	False	any50	11867	108	0.009100867953147384
+PXD004541_fr02	label_blind	strict_mass	low_fragments_le6	False	rank1	11867	1239	0.10440717957360748
+PXD004541_fr02	label_blind	strict_mass	low_fragments_le6	True	any50	3	2	0.6666666666666666
+PXD004541_fr02	label_blind	strict_mass	low_fragments_le6	True	rank1	3	3	1.0
+PXD004541_fr02	label_blind	strict_mass	q_gt_005	False	any50	11053	67	0.006061702705147924
+PXD004541_fr02	label_blind	strict_mass	q_gt_005	False	rank1	11053	1005	0.09092554057721886
+PXD004541_fr02	label_blind	strict_mass	q_gt_005	True	any50	817	43	0.05263157894736842
+PXD004541_fr02	label_blind	strict_mass	q_gt_005	True	rank1	817	237	0.29008567931456547
+PXD004541_fr02	label_blind	strict_mass	TMT_on_Y	False	any50	11870	110	0.009267059814658803
+PXD004541_fr02	label_blind	strict_mass	TMT_on_Y	False	rank1	11870	1242	0.1046335299073294
+PXD004541_fr02	label_blind	strict_mass	TMT_on_Y	True	any50	0	0	
+PXD004541_fr02	label_blind	strict_mass	TMT_on_Y	True	rank1	0	0	
+PXD004541_fr02	label_blind	strict_mass	independent_same_modified_peptide	False	any50	11870	110	0.009267059814658803
+PXD004541_fr02	label_blind	strict_mass	independent_same_modified_peptide	False	rank1	11870	1242	0.1046335299073294
+PXD004541_fr02	label_blind	strict_mass	independent_same_modified_peptide	True	any50	0	0	
+PXD004541_fr02	label_blind	strict_mass	independent_same_modified_peptide	True	rank1	0	0	
+PXD004541_fr02	label_blind	strict_mass	independent_accepted_disagreement	False	any50	11870	110	0.009267059814658803
+PXD004541_fr02	label_blind	strict_mass	independent_accepted_disagreement	False	rank1	11870	1242	0.1046335299073294
+PXD004541_fr02	label_blind	strict_mass	independent_accepted_disagreement	True	any50	0	0	
+PXD004541_fr02	label_blind	strict_mass	independent_accepted_disagreement	True	rank1	0	0	
+PXD004541_fr09	label_aware	paper_flank	low_fragments_le6	False	any50	11063	118	0.010666184579228058
+PXD004541_fr09	label_aware	paper_flank	low_fragments_le6	False	rank1	11063	1139	0.10295579860797252
+PXD004541_fr09	label_aware	paper_flank	low_fragments_le6	True	any50	9	6	0.6666666666666666
+PXD004541_fr09	label_aware	paper_flank	low_fragments_le6	True	rank1	9	6	0.6666666666666666
+PXD004541_fr09	label_aware	paper_flank	q_gt_005	False	any50	10416	87	0.008352534562211982
+PXD004541_fr09	label_aware	paper_flank	q_gt_005	False	rank1	10416	955	0.09168586789554531
+PXD004541_fr09	label_aware	paper_flank	q_gt_005	True	any50	656	37	0.056402439024390245
+PXD004541_fr09	label_aware	paper_flank	q_gt_005	True	rank1	656	190	0.2896341463414634
+PXD004541_fr09	label_aware	paper_flank	TMT_on_Y	False	any50	11072	124	0.011199421965317919
+PXD004541_fr09	label_aware	paper_flank	TMT_on_Y	False	rank1	11072	1145	0.10341401734104046
+PXD004541_fr09	label_aware	paper_flank	TMT_on_Y	True	any50	0	0	
+PXD004541_fr09	label_aware	paper_flank	TMT_on_Y	True	rank1	0	0	
+PXD004541_fr09	label_aware	paper_flank	independent_same_modified_peptide	False	any50	1531	56	0.036577400391900716
+PXD004541_fr09	label_aware	paper_flank	independent_same_modified_peptide	False	rank1	1531	245	0.16002612671456565
+PXD004541_fr09	label_aware	paper_flank	independent_same_modified_peptide	True	any50	9541	68	0.007127135520385704
+PXD004541_fr09	label_aware	paper_flank	independent_same_modified_peptide	True	rank1	9541	900	0.09432973482863431
+PXD004541_fr09	label_aware	paper_flank	independent_accepted_disagreement	False	any50	11065	124	0.011206507004066878
+PXD004541_fr09	label_aware	paper_flank	independent_accepted_disagreement	False	rank1	11065	1141	0.10311793944871216
+PXD004541_fr09	label_aware	paper_flank	independent_accepted_disagreement	True	any50	7	0	0.0
+PXD004541_fr09	label_aware	paper_flank	independent_accepted_disagreement	True	rank1	7	4	0.5714285714285714
+PXD004541_fr09	label_aware	strict_mass	low_fragments_le6	False	any50	11063	118	0.010666184579228058
+PXD004541_fr09	label_aware	strict_mass	low_fragments_le6	False	rank1	11063	1140	0.10304619000271174
+PXD004541_fr09	label_aware	strict_mass	low_fragments_le6	True	any50	9	6	0.6666666666666666
+PXD004541_fr09	label_aware	strict_mass	low_fragments_le6	True	rank1	9	6	0.6666666666666666
+PXD004541_fr09	label_aware	strict_mass	q_gt_005	False	any50	10416	87	0.008352534562211982
+PXD004541_fr09	label_aware	strict_mass	q_gt_005	False	rank1	10416	956	0.09178187403993855
+PXD004541_fr09	label_aware	strict_mass	q_gt_005	True	any50	656	37	0.056402439024390245
+PXD004541_fr09	label_aware	strict_mass	q_gt_005	True	rank1	656	190	0.2896341463414634
+PXD004541_fr09	label_aware	strict_mass	TMT_on_Y	False	any50	11072	124	0.011199421965317919
+PXD004541_fr09	label_aware	strict_mass	TMT_on_Y	False	rank1	11072	1146	0.10350433526011561
+PXD004541_fr09	label_aware	strict_mass	TMT_on_Y	True	any50	0	0	
+PXD004541_fr09	label_aware	strict_mass	TMT_on_Y	True	rank1	0	0	
+PXD004541_fr09	label_aware	strict_mass	independent_same_modified_peptide	False	any50	1531	56	0.036577400391900716
+PXD004541_fr09	label_aware	strict_mass	independent_same_modified_peptide	False	rank1	1531	246	0.16067929457870672
+PXD004541_fr09	label_aware	strict_mass	independent_same_modified_peptide	True	any50	9541	68	0.007127135520385704
+PXD004541_fr09	label_aware	strict_mass	independent_same_modified_peptide	True	rank1	9541	900	0.09432973482863431
+PXD004541_fr09	label_aware	strict_mass	independent_accepted_disagreement	False	any50	11065	124	0.011206507004066878
+PXD004541_fr09	label_aware	strict_mass	independent_accepted_disagreement	False	rank1	11065	1142	0.10320831450519656
+PXD004541_fr09	label_aware	strict_mass	independent_accepted_disagreement	True	any50	7	0	0.0
+PXD004541_fr09	label_aware	strict_mass	independent_accepted_disagreement	True	rank1	7	4	0.5714285714285714
+PXD004541_fr09	label_blind	paper_flank	low_fragments_le6	False	any50	11063	100	0.009039139473922082
+PXD004541_fr09	label_blind	paper_flank	low_fragments_le6	False	rank1	11063	1129	0.10205188466058031
+PXD004541_fr09	label_blind	paper_flank	low_fragments_le6	True	any50	9	6	0.6666666666666666
+PXD004541_fr09	label_blind	paper_flank	low_fragments_le6	True	rank1	9	6	0.6666666666666666
+PXD004541_fr09	label_blind	paper_flank	q_gt_005	False	any50	10416	73	0.007008448540706605
+PXD004541_fr09	label_blind	paper_flank	q_gt_005	False	rank1	10416	949	0.09110983102918586
+PXD004541_fr09	label_blind	paper_flank	q_gt_005	True	any50	656	33	0.05030487804878049
+PXD004541_fr09	label_blind	paper_flank	q_gt_005	True	rank1	656	186	0.28353658536585363
+PXD004541_fr09	label_blind	paper_flank	TMT_on_Y	False	any50	11072	106	0.009573699421965318
+PXD004541_fr09	label_blind	paper_flank	TMT_on_Y	False	rank1	11072	1135	0.10251083815028902
+PXD004541_fr09	label_blind	paper_flank	TMT_on_Y	True	any50	0	0	
+PXD004541_fr09	label_blind	paper_flank	TMT_on_Y	True	rank1	0	0	
+PXD004541_fr09	label_blind	paper_flank	independent_same_modified_peptide	False	any50	1531	44	0.028739386022207707
+PXD004541_fr09	label_blind	paper_flank	independent_same_modified_peptide	False	rank1	1531	237	0.15480078380143697
+PXD004541_fr09	label_blind	paper_flank	independent_same_modified_peptide	True	any50	9541	62	0.006498270621528142
+PXD004541_fr09	label_blind	paper_flank	independent_same_modified_peptide	True	rank1	9541	898	0.0941201131956818
+PXD004541_fr09	label_blind	paper_flank	independent_accepted_disagreement	False	any50	11065	106	0.009579755987347493
+PXD004541_fr09	label_blind	paper_flank	independent_accepted_disagreement	False	rank1	11065	1131	0.10221418888386805
+PXD004541_fr09	label_blind	paper_flank	independent_accepted_disagreement	True	any50	7	0	0.0
+PXD004541_fr09	label_blind	paper_flank	independent_accepted_disagreement	True	rank1	7	4	0.5714285714285714
+PXD004541_fr09	label_blind	strict_mass	low_fragments_le6	False	any50	11063	131	0.011841272710837928
+PXD004541_fr09	label_blind	strict_mass	low_fragments_le6	False	rank1	11063	1210	0.1093735876344572
+PXD004541_fr09	label_blind	strict_mass	low_fragments_le6	True	any50	9	6	0.6666666666666666
+PXD004541_fr09	label_blind	strict_mass	low_fragments_le6	True	rank1	9	6	0.6666666666666666
+PXD004541_fr09	label_blind	strict_mass	q_gt_005	False	any50	10416	99	0.009504608294930876
+PXD004541_fr09	label_blind	strict_mass	q_gt_005	False	rank1	10416	1015	0.09744623655913978
+PXD004541_fr09	label_blind	strict_mass	q_gt_005	True	any50	656	38	0.057926829268292686
+PXD004541_fr09	label_blind	strict_mass	q_gt_005	True	rank1	656	201	0.30640243902439024
+PXD004541_fr09	label_blind	strict_mass	TMT_on_Y	False	any50	11072	137	0.012373554913294798
+PXD004541_fr09	label_blind	strict_mass	TMT_on_Y	False	rank1	11072	1216	0.10982658959537572
+PXD004541_fr09	label_blind	strict_mass	TMT_on_Y	True	any50	0	0	
+PXD004541_fr09	label_blind	strict_mass	TMT_on_Y	True	rank1	0	0	
+PXD004541_fr09	label_blind	strict_mass	independent_same_modified_peptide	False	any50	1531	58	0.037883736120182886
+PXD004541_fr09	label_blind	strict_mass	independent_same_modified_peptide	False	rank1	1531	258	0.16851730894839975
+PXD004541_fr09	label_blind	strict_mass	independent_same_modified_peptide	True	any50	9541	79	0.008280054501624569
+PXD004541_fr09	label_blind	strict_mass	independent_same_modified_peptide	True	rank1	9541	958	0.10040876218425741
+PXD004541_fr09	label_blind	strict_mass	independent_accepted_disagreement	False	any50	11065	137	0.012381382738364212
+PXD004541_fr09	label_blind	strict_mass	independent_accepted_disagreement	False	rank1	11065	1212	0.10953456845910528
+PXD004541_fr09	label_blind	strict_mass	independent_accepted_disagreement	True	any50	7	0	0.0
+PXD004541_fr09	label_blind	strict_mass	independent_accepted_disagreement	True	rank1	7	4	0.5714285714285714
+PXD037999	label_aware	paper_flank	low_fragments_le6	False	any50	7980	335	0.041979949874686714
+PXD037999	label_aware	paper_flank	low_fragments_le6	False	rank1	7980	1322	0.1656641604010025
+PXD037999	label_aware	paper_flank	low_fragments_le6	True	any50	290	145	0.5
+PXD037999	label_aware	paper_flank	low_fragments_le6	True	rank1	290	197	0.6793103448275862
+PXD037999	label_aware	paper_flank	q_gt_005	False	any50	7617	283	0.03715373506629907
+PXD037999	label_aware	paper_flank	q_gt_005	False	rank1	7617	1155	0.15163450177235133
+PXD037999	label_aware	paper_flank	q_gt_005	True	any50	653	197	0.3016845329249617
+PXD037999	label_aware	paper_flank	q_gt_005	True	rank1	653	364	0.557427258805513
+PXD037999	label_aware	paper_flank	TMT_on_Y	False	any50	8270	480	0.05804111245465538
+PXD037999	label_aware	paper_flank	TMT_on_Y	False	rank1	8270	1519	0.18367593712212818
+PXD037999	label_aware	paper_flank	TMT_on_Y	True	any50	0	0	
+PXD037999	label_aware	paper_flank	TMT_on_Y	True	rank1	0	0	
+PXD037999	label_aware	paper_flank	independent_same_modified_peptide	False	any50	1498	202	0.1348464619492657
+PXD037999	label_aware	paper_flank	independent_same_modified_peptide	False	rank1	1498	436	0.2910547396528705
+PXD037999	label_aware	paper_flank	independent_same_modified_peptide	True	any50	6772	278	0.04105138806851742
+PXD037999	label_aware	paper_flank	independent_same_modified_peptide	True	rank1	6772	1083	0.15992321323095096
+PXD037999	label_aware	paper_flank	independent_accepted_disagreement	False	any50	8268	480	0.05805515239477504
+PXD037999	label_aware	paper_flank	independent_accepted_disagreement	False	rank1	8268	1518	0.18359941944847605
+PXD037999	label_aware	paper_flank	independent_accepted_disagreement	True	any50	2	0	0.0
+PXD037999	label_aware	paper_flank	independent_accepted_disagreement	True	rank1	2	1	0.5
+PXD037999	label_aware	strict_mass	low_fragments_le6	False	any50	7980	336	0.042105263157894736
+PXD037999	label_aware	strict_mass	low_fragments_le6	False	rank1	7980	1325	0.16604010025062657
+PXD037999	label_aware	strict_mass	low_fragments_le6	True	any50	290	145	0.5
+PXD037999	label_aware	strict_mass	low_fragments_le6	True	rank1	290	197	0.6793103448275862
+PXD037999	label_aware	strict_mass	q_gt_005	False	any50	7617	284	0.03728502034921885
+PXD037999	label_aware	strict_mass	q_gt_005	False	rank1	7617	1158	0.15202835762111067
+PXD037999	label_aware	strict_mass	q_gt_005	True	any50	653	197	0.3016845329249617
+PXD037999	label_aware	strict_mass	q_gt_005	True	rank1	653	364	0.557427258805513
+PXD037999	label_aware	strict_mass	TMT_on_Y	False	any50	8270	481	0.05816203143893591
+PXD037999	label_aware	strict_mass	TMT_on_Y	False	rank1	8270	1522	0.18403869407496978
+PXD037999	label_aware	strict_mass	TMT_on_Y	True	any50	0	0	
+PXD037999	label_aware	strict_mass	TMT_on_Y	True	rank1	0	0	
+PXD037999	label_aware	strict_mass	independent_same_modified_peptide	False	any50	1498	202	0.1348464619492657
+PXD037999	label_aware	strict_mass	independent_same_modified_peptide	False	rank1	1498	437	0.2917222963951936
+PXD037999	label_aware	strict_mass	independent_same_modified_peptide	True	any50	6772	279	0.041199054932073244
+PXD037999	label_aware	strict_mass	independent_same_modified_peptide	True	rank1	6772	1085	0.16021854695806262
+PXD037999	label_aware	strict_mass	independent_accepted_disagreement	False	any50	8268	481	0.05817610062893082
+PXD037999	label_aware	strict_mass	independent_accepted_disagreement	False	rank1	8268	1521	0.18396226415094338
+PXD037999	label_aware	strict_mass	independent_accepted_disagreement	True	any50	2	0	0.0
+PXD037999	label_aware	strict_mass	independent_accepted_disagreement	True	rank1	2	1	0.5
+PXD037999	label_blind	paper_flank	low_fragments_le6	False	any50	7980	288	0.03609022556390978
+PXD037999	label_blind	paper_flank	low_fragments_le6	False	rank1	7980	1259	0.15776942355889725
+PXD037999	label_blind	paper_flank	low_fragments_le6	True	any50	290	142	0.4896551724137931
+PXD037999	label_blind	paper_flank	low_fragments_le6	True	rank1	290	196	0.6758620689655173
+PXD037999	label_blind	paper_flank	q_gt_005	False	any50	7617	254	0.033346461861625314
+PXD037999	label_blind	paper_flank	q_gt_005	False	rank1	7617	1113	0.14612051988972036
+PXD037999	label_blind	paper_flank	q_gt_005	True	any50	653	176	0.26952526799387444
+PXD037999	label_blind	paper_flank	q_gt_005	True	rank1	653	342	0.5237366003062787
+PXD037999	label_blind	paper_flank	TMT_on_Y	False	any50	8270	430	0.05199516324062878
+PXD037999	label_blind	paper_flank	TMT_on_Y	False	rank1	8270	1455	0.1759371221281741
+PXD037999	label_blind	paper_flank	TMT_on_Y	True	any50	0	0	
+PXD037999	label_blind	paper_flank	TMT_on_Y	True	rank1	0	0	
+PXD037999	label_blind	paper_flank	independent_same_modified_peptide	False	any50	1498	186	0.12416555407209613
+PXD037999	label_blind	paper_flank	independent_same_modified_peptide	False	rank1	1498	421	0.281041388518024
+PXD037999	label_blind	paper_flank	independent_same_modified_peptide	True	any50	6772	244	0.03603071470761961
+PXD037999	label_blind	paper_flank	independent_same_modified_peptide	True	rank1	6772	1034	0.15268753691671588
+PXD037999	label_blind	paper_flank	independent_accepted_disagreement	False	any50	8268	430	0.05200774068698597
+PXD037999	label_blind	paper_flank	independent_accepted_disagreement	False	rank1	8268	1455	0.17597968069666184
+PXD037999	label_blind	paper_flank	independent_accepted_disagreement	True	any50	2	0	0.0
+PXD037999	label_blind	paper_flank	independent_accepted_disagreement	True	rank1	2	0	0.0
+PXD037999	label_blind	strict_mass	low_fragments_le6	False	any50	7980	358	0.04486215538847118
+PXD037999	label_blind	strict_mass	low_fragments_le6	False	rank1	7980	1592	0.19949874686716793
+PXD037999	label_blind	strict_mass	low_fragments_le6	True	any50	290	145	0.5
+PXD037999	label_blind	strict_mass	low_fragments_le6	True	rank1	290	197	0.6793103448275862
+PXD037999	label_blind	strict_mass	q_gt_005	False	any50	7617	298	0.039123014310095836
+PXD037999	label_blind	strict_mass	q_gt_005	False	rank1	7617	1413	0.18550610476565577
+PXD037999	label_blind	strict_mass	q_gt_005	True	any50	653	205	0.31393568147013784
+PXD037999	label_blind	strict_mass	q_gt_005	True	rank1	653	376	0.5758039816232772
+PXD037999	label_blind	strict_mass	TMT_on_Y	False	any50	8270	503	0.06082224909310762
+PXD037999	label_blind	strict_mass	TMT_on_Y	False	rank1	8270	1789	0.21632406287787181
+PXD037999	label_blind	strict_mass	TMT_on_Y	True	any50	0	0	
+PXD037999	label_blind	strict_mass	TMT_on_Y	True	rank1	0	0	
+PXD037999	label_blind	strict_mass	independent_same_modified_peptide	False	any50	1498	210	0.14018691588785046
+PXD037999	label_blind	strict_mass	independent_same_modified_peptide	False	rank1	1498	463	0.3090787716955941
+PXD037999	label_blind	strict_mass	independent_same_modified_peptide	True	any50	6772	293	0.04326639102185469
+PXD037999	label_blind	strict_mass	independent_same_modified_peptide	True	rank1	6772	1326	0.19580626107501475
+PXD037999	label_blind	strict_mass	independent_accepted_disagreement	False	any50	8268	503	0.06083696178035801
+PXD037999	label_blind	strict_mass	independent_accepted_disagreement	False	rank1	8268	1788	0.216255442670537
+PXD037999	label_blind	strict_mass	independent_accepted_disagreement	True	any50	2	0	0.0
+PXD037999	label_blind	strict_mass	independent_accepted_disagreement	True	rank1	2	1	0.5

@@ -1,0 +1,326 @@
+{
+  "all_TMT": [
+    {
+      "trait": "TMT_on_Y",
+      "flag": false,
+      "metric": "any50",
+      "n": 33826,
+      "failures": 792,
+      "failure_rate": 0.023413941938154083
+    },
+    {
+      "trait": "TMT_on_Y",
+      "flag": false,
+      "metric": "rank1",
+      "n": 33826,
+      "failures": 4211,
+      "failure_rate": 0.12449003724945308
+    },
+    {
+      "trait": "TMT_on_Y",
+      "flag": true,
+      "metric": "any50",
+      "n": 28,
+      "failures": 4,
+      "failure_rate": 0.14285714285714285
+    },
+    {
+      "trait": "TMT_on_Y",
+      "flag": true,
+      "metric": "rank1",
+      "n": 28,
+      "failures": 10,
+      "failure_rate": 0.35714285714285715
+    },
+    {
+      "trait": "independent_accepted_disagreement",
+      "flag": false,
+      "metric": "any50",
+      "n": 33828,
+      "failures": 788,
+      "failure_rate": 0.02329431240392574
+    },
+    {
+      "trait": "independent_accepted_disagreement",
+      "flag": false,
+      "metric": "rank1",
+      "n": 33828,
+      "failures": 4201,
+      "failure_rate": 0.12418706397067518
+    },
+    {
+      "trait": "independent_accepted_disagreement",
+      "flag": true,
+      "metric": "any50",
+      "n": 26,
+      "failures": 8,
+      "failure_rate": 0.3076923076923077
+    },
+    {
+      "trait": "independent_accepted_disagreement",
+      "flag": true,
+      "metric": "rank1",
+      "n": 26,
+      "failures": 20,
+      "failure_rate": 0.7692307692307693
+    },
+    {
+      "trait": "independent_same_modified_peptide",
+      "flag": false,
+      "metric": "any50",
+      "n": 15334,
+      "failures": 434,
+      "failure_rate": 0.028303117255771486
+    },
+    {
+      "trait": "independent_same_modified_peptide",
+      "flag": false,
+      "metric": "rank1",
+      "n": 15334,
+      "failures": 2014,
+      "failure_rate": 0.13134211556019304
+    },
+    {
+      "trait": "independent_same_modified_peptide",
+      "flag": true,
+      "metric": "any50",
+      "n": 18520,
+      "failures": 362,
+      "failure_rate": 0.019546436285097193
+    },
+    {
+      "trait": "independent_same_modified_peptide",
+      "flag": true,
+      "metric": "rank1",
+      "n": 18520,
+      "failures": 2207,
+      "failure_rate": 0.11916846652267818
+    },
+    {
+      "trait": "low_fragments_le6",
+      "flag": false,
+      "metric": "any50",
+      "n": 33544,
+      "failures": 639,
+      "failure_rate": 0.019049606487002147
+    },
+    {
+      "trait": "low_fragments_le6",
+      "flag": false,
+      "metric": "rank1",
+      "n": 33544,
+      "failures": 4010,
+      "failure_rate": 0.11954447889339376
+    },
+    {
+      "trait": "low_fragments_le6",
+      "flag": true,
+      "metric": "any50",
+      "n": 310,
+      "failures": 157,
+      "failure_rate": 0.5064516129032258
+    },
+    {
+      "trait": "low_fragments_le6",
+      "flag": true,
+      "metric": "rank1",
+      "n": 310,
+      "failures": 211,
+      "failure_rate": 0.6806451612903226
+    },
+    {
+      "trait": "q_gt_005",
+      "flag": false,
+      "metric": "any50",
+      "n": 31671,
+      "failures": 486,
+      "failure_rate": 0.015345268542199489
+    },
+    {
+      "trait": "q_gt_005",
+      "flag": false,
+      "metric": "rank1",
+      "n": 31671,
+      "failures": 3393,
+      "failure_rate": 0.10713270815572606
+    },
+    {
+      "trait": "q_gt_005",
+      "flag": true,
+      "metric": "any50",
+      "n": 2183,
+      "failures": 310,
+      "failure_rate": 0.14200641319285387
+    },
+    {
+      "trait": "q_gt_005",
+      "flag": true,
+      "metric": "rank1",
+      "n": 2183,
+      "failures": 828,
+      "failure_rate": 0.3792945487860742
+    }
+  ],
+  "independent_validation": [
+    {
+      "trait": "TMT_on_Y",
+      "flag": false,
+      "metric": "any50",
+      "n": 10884,
+      "failures": 582,
+      "failure_rate": 0.053472987872105845
+    },
+    {
+      "trait": "TMT_on_Y",
+      "flag": false,
+      "metric": "rank1",
+      "n": 10884,
+      "failures": 1944,
+      "failure_rate": 0.17861080485115766
+    },
+    {
+      "trait": "TMT_on_Y",
+      "flag": true,
+      "metric": "any50",
+      "n": 28,
+      "failures": 4,
+      "failure_rate": 0.14285714285714285
+    },
+    {
+      "trait": "TMT_on_Y",
+      "flag": true,
+      "metric": "rank1",
+      "n": 28,
+      "failures": 10,
+      "failure_rate": 0.35714285714285715
+    },
+    {
+      "trait": "independent_accepted_disagreement",
+      "flag": false,
+      "metric": "any50",
+      "n": 10893,
+      "failures": 578,
+      "failure_rate": 0.05306159919214174
+    },
+    {
+      "trait": "independent_accepted_disagreement",
+      "flag": false,
+      "metric": "rank1",
+      "n": 10893,
+      "failures": 1938,
+      "failure_rate": 0.17791242082071054
+    },
+    {
+      "trait": "independent_accepted_disagreement",
+      "flag": true,
+      "metric": "any50",
+      "n": 19,
+      "failures": 8,
+      "failure_rate": 0.42105263157894735
+    },
+    {
+      "trait": "independent_accepted_disagreement",
+      "flag": true,
+      "metric": "rank1",
+      "n": 19,
+      "failures": 16,
+      "failure_rate": 0.8421052631578947
+    },
+    {
+      "trait": "independent_same_modified_peptide",
+      "flag": false,
+      "metric": "any50",
+      "n": 1933,
+      "failures": 292,
+      "failure_rate": 0.15106052767718572
+    },
+    {
+      "trait": "independent_same_modified_peptide",
+      "flag": false,
+      "metric": "rank1",
+      "n": 1933,
+      "failures": 647,
+      "failure_rate": 0.3347128815312985
+    },
+    {
+      "trait": "independent_same_modified_peptide",
+      "flag": true,
+      "metric": "any50",
+      "n": 8979,
+      "failures": 294,
+      "failure_rate": 0.03274306715669897
+    },
+    {
+      "trait": "independent_same_modified_peptide",
+      "flag": true,
+      "metric": "rank1",
+      "n": 8979,
+      "failures": 1307,
+      "failure_rate": 0.1455618665775699
+    },
+    {
+      "trait": "low_fragments_le6",
+      "flag": false,
+      "metric": "any50",
+      "n": 10614,
+      "failures": 437,
+      "failure_rate": 0.041172036932353495
+    },
+    {
+      "trait": "low_fragments_le6",
+      "flag": false,
+      "metric": "rank1",
+      "n": 10614,
+      "failures": 1752,
+      "failure_rate": 0.16506500847936686
+    },
+    {
+      "trait": "low_fragments_le6",
+      "flag": true,
+      "metric": "any50",
+      "n": 298,
+      "failures": 149,
+      "failure_rate": 0.5
+    },
+    {
+      "trait": "low_fragments_le6",
+      "flag": true,
+      "metric": "rank1",
+      "n": 298,
+      "failures": 202,
+      "failure_rate": 0.6778523489932886
+    },
+    {
+      "trait": "q_gt_005",
+      "flag": false,
+      "metric": "any50",
+      "n": 10202,
+      "failures": 352,
+      "failure_rate": 0.034503038619878454
+    },
+    {
+      "trait": "q_gt_005",
+      "flag": false,
+      "metric": "rank1",
+      "n": 10202,
+      "failures": 1541,
+      "failure_rate": 0.15104881395804745
+    },
+    {
+      "trait": "q_gt_005",
+      "flag": true,
+      "metric": "any50",
+      "n": 710,
+      "failures": 234,
+      "failure_rate": 0.3295774647887324
+    },
+    {
+      "trait": "q_gt_005",
+      "flag": true,
+      "metric": "rank1",
+      "n": 710,
+      "failures": 413,
+      "failure_rate": 0.5816901408450704
+    }
+  ]
+}

@@ -1,0 +1,167 @@
+<!doctype html><html lang="en"><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>FASTag: automatic TMT detection and pseudo-tag filtering</title>
+<style>
+body{font:16px/1.55 system-ui,sans-serif;color:#182635;max-width:1180px;margin:36px auto;padding:0 24px}
+h1{font-size:32px;line-height:1.2}h2{margin-top:2em;font-size:23px}h3{font-size:18px}
+a{color:#076d9a}code,pre{font:13px/1.5 ui-monospace,monospace}pre{background:#f0f4f6;padding:18px;overflow:auto}
+.lead{font-size:19px}.note{border-left:4px solid #b1761d;padding:10px 18px;background:#fff8ec}
+img{width:100%;height:auto}figure{margin:24px 0}figcaption{font-size:14px;color:#526271}
+.table{overflow-x:auto}table{border-collapse:collapse;width:100%;font-size:14px;margin:16px 0}
+th,td{text-align:left;border-bottom:1px solid #dbe1e6;padding:9px 11px;vertical-align:top}
+th{background:#edf3f6}td:last-child{font-variant-numeric:tabular-nums}.small{font-size:14px;color:#526271}
+</style><h1>Automatic TMT detection works in these files; filtering helps when the label masses are configured</h1>
+<p class="small">FASTag feature experiment · 11 November 2026 · branch <code>feat/tmt-pseudo-tag-filter</code> · implementation <code>7eadc4e</code></p>
+<p class="lead">The detector activated on all four TMT6/10 files and abstained on the label-free control.
+With TMT specified in the residue masses, automatic filtering improved rank-1 accuracy in every TMT file,
+with no paired losses of correct rank-1 calls or recall. Recall itself was essentially unchanged.
+With TMT omitted, the paper's existing correctness metric showed recall losses in every TMT file
+and rank-1 losses in both independent validation projects.</p>
+<p class="note"><strong>Recommendation:</strong> keep this feature experimental and off by default.
+Use the filter with known TMT chemistry when cleaner top-ranked tags are the objective.
+Automatic detection currently switches filtering on; it does <strong>not</strong> add TMT modifications
+to the tagger's residue alphabet. Detecting a label and modeling its mass are separate operations.</p>
+
+<h2>Independent validation is the decisive comparison</h2>
+<p>PXD037999 and PXD000001 contribute 10,912 reference PSMs. With TMT specified,
+rank-1 accuracy rose from <strong>81.562% to 82.093%</strong> (+58 correct calls, +0.532 percentage points).
+Recall@50 stayed at <strong>94.630%</strong> (10,326 correct spectra).
+With TMT omitted, rank-1 accuracy fell from <strong>82.203% to 81.928%</strong> (−30),
+and recall fell from <strong>95.115% to 94.529%</strong> (−64).</p>
+<p>Across all four TMT files, including the development file and a second file from its project,
+TMT-specified rank-1 accuracy rose 86.971% → 87.532% (+190); recall changed
+97.643% → 97.649% (+2). These 33,854 PSMs are a descriptive pooled result,
+not four independent project replications.</p>
+
+<h2>Primary metric: sequence plus a correct flank</h2>
+<p>A tag or its reverse must match the reference sequence (I/L equivalent) and have at least one
+correct flank at that same placement, within 0.05 Da. Recall@50 asks whether any of the first 50 tags
+is correct; rank-1 accuracy asks whether the first tag is correct. All reference PSMs remain in the
+denominator, including spectra with no tag. Tables compare baseline → automatic narrow filtering.</p>
+<h3>TMT specified in both baseline and filtered runs</h3>
+<div class="table"><table><thead><tr><th>File</th><th>Reference PSMs</th><th>Recall@50 (%)</th><th>Δ correct</th><th>Rank-1 (%)</th><th>Δ correct</th></tr></thead><tbody><tr><td>PXD004541_fr02</td><td>11,870</td><td>99.267 → 99.275</td><td>+1</td><td>89.966 → 90.548</td><td>+69</td></tr><tr><td>PXD037999</td><td>8,270</td><td>94.196 → 94.196</td><td>+0</td><td>80.967 → 81.632</td><td>+55</td></tr><tr><td>PXD000001</td><td>2,642</td><td>95.988 → 95.988</td><td>+0</td><td>83.422 → 83.535</td><td>+3</td></tr><tr><td>PXD004541_fr09</td><td>11,072</td><td>98.871 → 98.880</td><td>+1</td><td>89.090 → 89.659</td><td>+63</td></tr></tbody></table></div>
+<h3>TMT omitted in both baseline and filtered runs</h3>
+<div class="table"><table><thead><tr><th>File</th><th>Reference PSMs</th><th>Recall@50 (%)</th><th>Δ correct</th><th>Rank-1 (%)</th><th>Δ correct</th></tr></thead><tbody><tr><td>PXD004541_fr02</td><td>11,870</td><td>99.410 → 99.124</td><td>-34</td><td>90.025 → 90.253</td><td>+27</td></tr><tr><td>PXD037999</td><td>8,270</td><td>94.800 → 94.135</td><td>-55</td><td>81.765 → 81.499</td><td>-22</td></tr><tr><td>PXD000001</td><td>2,642</td><td>96.101 → 95.761</td><td>-9</td><td>83.573 → 83.270</td><td>-8</td></tr><tr><td>PXD004541_fr09</td><td>11,072</td><td>99.025 → 98.817</td><td>-23</td><td>89.144 → 89.469</td><td>+36</td></tr></tbody></table></div>
+<figure><img src="figures/paper_flank.svg" alt="Changes in recall and rank-1 accuracy under the primary sequence-and-flank metric">
+<figcaption>Changes relative to the same chemistry configuration. Blue: automatic narrow filter.
+Purple: automatic filter plus reporter-endpoint removal. fr02 generated the hypotheses;
+fr09 is within-project validation. No confidence intervals are shown: these are exact paired changes
+in fixed reference sets, and the experiment has only two independent validation projects.</figcaption></figure>
+
+<h2>Why can a chemically suspicious tag still count as correct?</h2>
+<p>Consider a peptide ending in TMT-labeled lysine. A tag ending in bare K can have the correct amino-acid
+sequence and correct N flank while placing the missing 229.162932 Da label in its C gap.
+The paper metric accepts it. The filter's bare-K rule deletes it.
+For example, the synthetic peptide <code>[+229.162932]-AGPEPK[+229.162932]</code>
+admits <code>PEPK</code> with N gap 357.221510 Da and C gap 229.162932 Da:
+sequence and N placement are right, but the tag assigns no modification to K.</p>
+<p>An independent audit of every lost-recall spectrum found that <strong>all 124 losses
+were caused by the bare-K rule, none by the G/A rules</strong> (35 fr02, 55 PXD037999,
+9 Erwinia, 25 fr09). Each had exactly one paper-correct baseline tag, which failed strict
+residue-mass correctness. For a real example, fr02 scan 8236 has reference
+<code>[+229.16293]-VTGGAASK[+229.16293]</code>; the deleted rank-10 tag
+<code>AASK</code> has N gap 543.3225 Da and C gap 229.1628 Da.
+The net recall change is −121 after three newly recalled spectra.
+<a href="provenance/lost-recall-attribution.json">All 124 cases and their rule assignments</a>
+are retained. Preserving or reannotating these terminal K tags is the next refinement to test;
+a G/A-only counterfactual has not been benchmarked here.</p>
+<p>The supplementary <strong>strict residue-mass metric</strong> additionally requires every tag
+residue's fixed-plus-variable mass to match the reference within 0.02 Da.
+With TMT omitted, automatic filtering increased strict rank-1 accuracy on the two independent files
+from 78.904% to 81.662% (+301), with no strict paired losses; strict recall changed by only +1.
+This is improved chemical consistency, not evidence that the primary recall loss disappeared.</p>
+<figure><img src="figures/strict_mass.svg" alt="Changes when each residue mass must also be correct">
+<figcaption>Supplementary metric, defined before scoring. All four TMT files together:
+strict rank-1 +533 with TMT omitted, versus primary rank-1 +33 and primary recall −121.</figcaption></figure>
+
+<h2>What was implemented</h2>
+<p>The detector uses a deterministic probe of up to 1,024 eligible MS2 spectra spread across the input,
+four-residue ungapped tags and E ≤ 1 evidence. It counts distinct spectra, not tag rows.
+Let L = 229.162932 Da, W = 18.010565 Da, and K = 128.094963 Da.</p>
+<pre>probe = four-residue, ungapped tags from sampled MS2 spectra
+eligible = spectra with at least one qualifying tag
+N_evidence = spectra with n ≈ L       or c ≈ L − W
+K_evidence = spectra with c ≈ K + L   or n ≈ K + L + W
+threshold = max(20, ceil(0.01 × count(eligible)))
+activate only if count(eligible) ≥ 100 and both evidence counts ≥ threshold
+abstain if analogous TMTpro evidence passes, or tolerance is specified in Da
+
+for each scored candidate, before deduplication and the top-50 cap:
+    reject BY tags with unmodified G/A at a matching TMT-split boundary:
+        first G/A and n ≈ L − residue_mass
+        last  G/A and c ≈ L − W − residue_mass
+    reject BY tags ending in bare K with c ≈ L
+        (disabled when K has a fixed shift; variable-modified K is protected)
+    optionally reject charge-1 BY tags whose c + W + proton is a TMT reporter
+retain candidate scores and E-values; refill output slots from remaining tags</pre>
+<p>N-flank windows are ±0.020 Da and C-flank windows ±0.006 Da. Ordinary residue flanks,
+TMT-plus-residue flanks, and a-ion counterparts are not broadly removed.
+The detector does not use reporter ions, which are shared with other isobaric labels.
+The full frozen specification is in
+<a href="../../../doc/TMT-PSEUDO-FILTER-PROTOCOL.txt">TMT-PSEUDO-FILTER-PROTOCOL.txt</a>.
+The 229.162932 Da modification is documented by
+<a href="https://www.unimod.org/modifications_view.php?editid1=737">Unimod 737</a>;
+the label mass differs from the approximately 126–131 m/z reporter ions.</p>
+
+<h2>Detection and runtime</h2>
+<p>All automatic decisions were identical across three repetitions and both chemistry configurations.
+Automatic and forced-on outputs were byte-identical on every TMT file.
+Automatic output, including the reporter option, was byte-identical to baseline on the label-free
+control (8,254 PSMs; recall 93.930%, rank-1 67.095%). This small control set does not establish
+general detection sensitivity or specificity.</p>
+<div class="table"><table><thead><tr><th>File</th><th>Chemistry</th><th>Probe diagnostic</th></tr></thead><tbody><tr><td>PXD004541_fr02</td><td>label_blind</td><td>&#x27;/scratch/kohlbach/fastag-tmt-filter-20261111/data/PXD004541_fr02/HF1_201501212_GM_RJ1511D_TMT10_hpHRP_DMSO1_2p5ug_4uL_fr02.mzML&#x27; has no index, or one that no longer matches the file (edited after it was written?); found its 46803 spectra by scanning it instead (0.02 s). Re-index it, e.g. with FileConverter, to skip the scan. | TMT pseudo-filter (auto): on; TMT6_10_two_site_evidence; probed=1024; eligible=880, threshold=20, TMT_N=726, TMT_K=474, TMTpro_N=0, TMTpro_K=0; reporters=off</td></tr><tr><td>PXD004541_fr02</td><td>label_aware</td><td>&#x27;/scratch/kohlbach/fastag-tmt-filter-20261111/data/PXD004541_fr02/HF1_201501212_GM_RJ1511D_TMT10_hpHRP_DMSO1_2p5ug_4uL_fr02.mzML&#x27; has no index, or one that no longer matches the file (edited after it was written?); found its 46803 spectra by scanning it instead (0.03 s). Re-index it, e.g. with FileConverter, to skip the scan. | TMT pseudo-filter (auto): on; TMT6_10_two_site_evidence; probed=1024; eligible=877, threshold=20, TMT_N=727, TMT_K=475, TMTpro_N=0, TMTpro_K=0; reporters=off</td></tr><tr><td>PXD037999</td><td>label_blind</td><td>&#x27;/scratch/kohlbach/fastag-tmt-filter-20261111/data/PXD037999/220819_UM171_RCOR1_NB4_TMT10_F13_of_F13_R2.mzML&#x27; has no index, or one that no longer matches the file (edited after it was written?); found its 65596 spectra by scanning it instead (0.04 s). Re-index it, e.g. with FileConverter, to skip the scan. | TMT pseudo-filter (auto): on; TMT6_10_two_site_evidence; probed=1024; eligible=639, threshold=20, TMT_N=426, TMT_K=239, TMTpro_N=0, TMTpro_K=0; reporters=off</td></tr><tr><td>PXD037999</td><td>label_aware</td><td>&#x27;/scratch/kohlbach/fastag-tmt-filter-20261111/data/PXD037999/220819_UM171_RCOR1_NB4_TMT10_F13_of_F13_R2.mzML&#x27; has no index, or one that no longer matches the file (edited after it was written?); found its 65596 spectra by scanning it instead (0.04 s). Re-index it, e.g. with FileConverter, to skip the scan. | TMT pseudo-filter (auto): on; TMT6_10_two_site_evidence; probed=1024; eligible=620, threshold=20, TMT_N=431, TMT_K=240, TMTpro_N=0, TMTpro_K=0; reporters=off</td></tr><tr><td>PXD000001</td><td>label_blind</td><td>TMT pseudo-filter (auto): on; TMT6_10_two_site_evidence; probed=1024; eligible=790, threshold=20, TMT_N=508, TMT_K=414, TMTpro_N=2, TMTpro_K=0; reporters=off</td></tr><tr><td>PXD000001</td><td>label_aware</td><td>TMT pseudo-filter (auto): on; TMT6_10_two_site_evidence; probed=1024; eligible=769, threshold=20, TMT_N=498, TMT_K=416, TMTpro_N=2, TMTpro_K=0; reporters=off</td></tr><tr><td>PXD004541_fr09</td><td>label_blind</td><td>&#x27;/scratch/kohlbach/fastag-tmt-filter-20261111/data/PXD004541_fr09/HF1_201501216_GM_RJ1511D_TMT10_hpHRP_Drug2_2p5ug_4uL_fr09.mzML&#x27; has no index, or one that no longer matches the file (edited after it was written?); found its 44777 spectra by scanning it instead (0.02 s). Re-index it, e.g. with FileConverter, to skip the scan. | TMT pseudo-filter (auto): on; TMT6_10_two_site_evidence; probed=1024; eligible=822, threshold=20, TMT_N=698, TMT_K=462, TMTpro_N=0, TMTpro_K=0; reporters=off</td></tr><tr><td>PXD004541_fr09</td><td>label_aware</td><td>&#x27;/scratch/kohlbach/fastag-tmt-filter-20261111/data/PXD004541_fr09/HF1_201501216_GM_RJ1511D_TMT10_hpHRP_Drug2_2p5ug_4uL_fr09.mzML&#x27; has no index, or one that no longer matches the file (edited after it was written?); found its 44777 spectra by scanning it instead (0.02 s). Re-index it, e.g. with FileConverter, to skip the scan. | TMT pseudo-filter (auto): on; TMT6_10_two_site_evidence; probed=1024; eligible=818, threshold=20, TMT_N=690, TMT_K=463, TMTpro_N=0, TMTpro_K=0; reporters=off</td></tr><tr><td>PXD003531</td><td>control</td><td>TMT pseudo-filter (auto): off; insufficient_two_site_TMT_evidence; probed=1024; eligible=969, threshold=20, TMT_N=0, TMT_K=0, TMTpro_N=0, TMTpro_K=0; reporters=off</td></tr></tbody></table></div>
+<p>Median elapsed seconds from three serial runs, eight threads on <code>dax</code>, warm file cache;
+times include reading, detection, tagging and writing. Forced filtering alone cost approximately zero.
+Automatic detection added 0.133–0.244 s on the TMT files: about 8–11% for the larger runs,
+but 55% for the short Erwinia run. The label-free control added 0.384 s (12.2%).</p>
+<div class="table"><table><thead><tr><th>File</th><th>Chemistry</th><th>Baseline (s)</th><th>Forced on (s)</th><th>Automatic (s)</th><th>Δ s</th><th>Δ %</th></tr></thead><tbody><tr><td>PXD004541_fr02</td><td>label_blind</td><td>2.936</td><td>2.942</td><td>3.18</td><td>+0.244</td><td>+8.3%</td></tr><tr><td>PXD004541_fr02</td><td>label_aware</td><td>2.963</td><td>2.958</td><td>3.188</td><td>+0.225</td><td>+7.6%</td></tr><tr><td>PXD037999</td><td>label_blind</td><td>1.319</td><td>1.317</td><td>1.454</td><td>+0.135</td><td>+10.2%</td></tr><tr><td>PXD037999</td><td>label_aware</td><td>1.385</td><td>1.383</td><td>1.518</td><td>+0.133</td><td>+9.6%</td></tr><tr><td>PXD000001</td><td>label_blind</td><td>0.347</td><td>0.347</td><td>0.539</td><td>+0.192</td><td>+55.3%</td></tr><tr><td>PXD000001</td><td>label_aware</td><td>0.354</td><td>0.358</td><td>0.547</td><td>+0.193</td><td>+54.5%</td></tr><tr><td>PXD004541_fr09</td><td>label_blind</td><td>1.91</td><td>1.911</td><td>2.097</td><td>+0.187</td><td>+9.8%</td></tr><tr><td>PXD004541_fr09</td><td>label_aware</td><td>1.922</td><td>1.932</td><td>2.125</td><td>+0.203</td><td>+10.6%</td></tr><tr><td>PXD003531</td><td>control</td><td>3.146</td><td>3.146</td><td>3.53</td><td>+0.384</td><td>+12.2%</td></tr></tbody></table></div>
+
+<h2>Reporter-endpoint option</h2>
+<p>The separately benchmarked reporter filter gave small additional gains. On the two independent
+TMT-specified files it added another 17 correct rank-1 calls and one recalled spectrum over the narrow
+filter, bringing rank-1 to 82.249% (+75 versus baseline) and recall to 94.639% (+1).
+It can leave additional spectra without output, but no correct primary or strict calls were lost
+in the TMT-specified reference sets. It did not resolve the primary recall losses with TMT omitted.
+All counts, including tag-output coverage, are retained in <a href="summary.tsv">summary.tsv</a>.</p>
+
+<h2>Scope and reproducibility</h2>
+<p>The hypotheses and thresholds were frozen before scoring. fr02 from PXD004541 was development data;
+fr09 is another file from that project. PXD037999 and PXD000001 are independent project validation;
+PXD003531 is the label-free control. Reference PSMs are Sage rank-1 targets at spectrum q ≤ 0.01,
+with entrapment and decoy protein assignments excluded. These references are not error-free truth
+and do not measure performance on unidentified spectra.</p>
+<p>Every comparison holds spectra, truth and chemistry configuration fixed. Tag length 4, extension 0,
+one ordinary two-residue gap, maximum 50 tags, E ≤ 20 before gap penalty 100, maximum 400 peaks,
+10 peaks per window and 20 ppm fragment tolerance were used. TMT files retained their cysteine
+treatment and variable methionine oxidation. Erwinia truth also allows TMT on Y; this was omitted
+from both tagger arms. The control tagger uses oxidation and phosphorylation; its frozen truth also
+allows deamidation and N-terminal acetylation. Neither asymmetry changes between arms.</p>
+<p>The five arms were baseline v1.13.1, new binary default/off, forced on, automatic,
+and automatic plus reporters: nine file/chemistry cells × five arms × three repetitions = 135 runs.
+All completed successfully and repeated outputs were identical. All nine default/off outputs matched
+baseline byte-for-byte. An independent audit rehashed every output and rechecked paired scoring.
+Code checks passed: 85 tests, four optional skips; GUI typecheck and 25 parameter tests also passed.</p>
+<p>Only these high-resolution files, length 4 and no extension were benchmarked. There is no empirical
+TMTpro, mixed-label, partially labeled or low-resolution negative-control validation here.
+The TMTpro abstention path has unit coverage, not a measured dataset-level specificity estimate.
+Do not generalize to arbitrary acquisition modes or claim a downstream peptide-search improvement.</p>
+<pre># Example: known TMT with automatic evidence-gated filtering
+FASTag -in run.mzML -out tags.tsv \
+  -fixed_modifications 'Carbamidomethyl (C)' 'TMT6plex (K)' 'TMT6plex (N-term)' \
+  -variable_modifications 'Oxidation (M)' -tmt_pseudo_filter auto
+
+# Add -tmt_reporter_filter for the separately benchmarked reporter rule.
+# Use -tmt_pseudo_filter on for known chemistry without the detection prepass.
+# Default is off. Automatic mode requires seekable mzML/MGF input.</pre>
+<p>Artifacts: <a href="summary.tsv">all metrics</a> · <a href="paired_changes.tsv">paired gains/losses</a> ·
+<a href="spectrum_outcomes.tsv.gz">per-spectrum outcomes</a> · <a href="timings.jsonl">commands and timings</a> ·
+<a href="manifest.json">input, truth, binary and scorer hashes</a> ·
+<a href="provenance/independent-validation.json">independent output audit</a> ·
+<a href="provenance/build-and-validation.json">build and test record</a>.</p>
+<p>Raw outputs and run logs are retained at <code>/ceph/ibmi/abi/oliver/fastag-tmt-filter-20261111/results</code>;
+input spectra, frozen reference tables and Sage configurations at
+<code>/ceph/ibmi/abi/oliver/fastag-tmt-filter-benchmark-20261111</code>.
+Run <code>bench/tmt_pseudo_filter.py</code> with the manifest's dataset and binary paths to reproduce;
+the original command vectors are in the timing file.
+Regenerate these plots with <code>python bench/plot_tmt_pseudo.py RESULTS</code> and this report with
+<code>python bench/report_tmt_pseudo.py RESULTS</code>.</p></html>

@@ -1,0 +1,8 @@
+Modifications: Carbamidomethyl (C, fixed)
+'/scratch/kohlbach/fastag-labeldisc/heldout3/in/PXD007694/ch_g2_03.mzML' has no index, or one that no longer matches the file (edited after it was written?); found its 49095 spectra by scanning it instead (0.08 s). Re-index it, e.g. with FileConverter, to skip the scan.
+Acquisition check: DDA (no repeating window scheme (periodicity 0 over 2253 repeat gaps, cycle 10, 1746 distinct precursor m/z, 0% uncharged, 4000 MS2 probed))
+Subsampling: tagging 1 of 49095 input spectra (seed 1)
+No two peaks anywhere in this file are closer than 0.600159 Th, yet the fragment tolerance is 0.0123132 Th near m/z 615.66. That is what low-resolution (ion trap) MS2 read with a high-resolution tolerance looks like, and it yields almost no tags for a reason the output cannot show. If the MS2 is ion trap, try -fragment_tolerance 0.3 -fragment_tolerance_unit Da.
+TMT pseudo-filter (auto): off; insufficient_two_site_TMT_evidence; probed=1024; eligible=176, threshold=20, veto_min=5, TMT_N=0, TMT_K=0, TMTpro_N=0, TMTpro_K=0; reporters=off
+1 MS2 spectra, 50 tags
+FASTag took 0.67 s (wall), 0.87 s (CPU), 0.25 s (system), 0.62 s (user); Peak Memory Usage: 39 MB.
