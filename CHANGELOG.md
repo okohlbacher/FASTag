@@ -2,6 +2,21 @@
 
 ## Unreleased
 
+- **Raw-DIA check (#7): two more window schemes are refused.** (1) Tiling
+  isolation windows the run keeps returning to without one cycle (at least
+  10 visits per window, at least 99% of the second half of the probed MS2 on
+  an m/z of the first half), as a method that repeats blocks of windows
+  writes them; the 1.12 rule needed one cycle through all windows. (2) A
+  periodic or returning tiling scheme whose MS2 all carry the same charge
+  (at least 99%), a method default; 1.12 tagged these with a "DIA-like"
+  warning, which now remains for tiling schemes with mixed charges only.
+  Exit code 11, the `FASTAG_REFUSED` line and the calls for DDA, PRM,
+  pseudo-DDA and uncharged periodic DIA are unchanged. On the spent E7-03
+  sample (now a development set) 4 of 249 calls change: 3 missed Orbitrap
+  DIA files are refused, and so is one file drawn as Tribrid DDA that is a
+  150 x 4 Th scheme with charge 2+ on every MS2. On the 224 E7-02
+  development files 3 known default-charge DIA runs go from warned to
+  refused; nothing else changes.
 - **Label call minimum (backlog #8): `-label_call_min_tags`, experimental,
   default 175 (the 1.12 rule; no output change at the default).** At 0
   `label_call` makes no `no_call few_tags` below 175 C-terminal tag ends:

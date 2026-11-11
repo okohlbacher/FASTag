@@ -309,8 +309,14 @@ of a range of at least 100 Th, and at least half of the MS2 carry no charge; or,
 without recorded windows, when at least 90% are uncharged and the repeating
 m/z values form a regular grid at most 50 Th apart, as window centres do (at
 least 80% of the spacings between consecutive values within 20% of their
-median; an uncharged PRM or inclusion list of arbitrary targets is not one). A periodic, tiling but mostly charged run
-is tagged with a warning; a periodic scheme whose windows do not tile a range
+median; an uncharged PRM or inclusion list of arbitrary targets is not one).
+Since 1.13 two more window schemes are refused. First, tiling windows the run keeps
+returning to without one cycle (each window at least 10 times, and at least 99% of
+the MS2 in the second half of the probe on an m/z already seen in the first half), as when a
+method repeats blocks of windows. Second, a periodic or returning tiling scheme whose
+MS2 all carry the same charge (at least 99%): some DIA methods write a default
+charge, 2+ or 3+, on every MS2. A tiling scheme with mixed charges
+is still tagged with a warning; a periodic scheme whose windows do not tile a range
 is PRM or an inclusion list and passes; so do DDA with wide windows and
 pseudo-DDA spectra, which DIAspeXtract (its software entry and `spx_*`
 userParams) and diaTracer (its software entry) mark in the mzML. The
@@ -320,11 +326,16 @@ pseudo-DDA files) **failed**. Raw diaPASEF and Astral DIA were refused 12/12
 each. Orbitrap DIA was refused only 7/12 and the SWATH stratum 10/12, against
 >= 90%. 8 of 202 files that had to pass were refused (upper 95% bound 7.0%),
 all drawn from Astral projects labelled DDA. All 37 pseudo-DDA files passed.
-Charged tiling DIA is only warned about, by design. Post-hoc readings (not a
+That test ran the 1.12 rule, which only warned about charged tiling DIA. Post-hoc readings (not a
 re-score; only partly checked against vendor scan filters) are that the 8 refused files may be DIA
 runs filed as DDA, and that 4 of the missed DIA files, which showed no repeating
 window scheme, may be DDA library runs (see
-[doc/ACQUISITION-RELEASE-TEST.md](doc/ACQUISITION-RELEASE-TEST.md)). If a file
+[doc/ACQUISITION-RELEASE-TEST.md](doc/ACQUISITION-RELEASE-TEST.md)). The 1.13 additions were
+developed on that sample, which is therefore no test of them: there they refuse 3 more
+Orbitrap DIA files (2 with a default charge, 1 with repeated window blocks) and one file
+drawn as Tribrid DDA that is a 150 x 4 Th scheme with charge 2+ on every MS2; no other
+call changes, on that sample or on the 224 development files (3 known DIA runs with a
+default charge go from warned to refused). If a file
 you know is DDA is refused, rerun with `-acquisition_check warn` or `off`. A mixed file
 is judged on its first MS2; `-stream` is not checked.
 
