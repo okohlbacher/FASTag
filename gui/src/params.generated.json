@@ -1486,6 +1486,19 @@
       "toppAdvanced": false
     },
     {
+      "name": "species_reagents",
+      "type": "input-file",
+      "default": "",
+      "description": "Experimental, with -species_call explain: FASTA of protein reagents (UniProt headers with OX=<taxid>; species_reagents.fasta in the taxonomy directory lists porcine trypsin and pepsin, bovine serum, milk and enzyme proteins). A taxon the explain call does not detect is called present with call_reason 'reagent' when its tags in these proteins exceed the same count on the decoy tags: the reagent is in the sample, not the organism. Appends the columns reagent_tags and reagent_expected. Not held-out tested",
+      "required": false,
+      "toppAdvanced": true,
+      "formats": [
+        "fasta",
+        "fa",
+        "faa"
+      ]
+    },
+    {
       "name": "species_use_gapped",
       "type": "bool",
       "default": "false",

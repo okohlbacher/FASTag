@@ -85,6 +85,19 @@
   The 0.88 -> 1.28 % of the second held-out test was a single entrapment
   database; the standard deviation between databases is 0.1 to 0.3 points.
   The Comet export stays as it is. README and the option help say so.
+- `-species_reagents <fasta>` (experimental, off by default, with
+  `-species_call explain`): a taxon the explain call does not detect is
+  reported `present` with `call_reason` `reagent` when its tags in the listed
+  reagent proteins (`data/taxonomy/species_reagents.fasta`: porcine trypsin
+  and pepsin, bovine serum, milk and enzyme proteins, 38 entries) exceed the
+  same count on the decoy tags; new report columns `reagent_tags`,
+  `reagent_expected`; optional key `reagent_n_min` (8) in `species_call.tsv`.
+  The calls of the explain rule are unchanged. A reagent call is scored
+  neither as a true nor as a false genus call and is counted separately.
+  Development data only (62 spent held-out runs): 47 reagent calls in 37
+  runs, 40 of them with at least 3 Sage peptides in the listed proteins;
+  false genus calls per run 0.50, as for `explain` alone. Not held-out
+  tested.
 
 ## 1.13.1 (2026-11-10)
 
