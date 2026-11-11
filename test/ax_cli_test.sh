@@ -42,6 +42,8 @@ if ! "$BIN" --help >/dev/null 2>&1; then
   exit 77
 fi
 TMP=$(mktemp -d "${TMPDIR:-/tmp}/fastag-ax-test.XXXXXX") || exit 1
+# Windows (MSYS): the native binary and python see C:/..., not /tmp/...; compare and pass that form.
+command -v cygpath >/dev/null 2>&1 && TMP=$(cygpath -m "$TMP")
 trap 'rm -rf "$TMP"' EXIT
 fail() { echo "FAIL: $*" >&2; exit 1; }
 GATE_RE='^[0-9]+ MS2 spectra, [0-9]+ tags'
