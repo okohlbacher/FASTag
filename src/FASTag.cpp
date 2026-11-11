@@ -394,6 +394,16 @@ protected:
     // One gap only. Each additional gap multiplies the branching and asserts
     // another unobserved split, and a two-gap tag would be mostly inference.
     setMaxInt_("gaps", 1);
+    registerIntOption_("max_gap_residues", "<n>", FASTag::Cli::kMaxGapResidues,
+                       "Maximum residues in a gap: 2 bridges one missing peak; "
+                       "3 also bridges two missing peaks. Three-residue gaps use "
+                       "base/fixed-modified residues only. Requires -gaps 1", false, true);
+    setMinInt_("max_gap_residues", 2);
+    setMaxInt_("max_gap_residues", 3);
+    registerFlag_("gap_variable_mods",
+                  "Allow at most one variable-modified residue in a two-residue "
+                  "gap, using -variable_modifications. Requires -gaps 1; "
+                  "does not enable variable modifications in three-residue gaps", true);
     // Negated, because a TOPP flag is false unless given and deisotoping is on
     // by default. `-no_deisotope` follows TOPPBase's own `-no_progress`.
     registerFlag_("no_deisotope",
@@ -1925,6 +1935,8 @@ protected:
     p.tag_length = lengths.front();
     p.max_extension = getIntOption_("extension");
     p.max_gaps = getIntOption_("gaps");
+    p.max_gap_residues = getIntOption_("max_gap_residues");
+    p.gap_variable_mods = getFlag_("gap_variable_mods");
     p.deisotope = !getFlag_("no_deisotope");
     p.peaks_per_window = getIntOption_("peaks_per_window");
     p.frag_tol = getDoubleOption_("fragment_tolerance");

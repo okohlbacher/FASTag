@@ -1,5 +1,14 @@
 # Changelog
 
+## Unreleased
+
+- Add independent experimental gap modes: `-gap_variable_mods` permits one
+  configured variable-modified residue in a two-residue gap;
+  `-max_gap_residues 3` also permits three-residue gaps made of base/fixed-modified
+  residues. Both are off by default. One gap per seed and ordinary-edge
+  extension are unchanged. See `doc/OPTIONAL-GAP-MODES.md` for the controlled
+  comparison with 1.13.1, limitations, and reproducible commands.
+
 ## 1.13.1 (2026-11-10)
 
 No change to the program. Five test scripts compare and pass the Windows

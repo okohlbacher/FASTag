@@ -207,6 +207,28 @@ export const PARAM_UI: Record<string, ParamUi> = {
       tip: 'Leave it at 1; it lets a tag continue past a fragment that was not measured.'
     }
   },
+  gap_variable_mods: {
+    section: 'Tagging',
+    label: 'Variable modifications in pair gaps',
+    depends: [
+      { on: 'gaps', note: 'no gapped tags are produced' },
+      { on: 'variable_modifications', note: 'no variable modifications are configured' }
+    ],
+    help: {
+      text: 'Experimental: allow a two-residue gap to contain one of the variable modifications listed below. The two residues share one mass observation, so their order and modification placement can remain ambiguous.',
+      tip: 'Off by default. Select modifications appropriate to the sample, such as Oxidation (M).'
+    }
+  },
+  max_gap_residues: {
+    section: 'Tagging',
+    label: 'Maximum residues in a gap',
+    choices: ['2', '3'],
+    depends: [{ on: 'gaps', note: 'no gapped tags are produced' }],
+    help: {
+      text: '2 bridges one missing peak. Experimental value 3 also bridges two missing peaks using three residues, with fixed modifications but no variable modifications in those triplets.',
+      tip: 'A triplet can fill an entire seed of length 3 using only two observed peaks. Longer seeds provide more observed steps.'
+    }
+  },
   gap_penalty: {
     // -gaps 0 means no gapped tags exist, so nothing can be penalised.
     section: 'Tagging',

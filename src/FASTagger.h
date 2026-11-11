@@ -27,7 +27,7 @@
 
 namespace FASTag
 {
-  struct Alphabet;  ///< residue/pair tables built from Param.mods; defined in the .cpp
+  struct Alphabet;  ///< residue/gap tables built from Param.mods; defined in the .cpp
 
   /// One residue-specific modification, resolved to a mass by the TOPP tool
   /// (from OpenMS ModificationsDB) so this library needs no modification
@@ -73,6 +73,8 @@ namespace FASTag
     int    tag_length     = 3;      ///< seed length in residues
     int    max_extension  = 0;      ///< residues appended per terminus; 0 = off
     int    max_gaps       = 0;      ///< gap edges allowed per tag; 0 = off, 1 = max
+    int    max_gap_residues = 2;    ///< largest gap composition: 2 (default) or 3
+    bool   gap_variable_mods = false; ///< allow one configured variable mod in a two-residue gap
     /// Collapse isotope clusters (charges 1-3) to their monoisotopic peak
     /// before selecting peaks, and move multiply-charged fragments onto the
     /// singly-charged scale.
@@ -131,6 +133,9 @@ namespace FASTag
     /// therefore calibrated, not derived -- and calibrated on synthetic spectra,
     /// which is the weakest part of the claim. It is a knob for that reason.
     ///
+    /// The optional modified-pair and triplet modes retain this same multiplier;
+    /// its calibration above covers base two-residue gaps only.
+    ///
     /// Ranking only: the E-value cutoff is applied to the UNCORRECTED value, so
     /// this never removes a tag, only reorders. See tagSpectrum().
     double gap_penalty    = 100.0;
@@ -157,7 +162,7 @@ namespace FASTag
     int    charge = 1;          ///< fragment charge the tag was read at
     double p_intensity = 1, p_mzfidelity = 1, p_complement = 1;
     double evalue = 1;          ///< combined p-value x tags enumerated
-    /// Per-edge confidence in [0,1], summarised. Each edge (one residue, or two
+    /// Per-edge confidence in [0,1], summarised. Each edge (one residue, or two/three
     /// for a gap) scores m/z fit x endpoint intensity; min_conf is the weakest
     /// edge (the residue most likely wrong), mean_conf the average. The E-value
     /// is the primary, validated tag confidence; these localise WHERE a tag is
@@ -165,14 +170,14 @@ namespace FASTag
     float  min_conf = 1.0f;
     float  mean_conf = 1.0f;
     /// Per-RESIDUE confidence 0..100, N->C, one entry per residue (n_res of
-    /// them), only when Param::per_residue_conf. A gap edge's single pair
-    /// score is written to BOTH its residues: the mass evidence supports the
-    /// pair, not either identity or their order -- consumers of assembly-style
+    /// them), only when Param::per_residue_conf. A gap edge's single mass
+    /// score is written to all its residues: the mass evidence supports the
+    /// composition, not each identity or its order -- consumers of assembly-style
     /// exports should read gap residues as sharing one observation.
     std::vector<uint8_t> res_conf;
     bool   extended = false;
-    bool   gapped = false;      ///< crossed a missing peak; two residues are a
-                                ///< mass-only inference, not two observed steps
+    bool   gapped = false;      ///< crossed missing peaks; gap residues are a
+                                ///< mass-only inference, not individually observed steps
     double low_mz = 0;          ///< lowest peak; also the output tie-break
     double high_mz = 0;         ///< highest path peak (census tag_cover); not serialised
     float  peak_tic = 0;        ///< summed intensity of the path peaks (census best_tic); not serialised

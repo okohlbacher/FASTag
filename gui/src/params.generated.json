@@ -519,6 +519,14 @@
       "min": 1
     },
     {
+      "name": "gap_variable_mods",
+      "type": "bool",
+      "default": "false",
+      "description": "Allow at most one variable-modified residue in a two-residue gap, using -variable_modifications. Requires -gaps 1; does not enable variable modifications in three-residue gaps",
+      "required": false,
+      "toppAdvanced": true
+    },
+    {
       "name": "gaps",
       "type": "int",
       "default": "1",
@@ -832,6 +840,16 @@
       "required": false,
       "toppAdvanced": false,
       "min": 0
+    },
+    {
+      "name": "max_gap_residues",
+      "type": "int",
+      "default": "2",
+      "description": "Maximum residues in a gap: 2 bridges one missing peak; 3 also bridges two missing peaks. Three-residue gaps use base/fixed-modified residues only. Requires -gaps 1",
+      "required": false,
+      "toppAdvanced": true,
+      "min": 2,
+      "max": 3
     },
     {
       "name": "max_peaks",

@@ -39,6 +39,8 @@ int main(int argc, char** argv)
   check(p.tag_length == 3, "tag_length 3");
   check(p.max_extension == 0, "extension 0");
   check(p.max_gaps == 1, "gaps 1 (the library default is 0)");
+  check(p.max_gap_residues == 2, "max_gap_residues 2");
+  check(!p.gap_variable_mods, "variable modifications in gaps off");
   check(p.deisotope, "deisotoping on (the library default is off)");
   check(p.peaks_per_window == 10, "peaks_per_window 10");
   check(p.frag_tol == 20.0 && p.tol_ppm, "fragment tolerance 20 ppm");

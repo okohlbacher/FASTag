@@ -13,11 +13,13 @@
 #include <boost/math/distributions/hypergeometric.hpp>
 
 #include <algorithm>
+#include <array>
 #include <cassert>
 #include <cmath>
 #include <numeric>
 #include <map>
 #include <set>
+#include <stdexcept>
 #include <tuple>
 #include <random>
 #include <utility>
@@ -36,12 +38,14 @@ namespace FASTag
   /// the knob worth turning.
   static constexpr double PEAK_WINDOW_MZ = 100.0;
 
-  /// Cap on spellings emitted for one gap, admitted in pair-mass order. Up to
-  /// ~0.02 Da a window holds at most 7 spellings, so the cap never binds; from
+  /// Cap on pair-gap spellings, admitted in mass order. For the base alphabet,
+  /// up to ~0.02 Da a window holds at most 7 spellings, so the cap never binds; from
   /// ~0.05 Da (0.3 Da ion-trap settings, high-m/z 2+ fragments) a few windows
   /// (S+R, T+R) hold 10 and lose their heaviest compositions. It stops a wide
   /// tolerance from turning one path into hundreds of rows.
   static constexpr int MAX_GAP_SPELLINGS = 8;
+  // Triplets have up to six permutations per composition. Admit whole groups.
+  static constexpr int MAX_TRIPLET_SPELLINGS = 48;
 
   /// Peaks above precursor mass + proton + this (Da) are dropped.
   static constexpr double PRECURSOR_TOL = 1.5;
@@ -70,12 +74,12 @@ namespace FASTag
   // evicts through the per-spectrum cap were far less often correct than the
   // gapped ones replacing them.
   //
-  // The constraint that matters already exists: a gap spends 2 of tag_length's
+  // The constraint that matters already exists: a gap spends 2 (optionally 3) of tag_length's
   // residue budget, so a longer tag necessarily observes more of what it spells.
   // A short tag_length with gaps gives a high inferred fraction; that is the
   // caller's trade.
 
-  /// The residue and pair tables the graph walks, built once per run from the
+  /// The residue and gap tables the graph walks, built once per run from the
   /// active modifications. Held by Tables and passed read-only into the tagger.
   ///
   /// With no modifications this is the canonical "Natural19WithoutI" set (I
@@ -86,20 +90,32 @@ namespace FASTag
   struct Alphabet
   {
     struct Res { char base; double mass; std::string mod; };  ///< mod "" = unmodified
-    struct Pair { double mass; uint8_t a, b; };
+    struct Gap
+    {
+      double mass;
+      uint8_t a, b, c = 255;  // c == 255 denotes a two-residue composition
+      int size() const { return c == 255 ? 2 : 3; }
+      int permutations() const
+      {
+        if (size() == 2) return a == b ? 1 : 2;
+        return a == c ? 1 : (a == b || b == c ? 3 : 6);
+      }
+    };
 
     std::vector<Res>  res;    ///< base residues first (mass-sorted), variables after
-    std::vector<Pair> pairs;  ///< two-residue sums over the BASE residues only
+    std::vector<Gap> gaps;   ///< pairs, optional singly modified pairs, optional base triplets
     uint8_t           n_base = 0;
 
-    explicit Alphabet(const std::vector<ModSpec>& mods)
+    explicit Alphabet(const Param& p)
     {
+      if (p.max_gap_residues != 2 && p.max_gap_residues != 3)
+        throw std::invalid_argument("max_gap_residues must be 2 or 3");
       // Base residues, with fixed-mod mass shifts folded in.
       for (const Residue* r : ResidueDB::getInstance()->getResidues("Natural19WithoutI"))
       {
         char c = r->getOneLetterCode()[0];
         double m = r->getMonoWeight(Residue::Internal);
-        for (const ModSpec& mod : mods)
+        for (const ModSpec& mod : p.mods)
           if (!mod.variable && mod.residue == c) m += mod.delta;
         res.push_back({c, m, ""});
       }
@@ -107,48 +123,48 @@ namespace FASTag
       std::sort(res.begin(), res.end(), [](const Res& a, const Res& b) { return a.mass < b.mass; });
       n_base = static_cast<uint8_t>(res.size());
 
-      // Pairs over the base residues only. Gaps already assert a lot; letting a
-      // variable-modified residue also be an unobserved gap member would multiply
-      // that uncertainty for little gain, so modified residues take ordinary
-      // edges only. 190 pairs over 19 residues; three-residue sums are omitted
-      // for the same reason DirecTag omits them (they match a random difference
-      // 40-60% of the time, asserting almost nothing).
-      for (uint8_t i = 0; i < n_base; ++i)
-        for (uint8_t j = i; j < n_base; ++j)
-          pairs.push_back({res[i].mass + res[j].mass, i, j});
-      std::sort(pairs.begin(), pairs.end(), [](const Pair& x, const Pair& y) { return x.mass < y.mass; });
-
-      // Isobaric pairs -- AD and GE, AV and GL, SL and VT, 13 such groups over
-      // the base residues -- must keep one order wherever this runs: emit()
-      // admits pairs in this order under MAX_GAP_SPELLINGS, so the order
-      // decides which spelling a full budget drops. Their computed masses tie
-      // or differ in the last bit, and which one depends on the process:
-      // OpenMS's EmpiricalFormula sums its elements in Element* order, i.e. in
-      // heap-address order, which Windows randomises per process. A tie then
-      // falls to std::sort's unspecified order. So within each run of pairs
-      // closer than ISOBARIC_DA, order by spelling instead of by those bits.
-      // Distinct base compositions are >= 3.4 mDa apart, so the runs are exact.
-      constexpr double ISOBARIC_DA = 1e-6;
-      for (auto first = pairs.begin(); first != pairs.end();)
-      {
-        auto last = first + 1;
-        while (last != pairs.end() && last->mass - (last - 1)->mass < ISOBARIC_DA) ++last;
-        std::sort(first, last, [this](const Pair& x, const Pair& y) {
-          return std::make_pair(res[x.a].base, res[x.b].base) < std::make_pair(res[y.a].base, res[y.b].base);
-        });
-        first = last;
-      }
-
-      // Variable mods: one appended entry per (mod, matching base residue),
-      // carrying base_mass + delta and the mod name for inline annotation.
-      // Appended after the base set so pair indices (which reference base
-      // residues) stay valid. Deterministic order: input mod order, then residue.
-      for (const ModSpec& mod : mods)
+      // Append variable residues in the same order whether or not they may
+      // participate in gaps. The ordinary graph is unchanged by either option.
+      for (const ModSpec& mod : p.mods)
       {
         if (!mod.variable) continue;
         for (uint8_t i = 0; i < n_base; ++i)
           if (res[i].base == mod.residue)
             res.push_back({mod.residue, res[i].mass + mod.delta, mod.name});
+      }
+
+      for (uint8_t i = 0; i < n_base; ++i)
+        for (uint8_t j = i; j < n_base; ++j)
+          gaps.push_back({res[i].mass + res[j].mass, i, j});
+      if (p.gap_variable_mods)
+        for (uint8_t i = 0; i < n_base; ++i)
+          for (size_t j = n_base; j < res.size(); ++j)
+            gaps.push_back({res[i].mass + res[j].mass, i, static_cast<uint8_t>(j)});
+      if (p.max_gap_residues == 3)
+        for (uint8_t i = 0; i < n_base; ++i)
+          for (uint8_t j = i; j < n_base; ++j)
+            for (uint8_t k = j; k < n_base; ++k)
+              gaps.push_back({res[i].mass + res[j].mass + res[k].mass, i, j, k});
+      std::sort(gaps.begin(), gaps.end(), [](const Gap& x, const Gap& y) { return x.mass < y.mass; });
+
+      // Keep the historical pair ordering when options are off. Exact isobars
+      // may differ in their final floating-point bit between processes; stable
+      // spelling order keeps capped gap expansion deterministic.
+      constexpr double ISOBARIC_DA = 1e-6;
+      const std::string empty_mod;
+      const auto spellingKey = [this, &empty_mod](const Gap& g) {
+        return std::tuple<char, char, char, const std::string&, const std::string&, const std::string&>(
+            res[g.a].base, res[g.b].base, g.c == 255 ? char(0) : res[g.c].base,
+            res[g.a].mod, res[g.b].mod, g.c == 255 ? empty_mod : res[g.c].mod);
+      };
+      for (auto first = gaps.begin(); first != gaps.end();)
+      {
+        auto last = first + 1;
+        while (last != gaps.end() && last->mass - (last - 1)->mass < ISOBARIC_DA) ++last;
+        std::sort(first, last, [&](const Gap& x, const Gap& y) {
+          return spellingKey(x) < spellingKey(y);
+        });
+        first = last;
       }
     }
   };
@@ -156,21 +172,21 @@ namespace FASTag
   namespace
   {
     /// One traversal step: an ordinary edge carries one residue, a gap edge
-    /// carries a two-residue sum whose split is not observed.
+    /// carries a two- or three-residue sum whose internal splits are not observed.
     struct Step
     {
-      uint16_t pair = 0;   ///< index into Alphabet::pairs when gap
+      uint16_t pair = 0;   ///< index into Alphabet::gaps when gap
       uint8_t  res = 0;    ///< index into Alphabet::res otherwise
       bool     gap = false;
-      bool     swap = false;  ///< gap only: which arrangement of the pair to spell
+      uint8_t  order = 0;  ///< gap only: permutation of the composition to spell
     };
 
     inline double stepMass(const Alphabet& A, const Step& st)
     {
-      return st.gap ? A.pairs[st.pair].mass : A.res[st.res].mass;
+      return st.gap ? A.gaps[st.pair].mass : A.res[st.res].mass;
     }
 
-    inline int stepResidues(const Step& st) { return st.gap ? 2 : 1; }
+    inline int stepResidues(const Alphabet& A, const Step& st) { return st.gap ? A.gaps[st.pair].size() : 1; }
 
     /// Append one residue's spelling: base letter, plus [ModName] if modified.
     inline void spellRes(std::string& out, const Alphabet::Res& r)
@@ -183,10 +199,8 @@ namespace FASTag
     ///
     /// Traversal runs low->high m/z, which is C->N under the y assumption, so the
     /// path is walked backwards. That reversal is real and matters for ordinary
-    /// steps. A gap's two residues are never observed separately, so they have no
-    /// order to preserve -- emit() spells both arrangements instead of guessing.
-    /// Gap members are base residues (pairs are built over base residues only),
-    /// so they never carry a bracket.
+    /// steps. Gap members are not observed separately; emit() spells all
+    /// permutations of each admitted composition, including modification labels.
     std::string spell(const Alphabet& A, const std::vector<Step>& path)
     {
       std::string out;
@@ -194,9 +208,18 @@ namespace FASTag
       {
         const Step& st = path[static_cast<size_t>(i)];
         if (!st.gap) { spellRes(out, A.res[st.res]); continue; }
-        const auto& pe = A.pairs[st.pair];
-        out.push_back(A.res[st.swap ? pe.a : pe.b].base);
-        out.push_back(A.res[st.swap ? pe.b : pe.a].base);
+        const auto& pe = A.gaps[st.pair];
+        if (pe.size() == 2)
+        {
+          spellRes(out, A.res[st.order ? pe.a : pe.b]);
+          spellRes(out, A.res[st.order ? pe.b : pe.a]);
+        }
+        else
+        {
+          std::array<uint8_t, 3> r{pe.a, pe.b, pe.c};
+          for (uint8_t j = 0; j < st.order; ++j) std::next_permutation(r.begin(), r.end());
+          for (auto j = r.rbegin(); j != r.rend(); ++j) spellRes(out, A.res[*j]);
+        }
       }
       return out;
     }
@@ -261,16 +284,16 @@ namespace FASTag
 
   // ---------------------------------------------------------------- Tables
 
-  // A gap spends one fewer peak than it spells residues, so the realised peak
-  // count runs from tag_length + 1 - max_gaps upward. The tables must start
+  // One gap skips size-1 peaks: a triplet needs two fewer observed peaks.
+  // Use the largest gap that fits the seed residue budget. The tables must start
   // there: intensityP() returns 1.0 outside its range and mzFidelityP() clamps
   // to the nearest built k, so a gapped tag below the table would silently lose
   // one subscore and read the wrong null for another.
   Tables::Tables(const Param& p)
-    : k_min_(std::max(2, p.tag_length + 1 - std::max(0, p.max_gaps))),
+    : k_min_(std::max(2, p.tag_length + 1 - (p.max_gaps > 0 ? std::min(p.tag_length, p.max_gap_residues) - 1 : 0))),
       k_max_(std::max(2, p.tag_length + 1 + 2 * std::max(0, p.max_extension))),
       n_max_(p.max_peak_count > 0 ? p.max_peak_count : PEAK_CEILING),
-      alpha_(std::make_shared<const Alphabet>(p.mods)),
+      alpha_(std::make_shared<const Alphabet>(p)),
       compl_(ComplementSpec::fromParam(p))
   {
     ranksum_.resize(static_cast<size_t>(k_max_ - k_min_ + 1));
@@ -629,7 +652,7 @@ namespace FASTag
       std::vector<uint32_t> roff, rsrc; ///< reverse edges, so C-terminal
       std::vector<uint8_t>  rres;       ///< extension is O(degree) too
       std::vector<uint32_t> goff, gdst; ///< gap edges, empty unless max_gaps > 0
-      std::vector<uint16_t> gpair;      ///< matched entry in Alphabet::pairs
+      std::vector<uint16_t> gpair;      ///< matched entry in Alphabet::gaps
     };
 
     Graph buildGraph(const Prepared& s, const Param& p, const Alphabet& A, int charge)
@@ -694,21 +717,20 @@ namespace FASTag
       for (size_t i = 0; i < n; ++i)
         for (const auto& e : radj[i]) { g.rsrc.push_back(e.first); g.rres.push_back(e.second); }
 
-      // Gap edges: peak pairs separated by a two-residue sum, i.e. a series with
-      // one member missing. Built by walking peak pairs and binary-searching the
-      // sorted table -- n^2/2 = 5k searches at the library's default 100-peak
-      // cap (Param::max_peak_count; the CLI's -max_peaks defaults to 400),
-      // against the n * 190 = 19k findNearest calls the per-residue construction above would
-      // need. Peaks are m/z sorted, so the inner loop stops as soon as the
-      // difference exceeds the heaviest pair.
+      // Gap edges carry two or (optionally) three residues. Search each
+      // observed peak difference once; retain a match of each length because
+      // pair and triplet masses can coincide while spending different budgets.
+      // The common two-residue mode keeps its original graph and edge order.
       if (p.max_gaps > 0 && n > 1)
       {
-        const auto& P = A.pairs;
+        const auto& P = A.gaps;
         const double p_lo = P.front().mass, p_hi = P.back().mass;
         static thread_local std::vector<std::vector<std::pair<uint32_t, uint16_t>>> gadj;
+        struct TripleEdge { uint32_t from, to; uint16_t gap; };
+        static thread_local std::vector<TripleEdge> triples;
+        triples.clear();
         if (gadj.size() < n) gadj.resize(n);
-        // adj[] (ordinary edges, built above) is sorted by nothing in
-        // particular, so scan it: degree is a handful at real tolerances.
+        // adj[] is not destination-sorted; real-tolerance degrees are small.
         const auto twoStep = [&](uint32_t from, uint32_t to) {
           for (const auto& e1 : adj[from])
           {
@@ -726,25 +748,50 @@ namespace FASTag
             const double tol = tolAt(p, s.spec[j].getMZ()) * charge;
             if (d + tol < p_lo) continue;
             if (d - tol > p_hi) break;
-            int best = -1; double best_err = tol;
+            int best[2] = {-1, -1};
+            double best_err[2] = {tol, tol};
             for (auto it = std::lower_bound(P.begin(), P.end(), d - tol,
-                     [](const Alphabet::Pair& x, double v) { return x.mass < v; });
+                     [](const Alphabet::Gap& x, double v) { return x.mass < v; });
                  it != P.end() && it->mass <= d + tol; ++it)
             {
+              const int kind = it->size() - 2;
               const double err = std::fabs(it->mass - d);
-              if (err < best_err) { best_err = err; best = static_cast<int>(it - P.begin()); }
+              if (err < best_err[kind])
+              { best_err[kind] = err; best[kind] = static_cast<int>(it - P.begin()); }
             }
-            // A gap stands for ONE MISSING peak. When an ordinary two-step
-            // path i -> m -> j exists the peak is there, and the gap edge
-            // would only re-read an observed ladder: its spellings (both
-            // orders, every isobaric composition) add hypotheses with no new
-            // evidence, count in n_seeds -- multiplying every E-value in the
-            // spectrum -- and take max_tags slots. A single
-            // ordinary step whose residue is itself a pair sum (N = GG, W = AD)
-            // keeps its gap edge: the two-residue reading is an alternative.
-            if (best >= 0 && !twoStep(static_cast<uint32_t>(i), static_cast<uint32_t>(j)))
-              gadj[i].emplace_back(static_cast<uint32_t>(j), static_cast<uint16_t>(best));
+            // Suppress a pair gap if its intervening peak is observed. Keep
+            // single-edge aliases (N = GG, W = AD): their length differs.
+            if (best[0] >= 0 && !twoStep(static_cast<uint32_t>(i), static_cast<uint32_t>(j)))
+              gadj[i].emplace_back(static_cast<uint32_t>(j), static_cast<uint16_t>(best[0]));
+            if (best[1] >= 0)
+              triples.push_back({static_cast<uint32_t>(i), static_cast<uint32_t>(j),
+                                 static_cast<uint16_t>(best[1])});
           }
+        // A three-residue gap should not re-read an ordinary three-step path,
+        // or an ordinary edge plus a pair gap. Test after all pair gaps exist;
+        // these routes use more observed peaks for the same residue budget.
+        for (const auto& e : triples)
+        {
+          bool resolved = false;
+          for (const auto& first : adj[e.from])
+          {
+            if (first.first >= e.to) continue;
+            if (twoStep(first.first, e.to)) { resolved = true; break; }
+            for (const auto& second : gadj[first.first])
+              if (second.first == e.to && A.gaps[second.second].size() == 2)
+              { resolved = true; break; }
+            if (resolved) break;
+          }
+          if (!resolved)
+            for (const auto& first : gadj[e.from])
+            {
+              if (first.first >= e.to || A.gaps[first.second].size() != 2) continue;
+              for (const auto& second : adj[first.first])
+                if (second.first == e.to) { resolved = true; break; }
+              if (resolved) break;
+            }
+          if (!resolved) gadj[e.from].emplace_back(e.to, e.gap);
+        }
         g.goff.assign(n + 1, 0);
         uint32_t gt = 0;
         for (size_t i = 0; i < n; ++i) { g.goff[i] = gt; gt += gadj[i].size(); }
@@ -768,7 +815,7 @@ namespace FASTag
       // Back-project every peak onto an estimate of the first peak's position.
       // The spread of those estimates is the m/z-fidelity statistic.
       //
-      // A gap step advances by its matched two-residue sum, so the statistic
+      // A gap step advances by its matched composition mass, so the statistic
       // keeps measuring how well the observed peaks fit ideal masses. Every null
       // stays valid because Tables is keyed on PEAK count, not residue count: a
       // gapped tag spends the same number of peaks and draws the same null, it
@@ -820,7 +867,7 @@ namespace FASTag
       // Per-edge confidence: how well each residue is actually supported.
       //
       // The E-value scores the whole tag; this localises the weak link. Each edge
-      // i (peaks[i]..peaks[i+1]) carries one residue, or two for a gap. Its
+      // i (peaks[i]..peaks[i+1]) carries one residue, or a gap composition. Its
       // confidence multiplies two independent things that both have to hold:
       //   mz_fit   -- the observed peak gap matches the residue/pair mass, falling
       //               linearly from 1 at a perfect fit to 0 at the tolerance;
@@ -831,7 +878,7 @@ namespace FASTag
       {
         const double npk = static_cast<double>(std::max<size_t>(1, s.spec.size()));
         double conf_sum = 0.0, conf_min = 1.0;
-        if (p.per_residue_conf) t.res_conf.reserve(static_cast<size_t>(k) + 1);
+        if (p.per_residue_conf) t.res_conf.reserve(static_cast<size_t>(k) + 2);
         for (int i = 0; i + 1 < k; ++i)
         {
           const double gap = (s.spec[peaks[static_cast<size_t>(i) + 1]].getMZ()
@@ -848,8 +895,8 @@ namespace FASTag
           if (p.per_residue_conf)
           {
             const auto v = static_cast<uint8_t>(std::lround(100.0 * c));
-            t.res_conf.push_back(v);
-            if (path[static_cast<size_t>(i)].gap) t.res_conf.push_back(v);  // pair shares one score
+            for (int r = 0; r < stepResidues(A, path[static_cast<size_t>(i)]); ++r)
+              t.res_conf.push_back(v);  // every gap member shares one observation
           }
         }
         const int n_edge = k - 1;
@@ -895,7 +942,7 @@ namespace FASTag
       t.ion_series = p.ion_pair.kind;
 
       t.seq = spell(A, path);
-      for (const Step& st : path) { t.n_res += stepResidues(st); t.gapped = t.gapped || st.gap; }
+      for (const Step& st : path) { t.n_res += stepResidues(A, st); t.gapped = t.gapped || st.gap; }
       if (p.per_residue_conf)
       {
         // The path was traversed C->N and seq is stored N->C (see spell()), so
@@ -991,8 +1038,8 @@ namespace FASTag
 
     /// Push one scored path as one or more tags.
     ///
-    /// A gap edge asserts a two-residue SUM, not a split, so every composition
-    /// within tolerance of the observed difference -- in both orders -- is an
+    /// A gap edge asserts a residue SUM, not its internal splits, so each
+    /// composition within tolerance, in all orders up to the spelling cap, is an
     /// equally supported reading, and all of them are emitted. Keeping only the
     /// closest match would be wrong on a systematic class rather than a random
     /// one: AD and GE both weigh 186.064 exactly, so the correct spelling would
@@ -1013,7 +1060,7 @@ namespace FASTag
       const double d = (s.spec[peaks[gi + 1]].getMZ() - s.spec[peaks[gi]].getMZ()) * charge;
       const double tol = tolAt(p, s.spec[peaks[gi + 1]].getMZ()) * charge;
 
-      // Each spelling is rescored against ITS OWN pair mass rather than
+      // Each spelling is rescored against ITS OWN composition mass rather than
       // inheriting the best match's flanks.
       //
       // Sharing them looks harmless -- alternatives sit within the tolerance --
@@ -1024,24 +1071,27 @@ namespace FASTag
       // their own sequence. The alternative masses are exact numbers, so
       // recomputing asserts no precision the data lacks; it is arithmetic
       // consistency, and it costs one rescore of a path a few peaks long.
-      const auto& P = tab.alphabet().pairs;
+      const auto& P = tab.alphabet().gaps;
+      const int gap_size = P[path[gi].pair].size();
+      const int cap = gap_size == 3 ? MAX_TRIPLET_SPELLINGS : MAX_GAP_SPELLINGS;
       static thread_local std::vector<Step> alt;   // scratch, as in tagSpectrum
       alt = path;
       int emitted = 0;
       for (auto it = std::lower_bound(P.begin(), P.end(), d - tol,
-               [](const Alphabet::Pair& x, double v) { return x.mass < v; });
+               [](const Alphabet::Gap& x, double v) { return x.mass < v; });
            it != P.end() && it->mass <= d + tol; ++it)
       {
-        const int orders = (it->a == it->b) ? 1 : 2;
-        // Admit a composition only if BOTH its orders fit the budget. Stopping
+        if (it->size() != gap_size) continue;
+        const int orders = it->permutations();
+        // Admit a composition only if ALL its orders fit the budget. Stopping
         // part-way through one would emit a single arbitrary order and silently
         // drop the other, which is the one case where the caller could end up
         // with only the wrong spelling of a correct composition.
-        if (emitted + orders > MAX_GAP_SPELLINGS) break;
+        if (emitted + orders > cap) break;
         alt[gi].pair = static_cast<uint16_t>(it - P.begin());
         for (int o = 0; o < orders; ++o)
         {
-          alt[gi].swap = (o == 1);
+          alt[gi].order = static_cast<uint8_t>(o);
           Tag v = scorePath(s, p, tab, peaks, alt, charge);
           v.extended = t.extended;
           ++n_seeds;
@@ -1053,11 +1103,10 @@ namespace FASTag
     }
 
     /// Fewest peaks that can carry a tag of p.tag_length residues. A gap
-    /// spends one fewer peak than it spells residues, so a gapped tag of
-    /// tag_length residues needs only tag_length peaks.
+    /// of r residues skips r-1 internal peaks; restrict r to the seed budget.
     size_t minPeaks(const Param& p)
     {
-      return static_cast<size_t>(std::max(2, p.tag_length + 1 - std::max(0, p.max_gaps)));
+      return static_cast<size_t>(std::max(2, p.tag_length + 1 - (p.max_gaps > 0 ? std::min(p.tag_length, p.max_gap_residues) - 1 : 0)));
     }
 
     /// One graph per fragment charge, graphs[z - 1] for charge z.
@@ -1109,7 +1158,7 @@ namespace FASTag
           if (path.empty()) return;
           const Step sp = path.back();
           path.pop_back(); peaks.pop_back();
-          n_res -= stepResidues(sp);
+          n_res -= stepResidues(A, sp);
           if (sp.gap) gap_used = false;
         };
 
@@ -1147,7 +1196,7 @@ namespace FASTag
           {
             const uint32_t e = g.off[node] + ei;
             peaks.push_back(g.dst[e]);
-            path.push_back(Step{0, g.res[e], false, false});
+            path.push_back(Step{0, g.res[e], false, 0});
             ++n_res;
             dfs_stack.push_back({g.dst[e], 0});
           }
@@ -1156,11 +1205,13 @@ namespace FASTag
             // One gap per tag, and it must fit the remaining residue budget --
             // otherwise a gap taken at length-1 would overshoot to length+1 and
             // silently return tags longer than asked for.
-            if (gap_used || n_res + 2 > p.tag_length) continue;
+            if (gap_used) continue;
             const uint32_t e = g.goff[node] + (ei - n_edges);
+            const int gap_size = A.gaps[g.gpair[e]].size();
+            if (n_res + gap_size > p.tag_length) continue;
             peaks.push_back(g.gdst[e]);
-            path.push_back(Step{g.gpair[e], 0, true, false});
-            n_res += 2;
+            path.push_back(Step{g.gpair[e], 0, true, 0});
+            n_res += gap_size;
             gap_used = true;
             dfs_stack.push_back({g.gdst[e], 0});
           }

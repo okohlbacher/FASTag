@@ -30,6 +30,8 @@ namespace FASTag::Cli
   inline constexpr int kTagLength = 3;
   inline constexpr int kExtension = 0;
   inline constexpr int kGaps = 1;
+  inline constexpr int kMaxGapResidues = 2;
+  inline constexpr bool kGapVariableMods = false;
   inline constexpr bool kDeisotope = true;  ///< -no_deisotope is a flag, off
   inline constexpr int kPeaksPerWindow = 10;
   inline constexpr double kFragmentTolerance = 20.0;
@@ -84,6 +86,8 @@ namespace FASTag::Cli
     p.tag_length = kTagLength;
     p.max_extension = kExtension;
     p.max_gaps = kGaps;
+    p.max_gap_residues = kMaxGapResidues;
+    p.gap_variable_mods = kGapVariableMods;
     p.deisotope = kDeisotope;
     p.peaks_per_window = kPeaksPerWindow;
     p.frag_tol = kFragmentTolerance;

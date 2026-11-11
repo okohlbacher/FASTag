@@ -53,4 +53,17 @@ printf 'pick_profile\npick_unknown_type\n' | cat - "$TMP/legacy.txt" | LC_ALL=C 
 cmp -s "$TMP/want3.txt" "$TMP/written3.txt" || { diff "$TMP/want3.txt" "$TMP/written3.txt" >&2; fail "non-default 1.12 options are not listed exactly"; }
 tr -d '\r' < "$TMP/s3.mzML" | grep 'parameter: pick_profile' | grep -q '"auto"' || fail "-pick_profile auto is not listed with its value"
 tr -d '\r' < "$TMP/s3.mzML" | grep 'parameter: pick_unknown_type' | grep -q '"true"' || fail "-pick_unknown_type is not listed as true"
+# Optional gap settings must survive the default-parameter compatibility shim.
+"$BIN" -in "$IN" -out "$TMP/t4.tsv" -out_spectra "$TMP/s4.mzML" -max_gap_residues 3 -gap_variable_mods -threads 2 \
+  > "$TMP/log" 2>&1 || { cat "$TMP/log" >&2; fail "FASTag optional gap modes"; }
+names "$TMP/s4.mzML" > "$TMP/written4.txt"
+printf 'gap_variable_mods\nmax_gap_residues\n' | cat - "$TMP/legacy.txt" | LC_ALL=C sort > "$TMP/want4.txt"
+cmp -s "$TMP/want4.txt" "$TMP/written4.txt" || fail "non-default gap options are not listed exactly"
+tr -d '\r' < "$TMP/s4.mzML" | grep 'parameter: max_gap_residues' | grep -q '"3"' || fail "gap length not recorded"
+tr -d '\r' < "$TMP/s4.mzML" | grep 'parameter: gap_variable_mods' | grep -q '"true"' || fail "modified gap flag not recorded"
+for invalid in 1 4; do
+  if "$BIN" -in "$IN" -out "$TMP/invalid.tsv" -max_gap_residues "$invalid" > "$TMP/log" 2>&1; then
+    fail "accepted invalid max_gap_residues $invalid"
+  fi
+done
 echo "out_spectra_params_test: passed"

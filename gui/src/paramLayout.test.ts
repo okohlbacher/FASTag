@@ -60,6 +60,13 @@ describe('dependencies', () => {
     expect(inertBecause('gap_penalty', { gaps: '1' })).toBeNull()
   })
 
+  it('requires enabled gaps and configured variable modifications for modified pairs', () => {
+    expect(inertBecause('gap_variable_mods', { gaps: '0', variable_modifications: ['Oxidation (M)'] })).toBe('no gapped tags are produced')
+    expect(inertBecause('gap_variable_mods', { gaps: '1', variable_modifications: [] })).toBe('no variable modifications are configured')
+    expect(inertBecause('gap_variable_mods', { gaps: '1', variable_modifications: ['Oxidation (M)'] })).toBeNull()
+    expect(inertBecause('max_gap_residues', { gaps: '0' })).toBe('no gapped tags are produced')
+  })
+
   it('treats an empty path as off for file masters', () => {
     expect(inertBecause('orientation', { fasta: '  ' })).not.toBeNull()
     expect(inertBecause('orientation', { fasta: '/db.fasta' })).toBeNull()

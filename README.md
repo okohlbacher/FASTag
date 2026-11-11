@@ -91,6 +91,25 @@ Validation). Because a gapped tag asserts an unobserved split, it
 is systematically over-ranked relative to its real correctness, which
 `-gap_penalty` corrects; disable gaps entirely with `-gaps 0`.
 
+Two experimental extensions are independently opt-in. `-gap_variable_mods`
+also allows a two-residue gap to contain one of the variable-modified residues
+listed in `-variable_modifications` (at most one modified residue per gap).
+`-max_gap_residues 3` also permits three-residue gaps, bridging two missing
+intermediate peaks, using base/fixed-modified residues only. Both retain the
+one-gap-per-seed limit; extension follows ordinary single-residue edges.
+Fixed modifications already apply to ordinary two-residue gaps without either
+option. With no variable modifications configured, `-gap_variable_mods` has
+no effect. `-gaps 0` disables all gap modes.
+
+For example, add `-gap_variable_mods -variable_modifications 'Oxidation (M)'`
+to permit oxidized-methionine pairs, or add `-max_gap_residues 3` for triplets;
+the options can be combined. For phospho-enriched data, explicitly include
+`'Phospho (S)' 'Phospho (T)' 'Phospho (Y)'` in the variable-modification list.
+Three-residue gaps have up to 48 spellings, keeping each composition's
+permutations together. A three-residue seed can consist of just two observed
+peaks in this mode, so added recall can come with more ambiguity. See the
+[implementation and benchmark report](doc/OPTIONAL-GAP-MODES.md).
+
 **Modifications.** `-fixed_modifications` (default `Carbamidomethyl (C)`) shifts
 a residue's mass; `-variable_modifications` adds a modified alternative, written
 inline in the tag as `X[Name]`. Both take any OpenMS/UniMod name. Residue-specific
@@ -511,6 +530,8 @@ MGF→mzML direction is exact.
 | `-tag_lengths <n> ...` | none | Several seed lengths in one pass over the input, replacing `-tag_length`, e.g. `-tag_lengths 3 4 5`. Each length is tagged, scored and capped by `-max_tags` exactly as on its own, and a spectrum's rows are those runs' rows in ascending length. A tag several lengths report (same tag, charge, flanking masses and gapped flag, typically after extension) is kept only from the length that scores it best (lowest E-value; ties go to the shorter length), in every output. Masses are compared at full precision, so two different readings that merely print alike are both kept. The caps apply per length before this, so a spectrum can end up with fewer rows than they allow. `-delta_out` samples the lowest-E-value placed tag across lengths, and `-species` pools a spectrum's tags across lengths. Not combined with `-entrapment_fasta` |
 | `-extension <n>` | 0 | Max residues appended per terminus; 0 disables extension (max 12) |
 | `-gaps <n>` | 1 | Allow a tag to cross one missing peak (0 or 1) |
+| `-gap_variable_mods` | off | Experimental: allow one configured variable-modified residue in a two-residue gap |
+| `-max_gap_residues <n>` | 2 | Experimental: 3 also allows three-residue gaps using base/fixed-modified residues; 2 preserves the existing search |
 | `-no_deisotope` | off | Do not collapse isotope clusters to their monoisotopic peak, and do not move multiply-charged fragments onto the singly-charged scale, before peak selection |
 | `-fragment_tolerance <value>` | 20 | Fragment mass tolerance |
 | `-fragment_tolerance_unit <ppm\|Da>` | ppm | Tolerance unit |
