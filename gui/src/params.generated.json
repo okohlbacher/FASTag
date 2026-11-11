@@ -1566,6 +1566,27 @@
       "toppAdvanced": false
     },
     {
+      "name": "tmt_pseudo_filter",
+      "type": "string",
+      "default": "off",
+      "description": "Experimental TMT6/10 pseudo-residue filter before the tag cap; auto probes N-terminal and lysine mass signatures, on asserts TMT6/10 labeling",
+      "required": false,
+      "toppAdvanced": false,
+      "choices": [
+        "off",
+        "auto",
+        "on"
+      ]
+    },
+    {
+      "name": "tmt_reporter_filter",
+      "type": "bool",
+      "default": "false",
+      "description": "Also reject b/y tags anchored on singly charged TMT6/10 reporter ions; requires tmt_pseudo_filter auto or on and the same active TMT gate",
+      "required": false,
+      "toppAdvanced": false
+    },
+    {
       "name": "unknown_charge",
       "type": "string",
       "default": "assume2",

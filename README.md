@@ -679,6 +679,31 @@ although files were written:
 
 ## Output
 
+**Experimental TMT6/10 artifact filtering.** `-tmt_pseudo_filter auto` probes up
+to 1,024 MS2 spectra drawn deterministically across an mzML or MGF input. It
+requires at least 100 spectra with an ungapped length-4 tag at E-value ≤ 1.
+Both N-terminal TMT evidence (`n = 229.162932` or `c = 211.152367`) and
+TMT-lysine evidence (`c = 357.257895` or `n = 375.268460`) must occur in at
+least 20 spectra and at least 1% of eligible spectra. Counts are per spectrum,
+with ±0.020 Da N-channel and ±0.006 Da C-channel windows. The same two-site
+evidence for TMTpro causes abstention; a Da fragment tolerance also abstains.
+The automatic probe has no protein-database input. It logs its decision and
+records it in versioned reports and exported mzML provenance.
+
+When active, the filter removes b/y tags starting with bare G/A at
+`n = TMT − G/A`, ending with bare G/A at `c = TMT − H2O − G/A`, or ending
+with bare K at `c = TMT`. The K rule is disabled when K has a fixed mass shift.
+Residue identity and flank mass must both agree; modified G/A/K are not treated
+as bare residues. Filtering occurs after scoring but before the tag-count cap,
+so surviving tags retain their scores and can fill the vacated slots.
+Ordinary TMT-plus-residue flanks and a-ion counterparts are retained.
+`-tmt_reporter_filter` additionally removes tags whose singly charged low
+endpoint matches a TMT6/10 reporter ion, under the same active TMT gate.
+`-tmt_pseudo_filter on` asserts known TMT6/10 chemistry and skips detection;
+`off` is the default. Automatic detection needs random access and refuses
+`-stream` and mzPeak input; forced `on` supports them. These filters are
+experimental, not modification identification or labeling-efficiency estimates.
+
 One TSV row per tag: `spectrum` (native ID; `index=<k>`, the 0-based block,
 for MGF), `tag` (sequence), `length`,
 `charge` (fragment charge), `nterm_mass` / `cterm_mass` (flanking masses,

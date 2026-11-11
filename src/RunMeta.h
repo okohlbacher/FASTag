@@ -54,6 +54,7 @@ namespace FASTag::RunReport
   inline constexpr int kFormatVersion = 6;
   /// The version a Versioned report without the format-6 rows writes.
   inline constexpr int kFormatVersionNoAuto = 5;
+  inline constexpr int kTmtFormatVersion = 7;  ///< adds opt-in TMT filtering decision
 
   /// Run-level facts shared by every long-form report. Filled once per run.
   struct RunMeta
@@ -140,6 +141,8 @@ namespace FASTag::RunReport
     double complement_probe_median = 0;          ///< floor-corrected median error, Da (measured only)
     double complement_probe_mad = 0;             ///< floor-corrected MAD, Da (measured only)
     std::string complement_tol_why;              ///< why not measured (fallback only)
+    std::string tmt_filter_mode = "off";
+    std::string tmt_filter_resolved;
     // ---- 1.12 A ----
     // ---- 1.12 D ----
     // ---- 1.12 F ----
@@ -179,7 +182,8 @@ namespace FASTag::RunReport
                  std::to_string(m.subsample_spectra) + " spectra were drawn for tagging (0 = all)."});
     if (emit == Emit::Legacy) return r;
 
-    const std::string v = std::to_string(m.complement_tol_auto ? kFormatVersion : kFormatVersionNoAuto);
+    const std::string v = std::to_string(m.tmt_filter_mode != "off" ? kTmtFormatVersion :
+                                       m.complement_tol_auto ? kFormatVersion : kFormatVersionNoAuto);
     r.push_back({"run", "run_report_version", v, "-", "The run section follows FASTag run report format " + v + "."});
     // ---- 1.12 E ----
     {
@@ -309,6 +313,11 @@ namespace FASTag::RunReport
         r.push_back({"run", "complement_probe_mad", mad, "-",
                      "The floor-corrected median absolute deviation of the complement error was " + mad + " Da."});
       }
+    }
+    if (m.tmt_filter_mode != "off")
+    {
+      r.push_back({"run", "tmt_pseudo_filter", m.tmt_filter_mode, "-", "Requested experimental TMT6/10 tag filtering mode."});
+      r.push_back({"run", "tmt_pseudo_filter_resolved", m.tmt_filter_resolved, "-", "Run-level decision and deterministic probe counts; windows N=0.020, C=0.006 Da."});
     }
     // ---- 1.12 A ----
     // ---- 1.12 D ----
