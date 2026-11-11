@@ -1,5 +1,24 @@
 # Changelog
 
+## Unreleased (after 1.13.1)
+
+- `-shortlist_protease` other than trypsin: the shortlist's protease check
+  calls Asp-N from 21 % D at the N-terminal tag ends (was 50 %; tag ends of
+  Asp-N digests show 33-78 % D, other digests at most 10 %). On the 176
+  development runs with a known protease, three Asp-N runs change from
+  `unspecific` to Asp-N and no other call changes. No held-out test: the
+  held-out result of `auto` (1.13.1) describes the old rule. On the three
+  runs the exported Sage search is about twice as fast as the full search
+  (the unspecific export was 1.2 to 7 times slower), and the shortlist keeps
+  fewer of the full search's proteins (0.18, 0.19, 0.57 against 0.25, 0.34,
+  0.66); `-shortlist_specificity semi` keeps 0.25, 0.29, 0.64 at about the
+  time of the full search. `-digest_out` and the default trypsin check are
+  unchanged.
+- `-shortlist_protease auto`: a WARN states when the tag ends call
+  `unspecific` that the exported search is unspecific and can take longer
+  than a full search. No run-time guard: no peptide-length cap made the
+  unspecific export as fast as the full search without losing identifications.
+
 ## 1.13.1 (2026-11-10)
 
 No change to the program. Five test scripts compare and pass the Windows

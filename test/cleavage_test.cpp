@@ -119,6 +119,10 @@ int main()
     check(c.rule->name == "Trypsin" && !c.refuse, "auto: inconclusive is Trypsin, whatever the top model");
     c = FC::choose("auto", full, verdict(Verdict::NonTryptic, "unspecific"));
     check(c.rule->unspecific() && c.specificity == FC::Specificity::None, "auto: an unspecific call");
+    check(c.auto_unspecific, "auto: an unspecific call is flagged for the export warning");
+    check(!FC::choose("auto", full, verdict(Verdict::NonTryptic, "Asp-N")).auto_unspecific &&
+              !FC::choose("unspecific", full, verdict(Verdict::NonTryptic, "unspecific")).auto_unspecific,
+          "a called protease or a named unspecific rule is not flagged");
     c = FC::choose("chymotrypsin", full, verdict(Verdict::Compatible, "Trypsin"));
     check(c.rule->name == "Chymotrypsin" && c.refuse, "a named rule is refused on a contradicting trypsin call");
     c = FC::choose("chymotrypsin", full, verdict(Verdict::NonTryptic, "Chymotrypsin"));

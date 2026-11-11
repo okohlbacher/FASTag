@@ -78,6 +78,10 @@ namespace FASTag::Cleavage
     /// whose cleavage sites nest with the rule's (Trypsin vs Lys-C or Arg-C):
     /// the caller WARNs.
     bool mismatch = false;
+    /// `auto` and the tag ends call `unspecific`: the exported search is
+    /// unspecific and can take longer than a full search with the true
+    /// protease (post-1.13.1, aspn); the caller WARNs.
+    bool auto_unspecific = false;
     std::string reason;  ///< one short phrase for the log and the TSV header
   };
 

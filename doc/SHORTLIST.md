@@ -209,6 +209,16 @@ called trypsin); on the run called unspecific the export makes Sage four times s
 had no threshold). Asp-N is represented by one run. A named rule, `unspecific` given by the user and
 `-shortlist_specificity semi` or `none` were not tested. The option stays experimental.
 
+After 1.13.1 (development runs only, no held-out test): with the Asp-N call from 21 % D, three Asp-N runs
+(PXD064794, PXD068586, PXD051338) are called Asp-N instead of `unspecific`; one (PXD010154, 15 % D) stays
+`unspecific`. The Asp-N export makes Sage about twice as fast as the full search on the two larger runs
+(13 s against 31 s, 12 s against 30 s; the unspecific export took 162 s and 181 s), and the shortlist keeps fewer
+of the full search's proteins: 0.18, 0.19 and 0.57 against 0.25, 0.34 and 0.66. With `-shortlist_specificity semi`
+it keeps 0.25, 0.29 and 0.64 at about the time of the full search. When `auto` calls `unspecific`, a WARN says that
+the exported search is unspecific and can be slower than a full search; capping the peptide length of that search
+(50 to 30, 25, 20 or 16 residues) did not reach the time of the full search without losing identifications, so
+there is no cap.
+
 ## Reduced FASTA
 
 The database is streamed again and the kept entries are written in database

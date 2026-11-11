@@ -5994,6 +5994,12 @@ protected:
             OPENMS_LOG_ERROR << "Shortlist placement: " << sl_choice.reason
                              << ", so the shortlist may not describe this run. Not writing " << withheld
                              << " (-shortlist_force overrides)." << std::endl;
+          if (sl_choice.auto_unspecific)
+            OPENMS_LOG_WARN << "Shortlist export: the tag ends call no protease (unspecific), so the shortlist and "
+                               "the exported search are unspecific. An unspecific search of the shortlist can take "
+                               "longer and more memory than a full search with the true protease; if the protease "
+                               "is known, name it with -shortlist_protease (and -shortlist_specificity semi)."
+                            << std::endl;
           handoff_refused = sl_choice.refuse && !force && !withheld.empty();
           if (handoff_refused) sl_withheld = withheld;
           sl_plan.enzyme = FASTag::Cleavage::engineEnzyme(*sl_choice.rule, sl_choice.specificity);

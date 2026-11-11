@@ -110,6 +110,7 @@ namespace FASTag::Cleavage
                              : "auto: no confident protease call; Trypsin assumed";
       }
       if (c.rule->unspecific()) c.specificity = Specificity::None;
+      c.auto_unspecific = c.rule->unspecific();
       return c;
     }
     c.rule = findRule(option);
