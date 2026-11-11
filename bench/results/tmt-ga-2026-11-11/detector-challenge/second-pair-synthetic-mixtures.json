@@ -1,0 +1,130 @@
+[
+  {
+    "name": "pure_TMT",
+    "composition": {
+      "TMT": 1024
+    },
+    "input_sha256": "f5bf4c3053c84594d7b1305e22f601292cf785e3927ae2393d33e719e3816e63",
+    "binary_sha256": "81d2d34df21c1d3f752e947fcded203ace1b3ee820190d4bd8ad8d17672b07eb",
+    "returncode": 0,
+    "command": [
+      "/ceph/ibmi/abi/oliver/fastag-tmt-filter-20261111/bin/FASTag-feature",
+      "-in",
+      "/scratch/kohlbach/fastag-tmt-ga-review/detector-challenge/minority-validation/synthetic-mixtures/pure_TMT/mixture.mgf",
+      "-out",
+      "/scratch/kohlbach/fastag-tmt-ga-review/detector-challenge/minority-validation/synthetic-mixtures/pure_TMT/tags.tsv",
+      "-tag_length",
+      "4",
+      "-subsample_spectra",
+      "1",
+      "-threads",
+      "2",
+      "-tmt_pseudo_filter",
+      "auto"
+    ],
+    "decision": "TMT pseudo-filter (auto): on; TMT6_10_two_site_evidence; probed=1024; eligible=767, threshold=20, TMT_N=521, TMT_K=318, TMTpro_N=0, TMTpro_K=0; reporters=off"
+  },
+  {
+    "name": "pure_TMTpro",
+    "composition": {
+      "TMTpro": 1024
+    },
+    "input_sha256": "325677a2ab8e5498de5775c4555050e845aa270cd5dd51ae384b08770d70484e",
+    "binary_sha256": "81d2d34df21c1d3f752e947fcded203ace1b3ee820190d4bd8ad8d17672b07eb",
+    "returncode": 0,
+    "command": [
+      "/ceph/ibmi/abi/oliver/fastag-tmt-filter-20261111/bin/FASTag-feature",
+      "-in",
+      "/scratch/kohlbach/fastag-tmt-ga-review/detector-challenge/minority-validation/synthetic-mixtures/pure_TMTpro/mixture.mgf",
+      "-out",
+      "/scratch/kohlbach/fastag-tmt-ga-review/detector-challenge/minority-validation/synthetic-mixtures/pure_TMTpro/tags.tsv",
+      "-tag_length",
+      "4",
+      "-subsample_spectra",
+      "1",
+      "-threads",
+      "2",
+      "-tmt_pseudo_filter",
+      "auto"
+    ],
+    "decision": "TMT pseudo-filter (auto): off; TMTpro_or_mixed_evidence; probed=1024; eligible=567, threshold=20, TMT_N=2, TMT_K=2, TMTpro_N=300, TMTpro_K=194; reporters=off"
+  },
+  {
+    "name": "TMT_pro_50_50",
+    "composition": {
+      "TMT": 512,
+      "TMTpro": 512
+    },
+    "input_sha256": "99df4803b5dd4a546b7f8136d01eac78b21260c8081006f90668ff4f71a78f00",
+    "binary_sha256": "81d2d34df21c1d3f752e947fcded203ace1b3ee820190d4bd8ad8d17672b07eb",
+    "returncode": 0,
+    "command": [
+      "/ceph/ibmi/abi/oliver/fastag-tmt-filter-20261111/bin/FASTag-feature",
+      "-in",
+      "/scratch/kohlbach/fastag-tmt-ga-review/detector-challenge/minority-validation/synthetic-mixtures/TMT_pro_50_50/mixture.mgf",
+      "-out",
+      "/scratch/kohlbach/fastag-tmt-ga-review/detector-challenge/minority-validation/synthetic-mixtures/TMT_pro_50_50/tags.tsv",
+      "-tag_length",
+      "4",
+      "-subsample_spectra",
+      "1",
+      "-threads",
+      "2",
+      "-tmt_pseudo_filter",
+      "auto"
+    ],
+    "decision": "TMT pseudo-filter (auto): off; TMTpro_or_mixed_evidence; probed=1024; eligible=676, threshold=20, TMT_N=274, TMT_K=171, TMTpro_N=147, TMTpro_K=87; reporters=off"
+  },
+  {
+    "name": "TMT_pro_90_10",
+    "composition": {
+      "TMT": 922,
+      "TMTpro": 102
+    },
+    "input_sha256": "02f5f5f829940d9770d0d5cb64f2b78ae793ed03f018399004cfe92c628763a2",
+    "binary_sha256": "81d2d34df21c1d3f752e947fcded203ace1b3ee820190d4bd8ad8d17672b07eb",
+    "returncode": 0,
+    "command": [
+      "/ceph/ibmi/abi/oliver/fastag-tmt-filter-20261111/bin/FASTag-feature",
+      "-in",
+      "/scratch/kohlbach/fastag-tmt-ga-review/detector-challenge/minority-validation/synthetic-mixtures/TMT_pro_90_10/mixture.mgf",
+      "-out",
+      "/scratch/kohlbach/fastag-tmt-ga-review/detector-challenge/minority-validation/synthetic-mixtures/TMT_pro_90_10/tags.tsv",
+      "-tag_length",
+      "4",
+      "-subsample_spectra",
+      "1",
+      "-threads",
+      "2",
+      "-tmt_pseudo_filter",
+      "auto"
+    ],
+    "decision": "TMT pseudo-filter (auto): on; TMT6_10_two_site_evidence; probed=1024; eligible=747, threshold=20, TMT_N=475, TMT_K=283, TMTpro_N=31, TMTpro_K=11; reporters=off"
+  },
+  {
+    "name": "TMT_pro_95_5",
+    "composition": {
+      "TMT": 973,
+      "TMTpro": 51
+    },
+    "input_sha256": "b8a5bad259141d77c3529c412dd6beb4651d1f59e775efc8b211784ea1bf8795",
+    "binary_sha256": "81d2d34df21c1d3f752e947fcded203ace1b3ee820190d4bd8ad8d17672b07eb",
+    "returncode": 0,
+    "command": [
+      "/ceph/ibmi/abi/oliver/fastag-tmt-filter-20261111/bin/FASTag-feature",
+      "-in",
+      "/scratch/kohlbach/fastag-tmt-ga-review/detector-challenge/minority-validation/synthetic-mixtures/TMT_pro_95_5/mixture.mgf",
+      "-out",
+      "/scratch/kohlbach/fastag-tmt-ga-review/detector-challenge/minority-validation/synthetic-mixtures/TMT_pro_95_5/tags.tsv",
+      "-tag_length",
+      "4",
+      "-subsample_spectra",
+      "1",
+      "-threads",
+      "2",
+      "-tmt_pseudo_filter",
+      "auto"
+    ],
+    "decision": "TMT pseudo-filter (auto): on; TMT6_10_two_site_evidence; probed=1024; eligible=747, threshold=20, TMT_N=494, TMT_K=296, TMTpro_N=10, TMTpro_K=7; reporters=off"
+  }
+]

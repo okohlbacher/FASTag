@@ -1,0 +1,441 @@
+{
+  "scope": "GA-v1 first replicates against frozen baseline and reference PSMs; length4, extension0, gaps1, cap50",
+  "recommendations": [
+    "Retain the current G/A windows and K retention; no evidence-backed additional filter rule.",
+    "Report residue-mass consistency as a supplementary metric, not full chemical correctness.",
+    "Do not interpret all wrong ordered gap spellings as independent unsupported paths."
+  ],
+  "findings": [
+    "No remaining exact-G/A predicate matches, lowercase endpoints, or modified G/A endpoint near-matches in the scored GA-v1 tables.",
+    "All six paper-correct G/A candidate removals are lower-ranked reverse reads with erroneous M oxidation; all fail strict residue-mass scoring.",
+    "Wrong M oxidation shifts a reverse R-terminal flank from 174.111676 to158.116761 Da, only .009057 Da from the L-A anchor.",
+    "Wider N(.050)/C(.020) tails, N isotope +/-1,+/-2 windows, and their union yield zero posthoc rank1 gains or losses in all9 tables.",
+    "All three scored top1 isotope-window candidates have correct monoisotopic precursor masses in independent raw-spectrum checks.",
+    "Expanded windows overlap true TA, R and GL prefix masses in the label-free control; the file gate protects this control but mixed labeling remains a concern."
+  ],
+  "caveats": [
+    "Posthoc replay uses capped outputs and measures rank1 only; no recall or cap-refill claim.",
+    "Gap ties use equal reported score/charge and nearly equal rounded flanks; peak paths are not serialized, so identical physical paths are not proven.",
+    "The tested variable-modification set contains oxidation of M, not variable G/A modifications.",
+    "The detector has one real label-free control and synthetic TMTpro tests; this does not establish general labeling sensitivity or specificity.",
+    "Strict correctness still requires only one matching flank; precursor closure and both-flank agreement are not required."
+  ],
+  "tables": [
+    {
+      "dataset": "PXD004541_fr02",
+      "chemistry": "label_blind",
+      "reference_psms": 11870,
+      "baseline_current_GA_candidates": 17613,
+      "baseline_current_GA_paper_correct": 3,
+      "baseline_current_GA_top1_wrong": 100,
+      "baseline_current_GA_top1_correct": 0,
+      "remaining_top1_wrong": 1115,
+      "remaining_top1_wrong_gapped": 142,
+      "wrong_gapped_top1_with_tied_correct_alternative": 37,
+      "adjacent_swap_subset": 27,
+      "posthoc_rank1_replay": {
+        "tails": {
+          "gained": 0,
+          "lost": 0,
+          "gained_keys": [],
+          "lost_keys": [],
+          "emptied_spectra": 0
+        },
+        "isotopes": {
+          "gained": 0,
+          "lost": 0,
+          "gained_keys": [],
+          "lost_keys": [],
+          "emptied_spectra": 0
+        },
+        "tails_and_isotopes": {
+          "gained": 0,
+          "lost": 0,
+          "gained_keys": [],
+          "lost_keys": [],
+          "emptied_spectra": 0
+        }
+      }
+    },
+    {
+      "dataset": "PXD004541_fr02",
+      "chemistry": "label_aware",
+      "reference_psms": 11870,
+      "baseline_current_GA_candidates": 17883,
+      "baseline_current_GA_paper_correct": 3,
+      "baseline_current_GA_top1_wrong": 106,
+      "baseline_current_GA_top1_correct": 0,
+      "remaining_top1_wrong": 1122,
+      "remaining_top1_wrong_gapped": 156,
+      "wrong_gapped_top1_with_tied_correct_alternative": 41,
+      "adjacent_swap_subset": 31,
+      "posthoc_rank1_replay": {
+        "tails": {
+          "gained": 0,
+          "lost": 0,
+          "gained_keys": [],
+          "lost_keys": [],
+          "emptied_spectra": 0
+        },
+        "isotopes": {
+          "gained": 0,
+          "lost": 0,
+          "gained_keys": [],
+          "lost_keys": [],
+          "emptied_spectra": 0
+        },
+        "tails_and_isotopes": {
+          "gained": 0,
+          "lost": 0,
+          "gained_keys": [],
+          "lost_keys": [],
+          "emptied_spectra": 0
+        }
+      }
+    },
+    {
+      "dataset": "PXD037999",
+      "chemistry": "label_blind",
+      "reference_psms": 8270,
+      "baseline_current_GA_candidates": 8129,
+      "baseline_current_GA_paper_correct": 2,
+      "baseline_current_GA_top1_wrong": 101,
+      "baseline_current_GA_top1_correct": 0,
+      "remaining_top1_wrong": 1369,
+      "remaining_top1_wrong_gapped": 711,
+      "wrong_gapped_top1_with_tied_correct_alternative": 210,
+      "adjacent_swap_subset": 135,
+      "posthoc_rank1_replay": {
+        "tails": {
+          "gained": 0,
+          "lost": 0,
+          "gained_keys": [],
+          "lost_keys": [],
+          "emptied_spectra": 0
+        },
+        "isotopes": {
+          "gained": 0,
+          "lost": 0,
+          "gained_keys": [],
+          "lost_keys": [],
+          "emptied_spectra": 0
+        },
+        "tails_and_isotopes": {
+          "gained": 0,
+          "lost": 0,
+          "gained_keys": [],
+          "lost_keys": [],
+          "emptied_spectra": 0
+        }
+      }
+    },
+    {
+      "dataset": "PXD037999",
+      "chemistry": "label_aware",
+      "reference_psms": 8270,
+      "baseline_current_GA_candidates": 8279,
+      "baseline_current_GA_paper_correct": 2,
+      "baseline_current_GA_top1_wrong": 105,
+      "baseline_current_GA_top1_correct": 0,
+      "remaining_top1_wrong": 1425,
+      "remaining_top1_wrong_gapped": 762,
+      "wrong_gapped_top1_with_tied_correct_alternative": 225,
+      "adjacent_swap_subset": 147,
+      "posthoc_rank1_replay": {
+        "tails": {
+          "gained": 0,
+          "lost": 0,
+          "gained_keys": [],
+          "lost_keys": [],
+          "emptied_spectra": 0
+        },
+        "isotopes": {
+          "gained": 0,
+          "lost": 0,
+          "gained_keys": [],
+          "lost_keys": [],
+          "emptied_spectra": 0
+        },
+        "tails_and_isotopes": {
+          "gained": 0,
+          "lost": 0,
+          "gained_keys": [],
+          "lost_keys": [],
+          "emptied_spectra": 0
+        }
+      }
+    },
+    {
+      "dataset": "PXD000001",
+      "chemistry": "label_blind",
+      "reference_psms": 2642,
+      "baseline_current_GA_candidates": 1955,
+      "baseline_current_GA_paper_correct": 0,
+      "baseline_current_GA_top1_wrong": 6,
+      "baseline_current_GA_top1_correct": 0,
+      "remaining_top1_wrong": 426,
+      "remaining_top1_wrong_gapped": 92,
+      "wrong_gapped_top1_with_tied_correct_alternative": 17,
+      "adjacent_swap_subset": 12,
+      "posthoc_rank1_replay": {
+        "tails": {
+          "gained": 0,
+          "lost": 0,
+          "gained_keys": [],
+          "lost_keys": [],
+          "emptied_spectra": 0
+        },
+        "isotopes": {
+          "gained": 0,
+          "lost": 0,
+          "gained_keys": [],
+          "lost_keys": [],
+          "emptied_spectra": 0
+        },
+        "tails_and_isotopes": {
+          "gained": 0,
+          "lost": 0,
+          "gained_keys": [],
+          "lost_keys": [],
+          "emptied_spectra": 0
+        }
+      }
+    },
+    {
+      "dataset": "PXD000001",
+      "chemistry": "label_aware",
+      "reference_psms": 2642,
+      "baseline_current_GA_candidates": 2029,
+      "baseline_current_GA_paper_correct": 0,
+      "baseline_current_GA_top1_wrong": 6,
+      "baseline_current_GA_top1_correct": 0,
+      "remaining_top1_wrong": 429,
+      "remaining_top1_wrong_gapped": 106,
+      "wrong_gapped_top1_with_tied_correct_alternative": 16,
+      "adjacent_swap_subset": 11,
+      "posthoc_rank1_replay": {
+        "tails": {
+          "gained": 0,
+          "lost": 0,
+          "gained_keys": [],
+          "lost_keys": [],
+          "emptied_spectra": 0
+        },
+        "isotopes": {
+          "gained": 0,
+          "lost": 0,
+          "gained_keys": [],
+          "lost_keys": [],
+          "emptied_spectra": 0
+        },
+        "tails_and_isotopes": {
+          "gained": 0,
+          "lost": 0,
+          "gained_keys": [],
+          "lost_keys": [],
+          "emptied_spectra": 0
+        }
+      }
+    },
+    {
+      "dataset": "PXD004541_fr09",
+      "chemistry": "label_blind",
+      "reference_psms": 11072,
+      "baseline_current_GA_candidates": 15998,
+      "baseline_current_GA_paper_correct": 1,
+      "baseline_current_GA_top1_wrong": 135,
+      "baseline_current_GA_top1_correct": 0,
+      "remaining_top1_wrong": 1134,
+      "remaining_top1_wrong_gapped": 195,
+      "wrong_gapped_top1_with_tied_correct_alternative": 44,
+      "adjacent_swap_subset": 40,
+      "posthoc_rank1_replay": {
+        "tails": {
+          "gained": 0,
+          "lost": 0,
+          "gained_keys": [],
+          "lost_keys": [],
+          "emptied_spectra": 0
+        },
+        "isotopes": {
+          "gained": 0,
+          "lost": 0,
+          "gained_keys": [],
+          "lost_keys": [],
+          "emptied_spectra": 0
+        },
+        "tails_and_isotopes": {
+          "gained": 0,
+          "lost": 0,
+          "gained_keys": [],
+          "lost_keys": [],
+          "emptied_spectra": 0
+        }
+      }
+    },
+    {
+      "dataset": "PXD004541_fr09",
+      "chemistry": "label_aware",
+      "reference_psms": 11072,
+      "baseline_current_GA_candidates": 16095,
+      "baseline_current_GA_paper_correct": 1,
+      "baseline_current_GA_top1_wrong": 137,
+      "baseline_current_GA_top1_correct": 0,
+      "remaining_top1_wrong": 1144,
+      "remaining_top1_wrong_gapped": 204,
+      "wrong_gapped_top1_with_tied_correct_alternative": 47,
+      "adjacent_swap_subset": 43,
+      "posthoc_rank1_replay": {
+        "tails": {
+          "gained": 0,
+          "lost": 0,
+          "gained_keys": [],
+          "lost_keys": [],
+          "emptied_spectra": 0
+        },
+        "isotopes": {
+          "gained": 0,
+          "lost": 0,
+          "gained_keys": [],
+          "lost_keys": [],
+          "emptied_spectra": 0
+        },
+        "tails_and_isotopes": {
+          "gained": 0,
+          "lost": 0,
+          "gained_keys": [],
+          "lost_keys": [],
+          "emptied_spectra": 0
+        }
+      }
+    },
+    {
+      "dataset": "PXD003531",
+      "chemistry": "control",
+      "reference_psms": 8254,
+      "baseline_current_GA_candidates": 0,
+      "baseline_current_GA_paper_correct": 0,
+      "baseline_current_GA_top1_wrong": 0,
+      "baseline_current_GA_top1_correct": 0,
+      "remaining_top1_wrong": 2715,
+      "remaining_top1_wrong_gapped": 284,
+      "wrong_gapped_top1_with_tied_correct_alternative": 77,
+      "adjacent_swap_subset": 60,
+      "posthoc_rank1_replay": {
+        "tails": {
+          "gained": 0,
+          "lost": 0,
+          "gained_keys": [],
+          "lost_keys": [],
+          "emptied_spectra": 0
+        },
+        "isotopes": {
+          "gained": 0,
+          "lost": 0,
+          "gained_keys": [],
+          "lost_keys": [],
+          "emptied_spectra": 0
+        },
+        "tails_and_isotopes": {
+          "gained": 0,
+          "lost": 0,
+          "gained_keys": [],
+          "lost_keys": [],
+          "emptied_spectra": 0
+        }
+      }
+    }
+  ],
+  "paper_correct_GA_candidates": [
+    {
+      "dataset": "PXD004541_fr02",
+      "key": "scan=13349",
+      "rank": 14,
+      "tag": "AM[Oxidation]LM",
+      "charge": 1,
+      "nterm_mass": 158.1236,
+      "cterm_mass": 340.1895,
+      "evalue": 5.87941,
+      "gapped": 0,
+      "peptide": "[+229.16293]-EMLMAR",
+      "correct": true,
+      "strict_correct": false
+    },
+    {
+      "dataset": "PXD004541_fr02",
+      "key": "scan=11316",
+      "rank": 49,
+      "tag": "AEM[Oxidation]E",
+      "charge": 1,
+      "nterm_mass": 158.1236,
+      "cterm_mass": 581.3304,
+      "evalue": 1.81907,
+      "gapped": 0,
+      "peptide": "[+229.16293]-ELQEMEAR",
+      "correct": true,
+      "strict_correct": false
+    },
+    {
+      "dataset": "PXD004541_fr02",
+      "key": "scan=25622",
+      "rank": 49,
+      "tag": "AAM[Oxidation]M",
+      "charge": 1,
+      "nterm_mass": 158.1193,
+      "cterm_mass": 1150.5927,
+      "evalue": 1.97787,
+      "gapped": 0,
+      "peptide": "[+229.16293]-AGEVINQPMMMAAR",
+      "correct": true,
+      "strict_correct": false
+    },
+    {
+      "dataset": "PXD037999",
+      "key": "scan=30831",
+      "rank": 12,
+      "tag": "AM[Oxidation]SL",
+      "charge": 1,
+      "nterm_mass": 158.1225,
+      "cterm_mass": 445.2514,
+      "evalue": 0.0455214,
+      "gapped": 0,
+      "peptide": "[+229.16293]-YAISMAR",
+      "correct": true,
+      "strict_correct": false
+    },
+    {
+      "dataset": "PXD037999",
+      "key": "scan=35274",
+      "rank": 16,
+      "tag": "AM[Oxidation]EL",
+      "charge": 1,
+      "nterm_mass": 158.1234,
+      "cterm_mass": 539.3261,
+      "evalue": 0.0268692,
+      "gapped": 0,
+      "peptide": "[+229.16293]-ISQLEMAR",
+      "correct": true,
+      "strict_correct": false
+    },
+    {
+      "dataset": "PXD004541_fr09",
+      "key": "scan=11805",
+      "rank": 32,
+      "tag": "AM[Oxidation]VV",
+      "charge": 1,
+      "nterm_mass": 158.1189,
+      "cterm_mass": 626.3212,
+      "evalue": 3.94846,
+      "gapped": 0,
+      "peptide": "[+229.16293]-GSAEAVVMAR",
+      "correct": true,
+      "strict_correct": false
+    }
+  ],
+  "artifacts": [
+    "residual_audit.py",
+    "residual_baseline.json",
+    "residual_ga_v1.json",
+    "spectrum_support.json"
+  ]
+}

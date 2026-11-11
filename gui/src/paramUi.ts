@@ -252,7 +252,7 @@ export const PARAM_UI: Record<string, ParamUi> = {
   tmt_pseudo_filter: {
     hidden: EXPERIMENTAL_1_13,
     help: {
-      text: 'Experimental TMT6/10 filter for tags whose terminal G, A or bare K step is consistent with label fragmentation. Auto first checks a sample for both N-terminal and lysine TMT evidence. Off is the default; on is for known TMT6/10 input.'
+      text: 'Experimental TMT6/10 filter for tags whose terminal G or A step is consistent with label fragmentation. Terminal K alone never triggers rejection. Auto first checks a sample for both N-terminal and lysine TMT evidence and abstains on conflicting label evidence. Off is the default; on is for known TMT6/10 input.'
     }
   },
   tmt_reporter_filter: {

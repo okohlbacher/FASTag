@@ -1,0 +1,7 @@
+Modifications: Carbamidomethyl (C, fixed)
+'/scratch/kohlbach/fastag-labeldisc/heldout3/in/PXD017216/Replicate2_Phospho_11.mzML' has no index, or one that no longer matches the file (edited after it was written?); found its 47214 spectra by scanning it instead (0.06 s). Re-index it, e.g. with FileConverter, to skip the scan.
+Acquisition check: DDA (no repeating window scheme (periodicity 0.01 over 2038 repeat gaps, cycle 198, 1956 distinct precursor m/z, 0% uncharged, 4000 MS2 probed))
+Subsampling: tagging 1 of 47214 input spectra (seed 1)
+TMT pseudo-filter (auto): on; TMT6_10_two_site_evidence; probed=1024; eligible=657, threshold=20, veto_min=7, TMT_N=281, TMT_K=364, TMTpro_N=0, TMTpro_K=0; reporters=off
+1 MS2 spectra, 50 tags
+FASTag took 0.36 s (wall), 0.51 s (CPU), 0.20 s (system), 0.31 s (user); Peak Memory Usage: 38 MB.

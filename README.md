@@ -696,8 +696,10 @@ records it in versioned reports and exported mzML provenance.
 
 When active, the filter removes b/y tags starting with bare G/A at
 `n = TMT − G/A` or ending with bare G/A at `c = TMT − H2O − G/A`.
-Terminal K is retained, including when its TMT mass is allocated to the C flank;
-lysine signatures still contribute to labeling detection.
+Terminal K alone never triggers rejection, including when its TMT mass is
+allocated to the C flank; lysine signatures still contribute to labeling
+detection. A K-ending tag can still be rejected for an independent G/A
+pseudo-residue at its other end.
 Residue identity and flank mass must both agree; modified G/A are not treated
 as bare residues. Filtering occurs after scoring but before the tag-count cap,
 so surviving tags retain their scores and can fill the vacated slots.
@@ -709,18 +711,24 @@ endpoint matches a TMT6/10 reporter ion, under the same active TMT gate.
 `-stream` and mzPeak input; forced `on` supports them. These filters are
 experimental, not modification identification or labeling-efficiency estimates.
 
-The [first frozen TMT benchmark](bench/results/tmt-pseudo-2026-11-11/report.html),
-which included the former bare-K rejection rule, tested four TMT files and one
-label-free control. In the two independent TMT
-validation projects (10,912 reference PSMs), specifying TMT masses and enabling
-the automatic filter increased rank-1 accuracy from 81.562% to 82.093%, with
-recall@50 unchanged at 94.630%. Omitting TMT masses instead reduced the existing
-sequence-plus-flank recall from 95.115% to 94.529%: bare-K tags can carry the
-label mass in a terminal gap and still have a useful sequence. Automatic
-detection activates filtering; it does not change the residue alphabet.
-Keep the option experimental and off by default. Full paired counts, the
-supplementary residue-mass correctness metric, timing, and provenance accompany
-the report.
+The [G/A-only benchmark and reference audit](bench/results/tmt-ga-2026-11-11/report.html)
+tests four TMT files and one label-free control. In the two independent TMT
+projects (10,912 reference PSMs), automatic filtering increased rank-1 accuracy
+from 82.203% to 82.716% without configured TMT masses, and from 81.562% to
+82.093% with TMT masses. Recall@50 was unchanged at 95.115% and 94.630%,
+respectively, with no paired losses. The benefit remains in a supplementary
+subset corroborated by independent searches; the primary references were not
+changed. Automatic detection activates filtering; it does not configure the
+residue alphabet. The revised conflicting-label veto detects 10% TMTpro in
+two artificial spectrum mixtures, but misses a tested 5% mixture. It does not
+establish labeling purity. Keep the option experimental and off by default.
+Full paired counts, residue-mass consistency, runtime, detector challenges,
+raw-spectrum case figures, and provenance accompany the report.
+
+The [earlier benchmark](bench/results/tmt-pseudo-2026-11-11/report.html)
+documents the recall loss from the former bare-K rejection rule. Retaining
+terminal K removes that loss: those tags can allocate the label mass to a
+terminal gap while preserving useful sequence evidence.
 
 One TSV row per tag: `spectrum` (native ID; `index=<k>`, the 0-based block,
 for MGF), `tag` (sequence), `length`,

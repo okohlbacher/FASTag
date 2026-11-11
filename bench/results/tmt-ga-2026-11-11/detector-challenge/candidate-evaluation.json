@@ -1,0 +1,871 @@
+{
+  "rule": "Keep TMT positive gate unchanged; veto when BOTH ~304-Da site counts >= max(5,ceil(eligible/100)).",
+  "records": [
+    {
+      "source": "old_main",
+      "id": "PXD000001/label_aware",
+      "message": "TMT pseudo-filter (auto): on; TMT6_10_two_site_evidence; probed=1024; eligible=769, threshold=20, TMT_N=498, TMT_K=416, TMTpro_N=2, TMTpro_K=0; reporters=off",
+      "old_on": true,
+      "candidate_on": true,
+      "candidate_veto_limit": 8,
+      "counts": {
+        "eligible": 769,
+        "threshold": 20,
+        "TMT_N": 498,
+        "TMT_K": 416,
+        "TMTpro_N": 2,
+        "TMTpro_K": 0
+      }
+    },
+    {
+      "source": "old_main",
+      "id": "PXD000001/label_blind",
+      "message": "TMT pseudo-filter (auto): on; TMT6_10_two_site_evidence; probed=1024; eligible=790, threshold=20, TMT_N=508, TMT_K=414, TMTpro_N=2, TMTpro_K=0; reporters=off",
+      "old_on": true,
+      "candidate_on": true,
+      "candidate_veto_limit": 8,
+      "counts": {
+        "eligible": 790,
+        "threshold": 20,
+        "TMT_N": 508,
+        "TMT_K": 414,
+        "TMTpro_N": 2,
+        "TMTpro_K": 0
+      }
+    },
+    {
+      "source": "old_main",
+      "id": "PXD003531/control",
+      "message": "TMT pseudo-filter (auto): off; insufficient_two_site_TMT_evidence; probed=1024; eligible=969, threshold=20, TMT_N=0, TMT_K=0, TMTpro_N=0, TMTpro_K=0; reporters=off",
+      "old_on": false,
+      "candidate_on": false,
+      "candidate_veto_limit": 10,
+      "counts": {
+        "eligible": 969,
+        "threshold": 20,
+        "TMT_N": 0,
+        "TMT_K": 0,
+        "TMTpro_N": 0,
+        "TMTpro_K": 0
+      }
+    },
+    {
+      "source": "old_main",
+      "id": "PXD004541_fr02/label_aware",
+      "message": "TMT pseudo-filter (auto): on; TMT6_10_two_site_evidence; probed=1024; eligible=877, threshold=20, TMT_N=727, TMT_K=475, TMTpro_N=0, TMTpro_K=0; reporters=off",
+      "old_on": true,
+      "candidate_on": true,
+      "candidate_veto_limit": 9,
+      "counts": {
+        "eligible": 877,
+        "threshold": 20,
+        "TMT_N": 727,
+        "TMT_K": 475,
+        "TMTpro_N": 0,
+        "TMTpro_K": 0
+      }
+    },
+    {
+      "source": "old_main",
+      "id": "PXD004541_fr02/label_blind",
+      "message": "TMT pseudo-filter (auto): on; TMT6_10_two_site_evidence; probed=1024; eligible=880, threshold=20, TMT_N=726, TMT_K=474, TMTpro_N=0, TMTpro_K=0; reporters=off",
+      "old_on": true,
+      "candidate_on": true,
+      "candidate_veto_limit": 9,
+      "counts": {
+        "eligible": 880,
+        "threshold": 20,
+        "TMT_N": 726,
+        "TMT_K": 474,
+        "TMTpro_N": 0,
+        "TMTpro_K": 0
+      }
+    },
+    {
+      "source": "old_main",
+      "id": "PXD004541_fr09/label_aware",
+      "message": "TMT pseudo-filter (auto): on; TMT6_10_two_site_evidence; probed=1024; eligible=818, threshold=20, TMT_N=690, TMT_K=463, TMTpro_N=0, TMTpro_K=0; reporters=off",
+      "old_on": true,
+      "candidate_on": true,
+      "candidate_veto_limit": 9,
+      "counts": {
+        "eligible": 818,
+        "threshold": 20,
+        "TMT_N": 690,
+        "TMT_K": 463,
+        "TMTpro_N": 0,
+        "TMTpro_K": 0
+      }
+    },
+    {
+      "source": "old_main",
+      "id": "PXD004541_fr09/label_blind",
+      "message": "TMT pseudo-filter (auto): on; TMT6_10_two_site_evidence; probed=1024; eligible=822, threshold=20, TMT_N=698, TMT_K=462, TMTpro_N=0, TMTpro_K=0; reporters=off",
+      "old_on": true,
+      "candidate_on": true,
+      "candidate_veto_limit": 9,
+      "counts": {
+        "eligible": 822,
+        "threshold": 20,
+        "TMT_N": 698,
+        "TMT_K": 462,
+        "TMTpro_N": 0,
+        "TMTpro_K": 0
+      }
+    },
+    {
+      "source": "old_main",
+      "id": "PXD037999/label_aware",
+      "message": "TMT pseudo-filter (auto): on; TMT6_10_two_site_evidence; probed=1024; eligible=620, threshold=20, TMT_N=431, TMT_K=240, TMTpro_N=0, TMTpro_K=0; reporters=off",
+      "old_on": true,
+      "candidate_on": true,
+      "candidate_veto_limit": 7,
+      "counts": {
+        "eligible": 620,
+        "threshold": 20,
+        "TMT_N": 431,
+        "TMT_K": 240,
+        "TMTpro_N": 0,
+        "TMTpro_K": 0
+      }
+    },
+    {
+      "source": "old_main",
+      "id": "PXD037999/label_blind",
+      "message": "TMT pseudo-filter (auto): on; TMT6_10_two_site_evidence; probed=1024; eligible=639, threshold=20, TMT_N=426, TMT_K=239, TMTpro_N=0, TMTpro_K=0; reporters=off",
+      "old_on": true,
+      "candidate_on": true,
+      "candidate_veto_limit": 7,
+      "counts": {
+        "eligible": 639,
+        "threshold": 20,
+        "TMT_N": 426,
+        "TMT_K": 239,
+        "TMTpro_N": 0,
+        "TMTpro_K": 0
+      }
+    },
+    {
+      "source": "challenge",
+      "id": "PXD014616__Bh13CM_bjhb4_1/primary",
+      "message": "TMT pseudo-filter (auto): on; TMT6_10_two_site_evidence; probed=1024; eligible=961, threshold=20, TMT_N=749, TMT_K=502, TMTpro_N=2, TMTpro_K=1; reporters=off",
+      "old_on": true,
+      "candidate_on": true,
+      "candidate_veto_limit": 10,
+      "counts": {
+        "eligible": 961,
+        "threshold": 20,
+        "TMT_N": 749,
+        "TMT_K": 502,
+        "TMTpro_N": 2,
+        "TMTpro_K": 1
+      }
+    },
+    {
+      "source": "challenge",
+      "id": "PXD017216__Replicate2_Phospho_11/primary",
+      "message": "TMT pseudo-filter (auto): on; TMT6_10_two_site_evidence; probed=1024; eligible=657, threshold=20, TMT_N=281, TMT_K=364, TMTpro_N=0, TMTpro_K=0; reporters=off",
+      "old_on": true,
+      "candidate_on": true,
+      "candidate_veto_limit": 7,
+      "counts": {
+        "eligible": 657,
+        "threshold": 20,
+        "TMT_N": 281,
+        "TMT_K": 364,
+        "TMTpro_N": 0,
+        "TMTpro_K": 0
+      }
+    },
+    {
+      "source": "challenge",
+      "id": "PXD021560__Rono_TMT_6plex/primary",
+      "message": "TMT pseudo-filter (auto): on; TMT6_10_two_site_evidence; probed=1024; eligible=776, threshold=20, TMT_N=500, TMT_K=308, TMTpro_N=0, TMTpro_K=0; reporters=off",
+      "old_on": true,
+      "candidate_on": true,
+      "candidate_veto_limit": 8,
+      "counts": {
+        "eligible": 776,
+        "threshold": 20,
+        "TMT_N": 500,
+        "TMT_K": 308,
+        "TMTpro_N": 0,
+        "TMTpro_K": 0
+      }
+    },
+    {
+      "source": "challenge",
+      "id": "PXD007694__ch_g2_03/primary",
+      "message": "TMT pseudo-filter (auto): off; Da_tolerance; probed=0; eligible=0, threshold=20, TMT_N=0, TMT_K=0, TMTpro_N=0, TMTpro_K=0; reporters=off",
+      "old_on": false,
+      "candidate_on": false,
+      "candidate_veto_limit": 5,
+      "counts": {
+        "eligible": 0,
+        "threshold": 20,
+        "TMT_N": 0,
+        "TMT_K": 0,
+        "TMTpro_N": 0,
+        "TMTpro_K": 0
+      }
+    },
+    {
+      "source": "challenge",
+      "id": "PXD007694__ch_g2_03/ppm_stress",
+      "message": "TMT pseudo-filter (auto): off; insufficient_two_site_TMT_evidence; probed=1024; eligible=176, threshold=20, TMT_N=0, TMT_K=0, TMTpro_N=0, TMTpro_K=0; reporters=off",
+      "old_on": false,
+      "candidate_on": false,
+      "candidate_veto_limit": 5,
+      "counts": {
+        "eligible": 176,
+        "threshold": 20,
+        "TMT_N": 0,
+        "TMT_K": 0,
+        "TMTpro_N": 0,
+        "TMTpro_K": 0
+      }
+    },
+    {
+      "source": "challenge",
+      "id": "PXD014001__TMT09/primary",
+      "message": "TMT pseudo-filter (auto): off; Da_tolerance; probed=0; eligible=0, threshold=20, TMT_N=0, TMT_K=0, TMTpro_N=0, TMTpro_K=0; reporters=off",
+      "old_on": false,
+      "candidate_on": false,
+      "candidate_veto_limit": 5,
+      "counts": {
+        "eligible": 0,
+        "threshold": 20,
+        "TMT_N": 0,
+        "TMT_K": 0,
+        "TMTpro_N": 0,
+        "TMTpro_K": 0
+      }
+    },
+    {
+      "source": "challenge",
+      "id": "PXD014001__TMT09/ppm_stress",
+      "message": "TMT pseudo-filter (auto): off; few_eligible_spectra; probed=1024; eligible=10, threshold=20, TMT_N=0, TMT_K=0, TMTpro_N=0, TMTpro_K=0; reporters=off",
+      "old_on": false,
+      "candidate_on": false,
+      "candidate_veto_limit": 5,
+      "counts": {
+        "eligible": 10,
+        "threshold": 20,
+        "TMT_N": 0,
+        "TMT_K": 0,
+        "TMTpro_N": 0,
+        "TMTpro_K": 0
+      }
+    },
+    {
+      "source": "challenge",
+      "id": "PXD029808__vf_ratcsf_tmt48_20/primary",
+      "message": "TMT pseudo-filter (auto): on; TMT6_10_two_site_evidence; probed=1024; eligible=517, threshold=20, TMT_N=262, TMT_K=153, TMTpro_N=0, TMTpro_K=0; reporters=off",
+      "old_on": true,
+      "candidate_on": true,
+      "candidate_veto_limit": 6,
+      "counts": {
+        "eligible": 517,
+        "threshold": 20,
+        "TMT_N": 262,
+        "TMT_K": 153,
+        "TMTpro_N": 0,
+        "TMTpro_K": 0
+      }
+    },
+    {
+      "source": "challenge",
+      "id": "PXD015559__Fraction_11/primary",
+      "message": "TMT pseudo-filter (auto): off; Da_tolerance; probed=0; eligible=0, threshold=20, TMT_N=0, TMT_K=0, TMTpro_N=0, TMTpro_K=0; reporters=off",
+      "old_on": false,
+      "candidate_on": false,
+      "candidate_veto_limit": 5,
+      "counts": {
+        "eligible": 0,
+        "threshold": 20,
+        "TMT_N": 0,
+        "TMT_K": 0,
+        "TMTpro_N": 0,
+        "TMTpro_K": 0
+      }
+    },
+    {
+      "source": "challenge",
+      "id": "PXD015559__Fraction_11/ppm_stress",
+      "message": "TMT pseudo-filter (auto): off; insufficient_two_site_TMT_evidence; probed=1024; eligible=122, threshold=20, TMT_N=2, TMT_K=1, TMTpro_N=0, TMTpro_K=0; reporters=off",
+      "old_on": false,
+      "candidate_on": false,
+      "candidate_veto_limit": 5,
+      "counts": {
+        "eligible": 122,
+        "threshold": 20,
+        "TMT_N": 2,
+        "TMT_K": 1,
+        "TMTpro_N": 0,
+        "TMTpro_K": 0
+      }
+    },
+    {
+      "source": "challenge",
+      "id": "PXD081776__2023-05-05_Brieno-Enriquez_ProtTMT_SF_Plex1_F8/primary",
+      "message": "TMT pseudo-filter (auto): off; few_eligible_spectra; probed=1024; eligible=74, threshold=20, TMT_N=0, TMT_K=0, TMTpro_N=28, TMTpro_K=17; reporters=off",
+      "old_on": false,
+      "candidate_on": false,
+      "candidate_veto_limit": 5,
+      "counts": {
+        "eligible": 74,
+        "threshold": 20,
+        "TMT_N": 0,
+        "TMT_K": 0,
+        "TMTpro_N": 28,
+        "TMTpro_K": 17
+      }
+    },
+    {
+      "source": "challenge",
+      "id": "PXD055089__20210104_GM_NS_MBM_set1_HiRIEF_3-10_fr29/primary",
+      "message": "TMT pseudo-filter (auto): off; TMTpro_or_mixed_evidence; probed=1024; eligible=404, threshold=20, TMT_N=1, TMT_K=0, TMTpro_N=179, TMTpro_K=162; reporters=off",
+      "old_on": false,
+      "candidate_on": false,
+      "candidate_veto_limit": 5,
+      "counts": {
+        "eligible": 404,
+        "threshold": 20,
+        "TMT_N": 1,
+        "TMT_K": 0,
+        "TMTpro_N": 179,
+        "TMTpro_K": 162
+      }
+    },
+    {
+      "source": "challenge",
+      "id": "PXD039509__Batch6-Frxn13-TR1/primary",
+      "message": "TMT pseudo-filter (auto): off; TMTpro_or_mixed_evidence; probed=1024; eligible=545, threshold=20, TMT_N=2, TMT_K=0, TMTpro_N=292, TMTpro_K=204; reporters=off",
+      "old_on": false,
+      "candidate_on": false,
+      "candidate_veto_limit": 6,
+      "counts": {
+        "eligible": 545,
+        "threshold": 20,
+        "TMT_N": 2,
+        "TMT_K": 0,
+        "TMTpro_N": 292,
+        "TMTpro_K": 204
+      }
+    },
+    {
+      "source": "challenge",
+      "id": "PXD024282__ea04668/primary",
+      "message": "TMT pseudo-filter (auto): off; Da_tolerance; probed=0; eligible=0, threshold=20, TMT_N=0, TMT_K=0, TMTpro_N=0, TMTpro_K=0; reporters=off",
+      "old_on": false,
+      "candidate_on": false,
+      "candidate_veto_limit": 5,
+      "counts": {
+        "eligible": 0,
+        "threshold": 20,
+        "TMT_N": 0,
+        "TMT_K": 0,
+        "TMTpro_N": 0,
+        "TMTpro_K": 0
+      }
+    },
+    {
+      "source": "challenge",
+      "id": "PXD024282__ea04668/ppm_stress",
+      "message": "TMT pseudo-filter (auto): off; insufficient_two_site_TMT_evidence; probed=1024; eligible=103, threshold=20, TMT_N=0, TMT_K=0, TMTpro_N=1, TMTpro_K=1; reporters=off",
+      "old_on": false,
+      "candidate_on": false,
+      "candidate_veto_limit": 5,
+      "counts": {
+        "eligible": 103,
+        "threshold": 20,
+        "TMT_N": 0,
+        "TMT_K": 0,
+        "TMTpro_N": 1,
+        "TMTpro_K": 1
+      }
+    },
+    {
+      "source": "challenge",
+      "id": "PXD074090__1249415057B_Nina_TMT18_RTS_prot_F12/primary",
+      "message": "TMT pseudo-filter (auto): off; Da_tolerance; probed=0; eligible=0, threshold=20, TMT_N=0, TMT_K=0, TMTpro_N=0, TMTpro_K=0; reporters=off",
+      "old_on": false,
+      "candidate_on": false,
+      "candidate_veto_limit": 5,
+      "counts": {
+        "eligible": 0,
+        "threshold": 20,
+        "TMT_N": 0,
+        "TMT_K": 0,
+        "TMTpro_N": 0,
+        "TMTpro_K": 0
+      }
+    },
+    {
+      "source": "challenge",
+      "id": "PXD074090__1249415057B_Nina_TMT18_RTS_prot_F12/ppm_stress",
+      "message": "TMT pseudo-filter (auto): off; few_eligible_spectra; probed=1024; eligible=30, threshold=20, TMT_N=0, TMT_K=0, TMTpro_N=1, TMTpro_K=0; reporters=off",
+      "old_on": false,
+      "candidate_on": false,
+      "candidate_veto_limit": 5,
+      "counts": {
+        "eligible": 30,
+        "threshold": 20,
+        "TMT_N": 0,
+        "TMT_K": 0,
+        "TMTpro_N": 1,
+        "TMTpro_K": 0
+      }
+    },
+    {
+      "source": "challenge",
+      "id": "PXD038900__20200917LU1_Li_LP_JM_01_04/primary",
+      "message": "TMT pseudo-filter (auto): off; Da_tolerance; probed=0; eligible=0, threshold=20, TMT_N=0, TMT_K=0, TMTpro_N=0, TMTpro_K=0; reporters=off",
+      "old_on": false,
+      "candidate_on": false,
+      "candidate_veto_limit": 5,
+      "counts": {
+        "eligible": 0,
+        "threshold": 20,
+        "TMT_N": 0,
+        "TMT_K": 0,
+        "TMTpro_N": 0,
+        "TMTpro_K": 0
+      }
+    },
+    {
+      "source": "challenge",
+      "id": "PXD038900__20200917LU1_Li_LP_JM_01_04/ppm_stress",
+      "message": "TMT pseudo-filter (auto): off; few_eligible_spectra; probed=1024; eligible=27, threshold=20, TMT_N=0, TMT_K=0, TMTpro_N=0, TMTpro_K=0; reporters=off",
+      "old_on": false,
+      "candidate_on": false,
+      "candidate_veto_limit": 5,
+      "counts": {
+        "eligible": 27,
+        "threshold": 20,
+        "TMT_N": 0,
+        "TMT_K": 0,
+        "TMTpro_N": 0,
+        "TMTpro_K": 0
+      }
+    },
+    {
+      "source": "challenge",
+      "id": "PXD000869__20130503iTRAQ_c04/primary",
+      "message": "TMT pseudo-filter (auto): off; insufficient_two_site_TMT_evidence; probed=1024; eligible=515, threshold=20, TMT_N=0, TMT_K=0, TMTpro_N=0, TMTpro_K=0; reporters=off",
+      "old_on": false,
+      "candidate_on": false,
+      "candidate_veto_limit": 6,
+      "counts": {
+        "eligible": 515,
+        "threshold": 20,
+        "TMT_N": 0,
+        "TMT_K": 0,
+        "TMTpro_N": 0,
+        "TMTpro_K": 0
+      }
+    },
+    {
+      "source": "challenge",
+      "id": "PXD019532__Prog_pig_1-10_HpH_ii_3/primary",
+      "message": "TMT pseudo-filter (auto): off; TMTpro_or_mixed_evidence; probed=1024; eligible=289, threshold=20, TMT_N=1, TMT_K=0, TMTpro_N=151, TMTpro_K=72; reporters=off",
+      "old_on": false,
+      "candidate_on": false,
+      "candidate_veto_limit": 5,
+      "counts": {
+        "eligible": 289,
+        "threshold": 20,
+        "TMT_N": 1,
+        "TMT_K": 0,
+        "TMTpro_N": 151,
+        "TMTpro_K": 72
+      }
+    },
+    {
+      "source": "challenge",
+      "id": "PXD051941__F5/primary",
+      "message": "TMT pseudo-filter (auto): off; insufficient_two_site_TMT_evidence; probed=1024; eligible=164, threshold=20, TMT_N=0, TMT_K=0, TMTpro_N=0, TMTpro_K=0; reporters=off",
+      "old_on": false,
+      "candidate_on": false,
+      "candidate_veto_limit": 5,
+      "counts": {
+        "eligible": 164,
+        "threshold": 20,
+        "TMT_N": 0,
+        "TMT_K": 0,
+        "TMTpro_N": 0,
+        "TMTpro_K": 0
+      }
+    },
+    {
+      "source": "challenge",
+      "id": "PXD051521__20210304_PN_HipAkp_Rep2_Chymo_Phospho2/primary",
+      "message": "TMT pseudo-filter (auto): off; insufficient_two_site_TMT_evidence; probed=1024; eligible=471, threshold=20, TMT_N=2, TMT_K=0, TMTpro_N=0, TMTpro_K=0; reporters=off",
+      "old_on": false,
+      "candidate_on": false,
+      "candidate_veto_limit": 5,
+      "counts": {
+        "eligible": 471,
+        "threshold": 20,
+        "TMT_N": 2,
+        "TMT_K": 0,
+        "TMTpro_N": 0,
+        "TMTpro_K": 0
+      }
+    },
+    {
+      "source": "challenge",
+      "id": "PXD022181__180518FJKU27-C3K3-EL60/primary",
+      "message": "TMT pseudo-filter (auto): off; Da_tolerance; probed=0; eligible=0, threshold=20, TMT_N=0, TMT_K=0, TMTpro_N=0, TMTpro_K=0; reporters=off",
+      "old_on": false,
+      "candidate_on": false,
+      "candidate_veto_limit": 5,
+      "counts": {
+        "eligible": 0,
+        "threshold": 20,
+        "TMT_N": 0,
+        "TMT_K": 0,
+        "TMTpro_N": 0,
+        "TMTpro_K": 0
+      }
+    },
+    {
+      "source": "challenge",
+      "id": "PXD022181__180518FJKU27-C3K3-EL60/ppm_stress",
+      "message": "TMT pseudo-filter (auto): off; few_eligible_spectra; probed=1024; eligible=70, threshold=20, TMT_N=0, TMT_K=0, TMTpro_N=0, TMTpro_K=0; reporters=off",
+      "old_on": false,
+      "candidate_on": false,
+      "candidate_veto_limit": 5,
+      "counts": {
+        "eligible": 70,
+        "threshold": 20,
+        "TMT_N": 0,
+        "TMT_K": 0,
+        "TMTpro_N": 0,
+        "TMTpro_K": 0
+      }
+    },
+    {
+      "source": "challenge",
+      "id": "PXD014274__Tg3_R/primary",
+      "message": "TMT pseudo-filter (auto): off; insufficient_two_site_TMT_evidence; probed=1024; eligible=561, threshold=20, TMT_N=0, TMT_K=0, TMTpro_N=0, TMTpro_K=0; reporters=off",
+      "old_on": false,
+      "candidate_on": false,
+      "candidate_veto_limit": 6,
+      "counts": {
+        "eligible": 561,
+        "threshold": 20,
+        "TMT_N": 0,
+        "TMT_K": 0,
+        "TMTpro_N": 0,
+        "TMTpro_K": 0
+      }
+    },
+    {
+      "source": "challenge",
+      "id": "PXD006321__B_PH2_5/primary",
+      "message": "TMT pseudo-filter (auto): off; Da_tolerance; probed=0; eligible=0, threshold=20, TMT_N=0, TMT_K=0, TMTpro_N=0, TMTpro_K=0; reporters=off",
+      "old_on": false,
+      "candidate_on": false,
+      "candidate_veto_limit": 5,
+      "counts": {
+        "eligible": 0,
+        "threshold": 20,
+        "TMT_N": 0,
+        "TMT_K": 0,
+        "TMTpro_N": 0,
+        "TMTpro_K": 0
+      }
+    },
+    {
+      "source": "challenge",
+      "id": "PXD006321__B_PH2_5/ppm_stress",
+      "message": "TMT pseudo-filter (auto): off; few_eligible_spectra; probed=1024; eligible=30, threshold=20, TMT_N=0, TMT_K=0, TMTpro_N=0, TMTpro_K=0; reporters=off",
+      "old_on": false,
+      "candidate_on": false,
+      "candidate_veto_limit": 5,
+      "counts": {
+        "eligible": 30,
+        "threshold": 20,
+        "TMT_N": 0,
+        "TMT_K": 0,
+        "TMTpro_N": 0,
+        "TMTpro_K": 0
+      }
+    },
+    {
+      "source": "challenge",
+      "id": "PXD028364__QEP2_11215_YMER_396_1_160420/primary",
+      "message": "TMT pseudo-filter (auto): off; insufficient_two_site_TMT_evidence; probed=1024; eligible=205, threshold=20, TMT_N=0, TMT_K=0, TMTpro_N=0, TMTpro_K=0; reporters=off",
+      "old_on": false,
+      "candidate_on": false,
+      "candidate_veto_limit": 5,
+      "counts": {
+        "eligible": 205,
+        "threshold": 20,
+        "TMT_N": 0,
+        "TMT_K": 0,
+        "TMTpro_N": 0,
+        "TMTpro_K": 0
+      }
+    },
+    {
+      "source": "challenge",
+      "id": "PXD031534__ACE_0653-03_MK115/primary",
+      "message": "TMT pseudo-filter (auto): off; Da_tolerance; probed=0; eligible=0, threshold=20, TMT_N=0, TMT_K=0, TMTpro_N=0, TMTpro_K=0; reporters=off",
+      "old_on": false,
+      "candidate_on": false,
+      "candidate_veto_limit": 5,
+      "counts": {
+        "eligible": 0,
+        "threshold": 20,
+        "TMT_N": 0,
+        "TMT_K": 0,
+        "TMTpro_N": 0,
+        "TMTpro_K": 0
+      }
+    },
+    {
+      "source": "challenge",
+      "id": "PXD031534__ACE_0653-03_MK115/ppm_stress",
+      "message": "TMT pseudo-filter (auto): off; few_eligible_spectra; probed=1024; eligible=0, threshold=20, TMT_N=0, TMT_K=0, TMTpro_N=0, TMTpro_K=0; reporters=off",
+      "old_on": false,
+      "candidate_on": false,
+      "candidate_veto_limit": 5,
+      "counts": {
+        "eligible": 0,
+        "threshold": 20,
+        "TMT_N": 0,
+        "TMT_K": 0,
+        "TMTpro_N": 0,
+        "TMTpro_K": 0
+      }
+    },
+    {
+      "source": "development_mixtures",
+      "id": "pure_TMT",
+      "message": "TMT pseudo-filter (auto): on; TMT6_10_two_site_evidence; probed=1024; eligible=970, threshold=20, TMT_N=770, TMT_K=480, TMTpro_N=1, TMTpro_K=0; reporters=off",
+      "old_on": true,
+      "candidate_on": true,
+      "candidate_veto_limit": 10,
+      "counts": {
+        "eligible": 970,
+        "threshold": 20,
+        "TMT_N": 770,
+        "TMT_K": 480,
+        "TMTpro_N": 1,
+        "TMTpro_K": 0
+      }
+    },
+    {
+      "source": "development_mixtures",
+      "id": "pure_TMTpro",
+      "message": "TMT pseudo-filter (auto): off; TMTpro_or_mixed_evidence; probed=1024; eligible=406, threshold=20, TMT_N=0, TMT_K=0, TMTpro_N=181, TMTpro_K=154; reporters=off",
+      "old_on": false,
+      "candidate_on": false,
+      "candidate_veto_limit": 5,
+      "counts": {
+        "eligible": 406,
+        "threshold": 20,
+        "TMT_N": 0,
+        "TMT_K": 0,
+        "TMTpro_N": 181,
+        "TMTpro_K": 154
+      }
+    },
+    {
+      "source": "development_mixtures",
+      "id": "pure_LF",
+      "message": "TMT pseudo-filter (auto): off; insufficient_two_site_TMT_evidence; probed=1024; eligible=596, threshold=20, TMT_N=0, TMT_K=0, TMTpro_N=0, TMTpro_K=0; reporters=off",
+      "old_on": false,
+      "candidate_on": false,
+      "candidate_veto_limit": 6,
+      "counts": {
+        "eligible": 596,
+        "threshold": 20,
+        "TMT_N": 0,
+        "TMT_K": 0,
+        "TMTpro_N": 0,
+        "TMTpro_K": 0
+      }
+    },
+    {
+      "source": "development_mixtures",
+      "id": "TMT_pro_50_50",
+      "message": "TMT pseudo-filter (auto): off; TMTpro_or_mixed_evidence; probed=1024; eligible=701, threshold=20, TMT_N=393, TMT_K=242, TMTpro_N=100, TMTpro_K=74; reporters=off",
+      "old_on": false,
+      "candidate_on": false,
+      "candidate_veto_limit": 8,
+      "counts": {
+        "eligible": 701,
+        "threshold": 20,
+        "TMT_N": 393,
+        "TMT_K": 242,
+        "TMTpro_N": 100,
+        "TMTpro_K": 74
+      }
+    },
+    {
+      "source": "development_mixtures",
+      "id": "TMT_pro_90_10",
+      "message": "TMT pseudo-filter (auto): on; TMT6_10_two_site_evidence; probed=1024; eligible=919, threshold=20, TMT_N=689, TMT_K=431, TMTpro_N=29, TMTpro_K=16; reporters=off",
+      "old_on": true,
+      "candidate_on": false,
+      "candidate_veto_limit": 10,
+      "counts": {
+        "eligible": 919,
+        "threshold": 20,
+        "TMT_N": 689,
+        "TMT_K": 431,
+        "TMTpro_N": 29,
+        "TMTpro_K": 16
+      }
+    },
+    {
+      "source": "development_mixtures",
+      "id": "TMT_LF_50_50",
+      "message": "TMT pseudo-filter (auto): on; TMT6_10_two_site_evidence; probed=1024; eligible=776, threshold=20, TMT_N=393, TMT_K=242, TMTpro_N=1, TMTpro_K=0; reporters=off",
+      "old_on": true,
+      "candidate_on": true,
+      "candidate_veto_limit": 8,
+      "counts": {
+        "eligible": 776,
+        "threshold": 20,
+        "TMT_N": 393,
+        "TMT_K": 242,
+        "TMTpro_N": 1,
+        "TMTpro_K": 0
+      }
+    },
+    {
+      "source": "development_mixtures",
+      "id": "TMT_LF_10_90",
+      "message": "TMT pseudo-filter (auto): on; TMT6_10_two_site_evidence; probed=1024; eligible=636, threshold=20, TMT_N=80, TMT_K=54, TMTpro_N=0, TMTpro_K=0; reporters=off",
+      "old_on": true,
+      "candidate_on": true,
+      "candidate_veto_limit": 7,
+      "counts": {
+        "eligible": 636,
+        "threshold": 20,
+        "TMT_N": 80,
+        "TMT_K": 54,
+        "TMTpro_N": 0,
+        "TMTpro_K": 0
+      }
+    },
+    {
+      "source": "validation_mixtures",
+      "id": "pure_TMT",
+      "message": "TMT pseudo-filter (auto): on; TMT6_10_two_site_evidence; probed=1024; eligible=767, threshold=20, TMT_N=521, TMT_K=318, TMTpro_N=0, TMTpro_K=0; reporters=off",
+      "old_on": true,
+      "candidate_on": true,
+      "candidate_veto_limit": 8,
+      "counts": {
+        "eligible": 767,
+        "threshold": 20,
+        "TMT_N": 521,
+        "TMT_K": 318,
+        "TMTpro_N": 0,
+        "TMTpro_K": 0
+      }
+    },
+    {
+      "source": "validation_mixtures",
+      "id": "pure_TMTpro",
+      "message": "TMT pseudo-filter (auto): off; TMTpro_or_mixed_evidence; probed=1024; eligible=567, threshold=20, TMT_N=2, TMT_K=2, TMTpro_N=300, TMTpro_K=194; reporters=off",
+      "old_on": false,
+      "candidate_on": false,
+      "candidate_veto_limit": 6,
+      "counts": {
+        "eligible": 567,
+        "threshold": 20,
+        "TMT_N": 2,
+        "TMT_K": 2,
+        "TMTpro_N": 300,
+        "TMTpro_K": 194
+      }
+    },
+    {
+      "source": "validation_mixtures",
+      "id": "TMT_pro_50_50",
+      "message": "TMT pseudo-filter (auto): off; TMTpro_or_mixed_evidence; probed=1024; eligible=676, threshold=20, TMT_N=274, TMT_K=171, TMTpro_N=147, TMTpro_K=87; reporters=off",
+      "old_on": false,
+      "candidate_on": false,
+      "candidate_veto_limit": 7,
+      "counts": {
+        "eligible": 676,
+        "threshold": 20,
+        "TMT_N": 274,
+        "TMT_K": 171,
+        "TMTpro_N": 147,
+        "TMTpro_K": 87
+      }
+    },
+    {
+      "source": "validation_mixtures",
+      "id": "TMT_pro_90_10",
+      "message": "TMT pseudo-filter (auto): on; TMT6_10_two_site_evidence; probed=1024; eligible=747, threshold=20, TMT_N=475, TMT_K=283, TMTpro_N=31, TMTpro_K=11; reporters=off",
+      "old_on": true,
+      "candidate_on": false,
+      "candidate_veto_limit": 8,
+      "counts": {
+        "eligible": 747,
+        "threshold": 20,
+        "TMT_N": 475,
+        "TMT_K": 283,
+        "TMTpro_N": 31,
+        "TMTpro_K": 11
+      }
+    },
+    {
+      "source": "validation_mixtures",
+      "id": "TMT_pro_95_5",
+      "message": "TMT pseudo-filter (auto): on; TMT6_10_two_site_evidence; probed=1024; eligible=747, threshold=20, TMT_N=494, TMT_K=296, TMTpro_N=10, TMTpro_K=7; reporters=off",
+      "old_on": true,
+      "candidate_on": true,
+      "candidate_veto_limit": 8,
+      "counts": {
+        "eligible": 747,
+        "threshold": 20,
+        "TMT_N": 494,
+        "TMT_K": 296,
+        "TMTpro_N": 10,
+        "TMTpro_K": 7
+      }
+    }
+  ],
+  "changed": [
+    {
+      "source": "development_mixtures",
+      "id": "TMT_pro_90_10",
+      "message": "TMT pseudo-filter (auto): on; TMT6_10_two_site_evidence; probed=1024; eligible=919, threshold=20, TMT_N=689, TMT_K=431, TMTpro_N=29, TMTpro_K=16; reporters=off",
+      "old_on": true,
+      "candidate_on": false,
+      "candidate_veto_limit": 10,
+      "counts": {
+        "eligible": 919,
+        "threshold": 20,
+        "TMT_N": 689,
+        "TMT_K": 431,
+        "TMTpro_N": 29,
+        "TMTpro_K": 16
+      }
+    },
+    {
+      "source": "validation_mixtures",
+      "id": "TMT_pro_90_10",
+      "message": "TMT pseudo-filter (auto): on; TMT6_10_two_site_evidence; probed=1024; eligible=747, threshold=20, TMT_N=475, TMT_K=283, TMTpro_N=31, TMTpro_K=11; reporters=off",
+      "old_on": true,
+      "candidate_on": false,
+      "candidate_veto_limit": 8,
+      "counts": {
+        "eligible": 747,
+        "threshold": 20,
+        "TMT_N": 475,
+        "TMT_K": 283,
+        "TMTpro_N": 31,
+        "TMTpro_K": 11
+      }
+    }
+  ]
+}
