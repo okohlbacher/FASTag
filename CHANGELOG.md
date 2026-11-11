@@ -3,14 +3,15 @@
 ## Unreleased (after 1.13.1)
 
 - **`-search_engine msfragger`: the held-out-tested shortlist configuration
-  is the default.** With `-search_config_out`, `-shortlist_gapped` is on
-  (tryptic shortlist), `-shortlist_max_evalue` 10, `-recon_min_length` 6 and
+  is the default.** With `-search_config_out` and `-shortlist_protease
+  trypsin` (the default), `-shortlist_gapped` is on, `-shortlist_max_evalue` 10, `-recon_min_length` 6 and
   `-recon_missed_cleavages` 2, each unless given on the command line or in an
   INI (the mechanism of `-shortlist_specificity`). This is the configuration
   of the second held-out test (PASS, entry below); the first held-out test
   (FAIL, 1.13) stands for the 1.13 shortlist. The log and the shortlist
-  header name the values applied. Sage, Comet and runs without
-  `-search_config_out` are unchanged.
+  header name the values applied. On PXD003531 the export without the options
+  is byte-identical to the one with them. Sage, Comet, runs without
+  `-search_config_out` and other shortlist proteases keep 1.13.1's values.
 - **`-search_engine msfragger`: three more export values follow MSFragger's
   own closed-search defaults.** 2 missed cleavages (new
   `-search_missed_cleavages`, default -1 = by engine; with

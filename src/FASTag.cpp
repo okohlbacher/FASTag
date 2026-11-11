@@ -546,17 +546,13 @@ protected:
                        "Protein database for -recon_out. Default: the -fasta file", false);
     setValidFormats_("recon_fasta", ListUtils::create<std::string>("fasta"));
     registerIntOption_("recon_missed_cleavages", "<n>", 1,
-                       "Missed tryptic cleavages allowed in reconciliation windows (at most 10). With "
-                       "-search_engine msfragger and -search_config_out the default is 2 (the held-out-tested "
-                       "MSFragger configuration) unless given on the command line or in an INI", false);
+                       "Missed tryptic cleavages allowed in reconciliation windows (at most 10)", false);
     setMinInt_("recon_missed_cleavages", 0);
     setMaxInt_("recon_missed_cleavages", 10);
     registerIntOption_("recon_min_length", "<n>", 0,
                        "Shortest tag worth reconciling; 0 derives it from database size "
                        "(the length where chance matches fall below 5%). Overridable "
-                       "because the floor is a noise gate, not a correctness rule. With -search_engine msfragger "
-                       "and -search_config_out the default is 6 (the held-out-tested MSFragger configuration) "
-                       "unless given on the command line or in an INI", false);
+                       "because the floor is a noise gate, not a correctness rule", false);
     setMinInt_("recon_min_length", 0);
     registerFlag_("recon_localize",
                   "Localize each -recon_out mass gap to one residue of its region: the "
@@ -978,8 +974,9 @@ protected:
     setValidFormats_("shortlist_background", ListUtils::create<std::string>("fasta"));
     registerDoubleOption_("shortlist_max_evalue", "<f>", 0.1,
                           "E-value a tag needs for its placements to count for the shortlist. With -search_engine "
-                          "msfragger and -search_config_out the default is 10 (the held-out-tested MSFragger "
-                          "configuration) unless given on the command line or in an INI", false, true);
+                          "msfragger, -search_config_out and -shortlist_protease trypsin the default is 10 (the "
+                          "held-out-tested MSFragger configuration) unless given on the command line or in an INI",
+                          false, true);
     setMinFloat_("shortlist_max_evalue", 0.0);
     registerIntOption_("shortlist_min_spectra", "<n>", 2,
                        "Spectra a protein needs to be kept", false, true);
@@ -987,8 +984,8 @@ protected:
     registerFlag_("shortlist_gapped",
                   "Let placements with one mismatched flank (a mass gap) count for the shortlist; "
                   "by default only exact ones count (a gap equal to a fixed terminal label is exact). On by default "
-                  "with -search_engine msfragger and -search_config_out (the held-out-tested MSFragger "
-                  "configuration; tryptic shortlist only)");
+                  "with -search_engine msfragger, -search_config_out and -shortlist_protease trypsin (the "
+                  "held-out-tested MSFragger configuration)");
     registerStringOption_("shortlist_parsimony", "<mode>", "none",
                           "'none' keeps every protein above -shortlist_min_spectra; 'subset' drops a "
                           "protein whose spectra a higher-ranked kept one has; 'greedy' keeps a greedy "
@@ -1026,9 +1023,10 @@ protected:
                         "MSFragger fragger.params", false);
     registerStringOption_("search_engine", "<engine>", "sage",
                           "Engine of -search_config_out; msfragger (MSFragger 4.4.1, experimental) needs decoys in "
-                          "the database: -fasta_out then appends reversed ones. With msfragger -shortlist_gapped "
-                          "is on, -shortlist_max_evalue 10, -recon_min_length 6 and -recon_missed_cleavages 2 "
-                          "unless given: the configuration that passed its second held-out test (kept share "
+                          "the database: -fasta_out then appends reversed ones. With msfragger and -shortlist_protease "
+                          "trypsin, -shortlist_gapped is on, -shortlist_max_evalue 10, -recon_min_length 6 and "
+                          "-recon_missed_cleavages 2, each unless given on the command line or in an INI: the "
+                          "configuration that passed its second held-out test (kept share "
                           "0.83-0.98 of a full MSFragger search, 9 runs; the first test, with the 1.13 shortlist, "
                           "FAILED at 0.49-0.73)", false);
     setValidStrings_("search_engine", ListUtils::create<std::string>("sage,comet,msfragger"));
@@ -2288,18 +2286,20 @@ protected:
     }
     // post-1.13.1: with -search_engine msfragger (and -search_config_out) the
     // shortlist options take the configuration of the second held-out test
-    // (PREREG-msfragger2.md, PASS) unless the user set them.
+    // (PREREG-msfragger2.md, PASS) unless the user set them. Tested with the
+    // tryptic shortlist only, so a -shortlist_protease other than trypsin keeps
+    // 1.13.1's values. The help of the two -recon_* options is frozen (1.11
+    // interface, baseline_identity_test); -search_engine's help says it.
     std::string msf_defaults;  // what was applied, for the log and the shortlist header
-    const bool msf_shortlist = !search_config_out.empty() && search_engine == "msfragger";
+    const bool msf_shortlist = !search_config_out.empty() && search_engine == "msfragger" &&
+                               getStringOption_("shortlist_protease") == "trypsin";
     const auto msfDefault = [&](const char* name, const std::string& shown) {
       const bool apply = msf_shortlist && !optionGiven_(name);
       if (apply) msf_defaults += std::string(msf_defaults.empty() ? "" : ", ") + "-" + name + " " + shown;
       return apply;
     };
     FASTag::Shortlist::Settings sl_settings;
-    // Gapped placements are tryptic only (see the warning below).
-    sl_settings.gapped = (getStringOption_("shortlist_protease") == "trypsin" && msfDefault("shortlist_gapped", "on")) ||
-                         getFlag_("shortlist_gapped");
+    sl_settings.gapped = msfDefault("shortlist_gapped", "on") || getFlag_("shortlist_gapped");
     sl_settings.max_evalue = msfDefault("shortlist_max_evalue", "10") ? 10.0 : getDoubleOption_("shortlist_max_evalue");
     const int recon_min_length = msfDefault("recon_min_length", "6") ? 6 : getIntOption_("recon_min_length");
     const int recon_mc = msfDefault("recon_missed_cleavages", "2") ? 2 : getIntOption_("recon_missed_cleavages");

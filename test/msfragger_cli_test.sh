@@ -28,7 +28,8 @@
 #      the shortlist and exports equal a run that gives the held-out-tested
 #      values -shortlist_gapped -shortlist_max_evalue 10 -recon_min_length 6
 #      -recon_missed_cleavages 2, log and shortlist header say so; Sage keeps
-#      1.13.1's values; a value on the command line or in an INI wins.
+#      1.13.1's values, as does -shortlist_protease auto; a value on the command
+#      line or in an INI wins.
 # Cases a, b and f give the four options explicitly (1.13.1 values, gapped on:
 # a flag cannot be given off), so Sage and MSFragger runs share one shortlist.
 # Exits 77 (ctest SKIP) when the binary cannot start.
@@ -271,5 +272,9 @@ grep -q 'name="recon_min_length" value="7"' "$TMP/i5/y.ini" || fail "i: INI edit
 runh "$TMP/i6" "${I[@]}" -search_engine msfragger -ini "$TMP/i5/y.ini"
 grep -q 'min tag length 7 (set)' "$TMP/i6/run.log" || fail "i: the INI -recon_min_length 7 lost"
 grep -q -- '-recon_min_length' <(grep '^# msfragger defaults' "$TMP/i6/sl.tsv") && fail "i: header lists the INI value as a default"
+# a shortlist protease other than trypsin keeps 1.13.1's values (tested held-out with trypsin only)
+runh "$TMP/i7" "${I[@]}" -search_engine msfragger -shortlist_protease auto
+grep -q -i 'msfragger defaults' "$TMP/i7/sl.tsv" "$TMP/i7/run.log" && fail "i: msfragger defaults with -shortlist_protease auto"
+grep -q '^# settings: max_evalue 0.1, min_spectra 2, gapped no,' "$TMP/i7/sl.tsv" || fail "i: -shortlist_protease auto settings changed"
 echo "i: msfragger shortlist defaults, explicit values and INI win"
 echo "msfragger_cli_test: all checks passed"

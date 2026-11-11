@@ -350,7 +350,8 @@ an isotope or modification mass. `-shortlist_gapped` and a lower
 `-recon_min_length` admit these: 95 to 98% (mean 97%) with the recipe of the
 last row, at 2.7 times as many proteins (3,594 of 20,414 on average) and a
 search time 9% longer. After the second held-out test (below) they are the
-defaults under `-search_engine msfragger` with `-search_config_out`
+defaults under `-search_engine msfragger` with `-search_config_out` and the
+tryptic shortlist
 (`-recon_min_length` and `-recon_missed_cleavages` then also change
 `-recon_out`); Sage and Comet keep 1.13.1's values. MSFragger's mass calibration (`calibrate_mass 2`) and `stricttrypsin`
 added nothing on the two first runs and are not exported. All of this was
@@ -375,16 +376,19 @@ for this result. The first held-out test (FAIL, above) stays as it was: it
 tested the 1.13 export with the default shortlist.
 
 **MSFragger shortlist defaults.** Since this test, `-search_engine msfragger`
-with `-search_config_out` runs the tested configuration: `-shortlist_gapped`
-on (tryptic shortlist only; `-shortlist_gapped` is a flag and cannot be
+with `-search_config_out` and `-shortlist_protease trypsin` (the default)
+runs the tested configuration: `-shortlist_gapped` on (a flag: it cannot be
 switched off there), `-shortlist_max_evalue 10`, `-recon_min_length 6`,
 `-recon_missed_cleavages 2`. Each applies unless the option is given on the
 command line, or set in an INI to a value other than its 1.13.1 default (an
 INI value equal to that default cannot be told from it, as for
 `-shortlist_specificity`). The log line `MSFragger defaults (...)` and the
 shortlist header line `# msfragger defaults (...)` name the values applied;
-the reconciler's line says `min tag length 6 (msfragger default)`. Sage,
-Comet and a run without `-search_config_out` are unchanged.
+the reconciler's line says `min tag length 6 (msfragger default)`. On the
+development run PXD003531 the export without these options is
+byte-identical to the one with them. Sage, Comet, a run without
+`-search_config_out` and a `-shortlist_protease` other than trypsin (not
+tested held-out with these values) keep 1.13.1's values.
 
 `-search_engine msfragger` writes a complete `fragger.params` for MSFragger
 4.4.1 (`java -jar MSFragger-4.4.1.jar fragger.params <spectra>`), keys in the
