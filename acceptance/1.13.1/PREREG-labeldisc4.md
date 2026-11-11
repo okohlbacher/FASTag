@@ -156,3 +156,32 @@ No tuning, no second scoring.
 Tables of test 3 (confusion, per stratum, Clopper-Pearson bounds for S1 and F, sign test for A2), the same for the
 reference binary m0 and for arm 2, the paired table arm 1 against m0 per family, and one line of cause per wrong call
 (looked up after scoring; changes no score).
+
+## Addendum: staging and truth audit (freeze 2, before any FASTag or Param-Medic run on a selected file)
+
+Staging: 157 of 160 rank-0 files staged and converted. Deviation of the harness: `stage_retry.sh` retried the one failed
+rank-0 download (PXD012809, file name with `^`) 583 times instead of moving to the backup; the backups were then staged as
+the rule above says (`manifests/stage/backup_r1.list`, `backup_r2b.list`, `stage_b1.tsv`, `stage_b2.tsv`).
+PXD012809: rank 0 download failed, rank 1 staged (sha1 ok). PXD059735 (label-free) and PXD047416 (TMTpro): rank 0, 1 and
+2 all failed in conversion (ThermoRawFileParser: "RAW file is likely corrupted"; for PXD059735 rank 1 also a second
+download that differed); both projects are dropped and not replaced.
+
+Truth audit (`scripts/audit_heldout4.py`, `manifests/audited.tsv`, sha256
+50f1344154832888add34fc6d03e9bf1adbd46028a24bed14fd984d9b2254796): 140 of 160 projects included.
+
+| class | included | excluded (reason) |
+|---|---|---|
+| label-free | 42 (25 ion-trap MS2) | 1 conversion failed, 1 no MS2 spectra |
+| SILAC | 22 | - |
+| dimethyl | 28 | - |
+| TMT | 17 | 3 reporter scan disagrees |
+| TMTpro | 20 (8 MS3) | 3 reporter scan disagrees, 1 conversion failed |
+| iTRAQ4 | 6 | 3 reporter scan disagrees, 1 not assessable |
+| iTRAQ8 | 9 | 2 reporter scan disagrees, 1 not assessable |
+
+Kept and flagged (no high-resolution group or spectra above m/z 112, cannot be checked for reporters): label-free 37,
+SILAC 15, dimethyl 24. All minimum numbers of the criteria are reached by the included runs (label-free 42 / 25 ion-trap,
+labelled 102, each R family >= 15, TMTpro with MS3 8).
+
+The commands of the PREREG are run by `scripts/run_all.sh` (sha256 0be8a2ee9cc2c5d0965b00a1cc107cd62492fcb30567260883d948d9103064b9;
+five FASTag jobs of 8 threads, Param-Medic with 8 jobs, arms b2, f2, m0 in turn, then scoring and verdict once).
