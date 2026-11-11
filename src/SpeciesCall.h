@@ -100,8 +100,9 @@ namespace FASTag::SpeciesCall
   struct GenusStat
   {
     uint32_t taxid = 0;
-    uint64_t observed = 0;
-    uint64_t decoy_spectra = 0;
+    uint64_t observed = 0;         ///< explain: distinct tags in spectra not explained at the decision
+    uint64_t tags = 0;             ///< explain only: distinct tags of the genus in the run
+    uint64_t decoy_spectra = 0;    ///< explain: decoy tags (same count), summed over the replicates
     double random_expected = 0.0;  ///< r_g * N_trials
     double spill = 0.0;            ///< homology part
     double expected = 0.0;         ///< lambda_g = spill + random_expected
@@ -137,4 +138,49 @@ namespace FASTag::SpeciesCall
   std::vector<GenusStat> callGenera(const std::vector<GenusInput>& genera,
                                     const std::vector<double>& C,
                                     const RunInput& run, const Params& params);
+
+  // ---- -species_call explain (1.13) ----------------------------------------
+  //
+  // The decoy call above counts spectra and lets a called genus explain a
+  // weaker one through an expected spill. The explain call lets it explain
+  // SPECTRA instead: genera are called one at a time, strongest first, and a
+  // spectrum that has a contributing tag of a called genus no longer counts
+  // for any other genus. The unit is the DISTINCT TAG (a peptide seen in 500
+  // spectra is one piece of evidence, as its decoy is one lookup).
+  //
+  // Per step, for every genus g not yet called: o_g = distinct tags of g in
+  // unexplained spectra; K_gj = the same count on decoy replicate j (decoys of
+  // the tags of unexplained spectra). Null: negative binomial with mean
+  // lambda_g = (sum_j K_gj + 0.5) / R and variance f * lambda_g,
+  // f = phi * (1 + 1/R): 1/R for the estimated mean (predictive), phi =
+  // max(1, sum_g var_j(K_gj) / sum_g mean_j(K_gj)) for the spread between
+  // replicates beyond Poisson, pooled over the genera not yet called. The
+  // genus with the smallest p (ties: more tags, then smaller taxid) is called
+  // present when p * m <= alpha, m = genera not yet called with o >= n_min
+  // (step-down Bonferroni); then its spectra become explained. The first
+  // failure ends the loop. alpha and n_min come from Params; tau and pi0 are
+  // not used. Run-level no_call as in callGenera().
+
+  /// One contributing tag of a spectrum for one report-rank group.
+  struct TagHit
+  {
+    uint32_t spectrum = 0;
+    uint32_t tag = 0;    ///< id of the (target) tag sequence; a decoy carries its target's id
+    uint32_t group = 0;  ///< index into group_taxid
+  };
+
+  /// P(X >= o) for X negative binomial with mean @p mean and variance
+  /// @p variance_factor * mean; Poisson when variance_factor <= 1. 1 for o == 0.
+  double negBinomialUpperTail(uint64_t o, double mean, double variance_factor);
+
+  /// The explain call for every group, in the order of @p group_taxid.
+  /// GenusStat: observed = o_g at the genus's decision (its step when called,
+  /// the stop otherwise), tags = o_g before anything was explained,
+  /// decoy_spectra = sum_j K_gj, expected = lambda_g, qvalue = min(1, p * m),
+  /// reason pass | not_significant | explained (tags >= n_min > observed);
+  /// share is left 0 for the caller, lod is not applicable.
+  std::vector<GenusStat> callExplain(const std::vector<uint32_t>& group_taxid,
+                                     const std::vector<TagHit>& target,
+                                     const std::vector<std::vector<TagHit>>& decoys,
+                                     const RunInput& run, const Params& params);
 }

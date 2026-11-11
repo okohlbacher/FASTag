@@ -870,12 +870,15 @@ namespace FASTag::Probe
     namespace IS = FASTag::IonSeries;
     Param p = opt.param;
     const IS::Activation act = IS::activationClass(spec);
-    const bool run_column = opt.ion_mode == IS::Mode::Cz
-                            || (opt.ion_mode == IS::Mode::Auto
-                                && IS::autoReadsActivation(kind == Kind::MzPeak, kind == Kind::Mgf)
-                                && act == IS::Activation::Electron);
-    if (spec.getMSLevel() == 2 && IS::seriesInRun(opt.ion_mode, act, run_column) == IS::Series::CZ)
-      p.ion_pair = IS::ionPair(IS::Series::CZ);
+    // 1.13 item 11: a/x under ax, and under auto with -ion_series_photo ax
+    // for a photo-activated mzML spectrum.
+    const bool reads_act = IS::autoReadsActivation(kind == Kind::MzPeak, kind == Kind::Mgf);
+    const bool photo_ax = opt.ion_mode == IS::Mode::Auto && opt.photo_ax && reads_act && IS::photoActivated(spec);
+    const bool run_column = opt.ion_mode == IS::Mode::Cz || opt.ion_mode == IS::Mode::Ax
+                            || (opt.ion_mode == IS::Mode::Auto && reads_act
+                                && (act == IS::Activation::Electron || photo_ax));
+    const IS::Series sr = IS::seriesInRun(opt.ion_mode, act, run_column, photo_ax);
+    if (spec.getMSLevel() == 2 && sr != IS::Series::BY) p.ion_pair = IS::ionPair(sr);
     out.jsonl = spectrumRecord(spec, index, pick_result > 0, p);
     out.jsonl += JsonObject("end").line();
     return out;

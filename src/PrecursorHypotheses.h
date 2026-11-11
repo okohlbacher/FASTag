@@ -47,6 +47,21 @@
 // hypotheses are then merged by corrected E-value and capped together
 // (mergeHypotheses). E-values across hypotheses are a heuristic ranking.
 //
+// Header-charge check (1.13, -check_header_charge; off by default). A
+// header-charged precursor is checked twice (checkHeaderCharge). First the
+// isotope spacing of the precursor in the preceding MS1 scan (ms1Charge):
+// a spacing of 1/z at the precursor m/z calls z; a call equal to the header
+// agrees, any other disagrees. Without an MS1 call the infer call decides,
+// over -charge_min .. -charge_max plus the header charge, with complement
+// pairs counted charge-aware (1+/1+ and, from 3+, 1+/(z-1)+): the header
+// disagrees when the call differs from it and its complement pairs (both
+// charges' of an ambiguous call) beat the header's by at least the check
+// margin, or the 1+ test calls 1. Peaks above the header's fragment ceiling
+// are reported but are no ground to disagree. warn counts and reports the
+// verdicts and tags as before; both tags a disagreeing spectrum under the
+// header charge and the check's charge (charge_src `header` and
+// `check_call`), the header charge staying the selected one.
+//
 // At the defaults (assume2, isotope 0) there is exactly one hypothesis, the
 // 1.11 one (header charge or <= 0, the given m/z, H = 1), and nothing here
 // runs in the tool: isDefault() gates it.
@@ -87,8 +102,9 @@ namespace FASTag::Hyp
     Ambiguous = 3,   ///< one of the two charges of an ambiguous call
     Assumed = 4,     ///< 2 without evidence (assume2, or infer without a call)
     Enumerated = 5,  ///< one of charge_min .. charge_max under enumerate
+    CheckCall = 6,   ///< 1.13: the check's charge of a disagreeing header (tagged beside the header charge)
   };
-  inline constexpr std::size_t kChargeSources = 6;
+  inline constexpr std::size_t kChargeSources = 7;
 
   inline const char* sourceName(ChargeSource s)
   {
@@ -100,6 +116,7 @@ namespace FASTag::Hyp
       case ChargeSource::Ambiguous: return "ambiguous";
       case ChargeSource::Assumed: return "assumed";
       case ChargeSource::Enumerated: return "enumerated";
+      case ChargeSource::CheckCall: return "check_call";
     }
     return "assumed";
   }
@@ -112,6 +129,33 @@ namespace FASTag::Hyp
     if (s == "infer") { out = ChargeMode::Infer; return true; }
     return false;
   }
+
+  /// -check_header_charge (1.13).
+  enum class HeaderCheck
+  {
+    Off,       ///< no check; the default
+    Warn,      ///< check and report, tag at the header charge
+    Both,      ///< check and report, tag a disagreeing spectrum at the header charge and at the check's charge
+  };
+
+  inline bool parseHeaderCheck(std::string_view s, HeaderCheck& out)
+  {
+    if (s == "off") { out = HeaderCheck::Off; return true; }
+    if (s == "warn") { out = HeaderCheck::Warn; return true; }
+    if (s == "both") { out = HeaderCheck::Both; return true; }
+    return false;
+  }
+  inline constexpr const char* kHeaderCheckDefault = "off";
+  inline constexpr const char* kHeaderCheckValues = "off,warn,both";
+  /// -check_header_margin default: the complement-pair excess by which the
+  /// call must beat the header charge's own. Chosen on DEV (PXD003531,
+  /// PXD001819 against a Sage charge truth; output/backlog-1.13/hdrcharge):
+  /// at 2 a third of the disagreements on real headers were false.
+  inline constexpr double kHeaderMarginDefault = 6.0;
+  // ms1Charge() constants (chosen on DEV; output/backlog-1.13/hdrcharge).
+  inline constexpr double kMs1TolPpm = 10.0;      ///< m/z window of the precursor and its isotope peaks
+  inline constexpr double kMs1FirstMin = 0.15;    ///< +1/z peak, as a share of the precursor peak
+  inline constexpr double kMs1SupportMin = 0.05;  ///< -1/z or +2/z peak, as a share of the precursor peak
 
   // Registered defaults and limits of the #6 options.
   inline constexpr const char* kModeDefault = "assume2";
@@ -147,11 +191,16 @@ namespace FASTag::Hyp
     int charge_max = kChargeMaxDefault;
     double infer_margin = kInferMarginDefault;
     std::vector<int> isotope_errors{0};
+    HeaderCheck header_check = HeaderCheck::Off;  ///< 1.13 -check_header_charge
+    double header_margin = kHeaderMarginDefault;  ///< 1.13 -check_header_margin
 
-    /// True at the 1.11 behaviour: assume2 and the isotope list {0}.
+    /// True at the 1.11 behaviour: assume2, the isotope list {0} and no
+    /// second hypothesis from the header check (-check_header_charge warn
+    /// tags as 1.11 does).
     bool isDefault() const
     {
-      return mode == ChargeMode::Assume2 && isotope_errors.size() == 1 && isotope_errors[0] == 0;
+      return mode == ChargeMode::Assume2 && isotope_errors.size() == 1 && isotope_errors[0] == 0
+          && header_check != HeaderCheck::Both;
     }
   };
 
@@ -170,9 +219,21 @@ namespace FASTag::Hyp
     bool selected = false;
   };
 
+  /// What an infer call rests on (1.13; ChargeCall::basis).
+  enum class CallBasis : std::uint8_t
+  {
+    None = 0,        ///< no evidence (assumed)
+    OnePlus = 1,     ///< the 1+ test
+    Range = 2,       ///< range evidence alone (no complement excess above 0)
+    Complement = 3,  ///< the complement-pair excess
+    Ms1Isotope = 4,  ///< header check only: the precursor's isotope spacing in the preceding MS1 scan
+  };
+  inline constexpr std::size_t kCallBases = 5;
+
   /// What inferCharge() saw.
   struct ChargeCall
   {
+    CallBasis basis = CallBasis::None;  ///< what the call rests on
     int charge = 2;               ///< the call, one of the candidates (2, else the lowest, when assumed)
     ChargeSource src = ChargeSource::Assumed;  ///< Inferred, Ambiguous or Assumed
     int runner_up = 0;            ///< the second charge of an ambiguous call, else 0
@@ -185,7 +246,7 @@ namespace FASTag::Hyp
   /// Complement-pair excess of @p spec for a precursor of neutral mass @p M:
   /// pairs of the strongest kInferTopPeaks peaks (intensity desc, m/z desc)
   /// whose m/z sum to M + 2p (plus the series' pair delta, ComplementSpec::
-  /// pair_deltas: c/z-dot M + H + 2p) within ComplementSpec::tol, minus the mean count
+  /// pair_deltas: c/z-dot M + H + 2p; a/x summed over M - H + 2p and M + 2p) within ComplementSpec::tol, minus the mean count
   /// at the kOffTargetShifts sums. Independent of the input peak order.
   double complementExcess(const OpenMS::MSSpectrum& spec, double M, const ComplementSpec& cs);
 
@@ -201,13 +262,132 @@ namespace FASTag::Hyp
   ChargeCall inferCharge(const OpenMS::MSSpectrum& spec, double prec_mz, const std::vector<int>& charges,
                          const HypParam& hp, const ComplementSpec& cs);
 
+  /// 1.13 -check_header_charge: the verdict on one header charge.
+  enum class HeaderVerdict : std::uint8_t
+  {
+    Agree = 0,      ///< the call is the header charge (one of two, when ambiguous)
+    Disagree = 1,   ///< evidence against the header: see checkHeaderCharge()
+    Ambiguous = 2,  ///< two close charges, neither the header, no evidence against it
+    NoCall = 3,     ///< no evidence either way
+  };
+  inline constexpr std::size_t kHeaderVerdicts = 4;
+  inline const char* verdictName(HeaderVerdict v)
+  {
+    switch (v)
+    {
+      case HeaderVerdict::Agree: return "agree";
+      case HeaderVerdict::Disagree: return "disagree";
+      case HeaderVerdict::Ambiguous: return "ambiguous";
+      case HeaderVerdict::NoCall: return "nocall";
+    }
+    return "nocall";
+  }
+  inline const char* basisName(CallBasis b)
+  {
+    switch (b)
+    {
+      case CallBasis::None: return "none";
+      case CallBasis::OnePlus: return "one_plus";
+      case CallBasis::Range: return "range";
+      case CallBasis::Complement: return "complement";
+      case CallBasis::Ms1Isotope: return "ms1_isotope";
+    }
+    return "none";
+  }
+
+  struct HeaderCheckResult
+  {
+    int header = 0;                  ///< the header charge (> 0)
+    HeaderVerdict verdict = HeaderVerdict::NoCall;
+    ChargeCall call;                 ///< the infer call over the check's candidates (complement pairs counted charge-aware)
+    bool header_ruled_out = false;   ///< peaks above the header's fragment ceiling (reported; no ground to disagree)
+    int header_peaks_above = 0;      ///< strongest peaks above the header's fragment ceiling (b/y)
+    double header_excess = 0;        ///< complement excess at the header charge (also when ruled out or above the cap; 0 under the 1+ test)
+    double call_excess = 0;          ///< complement excess at the call (0 without complement basis)
+    int ms1_charge = 0;              ///< ms1Charge() of the preceding MS1 scan (0 = no call or no scan)
+    int ms1_peaks = 0;               ///< isotope positions (-1/z, +1/z, +2/z) found for ms1_charge
+    CallBasis flag_basis = CallBasis::None;  ///< what the verdict rests on (Ms1Isotope, or the call's basis)
+    int flag_charge = 0;             ///< the charge the verdict rests on (the MS1 charge, or the call)
+    /// The check's charge of a disagreeing header (tagged beside the header
+    /// under both); else the header.
+    int replacement() const { return verdict == HeaderVerdict::Disagree ? flag_charge : header; }
+  };
+
+  /// The candidates of a header check: -charge_min .. -charge_max plus the
+  /// header charge (when it is in 1 .. kChargeLimit), ascending.
+  std::vector<int> headerCheckCandidates(int header, const HypParam& hp);
+
+  /// The precursor charge read from the isotope spacing in an MS1 scan: the
+  /// highest z in 1 .. kChargeLimit with a peak at prec_mz + C13/z of at
+  /// least kMs1FirstMin of the precursor peak and one at prec_mz - C13/z or
+  /// prec_mz + 2*C13/z of at least kMs1SupportMin (all within kMs1TolPpm).
+  /// 0 = no call: a profile or empty scan, no precursor peak, no spacing.
+  /// @param peaks  optional; how many of the three positions the call has
+  int ms1Charge(const OpenMS::MSSpectrum& ms1, double prec_mz, int* peaks = nullptr);
+
+  /// 1.13 -check_header_charge: the verdict on a header-charged precursor.
+  /// With an MS1 call (ms1Charge of @p ms1): Agree when it is the header or
+  /// the header's own peak at prec_mz + C13/header reaches kMs1FirstMin of
+  /// the precursor peak, else Disagree at the MS1 charge. Without one, the infer call over
+  /// headerCheckCandidates() (the 1+ test where 1 is one; complement pairs
+  /// counted charge-aware) decides: Disagree when the call is not ambiguous,
+  /// is not the header, and its complement-pair excess is above 0 and beats
+  /// the header's by at least hp.header_margin (and the runner-up by
+  /// -charge_infer_margin, as infer), or the 1+ test calls 1. Agree when the
+  /// call (or one charge of an ambiguous call) is the header and is not
+  /// assumed. Two close charges that exclude the header: Disagree (the call
+  /// is the better one) when both beat its excess by hp.header_margin, else
+  /// Ambiguous. Else NoCall. `call` is the infer call in every case;
+  /// flag_basis and flag_charge say what the verdict rests on.
+  /// A precursor without a header charge gives NoCall with header 0.
+  HeaderCheckResult checkHeaderCharge(const OpenMS::MSSpectrum& spec, const OpenMS::Precursor& prec,
+                                      const HypParam& hp, const ComplementSpec& cs,
+                                      const OpenMS::MSSpectrum* ms1 = nullptr);
+
   /// The hypotheses of one spectrum, in ascending charge, exactly one of
   /// them selected. At hp.isDefault() this is the single 1.11 hypothesis
   /// {prec.getCharge(), 0, prec.getMZ(), header or assumed}.
   /// @param call  optional; the infer call when one was computed
+  /// @param header_check  optional (1.13); under -check_header_charge both,
+  ///        a Disagree verdict adds a hypothesis at the check's charge
+  ///        (ChargeSource::CheckCall); the header charge stays selected
   std::vector<Hypothesis> precursorHypotheses(const OpenMS::MSSpectrum& spec, const OpenMS::Precursor& prec,
                                               const HypParam& hp, const ComplementSpec& cs,
-                                              ChargeCall* call = nullptr);
+                                              ChargeCall* call = nullptr,
+                                              const HeaderCheckResult* header_check = nullptr);
+
+  /// 1.13: per-run counts of the header check (warn and both).
+  struct HeaderCheckCounts
+  {
+    std::size_t checked = 0;                       ///< header-charged MS2 spectra checked
+    std::size_t verdict[kHeaderVerdicts] = {};     ///< by verdict
+    std::size_t disagree_by[kCallBases] = {};      ///< Disagree by flag_basis
+    std::size_t both = 0;                          ///< tagged at both charges (both)
+    /// Disagree by (header, check's charge), both 1 .. kChargeLimit.
+    std::size_t moves[kChargeLimit + 1][kChargeLimit + 1] = {};
+    void add(const HeaderCheckResult& r, bool both_on)
+    {
+      if (r.header <= 0) return;
+      ++checked;
+      ++verdict[static_cast<std::size_t>(r.verdict)];
+      if (r.verdict == HeaderVerdict::Disagree)
+      {
+        ++disagree_by[static_cast<std::size_t>(r.flag_basis)];
+        if (r.header <= kChargeLimit && r.flag_charge >= 1 && r.flag_charge <= kChargeLimit)
+          ++moves[r.header][r.flag_charge];
+        if (both_on && r.flag_charge >= 1 && r.flag_charge != r.header) ++both;
+      }
+    }
+    void merge(const HeaderCheckCounts& o)
+    {
+      checked += o.checked;
+      for (std::size_t i = 0; i < kHeaderVerdicts; ++i) verdict[i] += o.verdict[i];
+      for (std::size_t i = 0; i < kCallBases; ++i) disagree_by[i] += o.disagree_by[i];
+      both += o.both;
+      for (int a = 0; a <= kChargeLimit; ++a)
+        for (int b = 0; b <= kChargeLimit; ++b) moves[a][b] += o.moves[a][b];
+    }
+  };
 
   /// Rows of several hypotheses of one spectrum, each list sorted best
   /// first, merged by (corrected) E-value -- stable, so ties keep hypothesis

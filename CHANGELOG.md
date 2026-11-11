@@ -1,5 +1,215 @@
 # Changelog
 
+## 1.13.0 (2026-11-10)
+
+Experimental options from the 1.13 backlog, each with its held-out result
+stated; all are off by default. Two defaults change: the raw-DIA check
+refuses two more window schemes (revised rule, held-out test passed), and
+`-search_isotope_errors` defaults to -1 (by engine), which changes only the
+MSFragger export. Passed their held-out tests: `-ion_series_hybrid both`,
+`-shortlist_protease auto`, the revised `-check_header_charge` rule, the
+census triage evaluation and `-alkylation_tags_out`. Failed or inconclusive,
+kept as experimental with the result documented: `-label_discovery_out`,
+`-label_call_min_tags 0`, a/x ion series, `-search_engine msfragger`,
+`-search_shifts`, `-species_call explain`, `-complement_tolerance_unit auto`.
+
+- **`-label_discovery_out`, report formats 2 to 4: third held-out test, FAIL.**
+  No code change. On 163 runs from 163 new PRIDE projects
+  (`acc113r/labeldisc3`, PREREG-labeldisc3.md, scored once) three of nine
+  criteria fail: weighted accuracy 0.572 (criterion above 0.80), 119 runs
+  right by label family against 149 for Param-Medic, TMTpro recall 11/18.
+  No label-free run got a label call (0 of 64); TMT, iTRAQ, SILAC and
+  dimethyl recall pass. Both causes are ion-trap MS2: no call is made there,
+  and TMTpro runs acquired as SPS-MS3 are called TMT. With Orbitrap MS2,
+  95 of 96 runs are right. The option stays experimental.
+- **`-complement_tolerance_unit auto` (backlog #15): second held-out
+  result, INCONCLUSIVE, no criterion failed.** No code change besides the
+  help text. With the revised estimator on 8 new runs (`acc113r/compltol`,
+  PREREG-compltol-heldout2.md, freeze cb84295, results 56f604d):
+  non-inferiority passes in 44 of 54 cells, fails in none and is
+  uninformative in 10 (all ion trap); the ion-trap gain is +1.07 points
+  (95% interval 0.87-1.27, PASS); timsTOF was not tested; the run time
+  ratio is 1.010 (PASS). On all five high-resolution files `auto` equals
+  the default. The option stays experimental and the default stays `Da`
+  (doc/COMPLEMENT-TOLERANCE.md).
+- **`-shortlist_protease auto` (backlog #20): held-out result, PASS.** No
+  code change besides the help text. On 9 runs from 6 PRIDE projects with 5
+  proteases (`acc113r/nontryptic`, PREREG-nontryptic.md, freeze 07bd705,
+  results 5dd9d9c, scored once) the shortlist keeps a median of 0.25 of the
+  proteins the full-proteome search with the true protease identifies
+  (criterion 0.20), 0.116 more than the trypsin shortlist (95% CI +0.035
+  to +0.190); the protease is called right in 7 of 9 runs; no run aborts.
+  The gain comes from Asp-N, Glu-C and chymotrypsin; Arg-C and Lys-C are
+  about equal; recall is 0.06-0.10 on three runs; on the one run called
+  `unspecific` the export makes Sage slower than the full search. A named
+  rule, `unspecific` and `-shortlist_specificity semi`/`none` have no
+  held-out test. The option stays experimental (doc/SHORTLIST.md).
+- **Raw-DIA check (#7): two more window schemes are refused.** (1) Tiling
+  isolation windows the run keeps returning to without one cycle (at least
+  10 visits per window, at least 99% of the second half of the probed MS2 on
+  an m/z of the first half), as a method that repeats blocks of windows
+  writes them; the 1.12 rule needed one cycle through all windows. (2) A
+  periodic or returning tiling scheme whose MS2 all carry the same charge
+  (at least 99%), a method default; 1.12 tagged these with a "DIA-like"
+  warning, which now remains for tiling schemes with mixed charges only.
+  Exit code 11, the `FASTAG_REFUSED` line and the calls for DDA, PRM,
+  pseudo-DDA and uncharged periodic DIA are unchanged. On the spent E7-03
+  sample (now a development set) 4 of 249 calls change: 3 missed Orbitrap
+  DIA files are refused, and so is one file drawn as Tribrid DDA that is a
+  150 x 4 Th scheme with charge 2+ on every MS2. On the 224 E7-02
+  development files 3 known default-charge DIA runs go from warned to
+  refused; nothing else changes.
+  Held-out test (preregistered, `acc113r/acqcheck`, 98 fresh public Thermo
+  files, truth from scan filters and isolation windows): **PASS**, 0 of 58
+  non-DIA files refused, 35 of 37 DIA files refused (1.12 rule: 19 of 37).
+  No Astral, timsTOF or SCIEX file in that sample.
+- **`-ion_series_hybrid both` (backlog #10): held-out result, PASS.** No
+  code change besides the help text. On 9 EThcD/ETciD runs from 5 PRIDE
+  projects (`acc113r/hybrid`, PREREG-hybrid.md, scored once) the truth
+  spectra with at least one correct tag rise by 43.2 points over
+  `-ion_series auto` alone (95% interval 41.3-45.1; worst project +28.2),
+  the precision of the reported tags by 14.3 points, at 1.60 times the CPU
+  time. Three of the five projects are ADP-ribosylation samples from one
+  laboratory. The option stays experimental and the default stays `by`
+  (doc/HYBRID-IONS.md).
+- **Label call minimum (backlog #8): `-label_call_min_tags`, experimental,
+  default 175 (the 1.12 rule; no output change at the default).** At 0
+  `label_call` makes no `no_call few_tags` below 175 C-terminal tag ends:
+  every ppm run is called with the same isobaric and SILAC rules,
+  label-free when none fires (the harness's prose-auto 0.1.3 rule), and a
+  call from fewer than 175 ends says that label-free then means only that
+  no label rule fired. On the 193 development runs (in-sample) 0 gave
+  178/193 against 150/193 for the 1.12 rule and 159/193 for "always
+  label-free". Its preregistered held-out test (acceptance/1.13
+  PREREG-item08.md, 172 public runs) FAILED: 149/172 = 0.866 against the
+  threshold 0.922 ("always label-free" + 0.05; always label-free is 0.872);
+  the 1.12 rule gave 83/172. Per the preregistered decision rule the default
+  stays 175 and 0 stays experimental. With zero tag ends the SILAC test is
+  now skipped (no undefined heavy share); this is reachable only at a
+  minimum of 0.
+- **Explain-away species call: `-species_call explain`, experimental,
+  opt-in.** Calls the taxa one at a time on their distinct tags in spectra
+  that no taxon called before explains; the report has the columns of the
+  `decoy` call plus `tags` and `unexplained_tags`. The default (`none`) and
+  the `decoy` call are unchanged. Its preregistered held-out test
+  (`acc113r/species`, PREREG-species-explain.md, 62 public runs) FAILED: the
+  primary endpoint passes (0.50 false genus calls per run against 5.98 for
+  the decoy call), the guard fails (recovery 38/105 against 77/105; Sus or
+  Bos 3/68 against 41/68). Scope: selection of the sample organism among
+  the 50 indexed genera (42 of 49 runs); a second organism or contaminant
+  is not reported; organisms outside the index are usually reported as
+  their nearest indexed relative (10 of 13 runs) or not at all.
+- **`-search_shifts` (backlog #17): isotope rule in the frame of a fixed
+  terminal label, and the held-out result.** A mass-gap peak at a fixed
+  terminal label (TMT) plus n x 1.00335 is now `skipped_isotope` and raises
+  the engine's isotope errors; before, it became a Comet offset near
+  n x 1.0034 and Sage did not search it. Output changes only under
+  `-search_shifts` on runs with a fixed terminal label. Both preregistered
+  held-out tests FAILED (acceptance/1.13 RESULT-item17.md; second test on
+  four new runs, `acc113r/shifts` RESULT-item17r.md: Comet P2 and P4, Sage
+  P4). In the second test PSMs at 1 % FDR rose on all four runs (Comet +7.7
+  to +36.8 %, Sage +6.5 to +25.2 %), but Comet's entrapment FDP rose from
+  0.88 to 1.28 % on the TMT run PXD037999, and 5 of 32 (Comet) and 3 of 11
+  (Sage) admissible open-search peaks were recovered. Part of the gain is
+  the isotope error setting (0..1 against 0 in the base search). The test
+  did not measure the fix. The option stays experimental and does not
+  replace an open search.
+- **`-search_engine msfragger` (backlog #18): held-out result, FAIL; the
+  exported `isotope_error` changes.** On 7 runs from 7 PRIDE projects
+  (`acc113r/msfragger`, PREREG-msfragger.md, scored once; FASTag 1.12.2 at
+  9365ff1, MSFragger 4.4.1) MSFragger ran on the unedited export in 7 of 7
+  runs (C1 PASS) and was 2.03 to 3.91 times as fast as on the full human
+  proteome (median 3.38, G1 PASS), but kept only 48.6 to 73.2% of the spectra
+  the full search with MSFragger's defaults identified (median 61.3%;
+  criterion 80% in every run, C2 FAIL), and the entrapment FDP was 1.27%
+  pooled but 2.09% in one run (limit 2.0%, G2 FAIL). On two development runs
+  the largest single cause was the exported `isotope_error 0`: with
+  MSFragger's own `0/1/2/3` the kept share rose from 47.5 to 72.2%
+  (PXD003531) and from 47.3 to 56.3% (PXD014764) at unchanged speed,
+  entrapment FDP under 1%. `-search_isotope_errors` therefore has the new
+  default -1 = by engine: `0/1/2/3` for MSFragger, none for Sage and Comet as
+  before (their configurations are unchanged; an explicit 0 is kept). This
+  default is set on development runs only and has no held-out test. The
+  option stays experimental (doc/SHORTLIST.md, "MSFragger configuration").
+- **MSFragger configuration (backlog #18): `-search_engine msfragger`,
+  experimental; held-out test FAILED (entry above).** `-search_config_out` writes a complete
+  `fragger.params` for MSFragger 4.4.1. MSFragger needs decoys in the
+  database: with `-fasta_out` FASTag appends reversed `rev_` decoys, without
+  it the input database must be a target-decoy database. `num_threads` is
+  `-threads`. `-search_shifts offsets` exports mass offsets (negative ones
+  included) on a ppm precursor window and is refused on a Da window, where
+  MSFragger 4.4.1 exits 1 on them. Sage and Comet configurations are
+  unchanged (doc/SHORTLIST.md, "MSFragger configuration").
+- **`-alkylation_tags_out`: held-out test PASS at the margin.** On 57 runs
+  from 57 PRIDE projects it called 40, 37 of them right (0.925, Wilson 95%
+  interval 0.801-0.974). It abstains on samples that are not alkylated; the
+  help text and the report's `alkt_run status` row now state the result.
+- **Census triage evaluation: held-out test PASS (second test).**
+  `tools/census_triage_eval.py` and doc/CENSUS-TRIAGE-EVAL.md; FASTag's
+  output is unchanged. On 8 runs from 8 PRIDE projects (7 evaluable) a
+  semi-enzymatic Sage search identified 10.9 % of the `-census_ids` triage
+  candidates against 2.0 % of the other unidentified spectra (rate ratio
+  5.32, 95 % CI 2.59-8.25; gain over the peak-count baseline +0.023).
+  Against an open search the candidates are not better than the peak-count
+  baseline. The first test FAILED and stays on record in the doc.
+- **c/z• preprocessing: charge-reduced peaks re-filtered against the
+  precursor cut (issue T25).** Peaks were cut at the precursor (neutral mass
+  + proton + 1.5 Da) before deisotoping only, so a peak the deisotoper moved
+  to the 1+ scale could land above the cut and be tagged. Under
+  `-ion_series cz` (and `auto` on electron-activated spectra) such peaks are
+  now dropped after deisotoping. c/z• output can change; b/y output
+  (the default) is byte-identical to 1.12.
+- **Shipped proteomes (backlog item 24).** The bundles (CMake install, the
+  Linux, macOS and Windows release bundles and the Homebrew casks, which
+  install the macOS image) carry the reviewed entries of the UniProt 2026_04
+  reference proteomes of human, mouse, yeast and E. coli
+  (`share/FASTag/alkylation`, about 17 MB, CC BY 4.0). `-alkylation_proteome
+  auto|human|mouse|yeast|ecoli` now uses them instead of stopping with exit
+  code 6. The alkylation report gains a `database_release` row for a shipped
+  proteome; FASTag refuses a shipped file whose FASTA sha256 or entry count
+  differs from its manifest (exit 3). The shipped proteomes need
+  `-tag_length 8` (human, mouse) or 7 (yeast, E. coli): at the default no tag
+  places, the log warns, and the report gives the reason `tags_too_short` and
+  an `alk_run min_tag_length` row. Reports on `-recon_fasta`, `-fasta` or a
+  FASTA path are unchanged. `tools/fetch_proteomes.sh` regenerates the files.
+- **`-label_discovery_out` (experimental, opt-in; held-out test FAILED):**
+  database-free label discovery. Reports every N-terminal, K, R or
+  C-terminal mass offset the tag flanks carry, known or not, explained by
+  residues, the known labels (TMT, TMTpro, iTRAQ4/8, dimethyl, SILAC Lys4/6/8
+  and Arg6/10) or Unimod, with a label call (format 3,
+  doc/LABEL-DISCOVERY-REPORT.md; design doc/DESIGN-label-discovery.md).
+  Advanced options `-label_discovery_max_flank` (at most 1500 Da), `_depth`,
+  `_min_spectra`, `_min_share`, `_window_n`, `_window_c` (at most 0.05 Da)
+  and `_unimod_top`. Every other output is byte-identical with the option
+  off or on (the `-out_spectra` provenance leaves the options out).
+  Held-out, 190 public runs, scored once on 2026-11-10 (acceptance/1.13
+  PREREG-labeldisc.md): P1 FAIL, 6 of 150 label-free runs got a label call
+  (4.0 %; the criterion was 0); P2 FAIL, 96/190 runs right against 150/190
+  for "always label-free"; P3 PASS, 96 against 91 for `-label_out`'s
+  `label_call` (sign test p = 0.33). Do not rely on the call as free of
+  false label calls.
+  Added after that test, and not covered by it: the `ld_reporter` section
+  counts TMT and iTRAQ reporter ions in the high-resolution MS2/MS3 scans.
+  A clear reporter signal sets the label family, missing reporters remove
+  an isobaric label call (`no_reporter_ions`), and a no call on a run with
+  ion-trap MS2 scans is reported as `low_resolution_ms2`. Thresholds were
+  set on the 99 development runs (86 right instead of 85).
+  Format 3 adds the `ld_pair` section: precursor pairs at the Lys8 and
+  Arg10 spacings call SILAC (`basis` `precursor_pairs`), also on runs with
+  ion-trap MS2, and a run with few tags, no reporter ions and no pair
+  signal is called label-free (`basis` `absence`). On the development runs
+  93 right instead of 86; no held-out test. A sample labelled in one
+  channel only is read as label-free by the absence rule.
+  Format 4 changes one rule of `ld_pair` (no new row, column or
+  threshold). A call of SILAC labels only gains `K:Lys8` and `R:Arg10`
+  when the pairs show both and the call lacks them (`basis` with the suffix
+  `+precursor_pairs`); a call with any other label is not changed. It was
+  set on the development runs, no held-out test: six SILAC calls change
+  (three to the labels their submitters state, e.g. PXD066890 `K:Lys8` to
+  `K:Lys8+R:Arg10`; three triple SILAC runs gain the missing heavy labels);
+  the class of no run changes (96 of 96 audited runs right). Under the
+  reporter gate `unclear` no absence call is made.
+
 ## 1.12.2 (2026-11-10)
 
 Faster mzML reading and acquisition check; no output changes. Defaults,

@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.24 FATAL_ERROR)
-project(FASTag VERSION 1.12.2 LANGUAGES CXX)
+project(FASTag VERSION 1.13.0 LANGUAGES CXX)
 # The GUI carries that version in four more files; a bump that misses one
 # fails here rather than shipping (cmake/version-guard.cmake says why).
 include(cmake/version-guard.cmake)
@@ -73,17 +73,22 @@ endif()
 # anchored list, in the fixed order E, A, D, F (E data types and acquisition,
 # A identification and search hand-off, D organism and run chemistry, F quality
 # control).
-set(FASTAG_CORE_SOURCES src/FASTagger.cpp src/AveragineDeisotoper.cpp src/Digest.cpp src/DigestReport.cpp src/FastaFilter.cpp src/ProteomeIndex.cpp src/ReconIds.cpp src/TagRecon.cpp src/TaxDeconv.cpp src/TaxIndex.cpp src/TaxStats.cpp)
+set(FASTAG_CORE_SOURCES src/FASTagger.cpp src/AveragineDeisotoper.cpp src/Digest.cpp src/DigestReport.cpp src/DigestQuality.cpp src/FastaFilter.cpp src/ProteomeIndex.cpp src/ReconIds.cpp src/TagRecon.cpp src/TaxDeconv.cpp src/TaxIndex.cpp src/TaxStats.cpp)
 # ---- 1.12 E: core sources ----
 set(FASTAG_CORE_SOURCES_E src/Acquisition.cpp src/Centroid.cpp src/PrecursorHypotheses.cpp)
 # ---- 1.12 A: core sources ----
 set(FASTAG_CORE_SOURCES_A src/Shortlist.cpp src/SearchConfig.cpp)
 # ---- 1.12 D: core sources ----
-set(FASTAG_CORE_SOURCES_D src/SpeciesLookup.cpp src/SpeciesCall.cpp src/AlkylationCall.cpp)
+set(FASTAG_CORE_SOURCES_D src/SpeciesLookup.cpp src/SpeciesCall.cpp src/AlkylationCall.cpp src/AlkylationTags.cpp src/Sha256.cpp)
 # ---- 1.12 F: core sources ----
 set(FASTAG_CORE_SOURCES_F src/OutputGuard.cpp src/CensusIds.cpp)
+# ---- label discovery (-label_discovery_out): core sources ----
+set(FASTAG_CORE_SOURCES_LD src/LabelDiscovery.cpp)
+# ---- 1.13: core sources ----
+set(FASTAG_CORE_SOURCES_113 src/Cleavage.cpp)
 add_library(fastag_core STATIC ${FASTAG_CORE_SOURCES}
-            ${FASTAG_CORE_SOURCES_E} ${FASTAG_CORE_SOURCES_A} ${FASTAG_CORE_SOURCES_D} ${FASTAG_CORE_SOURCES_F})
+            ${FASTAG_CORE_SOURCES_E} ${FASTAG_CORE_SOURCES_A} ${FASTAG_CORE_SOURCES_D} ${FASTAG_CORE_SOURCES_F}
+            ${FASTAG_CORE_SOURCES_113} ${FASTAG_CORE_SOURCES_LD})
 target_include_directories(fastag_core PUBLIC
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/src>)
@@ -242,16 +247,22 @@ install(FILES "${CMAKE_CURRENT_SOURCE_DIR}/data/digest/digest_models.tsv"
         DESTINATION share/FASTag/digest)
 # ---- 1.12 D: the -alkylation_proteome proteomes (#3g), beside the digest
 # data at <bin>/../share/FASTag/alkylation (flat layout: share-FASTag-alkylation).
-# Installed only once data/alkylation holds them (not in git yet). The
-# proteomes ship only with their README (UniProt release, sha256, CC BY 4.0
-# notice): a drop without it is a configure error, not an install failure.
+# 1.13 (#24): shipped (UniProt reference proteomes, reviewed entries, written by
+# tools/fetch_proteomes.sh). They install only with their README (UniProt
+# release, sha256, CC BY 4.0 notice) and proteomes.tsv (the manifest FASTag
+# reads): a drop without them is a configure error, not an install failure.
 file(GLOB FASTAG_ALKYLATION_PROTEOMES "${CMAKE_CURRENT_SOURCE_DIR}/data/alkylation/*.fasta.gz")
 if(FASTAG_ALKYLATION_PROTEOMES)
-  if(NOT EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/data/alkylation/README.md")
-    message(FATAL_ERROR "data/alkylation holds proteomes (${FASTAG_ALKYLATION_PROTEOMES}) but no README.md "
-                        "with their UniProt release, sha256 and licence notice; add it (and the BOM.md row).")
-  endif()
-  install(FILES ${FASTAG_ALKYLATION_PROTEOMES} "${CMAKE_CURRENT_SOURCE_DIR}/data/alkylation/README.md"
+  foreach(f README.md proteomes.tsv)
+    if(NOT EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/data/alkylation/${f}")
+      message(FATAL_ERROR "data/alkylation holds proteomes (${FASTAG_ALKYLATION_PROTEOMES}) but no ${f} "
+                          "(README.md: UniProt release, sha256, licence notice; proteomes.tsv: the manifest "
+                          "tools/fetch_proteomes.sh writes); add it (and the BOM.md row).")
+    endif()
+  endforeach()
+  install(FILES ${FASTAG_ALKYLATION_PROTEOMES}
+                "${CMAKE_CURRENT_SOURCE_DIR}/data/alkylation/README.md"
+                "${CMAKE_CURRENT_SOURCE_DIR}/data/alkylation/proteomes.tsv"
           DESTINATION share/FASTag/alkylation)
 endif()
 
@@ -274,10 +285,19 @@ if(FASTAG_BUILD_TESTS)
   # ---- 1.12 A: unit tests ----
   set(FASTAG_UNIT_TESTS_A shortlist_test search_config_test)
   # ---- 1.12 D: unit tests ----
-  set(FASTAG_UNIT_TESTS_D species_call_test digest_v2_test alkylation_test)
+  set(FASTAG_UNIT_TESTS_D species_call_test digest_v2_test alkylation_test alkylation_tags_test)
   # ---- 1.12 F: unit tests ----
   set(FASTAG_UNIT_TESTS_F output_guard_test census_test census_ids_test)
-  foreach(t ${FASTAG_UNIT_TESTS} ${FASTAG_UNIT_TESTS_E} ${FASTAG_UNIT_TESTS_A} ${FASTAG_UNIT_TESTS_D} ${FASTAG_UNIT_TESTS_F})
+  # ---- label discovery: unit tests ----
+  set(FASTAG_UNIT_TESTS_LD label_discovery_test)
+  # ---- 1.13 digqual: unit tests ----
+  set(FASTAG_UNIT_TESTS_DIGQUAL digest_quality_test)
+  # ---- 1.13 #18: unit tests ----
+  set(FASTAG_UNIT_TESTS_B113_MSFRAGGER msfragger_config_test)
+  # ---- 1.13: unit tests ----
+  set(FASTAG_UNIT_TESTS_113 complement_tol_test cleavage_test)
+  foreach(t ${FASTAG_UNIT_TESTS} ${FASTAG_UNIT_TESTS_E} ${FASTAG_UNIT_TESTS_A} ${FASTAG_UNIT_TESTS_D} ${FASTAG_UNIT_TESTS_F} ${FASTAG_UNIT_TESTS_113}
+            ${FASTAG_UNIT_TESTS_B113_MSFRAGGER} ${FASTAG_UNIT_TESTS_DIGQUAL} ${FASTAG_UNIT_TESTS_LD})
     add_executable(${t} test/${t}.cpp)
     target_link_libraries(${t} PRIVATE fastag_core)
     add_test(NAME ${t} COMMAND ${t})
@@ -377,6 +397,33 @@ if(FASTAG_BUILD_TESTS)
                    $<TARGET_FILE:buildtaxdb>
                    ${CMAKE_CURRENT_SOURCE_DIR}/data/taxonomy)
   set_tests_properties(digest_cli_test PROPERTIES SKIP_RETURN_CODE 77)
+  # 1.13 digqual: -digest_quality on the vendored fixture (1.12 rows a byte
+  # prefix, recount from the tag TSV, mc_few_specific, auto with and without a
+  # call, low_resolution on Da, refusals).
+  add_test(NAME digest_quality_cli_test
+           COMMAND bash ${CMAKE_CURRENT_SOURCE_DIR}/test/digest_quality_cli_test.sh $<TARGET_FILE:FASTag>
+                   ${CMAKE_CURRENT_SOURCE_DIR}/test/fixtures/Ecoli_MS2_small.mzML
+                   ${CMAKE_CURRENT_SOURCE_DIR}/data/digest)
+  set_tests_properties(digest_quality_cli_test PROPERTIES SKIP_RETURN_CODE 77)
+
+  # 1.13 (#24): the shipped -alkylation_proteome proteomes: manifest against
+  # the files, every name resolved in the installed and flat layouts, refusals.
+  add_test(NAME proteomes_cli_test
+           COMMAND bash ${CMAKE_CURRENT_SOURCE_DIR}/test/proteomes_cli_test.sh $<TARGET_FILE:FASTag>
+                   ${CMAKE_CURRENT_SOURCE_DIR}/test/fixtures/Ecoli_MS2_small.mzML
+                   ${CMAKE_CURRENT_SOURCE_DIR}/data/digest
+                   ${CMAKE_CURRENT_SOURCE_DIR}/data/alkylation)
+  set_tests_properties(proteomes_cli_test PROPERTIES SKIP_RETURN_CODE 77)
+
+  # Independent suite for -label_discovery_out, written from
+  # doc/DESIGN-label-discovery.md only, on the synthetic fixtures of
+  # test/fixtures/make_label_discovery_fixtures.py: known labels, label-free
+  # controls, reversed tags, threads, opt-in identity and edge inputs.
+  add_test(NAME label_discovery_indep_test
+           COMMAND bash ${CMAKE_CURRENT_SOURCE_DIR}/test/label_discovery_indep_test.sh $<TARGET_FILE:FASTag>
+                   ${CMAKE_CURRENT_SOURCE_DIR}/test/fixtures/label_discovery
+                   ${CMAKE_CURRENT_SOURCE_DIR}/data/digest)
+  set_tests_properties(label_discovery_indep_test PROPERTIES SKIP_RETURN_CODE 77)
 
   # Integration: -recon_id_out in mzid, idXML and mzTab holds what -recon_out
   # holds; .mzid is empty (0 bytes) without placements; with
@@ -452,6 +499,12 @@ if(FASTAG_BUILD_TESTS)
            COMMAND bash ${CMAKE_CURRENT_SOURCE_DIR}/test/complement_cli_test.sh $<TARGET_FILE:FASTag>
                    ${CMAKE_CURRENT_SOURCE_DIR}/test/fixtures/Ecoli_MS2_small.mzML)
   set_tests_properties(complement_cli_test PROPERTIES SKIP_RETURN_CODE 77)
+  # 1.13 item 15: -complement_tolerance_unit auto measures the window on the
+  # run and reaches the tags exactly as that window given in Da would.
+  add_test(NAME complement_tol_cli_test
+           COMMAND bash ${CMAKE_CURRENT_SOURCE_DIR}/test/complement_tol_cli_test.sh $<TARGET_FILE:FASTag>
+                   ${CMAKE_CURRENT_SOURCE_DIR}/test/fixtures)
+  set_tests_properties(complement_tol_cli_test PROPERTIES SKIP_RETURN_CODE 77)
   # #15 phase A: activation counts and the b/y warning on derived ETD, EThcD
   # and filter-string fixtures; tags unchanged; fast reader equals OnDisc.
   # Phase B: -ion_series by|cz|auto (by == absent, auto on collisional ==
@@ -469,6 +522,42 @@ if(FASTAG_BUILD_TESTS)
                    # census_ids_test once F11B (-census_ids) is in the tree; empty before
                    "$<$<TARGET_EXISTS:census_ids_test>:$<TARGET_FILE:census_ids_test>>")
   set_tests_properties(ion_series_cli_test PROPERTIES SKIP_RETURN_CODE 77)
+  # ---- 1.13 ax (backlog item 11): a/x ions ----
+  # -ion_series ax and -ion_series auto -ion_series_photo ax on synthetic
+  # UVPD runs (ax_ions_test --write-mzml): option off == 1.12, a/x rows and
+  # placements, filter-token photo, warnings, -stream refusal, threads,
+  # species exclusion.
+  add_executable(ax_ions_test test/ax_ions_test.cpp)
+  target_link_libraries(ax_ions_test PRIVATE fastag_core)
+  add_test(NAME ax_ions_test COMMAND ax_ions_test)
+  add_test(NAME ax_cli_test
+           COMMAND bash ${CMAKE_CURRENT_SOURCE_DIR}/test/ax_cli_test.sh $<TARGET_FILE:FASTag>
+                   ${CMAKE_CURRENT_SOURCE_DIR}/test/fixtures/Ecoli_MS2_small.mzML
+                   ${CMAKE_CURRENT_SOURCE_DIR}/test/fixtures/Ecoli_MS2_small.fasta
+                   $<TARGET_FILE:ax_ions_test>
+                   $<TARGET_FILE:buildtaxdb>
+                   ${CMAKE_CURRENT_SOURCE_DIR}/data/taxonomy
+                   ${CMAKE_CURRENT_SOURCE_DIR}/data/digest
+                   ${CMAKE_CURRENT_SOURCE_DIR}/test/fixtures/Ecoli_MS2_small.mgf)
+  set_tests_properties(ax_cli_test PROPERTIES SKIP_RETURN_CODE 77)
+  # ---- 1.13 hybrid (backlog item 10): EThcD/ETciD as b/y and c/z-dot ----
+  # -ion_series auto -ion_series_hybrid both on synthetic mixed y/z runs
+  # (hybrid_ions_test --write-mzml): option off == 1.12, rows of both series,
+  # E-values x 2, placements, warnings, -stream refusal, threads, OnDisc,
+  # species exclusion.
+  add_executable(hybrid_ions_test test/hybrid_ions_test.cpp)
+  target_link_libraries(hybrid_ions_test PRIVATE fastag_core)
+  add_test(NAME hybrid_ions_test COMMAND hybrid_ions_test)
+  add_test(NAME hybrid_cli_test
+           COMMAND bash ${CMAKE_CURRENT_SOURCE_DIR}/test/hybrid_cli_test.sh $<TARGET_FILE:FASTag>
+                   ${CMAKE_CURRENT_SOURCE_DIR}/test/fixtures/Ecoli_MS2_small.mzML
+                   ${CMAKE_CURRENT_SOURCE_DIR}/test/fixtures/Ecoli_MS2_small.fasta
+                   $<TARGET_FILE:hybrid_ions_test>
+                   $<TARGET_FILE:buildtaxdb>
+                   ${CMAKE_CURRENT_SOURCE_DIR}/data/taxonomy
+                   ${CMAKE_CURRENT_SOURCE_DIR}/data/digest
+                   ${CMAKE_CURRENT_SOURCE_DIR}/test/fixtures/Ecoli_MS2_small.mgf)
+  set_tests_properties(hybrid_cli_test PROPERTIES SKIP_RETURN_CODE 77)
   # #6: -unknown_charge, -charge_*, -isotope_error on the fixture MGF with its
   # charges stripped: defaults equal 1.11.0, the infer call, header charges
   # kept, threads, losing hypotheses add no species, refusals.
@@ -480,6 +569,15 @@ if(FASTAG_BUILD_TESTS)
                    ${CMAKE_CURRENT_SOURCE_DIR}/data/digest
                    ${CMAKE_CURRENT_SOURCE_DIR}/data/taxonomy)
   set_tests_properties(charge_cli_test PROPERTIES SKIP_RETURN_CODE 77)
+  # 1.13 (backlog #14): -check_header_charge on the fixture MGF and on a copy
+  # whose 3+/4+ headers are given as 2+: off and warn change no output, the
+  # wrong headers are found, both tags them under two charges, threads, refusals.
+  add_test(NAME header_charge_cli_test
+           COMMAND bash ${CMAKE_CURRENT_SOURCE_DIR}/test/header_charge_cli_test.sh $<TARGET_FILE:FASTag>
+                   ${CMAKE_CURRENT_SOURCE_DIR}/test/fixtures/Ecoli_MS2_small.mgf
+                   ${CMAKE_CURRENT_SOURCE_DIR}/test/fixtures/Ecoli_MS2_small.fasta
+                   ${CMAKE_CURRENT_SOURCE_DIR}/data/digest)
+  set_tests_properties(header_charge_cli_test PROPERTIES SKIP_RETURN_CODE 77)
   # ---- 1.12 A: CLI tests ----
   # #5: shortlist, reduced FASTA and engine configuration on the vendored
   # fixture: ranking, no decoys, existing outputs unchanged, threads, the
@@ -488,11 +586,23 @@ if(FASTAG_BUILD_TESTS)
                              FASTAG_FIXTURES="${CMAKE_CURRENT_SOURCE_DIR}/test/fixtures")
   target_compile_definitions(search_config_test PRIVATE
                              FASTAG_FIXTURES="${CMAKE_CURRENT_SOURCE_DIR}/test/fixtures")
+  # ---- 1.13 item 20 ----
+  target_compile_definitions(cleavage_test PRIVATE
+                             FASTAG_FIXTURES="${CMAKE_CURRENT_SOURCE_DIR}/test/fixtures")
+  target_compile_definitions(msfragger_config_test PRIVATE
+                             FASTAG_FIXTURES="${CMAKE_CURRENT_SOURCE_DIR}/test/fixtures")
   add_test(NAME shortlist_cli_test
            COMMAND bash ${CMAKE_CURRENT_SOURCE_DIR}/test/shortlist_cli_test.sh $<TARGET_FILE:FASTag>
                    ${CMAKE_CURRENT_SOURCE_DIR}/test/fixtures
                    ${CMAKE_CURRENT_SOURCE_DIR}/data/digest)
   set_tests_properties(shortlist_cli_test PROPERTIES SKIP_RETURN_CODE 77)
+  # 1.13 item 20: protease-aware shortlist placement on the in-silico
+  # chymotryptic MGF.
+  add_test(NAME nontryptic_cli_test
+           COMMAND bash ${CMAKE_CURRENT_SOURCE_DIR}/test/nontryptic_cli_test.sh $<TARGET_FILE:FASTag>
+                   ${CMAKE_CURRENT_SOURCE_DIR}/test/fixtures
+                   ${CMAKE_CURRENT_SOURCE_DIR}/data/digest)
+  set_tests_properties(nontryptic_cli_test PROPERTIES SKIP_RETURN_CODE 77)
   # Sage and Comet on a generated configuration; SKIPs without
   # FASTAG_SAGE_BIN / FASTAG_COMET_BIN (the acceptance job sets them and
   # treats a skip as a failure).
@@ -501,6 +611,12 @@ if(FASTAG_BUILD_TESTS)
                    ${CMAKE_CURRENT_SOURCE_DIR}/test/fixtures
                    ${CMAKE_CURRENT_SOURCE_DIR}/data/digest)
   set_tests_properties(search_engine_smoke_test PROPERTIES SKIP_RETURN_CODE 77)
+  # ---- 1.13 #18: -search_engine msfragger ----
+  add_test(NAME msfragger_cli_test
+           COMMAND bash ${CMAKE_CURRENT_SOURCE_DIR}/test/msfragger_cli_test.sh $<TARGET_FILE:FASTag>
+                   ${CMAKE_CURRENT_SOURCE_DIR}/test/fixtures
+                   ${CMAKE_CURRENT_SOURCE_DIR}/data/digest)
+  set_tests_properties(msfragger_cli_test PROPERTIES SKIP_RETURN_CODE 77)
   # ---- 1.12 D: CLI tests ----
   # #1: -species_call (decoy null, calls, warnings, refusals) on a toy index
   # built at test time; none equals the option absent (and FASTAG_BASELINE_BIN).
@@ -511,6 +627,15 @@ if(FASTAG_BUILD_TESTS)
                    ${CMAKE_CURRENT_SOURCE_DIR}/test/fixtures/Ecoli_MS2_small.fasta
                    ${CMAKE_CURRENT_SOURCE_DIR}/data/taxonomy)
   set_tests_properties(species_call_cli_test PROPERTIES SKIP_RETURN_CODE 77)
+  # 1.13 species redesign: the env-gated DEV dump changes no output and fails
+  # loudly on a bad decoy index, count or path (test/species_dump_test.sh).
+  add_test(NAME species_dump_cli_test
+           COMMAND bash ${CMAKE_CURRENT_SOURCE_DIR}/test/species_dump_test.sh $<TARGET_FILE:FASTag>
+                   $<TARGET_FILE:buildtaxdb>
+                   ${CMAKE_CURRENT_SOURCE_DIR}/test/fixtures/Ecoli_MS2_small.mzML
+                   ${CMAKE_CURRENT_SOURCE_DIR}/test/fixtures/Ecoli_MS2_small.fasta
+                   ${CMAKE_CURRENT_SOURCE_DIR}/data/taxonomy)
+  set_tests_properties(species_dump_cli_test PROPERTIES SKIP_RETURN_CODE 77)
   # #10: -species_orientation both on the same toy index; exact counts against
   # an independent Python recount (tools/species_orientation_recount.py).
   add_test(NAME species_orientation_cli_test
@@ -521,6 +646,14 @@ if(FASTAG_BUILD_TESTS)
                    ${CMAKE_CURRENT_SOURCE_DIR}/data/taxonomy
                    ${CMAKE_CURRENT_SOURCE_DIR}/tools/species_orientation_recount.py)
   set_tests_properties(species_orientation_cli_test PROPERTIES SKIP_RETURN_CODE 77)
+  # 1.13 #22: -alkylation_tags_out on synthetic single-Cys mzML that
+  # alkylation_tags_test writes (CAM, NEM, unmodified); the tag TSV is the
+  # same with and without it; refusals.
+  add_test(NAME alkylation_tags_cli_test
+           COMMAND bash ${CMAKE_CURRENT_SOURCE_DIR}/test/alkylation_tags_cli_test.sh $<TARGET_FILE:FASTag>
+                   $<TARGET_FILE:alkylation_tags_test>
+                   ${CMAKE_CURRENT_SOURCE_DIR}/test/fixtures/Ecoli_MS2_small.mzML)
+  set_tests_properties(alkylation_tags_cli_test PROPERTIES SKIP_RETURN_CODE 77)
   # ---- 1.12 F: CLI tests ----
   # #11 phase A: -census on the fixture, its MGF twin, census_edge.mzML (every
   # status, subsampling) and diatracer_like.mzML; existing outputs unchanged.
@@ -541,6 +674,20 @@ if(FASTAG_BUILD_TESTS)
                    ${CMAKE_CURRENT_SOURCE_DIR}/test/fixtures/Ecoli_MS2_small.mzML
                    ${CMAKE_CURRENT_SOURCE_DIR}/test/fixtures/Ecoli_MS2_small.fasta)
   set_tests_properties(census_ids_cli_test PROPERTIES SKIP_RETURN_CODE 77)
+  # 1.13 item 7: the census triage evaluation scorer (tools/census_triage_eval.py):
+  # unit tests on hand-counted tables, and a CLI test on a real -census_ids run.
+  # Both skip (77) without python3 (FASTAG_PYTHON names another).
+  add_test(NAME census_triage_eval_test
+           COMMAND bash -c "PY=\${FASTAG_PYTHON:-python3}; command -v \"\$PY\" >/dev/null || exit 77; exec \"\$PY\" \"\$0\" \"\$1\""
+                   ${CMAKE_CURRENT_SOURCE_DIR}/test/census_triage_eval_test.py
+                   ${CMAKE_CURRENT_SOURCE_DIR}/tools/census_triage_eval.py)
+  set_tests_properties(census_triage_eval_test PROPERTIES SKIP_RETURN_CODE 77)
+  add_test(NAME census_triage_eval_cli_test
+           COMMAND bash ${CMAKE_CURRENT_SOURCE_DIR}/test/census_triage_eval_cli_test.sh $<TARGET_FILE:FASTag>
+                   $<TARGET_FILE:census_ids_test>
+                   ${CMAKE_CURRENT_SOURCE_DIR}/test/fixtures/Ecoli_MS2_small.mzML
+                   ${CMAKE_CURRENT_SOURCE_DIR}/tools/census_triage_eval.py)
+  set_tests_properties(census_triage_eval_cli_test PROPERTIES SKIP_RETURN_CODE 77)
   # ---- 1.12 G: CLI tests ----
   # G1: the JSON writers, the mzML header parse and the spectrum record
   # against the tagger's preprocessing; probeInput()/dumpSpectrum() on the

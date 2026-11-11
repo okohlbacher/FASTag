@@ -142,6 +142,16 @@ aside. sha256
 `7be84af167c367b58732a9503f89328a2a790185dc4d1c660363bfb66525dff6`. Derived from
 the OpenMS example, so BSD-3-Clause as well.
 
+`label_1.12.0_Ecoli_MS2_small_ppm.tsv` — the `-label_out` report of the FASTag
+1.12.0 release candidate a117801 (FASTag.bin sha256 `c4c2ad67...`, node data
+`/scratch/kohlbach/fastag-heldout-1.12/rc-a117801/opt/FASTag`) on
+`Ecoli_MS2_small.mzML` with `-tag_length 4 -threads 2` (20 ppm): 0 C-terminal
+tag ends, so `label_call` is `no_call few_tags`. `test/digest_cli_test.sh`
+checks that the default (`-label_call_min_tags 175`, 1.13) writes it byte for byte, the
+`run version` row aside. sha256
+`8b3c5fa97ddc22fddf26daa61e785c95ed42467838ea4abbf4e58f57c27b104f`. Derived
+from the OpenMS example, so BSD-3-Clause as well.
+
 `digest_1.11.0_Ecoli_MS2_small_Da.tsv` — the `-digest_out` report of the same
 FASTag 1.11.0 run (same binary, input and options, written together with the
 label report above, whose sha256 it reproduced). `test/digest_cli_test.sh`
@@ -211,3 +221,83 @@ unexplained (12), -77.7777 unexplained (10). With `-extension 3` and
 dropped_engine). Derived from the vendored FASTA only, so the same licence.
 
 sha256: `shifts_insilico.mgf` `bb609510728087057effddcf1fec8b0a52cec4907e2e954cdd287d27cee4d257`.
+
+`msfragger_4.4.1_closed.params` — written by `java -jar MSFragger-4.4.1.jar
+--config closed` (MSFragger 4.4.1, OpenJDK 21.0.12.1, node data, 2026-11-09),
+unedited, sha256
+`0bb456769c6afc8e6c0759624b65def1cc87dae0a397a6bd6be9d70e5aeff0cd`.
+`msfragger_config_test` checks the key set and order of FASTag's MSFragger
+configuration against it. Note: MSFragger 4.4.1 does not run this file as it
+is (its `labile_fragment_ion_series` line carries a comment after spaces,
+which MSFragger reads as the value).
+
+`msfragger_4.4.1_echo.txt` — what MSFragger 4.4.1 read from the golden plan
+of `test/msfragger_config_test.cpp`: `msfragger_config_test --emit
+golden.params` (sha256 `3025697178e64d55869c1aff20a19ff54ba18931722562a303d10c2cf44cb631`),
+then `java -Xmx24g -jar MSFragger-4.4.1.jar golden.params run.mzML` with
+`run.mzML` = `Ecoli_MS2_small.mzML` and `golden_td.fasta` =
+`Ecoli_shortlist.fasta` plus a reversed `rev_` copy of every entry (exit 0;
+log sha256 `c6a2ad55...`, pepXML sha256 `80f8bdc7...`). The file holds the
+log's "Parameters:" block verbatim and the pepXML's sorted unique
+`<aminoacid_modification>` and `<terminal_modification>` elements except the
+26 mass-offset entries. Changing the golden plan needs a new run.
+
+## Complement-tolerance fixtures (1.13 item 15)
+
+`compltol_hires.mgf` and `compltol_lowres.mgf` (250 MS2 each), written by
+`make_compltol_fixture.py Ecoli_MS2_small.fasta .` (standard library only):
+in-silico charge-2 spectra of the tryptic peptides of `Ecoli_MS2_small.fasta`
+(b2..b(n-1), y1..y(n-1), 25 noise peaks), every fragment m/z with a Gaussian
+error of sd 0.004 Da (hires; a complement pair's 95% window 0.0111 Da) or
+0.1 Da (lowres; 0.277 Da). `complement_tol_cli_test` measures the window of
+`-complement_tolerance_unit auto` on them. sha256: `compltol_hires.mgf`
+`ff0210b513bf9c5515f845774617ca1de2959ed5c7f19d52d56e375e1cd3a7e0`,
+`compltol_lowres.mgf` `3437bfdef43f685735c8d00e39c302009ad4350d5173e5bd47e7254790ed8aa2`.
+
+## Label-discovery fixtures (independent suite)
+
+`label_discovery/` holds the input of `test/label_discovery_indep_test.sh`, the
+independent test suite of `-label_discovery_out` written from
+`doc/DESIGN-label-discovery.md` alone. Written by
+`make_label_discovery_fixtures.py label_discovery` (standard-library Python;
+3.12 and 3.15 write the same bytes; fixed seeds 101-110, no other input): random tryptic-like peptides
+(internal residues GASPVTLNDQEMHFYW, no C and no internal K/R; last residue K
+or R), precursor charge 2, singly charged fragments at monoisotopic masses
+with a seeded 0.2 mDa jitter, 1 ppm precursor jitter and five noise peaks per
+spectrum. Every set has 240 spectra unless stated:
+
+- `ld_tmt`, `ld_tmtpro`, `ld_itraq4`, `ld_dimethyl`: the label at the N
+  terminus and on a C-terminal K, with b0 (label + H+; not for dimethyl, whose
+  b0 is below any scan range), b1..b(n-1), y1..y(n-1), the precursor that lost
+  the N-terminal label (image N0f) and, for K peptides, L_K + H2O + H+ (image
+  K0f);
+- `ld_unknown`: +123.4567 at the N terminus only;
+- `ld_tmt_bonly`: TMT at N and K, b0..b(n-1) only, so every tag is a reversed
+  (b-ladder) reading;
+- `ld_labelfree`: no label; half the peptides start with AL and 40 % end
+  with LK (strong A, A+L, K, R and L+K flanks); `ld_labelfree_iso`: the same
+  peptides with 20 % of the precursors one and 5 % two 13C high;
+- `ld_noise` (60 spectra): random peaks only, no tag;
+- `ld_largeflank`: 30-36-residue peptides with fragments only inside
+  [760, M - 760] Da, so every flank is above the default max_flank of 700;
+- `ld_peptides.fasta`: the peptides of the sets as proteins, for the
+  -recon_out/-delta_out/-massgap_out identity checks.
+
+Checked with FASTag 1.12.1 (no label discovery) on node data: every tag set
+carries its images in the tag TSV (TMT: 256 N0r, 265 N0f, 120 K0f, 122 K1f,
+128 K1r filtered tags over 240 spectra), `ld_noise` gives no tag and every
+`ld_largeflank` flank is above 700 Da. `-label_out` calls the dimethyl,
+unknown and b-only sets label-free, which is the gap the new report closes.
+
+sha256:
+`ld_dimethyl.mgf` `da3a25f4bc4ddb6e4c0ee89f8bc90554529023f4567007e222af7817c5b0b45d`,
+`ld_itraq4.mgf` `12c6cf92b9b187793ba30ca4e07b5e49cb398588fe747f33db191c93b3a785aa`,
+`ld_labelfree.mgf` `3c38deaa60e9c718827ff85d5493112127a0cb4a860eab915547b51ae39d0ab6`,
+`ld_labelfree_iso.mgf` `31eba37a438b8fd7e39f032007d7102a2185b90a5e90a7a7d7b53135ac7a9cce`,
+`ld_largeflank.mgf` `b7c93418674c0311647e9d5a029655b63300ea4c2ab38a28b5e665bbfbea95ca`,
+`ld_noise.mgf` `b98c1be26103980534df7e0416581c428df393e814f6279ae8e2d96f006a6890`,
+`ld_peptides.fasta` `5b98bee9aea7311152612f9fd2df50736db75a1aae36480ca103a02ef99f8023`,
+`ld_tmt.mgf` `a6d65859c5c1015e186d9086bb83bcc8658c6e3520293100065a016040595ee3`,
+`ld_tmt_bonly.mgf` `8b12fc559a1a7cad58dd7ae3ae103466d1cd6e6ebbd170d8d8b18fd1c5b045ea`,
+`ld_tmtpro.mgf` `9ea36a0ad1eac100ac765cb1acbdfbca37fceb94a6fcc9e76981e1ee71755167`,
+`ld_unknown.mgf` `7506903414db2ffe52388f58d59030d11920df129c544f7f8576a1787d271ff2`.

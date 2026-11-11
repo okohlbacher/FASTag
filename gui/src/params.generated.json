@@ -4,7 +4,7 @@
       "name": "acquisition_check",
       "type": "string",
       "default": "refuse",
-      "description": "Check the acquisition before tagging. Raw DIA, whose MS2 'precursors' are isolation windows holding several peptides, is refused with exit code 11 (refuse), tagged anyway with a warning as before 1.12 (warn), or not checked (off). Tag DIA through pseudo-DDA spectra instead: run DIAspeXtract (or diaTracer for .d) first; their output passes the check",
+      "description": "Check the acquisition before tagging. Raw DIA, whose MS2 'precursors' are isolation windows holding several peptides, is refused with exit code 11 (refuse), tagged anyway with a warning as before 1.12 (warn), or not checked (off). Tag DIA through pseudo-DDA spectra instead: run DIAspeXtract (or diaTracer for .d) first; their output passes the check. The check failed its held-out release test (8 of 202 DDA-labelled files refused): if a DDA file is refused, use warn or off",
       "required": false,
       "toppAdvanced": false,
       "choices": [
@@ -56,9 +56,20 @@
       "name": "alkylation_proteome",
       "type": "string",
       "default": "auto",
-      "description": "Database of -alkylation_out without -recon_fasta: a FASTA file (.gz allowed). The names auto (= human), human, mouse, yeast and ecoli stand for shipped proteomes, which 1.12.0 does not ship: they stop with exit code 6, so give a FASTA file here or -recon_fasta",
+      "description": "Database of -alkylation_out without -recon_fasta: a FASTA file (.gz allowed). The names auto (= human), human, mouse, yeast and ecoli stand for the shipped UniProt reference proteomes (reviewed entries; share/FASTag/alkylation, release in its proteomes.tsv). Tags place on them from 8 residues (human, mouse) or 7 (yeast, ecoli): give -tag_length 8 or 7, at the default no tag places and there is no call (reason tags_too_short)",
       "required": false,
       "toppAdvanced": true
+    },
+    {
+      "name": "alkylation_tags_out",
+      "type": "output-file",
+      "default": "",
+      "description": "Experimental (held-out test passed at the margin: 40 of 57 runs called, 37 right; unalkylated runs are rarely called): report which reagent alkylated the cysteines (or none) without a database, from a second tagging pass with unmodified C and one alternative C edge per reagent (Carbamidomethyl, Propionamide, Nethylmaleimide, Methylthio, Carboxymethyl): votes per C form inside tags and the call. Use with -extension (measured with -tag_length 4 -extension 6): without it few spectra vote",
+      "required": false,
+      "toppAdvanced": true,
+      "formats": [
+        "tsv"
+      ]
     },
     {
       "name": "alkylation_window",
@@ -160,12 +171,54 @@
       "max": 8
     },
     {
+      "name": "check_header_charge",
+      "type": "string",
+      "default": "off",
+      "description": "Check every precursor charge the file gives against the isotope spacing of the precursor in the preceding MS1 scan and, where that gives no charge, against the charge its complement pairs support (the -unknown_charge infer call over -charge_min..-charge_max and the header charge, with 1+/(z-1)+ pairs for z >= 3): off (the default), warn (count and report disagreements, tag at the header charge) or both (tag a disagreeing spectrum under its header charge and under the charge the check found, charge_src 'check_call'; the header charge stays the selected one). Experimental",
+      "required": false,
+      "toppAdvanced": true,
+      "choices": [
+        "off",
+        "warn",
+        "both"
+      ]
+    },
+    {
+      "name": "check_header_margin",
+      "type": "double",
+      "default": "6.0",
+      "description": "Complement-pair excess by which the supported charge must beat the header charge's own for -check_header_charge to call a disagreement",
+      "required": false,
+      "toppAdvanced": true,
+      "min": 0
+    },
+    {
+      "name": "check_header_out",
+      "type": "output-file",
+      "default": "",
+      "description": "-check_header_charge: one row per header-charged MS2 spectrum (header charge, MS1 charge, call, evidence, verdict)",
+      "required": false,
+      "toppAdvanced": true,
+      "formats": [
+        "tsv"
+      ]
+    },
+    {
       "name": "complement_midp",
       "type": "bool",
       "default": "false",
       "description": "Score complements with DirecTag's hypergeometric mid-p P(X>c) + P(X=c)/2 for tags with 0 or 1 complemented peaks; 2 or more keep P(X>=c)",
       "required": false,
       "toppAdvanced": true
+    },
+    {
+      "name": "complement_probe",
+      "type": "int",
+      "default": "500",
+      "description": "MS2 spectra the -complement_tolerance_unit auto probe tags to measure the complement window",
+      "required": false,
+      "toppAdvanced": true,
+      "min": 1
     },
     {
       "name": "complement_rule",
@@ -202,12 +255,13 @@
       "name": "complement_tolerance_unit",
       "type": "string",
       "default": "Da",
-      "description": "Da: the window is -complement_tolerance. fragment: -complement_tol_factor scales the run's -fragment_tolerance at both partners",
+      "description": "Da: the window is -complement_tolerance. fragment: -complement_tol_factor scales the run's -fragment_tolerance at both partners. auto (experimental; its first held-out test failed, the second, with the revised estimator, was inconclusive with no criterion failed: +1.1 points of correct rank-1 tags on ion trap, same window as Da on the high-resolution files): the window is measured on the run, from the complement pairs of high-confidence tags in a probe of -complement_probe MS2 spectra; -complement_tolerance when too few pairs",
       "required": false,
       "toppAdvanced": true,
       "choices": [
         "Da",
-        "fragment"
+        "fragment",
+        "auto"
       ]
     },
     {
@@ -317,6 +371,14 @@
       "formats": [
         "tsv"
       ]
+    },
+    {
+      "name": "digest_quality",
+      "type": "string",
+      "default": "",
+      "description": "Append missed-cleavage and non-specific-end measurements for this enzyme to -digest_out: a model name of the protease table (e.g. Trypsin) or 'auto' (the report's call). Experimental; empty = off",
+      "required": false,
+      "toppAdvanced": true
     },
     {
       "name": "digest_silac_min",
@@ -506,13 +568,38 @@
       "name": "ion_series",
       "type": "string",
       "default": "by",
-      "description": "Ion series the MS2 spectra are read as: by (b/y ions, as before 1.12), cz (c/z-dot ions of electron transfer or capture dissociation, ETD/ECD), or auto (c/z-dot for spectra whose activation is ETD or ECD, b/y for all others, hybrid EThcD/ETciD included). Under cz and auto the tag TSV gains an ion_series column when some spectrum can be read as c/z",
+      "description": "Ion series the MS2 spectra are read as: by (b/y ions, as before 1.12), cz (c/z-dot ions of electron transfer or capture dissociation, ETD/ECD), or auto (c/z-dot for spectra whose activation is ETD or ECD, b/y for all others, hybrid EThcD/ETciD included), or ax (a/x ions of photodissociation, UVPD, every spectrum; experimental, failed its held-out test). Under cz, auto and ax the tag TSV gains an ion_series column when some spectrum can be read as c/z or a/x",
       "required": false,
       "toppAdvanced": false,
       "choices": [
         "by",
         "cz",
-        "auto"
+        "auto",
+        "ax"
+      ]
+    },
+    {
+      "name": "ion_series_hybrid",
+      "type": "string",
+      "default": "by",
+      "description": "Under -ion_series auto: how hybrid-activated spectra (EThcD, ETciD) are read: by (b/y ions, as before 1.13) or both (tagged twice, as b/y and as c/z-dot ions; the rows of both passes merged by E-value under one -max_tags cap, every E-value multiplied by 2, each row with its ion_series). mzML input only. Experimental; passed its held-out test (5 projects: +43 points of identified spectra with a correct tag, 1.6x CPU time)",
+      "required": false,
+      "toppAdvanced": true,
+      "choices": [
+        "by",
+        "both"
+      ]
+    },
+    {
+      "name": "ion_series_photo",
+      "type": "string",
+      "default": "by",
+      "description": "Under -ion_series auto: the series photodissociation spectra (UVPD; activation MS:1000435 or a Thermo @uvpd filter token, and no collisional or electron method) are read as: by (as before 1.13) or ax (a/x ions). -ion_series ax reads every spectrum as a/x ions. Experimental: the a/x reading failed its held-out test",
+      "required": false,
+      "toppAdvanced": true,
+      "choices": [
+        "by",
+        "ax"
       ]
     },
     {
@@ -536,6 +623,94 @@
       "itemType": "int",
       "min": -1,
       "max": 3
+    },
+    {
+      "name": "label_call_min_tags",
+      "type": "int",
+      "default": "175",
+      "description": "C-terminal tag ends -label_out's label_call needs; fewer give no_call few_tags (175: the FASTag 1.12 rule; 0, experimental, failed its held-out test: every ppm run is called)",
+      "required": false,
+      "toppAdvanced": true,
+      "min": 0
+    },
+    {
+      "name": "label_discovery_depth",
+      "type": "int",
+      "default": "2",
+      "description": "Most residues a -label_discovery_out channel-peak explanation names (0, 1 or 2)",
+      "required": false,
+      "toppAdvanced": true,
+      "min": 0,
+      "max": 2
+    },
+    {
+      "name": "label_discovery_max_flank",
+      "type": "double",
+      "default": "700.0",
+      "description": "Largest flank mass -label_discovery_out histograms, and the largest composition mass of its null image set (above 0, at most 1500)",
+      "required": false,
+      "toppAdvanced": true,
+      "min": 0,
+      "max": 1500
+    },
+    {
+      "name": "label_discovery_min_share",
+      "type": "double",
+      "default": "0.005",
+      "description": "Share of the counted spectra a -label_discovery_out peak needs",
+      "required": false,
+      "toppAdvanced": true,
+      "min": 0,
+      "max": 1
+    },
+    {
+      "name": "label_discovery_min_spectra",
+      "type": "int",
+      "default": "20",
+      "description": "Spectra a -label_discovery_out peak or site candidate needs",
+      "required": false,
+      "toppAdvanced": true,
+      "min": 1
+    },
+    {
+      "name": "label_discovery_out",
+      "type": "output-file",
+      "default": "",
+      "description": "Experimental: report every terminal or lysine mass offset the tag flanks carry, known or not, explained by residues, the known labels or Unimod, and a label call (failed its held-out test: 6 of 150 label-free runs got a label call; format in doc/LABEL-DISCOVERY-REPORT.md)",
+      "required": false,
+      "toppAdvanced": false,
+      "formats": [
+        "tsv"
+      ]
+    },
+    {
+      "name": "label_discovery_unimod_top",
+      "type": "int",
+      "default": "3",
+      "description": "Unimod alternatives -label_discovery_out lists per peak",
+      "required": false,
+      "toppAdvanced": true,
+      "min": 0
+    },
+    {
+      "name": "label_discovery_window_c",
+      "type": "double",
+      "default": "0.0",
+      "description": "Half-window of the C-terminal flank channel of -label_discovery_out; 0 = estimate it from the run (at most 0.05)",
+      "required": false,
+      "toppAdvanced": true,
+      "min": 0,
+      "max": 0.05
+    },
+    {
+      "name": "label_discovery_window_n",
+      "type": "double",
+      "default": "0.0",
+      "description": "Half-window of the N-terminal flank channel of -label_discovery_out; 0 = estimate it from the run (at most 0.05)",
+      "required": false,
+      "toppAdvanced": true,
+      "min": 0,
+      "max": 0.05
     },
     {
       "name": "label_out",
@@ -872,7 +1047,7 @@
       "name": "search_config_out",
       "type": "output-file",
       "default": "",
-      "description": "Search-engine configuration for -fasta_out (or the input database): Sage JSON, or Comet parameters (merged into -search_config_template when given)",
+      "description": "Search-engine configuration for -fasta_out (or the input database): Sage JSON, Comet parameters (merged into -search_config_template when given), or a complete MSFragger fragger.params",
       "required": false,
       "toppAdvanced": false
     },
@@ -888,7 +1063,7 @@
       "name": "search_decoy_prefix",
       "type": "string",
       "default": "",
-      "description": "Decoy prefix the engine generates; empty = rev_ (Sage) or DECOY_ (Comet)",
+      "description": "Decoy prefix the engine generates; empty = rev_ (Sage, MSFragger) or DECOY_ (Comet)",
       "required": false,
       "toppAdvanced": false
     },
@@ -896,22 +1071,23 @@
       "name": "search_engine",
       "type": "string",
       "default": "sage",
-      "description": "Engine of -search_config_out",
+      "description": "Engine of -search_config_out; msfragger (MSFragger 4.4.1, experimental; held-out test FAILED: the shortlist search kept 49-73% of the spectra a full MSFragger search identifies, criterion 80%) needs decoys in the database: -fasta_out then appends reversed ones",
       "required": false,
       "toppAdvanced": false,
       "choices": [
         "sage",
-        "comet"
+        "comet",
+        "msfragger"
       ]
     },
     {
       "name": "search_isotope_errors",
       "type": "int",
-      "default": "0",
-      "description": "Precursor isotope errors 0..n the engine searches; 0 = none",
+      "default": "-1",
+      "description": "Precursor isotope errors 0..n the engine searches; 0 = none; -1 = by engine: none for Sage and Comet, 0..3 (MSFragger's own default) for msfragger",
       "required": false,
       "toppAdvanced": false,
-      "min": 0,
+      "min": -1,
       "max": 3
     },
     {
@@ -939,7 +1115,7 @@
       "name": "search_shifts",
       "type": "string",
       "default": "none",
-      "description": "Add the run's mass-gap peaks to -search_config_out: 'variable' as variable modifications, 'offsets' as Comet mass offsets, 'both'. Isotope errors, fixed labels and caps are applied; -search_shifts_out lists every decision. Experimental",
+      "description": "Add the run's mass-gap peaks to -search_config_out: 'variable' as variable modifications, 'offsets' as Comet mass offsets, 'both'. Isotope errors, fixed labels and caps are applied; -search_shifts_out lists every decision. Experimental: failed both held-out tests (doc/SHORTLIST.md)",
       "required": false,
       "toppAdvanced": false,
       "choices": [
@@ -1105,6 +1281,38 @@
       ]
     },
     {
+      "name": "shortlist_protease",
+      "type": "string",
+      "default": "trypsin",
+      "description": "Cleavage rule of the shortlist's placements and of -search_config_out. 'trypsin': tryptic windows, a confidently non-tryptic run is refused (FASTag 1.12). 'auto': the protease the tag ends call (trypsin when inconclusive). A protease name, or 'unspecific': that rule. Except for 'trypsin', windows are found by flank mass and kept by the rule and -shortlist_specificity; only exact placements count. Experimental; auto passed its held-out test (9 runs, 5 proteases: median protein recall 0.25 against the full search, +0.12 over the trypsin shortlist); a named rule and unspecific have no held-out test",
+      "required": false,
+      "toppAdvanced": true,
+      "choices": [
+        "trypsin",
+        "auto",
+        "unspecific",
+        "lys-c",
+        "arg-c",
+        "asp-n",
+        "glu-c",
+        "chymotrypsin",
+        "lys-n"
+      ]
+    },
+    {
+      "name": "shortlist_specificity",
+      "type": "string",
+      "default": "full",
+      "description": "With -shortlist_protease other than trypsin: 'full' both window ends at a cleavage site (or a protein terminus), 'semi' at least one, 'none' any window",
+      "required": false,
+      "toppAdvanced": true,
+      "choices": [
+        "full",
+        "semi",
+        "none"
+      ]
+    },
+    {
       "name": "shortlist_top",
       "type": "int",
       "default": "0",
@@ -1125,12 +1333,13 @@
       "name": "species_call",
       "type": "string",
       "default": "none",
-      "description": "Call each taxon of the -species report present, no_call or not_detected: 'decoy' tests its count against a null of decoy tags (looked up like the tags) plus the spill expected from stronger related taxa, and appends the columns call, call_reason, decoy_spectra, decoy_expected, decoy_qvalue, share and lod. 'none' = the ranked report only",
+      "description": "Call each taxon of the -species report present, no_call or not_detected: 'decoy' tests its count against a null of decoy tags (looked up like the tags) plus the spill expected from stronger related taxa, and appends the columns call, call_reason, decoy_spectra, decoy_expected, decoy_qvalue, share and lod. 'explain' (1.13, experimental; failed the recovery guard of its held-out test, doc/SPECIES-DETECTOR.md) calls the taxa one at a time, strongest first, on their distinct tags in spectra that no taxon called before explains, against the same count on the decoy tags; it appends the same columns plus tags and unexplained_tags. 'none' = the ranked report only",
       "required": false,
       "toppAdvanced": true,
       "choices": [
         "none",
-        "decoy"
+        "decoy",
+        "explain"
       ]
     },
     {
@@ -1360,7 +1569,7 @@
       "name": "unknown_charge",
       "type": "string",
       "default": "assume2",
-      "description": "How a precursor without a charge is tagged: assume2 (as 2+, as before 1.12), enumerate (at each listed possible charge, else at every charge -charge_min..-charge_max) or infer (at the charge its complement pairs support; both of two close calls; 1+ when 1 is a candidate and almost no intensity lies above the precursor; without evidence 2+, or the lowest candidate when 2 is none). Every charge tagged is a listed possible charge, else one of -charge_min..-charge_max. With several, E-values are multiplied by their number and the reports count the charge-evidence choice only. A header charge is never replaced",
+      "description": "How a precursor without a charge is tagged: assume2 (as 2+, as before 1.12), enumerate (at each listed possible charge, else at every charge -charge_min..-charge_max) or infer (at the charge its complement pairs support; both of two close calls; 1+ when 1 is a candidate and almost no intensity lies above the precursor; without evidence 2+, or the lowest candidate when 2 is none). Every charge tagged is a listed possible charge, else one of -charge_min..-charge_max. With several, E-values are multiplied by their number and the reports count the charge-evidence choice only. A header charge is never replaced (-check_header_charge both tags a flagged spectrum under the flagged charge as well)",
       "required": false,
       "toppAdvanced": false,
       "choices": [
@@ -1388,7 +1597,7 @@
     {
       "name": "version",
       "type": "string",
-      "default": "1.12.2",
+      "default": "1.13.0",
       "description": "Version of the tool that generated this parameters file.",
       "required": false,
       "toppAdvanced": true

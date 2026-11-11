@@ -50,6 +50,23 @@
 // DDA (hundreds of distinct m/z, short gaps) out. The release test on a fresh
 // PRIDE sample (E7-03) is scored once on the frozen rule; it is not re-tuned.
 //
+// 1.13 revision (backlog item 7, after E7-03 failed; that sample is a
+// development set since). Two additions, both only inside the windowed,
+// tiling branch, so no other call changes:
+//  7. Closed window set: a run that keeps returning to the same few windows
+//     is a window scheme even when it has no single cycle (E7-03
+//     DIA_orbitrap.12 acquires each block of 12 windows twice: commonest gap
+//     12 against 38 windows). Closed = every window is visited at least
+//     closed_min_visits times on average and the second half of the probed
+//     events brings (almost) no m/z the first half did not have. DDA with
+//     recorded windows never comes near both (most-repeating DDA and PRM
+//     runs of the 472 development files: share <= 0.975 with coverage 0.27).
+//  8. Placeholder charge: a scheme that tiles and whose MS2 all carry one and
+//     the same charge is raw DIA whose method wrote a default charge state
+//     (E7-02: PXD063917, PXD066108, PXD071075; E7-03: DIA_orbitrap.03, .08,
+//     DDA_tribrid.06). It is refused. A scheme with mixed charges still only
+//     warns (DIA-like).
+//
 // Copyright (c) 2026 Oliver Kohlbacher and contributors
 // SPDX-License-Identifier: MIT
 #pragma once
@@ -99,6 +116,9 @@ namespace FASTag::Acquisition
     double min_coverage = 0.8;         ///< union of the windows over [lo, hi]
     double min_span = 100.0;           ///< hi - lo, Th
     double dia_min_uncharged = 0.5;    ///< uncharged MS2 share to refuse a windowed scheme
+    double closed_min_visits = 10.0;   ///< closed window set: events per distinct m/z, at least (1.13) ...
+    double closed_min_share = 0.99;    ///< ... and share of second-half events on an m/z of the first half
+    double placeholder_min_share = 0.99;  ///< MS2 share with the commonest charge, for a placeholder charge (1.13)
     double nowin_min_uncharged = 0.9;  ///< the same without windows
     double nowin_max_spacing = 50.0;   ///< median spacing of the distinct m/z without windows, Th
     double nowin_grid_tolerance = 0.2; ///< a spacing within this share of the median lies on the grid ...
@@ -120,6 +140,10 @@ namespace FASTag::Acquisition
     std::size_t cycle = 0;      ///< the commonest gap, in events
     std::size_t n_win = 0;      ///< distinct rounded m/z values
     bool periodic = false;
+    bool closed = false;        ///< a closed window set (Thresholds::closed_*), 1.13
+    double visits = 0;          ///< events per distinct rounded m/z
+    double closed_share = 0;    ///< share of second-half events on an m/z seen in the first half
+    int placeholder_charge = 0; ///< the charge all MS2 share (>= placeholder_min_share), 0 if none
     bool windows = false;       ///< isolation windows recorded
     double median_width = 0;    ///< of the recorded windows, Th
     double lo = 0, hi = 0;      ///< the window range, Th

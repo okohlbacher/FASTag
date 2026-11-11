@@ -106,7 +106,9 @@ export function proteaseCall(digest: Report | null | undefined): ProteaseCall {
 // ---- label (label report, label_call rows) --------------------------------------
 
 export type LabelCall =
-  | { state: 'call'; label: string; basis: string; silac: string; ends: number | null; why: string }
+  // weak: the status row says the call rests on fewer tag ends than 1.12 required
+  // (1.13 -label_call_min_tags below 175), so label-free only means no rule fired.
+  | { state: 'call'; label: string; basis: string; silac: string; ends: number | null; why: string; weak: boolean }
   | { state: 'no_call'; reason: string; why: string }
   // A label report without label_call rows: FASTag before 1.12 makes no call.
   | { state: 'not_called' }
@@ -118,13 +120,17 @@ export function labelCall(label: Report | null | undefined): LabelCall {
   if (!st) return { state: 'not_called' }
   if (st.value === 'call') {
     const l = row(label, 'label_call', 'label')
+    const caveat = st.description.match(/These are fewer than \d+[^.]*\./)?.[0]
     return {
       state: 'call',
       label: l?.value ?? '',
       basis: value(label, 'label_call', 'basis') ?? '',
       silac: value(label, 'label_call', 'silac') ?? '',
       ends: st.n,
-      why: l?.description ?? st.description
+      // 1.13 (backlog #8): a call from few tag ends carries a caveat in the
+      // status row ("These are fewer than 175, ..."); keep it with the label.
+      why: [l?.description ?? st.description, caveat].filter((x): x is string => !!x).join(' '),
+      weak: caveat !== undefined
     }
   }
   return { state: 'no_call', reason: value(label, 'label_call', 'reason') ?? 'unknown', why: st.description }

@@ -327,6 +327,47 @@ namespace
       check(m.at("variable_mod01").rfind("15.994915 M", 0) == 0 && m.at("variable_mod02").rfind("42.010565 K", 0) == 0,
             "shifts 7: the shift modification follows the user's in variable_mod02");
     }
+    // 7m. 1.13 #18, MSFragger: the same peaks, negative offsets kept, '/' list with 0 first
+    {
+      auto p = shiftPlan({cam}, {mod("Oxidation (M)")});
+      auto s = shiftSettings("msfragger");
+      s.max_offsets = 2;
+      const auto o = SC::shiftsToPlan(fx.result({{123.4567, 50}, {-77.7777, 60}, {42.0106, 40}, {15.9949, 30}}), {}, fx.mods,
+                                      fx.combos, s, p);
+      check(actionAt(o, -77.7777) == "offset", "shifts 7m: a negative MSFragger offset is exported");
+      check(actionAt(o, 123.4567) == "offset", "shifts 7m: the positive offset is exported");
+      check(actionAt(o, 42.0106) == "variable" && actionAt(o, 15.9949) == "already_searched", "shifts 7m: rules 3 as for Comet");
+      SC::SearchPlan q = p;
+      q.database = "x.fasta";
+      std::vector<std::pair<std::string, std::string>> keys;
+      check(SC::msfraggerKeys(q, keys).empty(), "shifts 7m: the plan renders for MSFragger");
+      std::map<std::string, std::string> m(keys.begin(), keys.end());
+      check(m["mass_offsets"] == "0/-77.7777/123.4567", "shifts 7m: mass_offsets '/'-separated, 0 first, then by spectra");
+      check(m["localize_delta_mass"] == "1", "shifts 7m: localize_delta_mass on with offsets");
+      check(m["variable_mod_02"].rfind("42.010565 K 3", 0) == 0, "shifts 7m: the shift modification in variable_mod_02");
+      // Comet's 15-slot cap does not apply; MSFragger's 16 does.
+      auto r = shiftPlan({cam}, std::vector<const OpenMS::ResidueModification*>(15, mod("Deamidated (N)")));
+      const auto o2 = SC::shiftsToPlan(fx.result({{15.9949, 100}, {42.0106, 40}}), {}, fx.mods, fx.combos,
+                                       shiftSettings("msfragger"), r);
+      check(actionAt(o2, 15.9949) == "variable" && r.variable.size() == 16, "shifts 7m: slot 16 is used");
+      check(actionAt(o2, 42.0106) == "dropped_cap" &&
+                decisionAt(o2, 42.0106)->reason.find("MSFragger's 16 variable modification slots") != std::string::npos,
+            "shifts 7m: a 17th modification is dropped_cap at MSFragger's 16 slots");
+      // A Da precursor window: MSFragger 4.4.1 exits 1 on mass offsets, so
+      // none is exported; the variable modifications are.
+      auto d = shiftPlan({cam}, {mod("Oxidation (M)")});
+      d.precursor_ppm = false;
+      d.precursor_tolerance = 0.02;
+      auto sd = shiftSettings("msfragger");
+      const auto o3 = SC::shiftsToPlan(fx.result({{123.4567, 50}, {-77.7777, 60}, {42.0106, 40}}), {}, fx.mods,
+                                       fx.combos, sd, d);
+      check(actionAt(o3, 123.4567) == "dropped_engine" && actionAt(o3, -77.7777) == "dropped_engine" &&
+                decisionAt(o3, 123.4567)->reason.find("Da precursor window") != std::string::npos,
+            "shifts 7m: Da precursor window -> offsets dropped_engine");
+      check(d.mass_offsets.empty() && actionAt(o3, 42.0106) == "variable", "shifts 7m: Da window keeps the variable mod");
+      d.database = "x.fasta";
+      check(SC::msfraggerKeys(d, keys).empty(), "shifts 7m: the Da plan renders for MSFragger");
+    }
     // 8. isotope vs Deamidated
     {
       auto p = shiftPlan({cam});
@@ -350,6 +391,17 @@ namespace
       bool tmt_var = false;
       for (const auto* v : p.variable) tmt_var = tmt_var || v->getId() == "TMT6plex";
       check(!tmt_var && p.variable.size() == 1 && p.fixed.size() == 2, "shifts 9: the label is not exported again");
+    }
+    // 9b. label + n x 13C is an isotope error, not an offset
+    {
+      const auto* tmt = mod("TMT6plex (N-term)");
+      const double L = tmt->getDiffMonoMass();
+      auto p = shiftPlan({cam, tmt});
+      const auto o = SC::shiftsToPlan(fx.result({{L, 300}, {L + 1.0049, 90}, {L + 2.0039, 40}}), {}, fx.mods, fx.combos,
+                                      shiftSettings(), p);
+      check(actionAt(o, L + 1.0049) == "skipped_isotope" && actionAt(o, L + 2.0039) == "skipped_isotope",
+            "shifts 9b: label + n x 13C is skipped_isotope");
+      check(o.isotope_max == 2 && p.isotope_errors == 2 && o.offsets == 0, "shifts 9b: the isotope range is raised, no offset exported");
     }
     // 10. substitution-dominated -> offset
     {
