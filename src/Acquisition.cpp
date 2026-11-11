@@ -130,6 +130,30 @@ namespace FASTag::Acquisition
     c.periodic = c.n_gaps >= t.min_gaps && c.per >= t.min_periodicity &&
                  std::fabs(static_cast<double>(c.cycle) - nw) <= t.cycle_tolerance * nw && c.n_win >= t.min_windows;
 
+    // 2b. Closed window set (1.13): the run keeps returning to the same few
+    // m/z, whatever the order. visits = events per distinct m/z; the share of
+    // the events of the second half whose m/z the first half had.
+    {
+      c.visits = c.n_win ? static_cast<double>(ev.size()) / nw : 0.0;
+      const std::size_t half = ev.size() / 2;
+      std::unordered_map<long, bool> first;
+      for (std::size_t i = 0; i < half; ++i) first.emplace(ev[i].kx, true);
+      std::size_t seen = 0;
+      for (std::size_t i = half; i < ev.size(); ++i) seen += first.count(ev[i].kx);
+      c.closed_share = ev.size() > half ? static_cast<double>(seen) / static_cast<double>(ev.size() - half) : 0.0;
+      c.closed = c.n_gaps >= t.min_gaps && c.n_win >= t.min_windows && c.visits >= t.closed_min_visits &&
+                 c.closed_share >= t.closed_min_share;
+    }
+    // One and the same charge on (almost) every MS2 is a method default, not
+    // a measured charge state.
+    {
+      std::map<int, std::size_t> zc;
+      for (const Ms2Meta& m : ms2)
+        if (m.charge > 0) ++zc[m.charge];
+      for (const auto& [z, k] : zc)
+        if (static_cast<double>(k) >= t.placeholder_min_share * n) c.placeholder_charge = z;
+    }
+
     // 3. Windows: recorded on most events; their median width; the union of
     // [target - lower, target + upper] over the distinct windows.
     std::vector<double> widths;
@@ -197,20 +221,29 @@ namespace FASTag::Acquisition
       return c;
     }
     const bool tiling = c.windows && c.coverage >= t.min_coverage && c.hi - c.lo >= t.min_span;
-    if (c.periodic && tiling)
+    if ((c.periodic || c.closed) && tiling)
     {
+      // The wording of a run with one cycle is the 1.12 one.
+      const std::string head = c.periodic
+          ? "the same " + std::to_string(c.n_win) + " isolation windows repeat every cycle and tile the range ("
+          : "the run keeps returning to the same " + std::to_string(c.n_win) + " isolation windows (" +
+            fmt(c.visits, 1) + " visits each, no single cycle), which tile the range (";
       if (c.frac_uncharged >= t.dia_min_uncharged)
       {
         c.mode = Mode::DIA;
-        c.why = "the same " + std::to_string(c.n_win) + " isolation windows repeat every cycle and tile the "
-                "range (" + win_stats + "); " + stats;
+        c.why = head + win_stats + "); " + stats;
+      }
+      else if (c.placeholder_charge > 0)
+      {
+        c.mode = Mode::DIA;
+        c.why = head + win_stats + "), and all MS2 carry the same charge " + std::to_string(c.placeholder_charge) +
+                "+, a method default; " + stats;
       }
       else
       {
         c.mode = Mode::DIALike;
         c.warn = true;
-        c.why = "the same " + std::to_string(c.n_win) + " isolation windows repeat every cycle and tile the "
-                "range (" + win_stats + "), but most MS2 carry a charge; " + stats;
+        c.why = head + win_stats + "), but most MS2 carry a charge; " + stats;
       }
       return c;
     }
@@ -367,9 +400,14 @@ namespace FASTag::Acquisition
     std::string scheme(const AcqCall& c)
     {
       if (c.windows)
-        return "the precursor m/z of its MS2 repeats in a cycle of " + std::to_string(c.n_win) +
+        return std::string("the precursor m/z of its MS2 ") +
+               (c.periodic ? "repeats in a cycle of " : "keeps returning to the same ") + std::to_string(c.n_win) +
                " isolation windows (median " + fmt(c.median_width) + " Th, " + fmt(c.lo, 1) + "-" + fmt(c.hi, 1) +
-               " m/z, periodicity " + fmt(c.per) + ", " + pct(c.frac_uncharged) + " uncharged)";
+               " m/z, periodicity " + fmt(c.per) + ", " + pct(c.frac_uncharged) + " uncharged" +
+               (c.frac_uncharged < 0.5 && c.placeholder_charge > 0
+                    ? ", all others " + std::to_string(c.placeholder_charge) + "+, a method default"
+                    : std::string()) +
+               ")";
       return "the precursor m/z of its MS2 repeats in a cycle of " + std::to_string(c.n_win) +
              " values without recorded isolation windows (median spacing " + fmt(c.spacing) + " Th, periodicity " +
              fmt(c.per) + ", " + pct(c.frac_uncharged) + " uncharged)";
