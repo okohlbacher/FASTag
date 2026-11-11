@@ -1,8 +1,8 @@
 # Run-measured complement tolerance (`-complement_tolerance_unit auto`)
 
 Experimental, opt-in (1.13, backlog item 15); `auto` **failed** its held-out
-test with the first estimator, and the revised estimator is checked on
-development data only (see Validation). With the option off, nothing in this
+test with the first estimator; the second test, with the revised estimator,
+was **inconclusive** with no criterion failed (see Validation). With the option off, nothing in this
 file runs and every output is unchanged.
 
 ## What it does
@@ -128,7 +128,7 @@ mode at that window: the tags, the `-unknown_charge infer` and
 
 ## Validation
 
-The held-out result below was measured with 1.13's first version
+The first held-out result below was measured with 1.13's first version
 (c5f96b5): the probe tagged at the run's first seed length with the run's
 preprocessing, and the window was the 95% order statistic of the
 floor-corrected |error|. That version's window was not a property of the
@@ -139,20 +139,18 @@ failing Astral L5 default 2+ cell is the cell with the 0.0566 Da window, so
 the Astral failure is at least partly estimator variance, not only a wrong
 window. The current version (probe at length 3 with default settings; median
 and MAD; `-complement_tolerance` as the lower bound) removes that dependence
-by construction and is far less variable on probe-sized samples. It has been
-run on DEV only: on PXD003531 one window per file (measured 0.0139 Da in all
+by construction and is far less variable on probe-sized samples. On DEV:
+on PXD003531 one window per file (measured 0.0139 Da in all
 six cells, so 0.02 Da in force and the tags equal the defaults); on PXD001819
 (0.5 Da) 0.224 Da in all six cells and +2.3 to +7.6 points rank-1 correct in
 every powered 2+ and 3+ cell ((ii) PASS on DEV; the 4+ cells are
-underpowered). It has **not** been
-tested on held-out data: the held-out result stands for the first version, and
-a new held-out test would need data not used for this one.
+underpowered). Its held-out result is the second test below.
 
 DEV of the first version (c5f96b5): the #2 DEV runs with the frozen #2 scorer. On PXD003531 (Q Exactive, 20 ppm) the measured windows were
 0.019-0.036 Da, and the powered cells moved by -0.20 to +0.27 points. On PXD001819 (LTQ Orbitrap Velos,
 ion-trap MS2, 0.5 Da) they were 0.177-0.208 Da, and the powered cells gained +2.2 to +7.6 points.
 
-Held-out (`acceptance/1.13`, `PREREG-compltol.md`, `results/compltol/RESULT.md`): the #2 design and margins on
+First held-out test, first version (`acceptance/1.13`, `PREREG-compltol.md`, `results/compltol/RESULT.md`): the #2 design and margins on
 11 runs (astral 2, ion_trap 5, qe 1, timsTOF 3), scored once. Verdict **FAIL**:
 - (i) fails on three Astral cells: L5 default 2+ at -0.503 points, and two 4+ cells whose Holm bound is below
   -1.0.
@@ -161,8 +159,29 @@ Held-out (`acceptance/1.13`, `PREREG-compltol.md`, `results/compltol/RESULT.md`)
 - (iv) time passes (ratio 1.027).
 
 The ion-trap runs gained +2.1 to +5.1 points in every powered 2+ and 3+ cell. Q Exactive and timsTOF stayed
-within +-0.33 points. Two high-resolution runs fell back to 0.02 Da (too few pairs). The option stays
-experimental; the default stays `Da`.
+within +-0.33 points. Two high-resolution runs fell back to 0.02 Da (too few pairs).
+
+Second held-out test, current version (`acceptance/1.13/PREREG-compltol-heldout2.md`, branch `acc113r/compltol`:
+freeze cb84295, results 56f604d; integration/1.13 at e21d803): 8 new runs (astral 2, ion_trap 3, qe 3), 54 cells.
+Against the first test, underpowered or uninformative 4+ cells do not block (i), and (ii) is the ion-trap set alone
+with a threshold of +1.0 points; both were fixed before the freeze. Verdict **INCONCLUSIVE**; no criterion failed:
+- (i) 44 cells pass, 0 fail, 10 are uninformative (all ion trap). Astral 18/18 and Q Exactive 18/18 pass with a
+  difference of 0 in every cell. Ion trap: 8 cells pass (+0.62 to +1.57 points); six 4+ cells and four 3+ cells
+  (L4 and L5, baseline 0.85 to 1.22%) are uninformative, and the four 3+ cells block a PASS (their differences:
+  -0.13 to +0.47 points).
+- (ii) passes: ion trap, length 3, 6.74% to 7.81%, +1.07 points (95% interval 0.87 to 1.27; 13,969 clusters).
+- (iii) timsTOF: not tested (no timsTOF run).
+- (iv) time passes (ratio 1.010).
+- One window per file in all six cells, never below 0.02 Da (8 of 8 files).
+
+On all five high-resolution files the window in force was 0.02 Da (three measured below it, 0.0064 to 0.0185 Da;
+two fell back with too few pairs), so `auto` equals the default there. The three ion-trap files measured 0.337 to
+0.426 Da. Limits: one Astral project, and in neither of its files did `auto` change the window, so windows above
+0.02 Da on Astral data are untested; three ion-trap files, all at a fragment tolerance of 0.5 Da and with low
+identification rates; no timsTOF; the scorer was started twice (the first start stopped at an import, before it
+read data).
+
+The option stays experimental; the default stays `Da`.
 
 ## Code
 

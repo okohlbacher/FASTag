@@ -927,7 +927,7 @@ export const PARAM_UI: Record<string, ParamUi> = {
   complement_tolerance_unit: {
     hidden: OPT_IN_1_12,
     help: {
-      text: 'Whether the complement window is a fixed value in Da, follows the fragment tolerance, or (auto, experimental; it failed its held-out test) is measured on the run from the complement pairs of confident tags.'
+      text: 'Whether the complement window is a fixed value in Da, follows the fragment tolerance, or (auto, experimental; its first held-out test failed, the second, with the revised estimator, was inconclusive with no criterion failed: +1.1 points of correct rank-1 tags on ion trap, same window as Da on the high-resolution files) is measured on the run from the complement pairs of confident tags.'
     }
   },
   digest_calibration: {
@@ -1131,7 +1131,7 @@ export const PARAM_UI: Record<string, ParamUi> = {
   shortlist_protease: {
     hidden: EXPERIMENTAL_1_13,
     help: {
-      text: 'The cleavage rule the shortlist places tags with: trypsin (as in 1.12), the protease the run calls (auto), a named protease, or none (unspecific). Experimental, no held-out test.'
+      text: 'The cleavage rule the shortlist places tags with: trypsin (as in 1.12), the protease the run calls (auto), a named protease, or none (unspecific). Experimental; auto passed its held-out test (9 runs, 5 proteases: median protein recall 0.25 against the full search, +0.12 over the trypsin shortlist); a named rule and unspecific have no held-out test.'
     }
   },
   shortlist_specificity: {
