@@ -2025,9 +2025,7 @@ namespace FASTag::LabelDiscovery
     };
     lys8 = pairs(kLys8);
     arg10 = pairs(kArg10);
-    lys6arg6 = pairs(6.020129);
-    medium_heavy = std::max(pairs(3.989092), pairs(3.988140));
-    other = std::max(lys6arg6, medium_heavy);
+    other = std::max({pairs(6.020129), pairs(3.989092), pairs(3.988140)});
     silac_top = std::max({lys8, arg10, other});
     dimethyl2 = 0;
     // Per labelled site: light/intermediate, light/13CD2O, light/CD2O+NaBD3CN, light/heavy, intermediate/heavy.
@@ -2058,30 +2056,6 @@ namespace FASTag::LabelDiscovery
   {
     const std::uint64_t m = std::max({lys8, arg10, other});
     return m >= 30 && ratio(m) >= 2.0;
-  }
-
-  namespace
-  {
-    // Development runs (633, five sets): the largest single-spacing ratio of a label-free run is 16.5, the SILAC runs
-    // with ion-trap MS2 and one spacing only show 34 to 211.
-    constexpr double kSingleRatio = 20.0;
-  }
-
-  bool PairCounter::silacSingle() const
-  {
-    const std::uint64_t m = std::max({lys8, arg10, lys6arg6, medium_heavy});
-    return m >= 30 && ratio(m) >= kSingleRatio && !dimethyl();
-  }
-
-  std::string PairCounter::silacSingleLabels() const
-  {
-    auto on = [&](std::uint64_t n) { return n >= 30 && ratio(n) >= kSingleRatio; };
-    // +3.9891 and +3.9881 lie 1 mDa apart: the medium to heavy pair names both residues.
-    const bool k4 = on(medium_heavy), k6 = on(lys6arg6), k8 = on(lys8) || k4, r6 = k6 || k4, r10 = on(arg10) || k4;
-    std::string l;
-    for (const auto& [b, name] : {std::pair{k4, "K:Lys4"}, {k6, "K:Lys6"}, {k8, "K:Lys8"}, {r6, "R:Arg6"}, {r10, "R:Arg10"}})
-      if (b) l += (l.empty() ? "" : "+") + std::string(name);
-    return l.empty() ? "-" : l;
   }
 
   void applyPairs(Analysis& a, PairCounter pc)
@@ -2119,20 +2093,7 @@ namespace FASTag::LabelDiscovery
       a.basis = "absence";
       return;
     }
-    if (!a.pairs.silac())
-    {
-      // One SILAC spacing alone (light/medium 13C(6), Lys8 or Arg10 only, medium/heavy), at a ratio of 20.
-      if (a.pairs.silacSingle() && (a.status == "no_call" || a.labels == "label-free"))
-      {
-        a.status = "call";
-        a.labels = a.pairs.silacSingleLabels();
-        const bool k = a.labels.find("K:") != std::string::npos, r = a.labels.find("R:") != std::string::npos;
-        a.call_sites = k && r ? "K,R" : k ? "K" : "R";
-        a.reason = "-";
-        a.basis = "precursor_pairs";
-      }
-      return;
-    }
+    if (!a.pairs.silac()) return;
     if (a.status == "call" && a.labels != "label-free")
     {
       // Format 4: a call of SILAC labels only (the tags often show one residue's label) gains the label the pairs show.
@@ -2922,10 +2883,6 @@ namespace FASTag::LabelDiscovery
       row("ld_pair", "other_pairs", num(pc.other), n, "the largest count at another label spacing: +6.0201, +3.9891, +3.9881 (SILAC), +4.0251, +6.0318, +6.0377, +8.0444, +4.0193 Da (dimethyl)");
       row("ld_pair", "other_ratio", fix(pc.ratio(pc.other), 2), "-", "other_pairs / (control_pairs + 5)");
       row("ld_pair", "silac", pc.silac() ? "yes" : "no", "-", "yes: both counts >= 30 and both ratios >= 2");
-      row("ld_pair", "lys6arg6_pairs", num(pc.lys6arg6), n, "the same at +6.0201 Da (Lys6, Arg6)");
-      row("ld_pair", "medium_heavy_pairs", num(pc.medium_heavy), n, "the larger count at +3.9891 Da (Lys4 to Lys8) and +3.9881 Da (Arg6 to Arg10)");
-      row("ld_pair", "silac_single", pc.silacSingle() ? "yes" : "no", "-",
-          "yes: one SILAC spacing (Lys8, Arg10, +6.0201, medium to heavy) has >= 30 pairs and a ratio >= 20, and dimethyl is no");
       row("ld_pair", "dimethyl_pairs", num(pc.dimethyl2), n, "largest over the dimethyl spacings of the smaller count at the spacing and at twice the spacing");
       row("ld_pair", "dimethyl_ratio", fix(pc.ratio(pc.dimethyl2), 2), "-", "dimethyl_pairs / (control_pairs + 5)");
       row("ld_pair", "dimethyl", pc.dimethyl() ? "yes" : "no", "-", "yes: count >= 30, ratio >= 2 and above the largest SILAC spacing count");
