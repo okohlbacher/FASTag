@@ -1,5 +1,16 @@
 # Changelog
 
+## Unreleased (branch post1131/labeldisc)
+
+- **`-label_discovery_out`, report format 5: fourth held-out test, PASS.**
+  TMTpro-only reporter ions name a TMT call TMTpro; precursor pairs at the
+  dimethyl spacings call `Dimethyl`; the absence rule also calls `label-free`
+  on ion-trap MS2. On 144 runs from 144 new PRIDE projects
+  (`post1131/labeldisc-heldout4`, PREREG-labeldisc4.md, scored once) all nine
+  criteria pass: 0 of 42 label-free runs got a label call, weighted accuracy
+  0.954, TMTpro 20/20, dimethyl 24/28, 5 of 102 labelled runs called
+  label-free (criterion at most 0.05). Still experimental and opt-in.
+
 ## 1.13.1 (2026-11-10)
 
 No change to the program. Five test scripts compare and pass the Windows
