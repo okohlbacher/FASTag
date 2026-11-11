@@ -2080,7 +2080,10 @@ namespace FASTag::LabelDiscovery
     const bool few = (a.reason == "few_spectra" || a.reason == "no_reference") && a.reporter_gate == "none";
     // There the pairs are the only evidence, so the run must be large enough to show them: 1500 precursors give the 30
     // pairs at a pair share of 2 % (development dimethyl runs: 0.6 to 5.1 %, median 2.5 %).
-    const bool trap = a.reason == "low_resolution_ms2" && (a.reporter_gate == "none" || a.reporter_gate == "unknown") &&
+    // Below 200 high-resolution scans (gate unknown) those scans must not show reporters (SPS-MS3 with few MS3 scans).
+    const ReporterCounter& rc = a.reporters;
+    const bool quiet = rc.excess(rc.tmt, rc.tmt_decoy) < kGateOff && rc.excess(rc.itraq4, rc.itraq4_decoy) < kGateOff;
+    const bool trap = a.reason == "low_resolution_ms2" && (a.reporter_gate == "none" || (a.reporter_gate == "unknown" && quiet)) &&
                       a.pairs.precursors.size() >= 1500;
     if (a.status == "no_call" && (few || trap) && a.pairs.precursors.size() >= 500 && !a.pairs.anyLabel())
     {

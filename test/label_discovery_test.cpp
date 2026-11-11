@@ -929,6 +929,11 @@ int main()
     x.reporter_gate = "unclear";
     LD::applyPairs(x, many);
     CHECK(x.status == "no_call", "no ion-trap absence call at gate unclear");
+    x = few;
+    x.reason = "low_resolution_ms2";
+    for (int i = 0; i < 150; ++i) x.reporters.add({{126.127726, 50}, {127.124761, 40}, {120.0, 100}}, 100.0);
+    LD::applyPairs(x, many);
+    CHECK(x.status == "no_call", "reporters in under 200 high-resolution scans block the ion-trap absence call");
     // format 5: dimethyl needs the spacing (one site) and twice the spacing (two sites)
     auto dimethyl = [&](double s, int one, int two) {
       LD::PairCounter d = many;
