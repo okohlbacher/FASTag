@@ -19,11 +19,19 @@ producing an empty report.
 | `nodes.dmp` | ~10 KB | yes |
 | `names.dmp` | ~19 KB | yes |
 | `tax_k7.taxdb` | ~1.06 GB | **no — separate release asset `FASTag-taxonomy-k7.tar.gz`** |
+| `species_reagents.fasta` | ~19 KB | yes |
 
 The two `.dmp` files are an NCBI taxdump **pruned to the lineages the index can
 reach** (a few hundred taxa instead of ~2.5M). Produced by
 `tools/prune_taxdump.py`; identical results to the full ~500 MB dump, and faster
 to load.
+
+`species_reagents.fasta` is the protein list of `-species_reagents`
+(experimental, with `-species_call explain`): 38 UniProtKB/Swiss-Prot entries
+(CC BY 4.0), porcine trypsin and pepsin and 36 bovine serum, milk and enzyme
+proteins (albumin, fetuins, transferrin, caseins, aprotinin, RNase A, DNase I,
+chymotrypsin, trypsin and others). The headers carry `OX=<taxid>`, which is how
+an entry is assigned to its taxon; add entries in the same format to extend it.
 
 The **index** is the reduced-set k=7 image over the reference proteomes listed in
 `reference-set.tsv` (~50 taxa: model organisms, MS contaminants, common
