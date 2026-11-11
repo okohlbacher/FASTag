@@ -704,6 +704,18 @@ endpoint matches a TMT6/10 reporter ion, under the same active TMT gate.
 `-stream` and mzPeak input; forced `on` supports them. These filters are
 experimental, not modification identification or labeling-efficiency estimates.
 
+The [frozen TMT benchmark](bench/results/tmt-pseudo-2026-11-11/report.html)
+tested four TMT files and one label-free control. In the two independent TMT
+validation projects (10,912 reference PSMs), specifying TMT masses and enabling
+the automatic filter increased rank-1 accuracy from 81.562% to 82.093%, with
+recall@50 unchanged at 94.630%. Omitting TMT masses instead reduced the existing
+sequence-plus-flank recall from 95.115% to 94.529%: bare-K tags can carry the
+label mass in a terminal gap and still have a useful sequence. Automatic
+detection activates filtering; it does not change the residue alphabet.
+Keep the option experimental and off by default. Full paired counts, the
+supplementary residue-mass correctness metric, timing, and provenance accompany
+the report.
+
 One TSV row per tag: `spectrum` (native ID; `index=<k>`, the 0-based block,
 for MGF), `tag` (sequence), `length`,
 `charge` (fragment charge), `nterm_mass` / `cterm_mass` (flanking masses,
