@@ -1284,7 +1284,7 @@
       "name": "shortlist_protease",
       "type": "string",
       "default": "trypsin",
-      "description": "Cleavage rule of the shortlist's placements and of -search_config_out. 'trypsin': tryptic windows, a confidently non-tryptic run is refused (FASTag 1.12). 'auto': the protease the tag ends call (trypsin when inconclusive). A protease name, or 'unspecific': that rule. Except for 'trypsin', windows are found by flank mass and kept by the rule and -shortlist_specificity; only exact placements count. Experimental; auto passed its held-out test (9 runs, 5 proteases: median protein recall 0.25 against the full search, +0.12 over the trypsin shortlist); a named rule and unspecific have no held-out test",
+      "description": "Cleavage rule of the shortlist's placements and of -search_config_out. 'trypsin': tryptic windows, a confidently non-tryptic run is refused (FASTag 1.12). 'auto': the protease the tag ends call (trypsin when inconclusive). A protease name, or 'unspecific': that rule. Except for 'trypsin', windows are found by flank mass and kept by the rule and -shortlist_specificity; only exact placements count. Experimental; auto passed its held-out test (9 runs, 5 proteases: median protein recall 0.25 against the full search, +0.12 over the trypsin shortlist); a named rule and unspecific have no held-out test. After 1.13.1 an Asp-N call of 'auto' is exported semi-specific unless -shortlist_specificity is given (development runs only, no held-out test)",
       "required": false,
       "toppAdvanced": true,
       "choices": [
@@ -1303,7 +1303,7 @@
       "name": "shortlist_specificity",
       "type": "string",
       "default": "full",
-      "description": "With -shortlist_protease other than trypsin: 'full' both window ends at a cleavage site (or a protein terminus), 'semi' at least one, 'none' any window",
+      "description": "With -shortlist_protease other than trypsin: 'full' both window ends at a cleavage site (or a protein terminus), 'semi' at least one, 'none' any window. When it is not given and -shortlist_protease auto calls Asp-N, 'semi' is used (development runs only, no held-out test); a named asp-n stays 'full'",
       "required": false,
       "toppAdvanced": true,
       "choices": [

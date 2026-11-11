@@ -1,9 +1,36 @@
 # Changelog
 
-## Unreleased
+## Unreleased (after 1.13.1)
 
-Documentation only, no change to the program's results.
-
+- `-shortlist_protease` other than trypsin: the shortlist's protease check
+  calls Asp-N from 21 % D at the N-terminal tag ends (was 50 %; tag ends of
+  Asp-N digests show 33-78 % D, other digests at most 10 %). On the 176
+  development runs with a known protease, three Asp-N runs change from
+  `unspecific` to Asp-N and no other call changes. No held-out test: the
+  held-out result of `auto` (1.13.1) describes the old rule. On the three
+  runs the exported Sage search is about twice as fast as the full search
+  (the unspecific export was 1.2 to 7 times slower), and the shortlist keeps
+  fewer of the full search's proteins (0.18, 0.19, 0.57 against 0.25, 0.34,
+  0.66); `-shortlist_specificity semi` keeps 0.25, 0.29, 0.64 at about the
+  time of the full search. `-digest_out` and the default trypsin check are
+  unchanged.
+- `-shortlist_protease auto`: an Asp-N call is placed and exported
+  semi-specific (Sage `semi_enzymatic`, Comet and MSFragger
+  `num_enzyme_termini = 1`) unless `-shortlist_specificity` is given on the
+  command line (or is `semi` or `none` in an INI); the placement line of the
+  log and of the shortlist header says so. `-shortlist_protease asp-n` and
+  every other call of `auto` keep `full`. Development runs only, no held-out
+  test. On the three development runs now called Asp-N (PXD064794,
+  PXD068586, PXD051338; Sage 0.14.7, 8 threads), share of the full search's
+  proteins kept / Sage wall time / peak RSS: unspecific export (1.13.1)
+  0.25, 0.34, 0.66 / 162, 181, 7 s / 17.9, 20.8, 0.8 GB; Asp-N full 0.18,
+  0.19, 0.57 / 13, 12, 6 s / 0.3, 0.3, 0.1 GB; Asp-N semi (now the export)
+  0.25, 0.29, 0.64 / 27, 26, 5 s / 1.7, 1.7, 0.2 GB; the full search with
+  Asp-N takes 25, 25, 6 s and 2.0, 1.8, 0.4 GB.
+- `-shortlist_protease auto`: a WARN states when the tag ends call
+  `unspecific` that the exported search is unspecific and can take longer
+  than a full search. No run-time guard: no peptide-length cap made the
+  unspecific export as fast as the full search without losing identifications.
 - **`-search_shifts`: gain against an isotope-matched base, entrapment FDP
   over 10 databases.** Development runs only (the spent held-out runs and two
   earlier development runs); the two held-out FAIL results stand and no new

@@ -339,6 +339,27 @@ int main()
     check(value(rows, "nocall", "tie") == "no", "tie: not on an unscored run");
   }
 
+  // ---- post-1.13.1 (aspn): softenNterm. A third of the N-terminal tag ends
+  // at D (an Asp-N digest as tags see it) is `unspecific` under the D-only
+  // model and Asp-N under the softened one; 12 % D stays unspecific.
+  {
+    std::map<char, std::uint64_t> bgc;
+    for (int i = 0; i < D::kNumAA; ++i) bgc[D::kAAs[static_cast<std::size_t>(i)]] = 4 * static_cast<std::uint64_t>(i + 1);
+    auto third = bgc, eighth = bgc;
+    third['D'] += 300;   // 340 of 1060
+    eighth['D'] += 60;   // 100 of 820
+    const auto top = [](const D::Classification& c) { return c.scores[static_cast<std::size_t>(c.top)].name; };
+    D::ModelTable soft = table();
+    D::softenNterm(soft, "Asp-N", D::kNtermSiteShare);
+    D::softenNterm(soft, "Trypsin", D::kNtermSiteShare);  // N end is the background: no-op
+    D::softenNterm(soft, "no such model", D::kNtermSiteShare);
+    check(top(D::classify(counts(bgc), counts(third), table(), 0.05, 100)) == "unspecific", "soften: 32 % D is unspecific before");
+    check(top(D::classify(counts(bgc), counts(third), soft, 0.05, 100)) == "Asp-N", "soften: 32 % D is Asp-N after");
+    check(top(D::classify(counts(bgc), counts(eighth), soft, 0.05, 100)) == "unspecific", "soften: 12 % D stays unspecific");
+    check(top(D::classify(counts({{'K', 150}, {'R', 60}}), counts(third), soft, 0.05, 100)) == "Trypsin",
+          "soften: a tryptic C end still wins");
+  }
+
   // ---- a residue at probability 0 is no call, not a margin of inf or nan
   {
     std::string t = "model\tclass\tend\tresidue\tfreq\n";
