@@ -88,7 +88,9 @@ thresholds.
 
 ## Protease-aware placement (1.13, item 20, experimental)
 
-Experimental, no held-out test: checked on development runs only.
+Experimental. `-shortlist_protease auto` **passed** its held-out test (see Held-out result at the end of this
+section); a named rule, `unspecific` and `-shortlist_specificity semi` or `none` are checked on development runs
+only.
 
 `-shortlist_protease` (default `trypsin`, the 1.12 behaviour above, byte for
 byte) chooses the cleavage rule of the shortlist's placements and of
@@ -164,6 +166,40 @@ placements by flank mass fit the rule.
 Cost: a placement by mass walks at most the flank masses from each
 occurrence (a few dozen residues), for the shortlist's tags only (E <=
 `-shortlist_max_evalue`); the evidence is filtered once after the run.
+
+### Held-out result (`-shortlist_protease auto`)
+
+**PASS** (`acceptance/1.13/PREREG-nontryptic.md`, branch `acc113r/nontryptic`: freeze 07bd705, results 5dd9d9c;
+integration/1.13 at 9365ff1; scored once). 9 runs from 6 PRIDE projects with 5 proteases (Arg-C 1, Asp-N 1, Glu-C 3,
+Lys-C 3, chymotrypsin 1); human, FTMS HCD DDA; `-extension 3`, `-shortlist_specificity full`, Sage 0.14.7 on the
+exported FASTA and configuration. Reference: Sage on the full human proteome with the true protease, proteins with
+at least 2 target PSMs at 1% FDR. Recall is the share of the reference proteins the shortlist keeps.
+
+| criterion | result |
+|---|---|
+| recall of the `auto` shortlist: median >= 0.20 | median 0.25, mean 0.30 |
+| recall, `auto` minus the trypsin shortlist: mean and lower 95% bound > 0 | +0.116 (CI +0.035 to +0.190) |
+| `auto` rule equals the true protease in >= 60% of runs | 7 of 9 |
+| no aborts | 0 of 9 |
+
+| protease | project | rule under `auto` | recall `auto` | recall trypsin shortlist | Sage speed-up, `auto` export |
+|---|---|---|---|---|---|
+| Arg-C | PXD059514 | Arg-C | 0.622 | 0.562 | 2.7 |
+| Asp-N | PXD064794 | unspecific | 0.253 | 0.008 | 0.25 |
+| Glu-C | PXD015759 | Glu-C | 0.072 | 0.001 | 4.8 |
+| Glu-C | PXD008333 | Glu-C | 0.057 | 0.000 | 4.4 |
+| Glu-C | PXD048926 | Glu-C | 0.506 | 0.004 | 3.9 |
+| Lys-C | PXD015759 | Lys-C | 0.246 | 0.234 | 2.4 |
+| Lys-C | PXD006465 | Lys-C | 0.341 | 0.343 | 2.1 |
+| Lys-C | PXD048926 | Trypsin | 0.463 | 0.463 | 2.3 |
+| Chymotrypsin | PXD064794 | Chymotrypsin | 0.101 | 0.000 | 3.9 |
+
+Limits: the gain comes from the Asp-N, Glu-C and chymotrypsin runs, where the trypsin shortlist keeps almost nothing;
+on Arg-C and Lys-C the two shortlists are about equal (-0.002 to +0.061). Recall is 0.06 to 0.10 on three runs, and
+the median passes its threshold by 0.05. Two calls differ from the truth (Asp-N called unspecific, one Lys-C run
+called trypsin); on the run called unspecific the export makes Sage four times slower than the full search (speed-up
+had no threshold). Asp-N is represented by one run. A named rule, `unspecific` given by the user and
+`-shortlist_specificity semi` or `none` were not tested. The option stays experimental.
 
 ## Reduced FASTA
 

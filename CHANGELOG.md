@@ -2,6 +2,28 @@
 
 ## Unreleased
 
+- **`-complement_tolerance_unit auto` (backlog #15): second held-out
+  result, INCONCLUSIVE, no criterion failed.** No code change besides the
+  help text. With the revised estimator on 8 new runs (`acc113r/compltol`,
+  PREREG-compltol-heldout2.md, freeze cb84295, results 56f604d):
+  non-inferiority passes in 44 of 54 cells, fails in none and is
+  uninformative in 10 (all ion trap); the ion-trap gain is +1.07 points
+  (95% interval 0.87-1.27, PASS); timsTOF was not tested; the run time
+  ratio is 1.010 (PASS). On all five high-resolution files `auto` equals
+  the default. The option stays experimental and the default stays `Da`
+  (doc/COMPLEMENT-TOLERANCE.md).
+- **`-shortlist_protease auto` (backlog #20): held-out result, PASS.** No
+  code change besides the help text. On 9 runs from 6 PRIDE projects with 5
+  proteases (`acc113r/nontryptic`, PREREG-nontryptic.md, freeze 07bd705,
+  results 5dd9d9c, scored once) the shortlist keeps a median of 0.25 of the
+  proteins the full-proteome search with the true protease identifies
+  (criterion 0.20), 0.116 more than the trypsin shortlist (95% CI +0.035
+  to +0.190); the protease is called right in 7 of 9 runs; no run aborts.
+  The gain comes from Asp-N, Glu-C and chymotrypsin; Arg-C and Lys-C are
+  about equal; recall is 0.06-0.10 on three runs; on the one run called
+  `unspecific` the export makes Sage slower than the full search. A named
+  rule, `unspecific` and `-shortlist_specificity semi`/`none` have no
+  held-out test. The option stays experimental (doc/SHORTLIST.md).
 - **Raw-DIA check (#7): two more window schemes are refused.** (1) Tiling
   isolation windows the run keeps returning to without one cycle (at least
   10 visits per window, at least 99% of the second half of the probed MS2 on
