@@ -233,8 +233,8 @@ is left under the name, and no configuration is written.
   Without a template a fragment is written whose header says to merge it.
 - The database in the configuration is `-fasta_out`, else the input database
   (WARN when that holds decoys, since the engine adds its own).
-- **MSFragger** (`-search_engine msfragger`, experimental since 1.13, held-out
-  test FAILED, pinned 4.4.1): see "MSFragger configuration" below.
+- **MSFragger** (`-search_engine msfragger`, experimental since 1.13, first held-out
+  test FAILED, second test with the shortlist recipe PASSED, pinned 4.4.1): see "MSFragger configuration" below.
 
 Engine acceptance (`test/search_engine_smoke_test.sh` with `FASTAG_SAGE_BIN`
 and `FASTAG_COMET_BIN`, mandatory with `FASTAG_ENGINES_REQUIRED=1`) runs on
@@ -276,8 +276,8 @@ The export of that test wrote `isotope_error 0`. On two development runs
 `0/1/2/3` the kept share rose from 47.5 to 72.2% and from 47.3 to 56.3%, at
 unchanged speed and an entrapment FDP under 1%. `0/1/2/3` is therefore the
 default for MSFragger since then (`-search_isotope_errors -1`; Sage and Comet
-keep none). **This default was set on development runs only and has no
-held-out test**; the held-out numbers above describe the export before it.
+keep none). The held-out numbers above describe the export before it; the second
+held-out test below covers it.
 After 1.13.1 three more values follow MSFragger's own closed defaults when
 the engine is msfragger: 2 missed cleavages (`-search_missed_cleavages -1`;
 with `-shortlist_protease` other than trypsin the value stays
@@ -306,10 +306,25 @@ last row, at 2.7 times as many proteins (3,594 of 20,414 on average) and a
 search time 9% longer. They are not defaults (`-recon_min_length` also changes
 the reconciliation output); give them with the export when the kept share
 matters. MSFragger's mass calibration (`calibrate_mass 2`) and `stricttrypsin`
-added nothing on the two first runs and are not exported. **All of this was
-set on development runs only and has no held-out test**; the entrapment
+added nothing on the two first runs and are not exported. All of this was
+set on development runs; the entrapment
 differences between the rows are within the noise of 8 to 290 entrapment hits
 per run.
+
+**Second held-out test: PASS** (10 runs from 10 new PRIDE projects,
+PREREG-msfragger2.md on `post1131/msfragger-heldout2`, scored once on
+2026-11-11; criteria of the first test). Tested: the export defaults with the
+recipe `-shortlist_gapped -recon_min_length 6 -shortlist_max_evalue 10
+-recon_missed_cleavages 2`, used unedited. MSFragger ran in 10 of 10 runs
+(C1). In the 9 evaluable runs the kept share is 0.833 to 0.976, median 0.934
+(C2, at least 0.80 in every run); the search is 1.64 to 4.72 times as fast,
+median 2.05 (G1); entrapment FDP 1.07% pooled and at most 1.88% per run (G2,
+limits 1.5% and 2.0%; the highest run has 11 entrapment hits, a 12th would
+exceed the limit). One run had 10 identifications in the full search and is
+not evaluable. The test covers the recipe and the export defaults together,
+not each alone. With the default shortlist (informational, no criterion) the
+kept share is 0.526 to 0.946, below 0.80 in 5 of 9 runs: the recipe is needed
+for this result and is not a default.
 
 `-search_engine msfragger` writes a complete `fragger.params` for MSFragger
 4.4.1 (`java -jar MSFragger-4.4.1.jar fragger.params <spectra>`), keys in the

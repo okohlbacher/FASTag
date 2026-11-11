@@ -17,9 +17,20 @@
   to 1.63%. With the shortlist widened by the existing options
   `-shortlist_gapped -recon_min_length 6 -shortlist_max_evalue 10
   -recon_missed_cleavages 2` it is 0.935 on average, 0.888 in the lowest
-  run, entrapment FDP at most 1.43% per run. **Set on development
-  runs only; no held-out test.** The held-out FAIL of 1.13 stands.
-  The shortlist options are not defaults.
+  run, entrapment FDP at most 1.43% per run. **Second held-out
+  test, PASS** (10 runs from 10 new PRIDE projects, PREREG-msfragger2.md on
+  `post1131/msfragger-heldout2`, scored once on 2026-11-11, criteria of the
+  first test; export defaults with this recipe, used unedited): MSFragger
+  ran in 10 of 10 runs; in the 9 evaluable runs the kept share is 0.833 to
+  0.976 (median 0.934; criterion at least 0.80 in every run), the search
+  1.64 to 4.72 times as fast (median 2.05), entrapment FDP 1.07% pooled
+  (limit 1.5%) and at most 1.88% per run (limit 2.0%; one more entrapment
+  hit in that run would exceed it). One run had too few identifications to
+  evaluate (10 in the full search). The test covers recipe and export
+  defaults together. With the default shortlist (informational) the kept
+  share is 0.526 to 0.946, below 0.80 in 5 of 9 runs. The shortlist options
+  are not defaults; the first held-out FAIL (1.13 export, default
+  shortlist) stands.
 
 ## 1.13.1 (2026-11-10)
 
