@@ -100,8 +100,9 @@ sruns h_both "$TMP/syn_split.mzML" -ion_series auto -ion_series_hybrid both
 sruns h_cz "$TMP/syn_split.mzML" -ion_series cz
 [ "$(lastcol "$TMP/h_both.tsv")" = ion_series ] || fail "both: no ion_series column"
 [ "$(valuesof "$TMP/h_both.tsv")" = "by cz" ] || fail "both: rows not of both series ($(valuesof "$TMP/h_both.tsv"))"
-head -1 "$TMP/h_both.tsv" | cmp -s - <(head -1 "$TMP/h_by.tsv" | sed 's/$/\tion_series/') \
-  || fail "both: the header is not the by header plus ion_series"
+head -1 "$TMP/h_both.tsv" | tr -d '\r' | cmp -s - <(head -1 "$TMP/h_by.tsv" | tr -d '\r' | sed 's/$/\tion_series/') \
+  || { head -1 "$TMP/h_both.tsv" | od -c | tail -4 >&2; head -1 "$TMP/h_by.tsv" | od -c | tail -3 >&2
+       fail "both: the header is not the by header plus ion_series"; }
 [ "$(awk -F'\t' '{ print NF }' "$TMP/h_both.tsv" | sort -u | wc -l)" -eq 1 ] || fail "both: ragged rows"
 EC=$(head -1 "$TMP/h_both.tsv" | tr '\t' '\n' | grep -n '^evalue$' | cut -d: -f1)
 [ -n "$EC" ] || fail "no evalue column"
