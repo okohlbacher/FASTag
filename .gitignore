@@ -30,3 +30,11 @@ __pycache__/
 # ...and the gate reference sets' run tables (gate.sh --refs writes cases.tsv, results.tsv)
 !tools/gate-1.12/refs-*/*.tsv
 !data/alkylation/proteomes.tsv
+# Compact, frozen TMT filter benchmark summaries (raw spectra/tags stay external).
+!bench/results/tmt-pseudo-2026-11-11/summary.tsv
+!bench/results/tmt-pseudo-2026-11-11/paired_changes.tsv
+!bench/results/tmt-ga-2026-11-11/summary.tsv
+!bench/results/tmt-ga-2026-11-11/paired_changes.tsv
+!bench/results/tmt-ga-2026-11-11/iteration1/summary.tsv
+!bench/results/tmt-ga-2026-11-11/iteration1/paired_changes.tsv
+!bench/results/tmt-ga-2026-11-11/audit/*.tsv

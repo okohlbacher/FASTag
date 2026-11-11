@@ -1,0 +1,164 @@
+[
+  {
+    "dataset": "PXD000001",
+    "chemistry": "label_aware",
+    "arm": "auto",
+    "messages": [
+      "TMT pseudo-filter (auto): on; TMT6_10_two_site_evidence; probed=1024; eligible=769, threshold=20, TMT_N=498, TMT_K=416, TMTpro_N=2, TMTpro_K=0; reporters=off"
+    ],
+    "stable": true
+  },
+  {
+    "dataset": "PXD000001",
+    "chemistry": "label_aware",
+    "arm": "auto_reporters",
+    "messages": [
+      "TMT pseudo-filter (auto): on; TMT6_10_two_site_evidence; probed=1024; eligible=769, threshold=20, TMT_N=498, TMT_K=416, TMTpro_N=2, TMTpro_K=0; reporters=on"
+    ],
+    "stable": true
+  },
+  {
+    "dataset": "PXD000001",
+    "chemistry": "label_blind",
+    "arm": "auto",
+    "messages": [
+      "TMT pseudo-filter (auto): on; TMT6_10_two_site_evidence; probed=1024; eligible=790, threshold=20, TMT_N=508, TMT_K=414, TMTpro_N=2, TMTpro_K=0; reporters=off"
+    ],
+    "stable": true
+  },
+  {
+    "dataset": "PXD000001",
+    "chemistry": "label_blind",
+    "arm": "auto_reporters",
+    "messages": [
+      "TMT pseudo-filter (auto): on; TMT6_10_two_site_evidence; probed=1024; eligible=790, threshold=20, TMT_N=508, TMT_K=414, TMTpro_N=2, TMTpro_K=0; reporters=on"
+    ],
+    "stable": true
+  },
+  {
+    "dataset": "PXD003531",
+    "chemistry": "control",
+    "arm": "auto",
+    "messages": [
+      "TMT pseudo-filter (auto): off; insufficient_two_site_TMT_evidence; probed=1024; eligible=969, threshold=20, TMT_N=0, TMT_K=0, TMTpro_N=0, TMTpro_K=0; reporters=off"
+    ],
+    "stable": true
+  },
+  {
+    "dataset": "PXD003531",
+    "chemistry": "control",
+    "arm": "auto_reporters",
+    "messages": [
+      "TMT pseudo-filter (auto): off; insufficient_two_site_TMT_evidence; probed=1024; eligible=969, threshold=20, TMT_N=0, TMT_K=0, TMTpro_N=0, TMTpro_K=0; reporters=off"
+    ],
+    "stable": true
+  },
+  {
+    "dataset": "PXD004541_fr02",
+    "chemistry": "label_aware",
+    "arm": "auto",
+    "messages": [
+      "TMT pseudo-filter (auto): on; TMT6_10_two_site_evidence; probed=1024; eligible=877, threshold=20, TMT_N=727, TMT_K=475, TMTpro_N=0, TMTpro_K=0; reporters=off"
+    ],
+    "stable": true
+  },
+  {
+    "dataset": "PXD004541_fr02",
+    "chemistry": "label_aware",
+    "arm": "auto_reporters",
+    "messages": [
+      "TMT pseudo-filter (auto): on; TMT6_10_two_site_evidence; probed=1024; eligible=877, threshold=20, TMT_N=727, TMT_K=475, TMTpro_N=0, TMTpro_K=0; reporters=on"
+    ],
+    "stable": true
+  },
+  {
+    "dataset": "PXD004541_fr02",
+    "chemistry": "label_blind",
+    "arm": "auto",
+    "messages": [
+      "TMT pseudo-filter (auto): on; TMT6_10_two_site_evidence; probed=1024; eligible=880, threshold=20, TMT_N=726, TMT_K=474, TMTpro_N=0, TMTpro_K=0; reporters=off"
+    ],
+    "stable": true
+  },
+  {
+    "dataset": "PXD004541_fr02",
+    "chemistry": "label_blind",
+    "arm": "auto_reporters",
+    "messages": [
+      "TMT pseudo-filter (auto): on; TMT6_10_two_site_evidence; probed=1024; eligible=880, threshold=20, TMT_N=726, TMT_K=474, TMTpro_N=0, TMTpro_K=0; reporters=on"
+    ],
+    "stable": true
+  },
+  {
+    "dataset": "PXD004541_fr09",
+    "chemistry": "label_aware",
+    "arm": "auto",
+    "messages": [
+      "TMT pseudo-filter (auto): on; TMT6_10_two_site_evidence; probed=1024; eligible=818, threshold=20, TMT_N=690, TMT_K=463, TMTpro_N=0, TMTpro_K=0; reporters=off"
+    ],
+    "stable": true
+  },
+  {
+    "dataset": "PXD004541_fr09",
+    "chemistry": "label_aware",
+    "arm": "auto_reporters",
+    "messages": [
+      "TMT pseudo-filter (auto): on; TMT6_10_two_site_evidence; probed=1024; eligible=818, threshold=20, TMT_N=690, TMT_K=463, TMTpro_N=0, TMTpro_K=0; reporters=on"
+    ],
+    "stable": true
+  },
+  {
+    "dataset": "PXD004541_fr09",
+    "chemistry": "label_blind",
+    "arm": "auto",
+    "messages": [
+      "TMT pseudo-filter (auto): on; TMT6_10_two_site_evidence; probed=1024; eligible=822, threshold=20, TMT_N=698, TMT_K=462, TMTpro_N=0, TMTpro_K=0; reporters=off"
+    ],
+    "stable": true
+  },
+  {
+    "dataset": "PXD004541_fr09",
+    "chemistry": "label_blind",
+    "arm": "auto_reporters",
+    "messages": [
+      "TMT pseudo-filter (auto): on; TMT6_10_two_site_evidence; probed=1024; eligible=822, threshold=20, TMT_N=698, TMT_K=462, TMTpro_N=0, TMTpro_K=0; reporters=on"
+    ],
+    "stable": true
+  },
+  {
+    "dataset": "PXD037999",
+    "chemistry": "label_aware",
+    "arm": "auto",
+    "messages": [
+      "TMT pseudo-filter (auto): on; TMT6_10_two_site_evidence; probed=1024; eligible=620, threshold=20, TMT_N=431, TMT_K=240, TMTpro_N=0, TMTpro_K=0; reporters=off"
+    ],
+    "stable": true
+  },
+  {
+    "dataset": "PXD037999",
+    "chemistry": "label_aware",
+    "arm": "auto_reporters",
+    "messages": [
+      "TMT pseudo-filter (auto): on; TMT6_10_two_site_evidence; probed=1024; eligible=620, threshold=20, TMT_N=431, TMT_K=240, TMTpro_N=0, TMTpro_K=0; reporters=on"
+    ],
+    "stable": true
+  },
+  {
+    "dataset": "PXD037999",
+    "chemistry": "label_blind",
+    "arm": "auto",
+    "messages": [
+      "TMT pseudo-filter (auto): on; TMT6_10_two_site_evidence; probed=1024; eligible=639, threshold=20, TMT_N=426, TMT_K=239, TMTpro_N=0, TMTpro_K=0; reporters=off"
+    ],
+    "stable": true
+  },
+  {
+    "dataset": "PXD037999",
+    "chemistry": "label_blind",
+    "arm": "auto_reporters",
+    "messages": [
+      "TMT pseudo-filter (auto): on; TMT6_10_two_site_evidence; probed=1024; eligible=639, threshold=20, TMT_N=426, TMT_K=239, TMTpro_N=0, TMTpro_K=0; reporters=on"
+    ],
+    "stable": true
+  }
+]

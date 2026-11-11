@@ -1,0 +1,17 @@
+Wed Nov 11 14:55:39 UTC 2026
+dax
+1.79 3.61 3.44 4/10864 2090505
+[1/6] Building CXX object CMakeFiles/tmt_pseudo_test.dir/test/tmt_pseudo_test.cpp.o
+[2/6] Building CXX object CMakeFiles/fastag_core.dir/src/FASTagger.cpp.o
+[3/6] Linking CXX static library libfastag_core.a
+[4/6] Linking CXX executable tmt_pseudo_test
+[5/6] Building CXX object CMakeFiles/FASTag.dir/src/FASTag.cpp.o
+[6/6] Linking CXX executable FASTag
+Test project /scratch/kohlbach/fastag-tmt-filter-20261111/build
+    Start 34: tmt_pseudo_test
+1/1 Test #34: tmt_pseudo_test ..................   Passed    0.05 sec
+
+100% tests passed out of 1
+
+Total Test time (real) =   0.05 sec
+2b03654a786c5a1ac267a9b1c53615481a2f329afa2ace71faf3e9d869a68d32  /ceph/ibmi/abi/oliver/fastag-tmt-filter-20261111/bin/FASTag-ga-v2

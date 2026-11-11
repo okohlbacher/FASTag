@@ -1,0 +1,111 @@
+[
+  {
+    "dataset": "PXD037999",
+    "source": "/scratch/kohlbach/b113/shifts/heldout/ho/PXD037999/base/comet.txt",
+    "copy": "/ceph/ibmi/abi/oliver/fastag-tmt-filter-benchmark-20261111/truth-audit/PXD037999/comet.txt",
+    "sha256": "efbceeed17df9b27fa67d5adf9087b930b60a83a3467beae2de44a98dc944e12",
+    "bytes": 27494625
+  },
+  {
+    "dataset": "PXD037999",
+    "source": "/scratch/kohlbach/b113/shifts/heldout/ho/PXD037999/base/comet.params",
+    "copy": "/ceph/ibmi/abi/oliver/fastag-tmt-filter-benchmark-20261111/truth-audit/PXD037999/comet.params",
+    "sha256": "86f00d5192c46280dcb1cd63fdaaaffb5984ef247f9fc5de7e0bf3b30f6579e5",
+    "bytes": 9966
+  },
+  {
+    "dataset": "PXD037999",
+    "source": "/scratch/kohlbach/b113/shifts/heldout/ho/PXD037999/base/comet.log",
+    "copy": "/ceph/ibmi/abi/oliver/fastag-tmt-filter-benchmark-20261111/truth-audit/PXD037999/comet.log",
+    "sha256": "c9b1ea0c47e7e4bbc749bc84c844ca263bbf27c357d975122b7dc56b59e8030d",
+    "bytes": 1436
+  },
+  {
+    "dataset": "PXD037999",
+    "source": "/scratch/kohlbach/b113/shifts/heldout/ho/PXD037999/base/cfg_comet.params",
+    "copy": "/ceph/ibmi/abi/oliver/fastag-tmt-filter-benchmark-20261111/truth-audit/PXD037999/cfg_comet.params",
+    "sha256": "3befe328f0d1880f348310491d6b29f2a33cbc11226867b1ff8002ad4a95cef5",
+    "bytes": 10179
+  },
+  {
+    "dataset": "PXD037999",
+    "input_alias": "/scratch/kohlbach/b113/shifts/heldout/ho/PXD037999/run.mzML",
+    "input_resolved": "/scratch/kohlbach/b113/shifts/heldout/stage/PXD037999/220819_UM171_RCOR1_NB4_TMT10_F13_of_F13_R2.mzML",
+    "input_sha256": "4ce8607cf57f5af6397860484a79c1db252a7cfd1e764d5cf972d9661c27c3b3"
+  },
+  {
+    "dataset": "PXD004541_fr09",
+    "source": "/scratch/kohlbach/b113/shifts/ho/PXD004541/base/comet.txt",
+    "copy": "/ceph/ibmi/abi/oliver/fastag-tmt-filter-benchmark-20261111/truth-audit/PXD004541_fr09/comet.txt",
+    "sha256": "59f9aacfbd071f37ca23e305f00ba66aed69e9e2860bd025eda896d0579e9423",
+    "bytes": 30880982
+  },
+  {
+    "dataset": "PXD004541_fr09",
+    "source": "/scratch/kohlbach/b113/shifts/ho/PXD004541/base/comet.params",
+    "copy": "/ceph/ibmi/abi/oliver/fastag-tmt-filter-benchmark-20261111/truth-audit/PXD004541_fr09/comet.params",
+    "sha256": "595cd9d2e36d4519fae3218d5689e2793f43aba32c656834eb543fbc366e2922",
+    "bytes": 9958
+  },
+  {
+    "dataset": "PXD004541_fr09",
+    "source": "/scratch/kohlbach/b113/shifts/ho/PXD004541/base/comet.log",
+    "copy": "/ceph/ibmi/abi/oliver/fastag-tmt-filter-benchmark-20261111/truth-audit/PXD004541_fr09/comet.log",
+    "sha256": "40771bc5c062d926c8f39ed8e925c032f555a4a9e1bd5e0b21d56ddc80383fe0",
+    "bytes": 1436
+  },
+  {
+    "dataset": "PXD004541_fr09",
+    "source": "/scratch/kohlbach/b113/shifts/ho/PXD004541/base/cfg_comet.params",
+    "copy": "/ceph/ibmi/abi/oliver/fastag-tmt-filter-benchmark-20261111/truth-audit/PXD004541_fr09/cfg_comet.params",
+    "sha256": "3befe328f0d1880f348310491d6b29f2a33cbc11226867b1ff8002ad4a95cef5",
+    "bytes": 10179
+  },
+  {
+    "dataset": "PXD004541_fr09",
+    "input_alias": "/scratch/kohlbach/b113/shifts/ho/PXD004541/run.mzML",
+    "input_resolved": "/scratch/kohlbach/fastag-heldout-1.12/item17/heldout/PXD004541/HF1_201501216_GM_RJ1511D_TMT10_hpHRP_Drug2_2p5ug_4uL_fr09.mzML",
+    "input_sha256": "7be0a4c9d0ac7fe0445b85e689c8e2575a639cfe42d4c6a0f89150ef56fd6e3a"
+  },
+  {
+    "dataset": "PXD000001",
+    "source": "/scratch/kohlbach/b113/shifts/ho/PXD000001/base/comet.txt",
+    "copy": "/ceph/ibmi/abi/oliver/fastag-tmt-filter-benchmark-20261111/truth-audit/PXD000001/comet.txt",
+    "sha256": "816c0092ed475a98e95368c50b65db8d86c20a710e1c58b6ce58aed7b34efd23",
+    "bytes": 4528397
+  },
+  {
+    "dataset": "PXD000001",
+    "source": "/scratch/kohlbach/b113/shifts/ho/PXD000001/base/comet.params",
+    "copy": "/ceph/ibmi/abi/oliver/fastag-tmt-filter-benchmark-20261111/truth-audit/PXD000001/comet.params",
+    "sha256": "901c5e5faa4df4676e1cabbceb9c069de89839116a0c69f74bb4eb5838061df5",
+    "bytes": 9958
+  },
+  {
+    "dataset": "PXD000001",
+    "source": "/scratch/kohlbach/b113/shifts/ho/PXD000001/base/comet.log",
+    "copy": "/ceph/ibmi/abi/oliver/fastag-tmt-filter-benchmark-20261111/truth-audit/PXD000001/comet.log",
+    "sha256": "3f8b511324c41272ad7fab173d990c5bf592f774eacc49f181c6f24605a0cd5b",
+    "bytes": 373
+  },
+  {
+    "dataset": "PXD000001",
+    "source": "/scratch/kohlbach/b113/shifts/ho/PXD000001/base/cfg_comet.params",
+    "copy": "/ceph/ibmi/abi/oliver/fastag-tmt-filter-benchmark-20261111/truth-audit/PXD000001/cfg_comet.params",
+    "sha256": "4074e110b003fc30304129f9950df644a2b76cfd05d07e940a7305e5f7914814",
+    "bytes": 10195
+  },
+  {
+    "dataset": "PXD000001",
+    "input_alias": "/scratch/kohlbach/b113/shifts/ho/PXD000001/run.mzML",
+    "input_resolved": "/scratch/kohlbach/fastag-heldout-1.12/item17/heldout/PXD000001/TMT_Erwinia_1uLSike_Top10HCD_isol2_45stepped_60min_01.mzML",
+    "input_sha256": "da95d2559c8c19bdc734c9582367e1478c2996cb56976151bc8e81bc02e73d7d"
+  },
+  {
+    "dataset": "PXD000001",
+    "source": "/ceph/ibmi/abi/oliver/jpr-bench/data/PXD000001/F063721.dat",
+    "copy": "/ceph/ibmi/abi/oliver/fastag-tmt-filter-benchmark-20261111/truth-audit/PXD000001/F063721.dat",
+    "sha256": "286c1677e40f0084469603b7fc0b2b13d7653373047f8982cb6d806de476bab6",
+    "bytes": 21185462
+  }
+]

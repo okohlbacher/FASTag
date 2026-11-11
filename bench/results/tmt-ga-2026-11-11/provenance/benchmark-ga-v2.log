@@ -1,0 +1,217 @@
+TMT scorer orientation and fixed-modification checks passed
+RUN PXD004541_fr02 label_blind auto 1/3
+  wall=3.207s
+RUN PXD004541_fr02 label_blind baseline 1/3
+  wall=2.976s
+RUN PXD004541_fr02 label_blind on 1/3
+  wall=2.971s
+RUN PXD004541_fr02 label_blind off 1/3
+  wall=2.98s
+RUN PXD004541_fr02 label_blind off 2/3
+  wall=2.973s
+RUN PXD004541_fr02 label_blind baseline 2/3
+  wall=2.976s
+RUN PXD004541_fr02 label_blind on 2/3
+  wall=2.97s
+RUN PXD004541_fr02 label_blind auto 2/3
+  wall=3.207s
+RUN PXD004541_fr02 label_blind on 3/3
+  wall=3.006s
+RUN PXD004541_fr02 label_blind off 3/3
+  wall=2.961s
+RUN PXD004541_fr02 label_blind auto 3/3
+  wall=3.198s
+RUN PXD004541_fr02 label_blind baseline 3/3
+  wall=2.975s
+RUN PXD004541_fr02 label_aware auto 1/3
+  wall=3.212s
+RUN PXD004541_fr02 label_aware off 1/3
+  wall=2.986s
+RUN PXD004541_fr02 label_aware baseline 1/3
+  wall=2.984s
+RUN PXD004541_fr02 label_aware on 1/3
+  wall=2.986s
+RUN PXD004541_fr02 label_aware on 2/3
+  wall=2.985s
+RUN PXD004541_fr02 label_aware auto 2/3
+  wall=3.223s
+RUN PXD004541_fr02 label_aware baseline 2/3
+  wall=3.019s
+RUN PXD004541_fr02 label_aware off 2/3
+  wall=2.985s
+RUN PXD004541_fr02 label_aware on 3/3
+  wall=2.993s
+RUN PXD004541_fr02 label_aware baseline 3/3
+  wall=2.988s
+RUN PXD004541_fr02 label_aware off 3/3
+  wall=2.981s
+RUN PXD004541_fr02 label_aware auto 3/3
+  wall=3.22s
+RUN PXD037999 label_blind off 1/3
+  wall=1.355s
+RUN PXD037999 label_blind auto 1/3
+  wall=1.489s
+RUN PXD037999 label_blind baseline 1/3
+  wall=1.365s
+RUN PXD037999 label_blind on 1/3
+  wall=1.353s
+RUN PXD037999 label_blind on 2/3
+  wall=1.352s
+RUN PXD037999 label_blind auto 2/3
+  wall=1.534s
+RUN PXD037999 label_blind off 2/3
+  wall=1.349s
+RUN PXD037999 label_blind baseline 2/3
+  wall=1.352s
+RUN PXD037999 label_blind auto 3/3
+  wall=1.49s
+RUN PXD037999 label_blind off 3/3
+  wall=1.349s
+RUN PXD037999 label_blind on 3/3
+  wall=1.348s
+RUN PXD037999 label_blind baseline 3/3
+  wall=1.355s
+RUN PXD037999 label_aware baseline 1/3
+  wall=1.41s
+RUN PXD037999 label_aware on 1/3
+  wall=1.401s
+RUN PXD037999 label_aware auto 1/3
+  wall=1.543s
+RUN PXD037999 label_aware off 1/3
+  wall=1.407s
+RUN PXD037999 label_aware off 2/3
+  wall=1.4s
+RUN PXD037999 label_aware auto 2/3
+  wall=1.559s
+RUN PXD037999 label_aware baseline 2/3
+  wall=1.407s
+RUN PXD037999 label_aware on 2/3
+  wall=1.406s
+RUN PXD037999 label_aware baseline 3/3
+  wall=1.405s
+RUN PXD037999 label_aware off 3/3
+  wall=1.406s
+RUN PXD037999 label_aware on 3/3
+  wall=1.406s
+RUN PXD037999 label_aware auto 3/3
+  wall=1.548s
+RUN PXD000001 label_blind on 1/3
+  wall=0.346s
+RUN PXD000001 label_blind baseline 1/3
+  wall=0.348s
+RUN PXD000001 label_blind auto 1/3
+  wall=0.541s
+RUN PXD000001 label_blind off 1/3
+  wall=0.348s
+RUN PXD000001 label_blind auto 2/3
+  wall=0.545s
+RUN PXD000001 label_blind baseline 2/3
+  wall=0.347s
+RUN PXD000001 label_blind on 2/3
+  wall=0.352s
+RUN PXD000001 label_blind off 2/3
+  wall=0.347s
+RUN PXD000001 label_blind baseline 3/3
+  wall=0.348s
+RUN PXD000001 label_blind off 3/3
+  wall=0.348s
+RUN PXD000001 label_blind auto 3/3
+  wall=0.543s
+RUN PXD000001 label_blind on 3/3
+  wall=0.351s
+RUN PXD000001 label_aware auto 1/3
+  wall=0.551s
+RUN PXD000001 label_aware off 1/3
+  wall=0.355s
+RUN PXD000001 label_aware baseline 1/3
+  wall=0.362s
+RUN PXD000001 label_aware on 1/3
+  wall=0.357s
+RUN PXD000001 label_aware auto 2/3
+  wall=0.549s
+RUN PXD000001 label_aware baseline 2/3
+  wall=0.361s
+RUN PXD000001 label_aware on 2/3
+  wall=0.356s
+RUN PXD000001 label_aware off 2/3
+  wall=0.357s
+RUN PXD000001 label_aware off 3/3
+  wall=0.359s
+RUN PXD000001 label_aware on 3/3
+  wall=0.356s
+RUN PXD000001 label_aware auto 3/3
+  wall=0.553s
+RUN PXD000001 label_aware baseline 3/3
+  wall=0.357s
+RUN PXD004541_fr09 label_blind baseline 1/3
+  wall=1.882s
+RUN PXD004541_fr09 label_blind on 1/3
+  wall=1.947s
+RUN PXD004541_fr09 label_blind off 1/3
+  wall=1.942s
+RUN PXD004541_fr09 label_blind auto 1/3
+  wall=2.062s
+RUN PXD004541_fr09 label_blind on 2/3
+  wall=1.958s
+RUN PXD004541_fr09 label_blind auto 2/3
+  wall=2.128s
+RUN PXD004541_fr09 label_blind off 2/3
+  wall=1.946s
+RUN PXD004541_fr09 label_blind baseline 2/3
+  wall=1.965s
+RUN PXD004541_fr09 label_blind off 3/3
+  wall=1.945s
+RUN PXD004541_fr09 label_blind baseline 3/3
+  wall=2.091s
+RUN PXD004541_fr09 label_blind auto 3/3
+  wall=2.145s
+RUN PXD004541_fr09 label_blind on 3/3
+  wall=1.954s
+RUN PXD004541_fr09 label_aware on 1/3
+  wall=1.962s
+RUN PXD004541_fr09 label_aware auto 1/3
+  wall=2.144s
+RUN PXD004541_fr09 label_aware off 1/3
+  wall=1.981s
+RUN PXD004541_fr09 label_aware baseline 1/3
+  wall=1.959s
+RUN PXD004541_fr09 label_aware off 2/3
+  wall=1.961s
+RUN PXD004541_fr09 label_aware on 2/3
+  wall=1.96s
+RUN PXD004541_fr09 label_aware baseline 2/3
+  wall=1.967s
+RUN PXD004541_fr09 label_aware auto 2/3
+  wall=2.143s
+RUN PXD004541_fr09 label_aware off 3/3
+  wall=1.955s
+RUN PXD004541_fr09 label_aware baseline 3/3
+  wall=1.963s
+RUN PXD004541_fr09 label_aware on 3/3
+  wall=1.891s
+RUN PXD004541_fr09 label_aware auto 3/3
+  wall=2.161s
+RUN PXD003531 control auto 1/3
+  wall=3.535s
+RUN PXD003531 control baseline 1/3
+  wall=3.149s
+RUN PXD003531 control on 1/3
+  wall=3.271s
+RUN PXD003531 control off 1/3
+  wall=3.163s
+RUN PXD003531 control off 2/3
+  wall=3.166s
+RUN PXD003531 control auto 2/3
+  wall=3.535s
+RUN PXD003531 control on 2/3
+  wall=3.148s
+RUN PXD003531 control baseline 2/3
+  wall=3.152s
+RUN PXD003531 control on 3/3
+  wall=3.151s
+RUN PXD003531 control off 3/3
+  wall=3.155s
+RUN PXD003531 control auto 3/3
+  wall=3.545s
+RUN PXD003531 control baseline 3/3
+  wall=3.141s
