@@ -1,0 +1,8 @@
+Modifications: Carbamidomethyl (C, fixed)
+'/scratch/kohlbach/fastag-labeldisc/heldout3/in/PXD039509/Batch6-Frxn13-TR1.mzML' has no index, or one that no longer matches the file (edited after it was written?); found its 54507 spectra by scanning it instead (0.06 s). Re-index it, e.g. with FileConverter, to skip the scan.
+Acquisition check: DDA (no repeating window scheme (periodicity 0.07 over 2058 repeat gaps, cycle 9, 1940 distinct precursor m/z, 36% uncharged, 4000 MS2 probed))
+Subsampling: tagging 1 of 54507 input spectra (seed 1)
+TMT pseudo-filter (auto): off; conflicting_304Da_label_evidence; probed=1024; eligible=545, threshold=20, veto_min=6, TMT_N=2, TMT_K=0, TMTpro_N=292, TMTpro_K=204; reporters=off
+1 MS2 spectra, 35 tags
+1 of 1 MS2 spectra carry no precursor charge and were tagged as 2+: their peaks above the 2+ precursor mass are dropped, and their nterm_mass flanks assume charge 2 (wrong for a 3+ or higher precursor).
+FASTag took 0.38 s (wall), 0.55 s (CPU), 0.19 s (system), 0.36 s (user); Peak Memory Usage: 41 MB.

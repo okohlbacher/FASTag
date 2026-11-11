@@ -571,15 +571,15 @@ MGF→mzML direction is exact.
 | `-shortlist_top <n>` | 0 | Advanced: keep at most this many proteins, ties at the cut kept; 0 = no cap |
 | `-shortlist_decoy_affix <list>` | `DECOY_ decoy_ rev_ REV_ reverse_ XXX_ shuffled_ random_ _DECOY _rev` | Advanced: accession prefixes and suffixes that mark a decoy entry |
 | `-shortlist_force` | off | Advanced: write `-fasta_out` and `-search_config_out` although the tag ends call a non-tryptic protease |
-| `-shortlist_protease <trypsin\|auto\|unspecific\|lys-c\|arg-c\|asp-n\|glu-c\|chymotrypsin\|lys-n>` | trypsin | Experimental (1.13), advanced; `auto` **passed** its held-out test (see Held-out acceptance), a named rule and `unspecific` have none: cleavage rule of the shortlist's placements and of `-search_config_out` (Sage, Comet or MSFragger). `trypsin` is 1.12 (tryptic windows, a non-tryptic run refused); `auto` takes the protease the tag ends call (trypsin when inconclusive); a name or `unspecific` takes that rule. Otherwise windows are found by flank mass, only exact placements count, and a named rule the run's call contradicts is refused unless `-shortlist_force` (see doc/SHORTLIST.md) |
-| `-shortlist_specificity <full\|semi\|none>` | full | Experimental (1.13), advanced; `semi` and `none` have no held-out test (the test of `-shortlist_protease auto` ran at `full`): with a `-shortlist_protease` other than trypsin, both window ends at a cleavage site (`full`), at least one (`semi`, Sage `semi_enzymatic`, Comet `num_enzyme_termini = 1`) or none; missed cleavages up to `-recon_missed_cleavages` |
+| `-shortlist_protease <trypsin\|auto\|unspecific\|lys-c\|arg-c\|asp-n\|glu-c\|chymotrypsin\|lys-n>` | trypsin | Experimental (1.13), advanced; `auto` **passed** its held-out test (see Held-out acceptance), a named rule and `unspecific` have none: cleavage rule of the shortlist's placements and of `-search_config_out` (Sage, Comet or MSFragger). `trypsin` is 1.12 (tryptic windows, a non-tryptic run refused); `auto` takes the protease the tag ends call (trypsin when inconclusive; after 1.13.1 Asp-N is called from 21 % D at the N-terminal tag ends and an Asp-N call is exported semi-specific unless `-shortlist_specificity` is given, both on development runs only, no held-out test; a WARN when the call is `unspecific`, whose exported search can be slower than a full search); a name or `unspecific` takes that rule. Otherwise windows are found by flank mass, only exact placements count, and a named rule the run's call contradicts is refused unless `-shortlist_force` (see doc/SHORTLIST.md) |
+| `-shortlist_specificity <full\|semi\|none>` | full | Experimental (1.13), advanced; `semi` and `none` have no held-out test (the test of `-shortlist_protease auto` ran at `full`): with a `-shortlist_protease` other than trypsin, both window ends at a cleavage site (`full`), at least one (`semi`, Sage `semi_enzymatic`, Comet `num_enzyme_termini = 1`) or none; missed cleavages up to `-recon_missed_cleavages`. Not given, an Asp-N call of `-shortlist_protease auto` uses `semi` (after 1.13.1; development runs only, no held-out test: on three Asp-N runs the shortlist keeps 0.25, 0.29, 0.64 of the full search's proteins, Sage 27, 26, 5 s and 1.7, 1.7, 0.2 GB, against 0.18, 0.19, 0.57, 13, 12, 6 s and 0.3, 0.3, 0.1 GB at `full` and 0.25, 0.34, 0.66, 162, 181, 7 s and 17.9, 20.8, 0.8 GB for the unspecific export of 1.13.1); a named `asp-n` stays `full` |
 | `-search_config_out <file>` | none | Experimental: a Sage configuration (JSON), Comet parameters or a complete MSFragger `fragger.params` for `-fasta_out`, or for the input database without it |
 | `-search_engine <sage\|comet\|msfragger>` | sage | Engine of `-search_config_out`; `comet` is unverified against the Comet binary; `msfragger` (experimental, 1.13; held-out test **FAILED**, see Held-out acceptance) is checked against MSFragger 4.4.1 and needs decoys in the database: with `-fasta_out` FASTag appends reversed `rev_` decoys, without it the input database must be a target-decoy database; its `num_threads` is `-threads` (0 = every CPU) (see doc/SHORTLIST.md) |
 | `-search_config_template <file>` | none | Comet only (Sage and MSFragger files are written complete): a `comet -p` file the managed keys are merged into; without it a fragment is written |
 | `-search_precursor_tolerance <f>` / `-search_precursor_unit <ppm\|Da>` | 10 / ppm | Precursor tolerance written to the configuration |
 | `-search_isotope_errors <n>` | -1 | Precursor isotope errors 0..n (at most 3); 0 = none; -1 = by engine: none for Sage and Comet, 0..3 for MSFragger (set on development runs only, no held-out test) |
 | `-search_decoy_prefix <s>` | `rev_` (Sage, MSFragger) / `DECOY_` (Comet) | Prefix of the decoys the engine generates (MSFragger: the decoys FASTag appends to `-fasta_out`, or the ones the input database holds) |
-| `-search_shifts <none\|variable\|offsets\|both>` | none | Experimental (1.12): add the run's mass-gap peaks (the `-massgap_out` peaks, computed without writing it) to `-search_config_out` as variable modifications or Comet mass offsets (see Mass shifts as search configuration). Candidates for an FDR-controlling engine, NOT identifications; failed both held-out tests (see Held-out acceptance). Needs `-search_config_out` and a database; `offsets` needs `-search_engine comet` or `msfragger` (MSFragger keeps negative offsets and has 16 variable slots; with a Da precursor window it gets no offsets, MSFragger 4.4.1 exits 1 on them) |
+| `-search_shifts <none\|variable\|offsets\|both>` | none | Experimental (1.12): add the run's mass-gap peaks (the `-massgap_out` peaks, computed without writing it) to `-search_config_out` as variable modifications or Comet mass offsets (see Mass shifts as search configuration). Candidates for an FDR-controlling engine, NOT identifications; failed both held-out tests (see Held-out acceptance); on development runs 0 to +80 % PSMs over a search with the same isotope errors (see Mass shifts as search configuration). Needs `-search_config_out` and a database; `offsets` needs `-search_engine comet` or `msfragger` (MSFragger keeps negative offsets and has 16 variable slots; with a Da precursor window it gets no offsets, MSFragger 4.4.1 exits 1 on them) |
 | `-search_shifts_out <file>` | none | With `-search_shifts`: one row per mass-gap peak with its explanation and the action taken (`variable`, `offset`, `fixed`, `skipped_isotope`, `expected_label`, `label_incomplete`, `fixed_mod_questionable`, `skipped_silac`, `deferred_alkylation_call`, `already_searched`, `dropped_cap`, `dropped_engine`, `dropped_mode`) |
 | `-shift_max_variable <n>` / `-shift_max_offsets <n>` | 3 / 10 | Advanced: gap peaks exported as variable modifications / as offsets besides 0, most spectra first |
 | `-shift_expand_sites` | off | Advanced, unvalidated: add the residues `-recon_localize` places a variable shift on to that modification (needs `-recon_localize`) |
@@ -678,6 +678,57 @@ although files were written:
   proteome (see q_db).
 
 ## Output
+
+**Experimental TMT6/10 artifact filtering.** `-tmt_pseudo_filter auto` probes up
+to 1,024 MS2 spectra drawn deterministically across an mzML or MGF input. It
+requires at least 100 spectra with an ungapped length-4 tag at E-value ≤ 1.
+Both N-terminal TMT evidence (`n = 229.162932` or `c = 211.152367`) and
+TMT-lysine evidence (`c = 357.257895` or `n = 375.268460`) must occur in at
+least 20 spectra and at least 1% of eligible spectra. Counts are per spectrum,
+with ±0.020 Da N-channel and ±0.006 Da C-channel windows. Conflicting 304 Da
+label evidence causes abstention when both sites occur in at least 5 spectra
+and at least 1% of eligible spectra. These anchors are compatible with TMTpro
+and iTRAQ8; the veto does not identify either chemistry. A Da fragment
+tolerance also abstains. The gate tests for TMT6/10 presence, not purity:
+minority labeling chemistries below the veto threshold can remain undetected.
+The automatic probe has no protein-database input. It logs its decision and
+records it in versioned reports and exported mzML provenance.
+
+When active, the filter removes b/y tags starting with bare G/A at
+`n = TMT − G/A` or ending with bare G/A at `c = TMT − H2O − G/A`.
+Terminal K alone never triggers rejection, including when its TMT mass is
+allocated to the C flank; lysine signatures still contribute to labeling
+detection. A K-ending tag can still be rejected for an independent G/A
+pseudo-residue at its other end.
+Residue identity and flank mass must both agree; modified G/A are not treated
+as bare residues. Filtering occurs after scoring but before the tag-count cap,
+so surviving tags retain their scores and can fill the vacated slots.
+Ordinary TMT-plus-residue flanks and a-ion counterparts are retained.
+`-tmt_reporter_filter` additionally removes tags whose singly charged low
+endpoint matches a TMT6/10 reporter ion, under the same active TMT gate.
+`-tmt_pseudo_filter on` asserts known TMT6/10 chemistry and skips detection;
+`off` is the default. Automatic detection needs random access and refuses
+`-stream` and mzPeak input; forced `on` supports them. These filters are
+experimental, not modification identification or labeling-efficiency estimates.
+
+The [G/A-only benchmark and reference audit](bench/results/tmt-ga-2026-11-11/report.html)
+tests four TMT files and one label-free control. In the two independent TMT
+projects (10,912 reference PSMs), automatic filtering increased rank-1 accuracy
+from 82.203% to 82.716% without configured TMT masses, and from 81.562% to
+82.093% with TMT masses. Recall@50 was unchanged at 95.115% and 94.630%,
+respectively, with no paired losses. The benefit remains in a supplementary
+subset corroborated by independent searches; the primary references were not
+changed. Automatic detection activates filtering; it does not configure the
+residue alphabet. The revised conflicting-label veto detects 10% TMTpro in
+two artificial spectrum mixtures, but misses a tested 5% mixture. It does not
+establish labeling purity. Keep the option experimental and off by default.
+Full paired counts, residue-mass consistency, runtime, detector challenges,
+raw-spectrum case figures, and provenance accompany the report.
+
+The [earlier benchmark](bench/results/tmt-pseudo-2026-11-11/report.html)
+documents the recall loss from the former bare-K rejection rule. Retaining
+terminal K removes that loss: those tags can allocate the label mass to a
+terminal gap while preserving useful sequence evidence.
 
 One TSV row per tag: `spectrum` (native ID; `index=<k>`, the 0-based block,
 for MGF), `tag` (sequence), `length`,
@@ -829,7 +880,9 @@ exits with `ILLEGAL_PARAMETERS` unless `-shortlist_force` (a run asking for
 shortlist's tags on windows found by flank mass and keeps those that fit the
 called (or named) cleavage rule at `-shortlist_specificity`, and writes that
 rule into the engine configuration, so non-tryptic runs get their FASTA and
-configuration instead of being refused. Only tags at or
+configuration instead of being refused. After 1.13.1 an Asp-N call of `auto`
+is placed and exported semi-specific unless `-shortlist_specificity` is
+given (development runs only, no held-out test). Only tags at or
 above the placement floor place (`-recon_min_length`, derived as 8 residues on
 the human proteome), so give `-extension` (3 on the gate runs). See [doc/SHORTLIST.md](doc/SHORTLIST.md).
 
@@ -871,7 +924,27 @@ RESULT-item17r.md) FAILED as well: +7.7 to +36.8 % PSMs with Comet and +6.5
 to +25.2 % with Sage on all four runs, but Comet's entrapment FDP rose from
 0.88 to 1.28 % on the TMT run, and only 5 of 32 (Comet) and 3 of 11 (Sage)
 admissible open-search peaks were recovered. Part of the gain is the isotope
-error setting (0..1 against 0 in the base search). The option does not
+error setting (0..1 against 0 in the base search). Both FAIL results stand.
+Measured afterwards on development runs only (the eight held-out runs, now
+spent, and two earlier development runs; no new held-out test): against a
+base search with the same isotope error setting the option gives, with
+Comet, +0.2 % (PXD000001, TMT6), +0.8 % (PXD073763, TMTpro), +2.2 %
+(PXD065251, SILAC), +4.5 and +4.8 % (PXD004541, TMT10, two fractions), +6.8 %
+(PXD049248, label-free), +10.1 % (PXD063151, label-free), +13.6 % (PXD014764,
+SILAC), +38.3 % (PXD037999, TMT10) and +80.3 % (PXD003531, label-free) PSMs
+at 1 % FDR; with Sage 0.0, +1.3, +2.5 to +2.8 (three runs), +3.1, +7.8,
++7.9, +25.4 and +64.7 % in the same runs (means over 3 entrapment databases,
+10 for PXD037999 and PXD003531, 1 for PXD014764). The isotope error setting
+alone gives +1.3 to +54 % (Comet), which is most of the gain reported above on
+six of the ten runs. Entrapment FDP at 1 % FDR, mean of 10 entrapment
+databases: PXD037999 (isotope setting unchanged) Comet 1.09 % without and
+1.21 % with the option, Sage 1.21 and 1.05 %; PXD003531 Comet 0.93 %
+without, 1.21 % with isotope errors 0..2 alone and 1.19 % with the option,
+Sage 0.95, 1.11 and 1.04 %. The rise on PXD003531 comes with the isotope
+errors, not with the shifts; the 0.88 -> 1.28 % of the second held-out test
+was one entrapment database (standard deviation between databases 0.1 to
+0.3 points). The Comet search takes 1.1 to 17 times as long with the option.
+The option does not
 replace an open search and stays experimental. Offsets need a narrow precursor
 tolerance, which the configuration sets explicitly. See
 [doc/SHORTLIST.md](doc/SHORTLIST.md#mass-shifts-as-engine-configuration-112-17).
@@ -1538,7 +1611,10 @@ validated on held-out data. No 1.12 option is validated on low-resolution
 ion_trap set of #6 item06-H1-r2) are a failure and a descriptive result.
 Of the 1.13 options, `-shortlist_protease` with a named rule or
 `unspecific` and `-shortlist_specificity semi` and `none` (checked on
-development runs only) are experimental and have no held-out test.
+development runs only) are experimental and have no held-out test; neither
+have the Asp-N call of `auto` from 21 % D and its semi-specific export, both
+added after 1.13.1 (the held-out result of `auto` describes the 1.13.1 rule
+at `full`).
 
 ### Ranking, and the synthetic benchmark
 

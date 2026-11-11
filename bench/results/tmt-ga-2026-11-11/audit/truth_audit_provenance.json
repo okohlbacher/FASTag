@@ -1,0 +1,148 @@
+{
+  "reference_manifest": "/Users/kohlbach/Claude/OpenMS - XERCES Replacement/fastag-tmt-filter-benchmark/source-data/datasets.json",
+  "reference_manifest_sha256": "39f91e71f4bbeca2c3c9204383dab559359f3b5d8d101835356abdae94b181a9",
+  "outcome_source": "/Users/kohlbach/Claude/OpenMS - XERCES Replacement/fastag-tmt-filter/bench/results/tmt-ga-2026-11-11/spectrum_outcomes.tsv.gz",
+  "outcome_sha256": "f98dab76de4f8033cc3d83516ecce7b3c07030a014cdfea0dbc7d53f78a2a2b1",
+  "audit_files": [
+    {
+      "path": "TRUTH_AUDIT.md",
+      "bytes": 12451,
+      "sha256": "13f070e940f63d928f0f512345e698f46516c82974a68e0c3fab09bc29d81b46"
+    },
+    {
+      "path": "audit_truth.py",
+      "bytes": 5388,
+      "sha256": "a22e3202983cc81f548f0ca7518af3a3aac53de5f0714096d6645409acbbe203"
+    },
+    {
+      "path": "compare_engines.py",
+      "bytes": 7749,
+      "sha256": "cb138dc3b3171f7da2df9192fbb075c323e51979590d79df5fe61111706937fe"
+    },
+    {
+      "path": "extract_raw_spectra.py",
+      "bytes": 2573,
+      "sha256": "2869a5d4ff3912594d46e50ede5d34e3565b659e758a323cd44913a5604a5cb8"
+    },
+    {
+      "path": "score_raw_spectra.py",
+      "bytes": 7161,
+      "sha256": "319eb14fc135b23dd5e254979b03fe1689439d3292ee2ca8f3ecd64ff2100174"
+    },
+    {
+      "path": "extract_case_tags.py",
+      "bytes": 890,
+      "sha256": "f4a467f16bfb7c2c7c423f95bfc013ddfb97863515c1f3603a9533c9405ab56d"
+    },
+    {
+      "path": "score_case_tags.py",
+      "bytes": 2013,
+      "sha256": "a46d83dec5c10f2d403e7b6333cbae18c2662e8fced8edbf9fa6c6b6ce702242"
+    },
+    {
+      "path": "analyze_outcomes.py",
+      "bytes": 4051,
+      "sha256": "f10226e2d7a42c7ea7ebb80c48016e33dc0b41e2c7c42cbe78039d663e690713"
+    },
+    {
+      "path": "raw_requests.json",
+      "bytes": 2097,
+      "sha256": "98ff8ee5c993301aba51dd83173029d056e9818c0aa1611d6bcbc2acdfb4c358"
+    },
+    {
+      "path": "truth_audit_summary.json",
+      "bytes": 14248,
+      "sha256": "f1bcc10bdf84a77b824627fbee6dfbce9915ee89db2f2d9d35ab8f396b50e1f0"
+    },
+    {
+      "path": "truth_rows.tsv.gz",
+      "bytes": 3575863,
+      "sha256": "0eaeb72fa3daee2ff9a8a035b99c91a7cb821f3c37eda61ea330f0cc126b60cf"
+    },
+    {
+      "path": "engine_summary.json",
+      "bytes": 1570,
+      "sha256": "ae4c5ad90e3eddd4c90e6e64bd25ce297506c15e55dee09d0237f7ea08438208"
+    },
+    {
+      "path": "engine_comparisons.tsv.gz",
+      "bytes": 791476,
+      "sha256": "cfea12a9dcfb757d522b938e52a7be9ed0e6eb5ae197612fcac06c8d8145c77e"
+    },
+    {
+      "path": "engine_disagreements.tsv",
+      "bytes": 6683,
+      "sha256": "9a9693b3d21ae380258c3044e1b5a5a5d56d56a7b0a87d77bdcab143cb89a030"
+    },
+    {
+      "path": "independent_candidates.tsv.gz",
+      "bytes": 2386783,
+      "sha256": "0ffa30f7bc5a079782fb45cce973b10298c3eff4db4dc55c83e9489f5756ca90"
+    },
+    {
+      "path": "erwinia_conversion_comparison.json",
+      "bytes": 7948,
+      "sha256": "5d97f372dce3177013f1c08272810fd1d61fdc5e6846d2dc3806b6c74fe8af35"
+    },
+    {
+      "path": "spectrum_support.json",
+      "bytes": 1735776,
+      "sha256": "c7971c144b691244d52a0d645da6322a54b25d1acf0b387701f5e228dd5a31a7"
+    },
+    {
+      "path": "spectrum_support.tsv",
+      "bytes": 46040,
+      "sha256": "0584c75bc8cf02196e86bfab085d9dd19c2ebb70ffa9fe8b96878ebdcf201b8f"
+    },
+    {
+      "path": "case_tags.tsv.gz",
+      "bytes": 134127,
+      "sha256": "e88b1ab67dcb0c7448f7358e5d2204471990d0433c6ca188b562e041b35734f0"
+    },
+    {
+      "path": "case_alternate_peptide_scores.tsv",
+      "bytes": 62140,
+      "sha256": "9f5bff918d78fbbdd2724032a3891f2886e50d4e716a2b6d2188b022e84cb9d3"
+    },
+    {
+      "path": "quality_subset_paired.tsv",
+      "bytes": 9171,
+      "sha256": "b15ad44fb94de50664074dafa75f7dee59b1bf98803d27a508c854215684a6ee"
+    },
+    {
+      "path": "failure_quality_strata.tsv",
+      "bytes": 33014,
+      "sha256": "2a67ceef7de94f9b50689d4cef42feaf5476912e3cd1b1aa3950f53ae911e3a1"
+    },
+    {
+      "path": "quality_audit_summary.json",
+      "bytes": 7206,
+      "sha256": "ce3bffedd4a7be154b9c513d3f850d9c93dad575f4d681cf5735e6397098b064"
+    },
+    {
+      "path": "selected_case_outcomes.tsv",
+      "bytes": 98425,
+      "sha256": "61a7f927bdb5a0c1f04470f0c8a29eef08fc36fd8adda9a3b9b3c5e730576acb"
+    },
+    {
+      "path": "raw-spectra/PXD000001.json",
+      "bytes": 1511457,
+      "sha256": "2776b875ab82212a39b8c7091a6cb67aa91d40f31764474c8b64f78fcf39b7bc"
+    },
+    {
+      "path": "raw-spectra/PXD000001_old_conversion.json",
+      "bytes": 1588199,
+      "sha256": "bf4417c129b900b4e15d2a871d39fe122850f599290decddf96908cc27386cc3"
+    },
+    {
+      "path": "raw-spectra/PXD004541_fr09.json",
+      "bytes": 8487380,
+      "sha256": "f7c9fb96f5d05d9386a7f83f9b4a0142464daa03071f827eba720352ce8e8d2c"
+    },
+    {
+      "path": "raw-spectra/PXD037999.json",
+      "bytes": 7592669,
+      "sha256": "ab3580023958ffdb38da8c54911c6f34b5ad909e8068bb7cde49699dad7e0bd1"
+    }
+  ]
+}

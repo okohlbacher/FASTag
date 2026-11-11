@@ -242,6 +242,20 @@ namespace FASTag::Digest
                           const std::array<std::uint64_t, kNumAA>& nterm,
                           const ModelTable& table, double share, int tag_min);
 
+  /// post-1.13.1 (aspn): the share of the counted N-terminal tag ends that
+  /// softenNterm() leaves at the Asp-N model's cleavage site. With the 5 %
+  /// background share Asp-N then beats `unspecific` from about 21 % D among
+  /// the N-terminal tag ends (above 50 % before); the development runs have
+  /// 33-78 % D in Asp-N digests and at most 10 % elsewhere.
+  inline constexpr double kNtermSiteShare = 0.5;
+  /// Replaces the N end of model @p name by site_share * model +
+  /// (1 - site_share) * background: only part of the N-terminal tag ends of an
+  /// N-terminal-rule digest sit at a cleavage site (a tag seldom reaches the
+  /// peptide's N-terminus cleanly). No-op for an unknown model or an N end
+  /// that is the background. Used by the shortlist's protease check with
+  /// -shortlist_protease other than trypsin; -digest_out's call is untouched.
+  void softenNterm(ModelTable& table, std::string_view name, double site_share);
+
   // ---- 1.12 D: detection, specificity, flank2 (#3c-#3e), all opt-in ----
 
   /// What classify() and classify2() add to the 1.11 model. Default: nothing,

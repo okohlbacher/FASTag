@@ -1,0 +1,7 @@
+Modifications: Carbamidomethyl (C, fixed)
+'/scratch/kohlbach/fastag-labeldisc/heldout3/in/PXD081776/2023-05-05_Brieno-Enriquez_ProtTMT_SF_Plex1_F8.mzML' has no index, or one that no longer matches the file (edited after it was written?); found its 52902 spectra by scanning it instead (0.05 s). Re-index it, e.g. with FileConverter, to skip the scan.
+Acquisition check: DDA (no repeating window scheme (periodicity 0.01 over 2191 repeat gaps, cycle 158, 1809 distinct precursor m/z, 0% uncharged, 4000 MS2 probed))
+Subsampling: tagging 1 of 52902 input spectra (seed 1)
+TMT pseudo-filter (auto): off; few_eligible_spectra; probed=1024; eligible=74, threshold=20, veto_min=5, TMT_N=0, TMT_K=0, TMTpro_N=28, TMTpro_K=17; reporters=off
+0 MS2 spectra, 0 tags
+FASTag took 0.24 s (wall), 0.39 s (CPU), 0.18 s (system), 0.21 s (user); Peak Memory Usage: 39 MB.

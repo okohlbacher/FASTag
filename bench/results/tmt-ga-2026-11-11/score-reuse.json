@@ -1,0 +1,13 @@
+{
+  "reason": "All new tag outputs match previously scored outputs byte-for-byte",
+  "previous_results": "/scratch/kohlbach/fastag-tmt-filter-20261111/results-ga-v1",
+  "verified_runs": 108,
+  "verified_cells": 36,
+  "source_scoring_artifacts": {
+    "summary.tsv": "45c127ed1d6f39f44d0599d1e41c4ff66078095e0abfbc4741a19dd10f603bb1",
+    "paired_changes.tsv": "d079911e521458234cda53a120f5579f7dfef2db97e93f5e8973e338366eeb28",
+    "spectrum_outcomes.tsv.gz": "f98dab76de4f8033cc3d83516ecce7b3c07030a014cdfea0dbc7d53f78a2a2b1",
+    "default_equivalence.json": "2934f2dc33d9976f15ea633bc1b349d7bd9c3864a4ae0ed0a2da4f3a95f26439"
+  },
+  "runtime_source": "Current executions, never copied from previous timings"
+}

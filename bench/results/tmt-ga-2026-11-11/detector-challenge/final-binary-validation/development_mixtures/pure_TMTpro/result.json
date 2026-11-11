@@ -1,0 +1,26 @@
+{
+  "group": "development_mixtures",
+  "name": "pure_TMTpro",
+  "command": [
+    "/ceph/ibmi/abi/oliver/fastag-tmt-filter-20261111/bin/FASTag-ga-v2",
+    "-in",
+    "/scratch/kohlbach/fastag-tmt-ga-review/detector-challenge/synthetic-mixtures/pure_TMTpro/mixture.mgf",
+    "-out",
+    "/scratch/kohlbach/fastag-tmt-ga-review/detector-challenge/final-binary-validation/development_mixtures/pure_TMTpro/tags.tsv",
+    "-tag_length",
+    "4",
+    "-subsample_spectra",
+    "1",
+    "-threads",
+    "2",
+    "-tmt_pseudo_filter",
+    "auto"
+  ],
+  "binary_sha256": "2b03654a786c5a1ac267a9b1c53615481a2f329afa2ace71faf3e9d869a68d32",
+  "source_sha256": "ce21c3baea4340202a46fbd9cdd206c921eadea275c0e7384d0350b1ea8e1932",
+  "returncode": 0,
+  "old_decision": "TMT pseudo-filter (auto): off; TMTpro_or_mixed_evidence; probed=1024; eligible=406, threshold=20, TMT_N=0, TMT_K=0, TMTpro_N=181, TMTpro_K=154; reporters=off",
+  "decision": "TMT pseudo-filter (auto): off; conflicting_304Da_label_evidence; probed=1024; eligible=406, threshold=20, veto_min=5, TMT_N=0, TMT_K=0, TMTpro_N=181, TMTpro_K=154; reporters=off",
+  "counts_identical": true,
+  "matches_frozen_candidate": true
+}

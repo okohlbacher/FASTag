@@ -1,0 +1,7 @@
+Modifications: Carbamidomethyl (C, fixed)
+'/scratch/kohlbach/fastag-labeldisc/heldout3/in/PXD014274/Tg3_R.mzML' has no index, or one that no longer matches the file (edited after it was written?); found its 38871 spectra by scanning it instead (0.09 s). Re-index it, e.g. with FileConverter, to skip the scan.
+Acquisition check: DDA (no repeating window scheme (periodicity 0.02 over 2140 repeat gaps, cycle 67, 1855 distinct precursor m/z, 0% uncharged, 4000 MS2 probed))
+Subsampling: tagging 1 of 38871 input spectra (seed 1)
+TMT pseudo-filter (auto): off; insufficient_two_site_TMT_evidence; probed=1024; eligible=561, threshold=20, veto_min=6, TMT_N=0, TMT_K=0, TMTpro_N=0, TMTpro_K=0; reporters=off
+0 MS2 spectra, 0 tags
+FASTag took 0.45 s (wall), 0.70 s (CPU), 0.35 s (system), 0.35 s (user); Peak Memory Usage: 42 MB.
