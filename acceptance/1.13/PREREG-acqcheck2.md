@@ -92,3 +92,12 @@ verdict. Descriptive only: counts per stratum, DIA-like calls, label-versus-trut
   counts as **not refused** (a miss if truth is DIA).
 - No rerun of the scored run except for a failure of the node or the scripts that produced no summary; such a
   rerun uses the same frozen files and is reported.
+
+## Addendum 1 (2026-11-10, before the scored run; staging only)
+
+Pass 1 met refused connections for most files: PRIDE limits the connections per address and other jobs on the
+node download at the same time. `stage2.sh` (one retry pass) was replaced, before it had started a download, by
+`acqcheck2/scorers/stage3.sh` (sha256 580d111ed7a78ccfa820889ac433705ebbb98ecda29e909c3c63bedfcde2ab11): `stage.sh` is repeated with
+8 parallel downloads until every manifest file is staged or the unchanged hard stop 20:20 CST. Nothing else
+changes; at this point no FASTag binary and no truth script has read a held-out file (`run.sh` waits for
+`stage.final.done`). The project list was fetched at about 18:12 CST, not 18:20.
