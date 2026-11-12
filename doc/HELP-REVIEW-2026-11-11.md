@@ -15,7 +15,7 @@ The Help was broad, but not complete enough for a new user to follow all of the 
 
 ## Coverage checked against the implementation
 
-- Setup and first run: tasks, 10% sampling, full-input settings, input checks, tolerance presets, output paths, parameter search, presets, INI export and cancellation.
+- Setup and first run: tag generation as the default, reopening results, optional QC with 10% sampling, full-input settings, input checks, tolerance presets, output paths, parameter search, presets, INI export and cancellation.
 - Results: Tags columns, filtering/export and spectrum inspection; Overview count provenance, the 1,000-tagged-spectrum census cutoff, and suggested-settings provenance; Species ranking versus optional calls; Digest and label gates; Glyco filters, report-wide ion frequencies and the base-peak denominator; reconciliation placements, filters, assumed mass window, 100-spectrum warning and report size limit.
 - Batch and SDRF: pending versus completed output paths, retries and cancellation, majority calculation, comparison states, settings versus measurements, exported proposals and unchanged source metadata.
 - History: reopening outputs, copying commands, loading settings with Undo, rerunning recorded settings, deleting records without deleting files, and incomplete outputs.
@@ -30,9 +30,15 @@ Sources were the implementation in `gui/src`, the CLI registration and scoring/r
 - Production build and `check:dist`: passed; no mock or fixture strings in the release bundle.
 - Related CLI shell tests: syntax checks passed. Their runtime assertions require a rebuilt CLI. The changed CLI option description matches the generated manifest exactly.
 
-Browser checks use the existing fixture bridge, not a packaged desktop binary. Visual inspection covers the Help panel in light/dark themes and its narrow layout. No analysis algorithm or default was changed.
+Browser checks use the existing fixture bridge, not a packaged desktop binary. Visual inspection covers the Help panel in light/dark themes and its narrow layout. No analysis algorithm or CLI default was changed.
 
 ## Follow-up implementation and validation
+
+The final task-priority review places **Export tags** first and makes it the
+GUI startup task, with **Open results / inspect spectra** second and the
+Characterize/Batch QC tasks after them. The first-run guide now follows
+all-spectrum tag generation and the Tags view. It introduces the 10% survey
+and Overview only when the user chooses a QC task.
 
 The final review added exact CLI-name ranking, focus recovery when Help's
 opener becomes hidden/disabled/removed, wrapping for narrow WebKit tables,

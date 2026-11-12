@@ -1,13 +1,13 @@
 // The Setup screen of P2a PR u (GUI-DESIGN 3 S1, 10 P2a): the task chooser,
 // the four step cards with hidden dependent fields, the plan footer with
 // Copy command and Export INI, and presets saved as diffs. Rendered as the
-// app starts (renderColdApp: Characterize a run, D1), unlike the older
-// App-level tests, which start from FASTag's defaults (renderApp).
+// app starts (renderColdApp: Export tags). Survey-specific tests select
+// Characterize explicitly; renderApp starts from FASTag's own defaults.
 
 import { act, fireEvent, screen, waitFor, within } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 import { installMockBridge } from '../testing/mockBridge'
-import { click, renderApp, renderColdApp, runButton } from '../testing/render'
+import { click, renderApp, renderColdApp, renderCharacterizeApp, runButton } from '../testing/render'
 import { shellLine } from '../app/format'
 
 const field = (name: string): HTMLInputElement | null => document.getElementById(`p-${name}`) as HTMLInputElement | null
@@ -23,24 +23,40 @@ const footer = (): HTMLElement => screen.getByRole('region', { name: 'Plan' })
 const task = (name: RegExp): HTMLInputElement => screen.getByRole('radio', { name }) as HTMLInputElement
 
 describe('Setup: the task chooser', () => {
-  it('a cold start lands on Characterize a run and reaches Run in 2 actions', async () => {
+  it('a cold start prioritizes Export tags, runs all spectra in 2 actions, and lands on Tags', async () => {
     const mock = installMockBridge()
     await renderColdApp(mock)
-    expect(task(/^Characterize a run/).checked).toBe(true)
+    expect(screen.getAllByRole('radio').map((radio) => (radio as HTMLInputElement).value))
+      .toEqual(['export-tags', 'open-results', 'characterize', 'batch-qc'])
+    expect(task(/^Export tags/).checked).toBe(true)
+    expect((screen.getByLabelText('Preset') as HTMLSelectElement).value).toBe('builtin:export-tags')
+    expect(footer().textContent).toContain('all spectra · species off · no reports')
     // Action 1: the input. Action 2: Run.
     mock.nextPickInput = '/d/run01.mzML'
     await click(screen.getByRole('button', { name: 'Choose file…' }))
     await click(runButton())
     expect(mock.runCalls).toHaveLength(1)
     const p = mock.runCalls[0].params
-    expect([p.species, p.extension, p.glyco, p.subsample_fraction]).toEqual([true, '2', true, '0.1'])
-    expect([p.digest_out, p.label_out]).toEqual(['/d/run01.digest.tsv', '/d/run01.label.tsv'])
+    expect(p.res_conf).toBe(true)
+    expect([p.tag_length, p.extension]).toEqual(['3', '0'])
+    expect([p.subsample_spectra, p.subsample_fraction]).toEqual(['0', '0.0'])
+    expect(p.species).not.toBe(true)
+    expect(p.glyco).not.toBe(true)
+    for (const output of ['digest_out', 'label_out', 'species_out', 'glyco_out', 'recon_out', 'massgap_out', 'delta_out']) {
+      expect(p[output] ?? '', output).toBe('')
+    }
     expect(mock.runCalls[0].out).toBe('/d/run01.tags.tsv')
+    await act(async () => mock.emitDone({ ok: true, code: 0, runId: mock.lastRunId }))
+    await waitFor(() => expect(mock.resultsOpenCalls).toContain('/d/run01.tags.tsv'))
+    expect(screen.getByRole('tab', { selected: true }).textContent).toBe('Tags')
+    expect(screen.queryByRole('region', { name: 'Running' })).toBeNull()
+    expect(mock.reportCalls).toEqual([])
+    expect(mock.speciesCalls).toEqual([])
   })
 
   it('a task replaces the form; Undo brings back what it replaced', async () => {
     const mock = installMockBridge()
-    await renderColdApp(mock)
+    await renderCharacterizeApp(mock)
     await change(field('tag_length')!, '5')
     await click(task(/^Export tags/))
     expect(task(/^Export tags/).checked).toBe(true)
@@ -59,12 +75,11 @@ describe('Setup: the task chooser', () => {
     expect(screen.queryByRole('button', { name: 'Undo' })).toBeNull()
   })
 
-  it('edits survive two task switches in a row, by keyboard: Undo brings them back', async () => {
+  it('edits survive two task switches in a row: Undo brings them back', async () => {
     const mock = installMockBridge()
-    await renderColdApp(mock)
+    await renderCharacterizeApp(mock)
     await change(field('tag_length')!, '5')
-    // Arrowing through the native radio group replaces the form once per
-    // task it passes: Batch QC, then Export tags.
+    // Each task switch replaces the form but preserves the original edits.
     await click(task(/^Batch QC/))
     await click(task(/^Export tags/))
     expect(field('tag_length')!.value).toBe('3')
@@ -114,8 +129,8 @@ describe('Setup: the task chooser', () => {
     await renderColdApp(mock)
     const cards = screen.getAllByRole('region').filter((r) => r.classList.contains('step-card'))
     expect(cards.map((c) => c.getAttribute('aria-label'))).toEqual(['1 Spectra', '2 Database & taxonomy', '3 Tagging', '4 Reports'])
-    expect(within(cards[1]).getByText('Species on (bundled index) · no FASTA selected (optional)')).toBeDefined()
-    expect(within(cards[2]).getByText('length 3 · extension 2 · 20.0 ppm · max 50 tags')).toBeDefined()
+    expect(within(cards[1]).getByText('Species off · no FASTA selected (optional)')).toBeDefined()
+    expect(within(cards[2]).getByText('length 3 · extension 0 · 20.0 ppm · max 50 tags')).toBeDefined()
   })
 })
 
@@ -191,7 +206,7 @@ describe('Setup: the plan footer', () => {
 
   it('says what the run does and how far the form differs from where it started', async () => {
     const mock = installMockBridge()
-    await renderColdApp(mock)
+    await renderCharacterizeApp(mock)
     mock.nextPickInput = '/d/run01.mzML'
     await click(screen.getByRole('button', { name: 'Choose file…' }))
     expect(within(footer()).getByText('1 file · 10% of spectra · species on · digest+label+glyco · out: beside input')).toBeDefined()
@@ -324,7 +339,7 @@ describe('Setup: the plan footer', () => {
 describe('Setup: presets as diffs', () => {
   it('a preset saved from a task stores its diff over the task, without paths', async () => {
     const mock = installMockBridge()
-    await renderColdApp(mock)
+    await renderCharacterizeApp(mock)
     mock.nextPickInput = '/data/run01.mzML'
     await click(screen.getByRole('button', { name: 'Choose file…' }))
     await change(field('tag_length')!, '4')
@@ -362,7 +377,7 @@ describe('Setup: presets as diffs', () => {
     expect(screen.getByLabelText('Preset name')).toBeDefined()
     await click(screen.getByRole('button', { name: 'Cancel' }))
     expect(screen.queryByRole('alert')).toBeNull()
-    expect((screen.getByLabelText('Preset') as HTMLSelectElement).value).toBe('builtin:characterize')
+    expect((screen.getByLabelText('Preset') as HTMLSelectElement).value).toBe('builtin:export-tags')
     expect(footer().textContent).not.toContain('preset Mine')
     expect((screen.getByRole('button', { name: 'Delete' }) as HTMLButtonElement).disabled).toBe(true)
   })

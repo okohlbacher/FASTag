@@ -15,10 +15,10 @@ backend has to satisfy.
 
 ## First run
 
-1. Keep **Characterize a run** selected in **Setup** for a quick survey. It
-   samples **10% of the input spectra** and enables species, digest, label
-   and glyco reports. No FASTA is needed. Choose **Export tags** when you want
-   to tag the full input with per-residue confidence for downstream export.
+1. Keep **Export tags** selected in **Setup**. This default task generates
+   sequence tags from **all input spectra**, with per-residue confidence
+   for downstream export. No FASTA is needed. To inspect existing output
+   instead, choose the second task, **Open results / inspect spectra**.
 2. Click **Choose file…** and select uncompressed mzML or MGF, or an mzPeak
    file. Convert vendor files such as `.raw` and `.d` first. Raw DIA needs
    conversion to pseudo-DDA spectra; see the checks below the input.
@@ -31,13 +31,11 @@ backend has to satisfy.
 4. Check **Output** and the plan above **Run**. By default the tags and
    requested reports are written beside the input; **Browse…** changes the
    tags path. Existing outputs require confirmation before overwrite.
-5. Click **Run on <file>**. Characterize opens **Results → Overview** when it
-   finishes. Read the evidence and caveats, then use **Tags**, **Species**,
-   **Digest** or **Glyco** for the detail. A species ranking is not a presence
-   call, and “no call” or “not assessed” does not establish absence.
-6. For a full survey, set **Subsample fraction** to `1` and **Subsample
-   spectra** to `0` under **Spectra**, then run again. **Export INI…** saves
-   the current setup for the CLI; **Save…** saves a reusable preset.
+5. Click **Run on <file>**. Results opens on **Tags**. Select a row and choose
+   **Open in Spectrum** to inspect its evidence, or **Export shown rows…**
+   to save a filtered table.
+6. **Export INI…** saves the current setup for the CLI; **Save…** saves a
+   reusable preset.
 
 For **Stitch/ALPS reads**, choose a tag length or extension that can reach
 the export's default minimum of 8 residues. **Export tags** initially uses
@@ -47,7 +45,12 @@ only tags that actually reach the export minimum will be kept. Lower the
 export minimum only if shorter reads suit the downstream tool. Read exports
 use the whole file and their own filters, not the Tags table's filters.
 
-**Batch QC vs SDRF** runs the same survey for multiple files. An SDRF
+For QC, choose **Characterize a run**: it samples **10% of the input spectra**
+and enables species, digest, label and glyco reports, opening on
+**Results → Overview**. A species ranking is not a presence call, and “no
+call” or “not assessed” does not establish absence. For a full survey, set
+**Subsample fraction** to `1` and **Subsample spectra** to `0` under **Spectra**.
+**Batch QC vs SDRF** runs that survey for multiple files. An SDRF
 (sample and data relationship format) metadata table is optional; load one
 in **Batch** to compare its annotations with the reports. **Open results /
 inspect spectra** opens existing output without starting a new run.
@@ -319,10 +322,10 @@ rewritten: both exports of the Batch view (the corrections and the batch
 summary) refuse the SDRF's own path, in the panel and in the backend (`summary_write`'s protect list, which also catches another spelling
 or a link to the same file).
 
-Setup starts from a task: **Characterize a run** (the default: species with
-extension 2, the digest, label and glyco reports, a tenth of the spectra),
-**Batch QC vs SDRF**, **Export tags** (with the per-residue confidence
-column) or **Open results / inspect spectra** (no run). "Starting from" also
+Setup presents tasks in this order: **Export tags** (the default: all spectra
+with the per-residue confidence column), **Open results / inspect spectra**
+(no run), **Characterize a run** (species with extension 2, digest, label and
+glyco reports, a tenth of the spectra), then **Batch QC vs SDRF**. "Starting from" also
 offers FASTag's own defaults and your saved presets. The parameters sit in
 four step cards (Spectra, Database & taxonomy, Tagging, Reports), each with a
 one-line summary; settings that only a section's switch turns on (species,
@@ -608,7 +611,7 @@ removed and no CLI process left. `E2E_ONLY` picks specs by name. Results go to
 `e2e-tauri/results/`.
 
 Setup (P2a): `setup/setupScreen.app.test.tsx` renders the window as it starts
-(`renderColdApp`: the task "Characterize a run") and checks the two-action
+(`renderColdApp`: the task "Export tags") and checks the two-action
 cold start, the task chooser and Undo, hidden dependent fields, the plan
 footer, Copy command line, Export INI and presets saved as diffs; the older
 App-level tests start from FASTag's defaults (`renderApp`).
@@ -653,7 +656,7 @@ them), which `cargo test` or `cargo build --examples` builds;
 `gui-cli-consistency` job on pull requests, tags and `gui_dry_run` dispatches,
 against the portable linux-x64 CLI built from the same checkout. The job
 supplies the pinned taxonomy data when the bundle omits it and fails if any
-of the 19 tests are skipped. See `src/adversarial/external.ts`.
+of the 20 tests are skipped. See `src/adversarial/external.ts`.
 
 `e2e-web/specs/help-navigation.spec.ts` checks every Help page and its contents
 links at 960×600 in both themes, expanded CLI descriptions, long unmatched

@@ -12,8 +12,8 @@ test('the e2e build starts on its fixture bridge with nothing run yet', async ({
 })
 
 test('first result in two clicks: choose the file, run it', async ({ page }) => {
-  // From FASTag's defaults: the tags table is the first result (the landing
-  // task's run opens on its digest report, setup.spec.ts).
+  // FASTag's unmodified defaults also open the tags table. setup.spec.ts
+  // covers the Export tags landing task, which adds per-residue confidence.
   await openApp(page, 'default', 'defaults')
   await page.getByRole('button', { name: 'Choose file…' }).click()
   await page.getByRole('button', { name: 'Run on run01.mzML' }).click()

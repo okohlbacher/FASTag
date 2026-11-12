@@ -8,7 +8,7 @@ import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 import HelpView from './HelpView'
 import { resetHelp, showHelpPage } from './link'
-import { taskById } from '../setup/tasks'
+import { LANDING_TASK, taskById } from '../setup/tasks'
 
 const repo = join(__dirname, '..', '..', '..')
 const doc = (f: string): string => readFileSync(join(repo, f), 'utf8').replace(/\s+/g, ' ')
@@ -27,11 +27,18 @@ afterEach(() => resetHelp())
 
 describe('help vs docs', () => {
   it('describes the actual first-run task and existing results views', () => {
-    const task = taskById('characterize')!
-    expect(task.values).toMatchObject({ species: true, extension: '2', subsample_fraction: '0.1', digest_out: 'digest.tsv', label_out: 'label.tsv', glyco: true })
+    expect(LANDING_TASK).toBe('export-tags')
+    expect(taskById(LANDING_TASK)!.values).toEqual({ res_conf: true })
     const start = pageText('start')
-    expect(start).toContain('10% of the input spectra')
-    expect(start).toContain('Results opens on Overview')
+    expect(start).toContain('Export tags, the default task')
+    expect(start).toContain('tags from all input spectra and includes per-residue confidence')
+    expect(start).toContain('Results opens on Tags')
+    expect(start).toContain('Open results / inspect spectra')
+    // QC remains available as an explicit optional workflow.
+    expect(taskById('characterize')!.values).toMatchObject({ species: true, extension: '2', subsample_fraction: '0.1', digest_out: 'digest.tsv', label_out: 'label.tsv', glyco: true })
+    expect(start).toContain('For a separate QC survey, choose Characterize a run')
+    expect(start).toContain('These tasks sample 10% of the spectra')
+    expect(start).toContain('opening on Overview')
     expect(start).not.toContain('Every other setting starts at')
     const files = pageText('files')
     expect(files).toContain('Glyco tab lists these spectra')

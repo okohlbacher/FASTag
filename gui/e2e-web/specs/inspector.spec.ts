@@ -47,6 +47,7 @@ test('raw-DIA probe: Run is blocked, with the DIAspeXtract command and no Run an
 
 test('without the probe: "not checked" before the run; after it the ion-trap red flag and the re-run at 0.3 Da', async ({ page }) => {
   await openApp(page, 'iontrap')
+  await page.getByRole('radio', { name: /^Characterize a run/ }).check()
   await page.getByRole('button', { name: 'Choose file…' }).click()
   await expect(page.locator('p.not-checked', { hasText: /Not checked before the run: this FASTag has no metadata probe/ })).toBeVisible()
   await page.getByRole('button', { name: 'Run on run01.mzML' }).click()

@@ -1,7 +1,7 @@
 // A minimal W3C WebDriver client for tauri-driver (GUI-DESIGN section 9,
 // layer 4). Only the handful of commands the specs need, over Node's fetch,
 // so the job installs no WebdriverIO or Selenium tree.
-const ELEMENT = 'element-6066-11e4-a52f-4a6976a6e3b5'
+export const ELEMENT = 'element-6066-11e4-a52e-4f735466cecf'
 
 export class WebDriverError extends Error {}
 
@@ -86,12 +86,16 @@ export class Session {
 
   async find(xpath) {
     const v = await this.cmd('POST', '/element', { using: 'xpath', value: xpath })
-    return v[ELEMENT]
+    const id = v?.[ELEMENT]
+    if (typeof id !== 'string' || !id) throw new WebDriverError(`Unexpected element reference: ${JSON.stringify(v)}`)
+    return id
   }
 
   async findAll(xpath) {
     const v = await this.cmd('POST', '/elements', { using: 'xpath', value: xpath })
-    return v.map((e) => e[ELEMENT])
+    const ids = v.map((e) => e?.[ELEMENT])
+    if (ids.some((id) => typeof id !== 'string' || !id)) throw new WebDriverError(`Unexpected element references: ${JSON.stringify(v)}`)
+    return ids
   }
 
   /** A WebDriver click; if the driver refuses it (not interactable, an

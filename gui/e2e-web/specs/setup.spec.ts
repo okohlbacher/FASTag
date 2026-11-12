@@ -23,26 +23,31 @@ const setMock = (page: Page, key: string, value: unknown): Promise<void> =>
 const plan = (page: Page) => page.getByRole('region', { name: 'Plan' })
 const section = (page: Page, title: string) => page.locator('summary.disclosure', { has: page.locator('.sec-title', { hasText: new RegExp(`^${title}$`) }) })
 
-test('a cold start reaches Run in two actions, with the task it lands on', async ({ page }) => {
+test('a cold start prioritizes Export tags and reaches all-spectra Tags results in two actions', async ({ page }) => {
   await openApp(page)
-  await expect(page.getByRole('radio', { name: /^Characterize a run/ })).toBeChecked()
+  await expect(page.locator('.tasks .task-label')).toHaveText([
+    'Export tags', 'Open results / inspect spectra', 'Characterize a run', 'Batch QC vs SDRF'
+  ])
+  await expect(page.getByRole('radio', { name: /^Export tags/ })).toBeChecked()
+  await expect(page.getByLabel('Preset', { exact: true })).toHaveValue('builtin:export-tags')
+  await expect(page.locator('#task-export-tags-d')).toContainText('all spectra, with per-residue confidence')
+  await expect(plan(page)).toContainText('all spectra')
   // 1: the input. 2: Run.
   await page.getByRole('button', { name: 'Choose file…' }).click()
   await page.getByRole('button', { name: 'Run on run01.mzML' }).click()
-  // P2b (D8): the task lands on the Overview, with the Digest tab beside it
-  // (was: the Digest tab selected).
-  await expect(page.getByRole('tab', { name: 'Overview' })).toHaveAttribute('aria-selected', 'true')
-  await expect(page.getByRole('tab', { name: /^Digest/ })).toBeVisible()
+  await expect(page.getByRole('tab', { name: 'Tags' })).toHaveAttribute('aria-selected', 'true')
+  await expect(page.getByText('Showing 2,028 of 2,028')).toBeVisible()
   const calls = await mockState<RunCall[]>(page, 'runCalls')
   expect(calls).toHaveLength(1)
   const p = calls[0].params
-  expect([p.species, p.extension, p.glyco, p.subsample_fraction]).toEqual([true, '2', true, '0.1'])
-  expect(String(p.digest_out)).toMatch(/run01\.digest\.tsv$/)
-  expect(String(p.label_out)).toMatch(/run01\.label\.tsv$/)
+  expect(p.res_conf).toBe(true)
+  expect([Number(p.subsample_fraction), Number(p.subsample_spectra)]).toEqual([0, 0])
+  expect([p.species, p.glyco, p.digest_out, p.label_out]).toEqual([false, false, '', ''])
 })
 
 test('four step cards; a section switch hides the settings it turns on', async ({ page }) => {
   await openApp(page)
+  await page.getByRole('radio', { name: /^Characterize a run/ }).check()
   await expect(page.locator('section.step-card .card-head h2')).toHaveText(['Spectra', 'Database & taxonomy', 'Tagging', 'Reports'])
   await section(page, 'Species detection').click()
   await expect(page.getByLabel(/^Species rank/)).toBeVisible()
@@ -54,6 +59,7 @@ test('four step cards; a section switch hides the settings it turns on', async (
 
 test('the plan footer counts what differs from the task, and Reset takes it back', async ({ page }) => {
   await openApp(page)
+  await page.getByRole('radio', { name: /^Characterize a run/ }).check()
   await page.getByRole('button', { name: 'Choose file…' }).click()
   await expect(plan(page)).toContainText('1 file · 10% of spectra · species on · digest+label+glyco · out: beside input')
   await expect(plan(page)).toContainText('Same as Characterize a run')
@@ -84,7 +90,7 @@ test('a preset saves its diff over the task and no paths; Open results needs no 
   await page.getByLabel('Preset name').fill('Mine')
   await page.getByRole('button', { name: 'Save', exact: true }).click()
   const settings = await mockState<{ presets: Record<string, unknown> }>(page, 'settings')
-  expect(settings.presets['Mine']).toEqual({ v: 2, base: 'builtin:characterize', diff: { tag_length: '4' } })
+  expect(settings.presets['Mine']).toEqual({ v: 2, base: 'builtin:export-tags', diff: { tag_length: '4' } })
   await expect(plan(page)).toContainText('Same as preset Mine')
   await page.getByRole('radio', { name: /^Open results/ }).check()
   await expect(page.locator('#p-tag_length')).toHaveCount(0)
@@ -118,15 +124,16 @@ test('arrowing through the tasks by keyboard keeps the edits for Undo', async ({
   await page.locator('#p-tag_length').fill('5')
   // The native radio group selects on each arrow key: two tasks replace
   // the form in turn, and Undo still brings back the edited values.
-  await page.getByRole('radio', { name: /^Characterize a run/ }).focus()
+  await page.getByRole('radio', { name: /^Export tags/ }).focus()
   await page.keyboard.press('ArrowDown')
-  await expect(page.getByRole('radio', { name: /^Batch QC/ })).toBeChecked()
+  await expect(page.getByRole('radio', { name: /^Open results/ })).toBeChecked()
+  await expect(page.locator('#p-tag_length')).toHaveCount(0)
   await page.keyboard.press('ArrowDown')
-  await expect(page.getByRole('radio', { name: /^Export tags/ })).toBeChecked()
+  await expect(page.getByRole('radio', { name: /^Characterize a run/ })).toBeChecked()
   await expect(page.locator('#p-tag_length')).toHaveValue('3')
   await page.getByRole('button', { name: 'Undo' }).click()
   await expect(page.locator('#p-tag_length')).toHaveValue('5')
-  await expect(page.getByRole('radio', { name: /^Characterize a run/ })).toBeChecked()
+  await expect(page.getByRole('radio', { name: /^Export tags/ })).toBeChecked()
 })
 
 test('Batch QC asks for the files of a batch first', async ({ page }) => {

@@ -12,13 +12,15 @@ The target scenario is a first-time user choosing spectra, understanding
 what will run, resolving input checks and interpreting the results. Preserve
 the existing four-view layout, task presets, OpenMS logo, system typography,
 blue accent, light/dark tokens and native form controls. No dependency,
-algorithm, parameter-default or report-format changes are needed.
+algorithm, CLI-default or report-format changes are needed. The GUI now
+starts with tag generation, followed by reopening results and the two QC
+tasks, as requested in the final priority review.
 
 ## Findings and changes
 
 | Finding | Change |
 | --- | --- |
-| Getting started described CLI defaults and a Tags landing page, but the app starts with Characterize and opens Overview. | Rewrote the first-run guide and Help around the actual task, 10% sample, input checks, output location and Overview. |
+| Getting started and the task order did not clearly prioritize tag generation. | Put Export tags first and make it the GUI default, followed by Open results, Characterize and Batch QC. Align first-run Help with all-spectrum tagging and the Tags view; explain 10% sampling and Overview in the optional QC workflows. |
 | Task descriptions led with implementation details; the next action was unclear. | Used plain descriptions, emphasized Choose file, added a direct first-run Help link and strengthened step-heading hierarchy. |
 | The final plan omitted sampling. Small nonzero fractions could display as 0%. | The plan and Spectra card show all spectra, percentage or absolute sample count; count precedence matches the CLI. |
 | An absent FASTA looked like a missing requirement. | Marked it optional and explained that the bundled species index needs no FASTA. |
@@ -56,14 +58,14 @@ Automated coverage now includes keyboard navigation through all 20 displayed
 search hits, FAQ/glossary round trips, a blocked input, focus after a view
 switch, and native WebDriver Enter/Escape behavior. The existing real-CLI
 consistency job now runs on pull requests with the pinned taxonomy and fails
-if any of its 19 cases is skipped. Browser fixtures, native-backend tests and
+if any of its 20 cases is skipped. Browser fixtures, native-backend tests and
 real-CLI checks remain distinct layers of evidence.
 
 ## Final local validation
 
 | Layer | Result |
 | --- | --- |
-| Frontend and real-CLI integration | 958 tests exercised across 79 files with the freshly built CLI and Rust argv/order helpers; no skipped cases. One existing lifecycle test hit its five-second timeout during concurrent native builds, then all 10 tests in that file passed in isolation with the original timeout. The other 957 passed in the full run. |
+| Frontend and real-CLI integration | 959 passed across 79 files with the freshly built CLI and Rust argv/order helpers; no skipped or failed cases. Includes 20 real-CLI consistency tests covering both the Export tags startup and the optional Characterize task. |
 | Browser GUI | 196 passed in Chromium and WebKit, including all Help pages, contextual navigation, keyboard search, minimum-window fit, both themes, Setup, results, batch, exports and History. |
 | Rust backend | 231 passed, zero failed, two intentionally ignored helper-process entry points. Includes real-CLI INI round trip, protected file aliases, crash recovery and cancellation of a 400,000-row export. |
 | C++ and CLI | 81 passed; five optional external-tool/data checks skipped. Two sandbox-restricted filesystem checks passed on rerun with the required access. Both changed species integration checks passed. |

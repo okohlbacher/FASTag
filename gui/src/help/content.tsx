@@ -57,8 +57,9 @@ export const START: HelpPage = {
             so.
           </p>
           <p>
-            FASTag gives a fast first look: which organisms are in a run (Species tab), which spectra carry a piece of
-            your protein, and how the sample was digested and labelled (Digest tab).
+            Generate tags to inspect peptide sequence evidence and export it for downstream analysis. You can also
+            reopen earlier results, or assess which organisms may be present (Species tab) and how the sample was
+            digested and labelled (Digest tab).
           </p>
           <p>
             New to tags? Read <L to="tags-spectrum">What an MS2 spectrum shows</L> and{' '}
@@ -73,10 +74,9 @@ export const START: HelpPage = {
       body: (
         <>
           <p>
-            Start in <strong>Setup</strong> with <strong>Characterize a run</strong>. This quick survey samples
-            10% of the input spectra and enables species, digest, label and glyco reports. It does not need a FASTA
-            file. To tag the full input, set <L to="param-subsample_fraction">Subsample fraction</L> to 1 and{' '}
-            <L to="param-subsample_spectra">Subsample spectra</L> to 0 under Spectra.
+            Start in <strong>Setup</strong> with <strong>Export tags</strong>, the default task. It generates sequence
+            tags from all input spectra and includes per-residue confidence for downstream export. No FASTA file is
+            needed. To inspect an earlier analysis instead, choose <strong>Open results / inspect spectra</strong>.
           </p>
           <ol>
             <li>
@@ -99,12 +99,17 @@ export const START: HelpPage = {
               shows FASTag&apos;s messages.
             </li>
             <li>
-              Results opens on <L to="workflow-overview">Overview</L> for Characterize a run. Read the evidence and caveats,
-              then open <strong>Tags</strong> for the sequences, <strong>Species</strong> for the taxon ranking,
-              <strong>Digest</strong> for digestion and labels, or <strong>Glyco</strong> for oxonium-ion flags.
-              A report that says “not assessed” or “no call” is not evidence that a feature is absent.
+              Results opens on <strong>Tags</strong>. Inspect the sequences, select a row and choose
+              <strong> Open in Spectrum</strong> to see its evidence, or use <strong>Export shown rows…</strong> to
+              save a filtered table. See <L to="results-export">read export settings</L> for Stitch/ALPS exports.
             </li>
           </ol>
+          <p>
+            For a separate QC survey, choose <strong>Characterize a run</strong> or <strong>Batch QC vs SDRF</strong>.
+            These tasks sample 10% of the spectra and enable species, digest, label and glyco reports, opening on{' '}
+            <L to="workflow-overview">Overview</L>. A report that says “not assessed” or “no call” is not evidence
+            that a feature is absent.
+          </p>
           <p>
             &quot;FASTag ready&quot; in the title bar means the FASTag program that comes with the app can be run; the
             number beside it is its version. A field marked <em>changed</em> differs from the CLI default; the
@@ -226,10 +231,11 @@ export const START: HelpPage = {
       body: (
         <>
           <p>
-            Setup starts from a task: <strong>Characterize a run</strong> (species with extension 2, the digest, label
-            and glyco reports, a tenth of the spectra), <strong>Batch QC vs SDRF</strong> (the same reports, and the input
-            asks for the files of a batch first), <strong>Export tags</strong> (adds the per-residue confidence column; see <L to="results-export">read export settings</L>){' '}
-            or <strong>Open results / inspect spectra</strong>. <strong>Starting from</strong> also offers FASTag&apos;s
+            Setup starts with <strong>Export tags</strong> (all spectra, with per-residue confidence; see{' '}
+            <L to="results-export">read export settings</L>). Next is <strong>Open results / inspect spectra</strong>
+            for existing output. The QC tasks follow: <strong>Characterize a run</strong> (species with extension 2,
+            digest, label and glyco reports, a tenth of the spectra) and <strong>Batch QC vs SDRF</strong> (the same
+            reports for several files). <strong>Starting from</strong> also offers FASTag&apos;s
             own defaults and your presets. Choosing one replaces the form; <strong>Undo</strong> brings back what it
             replaced. The footer above Run counts what differs from where the form started, and its{' '}
             <strong>Reset</strong> takes that back.
@@ -1219,11 +1225,12 @@ export const FILES: HelpPage = {
 export const SETTINGS_INTRO: ReactNode = (
   <>
     <p>
-      Settings start from your task or preset. <strong>Characterize a run</strong> enables species, digest,
+      Settings start from your task or preset. The default <strong>Export tags</strong> task processes all spectra
+      and adds per-residue confidence. <strong>Characterize a run</strong> enables species, digest,
       label and glyco reports and samples 10% of the input spectra. The reference below shows the CLI defaults,
       which can differ from the task&apos;s values. First check the{' '}
       <L to="param-fragment_tolerance">fragment tolerance</L> for the MS2 analyser. Species detection needs tags
-      that reach 7 residues: the task uses <L to="param-tag_length">tag length</L> 3 with extension 2.
+      that reach 7 residues: the Characterize task uses <L to="param-tag_length">tag length</L> 3 with extension 2.
       Optional analyses run when their switch or output file is set.
     </p>
     <p>

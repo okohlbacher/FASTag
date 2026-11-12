@@ -1,6 +1,6 @@
 // The Overview in the app (GUI-DESIGN 10 P2b acceptance): "Characterize a
-// run" on a gate fixture reaches the Overview in 3 actions (add file, Run,
-// open toast); without a FASTA the alkylation tile says "not assessed (needs
+// run" on a gate fixture reaches the Overview in 4 actions (select task,
+// add file, Run, open toast); without a FASTA the alkylation tile says "not assessed (needs
 // a FASTA)" and the C+57.021 line says "default"; the Results pane shows the
 // running state while the run goes; a tile's action turns its option on and
 // runs again. The CLI output is FASTag integration/1.12 on PXD003531
@@ -9,7 +9,7 @@
 import { act, fireEvent, screen, waitFor, within } from '@testing-library/react'
 import { describe, expect, it } from 'vitest'
 import { installMockBridge, type MockBridge } from '../testing/mockBridge'
-import { click, goTo, renderApp, renderColdApp, runButton } from '../testing/render'
+import { click, goTo, renderApp, renderCharacterizeApp, runButton } from '../testing/render'
 import { CLI_CASES, logLines, type CliCase } from '../testing/cliFixtures'
 import { applyLastUsed } from '../testing/lastUsed'
 import { speciesFromTsv } from '../testing/speciesTsv'
@@ -34,19 +34,19 @@ const shownView = (): string | undefined =>
   [...document.querySelectorAll<HTMLElement>('.view')].find((v) => !v.hidden)?.dataset.view
 
 describe('Overview in the app', () => {
-  it('Characterize a run reaches the Overview in 3 actions: add file, Run, open toast', async () => {
+  it('Characterize a run reaches the Overview in 4 actions: select task, add file, Run, open toast', async () => {
     const mock = installMockBridge()
     gate(mock, CLI_CASES.v112)
-    await renderColdApp(mock)
-    // 1: add the file.
+    await renderCharacterizeApp(mock)
+    // 1: select Characterize (in the helper). 2: add the file.
     await click(screen.getByRole('button', { name: 'Choose file…' }))
-    // 2: Run.
+    // 3: Run.
     await click(runButton())
     expect(mock.runCalls).toHaveLength(1)
     // The user looks at the form while it runs; the run ends elsewhere.
     await goTo('setup')
     await finish(mock, CLI_CASES.v112)
-    // 3: the toast's Open results.
+    // 4: the toast's Open results.
     const toast = await screen.findByRole('status', { name: 'Run finished' })
     await click(within(toast).getByRole('button', { name: 'Open results' }))
     expect(shownView()).toBe('results')
@@ -59,7 +59,7 @@ describe('Overview in the app', () => {
   it('without a FASTA: no alkylation call, and the C+57.021 line says "default"', async () => {
     const mock = installMockBridge()
     gate(mock, CLI_CASES.v112)
-    await renderColdApp(mock)
+    await renderCharacterizeApp(mock)
     await click(screen.getByRole('button', { name: 'Choose file…' }))
     await click(runButton())
     await finish(mock, CLI_CASES.v112)
@@ -74,7 +74,7 @@ describe('Overview in the app', () => {
   it('the Results pane shows the running state, then the Overview', async () => {
     const mock = installMockBridge()
     gate(mock, CLI_CASES.v112)
-    await renderColdApp(mock)
+    await renderCharacterizeApp(mock)
     await click(screen.getByRole('button', { name: 'Choose file…' }))
     await click(runButton())
     expect(shownView()).toBe('results')
@@ -95,7 +95,7 @@ describe('Overview in the app', () => {
   it('"Add FASTA and run again" picks a FASTA, turns the mass-gap report on, raises the extension to 3 and runs again', async () => {
     const mock = installMockBridge()
     gate(mock, CLI_CASES.v112)
-    await renderColdApp(mock)
+    await renderCharacterizeApp(mock)
     await click(screen.getByRole('button', { name: 'Choose file…' }))
     await click(runButton())
     await finish(mock, CLI_CASES.v112)
@@ -150,7 +150,7 @@ describe('Overview in the app', () => {
   it('focus does not fall to the page body when the run ends: the selected tab gets it', async () => {
     const mock = installMockBridge()
     gate(mock, CLI_CASES.v112)
-    await renderColdApp(mock)
+    await renderCharacterizeApp(mock)
     await click(screen.getByRole('button', { name: 'Choose file…' }))
     await click(runButton())
     const showLog = within(screen.getByRole('region', { name: 'Running' })).getByRole('button', { name: 'Show log' })
@@ -164,7 +164,7 @@ describe('Overview in the app', () => {
   it('focus does not fall to the page body after Cancel: the Results view gets it', async () => {
     const mock = installMockBridge()
     gate(mock, CLI_CASES.v112)
-    await renderColdApp(mock)
+    await renderCharacterizeApp(mock)
     await click(screen.getByRole('button', { name: 'Choose file…' }))
     await click(runButton())
     const cancel = within(screen.getByRole('region', { name: 'Running' })).getByRole('button', { name: 'Cancel' })
@@ -177,7 +177,7 @@ describe('Overview in the app', () => {
     await waitFor(() => expect(document.activeElement).toBe(document.querySelector('.view[data-view="results"]')))
   })
 
-  it('from the defaults: the old landing tab, the Overview offered, and "Turn on and run again"', async () => {
+  it('from the defaults: the Tags tab, the Overview offered, and "Turn on and run again"', async () => {
     const mock = installMockBridge()
     gate(mock, CLI_CASES.v112)
     await renderApp(mock) // FASTag's defaults: no label report

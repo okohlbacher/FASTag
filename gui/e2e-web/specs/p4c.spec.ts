@@ -35,6 +35,7 @@ function oracle(c: string) {
 
 async function runOn(page: Page, fixture: string): Promise<void> {
   await openApp(page, fixture)
+  await page.getByRole('radio', { name: /^Characterize a run/ }).check()
   await page.getByRole('button', { name: 'Choose file…' }).click()
   await page.getByRole('button', { name: 'Run on run01.mzML' }).click()
   await expect(page.getByRole('tab', { name: 'Overview' })).toHaveAttribute('aria-selected', 'true')

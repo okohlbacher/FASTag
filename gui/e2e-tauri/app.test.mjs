@@ -28,7 +28,7 @@ import { basename, dirname, join } from 'node:path'
 import { once } from 'node:events'
 import { spawnSync } from 'node:child_process'
 import { fileURLToPath } from 'node:url'
-import { Session, until } from './wd.mjs'
+import { ELEMENT, Session, until } from './wd.mjs'
 import { repeatMzML } from './mzml.mjs'
 
 const APP = process.env.FASTAG_APP
@@ -84,15 +84,15 @@ async function chooseInput(s, path) {
 async function view(s, id) {
   const nav = await until(`the ${id} view button`, async () => {
     const el = await s.exec(`return document.querySelector('nav[aria-label="Views"] button[data-view="' + arguments[0] + '"]')`, id)
-    return el && (el['element-6066-11e4-a52f-4a6976a6e3b5'] ?? Object.values(el)[0])
+    return el && (el[ELEMENT] ?? Object.values(el)[0])
   })
   await s.click(nav)
   await until(`the ${id} view`, () => s.exec(`const v = document.querySelector('.view[data-view="' + arguments[0] + '"]'); return !!v && !v.hidden`, id), 5000)
 }
 
 /** Start the session from FASTag's defaults through Setup's "Starting
- *  from" select, as a user does (P2a D1: the app lands on "Characterize a
- *  run", whose run opens on its digest report, not the tags table). The run
+ *  from" select, as a user does (the app starts on "Export tags", which
+ *  additionally enables per-residue confidence). The run
  *  and IPC specs check what a run from the defaults writes and shows, as the
  *  e2e-web smoke spec does with ?start=defaults. React's onChange on a select
  *  listens to the change event, so the value goes through the native setter
@@ -129,8 +129,7 @@ test('help: keyboard search opens a CLI entry and Escape restores focus without 
     await view(s, 'setup')
     const before = await s.exec("return document.getElementById('p-tag_length').value")
     const help = await s.button('Help')
-    // WebKitGTK does not resolve an element reference passed to execute/sync here.
-    await s.exec('document.querySelector(\'button[aria-controls="help-panel"]\').focus()')
+    await s.exec('arguments[0].focus()', { [ELEMENT]: help })
     await s.click(help)
     const search = await until('Help search', () => s.find('//input[@aria-label="Search Help"]'))
     // W3C element send-keys drives WebKit's actual keyboard defaults. A
@@ -279,7 +278,7 @@ test('spectrum: a row of the Tags table opens in the Spectrum tab with its ladde
       await s.waitText(/Showing 2,028 of 2,028/, 60000)
       const row = await until('the first row', async () => {
         const el = await s.exec("return document.querySelector('.rt-rows .rt-row')")
-        return el && (el['element-6066-11e4-a52f-4a6976a6e3b5'] ?? Object.values(el)[0])
+        return el && (el[ELEMENT] ?? Object.values(el)[0])
       })
       const spectrum = await s.exec("return document.querySelector('.rt-rows .rt-row [role=gridcell]').getAttribute('title')")
       await s.click(row)

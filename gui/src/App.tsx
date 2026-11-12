@@ -55,7 +55,7 @@ const FASTA_FORMATS = ['fasta', 'fa', 'faa']
 // view store (tab and log drawer); the views render it.
 ///
 /// @p start: where the session's values come from; the app lands on the
-/// built-in task "Characterize a run" (D1, GUI-DESIGN 3 S1).
+/// built-in task "Export tags".
 export default function App({ start = LANDING }: { start?: Origin } = {}): JSX.Element {
   const [bin, setBin] = useState<BinaryInfo | null>(null)
   // The view shown (Cmd+1..4, the top bar, the View menu).

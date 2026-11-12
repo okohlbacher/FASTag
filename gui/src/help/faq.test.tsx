@@ -26,7 +26,7 @@ describe('troubleshooting guidance matches the app', () => {
     expect(text).not.toContain('shows every message')
   })
 
-  it('uses the Characterize species settings as the standard starting point', () => {
+  it('uses the Characterize species settings for the optional survey workflow', () => {
     const task = taskById('characterize')!
     const text = entry('faq-species-off')
     expect(text).toContain(`extension ${task.values.extension}`)
