@@ -2030,11 +2030,13 @@ namespace FASTag::LabelDiscovery
     other = std::max(lys6arg6, medium_heavy);
     silac_top = std::max({lys8, arg10, other});
     dimethyl2 = 0;
+    hint = std::max(lys8, arg10);
     // Per labelled site: light/intermediate, light/13CD2O, light/CD2O+NaBD3CN, light/heavy, intermediate/heavy.
     for (double s : {4.025107, 6.031812, 6.037660, 8.044366, 4.019259})
     {
       const std::uint64_t one = pairs(s);
       other = std::max(other, one);
+      hint = std::max(hint, one);
       dimethyl2 = std::max(dimethyl2, std::min(one, pairs(2 * s)));
     }
     std::array<std::uint64_t, 8> c{};
@@ -2058,6 +2060,14 @@ namespace FASTag::LabelDiscovery
   {
     const std::uint64_t m = std::max({lys8, arg10, other});
     return m >= 30 && ratio(m) >= 2.0;
+  }
+
+  bool PairCounter::labelHint() const
+  {
+    // Development runs (774, six sets): labelled runs the absence rule called label-free show 11 to 23 pairs at
+    // 3.6 to 10.5 x (control + 1); label-free runs it calls reach 2.5. Not +6.0201 or medium to heavy: label-free
+    // runs with few precursors show 14 to 25 pairs there over a control of 0 to 5.
+    return hint >= 10 && static_cast<double>(hint) >= 3.0 * (control + 1.0);
   }
 
   namespace
@@ -2167,7 +2177,8 @@ namespace FASTag::LabelDiscovery
     const bool quiet = rc.excess(rc.tmt, rc.tmt_decoy) < kGateOff && rc.excess(rc.itraq4, rc.itraq4_decoy) < kGateOff;
     const bool trap = a.reason == "low_resolution_ms2" && (a.reporter_gate == "none" || (a.reporter_gate == "unknown" && quiet)) &&
                       a.pairs.precursors.size() >= 1500;
-    if (a.status == "no_call" && (few || trap) && a.pairs.precursors.size() >= 500 && !a.pairs.anyLabel())
+    // A weak signal at Lys8, Arg10 or a dimethyl spacing (too few pairs for a call) leaves the no call.
+    if (a.status == "no_call" && (few || trap) && a.pairs.precursors.size() >= 500 && !a.pairs.anyLabel() && !a.pairs.labelHint())
     {
       a.status = "call";
       a.labels = "label-free";
@@ -2992,6 +3003,8 @@ namespace FASTag::LabelDiscovery
       row("ld_pair", "dimethyl_pairs", num(pc.dimethyl2), n, "largest over the dimethyl spacings of the smaller count at the spacing and at twice the spacing");
       row("ld_pair", "dimethyl_ratio", fix(pc.ratio(pc.dimethyl2), 2), "-", "dimethyl_pairs / (control_pairs + 5)");
       row("ld_pair", "dimethyl", pc.dimethyl() ? "yes" : "no", "-", "yes: count >= 30, ratio >= 2 and above the largest SILAC spacing count");
+      row("ld_pair", "hint_pairs", num(pc.hint), n, "the largest count at Lys8, Arg10 or one of the five dimethyl spacings");
+      row("ld_pair", "label_hint", pc.labelHint() ? "yes" : "no", "-", "yes: hint_pairs >= 10 and >= 3 x (control_pairs + 1); no absence call");
     }
     // ld_call
     row("ld_call", "status", a.status, "-", "call or no_call");

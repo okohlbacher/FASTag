@@ -459,6 +459,8 @@ namespace FASTag::LabelDiscovery
     std::uint8_t veto = 0;
     double veto_expected = 0;  ///< the largest expected heavy K/R tag spectra over the vetoed spacings
     double control = 0;  ///< median of the eight control counts
+    /// The largest count at Lys8, Arg10 or one of the five dimethyl spacings (format 5, absence rule).
+    std::uint64_t hint = 0;
     void count();
     /// count / (control + 5): the excess of a label spacing over the controls.
     double ratio(std::uint64_t pairs) const { return static_cast<double>(pairs) / (control + 5.0); }
@@ -469,6 +471,8 @@ namespace FASTag::LabelDiscovery
     bool dimethyl() const;
     /// Any label spacing has >= 30 pairs and a ratio >= 2.
     bool anyLabel() const;
+    /// A weak label signal: hint >= 10 pairs and >= 3 x (control + 1). Blocks the absence rule.
+    bool labelHint() const;
     /// One SILAC spacing alone (Lys8, Arg10, +6.0201 or medium to heavy) has
     /// >= 30 pairs and a ratio >= 20, and dimethyl() is false; spacings in veto are ignored.
     bool silacSingle() const;

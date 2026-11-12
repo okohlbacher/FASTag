@@ -913,6 +913,25 @@ int main()
     LD::applyPairs(x, dim);
     CHECK(x.status == "no_call" && x.pairs.other == 60, "a +4.0251 pair spacing blocks the absence call (%llu)",
           static_cast<unsigned long long>(x.pairs.other));
+    // a weak Arg10 signal (12 pairs, control 0: below the call, above the hint) leaves the no call
+    auto withArg10 = [&](int n) {
+      LD::PairCounter w = many;
+      for (int i = 0; i < n; ++i)
+      {
+        w.add(3.0 * i + 1.0, 2000.0 + 1.7 * i, 2);
+        w.add(3.0 * i + 1.0, 2000.0 + 1.7 * i + 10.008269 / 2, 2);
+      }
+      LD::Analysis e = few;
+      e.reporter_gate = "none";
+      LD::applyPairs(e, w);
+      return e;
+    };
+    x = withArg10(12);
+    CHECK(x.status == "no_call" && x.pairs.hint == 12 && x.pairs.labelHint(), "a weak Arg10 signal blocks the absence call (%llu)",
+          static_cast<unsigned long long>(x.pairs.hint));
+    CHECK(rowsOf(x, S).at("ld_pair/label_hint") == "yes" && rowsOf(x, S).at("ld_pair/hint_pairs") == "12", "hint rows");
+    x = withArg10(9);
+    CHECK(x.status == "call" && x.labels == "label-free" && !x.pairs.labelHint(), "9 Arg10 pairs are no hint");
 
     // format 5: the absence call on ion-trap MS2 without a reporter gate
     x = few;
