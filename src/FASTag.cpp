@@ -144,9 +144,11 @@ namespace
   double g_t_probe = 0, g_t_tables = 0; ///< tolerance probe, null tables
   /// When main_() finished a file run; what follows it is teardown.
   std::chrono::steady_clock::time_point g_t_main_end;
-  /// -shortlist_specificity is on the command line (set by main()): TOPPBase
-  /// does not tell an explicit `full` from the default. post-1.13.1 (aspn).
-  bool g_cli_shortlist_specificity = false;
+  /// Options on the command line (`-name`, set by main()): TOPPBase does not
+  /// tell an explicit default value from the default. Read for
+  /// -shortlist_specificity (post-1.13.1, aspn) and the msfragger shortlist
+  /// defaults (post-1.13.1, msfragger).
+  std::set<std::string> g_cli_options;
 
   /// Thrown by the tagging loop at the first MS2 with an ion mobility per
   /// peak when -out_spectra is mzPeak, which cannot store it.
@@ -973,14 +975,19 @@ protected:
                        "and entries already in the database are left out", false);
     setValidFormats_("shortlist_background", ListUtils::create<std::string>("fasta"));
     registerDoubleOption_("shortlist_max_evalue", "<f>", 0.1,
-                          "E-value a tag needs for its placements to count for the shortlist", false, true);
+                          "E-value a tag needs for its placements to count for the shortlist. With -search_engine "
+                          "msfragger, -search_config_out and -shortlist_protease trypsin the default is 10 (the "
+                          "held-out-tested MSFragger configuration) unless given on the command line or in an INI",
+                          false, true);
     setMinFloat_("shortlist_max_evalue", 0.0);
     registerIntOption_("shortlist_min_spectra", "<n>", 2,
                        "Spectra a protein needs to be kept", false, true);
     setMinInt_("shortlist_min_spectra", 1);
     registerFlag_("shortlist_gapped",
                   "Let placements with one mismatched flank (a mass gap) count for the shortlist; "
-                  "by default only exact ones count (a gap equal to a fixed terminal label is exact)");
+                  "by default only exact ones count (a gap equal to a fixed terminal label is exact). On by default "
+                  "with -search_engine msfragger, -search_config_out and -shortlist_protease trypsin (the "
+                  "held-out-tested MSFragger configuration)");
     registerStringOption_("shortlist_parsimony", "<mode>", "none",
                           "'none' keeps every protein above -shortlist_min_spectra; 'subset' drops a "
                           "protein whose spectra a higher-ranked kept one has; 'greedy' keeps a greedy "
@@ -1017,16 +1024,20 @@ protected:
                         "Comet parameters (merged into -search_config_template when given), or a complete "
                         "MSFragger fragger.params", false);
     registerStringOption_("search_engine", "<engine>", "sage",
-                          "Engine of -search_config_out; msfragger (MSFragger 4.4.1, experimental; held-out test "
-                          "FAILED: the shortlist search kept 49-73% of the spectra a full MSFragger search "
-                          "identifies, criterion 80%) needs decoys in the database: -fasta_out then appends "
-                          "reversed ones", false);
+                          "Engine of -search_config_out; msfragger (MSFragger 4.4.1, experimental) needs decoys in "
+                          "the database: -fasta_out then appends reversed ones. With msfragger and -shortlist_protease "
+                          "trypsin, -shortlist_gapped is on, -shortlist_max_evalue 10, -recon_min_length 6 and "
+                          "-recon_missed_cleavages 2, each unless given on the command line or in an INI: the "
+                          "configuration that passed its second held-out test (kept share "
+                          "0.83-0.98 of a full MSFragger search, 9 runs; the first test, with the 1.13 shortlist, "
+                          "FAILED at 0.49-0.73)", false);
     setValidStrings_("search_engine", ListUtils::create<std::string>("sage,comet,msfragger"));
     registerInputFile_("search_config_template", "<file>", "",
                        "Comet only: a `comet -p` parameter file the managed keys are merged into", false);
-    registerDoubleOption_("search_precursor_tolerance", "<f>", 10.0,
-                          "Precursor tolerance written to -search_config_out", false);
-    setMinFloat_("search_precursor_tolerance", 0.0);
+    registerDoubleOption_("search_precursor_tolerance", "<f>", -1.0,
+                          "Precursor tolerance written to -search_config_out; -1 = by engine: 10, or 20 ppm "
+                          "(MSFragger's own default) for msfragger", false);
+    setMinFloat_("search_precursor_tolerance", -1.0);
     registerStringOption_("search_precursor_unit", "<unit>", "ppm",
                           "Unit of -search_precursor_tolerance", false);
     setValidStrings_("search_precursor_unit", ListUtils::create<std::string>("ppm,Da"));
@@ -1035,6 +1046,16 @@ protected:
                        "Sage and Comet, 0..3 (MSFragger's own default) for msfragger", false);
     setMinInt_("search_isotope_errors", -1);
     setMaxInt_("search_isotope_errors", 3);
+    registerIntOption_("search_missed_cleavages", "<n>", -1,
+                       "Missed cleavages the engine searches; -1 = by engine: -recon_missed_cleavages for Sage "
+                       "and Comet and with -shortlist_protease other than trypsin, 2 (MSFragger's own default) "
+                       "for msfragger", false);
+    setMinInt_("search_missed_cleavages", -1);
+    setMaxInt_("search_missed_cleavages", 10);
+    registerStringOption_("search_nterm_acetyl", "<mode>", "engine",
+                          "Add 'Acetyl (Protein N-term)' to the variable modifications of -search_config_out; "
+                          "'engine' = yes for msfragger (its own default), no for Sage and Comet", false);
+    setValidStrings_("search_nterm_acetyl", ListUtils::create<std::string>("engine,yes,no"));
     registerStringOption_("search_decoy_prefix", "<s>", "",
                           "Decoy prefix the engine generates; empty = rev_ (Sage, MSFragger) or DECOY_ (Comet)", false);
     // #17: the run's mass-gap peaks (the -massgap_out peaks) as variable
@@ -1264,6 +1285,14 @@ protected:
       case ParameterInformation::INTLIST: return getIntList_(name) != e.default_value.toIntVector();
       default: return getStringOption_(name) != static_cast<std::string>(e.default_value);
     }
+  }
+
+  /// The user set option @p name: on the command line, or a value other than
+  /// its default from an INI (an INI value equal to the default cannot be
+  /// told from the default).
+  bool optionGiven_(const std::string& name) const
+  {
+    return g_cli_options.count(name) > 0 || optionNonDefault_(name);
   }
 
   /// True when option @p name is registered in this build and holds a value
@@ -2266,10 +2295,29 @@ protected:
       OPENMS_LOG_ERROR << "-shift_expand_sites needs -recon_localize (the sites are the localized ones)." << std::endl;
       return ILLEGAL_PARAMETERS;
     }
+    // post-1.13.1: with -search_engine msfragger (and -search_config_out) the
+    // shortlist options take the configuration of the second held-out test
+    // (PREREG-msfragger2.md, PASS) unless the user set them. Tested with the
+    // tryptic shortlist only, so a -shortlist_protease other than trypsin keeps
+    // 1.13.1's values. The help of the two -recon_* options is frozen (1.11
+    // interface, baseline_identity_test); -search_engine's help says it.
+    std::string msf_defaults;  // what was applied, for the log and the shortlist header
+    const bool msf_shortlist = !search_config_out.empty() && search_engine == "msfragger" &&
+                               getStringOption_("shortlist_protease") == "trypsin";
+    const auto msfDefault = [&](const char* name, const std::string& shown) {
+      const bool apply = msf_shortlist && !optionGiven_(name);
+      if (apply) msf_defaults += std::string(msf_defaults.empty() ? "" : ", ") + "-" + name + " " + shown;
+      return apply;
+    };
     FASTag::Shortlist::Settings sl_settings;
-    sl_settings.max_evalue = getDoubleOption_("shortlist_max_evalue");
+    sl_settings.gapped = msfDefault("shortlist_gapped", "on") || getFlag_("shortlist_gapped");
+    sl_settings.max_evalue = msfDefault("shortlist_max_evalue", "10") ? 10.0 : getDoubleOption_("shortlist_max_evalue");
+    const int recon_min_length = msfDefault("recon_min_length", "6") ? 6 : getIntOption_("recon_min_length");
+    const int recon_mc = msfDefault("recon_missed_cleavages", "2") ? 2 : getIntOption_("recon_missed_cleavages");
+    if (!msf_defaults.empty())
+      OPENMS_LOG_INFO << "MSFragger defaults (the configuration of its second held-out test): " << msf_defaults
+                      << "; an option given on the command line or in an INI wins." << std::endl;
     sl_settings.min_spectra = static_cast<std::uint64_t>(getIntOption_("shortlist_min_spectra"));
-    sl_settings.gapped = getFlag_("shortlist_gapped");
     {
       const std::string pm = getStringOption_("shortlist_parsimony");
       sl_settings.parsimony = pm == "subset" ? FASTag::Shortlist::Parsimony::Subset
@@ -2540,10 +2588,10 @@ protected:
                           << std::endl;
         }
       }
-      int rmin = getIntOption_("recon_min_length");
+      int rmin = recon_min_length;
       if (rmin == 0) rmin = pindex.autoMinLen();
       recon_min_len = rmin;
-      recon.attach(&pindex, getIntOption_("recon_missed_cleavages"), rmin);
+      recon.attach(&pindex, recon_mc, rmin);
       std::vector<FASTag::ModCandidate> cands;
       for (const auto& m : p.mods)
         if (m.variable) cands.push_back({m.name, m.delta, std::string(1, m.residue)});
@@ -2557,7 +2605,7 @@ protected:
         id_params.db = recon_db;
         id_params.fixed_modifications = fixed_mods;
         id_params.variable_modifications = variable_mods;
-        id_params.missed_cleavages = static_cast<UInt>(getIntOption_("recon_missed_cleavages"));
+        id_params.missed_cleavages = static_cast<UInt>(recon_mc);
         id_params.fragment_mass_tolerance = p.frag_tol;
         id_params.fragment_mass_tolerance_ppm = p.tol_ppm;
         id_params.digestion_enzyme = *ProteaseDB::getInstance()->getEnzyme("Trypsin");  // ProteomeIndex's rule
@@ -2566,7 +2614,9 @@ protected:
       OPENMS_LOG_INFO << "Recon index: " << pindex.proteinCount() << " proteins, "
                       << pindex.residueCount() << " residues, "
                       << pindex.collapseRuleCount() << " isobaric rules; min tag length "
-                      << rmin << (getIntOption_("recon_min_length") == 0 ? " (derived)" : " (set)")
+                      << rmin
+                      << (recon_min_length == 0 ? " (derived)"
+                          : optionGiven_("recon_min_length") || !msf_shortlist ? " (set)" : " (msfragger default)")
                       << std::endl;
       // 1.13 (#24): a run whose tags cannot reach that length places nothing,
       // and -alkylation_out cannot call (the default -tag_length 3 on a
@@ -2738,6 +2788,8 @@ protected:
           {"search_precursor_tolerance", "-search_config_out", !search_config_out.empty()},
           {"search_precursor_unit", "-search_config_out", !search_config_out.empty()},
           {"search_isotope_errors", "-search_config_out", !search_config_out.empty()},
+          {"search_missed_cleavages", "-search_config_out", !search_config_out.empty()},
+          {"search_nterm_acetyl", "-search_config_out", !search_config_out.empty()},
           {"search_decoy_prefix", "-search_config_out", !search_config_out.empty()},
           {"search_shifts_out", "-search_shifts", shifts_on},
           {"shift_max_variable", "-search_shifts", shifts_on},
@@ -2983,11 +3035,23 @@ protected:
           if (!nm.empty()) sl_plan.fixed.push_back(mdb->getModification(nm));
         for (const std::string& nm : getStringList_("variable_modifications"))
           if (!nm.empty()) sl_plan.variable.push_back(mdb->getModification(nm));
-        sl_plan.missed_cleavages = getIntOption_("recon_missed_cleavages");
+        // By engine (post-1.13.1, nine development runs): MSFragger gets its own
+        // closed-search defaults (2 missed cleavages, 20 ppm, protein N-terminal
+        // acetylation); Sage and Comet are unchanged.
+        const bool msf = search_engine == "msfragger";
+        const std::string ac = getStringOption_("search_nterm_acetyl");
+        const ResidueModification* acetyl = mdb->getModification("Acetyl (Protein N-term)");
+        if ((ac == "yes" || (ac == "engine" && msf)) &&
+            std::find(sl_plan.variable.begin(), sl_plan.variable.end(), acetyl) == sl_plan.variable.end())
+          sl_plan.variable.push_back(acetyl);
+        sl_plan.missed_cleavages = getIntOption_("search_missed_cleavages");
+        if (sl_plan.missed_cleavages < 0)  // 2 measured with trypsin only
+          sl_plan.missed_cleavages = msf && !sl_nontryptic ? 2 : recon_mc;
         sl_plan.fragment_tolerance = p.frag_tol;
         sl_plan.fragment_ppm = p.tol_ppm;
-        sl_plan.precursor_tolerance = getDoubleOption_("search_precursor_tolerance");
         sl_plan.precursor_ppm = getStringOption_("search_precursor_unit") == "ppm";
+        sl_plan.precursor_tolerance = getDoubleOption_("search_precursor_tolerance");
+        if (sl_plan.precursor_tolerance < 0) sl_plan.precursor_tolerance = msf && sl_plan.precursor_ppm ? 20.0 : 10.0;
         // -1: Sage and Comet none (as before); MSFragger its own default 0..3
         // (development runs: without it the search lost a third of its PSMs).
         sl_plan.isotope_errors = getIntOption_("search_isotope_errors");
@@ -6101,8 +6165,7 @@ protected:
           // unless the user chose the specificity (on the command line, or a
           // value other than the default from an INI).
           sl_choice = FASTag::Cleavage::choose(sl_protease, sl_spec, verdict,
-                                               g_cli_shortlist_specificity ||
-                                                   optionNonDefault_("shortlist_specificity"));
+                                               optionGiven_("shortlist_specificity"));
           std::string withheld;
           if (!fasta_out.empty()) withheld = "-fasta_out";
           if (!search_config_out.empty()) withheld += (withheld.empty() ? "" : " or ") + std::string("-search_config_out");
@@ -6144,7 +6207,7 @@ protected:
                                return x.protein < y.protein;
                              });
             const FASTag::Cleavage::WindowFilter wf(*sl_choice.rule, sl_choice.specificity,
-                                                    getIntOption_("recon_missed_cleavages"));
+                                                    recon_mc);
             std::string prot;
             std::uint32_t cur = std::numeric_limits<std::uint32_t>::max();
             std::size_t w = 0;
@@ -6241,9 +6304,11 @@ protected:
                                 (sl_choice.rule->unspecific() || sl_choice.specificity ==
                                                                      FASTag::Cleavage::Specificity::None
                                      ? std::string("no missed-cleavage limit")
-                                     : "missed cleavages <= " + std::to_string(getIntOption_("recon_missed_cleavages"))) +
+                                     : "missed cleavages <= " + std::to_string(recon_mc)) +
                                 ", windows by flank mass (" + sl_choice.reason + ")" +
                                 (sl_withheld.empty() ? std::string() : "; " + sl_withheld + " withheld"));
+            if (!msf_defaults.empty())
+              header.push_back("msfragger defaults (the configuration of its second held-out test): " + msf_defaults);
             if (subsampling) header.push_back("counts are over the -subsample_* spectra only");
             if (filtering) header.push_back("-fasta filtered the tags before placement");
             std::string err;
@@ -7646,7 +7711,7 @@ int main(int argc, const char** argv)
   {
     if (std::strcmp(argv[i], "-threads") == 0 || std::strcmp(argv[i], "-ini") == 0) explicit_threads = true;
     if (std::strcmp(argv[i], "--help") == 0 || std::strcmp(argv[i], "--helphelp") == 0) help = true;
-    if (std::strcmp(argv[i], "-shortlist_specificity") == 0) g_cli_shortlist_specificity = true;
+    if (argv[i][0] == '-') g_cli_options.insert(argv[i] + 1);
   }
   // ...and not for a bare `FASTag` either: with no arguments TOPPBase prints
   // the usage, and an injected pair would turn that into "in and out are

@@ -139,8 +139,9 @@ fi
 
 # ---- d: every #5 option at its default equals no option
 run "$TMP/dflt" "$BIN" "${SHARED[@]}" -threads 2 -shortlist_max_evalue 0.1 -shortlist_min_spectra 2 \
-  -shortlist_parsimony none -shortlist_top 0 -search_engine sage -search_precursor_tolerance 10 \
-  -search_precursor_unit ppm -search_isotope_errors -1 -search_decoy_prefix ""
+  -shortlist_parsimony none -shortlist_top 0 -search_engine sage -search_precursor_tolerance -1 \
+  -search_precursor_unit ppm -search_isotope_errors -1 -search_missed_cleavages -1 -search_nterm_acetyl engine \
+  -search_decoy_prefix ""
 for f in t.tsv r.tsv d.tsv m.tsv; do
   cmp -s "$TMP/a/$f" "$TMP/dflt/$f" || fail "$f: #5 options at their defaults differ from none"
 done
