@@ -82,3 +82,66 @@ jobs:
         shell: pwsh
         run: if (Test-Path "$env:RUNNER_TEMP\FASTag-app\uninstall.exe") { Start-Process "$env:RUNNER_TEMP\FASTag-app\uninstall.exe" -ArgumentList '/S' -Wait }
 
+
+  # x64 run time before (v1.13.2 zip) vs after (installer of run 43210084212,
+  # the fix's build): same fixture, alternating, 7 repetitions each; the tags
+  # TSVs must be identical apart from # lines.
+  timing-x64:
+    runs-on: windows-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          sparse-checkout: test/fixtures
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
+        with:
+          name: FASTag-gui-windows-x64-installer-check
+          path: installer
+          run-id: ${{ vars.E2E_ITERATE_RUN || '43210084212' }}
+          github-token: ${{ github.token }}
+      - name: Time before vs after
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release download v1.13.2 -R ${{ github.repository }} -p FASTag-windows-x64.zip -D old
+          Expand-Archive old/FASTag-windows-x64.zip -DestinationPath old -Force
+          $oldBat = (Resolve-Path old/FASTag/FASTag.bat).Path
+          $i = Get-ChildItem installer -Recurse -Filter *-setup.exe | Select-Object -First 1
+          $dest = "$env:RUNNER_TEMP\app"
+          Start-Process $i.FullName -ArgumentList '/S', "/D=$dest" -Wait
+          # The new CLI in the zip's layout: FASTag.core.exe + the new FASTag.bat + share-OpenMS.
+          $new = "$env:RUNNER_TEMP\new"
+          Copy-Item -Recurse "$dest\resources\fastag\bin" $new
+          Move-Item "$new\FASTag.exe" "$new\FASTag.core.exe"
+          Copy-Item -Recurse "$dest\resources\fastag\share\OpenMS" "$new\share-OpenMS"
+          Copy-Item (Get-ChildItem installer -Recurse -Filter FASTag.bat | Select-Object -First 1).FullName "$new\FASTag.bat"
+          $newBat = "$new\FASTag.bat"
+          & $oldBat --help | Select-String 'Version' | Select-Object -First 1
+          & $newBat --help | Select-String 'Version' | Select-Object -First 1
+          $mz = (Resolve-Path test/fixtures/Ecoli_MS2_small.mzML).Path
+          & $oldBat -in $mz -out "$env:RUNNER_TEMP\warm.tsv" | Out-Null
+          & $newBat -in $mz -out "$env:RUNNER_TEMP\warm.tsv" | Out-Null
+          $t = @{ old = @(); new = @() }
+          foreach ($k in 1..7) {
+            foreach ($w in 'old', 'new') {
+              $bat = if ($w -eq 'old') { $oldBat } else { $newBat }
+              $o = "$env:RUNNER_TEMP\$w.tags.tsv"
+              $s = [Diagnostics.Stopwatch]::StartNew()
+              & $bat -in $mz -out $o | Out-Null
+              $s.Stop()
+              if ($LASTEXITCODE) { Write-Host "::error::$w exited $LASTEXITCODE"; exit 1 }
+              $t[$w] += $s.Elapsed.TotalSeconds
+            }
+          }
+          foreach ($w in 'old', 'new') {
+            $v = $t[$w] | Sort-Object
+            Write-Host ("TIMING {0}: median {1:N3} s, min {2:N3}, max {3:N3}; all {4}" -f $w, $v[3], $v[0], $v[6], (($t[$w] | ForEach-Object { '{0:N3}' -f $_ }) -join ' '))
+          }
+          $a = Get-Content "$env:RUNNER_TEMP\old.tags.tsv" | Where-Object { -not $_.StartsWith('#') }
+          $b = Get-Content "$env:RUNNER_TEMP\new.tags.tsv" | Where-Object { -not $_.StartsWith('#') }
+          $d = Compare-Object $a $b -SyncWindow 0
+          Write-Host ("TSV rows old {0}, new {1}; differing lines {2}" -f $a.Count, $b.Count, @($d).Count)
+          Get-Content "$env:RUNNER_TEMP\old.tags.tsv" | Where-Object { $_.StartsWith('#') } | ForEach-Object { "old# $_" }
+          Get-Content "$env:RUNNER_TEMP\new.tags.tsv" | Where-Object { $_.StartsWith('#') } | ForEach-Object { "new# $_" }
+          if (@($d).Count) { $d | Select-Object -First 10 | Format-List | Out-String | Write-Host; exit 1 }
