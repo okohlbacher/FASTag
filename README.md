@@ -1551,6 +1551,22 @@ in all 9 cells (tag length 3-5, charge 2, 3, 4+), but on PXD016519 `auto`
 tagged 567 fewer spectra at tag length 3 (15,987 against 16,554). No Astral
 or TOF run was scored.
 
+**Peak memory on spectra with many peaks (Linux).** Each thread keeps buffers
+sized by the largest spectra it has read, so on large un-centroided MS2 peak memory
+grows with the thread count: on PXD028735 (diaPASEF frames, median 24,000 peaks per
+MS2) about 13 MB per thread, 2.1 GB at 128 threads; on centroided data with at most a
+few hundred peaks per spectrum (PXD047793) about 1 MB per thread. About a third of the
+growth is glibc allocator overhead. Where memory is the limit, these glibc settings
+return freed memory sooner and lowered PXD028735 peak memory by 18 / 14 / 9 % at
+128 / 64 / 16 threads, at 10 / 7 / 6 % more run time (BinAC2, AMD EPYC 7543; no
+change on PXD047793; tags identical):
+
+```bash
+MALLOC_MMAP_THRESHOLD_=33554432 MALLOC_TRIM_THRESHOLD_=131072 MALLOC_TOP_PAD_=0 FASTag -in run.mzML -out tags.tsv -threads 64
+```
+
+Measured on these two data sets only; macOS and Windows use other allocators.
+
 Output is identical at every thread count (`threads_test` checks every output
 on the fixture). Row memory on the mzML path is bounded by a ring of three
 blocks of 65,536 spectra, so it grows with the file up to ~196,000 MS2 spectra
