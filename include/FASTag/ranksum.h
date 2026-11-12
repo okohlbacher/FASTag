@@ -2,6 +2,8 @@
 //
 // Copyright (c) 2026 Oliver Kohlbacher and contributors
 // SPDX-License-Identifier: MIT
+// $Maintainer: Oliver Kohlbacher $
+// $Authors: Oliver Kohlbacher $
 //
 // This is the one piece of mathematics FASTag keeps in-house: neither OpenMS nor
 // Boost provides the exact null of a rank sum over distinct ranks. Boost offers

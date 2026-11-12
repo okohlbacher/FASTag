@@ -1,6 +1,8 @@
 // Experimental TMT6/10 pseudo-residue filtering. Defaults never invoke it.
 // Copyright (c) 2026 Oliver Kohlbacher and contributors
 // SPDX-License-Identifier: MIT
+// $Maintainer: Oliver Kohlbacher $
+// $Authors: Oliver Kohlbacher $
 #pragma once
 
 #include "FASTagger.h"

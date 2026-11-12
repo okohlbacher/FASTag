@@ -1,6 +1,8 @@
 // Copyright (c) 2026 Oliver Kohlbacher and contributors
 // Copyright (c) 2002-present, OpenMS Inc. -- EKU Tuebingen, ETH Zurich, and FU Berlin
 // SPDX-License-Identifier: MIT AND BSD-3-Clause
+// $Maintainer: Oliver Kohlbacher $
+// $Authors: Oliver Kohlbacher $
 //
 // Ported from OpenMS release/3.5.0 (c49149d47d): Deisotoper.cpp's
 // deisotopeWithAveragineModel, CoarseIsotopePatternGenerator::

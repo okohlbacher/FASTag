@@ -1,5 +1,7 @@
 // Copyright (c) 2026 Oliver Kohlbacher and contributors
 // SPDX-License-Identifier: MIT
+// $Maintainer: Oliver Kohlbacher $
+// $Authors: Oliver Kohlbacher $
 //
 // Compiled with -ffp-contract=off (CMakeLists.txt) to match the reference's
 // floating-point results: it evaluates (1 - s) * p + s * bg as two products
