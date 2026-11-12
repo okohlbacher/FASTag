@@ -1,5 +1,5 @@
 # TEMPORARY (post1131/win-crash): iterate on windows.yml's installed-app job
-# against the installer of dispatch run 43210084212 without rebuilding.
+# against the installer of dispatch run 43215759761 without rebuilding.
 # Removed before the branch is proposed.
 name: win-e2e-iterate
 on:
@@ -30,7 +30,7 @@ jobs:
         with:
           name: FASTag-gui-windows-x64-installer-check
           path: installer
-          run-id: ${{ vars.E2E_ITERATE_RUN || '43210084212' }}
+          run-id: ${{ vars.E2E_ITERATE_RUN || '43215759761' }}
           github-token: ${{ github.token }}
       - name: Installed-app check
         shell: pwsh
@@ -38,17 +38,6 @@ jobs:
           $i = Get-ChildItem installer -Recurse -Filter *-setup.exe | Select-Object -First 1
           ./tools/windows_installed_check.ps1 -Installer $i.FullName -Dest "$env:RUNNER_TEMP\FASTag-app" -Out "$env:RUNNER_TEMP\installed-check" -Keep
           if ($LASTEXITCODE) { exit $LASTEXITCODE }
-      - name: The zip's FASTag.bat
-        shell: pwsh
-        run: |
-          $bin = "$env:RUNNER_TEMP\FASTag-app\resources\fastag\bin"
-          Copy-Item "$bin\FASTag.exe" "$bin\FASTag.core.exe"
-          Copy-Item (Get-ChildItem installer -Recurse -Filter FASTag.bat | Select-Object -First 1).FullName "$bin\FASTag.bat"
-          $o = cmd /c "`"$bin\FASTag.bat`" --help" 2>&1 | Out-String
-          $code = $LASTEXITCODE
-          Write-Host ("FASTag.bat --help: exit {0} (0x{0:X8}); PROCESSOR_ARCHITECTURE={1}; PROCESSOR_IDENTIFIER={2}" -f $code, $env:PROCESSOR_ARCHITECTURE, $env:PROCESSOR_IDENTIFIER)
-          Remove-Item "$bin\FASTag.core.exe", "$bin\FASTag.bat"
-          if ($code -ne 0 -or $o -notmatch 'Version:\s*[0-9]') { Write-Host $o; Write-Host "::error::FASTag.bat cannot start the CLI"; exit 1 }
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
         with:
           node-version: 24
@@ -83,7 +72,7 @@ jobs:
         run: if (Test-Path "$env:RUNNER_TEMP\FASTag-app\uninstall.exe") { Start-Process "$env:RUNNER_TEMP\FASTag-app\uninstall.exe" -ArgumentList '/S' -Wait }
 
 
-  # x64 run time before (v1.13.2 zip) vs after (installer of run 43210084212,
+  # x64 run time before (v1.13.2 zip) vs after (the zip of run 43215759761,
   # the fix's build): same fixture, alternating, 7 repetitions each; the tags
   # TSVs must be identical apart from # lines.
   timing-x64:
@@ -97,7 +86,7 @@ jobs:
         with:
           name: FASTag-gui-windows-x64-installer-check
           path: installer
-          run-id: ${{ vars.E2E_ITERATE_RUN || '43210084212' }}
+          run-id: ${{ vars.E2E_ITERATE_RUN || '43215759761' }}
           github-token: ${{ github.token }}
       - name: Time before vs after
         shell: pwsh
@@ -107,16 +96,9 @@ jobs:
           gh release download v1.13.2 -R ${{ github.repository }} -p FASTag-windows-x64.zip -D old
           Expand-Archive old/FASTag-windows-x64.zip -DestinationPath old -Force
           $oldBat = (Resolve-Path old/FASTag/FASTag.bat).Path
-          $i = Get-ChildItem installer -Recurse -Filter *-setup.exe | Select-Object -First 1
-          $dest = "$env:RUNNER_TEMP\app"
-          Start-Process $i.FullName -ArgumentList '/S', "/D=$dest" -Wait
-          # The new CLI in the zip's layout: FASTag.core.exe + the new FASTag.bat + share-OpenMS.
-          $new = "$env:RUNNER_TEMP\new"
-          Copy-Item -Recurse "$dest\resources\fastag\bin" $new
-          Move-Item "$new\FASTag.exe" "$new\FASTag.core.exe"
-          Copy-Item -Recurse "$dest\resources\fastag\share\OpenMS" "$new\share-OpenMS"
-          Copy-Item (Get-ChildItem installer -Recurse -Filter FASTag.bat | Select-Object -First 1).FullName "$new\FASTag.bat"
-          $newBat = "$new\FASTag.bat"
+          $z = Get-ChildItem installer -Recurse -Filter FASTag-windows-x64.zip | Select-Object -First 1
+          Expand-Archive $z.FullName -DestinationPath new -Force
+          $newBat = (Resolve-Path new/FASTag/FASTag.bat).Path
           & $oldBat --help | Select-String 'Version' | Select-Object -First 1
           & $newBat --help | Select-String 'Version' | Select-Object -First 1
           $mz = (Resolve-Path test/fixtures/Ecoli_MS2_small.mzML).Path
