@@ -147,6 +147,15 @@ OpenBLAS arrives with libOpenMS and otherwise starts one spinning thread per
 core at load, which FASTag never uses. The desktop app does the same for the
 CLI it launches, on every platform.
 
+**Windows on ARM64** (e.g. Snapdragon laptops, Windows 11 in Parallels on an
+Apple silicon Mac) runs the x64 build emulated. There the CLI must start with
+`MIMALLOC_DISABLE_REDIRECT=1`: the x64 heap redirection cannot patch the ARM64
+C runtime, and without it `FASTag.exe` stops at start-up with "The application
+was unable to start correctly (0xc0000142)" (1.13.0–1.13.2, also in the desktop
+app). From the release after 1.13.2 the desktop app and `FASTag.bat` set it themselves; only if
+you start `FASTag.core.exe` (or the app's bundled `FASTag.exe`) directly, set it
+once with `setx MIMALLOC_DISABLE_REDIRECT 1` and open a new prompt.
+
 **macOS 13.4 or later.** macOS ships as a disk image only, signed with a
 Developer ID certificate, notarized and **stapled**, so it opens with no network
 connection — a plain tarball cannot carry a notarization ticket.
