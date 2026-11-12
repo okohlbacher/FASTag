@@ -771,10 +771,18 @@ jobs:
           # reason as in ci.yml's wrappers, and harmless when the build carries
           # no OpenBLAS. `if not defined` is the batch spelling of ${VAR:-1}:
           # a value the user set wins.
+          # MIMALLOC_DISABLE_REDIRECT on Windows on ARM64: the x64 binary runs
+          # emulated there and mimalloc-redirect.dll fails its DllMain, so the
+          # process dies before main() with 0xC0000142 (the 1.13.2 GUI crash;
+          # the GUI sets the same, gui/src-tauri/src/fastag.rs cli_env).
+          # cmd.exe on ARM64 is native (PROCESSOR_ARCHITECTURE=ARM64); the
+          # PROCESSOR_IDENTIFIER test covers a caller that is itself x64.
           printf '%s\r\n' \
             '@echo off' \
             'set "OPENMS_DATA_PATH=%~dp0share-OpenMS"' \
             'if not defined OPENBLAS_NUM_THREADS set "OPENBLAS_NUM_THREADS=1"' \
+            'if not defined MIMALLOC_DISABLE_REDIRECT if /i "%PROCESSOR_ARCHITECTURE%"=="ARM64" set "MIMALLOC_DISABLE_REDIRECT=1"' \
+            'if not defined MIMALLOC_DISABLE_REDIRECT if /i "%PROCESSOR_IDENTIFIER:~0,3%"=="ARM" set "MIMALLOC_DISABLE_REDIRECT=1"' \
             '"%~dp0FASTag.core.exe" %*' \
             > dist/FASTag/FASTag.bat
           ls dist/FASTag | wc -l

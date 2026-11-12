@@ -230,7 +230,7 @@ pub async fn export_ini(app: AppHandle, params: RunParams, dest: String) -> Resu
         if let Some(d) = &r.data {
             cmd.env("OPENMS_DATA_PATH", d);
         }
-        fastag::quiet_blas(&mut cmd);
+        fastag::cli_env(&mut cmd);
         lifetime::die_with_parent(&mut cmd);
         export_with(cmd, &params, Path::new(&dest), &std::env::temp_dir())
     })

@@ -264,14 +264,44 @@ pub fn taxonomy_dir(r: &Resolved) -> Option<PathBuf> {
     r.taxonomy.clone()
 }
 
+/// The environment every CLI child gets.
+///
 /// libOpenMS pulls in OpenBLAS, which starts one spinning thread per core at
 /// load time (127 on a 128-thread node, ~2 s of CPU even for --help). FASTag
 /// never calls BLAS. The CLI wrappers set the same default; a user's own
 /// OPENBLAS_NUM_THREADS still wins.
-pub(crate) fn quiet_blas(cmd: &mut Command) {
+///
+/// Windows on ARM64: the x64 CLI runs emulated there, and the x64
+/// mimalloc-redirect.dll fails its DllMain against the system's ucrtbase.dll,
+/// so the CLI dies before main() with 0xC0000142 (STATUS_DLL_INIT_FAILED) --
+/// the 1.13.2 "Application Error" at start-up. MIMALLOC_DISABLE_REDIRECT=1
+/// makes the redirect DLL step aside (mimalloc then serves only FASTag's own
+/// allocations; the tags are identical, test/mimalloc_redirect_test.sh).
+/// FASTag.bat applies the same rule; a user's own value still wins.
+pub(crate) fn cli_env(cmd: &mut Command) {
     if std::env::var_os("OPENBLAS_NUM_THREADS").is_none() {
         cmd.env("OPENBLAS_NUM_THREADS", "1");
     }
+    if windows_on_arm64() && std::env::var_os("MIMALLOC_DISABLE_REDIRECT").is_none() {
+        cmd.env("MIMALLOC_DISABLE_REDIRECT", "1");
+    }
+}
+
+/// True when this process runs on an ARM64 Windows host, natively or (as the
+/// x64 build does) emulated: IsWow64Process2's native machine.
+#[cfg(windows)]
+pub(crate) fn windows_on_arm64() -> bool {
+    use windows_sys::Win32::System::Threading::{GetCurrentProcess, IsWow64Process2};
+    const IMAGE_FILE_MACHINE_ARM64: u16 = 0xAA64;
+    let (mut process, mut native) = (0u16, 0u16);
+    // SAFETY: this process's pseudo-handle and two out-parameters.
+    let ok = unsafe { IsWow64Process2(GetCurrentProcess(), &mut process, &mut native) };
+    ok != 0 && native == IMAGE_FILE_MACHINE_ARM64
+}
+
+#[cfg(not(windows))]
+pub(crate) fn windows_on_arm64() -> bool {
+    false
 }
 
 // async + spawn_blocking: a sync command would run on the main thread.
@@ -311,7 +341,7 @@ fn probe_blocking(app: &AppHandle) -> BinaryInfo {
     if let Some(d) = &r.data {
         cmd.env("OPENMS_DATA_PATH", d);
     }
-    quiet_blas(&mut cmd);
+    cli_env(&mut cmd);
     // Started by the spawner thread like every CLI child (lifetime.rs): this
     // blocking-pool thread may exit as soon as it is idle.
     lifetime::die_with_parent(&mut cmd);
@@ -989,7 +1019,7 @@ pub fn launch(mgr: &RunManager, r: &Resolved, params: RunParams, sink: Sink, his
     if let Some(d) = &r.data {
         cmd.env("OPENMS_DATA_PATH", d);
     }
-    quiet_blas(&mut cmd);
+    cli_env(&mut cmd);
     no_console_window(&mut cmd);
     if let Some(t) = taxonomy_dir(r) {
         // Point -species at the taxonomy explicitly (the CLI's own
