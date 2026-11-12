@@ -80,6 +80,36 @@ describe('useRun', () => {
     expect(result.current.failure?.reasons).toEqual([{ text: 'Error: Unable to read file a.mzML' }])
   })
 
+  it('the banner quotes the stderr refusal even when a stdout line the CLI wrote before it arrives after it', async () => {
+    // v1.13.2 release CI (gui-cli-consistency, first attempt): the CLI wrote
+    // "-threads 0: ..." to stdout, then its -species refusal to stderr; the
+    // two pipe readers (fastag.rs) delivered the stdout line last, and the
+    // banner quoted it. The arrival order is reproduced here exactly.
+    const mock = installMockBridge()
+    const { result } = hook(mock)
+    await act(async () => void result.current.run())
+    await waitFor(() => expect(mock.runCalls).toHaveLength(1))
+    const refusal = '-species: tag_length (3) + 2*extension (0) = 3 cannot reach the index k = 7, so every tag would be too short to look up and the report would be empty. Set -tag_length 7 (or raise -extension).'
+    const id = mock.lastRunId
+    await act(async () => mock.emitEvent(id, { kind: 'log', lines: [[refusal, true]] }))
+    await act(async () => mock.emitEvent(id, { kind: 'log', lines: [['-threads 0: using 2 of 4 logical cores.', false]] }))
+    await act(async () => mock.emitEvent(id, { kind: 'log', lines: [['FASTag took 0.05 s (wall), 0.04 s (CPU), 0.01 s (system), 0.03 s (user); Peak Memory Usage: 60 MB.', false]] }))
+    await act(async () => mock.emitDone({ ok: false, code: 6, runId: id }))
+    await waitFor(() => expect(result.current.failure).not.toBeNull())
+    expect(result.current.failure?.reasons).toEqual([{ text: refusal }])
+  })
+
+  it('a stdout line is the reason only when stderr said nothing', async () => {
+    const mock = installMockBridge()
+    const { result } = hook(mock)
+    await act(async () => void result.current.run())
+    await waitFor(() => expect(mock.runCalls).toHaveLength(1))
+    await act(async () => mock.emitEvent(mock.lastRunId, { kind: 'log', lines: [['Reading a.mzML', false]] }))
+    await act(async () => mock.emitDone({ ok: false, code: 1, runId: mock.lastRunId }))
+    await waitFor(() => expect(result.current.failure).not.toBeNull())
+    expect(result.current.failure?.reasons).toEqual([{ text: 'Reading a.mzML' }])
+  })
+
   it('adds batch files once each, and a blocked form runs no batch', async () => {
     const mock = installMockBridge()
     const { result } = hook(mock, { blocked: true })
