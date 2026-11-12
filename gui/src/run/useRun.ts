@@ -47,6 +47,9 @@ const HELP_START = /^FASTag -- /
 const REFUSED = /^FASTAG_REFUSED\b/
 // "Error:", "ConversionError", "exception", "fatal".
 const ERROR_WORD = /(error|exception)\b|\bfatal\b/i
+// A line kept per stream: stderr (err) and stdout (out).
+type StreamLines = { err: string | null; out: string | null }
+const noLines = (): StreamLines => ({ err: null, out: null })
 
 // What a run is started with, from the session.
 export interface RunInputs {
@@ -114,11 +117,16 @@ export function useRun(s: RunInputs, view: ViewStore, hooks: RunHooks = {}) {
   const checking = useRef(false)
   // The command line the run in flight was given.
   const command = useRef<string[] | undefined>(undefined)
-  const lastError = useRef<string | null>(null)
+  // The last error line and the last line of each stream, stderr and
+  // stdout apart: the two pipes are read by two threads (fastag.rs), so a
+  // stdout line the CLI wrote BEFORE its stderr refusal can still arrive
+  // after it. Only the order within one stream is the CLI's; FASTag writes
+  // its errors and refusals to stderr (OPENMS_LOG_ERROR), its info to stdout.
+  const lastError = useRef<StreamLines>(noLines())
   // The tag count of the CLI's summary line, for the announcement.
   const lastTags = useRef<number | null>(null)
   // The last log line: FASTag's own refusals name no error, exception or fatal.
-  const lastLine = useRef<string | null>(null)
+  const lastLine = useRef<StreamLines>(noLines())
   // Inside the --help dump OpenMS prints after a ConversionError.
   const inHelp = useRef(false)
   // The run's lines the inspector reads (checks.ts NOTE_LINE): the
@@ -175,14 +183,15 @@ export function useRun(s: RunInputs, view: ViewStore, hooks: RunHooks = {}) {
 
   // One line of the run's log: the reasons for the failure banner and the
   // counts of the CLI's summary come from these.
-  const onLogLine = (line: string): void => {
+  const onLogLine = (line: string, stderr: boolean): void => {
     // The reason for the banner: neither the exit epilogue nor the help
     // dump that follows a ConversionError can be it.
     if (HELP_START.test(line)) inHelp.current = true
     if (!inHelp.current && notes.current.length < 50 && NOTE_LINE.test(line)) notes.current.push(line)
     if (!inHelp.current && !EPILOGUE.test(line) && !REFUSED.test(line)) {
-      if (ERROR_WORD.test(line)) lastError.current = line
-      if (line.trim()) lastLine.current = line.trim()
+      const k = stderr ? 'err' : 'out'
+      if (ERROR_WORD.test(line)) lastError.current[k] = line
+      if (line.trim()) lastLine.current[k] = line.trim()
     }
     // "Species: N spectra contributed taxon evidence; ..."
     const sp = /^Species:\s+(\d+) spectra contributed/.exec(line)
@@ -282,9 +291,8 @@ export function useRun(s: RunInputs, view: ViewStore, hooks: RunHooks = {}) {
         if (a.type === 'EVENT' && a.event.kind === 'log') {
           // Into the log store only: no React state changes, so only the
           // drawer re-renders.
-          const lines = a.event.lines.map((l: LogLine) => l[0])
-          log.append(lines)
-          lines.forEach(onLogLine)
+          log.append(a.event.lines.map((l: LogLine) => l[0]))
+          a.event.lines.forEach((l: LogLine) => onLogLine(l[0], l[1]))
           return
         }
         if (a.type === 'REPLY') {
@@ -306,8 +314,8 @@ export function useRun(s: RunInputs, view: ViewStore, hooks: RunHooks = {}) {
       // The Overview and the Digest reports of the run before go.
       setTab((t) => (t === 'digest' || t === 'overview' ? 'results' : t))
       command.current = undefined
-      lastError.current = null
-      lastLine.current = null
+      lastError.current = noLines()
+      lastLine.current = noLines()
       inHelp.current = false
       notes.current = []
       cancelled.current = false
@@ -389,7 +397,11 @@ export function useRun(s: RunInputs, view: ViewStore, hooks: RunHooks = {}) {
   // its last error line, which may have scrolled out of the log.
   function failureWhy(): string | null {
     // FASTag's refusal names the reason; its last line is the sentinel.
-    return refusalOf(notes.current, null)?.message ?? lastError.current ?? lastLine.current
+    // stderr first: its last line is the CLI's last word, whatever stdout
+    // line the other reader thread delivered after it.
+    const e = lastError.current
+    const l = lastLine.current
+    return refusalOf(notes.current, null)?.message ?? e.err ?? l.err ?? e.out ?? l.out
   }
   function failureReason(r: RunResult): string {
     const why = failureWhy()

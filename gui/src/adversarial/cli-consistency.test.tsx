@@ -100,7 +100,8 @@ async function guiRun(opts: {
     execFileSync(BA, { input: JSON.stringify({ in: call.in, out: call.out, params: call.params }) }).toString()
   ) as string[]
   const { rc, lines } = await runCli(argv)
-  for (const l of lines) await act(async () => mock.emitLog(l.line))
+  // Each line on the stream it came on, as fastag.rs's Log events carry it.
+  for (const l of lines) await act(async () => mock.emitEvent(mock.lastRunId, { kind: 'log', lines: [[l.line, l.src === 'err']] }))
   await act(async () => mock.emitDone({ runId: mock.lastRunId, ok: rc === 0, code: rc }))
   const banner = screen.queryByRole('alert')?.textContent ?? null
   return { argv, rc, lines, banner, mock }
