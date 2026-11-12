@@ -61,6 +61,16 @@
 // bounded to the element they belong to, so a field that is absent no
 // longer costs a scan of the rest of the head.
 //
+// SELECTED-ION M/Z 0, THE ONE DELIBERATE DIFFERENCE FROM MzMLFile: a
+// selected-ion m/z (MS:1000744) of 0, below 0 or not finite is read as no
+// selected-ion m/z, so the precursor takes the isolation window target as a
+// missing MS:1000744 gives it (no target meta value then). OpenMS's
+// MzMLHandler keeps the 0, with the target as the meta value. mzpeak-convert
+// 0.18 (mzdata) writes 0 for every Bruker precursor without a monoisotopic
+// m/z; read as 0, such a spectrum yields no tags. getSpectrum() counts these
+// spectra (invalidSelectedMz()); useSelectedIonTarget() does the same for a
+// spectrum OpenMS read, so every input path tags them alike.
+//
 // NO INDEX, OR A STALE ONE: the spectrum offsets are rebuilt by scanning the
 // file for <spectrum> start tags, in parallel, and the file is then read the
 // same way. A stale index is the common case, not an exotic one: any tool
@@ -184,6 +194,12 @@ namespace FASTag
     /// MS2 spectra this reader decoded directly, and through OpenMS.
     std::size_t directDecoded() const;
     std::size_t openmsDecoded() const;
+    /// Spectra read by getSpectrum() with a selected-ion m/z of 0, below 0
+    /// or not finite (see the file comment), and those of them whose
+    /// precursor took the isolation window target instead (the rest have
+    /// none and yield no tags). Metadata and any-level reads are not counted.
+    std::size_t invalidSelectedMz() const;
+    std::size_t invalidSelectedMzFromTarget() const;
     /// Declined this many times in a row from the start, a reader stops
     /// trying the direct decoder.
     static constexpr std::size_t kDirectProbe = 64;
@@ -201,4 +217,13 @@ namespace FASTag
     struct Impl;
     std::unique_ptr<Impl> impl_;
   };
+
+  /// For a spectrum read by OpenMS (OnDiscMSExperiment, MzMLFile, MzPeakFile):
+  /// does a precursor have an m/z of 0, below 0 or not finite while its
+  /// "isolation window target m/z" meta value is positive? That is how
+  /// OpenMS reads a selected-ion m/z of 0 next to an isolation target.
+  bool needsSelectedIonTarget(const OpenMS::MSSpectrum& spec);
+  /// Gives each such precursor the target as its m/z and drops the meta
+  /// value, as IndexedMzMLReader reads the same precursor. True if any changed.
+  bool useSelectedIonTarget(OpenMS::MSSpectrum& spec);
 }

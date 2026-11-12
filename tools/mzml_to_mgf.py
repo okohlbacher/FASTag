@@ -13,8 +13,10 @@ What is written per MS2, in file order:
   TITLE        the mzML native ID
   PEPMASS      the precursor m/z as FASTag's mzML reader reads it, from the
                first <precursor> that counts as one (see below): its first
-               selected ion's m/z, else its isolation window target m/z when
-               that is > 0 (diaTracer writes only the target); left out when
+               selected ion's m/z (when > 0 and finite), else its isolation
+               window target m/z when that is > 0 (diaTracer writes only the
+               target, mzpeak-convert 0.18 a selected ion m/z of 0 where
+               Bruker has no monoisotopic m/z); left out when
                there is neither, as FASTag then reads m/z 0 from the mzML too
   CHARGE       its `charge state` (MS:1000041), when present, as <z>+, or as
                <|z|>- for a negative charge (FASTag's MGF reader then reads
@@ -60,6 +62,7 @@ spectrum in memory. Needs pyteomics (5.0.2 tested) and numpy.
 """
 from __future__ import annotations
 
+import math
 import os
 import re
 import sys
@@ -107,10 +110,14 @@ def counted_precursor(precs: list) -> dict | None:
 def precursor_fields(prec: dict) -> tuple[float | None, int | None]:
     """The precursor m/z and charge FASTag's mzML reader reads: the first
     selected ion's m/z, else the isolation window target m/z when it is > 0;
-    the charge is the first selected ion's `charge state`."""
+    a selected ion m/z of 0, below 0 or not finite counts as none (some
+    converters write 0 for a precursor without a monoisotopic m/z); the
+    charge is the first selected ion's `charge state`."""
     ions = prec.get("selectedIonList", {}).get("selectedIon", [])
     ion = ions[0] if ions else {}
-    mz = ion.get("selected ion m/z")
+    mz = _positive(ion.get("selected ion m/z"))
+    if mz is not None and not math.isfinite(mz):
+        mz = None
     if mz is None:
         mz = _positive(prec.get("isolationWindow", {}).get("isolation window target m/z"))
     z = ion.get("charge state")

@@ -195,8 +195,12 @@ namespace
   }
 
   /// @p src rewritten with the given array encoding.
+  /// MS-Numpress: @p mz_np for m/z, @p other_np for the intensities and for
+  /// an added per-peak float array named "Ion Mobility" (written as a
+  /// non-standard array, MS:1000786, as timsTOF conversions do).
   std::string rewrite_encoded(const std::string& src, const std::string& dst, bool zlib, bool mz32, bool int32,
-                              bool numpress = false)
+                              MSNumpressCoder::NumpressCompression mz_np = MSNumpressCoder::NONE,
+                              MSNumpressCoder::NumpressCompression other_np = MSNumpressCoder::NONE)
   {
     try
     {
@@ -207,13 +211,21 @@ namespace
       mz.getOptions().setCompression(zlib);
       mz.getOptions().setMz32Bit(mz32);
       mz.getOptions().setIntensity32Bit(int32);
-      if (numpress)
-      {
-        MSNumpressCoder::NumpressConfig c;
-        c.np_compression = MSNumpressCoder::LINEAR;
-        c.estimate_fixed_point = true;
-        mz.getOptions().setNumpressConfigurationMassTime(c);
-      }
+      MSNumpressCoder::NumpressConfig c;
+      c.estimate_fixed_point = true;
+      c.numpressErrorTolerance = 0; // lossy is fine here; never fall back to plain arrays
+      c.np_compression = mz_np;
+      mz.getOptions().setNumpressConfigurationMassTime(c);
+      c.np_compression = other_np;
+      mz.getOptions().setNumpressConfigurationIntensity(c);
+      mz.getOptions().setNumpressConfigurationFloatDataArray(c);
+      if (other_np != MSNumpressCoder::NONE)
+        for (MSSpectrum& sp : exp)
+        {
+          auto& im = sp.getFloatDataArrays().emplace_back();
+          im.setName("Ion Mobility");
+          for (Size k = 0; k < sp.size(); ++k) im.push_back(0.6f + 0.001f * static_cast<float>(k % 900));
+        }
       mz.store(dst, exp);
       return dst;
     }
@@ -1106,10 +1118,26 @@ int main(int argc, char** argv)
           check(!f.empty(), "write the " + tag + " copy");
           if (!f.empty()) direct_vs_openms(f, "direct: " + tag, true);
         }
-    // Numpress is OpenMS's alone: every spectrum declined, same result.
+    // MS-Numpress, decoded with OpenMS's own functions: m/z alone, and all
+    // three arrays of a timsTOF conversion (m/z, intensity, "Ion Mobility").
     {
-      const std::string f = rewrite_encoded(fixture, tmp + "/fastag_enc_numpress.mzML", true, false, true, true);
-      if (!f.empty()) direct_vs_openms(f, "direct: numpress (declined)", false);
+      using NP = MSNumpressCoder;
+      const std::string f = rewrite_encoded(fixture, tmp + "/fastag_enc_numpress.mzML", true, false, true, NP::LINEAR);
+      check(!f.empty(), "numpress fixture written");
+      if (!f.empty()) direct_vs_openms(f, "direct: numpress linear m/z", true);
+      for (const bool zlib : {false, true})
+        for (const NP::NumpressCompression other : {NP::LINEAR, NP::PIC, NP::SLOF})
+        {
+          const std::string tag = std::string("numpress linear+") + (other == NP::LINEAR ? "linear" : other == NP::PIC ? "pic" : "slof") +
+                                  (zlib ? "+zlib" : "") + " with ion mobility";
+          const std::string g = rewrite_encoded(fixture, tmp + "/fastag_enc_np" + std::to_string(int(other)) + (zlib ? "z" : "") + ".mzML",
+                                                zlib, false, false, NP::LINEAR, other);
+          check(!g.empty(), tag + ": fixture written");
+          if (g.empty()) continue;
+          check(slurp(g).find("value=\"Ion Mobility\"") != std::string::npos && slurp(g).find("MS-Numpress") != std::string::npos,
+                tag + ": the file has a Numpress non-standard array");
+          direct_vs_openms(g, "direct: " + tag, true);
+        }
     }
     // Line breaks inside the base64, as some writers emit them: the index
     // goes stale (rescanned), the decoder skips the whitespace as OpenMS
@@ -1308,6 +1336,86 @@ int main(int argc, char** argv)
   // spectrum: under ctest the vendored mzML that OpenMS did not write
   // (diaTracer and ddaPASEF layouts), by hand the public gate inputs.
   for (int a = 2; a < argc; ++a) direct_vs_openms(argv[a], std::string("direct: ") + argv[a], true);
+
+  // A selected-ion m/z of 0 (mzpeak-convert 0.18 from a Bruker .d writes it
+  // for a precursor without a monoisotopic m/z), below 0 or not a number is
+  // read as absent: the isolation target stands in, as for a missing
+  // MS:1000744. OpenMS's MzMLFile keeps the 0; useSelectedIonTarget() gives
+  // a spectrum it read the reader's precursor.
+  {
+    const auto with_precursor = [](const std::string& id, const std::string& target, const std::string& mz) {
+      std::string prec = "<precursorList count=\"1\">\n<precursor>\n";
+      if (!target.empty())
+        prec += "<isolationWindow>\n<cvParam cvRef=\"MS\" accession=\"MS:1000827\" name=\"isolation window target "
+                "m/z\" value=\"" + target + "\"/>\n<cvParam cvRef=\"MS\" accession=\"MS:1000828\" name=\"isolation "
+                "window lower offset\" value=\"1.0\"/>\n<cvParam cvRef=\"MS\" accession=\"MS:1000829\" "
+                "name=\"isolation window upper offset\" value=\"1.0\"/>\n</isolationWindow>\n";
+      prec += "<selectedIonList count=\"1\">\n<selectedIon>\n<cvParam cvRef=\"MS\" accession=\"MS:1000744\" "
+              "name=\"selected ion m/z\" value=\"" + mz + "\"/>\n</selectedIon>\n</selectedIonList>\n"
+              "</precursor>\n</precursorList>\n";
+      return edit(synthetic_spectrum(id, false), "<binaryDataArrayList", prec + "<binaryDataArrayList");
+    };
+    struct Case { const char* target; const char* mz; double want; const char* what; };
+    const std::vector<Case> cases = {
+        {"431.2034017772498", "0", 431.2034017772498, "m/z 0 with a target: the target"},
+        {"", "0", 0.0, "m/z 0 without a target: no m/z"},
+        {"551.25", "-5.0", 551.25, "m/z below 0 with a target: the target"},
+        {"489.5", "nan", 489.5, "m/z nan with a target: the target"},
+        {"600.0", "600.5", 600.5, "a valid m/z is kept (control)"},
+    };
+    std::vector<std::string> spectra;
+    for (std::size_t k = 0; k < cases.size(); ++k)
+      spectra.push_back(with_precursor("s=" + std::to_string(k), cases[k].target, cases[k].mz));
+    const std::string path = tmp + "/fastag_selected_mz0.mzML";
+    write_synthetic(path, spectra);
+    // MzMLFile requires the run's and the list's default references.
+    spit(path, edit(edit(slurp(path), "<run id=\"r\">", "<run id=\"r\" defaultInstrumentConfigurationRef=\"ic\">"),
+                    "<spectrumList ", "<spectrumList defaultDataProcessingRef=\"dp\" "));
+
+    FASTag::IndexedMzMLReader r(path);
+    check(r.ok() && r.getNrSpectra() == cases.size(), "mz0: the file reads");
+    PeakMap ref;
+    try { MzMLFile().load(path, ref); }
+    catch (const Exception::BaseException& e) { check(false, std::string("mz0: OpenMS loads the file: ") + e.what()); }
+    check(ref.size() == cases.size(), "mz0: OpenMS reads every spectrum (" + std::to_string(ref.size()) + ")");
+    for (std::size_t k = 0; r.ok() && k < cases.size() && k < ref.size(); ++k)
+    {
+      const Case& c = cases[k];
+      for (const unsigned fields : {unsigned(FASTag::IndexedMzMLReader::kAllFields),
+                                    unsigned(FASTag::IndexedMzMLReader::kTaggingFields)})
+      {
+        const MSSpectrum got = r.getSpectrum(k, fields);
+        check(got.getPrecursors().size() == 1, std::string("mz0: one precursor: ") + c.what);
+        if (got.getPrecursors().size() != 1) continue;
+        const Precursor& p = got.getPrecursors()[0];
+        check(p.getMZ() == c.want, std::string("mz0: reader precursor m/z: ") + c.what);
+        // Read as a missing MS:1000744: no target meta value then; with a
+        // valid m/z away from the target, the meta value as before.
+        const bool want_meta = (fields & FASTag::IndexedMzMLReader::kStep0TargetMeta) && k == 4;
+        check(p.metaValueExists("isolation window target m/z") == want_meta,
+              std::string("mz0: reader target meta value: ") + c.what);
+      }
+      // OpenMS keeps what the file says; the helper turns it into the reader's.
+      MSSpectrum o = ref[k];
+      check(o.getPrecursors().size() == 1, std::string("mz0: OpenMS has one precursor: ") + c.what);
+      if (o.getPrecursors().size() != 1) continue;
+      const bool replaced = k == 0 || k == 2 || k == 3;
+      if (k == 0 || k == 1) check(o.getPrecursors()[0].getMZ() == 0.0, std::string("mz0: OpenMS keeps the 0: ") + c.what);
+      check(FASTag::needsSelectedIonTarget(o) == replaced, std::string("mz0: needsSelectedIonTarget: ") + c.what);
+      check(FASTag::useSelectedIonTarget(o) == replaced, std::string("mz0: useSelectedIonTarget: ") + c.what);
+      check(o.getPrecursors()[0].getMZ() == c.want, std::string("mz0: OpenMS + helper m/z: ") + c.what);
+      check(o.getPrecursors()[0].metaValueExists("isolation window target m/z") == (k == 4),
+            std::string("mz0: OpenMS + helper target meta value: ") + c.what);
+    }
+    // Four invalid m/z, three of them with a target, each spectrum read twice
+    // by getSpectrum(). Metadata and any-level reads are not counted.
+    check(r.invalidSelectedMz() == 8 && r.invalidSelectedMzFromTarget() == 6,
+          "mz0: counted " + std::to_string(r.invalidSelectedMz()) + "/" +
+              std::to_string(r.invalidSelectedMzFromTarget()) + ", want 8/6");
+    (void)r.getSpectrumMetadata(0);
+    (void)r.getSpectrumAnyLevel(0);
+    check(r.invalidSelectedMz() == 8, "mz0: metadata and any-level reads are not counted");
+  }
 
   // An XML file with no spectrumList holds nothing to scan for.
   {

@@ -2,6 +2,25 @@
 
 ## Unreleased (after 1.13.1)
 
+- **mzML: a selected ion m/z of 0 is read as missing.** A selected ion m/z
+  (`MS:1000744`) of 0, below 0 or not a number now gives the precursor its
+  isolation window target m/z, as a missing `MS:1000744` does; before, the
+  spectrum yielded no tags. mzpeak-convert 0.18 (`--to mzml` from a Bruker
+  `.d`, via mzdata) writes 0 for every precursor Bruker stored without a
+  monoisotopic m/z; mzpeak-convert's own mzPeak output stores null there,
+  which the mzPeak reader already read as the target. The run summary warns
+  with the number of such spectra, how many took the target and that the
+  converter wrote m/z 0. This departs from OpenMS `MzMLFile`, which keeps the
+  0 (the documented exception to the indexed reader's parity with it). The
+  OpenMS-read paths (no usable index, `-out_spectra`, mzPeak with a stored 0)
+  do the same, and `-out_spectra` writes the target as the selected ion m/z;
+  `tools/mzml_to_mgf.py` writes the target as `PEPMASS`. PXD054073 mzML
+  (5,952 such MS2, all given the target): 7,506,097 tags instead of
+  7,309,985, byte-identical to the same mzML with those lines blanked out, with
+  and without `-out_spectra` (its point mzPeak gives 7,506,102; the rest is
+  the float32 isolation target there). PXD003531, PXD047793, PXD076528 and
+  PXD028735 (mzML) give byte-identical tags.
+
 - `-shortlist_protease` other than trypsin: the shortlist's protease check
   calls Asp-N from 21 % D at the N-terminal tag ends (was 50 %; tag ends of
   Asp-N digests show 33-78 % D, other digests at most 10 %). On the 176
@@ -47,14 +66,19 @@
   The 0.88 -> 1.28 % of the second held-out test was a single entrapment
   database; the standard deviation between databases is 0.1 to 0.3 points.
   The Comet export stays as it is. README and the option help say so.
-- **`-label_discovery_out`, report format 5: fourth held-out test, PASS.**
-  TMTpro-only reporter ions name a TMT call TMTpro; precursor pairs at the
-  dimethyl spacings call `Dimethyl`; the absence rule also calls `label-free`
-  on ion-trap MS2. On 144 runs from 144 new PRIDE projects
-  (`post1131/labeldisc-heldout4`, PREREG-labeldisc4.md, scored once) all nine
-  criteria pass: 0 of 42 label-free runs got a label call, weighted accuracy
-  0.954, TMTpro 20/20, dimethyl 24/28, 5 of 102 labelled runs called
-  label-free (criterion at most 0.05). Still experimental and opt-in.
+- `-species_reagents <fasta>` (experimental, off by default, with
+  `-species_call explain`): a taxon the explain call does not detect is
+  reported `present` with `call_reason` `reagent` when its tags in the listed
+  reagent proteins (`data/taxonomy/species_reagents.fasta`: porcine trypsin
+  and pepsin, bovine serum, milk and enzyme proteins, 38 entries) exceed the
+  same count on the decoy tags; new report columns `reagent_tags`,
+  `reagent_expected`; optional key `reagent_n_min` (8) in `species_call.tsv`.
+  The calls of the explain rule are unchanged. A reagent call is scored
+  neither as a true nor as a false genus call and is counted separately.
+  Development data only (62 spent held-out runs): 47 reagent calls in 37
+  runs, 40 of them with at least 3 Sage peptides in the listed proteins;
+  false genus calls per run 0.50, as for `explain` alone. Not held-out
+  tested.
 
 ## 1.13.1 (2026-11-10)
 

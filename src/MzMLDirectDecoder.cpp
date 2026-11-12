@@ -3,6 +3,8 @@
 
 #include "MzMLDirectDecoder.h"
 
+#include <OpenMS/CONCEPT/Exception.h>
+#include <OpenMS/FORMAT/MSNumpressCoder.h>
 #include <OpenMS/KERNEL/Peak1D.h>
 
 #include <zlib.h>
@@ -17,6 +19,7 @@
 #include <limits>
 #include <new>
 #include <string>
+#include <vector>
 
 #if defined(__SSE2__) || defined(_M_X64)
 #define FASTAG_DECODER_SSE2 1
@@ -412,18 +415,29 @@ namespace FASTag
     struct Array
     {
       std::string_view base64;
-      std::string_view name;   ///< "name" of its m/z or intensity cvParam
+      std::string_view name;   ///< "name" of its m/z or intensity cvParam, or the MS:1000786 value
       int bits = 0;            ///< 32 or 64; 0: no float type given
+      int numpress = 0;        ///< 0 none, else kLinear, kPic, kSlof
       bool zlib = false;
       bool has_binary = false;
+      bool standard = false;   ///< carries the m/z or intensity term
+      bool other = false;      ///< carries MS:1000786, a non-standard array named by its value
     };
+    enum { kLinear = 1, kPic, kSlof };
+    /// More arrays than this in one spectrum are declined.
+    constexpr std::size_t kMaxArrays = 8;
+    /// The most bytes MS-Numpress writes for @p n values: 8 for the fixed
+    /// point, at most 4.5 per value (linear and pic), 2 per value (slof). A
+    /// longer stream cannot decode to n values.
+    constexpr std::size_t numpress_bound(std::size_t n) { return 5 * n + 24; }
   }
 
   /****************************************************************************/
   struct MzMLDirectDecoder::Impl
   {
     Buffer b64;
-    Buffer bytes[2];
+    Buffer packed;   ///< the MS-Numpress bytes of one array
+    Buffer bytes[2]; ///< m/z and intensity values
     z_stream zs{};
     bool z_ready = false;
 
@@ -487,7 +501,56 @@ namespace FASTag
       }
       return inflate_into(b64.data.get(), b64.size, out, expect_bytes);
     }
+
+    bool values_of(const Array& a, Buffer& out, std::size_t n, std::size_t& width);
   };
+
+  /// The values of @p a into @p out, @p width bytes each (8 after
+  /// MS-Numpress, which always decodes to doubles, as in OpenMS). True only
+  /// when there are exactly @p n of them.
+  bool MzMLDirectDecoder::Impl::values_of(const Array& a, Buffer& out, std::size_t n, std::size_t& width)
+  {
+    if (a.numpress == 0)
+    {
+      width = static_cast<std::size_t>(a.bits / 8);
+      if (!bytes_of(a, out, n * width)) return false;
+      // A zlib array whose bytes are not whole values makes OpenMS throw; an
+      // array whose length differs from defaultArrayLength makes it warn.
+      // Either way: OpenMS's path, with its messages.
+      if (a.zlib && out.size % width != 0) return false;
+      return out.size / width == n;
+    }
+    // MS-Numpress, as MSNumpressCoder::decodeNP: base64, zlib if given, then
+    // OpenMS's own decoder on the bytes. OpenMS does not compare a Numpress
+    // array with defaultArrayLength; only arrays of that length are taken
+    // here, which is also what bounds the work on a damaged stream.
+    width = 8;
+    if (!bytes_of(a, packed, numpress_bound(n)) || packed.size > numpress_bound(n)) return false;
+    MSNumpressCoder::NumpressConfig config;
+    config.np_compression = a.numpress == kLinear ? MSNumpressCoder::LINEAR
+                          : a.numpress == kPic ? MSNumpressCoder::PIC : MSNumpressCoder::SLOF;
+    // ponytail: decodeNPRaw is the public entry (the ms::numpress functions are
+    // not exported from libOpenMS); it wants a std::string and zero-fills 16
+    // bytes of output per input byte. Both are locals: kept per thread at
+    // their largest they cost more memory than OpenMS's whole path (measured).
+    // Decode in place if this shows in a profile.
+    const std::string np_in(reinterpret_cast<const char*>(packed.data.get()), packed.size);
+    std::vector<double> np_out;
+    try
+    {
+      MSNumpressCoder().decodeNPRaw(np_in, np_out, config);
+    }
+    catch (const Exception::BaseException&)
+    {
+      return false; // corrupt: OpenMS's path, with its message
+    }
+    if (np_out.size() != n) return false;
+    out.size = 0;
+    out.reserve(n * 8 + 8);
+    if (n) std::memcpy(out.data.get(), np_out.data(), n * 8);
+    out.size = n * 8;
+    return true;
+  }
 
   MzMLDirectDecoder::MzMLDirectDecoder() : impl_(std::make_unique<Impl>()) {}
   MzMLDirectDecoder::~MzMLDirectDecoder() = default;
@@ -561,7 +624,7 @@ namespace FASTag
     std::size_t depth = 0;
     stack[depth++] = root.name;
     const char* p = root.end;
-    std::array<Array, 2> arrays;
+    std::array<Array, kMaxArrays> arrays;
     int n_arrays = 0;
     Array* cur = nullptr;
     const auto blank = [](const char* b, const char* e)
@@ -633,21 +696,22 @@ namespace FASTag
         }
         else
         {
-          if (cur || t.self_closing || n_arrays == 2) return false; // more than two arrays
+          if (cur || t.self_closing || n_arrays == static_cast<int>(kMaxArrays)) return false;
           cur = &arrays[static_cast<std::size_t>(n_arrays++)];
         }
       }
       else if (t.name == "cvParam")
       {
         if (!cur || t.closing) return false;
-        std::string_view accession, name, unit;
-        bool has_unit = false;
+        std::string_view accession, name, unit, value;
+        bool has_unit = false, has_value = false;
         for (std::size_t i = 0; i < t.n_attrs; ++i)
         {
           const std::string_view an = t.attr_name(i);
           if (an == "accession") accession = t.attr_value(i);
           else if (an == "name") name = t.attr_value(i);
           else if (an == "unitAccession") { unit = t.attr_value(i); has_unit = true; }
+          else if (an == "value") { value = t.attr_value(i); has_value = true; }
         }
         // The unit is compared as text below; one written with a character
         // reference (UO&#58;0000269) is the same unit to libxml2.
@@ -658,13 +722,30 @@ namespace FASTag
         {
           if (accession == "MS:1000515" && unit == "UO:0000269") return false;
           cur->name = name;
+          cur->standard = true;
         }
         else if (has_unit && !unit.empty()) return false;
         else if (accession == "MS:1000523") cur->bits = 64;
         else if (accession == "MS:1000521") cur->bits = 32;
+        // Compression, in the order given, as handleBinaryDataArrayCVParam
+        // applies it: a Numpress term leaves zlib as it is, the combined
+        // terms set both, "no compression" clears both.
         else if (accession == "MS:1000574") cur->zlib = true;
-        else if (accession == "MS:1000576") cur->zlib = false;
-        else return false; // numpress, zstd, integer/string types, other arrays, unknown terms
+        else if (accession == "MS:1000576") { cur->zlib = false; cur->numpress = 0; }
+        else if (accession == "MS:1002312") cur->numpress = kLinear;
+        else if (accession == "MS:1002313") cur->numpress = kPic;
+        else if (accession == "MS:1002314") cur->numpress = kSlof;
+        else if (accession == "MS:1002746") { cur->numpress = kLinear; cur->zlib = true; }
+        else if (accession == "MS:1002747") { cur->numpress = kPic; cur->zlib = true; }
+        else if (accession == "MS:1002748") { cur->numpress = kSlof; cur->zlib = true; }
+        else if (accession == "MS:1000786")
+        {
+          // A non-standard array, named by its value (pwiz: "Ion Mobility").
+          if (!has_value || !literal(value)) return false;
+          cur->name = value;
+          cur->other = true;
+        }
+        else return false; // zstd, integer/string types, CV-named other arrays, unknown terms
         if (!t.self_closing)
         {
           // <cvParam ...></cvParam>: only whitespace may come before the end tag.
@@ -696,39 +777,66 @@ namespace FASTag
     }
     if (region != Region::after) return false; // no arrays
 
-    // Exactly one m/z and one intensity array, both float.
-    if (n_arrays != 2) return false;
+    // Exactly one m/z and one intensity array; any further array must be a
+    // non-standard one (MS:1000786). All float. An array with both kinds of
+    // name term, or none, is OpenMS's.
     int mz_i = -1, int_i = -1;
-    for (int i = 0; i < 2; ++i)
+    for (int i = 0; i < n_arrays; ++i)
     {
       const Array& a = arrays[static_cast<std::size_t>(i)];
-      if (a.bits == 0) return false;
-      if (a.name == "m/z array" && mz_i < 0) mz_i = i;
-      else if (a.name == "intensity array" && int_i < 0) int_i = i;
+      if (a.bits == 0 || a.standard == a.other) return false;
+      const bool is_mz = a.name == "m/z array", is_int = a.name == "intensity array";
+      if (a.other)
+      {
+        if (is_mz || is_int) return false;
+      }
+      else if (is_mz && mz_i < 0) mz_i = i;
+      else if (is_int && int_i < 0) int_i = i;
+      else return false;
     }
     if (mz_i < 0 || int_i < 0) return false;
     const Array& mz = arrays[static_cast<std::size_t>(mz_i)];
     const Array& in = arrays[static_cast<std::size_t>(int_i)];
 
     const std::size_t n = static_cast<std::size_t>(length);
-    if (!impl_->bytes_of(mz, impl_->bytes[0], n * static_cast<std::size_t>(mz.bits / 8)) ||
-        !impl_->bytes_of(in, impl_->bytes[1], n * static_cast<std::size_t>(in.bits / 8)))
-      return false;
+    // The further arrays, in file order, as OpenMS's fillDataArrayFloat
+    // builds them: named, every value cast to float. Before the peaks, so
+    // their values can pass through the m/z buffer.
+    std::vector<MSSpectrum::FloatDataArray> others;
+    for (int i = 0; i < n_arrays; ++i)
+    {
+      const Array& a = arrays[static_cast<std::size_t>(i)];
+      if (!a.other) continue;
+      std::size_t w = 0;
+      if (!impl_->values_of(a, impl_->bytes[0], n, w)) return false;
+      MSSpectrum::FloatDataArray& fda = others.emplace_back();
+      fda.setName(std::string(a.name));
+      fda.resize(n);
+      const unsigned char* const vp = impl_->bytes[0].data.get();
+      for (std::size_t k = 0; k < n; ++k)
+      {
+        if (w == 8)
+        {
+          double d;
+          std::memcpy(&d, vp + k * 8, 8);
+          fda[k] = static_cast<float>(d);
+        }
+        else std::memcpy(&fda[k], vp + k * 4, 4);
+      }
+    }
+
+    std::size_t mw = 0, iw = 0;
+    if (!impl_->values_of(mz, impl_->bytes[0], n, mw) || !impl_->values_of(in, impl_->bytes[1], n, iw)) return false;
     const Buffer& mb = impl_->bytes[0];
     const Buffer& ib = impl_->bytes[1];
-    const std::size_t mw = static_cast<std::size_t>(mz.bits / 8), iw = static_cast<std::size_t>(in.bits / 8);
-    // A zlib array whose bytes are not whole values makes OpenMS throw; an
-    // array whose length differs from defaultArrayLength makes it warn.
-    // Either way: OpenMS's path, with its messages.
-    if (mz.zlib && mb.size % mw != 0) return false;
-    if (in.zlib && ib.size % iw != 0) return false;
-    if (mb.size / mw != n || ib.size / iw != n) return false;
 
     // The peaks, converted as OpenMS's fillDataArray does: m/z to double,
     // intensity to float. The allocations come first: a bad_alloc in either
     // leaves the peaks of `spec` as they were.
     spec.reserve(spec.size() + n);
+    spec.getFloatDataArrays().reserve(spec.getFloatDataArrays().size() + others.size());
     spec.setNativeID(std::string(id));
+    for (auto& fda : others) spec.getFloatDataArrays().push_back(std::move(fda));
     Peak1D peak;
     const unsigned char* mp = mb.data.get();
     const unsigned char* ip = ib.data.get();

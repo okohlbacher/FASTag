@@ -322,6 +322,67 @@ protein) and 3 are unsupported.
 The mode stays opt-in and experimental; the default (`none`) and the decoy
 call are unchanged.
 
+## Reagent organisms (`-species_reagents`, opt-in, experimental, after 1.13.1)
+
+Why `explain` does not report porcine trypsin or bovine serum: after the
+sample organism is called, a genus is tested on all its unexplained tags
+against the random matches of its whole proteome. A protein reagent gives
+some tens of tags from a few proteins; the null of a mammalian proteome is
+several hundred (PXD001587: Bos 467 unexplained tags against 468.7 expected,
+of which 376 lie in listed bovine serum proteins). All 65 lost Sus/Bos
+positives of the spent runs end as `not_significant`. The `decoy` call
+reports them through tags shared with the sample organism, the channel that
+also gives its 5.98 false calls per run.
+
+`-species_reagents <fasta>` (with `-species_call explain` only) tests a
+smaller hypothesis. The file lists reagent proteins with UniProt headers
+(`OX=` gives the taxon); `data/taxonomy/species_reagents.fasta` has 38
+entries (porcine trypsin and pepsin; bovine serum proteins, caseins and whey
+proteins, trypsin, chymotrypsin, aprotinin, RNase A, DNase I). For a taxon
+the explain call did not call, the distinct tags that lie in its listed
+proteins, whose index support holds that taxon and no called taxon, are
+counted against the same membership of the decoy tags. Greedy over the
+reagent taxa; a taxon with at least `reagent_n_min` tags (8; optional key of
+`species_call.tsv`) and Poisson p times the number of candidates <= alpha is
+reported `present` with `call_reason` `reagent`. The report gets the columns
+`reagent_tags` and `reagent_expected` (NA for taxa without listed proteins).
+No row of the explain call changes: on 98 runs the calls with reason `pass`
+are identical with and without the option. A `reagent` call says that the
+protein reagent is in the sample, not that the organism is the sample.
+
+Development data only (62 spent held-out runs and 35 runs of the 1.12
+development set with a Sage truth search; frozen genus rule of
+`PREREG-species-explain.md`, Sus/Bos counted as positives; branch
+`post1131/species`). **Not held-out tested.**
+
+Scoring: a reagent call (a row with `call` `present` and `call_reason`
+`reagent`, read from the report alone) is neither a true nor a false genus
+call. It is left out of the false genus calls; a positive genus that is not
+a sample genus and has a reagent call is left out of the recovery of all
+three columns; the reagent calls are counted on their own.
+
+| | decoy call | explain (1.13.1) | explain + reagents |
+|---|---|---|---|
+| Spent runs (62): false genus calls per run | 5.98 [4.68, 7.48] | 0.50 [0.29, 0.73] | 0.50 [0.29, 0.73] |
+| Spent runs: recovery (42 of 105 positives left out) | 52/63 | 38/63 | 38/63 |
+| Spent runs: reagent calls | | | 47 in 37 runs |
+| of these: >= 3 / 1 or 2 / no Sage peptides in listed proteins | | | 40 / 5 / 2 |
+| Development runs (35): false genus calls per run | 7.37 [6.03, 8.89] | 0.40 [0.17, 0.66] | 0.40 [0.17, 0.66] |
+| Development runs: recovery (34 of 102 positives left out) | 61/68 | 50/68 | 50/68 |
+| Development runs: reagent calls | | | 37 in 28 runs |
+| of these: >= 3 / 1 or 2 / no Sage peptides in listed proteins | | | 32 / 3 / 2 |
+
+Scored this way the option changes neither false genus calls nor recovery
+against `explain` alone; what it adds is the reagent calls. Sus or Bos
+positives with a reagent call: 42 of 68 on the spent runs, 34 of 54 on the
+development runs. Of the 68 Sus/Bos positives of the spent
+runs none is a sample organism: in 53 the Sage peptides come from reagent
+proteins (>= 3 peptides), in 11 from one or two such peptides, in 4 from
+none. Limits: a genuine second organism at low level (meat or milk
+admixture, xenograft host) is still not recovered by `explain`; only Sus and
+Bos have listed proteins; a reagent protein that is absent from the list is
+not found.
+
 ## Both tag orientations (`-species_orientation both`, opt-in, 1.12)
 
 Tags are written N->C under a y-ion assumption, so a tag read from b ions is
