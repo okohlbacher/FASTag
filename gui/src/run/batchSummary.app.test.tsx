@@ -6,7 +6,7 @@
 import { act, screen, waitFor, within } from '@testing-library/react'
 import { describe, expect, it } from 'vitest'
 import { installMockBridge, type MockBridge } from '../testing/mockBridge'
-import { addBatch, click, goTo, renderColdApp, startBatch } from '../testing/render'
+import { addBatch, click, goTo, renderColdApp, renderCharacterizeApp, startBatch } from '../testing/render'
 import { BATCH_CASES, DIA_REFUSAL, type BatchCase } from '../testing/batchFixtures'
 import { speciesFromTsv } from '../testing/speciesTsv'
 
@@ -37,7 +37,7 @@ const cells = (r: HTMLElement): string[] => within(r).getAllByRole('cell').map((
 describe('the batch summary', () => {
   it('has one row per job with the CLI calls, and flags the one that differs from a majority of 3', async () => {
     const mock = installMockBridge()
-    await renderColdApp(mock)
+    await renderCharacterizeApp(mock)
     const cases = [BATCH_CASES.pxd003531, BATCH_CASES.pxd004541, BATCH_CASES.pxd003531mzpeak]
     ;['a', 'b', 'c'].forEach((s, i) => serve(mock, s, cases[i]))
     await addBatch(mock, ['/d/a.mzML', '/d/b.mzML', '/d/c.mzML'])
@@ -65,7 +65,7 @@ describe('the batch summary', () => {
 
   it('with fewer than 3 jobs nothing is flagged, though the calls differ', async () => {
     const mock = installMockBridge()
-    await renderColdApp(mock)
+    await renderCharacterizeApp(mock)
     serve(mock, 'a', BATCH_CASES.pxd003531)
     serve(mock, 'b', BATCH_CASES.pxd004541)
     await addBatch(mock, ['/d/a.mzML', '/d/b.mzML'])
@@ -77,7 +77,7 @@ describe('the batch summary', () => {
 
   it('a raw DIA input the CLI refuses (exit 11, FASTag 1.12) fails with the CLI sentence as its reason, and counts nothing', async () => {
     const mock = installMockBridge()
-    await renderColdApp(mock)
+    await renderCharacterizeApp(mock)
     serve(mock, 'a', BATCH_CASES.pxd003531)
     await addBatch(mock, ['/d/a.mzML', '/d/dia.mzML'])
     await startBatch()
@@ -101,7 +101,7 @@ describe('the batch summary', () => {
 
   it('exports the summary TSV: the table, cell for cell, through a .part-safe write', async () => {
     const mock = installMockBridge()
-    await renderColdApp(mock)
+    await renderCharacterizeApp(mock)
     const cases = [BATCH_CASES.pxd003531, BATCH_CASES.pxd004541, BATCH_CASES.pxd014764]
     ;['a', 'b', 'c'].forEach((s, i) => serve(mock, s, cases[i]))
     await addBatch(mock, ['/d/a.mzML', '/d/b.mzML', '/d/c.mzML'])
@@ -126,7 +126,7 @@ describe('the batch summary', () => {
 
   it('a failed export says why', async () => {
     const mock = installMockBridge()
-    await renderColdApp(mock)
+    await renderCharacterizeApp(mock)
     await addBatch(mock, ['/d/a.mzML'])
     await goTo('batch')
     mock.nextPickOutput = '/ro/s.tsv'
@@ -166,7 +166,7 @@ describe('folder input and the output folder', () => {
 
   it('an output folder takes every output of the batch; Beside inputs puts them back', async () => {
     const mock = installMockBridge()
-    await renderColdApp(mock)
+    await renderCharacterizeApp(mock)
     await addBatch(mock, ['/share/a.mzML', '/share/b.mzML'])
     await goTo('batch')
     const outdir = (): HTMLElement => document.querySelector<HTMLElement>('.view[data-view="batch"] .outdir')!
@@ -197,7 +197,7 @@ describe('folder input and the output folder', () => {
 describe('what a summary cell says when a read goes wrong, and where notes show', () => {
   it('a report the job was sent but could not read says "unreadable" with the error, in the cell', async () => {
     const mock = installMockBridge()
-    await renderColdApp(mock)
+    await renderCharacterizeApp(mock)
     serve(mock, 'a', BATCH_CASES.pxd003531)
     // An empty digest report (parseRows: the file is empty), a species read
     // that rejects.
@@ -217,7 +217,7 @@ describe('what a summary cell says when a read goes wrong, and where notes show'
 
   it('a job whose reports cannot be read at all says so instead of "reading…" forever', async () => {
     const mock = installMockBridge()
-    await renderColdApp(mock)
+    await renderCharacterizeApp(mock)
     serve(mock, 'a', BATCH_CASES.pxd003531)
     window.fastag.species = () => {
       throw new Error('bridge gone')
@@ -230,7 +230,7 @@ describe('what a summary cell says when a read goes wrong, and where notes show'
 
   it('a done job whose outputs the app never learned is not "reading…", and offers no Open', async () => {
     const mock = installMockBridge()
-    await renderColdApp(mock)
+    await renderCharacterizeApp(mock)
     await addBatch(mock, ['/d/a.mzML'])
     mock.holdRun()
     await startBatch()
@@ -250,7 +250,7 @@ describe('what a summary cell says when a read goes wrong, and where notes show'
 
   it("each call cell shows its cutoff or caveat, not only on hover", async () => {
     const mock = installMockBridge()
-    await renderColdApp(mock)
+    await renderCharacterizeApp(mock)
     serve(mock, 'a', BATCH_CASES.pxd003531)
     await addBatch(mock, ['/d/a.mzML'])
     await runAll(mock, [BATCH_CASES.pxd003531])

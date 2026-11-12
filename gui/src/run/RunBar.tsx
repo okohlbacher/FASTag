@@ -4,7 +4,7 @@
 
 import { useEffect, useRef, useState, type JSX } from 'react'
 import type { Progress } from '../runJob'
-import { humanName, type Conflict } from '../paramLayout'
+import { humanName, PARAM_BY_NAME, type Conflict } from '../paramLayout'
 import type { ParamValue } from '../ParamField'
 import { baseName } from '../digestReport'
 import { IconError } from '../icons'
@@ -34,6 +34,7 @@ export interface RunBarProps {
   fixes: SpeciesFix[]
   onFix(values: Record<string, ParamValue>): void
   input: string
+  out: string
   // The number of queued batch jobs, those not run yet and the failed ones.
   jobs: number
   remaining: number
@@ -76,6 +77,8 @@ export default function RunBar(p: RunBarProps): JSX.Element {
   const chosenInstrument = INSTRUMENTS.find((x) => x.id === p.instrument)
   // A preset stays shown only while the values are still its own.
   const shownInstrument = chosenInstrument && matchesInstrument(p.values, chosenInstrument) ? chosenInstrument.id : ''
+  const tolerance = p.values.fragment_tolerance || PARAM_BY_NAME.get('fragment_tolerance')?.default
+  const toleranceUnit = p.values.fragment_tolerance_unit || PARAM_BY_NAME.get('fragment_tolerance_unit')?.default
 
   const pct = progress && progress.total > 0 ? Math.round((progress.done / progress.total) * 100) : null
   const elapsed = running && p.startedAt ? ` · ${duration(Date.now() - p.startedAt)} elapsed` : ''
@@ -166,6 +169,7 @@ export default function RunBar(p: RunBarProps): JSX.Element {
         </div>
       )}
       {!busy && !blocked && jobs === 0 && !p.input && <p className="hint">Choose an input file to run.</p>}
+      {!busy && jobs === 0 && !!p.input && !p.out && <p className="warn" id="run-output-required">Choose where to save the tags TSV in Output before running.</p>}
       {/* No live region of its own: the checks' summary (InspectorPanel) is
           announced; Run's aria-describedby names this line. */}
       {held && p.inspectorChecking && (
@@ -182,7 +186,7 @@ export default function RunBar(p: RunBarProps): JSX.Element {
 
       {!busy && (
         <div className="instrument">
-          <label htmlFor="instrument">Instrument</label>
+          <label htmlFor="instrument">Fragment tolerance preset</label>
           <select
             id="instrument"
             className="small"
@@ -190,7 +194,7 @@ export default function RunBar(p: RunBarProps): JSX.Element {
             onChange={(e) => p.onInstrument(e.target.value)}
             title="Sets the fragment tolerance and its unit, nothing else"
           >
-            <option value="">{chosenInstrument ? 'Custom tolerance' : 'Choose a preset…'}</option>
+            <option value="">Current: {String(tolerance)} {String(toleranceUnit)} (custom)</option>
             {INSTRUMENTS.map((x) => (
               <option key={x.id} value={x.id}>
                 {presetText(x)}
@@ -252,7 +256,7 @@ export default function RunBar(p: RunBarProps): JSX.Element {
               onClick={p.onRun}
               disabled={!p.canRun}
               data-run=""
-              aria-describedby={held ? 'run-held' : undefined}
+              aria-describedby={[held ? 'run-held' : '', p.input && !p.out ? 'run-output-required' : ''].filter(Boolean).join(' ') || undefined}
               aria-keyshortcuts={isMac() ? 'Meta+Enter' : 'Control+Enter'}
               title={`Run (${keyText(isMac() ? '⏎' : 'Enter')})`}
             >

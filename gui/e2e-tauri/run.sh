@@ -36,6 +36,8 @@ esac
 command -v tauri-driver >/dev/null || { echo "run.sh: tauri-driver is not on PATH" >&2; exit 2; }
 command -v WebKitWebDriver >/dev/null || { echo "run.sh: WebKitWebDriver is not on PATH (apt: webkit2gtk-driver)" >&2; exit 2; }
 
+node --test "$GUI/e2e-tauri/wd.test.mjs"
+
 mkdir -p "$E2E_OUT"
 tauri-driver --port 4444 > "$E2E_OUT/tauri-driver-$MODE.log" 2>&1 &
 DRIVER=$!

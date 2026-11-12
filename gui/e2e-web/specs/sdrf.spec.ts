@@ -29,6 +29,7 @@ const sdrfTable = (page: Page) => page.getByRole('table', { name: /^SDRF compari
 
 async function runAndLoad(page: Page): Promise<void> {
   await openApp(page, 'gate-batch')
+  await page.getByRole('radio', { name: /^Batch QC/ }).check()
   await goTo(page, 'Batch')
   await page.getByRole('button', { name: 'Add folder…' }).click()
   await page.getByRole('button', { name: `Run ${NAMES.length} remaining files` }).click()

@@ -7,7 +7,7 @@
 import { act, fireEvent, screen, within } from '@testing-library/react'
 import { describe, expect, it } from 'vitest'
 import { installMockBridge, type MockBridge } from '../testing/mockBridge'
-import { click, flush, goTo, key, pickSingle, renderApp, renderColdApp, runButton, showView } from '../testing/render'
+import { click, flush, goTo, key, pickSingle, renderApp, renderCharacterizeApp, runButton, showView } from '../testing/render'
 import diaPseudoProbe from '../fixtures/probe/dia_pseudo.probe.jsonl?raw'
 import { applyLastUsed, formValue } from '../testing/lastUsed'
 import iontrapProbe from '../fixtures/probe/iontrap.probe.jsonl?raw'
@@ -252,8 +252,8 @@ describe('inspector after a run (real 1.12 reports and log)', () => {
   it('the ion-trap gate input at 20 ppm: the red flag from the meta rows and the log, and a re-run at 0.3 Da', async () => {
     const mock = installMockBridge()
     ionTrapRun(mock)
-    // The task the app lands on writes the digest report (and has species on).
-    await renderColdApp(mock)
+    // Characterize writes the digest report and has species on.
+    await renderCharacterizeApp(mock)
     await pickSingle(mock, IN)
     await click(runButton())
     expect(mock.runCalls[0].params).toMatchObject({ digest_out: '/data/run01.digest.tsv' })
@@ -302,7 +302,7 @@ describe('inspector after a run (real 1.12 reports and log)', () => {
   it('an Orbitrap HCD run shows no checks after it', async () => {
     const mock = installMockBridge()
     mock.reportFiles = { '/data/run01.digest.tsv': orbiDigest }
-    await renderColdApp(mock)
+    await renderCharacterizeApp(mock)
     await pickSingle(mock, IN)
     await click(runButton())
     await playRun(mock, [orbiErr], { ok: true, code: 0 })

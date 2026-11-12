@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased (after 1.13.1)
+## Unreleased
 
 - **New `-shortlist_exact_only` (experimental).** Turns off the gapped
   placement that `-search_engine msfragger` switches on by default
@@ -8,6 +8,35 @@
   msfragger defaults stay. Also settable in an INI; refused together with
   `-shortlist_gapped`. Runs without it are byte-identical to before; with
   Sage or Comet it changes nothing (exact is their default). No held-out test.
+
+## 1.13.2 (2026-11-12)
+
+Every new option is experimental and off by default unless stated. One
+default changes: under `-search_engine msfragger` with `-search_config_out`
+and the tryptic shortlist, the shortlist uses the configuration that passed
+its second held-out test (MSFragger entry below). Tag output is otherwise
+unchanged, except for mzML files with a selected-ion m/z of 0 (entry below).
+
+- **Peak memory with many threads on large spectra.** The direct mzML decoder
+  handles MS-Numpress and extra float arrays (such as ion mobility) itself, the
+  tagger prepares peaks in place, and the indexed reader no longer keeps a
+  per-thread copy of each spectrum's text. On PXD028735 (diaPASEF, mzML) peak
+  RSS falls from 2,362 to 2,114 MB at 128 threads and from 1,392 to 1,282 MB
+  at 64 threads (BinAC2, 3 repetitions), wall time 3-5 % lower; tag output
+  byte-identical on five data sets. README states three glibc settings that
+  lower it further at some run-time cost.
+- **Experimental TMT6/10 artifact filtering** (`-tmt_pseudo_filter
+  off|auto|on`, `-tmt_reporter_filter`; off by default): removes tags that
+  start or end with a bare G/A pseudo-residue at a TMT flank mass, and
+  optionally tags ending on a TMT reporter ion, when TMT labelling is detected
+  (`auto`) or asserted (`on`). On two independent TMT projects (10,912
+  reference PSMs) rank-1 accuracy rose from 82.20 to 82.72 %, recall@50
+  unchanged (`bench/results/tmt-ga-2026-11-11/`). No held-out test.
+- **GUI:** Setup starts with Export tags; Help completed (Overview, batch
+  comparison, SDRF, History, reconciliation, exports) with contents, links and
+  exact CLI-name search; Export INI no longer overwrites run inputs or
+  reports; Tags is selected after tag-only runs; the Run shortcut no longer
+  starts a hidden setup. No analysis default or report format changes.
 - **`-search_engine msfragger`: the held-out-tested shortlist configuration
   is the default.** With `-search_config_out` and `-shortlist_protease
   trypsin` (the default), `-shortlist_gapped` is on, `-shortlist_max_evalue` 10, `-recon_min_length` 6 and

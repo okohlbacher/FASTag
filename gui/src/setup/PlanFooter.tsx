@@ -4,7 +4,7 @@
 // send (useRun paramsFor): the command line is fastag.rs build_args, the INI
 // is that argv merged by the CLI itself (ini.rs).
 
-import { useState, type JSX } from 'react'
+import { useEffect, useRef, useState, type JSX } from 'react'
 import type { Session } from './useSession'
 import type { RunState } from '../run/useRun'
 import { planLine } from './plan'
@@ -23,27 +23,37 @@ export default function PlanFooter({ session, run }: { session: Session; run: Ru
   const { values, input, out, diff, originText } = session
   const [copied, setCopied] = useState<'yes' | 'no' | null>(null)
   const [ini, setIni] = useState<{ ok: boolean; text: string } | null>(null)
+  const revision = useRef(0)
+  useEffect(() => {
+    setCopied(null)
+    setIni(null)
+    return () => { revision.current++ }
+  }, [values, input, out])
 
   async function copy(): Promise<void> {
+    const started = revision.current
     try {
       const argv = await window.fastag.commandLine(run.paramsFor())
+      if (revision.current !== started) return
       await navigator.clipboard.writeText(shellLine(argv))
-      setCopied('yes')
+      if (revision.current === started) setCopied('yes')
     } catch {
-      setCopied('no')
+      if (revision.current === started) setCopied('no')
     }
   }
 
   async function exportIni(): Promise<void> {
+    const started = revision.current
+    const params = run.paramsFor()
     setIni(null)
-    const dest = await window.fastag.saveFile(iniName(out), ['ini'])
-    if (!dest) return
     try {
-      const r = await window.fastag.exportIni(run.paramsFor(), dest)
+      const dest = await window.fastag.saveFile(iniName(out), ['ini'])
+      if (!dest) return
+      const r = await window.fastag.exportIni(params, dest)
       const name = baseName(r.dest)
-      setIni({ ok: true, text: `INI written: ${name}. Run it with FASTag -ini ${name}` })
+      if (revision.current === started) setIni({ ok: true, text: `INI written: ${name}. Run it with FASTag -ini ${name}` })
     } catch (e) {
-      setIni({ ok: false, text: `Export INI failed: ${e instanceof Error ? e.message : String(e)}` })
+      if (revision.current === started) setIni({ ok: false, text: `Export INI failed: ${e instanceof Error ? e.message : String(e)}` })
     }
   }
 

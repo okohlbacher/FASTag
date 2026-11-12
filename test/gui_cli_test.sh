@@ -539,9 +539,20 @@ dump "$FIX/census_edge.mzML" "$ms1" "$TMP/ms1.jsonl"
 # ---- (f) the shipped digest data in the installed layouts -------------------------
 dest=$(awk '/install\(FILES .*data\/digest\/digest_models.tsv/ { f = 1 } f && /DESTINATION/ { sub(/.*DESTINATION[ \t]+/, ""); sub(/\).*/, ""); print; exit }' "$CMAKELISTS")
 [ -n "$dest" ] || fail "(f) no install DESTINATION for data/digest in CMakeLists.txt"
+# The digest data is looked up beside the executable, so the layouts hold a copy
+# of the executable itself. Given the Linux release launcher (FASTag, a script that
+# sets OPENMS_DATA_PATH and execs the FASTag.bin beside it), copy FASTag.bin, export
+# what the launcher exports. A lib/ beside the binary (the release bundle, RUNPATH
+# $ORIGIN/lib) is linked beside each copy.
+EXE="$BIN"; BDIR=$(dirname "$BIN")
+if [ "$(head -c2 "$BIN")" = '#!' ] && [ -x "$BDIR/FASTag.bin" ]; then
+  EXE="$BDIR/FASTag.bin"
+  [ -d "$BDIR/share-OpenMS" ] && export OPENMS_DATA_PATH="${OPENMS_DATA_PATH:-$BDIR/share-OpenMS}"
+fi
 layout() { # layout <name> <binary path inside> <digest dir inside or ''>: a copy of the binary and data
   local root="$TMP/l_$1"; mkdir -p "$root/$(dirname "$2")"
-  cp "$BIN" "$root/$2"; chmod +x "$root/$2"
+  cp "$EXE" "$root/$2"; chmod +x "$root/$2"
+  if [ -d "$BDIR/lib" ]; then ln -s "$(cd "$BDIR/lib" && pwd)" "$root/$(dirname "$2")/lib"; fi
   # Windows: the DLLs installed beside FASTag.exe (mimalloc.dll) go along.
   for dll in "$(dirname "$BIN")"/*.dll; do [ -f "$dll" ] && cp "$dll" "$root/$(dirname "$2")/"; done
   if [ -n "$3" ]; then mkdir -p "$root/$3"; cp "$DIGEST"/digest_models.tsv "$DIGEST"/massgap_mods.tsv "$root/$3/"; fi

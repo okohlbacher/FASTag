@@ -9,7 +9,7 @@ import { readFileSync } from 'node:fs'
 import { act, screen, waitFor, within } from '@testing-library/react'
 import { describe, expect, it } from 'vitest'
 import { installMockBridge, type MockBridge } from '../testing/mockBridge'
-import { addBatch, click, goTo, renderColdApp, startBatch } from '../testing/render'
+import { addBatch, click, goTo, renderColdApp, renderCharacterizeApp, startBatch } from '../testing/render'
 import { BATCH_CASES, type BatchCase } from '../testing/batchFixtures'
 import { speciesFromTsv } from '../testing/speciesTsv'
 
@@ -45,7 +45,7 @@ async function batchOfThree(): Promise<MockBridge> {
   const mock = installMockBridge()
   mock.sdrfFiles[SDRF_PATH] = SDRF_BYTES
   mock.taxonomyResult = TAXONOMY
-  await renderColdApp(mock)
+  await renderCharacterizeApp(mock)
   ;['a', 'b', 'c'].forEach((s, i) => serve(mock, s, CASES[i]))
   await addBatch(mock, ['/d/a.mzML', '/d/b.mzML', '/d/c.mzML'])
   await runAll(mock, CASES)

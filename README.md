@@ -210,8 +210,11 @@ placed too few spectra with an extension below 3 it offers the run with extensio
 0.5 Da window, and the chart says so. Tables up to 128 MB open in the app; larger ones
 open only in a spreadsheet. A **Glyco** tab lists the `-glyco_out` spectra, flagged ones first by their
 oxonium intensity. Setup starts
-from a task (by default **Characterize a run**: species, digest, label and
-glyco reports), so a file and Run are all a first run needs; the settings sit
+with **Export tags**, generating tags from **all input spectra** with
+per-residue confidence. **Open results / inspect spectra** is second;
+**Characterize a run** and **Batch QC vs SDRF** follow for assessment.
+Choose a file, check the MS2
+fragment tolerance and output path, then Run; the settings sit
 in four step cards, presets store only what differs from their task, and
 **Export INI…** writes the same parameters for `FASTag -ini`. The
 window has four views, switched from the top bar or with Cmd/Ctrl+1..4:
@@ -234,6 +237,15 @@ Installable bundles ship with every release: signed, notarized and stapled disk
 images for macOS (also on Homebrew, above), an installer for Windows, which
 is not yet code-signed (see above), and from 1.12.0 a `.deb` and a tarball for
 Linux x64 (glibc ≥ 2.35, WebKitGTK 4.1: Ubuntu 22.04, Debian 12) — see the install table at the top. Details in [gui/README.md](gui/README.md).
+
+For a first run, keep **Export tags**, choose spectra, confirm the
+MS2 analyser's tolerance, then run and inspect **Results → Tags**. For a
+separate survey, choose **Characterize a run** and read **Results → Overview**;
+that task samples a tenth of the spectra and enables species, digest, label
+and glyco reports. To survey the whole input, set **Subsample fraction** to `1`
+and **Subsample spectra** to `0`. The
+[desktop first-run guide](gui/README.md#first-run) explains the tasks,
+outputs, checks and result views.
 
 ## Usage
 
@@ -550,7 +562,7 @@ MGF→mzML direction is exact.
 | `-delta_out <file>` | none | Aggregated mass-shift histogram over reconciliations (one best placement per spectrum). Region-level candidates, NOT localized identifications, NOT FDR-controlled. Requires `-recon_out` |
 | `-digest_out <file>` | none | Terminal residues of the tags (ungapped, E-value ≤ 1) at P4..P1 and P1'..P4', and the protease call they support with its margin, or `no_call` with the reason (see Digest, label and mass-gap reports) |
 | `-label_out <file>` | none | TMT, TMTpro and iTRAQ4 gaps at either tag end (N- and C-terminal counts pooled, each given in the description) and the heavy Lys8/Arg10 shares |
-| `-label_discovery_out <file>` | none | Experimental (1.13); report format 5 passed its fourth held-out test (0 of 42 label-free runs got a label call, 129 of 144 runs right; see Held-out acceptance), formats 1 to 4 failed theirs: every N-terminal, lysine, arginine or C-terminal mass offset the tag flanks carry, known or not, explained by residues, the known labels or Unimod, and a label call (see Digest, label and mass-gap reports; format in doc/LABEL-DISCOVERY-REPORT.md) |
+| `-label_discovery_out <file>` | none | Experimental (1.13); failed its held-out test (6 of 150 label-free runs got a label call, see Validation): every N-terminal, lysine, arginine or C-terminal mass offset the tag flanks carry, known or not, explained by residues, the known labels or Unimod, and a label call (see Digest, label and mass-gap reports; format in doc/LABEL-DISCOVERY-REPORT.md) |
 | `-label_discovery_max_flank <Da>` / `-label_discovery_depth <n>` | 700 / 2 | Advanced: largest flank mass histogrammed and of the null compositions (above 0, at most 1500; the post-processing adds about 110 MB of peak memory at 700 Da and about 670 MB at 1500 Da); most residues a peak explanation names (0-2) |
 | `-label_discovery_min_spectra <n>` / `-label_discovery_min_share <f>` | 20 / 0.005 | Advanced: spectra and share of the counted spectra a peak or site candidate needs |
 | `-label_discovery_window_n <Da>` / `-label_discovery_window_c <Da>` | 0 / 0 | Advanced: half-window of the N- and C-terminal flank channel (at most 0.05 Da, so the half-integer background stays outside it); 0 = estimate it from the run |
@@ -1057,12 +1069,7 @@ options and their values.
   call, precursor pairs at the Lys8 and Arg10 spacings call SILAC and
   (format 4) add `K:Lys8` and `R:Arg10` to a call of SILAC labels only that
   lacks them, and a run with few tags, no reporter ions and no pairs is
-  called `label-free` (not when the reporter gate is `unclear`). Format 5 (post-1.13.1): the TMTpro-only reporters
-  (132 to 135) name a TMT call TMTpro, precursor pairs at the dimethyl spacings call `Dimethyl`, and the absence rule
-  also calls `label-free` on ion-trap MS2. Format 5 passed its held-out test (`post1131/labeldisc-heldout4`,
-  PREREG-labeldisc4.md; 144 runs from 144 new PRIDE projects, scored once on 2026-11-11): 0 of 42 label-free runs
-  got a label call, weighted accuracy 0.954, TMTpro 20 of 20, dimethyl 24 of 28, SILAC 14 of 22, and 5 of 102
-  labelled runs were called label-free (criterion at most 0.05). Format, classes and the call rule:
+  called `label-free` (not when the reporter gate is `unclear`). Format, classes and the call rule:
   doc/LABEL-DISCOVERY-REPORT.md; design: doc/DESIGN-label-discovery.md.
 - **`-massgap_out`** reads the `-delta_out` histogram (built even when
   `-delta_out` is not written; run it without fixed modifications to see the
@@ -1552,6 +1559,22 @@ in all 9 cells (tag length 3-5, charge 2, 3, 4+), but on PXD016519 `auto`
 tagged 567 fewer spectra at tag length 3 (15,987 against 16,554). No Astral
 or TOF run was scored.
 
+**Peak memory on spectra with many peaks (Linux).** Each thread keeps buffers
+sized by the largest spectra it has read, so on large un-centroided MS2 peak memory
+grows with the thread count: on PXD028735 (diaPASEF frames, median 24,000 peaks per
+MS2) about 13 MB per thread, 2.1 GB at 128 threads; on centroided data with at most a
+few hundred peaks per spectrum (PXD047793) about 1 MB per thread. About a third of the
+growth is glibc allocator overhead. Where memory is the limit, these glibc settings
+return freed memory sooner and lowered PXD028735 peak memory by 18 / 14 / 9 % at
+128 / 64 / 16 threads, at 10 / 7 / 6 % more run time (BinAC2, AMD EPYC 7543; no
+change on PXD047793; tags identical):
+
+```bash
+MALLOC_MMAP_THRESHOLD_=33554432 MALLOC_TRIM_THRESHOLD_=131072 MALLOC_TOP_PAD_=0 FASTag -in run.mzML -out tags.tsv -threads 64
+```
+
+Measured on these two data sets only; macOS and Windows use other allocators.
+
 Output is identical at every thread count (`threads_test` checks every output
 on the fixture). Row memory on the mzML path is bounded by a ring of three
 blocks of 65,536 spectra, so it grows with the file up to ~196,000 MS2 spectra
@@ -1627,7 +1650,6 @@ data.
 | 1.13 `-label_call_min_tags 0` | **FAIL** | 149/172 runs right (0.866) against the threshold 0.922; always label-free gives 0.872 and the 1.12 rule 83/172. Default stays 175; 0 stays experimental |
 | 1.13 `-label_discovery_out` | **FAIL** | `acceptance/1.13`, PREREG-labeldisc.md; 190 runs, scored once on 2026-11-10. P1 FAIL: 6 of 150 label-free runs got a label call (4.0 %; criterion 0). P2 FAIL: 96/190 runs right against 150/190 for "always label-free" (65 label-free runs got no call). P3 PASS: 96 against 91 for `label_call` (sign test p = 0.33). Experimental, opt-in; do not rely on it as free of false label calls |
 | 1.13 `-label_discovery_out`, report formats 2 to 4, third held-out test (`acc113r/labeldisc3`) | **FAIL** | PREREG-labeldisc3.md; 163 runs from 163 new PRIDE projects (Thermo Orbitrap-family instruments only), scored once on 2026-11-10 against the stated label, with Param-Medic 0.2 as comparison. Three of nine criteria fail. PASS: no label call on 64 label-free runs; recall TMT 18/18, iTRAQ 19/19, SILAC 18/22, dimethyl 13/22; 1 of 99 labelled runs called label-free. FAIL: weighted accuracy 0.572 (criterion above 0.80); 119 runs right by label family against 149 for Param-Medic; TMTpro recall 11/18 (criterion 0.8). Both causes are ion-trap MS2: the rule makes no call there (all 31 label-free ion-trap runs, 8 dimethyl, 4 SILAC), and the 7 TMTpro runs acquired as SPS-MS3 are called TMT, because the call does not use the TMTpro-only reporter ions. With Orbitrap MS2, 95 of 96 runs are right. Experimental, opt-in |
-| `-label_discovery_out`, report format 5 (TMTpro reporters, dimethyl and ion-trap pair rule), fourth held-out test (`post1131/labeldisc-heldout4`) | **PASS** | PREREG-labeldisc4.md; 144 runs from 144 new PRIDE projects, scored once on 2026-11-11. S1 0 of 42 label-free runs got a label call (25 with ion-trap MS2); A1 0.954; A2 129 runs right by family against 125 for Param-Medic 0.2; recall TMT 17/17, TMTpro 20/20 (8 SPS-MS3), iTRAQ4+8 13/15, SILAC 14/22, dimethyl 24/28; F 5 of 102 labelled runs called label-free (0.049, criterion 0.05). All nine criteria pass. The same binary plus PR #66 (format 6) failed both of its safety criteria: one dimethyl run called label-free that format 5 leaves uncalled |
 | 1.13 `-ion_series ax` | **FAIL** | On the UVPD spectra of PXD018176 replicate 2, rank-1 tags are correct for 0.04% under `ax` against 30.87% under `by`: -30.83 points (95% interval -31.63 to -30.02; criterion +5). Tested as an a/x-only reading with even-electron flanks; an a+1/x+1 reading and a mixed b/y + a/x reading are untested (doc/AX-IONS.md). Experimental |
 | 1.13 census triage (`-census_ids`) | **PASS** (second test); first test **FAIL** | Second test, 8 runs, 7 evaluable: the triage candidates are identified by a semi-enzymatic second search 5.32 times as often as the other unidentified spectra (95% CI 2.59-8.25), 0.023 above a peak-count baseline. Against an open search they are enriched but not better than that baseline (doc/CENSUS-TRIAGE-EVAL.md) |
 | 1.13 `-alkylation_tags_out` | **PASS**, at the margin | 57 runs from 57 PRIDE projects: 40 called, 37 right (0.925, Wilson 95% interval 0.801-0.974; criterion: at least 30 calls and a lower end of at least 0.80). It abstains on samples that are not alkylated (2 of 12 called); spectra read as a/x ions are untested (doc/ALKYLATION-REPORT.md). Experimental |

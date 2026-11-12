@@ -55,7 +55,7 @@ const FASTA_FORMATS = ['fasta', 'fa', 'faa']
 // view store (tab and log drawer); the views render it.
 ///
 /// @p start: where the session's values come from; the app lands on the
-/// built-in task "Characterize a run" (D1, GUI-DESIGN 3 S1).
+/// built-in task "Export tags".
 export default function App({ start = LANDING }: { start?: Origin } = {}): JSX.Element {
   const [bin, setBin] = useState<BinaryInfo | null>(null)
   // The view shown (Cmd+1..4, the top bar, the View menu).
@@ -160,6 +160,7 @@ export default function App({ start = LANDING }: { start?: Origin } = {}): JSX.E
   useEffect(() => {
     if (shownView.current === view) return
     shownView.current = view
+    if (view !== 'setup') setSearchOpen(false)
     const a = document.activeElement
     if (a && a !== document.body && !a.closest('[hidden]')) return
     viewsRef.current?.querySelector<HTMLElement>(`.view[data-view="${view}"]`)?.focus()
@@ -302,8 +303,9 @@ export default function App({ start = LANDING }: { start?: Origin } = {}): JSX.E
     await run.runWith(over)
   }
 
-  // Not behind a batch queue: the single input and output are hidden then.
-  const canRun = !!bin?.ok && !!input && !!out && !running && !batchRunning && jobs.length === 0 && !blocked && !inspector.held
+  // Not behind a batch queue or the browse-only task: their single-file
+  // run controls are hidden, so shortcuts must not start that hidden setup.
+  const canRun = session.task !== 'open-results' && !!bin?.ok && !!input && !!out && !running && !batchRunning && jobs.length === 0 && !blocked && !inspector.held
 
   // The checks after a run, from its reports and FASTag's log lines.
   const after = postRunChecks({ reports: run.reports.list, notes: run.shownNotes })
@@ -352,6 +354,8 @@ export default function App({ start = LANDING }: { start?: Origin } = {}): JSX.E
 
   // Shortcuts and native menus run the same actions (setup/shortcuts.ts).
   const act = (a: Action): void => {
+    // Native menu events bypass the modal's DOM keyboard handler.
+    if (searchOpen && a !== 'search-params') setSearchOpen(false)
     const v = viewOfAction(a)
     if (v) {
       setView(v)
@@ -449,6 +453,7 @@ export default function App({ start = LANDING }: { start?: Origin } = {}): JSX.E
       fixes={session.fixes}
       onFix={session.applyFix}
       input={input}
+      out={out}
       jobs={jobs.length}
       remaining={run.remaining}
       failedJobs={run.failedJobs}
@@ -524,7 +529,7 @@ export default function App({ start = LANDING }: { start?: Origin } = {}): JSX.E
           {/* Hidden, not unmounted: the form, the batch and the results stay as they were. */}
           <section className="view view-setup" data-view="setup" hidden={view !== 'setup'} tabIndex={-1} aria-label="Setup">
             <aside className="controls" aria-label="Run setup">
-              {searchOpen && !busy && (
+              {searchOpen && view === 'setup' && !busy && (
                 <ParamSearch
                   onChoose={chooseParam}
                   onClose={() => {

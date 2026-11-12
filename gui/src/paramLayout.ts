@@ -266,6 +266,7 @@ function badNumber(type: string, s: string, min?: number, max?: number): string 
     return 'not a number'
   }
   const n = Number(s)
+  if (!Number.isFinite(n)) return 'must be a finite number'
   if (type === 'int' && Math.abs(n) > INT_LIMIT) return 'too large'
   if (min !== undefined && n < min) return `must be at least ${min}`
   if (max !== undefined && n > max) return `must be at most ${max}`

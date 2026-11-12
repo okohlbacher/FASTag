@@ -4,7 +4,7 @@ import { GLOSSARY, PAGES, SETTINGS_INTRO, type HelpPage } from './content'
 import { FAQ, FAQ_BY_ID, FAQ_GROUPS } from './faq'
 import { HelpLink } from './HelpLink'
 import { closeHelp, helpBack, openHelp, rememberHelpPage, showHelpPage, useHelp } from './link'
-import { searchHelp } from './search'
+import { parameterLimits, searchHelp } from './search'
 
 export const slug = (s: string): string => s.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')
 
@@ -62,7 +62,8 @@ export function reveal(id: string): void {
 
 function ParamEntry({ name }: { name: string }): JSX.Element | null {
   const spec = PARAM_BY_NAME.get(name)
-  const h = uiOf(name).help
+  const ui = uiOf(name)
+  const h = ui.help
   if (!spec || !h) return null
   const needs = dependsOf(name)
   return (
@@ -72,6 +73,7 @@ function ParamEntry({ name }: { name: string }): JSX.Element | null {
       </summary>
       <p>{h.text}</p>
       {h.tip && <p className="tip">{h.tip}</p>}
+      {ui.hidden && <p className="tip"><strong>Not in the settings form:</strong> {ui.hidden}.</p>}
       <p className="meta">
         Default: {defaultText(spec)}
         {needs.map((d) => (
@@ -87,6 +89,8 @@ function ParamEntry({ name }: { name: string }): JSX.Element | null {
           </span>
         ))}
       </p>
+      {!ui.hidden && <p className="meta">Settings group: {ui.section}.</p>}
+      {parameterLimits(spec) && <p className="meta">{parameterLimits(spec)}</p>}
       {spec.description && (
         <details className="cli-desc">
           <summary>Command-line description</summary>
@@ -141,7 +145,7 @@ function Settings(): JSX.Element {
       })}
       <section id="param-sec-hidden" aria-labelledby="param-sec-hidden-h">
         <h3 id="param-sec-hidden-h">Not in the form</h3>
-        <p className="help-blurb">FASTag options the app sets itself, that have no use in the app, or that the app does not offer yet (the 1.12 command-line options, used at their defaults).</p>
+        <p className="help-blurb">These options use dedicated controls, are managed by the app, or are available only on the command line. Each entry explains why it is not in the settings form. Reading an option here does not enable it in a GUI run.</p>
         {HIDDEN_PARAMS.map((n) => (
           <ParamEntry key={n} name={n} />
         ))}
@@ -222,6 +226,12 @@ function PageBody({ page }: { page: HelpPage }): JSX.Element {
   if (page.id === 'glossary') return <Glossary />
   return (
     <>
+      <nav aria-label="On this page" className="help-contents">
+        <h3>On this page</h3>
+        <ul>
+          {page.sections.map((s) => <li key={s.id}><HelpLink to={s.id}>{s.title}</HelpLink></li>)}
+        </ul>
+      </nav>
       {page.sections.map((s) => (
         <section key={s.id} id={s.id} aria-labelledby={`${s.id}-h`}>
           <h3 id={`${s.id}-h`}>{s.title}</h3>
@@ -246,15 +256,24 @@ function HelpSearch(): JSX.Element {
         value={q}
         onChange={(e) => setQ(e.target.value)}
         onKeyDown={(e) => {
-          if (e.key === 'Escape' && q) {
+          if (e.key === 'Escape') {
+            e.preventDefault()
             e.stopPropagation()
-            setQ('')
+            if (q) setQ('')
+            else closeHelp()
           } else if (e.key === 'Enter' && hits[0]) {
+            e.preventDefault()
+            e.stopPropagation()
             openHelp(hits[0].id)
             setQ('')
           }
         }}
       />
+      <p className={q.trim() ? 'hint' : 'sr-only'} role="status" aria-live="polite">
+        {q.trim() && (hits.length
+          ? `${hits.length === 20 ? 'First 20' : hits.length} ${hits.length === 1 ? 'result' : 'results'}. Enter opens the first; Tab reaches each result.`
+          : 'Nothing in Help matches. Try a shorter term or a command-line parameter name.')}
+      </p>
       {q.trim() !== '' &&
         (hits.length ? (
           <ul className="help-hits" aria-label="Search results">
@@ -274,9 +293,7 @@ function HelpSearch(): JSX.Element {
               </li>
             ))}
           </ul>
-        ) : (
-          <p className="hint">Nothing in Help matches “{q.trim()}”.</p>
-        ))}
+        ) : null)}
     </div>
   )
 }

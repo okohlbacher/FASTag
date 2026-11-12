@@ -382,7 +382,7 @@ export function useRun(s: RunInputs, view: ViewStore, hooks: RunHooks = {}) {
         return
       }
     }
-    if (!switched && (rep.reports.length || rep.errors.length)) setTab('digest')
+    if (!switched) setTab(rep.reports.length || rep.errors.length ? 'digest' : 'results')
   }
 
   // The message above the tabs when a run failed: the CLI's exit status and
@@ -574,6 +574,9 @@ export function useRun(s: RunInputs, view: ViewStore, hooks: RunHooks = {}) {
 
   // A tags table, picked or dropped.
   async function openResultsPath(p: string): Promise<void> {
+    // Select before waiting: a mixed drop may open a report alongside the
+    // tags, and that report's later selection should remain in front.
+    setTab('results')
     // A file whose run the record marks cancelled or failed (its cleanup
     // could not remove it) is not opened as a complete table.
     const rec = await window.fastag.historyOf(p).catch(() => null)

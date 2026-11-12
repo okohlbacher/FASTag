@@ -4,7 +4,7 @@
       "name": "acquisition_check",
       "type": "string",
       "default": "refuse",
-      "description": "Check the acquisition before tagging. Raw DIA, whose MS2 'precursors' are isolation windows holding several peptides, is refused with exit code 11 (refuse), tagged anyway with a warning as before 1.12 (warn), or not checked (off). Tag DIA through pseudo-DDA spectra instead: run DIAspeXtract (or diaTracer for .d) first; their output passes the check. The check failed its held-out release test (8 of 202 DDA-labelled files refused): if a DDA file is refused, use warn or off",
+      "description": "Check the acquisition before tagging. Raw DIA, whose MS2 'precursors' are isolation windows holding several peptides, is refused with exit code 11 (refuse), tagged anyway with a warning as before 1.12 (warn), or not checked (off). Tag DIA through pseudo-DDA spectra instead: run DIAspeXtract (or diaTracer for .d) first. The revised 1.13 check passed its second held-out test on Thermo files: 0 of 58 non-DIA and 35 of 37 DIA files refused (no Astral, timsTOF or SCIEX files tested). If a known DDA file is refused, inspect the acquisition metadata before choosing warn or off",
       "required": false,
       "toppAdvanced": false,
       "choices": [
@@ -1456,7 +1456,7 @@
       "name": "species_orientation",
       "type": "string",
       "default": "forward",
-      "description": "Which readings of a tag -species looks up: 'forward' = as written; 'both' = also reversed (a tag read from b ions is written reversed), using the one informative reading, or the taxa both share; a tag whose two readings share none is skipped. Independent of -orientation, which applies to -fasta and -recon_fasta only. Under 'both' the analytic log_pvalue and qvalue columns are NA (no analytic background follows); only decoy_qvalue and call from -species_call decoy are calibrated",
+      "description": "Which readings of a tag -species looks up: 'forward' = as written; 'both' = also reversed (a tag read from b ions is written reversed), using the one informative reading, or the taxa both share; a tag whose two readings share none is skipped. Independent of -orientation, which applies to -fasta and -recon_fasta only. Under 'both' the analytic log_pvalue and qvalue columns are NA (no analytic background follows). The optional decoy_qvalue and call from -species_call decoy are experimental and not calibrated",
       "required": false,
       "toppAdvanced": true,
       "choices": [
@@ -1662,7 +1662,7 @@
     {
       "name": "version",
       "type": "string",
-      "default": "1.13.1",
+      "default": "1.13.2",
       "description": "Version of the tool that generated this parameters file.",
       "required": false,
       "toppAdvanced": true

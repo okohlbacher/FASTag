@@ -8,6 +8,7 @@ import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 import HelpView from './HelpView'
 import { resetHelp, showHelpPage } from './link'
+import { LANDING_TASK, taskById } from '../setup/tasks'
 
 const repo = join(__dirname, '..', '..', '..')
 const doc = (f: string): string => readFileSync(join(repo, f), 'utf8').replace(/\s+/g, ' ')
@@ -25,12 +26,37 @@ function pageText(page: string): string {
 afterEach(() => resetHelp())
 
 describe('help vs docs', () => {
+  it('describes the actual first-run task and existing results views', () => {
+    expect(LANDING_TASK).toBe('export-tags')
+    expect(taskById(LANDING_TASK)!.values).toEqual({ res_conf: true })
+    const start = pageText('start')
+    expect(start).toContain('Export tags, the default task')
+    expect(start).toContain('tags from all input spectra and includes per-residue confidence')
+    expect(start).toContain('Results opens on Tags')
+    expect(start).toContain('Open results / inspect spectra')
+    // QC remains available as an explicit optional workflow.
+    expect(taskById('characterize')!.values).toMatchObject({ species: true, extension: '2', subsample_fraction: '0.1', digest_out: 'digest.tsv', label_out: 'label.tsv', glyco: true })
+    expect(start).toContain('For a separate QC survey, choose Characterize a run')
+    expect(start).toContain('These tasks sample 10% of the spectra')
+    expect(start).toContain('opening on Overview')
+    expect(start).not.toContain('Every other setting starts at')
+    const files = pageText('files')
+    expect(files).toContain('Glyco tab lists these spectra')
+    expect(files).not.toContain('report has no tab')
+  })
+
   const readme = doc('README.md')
   const digest = doc('doc/DESIGN-digest.md')
   const species = doc('doc/SPECIES-DETECTOR.md')
+  const tagger = doc('src/FASTagger.cpp')
 
   // [doc text, sentence in the doc, page, sentence in Help]
   const claims: [string, string, string, string][] = [
+    [tagger, 'use_compl ? 3 : 2', 'results', 'This component is omitted when the spectrum has no complementary pairs'],
+    [tagger, 'pair shares one score', 'results', 'That step counts once in Mean conf., even though its score appears twice in the residue list'],
+    [readme, '`auto` reads the activation of mzML input only', 'tags', 'Automatic selection uses activation metadata from mzML only'],
+    [readme, 'or no call on a Da tolerance or below 175 C-terminal tag ends', 'digest', 'The label call needs at least 175 counted C-terminal ends by default and a ppm tolerance'],
+    [readme, '`decoy_qvalue` are not calibrated', 'species', 'neither its calls nor its decoy q-values are calibrated error guarantees'],
     [readme, 'The E-value ranks tags; it is not a calibrated expected count.', 'results', 'The E-value ranks tags; it is not an error rate, and its value does not tell how many such tags arise by chance'],
     [readme, 'so it can exceed `-max_evalue`; divide by the penalty for the raw E-value', 'results', 'divide it by the gap penalty (100 by default) to compare it with the cutoff'],
     [readme, '`-out run.tags.tsv` gives `run.tags.species.tsv` and `run.tags.glyco.tsv`', 'files', '<name>.tags.species.tsv'],

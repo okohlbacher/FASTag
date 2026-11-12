@@ -9,6 +9,7 @@ import { baseName, fmt, pct } from '../digestReport'
 import DataTable, { type Column } from './DataTable'
 import type { GlycoTable as Glyco } from './tables'
 import { useTable } from './useTable'
+import { HelpLink } from '../help/HelpLink'
 import './viewers.css'
 
 export interface GlycoTableProps {
@@ -66,6 +67,7 @@ function GlycoBody({ t, minFraction }: { t: Glyco; minFraction: number | null })
     <div className="glyco-view">
       <div className="card-head">
         <h2>Glyco: oxonium ions per spectrum</h2>
+        <HelpLink to="files-glyco">How to read glyco flags</HelpLink>
         <code className="src" title={t.path}>
           {baseName(t.path)}
         </code>

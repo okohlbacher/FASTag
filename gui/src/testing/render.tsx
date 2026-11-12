@@ -45,11 +45,8 @@ const runBarView = (): ShellView =>
 /// Render the whole app against the installed bridge and wait until its
 /// probe has answered. @p _mock names the bridge the test installed.
 ///
-/// The session starts from FASTag's own defaults, as every App-level test
-/// before P2a PR u assumed: the app itself lands on the built-in task
-/// "Characterize a run" (D1), which renderColdApp renders. Starting the
-/// older tests there would change what each of them sends, not what it
-/// checks.
+/// The session starts from FASTag's own defaults. Use renderColdApp to
+/// exercise the actual startup task, which adds per-residue confidence.
 export async function renderApp(_mock?: MockBridge): Promise<HTMLElement> {
   const { container } = render(<App start={DEFAULTS} />)
   await screen.findByText('FASTag ready')
@@ -57,11 +54,18 @@ export async function renderApp(_mock?: MockBridge): Promise<HTMLElement> {
   return container
 }
 
-/// The app as it starts (D1: the task "Characterize a run").
+/// The app as it starts, without overriding its task.
 export async function renderColdApp(_mock?: MockBridge): Promise<HTMLElement> {
   const { container } = render(<App />)
   await screen.findByText('FASTag ready')
   await flush()
+  return container
+}
+
+/// Select the optional survey workflow explicitly, as a user does.
+export async function renderCharacterizeApp(mock?: MockBridge): Promise<HTMLElement> {
+  const container = await renderColdApp(mock)
+  await click(screen.getByRole('radio', { name: /^Characterize a run/ }))
   return container
 }
 

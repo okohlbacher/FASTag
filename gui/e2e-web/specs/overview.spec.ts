@@ -41,21 +41,28 @@ const value = (page: Page, name: string) => tile(page, name).locator('.tile-valu
 
 async function characterize(page: Page, fixture: string): Promise<void> {
   await openApp(page, fixture)
-  await expect(page.getByRole('radio', { name: /^Characterize a run/ })).toBeChecked()
+  await page.getByRole('radio', { name: /^Characterize a run/ }).check()
   await page.getByRole('button', { name: 'Choose file…' }).click()
   await page.getByRole('button', { name: 'Run on run01.mzML' }).click()
 }
 
-test('Characterize a run reaches the Overview in at most 3 actions: add file, Run, open toast', async ({ page }) => {
-  await characterize(page, 'gate') // actions 1 and 2
+test('choosing Characterize, adding a file and running reaches Overview through its finished toast', async ({ page }) => {
+  await characterize(page, 'gate')
   // The run moves to Results; its running state shows while it goes.
   await expect(page.getByRole('region', { name: 'Running' })).toBeVisible()
-  // Looking at the form while it runs, the toast is the way back (action 3).
+  // Looking at the form while it runs, the toast is the way back.
   await goTo(page, 'Setup')
   const toast = page.getByRole('status', { name: 'Run finished' })
   await toast.getByRole('button', { name: 'Open results' }).click()
   await expect(page.getByRole('tab', { name: 'Overview' })).toHaveAttribute('aria-selected', 'true')
   await expect(page.getByRole('heading', { name: 'Overview of run01.mzML' })).toBeVisible()
+  await expect(page.getByRole('tab', { name: /^Digest/ })).toBeVisible()
+  const calls = await mockState<{ params: Record<string, unknown> }[]>(page, 'runCalls')
+  expect(calls).toHaveLength(1)
+  const p = calls[0].params
+  expect([p.species, p.extension, p.glyco, p.subsample_fraction]).toEqual([true, '2', true, '0.1'])
+  expect(String(p.digest_out)).toMatch(/run01\.digest\.tsv$/)
+  expect(String(p.label_out)).toMatch(/run01\.label\.tsv$/)
 })
 
 test('Overview figures and calls equal the oracles of the 1.12 gate output', async ({ page }) => {

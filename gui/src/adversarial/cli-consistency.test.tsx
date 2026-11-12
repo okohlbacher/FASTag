@@ -76,8 +76,8 @@ async function guiRun(opts: {
   ui?: () => Promise<void>
   name: string
   /// Where the session starts. FASTag's defaults unless a test asks for the
-  /// landing task: the app lands on "Characterize a run" (D1, P2a PR u),
-  /// which switches species on, and each test here states its options as a
+  /// landing task: the app lands on "Export tags", which adds per-residue
+  /// confidence, and each test here states its options as a
   /// diff over the CLI's defaults (as renderApp in testing/render.tsx does).
   start?: Origin
 }): Promise<Outcome> {
@@ -145,8 +145,21 @@ describe.skipIf(!ready)('GUI-built argv against the FASTag CLI (FASTAG_BIN)', ()
     expect(o.argv).not.toContain('-species')
   }, 30000)
 
-  it('the run the app lands on ("Characterize a run", D1) is accepted and writes its reports', async () => {
+  it('the landing Export tags task processes all spectra with confidence and no survey reports', async () => {
     const o = await guiRun({ name: 'landing', start: LANDING })
+    expect(o.rc).toBe(0)
+    expect(o.banner).toBeNull()
+    expect(o.argv).toContain('-res_conf')
+    expect(argOf(o.argv, 'subsample_spectra')).toBe('0')
+    expect(argOf(o.argv, 'subsample_fraction')).toBe('0.0')
+    for (const name of ['species', 'glyco', 'digest_out', 'label_out', 'species_out', 'glyco_out']) {
+      expect(o.argv).not.toContain(`-${name}`)
+    }
+    expect(readFileSync(`${S}/landing.tags.tsv`, 'utf8').split('\n')[0].split('\t')).toContain('res_conf')
+  }, 30000)
+
+  it('the optional Characterize task is accepted and writes its survey reports', async () => {
+    const o = await guiRun({ name: 'characterize', start: { kind: 'builtin', id: 'characterize' } })
     expect(o.rc).toBe(0)
     expect(o.banner).toBeNull()
     expect(o.argv).toContain('-species')
@@ -210,9 +223,9 @@ describe.skipIf(!ready)('GUI-built argv against the FASTag CLI (FASTAG_BIN)', ()
     expect(o.rc).toBe(6)
     const refusal = o.lines.find((l) => /cannot reach the index k = 7/.test(l.line))
     expect(refusal?.src).toBe('err')
-    // stdout is block-buffered into the pipe and flushed at exit, after the refusal
-    // (80 of 80 runs with the two-thread reader).
-    expect(o.lines[o.lines.length - 1].line).toMatch(/^FASTag took/)
+    // Separate stdout/stderr readers can deliver either line last.
+    // lifecycle.test.tsx also checks a deterministic trailing timing line.
+    expect(o.lines.some((l) => l.src === 'out' && /^FASTag took/.test(l.line))).toBe(true)
     expect(o.banner).toMatch(/^ecoli\.mzML failed \(exit code 6\)FASTag's reason:-species: .*cannot reach the index k = 7/)
     expect(o.banner).not.toMatch(/FASTag took/)
   }, 30000)
