@@ -1053,7 +1053,7 @@ export const PARAM_UI: Record<string, ParamUi> = {
   search_engine: {
     hidden: OPT_IN_1_12,
     help: {
-      text: 'The search engine the settings are written for: Sage, Comet or MSFragger (experimental; its held-out test failed: the shortlist search kept 49 to 73% of the spectra a full MSFragger search identifies, criterion 80%; needs decoys in the database).'
+      text: 'The search engine the settings are written for: Sage, Comet or MSFragger (experimental; needs decoys in the database). With MSFragger the shortlist uses the configuration that passed its second held-out test (gapped placements, E-value 10, minimum tag length 6, 2 missed cleavages; each unless set); the first held-out test, with the 1.13 shortlist, failed.'
     }
   },
   search_isotope_errors: {
@@ -1062,10 +1062,22 @@ export const PARAM_UI: Record<string, ParamUi> = {
       text: 'How many precursor isotope errors the search engine should consider; -1 leaves it to the engine: none for Sage and Comet, up to 3 for MSFragger.'
     }
   },
+  search_missed_cleavages: {
+    hidden: OPT_IN_1_12,
+    help: {
+      text: 'How many missed cleavages the search engine should allow; -1 leaves it to the engine: the tag placement setting for Sage and Comet, 2 for MSFragger with trypsin.'
+    }
+  },
+  search_nterm_acetyl: {
+    hidden: OPT_IN_1_12,
+    help: {
+      text: 'Whether protein N-terminal acetylation is written into the search settings as a variable modification; "engine" means yes for MSFragger and no for Sage and Comet.'
+    }
+  },
   search_precursor_tolerance: {
     hidden: OPT_IN_1_12,
     help: {
-      text: 'The precursor tolerance written into the search settings.'
+      text: 'The precursor tolerance written into the search settings; -1 leaves it to the engine: 10, or 20 ppm for MSFragger.'
     }
   },
   search_precursor_unit: {
