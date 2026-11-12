@@ -14,6 +14,7 @@
 
 #include <algorithm>
 #include <cerrno>
+#include <cmath>
 #include <charconv>
 #include <cstring>
 #include <fstream>
@@ -531,6 +532,8 @@ namespace FASTag
     bool direct_on = !MzMLDirectDecoder::disabledByEnvironment();
     std::size_t n_direct = 0;   ///< MS2 peaks decoded directly
     std::size_t n_openms = 0;   ///< MS2 peaks decoded by OpenMS
+    std::size_t n_bad_mz = 0;   ///< getSpectrum() reads with a selected-ion m/z <= 0 or not finite
+    std::size_t n_bad_mz_target = 0;  ///< ... of them given the isolation target instead
     bool ok = false;
     bool rebuilt = false; ///< offsets came from a scan, not the file's index
     /// The file's referenceableParamGroups, read once at open and shared by
@@ -813,6 +816,42 @@ namespace FASTag
   std::size_t IndexedMzMLReader::directDecoded() const { return impl_->n_direct; }
 
   std::size_t IndexedMzMLReader::openmsDecoded() const { return impl_->n_openms; }
+
+  std::size_t IndexedMzMLReader::invalidSelectedMz() const { return impl_->n_bad_mz; }
+
+  std::size_t IndexedMzMLReader::invalidSelectedMzFromTarget() const { return impl_->n_bad_mz_target; }
+
+  bool needsSelectedIonTarget(const MSSpectrum& spec)
+  {
+    for (const Precursor& p : spec.getPrecursors())
+    {
+      const double mz = p.getMZ();
+      if (!(mz > 0 && std::isfinite(mz)) && p.metaValueExists("isolation window target m/z"))
+      {
+        const double t = p.getMetaValue("isolation window target m/z");
+        if (t > 0 && std::isfinite(t)) return true;
+      }
+    }
+    return false;
+  }
+
+  bool useSelectedIonTarget(MSSpectrum& spec)
+  {
+    bool changed = false;
+    for (Precursor& p : spec.getPrecursors())
+    {
+      const double mz = p.getMZ();
+      if ((mz > 0 && std::isfinite(mz)) || !p.metaValueExists("isolation window target m/z")) continue;
+      const double t = p.getMetaValue("isolation window target m/z");
+      if (!(t > 0 && std::isfinite(t))) continue;
+      // As OpenMS leaves a precursor without MS:1000744: the target as its
+      // m/z and no target meta value.
+      p.setMZ(t);
+      p.removeMetaValue("isolation window target m/z");
+      changed = true;
+    }
+    return changed;
+  }
 
   Size IndexedMzMLReader::getNrSpectra() const
   {
@@ -1173,6 +1212,9 @@ namespace FASTag
     // Precursors: one OpenMS Precursor per SELECTED ION, matching the mzPeak
     // reader, so a window with several ions keeps all of them.
     if (plb == std::string_view::npos) return spec;
+    // A selected-ion m/z read as absent (see below), counted once per
+    // spectrum and only on the tagging loop's reads, getSpectrum().
+    bool bad_mz = false, bad_mz_target = false;
     const std::size_t ple = find_or(xml, "</precursorList>", plb, n);
 
     // Element matching is by NAME, not by "<name " with a space: a writer may
@@ -1264,7 +1306,19 @@ namespace FASTag
         double mz = 0;
         int charge = 0;
         double intensity = 0;
-        if (to_number(cv_value(xml, kSelectedMz, s, s_end), mz))
+        const bool has_mz = to_number(cv_value(xml, kSelectedMz, s, s_end), mz);
+        // A selected-ion m/z of 0, below 0 or not finite is no m/z:
+        // it is read as a missing MS:1000744, so the isolation target stands
+        // in for it. A converter writes 0 for a precursor without a
+        // monoisotopic m/z (mzpeak-convert 0.18 from a Bruker .d). OpenMS's
+        // MzMLFile keeps the 0, and the spectrum would yield no tags.
+        const bool valid_mz = has_mz && mz > 0 && std::isfinite(mz);
+        if (has_mz && !valid_mz)
+        {
+          bad_mz = true;
+          bad_mz_target = bad_mz_target || target > 0;
+        }
+        if (valid_mz)
         {
           prec.setMZ(mz);
           // The isolation target kept as OpenMS keeps it (step 0): as the
@@ -1318,6 +1372,11 @@ namespace FASTag
         spec.getPrecursors().push_back(std::move(prec));
       }
       p = p_end > p ? p_end : p + 10;
+    }
+    if (bad_mz && want_peaks && !any_level)
+    {
+      ++impl_->n_bad_mz;
+      impl_->n_bad_mz_target += bad_mz_target;
     }
     return spec;
   }

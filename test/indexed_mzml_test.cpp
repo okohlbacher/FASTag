@@ -1337,6 +1337,86 @@ int main(int argc, char** argv)
   // (diaTracer and ddaPASEF layouts), by hand the public gate inputs.
   for (int a = 2; a < argc; ++a) direct_vs_openms(argv[a], std::string("direct: ") + argv[a], true);
 
+  // A selected-ion m/z of 0 (mzpeak-convert 0.18 from a Bruker .d writes it
+  // for a precursor without a monoisotopic m/z), below 0 or not a number is
+  // read as absent: the isolation target stands in, as for a missing
+  // MS:1000744. OpenMS's MzMLFile keeps the 0; useSelectedIonTarget() gives
+  // a spectrum it read the reader's precursor.
+  {
+    const auto with_precursor = [](const std::string& id, const std::string& target, const std::string& mz) {
+      std::string prec = "<precursorList count=\"1\">\n<precursor>\n";
+      if (!target.empty())
+        prec += "<isolationWindow>\n<cvParam cvRef=\"MS\" accession=\"MS:1000827\" name=\"isolation window target "
+                "m/z\" value=\"" + target + "\"/>\n<cvParam cvRef=\"MS\" accession=\"MS:1000828\" name=\"isolation "
+                "window lower offset\" value=\"1.0\"/>\n<cvParam cvRef=\"MS\" accession=\"MS:1000829\" "
+                "name=\"isolation window upper offset\" value=\"1.0\"/>\n</isolationWindow>\n";
+      prec += "<selectedIonList count=\"1\">\n<selectedIon>\n<cvParam cvRef=\"MS\" accession=\"MS:1000744\" "
+              "name=\"selected ion m/z\" value=\"" + mz + "\"/>\n</selectedIon>\n</selectedIonList>\n"
+              "</precursor>\n</precursorList>\n";
+      return edit(synthetic_spectrum(id, false), "<binaryDataArrayList", prec + "<binaryDataArrayList");
+    };
+    struct Case { const char* target; const char* mz; double want; const char* what; };
+    const std::vector<Case> cases = {
+        {"431.2034017772498", "0", 431.2034017772498, "m/z 0 with a target: the target"},
+        {"", "0", 0.0, "m/z 0 without a target: no m/z"},
+        {"551.25", "-5.0", 551.25, "m/z below 0 with a target: the target"},
+        {"489.5", "nan", 489.5, "m/z nan with a target: the target"},
+        {"600.0", "600.5", 600.5, "a valid m/z is kept (control)"},
+    };
+    std::vector<std::string> spectra;
+    for (std::size_t k = 0; k < cases.size(); ++k)
+      spectra.push_back(with_precursor("s=" + std::to_string(k), cases[k].target, cases[k].mz));
+    const std::string path = tmp + "/fastag_selected_mz0.mzML";
+    write_synthetic(path, spectra);
+    // MzMLFile requires the run's and the list's default references.
+    spit(path, edit(edit(slurp(path), "<run id=\"r\">", "<run id=\"r\" defaultInstrumentConfigurationRef=\"ic\">"),
+                    "<spectrumList ", "<spectrumList defaultDataProcessingRef=\"dp\" "));
+
+    FASTag::IndexedMzMLReader r(path);
+    check(r.ok() && r.getNrSpectra() == cases.size(), "mz0: the file reads");
+    PeakMap ref;
+    try { MzMLFile().load(path, ref); }
+    catch (const Exception::BaseException& e) { check(false, std::string("mz0: OpenMS loads the file: ") + e.what()); }
+    check(ref.size() == cases.size(), "mz0: OpenMS reads every spectrum (" + std::to_string(ref.size()) + ")");
+    for (std::size_t k = 0; r.ok() && k < cases.size() && k < ref.size(); ++k)
+    {
+      const Case& c = cases[k];
+      for (const unsigned fields : {unsigned(FASTag::IndexedMzMLReader::kAllFields),
+                                    unsigned(FASTag::IndexedMzMLReader::kTaggingFields)})
+      {
+        const MSSpectrum got = r.getSpectrum(k, fields);
+        check(got.getPrecursors().size() == 1, std::string("mz0: one precursor: ") + c.what);
+        if (got.getPrecursors().size() != 1) continue;
+        const Precursor& p = got.getPrecursors()[0];
+        check(p.getMZ() == c.want, std::string("mz0: reader precursor m/z: ") + c.what);
+        // Read as a missing MS:1000744: no target meta value then; with a
+        // valid m/z away from the target, the meta value as before.
+        const bool want_meta = (fields & FASTag::IndexedMzMLReader::kStep0TargetMeta) && k == 4;
+        check(p.metaValueExists("isolation window target m/z") == want_meta,
+              std::string("mz0: reader target meta value: ") + c.what);
+      }
+      // OpenMS keeps what the file says; the helper turns it into the reader's.
+      MSSpectrum o = ref[k];
+      check(o.getPrecursors().size() == 1, std::string("mz0: OpenMS has one precursor: ") + c.what);
+      if (o.getPrecursors().size() != 1) continue;
+      const bool replaced = k == 0 || k == 2 || k == 3;
+      if (k == 0 || k == 1) check(o.getPrecursors()[0].getMZ() == 0.0, std::string("mz0: OpenMS keeps the 0: ") + c.what);
+      check(FASTag::needsSelectedIonTarget(o) == replaced, std::string("mz0: needsSelectedIonTarget: ") + c.what);
+      check(FASTag::useSelectedIonTarget(o) == replaced, std::string("mz0: useSelectedIonTarget: ") + c.what);
+      check(o.getPrecursors()[0].getMZ() == c.want, std::string("mz0: OpenMS + helper m/z: ") + c.what);
+      check(o.getPrecursors()[0].metaValueExists("isolation window target m/z") == (k == 4),
+            std::string("mz0: OpenMS + helper target meta value: ") + c.what);
+    }
+    // Four invalid m/z, three of them with a target, each spectrum read twice
+    // by getSpectrum(). Metadata and any-level reads are not counted.
+    check(r.invalidSelectedMz() == 8 && r.invalidSelectedMzFromTarget() == 6,
+          "mz0: counted " + std::to_string(r.invalidSelectedMz()) + "/" +
+              std::to_string(r.invalidSelectedMzFromTarget()) + ", want 8/6");
+    (void)r.getSpectrumMetadata(0);
+    (void)r.getSpectrumAnyLevel(0);
+    check(r.invalidSelectedMz() == 8, "mz0: metadata and any-level reads are not counted");
+  }
+
   // An XML file with no spectrumList holds nothing to scan for.
   {
     spit(tmp + "/fastag_no_list.mzML", "<?xml version=\"1.0\"?>\n<mzML><run id=\"r\"></run></mzML>\n");
