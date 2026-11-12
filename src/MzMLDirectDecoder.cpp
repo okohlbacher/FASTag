@@ -437,7 +437,7 @@ namespace FASTag
   {
     Buffer b64;
     Buffer packed;   ///< the MS-Numpress bytes of one array
-    Buffer bytes[1]; ///< the values of one array at a time: further arrays, m/z, then intensity
+    Buffer bytes[2]; ///< m/z and intensity values
     z_stream zs{};
     bool z_ready = false;
 
@@ -825,19 +825,21 @@ namespace FASTag
       }
     }
 
-    // m/z into the peaks first, then the intensities through the same
-    // buffer: one array's values per thread instead of two. A failure after
-    // the m/z went in takes the peaks back off, so `spec` is as it was.
     std::size_t mw = 0, iw = 0;
-    if (!impl_->values_of(mz, impl_->bytes[0], n, mw)) return false;
+    if (!impl_->values_of(mz, impl_->bytes[0], n, mw) || !impl_->values_of(in, impl_->bytes[1], n, iw)) return false;
+    const Buffer& mb = impl_->bytes[0];
+    const Buffer& ib = impl_->bytes[1];
 
     // The peaks, converted as OpenMS's fillDataArray does: m/z to double,
-    // intensity to float.
-    const std::size_t old = spec.size();
-    spec.reserve(old + n);
+    // intensity to float. The allocations come first: a bad_alloc in either
+    // leaves the peaks of `spec` as they were.
+    spec.reserve(spec.size() + n);
     spec.getFloatDataArrays().reserve(spec.getFloatDataArrays().size() + others.size());
-    spec.resize(old + n);
-    const unsigned char* const mp = impl_->bytes[0].data.get();
+    spec.setNativeID(std::string(id));
+    for (auto& fda : others) spec.getFloatDataArrays().push_back(std::move(fda));
+    Peak1D peak;
+    const unsigned char* mp = mb.data.get();
+    const unsigned char* ip = ib.data.get();
     for (std::size_t k = 0; k < n; ++k)
     {
       double m;
@@ -848,41 +850,21 @@ namespace FASTag
         std::memcpy(&f, mp + k * 4, 4);
         m = f;
       }
-      spec[old + k].setMZ(m);
-    }
-    bool have_int = false;
-    try
-    {
-      have_int = impl_->values_of(in, impl_->bytes[0], n, iw);
-    }
-    catch (...)
-    {
-      spec.resize(old);
-      throw;
-    }
-    if (!have_int)
-    {
-      spec.resize(old);
-      return false;
-    }
-    const unsigned char* const ip = impl_->bytes[0].data.get();
-    for (std::size_t k = 0; k < n; ++k)
-    {
       if (iw == 8)
       {
         double d;
         std::memcpy(&d, ip + k * 8, 8);
-        spec[old + k].setIntensity(static_cast<Peak1D::IntensityType>(d));
+        peak.setIntensity(static_cast<Peak1D::IntensityType>(d));
       }
       else
       {
         float f;
         std::memcpy(&f, ip + k * 4, 4);
-        spec[old + k].setIntensity(f);
+        peak.setIntensity(f);
       }
+      peak.setMZ(m);
+      spec.push_back(peak);
     }
-    spec.setNativeID(std::string(id));
-    for (auto& fda : others) spec.getFloatDataArrays().push_back(std::move(fda));
     return true;
   }
 }
