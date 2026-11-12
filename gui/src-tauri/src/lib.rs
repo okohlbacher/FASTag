@@ -20,6 +20,8 @@ mod settings;
 mod species;
 mod spectrum;
 mod sweep;
+#[cfg_attr(not(windows), allow(dead_code))]
+mod webview_args;
 
 use std::time::Duration;
 
@@ -77,6 +79,25 @@ pub fn run() {
             if let Some(d) = history::dir(app.handle()) {
                 sweep::recover(&d);
             }
+            // The main window, from its tauri.conf.json entry ("create":
+            // false there): on Windows with the WebView2 arguments of
+            // WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS merged in, which WebView2
+            // would otherwise drop (webview_args.rs; WebDriver needs them).
+            let cfg = app
+                .config()
+                .app
+                .windows
+                .iter()
+                .find(|w| w.label == "main")
+                .cloned()
+                .ok_or("tauri.conf.json has no main window")?;
+            #[allow(unused_mut)]
+            let mut window = tauri::WebviewWindowBuilder::from_config(app.handle(), &cfg)?;
+            #[cfg(windows)]
+            if let Some(args) = webview_args::merged(std::env::var(webview_args::ENV).ok().as_deref()) {
+                window = window.additional_browser_args(&args);
+            }
+            window.build()?;
             if let Some(out) = std::env::var_os(fastag::SELFTEST_OUT) {
                 let handle = app.handle().clone();
                 std::thread::spawn(move || {
