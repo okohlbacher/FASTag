@@ -14,7 +14,7 @@
 //   E2E_OUT       results: windows-e2e.json and screens\*.png
 import { test, after } from 'node:test'
 import assert from 'node:assert/strict'
-import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs'
+import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { basename, dirname, join } from 'node:path'
 import { spawnSync } from 'node:child_process'
@@ -197,22 +197,40 @@ test('characterize: species, digest, label reports and the Overview', { timeout:
     const input = copyIn(process.env.E2E_MZML, 'char.mzML')
     await chooseInput(s, input)
     await shot(s, '04-characterize-setup')
+    // A fresh install has the taxonomy dumps but not the k-mer index (a
+    // separate release asset): the species survey stops with exit 6 and the
+    // failure banner must quote FASTag's reason. Then the index goes where
+    // that reason says, as a user would put it, and the run is repeated.
+    const taxDir = join(dirname(APP), 'resources', 'fastag', 'share', 'FASTag', 'taxonomy')
+    const taxdb = process.env.E2E_TAXDB
+    if (taxdb && !existsSync(join(taxDir, basename(taxdb)))) {
+      await s.click(await s.button('Run on char.mzML', 120000))
+      const banner = await until('the failure banner', () => s.exec("const b = document.querySelector('.failure[role=alert]'); return b ? b.innerText : ''"), 300000, 300)
+      await shot(s, '05-characterize-no-taxdb')
+      record.steps.characterizeNoTaxdb = banner.slice(0, 1500)
+      assert.match(banner, /FASTag.s reason/, banner)
+      assert.match(banner, /no taxdb/, banner)
+      copyFileSync(taxdb, join(taxDir, basename(taxdb)))
+      await view(s, 'setup')
+    }
     await s.click(await s.button('Run on char.mzML', 120000))
     await until('the Overview', () => s.exec(`const t = [...document.querySelectorAll('[role=tab]')].find((t) => t.textContent.trim() === 'Overview');
       return !!t && t.getAttribute('aria-selected') === 'true' && !!document.querySelector('.view[data-view="results"]:not([hidden])')`), 600000, 500)
       .catch(async (e) => {
-        await shot(s, '05-overview-missing').catch(() => {})
+        await shot(s, '06-overview-missing').catch(() => {})
         const body = await s.bodyText().catch(() => '')
         record.steps.characterize = { missing: body.replace(/\s+/g, ' ').slice(0, 3000) }
         throw new Error(`${e.message}; the app shows: ${body.replace(/\s+/g, ' ').slice(0, 1500)}`)
       })
     const overview = await s.exec("const p = document.querySelector('[role=tabpanel]:not([hidden])'); return p ? p.innerText : ''")
-    await shot(s, '05-overview')
+    await shot(s, '06-overview')
     const tabs = await s.exec("return [...document.querySelectorAll('[role=tab]')].map((t) => t.textContent.trim())")
     record.steps.characterize = { tabs, overview: overview.slice(0, 1500) }
     assert.match(overview, /Overview of/)
     const dir = dirname(input)
-    for (const f of ['digest.tsv', 'label.tsv']) assert.ok(existsSync(join(dir, f)), `${f} was not written next to the input (${dir})`)
+    const written = readdirSync(dir)
+    record.steps.characterize.files = written
+    for (const kind of ['digest', 'label']) assert.ok(written.some((f) => f.includes(kind) && f.endsWith('.tsv')), `no ${kind} report next to the input: ${written.join(', ')}`)
     // Each report tab renders.
     for (const want of tabs.filter((t) => t !== 'Overview')) {
       await s.exec(`const t = [...document.querySelectorAll('[role=tab]')].find((t) => t.textContent.trim() === arguments[0]); t && t.click()`, want)
@@ -222,11 +240,11 @@ test('characterize: species, digest, label reports and the Overview', { timeout:
         return t.length > 20 && t
       }, 30000, 200)
       record.steps.characterize[`tab:${want}`] = text.slice(0, 300)
-      await shot(s, `06-report-${want.replace(/[^A-Za-z0-9]+/g, '_')}`)
+      await shot(s, `07-report-${want.replace(/[^A-Za-z0-9]+/g, '_')}`)
     }
   }))
 
-test('refusal: a run FASTag rejects shows its reason', { timeout: 300000 }, () =>
+test('refusal: a file FASTag refuses is blocked before the run, with its reason', { timeout: 300000 }, () =>
   withApp(async (s) => {
     await task(s, 'Export tags')
     // DIA spectra: FASTag refuses them (exit 11) and says why.
@@ -236,25 +254,20 @@ test('refusal: a run FASTag rejects shows its reason', { timeout: 300000 }, () =
     const cliText = (r.stdout || '') + (r.stderr || '')
     assert.notEqual(r.status, 0, 'the CLI accepted the DIA input')
     await chooseInput(s, input)
-    // The pre-run input check flags raw DIA first (a red flag holding Run);
-    // "Run anyway" lets the run start, still with -acquisition_check refuse,
-    // so FASTag itself refuses it and the failure banner must say why.
-    const flag = await until('the raw-DIA red flag', () => s.exec(`const f = document.querySelector('li.check-flag[data-unanswered]');
+    // The GUI asks FASTag's probe before a run: a file it would refuse is a
+    // "Blocks the run" check quoting FASTag's classification, Run stays
+    // disabled, and the DIAspeXtract command is offered.
+    const block = await until('the raw-DIA check', () => s.exec(`const f = document.querySelector('li.check-block[data-check="raw-dia"]');
       return f ? f.innerText : ''`), 120000, 300)
-    await shot(s, '07-refusal-flag')
-    await s.exec(`const f = document.querySelector('li.check-flag[data-unanswered]');
-      const b = f && [...f.querySelectorAll('button')].find((b) => b.textContent.trim() === 'Run anyway'); b && b.click(); return !!b`)
-    await s.click(await s.button('Run on dia_like.mzML', 60000))
-    const where = 'failure banner'
-    const shown = await until('the failure banner', () => s.exec("const b = document.querySelector('.failure[role=alert]'); return b ? b.innerText : ''"), 180000, 300)
-    await shot(s, '08-refusal-banner')
-    // The CLI's reason: its last line naming DIA (FASTag's refusal message).
-    const reason = cliText.split(/\r?\n/).map((l) => l.trim()).filter((l) => /DIA/.test(l)).pop() || ''
-    record.steps.refusal = { where, cliExit: r.status, reason, flag: flag.slice(0, 800), shown: shown.slice(0, 1500) }
-    assert.match(flag, /DIA/, `the pre-run red flag does not name DIA: ${flag}`)
-    assert.ok(reason, `no DIA reason in the CLI's output: ${cliText.slice(-800)}`)
-    // Its words after the path ("is raw DIA: the precursor m/z ...").
-    const core = reason.includes(' is raw DIA') ? reason.slice(reason.indexOf(' is raw DIA')) : reason.replace(/^[^:]*error[^:]*:\s*/i, '')
-    const words = core.split(/\s+/).filter((w) => w.length > 4).slice(0, 6)
-    for (const w of words) assert.ok(shown.includes(w), `the ${where} does not quote FASTag's reason "${reason}"; it shows: ${shown.slice(0, 800)}`)
+    await shot(s, '08-refusal')
+    const runEnabled = !!(await s.buttonNow('Run on dia_like.mzML'))
+    const reason = cliText.split(/\r?\n/).map((l) => l.trim()).filter((l) => / is raw DIA/.test(l)).pop() || ''
+    record.steps.refusal = { cliExit: r.status, reason, block: block.slice(0, 1500), runEnabled }
+    assert.equal(r.status, 11, `the CLI exited ${r.status}, not 11 (refused): ${cliText.slice(-800)}`)
+    assert.ok(reason, `no refusal message in the CLI's output: ${cliText.slice(-800)}`)
+    assert.equal(runEnabled, false, 'Run is enabled for a file FASTag refuses')
+    // The same classification as FASTag's refusal: windows and median width.
+    const m = /cycle of (\d+) isolation windows \(median ([\d.]+) Th/.exec(reason)
+    assert.ok(m, `unexpected refusal message: ${reason}`)
+    for (const w of [`${m[1]} `, `${m[2]} Th`, 'DIAspeXtract']) assert.ok(block.includes(w), `the raw-DIA check does not show "${w}" from FASTag's refusal "${reason}"; it shows: ${block}`)
   }))

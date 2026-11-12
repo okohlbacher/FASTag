@@ -2,7 +2,11 @@
   Run windows.test.mjs against an INSTALLED Windows app (CI: windows.yml job
   installed-app, on x64 and ARM64 runners).
 
-    run-windows.ps1 -App <install dir>\fastag.exe -Out <dir>
+    run-windows.ps1 -App <install dir>\fastag.exe -Out <dir> [-TaxDb <tax_k7.taxdb>]
+
+  -TaxDb: the taxonomy k-mer index of the release asset
+  FASTag-taxonomy-k7.tar.gz; Characterize first runs without it (the
+  failure banner), then with it copied into the installed app.
 
   tauri-driver must be on PATH; msedgedriver.exe is fetched for the
   WebView2 runtime this machine has (the versions must match). The app's
@@ -10,7 +14,8 @@
 #>
 param(
   [Parameter(Mandatory = $true)][string]$App,
-  [Parameter(Mandatory = $true)][string]$Out
+  [Parameter(Mandatory = $true)][string]$Out,
+  [string]$TaxDb = ''
 )
 $ErrorActionPreference = 'Stop'
 $GUI = Split-Path $PSScriptRoot -Parent
@@ -36,6 +41,7 @@ $env:FASTAG_APP = (Resolve-Path $App).Path
 $env:E2E_OUT = $Out
 $env:E2E_MZML = Join-Path $REPO 'test\fixtures\Ecoli_MS2_small.mzML'
 $env:E2E_MGF = Join-Path $REPO 'test\fixtures\Ecoli_MS2_small.mgf'
+if ($TaxDb) { $env:E2E_TAXDB = (Resolve-Path $TaxDb).Path }
 $env:E2E_REFUSED = Join-Path $REPO 'test\fixtures\dia_like.mzML'
 $env:E2E_VERSION = ([regex]::Match((Get-Content (Join-Path $REPO 'CMakeLists.txt') -Raw), 'project\(FASTag VERSION ([0-9.]+)')).Groups[1].Value
 Write-Host "app $env:FASTAG_APP, expecting CLI $env:E2E_VERSION"

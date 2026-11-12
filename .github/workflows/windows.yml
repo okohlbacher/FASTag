@@ -1246,10 +1246,24 @@ jobs:
             $env:PATH = "$env:USERPROFILE\.cargo\bin;$env:PATH"
           }
           cargo install tauri-driver --version 2.1.0 --locked
+      # The taxonomy index (a separate release asset) for Characterize.
+      - name: Taxonomy index
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAXDB_TAG: ${{ env.TAXDB_TAG }}
+          TAXDB_SHA256: ${{ env.TAXDB_SHA256 }}
+        run: |
+          set -euo pipefail
+          gh release download "$TAXDB_TAG" -p 'FASTag-taxonomy-k7.tar.gz' -D "$RUNNER_TEMP/taxdb" --repo "${{ github.repository }}"
+          got=$(sha256sum "$RUNNER_TEMP/taxdb/FASTag-taxonomy-k7.tar.gz" | cut -d' ' -f1)
+          [ "$got" = "$TAXDB_SHA256" ] || { echo "::error::taxonomy sha256 mismatch: $got"; exit 1; }
+          tar -xzf "$RUNNER_TEMP/taxdb/FASTag-taxonomy-k7.tar.gz" -C "$RUNNER_TEMP/taxdb" share-FASTag-taxonomy/tax_k7.taxdb
+          test -s "$RUNNER_TEMP/taxdb/share-FASTag-taxonomy/tax_k7.taxdb"
       - name: GUI end-to-end (installed app, real CLI)
         shell: pwsh
         run: |
-          ./gui/e2e-tauri/run-windows.ps1 -App "$env:RUNNER_TEMP\FASTag-app\fastag.exe" -Out "$env:RUNNER_TEMP\e2e"
+          ./gui/e2e-tauri/run-windows.ps1 -App "$env:RUNNER_TEMP\FASTag-app\fastag.exe" -Out "$env:RUNNER_TEMP\e2e" -TaxDb "$env:RUNNER_TEMP\taxdb\share-FASTag-taxonomy\tax_k7.taxdb"
           if ($LASTEXITCODE) { exit $LASTEXITCODE }
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         if: always()
