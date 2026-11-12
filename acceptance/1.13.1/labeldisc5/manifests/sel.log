@@ -1,0 +1,23 @@
+SILAC HYB+TRI+QE subtarget_filled 15/15 light/medium Lys6/Arg6 of 29 eligible projects
+SILAC TRI+QE subtarget_filled 0/5 Arg10 only or Arg-C of 0 eligible projects
+label-free HYB cell_filled 30/30 of 265 eligible projects
+label-free TRI cell_filled 10/10 of 453 eligible projects
+label-free QE cell_filled 10/10 of 441 eligible projects
+probe HYB cell_filled 3/4 of 5 eligible projects
+probe TRI cell_filled 4/4 of 6 eligible projects
+probe QE cell_filled 5/6 of 5 eligible projects
+SILAC HYB cell_filled 30/30 of 128 eligible projects
+SILAC TRI cell_filled 6/6 of 43 eligible projects
+SILAC QE cell_filled 8/8 of 53 eligible projects
+dimethyl HYB cell_filled 12/12 of 17 eligible projects
+dimethyl TRI cell_filled 2/4 of 7 eligible projects
+dimethyl QE cell_filled 3/4 of 5 eligible projects
+TMT HYB cell_filled 2/2 of 169 eligible projects
+TMT TRI cell_filled 4/4 of 993 eligible projects
+TMT QE cell_filled 3/3 of 274 eligible projects
+TMTpro TRI cell_filled 5/5 of 439 eligible projects
+TMTpro QE cell_filled 3/3 of 100 eligible projects
+iTRAQ4 HYB cell_filled 2/2 of 10 eligible projects
+iTRAQ8 HYB cell_filled 2/2 of 26 eligible projects
+iTRAQ8 TRI cell_filled 1/1 of 6 eligible projects
+iTRAQ8 QE cell_filled 2/2 of 15 eligible projects
