@@ -690,6 +690,33 @@ avoids OpenMP error #15), the digest tables (`share/FASTag/digest`) and the
 [../doc/SIGNING-macos-gui.md](../doc/SIGNING-macos-gui.md). In dev those
 resources are machine-specific symlinks and are gitignored.
 
+On Windows the NSIS installer (`bundle.windows.nsis`, `installMode: "both"`)
+installs for all users into `C:\Program Files\FASTag` (HKLM; preselected when
+an administrator starts it) or for the current user into
+`%LOCALAPPDATA%\Programs\FASTag` (HKCU; a 1.13.x per-user install keeps
+`%LOCALAPPDATA%\FASTag`). A standard user gets no administrator prompt. Silent:
+`/S` (all users when elevated), `/S /AllUsers`, `/S /CurrentUser`; `/D=` is not
+honoured in this mode; `uninstall.exe /S`. The pre-install hook
+(`src-tauri/windows/installer-hooks.nsh`) first removes an install in the
+other scope (same identifier `de.openms.fastag`), so an upgrade leaves one copy
+and one Apps entry. The app needs the WebView2 runtime (part of current
+Windows 10 and 11; the installer's bootstrapper downloads it otherwise) and
+runs on Windows on ARM64 emulated. It takes about 360 MB installed; the
+taxonomy k-mer index (1.14 GB, the separate `FASTag-taxonomy-k7.tar.gz`
+asset) is not in the installer, and the check before a run with `-species`
+(`inspector/checks.ts`, `no-taxdb`) says where it goes:
+`<install>\resources\fastag\share\FASTag\taxonomy\` or
+`FASTAG_TAXONOMY_DIR`. Settings stay in `%APPDATA%\de.openms.fastag`
+(Roaming, `app_config_dir`); history, run markers, `last-failure.log` and
+`leftovers-kept.json` live in `%LOCALAPPDATA%\de.openms.fastag`
+(`app_local_data_dir`, moved from Roaming once at the first start after 1.13.3;
+on macOS and Linux both are the same folder), next to the WebView2 profile.
+Uninstall removes the installed files only: app data stays unless "Delete app
+data" is ticked, an index unpacked into the install stays, and outputs are
+never touched. Job `installed-app` in `.github/workflows/windows.yml` checks
+per-user and all-users installs, the upgrade from the v1.13.3 installer, and
+that uninstall leaves nothing, on windows-latest and windows-11-arm.
+
 On Linux (from 1.12.0) the `gui-linux` job in `.github/workflows/ci.yml`
 builds the app outside conda on ubuntu-22.04 against apt's WebKitGTK 4.1,
 with the portable linux-x64 CLI staged into `src-tauri/resources/fastag`:
