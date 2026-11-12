@@ -26,8 +26,9 @@ trap 'rm -rf "$TMP"' EXIT
 fail() { echo "FAIL: $*" >&2; exit 1; }
 run() { local name=$1; shift; "$BIN" -in "$IN" -out "$TMP/$name.tsv" -threads 2 "$@" >"$TMP/$name.log" 2>&1 \
           || { cat "$TMP/$name.log" >&2; fail "run $name failed"; }; }
-# The mzML's completion time is the only run-dependent field.
-mzml_masked() { tr -d '\r' < "$1" | sed -E 's/completionTime="[^"]*"//; s/<fileChecksum>[^<]*</<fileChecksum></'; }
+# The run's time stamps (completionTime and the MS:1000747 "completion time"
+# cvParam, minute resolution) are the only run-dependent fields.
+mzml_masked() { tr -d '\r' < "$1" | sed -E 's/completionTime="[^"]*"//; s/(name="completion time" value=")[^"]*"/\1"/; s/<fileChecksum>[^<]*</<fileChecksum></'; }
 
 # The same relative output names in two directories: -out and -out_spectra
 # are themselves listed in the exported mzML.
