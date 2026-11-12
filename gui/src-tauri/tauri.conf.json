@@ -64,7 +64,8 @@
     ],
     "windows": {
       "nsis": {
-        "compression": "lzma"
+        "compression": "lzma",
+        "installMode": "both"
       }
     },
     "macOS": {
