@@ -3822,26 +3822,38 @@ protected:
       const FASTag::Tables probe_tab_ax(probe_ax);
       std::vector<std::vector<double>> per_spec(probe_specs.size());
       std::vector<char> confident(probe_specs.size(), 0);
+      // An exception must not leave the OpenMP region (std::terminate): each
+      // iteration stores its own and the first is rethrown after the loop.
+      std::vector<std::exception_ptr> probe_failed(probe_specs.size());
 #pragma omp parallel for schedule(dynamic, 8)
       for (std::ptrdiff_t k = 0; k < static_cast<std::ptrdiff_t>(probe_specs.size()); ++k)
       {
-        const MSSpectrum& s = probe_specs[static_cast<Size>(k)];
-        const Precursor& pc = s.getPrecursors().front();
-        // The series rule of the tagging pass (IonSeries::seriesInRun).
-        const bool photo = (photo_ax || ion_mode == FASTag::IonSeries::Mode::Ax) && FASTag::IonSeries::photoActivated(s);
-        const FASTag::IonSeries::Series sr =
-            FASTag::IonSeries::seriesInRun(ion_mode, FASTag::IonSeries::activationClass(s), ion_column, photo_ax && photo);
-        const bool cz = any_cz && sr == FASTag::IonSeries::Series::CZ;
-        const bool ax = any_ax && sr == FASTag::IonSeries::Series::AX;
-        const FASTag::Param& pp = cz ? probe_cz : ax ? probe_ax : probe_by;
-        const std::vector<FASTag::Tag> tg =
-            FASTag::tagSpectrum(s, pc.getMZ(), pc.getCharge(), pp, cz ? probe_tab_cz : ax ? probe_tab_ax : probe_tab_by);
-        if (tg.empty() || !(tg.front().evalue <= CT::kAutoMaxEvalue)) continue;
-        confident[static_cast<Size>(k)] = 1;
-        const MSSpectrum prep = FASTag::preparedPeaks(s, pc.getMZ(), pc.getCharge(), pp);
-        CT::collectErrors(prep, pc.getMZ(), pc.getCharge(), tg.front(), FASTag::ComplementSpec::fromParam(pp),
-                          window, per_spec[static_cast<Size>(k)]);
+        try
+        {
+          const MSSpectrum& s = probe_specs[static_cast<Size>(k)];
+          const Precursor& pc = s.getPrecursors().front();
+          // The series rule of the tagging pass (IonSeries::seriesInRun).
+          const bool photo = (photo_ax || ion_mode == FASTag::IonSeries::Mode::Ax) && FASTag::IonSeries::photoActivated(s);
+          const FASTag::IonSeries::Series sr =
+              FASTag::IonSeries::seriesInRun(ion_mode, FASTag::IonSeries::activationClass(s), ion_column, photo_ax && photo);
+          const bool cz = any_cz && sr == FASTag::IonSeries::Series::CZ;
+          const bool ax = any_ax && sr == FASTag::IonSeries::Series::AX;
+          const FASTag::Param& pp = cz ? probe_cz : ax ? probe_ax : probe_by;
+          const std::vector<FASTag::Tag> tg =
+              FASTag::tagSpectrum(s, pc.getMZ(), pc.getCharge(), pp, cz ? probe_tab_cz : ax ? probe_tab_ax : probe_tab_by);
+          if (tg.empty() || !(tg.front().evalue <= CT::kAutoMaxEvalue)) continue;
+          confident[static_cast<Size>(k)] = 1;
+          const MSSpectrum prep = FASTag::preparedPeaks(s, pc.getMZ(), pc.getCharge(), pp);
+          CT::collectErrors(prep, pc.getMZ(), pc.getCharge(), tg.front(), FASTag::ComplementSpec::fromParam(pp),
+                            window, per_spec[static_cast<Size>(k)]);
+        }
+        catch (...)
+        {
+          probe_failed[static_cast<Size>(k)] = std::current_exception();
+        }
       }
+      for (const std::exception_ptr& e : probe_failed)
+        if (e) std::rethrow_exception(e);
       std::vector<double> errors;
       for (const auto& v : per_spec) errors.insert(errors.end(), v.begin(), v.end());
       const CT::Estimate est = CT::estimate(errors, window);
@@ -5270,6 +5282,10 @@ protected:
     for (size_t k = 0; k < open_upto; ++k) prep_block(blocks[k % kRing], k * BLOCK, block_size(k));
     t_prep = secs(t_prep_a, Clock::now());
 
+    // FASTAG_TIMING: each thread's exit from its last chunk. Allocated before
+    // the writer starts: a throw between its start and join() would destroy a
+    // joinable std::thread (std::terminate).
+    std::vector<Clock::time_point> t_done(static_cast<size_t>(read_threads));
     std::thread writer([&]
     {
       try
@@ -5306,8 +5322,6 @@ protected:
       }
     });
 
-    // FASTAG_TIMING: each thread's exit from its last chunk.
-    std::vector<Clock::time_point> t_done(static_cast<size_t>(read_threads));
     const auto t_par_a = Clock::now();
 #pragma omp parallel num_threads(read_threads)
     {
