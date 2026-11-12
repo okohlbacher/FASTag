@@ -20,7 +20,6 @@
 
 #include <charconv>
 #include <cstdint>
-#include <cstdlib>
 #include <filesystem>
 #include <iostream>
 #include <string>
@@ -39,48 +38,65 @@ int main(int argc, char** argv)
   }
   const std::string dir = argv[1];
   const std::string out = argv[2];
-  const int k = argc > 3 ? std::atoi(argv[3]) : 7;
+  // The whole argument must be a number: atoi took "7x" as 7 and "x" as 0.
+  int k = 7;
+  if (argc > 3)
+  {
+    const char* const last = argv[3] + std::char_traits<char>::length(argv[3]);
+    const auto [ptr, ec] = std::from_chars(argv[3], last, k);
+    if (ec != std::errc() || ptr != last) k = 0;
+  }
   // Upper bound is TaxIndex::MAX_K: base-19 codes overflow a uint64 beyond it.
   if (k < 3 || k > FASTag::TaxIndex::MAX_K)
   { std::cerr << "k out of range (3.." << FASTag::TaxIndex::MAX_K << ")\n"; return 2; }
 
-  std::vector<FASTAFile::FASTAEntry> entries;
-  std::vector<uint32_t> taxids;
-  size_t files = 0;
-  for (const auto& e : fs::directory_iterator(dir))
+  // No exception may end the program uncaught (a missing directory throws
+  // std::filesystem::filesystem_error): report it and fail with 1.
+  try
   {
-    if (!e.is_regular_file()) continue;
-    const std::string path = e.path().string();
-    const std::string stem = e.path().stem().string();  // "<taxid>"
-    if (e.path().extension() != ".fasta") continue;
-    // The WHOLE stem must be a taxid that fits uint32: strtoul took
-    // "9606_backup" as 9606, accepted a sign, and wrapped 4294967297 to 1.
-    uint32_t tx = 0;
-    const char* const first = stem.data();
-    const char* const last = first + stem.size();
-    const auto [ptr, ec] = std::from_chars(first, last, tx);
-    if (ec != std::errc() || ptr != last || tx == 0)
+    std::vector<FASTAFile::FASTAEntry> entries;
+    std::vector<uint32_t> taxids;
+    size_t files = 0;
+    for (const auto& e : fs::directory_iterator(dir))
     {
-      std::cerr << "  skip (filename is not <taxid>.fasta): " << path << "\n";
-      continue;
+      if (!e.is_regular_file()) continue;
+      const std::string path = e.path().string();
+      const std::string stem = e.path().stem().string();  // "<taxid>"
+      if (e.path().extension() != ".fasta") continue;
+      // The WHOLE stem must be a taxid that fits uint32: strtoul took
+      // "9606_backup" as 9606, accepted a sign, and wrapped 4294967297 to 1.
+      uint32_t tx = 0;
+      const char* const first = stem.data();
+      const char* const last = first + stem.size();
+      const auto [ptr, ec] = std::from_chars(first, last, tx);
+      if (ec != std::errc() || ptr != last || tx == 0)
+      {
+        std::cerr << "  skip (filename is not <taxid>.fasta): " << path << "\n";
+        continue;
+      }
+      std::vector<FASTAFile::FASTAEntry> part;
+      try { FASTAFile().load(path, part); }
+      catch (const std::exception& ex) { std::cerr << "  FASTA load failed: " << path << ": " << ex.what() << "\n"; continue; }
+      for (auto& fe : part) { entries.push_back(std::move(fe)); taxids.push_back(tx); }
+      ++files;
+      std::cerr << "  taxid " << tx << ": " << part.size() << " proteins (" << stem << ")\n";
     }
-    std::vector<FASTAFile::FASTAEntry> part;
-    try { FASTAFile().load(path, part); }
-    catch (const std::exception& ex) { std::cerr << "  FASTA load failed: " << path << ": " << ex.what() << "\n"; continue; }
-    for (auto& fe : part) { entries.push_back(std::move(fe)); taxids.push_back(tx); }
-    ++files;
-    std::cerr << "  taxid " << tx << ": " << part.size() << " proteins (" << stem << ")\n";
+    if (entries.empty()) { std::cerr << "no proteins loaded from " << dir << "\n"; return 1; }
+
+    std::cerr << "building k=" << k << " index over " << entries.size()
+              << " proteins from " << files << " taxa...\n";
+    FASTag::TaxIndex idx;
+    idx.build(entries, taxids, k);
+    std::cerr << "  " << idx.nKmers() << " distinct k-mers, " << idx.taxa().size() << " taxa\n";
+
+    std::string err;
+    if (!idx.save(out, &err)) { std::cerr << "save failed: " << err << "\n"; return 1; }
+    std::cerr << "wrote " << out << "\n";
+    return 0;
   }
-  if (entries.empty()) { std::cerr << "no proteins loaded from " << dir << "\n"; return 1; }
-
-  std::cerr << "building k=" << k << " index over " << entries.size()
-            << " proteins from " << files << " taxa...\n";
-  FASTag::TaxIndex idx;
-  idx.build(entries, taxids, k);
-  std::cerr << "  " << idx.nKmers() << " distinct k-mers, " << idx.taxa().size() << " taxa\n";
-
-  std::string err;
-  if (!idx.save(out, &err)) { std::cerr << "save failed: " << err << "\n"; return 1; }
-  std::cerr << "wrote " << out << "\n";
-  return 0;
+  catch (const std::exception& ex)
+  {
+    std::cerr << "buildtaxdb failed: " << ex.what() << "\n";
+    return 1;
+  }
 }
