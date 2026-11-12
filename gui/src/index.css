@@ -301,7 +301,7 @@ td.hist-actions { display: flex; flex-wrap: wrap; gap: var(--space-1); align-ite
 .help-panel .help-main { padding: var(--space-4); }
 .help-panel .help-page h2 { font-size: var(--text-lg); }
 .help-head { display: flex; gap: var(--space-2); align-items: flex-start; padding: var(--space-3); background: var(--card); border-bottom: 1px solid var(--border); }
-.help-search { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: var(--space-2); }
+.help-search { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: var(--space-2); overflow-wrap: anywhere; }
 .help-search input { width: 100%; }
 ul.help-hits { list-style: none; margin: 0; padding: 0; max-height: 50vh; overflow: auto; display: flex; flex-direction: column; gap: 2px; }
 ul.help-hits button {
@@ -961,7 +961,7 @@ dl.recipes dt { font-weight: 600; margin-top: var(--space-2); }
 dl.recipes dd { margin: 2px 0 0; }
 
 table.help-table { font-size: var(--text-sm); background: var(--card); border: 1px solid var(--border); border-radius: var(--radius-md); }
-table.help-table td, table.help-table th { white-space: normal; vertical-align: top; }
+table.help-table td, table.help-table th { white-space: normal; vertical-align: top; overflow-wrap: anywhere; }
 .help-pre { margin: 0; padding: var(--space-2) var(--space-3); background: var(--card); border: 1px solid var(--border); border-radius: var(--radius-sm); font: var(--text-xs) / 1.5 var(--font-mono); overflow-x: auto; }
 
 details.help-entry { background: var(--card); border: 1px solid var(--border); border-radius: var(--radius-md); padding: 0 var(--space-3); scroll-margin-top: var(--space-4); }

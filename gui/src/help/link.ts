@@ -56,7 +56,15 @@ export function closeHelp(): void {
   set({ ...state, open: false, target: null, back: null })
   const o = opener
   opener = null
-  if (o) setTimeout(() => o.isConnected && o.focus())
+  setTimeout(() => {
+    // A view switch can hide the opener while Help stays open; a finished
+    // run can remove or disable it. Keep keyboard users on a usable control.
+    const target = o?.isConnected && o !== document.body && !o.closest('[hidden]') && !o.matches(':disabled') ? o : null
+    target?.focus()
+    if (!target || document.activeElement !== target) {
+      document.querySelector<HTMLElement>('button[aria-controls="help-panel"]')?.focus()
+    }
+  })
 }
 
 export function useHelp(): HelpState {

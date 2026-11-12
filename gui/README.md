@@ -592,7 +592,8 @@ needs FASTag 1.12 or later"). When another worktree's preview holds port 4173,
 
 The tauri-driver specs in `e2e-tauri/` drive the real debug app in WebKitGTK
 on Linux (tauri-driver and WebKitWebDriver under xvfb): probe, run, table,
-cancel, a Tags row opened in the Spectrum tab, and two recorded gates, the time to first rows on a generated
+cancel, Help search with real Enter/Escape keys and focus restoration, a Tags
+row opened in the Spectrum tab, and two recorded gates, the time to first rows on a generated
 1M-row file and the IPC rate of a chatty run (log lines and messages, counted
 apart, so batched log events still count every line). Native dialogs cannot
 be driven, so a spec replaces only `window.fastag.pickInput` /
@@ -648,9 +649,17 @@ README. The real CLI outputs they parse are committed in
 need the `build_args` and `order_rs` examples in `src-tauri/examples`
 (`order_rs` replays stdout/stderr in the order two reader threads receive
 them), which `cargo test` or `cargo build --examples` builds;
-`FASTAG_ORDER_RS` names another helper. CI runs them in the release-only
-`gui-cli-consistency` job, on a tag and on a `gui_dry_run` dispatch, against
-the portable linux-x64 CLI. See `src/adversarial/external.ts`.
+`FASTAG_ORDER_RS` names another helper. CI runs them in the
+`gui-cli-consistency` job on pull requests, tags and `gui_dry_run` dispatches,
+against the portable linux-x64 CLI built from the same checkout. The job
+supplies the pinned taxonomy data when the bundle omits it and fails if any
+of the 19 tests are skipped. See `src/adversarial/external.ts`.
+
+`e2e-web/specs/help-navigation.spec.ts` checks every Help page and its contents
+links at 960×600 in both themes, expanded CLI descriptions, long unmatched
+queries, keyboard navigation through search results, contextual FAQ/glossary
+links, and focus recovery after changing views. Search unit tests verify that
+every exact CLI parameter name ranks first, with or without the leading dash.
 
 The Stitch/ALPS export (P3) is tested against golden files that the
 repository's `tools/tags_to_denovo.py` writes (`src/fixtures/denovo/`: the

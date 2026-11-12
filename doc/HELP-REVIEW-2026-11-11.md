@@ -23,7 +23,7 @@ The Help was broad, but not complete enough for a new user to follow all of the 
 
 Sources were the implementation in `gui/src`, the CLI registration and scoring/report code in `src`, `README.md`, `doc/DESIGN-digest.md`, `doc/SPECIES-DETECTOR.md`, and the repository's existing fixtures/tests. Key scientific statements have cross-document regression checks in `gui/src/help/help-docs.test.tsx`.
 
-## Validation and limits
+## Initial validation
 
 - Unit suite: 79 files passed; 933 tests passed and 16 skipped.
 - Browser suite: all 184 tests passed across Chromium and WebKit, including Help search, Enter/Escape behavior, focus restoration and both window sizes/themes.
@@ -32,4 +32,24 @@ Sources were the implementation in `gui/src`, the CLI registration and scoring/r
 
 Browser checks use the existing fixture bridge, not a packaged desktop binary. Visual inspection covers the Help panel in light/dark themes and its narrow layout. No analysis algorithm or default was changed.
 
-The revised Help covers the main implemented GUI workflows and the full parameter inventory. This is a code/documentation audit and visual usability review, not evidence from a study with first-time users. Native packaging and the changed CLI warning strings still require a CLI rebuild; the related shell test expectations were updated and syntax-checked.
+## Follow-up implementation and validation
+
+The final review added exact CLI-name ranking, focus recovery when Help's
+opener becomes hidden/disabled/removed, wrapping for narrow WebKit tables,
+and bounded no-result search guidance. Six new browser scenarios exercise
+every Help page and its contents links at 960×600 in both themes, expanded
+CLI descriptions, long queries, all displayed search results by keyboard,
+contextual FAQ/glossary navigation, and closing Help after changing views.
+The full browser suite now passes 196 tests across Chromium and WebKit.
+
+The CLI and native app were rebuilt. The generated parameter manifest
+matches exactly, the changed species CLI integration tests pass, and native
+macOS checks verified contextual Help and Enter opening `-species_call` with
+its availability and scientific limitations visible. Linux CI also runs a
+native WebDriver Help scenario with real Enter/Escape events. See
+[the GUI review](GUI-REVIEW-2026-11-11.md#final-local-validation) for the full
+validation matrix and its limits.
+
+The revised Help covers the main implemented GUI workflows and the full
+parameter inventory. This is a code/documentation audit and visual usability
+review, not evidence from a study with first-time users.

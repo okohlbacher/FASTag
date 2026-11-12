@@ -272,7 +272,7 @@ function HelpSearch(): JSX.Element {
       <p className={q.trim() ? 'hint' : 'sr-only'} role="status" aria-live="polite">
         {q.trim() && (hits.length
           ? `${hits.length === 20 ? 'First 20' : hits.length} ${hits.length === 1 ? 'result' : 'results'}. Enter opens the first; Tab reaches each result.`
-          : `Nothing in Help matches “${q.trim()}”.`)}
+          : 'Nothing in Help matches. Try a shorter term or a command-line parameter name.')}
       </p>
       {q.trim() !== '' &&
         (hits.length ? (

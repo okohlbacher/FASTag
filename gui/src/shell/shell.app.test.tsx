@@ -275,7 +275,7 @@ describe('shell: Help panel', () => {
     await act(async () => {
       fireEvent.change(screen.getByRole('searchbox', { name: 'Search Help' }), { target: { value: 'qqqzz' } })
     })
-    expect(screen.getByText('Nothing in Help matches “qqqzz”.')).toBeDefined()
+    expect(screen.getByText('Nothing in Help matches. Try a shorter term or a command-line parameter name.')).toBeDefined()
   })
 
   it('the FAQ menu opens Troubleshooting; About shows the version', async () => {

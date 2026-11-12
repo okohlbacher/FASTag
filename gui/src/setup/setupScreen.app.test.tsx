@@ -250,6 +250,64 @@ describe('Setup: the plan footer', () => {
     expect(mock.exportIniCalls[0].params).toEqual(mock.runCalls[0])
   })
 
+  it('does not show late clipboard success for a changed command', async () => {
+    const mock = installMockBridge()
+    let finish!: () => void
+    const writeText = vi.fn(() => new Promise<void>((resolve) => { finish = resolve }))
+    Object.defineProperty(navigator, 'clipboard', { value: { writeText }, configurable: true })
+    await renderColdApp(mock)
+    mock.nextPickInput = '/d/run01.mzML'
+    await click(screen.getByRole('button', { name: 'Choose file…' }))
+    await click(within(footer()).getByRole('button', { name: 'Copy command line' }))
+    await waitFor(() => expect(writeText).toHaveBeenCalled())
+    await change(field('tag_length')!, '4')
+    await act(async () => { finish() })
+    expect(within(footer()).queryByRole('button', { name: 'Copied' })).toBeNull()
+  })
+
+  it('does not overwrite a newer copy with a late command-line response', async () => {
+    const mock = installMockBridge()
+    const writeText = vi.fn().mockResolvedValue(undefined)
+    Object.defineProperty(navigator, 'clipboard', { value: { writeText }, configurable: true })
+    await renderColdApp(mock)
+    mock.nextPickInput = '/d/run01.mzML'
+    await click(screen.getByRole('button', { name: 'Choose file…' }))
+    let finish!: (argv: string[]) => void
+    vi.spyOn(window.fastag, 'commandLine')
+      .mockImplementationOnce(() => new Promise((resolve) => { finish = resolve }))
+      .mockResolvedValueOnce(['FASTag', '-tag_length', '4'])
+    await click(within(footer()).getByRole('button', { name: 'Copy command line' }))
+    await change(field('tag_length')!, '4')
+    await click(within(footer()).getByRole('button', { name: 'Copy command line' }))
+    expect(writeText).toHaveBeenCalledExactlyOnceWith('FASTag -tag_length 4')
+    await act(async () => { finish(['FASTag', '-tag_length', '3']) })
+    expect(writeText).toHaveBeenCalledTimes(1)
+    expect(within(footer()).getByRole('button', { name: 'Copied' })).toBeDefined()
+  })
+
+  it('exports the clicked setup but does not show late success for a changed setup', async () => {
+    const mock = installMockBridge()
+    await renderColdApp(mock)
+    mock.nextPickInput = '/d/run01.mzML'
+    await click(screen.getByRole('button', { name: 'Choose file…' }))
+    let choose!: (path: string) => void
+    vi.spyOn(window.fastag, 'saveFile').mockImplementation(() => new Promise((resolve) => { choose = resolve }))
+    await click(within(footer()).getByRole('button', { name: 'Export INI…' }))
+    await change(field('tag_length')!, '4')
+    await act(async () => { choose('/d/run01.ini') })
+    expect(mock.exportIniCalls[0].params.params.tag_length).toBe('3')
+    expect(within(footer()).queryByRole('status')).toBeNull()
+  })
+
+  it('reports a rejected save dialog without an unhandled promise rejection', async () => {
+    const mock = installMockBridge()
+    await renderColdApp(mock)
+    vi.spyOn(window.fastag, 'saveFile').mockRejectedValue(new Error('Save dialog unavailable'))
+    await click(within(footer()).getByRole('button', { name: 'Export INI…' }))
+    expect((await within(footer()).findByRole('alert')).textContent).toContain('Save dialog unavailable')
+    expect(mock.exportIniCalls).toHaveLength(0)
+  })
+
   it('a failed export says why; a cancelled dialog writes nothing', async () => {
     const mock = installMockBridge()
     await renderColdApp(mock)

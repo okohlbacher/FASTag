@@ -1025,17 +1025,17 @@ jobs:
       # verified portable dist/FASTag (wrapper, FASTag.bin, lib/, share-*),
       # after the portability guard and, on a tag, with the taxonomy index
       # embedded by the step above. As a tar archive because upload-artifact
-      # drops exec bits and symlinks (lib/ holds soname links). Not on pull
-      # requests: nothing there consumes it, and it is several hundred MB.
+      # drops exec bits and symlinks (lib/ holds soname links). Pull requests
+      # consume it too, in the real-CLI GUI consistency check below.
       - name: Pack the portable CLI for the Linux GUI (linux-x64)
-        if: matrix.name == 'linux-x64' && github.event_name != 'pull_request'
+        if: matrix.name == 'linux-x64'
         shell: bash
         run: |
           set -euo pipefail
           tar -C dist -czf FASTag-linux-x64-portable.tar.gz FASTag
           ls -l FASTag-linux-x64-portable.tar.gz
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
-        if: matrix.name == 'linux-x64' && github.event_name != 'pull_request'
+        if: matrix.name == 'linux-x64'
         with:
           name: FASTag-linux-x64-portable
           path: FASTag-linux-x64-portable.tar.gz
@@ -2065,12 +2065,11 @@ jobs:
   # cli-consistency.test.tsx (19 tests, skipped in the gui job, which has no
   # CLI) runs the real App's run requests through the shipped build_args and
   # the FASTag CLI, with the pipe-order helper order_rs, both cargo examples
-  # in gui/src-tauri/examples. Release-only: on a v* tag and on a gui_dry_run
-  # dispatch, against the portable linux-x64 CLI the build leg uploads -- the
-  # version params.generated.json was made from, which only holds at a
-  # release. release-complete fails when this job did not pass.
+  # in gui/src-tauri/examples. Run on PRs as well as release validation: the
+  # current GUI must work with the current CLI before merging. Both are built
+  # from this checkout. release-complete also requires this job to pass.
   gui-cli-consistency:
-    if: ${{ !cancelled() && (startsWith(github.ref, 'refs/tags/v') || inputs.gui_dry_run) }}
+    if: ${{ !cancelled() && (github.event_name == 'pull_request' || startsWith(github.ref, 'refs/tags/v') || inputs.gui_dry_run) }}
     needs: [build]
     runs-on: ubuntu-22.04
     timeout-minutes: 45
@@ -2091,6 +2090,23 @@ jobs:
           want=$(sed -n 's/^project(FASTag VERSION \([0-9.]*\).*/\1/p' CMakeLists.txt)
           "$B" --help 2>&1 | grep -q "^Version: $want" || { echo "::error::the portable CLI does not report version $want"; exit 1; }
           echo "FASTAG_BIN=$B" >> "$GITHUB_ENV"
+      # PR bundles omit the large reference data. The Characterize and
+      # species tests still exercise the real default index, never a mock.
+      - name: Supply the pinned taxonomy for non-release bundles
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          root="$RUNNER_TEMP/cli/FASTag"
+          if [ ! -s "$root/share-FASTag-taxonomy/tax_k7.taxdb" ]; then
+            mkdir -p "$RUNNER_TEMP/taxdb"
+            gh release download "$TAXDB_TAG" --repo "$GITHUB_REPOSITORY" -p 'FASTag-taxonomy-k7.tar.gz' -D "$RUNNER_TEMP/taxdb"
+            archive="$RUNNER_TEMP/taxdb/FASTag-taxonomy-k7.tar.gz"
+            echo "$TAXDB_SHA256  $archive" | sha256sum --check --status
+            tar -xzf "$archive" -C "$root"
+          fi
+          test -s "$root/share-FASTag-taxonomy/tax_k7.taxdb"
+          cp data/taxonomy/species_call.tsv "$root/share-FASTag-taxonomy/"
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
         with:
           node-version: 24

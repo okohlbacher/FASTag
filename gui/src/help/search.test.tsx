@@ -42,6 +42,14 @@ describe('help search', () => {
     expect(searchHelp('output folder').some((h) => h.id === 'workflow-batch')).toBe(true)
   })
 
+  it('ranks every exact CLI name first, with or without its leading dash', () => {
+    for (const name of PARAM_BY_NAME.keys()) {
+      for (const query of [name, ` -${name.toUpperCase()} `]) {
+        expect(searchHelp(query)[0]?.id, query).toBe(`param-${name}`)
+      }
+    }
+  })
+
   it('describes the bounds enforced by the form, including exclusive bounds and list items', () => {
     expect(parameterLimits(PARAM_BY_NAME.get('fragment_tolerance')!)).toBe('minimum 1e-9.')
     expect(parameterLimits(PARAM_BY_NAME.get('digest_background_share')!)).toBe('minimum 0; below 1.')

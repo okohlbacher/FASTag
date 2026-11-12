@@ -1,7 +1,8 @@
 # GUI correctness and beginner usability review
 
-Reviewed the current `main` at `4fba712` on branch
-`codex/gui-usability-review`. The supplied FASTag handoffs and earlier GUI
+Started from `main` at `4fba712` on branch
+`codex/gui-usability-review`, then merged upstream through `bc99966` for the
+final implementation and validation. The supplied FASTag handoffs and earlier GUI
 review provided context; the current CLI, parameter manifest, frontend and
 tests determined present behavior.
 
@@ -33,35 +34,65 @@ algorithm, parameter-default or report-format changes are needed.
 | Export tags starts with 3-residue tags, but Stitch/ALPS export defaults to at least 8 residues. | Explain the mismatch and how tag length, extension and export cutoff interact, without changing the preset. |
 | Exit-13 troubleshooting promised outputs the desktop backend removes. | Document the desktop cleanup behavior and recovery action. |
 
-## Validation
+## Adversarial review and iteration
 
-`npm test`: 78 files passed, 921 tests passed, 16 skipped (the existing
-external CLI/scratch-dependent cases). `npm run build`, `npm run build:e2e`
-and `npm run check:dist` passed, including TypeScript checking and the check
-that production assets contain no mock bridge or test fixtures.
+An independent code review traced input/output resolution, INI export,
+numeric and sampling bounds, batch names, hidden options, Help routing,
+species/label/glyco interpretation, History, SDRF and reconciliation. A second
+pass checked the resulting fixes and the new CI dependencies. Browser testing
+then exercised every Help page at the minimum window size in both themes.
 
-`E2E_PORT=4187 npm run e2e -- --workers=4`: **182 tests passed** in
-Chromium and WebKit. `git diff --check` also passed.
+| Finding | Fix and regression coverage |
+| --- | --- |
+| Export INI could overwrite the run's spectra, FASTA or report. | Reject resolved inputs and outputs before starting the CLI, including derived species/glyco reports and existing symlink/hardlink aliases; verify original bytes remain intact. |
+| A late command-line response could overwrite a newer clipboard copy. | Reject stale responses before writing the clipboard; test the old request completing after the newer copy. |
+| Pending copy/export feedback could describe settings or results no longer shown. | Invalidate feedback across setup/result changes; retain the clicked INI settings snapshot and catch save-dialog rejection. |
+| Closing Help after changing views could restore focus to a hidden opener. | Fall back to the top-bar Help button; cover hidden, disabled and removed openers. |
+| An exact CLI name such as `-species_call` could rank related options first. | Rank the exact parameter first; check every parameter with plain, dashed and uppercase queries. |
+| The optional-reports table overflowed the narrow Help panel in WebKit. | Allow long table-cell text to wrap; check every Help page and contents link in both browser engines. |
+| A long unmatched search query expanded the window horizontally. | Show bounded recovery guidance rather than echoing the query; check long paths and expanded CLI descriptions at 960×600. |
 
-The browser suite uses the repository's explicit test bridge and committed CLI-output fixtures.
-It covers setup, reports, batch handling, export, input checks and history in
-Chromium and WebKit. Native-menu events are exercised through that bridge.
+Automated coverage now includes keyboard navigation through all 20 displayed
+search hits, FAQ/glossary round trips, a blocked input, focus after a view
+switch, and native WebDriver Enter/Escape behavior. The existing real-CLI
+consistency job now runs on pull requests with the pinned taxonomy and fails
+if any of its 19 cases is skipped. Browser fixtures, native-backend tests and
+real-CLI checks remain distinct layers of evidence.
 
-Visual review covers Setup in both themes at 960×600 and 1440×900. Run and the
-plan remain visible and the page does not overflow. The
-search test checks background inertness, keyboard scrolling, Escape, focus
-return and view changes.
+## Final local validation
 
-The manifest's names, defaults, types, restrictions and version were compared
-with the base commit and are unchanged. Only two descriptions changed.
+| Layer | Result |
+| --- | --- |
+| Frontend and real-CLI integration | 958 tests exercised across 79 files with the freshly built CLI and Rust argv/order helpers; no skipped cases. One existing lifecycle test hit its five-second timeout during concurrent native builds, then all 10 tests in that file passed in isolation with the original timeout. The other 957 passed in the full run. |
+| Browser GUI | 196 passed in Chromium and WebKit, including all Help pages, contextual navigation, keyboard search, minimum-window fit, both themes, Setup, results, batch, exports and History. |
+| Rust backend | 231 passed, zero failed, two intentionally ignored helper-process entry points. Includes real-CLI INI round trip, protected file aliases, crash recovery and cancellation of a 400,000-row export. |
+| C++ and CLI | 81 passed; five optional external-tool/data checks skipped. Two sandbox-restricted filesystem checks passed on rerun with the required access. Both changed species integration checks passed. |
+| Parameter contract | Fresh CLI-generated manifest matches `gui/src/params.generated.json` byte-for-byte. |
+| Build and hygiene | Production and e2e builds, TypeScript, production fixture-exclusion check, workflow syntax validation and `git diff --check` passed. |
+| Native macOS GUI | Built an isolated, ad hoc signed debug app with the production frontend, updated bundled CLI and reference data. Verified native file selection, input checks, tolerance warning acknowledgement, exact Help search, contextual Help, Escape, run, Overview, Tags, spectrum inspection, History and view shortcuts. |
+
+The native run used a copy of the public `Ecoli_MS2_small.mzML` fixture.
+With the Characterize task and Ion trap CID 0.3 Da preset it processed 14 of
+139 spectra and displayed the 598 tags written by the CLI, including 62
+ungapped tags with E-value ≤1 and four glyco-flagged spectra. The interface
+correctly retained the Da-tolerance limitations and no-call explanations.
+This fixture verifies execution and result plumbing, not scientific accuracy
+on a representative study. The native app used a separate application ID so
+its test history did not modify the installed application's history.
+
+Browser tests use the explicit fixture bridge; they do not substitute for
+native validation. On macOS, Playwright WebKit uses Option+Tab to include
+buttons under the system's default keyboard-navigation preference. Linux
+WebKit uses Tab. The new WebDriver Help test runs on Linux CI with actual
+Enter/Escape events, not synthetic DOM key events.
 
 ## Scope limits
 
-- No packaged Tauri app or C++ binary was rebuilt in this review. The C++
-  changes are help text only; native process execution and platform-specific
-  file dialogs were not newly tested.
+- The macOS validation build is a debug native executable with a production
+  frontend, not a signed/notarized release installer. Linux and Windows
+  platform checks are recorded by the pull request's CI jobs.
 - Experimental CLI-only reports remain outside the setup form. The GUI's
   alkylation summary still uses mass-gap counts, not the separate reagent call.
 - Existing Vite bundle-size warnings remain. No dependencies were added or
   upgraded.
-- Changes are local; no release, merge or push was performed.
+- No release, tag or merge is part of this review.

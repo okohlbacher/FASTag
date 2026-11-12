@@ -87,9 +87,10 @@ function snippet(text: string, word: string): string {
 
 /// The docs that hold every word of @p query, best first: a word in the
 /// title counts ten times one in the text; a title that is the query, or
-/// starts with it, more.
+/// starts with it, more. An exact CLI parameter name always comes first.
 export function searchHelp(query: string, limit = 20): HelpHit[] {
-  const words = query.toLowerCase().split(/\s+/).filter(Boolean)
+  const q = query.toLowerCase().trim()
+  const words = q.split(/\s+/).filter(Boolean)
   if (words.length === 0) return []
   const scored: { d: HelpDoc; score: number; i: number }[] = []
   HELP_INDEX.forEach((d, i) => {
@@ -103,9 +104,9 @@ export function searchHelp(query: string, limit = 20): HelpHit[] {
       if (!inTitle && n === 0) return
       score += (inTitle ? 10 : 0) + n
     }
-    const q = query.toLowerCase().trim()
     if (title === q) score += 40
     else if (title.startsWith(q)) score += 20
+    if (d.id === `param-${q.replace(/^-/, '')}`) score += 100
     scored.push({ d, score, i })
   })
   scored.sort((a, b) => b.score - a.score || a.i - b.i)

@@ -124,6 +124,30 @@ test('probe: the app finds its CLI and reads its version', { timeout: 120000 }, 
     gates.webview = await s.exec('return navigator.userAgent')
   }))
 
+test('help: keyboard search opens a CLI entry and Escape restores focus without changing Setup', { timeout: 120000 }, () =>
+  withApp(async (s) => {
+    await view(s, 'setup')
+    const before = await s.exec("return document.getElementById('p-tag_length').value")
+    const help = await s.button('Help')
+    await s.exec('arguments[0].focus()', { 'element-6066-11e4-a52f-4a6976a6e3b5': help })
+    await s.click(help)
+    const search = await until('Help search', () => s.find('//input[@aria-label="Search Help"]'))
+    // W3C element send-keys drives WebKit's actual keyboard defaults. A
+    // synthetic keydown would miss Enter toggling a newly focused summary.
+    await s.cmd('POST', `/element/${search}/value`, { text: 'decoy_expected\uE007' })
+    await until('the expanded species-call help entry', () => s.exec("return document.getElementById('param-species_call')?.open === true"))
+    assert.match(await s.exec("return document.getElementById('param-species_call').innerText"), /Not in the settings form/)
+    await s.cmd('POST', `/element/${search}/value`, { text: 'no-such-help-entry' })
+    await s.waitText(/Nothing in Help matches/)
+    await s.cmd('POST', `/element/${search}/value`, { text: '\uE00C' })
+    await until('the cleared help query', () => s.exec("return document.querySelector('[aria-label=\"Search Help\"]').value === ''"))
+    assert.equal(await s.exec("return !!document.getElementById('help-panel')"), true)
+    await s.cmd('POST', `/element/${search}/value`, { text: '\uE00C' })
+    await until('Help to close and focus to return', () => s.exec("return !document.getElementById('help-panel') && document.activeElement?.textContent === 'Help'"))
+    assert.equal(await s.exec("return document.getElementById('p-tag_length').value"), before)
+    gates.helpKeyboard = true
+  }))
+
 let fullRows = -1
 test('run: Choose file, Run, and the table shows what the CLI wrote', { timeout: 300000 }, () =>
   withApp(async (s) => {

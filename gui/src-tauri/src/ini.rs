@@ -176,7 +176,19 @@ pub fn export_with(mut cmd: Command, params: &RunParams, dest: &Path, tmp_dir: &
     if !dest.is_absolute() {
         return Err(format!("{} is not an absolute path", dest.display()));
     }
-    let items = items_from_argv(&fastag::build_args(params));
+    let args = fastag::build_args(params);
+    let items = items_from_argv(&args);
+    // A save dialog does not prevent selecting an input, FASTA or report.
+    // Use the resolved argv, including implicit species/glyco reports, and
+    // the same alias check as the summary export before the CLI can write.
+    let files = items.iter().filter_map(|item| match (&item.value, item.ty) {
+        (IniValue::Scalar(path), "input-file" | "output-file") => Some(path.clone()),
+        _ => None,
+    }).chain(crate::outputs::resolved_outputs(&args));
+    let dest_text = dest.to_string_lossy();
+    if let Some(path) = files.into_iter().find(|path| crate::report::same_file(&dest_text, path)) {
+        return Err(format!("cannot export INI to {}: it is a run input or output ({path}); choose another name", dest.display()));
+    }
     let tmp = temp_ini(tmp_dir);
     std::fs::write(&tmp, ini_xml(&items)).map_err(|e| format!("cannot write the temporary INI {}: {e}", tmp.display()))?;
     cmd.arg("-ini")
@@ -351,6 +363,44 @@ mod tests {
     fn a_relative_destination_is_refused() {
         let e = export_with(Command::new("true"), &rp(r#"{"in":"","out":""}"#), Path::new("x.ini"), &std::env::temp_dir());
         assert!(e.unwrap_err().contains("not an absolute path"));
+    }
+
+    #[test]
+    fn export_never_overwrites_run_files_or_their_aliases() {
+        let d = std::env::temp_dir().join(format!("fastag-ini-protect-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&d);
+        std::fs::create_dir_all(&d).unwrap();
+        let p = rp(&serde_json::json!({
+            "in": d.join("input.mzML"), "out": "run.tags.tsv",
+            "params": {"fasta": "proteins.fasta", "digest_out": "run.digest.tsv", "species": true, "glyco": true}
+        }).to_string());
+        // Even a not-yet-written output is reserved for the run. Existing
+        // files must keep their original bytes, and no CLI or temp file is needed.
+        for name in ["input.mzML", "proteins.fasta", "run.tags.tsv", "run.digest.tsv", "run.tags.species.tsv", "run.tags.glyco.tsv"] {
+            let file = d.join(name);
+            let fail = |dest: &Path| {
+                let err = export_with(Command::new("fastag-export-must-not-start"), &p, dest, &d).unwrap_err();
+                assert!(err.contains("run input or output"), "{}: {err}", dest.display());
+            };
+            fail(&file);
+            assert!(!file.exists());
+            std::fs::write(&file, b"keep original data").unwrap();
+            fail(&file);
+            fail(&d.join(".").join(name));
+            #[cfg(unix)]
+            {
+                let link = d.join("alias.ini");
+                std::os::unix::fs::symlink(&file, &link).unwrap();
+                fail(&link);
+                std::fs::remove_file(&link).unwrap();
+                std::fs::hard_link(&file, &link).unwrap();
+                fail(&link);
+                std::fs::remove_file(&link).unwrap();
+            }
+            assert_eq!(std::fs::read(&file).unwrap(), b"keep original data");
+        }
+        assert_eq!(std::fs::read_dir(&d).unwrap().count(), 6);
+        std::fs::remove_dir_all(d).unwrap();
     }
 
     // The round trip of the acceptance test (GUI-DESIGN 10 P2a): export,

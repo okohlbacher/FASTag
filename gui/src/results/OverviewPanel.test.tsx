@@ -1,7 +1,7 @@
 // The Overview tab as a component (GUI-DESIGN 3 S3), over the model of real
 // gate-PXD CLI output (overview.ts).
 
-import { render, screen, within } from '@testing-library/react'
+import { act, render, screen, within } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 import { parseReport } from '../digestReport'
 import { CLI_CASES, logLines, type CliCase } from '../testing/cliFixtures'
@@ -68,5 +68,21 @@ describe('Overview panel', () => {
     // No census: the CLI's no call stands, with its reason.
     expect(within(tile('Protease')).getByText('no call')).toBeDefined()
     expect(tile('Protease').textContent).toMatch(/the fragment tolerance is in Da/)
+  })
+
+  it('clears copied feedback for another result and ignores an earlier pending copy', async () => {
+    let finish!: () => void
+    const writeText = vi.fn().mockResolvedValueOnce(undefined).mockImplementationOnce(() => new Promise<void>((resolve) => { finish = resolve }))
+    Object.defineProperty(navigator, 'clipboard', { value: { writeText }, configurable: true })
+    const props = { input: '/d/a.mzML', busy: false, onAction: vi.fn() }
+    const { rerender } = render(<OverviewPanel {...props} overview={model(CLI_CASES.v112)} />)
+    await click(screen.getByRole('button', { name: 'Copy suggested settings' }))
+    expect(screen.getByText('Copied.')).toBeDefined()
+    rerender(<OverviewPanel {...props} overview={model(CLI_CASES.v112Da)} />)
+    expect(screen.queryByText('Copied.')).toBeNull()
+    await click(screen.getByRole('button', { name: 'Copy suggested settings' }))
+    rerender(<OverviewPanel {...props} input="/d/b.mzML" overview={model(CLI_CASES.v112)} />)
+    await act(async () => { finish() })
+    expect(screen.queryByText('Copied.')).toBeNull()
   })
 })

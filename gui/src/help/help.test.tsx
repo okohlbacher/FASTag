@@ -18,7 +18,7 @@ import { GLOSSARY, PAGES } from './content'
 import { CLASSES, FAQ, FAQ_GROUPS, faqForMessage } from './faq'
 import HelpView, { COMMON, PAGE_OF, slug } from './HelpView'
 import { PARAM_UI } from '../paramUi'
-import { helpBack, openHelp, resetHelp, showHelpPage, useHelp } from './link'
+import { closeHelp, helpBack, openHelp, resetHelp, showHelpPage, useHelp } from './link'
 
 // The help of every PARAM_UI entry that has one (help/params.ts before P5).
 const PARAM_HELP = Object.fromEntries(Object.entries(PARAM_UI).flatMap(([n, u]) => (u.help ? [[n, u.help]] : [])))
@@ -238,6 +238,21 @@ describe('help: in the app', () => {
     expect(setupView(c).hidden).toBe(false)
     expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Help' }))
     vi.useRealTimers()
+  })
+
+  it.each(['hidden', 'disabled', 'removed'] as const)('closing Help recovers focus when its opener is %s', async (state) => {
+    await renderApp()
+    const opener = document.createElement('button')
+    document.body.append(opener)
+    opener.focus()
+    act(() => openHelp())
+    if (state === 'hidden') opener.hidden = true
+    else if (state === 'disabled') opener.disabled = true
+    else opener.remove()
+    act(() => closeHelp())
+    await act(async () => { await new Promise((resolve) => setTimeout(resolve, 0)) })
+    expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Help' }))
+    opener.remove()
   })
 
   it('F1 opens Help, Esc closes it; ? typed in a field does not open it', async () => {
