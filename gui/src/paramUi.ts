@@ -97,8 +97,8 @@ const OPT_IN_1_13_EXPERIMENTAL = '1.13 experimental command-line option, not in 
 /// not offered in the form.
 const EXPERIMENTAL_1_13 = '1.13 experimental command-line option, not in the form (CLI default applies)'
 
-/// Label discovery (-label_discovery_out): experimental and opt-in; format 5
-/// passed its fourth held-out test; command line only until it has a GUI design.
+/// Label discovery (-label_discovery_out): experimental and opt-in; it failed its
+/// held-out tests; command line only until it has a GUI design.
 const EXPERIMENTAL_LABEL_DISCOVERY =
   'experimental command-line option (label discovery), not in the form (CLI default applies)'
 
@@ -1265,7 +1265,7 @@ export const PARAM_UI: Record<string, ParamUi> = {
   label_discovery_out: {
     hidden: EXPERIMENTAL_LABEL_DISCOVERY,
     help: {
-      text: 'Write the label discovery report: mass offsets the tag flanks carry at the peptide N-terminus, lysine, arginine or C-terminus, explained by residues, known labels or Unimod, with a label call supported by reporter ions and precursor pairs. Experimental and CLI-only. Format 5 passed its fourth held-out test on 144 new PRIDE projects: 0 of 42 label-free runs got a label call, while 5 of 102 labelled runs were called label-free. Earlier formats failed; a call is evidence to check, not a guarantee.'
+      text: 'Write the label discovery report: mass offsets the tag flanks carry at the peptide N-terminus, lysine, arginine or C-terminus, explained by residues, known labels or Unimod, with a label call supported by reporter ions and precursor pairs. Experimental and CLI-only. It failed its held-out tests (the third: weighted accuracy 0.572 against 0.80, TMTpro recall 11 of 18); a call is evidence to check, not a guarantee.'
     }
   },
   label_discovery_depth: {

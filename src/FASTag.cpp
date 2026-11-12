@@ -619,8 +619,7 @@ protected:
     registerOutputFile_("label_discovery_out", "<file>", "",
                         "Experimental: report every terminal or lysine mass offset the tag flanks carry, known or "
                         "not, explained by residues, the known labels or Unimod, and a label call "
-                        "(format 5 passed its fourth held-out test: 0 of 42 label-free runs got a label call, "
-                        "5 of 102 labelled runs were called label-free; "
+                        "(failed its held-out test: 6 of 150 label-free runs got a label call; "
                         "format in doc/LABEL-DISCOVERY-REPORT.md)", false);
     setValidFormats_("label_discovery_out", ListUtils::create<std::string>("tsv"));
     registerDoubleOption_("label_discovery_max_flank", "<Da>", 700.0,
