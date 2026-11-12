@@ -47,7 +47,10 @@ cd "$TMP" || exit 1
 DB=db.fasta
 # CR stripped: on Windows FASTag writes its text outputs with CRLF, as 1.11 did.
 sha() { if command -v sha256sum >/dev/null 2>&1; then tr -d '\r' < "$1" | sha256sum | cut -d' ' -f1; else tr -d '\r' < "$1" | shasum -a 256 | cut -d' ' -f1; fi; }
-mzml_masked() { tr -d '\r' < "$1" | sed -E 's/completionTime="[^"]*"//; s/<fileChecksum>[^<]*</<fileChecksum></'; }
+# The run's time stamps (completionTime and the MS:1000747 "completion time"
+# cvParam, minute resolution: two runs straddling a minute differed) and the
+# checksum over them are masked.
+mzml_masked() { tr -d '\r' < "$1" | sed -E 's/completionTime="[^"]*"//; s/(name="completion time" value=")[^"]*"/\1"/; s/<fileChecksum>[^<]*</<fileChecksum></'; }
 
 tr -d '\r' < "$MGF" | grep -v '^CHARGE=' > "$TMP/noz.mgf"
 tr -d '\r' < "$MGF" | sed -n 's/^CHARGE=\([0-9]*\)+$/\1/p' > "$TMP/truth.txt"

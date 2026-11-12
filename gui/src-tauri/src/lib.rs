@@ -20,6 +20,8 @@ mod settings;
 mod species;
 mod spectrum;
 mod sweep;
+#[cfg_attr(not(windows), allow(dead_code))]
+mod webview_args;
 
 use std::time::Duration;
 
@@ -65,9 +67,44 @@ pub fn run() {
         );
     });
     builder
+        // ONE setup hook: Builder::setup replaces an earlier one, so a
+        // second .setup() call silently dropped this one (the v1 settings
+        // migration and the installed-app self-test never ran).
         .setup(|app| {
             // Migrates a v1 settings file before the store first opens.
             settings::init(app.handle());
+            // A run of an earlier session that the app did not see end (it
+            // was killed) is recorded as interrupted before the window asks
+            // for the last run and the leftovers (sweep.rs).
+            if let Some(d) = history::dir(app.handle()) {
+                sweep::recover(&d);
+            }
+            // The main window, from its tauri.conf.json entry ("create":
+            // false there): on Windows with the WebView2 arguments of
+            // WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS merged in, which WebView2
+            // would otherwise drop (webview_args.rs; WebDriver needs them).
+            let cfg = app
+                .config()
+                .app
+                .windows
+                .iter()
+                .find(|w| w.label == "main")
+                .cloned()
+                .ok_or("tauri.conf.json has no main window")?;
+            #[allow(unused_mut)]
+            let mut window = tauri::WebviewWindowBuilder::from_config(app.handle(), &cfg)?;
+            #[cfg(windows)]
+            if let Some(args) = webview_args::merged(std::env::var(webview_args::ENV).ok().as_deref()) {
+                window = window.additional_browser_args(&args);
+            }
+            window.build()?;
+            if let Some(out) = std::env::var_os(fastag::SELFTEST_OUT) {
+                let handle = app.handle().clone();
+                std::thread::spawn(move || {
+                    let code = fastag::self_test(&handle, std::path::Path::new(&out));
+                    handle.exit(code);
+                });
+            }
             Ok(())
         })
         .manage(RunManager::default())
@@ -113,15 +150,6 @@ pub fn run() {
             sweep::leftovers_sweep,
             sweep::leftovers_keep,
         ])
-        // A run of an earlier session that the app did not see end (it was
-        // killed) is recorded as interrupted before the window asks for the
-        // last run and the leftovers (sweep.rs).
-        .setup(|app| {
-            if let Some(d) = history::dir(app.handle()) {
-                sweep::recover(&d);
-            }
-            Ok(())
-        })
         .on_window_event(|window, event| match event {
             // Closing the window while a run or batch is active asks first
             // (close_guard); when idle it closes as usual.

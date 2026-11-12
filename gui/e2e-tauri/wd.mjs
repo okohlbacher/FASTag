@@ -55,8 +55,15 @@ export async function until(what, fn, timeoutMs = 20000, everyMs = 50) {
 export class Session {
   /** Start the app at @p application through tauri-driver at @p base. */
   static async start(application, base = 'http://127.0.0.1:4444') {
+    // Windows: tauri-driver 2.x passes ms:edgeOptions.webviewOptions to
+    // msedgedriver only when tauri:options carries it. Without it
+    // msedgedriver treats the app as an Edge browser (passes
+    // --remote-debugging-port on its command line, which a WebView2 app
+    // ignores) and fails after 60 s with "DevToolsActivePort file doesn't
+    // exist"; with it, it attaches through WEBVIEW2_* environment variables.
+    const options = process.platform === 'win32' ? { application, webviewOptions: {} } : { application }
     const v = await call(base, 'POST', '/session', {
-      capabilities: { alwaysMatch: { browserName: 'wry', 'tauri:options': { application } } }
+      capabilities: { alwaysMatch: { browserName: 'wry', 'tauri:options': options } }
     })
     return new Session(base, v.sessionId)
   }

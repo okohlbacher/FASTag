@@ -23,7 +23,7 @@ use std::time::{Duration, Instant, SystemTime};
 use serde::Serialize;
 use tauri::AppHandle;
 
-use crate::fastag::{no_console_window, quiet_blas, resolve_binary, taxonomy_dir, Resolved};
+use crate::fastag::{no_console_window, cli_env, resolve_binary, taxonomy_dir, Resolved};
 use crate::lifetime;
 
 /// How long a probe may take: it reads metadata only (the 1.12 acquisition
@@ -110,7 +110,7 @@ fn command(r: &Resolved) -> Command {
     if let Some(t) = taxonomy_dir(r) {
         cmd.env("FASTAG_TAXONOMY_DIR", t);
     }
-    quiet_blas(&mut cmd);
+    cli_env(&mut cmd);
     // Started by the spawner thread like every CLI child (lifetime.rs, see
     // run_bounded): the blocking-pool thread that asks may exit when idle.
     lifetime::die_with_parent(&mut cmd);

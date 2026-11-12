@@ -989,6 +989,7 @@ dependencies = [
 name = "fastag"
 version = "1.13.2"
 dependencies = [
+ "dunce",
  "libc",
  "muda",
  "proptest",

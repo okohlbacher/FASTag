@@ -26,7 +26,7 @@ use serde::Serialize;
 use serde_json::{Map, Value};
 use tauri::AppHandle;
 
-use crate::fastag::{build_args, no_console_window, quiet_blas, resolve_binary, taxonomy_dir, Resolved, RunParams, PARAM_TYPES};
+use crate::fastag::{build_args, no_console_window, cli_env, resolve_binary, taxonomy_dir, Resolved, RunParams, PARAM_TYPES};
 use crate::inspect::parse_options;
 use crate::lifetime;
 
@@ -160,7 +160,7 @@ fn command(r: &Resolved) -> Command {
     if let Some(t) = taxonomy_dir(r) {
         cmd.env("FASTAG_TAXONOMY_DIR", t);
     }
-    quiet_blas(&mut cmd);
+    cli_env(&mut cmd);
     lifetime::die_with_parent(&mut cmd);
     cmd
 }
