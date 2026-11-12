@@ -39,7 +39,7 @@
 
 namespace FASTag::LabelDiscovery
 {
-  inline constexpr int kFormat = 5;
+  inline constexpr int kFormat = 4;
   inline constexpr double kBin = 0.0005;          ///< histogram bin width (Da)
   inline constexpr double kC13 = 1.0033548378;    ///< 13C - 12C
   inline constexpr double kH2O = Digest::kH2O;
@@ -440,25 +440,13 @@ namespace FASTag::LabelDiscovery
     void merge(PairCounter&& o);
     // filled by count()
     std::uint64_t lys8 = 0, arg10 = 0;
-    /// The largest count at one of the other label spacings: +6.0201 (Lys6,
-    /// Arg6), +3.9891 / +3.9881 (Lys4 to Lys8, Arg6 to Arg10) and the dimethyl
-    /// spacings per labelled site +4.0251 (also Lys4), +6.0318, +6.0377,
-    /// +8.0444, +4.0193.
-    std::uint64_t other = 0;
-    /// Dimethyl (format 5): the largest, over the five dimethyl spacings, of
-    /// the smaller count at the spacing (one labelled site) and at twice the
-    /// spacing (N-terminus and one Lys).
-    std::uint64_t dimethyl2 = 0;
-    std::uint64_t silac_top = 0;  ///< the largest count at a SILAC spacing (Lys8, Arg10, +6.0201, medium to heavy)
+    std::uint64_t other = 0;  ///< the largest count at +4.0251 (Lys4, dimethyl), +6.0201 (Lys6, Arg6), +8.0444 (dimethyl)
     double control = 0;  ///< median of the eight control counts
     void count();
     /// count / (control + 5): the excess of a label spacing over the controls.
     double ratio(std::uint64_t pairs) const { return static_cast<double>(pairs) / (control + 5.0); }
     /// Both Lys8 and Arg10 have >= 30 pairs and a ratio >= 2.
     bool silac() const;
-    /// dimethyl2 has >= 30 pairs and a ratio >= 2 and exceeds silac_top
-    /// (SILAC with Lys4 shows +4.0251 and twice that as well).
-    bool dimethyl() const;
     /// Any label spacing has >= 30 pairs and a ratio >= 2.
     bool anyLabel() const;
   };
@@ -493,9 +481,8 @@ namespace FASTag::LabelDiscovery
 
   /// The reporter-ion gate on the finished call: a TMT or iTRAQ gate keeps a
   /// call of that family and otherwise replaces the call by the family's
-  /// label (TMTpro when the TMTpro-only reporters reach half the TMT excess,
-  /// format 5; else the variant from the N-terminal candidates; sites `-`
-  /// when none fits); gate `none` removes isobaric labels from the call; a no call on a
+  /// label (variant from the N-terminal candidates, sites `-` when none
+  /// fits); gate `none` removes isobaric labels from the call; a no call on a
   /// run of ion-trap MS2 scans gets the reason `low_resolution_ms2`.
   void applyReporters(Analysis& a, const ReporterCounter& rc);
 
@@ -503,10 +490,8 @@ namespace FASTag::LabelDiscovery
   /// a label-free call or a no call by `K:Lys8+R:Arg10` (basis
   /// `precursor_pairs`); a call of SILAC labels only gains `K:Lys8` and
   /// `R:Arg10` where it lacks them (basis `+precursor_pairs` appended, format
-  /// 4). Any other label call stays. Format 5: pairs at a dimethyl spacing
-  /// and at twice that spacing replace a label-free call or a no call by
-  /// `Dimethyl`, and the label-free call by absence is also made on a run of
-  /// ion-trap MS2 scans without a reporter gate. Call after applyReporters().
+  /// 4). Any other label call stays. Also makes the label-free call by
+  /// absence. Call after applyReporters().
   void applyPairs(Analysis& a, PairCounter pc);
 
   /// The report rows after the shared run rows: ld_run, ld_count, ld_peak,
