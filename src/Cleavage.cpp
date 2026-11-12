@@ -7,17 +7,14 @@
 
 #include "Shortlist.h"
 
+#include <OpenMS/DATASTRUCTURES/StringUtils.h>
+
 #include <cctype>
 
 namespace FASTag::Cleavage
 {
   namespace
   {
-    std::string lower(std::string s)
-    {
-      for (char& c : s) c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
-      return s;
-    }
     bool trypsinCompatible(const std::string& name)
     {
       return name == "Trypsin" || name == "Lys-C" || name == "Arg-C";
@@ -51,9 +48,9 @@ namespace FASTag::Cleavage
 
   const Rule* findRule(const std::string& name)
   {
-    const std::string n = lower(name);
+    const std::string n = OpenMS::StringUtils::toLowered(name);
     for (const Rule& r : rules())
-      if (lower(r.name) == n) return &r;
+      if (OpenMS::StringUtils::toLowered(r.name) == n) return &r;
     return nullptr;
   }
 
@@ -96,7 +93,7 @@ namespace FASTag::Cleavage
     Choice c;
     c.specificity = spec;
     const bool confident = v.kind != Verdict::Inconclusive;
-    if (lower(option) == "auto")
+    if (OpenMS::StringUtils::toLowered(option) == "auto")
     {
       const Rule* called = confident ? findRule(v.model) : nullptr;
       if (called)

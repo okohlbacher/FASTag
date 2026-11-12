@@ -8,6 +8,7 @@
 #include "TaxDeconv.h"
 #include "TaxStats.h"
 
+#include <OpenMS/DATASTRUCTURES/StringUtils.h>
 #include <OpenMS/MATH/STATISTICS/MultipleTesting.h>
 
 #include <boost/math/special_functions/beta.hpp>
@@ -43,13 +44,6 @@ namespace FASTag::SpeciesCall
       v = std::strtoull(s.c_str(), &end, 10);
       return errno == 0 && end == s.c_str() + s.size();
     }
-    std::string trim(const std::string& s)
-    {
-      const auto b = s.find_first_not_of(" \t\r\n");
-      if (b == std::string::npos) return std::string();
-      const auto e = s.find_last_not_of(" \t\r\n");
-      return s.substr(b, e - b + 1);
-    }
   }
 
   bool loadParams(const std::string& path, Params& out, std::string* err)
@@ -66,12 +60,12 @@ namespace FASTag::SpeciesCall
     while (std::getline(in, line))
     {
       ++ln;
-      const std::string t = trim(line);
+      const std::string t = OpenMS::StringUtils::trimmed(line);
       if (t.empty() || t[0] == '#') continue;
       const auto tab = t.find('\t');
       if (tab == std::string::npos) return fail("line " + std::to_string(ln) + " is not key<TAB>value");
-      const std::string key = trim(t.substr(0, tab));
-      const std::string val = trim(t.substr(tab + 1));
+      const std::string key = OpenMS::StringUtils::trimmed(t.substr(0, tab));
+      const std::string val = OpenMS::StringUtils::trimmed(t.substr(tab + 1));
       if (key != "alpha" && key != "tau" && key != "n_min" && key != "decoys" && key != "version"
           && key != "training_sha256" && key != "reagent_n_min")
         return fail("unknown key '" + key + "' (line " + std::to_string(ln) + ")");
