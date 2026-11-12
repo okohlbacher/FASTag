@@ -53,6 +53,8 @@ then exercised every Help page at the minimum window size in both themes.
 | An exact CLI name such as `-species_call` could rank related options first. | Rank the exact parameter first; check every parameter with plain, dashed and uppercase queries. |
 | The optional-reports table overflowed the narrow Help panel in WebKit. | Allow long table-cell text to wrap; check every Help page and contents link in both browser engines. |
 | A long unmatched search query expanded the window horizontally. | Show bounded recovery guidance rather than echoing the query; check long paths and expanded CLI descriptions at 960×600. |
+| Generating or reopening tags could leave an unrelated Species or Spectrum tab selected. | Select Tags when a run has no survey report and when opening a tags file; retain report selection for mixed file drops, including delayed history lookup. |
+| The Run shortcut could start an analysis while Open results hid the single-file Run control. | Disable that single-file action for the Open results task; verify keyboard and native-menu commands leave the run count unchanged. |
 
 Automated coverage now includes keyboard navigation through all 20 displayed
 search hits, FAQ/glossary round trips, a blocked input, focus after a view
@@ -65,8 +67,8 @@ real-CLI checks remain distinct layers of evidence.
 
 | Layer | Result |
 | --- | --- |
-| Frontend and real-CLI integration | 959 passed across 79 files with the freshly built CLI and Rust argv/order helpers; no skipped or failed cases. Includes 20 real-CLI consistency tests covering both the Export tags startup and the optional Characterize task. |
-| Browser GUI | 196 passed in Chromium and WebKit, including all Help pages, contextual navigation, keyboard search, minimum-window fit, both themes, Setup, results, batch, exports and History. |
+| Frontend and real-CLI integration | 962 passed across 79 files with the freshly built CLI and Rust argv/order helpers; no skipped or failed cases. Includes 20 real-CLI consistency tests covering both the Export tags startup and the optional Characterize task. |
+| Browser GUI | 198 passed in Chromium and WebKit, including all Help pages, contextual navigation, keyboard search, minimum-window fit, both themes, Setup, results, batch, exports and History. |
 | Rust backend | 231 passed, zero failed, two intentionally ignored helper-process entry points. Includes real-CLI INI round trip, protected file aliases, crash recovery and cancellation of a 400,000-row export. |
 | C++ and CLI | 81 passed; five optional external-tool/data checks skipped. Two sandbox-restricted filesystem checks passed on rerun with the required access. Both changed species integration checks passed. |
 | Parameter contract | Fresh CLI-generated manifest matches `gui/src/params.generated.json` byte-for-byte. |

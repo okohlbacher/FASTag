@@ -7,7 +7,7 @@
 import { act, fireEvent, screen, waitFor, within } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 import { installMockBridge } from '../testing/mockBridge'
-import { click, renderApp, renderColdApp, renderCharacterizeApp, runButton } from '../testing/render'
+import { click, goTo, key, renderApp, renderColdApp, renderCharacterizeApp, runButton } from '../testing/render'
 import { shellLine } from '../app/format'
 
 const field = (name: string): HTMLInputElement | null => document.getElementById(`p-${name}`) as HTMLInputElement | null
@@ -75,6 +75,24 @@ describe('Setup: the task chooser', () => {
     expect(screen.queryByRole('button', { name: 'Undo' })).toBeNull()
   })
 
+  it.each(['Species', 'Spectrum'])('an Export tags run returns to Tags after viewing %s', async (previousTab) => {
+    const mock = installMockBridge()
+    mock.spectrumSupportResult = { ...mock.spectrumSupportResult, supported: true }
+    await renderCharacterizeApp(mock)
+    await goTo('results')
+    await click(screen.getByRole('tab', { name: previousTab }))
+    await goTo('setup')
+    await click(task(/^Export tags/))
+    mock.nextPickInput = '/d/run01.mzML'
+    await click(screen.getByRole('button', { name: 'Choose file…' }))
+    await click(runButton())
+    expect(mock.runCalls[0].params.species).not.toBe(true)
+    await act(async () => mock.emitDone({ ok: true, code: 0, runId: mock.lastRunId }))
+    await waitFor(() => expect(screen.queryByRole('region', { name: 'Running' })).toBeNull())
+    expect(screen.getByRole('tab', { selected: true }).textContent).toBe('Tags')
+    await waitFor(() => expect(mock.resultsOpenCalls).toContain('/d/run01.tags.tsv'))
+  })
+
   it('edits survive two task switches in a row: Undo brings them back', async () => {
     const mock = installMockBridge()
     await renderCharacterizeApp(mock)
@@ -115,13 +133,36 @@ describe('Setup: the task chooser', () => {
   it('Open results collapses the cards to an Open… button', async () => {
     const mock = installMockBridge()
     await renderColdApp(mock)
+    await goTo('results')
+    await click(screen.getByRole('tab', { name: 'Species' }))
+    await goTo('setup')
     await click(task(/^Open results/))
     expect(field('tag_length')).toBeNull()
     expect(screen.queryByRole('region', { name: 'Plan' })).toBeNull()
     expect(screen.queryByRole('button', { name: /^Run/ })).toBeNull()
     mock.nextPickResults = '/d/old.tags.tsv'
     await click(screen.getByRole('button', { name: 'Open results…' }))
+    expect(screen.getByRole('tab', { selected: true }).textContent).toBe('Tags')
     await waitFor(() => expect(mock.resultsOpenCalls).toEqual(['/d/old.tags.tsv']))
+  })
+
+  it('Open results cannot run a previously chosen input through the menu or shortcut', async () => {
+    const mock = installMockBridge()
+    await renderColdApp(mock)
+    mock.nextPickInput = '/d/run01.mzML'
+    await click(screen.getByRole('button', { name: 'Choose file…' }))
+    await click(task(/^Open results/))
+    expect(screen.queryByRole('button', { name: /^Run on/ })).toBeNull()
+    await act(async () => mock.emitMenu('run'))
+    expect(mock.runCalls).toEqual([])
+    // A different action separates the menu and key requests so the
+    // duplicate-event guard cannot make the shortcut assertion pass.
+    await act(async () => mock.emitMenu('view-setup'))
+    await key({ key: 'Enter', ctrlKey: true })
+    expect(mock.runCalls).toEqual([])
+    await click(task(/^Export tags/))
+    await click(runButton())
+    expect(mock.runCalls).toHaveLength(1)
   })
 
   it('four numbered step cards, each with its summary line', async () => {

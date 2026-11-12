@@ -4,7 +4,7 @@
 // presets saved as diffs; screenshots of Setup at both window sizes in both
 // themes, kept as test artifacts.
 import type { Page } from '@playwright/test'
-import { test, expect, mockState, openApp } from './fixtures'
+import { test, expect, goTo, mockState, openApp } from './fixtures'
 
 interface RunCall {
   in: string
@@ -43,6 +43,51 @@ test('a cold start prioritizes Export tags and reaches all-spectra Tags results 
   expect(p.res_conf).toBe(true)
   expect([Number(p.subsample_fraction), Number(p.subsample_spectra)]).toEqual([0, 0])
   expect([p.species, p.glyco, p.digest_out, p.label_out]).toEqual([false, false, '', ''])
+})
+
+test('Export tags and Open results leave a previous Species tab for the requested tags', async ({ page }) => {
+  await openApp(page, 'gate')
+  await page.getByRole('radio', { name: /^Characterize a run/ }).check()
+  await page.getByRole('button', { name: 'Choose file…' }).click()
+  await page.getByRole('button', { name: 'Run on run01.mzML' }).click()
+  await expect(page.getByRole('tab', { name: 'Overview' })).toHaveAttribute('aria-selected', 'true')
+  await page.getByRole('tab', { name: 'Species' }).click()
+  await expect(page.getByRole('tab', { name: 'Species' })).toHaveAttribute('aria-selected', 'true')
+
+  await goTo(page, 'Setup')
+  await page.getByRole('radio', { name: /^Export tags/ }).check()
+  await page.getByRole('button', { name: 'Run on run01.mzML' }).click()
+  await expect(page.getByRole('tab', { name: 'Tags' })).toHaveAttribute('aria-selected', 'true')
+  await expect(page.getByRole('heading', { name: 'run01.tags.tsv' })).toBeVisible()
+  await expect(page.getByText('Showing 2,028 of 2,028')).toBeVisible()
+  const calls = await mockState<RunCall[]>(page, 'runCalls')
+  expect(calls).toHaveLength(2)
+  expect(calls[0].params.species).toBe(true)
+  expect(calls[1].params).toMatchObject({ res_conf: true, species: false, digest_out: '', label_out: '' })
+
+  await page.getByRole('tab', { name: 'Species' }).click()
+  await goTo(page, 'Setup')
+  await page.getByRole('radio', { name: /^Open results/ }).check()
+  await setMock(page, 'nextPickResults', '/data/previous.tags.tsv')
+  await page.getByRole('button', { name: 'Open results…' }).click()
+  await expect(page.getByRole('tab', { name: 'Tags' })).toHaveAttribute('aria-selected', 'true')
+  await expect(page.getByRole('heading', { name: 'previous.tags.tsv' })).toBeVisible()
+  await expect(page.getByText('Showing 2,028 of 2,028')).toBeVisible()
+  expect(await mockState<RunCall[]>(page, 'runCalls')).toHaveLength(2)
+  expect(await mockState<string[]>(page, 'resultsOpenCalls')).toContain('/data/previous.tags.tsv')
+
+  // Open results keeps the previous input, but neither Run shortcut may
+  // start it while this task offers no Run control.
+  await goTo(page, 'Setup')
+  await page.keyboard.press('ControlOrMeta+Enter')
+  expect(await mockState<RunCall[]>(page, 'runCalls')).toEqual(calls)
+  await page.evaluate(() => {
+    const app = (window as unknown as { __fastagE2E: { menu(action: string): void } }).__fastagE2E
+    app.menu('view-setup') // reset action deduplication without changing task
+    app.menu('run')
+  })
+  expect(await mockState<RunCall[]>(page, 'runCalls')).toEqual(calls)
+  await expect(page.getByRole('button', { name: 'Open results…' })).toBeEnabled()
 })
 
 test('four step cards; a section switch hides the settings it turns on', async ({ page }) => {

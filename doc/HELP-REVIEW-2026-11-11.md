@@ -46,7 +46,7 @@ and bounded no-result search guidance. Six new browser scenarios exercise
 every Help page and its contents links at 960×600 in both themes, expanded
 CLI descriptions, long queries, all displayed search results by keyboard,
 contextual FAQ/glossary navigation, and closing Help after changing views.
-The full browser suite now passes 196 tests across Chromium and WebKit.
+The full browser suite now passes 198 tests across Chromium and WebKit.
 
 The CLI and native app were rebuilt. The generated parameter manifest
 matches exactly, the changed species CLI integration tests pass, and native

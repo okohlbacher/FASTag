@@ -223,9 +223,9 @@ describe.skipIf(!ready)('GUI-built argv against the FASTag CLI (FASTAG_BIN)', ()
     expect(o.rc).toBe(6)
     const refusal = o.lines.find((l) => /cannot reach the index k = 7/.test(l.line))
     expect(refusal?.src).toBe('err')
-    // stdout is block-buffered into the pipe and flushed at exit, after the refusal
-    // (80 of 80 runs with the two-thread reader).
-    expect(o.lines[o.lines.length - 1].line).toMatch(/^FASTag took/)
+    // Separate stdout/stderr readers can deliver either line last.
+    // lifecycle.test.tsx also checks a deterministic trailing timing line.
+    expect(o.lines.some((l) => l.src === 'out' && /^FASTag took/.test(l.line))).toBe(true)
     expect(o.banner).toMatch(/^ecoli\.mzML failed \(exit code 6\)FASTag's reason:-species: .*cannot reach the index k = 7/)
     expect(o.banner).not.toMatch(/FASTag took/)
   }, 30000)

@@ -303,8 +303,9 @@ export default function App({ start = LANDING }: { start?: Origin } = {}): JSX.E
     await run.runWith(over)
   }
 
-  // Not behind a batch queue: the single input and output are hidden then.
-  const canRun = !!bin?.ok && !!input && !!out && !running && !batchRunning && jobs.length === 0 && !blocked && !inspector.held
+  // Not behind a batch queue or the browse-only task: their single-file
+  // run controls are hidden, so shortcuts must not start that hidden setup.
+  const canRun = session.task !== 'open-results' && !!bin?.ok && !!input && !!out && !running && !batchRunning && jobs.length === 0 && !blocked && !inspector.held
 
   // The checks after a run, from its reports and FASTag's log lines.
   const after = postRunChecks({ reports: run.reports.list, notes: run.shownNotes })
