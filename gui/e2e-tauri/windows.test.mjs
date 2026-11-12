@@ -31,6 +31,17 @@ mkdirSync(SCREENS, { recursive: true })
 const record = { recorded: new Date().toISOString(), app: APP, steps: {} }
 after(() => writeFileSync(join(OUT, 'windows-e2e.json'), JSON.stringify(record, null, 2) + '\n'))
 
+/** The CLI's environment as the app sets it (fastag.rs cli_env): on Windows
+ *  on ARM64 the x64 CLI runs emulated and needs the mimalloc redirection off
+ *  (0xC0000142 otherwise; FASTag.bat does the same). */
+const ARM64 = /^ARM/i.test(process.env.PROCESSOR_ARCHITECTURE || '') || /^ARM/i.test(process.env.PROCESSOR_IDENTIFIER || '')
+const cliEnv = () => ({
+  ...process.env,
+  OPENMS_DATA_PATH: join(dirname(CLI), '..', 'share', 'OpenMS'),
+  OPENBLAS_NUM_THREADS: '1',
+  ...(ARM64 && !process.env.MIMALLOC_DISABLE_REDIRECT ? { MIMALLOC_DISABLE_REDIRECT: '1' } : {})
+})
+
 const tagsOf = (input) => join(dirname(input), basename(input).replace(/\.[^.]+$/, '') + '.tags.tsv')
 const count = (s) => Number(s.replace(/,/g, ''))
 
@@ -107,8 +118,7 @@ async function cliTwin(s, out) {
   const i = args.indexOf('-out')
   assert.ok(i >= 0, `no -out in ${JSON.stringify(argv)}`)
   args[i + 1] = out
-  const env = { ...process.env, OPENMS_DATA_PATH: join(dirname(CLI), '..', 'share', 'OpenMS'), OPENBLAS_NUM_THREADS: '1' }
-  const r = spawnSync(CLI, args, { encoding: 'utf8', env, cwd: dirname(out), windowsHide: true })
+  const r = spawnSync(CLI, args, { encoding: 'utf8', env: cliEnv(), cwd: dirname(out), windowsHide: true })
   assert.equal(r.status, 0, `the CLI twin exited ${r.status}: ${(r.stderr || '').slice(-1500)}`)
   return { argv, args }
 }
@@ -187,9 +197,15 @@ test('characterize: species, digest, label reports and the Overview', { timeout:
     const input = copyIn(process.env.E2E_MZML, 'char.mzML')
     await chooseInput(s, input)
     await shot(s, '04-characterize-setup')
-    await s.click(await s.button('Run on char.mzML'))
+    await s.click(await s.button('Run on char.mzML', 120000))
     await until('the Overview', () => s.exec(`const t = [...document.querySelectorAll('[role=tab]')].find((t) => t.textContent.trim() === 'Overview');
-      return !!t && t.getAttribute('aria-selected') === 'true' && !!document.querySelector('.view[data-view="results"]:not([hidden])')`), 840000, 500)
+      return !!t && t.getAttribute('aria-selected') === 'true' && !!document.querySelector('.view[data-view="results"]:not([hidden])')`), 600000, 500)
+      .catch(async (e) => {
+        await shot(s, '05-overview-missing').catch(() => {})
+        const body = await s.bodyText().catch(() => '')
+        record.steps.characterize = { missing: body.replace(/\s+/g, ' ').slice(0, 3000) }
+        throw new Error(`${e.message}; the app shows: ${body.replace(/\s+/g, ' ').slice(0, 1500)}`)
+      })
     const overview = await s.exec("const p = document.querySelector('[role=tabpanel]:not([hidden])'); return p ? p.innerText : ''")
     await shot(s, '05-overview')
     const tabs = await s.exec("return [...document.querySelectorAll('[role=tab]')].map((t) => t.textContent.trim())")
@@ -216,28 +232,29 @@ test('refusal: a run FASTag rejects shows its reason', { timeout: 300000 }, () =
     // DIA spectra: FASTag refuses them (exit 11) and says why.
     const input = copyIn(process.env.E2E_REFUSED, 'dia_like.mzML')
     const d = dirname(input)
-    const env = { ...process.env, OPENMS_DATA_PATH: join(dirname(CLI), '..', 'share', 'OpenMS'), OPENBLAS_NUM_THREADS: '1' }
-    const r = spawnSync(CLI, ['-in', input, '-out', join(d, 'cli.tsv')], { encoding: 'utf8', env, windowsHide: true })
+    const r = spawnSync(CLI, ['-in', input, '-out', join(d, 'cli.tsv')], { encoding: 'utf8', env: cliEnv(), windowsHide: true })
     const cliText = (r.stdout || '') + (r.stderr || '')
     assert.notEqual(r.status, 0, 'the CLI accepted the DIA input')
     await chooseInput(s, input)
-    // The pre-run input check may already stop the run; otherwise Run, and
-    // the failure banner. Either way the app must quote FASTag's reason.
-    const run = await s.button('Run on dia_like.mzML', 30000).catch(() => null)
-    let shown = ''
-    let where = 'pre-run check'
-    if (run) {
-      await s.click(run)
-      where = 'failure banner'
-      shown = await until('the failure banner', () => s.exec("const b = document.querySelector('.failure[role=alert]'); return b ? b.innerText : ''"), 120000, 300)
-    } else {
-      shown = await s.bodyText()
-    }
-    await shot(s, '07-refusal')
+    // The pre-run input check flags raw DIA first (a red flag holding Run);
+    // "Run anyway" lets the run start, still with -acquisition_check refuse,
+    // so FASTag itself refuses it and the failure banner must say why.
+    const flag = await until('the raw-DIA red flag', () => s.exec(`const f = document.querySelector('li.check-flag[data-unanswered]');
+      return f ? f.innerText : ''`), 120000, 300)
+    await shot(s, '07-refusal-flag')
+    await s.exec(`const f = document.querySelector('li.check-flag[data-unanswered]');
+      const b = f && [...f.querySelectorAll('button')].find((b) => b.textContent.trim() === 'Run anyway'); b && b.click(); return !!b`)
+    await s.click(await s.button('Run on dia_like.mzML', 60000))
+    const where = 'failure banner'
+    const shown = await until('the failure banner', () => s.exec("const b = document.querySelector('.failure[role=alert]'); return b ? b.innerText : ''"), 180000, 300)
+    await shot(s, '08-refusal-banner')
     // The CLI's reason: its last line naming DIA (FASTag's refusal message).
     const reason = cliText.split(/\r?\n/).map((l) => l.trim()).filter((l) => /DIA/.test(l)).pop() || ''
-    record.steps.refusal = { where, cliExit: r.status, reason, shown: shown.slice(0, 1500) }
+    record.steps.refusal = { where, cliExit: r.status, reason, flag: flag.slice(0, 800), shown: shown.slice(0, 1500) }
+    assert.match(flag, /DIA/, `the pre-run red flag does not name DIA: ${flag}`)
     assert.ok(reason, `no DIA reason in the CLI's output: ${cliText.slice(-800)}`)
-    const words = reason.replace(/^[^:]*error[^:]*:\s*/i, '').split(/\s+/).filter((w) => w.length > 4).slice(0, 5)
+    // Its words after the path ("is raw DIA: the precursor m/z ...").
+    const core = reason.includes(' is raw DIA') ? reason.slice(reason.indexOf(' is raw DIA')) : reason.replace(/^[^:]*error[^:]*:\s*/i, '')
+    const words = core.split(/\s+/).filter((w) => w.length > 4).slice(0, 6)
     for (const w of words) assert.ok(shown.includes(w), `the ${where} does not quote FASTag's reason "${reason}"; it shows: ${shown.slice(0, 800)}`)
   }))

@@ -48,16 +48,6 @@ $log = Join-Path $Out 'tauri-driver.log'
 $wrap = Join-Path $drv 'msedgedriver-logged.cmd'
 ('@"%~dp0msedgedriver.exe" --verbose --log-path="' + $Out + '\msedgedriver.log" %*') | Set-Content -Encoding ascii $wrap
 $d = Start-Process tauri-driver -ArgumentList '--port', '4444', '--native-driver', $wrap -PassThru -NoNewWindow -RedirectStandardOutput $log -RedirectStandardError "$log.err"
-# The processes during the first sessions (Out\procs.txt).
-$procs = Join-Path $Out 'procs.txt'
-$sampler = Start-Job -ArgumentList $procs -ScriptBlock {
-  param($f)
-  foreach ($k in 1..45) {
-    Get-CimInstance Win32_Process | Where-Object { $_.Name -match 'fastag|msedgewebview2|msedgedriver' } |
-      ForEach-Object { "$(Get-Date -Format HH:mm:ss) $($_.ProcessId) <- $($_.ParentProcessId) $($_.Name) :: $($_.CommandLine)" } | Add-Content $f
-    Start-Sleep 2
-  }
-}
 try {
   $up = $false
   for ($i = 0; $i -lt 100 -and -not $up; $i++) {
@@ -69,7 +59,6 @@ try {
   $code = $LASTEXITCODE
   Pop-Location
 } finally {
-  Stop-Job $sampler -ErrorAction SilentlyContinue
   Stop-Process -Id $d.Id -Force -ErrorAction SilentlyContinue
   Get-Process msedgedriver -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
 }
