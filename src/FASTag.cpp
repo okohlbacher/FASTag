@@ -617,7 +617,8 @@ protected:
     registerOutputFile_("label_discovery_out", "<file>", "",
                         "Experimental: report every terminal or lysine mass offset the tag flanks carry, known or "
                         "not, explained by residues, the known labels or Unimod, and a label call "
-                        "(failed its held-out test: 6 of 150 label-free runs got a label call; "
+                        "(format 5 passed its fourth held-out test: 0 of 42 label-free runs got a label call, "
+                        "5 of 102 labelled runs were called label-free; "
                         "format in doc/LABEL-DISCOVERY-REPORT.md)", false);
     setValidFormats_("label_discovery_out", ListUtils::create<std::string>("tsv"));
     registerDoubleOption_("label_discovery_max_flank", "<Da>", 700.0,
@@ -809,9 +810,10 @@ protected:
                           "isolation windows holding several peptides, is refused with exit code 11 "
                           "(refuse), tagged anyway with a warning as before 1.12 (warn), or not "
                           "checked (off). Tag DIA through pseudo-DDA spectra instead: run DIAspeXtract "
-                          "(or diaTracer for .d) first; their output passes the check. The check failed its "
-                          "held-out release test (8 of 202 DDA-labelled files refused): if a DDA file is "
-                          "refused, use warn or off", false);
+                          "(or diaTracer for .d) first. The revised 1.13 check passed its second held-out "
+                          "test on Thermo files: 0 of 58 non-DIA and 35 of 37 DIA files refused "
+                          "(no Astral, timsTOF or SCIEX files tested). If a known DDA file is refused, "
+                          "inspect the acquisition metadata before choosing warn or off", false);
     setValidStrings_("acquisition_check", ListUtils::create<std::string>("refuse,warn,off"));
     registerIntOption_("acquisition_probe_spectra", "<n>", 4000,
                        "MS2 spectra the acquisition check reads (metadata only) from the start of "

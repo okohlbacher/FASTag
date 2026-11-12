@@ -15,7 +15,7 @@ describe('rust-security: working directory', () => {
     mock.nextPickInput = '/d/a.mzML'
     await click(screen.getByRole('button', { name: /^(Choose file|Change)…$/ }))
     const outField = screen.getByLabelText(/Tags TSV/) as HTMLInputElement
-    expect(outField.placeholder).toBe('tags.tsv')
+    expect(outField.placeholder).toBe('Filled in when you choose spectra')
     await act(async () => {
       fireEvent.change(outField, { target: { value: 'run.tags.tsv' } })
     })

@@ -40,7 +40,7 @@ export const TASKS: readonly Task[] = [
   {
     id: 'characterize',
     label: 'Characterize a run',
-    blurb: 'Species (extension 2, paper-validated), digest, label and glyco reports on a tenth of the spectra.',
+    blurb: 'Survey species, digestion, labels and glycopeptides using 10% of the spectra. A good first step.',
     runs: true,
     batch: false,
     values: CHARACTERIZE
@@ -51,7 +51,7 @@ export const TASKS: readonly Task[] = [
     // Only the input differs from Characterize in P2a: Setup asks for the
     // files of a batch first. The output folder and the cross-run summary
     // are the Batch view's (GUI-DESIGN 10 P2b), the SDRF comparison P4's.
-    blurb: 'The Characterize reports for every file of a batch, each beside its own input.',
+    blurb: 'Survey several files and compare their results. Optionally check sample metadata from an SDRF file.',
     runs: true,
     batch: true,
     values: CHARACTERIZE
@@ -61,7 +61,7 @@ export const TASKS: readonly Task[] = [
     label: 'Export tags',
     // The best-tag-per-spectrum thinning is the Export menu's, with the
     // results browser rewrite (GUI-DESIGN S8, 10 P3); the run writes every tag.
-    blurb: 'Every tag with a per-residue confidence column (res_conf), for de novo assembly and export.',
+    blurb: 'Extract short peptide sequences from all spectra, with per-residue confidence for assembly and export.',
     runs: true,
     batch: false,
     values: { res_conf: true }
@@ -69,7 +69,7 @@ export const TASKS: readonly Task[] = [
   {
     id: 'open-results',
     label: 'Open results / inspect spectra',
-    blurb: 'No run: open a tags table or a report FASTag wrote earlier.',
+    blurb: 'Browse a tags table or report from an earlier FASTag run.',
     runs: false,
     batch: false,
     values: {}

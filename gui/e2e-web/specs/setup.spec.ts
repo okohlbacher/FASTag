@@ -49,13 +49,13 @@ test('four step cards; a section switch hides the settings it turns on', async (
   await page.locator('#p-species').uncheck()
   await expect(page.getByLabel(/^Species rank/)).toBeHidden()
   await expect(page.locator('#h-species')).toContainText('Turns on 11 settings.')
-  await expect(page.locator('.step-card').nth(1).locator('.card-summary')).toHaveText('Species off · FASTA none')
+  await expect(page.locator('.step-card').nth(1).locator('.card-summary')).toHaveText('Species off · no FASTA selected (optional)')
 })
 
 test('the plan footer counts what differs from the task, and Reset takes it back', async ({ page }) => {
   await openApp(page)
   await page.getByRole('button', { name: 'Choose file…' }).click()
-  await expect(plan(page)).toContainText('1 file · species on · digest+label+glyco · out: beside input')
+  await expect(plan(page)).toContainText('1 file · 10% of spectra · species on · digest+label+glyco · out: beside input')
   await expect(plan(page)).toContainText('Same as Characterize a run')
   await page.locator('#p-tag_length').fill('4')
   await expect(plan(page)).toContainText('Differs from Characterize a run: 1')

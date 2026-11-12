@@ -332,9 +332,9 @@ function genusTile(c: SpeciesCall, da: boolean): Tile {
     if (c.present.length === 0)
       return {
         ...base,
-        value: 'none present',
+        value: c.noCall > 0 ? 'no presence call' : 'none detected',
         tone: 'nocall',
-        note: `${c.runNoCall ? `run-level no call (${c.runNoCall})` : `no genus present by the CLI species call; ${c.noCall} no call, ${c.notDetected} not detected`}.${caveat}`
+        note: `${c.runNoCall ? `run-level no call (${c.runNoCall})` : `the CLI did not call any genus present; ${c.noCall} no call, ${c.notDetected} not detected`}. This does not establish absence.${caveat}`
       }
     const others = c.present.slice(1).map((t) => t.name)
     return {
@@ -403,7 +403,7 @@ function alkylationTile(c: AlkylationCall, fasta: boolean, params: Record<string
       ...base,
       value: 'no call (counts only)',
       tone: 'nocall',
-      note: `${hits.length ? hits.map((s) => `${s.name} ${fmt(s.spectra)} of ${placed} placed spectra`).join(', ') : `no Cys alkylation gap among ${placed} placed spectra`}; FASTag writes no alkylation call yet`
+      note: `${hits.length ? hits.map((s) => `${s.name} ${fmt(s.spectra)} of ${placed} placed spectra`).join(', ') : `no Cys alkylation gap among ${placed} placed spectra`}; this mass-gap report contains counts, not an alkylation call. The separate CLI-only -alkylation_out report makes that call`
     }
   }
   if (fasta)

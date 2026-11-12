@@ -150,7 +150,7 @@ describe('calls.ts: alkylation (mass-gap report)', () => {
     expect(alkylationCall(null)).toEqual({ state: 'absent' })
   })
 
-  it('with a FASTA: the Cys gap counts, and still no call (FASTag 1.12 writes none)', () => {
+  it('with a FASTA: the Cys gap counts, without turning counts into a call', () => {
     const r = parseReport(CLI_CASES.v112Fasta.massgap!, '/d/run.massgap.tsv')
     expect(alkylationCall(r)).toEqual({
       state: 'counts',

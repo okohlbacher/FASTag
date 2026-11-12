@@ -8,6 +8,7 @@ import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 import HelpView from './HelpView'
 import { resetHelp, showHelpPage } from './link'
+import { taskById } from '../setup/tasks'
 
 const repo = join(__dirname, '..', '..', '..')
 const doc = (f: string): string => readFileSync(join(repo, f), 'utf8').replace(/\s+/g, ' ')
@@ -25,6 +26,18 @@ function pageText(page: string): string {
 afterEach(() => resetHelp())
 
 describe('help vs docs', () => {
+  it('describes the actual first-run task and existing results views', () => {
+    const task = taskById('characterize')!
+    expect(task.values).toMatchObject({ species: true, extension: '2', subsample_fraction: '0.1', digest_out: 'digest.tsv', label_out: 'label.tsv', glyco: true })
+    const start = pageText('start')
+    expect(start).toContain('10% of the input spectra')
+    expect(start).toContain('Results opens on Overview')
+    expect(start).not.toContain('Every other setting starts at')
+    const files = pageText('files')
+    expect(files).toContain('Glyco tab lists these spectra')
+    expect(files).not.toContain('report has no tab')
+  })
+
   const readme = doc('README.md')
   const digest = doc('doc/DESIGN-digest.md')
   const species = doc('doc/SPECIES-DETECTOR.md')

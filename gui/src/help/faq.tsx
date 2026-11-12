@@ -315,7 +315,7 @@ export const FAQ: FaqEntry[] = [
     group: 'Digest tab',
     question: 'The Digest tab is empty',
     symptoms: <>The Digest tab offers only to open a report.</>,
-    causes: [<>The run wrote none of the digest, label or mass-gap reports; they are off by default.</>],
+    causes: [<>The run wrote none of the digest, label or mass-gap reports. They are off in the CLI defaults; Characterize a run enables the digest and label reports.</>],
     fixes: [
       <>Under Digest and labels, set a file for the digest report and the label report. The mass-gap report sits under Reconciliation and needs the reconciliation table. See <L to="digest">The Digest tab</L>.</>
     ]
@@ -360,7 +360,7 @@ export const FAQ: FaqEntry[] = [
       <>With "Spectra with tags" set, no spectrum had a tag to write, for example because no tag matched the sequence database.</>
     ],
     fixes: [
-      <>The tags file and every report are complete. If the Tags tab shows only entrapment matches, no reported tag matched the sequence database, so there was no spectrum to write. This does not show that the protein is absent. Otherwise check the tags (see <L to="faq-no-tags">Few or no tags</L>).</>
+      <>The desktop app treats exit code 13 as a failed run and removes that run&apos;s output files. Clear the “Spectra with tags” output and run again to inspect the tags and reports. An absence of matching spectra does not show that the protein is absent. See <L to="faq-no-tags">Few or no tags</L>.</>
     ]
   },
   {
@@ -368,7 +368,7 @@ export const FAQ: FaqEntry[] = [
     group: 'Files',
     question: 'The entrapment database is refused (exit code 13)',
     symptoms: <>The reason says the entrapment database shares its sequence space with the target database.</>,
-    causes: [<>Every tag that could match the <L to="gloss-entrapment">entrapment database</L> could also match the sequence database, so no chance rate can be estimated. The files written while the spectra are read (the tags file, the reconciliation table and the glyco report) are kept; the tags file has no q_db column. The files written at the end of a run are not: the mass-shift histogram, the reconciliation identifications, the digest, label and mass-gap reports, and the spectra file.</>],
+    causes: [<>Every tag that could match the <L to="gloss-entrapment">entrapment database</L> could also match the sequence database, so no chance rate can be estimated. The CLI can leave partial outputs at this point, but the desktop app treats exit code 13 as a failed run and removes that run&apos;s output files.</>],
     fixes: [<>Choose a more distant organism for the entrapment database, for example archaea for a human sample.</>]
   },
 

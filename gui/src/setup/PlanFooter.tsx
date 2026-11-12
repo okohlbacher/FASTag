@@ -4,7 +4,7 @@
 // send (useRun paramsFor): the command line is fastag.rs build_args, the INI
 // is that argv merged by the CLI itself (ini.rs).
 
-import { useState, type JSX } from 'react'
+import { useEffect, useState, type JSX } from 'react'
 import type { Session } from './useSession'
 import type { RunState } from '../run/useRun'
 import { planLine } from './plan'
@@ -23,6 +23,10 @@ export default function PlanFooter({ session, run }: { session: Session; run: Ru
   const { values, input, out, diff, originText } = session
   const [copied, setCopied] = useState<'yes' | 'no' | null>(null)
   const [ini, setIni] = useState<{ ok: boolean; text: string } | null>(null)
+  useEffect(() => {
+    setCopied(null)
+    setIni(null)
+  }, [values, input, out])
 
   async function copy(): Promise<void> {
     try {

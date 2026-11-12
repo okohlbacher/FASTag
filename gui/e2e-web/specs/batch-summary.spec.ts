@@ -41,7 +41,7 @@ function oracle(c: string) {
     tags: Number(/^(\d+) MS2 spectra, (\d+) tags/m.exec(log)![2]),
     protease: call(protease, protease ?? '', 'no call'),
     label: call(lab, lab === 'label-free' ? 'none (label-free)' : (lab ?? ''), 'no call'),
-    genus: call(present ? present[2] : null, present?.[2] ?? '', genera.length ? 'none present' : 'no genus')
+    genus: call(present ? present[2] : null, present?.[2] ?? '', genera.length ? (genera.some((r) => r[8] === 'no_call') ? 'no presence call' : 'none detected') : 'no genus')
   }
 }
 

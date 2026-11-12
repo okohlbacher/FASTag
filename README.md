@@ -211,7 +211,8 @@ placed too few spectra with an extension below 3 it offers the run with extensio
 open only in a spreadsheet. A **Glyco** tab lists the `-glyco_out` spectra, flagged ones first by their
 oxonium intensity. Setup starts
 from a task (by default **Characterize a run**: species, digest, label and
-glyco reports), so a file and Run are all a first run needs; the settings sit
+glyco reports on **10% of the input spectra**). Choose a file, check the MS2
+fragment tolerance and output path, then Run; the settings sit
 in four step cards, presets store only what differs from their task, and
 **Export INI…** writes the same parameters for `FASTag -ini`. The
 window has four views, switched from the top bar or with Cmd/Ctrl+1..4:
@@ -234,6 +235,14 @@ Installable bundles ship with every release: signed, notarized and stapled disk
 images for macOS (also on Homebrew, above), an installer for Windows, which
 is not yet code-signed (see above), and from 1.12.0 a `.deb` and a tarball for
 Linux x64 (glibc ≥ 2.35, WebKitGTK 4.1: Ubuntu 22.04, Debian 12) — see the install table at the top. Details in [gui/README.md](gui/README.md).
+
+For a first survey, keep **Characterize a run**, choose spectra, confirm the
+MS2 analyser's tolerance, then run and read **Results → Overview**. To survey
+the whole input, set **Subsample fraction** to `1` and **Subsample spectra**
+to `0`; the initial task intentionally samples only a tenth. **Export tags**
+starts from the full input and adds per-residue confidence. The
+[desktop first-run guide](gui/README.md#first-run) explains the tasks,
+outputs, checks and result views.
 
 ## Usage
 

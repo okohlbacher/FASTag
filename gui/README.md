@@ -13,6 +13,51 @@ dominated by the bundled CLI and its ~1 GB taxonomy (see Packaging), about
 `window.fastag` bridge (`src/api.ts`), which is the only surface the Rust
 backend has to satisfy.
 
+## First run
+
+1. Keep **Characterize a run** selected in **Setup** for a quick survey. It
+   samples **10% of the input spectra** and enables species, digest, label
+   and glyco reports. No FASTA is needed. Choose **Export tags** when you want
+   to tag the full input with per-residue confidence for downstream export.
+2. Click **Choose file…** and select uncompressed mzML or MGF, or an mzPeak
+   file. Convert vendor files such as `.raw` and `.d` first. Raw DIA needs
+   conversion to pseudo-DDA spectra; see the checks below the input.
+3. Review those checks and confirm the **fragment tolerance** under
+   **Tagging**, or use **Fragment tolerance preset** beside Run. The preset
+   should match the analyser that measured the MS2
+   fragments: 20 ppm is a starting point for high-resolution MS2, 0.3 Da for
+   ion-trap MS2. A hybrid instrument's name alone may not identify its MS2
+   analyser. Instrument suggestions are applied only when you choose them.
+4. Check **Output** and the plan above **Run**. By default the tags and
+   requested reports are written beside the input; **Browse…** changes the
+   tags path. Existing outputs require confirmation before overwrite.
+5. Click **Run on <file>**. Characterize opens **Results → Overview** when it
+   finishes. Read the evidence and caveats, then use **Tags**, **Species**,
+   **Digest** or **Glyco** for the detail. A species ranking is not a presence
+   call, and “no call” or “not assessed” does not establish absence.
+6. For a full survey, set **Subsample fraction** to `1` and **Subsample
+   spectra** to `0` under **Spectra**, then run again. **Export INI…** saves
+   the current setup for the CLI; **Save…** saves a reusable preset.
+
+For **Stitch/ALPS reads**, choose a tag length or extension that can reach
+the export's default minimum of 8 residues. **Export tags** initially uses
+tag length 3 and extension 0, so its tags are too short for that export.
+For example, length 3 with extension 3 allows tags of up to 9 residues;
+only tags that actually reach the export minimum will be kept. Lower the
+export minimum only if shorter reads suit the downstream tool. Read exports
+use the whole file and their own filters, not the Tags table's filters.
+
+**Batch QC vs SDRF** runs the same survey for multiple files. An SDRF
+(sample and data relationship format) metadata table is optional; load one
+in **Batch** to compare its annotations with the reports. **Open results /
+inspect spectra** opens existing output without starting a new run.
+
+A field marked **changed** differs from the CLI default, including changes
+made by the selected task. The plan compares your settings with that task
+or preset. Its **Reset** restores the task or preset; **Reset…** beside Run
+restores the CLI defaults. Use **Help** (F1) for the searchable guide,
+glossary and parameter reference.
+
 ## Layout
 
 ```
@@ -185,7 +230,7 @@ manifest: the shell empties the file before the script runs.
 ## The window
 
 Four views, switched from the top bar: **Setup** (the input, the parameters
-and Run), **Results** (Overview, Tags, Species, Digest, Mass gaps & recon and Glyco, full width), **Batch** (the
+and Run), **Results** (Overview, Tags, Spectrum when supported, Species, Digest, Mass gaps & recon and Glyco, full width), **Batch** (the
 queue, its run bar, the failure banner, the summary table and each job's log) and **History**
 (every recorded run: input, status, duration, tags, outputs; Open, Reveal,
 Copy command, Settings into form with Undo, Re-run, Delete record). Copy command
@@ -208,12 +253,12 @@ A run of **Characterize a run** or **Batch QC** lands on the **Overview**:
 key figures (MS2 spectra, spectra with tags, tags, tags with E ≤ 1, glyco
 flags), the calls FASTag made (protease from the digest report, top genus
 from the species report, label from the `label_call` rows of `-label_out`,
-alkylation only from a mass-gap report, so only with a FASTA; otherwise
+cysteine mass-gap counts from a mass-gap report, which needs a FASTA; otherwise
 "not assessed (needs a FASTA)"), the checks (the 1.12 acquisition check
 line, a Da tolerance, electron activation) and suggested search settings,
 each line naming its evidence (a call, a default, a preset or the run).
 Every tile names its cutoff or caveat; with fewer than 1,000 spectra a call
-reads "too little evidence". The GUI computes no call itself: `calls.ts`
+reads "too little evidence". The Overview does not turn report counts into a call: `calls.ts`
 only parses what the CLI wrote, and what an older CLI does not write reads
 "not called" or "not checked" (detected from the rows and columns present,
 never from the version string). A tile whose report the run did not write
@@ -242,7 +287,8 @@ organism, cleavage agent, label, modification parameters, instrument and
 fragment tolerance. Only FASTag's output counts: the summary's calls (a no
 call or "too little evidence" is never a difference), the instrument the
 input names and the run's tolerance (the reports' meta and run rows), and the
-run's fixed modifications (its log; FASTag writes no alkylation call). A
+run's fixed modifications (its log; the GUI does not use the separate CLI
+`-alkylation_out` call for this comparison). A
 converter's generic instrument term ("Thermo Fisher Scientific instrument
 model") counts as no instrument name: the instrument_model row is read
 instead, else the field is a no call. Fragment tolerance and modifications are
@@ -296,6 +342,21 @@ progress bar, is left out). Presets and the last-used offer are kept with
 tauri-plugin-store in `settings.json` in the app config folder; a settings
 file of an earlier version is migrated on the first start, every preset
 kept, and the old file stays beside it as `settings.v1.json.bak`.
+
+The **Species** tab labels its headline **Top-ranked taxon**: the taxon with
+the most ranked evidence, which need not have a CLI presence call. A tie
+reads **No single leader**. When an opened report contains the optional
+species call columns, **CLI call** shows each reported status separately
+from the counts, with its reason on hover. The relative bars are evidence
+ratios, not probabilities. The **Glyco** tab displays the oxonium-ion report;
+it is not necessary to open a spreadsheet to inspect it.
+
+The GUI's **Alkylation** summary uses cysteine counts from the mass-gap
+report, not a reagent call. The CLI's separate `-alkylation_out` can make a
+call, but that experimental option is not in the form or this summary.
+The settings reference under **Not in the form** documents such CLI-only
+options, including label discovery; their presence in Help does not enable
+them for a GUI run.
 
 The **Tags** table opens in file order and swaps in the E-value order when
 it is ready. Its rows can be walked by keyboard: the arrows, Page Up/Down and

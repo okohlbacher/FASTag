@@ -4,6 +4,7 @@
 
 import { PARAM_BY_NAME, isActive, inertBecause } from '../paramLayout'
 import { baseName } from '../digestReport'
+import { dirName } from '../app/paths'
 
 export interface Card {
   n: number
@@ -27,6 +28,16 @@ const shown = (v: unknown, name: string): string => {
   return s === '' ? String(PARAM_BY_NAME.get(name)?.default ?? '') : s
 }
 
+// Match the CLI: an absolute sample count takes precedence over a fraction;
+// zero means all. Do not round a small, nonzero fraction down to "0%".
+export function samplingSummary(values: V): string {
+  const n = Number(shown(values['subsample_spectra'], 'subsample_spectra'))
+  const fraction = Number(shown(values['subsample_fraction'], 'subsample_fraction'))
+  if (n > 0) return `up to ${n.toLocaleString('en-US')} spectra sampled`
+  if (fraction > 0 && fraction < 1) return `${Number((fraction * 100).toPrecision(6))}% of spectra`
+  return 'all spectra'
+}
+
 /// The reports a run writes, by short name, in the order of card 4.
 export function reportsOn(values: V): string[] {
   const on: string[] = []
@@ -43,16 +54,13 @@ export function cardSummary(id: Card['id'], values: V, ctx: { input: string; out
   switch (id) {
     case 'spectra': {
       const what = ctx.files > 0 ? `${ctx.files} ${ctx.files === 1 ? 'file' : 'files'} in the batch` : ctx.input ? baseName(ctx.input) : 'no file yet'
-      const sub = Number(shown(values['subsample_fraction'], 'subsample_fraction'))
-      const n = Number(shown(values['subsample_spectra'], 'subsample_spectra'))
-      const subText = n > 0 ? ` · ${n} spectra sampled` : sub > 0 && sub < 1 ? ` · ${Math.round(sub * 100)}% of spectra` : ''
-      return `${what}${subText}`
+      return `${what} · ${samplingSummary(values)}`
     }
     case 'database': {
       const species = isActive('species', values)
         ? `Species on (${isActive('taxdb', values) ? baseName(String(values['taxdb'])) : 'bundled index'})`
         : 'Species off'
-      const fasta = isActive('fasta', values) ? `FASTA ${baseName(String(values['fasta']))}` : 'FASTA none'
+      const fasta = isActive('fasta', values) ? `FASTA ${baseName(String(values['fasta']))}` : 'no FASTA selected (optional)'
       return `${species} · ${fasta}`
     }
     case 'tagging': {
@@ -76,13 +84,13 @@ export function cardSummary(id: Card['id'], values: V, ctx: { input: string; out
 export function planLine(values: V, ctx: { input: string; out: string; files: number; outDir?: string | null }): string {
   const parts: string[] = []
   parts.push(ctx.files > 0 ? `${ctx.files} ${ctx.files === 1 ? 'file' : 'files'}` : ctx.input ? '1 file' : 'no file')
+  parts.push(samplingSummary(values))
   parts.push(isActive('species', values) ? 'species on' : 'species off')
   const on = reportsOn(values)
   parts.push(on.length ? on.join('+') : 'no reports')
   if (ctx.files > 0) parts.push(ctx.outDir ? `out: ${ctx.outDir}` : 'out: beside each input')
   else if (ctx.out) {
-    const dir = (p: string): string => p.slice(0, Math.max(p.lastIndexOf('/'), p.lastIndexOf('\\')) + 1)
-    parts.push(ctx.input && dir(ctx.input) === dir(ctx.out) ? 'out: beside input' : `out: ${baseName(ctx.out)}`)
+    parts.push(ctx.input && dirName(ctx.input) === dirName(ctx.out) ? 'out: beside input' : `out: ${ctx.out}`)
   }
   return parts.join(' · ')
 }

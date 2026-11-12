@@ -97,8 +97,8 @@ const OPT_IN_1_13_EXPERIMENTAL = '1.13 experimental command-line option, not in 
 /// not offered in the form.
 const EXPERIMENTAL_1_13 = '1.13 experimental command-line option, not in the form (CLI default applies)'
 
-/// Label discovery (-label_discovery_out): experimental and opt-in; it failed
-/// its held-out test; command line only until it has a GUI design.
+/// Label discovery (-label_discovery_out): experimental and opt-in; format 5
+/// passed its fourth held-out test; command line only until it has a GUI design.
 const EXPERIMENTAL_LABEL_DISCOVERY =
   'experimental command-line option (label discovery), not in the form (CLI default applies)'
 
@@ -115,7 +115,7 @@ export const PARAM_UI: Record<string, ParamUi> = {
     section: 'Spectra',
     label: 'Raw DIA check',
     help: {
-      text: 'Before tagging, FASTag checks whether the file is raw DIA data, whose MS2 spectra each mix several peptides. By default (refuse) such a file is not tagged: the run stops with exit code 11 before any file is written. warn tags it anyway, with a warning in the log; off skips the check. DDA and pseudo-DDA files pass the check and are tagged the same under every setting. The check failed its held-out test: 8 of 202 files labelled DDA were refused, so switch to warn or off when a DDA file is refused.',
+      text: 'Before tagging, FASTag checks whether the file is raw DIA data, whose MS2 spectra each mix several peptides. By default (refuse) a file classified as raw DIA is not tagged: the run stops with exit code 11 before any file is written. warn tags it anyway, with a warning in the log; off skips the check. The revised 1.13 check passed its second held-out test on Thermo files: 0 of 58 non-DIA files and 35 of 37 DIA files were refused. That test included no Astral, timsTOF or SCIEX files. If a known DDA file is refused, inspect the acquisition metadata before choosing warn or off.',
       tip: 'Better than warn: make pseudo-DDA spectra with DIAspeXtract (or diaTracer for timsTOF .d) first, and tag those. Tags of raw DIA spectra get wrong flanking masses and complement statistics.'
     }
   },
@@ -1251,7 +1251,7 @@ export const PARAM_UI: Record<string, ParamUi> = {
   label_discovery_out: {
     hidden: EXPERIMENTAL_LABEL_DISCOVERY,
     help: {
-      text: 'Write the label discovery report: every mass offset the tag flanks carry at the peptide N-terminus, at lysine, at arginine or at the C-terminus, known or not, explained by residues, the known labels or Unimod, with a label call. Experimental: it failed its held-out test (6 of 150 label-free runs got a label call), so do not rely on it as free of false label calls.'
+      text: 'Write the label discovery report: mass offsets the tag flanks carry at the peptide N-terminus, lysine, arginine or C-terminus, explained by residues, known labels or Unimod, with a label call supported by reporter ions and precursor pairs. Experimental and CLI-only. Format 5 passed its fourth held-out test on 144 new PRIDE projects: 0 of 42 label-free runs got a label call, while 5 of 102 labelled runs were called label-free. Earlier formats failed; a call is evidence to check, not a guarantee.'
     }
   },
   label_discovery_depth: {

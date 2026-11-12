@@ -114,7 +114,7 @@ describe('Setup: the task chooser', () => {
     await renderColdApp(mock)
     const cards = screen.getAllByRole('region').filter((r) => r.classList.contains('step-card'))
     expect(cards.map((c) => c.getAttribute('aria-label'))).toEqual(['1 Spectra', '2 Database & taxonomy', '3 Tagging', '4 Reports'])
-    expect(within(cards[1]).getByText('Species on (bundled index) · FASTA none')).toBeDefined()
+    expect(within(cards[1]).getByText('Species on (bundled index) · no FASTA selected (optional)')).toBeDefined()
     expect(within(cards[2]).getByText('length 3 · extension 2 · 20.0 ppm · max 50 tags')).toBeDefined()
   })
 })
@@ -159,15 +159,42 @@ describe('Setup: hidden dependent fields', () => {
     })
     await waitFor(() => expect(document.activeElement).toBe(field('species')))
   })
+
+  it('a native view menu closes search instead of leaving a modal over a hidden form', async () => {
+    const mock = installMockBridge()
+    await renderColdApp(mock)
+    await click(screen.getByRole('button', { name: /Search…/ }))
+    expect(screen.getByRole('dialog', { name: 'Search parameters' })).toBeDefined()
+    await act(async () => mock.emitMenu('view-results'))
+    expect(screen.queryByRole('dialog', { name: 'Search parameters' })).toBeNull()
+    await click(screen.getByRole('button', { name: /^Setup$/ }))
+    expect(screen.queryByRole('dialog', { name: 'Search parameters' })).toBeNull()
+  })
 })
 
 describe('Setup: the plan footer', () => {
+  it('explains an empty output at the field and Run, then clears the error when repaired', async () => {
+    const mock = installMockBridge()
+    await renderColdApp(mock)
+    mock.nextPickInput = '/d/run01.mzML'
+    await click(screen.getByRole('button', { name: 'Choose file…' }))
+    const output = document.getElementById('out')!
+    await change(output, '')
+    expect(output.getAttribute('aria-invalid')).toBe('true')
+    expect(runButton().hasAttribute('disabled')).toBe(true)
+    expect(runButton().getAttribute('aria-describedby')).toContain('run-output-required')
+    expect(screen.getByText('Choose where to save the tags TSV in Output before running.')).toBeDefined()
+    await change(output, '/d/repaired.tsv')
+    expect(output.getAttribute('aria-invalid')).toBe('false')
+    expect(runButton().hasAttribute('disabled')).toBe(false)
+  })
+
   it('says what the run does and how far the form differs from where it started', async () => {
     const mock = installMockBridge()
     await renderColdApp(mock)
     mock.nextPickInput = '/d/run01.mzML'
     await click(screen.getByRole('button', { name: 'Choose file…' }))
-    expect(within(footer()).getByText('1 file · species on · digest+label+glyco · out: beside input')).toBeDefined()
+    expect(within(footer()).getByText('1 file · 10% of spectra · species on · digest+label+glyco · out: beside input')).toBeDefined()
     expect(footer().textContent).toContain('Same as Characterize a run')
     await change(field('tag_length')!, '4')
     await change(field('max_tags')!, '20')
@@ -194,6 +221,18 @@ describe('Setup: the plan footer', () => {
     // The footer asked for the very request Run sent, and copied its argv.
     expect(mock.commandLineCalls[0]).toEqual(mock.runCalls[0])
     expect(writeText).toHaveBeenCalledWith(shellLine(mock.commandOf(mock.runCalls[0])))
+  })
+
+  it('clears copied feedback when the command changes', async () => {
+    const mock = installMockBridge()
+    Object.defineProperty(navigator, 'clipboard', { value: { writeText: vi.fn().mockResolvedValue(undefined) }, configurable: true })
+    await renderColdApp(mock)
+    mock.nextPickInput = '/d/run01.mzML'
+    await click(screen.getByRole('button', { name: 'Choose file…' }))
+    await click(within(footer()).getByRole('button', { name: 'Copy command line' }))
+    expect(within(footer()).getByRole('button', { name: 'Copied' })).toBeDefined()
+    await change(field('tag_length')!, '4')
+    expect(within(footer()).getByRole('button', { name: 'Copy command line' })).toBeDefined()
   })
 
   it('Export INI writes the request Run would send to the chosen file', async () => {

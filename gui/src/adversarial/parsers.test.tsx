@@ -324,10 +324,10 @@ describe('SpeciesPanel: edge values from species.rs', () => {
   const taxon = (o: Partial<{ rank: string; taxid: number; name: string; observed: number; adjusted: number; q: number | null }>) => ({
     rank: 'genus', taxid: 1, name: 'A', observed: 5, adjusted: 5, q: 0.01, ...o
   })
-  it('an empty rank reads "Call at an unstated rank" and draws no empty rank chip', () => {
+  it('an empty rank reads "Ranking at an unstated rank" and draws no empty rank chip', () => {
     const { container } = render(<SpeciesPanel report={{ path: 'x', taxa: [taxon({ rank: '' })] }} enabled tooShort={null} contributed={null} totalMs2={null} />)
-    expect(screen.getByText(/^Call at an unstated rank/)).toBeDefined()
-    expect(screen.queryByText(/^-level call/)).toBeNull()
+    expect(screen.getByText(/^Ranking at an unstated rank/)).toBeDefined()
+    expect(screen.queryByText(/^-level ranking/)).toBeNull()
     expect(container.querySelector('.headline .rank')).toBeNull()
   })
   it('a missing q falls back to the CLI default of 1.000', () => {

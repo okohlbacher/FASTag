@@ -160,6 +160,7 @@ export default function App({ start = LANDING }: { start?: Origin } = {}): JSX.E
   useEffect(() => {
     if (shownView.current === view) return
     shownView.current = view
+    if (view !== 'setup') setSearchOpen(false)
     const a = document.activeElement
     if (a && a !== document.body && !a.closest('[hidden]')) return
     viewsRef.current?.querySelector<HTMLElement>(`.view[data-view="${view}"]`)?.focus()
@@ -352,6 +353,8 @@ export default function App({ start = LANDING }: { start?: Origin } = {}): JSX.E
 
   // Shortcuts and native menus run the same actions (setup/shortcuts.ts).
   const act = (a: Action): void => {
+    // Native menu events bypass the modal's DOM keyboard handler.
+    if (searchOpen && a !== 'search-params') setSearchOpen(false)
     const v = viewOfAction(a)
     if (v) {
       setView(v)
@@ -449,6 +452,7 @@ export default function App({ start = LANDING }: { start?: Origin } = {}): JSX.E
       fixes={session.fixes}
       onFix={session.applyFix}
       input={input}
+      out={out}
       jobs={jobs.length}
       remaining={run.remaining}
       failedJobs={run.failedJobs}
@@ -524,7 +528,7 @@ export default function App({ start = LANDING }: { start?: Origin } = {}): JSX.E
           {/* Hidden, not unmounted: the form, the batch and the results stay as they were. */}
           <section className="view view-setup" data-view="setup" hidden={view !== 'setup'} tabIndex={-1} aria-label="Setup">
             <aside className="controls" aria-label="Run setup">
-              {searchOpen && !busy && (
+              {searchOpen && view === 'setup' && !busy && (
                 <ParamSearch
                   onChoose={chooseParam}
                   onClose={() => {

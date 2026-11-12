@@ -26,6 +26,7 @@ function bar(p: Partial<RunBarProps> = {}): { c: HTMLElement; props: RunBarProps
     fixes: [],
     onFix: vi.fn(),
     input: '/d/a.mzML',
+    out: '/d/a.tags.tsv',
     jobs: 0,
     remaining: 0,
     failedJobs: 0,
