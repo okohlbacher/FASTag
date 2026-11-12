@@ -129,7 +129,8 @@ test('help: keyboard search opens a CLI entry and Escape restores focus without 
     await view(s, 'setup')
     const before = await s.exec("return document.getElementById('p-tag_length').value")
     const help = await s.button('Help')
-    await s.exec('arguments[0].focus()', { 'element-6066-11e4-a52f-4a6976a6e3b5': help })
+    // WebKitGTK does not resolve an element reference passed to execute/sync here.
+    await s.exec('document.querySelector(\'button[aria-controls="help-panel"]\').focus()')
     await s.click(help)
     const search = await until('Help search', () => s.find('//input[@aria-label="Search Help"]'))
     // W3C element send-keys drives WebKit's actual keyboard defaults. A
