@@ -321,6 +321,23 @@ pub async fn probe(app: AppHandle) -> BinaryInfo {
         })
 }
 
+/// The installed-app check (tools/windows_installed_check.ps1): with
+/// FASTAG_SELFTEST_OUT=<file> set, the app runs the start-up probe exactly as
+/// the Setup page does (same resolution, environment and spawn path), writes
+/// its BinaryInfo as JSON to <file> and exits 0 if the CLI ran, else 1.
+pub(crate) const SELFTEST_OUT: &str = "FASTAG_SELFTEST_OUT";
+
+pub(crate) fn self_test(app: &AppHandle, out: &std::path::Path) -> i32 {
+    let info = probe_blocking(app);
+    let json = serde_json::to_string_pretty(&info).unwrap_or_default();
+    let written = std::fs::write(out, json).is_ok();
+    if info.ok && written {
+        0
+    } else {
+        1
+    }
+}
+
 fn probe_blocking(app: &AppHandle) -> BinaryInfo {
     let r = resolve_binary(app);
     let bin_s = r.bin.display().to_string();

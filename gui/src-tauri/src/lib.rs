@@ -68,6 +68,13 @@ pub fn run() {
         .setup(|app| {
             // Migrates a v1 settings file before the store first opens.
             settings::init(app.handle());
+            if let Some(out) = std::env::var_os(fastag::SELFTEST_OUT) {
+                let handle = app.handle().clone();
+                std::thread::spawn(move || {
+                    let code = fastag::self_test(&handle, std::path::Path::new(&out));
+                    handle.exit(code);
+                });
+            }
             Ok(())
         })
         .manage(RunManager::default())
