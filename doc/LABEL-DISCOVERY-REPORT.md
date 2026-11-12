@@ -338,6 +338,8 @@ precursors of the same charge whose m/z differ by a label mass / z within
 | `lys6arg6_pairs`, `medium_heavy_pairs` | the count at +6.0201 Da (Lys6, Arg6) and the larger count at +3.9891 / +3.9881 Da (Lys4 to Lys8, Arg6 to Arg10), unreleased |
 | `silac_single` | `yes` when one SILAC spacing not in `silac_site_veto` (Lys8, Arg10, +6.0201, medium to heavy) has >= 30 pairs and a ratio >= 20 and the dimethyl rule does not fire, unreleased |
 | `silac_site_veto` | the spacings the site check removes (`-` for none); `n` is the largest expected count, unreleased |
+| `hint_pairs` | the largest count at Lys8, Arg10 or one of the five dimethyl spacings, unreleased |
+| `label_hint` | `yes` when `hint_pairs` is >= 10 and >= 3 x (`control_pairs` + 1): a label signal too weak for a call; it blocks the absence call, unreleased |
 
 Effect on the call:
 
@@ -374,6 +376,18 @@ Effect on the call:
   `arg10_pairs` and `other_pairs` all below 30 pairs or below a ratio of 2):
   the call becomes `label-free` (`basis` `absence`). With any other gate the
   no call stays.
+- Unreleased, development only: no absence call when `label_hint` is `yes`
+  (the run stays a no call). +6.0201 and medium to heavy do not count:
+  label-free runs with few precursors show 14 to 25 pairs there over a
+  control of 0 to 5. On six development sets (774 runs, incl. the spent
+  held-out set 5) the hint turns four wrong `label-free` calls of labelled
+  runs into no calls (SILAC PXD009424, PXD012108; dimethyl PXD012424,
+  PXD002727: 11 to 23 pairs at 3.6 to 10.5 x (control + 1)) and changes no
+  other result; label-free runs the absence rule calls reach 2.5. No
+  held-out test. Not fixed: labelled runs without any pair signal
+  (PXD051121, PXD009190, PXD063777), Lys4/Arg6 PXD010946 (2 Lys4 and 10 Arg6
+  pairs; +6.0201 is not a hint), and the site-scan `label-free` call of the
+  partial-incorporation SILAC run PXD009500.
 
 On the 99 development runs the two rules give 93 right results instead of 86:
 the pair rule adds two SILAC runs with ion-trap MS2 (PXD011848, PXD050844),

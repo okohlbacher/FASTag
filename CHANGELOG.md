@@ -2,6 +2,16 @@
 
 ## Unreleased (after 1.13.1)
 
+- **Label discovery: a weak label pair signal blocks the absence call
+  (development only, no held-out test).** The absence rule no longer calls a
+  run `label-free` when Lys8, Arg10 or a dimethyl spacing shows >= 10 pairs
+  and >= 3 x (control + 1); the run stays a no call. New `ld_pair` rows
+  `hint_pairs`, `label_hint` (format 5; readers ignore unknown keys). Six
+  development sets (774 runs, incl. the spent held-out set 5): four wrong
+  `label-free` calls of SILAC and dimethyl runs become no calls, no other
+  result changes, 0 label calls on label-free runs
+  (doc/LABEL-DISCOVERY-REPORT.md, `ld_pair`).
+
 - **Label discovery: SILAC from one pair spacing, with a site check
   (development only, no held-out test).** A no call or a `label-free` call
   becomes a SILAC call (`basis` `precursor_pairs`) when one SILAC precursor
