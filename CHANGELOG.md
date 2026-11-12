@@ -2,6 +2,20 @@
 
 ## Unreleased (after 1.13.1)
 
+- **Label discovery: SILAC from one pair spacing, with a site check
+  (development only, no held-out test).** A no call or a `label-free` call
+  becomes a SILAC call (`basis` `precursor_pairs`) when one SILAC precursor
+  spacing alone (Lys8, Arg10, +6.0201 Lys6/Arg6, +3.989 medium to heavy) has
+  >= 30 pairs and a ratio >= 20 to the controls, the dimethyl rule does not
+  fire, and the site check does not remove the spacing: where the pair share
+  predicts >= 60 tag spectra at the heavy K/R mass and the site scan shows no
+  K/R candidate there, the pairs come from another isotope-coded label (a
+  13C(6) cysteine probe, PXD027767). New `ld_pair` rows `lys6arg6_pairs`,
+  `medium_heavy_pairs`, `silac_single`, `silac_site_veto` (format 5; readers
+  ignore unknown keys). Five development sets (633 runs): 14 SILAC runs right
+  instead of no call or wrong, no other result changes, 0 label calls on
+  label-free runs (doc/LABEL-DISCOVERY-REPORT.md, `ld_pair`).
+
 - **mzML: a selected ion m/z of 0 is read as missing.** A selected ion m/z
   (`MS:1000744`) of 0, below 0 or not a number now gives the precursor its
   isolation window target m/z, as a missing `MS:1000744` does; before, the

@@ -335,6 +335,9 @@ precursors of the same charge whose m/z differ by a label mass / z within
 | `lys8_ratio`, `arg10_ratio` | pairs / (`control_pairs` + 5) |
 | `other_pairs`, `other_ratio` | the largest count at +4.0251 (Lys4, dimethyl), +6.0201 (Lys6, Arg6) and +8.0444 Da (dimethyl), and its ratio |
 | `silac` | `yes` when both `lys8_pairs` and `arg10_pairs` are >= 30 and both ratios >= 2 |
+| `lys6arg6_pairs`, `medium_heavy_pairs` | the count at +6.0201 Da (Lys6, Arg6) and the larger count at +3.9891 / +3.9881 Da (Lys4 to Lys8, Arg6 to Arg10), unreleased |
+| `silac_single` | `yes` when one SILAC spacing not in `silac_site_veto` (Lys8, Arg10, +6.0201, medium to heavy) has >= 30 pairs and a ratio >= 20 and the dimethyl rule does not fire, unreleased |
+| `silac_site_veto` | the spacings the site check removes (`-` for none); `n` is the largest expected count, unreleased |
 
 Effect on the call:
 
@@ -347,6 +350,25 @@ Effect on the call:
   `basis` `site_scan+precursor_pairs`). The labels of the call stay. A call
   with any other label (TMT, iTRAQ, dimethyl, unknown, ambiguous) is not
   changed.
+- Unreleased, development only: `silac` `no`, `silac_single` `yes` and no
+  call or a `label-free` call: the call becomes the SILAC labels of the
+  spacings that pass (`K:Lys8`, `R:Arg10`, `K:Lys6+R:Arg6`, or
+  `K:Lys4+K:Lys8+R:Arg6+R:Arg10` for medium to heavy; `basis`
+  `precursor_pairs`). Site check: a spacing is ignored when its pair share
+  (pairs / `precursors`) times the tag spectra of the unlabelled K and R
+  rows of the site scan (`ld_site` `K.0`, `R.0`; only the residues the
+  label sits on) is >= 60 and the site scan has no K or R candidate within
+  10 mDa of the heavy label. Other isotope-coded labels give the same
+  pairs: a light/heavy 13C(6) cysteine probe (pChem, PXD027767) shows 4854
+  pairs at +6.0201, an expected 349 heavy K/R tag spectra and none. On the
+  five development sets (633 runs) the rule turns 12 no calls and 2 wrong
+  `label-free` calls of SILAC runs (ion-trap MS2, Lys-C, Arg-C) into right
+  calls and changes no other result; 0 label calls on label-free runs. No
+  held-out test. Limit: the site scan lists no `R` candidate at +10.0083
+  in four SILAC runs with real Arg10 pairs and good tag coverage
+  (PXD007910, PXD012871, PXD064675, PXD049319; expected 62 to 110), so the
+  check would also remove an Arg10-only call on such a run; those four are
+  called by other rules and do not change.
 - A no call with the reason `few_spectra` or `no_reference`, the reporter
   gate `none`, at least 500 precursors and no pair signal (`lys8_pairs`,
   `arg10_pairs` and `other_pairs` all below 30 pairs or below a ratio of 2):
