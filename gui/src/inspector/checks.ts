@@ -98,7 +98,9 @@ export function noTaxdbCheck(values: Record<string, ParamValue>, taxonomy: Taxon
     ? 'Point the taxonomy index field at an existing tax_k7.taxdb, or clear it to use the one beside FASTag.'
     : `Download ${TAXONOMY_ASSET} from the FASTag release page, unpack it, and copy tax_k7.taxdb from its share-FASTag-taxonomy folder into ${
         taxonomy.dir ?? 'a folder of your choice'
-      }${taxonomy.fromEnv ? ' (the folder FASTAG_TAXONOMY_DIR names)' : ''} and press Check again. Or keep it in a folder of your own, set the environment variable FASTAG_TAXONOMY_DIR to that folder and start FASTag again.`
+      }${taxonomy.fromEnv ? ' (the folder FASTAG_TAXONOMY_DIR names)' : ''}${
+        /^[A-Za-z]:\\Program Files/i.test(taxonomy.dir ?? '') ? ' (writing there needs an administrator)' : ''
+      } and press Check again. Or keep it in a folder of your own, set the environment variable FASTAG_TAXONOMY_DIR to that folder and start FASTag again.`
   return {
     id: 'no-taxdb',
     level: 'block',

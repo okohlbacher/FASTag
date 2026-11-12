@@ -132,7 +132,7 @@ describe('preStartChecks (from the probe)', () => {
     expect(c.title).toBe('The species report needs the taxonomy index')
     expect(c.detail).toContain(`not found at ${dir}\\tax_k7.taxdb`)
     expect(c.detail).toContain(TAXONOMY_ASSET)
-    expect(c.detail).toContain(`copy tax_k7.taxdb from its share-FASTag-taxonomy folder into ${dir} and press Check again`)
+    expect(c.detail).toContain(`copy tax_k7.taxdb from its share-FASTag-taxonomy folder into ${dir} (writing there needs an administrator) and press Check again`)
     expect(c.detail).toContain('FASTAG_TAXONOMY_DIR')
     expect(c.detail).toContain('"-species: no taxdb"')
     expect(c.fix).toEqual({ label: 'Run without the species report', params: { species: false } })
@@ -158,7 +158,7 @@ describe('preStartChecks (from the probe)', () => {
     expect(none.detail).toContain('not found beside FASTag (there is no taxonomy folder)')
     expect(none.detail).toContain('into a folder of your choice')
     const env = noTaxdbCheck({ ...ppm, species: true }, { index: null, dir: 'D:\\tax', expected: 'D:\\tax\\tax_k7.taxdb', fromEnv: true })!
-    expect(env.detail).toContain('into D:\\tax (the folder FASTAG_TAXONOMY_DIR names)')
+    expect(env.detail).toContain('into D:\\tax (the folder FASTAG_TAXONOMY_DIR names) and press Check again')
   })
 
   it('without -probe_input nothing is checked from the file and nothing is guessed', () => {

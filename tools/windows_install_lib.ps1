@@ -57,6 +57,9 @@ function Install-Fastag([string]$Installer, [string[]]$Switches, [string]$Expect
   if (-not (Test-Path (Join-Path $i.Dir 'fastag.exe'))) { Fail "no fastag.exe in $($i.Dir)" }
   $root = if ($i.Scope -eq 'AllUsers') { $env:ProgramFiles } else { $env:LOCALAPPDATA }
   if (-not $i.Dir.StartsWith($root, [StringComparison]::OrdinalIgnoreCase)) { Fail "$($i.Scope) install in $($i.Dir), not under $root" }
+  $files = @(Get-ChildItem $i.Dir -Recurse -Force -File)
+  $bytes = ($files | Measure-Object Length -Sum).Sum
+  Write-Host ("footprint: {0} files, {1:N0} bytes ({2:N1} MiB) in {3}" -f $files.Count, $bytes, ($bytes / 1MB), $i.Dir)
   return $i
 }
 
