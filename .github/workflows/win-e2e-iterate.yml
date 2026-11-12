@@ -63,7 +63,8 @@ jobs:
           gh release download "$TAXDB_TAG" -p 'FASTag-taxonomy-k7.tar.gz' -D "$RUNNER_TEMP/taxdb" --repo "${{ github.repository }}"
           got=$(sha256sum < "$RUNNER_TEMP/taxdb/FASTag-taxonomy-k7.tar.gz" | cut -d" " -f1)
           [ "$got" = "$TAXDB_SHA256" ] || { echo "::error::taxonomy sha256 mismatch: $got"; exit 1; }
-          tar -xzf "$RUNNER_TEMP/taxdb/FASTag-taxonomy-k7.tar.gz" -C "$RUNNER_TEMP/taxdb" share-FASTag-taxonomy/tax_k7.taxdb
+          # relative paths: GNU tar reads "D:..." as a remote host
+          (cd "$RUNNER_TEMP/taxdb" && tar -xzf FASTag-taxonomy-k7.tar.gz share-FASTag-taxonomy/tax_k7.taxdb)
           test -s "$RUNNER_TEMP/taxdb/share-FASTag-taxonomy/tax_k7.taxdb"
       - name: GUI end-to-end (installed app, real CLI)
         shell: pwsh
