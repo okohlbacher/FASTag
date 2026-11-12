@@ -65,9 +65,18 @@ pub fn run() {
         );
     });
     builder
+        // ONE setup hook: Builder::setup replaces an earlier one, so a
+        // second .setup() call silently dropped this one (the v1 settings
+        // migration and the installed-app self-test never ran).
         .setup(|app| {
             // Migrates a v1 settings file before the store first opens.
             settings::init(app.handle());
+            // A run of an earlier session that the app did not see end (it
+            // was killed) is recorded as interrupted before the window asks
+            // for the last run and the leftovers (sweep.rs).
+            if let Some(d) = history::dir(app.handle()) {
+                sweep::recover(&d);
+            }
             if let Some(out) = std::env::var_os(fastag::SELFTEST_OUT) {
                 let handle = app.handle().clone();
                 std::thread::spawn(move || {
@@ -120,15 +129,6 @@ pub fn run() {
             sweep::leftovers_sweep,
             sweep::leftovers_keep,
         ])
-        // A run of an earlier session that the app did not see end (it was
-        // killed) is recorded as interrupted before the window asks for the
-        // last run and the leftovers (sweep.rs).
-        .setup(|app| {
-            if let Some(d) = history::dir(app.handle()) {
-                sweep::recover(&d);
-            }
-            Ok(())
-        })
         .on_window_event(|window, event| match event {
             // Closing the window while a run or batch is active asks first
             // (close_guard); when idle it closes as usual.
