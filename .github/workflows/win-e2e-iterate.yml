@@ -61,7 +61,7 @@ jobs:
         run: |
           set -euo pipefail
           gh release download "$TAXDB_TAG" -p 'FASTag-taxonomy-k7.tar.gz' -D "$RUNNER_TEMP/taxdb" --repo "${{ github.repository }}"
-          got=$(sha256sum "$RUNNER_TEMP/taxdb/FASTag-taxonomy-k7.tar.gz" | cut -d' ' -f1)
+          got=$(sha256sum < "$RUNNER_TEMP/taxdb/FASTag-taxonomy-k7.tar.gz" | cut -d" " -f1)
           [ "$got" = "$TAXDB_SHA256" ] || { echo "::error::taxonomy sha256 mismatch: $got"; exit 1; }
           tar -xzf "$RUNNER_TEMP/taxdb/FASTag-taxonomy-k7.tar.gz" -C "$RUNNER_TEMP/taxdb" share-FASTag-taxonomy/tax_k7.taxdb
           test -s "$RUNNER_TEMP/taxdb/share-FASTag-taxonomy/tax_k7.taxdb"
