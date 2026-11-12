@@ -41,7 +41,7 @@ function oracle(c: string) {
     tags: Number(/^(\d+) MS2 spectra, (\d+) tags/m.exec(log)![2]),
     protease: call(protease, protease ?? '', 'no call'),
     label: call(lab, lab === 'label-free' ? 'none (label-free)' : (lab ?? ''), 'no call'),
-    genus: call(present ? present[2] : null, present?.[2] ?? '', genera.length ? 'none present' : 'no genus')
+    genus: call(present ? present[2] : null, present?.[2] ?? '', genera.length ? (genera.some((r) => r[8] === 'no_call') ? 'no presence call' : 'none detected') : 'no genus')
   }
 }
 
@@ -61,6 +61,7 @@ async function shown(page: Page): Promise<string[][]> {
 
 async function runFolder(page: Page): Promise<void> {
   await openApp(page, 'gate-batch')
+  await page.getByRole('radio', { name: /^Batch QC/ }).check()
   await goTo(page, 'Batch')
   await page.getByRole('button', { name: 'Add folder…' }).click()
   await expect(bodyRows(page)).toHaveCount(NAMES.length)
@@ -138,6 +139,7 @@ test('Export summary TSV writes the table, cell for cell', async ({ page }) => {
 
 test('an output folder takes every job output; fewer than 3 jobs flag nothing', async ({ page }) => {
   await openApp(page, 'gate-batch')
+  await page.getByRole('radio', { name: /^Batch QC/ }).check()
   await goTo(page, 'Batch')
   await page.evaluate(() => {
     const m = (window as unknown as { __fastagE2E: { mock: { folderFiles: Record<string, string[]>; nextPickFolder: string } } }).__fastagE2E.mock
@@ -164,6 +166,7 @@ test('an output folder takes every job output; fewer than 3 jobs flag nothing', 
 
 test('by keyboard, focus does not fall to the page body after Add folder… or a batch pass', async ({ page }) => {
   await openApp(page, 'gate-batch')
+  await page.getByRole('radio', { name: /^Batch QC/ }).check()
   await goTo(page, 'Batch')
   // The empty state's Add folder…: the queue replaces it, focus goes to its Add….
   await page.locator('.batch-empty').getByRole('button', { name: 'Add folder…' }).focus()

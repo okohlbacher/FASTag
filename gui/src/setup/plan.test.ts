@@ -1,13 +1,19 @@
 // The step cards' summaries and the plan line (GUI-DESIGN 3 S1, P2a PR u).
 
 import { describe, expect, it } from 'vitest'
-import { CARDS, cardSummary, planLine, reportsOn } from './plan'
+import { CARDS, cardSummary, planLine, reportsOn, samplingSummary } from './plan'
 import { baseValues, startValues } from './tasks'
 import { SECTIONS, dependents, hiddenUntilMaster } from '../paramLayout'
 
 const ctx = { input: '/d/run01.mzML', out: '/d/run01.tags.tsv', files: 0 }
 
 describe('the step cards', () => {
+  it('sampling follows CLI count precedence and keeps small fractions visible', () => {
+    expect(samplingSummary({ subsample_spectra: '1000', subsample_fraction: '0.1' })).toBe('up to 1,000 spectra sampled')
+    expect(samplingSummary({ subsample_fraction: '0.0001' })).toBe('0.01% of spectra')
+    expect(samplingSummary({ subsample_fraction: '1' })).toBe('all spectra')
+    expect(samplingSummary({ subsample_fraction: '0' })).toBe('all spectra')
+  })
   it('the four cards hold every form section once, in the order of the run', () => {
     expect(CARDS.map((c) => `${c.n} ${c.title}`)).toEqual(['1 Spectra', '2 Database & taxonomy', '3 Tagging', '4 Reports'])
     expect(CARDS.flatMap((c) => c.sections).sort()).toEqual(SECTIONS.map((s) => s.title).sort())
@@ -16,24 +22,24 @@ describe('the step cards', () => {
   it('each card says what it is set to in one line', () => {
     const v = startValues('builtin:characterize', ctx.out)
     expect(cardSummary('spectra', v, ctx)).toBe('run01.mzML · 10% of spectra')
-    expect(cardSummary('database', v, ctx)).toBe('Species on (bundled index) · FASTA none')
+    expect(cardSummary('database', v, ctx)).toBe('Species on (bundled index) · no FASTA selected (optional)')
     expect(cardSummary('tagging', v, ctx)).toBe('length 3 · extension 2 · 20.0 ppm · max 50 tags')
     expect(cardSummary('reports', v, ctx)).toBe('digest, label, glyco · mass-gap needs a FASTA')
     const d = baseValues('defaults')
-    expect(cardSummary('spectra', d, { input: '', out: '', files: 0 })).toBe('no file yet')
-    expect(cardSummary('spectra', d, { input: '', out: '', files: 3 })).toBe('3 files in the batch')
+    expect(cardSummary('spectra', d, { input: '', out: '', files: 0 })).toBe('no file yet · all spectra')
+    expect(cardSummary('spectra', d, { input: '', out: '', files: 3 })).toBe('3 files in the batch · all spectra')
     expect(cardSummary('database', { ...d, species: false, fasta: '/db/human.fasta' }, ctx)).toBe('Species off · FASTA human.fasta')
     expect(cardSummary('reports', { ...d, fasta: '/db/h.fasta' }, ctx)).toBe('tags only')
   })
 
   it('the plan line names files, species, reports and where the outputs go', () => {
     const v = startValues('builtin:characterize', ctx.out)
-    expect(planLine(v, ctx)).toBe('1 file · species on · digest+label+glyco · out: beside input')
-    expect(planLine(baseValues('defaults'), { input: '', out: '', files: 0 })).toBe('no file · species off · no reports')
-    expect(planLine(v, { input: '/d/a.mzML', out: '/elsewhere/x.tsv', files: 0 })).toMatch(/out: x\.tsv$/)
-    expect(planLine(v, { input: '', out: '', files: 2 })).toBe('2 files · species on · digest+label+glyco · out: beside each input')
+    expect(planLine(v, ctx)).toBe('1 file · 10% of spectra · species on · digest+label+glyco · out: beside input')
+    expect(planLine(baseValues('defaults'), { input: '', out: '', files: 0 })).toBe('no file · all spectra · species off · no reports')
+    expect(planLine(v, { input: '/d/a.mzML', out: '/elsewhere/x.tsv', files: 0 })).toContain('out: /elsewhere/x.tsv')
+    expect(planLine(v, { input: '', out: '', files: 2 })).toBe('2 files · 10% of spectra · species on · digest+label+glyco · out: beside each input')
     // P2b: the batch's output folder.
-    expect(planLine(v, { input: '', out: '', files: 2, outDir: '/share/out' })).toBe('2 files · species on · digest+label+glyco · out: /share/out')
+    expect(planLine(v, { input: '', out: '', files: 2, outDir: '/share/out' })).toBe('2 files · 10% of spectra · species on · digest+label+glyco · out: /share/out')
     expect(reportsOn({ ...v, recon_out: '/d/r.tsv', recon_fasta: '/db/x.fasta', massgap_out: '/d/m.tsv' })).toEqual([
       'digest',
       'label',

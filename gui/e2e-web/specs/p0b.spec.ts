@@ -103,14 +103,14 @@ test('search to field: "tolerance" focuses fragment_tolerance', async ({ page })
 test('presets: "Ion trap CID" sets 0.3 Da and nothing else', async ({ page }) => {
   await openApp(page, 'default', 'defaults')
   await page.getByRole('button', { name: 'Choose file…' }).click()
-  await expect(page.getByLabel('Instrument').locator('option')).toHaveText([
-    'Choose a preset…',
+  await expect(page.getByLabel('Fragment tolerance preset').locator('option')).toHaveText([
+    'Current: 20.0 ppm (custom)',
     'Orbitrap HCD 20 ppm',
     'Ion trap CID 0.3 Da',
     'timsTOF 30 ppm (unvalidated)',
     'Astral 20 ppm (unvalidated)'
   ])
-  await page.getByLabel('Instrument').selectOption({ label: 'Ion trap CID 0.3 Da' })
+  await page.getByLabel('Fragment tolerance preset').selectOption({ label: 'Ion trap CID 0.3 Da' })
   await page.getByRole('button', { name: 'Run on run01.mzML' }).click()
   await expect(page.getByText('Showing 2,028 of 2,028')).toBeVisible()
   const runs = await mockState<{ params: Record<string, unknown> }[]>(page, 'runCalls')

@@ -124,6 +124,8 @@ bad=$(awk -F'\t' 'NR > 1 && ($7 != "NA" || $8 != "NA")' "$B" | wc -l | tr -d ' '
 [ "$bad" = 0 ] || fail "both without decoy: $bad rows with a numeric log_pvalue or qvalue"
 grep -q -- "-species_orientation both: the analytic log_pvalue and qvalue columns of the species report are NA under both; use decoy_qvalue from -species_call decoy" "$TMP/both_t1.log" \
   || { cat "$TMP/both_t1.log" >&2; fail "no NA warning"; }
+grep -q "These optional decoy values are experimental and not calibrated" "$TMP/both_t1.log" \
+  || fail "no decoy calibration caveat"
 grep -q "Species orientation (both)" "$TMP/both_t1.log" || fail "no orientation line in the log"
 
 # ---- exact counts against the independent recount ------------------------------
@@ -208,8 +210,8 @@ run dec "${COMMON[@]}" -species "${TAX[@]}" -species_orientation both -species_c
     -species_call_min_units 10 -species_call_params "$TMP/params.tsv" -threads 2 \
   || { cat "$TMP/dec.log" >&2; fail "both with decoy"; }
 [ "$(fields "$TMP/dec.species.tsv")" = 15 ] || fail "both with decoy: not 15 fields"
-# The analytic columns stay NA under decoy: decoy calls calibrate only
-# decoy_qvalue and call, not the forward-background log_pvalue/qvalue.
+# The analytic columns stay NA under decoy; the separate decoy_qvalue and
+# call remain experimental rather than calibrated error estimates.
 bad=$(awk -F'\t' 'NR > 1 && ($7 != "NA" || $8 != "NA")' "$TMP/dec.species.tsv" | wc -l | tr -d ' ')
 [ "$bad" = 0 ] || fail "both with decoy: $bad rows with a numeric log_pvalue or qvalue"
 bad=$(awk -F'\t' 'NR > 1 && $13 !~ /^[0-9.eE+-]+$/' "$TMP/dec.species.tsv" | wc -l | tr -d ' ')

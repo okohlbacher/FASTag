@@ -107,7 +107,7 @@ pub(crate) fn write_summary(dest: &str, text: &str, protect: &[String]) -> Resul
 /// Whether @p a and @p b name the same file: the same path, or (both
 /// existing) the same file on disk, by device and inode on Unix and by the
 /// canonical path elsewhere (which resolves case and links on Windows).
-fn same_file(a: &str, b: &str) -> bool {
+pub(crate) fn same_file(a: &str, b: &str) -> bool {
     if a == b {
         return true;
     }

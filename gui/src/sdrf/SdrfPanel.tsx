@@ -5,6 +5,7 @@
 // the backend (report.rs write_summary's protect list).
 
 import { useState, type JSX } from 'react'
+import { HelpLink } from '../help/HelpLink'
 import { dirName } from '../app/paths'
 import { baseName } from '../digestReport'
 import { folderPath } from '../run/batch'
@@ -142,6 +143,7 @@ export default function SdrfPanel({ sdrf, busy, outDir, onShow, protect }: SdrfP
     <section className="block sdrf-block" aria-labelledby="sdrf-h">
       <div className="block-head">
         <h2 id="sdrf-h">SDRF</h2>
+        <HelpLink to="workflow-sdrf">How to compare annotations</HelpLink>
         <button type="button" className="secondary small" onClick={() => void sdrf.pick()} disabled={busy || sdrf.loading}>
           {file ? 'Replace SDRF…' : 'Load SDRF…'}
         </button>
@@ -232,7 +234,7 @@ export default function SdrfPanel({ sdrf, busy, outDir, onShow, protect }: SdrfP
           <p className="hint">
             Compared against FASTag's output only: the calls of the summary (a no call or too little evidence is never a difference),
             the instrument the input names (its reports), the run's fragment tolerance (its reports) and the run's fixed modifications
-            (its log; FASTag writes no alkylation call). The last two are settings of the run, not measurements: where they differ
+            (its log; this comparison does not use the separate CLI alkylation call). The last two are settings of the run, not measurements: where they differ
             from the SDRF the table shows ≠ run setting differs, a hint on how the run was set up, and no correction is written. The
             organism is matched by NCBI taxid against the called (top) genus only: a call that contains the SDRF species, or an SDRF
             taxon above genus that contains the call, is consistent. An SDRF organism the species report finds only below the call

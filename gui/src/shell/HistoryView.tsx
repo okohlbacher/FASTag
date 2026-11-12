@@ -15,6 +15,7 @@ import type { RunRecord } from '../types'
 import { baseName } from '../digestReport'
 import { duration, shellLine } from '../app/format'
 import { JobIcon } from '../icons'
+import { HelpLink } from '../help/HelpLink'
 
 const STATUS: Record<RunRecord['status'], { text: string; icon: 'done' | 'failed' | 'cancelled' }> = {
   ok: { text: 'Finished', icon: 'done' },
@@ -149,6 +150,7 @@ export default function HistoryView(p: HistoryViewProps): JSX.Element {
       <h2 id="history-h" ref={headingRef} tabIndex={-1}>
         History
       </h2>
+      <p><HelpLink to="workflow-history">Reopen results or reuse settings</HelpLink></p>
       <div className="history-note" role="status" aria-label="History">
         {note?.kind === 'settings' && (
           <>

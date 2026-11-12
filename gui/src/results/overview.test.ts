@@ -80,6 +80,29 @@ describe('Overview model: calls', () => {
     expect(tile(o, 'genus').note).toMatch(/present by the CLI species call.*also present: Macaca, Sus, Equus/)
   })
 
+  it.each(['few_spectra', 'low_resolution', 'homology'])('does not turn a %s no-call into biological absence', (reason) => {
+    const o = buildOverview({
+      log: [], reports: [], census: null, params: {}, instrument: null,
+      species: { path: '/d/species.tsv', taxa: [
+        { rank: 'genus', taxid: 9605, name: 'Homo', observed: 9, adjusted: 9, q: 1, call: 'no_call', callReason: reason }
+      ] }
+    })
+    expect(tile(o, 'genus')).toMatchObject({ value: 'no presence call', tone: 'nocall' })
+    expect(tile(o, 'genus').note).toContain('does not establish absence')
+    expect(o.suggestions.find((s) => s.setting === 'database')).toBeUndefined()
+  })
+
+  it('describes not_detected taxa as undetected rather than absent', () => {
+    const o = buildOverview({
+      log: [], reports: [], census: null, params: {}, instrument: null,
+      species: { path: '/d/species.tsv', taxa: [
+        { rank: 'genus', taxid: 9605, name: 'Homo', observed: 9, adjusted: 9, q: 1, call: 'not_detected', callReason: 'not_significant' }
+      ] }
+    })
+    expect(tile(o, 'genus').value).toBe('none detected')
+    expect(tile(o, 'genus').note).toContain('does not establish absence')
+  })
+
   it('label from the CLI label_call (1.12); "not called" for 1.11, never a GUI rule', () => {
     expect(tile(overviewOf(CLI_CASES.v112Tmt), 'label')).toMatchObject({ value: 'TMT', tone: 'call' })
     expect(tile(overviewOf(CLI_CASES.v112), 'label').value).toBe('none (label-free)')

@@ -223,7 +223,7 @@ cmp -s "$TMP/absent.species.tsv" "$TMP/warn2.species.tsv" || fail "ignored -spec
 printf 'alpha\t0.05\ntau\t0\nn_min\t5\ndecoys\t3\n' > "$TMP/params_d3.tsv"
 run warn3 "${COMMON[@]}" -species "${TAX[@]}" -species_call decoy -species_call_params "$TMP/params_d3.tsv" -threads 2 \
   || { cat "$TMP/warn3.log" >&2; fail "params with decoys 3"; }
-grep -q "calibrated with 3 decoy" "$TMP/warn3.log" || { cat "$TMP/warn3.log" >&2; fail "no warning when -species_call_decoys differs from the calibration"; }
+grep -q "specify 3 decoy" "$TMP/warn3.log" || { cat "$TMP/warn3.log" >&2; fail "no warning when -species_call_decoys differs from the parameter file"; }
 
 # ---- refusals ------------------------------------------------------------------
 refused() {  # name pattern args...

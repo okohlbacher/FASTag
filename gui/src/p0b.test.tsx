@@ -146,7 +146,7 @@ describe('App wiring', () => {
     const mock = installMockBridge()
     await renderApp(mock)
     await pickSingle(mock, '/d/a.mzML')
-    const sel = screen.getByLabelText('Instrument') as HTMLSelectElement
+    const sel = screen.getByLabelText('Fragment tolerance preset') as HTMLSelectElement
     await act(async () => {
       fireEvent.change(sel, { target: { value: 'iontrap-cid' } })
     })
@@ -164,7 +164,7 @@ describe('App wiring', () => {
     const mock = installMockBridge()
     await renderApp(mock)
     await act(async () => {
-      fireEvent.change(screen.getByLabelText('Instrument'), { target: { value: 'timstof' } })
+      fireEvent.change(screen.getByLabelText('Fragment tolerance preset'), { target: { value: 'timstof' } })
     })
     expect(screen.getByRole('note').textContent).toMatch(/timsTOF: not validated/)
   })

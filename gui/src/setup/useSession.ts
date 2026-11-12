@@ -48,7 +48,7 @@ interface Snapshot {
 }
 
 /// @p start: where the session's values come from (D1: the app passes the
-/// task "Characterize a run"; the hook alone starts from the defaults).
+/// task "Export tags"; the hook alone starts from the defaults).
 export function useSession(start: Origin = DEFAULTS) {
   const [input, setInput] = useState('')
   const [out, setOut] = useState('')

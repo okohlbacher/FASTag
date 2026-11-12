@@ -9,6 +9,7 @@ import {
   humanName,
   inertBecause,
   invalidBecause,
+  invalidParams,
   isActive,
   masters,
   speciesReach,
@@ -113,6 +114,14 @@ describe('dependencies', () => {
 })
 
 describe('field validation', () => {
+  it('blocks numeric overflow before a run reaches the CLI', () => {
+    const spec = PARAM_BY_NAME.get('fragment_tolerance')!
+    expect(invalidBecause(spec, '1e999')).toBe('must be a finite number')
+    expect(invalidBecause(spec, '-1e999')).toBe('must be a finite number')
+    expect(invalidParams({ fragment_tolerance: '1e999' })).toMatchObject({ fragment_tolerance: 'must be a finite number' })
+    expect(invalidBecause(spec, '2e1')).toBeNull()
+  })
+
   // The CLI declares fragment_tolerance >= 1e-9 (restrictions="1.0e-09:" in
   // the CTD); 0 and negatives read as "greater than 0", not "at least 1e-9".
   it('requires fragment_tolerance greater than 0', () => {

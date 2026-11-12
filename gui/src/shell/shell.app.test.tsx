@@ -275,7 +275,7 @@ describe('shell: Help panel', () => {
     await act(async () => {
       fireEvent.change(screen.getByRole('searchbox', { name: 'Search Help' }), { target: { value: 'qqqzz' } })
     })
-    expect(screen.getByText('Nothing in Help matches “qqqzz”.')).toBeDefined()
+    expect(screen.getByText('Nothing in Help matches. Try a shorter term or a command-line parameter name.')).toBeDefined()
   })
 
   it('the FAQ menu opens Troubleshooting; About shows the version', async () => {
@@ -319,9 +319,13 @@ describe('shell: drop routing', () => {
     expect(screen.getByRole('heading', { name: /Batch · 2 files/ })).toBeDefined()
   })
 
-  it('a tags table opens in Results, a digest report in its tab', async () => {
+  it('a mixed drop stays on its digest report when the tags history lookup finishes later', async () => {
     const mock = installMockBridge()
     const c = await renderApp(mock)
+    let finishHistory!: () => void
+    vi.spyOn(window.fastag, 'historyOf').mockImplementationOnce(() => new Promise((resolve) => {
+      finishHistory = () => resolve(null)
+    }))
     mock.reportFiles['/d/r.digest.tsv'] = 'run\tversion\t1.11.0\n'
     await act(async () =>
       mock.emitDrop({ results: '/d/r.tags.tsv', reports: [{ kind: 'digest', path: '/d/r.digest.tsv' }] })
@@ -329,6 +333,8 @@ describe('shell: drop routing', () => {
     await flush()
     expect(shown(c)).toEqual(['results'])
     expect(mock.reportCalls).toContain('/d/r.digest.tsv')
+    expect(screen.getByRole('tab', { selected: true }).id).toBe('tab-digest')
+    await act(async () => finishHistory())
     expect(screen.getByRole('tab', { selected: true }).id).toBe('tab-digest')
     await click(c.querySelector('#tab-results')!)
     await waitFor(() => expect(mock.resultsOpenCalls.concat(mock.resultsQueryCalls.map((q) => q.path))).toContain('/d/r.tags.tsv'))

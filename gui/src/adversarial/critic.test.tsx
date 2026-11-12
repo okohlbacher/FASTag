@@ -41,7 +41,7 @@ describe('critic: species headline on an exact tie', () => {
     ])
     const { container } = render(<SpeciesPanel report={rep} enabled tooShort={null} contributed={7} totalMs2={139} />)
     const head = container.querySelector('.headline')!
-    expect(head.querySelector('.taxon')!.textContent).toBe('No single call')
+    expect(head.querySelector('.taxon')!.textContent).toBe('No single leader')
     expect(head.textContent).toMatch(
       /Tie between 10 taxa: Escherichia, Klebsiella, Salmonella, Yersinia, Sus, Bos, Ovis, Mus, Pectobacterium, Dickeya/
     )
@@ -58,9 +58,27 @@ describe('critic: species headline on an exact tie', () => {
     expect(rep.taxa[1].name).toBe('Zea')
     expect(rep.taxa[0].adjusted).toBe(rep.taxa[1].adjusted)
     const { container } = render(<SpeciesPanel report={rep} enabled tooShort={null} contributed={null} totalMs2={null} />)
-    expect(container.querySelector('.headline .taxon')!.textContent).toBe('No single call')
+    expect(container.querySelector('.headline .taxon')!.textContent).toBe('No single leader')
     expect(container.querySelector('.headline')!.textContent).toMatch(/Tie between 2 taxa: Chlamydomonas, Zea/)
   })
+})
+
+
+it('keeps the taxon ranking separate from the CLI presence call', () => {
+  const report: SpeciesReport = {
+    path: '/r/species.tsv',
+    taxa: [
+      { taxid: 9605, name: 'Homo', rank: 'genus', observed: 100, adjusted: 100, q: 0.01, call: 'no_call', callReason: 'few_spectra' },
+      { taxid: 10088, name: 'Mus', rank: 'genus', observed: 80, adjusted: 80, q: 0.02, call: 'present' }
+    ]
+  }
+  const { container } = render(<SpeciesPanel report={report} enabled tooShort={null} contributed={null} totalMs2={null} />)
+  expect(container.querySelector('.headline .taxon')!.textContent).toBe('Homo')
+  expect(screen.getByText('Top-ranked taxon')).toBeDefined()
+  expect(screen.queryByText('Species call')).toBeNull()
+  expect(screen.getByRole('columnheader', { name: 'CLI call' })).toBeDefined()
+  expect(screen.getByRole('cell', { name: 'no call' }).title).toBe('few spectra')
+  expect(screen.getByRole('cell', { name: 'present' })).toBeDefined()
 })
 
 async function renderWith(lastUsed: Record<string, unknown>): Promise<MockBridge> {

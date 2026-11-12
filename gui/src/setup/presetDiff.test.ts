@@ -66,13 +66,14 @@ describe('presets as diffs', () => {
 
   it('every built-in task is a diff over the defaults that names only real parameters', () => {
     for (const t of TASKS) for (const n of Object.keys(t.values)) expect(RENDERED).toContain(n)
-    expect(TASKS.map((t) => t.label)).toEqual(['Characterize a run', 'Batch QC vs SDRF', 'Export tags', 'Open results / inspect spectra'])
+    expect(TASKS.map((t) => t.label)).toEqual(['Export tags', 'Open results / inspect spectra', 'Characterize a run', 'Batch QC vs SDRF'])
     const c = baseValues('builtin:characterize')
     expect([c['species'], c['extension'], c['glyco'], c['subsample_fraction']]).toEqual([true, '2', true, '0.1'])
     expect(Boolean(c['digest_out']) && Boolean(c['label_out'])).toBe(true)
     expect(baseValues('builtin:export-tags')['res_conf']).toBe(true)
     expect(baseValues('defaults')).toEqual(defaults)
-    expect(originText(LANDING)).toBe('Characterize a run')
+    expect(originText(LANDING)).toBe('Export tags')
+    expect(baseValues(baseOf(LANDING))).toEqual({ ...defaults, res_conf: true })
     expect(baseOf({ kind: 'preset', name: 'x', base: 'builtin:export-tags' })).toBe('builtin:export-tags')
     expect(taskOf({ kind: 'preset', name: 'x', base: 'builtin:export-tags' })?.id).toBe('export-tags')
   })

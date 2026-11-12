@@ -130,7 +130,7 @@ export default function SetupForm({ session, run, onPickInput, onSearch, searchB
             <div className="input-card empty-input">
               <IconFile />
               <span className="muted">The files of the batch, as mzML, mzPeak or MGF</span>
-              <button className="secondary" ref={addBatchRef} onClick={run.addBatchFiles} title="Queue several files to run in turn">
+              <button ref={addBatchRef} onClick={run.addBatchFiles} title="Queue several files to run in turn">
                 Add files for a batch…
               </button>
             </div>
@@ -159,7 +159,7 @@ export default function SetupForm({ session, run, onPickInput, onSearch, searchB
           <div className="input-card empty-input">
             <IconFile />
             <span className="muted">Spectra as mzML, mzPeak or MGF</span>
-            <button className="secondary" onClick={onPickInput}>
+            <button onClick={onPickInput}>
               Choose file…
             </button>
           </div>
@@ -183,7 +183,7 @@ export default function SetupForm({ session, run, onPickInput, onSearch, searchB
           Tags TSV <code className="cli">out</code>
         </label>
         <div className="row tight">
-          <input id="out" className="path-input" value={out} onChange={(e) => session.setOut(e.target.value)} placeholder="tags.tsv" />
+          <input id="out" className="path-input" value={out} onChange={(e) => session.setOut(e.target.value)} placeholder="Filled in when you choose spectra" aria-invalid={!!input && !out} aria-describedby="out-help" />
           <button
             className="secondary"
             aria-label="Browse for the tags TSV"
@@ -195,6 +195,11 @@ export default function SetupForm({ session, run, onPickInput, onSearch, searchB
             Browse…
           </button>
         </div>
+        <p id="out-help" className={input && !out ? 'warn' : 'hint'}>
+          {input && !out
+            ? 'Choose where to save the tags TSV before running.'
+            : 'The tags TSV is a table of short peptide sequences. By default, results are saved beside your input file.'}
+        </p>
         {out && writingFiles.length > 1 && (
           <p className="hint">
             Reports go to{' '}
@@ -349,7 +354,7 @@ export default function SetupForm({ session, run, onPickInput, onSearch, searchB
           ) : (
             <>
               <div className="row tight cards-tools">
-                <span className="muted">Every setting is in one of the four steps below.</span>
+                <span className="muted">Choose spectra, review the input checks, then Run. <HelpLink to="start-first">First run guide</HelpLink></span>
                 <button
                   type="button"
                   className="secondary small"
@@ -370,6 +375,8 @@ export default function SetupForm({ session, run, onPickInput, onSearch, searchB
                     <h2>{card.title}</h2>
                   </div>
                   <p className="card-summary">{cardSummary(card.id, values, { input, out, files: jobs.length })}</p>
+                  {card.id === 'database' && <p className="hint">A FASTA protein database is optional. No FASTA is needed to use the bundled species index.</p>}
+                  {card.id === 'tagging' && session.task === 'export-tags' && <p className="hint">Stitch/ALPS export keeps tags of at least 8 residues by default. Set tag length or extension here to produce longer tags, or adjust the export cutoff.</p>}
                   {card.id === 'spectra' && spectraInputs}
                   {card.sections.map((t) => renderSection(SECTIONS.find((x) => x.title === t)!))}
                 </section>

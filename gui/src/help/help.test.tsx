@@ -18,7 +18,7 @@ import { GLOSSARY, PAGES } from './content'
 import { CLASSES, FAQ, FAQ_GROUPS, faqForMessage } from './faq'
 import HelpView, { COMMON, PAGE_OF, slug } from './HelpView'
 import { PARAM_UI } from '../paramUi'
-import { helpBack, openHelp, resetHelp, showHelpPage, useHelp } from './link'
+import { closeHelp, helpBack, openHelp, resetHelp, showHelpPage, useHelp } from './link'
 
 // The help of every PARAM_UI entry that has one (help/params.ts before P5).
 const PARAM_HELP = Object.fromEntries(Object.entries(PARAM_UI).flatMap(([n, u]) => (u.help ? [[n, u.help]] : [])))
@@ -80,6 +80,15 @@ describe('help: settings reference', () => {
       expect(d!.querySelector('.meta')!.textContent).toContain(`Default: ${defaultText(PARAM_BY_NAME.get(n)!)}`)
     }
   })
+
+  it('a deep link to a hidden option explains that it is unavailable in the form', () => {
+    act(() => openHelp('param-species_call'))
+    const { container } = render(<HelpView />)
+    const entry = container.querySelector<HTMLDetailsElement>('#param-species_call')!
+    expect(entry.open).toBe(true)
+    expect(entry.textContent).toContain(`Not in the settings form: ${PARAM_UI.species_call.hidden}`)
+    expect(entry.textContent).toContain('Choices:')
+  })
 })
 
 describe('help: links', () => {
@@ -98,7 +107,7 @@ describe('help: links', () => {
     for (const text of Object.values(SOURCES)) {
       for (const m of text.matchAll(/\b(?:to|help)="([a-z0-9_-]+)"|openHelp\('([a-z0-9_-]+)'\)/g)) targets.add(m[1] ?? m[2])
       // Every quoted string with a link-target prefix, wherever it is written (arrays, maps).
-      for (const m of text.matchAll(/'((?:faq|param|tags|results|digest|species|files|start|gloss)-[a-z0-9_]+(?:-[a-z0-9_]+)*)'/g))
+      for (const m of text.matchAll(/'((?:faq|param|tags|results|digest|species|files|start|gloss|workflow)-[a-z0-9_]+(?:-[a-z0-9_]+)*)'/g))
         targets.add(m[1])
     }
     for (const id of COMMON) expect(targets.has(id), id).toBe(true)
@@ -229,6 +238,21 @@ describe('help: in the app', () => {
     expect(setupView(c).hidden).toBe(false)
     expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Help' }))
     vi.useRealTimers()
+  })
+
+  it.each(['hidden', 'disabled', 'removed'] as const)('closing Help recovers focus when its opener is %s', async (state) => {
+    await renderApp()
+    const opener = document.createElement('button')
+    document.body.append(opener)
+    opener.focus()
+    act(() => openHelp())
+    if (state === 'hidden') opener.hidden = true
+    else if (state === 'disabled') opener.disabled = true
+    else opener.remove()
+    act(() => closeHelp())
+    await act(async () => { await new Promise((resolve) => setTimeout(resolve, 0)) })
+    expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Help' }))
+    opener.remove()
   })
 
   it('F1 opens Help, Esc closes it; ? typed in a field does not open it', async () => {

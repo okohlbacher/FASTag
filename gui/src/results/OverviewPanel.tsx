@@ -4,9 +4,10 @@
 // evidence of each line. A tile whose report the run did not write offers
 // to turn it on and run again.
 
-import { useState, type JSX } from 'react'
+import { useEffect, useRef, useState, type JSX } from 'react'
 import { baseName } from '../digestReport'
 import type { Overview, Tile, TileAction } from './overview'
+import { HelpLink } from '../help/HelpLink'
 
 export interface OverviewPanelProps {
   overview: Overview
@@ -38,12 +39,18 @@ function TileView({ t, busy, onAction }: { t: Tile; busy: boolean; onAction(a: T
 
 export default function OverviewPanel({ overview: o, input, busy, onAction }: OverviewPanelProps): JSX.Element {
   const [copied, setCopied] = useState<'yes' | 'no' | null>(null)
+  const revision = useRef(0)
+  useEffect(() => {
+    setCopied(null)
+    return () => { revision.current++ }
+  }, [input, o.copyText])
   async function copy(): Promise<void> {
+    const started = revision.current
     try {
       await navigator.clipboard.writeText(o.copyText)
-      setCopied('yes')
+      if (revision.current === started) setCopied('yes')
     } catch {
-      setCopied('no')
+      if (revision.current === started) setCopied('no')
     }
   }
   return (
@@ -51,6 +58,7 @@ export default function OverviewPanel({ overview: o, input, busy, onAction }: Ov
       <h2>
         Overview of <span className="mono">{baseName(input)}</span>
       </h2>
+      <p><HelpLink to="workflow-overview">How to read this overview</HelpLink></p>
       <ul className="tiles" aria-label="Key figures">
         {o.figures.map((t) => (
           <TileView key={t.id} t={t} busy={busy} onAction={onAction} />

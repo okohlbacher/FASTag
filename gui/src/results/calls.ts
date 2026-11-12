@@ -139,8 +139,8 @@ export function labelCall(label: Report | null | undefined): LabelCall {
 // ---- alkylation (mass-gap report) ------------------------------------------------
 
 export type AlkylationCall =
-  // The mass-gap report's Cys gap counts: FASTag 1.12 writes no alkylation
-  // call (that is the planned -alkylation_out, 1.12 plan item 3g).
+  // The mass-gap report's Cys gap counts, not a call. The separate
+  // CLI-only -alkylation_out report is parsed in digestReport.ts.
   | { state: 'counts'; placed: number | null; zero: number | null; sites: { name: string; spectra: number | null }[] }
   // No mass-gap report: it needs reconciliation against a FASTA.
   | { state: 'absent' }
