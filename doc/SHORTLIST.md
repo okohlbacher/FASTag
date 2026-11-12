@@ -278,8 +278,9 @@ is left under the name, and no configuration is written.
   Without a template a fragment is written whose header says to merge it.
 - The database in the configuration is `-fasta_out`, else the input database
   (WARN when that holds decoys, since the engine adds its own).
-- **MSFragger** (`-search_engine msfragger`, experimental since 1.13, held-out
-  test FAILED, pinned 4.4.1): see "MSFragger configuration" below.
+- **MSFragger** (`-search_engine msfragger`, experimental since 1.13, first held-out
+  test FAILED, second test with the shortlist recipe PASSED and that recipe the
+  default since, pinned 4.4.1): see "MSFragger configuration" below.
 
 Engine acceptance (`test/search_engine_smoke_test.sh` with `FASTAG_SAGE_BIN`
 and `FASTAG_COMET_BIN`, mandatory with `FASTAG_ENGINES_REQUIRED=1`) runs on
@@ -321,14 +322,73 @@ The export of that test wrote `isotope_error 0`. On two development runs
 `0/1/2/3` the kept share rose from 47.5 to 72.2% and from 47.3 to 56.3%, at
 unchanged speed and an entrapment FDP under 1%. `0/1/2/3` is therefore the
 default for MSFragger since then (`-search_isotope_errors -1`; Sage and Comet
-keep none). **This default was set on development runs only and has no
-held-out test**; the held-out numbers above describe the export before it.
-On the same two runs, on top of it, `-recon_missed_cleavages 2` added 1.6 and 9.5 points
-(entrapment FDP up to 1.4%), `-search_precursor_tolerance 20` 4.8 and 0.8, and
-`Acetyl (Protein N-term)` in `-variable_modifications` 1.8 and 0.7; these are
-not defaults. MSFragger's mass calibration (`calibrate_mass 2`) added nothing
-and cost a third of the speed. With all of them the share was 80.6% and 67.8%;
-the shortlist itself limits it to 88.3% and 77.2% on these runs.
+keep none). The held-out numbers above describe the export before it; the second
+held-out test below covers it.
+After 1.13.1 three more values follow MSFragger's own closed defaults when
+the engine is msfragger: 2 missed cleavages (`-search_missed_cleavages -1`;
+with `-shortlist_protease` other than trypsin the value stays
+`-recon_missed_cleavages`), a 20 ppm precursor window
+(`-search_precursor_tolerance -1`) and variable protein N-terminal acetylation
+(`-search_nterm_acetyl engine`). Measured on nine development runs (the two
+above and the seven runs of the held-out test, which is spent), MSFragger
+4.4.1, kept share of the full search's identified spectra (mean; lowest run)
+and largest per-run entrapment FDP:
+
+| Shortlist options | 1.13.1 export | with the three values |
+|---|---|---|
+| as in the held-out test | 0.723; 0.563; 2.39% | 0.831; 0.678; 1.63% |
+| + `-shortlist_gapped` | 0.766; 0.669; 2.19% | 0.888; 0.846; 1.62% |
+| + `-shortlist_gapped -recon_min_length 7` | 0.786; 0.702; 2.48% | 0.911; 0.878; 1.46% |
+| + `-shortlist_gapped -recon_min_length 6` | 0.801; 0.710; 2.51% | 0.928; 0.886; 1.57% |
+| + `-shortlist_gapped -recon_min_length 6 -shortlist_max_evalue 10 -recon_missed_cleavages 2` (recipe) | not searched | 0.935; 0.888; 1.43% |
+
+Each of the three values raised the kept share on every shortlist. The
+shortlist of the held-out configuration reaches 68 to 93% of the full
+search's identified spectra (mean 85%); most of the rest has no tag of the
+default minimum length 8 on the right protein, or a tag with one flank off by
+an isotope or modification mass. `-shortlist_gapped` and a lower
+`-recon_min_length` admit these: 95 to 98% (mean 97%) with the recipe of the
+last row, at 2.7 times as many proteins (3,594 of 20,414 on average) and a
+search time 9% longer. After the second held-out test (below) they are the
+defaults under `-search_engine msfragger` with `-search_config_out` and the
+tryptic shortlist
+(`-recon_min_length` and `-recon_missed_cleavages` then also change
+`-recon_out`); Sage and Comet keep 1.13.1's values. MSFragger's mass calibration (`calibrate_mass 2`) and `stricttrypsin`
+added nothing on the two first runs and are not exported. All of this was
+set on development runs; the entrapment
+differences between the rows are within the noise of 8 to 290 entrapment hits
+per run.
+
+**Second held-out test: PASS** (10 runs from 10 new PRIDE projects,
+PREREG-msfragger2.md on `post1131/msfragger-heldout2`, scored once on
+2026-11-11; criteria of the first test). Tested: the export defaults with the
+recipe `-shortlist_gapped -recon_min_length 6 -shortlist_max_evalue 10
+-recon_missed_cleavages 2`, used unedited. MSFragger ran in 10 of 10 runs
+(C1). In the 9 evaluable runs the kept share is 0.833 to 0.976, median 0.934
+(C2, at least 0.80 in every run); the search is 1.64 to 4.72 times as fast,
+median 2.05 (G1); entrapment FDP 1.07% pooled and at most 1.88% per run (G2,
+limits 1.5% and 2.0%; the highest run has 11 entrapment hits, a 12th would
+exceed the limit). One run had 10 identifications in the full search and is
+not evaluable. The test covers the recipe and the export defaults together,
+not each alone. With the default shortlist (informational, no criterion) the
+kept share is 0.526 to 0.946, below 0.80 in 5 of 9 runs: the recipe is needed
+for this result. The first held-out test (FAIL, above) stays as it was: it
+tested the 1.13 export with the default shortlist.
+
+**MSFragger shortlist defaults.** Since this test, `-search_engine msfragger`
+with `-search_config_out` and `-shortlist_protease trypsin` (the default)
+runs the tested configuration: `-shortlist_gapped` on (a flag: it cannot be
+switched off there), `-shortlist_max_evalue 10`, `-recon_min_length 6`,
+`-recon_missed_cleavages 2`. Each applies unless the option is given on the
+command line, or set in an INI to a value other than its 1.13.1 default (an
+INI value equal to that default cannot be told from it, as for
+`-shortlist_specificity`). The log line `MSFragger defaults (...)` and the
+shortlist header line `# msfragger defaults (...)` name the values applied;
+the reconciler's line says `min tag length 6 (msfragger default)`. On the
+development run PXD003531 the export without these options is
+byte-identical to the one with them. Sage, Comet, a run without
+`-search_config_out` and a `-shortlist_protease` other than trypsin (not
+tested held-out with these values) keep 1.13.1's values.
 
 `-search_engine msfragger` writes a complete `fragger.params` for MSFragger
 4.4.1 (`java -jar MSFragger-4.4.1.jar fragger.params <spectra>`), keys in the
@@ -340,7 +400,8 @@ after spaces as part of the value, so its own `--config` file stops with
 values:
 
 - precursor: `precursor_mass_lower = -tol`, `precursor_mass_upper = +tol`,
-  `precursor_mass_units` (0 Da, 1 ppm) from `-search_precursor_tolerance`;
+  `precursor_mass_units` (0 Da, 1 ppm) from `-search_precursor_tolerance`
+  (20 ppm by default for this engine);
   `precursor_true_tolerance`/`precursor_true_units` are separate keys and are
   set to the same window: MSFragger assigns a PSM's delta to its offset or
   isotope window with them, and with the 20 ppm default and mass offsets
@@ -360,7 +421,8 @@ values:
   offset `dropped_engine` (the variable modifications are still exported),
   `-search_shifts offsets` is refused; use `-search_precursor_unit ppm`;
 - trypsin (`search_enzyme_name_1 trypsin`, cut `KR`, nocut `P`, sense `C`),
-  `allowed_missed_cleavage_1` from `-recon_missed_cleavages` (at most 5),
+  `allowed_missed_cleavage_1` from `-search_missed_cleavages` (2 by default
+  with trypsin, else `-recon_missed_cleavages`; at most 5),
   `num_enzyme_termini 2`; with a `-shortlist_protease` other than trypsin
   (item 20) its rule instead: the rule's name in lower case, its cut and
   no-cut residues, sense `C` or `N`, `num_enzyme_termini` 2 (`full`) or 1
@@ -372,7 +434,8 @@ values:
   chymotryptic MGF: it echoes the exported chymotrypsin rule (474 peptides
   from the reduced FASTA) and `nonspecific` (87,087 peptides);
 - variable modifications in `variable_mod_01..16` (only the used slots; the
-  default file's Oxidation and protein N-term Acetyl are not kept):
+  default file's entries are not kept; protein N-term Acetyl is added unless
+  `-search_nterm_acetyl no`):
   `<mass> <site> <max>`, site the residue, `n^`/`c^` a peptide terminus,
   `[^`/`]^` a protein terminus, `nQ`/`[M` a terminus on one residue; max 3
   on residues, 1 on termini. More than 16 is refused; `-search_shifts` caps at 16;

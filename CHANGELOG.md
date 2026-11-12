@@ -2,6 +2,44 @@
 
 ## Unreleased (after 1.13.1)
 
+- **`-search_engine msfragger`: the held-out-tested shortlist configuration
+  is the default.** With `-search_config_out` and `-shortlist_protease
+  trypsin` (the default), `-shortlist_gapped` is on, `-shortlist_max_evalue` 10, `-recon_min_length` 6 and
+  `-recon_missed_cleavages` 2, each unless given on the command line or in an
+  INI (the mechanism of `-shortlist_specificity`). This is the configuration
+  of the second held-out test (PASS, entry below); the first held-out test
+  (FAIL, 1.13) stands for the 1.13 shortlist. The log and the shortlist
+  header name the values applied. On PXD003531 the export without the options
+  is byte-identical to the one with them. Sage, Comet, runs without
+  `-search_config_out` and other shortlist proteases keep 1.13.1's values.
+- **`-search_engine msfragger`: three more export values follow MSFragger's
+  own closed-search defaults.** 2 missed cleavages (new
+  `-search_missed_cleavages`, default -1 = by engine; with
+  `-shortlist_protease` other than trypsin the value stays
+  `-recon_missed_cleavages`), a 20 ppm precursor window
+  (`-search_precursor_tolerance` defaults to -1 = by engine) and variable
+  protein N-terminal acetylation (new `-search_nterm_acetyl`, default
+  `engine`). The Sage and Comet exports are byte-identical to 1.13.1. On
+  nine development runs (two development runs and the seven runs of the
+  spent held-out set of 1.13) the share of the full search's identified
+  spectra that the shortlist search keeps rose from 0.723 to 0.831 on
+  average (lowest run 0.563 to 0.678), largest per-run entrapment FDP 2.39%
+  to 1.63%. With the shortlist widened by the existing options
+  `-shortlist_gapped -recon_min_length 6 -shortlist_max_evalue 10
+  -recon_missed_cleavages 2` it is 0.935 on average, 0.888 in the lowest
+  run, entrapment FDP at most 1.43% per run. **Second held-out
+  test, PASS** (10 runs from 10 new PRIDE projects, PREREG-msfragger2.md on
+  `post1131/msfragger-heldout2`, scored once on 2026-11-11, criteria of the
+  first test; export defaults with this recipe, used unedited): MSFragger
+  ran in 10 of 10 runs; in the 9 evaluable runs the kept share is 0.833 to
+  0.976 (median 0.934; criterion at least 0.80 in every run), the search
+  1.64 to 4.72 times as fast (median 2.05), entrapment FDP 1.07% pooled
+  (limit 1.5%) and at most 1.88% per run (limit 2.0%; one more entrapment
+  hit in that run would exceed it). One run had too few identifications to
+  evaluate (10 in the full search). The test covers recipe and export
+  defaults together. With the default shortlist (informational) the kept
+  share is 0.526 to 0.946, below 0.80 in 5 of 9 runs. The first held-out
+  FAIL (1.13 export, default shortlist) stands.
 - **mzML: a selected ion m/z of 0 is read as missing.** A selected ion m/z
   (`MS:1000744`) of 0, below 0 or not a number now gives the precursor its
   isolation window target m/z, as a missing `MS:1000744` does; before, the
