@@ -1,7 +1,26 @@
 # Changelog
 
-## Unreleased
+## 1.13.3 (2026-11-12)
 
+Fixes for the Windows desktop app and one new experimental option; tag output
+is unchanged unless that option is used.
+
+- **Windows on ARM64: the desktop app works.** The bundled x64 CLI died
+  before it started (0xC0000142) on Windows 11 on ARM64, in 1.13.0 to 1.13.2:
+  under x64 emulation its `mimalloc-redirect.dll` cannot patch the C runtime
+  (microsoft/mimalloc#958). The app and the zip's `FASTag.bat` now set
+  `MIMALLOC_DISABLE_REDIRECT=1` on ARM64 hosts; x64 is unchanged. If you
+  start `FASTag.exe` directly on ARM64, set it yourself (README).
+- **GUI settings migration runs again.** A second start-up hook replaced the
+  first, so the migration of version-1 settings had not run since 1.12.0.
+- **Characterize on Windows found no taxonomy index** even when it was
+  installed (exit 6): the app passed the CLI a `\\?\` path it could not extend.
+- **Label discovery help** no longer says report format 5 passed its fourth
+  held-out test; format 5 was taken out before 1.13.2.
+- **Windows releases are now attached only after tests on x64 and ARM64**:
+  silent install, the app's start-up check of its CLI, the zip's
+  `FASTag.bat`, and GUI end-to-end runs (export tags, spectrum inspector,
+  Characterize) with the real CLI.
 - **New `-shortlist_exact_only` (experimental).** Turns off the gapped
   placement that `-search_engine msfragger` switches on by default
   (`-shortlist_gapped` is a flag and cannot be given off); the other three
