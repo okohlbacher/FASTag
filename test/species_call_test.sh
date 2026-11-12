@@ -189,8 +189,8 @@ run reag "${COMMON[@]}" -species "${TAX[@]}" "${EXPL[@]}" -species_reagents "$TM
   || { cat "$TMP/reag.log" >&2; fail "-species_reagents"; }
 G="$TMP/reag.species.tsv"
 [ "$(fields "$G")" = 19 ] || fail "-species_reagents: not 19 fields on every line ($(fields "$G"))"
-cut -f1-17 "$G" | cmp -s "$E" - || fail "-species_reagents changed the explain columns of a run without a reagent call"
-[ "$(head -1 "$G" | cut -f18-)" = "$(printf 'reagent_tags\treagent_expected')" ] || fail "-species_reagents: header"
+tr -d '\r' < "$G" | cut -f1-17 | cmp -s <(tr -d '\r' < "$E") - || fail "-species_reagents changed the explain columns of a run without a reagent call"
+[ "$(head -1 "$G" | tr -d '\r' | cut -f18-)" = "$(printf 'reagent_tags\treagent_expected')" ] || fail "-species_reagents: header"
 [ "$(col "$G" 590 reagent_tags)" = NA ] || fail "-species_reagents: a taxon without listed proteins is not NA"
 # With an explain n_min nothing reaches, Escherichia is found through the listed (fixture) proteins alone.
 printf 'alpha\t0.01\ntau\t0\nn_min\t100000\nreagent_n_min\t3\n' > "$TMP/params_r.tsv"

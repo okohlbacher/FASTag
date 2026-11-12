@@ -122,7 +122,8 @@ mkdir -p "$TMP/oa" "$TMP/oe"
     -charge_min 2 -charge_max 4 -charge_infer_margin 2 -isotope_error 0 > log 2>&1 ) \
   || { cat "$TMP/oe/log" >&2; fail "-out_spectra with the defaults spelled out failed"; }
 cmp -s <(mzml_masked "$TMP/oa/s.mzML") <(mzml_masked "$TMP/oe/s.mzML") \
-  || fail "the #6 options at their defaults changed the -out_spectra mzML"
+  || { diff <(mzml_masked "$TMP/oa/s.mzML") <(mzml_masked "$TMP/oe/s.mzML") | head -20 >&2
+       fail "the #6 options at their defaults changed the -out_spectra mzML"; }
 grep -Eq 'parameter: (unknown_charge|charge_min|charge_max|charge_infer_margin|isotope_error)' "$TMP/oa/s.mzML" \
   && fail "a default #6 option is listed in -out_spectra"
 
