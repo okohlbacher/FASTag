@@ -51,6 +51,32 @@ jobs:
             $env:PATH = "$env:USERPROFILE\.cargo\bin;$env:PATH"
           }
           cargo install tauri-driver --version 2.1.0 --locked
+      # DIAGNOSTIC: does the installed app's WebView2 open a DevTools port
+      # when started with the env var msedgedriver uses?
+      - name: Diag - WebView2 remote debugging without a driver
+        shell: pwsh
+        continue-on-error: true
+        run: |
+          Get-ChildItem env: | Where-Object { $_.Name -like 'WEBVIEW2*' } | Format-Table -AutoSize | Out-String | Write-Host
+          Write-Host "session: $([Environment]::UserInteractive) user $env:USERNAME; SESSIONNAME=$env:SESSIONNAME"
+          Get-Process -Id $PID | Select-Object SessionId | Out-String | Write-Host
+          $udf = "$env:RUNNER_TEMP\wv2-udf"
+          $env:WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS = '--remote-debugging-port=9333'
+          $env:WEBVIEW2_USER_DATA_FOLDER = $udf
+          $env:TAURI_WEBVIEW_AUTOMATION = 'true'
+          $p = Start-Process "$env:RUNNER_TEMP\FASTag-app\fastag.exe" -PassThru
+          Remove-Item Env:WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS, Env:WEBVIEW2_USER_DATA_FOLDER
+          $ok = $false
+          foreach ($k in 1..30) {
+            Start-Sleep 2
+            try { $v = Invoke-RestMethod http://127.0.0.1:9333/json/version -TimeoutSec 2; Write-Host "CDP after $(2*$k) s: $($v | ConvertTo-Json -Compress)"; $ok = $true; break } catch {}
+          }
+          if (-not $ok) { Write-Host "DIAG: no CDP port after 60 s" }
+          Get-CimInstance Win32_Process | Where-Object { $_.Name -match 'fastag|msedgewebview2' } | ForEach-Object { "PROC $($_.ProcessId) $($_.Name) :: $($_.CommandLine)" } | Select-Object -First 12 | Out-String -Width 400 | Write-Host
+          Get-ChildItem $udf -ErrorAction SilentlyContinue | ForEach-Object { "UDF $($_.Name)" } | Out-String | Write-Host
+          Get-ChildItem "$env:LOCALAPPDATA\de.openms.fastag" -Recurse -Depth 1 -ErrorAction SilentlyContinue | ForEach-Object { "LAD $($_.FullName)" } | Select-Object -First 15 | Out-String | Write-Host
+          Stop-Process -Id $p.Id -Force -ErrorAction SilentlyContinue
+          Get-Process msedgewebview2 -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
       - name: GUI end-to-end (installed app, real CLI)
         shell: pwsh
         run: |
@@ -64,6 +90,8 @@ jobs:
             ${{ runner.temp }}/e2e/screens
             ${{ runner.temp }}/e2e/windows-e2e.json
             ${{ runner.temp }}/e2e/tauri-driver.log*
+            ${{ runner.temp }}/e2e/msedgedriver.log
+            ${{ runner.temp }}/e2e/procs.txt
             ${{ runner.temp }}/installed-check
           if-no-files-found: warn
       - name: Uninstall
