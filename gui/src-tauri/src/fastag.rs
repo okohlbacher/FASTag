@@ -197,7 +197,12 @@ pub fn resolve_binary(app: &AppHandle) -> Resolved {
     }
     let mut roots: Vec<PathBuf> = Vec::new();
     if let Ok(rd) = app.path().resource_dir() {
-        roots.push(rd.join("resources").join("fastag"));
+        // Without the \\?\ prefix Windows gives resource_dir(): the paths
+        // below reach the CLI (FASTAG_TAXONOMY_DIR, OPENMS_DATA_PATH), which
+        // appends "/<file>" to them, and a verbatim path does not take a
+        // forward slash: with tax_k7.taxdb installed, -species still reported
+        // "the k-mer index is not" there (Windows e2e, both architectures).
+        roots.push(dunce::simplified(&rd).join("resources").join("fastag"));
     }
     // Dev fallback: the resources dir next to this crate (tauri dev does not
     // populate resource_dir the way a bundle does).
