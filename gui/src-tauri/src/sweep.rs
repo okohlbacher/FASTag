@@ -4,12 +4,15 @@
 // A run that is cancelled or fails is cleaned up when it ends (outputs.rs),
 // but a run whose GUI was killed is not: the CLI ends with the GUI
 // (lifetime.rs), and its partial outputs stay at their final paths with no
-// run record. So `run` writes a marker, <app data>/running-<n>.json, before
-// the CLI starts and removes it when the run has ended; at the next start
-// recover() turns a marker that is still there into a Failed run record
-// ("interrupted"). One marker per run: a run refused because another is live
-// removes its own marker, never the live run's. While the run is live its
-// marker's mtime is refreshed every HEARTBEAT, so the marker of a killed run
+// run record. So `run` writes a marker, <app data>/running-<n>.json (the
+// app's local data folder, history::dir; with the host and process id of
+// the GUI), before the CLI starts and removes it when the run has ended; at
+// the next start recover() turns a marker that is still there into a Failed
+// run record ("interrupted"), unless its run may still be live (another
+// machine, a process that still runs, a fresh heartbeat: abandoned()). One
+// marker per run: a run refused because another is live removes its own
+// marker, never the live run's. While the run is live its marker's mtime is
+// refreshed every HEARTBEAT, so the marker of a killed run
 // says when that run was last alive: that is the record's end.
 // leftovers() then lists, for the recorded runs:
 // - <output>.part (a CLI that writes to .part and renames on success, Q3,
@@ -48,6 +51,10 @@ pub const HEARTBEAT: Duration = Duration::from_secs(2);
 /// rest is slack for a late heartbeat and coarse file times.
 const AFTER_HEARTBEAT_MS: u64 = 2 * HEARTBEAT.as_millis() as u64;
 
+/// A marker refreshed less than this long ago belongs to a run that may be
+/// live: its heartbeat (every HEARTBEAT) has not been missed three times.
+pub const FRESH: Duration = Duration::from_secs(3 * HEARTBEAT.as_secs());
+
 /// How many recorded runs are searched for leftovers.
 const RUNS_SEARCHED: usize = 500;
 
@@ -61,7 +68,8 @@ pub fn mark_running(dir: &Path, rec: &RunRecord) -> std::io::Result<PathBuf> {
     let path = dir.join(format!("{MARKER_PREFIX}{}-{}-{n}.json", rec.start, std::process::id()));
     let mut tmp = path.clone().into_os_string();
     tmp.push(".tmp");
-    std::fs::write(&tmp, serde_json::to_vec(rec).map_err(std::io::Error::other)?)?;
+    let marker = Marker { rec: rec.clone(), host: host_name(), pid: Some(std::process::id()) };
+    std::fs::write(&tmp, serde_json::to_vec(&marker).map_err(std::io::Error::other)?)?;
     std::fs::rename(&tmp, &path)?;
     let beat = path.clone();
     let _ = std::thread::Builder::new().name("fastag-heartbeat".into()).spawn(move || loop {
@@ -101,19 +109,141 @@ pub fn markers(dir: &Path) -> Vec<PathBuf> {
     v
 }
 
-/// At startup: a marker left by an earlier session is a run the app did not
-/// see end. Each is recorded as Failed (INTERRUPTED), with the marker's
-/// last heartbeat (its mtime) as its end, and the marker goes. Returns those
-/// records.
-pub fn recover(dir: &Path) -> Vec<RunRecord> {
-    markers(dir).iter().filter_map(|m| recover_one(dir, m)).collect()
+/// What a marker holds: the run's record, plus the host and the process id
+/// of the GUI that started it (absent in markers of 1.13.3 and earlier).
+#[derive(serde::Serialize, serde::Deserialize)]
+struct Marker {
+    #[serde(flatten)]
+    rec: RunRecord,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    host: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pid: Option<u32>,
 }
 
-fn recover_one(dir: &Path, marker: &Path) -> Option<RunRecord> {
+/// This machine's name (COMPUTERNAME, gethostname), None when unknown.
+pub(crate) fn host_name() -> Option<String> {
+    #[cfg(windows)]
+    {
+        std::env::var("COMPUTERNAME").ok().filter(|h| !h.is_empty())
+    }
+    #[cfg(unix)]
+    {
+        let mut buf = [0u8; 256];
+        // SAFETY: gethostname writes at most buf.len() bytes into buf.
+        if unsafe { libc::gethostname(buf.as_mut_ptr().cast(), buf.len()) } != 0 {
+            return None;
+        }
+        let n = buf.iter().position(|&b| b == 0).unwrap_or(buf.len());
+        Some(String::from_utf8_lossy(&buf[..n]).into_owned()).filter(|h| !h.is_empty())
+    }
+    #[cfg(not(any(windows, unix)))]
+    {
+        None
+    }
+}
+
+/// Process @p pid runs on this machine.
+pub(crate) fn pid_alive(pid: u32) -> bool {
+    #[cfg(unix)]
+    {
+        let Ok(p) = i32::try_from(pid) else { return false };
+        // SAFETY: signal 0 only checks that the process exists.
+        unsafe { libc::kill(p, 0) == 0 || std::io::Error::last_os_error().raw_os_error() == Some(libc::EPERM) }
+    }
+    #[cfg(windows)]
+    {
+        use windows_sys::Win32::Foundation::{CloseHandle, GetLastError, ERROR_ACCESS_DENIED};
+        use windows_sys::Win32::System::Threading::{GetExitCodeProcess, OpenProcess, PROCESS_QUERY_LIMITED_INFORMATION};
+        // SAFETY: plain Win32 calls; the handle is closed here.
+        unsafe {
+            let h = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, 0, pid);
+            if h.is_null() {
+                // Another user's process: it exists.
+                return GetLastError() == ERROR_ACCESS_DENIED;
+            }
+            let mut code = 0u32;
+            let ok = GetExitCodeProcess(h, &mut code);
+            CloseHandle(h);
+            ok != 0 && code == 259 // STILL_ACTIVE
+        }
+    }
+    #[cfg(not(any(windows, unix)))]
+    {
+        let _ = pid;
+        false
+    }
+}
+
+/// Who owns a marker, as far as this session can tell.
+#[derive(Debug, PartialEq)]
+enum Owner {
+    /// This process (cannot have a run yet when recover() runs at startup).
+    ThisProcess,
+    /// A process on this machine that has ended.
+    Ended,
+    /// A process on this machine that still runs.
+    Running,
+    /// A GUI on another machine (an app data folder shared between machines).
+    OtherHost,
+    /// A marker of 1.13.3 or earlier: no host or process id.
+    Unknown,
+}
+
+fn owner(m: &Marker, host: Option<&str>, me: u32, alive: &dyn Fn(u32) -> bool) -> Owner {
+    match (m.host.as_deref(), m.pid) {
+        (Some(h), _) if host.is_some_and(|me_host| !me_host.eq_ignore_ascii_case(h)) => Owner::OtherHost,
+        (Some(_), Some(p)) if p == me => Owner::ThisProcess,
+        (Some(_), Some(p)) if alive(p) => Owner::Running,
+        (Some(_), Some(_)) => Owner::Ended,
+        _ => Owner::Unknown,
+    }
+}
+
+/// The marker of @p owner, last refreshed @p age ago, is a run nobody will
+/// end: a run of another machine or of a process still running is left
+/// alone, and so is a marker without an owner whose heartbeat is fresh (a
+/// GUI of 1.13.3 or earlier, possibly on another machine that shares the
+/// folder). PID reuse can only delay a recovery: once that process ends, the
+/// next start recovers the marker.
+fn abandoned(owner: &Owner, age: Option<Duration>) -> bool {
+    match owner {
+        Owner::ThisProcess | Owner::Ended => true,
+        Owner::Running | Owner::OtherHost => false,
+        Owner::Unknown => age.is_none_or(|a| a >= FRESH),
+    }
+}
+
+/// How long ago @p p was last written (its heartbeat), None when unknown.
+fn age(p: &Path) -> Option<Duration> {
+    let t = std::fs::metadata(p).and_then(|m| m.modified()).ok()?;
+    Some(SystemTime::now().duration_since(t).unwrap_or(Duration::ZERO))
+}
+
+/// At startup: a marker left by an earlier session is a run the app did not
+/// see end. Each is recorded as Failed (INTERRUPTED), with the marker's
+/// last heartbeat (its mtime) as its end, and the marker goes. A marker of a
+/// run that may still be live (abandoned() is false) stays. Returns those
+/// records.
+pub fn recover(dir: &Path) -> Vec<RunRecord> {
+    recover_with(dir, host_name().as_deref(), std::process::id(), &pid_alive)
+}
+
+fn recover_with(dir: &Path, host: Option<&str>, me: u32, alive: &dyn Fn(u32) -> bool) -> Vec<RunRecord> {
+    markers(dir).iter().filter_map(|m| recover_one(dir, m, host, me, alive)).collect()
+}
+
+fn recover_one(dir: &Path, marker: &Path, host: Option<&str>, me: u32, alive: &dyn Fn(u32) -> bool) -> Option<RunRecord> {
     let text = std::fs::read(marker).ok()?;
     let last_beat = mtime_ms(marker);
+    let m: Option<Marker> = serde_json::from_slice(&text).ok();
+    if let Some(m) = &m {
+        if !abandoned(&owner(m, host, me, alive), age(marker)) {
+            return None;
+        }
+    }
     let _ = std::fs::remove_file(marker);
-    let mut rec: RunRecord = serde_json::from_slice(&text).ok()?;
+    let mut rec = m?.rec;
     rec.status = Status::Failed;
     rec.exit_code = None;
     rec.message = Some(INTERRUPTED.to_string());
@@ -121,6 +251,43 @@ fn recover_one(dir: &Path, marker: &Path) -> Option<RunRecord> {
     history::append(dir, &rec).ok()?;
     let _ = history::write_failure_log(dir, &rec, &[]);
     Some(rec)
+}
+
+/// Move the run data of 1.13.3 and earlier from @p old (app_data_dir,
+/// Roaming on Windows) to @p new (history::dir) once: the record, the
+/// failure log, the kept leftovers, and the markers of runs nobody will end
+/// (those of a GUI that may still run elsewhere stay, and are that GUI's).
+/// A file already in @p new is never overwritten. Nothing happens where both
+/// are the same folder (macOS, Linux). Returns the files moved.
+pub fn migrate(old: &Path, new: &Path) -> Vec<PathBuf> {
+    if old == new || !old.is_dir() {
+        return Vec::new();
+    }
+    let mut names: Vec<std::ffi::OsString> =
+        [history::HISTORY_FILE, history::FAILURE_LOG, KEPT_FILE].iter().map(|n| (*n).into()).collect();
+    for m in markers(old) {
+        let gone = std::fs::read(&m)
+            .ok()
+            .and_then(|t| serde_json::from_slice::<Marker>(&t).ok())
+            .is_some_and(|mk| abandoned(&owner(&mk, host_name().as_deref(), std::process::id(), &pid_alive), age(&m)));
+        if gone {
+            names.extend(m.file_name().map(|n| n.to_owned()));
+        }
+    }
+    let mut moved = Vec::new();
+    for n in names {
+        let (from, to) = (old.join(&n), new.join(&n));
+        if !from.is_file() || to.exists() || std::fs::create_dir_all(new).is_err() {
+            continue;
+        }
+        // A rename, or (Roaming redirected to another volume) copy and remove.
+        let ok = std::fs::rename(&from, &to).is_ok()
+            || (std::fs::copy(&from, &to).is_ok() && std::fs::remove_file(&from).is_ok());
+        if ok {
+            moved.push(to);
+        }
+    }
+    moved
 }
 
 /// @p p was last written while the interrupted run @p rec was alive: not
@@ -365,6 +532,102 @@ mod tests {
         assert_eq!(shown(&leftovers(&app)), shown(std::slice::from_ref(&partial)));
         assert_eq!(sweep(&app, &[older.display().to_string(), newer.display().to_string()]).removed.len(), 0);
         assert!(older.exists() && newer.exists());
+        let _ = std::fs::remove_dir_all(&d);
+    }
+
+    /// A marker of @p r in @p dir as the GUI @p host / @p pid writes it
+    /// (None, None: a marker of 1.13.3), last refreshed @p age_ms ago.
+    fn marker_at(dir: &Path, name: &str, r: &RunRecord, host: Option<&str>, pid: Option<u32>, age_ms: u64) -> PathBuf {
+        std::fs::create_dir_all(dir).unwrap();
+        let p = dir.join(format!("{MARKER_PREFIX}{name}.json"));
+        let m = Marker { rec: r.clone(), host: host.map(String::from), pid };
+        std::fs::write(&p, serde_json::to_vec(&m).unwrap()).unwrap();
+        set_mtime(&p, history::now_ms() - age_ms);
+        p
+    }
+
+    #[test]
+    fn a_marker_names_its_host_and_process() {
+        let d = tmp("owner");
+        let app = d.join("appdata");
+        let m = mark_running(&app, &rec("1-1", &d, Status::Ok)).unwrap();
+        let mk: Marker = serde_json::from_slice(&std::fs::read(&m).unwrap()).unwrap();
+        clear_running(&m);
+        assert_eq!(mk.pid, Some(std::process::id()));
+        assert_eq!(mk.host, host_name());
+        assert!(host_name().is_some(), "no host name on this machine");
+        assert!(pid_alive(std::process::id()));
+        // A marker of 1.13.3 (no host, no pid) still reads.
+        let old = serde_json::to_vec(&rec("1-1", &d, Status::Ok)).unwrap();
+        let mk: Marker = serde_json::from_slice(&old).unwrap();
+        assert_eq!((mk.host, mk.pid), (None, None));
+        let _ = std::fs::remove_dir_all(&d);
+    }
+
+    // Startup recovery leaves a run alone that may still be live: one of
+    // another machine (an app data folder on a share), of a process of this
+    // machine that still runs, or a marker without owner whose heartbeat is
+    // fresh. A run whose process has ended is recovered even with a fresh
+    // heartbeat (it was killed a moment ago).
+    #[test]
+    fn recovery_leaves_the_markers_of_live_runs_alone() {
+        let d = tmp("live");
+        let app = d.join("appdata");
+        let r = rec("1-1", &d, Status::Ok);
+        let me = 4242;
+        let running = |p: u32| p == 7;
+        let other_host = marker_at(&app, "a", &r, Some("OTHER-PC"), Some(7), 60_000);
+        let live_here = marker_at(&app, "b", &r, Some("THIS-PC"), Some(7), 60_000);
+        let fresh_old = marker_at(&app, "c", &r, None, None, 1_000);
+        let dead_fresh = marker_at(&app, "d", &r, Some("this-pc"), Some(8), 1_000);
+        let stale_old = marker_at(&app, "e", &r, None, None, 60_000);
+        let mine = marker_at(&app, "f", &r, Some("THIS-PC"), Some(me), 1_000);
+        let got = recover_with(&app, Some("THIS-PC"), me, &running);
+        assert_eq!(got.len(), 3, "recovered {got:?}");
+        for m in [&other_host, &live_here, &fresh_old] {
+            assert!(m.exists(), "{} was taken over", m.display());
+        }
+        for m in [&dead_fresh, &stale_old, &mine] {
+            assert!(!m.exists(), "{} was not recovered", m.display());
+        }
+        assert_eq!(history::list(&app, 10).len(), 3);
+        // The live run ends: its marker is recovered at the next start.
+        assert_eq!(recover_with(&app, Some("THIS-PC"), me, &|_| false).len(), 1);
+        assert!(!live_here.exists());
+        assert!(other_host.exists(), "another machine's marker is that machine's");
+        let _ = std::fs::remove_dir_all(&d);
+    }
+
+    #[test]
+    fn migrate_moves_the_run_data_once_and_never_overwrites() {
+        let d = tmp("migrate");
+        let (old, new) = (d.join("roaming"), d.join("local"));
+        // Same folder (macOS, Linux): nothing to do.
+        std::fs::create_dir_all(&old).unwrap();
+        std::fs::write(old.join(history::HISTORY_FILE), "{}\n").unwrap();
+        assert!(migrate(&old, &old).is_empty());
+        assert!(old.join(history::HISTORY_FILE).exists());
+        std::fs::write(old.join(history::FAILURE_LOG), "log").unwrap();
+        std::fs::write(old.join(KEPT_FILE), "[]").unwrap();
+        let r = rec("1-1", &d, Status::Ok);
+        let stale = marker_at(&old, "1-1-0", &r, None, None, 60_000);
+        let fresh = marker_at(&old, "1-2-0", &r, None, None, 0);
+        let moved = migrate(&old, &new);
+        assert_eq!(moved.len(), 4, "moved {moved:?}");
+        for n in [history::HISTORY_FILE, history::FAILURE_LOG, KEPT_FILE] {
+            assert!(new.join(n).is_file() && !old.join(n).exists(), "{n} not moved");
+        }
+        assert!(!stale.exists() && new.join(stale.file_name().unwrap()).exists());
+        assert!(fresh.exists(), "a marker with a fresh heartbeat (a live 1.13 run) was moved");
+        // The moved marker is recovered in its new folder.
+        assert_eq!(recover(&new).len(), 1);
+        // Once: a later file in the old folder never replaces the new one.
+        let now = std::fs::read_to_string(new.join(history::FAILURE_LOG)).unwrap();
+        std::fs::write(old.join(history::FAILURE_LOG), "older").unwrap();
+        assert!(migrate(&old, &new).is_empty());
+        assert_eq!(std::fs::read_to_string(new.join(history::FAILURE_LOG)).unwrap(), now);
+        // No old folder: nothing.
+        assert!(migrate(&d.join("none"), &new).is_empty());
         let _ = std::fs::remove_dir_all(&d);
     }
 
