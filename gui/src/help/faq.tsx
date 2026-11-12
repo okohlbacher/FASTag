@@ -404,7 +404,7 @@ export const FAQ: FaqEntry[] = [
     causes: [
       <>
         The app: for all users in C:\Program Files\FASTag (the choice preselected when an administrator starts the installer), or for one user in
-        %LOCALAPPDATA%\Programs\FASTag (no administrator needed; an install of 1.13.3 or earlier stays in %LOCALAPPDATA%\FASTag). About 330 MB,
+        %LOCALAPPDATA%\Programs\FASTag (no administrator needed; an install of 1.13.3 or earlier stays in %LOCALAPPDATA%\FASTag). About 365 MB,
         and about 1.5 GB with the taxonomy index of the species report, which is a separate download.
       </>,
       <>Settings: %APPDATA%\de.openms.fastag (they follow you to other PCs). History, run records and the failure log: %LOCALAPPDATA%\de.openms.fastag, with the WebView2 data. Outputs: where you chose, beside the input by default.</>,

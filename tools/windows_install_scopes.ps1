@@ -30,7 +30,9 @@ Write-Host '--- 1. upgrade: previous per-user release, then the new installer (/
 $old = Install-Fastag $Previous @() 'CurrentUser'
 Write-Host "previous: $($old.Version) in $($old.Dir)"
 $new = Install-Fastag $Installer @() 'AllUsers'
-if ($new.Version -eq $old.Version) { Fail "the new installer registered the old version $($new.Version)" }
+# The version this tree builds: a pre-release dry run may carry the previous release's number.
+$want = (Get-Content -Raw (Join-Path $PSScriptRoot '..\gui\src-tauri\tauri.conf.json') | ConvertFrom-Json).version
+if ($new.Version -ne $want) { Fail "the new installer registered $($new.Version), expected $want" }
 $left = Get-Leftovers $old.Dir
 if ($left.Count -or (Test-Path $old.Dir)) { Fail "the upgrade left the per-user copy in $($old.Dir) ($($left.Count) files)" }
 Write-Host "upgrade: $($old.Version) per user -> $($new.Version) for all users; the per-user copy is gone"

@@ -162,7 +162,7 @@ Windows 10 and 11 already have (the installer downloads it otherwise, so a
 machine without it needs a network connection). Started by an administrator,
 the installer asks for whom to install: all users (preselected) or only the
 current user. A standard user installs for themselves, with no administrator
-prompt. The installed app takes about 360 MB, and about 1.5 GB with the
+prompt. The installed app takes about 365 MB, and about 1.5 GB with the
 taxonomy index of the species report, which is a separate download
 (`FASTag-taxonomy-k7.tar.gz` on the release page; the app checks for it before
 a run with the species report and says where to put it).

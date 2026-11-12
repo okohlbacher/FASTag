@@ -701,7 +701,7 @@ honoured in this mode; `uninstall.exe /S`. The pre-install hook
 other scope (same identifier `de.openms.fastag`), so an upgrade leaves one copy
 and one Apps entry. The app needs the WebView2 runtime (part of current
 Windows 10 and 11; the installer's bootstrapper downloads it otherwise) and
-runs on Windows on ARM64 emulated. It takes about 360 MB installed; the
+runs on Windows on ARM64 emulated. It takes about 365 MB installed; the
 taxonomy k-mer index (1.14 GB, the separate `FASTag-taxonomy-k7.tar.gz`
 asset) is not in the installer, and the check before a run with `-species`
 (`inspector/checks.ts`, `no-taxdb`) says where it goes:
