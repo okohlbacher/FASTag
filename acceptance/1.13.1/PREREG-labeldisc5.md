@@ -202,3 +202,39 @@ bc5949743a9c6f1e1b28f64462fae8bde2ddd90c7e7d71e4623909db613017c8; `manifests/man
 Expected numbers against the minimum numbers (decided only by the audit): label-free 50 (>= 40; ion-trap MS2 from 30
 HYB, >= 20 likely), probe 12 (S2 needs >= 8 with a SILAC spacing signal, unknown before the run), SILAC 43 (>= 30;
 ion-trap MS2 >= 15 likely from 30 HYB), labelled 83 (>= 60).
+
+## Addendum: staging and truth audit (freeze 2, before any FASTag run on a selected file)
+
+Staging (`scripts/stage_heldout5.sh`, `manifests/stage/`): 147 of 147 rank-0 files staged and converted
+(`stage.done`: "STAGE5_DONE 2026-11-12T07:42:50+01:00 staged 147"). 103 checked by PRIDE SHA-1 (`sha1_ok`), 44 without a
+PRIDE SHA-1 checked by size plus a second identical download (`no_pride_sha1,size_ok,second_download_same`; the
+"PRIDE SHA-1 or size plus a second identical download" of the rule). No download failed or differed (`rerun_r0_1.keys`
+empty), no conversion failed; the backup lists of ranks 1 and 2 are empty, no backup was staged.
+
+Truth audit (`scripts/audit_all.sh`, `scripts/audit_heldout5.py`, `manifests/audited.tsv`, sha256
+5f2df09419c8b761090f1f28b94addf2714df4f45cf088824b9cc7c4667250d9): 141 of 147 staged projects included.
+
+| class | included | ion-trap MS2 (IT or mixed) | kept and flagged (not assessable for reporters) | excluded (reason) |
+|---|---|---|---|---|
+| label-free | 50 | 30 | 39 | - |
+| probe (truth label-free) | 12 | 4 | 6 | - |
+| SILAC | 43 | 29 | 32 | 1 manual (PXD006996, freeze 1) |
+| dimethyl | 16 | 10 | 13 | 1 manual (PXD075416, freeze 1) |
+| TMT | 8 (4 MS3) | 4 | - | 1 reporter scan not assessable (PXD012180) |
+| TMTpro | 7 (1 MS3) | 1 | - | 1 reporter scan disagrees (PXD019171) |
+| iTRAQ4 | 0 | - | - | 2 reporter scan disagrees (PXD009297, PXD020911) |
+| iTRAQ8 | 5 | 0 | - | - |
+
+SILAC sub-labels of the included SILAC runs (D1): light/medium Lys6/Arg6 16, triple 14, unknown 11, light/heavy
+Lys8/Arg10 2. Truth from PRIDE records and paper text: the text check of freeze 1 (`manifests/textcheck.tsv`) is the
+truth audit of the label classes; it was done before staging and before any FASTag run; no truth class was changed after
+it, and the reporter scan above changed none (it only excludes).
+
+Minimum numbers: S1 label-free 50 (>= 40), 30 with ion-trap MS2 (>= 20): reached. E1 SILAC with ion-trap MS2 29 (>= 15):
+reached. R-SILAC SILAC 43 (>= 30): reached. F labelled 79 (>= 60): reached. S2 probe runs 12 drawn; whether >= 8 carry a
+SILAC spacing signal is read from the candidate report after the run. P-S1, I1, D1, V1: no minimum.
+
+Harness note (no frozen file changed): `manifests/manual_exclusions.tsv` (frozen, sha256 97e859fd...) had not been copied
+to the work directory on `data`; the first `audit_heldout5.py` call stopped on the missing file before writing anything;
+the file was copied unchanged and the audit run once. The frozen scripts and scorers on `data` were checked equal to the
+freeze-1 sha256 values before the audit.
