@@ -4212,6 +4212,7 @@ protected:
       size_t ms2 = 0, tags = 0, reported = 0;
       size_t no_charge = 0;  ///< MS2 whose precursor carries no charge (tagged as 2+)
       size_t multi_charge = 0;  ///< ... of them, those listing several possible charges
+      size_t mz0_target = 0;  ///< OpenMS-read spectra whose selected-ion m/z 0 became the isolation target
       // Entrapment-calibration accumulators (entrap_on only): target E-values,
       // and entrapment E-values with their tag length -- the key spaces are
       // per-length, so each entrapment event is weighted by 1/r_len later.
@@ -5269,6 +5270,15 @@ protected:
           if (!loaded_here) { loaded = exp[static_cast<Size>(i)]; loaded_here = true; }
           per_thread[tid].acc.e.pick.add(FC::apply(loaded, *picker, pick_mzml));
         }
+        // A selected-ion m/z of 0 next to an isolation target, as OpenMS reads
+        // it (OnDiscMSExperiment, in-memory mzML, mzPeak): the target instead,
+        // as the indexed reader reads the same precursor. MGF has no target.
+        if (!freader && !mreader && FASTag::needsSelectedIonTarget(loaded_here ? loaded : exp[static_cast<Size>(i)]))
+        {
+          if (!loaded_here) { loaded = exp[static_cast<Size>(i)]; loaded_here = true; }
+          FASTag::useSelectedIonTarget(loaded);
+          ++per_thread[tid].mz0_target;
+        }
         const MSSpectrum& spec = loaded_here ? loaded : exp[static_cast<Size>(i)];
         if (mzpeak_out && spec.getMSLevel() == 2 && spec.containsIMData()) throw IonMobilityRefused{};
         if (ldisc_on && spec.getMSLevel() >= 2)
@@ -5512,6 +5522,15 @@ protected:
     if (mzs && mzs->picked() > 0) log_picked("mzPeak", mzs->picked(), mzs->pickFailed());
 
     size_t n_no_charge = 0, n_multi_charge = 0;
+    // Selected-ion m/z 0 (or below, or not finite): counted by the indexed
+    // reader's per-thread copies, or by the loop for spectra OpenMS read.
+    size_t n_mz0 = 0, n_mz0_target = 0;
+    for (const auto& r : freaders)
+      if (r)
+      {
+        n_mz0 += r->invalidSelectedMz();
+        n_mz0_target += r->invalidSelectedMzFromTarget();
+      }
     FASTag::ClusterAcc::ClusterThread run_acc;  // the per-cluster accumulators, summed in thread order
     FASTag::Hyp::HeaderCheckCounts hdr_counts;  // 1.13 -check_header_charge
     for (const PerThread& pt : per_thread)
@@ -5520,6 +5539,8 @@ protected:
       hdr_counts.merge(pt.hdr);
       n_no_charge += pt.no_charge;
       n_multi_charge += pt.multi_charge;
+      n_mz0 += pt.mz0_target;
+      n_mz0_target += pt.mz0_target;
       n_ms2 += pt.ms2;
       n_tags += pt.tags;
       n_reported += pt.reported;
@@ -7236,6 +7257,15 @@ protected:
                       << " and were tagged as 2+: their peaks above the 2+ precursor "
                          "mass are dropped, and their nterm_mass flanks assume charge 2 (wrong "
                          "for a 3+ or higher precursor)." << std::endl;
+    if (n_mz0 > 0)
+      OPENMS_LOG_WARN << n_mz0 << " spectra have a selected ion m/z of 0 (or below 0, or not a number): "
+                         "the converter wrote m/z 0 for precursors it had no m/z for. "
+                      << n_mz0_target << " of them were tagged at their isolation window target m/z instead, "
+                         "as if the selected ion m/z were missing (OpenMS MzMLFile keeps the 0)"
+                      << (n_mz0 > n_mz0_target ? "; the other " + std::to_string(n_mz0 - n_mz0_target)
+                                                     + " have no isolation target and yield no tags."
+                                               : std::string("."))
+                      << std::endl;
     // ---- 1.13: -check_header_charge summary and -check_header_out ----
     if (hdr_check_on)
     {
@@ -7417,6 +7447,8 @@ protected:
         {
           sp.setSourceFile(SourceFile());
           sp.setDataProcessing({});
+          // As tagged: a selected-ion m/z 0 written as the isolation target.
+          FASTag::useSelectedIonTarget(sp);
           sink(sp);
         };
         if (mzpeak_in)

@@ -357,6 +357,19 @@ fast reader cannot understand at all still falls back to loading the whole run
 into memory, with its own warning. `-out_spectra` runs need run-level metadata
 and read it up front instead.
 
+**A selected ion m/z of 0** (or below 0, or not a number) is read as no
+selected ion m/z: the precursor takes the isolation window target m/z, as when
+`MS:1000744` is missing. mzpeak-convert 0.18 (`--to mzml` from a Bruker `.d`)
+writes 0 for every precursor Bruker stored without a monoisotopic m/z (5,952
+MS2 of the PXD054073 run); read as 0, these spectra yield no tags. The run
+summary warns with the number of such spectra and how many took the target.
+This is the one place where FASTag reads an mzML differently from OpenMS's
+`MzMLFile`, which keeps the 0. Every input path does the same: the indexed
+reader, the OpenMS fallback (no usable index, `-out_spectra`, which also writes
+the target as the selected ion m/z) and mzPeak archives that store a 0 next to
+an isolation target. An MGF has no isolation target: a `PEPMASS` of 0 stays
+unusable and is counted in its own warning.
+
 ### mzPeak
 
 mzPeak is a Parquet-backed format (Parquet tables in a ZIP container). FASTag
@@ -482,8 +495,8 @@ name different numbers, or appear for only one of the two. TITLE holds the
 mzML native ID of each block and is the stable key back to the mzML;
 `index=<k>` is the k-th block written, which is the k-th MS2 of the mzML only
 when no MS2 was left out (see below). The precursor m/z is the one FASTag's
-mzML reader reads: the selected ion m/z, else the isolation window target m/z
-when it is above 0, which is all diaTracer writes. An MS2 without peaks
+mzML reader reads: the selected ion m/z when it is above 0, else the isolation
+window target m/z when it is above 0, which is all diaTracer writes. An MS2 without peaks
 (ddaPASEF conversions write some) becomes a block without peak lines, which
 FASTag skips as it skips the empty spectrum in the mzML (`--skip-empty` leaves
 it out instead, for readers that refuse empty blocks; the tags stay the same).
