@@ -161,7 +161,7 @@ export default function ReconView({ massgap, tables, gen = {}, notice, action, e
           </button>
         </div>
         <p>
-          <HelpLink to="digest-gaps">About the mass gaps</HelpLink>
+          <HelpLink to="workflow-reconciliation">Working with mass gaps and reconciliation</HelpLink>
         </p>
       </div>
     )
@@ -173,6 +173,7 @@ export default function ReconView({ massgap, tables, gen = {}, notice, action, e
     <div className="recon-view">
       <div className="card-head">
         <h2 id="recon-title">Mass gaps and reconciliation</h2>
+        <HelpLink to="workflow-reconciliation">How to read these reports</HelpLink>
         {sources.map((p) => (
           <code className="src" key={p} title={p}>
             {baseName(p)}

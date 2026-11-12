@@ -1425,7 +1425,7 @@
       "name": "species_orientation",
       "type": "string",
       "default": "forward",
-      "description": "Which readings of a tag -species looks up: 'forward' = as written; 'both' = also reversed (a tag read from b ions is written reversed), using the one informative reading, or the taxa both share; a tag whose two readings share none is skipped. Independent of -orientation, which applies to -fasta and -recon_fasta only. Under 'both' the analytic log_pvalue and qvalue columns are NA (no analytic background follows); only decoy_qvalue and call from -species_call decoy are calibrated",
+      "description": "Which readings of a tag -species looks up: 'forward' = as written; 'both' = also reversed (a tag read from b ions is written reversed), using the one informative reading, or the taxa both share; a tag whose two readings share none is skipped. Independent of -orientation, which applies to -fasta and -recon_fasta only. Under 'both' the analytic log_pvalue and qvalue columns are NA (no analytic background follows). The optional decoy_qvalue and call from -species_call decoy are experimental and not calibrated",
       "required": false,
       "toppAdvanced": true,
       "choices": [

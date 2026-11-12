@@ -378,7 +378,15 @@ a cancelled or failed export leaves no file. For a run's output without
 with `-res_conf` on.
 
 Help is a side panel beside any view, with a search over every page, the
-troubleshooting entries, the glossary and the settings reference.
+troubleshooting entries, the glossary and the settings reference. **Results
+and workflows** explains Overview counts and evidence, batch summaries,
+SDRF comparisons, History actions and the Mass gaps & recon viewer, including
+their missing-evidence states and limits.
+Each explanatory page has an **On this page** contents list. Search includes
+page titles, parameter defaults and limits, and the expandable CLI descriptions.
+Parameter entries state their allowed values and explain when an option is
+managed by the app, uses a dedicated control, or is command-line-only.
+In Search Help, Esc clears the query first; pressing it again closes Help.
 
 Files dropped anywhere on the window go by type: one spectra file to the
 input, two or more (or a folder) to the batch, a FASTA to `-fasta`, a

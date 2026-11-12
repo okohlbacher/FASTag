@@ -18,6 +18,7 @@
 // every target used anywhere in src/ exists.
 import type { JSX, ReactNode } from 'react'
 import { HelpLink } from './HelpLink'
+import { WORKFLOWS } from './workflows'
 
 export interface HelpSection {
   id: string
@@ -98,7 +99,7 @@ export const START: HelpPage = {
               shows FASTag&apos;s messages.
             </li>
             <li>
-              Results opens on <strong>Overview</strong> for Characterize a run. Read the evidence and caveats,
+              Results opens on <L to="workflow-overview">Overview</L> for Characterize a run. Read the evidence and caveats,
               then open <strong>Tags</strong> for the sequences, <strong>Species</strong> for the taxon ranking,
               <strong>Digest</strong> for digestion and labels, or <strong>Glyco</strong> for oxonium-ion flags.
               A report that says “not assessed” or “no call” is not evidence that a feature is absent.
@@ -142,7 +143,9 @@ export const START: HelpPage = {
             needs: about 4 residues for one protein, 7 or 8 for a proteome. With the default tag length 3, extension 1
             suffices for one protein and 2 or 3 for a proteome. The run is refused if no tag can reach that length. Under Reports › Output, set a file for
             &quot;<L to="param-out_spectra">Spectra with tags (file)</L>&quot; to collect the spectra whose tags match. Read the chance table in the
-            log before trusting a count (see <L to="results-fasta">Matching a sequence database</L>).
+            log before trusting a count (see <L to="results-fasta">Matching a sequence database</L>). To collect matches
+            from the full input, set Subsample fraction to 1 and Subsample spectra to 0; Characterize a run otherwise
+            keeps its 10% sample.
           </dd>
           <dt>How was the sample digested and labelled?</dt>
           <dd>
@@ -165,8 +168,9 @@ export const START: HelpPage = {
           </p>
           <ul>
             <li>
-              Each file writes its own <code>&lt;name&gt;.tags.tsv</code> next to it. Each report you set is renamed
-              after that file, for example <code>sample1.digest.tsv</code>, so no file overwrites another.
+              By default, each file writes its own <code>&lt;name&gt;.tags.tsv</code> beside the input. Each report is
+              renamed after that file, for example <code>sample1.digest.tsv</code>. Use <strong>Choose output folder…</strong>
+              in Batch to change the destination for pending or retried jobs; completed jobs keep their existing paths.
             </li>
             <li>
               <strong>Run N remaining files</strong> runs the files not run yet. <strong>Retry failed</strong> runs
@@ -181,20 +185,37 @@ export const START: HelpPage = {
               file are shown at the end.
             </li>
             <li>
-              <strong>Load SDRF…</strong> on the Batch view (or dropping an <code>.sdrf.tsv</code> on the window)
-              compares each file with its SDRF rows, matched by <code>comment[data file]</code>: organism (by NCBI
-              taxid; a genus call that contains the SDRF species is consistent at genus, and only the called genus counts: an
-              SDRF organism found only lower in the present list differs, or, in a mixed sample, is ~ <em>present, not
-              called</em>), cleavage agent, label,
-              modifications, instrument and fragment tolerance. Only FASTag&apos;s own calls and reports count, so a
-              no call is never a difference. Fragment tolerance and modifications are the run&apos;s settings, not
-              measurements: where they differ the table shows ≠ <em>run setting differs</em>, which is no
-              correction. <strong>Export SDRF corrections TSV…</strong> writes the differences; the SDRF itself is
-              never changed, and neither this export nor the summary export will write over it.
+              The <L to="workflow-batch">Summary</L> compares results across files. Use{' '}
+              <L to="workflow-sdrf">Load SDRF…</L> to compare them with sample annotations. You can export the
+              summary and proposed SDRF corrections; the original SDRF stays unchanged.
             </li>
           </ul>
           <p>
             If a file fails, see <L to="faq-batch-failed">Some files of a batch failed</L>.
+          </p>
+        </>
+      )
+    },
+    {
+      id: 'start-navigation',
+      title: 'Find your way around',
+      body: (
+        <>
+          <p>
+            <strong>Setup</strong> prepares a run. <strong>Results</strong> shows its tags and reports.{' '}
+            <L to="workflow-batch">Batch</L> manages several files. <L to="workflow-history">History</L> reopens
+            earlier outputs or loads their settings. Switch views with Cmd+1–4 on macOS or Ctrl+1–4 elsewhere.
+          </p>
+          <p>
+            Use <strong>Search parameters</strong> (Cmd/Ctrl+K, or / outside a text field) to find an editable
+            setting and jump to it. Use <strong>Search Help</strong> here for explanations, troubleshooting and
+            command-line options. Entries marked <em>Not in the settings form</em> explain whether the app uses
+            a dedicated control, manages the option itself, or leaves it to the command line.
+          </p>
+          <p>
+            F1 opens Help; Esc closes it. In Search Help, the first Esc clears a query, and a second closes Help.
+            Cmd/Ctrl+Enter starts a ready run; Cmd/Ctrl+. cancels an active run. Closing Help returns focus to the
+            control that opened it. Your setup and results remain in place while you read.
           </p>
         </>
       )
@@ -261,10 +282,11 @@ export const TAGS: HelpPage = {
         <>
           <p>
             A peptide ion selected in the first scan is called the <G to="gloss-precursor">precursor</G>. In the
-            second scan (MS2) it is broken, mostly between two residues, into two pieces. A piece that keeps the
+            second scan (MS2) it is fragmented. In the default b/y interpretation, a piece that keeps the
             peptide&apos;s start (N-terminus) is a <G to="gloss-by-ions">b ion</G>; a piece that keeps its end
-            (C-terminus) is a y ion. Each peak in the spectrum is one such piece, measured as its{' '}
-            <G to="gloss-mz">mass-to-charge ratio (m/z)</G>.
+            (C-terminus) is a y ion. The spectrum measures their{' '}
+            <G to="gloss-mz">mass-to-charge ratios (m/z)</G>, together with other fragments and noise; not every
+            peak belongs to a b/y ladder.
           </p>
           <p>
             The y ions of one peptide form a ladder: the next larger y ion has one more residue, so neighbouring peaks
@@ -348,6 +370,26 @@ export const TAGS: HelpPage = {
       )
     },
     {
+      id: 'tags-tolerance',
+      title: 'Choosing a fragment tolerance',
+      body: (
+        <>
+          <p>
+            The <G to="gloss-tolerance">fragment tolerance</G> is the allowed distance from an expected peak
+            position. <G to="gloss-ppm">Da</G> gives a fixed window; ppm gives a window that grows with m/z.
+            For example, 20 ppm allows ±0.010 at m/z 500 and ±0.020 at m/z 1000. It is relative to the fragment
+            peak position, not the amino acid&apos;s mass.
+          </p>
+          <p>
+            Use the analyser that measured MS2 to choose the setting: 20 ppm is a starting point for high-resolution
+            Orbitrap, Astral or TOF spectra; 0.3 Da for ion-trap spectra. Too narrow a window loses real steps;
+            too wide a window admits more chance matches. Changing the unit to ppm cannot make low-resolution
+            data high-resolution. With a Da tolerance, the default digest and label rules make no call.
+          </p>
+        </>
+      )
+    },
+    {
       id: 'tags-seed',
       title: 'Seeds and extension',
       body: (
@@ -380,7 +422,7 @@ export const TAGS: HelpPage = {
             Gaps help because a tag can continue past a fragment that was not measured. But a gapped tag claims a split
             that no peak shows, so it is wrong more often. Without a penalty, a gapped tag was the top-ranked tag in 95%
             of simulated spectra, yet a top-ranked gapped tag was 3.6 times less often correct than an ungapped one.
-            FASTag therefore ranks a gapped tag as if its{' '}
+            By default, FASTag therefore ranks a gapped tag as if its{' '}
             <L to="results-evalue">E-value</L> were 100 times worse (<L to="param-gap_penalty">gap penalty</L>), and
             the E-value printed for it includes that factor. Gaps are on by default; set{' '}
             <L to="param-gaps">gaps</L> to 0 to turn them off.
@@ -398,7 +440,7 @@ export const TAGS: HelpPage = {
       body: (
         <>
           <p>
-            Tags are written from N- to C-terminus, as if read from y ions. A tag read from a b-ion ladder comes out
+            With the default b/y ion series, tags are written from N- to C-terminus, as if read from y ions. A tag read from a b-ion ladder comes out
             reversed: the same peptide can give AEL from its y ions and LEA from its b ions. Matching against a
             sequence database therefore tries both directions (<L to="param-orientation">orientation</L>).
           </p>
@@ -410,17 +452,47 @@ export const TAGS: HelpPage = {
       )
     },
     {
+      id: 'tags-ions',
+      title: 'Ion series and fragmentation methods',
+      body: (
+        <>
+          <p>
+            The GUI uses b/y ions, appropriate for <G to="gloss-activation">CID and HCD</G> fragmentation.
+            ETD and ECD produce mainly c/z• ions, with different end masses. A run with those spectra needs the
+            command-line <L to="param-ion_series">ion-series option</L>: <code>cz</code> reads all spectra as
+            c/z•; <code>auto</code> reads ETD/ECD spectra as c/z• and other spectra as b/y. Automatic selection
+            uses activation metadata from mzML only; MGF and mzPeak are read as b/y under <code>auto</code>.
+          </p>
+          <p>
+            Hybrid EThcD/ETciD spectra stay b/y under <code>auto</code> unless the experimental{' '}
+            <L to="param-ion_series_hybrid">hybrid option</L> is set to both. The a/x option for UVPD is also
+            experimental and failed its held-out test. Tags read with a non-default series carry an{' '}
+            <code>ion_series</code> column. Species detection uses only b/y tags, so it cannot use the c/z• or
+            a/x rows from these runs.
+          </p>
+        </>
+      )
+    },
+    {
       id: 'tags-mods',
       title: 'Modifications',
       body: (
-        <p>
-          A <L to="param-fixed_modifications">fixed modification</L> changes the mass of every residue of its kind
-          and is not written in the tag. The default is carbamidomethyl on C, from{' '}
-          <G to="gloss-alkylation">alkylation</G> with iodoacetamide. A{' '}
-          <L to="param-variable_modifications">variable modification</L> may or may not be there; a modified residue
-          is written as X[Name], for example S[Phospho]. A modification of the peptide&apos;s ends is not written in
-          the tag: it changes the flanking mass instead.
-        </p>
+        <>
+          <p>
+            A <L to="param-fixed_modifications">fixed modification</L> changes the mass of every residue of its kind
+            and is implicit in the ordinary tag text. The default is carbamidomethyl on C, from{' '}
+            <G to="gloss-alkylation">alkylation</G> with iodoacetamide. Clear or replace it if the sample used
+            different cysteine chemistry. The optional <L to="param-proforma">ProForma column</L> records fixed
+            residue modifications explicitly.
+          </p>
+          <p>
+            A <L to="param-variable_modifications">variable modification</L> adds a modified alternative for that
+            residue, written as X[Name], for example S[Phospho]. Enter OpenMS/UniMod names,
+            one per line, such as <code>Oxidation (M)</code> or <code>Phospho (S)</code>. Each adds candidate masses,
+            so choose those relevant to the sample. A modification of the peptide&apos;s ends is not written in
+            the tag: it changes the flanking mass instead.
+          </p>
+        </>
       )
     }
   ]
@@ -451,7 +523,7 @@ export const RESULTS: HelpPage = {
             <tr><td>Extended</td><td>1 when the tag grew beyond its seed (<L to="tags-seed">extension</L>).</td></tr>
             <tr><td>Gapped</td><td>1 when the tag crosses a missing peak (<L to="tags-gapped">gapped tag</L>).</td></tr>
             <tr><td>E-value</td><td>The score; lower is better (<L to="results-evalue">E-value</L>).</td></tr>
-            <tr><td>Min. conf., Mean conf.</td><td>The weakest and the average residue score, 0 to 1 (<L to="results-conf">residue confidence</L>).</td></tr>
+            <tr><td>Min. conf., Mean conf.</td><td>The weakest and the average observed-step score, 0 to 1 (<L to="results-conf">residue confidence</L>).</td></tr>
             <tr><td>Database hit</td><td>Without a sequence database: No match (-). With one: In database (fwd, as written; rev, reversed), or Entrapment (efwd, erev: found only in the entrapment database).</td></tr>
             <tr><td>Database q-value</td><td>q_db, only with an <G to="gloss-entrapment">entrapment database</G> (<L to="results-nofdr">see below</L>).</td></tr>
             <tr><td>ProForma, Residue conf., USI</td><td>Optional columns (<L to="param-proforma">ProForma</L>, <L to="param-res_conf">per-residue confidence</L>, <L to="param-usi_collection">USI collection</L>), under Reports › Output.</td></tr>
@@ -480,7 +552,7 @@ export const RESULTS: HelpPage = {
       title: 'The E-value: how tags are ranked',
       body: (
         <>
-          <p>Every tag is scored on three things:</p>
+          <p>Tags are scored using these sources of evidence:</p>
           <ul>
             <li>
               <strong>Intensity:</strong> how unlikely it is that peaks this strong form a tag by chance.
@@ -489,20 +561,21 @@ export const RESULTS: HelpPage = {
               <strong>Mass fit:</strong> how closely the peaks fit the exact residue masses.
             </li>
             <li>
-              <strong>Complementarity:</strong> whether the flanking masses are confirmed by a matching ion of the
-              other series (a b and a y ion whose masses add up to the precursor).
+              <strong>Complementarity:</strong> how many of the tag&apos;s peaks have a matching ion of the
+              other series. For b/y ions, their neutral masses add up to the precursor&apos;s neutral mass.
+              This component is omitted when the spectrum has no complementary pairs at the fragment charge being tested.
             </li>
           </ul>
           <p>
-            The three are combined into one probability and multiplied by the number of candidate tags in the
+            The available components are combined into one model-based probability and multiplied by the number of candidate tags in the
             spectrum. The result is the <G to="gloss-e-value">E-value</G>. <strong>Lower is better</strong>: 0.001
-            ranks above 1, and 1 above 20. At most 50 tags are written per spectrum, best first (
+            ranks above 1, and 1 above 20. By default, at most 50 tags are written per spectrum, best first (
             <L to="param-max_tags">max tags</L>). With several <L to="param-tag_lengths">tag lengths</L>, each length
-            has its own limit of 50, and the rows come in order of length, so a spectrum can have more rows and its
+            has its own limit of 50 by default, and the rows come in order of length, so a spectrum can have more rows and its
             best tag need not come first.
           </p>
           <p>
-            Tags whose E-value is above 20 before the <L to="tags-gapped">gap penalty</L> are not written (
+            By default, tags whose E-value is above 20 before the <L to="tags-gapped">gap penalty</L> are not written (
             <L to="param-max_evalue">maximum E-value</L>). A gapped tag&apos;s printed E-value includes the penalty, so
             it can be above 20, up to 2,000 with the defaults; divide it by the gap penalty (100 by default) to compare
             it with the cutoff. A Max. E-value filter of 20 in the Tags tab therefore hides some gapped tags.
@@ -523,13 +596,19 @@ export const RESULTS: HelpPage = {
       id: 'results-conf',
       title: 'Residue confidence: the weakest letter',
       body: (
-        <p>
-          Min. conf. and Mean conf. score each residue of a tag on its own, from 0 to 1, higher is better: how well
-          its step fits the residue mass, times the strength of its peaks. Min. conf. is the weakest residue, so it
-          points to the letter most likely wrong, which the single E-value cannot. Correct tags have a clearly higher
-          Min. conf. than wrong ones. With <L to="param-res_conf">per-residue confidence</L>, every residue&apos;s
-          score is written (0 to 100).
-        </p>
+        <>
+          <p>
+            Each observed step between two peaks gets a score from 0 to 1: its mass fit multiplied by the intensity
+            support of its weaker peak, ranked against the other peaks in the spectrum. Higher is better.
+            Min. conf. is the weakest step; Mean conf. averages the observed steps. They help locate weak support
+            within a tag, but are not probabilities that a residue is correct.
+          </p>
+          <p>
+            With <L to="param-res_conf">per-residue confidence</L>, the scores are also written on a 0–100 scale.
+            The two residues across a missing peak share one score: there is no independent evidence for their
+            order. That step counts once in Mean conf., even though its score appears twice in the residue list.
+          </p>
+        </>
       )
     },
     {
@@ -538,7 +617,7 @@ export const RESULTS: HelpPage = {
       body: (
         <>
           <p>
-            With a <L to="param-fasta">sequence database</L> (a FASTA file of proteins), only tags that occur in it are
+            With a <L to="param-fasta">sequence database</L> (a <G to="gloss-fasta">FASTA</G> file of proteins), only tags that occur in it are
             written. I and L count as the same, tags are also tried reversed, and a residue may stand for a pair of
             the same mass (N for GG, for example). With an entrapment database, tags found only there are written too,
             marked Entrapment (efwd, erev); they measure chance and are not matches.
@@ -567,13 +646,14 @@ export const RESULTS: HelpPage = {
         <>
           <p>
             A <G to="gloss-q-value">q-value</G> or false discovery rate needs a model of what wrong tags look like.
-            Real spectra often hold two peptides at once, and the wrong tags this creates are not reproduced by a decoy
+            Real spectra often hold two peptides at once, and the wrong tags this creates are not reproduced by a <G to="gloss-decoy">decoy</G>{' '}
             (a made-up spectrum used to model wrong answers). FASTag therefore reports the E-value as a score and no error rate per tag.
           </p>
           <p>
-            For matches to a sequence database there is one calibrated measure: with an{' '}
+            For matches to a sequence database there is a separate chance-match estimate: with an{' '}
             <L to="param-entrapment_fasta">entrapment database</L> (proteins the sample cannot contain), the q_db
-            column estimates how often a tag this good matches the database by chance. Use it at tight thresholds. On
+            column estimates the chance-match share among database matches at that E-value or better, not the
+            probability that an individual tag is wrong. Use it at tight thresholds. On
             one human Astral run with an archaeal entrapment database, q_db at 0.02 or below was higher than the real
             chance rate (on the safe side); at 0.05 to 0.1 the real rate was about 1.6 times higher. How well it holds
             depends on the entrapment database and on how many tags match it. A q_db of 0 means too few entrapment
@@ -754,7 +834,7 @@ export const DIGEST: HelpPage = {
               <tr><td><L to="faq-digest-timstof">timsTOF</L></td><td>A C-terminal R is nearly invisible on these instruments.</td></tr>
               <tr><td><L to="faq-digest-ms2_scan_window">Scan range</L></td><td>In most MS2 spectra (the median) the scan range starts above m/z 147.21, so the y1 ion of a C-terminal K (the smallest y ion, the last residue alone) is never seen.</td></tr>
               <tr><td><L to="faq-digest-ms2_first_peak">First peaks</L></td><td>The lowest peaks of most spectra lie above m/z 147.21.</td></tr>
-              <tr><td><L to="faq-digest-ion_counts">Ion counts</L></td><td>No instrument named, and the intensities are whole numbers, as on a timsTOF.</td></tr>
+              <tr><td><L to="faq-digest-ion_counts">Ion counts</L></td><td>No informative instrument or spectrum-ID metadata, and at least half the positive peak intensities are whole numbers, as on a timsTOF.</td></tr>
               <tr><td><L to="faq-digest-few_tags">Too few tag ends</L></td><td>Fewer than 100 tag ends fit a residue.</td></tr>
               <tr><td><L to="faq-digest-nonfinite_score">Probability 0</L></td><td>A seen residue is impossible under a model.</td></tr>
               <tr><td><L to="faq-digest-tie">Tie</L></td><td>Two kinds of protease fit exactly equally well.</td></tr>
@@ -789,6 +869,20 @@ export const DIGEST: HelpPage = {
             C-terminal K and R ends that are heavy, and says whether there are enough ends to judge them: at least 50
             K and 50 R ends (<L to="param-digest_silac_min">heavy-label check</L>). With a tolerance in Da, the label windows do not
             hold.
+          </p>
+          <p>
+            The label call needs at least 175 counted C-terminal ends by default and a ppm tolerance. Otherwise it
+            reports <code>no_call</code> with reason <code>few_tags</code> or <code>low_resolution</code>.
+            An isobaric-label call needs the label count to reach 1% of filtered tags and 20 times its background.
+            SILAC additionally needs both heavy shares to reach 20% and K/R to account for at least 80% of the
+            counted C-terminal ends. <code>label-free</code> means no tested label rule fired; it does not rule out
+            other labels or weak labelling. TMTpro and iTRAQ8plex have the same mass here; reporter ions are needed
+            to distinguish them.
+          </p>
+          <p>
+            These calls belong to <L to="param-label_out">Label report</L>. The separate experimental
+            command-line <L to="param-label_discovery_out">label discovery</L> searches for additional offsets
+            and does not change this report&apos;s call.
           </p>
         </>
       )
@@ -879,9 +973,11 @@ export const SPECIES: HelpPage = {
           <p>
             Only tags without a gap count by default, because the two residues across a gap are inferred; letting them
             in moved the true genus from rank 1 to rank 20 on a public test run (<L to="param-species_use_gapped">use
-            gapped tags</L>). Tags need at least 7 residues: set <L to="param-tag_length">tag length</L> to 7. Tag
-            length 3 with extension 2 also passes the check, but only tags that actually grow to 7 residues count, which
-            is usually far fewer; check the Evidence card afterwards.
+            gapped tags</L>). Tags need at least 7 residues. The <strong>Find organisms</strong> and{' '}
+            <strong>Characterize sample</strong> tasks use <L to="param-tag_length">tag length</L> 3 with{' '}
+            <L to="param-extension">extension</L> 2, which can reach 7; only tags that actually grow that far
+            count. You can also request 7-residue seeds directly. Check the Evidence card afterwards: choosing
+            a reachable length does not guarantee that the spectra provide enough evidence.
           </p>
         </>
       )
@@ -917,14 +1013,16 @@ export const SPECIES: HelpPage = {
               reason when one was reported.
             </li>
             <li>
-              <strong>q-value:</strong> smaller means the count is less likely to be chance. It helps sort the list but
-              is not an error rate you can rely on (see <L to="species-limits">When to trust a call</L>).
+              <strong>q-value:</strong> smaller means stronger evidence against the analytic chance model. It helps
+              interpret the list but is not an error rate you can rely on (see <L to="species-limits">limits</L>).
+              With command-line <L to="param-species_orientation">species orientation</L> set to both, this
+              analytic value is NA because that model does not cover both readings.
             </li>
           </ul>
           <p>
             Rows are ranked by count (Adjusted, which equals Observed without deconvolution): a close relative&apos;s
             borrowed count can make it look significant. Read the count with the q-value (see{' '}
-            <L to="species-limits">When to trust a call</L>). Click a taxon to open it in NCBI
+            <L to="species-limits">limits</L>). Click a taxon to open it in NCBI
             Taxonomy.
           </p>
         </>
@@ -964,7 +1062,7 @@ export const SPECIES: HelpPage = {
     },
     {
       id: 'species-limits',
-      title: 'When to trust a call',
+      title: 'Limits of the ranking and optional calls',
       body: (
         <ul>
           <li>
@@ -983,6 +1081,14 @@ export const SPECIES: HelpPage = {
             calibrated false discovery rate.
           </li>
           <li>
+            <strong>Optional calls are experimental.</strong> The command-line <L to="param-species_call">species
+            call</L> is off by default. Its decoy model and decision settings are provisional; neither its calls
+            nor its decoy q-values are calibrated error guarantees. The alternative explain-away method also
+            failed its held-out recovery criterion. A <code>no_call</code> means the evidence or checks were
+            insufficient; <code>not_detected</code> is a result under that method&apos;s detection limit, never
+            proof of biological absence.
+          </li>
+          <li>
             <strong>With a sequence database, only matching tags count.</strong> Run species detection without one to
             see what the sample contains.
           </li>
@@ -999,7 +1105,7 @@ export const SPECIES: HelpPage = {
 export const FILES: HelpPage = {
   id: 'files',
   title: 'Input and output files',
-  lead: <>What FASTag reads, and every file it can write.</>,
+  lead: <>What FASTag reads, and the main files used by the GUI.</>,
   sections: [
     {
       id: 'files-inputs',
@@ -1026,6 +1132,12 @@ export const FILES: HelpPage = {
             ThermoRawFileParser. MS2 spectra should be <G to="gloss-centroid">centroided</G> (one peak per ion); profile
             spectra in an mzML file are tagged as they are, which finds fewer tags.
           </p>
+          <p>
+            The usual input is <G to="gloss-acquisition">DDA</G>, where a precursor is selected for fragmentation.
+            Raw DIA combines many precursors in each isolation window and is refused when detected. Exported
+            pseudo-DDA spectra can be used; renaming a raw DIA file does not separate its precursors.
+            See <L to="faq-raw-dia">the DIA guidance</L> for preparation and override limitations.
+          </p>
         </>
       )
     },
@@ -1051,7 +1163,7 @@ export const FILES: HelpPage = {
               <tr><td>&lt;name&gt;.tags.species.tsv</td><td><L to="param-species_out">Species detection</L></td><td>Taxa by spectra (<L to="species">Species tab</L>).</td></tr>
               <tr><td>&lt;name&gt;.tags.glyco.tsv</td><td><L to="param-glyco_out">Glycopeptides</L></td><td>Per spectrum: <G to="gloss-oxonium">oxonium ions</G> found and a 0/1 flag (<L to="files-glyco">glyco report</L>).</td></tr>
               <tr><td>Digest report</td><td><L to="param-digest_out">Digest and labels</L></td><td>Tag-end counts and the protease call (<L to="digest-protease">Digest tab</L>).</td></tr>
-              <tr><td>Label report</td><td><L to="param-label_out">Digest and labels</L></td><td>Label and SILAC counts (<L to="digest-labels">Digest tab</L>).</td></tr>
+              <tr><td>Label report</td><td><L to="param-label_out">Digest and labels</L></td><td>Label and SILAC counts and the label call (<L to="digest-labels">Digest tab</L>).</td></tr>
               <tr><td>Reconciliation table</td><td><L to="param-recon_out">Reconciliation</L></td><td>Each tag placed in database peptides, with the leftover mass (<L to="digest-gaps">mass gaps</L>).</td></tr>
               <tr><td>Mass-shift histogram</td><td><L to="param-delta_out">Reconciliation</L></td><td>Leftover masses, one count per spectrum.</td></tr>
               <tr><td>Reconciliation as identifications</td><td><L to="param-recon_id_out">Reconciliation</L></td><td>The placements as idXML, mzIdentML (.mzid) or mzTab, not filtered by a false discovery rate.</td></tr>
@@ -1076,15 +1188,25 @@ export const FILES: HelpPage = {
           <p>
             With <L to="param-glyco">Glyco flag</L>, FASTag writes one row per MS2 spectrum: how many different{' '}
             <G to="gloss-oxonium">oxonium ions</G> it holds, their summed intensity as a share of the strongest peak,
-            a 0/1 flag and the ion names. The flag is 1 when at least 2 different oxonium ions are found and their
-            share reaches the <L to="param-glyco_min_fraction">minimum fraction</L> (0.10).
+            a 0/1 flag and the ion names. By default, the flag is 1 when at least 2 different oxonium ions are found and their
+            share reaches the <L to="param-glyco_min_fraction">minimum fraction</L> (0.10). These are raw-spectrum
+            signals, measured before the peak budget used for tagging; the fraction is relative to the strongest
+            peak, not the sum of all peak intensities, and can exceed 1.
           </p>
           <p>
-            A flag means a sugar broke apart in that spectrum (a glycopeptide, a free glycan or O-GlcNAc); it is not
-            an identification. Such spectra often give few tags, so the report covers spectra without tags too. The
-            <strong>Glyco</strong> tab lists these spectra, with flagged spectra first by oxonium intensity. On TMT data at 0.3 Da a TMT reporter ion
+            A flag supports glycan fragmentation in that spectrum (a glycopeptide, a free glycan or O-GlcNAc); it
+            does not identify a peptide, a glycan or a modification site. Such spectra often give few tags, so the report covers spectra without tags too. The
+            <strong>Glyco</strong> tab lists these spectra. On TMT data at 0.3 Da a TMT reporter ion
             overlaps a sugar fragment, so flags on labeled ion-trap data are unreliable. Keep the tolerance that
             suits the MS2 analyzer.
+          </p>
+          <p>
+            <strong>Flagged only</strong> is initially on when the report has any flags; clear it to see unflagged
+            spectra too. <strong>With ion</strong> keeps spectra containing the selected oxonium ion, and{' '}
+            <strong>Spectrum contains</strong> searches their IDs. The initial sort puts the largest{' '}
+            <strong>Oxonium / base peak</strong> ratio first. Expand <strong>Oxonium ions among the flagged spectra</strong>{' '}
+            to see each ion&apos;s frequency among all flagged spectra and all spectra in the report. Those
+            counts, and the headline total, cover the entire report and do not change with the row filters.
           </p>
         </>
       )
@@ -1118,11 +1240,15 @@ export interface GlossEntry {
 }
 
 export const GLOSSARY: GlossEntry[] = [
+  { id: 'gloss-acquisition', term: 'DDA, DIA and pseudo-DDA', text: <>Data-dependent acquisition (DDA) selects precursor ions for fragmentation. Data-independent acquisition (DIA) fragments broad windows containing multiple precursors. Pseudo-DDA is reconstructed from DIA, separating signals into precursor-specific spectra before tagging. <L to="faq-raw-dia">Preparing DIA input</L>.</> },
+  { id: 'gloss-activation', term: 'Fragmentation: CID, HCD, ETD and ECD', text: <>Collision-induced dissociation (CID) and higher-energy collisional dissociation (HCD) mainly produce b/y ions. Electron-transfer dissociation (ETD) and electron-capture dissociation (ECD) mainly produce c/z• ions. EThcD and ETciD combine electron-transfer and collisional activation; UVPD uses ultraviolet light. <L to="tags-ions">Choosing ion series</L>.</> },
   { id: 'gloss-alkylation', term: 'Alkylation (of cysteine)', text: <>A chemical cap on cysteine (C), added in sample preparation, most often carbamidomethyl (+57.021 Da) from iodoacetamide. <L to="digest-gaps">Mass gaps</L>.</> },
   { id: 'gloss-by-ions', term: 'b and y ions', text: <>The two pieces of a peptide broken between two residues: the b ion keeps the N-terminus, the y ion the C-terminus. <L to="tags-spectrum">MS2 spectrum</L>.</> },
   { id: 'gloss-centroid', term: 'Centroid and profile', text: <>A profile spectrum stores each ion as a curve of many points; a centroided one stores one peak per ion. FASTag works best on centroided MS2: profile mzML is tagged as it is and finds fewer tags; profile mzPeak is centroided as it is read. <L to="files-inputs">Input files</L>.</> },
-  { id: 'gloss-e-value', term: 'E-value', text: <>FASTag&apos;s score for a tag: a combined probability from peak strength, mass fit and complementary ions, times the number of candidate tags in the spectrum. Lower is better. It ranks tags; it is not a count of chance tags and not an error rate. <L to="results-evalue">E-value</L>.</> },
+  { id: 'gloss-decoy', term: 'Target and decoy', text: <>Targets are the real sequences being tested. Decoys are artificial sequences, tags or spectra used to model chance matches. Their usefulness depends on how well they reproduce false results; they are different from an entrapment database of real proteins known to be absent. <L to="results-nofdr">Error-rate limits</L>.</> },
+  { id: 'gloss-e-value', term: 'E-value', text: <>FASTag&apos;s score for a tag: a combined model-based probability from peak strength, mass fit and, when available, complementary ions, times the number of candidate tags in the spectrum. A gapped tag also receives a penalty. Lower is better. It ranks tags; it is not a count of chance tags and not an error rate. <L to="results-evalue">E-value</L>.</> },
   { id: 'gloss-entrapment', term: 'Entrapment database', text: <>Proteins of organisms the sample cannot contain. Matches to them show how often tags match by chance. <L to="results-nofdr">q_db</L>.</> },
+  { id: 'gloss-fasta', term: 'FASTA', text: <>A text file of sequences, each with a header beginning with &gt;. FASTag uses protein FASTA files to filter tags or place them in candidate peptides. A match to a short sequence alone does not identify a protein. <L to="results-fasta">Matching a sequence database</L>.</> },
   { id: 'gloss-flanking', term: 'Flanking mass', text: <>The mass of the peptide beyond one end of a tag (N-term mass, C-term mass). <L to="tags-tag">Sequence tag</L>.</> },
   { id: 'gloss-gapped', term: 'Gapped tag', text: <>A tag that crosses one missing peak by spelling two residues from their summed mass. <L to="tags-gapped">Gapped tags</L>.</> },
   { id: 'gloss-isobaric', term: 'Isobaric', text: <>Of the same mass: I and L, or N and the pair GG. <L to="tags-direction">I and L</L>.</> },
@@ -1130,7 +1256,7 @@ export const GLOSSARY: GlossEntry[] = [
   { id: 'gloss-kmer', term: 'k-mer', text: <>A piece of k consecutive residues; the species reference uses k = 7. <L to="species-howto">Species detection</L>.</> },
   { id: 'gloss-log-likelihood', term: 'Log-likelihood', text: <>How well a model explains counts, as a logarithm; higher (closer to 0) is better. <L to="digest-protease">Protease call</L>.</> },
   { id: 'gloss-mass-gap', term: 'Mass gap', text: <>The mass left over on the one side of a tag that does not fit the database peptide (0 when both sides fit); a candidate for a modification, not an identification. <L to="digest-gaps">Mass gaps</L>.</> },
-  { id: 'gloss-ms2', term: 'MS1 and MS2', text: <>MS1 measures intact peptides; MS2 measures the pieces of one selected peptide (its fragments). Tags are read from MS2 spectra. <L to="tags-spectrum">MS2 spectrum</L>.</> },
+  { id: 'gloss-ms2', term: 'MS1 and MS2', text: <>MS1 measures intact ions; MS2 measures fragments after precursor selection. An MS2 spectrum can contain fragments from more than one peptide. Tags are read from MS2 spectra. <L to="tags-spectrum">MS2 spectrum</L>.</> },
   { id: 'gloss-mz', term: 'm/z', text: <>Mass divided by charge, what a mass spectrometer measures. For a fragment of charge 1 it is close to its mass plus one proton. <L to="tags-spectrum">MS2 spectrum</L>.</> },
   { id: 'gloss-oxonium', term: 'Oxonium ion', text: <>A small sugar fragment that glycopeptides and glycans give off in MS2. <L to="files-glyco">Glyco report</L>.</> },
   { id: 'gloss-p1', term: 'P1 and P1′', text: <>The residues on either side of a protease cut: P1 before it, P1′ after it. <L to="digest-positions">Positions</L>.</> },
@@ -1140,6 +1266,7 @@ export const GLOSSARY: GlossEntry[] = [
   { id: 'gloss-q-value', term: 'q-value and false discovery rate (FDR)', text: <>The expected share of wrong results among those accepted at a threshold. FASTag gives none per tag; the species q-value only ranks. <L to="results-nofdr">No error rate per tag</L>.</> },
   { id: 'gloss-reconciliation', term: 'Reconciliation', text: <>Placing a tag in the tryptic peptides of a protein database by its flanking masses. <L to="digest-gaps">Mass gaps</L>.</> },
   { id: 'gloss-residue-mass', term: 'Residue mass', text: <>The mass an amino acid adds to a peptide chain, for example 128.095 Da for K and 113.084 Da for L. <L to="tags-tag">Sequence tag</L>.</> },
+  { id: 'gloss-sdrf', term: 'SDRF', text: <>Sample and Data Relationship Format: a tab-separated metadata file connecting samples, preparation and instrument information to data files. The GUI compares these annotations with batch results and run settings, and can export proposed corrections for review. Loading an SDRF does not configure the run. <L to="workflow-sdrf">SDRF comparison</L>.</> },
   { id: 'gloss-seed', term: 'Seed', text: <>A first tag of exactly tag length residues, before extension. <L to="tags-seed">Seeds</L>.</> },
   { id: 'gloss-silac', term: 'SILAC', text: <>Labelling by growing cells with heavy K and R (for example Lys8, Arg10). <L to="digest-labels">Labels</L>.</> },
   { id: 'gloss-tag', term: 'Sequence tag', text: <>A short piece of peptide sequence read from the distances between peaks of an MS2 spectrum. <L to="tags-tag">Sequence tag</L>.</> },
@@ -1170,4 +1297,4 @@ export const TROUBLE_PAGE: HelpPage = {
 }
 
 /// Navigation order.
-export const PAGES: HelpPage[] = [START, TROUBLE_PAGE, TAGS, RESULTS, DIGEST, SPECIES, FILES, SETTINGS_PAGE, GLOSSARY_PAGE]
+export const PAGES: HelpPage[] = [START, WORKFLOWS, TROUBLE_PAGE, TAGS, RESULTS, DIGEST, SPECIES, FILES, SETTINGS_PAGE, GLOSSARY_PAGE]

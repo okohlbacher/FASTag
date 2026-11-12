@@ -80,6 +80,15 @@ describe('help: settings reference', () => {
       expect(d!.querySelector('.meta')!.textContent).toContain(`Default: ${defaultText(PARAM_BY_NAME.get(n)!)}`)
     }
   })
+
+  it('a deep link to a hidden option explains that it is unavailable in the form', () => {
+    act(() => openHelp('param-species_call'))
+    const { container } = render(<HelpView />)
+    const entry = container.querySelector<HTMLDetailsElement>('#param-species_call')!
+    expect(entry.open).toBe(true)
+    expect(entry.textContent).toContain(`Not in the settings form: ${PARAM_UI.species_call.hidden}`)
+    expect(entry.textContent).toContain('Choices:')
+  })
 })
 
 describe('help: links', () => {
@@ -98,7 +107,7 @@ describe('help: links', () => {
     for (const text of Object.values(SOURCES)) {
       for (const m of text.matchAll(/\b(?:to|help)="([a-z0-9_-]+)"|openHelp\('([a-z0-9_-]+)'\)/g)) targets.add(m[1] ?? m[2])
       // Every quoted string with a link-target prefix, wherever it is written (arrays, maps).
-      for (const m of text.matchAll(/'((?:faq|param|tags|results|digest|species|files|start|gloss)-[a-z0-9_]+(?:-[a-z0-9_]+)*)'/g))
+      for (const m of text.matchAll(/'((?:faq|param|tags|results|digest|species|files|start|gloss|workflow)-[a-z0-9_]+(?:-[a-z0-9_]+)*)'/g))
         targets.add(m[1])
     }
     for (const id of COMMON) expect(targets.has(id), id).toBe(true)

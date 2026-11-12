@@ -953,6 +953,9 @@ button.help-page-btn[aria-current='page'] { background: var(--primary-soft); col
 .help-page p, .help-page ul, .help-page ol, .help-page dl { margin: 0; }
 .help-page ul, .help-page ol { padding-left: 22px; display: flex; flex-direction: column; gap: var(--space-1); }
 .help-page button.link { display: inline; font-weight: 400; text-decoration: underline; text-underline-offset: 2px; }
+.help-contents { padding: var(--space-3); border: 1px solid var(--border); border-radius: var(--radius-md); background: var(--card); }
+.help-contents h3 { margin-bottom: var(--space-2); }
+.help-page .help-contents ul { list-style: none; padding-left: 0; }
 .help-blurb { color: var(--muted-foreground); }
 dl.recipes dt { font-weight: 600; margin-top: var(--space-2); }
 dl.recipes dd { margin: 2px 0 0; }

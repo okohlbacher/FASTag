@@ -1191,7 +1191,8 @@ export const PARAM_UI: Record<string, ParamUi> = {
   species_call: {
     hidden: OPT_IN_1_12,
     help: {
-      text: 'Call each organism of the species report present, no call or not detected, by comparing it with decoy tags. Off by default.'
+      text: 'Add experimental organism calls to the species report. none leaves calls off; decoy compares evidence with decoy tags; explain tests each organism using spectra not explained by an earlier call.',
+      tip: 'The decision settings are provisional. These calls and their decoy q-values are not calibrated error guarantees; not detected never proves biological absence.'
     }
   },
   species_call_decoys: {
@@ -1215,7 +1216,8 @@ export const PARAM_UI: Record<string, ParamUi> = {
   species_orientation: {
     hidden: OPT_IN_1_12,
     help: {
-      text: 'Look up each tag in the species index as written (the default) or also reversed. When reversed readings are used, the log p-value and q-value columns are NA.'
+      text: 'Look up each tag in the species index as written (the default) or also reversed. When reversed readings are used, the log p-value and q-value columns are NA.',
+      tip: 'The optional decoy-based calls and decoy q-values remain experimental and uncalibrated.'
     }
   },
   species_reagents: {

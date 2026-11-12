@@ -246,14 +246,14 @@ export default function SpeciesPanel({
         <em>not an error rate</em> you can rely on, because the background it assumes is approximate and spectra
         that mix two peptides can make a taxon look stronger than it is. “Common contaminant” marks genera that
         turn up in most runs, from reagents such as trypsin or serum, or from handling (keratin).{' '}
-        <HelpLink to="species-limits">When to trust a call</HelpLink>
+        <HelpLink to="species-limits">Limits of the ranking and optional calls</HelpLink>
       </p>
     </div>
   )
 }
 
 const Q_NA_TITLE =
-  'Uncalibrated: under -species_orientation both no analytic background applies, so the CLI writes the q-value as NA. Use the decoy_qvalue of -species_call decoy.'
+  'Under -species_orientation both no analytic background applies, so the CLI writes the q-value as NA. The optional decoy_qvalue and call from -species_call decoy are experimental and also uncalibrated.'
 
 const Q_TITLE = 'q-value: smaller means the evidence is less likely to be chance. Use it to rank taxa, not as an error rate.'
 

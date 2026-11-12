@@ -1118,8 +1118,8 @@ protected:
                           "informative reading, or the taxa both share; a tag whose two readings share "
                           "none is skipped. Independent of -orientation, which applies to -fasta and "
                           "-recon_fasta only. Under 'both' the analytic log_pvalue and qvalue columns are NA "
-                          "(no analytic background follows); only decoy_qvalue and call from "
-                          "-species_call decoy are calibrated", false, true);
+                          "(no analytic background follows). The optional decoy_qvalue and call from "
+                          "-species_call decoy are experimental and not calibrated", false, true);
     setValidStrings_("species_orientation", ListUtils::create<std::string>("forward,both"));
     // #3c-#3f chemistry v2 for -digest_out (src/Digest.h). Off by default: at
     // these defaults -digest_out is 1.11's. Not validated on held-out data;
@@ -1932,19 +1932,20 @@ protected:
       }
       if (species_call_params.decoys > 0 && species_call_params.decoys != getIntOption_("species_call_decoys"))
         OPENMS_LOG_WARN << "-species_call: the parameters in " << species_call_params_path
-                        << " were calibrated with " << species_call_params.decoys
+                        << " specify " << species_call_params.decoys
                         << " decoy replicates; this run uses -species_call_decoys "
                         << getIntOption_("species_call_decoys") << "." << std::endl;
     }
     // 1.12 #10: no analytic background follows from the orientation rule, so
     // the analytic log_pvalue and qvalue (forward index background) are
-    // withheld under both, with or without -species_call decoy; only the
-    // decoy null (decoy_qvalue, call) is calibrated.
+    // withheld under both, with or without -species_call decoy. The optional
+    // decoy null (decoy_qvalue, call) remains experimental and uncalibrated.
     if (species_both)
       OPENMS_LOG_WARN << "-species_orientation both: the analytic log_pvalue and qvalue columns of the species "
                          "report are NA under both; "
                       << (species_call_on ? "use decoy_qvalue and call from -species_call decoy."
                                           : "use decoy_qvalue from -species_call decoy.")
+                      << " These optional decoy values are experimental and not calibrated."
                       << std::endl;
     const std::string fasta = getStringOption_("fasta");
     const std::string out_spectra = getStringOption_("out_spectra");
@@ -7143,7 +7144,8 @@ protected:
         char num[128];
         if (species_both)
           // 1.12 #10: uncalibrated under both orientations, also with
-          // -species_call decoy (see the warning); decoy_qvalue is calibrated.
+          // -species_call decoy (see the warning); its decoy_qvalue is also
+          // experimental, not a calibrated error rate.
           std::snprintf(num, sizeof num, "\t%llu\t%.1f\t%.1f\tNA\tNA",
                         static_cast<unsigned long long>(c.observed), adj, c.expected);
         else

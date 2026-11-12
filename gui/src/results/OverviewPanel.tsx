@@ -7,6 +7,7 @@
 import { useState, type JSX } from 'react'
 import { baseName } from '../digestReport'
 import type { Overview, Tile, TileAction } from './overview'
+import { HelpLink } from '../help/HelpLink'
 
 export interface OverviewPanelProps {
   overview: Overview
@@ -51,6 +52,7 @@ export default function OverviewPanel({ overview: o, input, busy, onAction }: Ov
       <h2>
         Overview of <span className="mono">{baseName(input)}</span>
       </h2>
+      <p><HelpLink to="workflow-overview">How to read this overview</HelpLink></p>
       <ul className="tiles" aria-label="Key figures">
         {o.figures.map((t) => (
           <TileView key={t.id} t={t} busy={busy} onAction={onAction} />

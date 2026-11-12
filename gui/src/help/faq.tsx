@@ -123,12 +123,18 @@ export const FAQ: FaqEntry[] = [
     symptoms: <>Run (or Run remaining files) cannot be clicked.</>,
     causes: [
       <>No input file is chosen yet.</>,
+      <>The tags output path is empty. Choose where to save the tags TSV under Spectra › Output.</>,
+      <>The title bar says "FASTag cannot start": the program bundled with the app is unavailable.</>,
+      <>Checks before the run are still running, a check blocks the run, or a red flag has not been answered.</>,
       <>A value is marked red: FASTag would refuse it. The reason is written under the field and above the Run button.</>,
       <>Two settings do not go together, for example species detection with tags that are too short. The reason is written above the Run button.</>,
-      <>Files are queued for a batch: the batch has its own Run button.</>,
+      <>Files are queued for a batch: the Batch view has its own Run button. It is disabled when no files remain to run; failed files have a separate Retry failed button.</>,
       <>A run is still going.</>
     ],
-    fixes: [<>Fix what the message above the Run button names. Reset… sets every parameter back to its default.</>]
+    fixes: [
+      <>Fix what the message above the Run button names. For an input check, wait for it to finish, then read its suggested fix. Choose Run anyway only after understanding a red flag; a blocking check cannot be overridden. See <L to="faq-inspector">What the checks mean</L>.</>,
+      <>If FASTag cannot start, see <L to="faq-will-not-start">Restoring the bundled program</L>. Reset… changes parameters only; it cannot fix missing files or an unavailable program.</>
+    ]
   },
   {
     id: 'faq-run-failed',
@@ -139,7 +145,7 @@ export const FAQ: FaqEntry[] = [
       <>The reason line is FASTag&apos;s own message, and usually says what to change. The exit code says what kind of problem it was: 1, a file was not found (OpenMS checks this before FASTag starts); 2, the input cannot be read; 3, an input cannot be decoded (the spectra, a protease table of your own, or the species reference); 4, an input holds nothing usable; 5, an output cannot be written; 6, settings that do not go together, a value out of range, or an input of a type FASTag does not read; 11, the input is raw DIA (see below), or ion-mobility spectra cannot be written as mzPeak; 13, see the entries on the spectra file and the entrapment database below.</>
     ],
     fixes: [
-      <>Show full log shows every message of the run. Copy command copies the command line, to run it in a terminal or to send with a question.</>
+      <>Show full log opens the run log. The drawer shows the last 500 lines; the app retains at most 5,000 lines for a run, so this is not a complete log of a long run. Copy command copies the command line, to run it in a terminal or to send with a question. If you need every message, rerun in a terminal and save its standard output and error output to a file.</>
     ]
   },
   {
@@ -187,10 +193,10 @@ export const FAQ: FaqEntry[] = [
     question: 'FASTag refuses the file as raw DIA (exit code 11)',
     symptoms: <>The run stops at once with "raw DIA, not tagged", or the checks before the run say "Raw DIA: FASTag will not tag this file".</>,
     causes: [
-      <>The file is data-independent acquisition (DIA): its MS2 spectra repeat a cycle of isolation windows, and each one mixes the fragments of several peptides. Its "precursor" is a window, not a peptide, so the tags would get wrong flanking masses and complement statistics. From FASTag 1.12 the acquisition check (<C>acquisition_check</C>) refuses such files, before any output is written.</>
+      <>The file is <L to="gloss-acquisition">data-independent acquisition (DIA)</L>: its MS2 spectra repeat a cycle of isolation windows, and each one mixes the fragments of several peptides. Its "precursor" is a window, not a peptide, so the tags would get wrong flanking masses and complement statistics. From FASTag 1.12 the acquisition check (<C>acquisition_check</C>) refuses such files, before any output is written.</>
     ],
     fixes: [
-      <>Generate pseudo-DDA spectra first with DIAspeXtract (for Bruker .d also diaTracer), then run FASTag on the .pseudo.mzML file it writes; that file passes the check. The app shows the DIAspeXtract command to copy.</>,
+      <>Generate <L to="gloss-acquisition">pseudo-DDA spectra</L> first with DIAspeXtract (for Bruker .d also diaTracer), then run FASTag on the .pseudo.mzML file it writes; that file passes the check. The app shows the DIAspeXtract command to copy.</>,
       <>Experts who want to tag the raw DIA spectra anyway can set <L to="param-acquisition_check">Raw DIA check</L> (under Spectra) to warn, or run the command line with <C>-acquisition_check warn</C>; the flanks and complements are then wrong.</>
     ]
   },
@@ -241,7 +247,7 @@ export const FAQ: FaqEntry[] = [
     question: 'The log warns "No two peaks anywhere in this file are closer than …"',
     symptoms: <>A warning in the log that names a distance between peaks and the fragment tolerance.</>,
     causes: [<>The peaks of this file lie much further apart than the tolerance. That is what low-resolution (ion-trap) spectra look like when read with a high-resolution tolerance.</>],
-    fixes: [<>If the MS2 spectra come from an ion trap, set the fragment tolerance to 0.3 Da. FASTag cannot know the instrument, so this setting is yours.</>]
+    fixes: [<>If the MS2 spectra come from an ion trap, set the fragment tolerance to 0.3 Da. The input checks may identify the instrument and suggest a Fragment tolerance preset. Confirm the analyser that measured MS2 before applying it: an instrument with more than one analyser does not always say which one was used.</>]
   },
   {
     id: 'faq-stale-index',
@@ -259,7 +265,7 @@ export const FAQ: FaqEntry[] = [
     question: 'The Species tab says species detection is off',
     symptoms: <>"Species detection is off", or "The last run … did not detect species".</>,
     causes: [<>The run was made without <C>species</C>.</>],
-    fixes: [<>Open Species detection in the parameters, tick Species, set tag length 7 and run again. See <L to="species-howto">How species detection works</L>.</>]
+    fixes: [<>Under Database &amp; taxonomy › Species detection, tick Species. For the bundled reference, tag length 3 with extension 2 is the starting point used by Characterize a run; check these under Tagging, then run again. Only tags that actually reach 7 residues contribute to the species report. See <L to="species-howto">How species detection works</L>.</>]
   },
   {
     id: 'faq-species-short',
@@ -267,7 +273,7 @@ export const FAQ: FaqEntry[] = [
     question: 'Tags are too short for the species reference',
     symptoms: <>The Species tab or the message beside Run says the tags cannot reach the index length k = 7.</>,
     causes: [<>The species reference stores protein pieces of 7 residues (<L to="gloss-kmer">k-mers</L>). A tag shorter than that cannot be looked up, so FASTag refuses the run. The longest seed length plus 2 × extension must reach 7.</>],
-    fixes: [<>Set tag length to 7. Tag length 3 with extension 2 also passes the check, but only tags that actually grow to 7 residues count, which is usually far fewer; check the Evidence card afterwards.</>]
+    fixes: [<>Use the extension fix offered above Run. For the bundled reference, tag length 3 with extension 2 can reach 7 residues, as in Characterize a run; a seed length of 7 also works. With a custom index, the longest seed length plus 2 × extension must reach its k. Only tags that actually reach k contribute: check the Evidence card afterwards.</>]
   },
   {
     id: 'faq-species-none',

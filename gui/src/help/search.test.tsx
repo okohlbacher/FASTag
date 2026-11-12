@@ -3,9 +3,11 @@
 // exists, the title outranks the text, all words must match.
 import { describe, expect, it } from 'vitest'
 import { isValidElement, type ReactNode } from 'react'
-import { HELP_INDEX, searchHelp, textOf } from './search'
+import { HELP_INDEX, parameterLimits, searchHelp, textOf } from './search'
 import { PAGE_OF } from './HelpView'
 import { FAQ } from './faq'
+import { PAGES } from './content'
+import { PARAM_BY_NAME } from '../paramLayout'
 
 describe('help search', () => {
   it('flattens JSX to its text', () => {
@@ -17,10 +19,12 @@ describe('help search', () => {
     expect(isValidElement(node)).toBe(true)
     expect(textOf(node).replace(/\s+/g, ' ').trim()).toBe('A -tag_length of 3 and more')
     expect(textOf(null)).toBe('')
+    expect(textOf(<><p>First paragraph.</p><p>Next paragraph.</p></>)).toBe('First paragraph. Next paragraph. ')
   })
 
   it('indexes every page section, FAQ entry, glossary term and parameter', () => {
     const ids = new Set(HELP_INDEX.map((d) => d.id))
+    for (const p of PAGES) expect(ids.has(p.id), p.id).toBe(true)
     for (const f of FAQ) expect(ids.has(f.id), f.id).toBe(true)
     expect(ids.has('tags-gapped')).toBe(true)
     expect(ids.has('gloss-e-value')).toBe(true)
@@ -28,6 +32,21 @@ describe('help search', () => {
     // Every hit opens somewhere.
     for (const d of HELP_INDEX) expect(PAGE_OF.has(d.id), d.id).toBe(true)
     for (const d of HELP_INDEX) expect(d.text.length, d.id).toBeGreaterThan(0)
+  })
+
+  it('finds page names, workflow actions and the expanded command-line reference', () => {
+    expect(searchHelp('getting started')[0].id).toBe('start')
+    expect(searchHelp('settings reference')[0].id).toBe('settings')
+    expect(searchHelp('decoy_expected').some((h) => h.id === 'param-species_call')).toBe(true)
+    expect(searchHelp('delete record').some((h) => h.id === 'workflow-history')).toBe(true)
+    expect(searchHelp('output folder').some((h) => h.id === 'workflow-batch')).toBe(true)
+  })
+
+  it('describes the bounds enforced by the form, including exclusive bounds and list items', () => {
+    expect(parameterLimits(PARAM_BY_NAME.get('fragment_tolerance')!)).toBe('minimum 1e-9.')
+    expect(parameterLimits(PARAM_BY_NAME.get('digest_background_share')!)).toBe('minimum 0; below 1.')
+    expect(parameterLimits(PARAM_BY_NAME.get('tag_lengths')!)).toContain('Whole numbers, one per line')
+    expect(parameterLimits(PARAM_BY_NAME.get('fragment_tolerance_unit')!)).toContain('Choices: ppm, Da')
   })
 
   it('needs every word, ranks title hits first, and is case-insensitive', () => {
