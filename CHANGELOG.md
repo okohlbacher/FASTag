@@ -1,5 +1,14 @@
 # Changelog
 
+## Unreleased
+
+- **New `-shortlist_exact_only` (experimental).** Turns off the gapped
+  placement that `-search_engine msfragger` switches on by default
+  (`-shortlist_gapped` is a flag and cannot be given off); the other three
+  msfragger defaults stay. Also settable in an INI; refused together with
+  `-shortlist_gapped`. Runs without it are byte-identical to before; with
+  Sage or Comet it changes nothing (exact is their default). No held-out test.
+
 ## 1.13.2 (2026-11-12)
 
 Every new option is experimental and off by default unless stated. One

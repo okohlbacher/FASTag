@@ -987,6 +987,12 @@ protected:
                   "by default only exact ones count (a gap equal to a fixed terminal label is exact). On by default "
                   "with -search_engine msfragger, -search_config_out and -shortlist_protease trypsin (the "
                   "held-out-tested MSFragger configuration)");
+    // post-1.13.1: -shortlist_gapped is a flag and cannot be given off, so the
+    // msfragger default needs its own switch to turn gapped placement off.
+    registerFlag_("shortlist_exact_only",
+                  "Count only exact placements for the shortlist, also where -search_engine msfragger turns "
+                  "-shortlist_gapped on by default (the other msfragger defaults stay). Without msfragger "
+                  "this is the default already. Not with -shortlist_gapped. Experimental");
     registerStringOption_("shortlist_parsimony", "<mode>", "none",
                           "'none' keeps every protein above -shortlist_min_spectra; 'subset' drops a "
                           "protein whose spectra a higher-ranked kept one has; 'greedy' keeps a greedy "
@@ -2309,7 +2315,13 @@ protected:
       return apply;
     };
     FASTag::Shortlist::Settings sl_settings;
-    sl_settings.gapped = msfDefault("shortlist_gapped", "on") || getFlag_("shortlist_gapped");
+    const bool sl_exact_only = getFlag_("shortlist_exact_only");
+    if (sl_exact_only && getFlag_("shortlist_gapped"))
+    {
+      OPENMS_LOG_ERROR << "-shortlist_exact_only and -shortlist_gapped contradict each other; give one." << std::endl;
+      return ILLEGAL_PARAMETERS;
+    }
+    sl_settings.gapped = !sl_exact_only && (msfDefault("shortlist_gapped", "on") || getFlag_("shortlist_gapped"));
     sl_settings.max_evalue = msfDefault("shortlist_max_evalue", "10") ? 10.0 : getDoubleOption_("shortlist_max_evalue");
     const int recon_min_length = msfDefault("recon_min_length", "6") ? 6 : getIntOption_("recon_min_length");
     const int recon_mc = msfDefault("recon_missed_cleavages", "2") ? 2 : getIntOption_("recon_missed_cleavages");
@@ -2778,6 +2790,7 @@ protected:
           {"shortlist_max_evalue", "-shortlist_out or -fasta_out", shortlist_on},
           {"shortlist_min_spectra", "-shortlist_out or -fasta_out", shortlist_on},
           {"shortlist_gapped", "-shortlist_out or -fasta_out", shortlist_on},
+          {"shortlist_exact_only", "-shortlist_out or -fasta_out", shortlist_on},
           {"shortlist_parsimony", "-shortlist_out or -fasta_out", shortlist_on},
           {"shortlist_top", "-shortlist_out or -fasta_out", shortlist_on},
           {"shortlist_protease", "-shortlist_out, -fasta_out or -search_config_out", handoff_on},

@@ -29,7 +29,10 @@
 #      values -shortlist_gapped -shortlist_max_evalue 10 -recon_min_length 6
 #      -recon_missed_cleavages 2, log and shortlist header say so; Sage keeps
 #      1.13.1's values, as does -shortlist_protease auto; a value on the command
-#      line or in an INI wins.
+#      line or in an INI wins;
+#   j. -shortlist_exact_only with msfragger: exact placements only, the other
+#      three defaults still applied (equal to giving them), also from an INI;
+#      refused with -shortlist_gapped; Sage outputs unchanged by it.
 # Cases a, b and f give the four options explicitly (1.13.1 values, gapped on:
 # a flag cannot be given off), so Sage and MSFragger runs share one shortlist.
 # Exits 77 (ctest SKIP) when the binary cannot start.
@@ -277,4 +280,32 @@ runh "$TMP/i7" "${I[@]}" -search_engine msfragger -shortlist_protease auto
 grep -q -i 'msfragger defaults' "$TMP/i7/sl.tsv" "$TMP/i7/run.log" && fail "i: msfragger defaults with -shortlist_protease auto"
 grep -q '^# settings: max_evalue 0.1, min_spectra 2, gapped no,' "$TMP/i7/sl.tsv" || fail "i: -shortlist_protease auto settings changed"
 echo "i: msfragger shortlist defaults, explicit values and INI win"
+# ---- j: -shortlist_exact_only switches the msfragger gapped default off
+runh "$TMP/j1" "${I[@]}" -search_engine msfragger -shortlist_exact_only
+grep -q '^# settings: max_evalue 10, min_spectra 2, gapped no,' "$TMP/j1/sl.tsv" || fail "j: exact only: shortlist settings"
+grep -qx '# msfragger defaults (the configuration of its second held-out test): -shortlist_max_evalue 10, -recon_min_length 6, -recon_missed_cleavages 2' \
+  "$TMP/j1/sl.tsv" || fail "j: exact only: the other three defaults are not applied"
+grep -q 'min tag length 6 (msfragger default)' "$TMP/j1/run.log" || fail "j: exact only: recon min length default lost"
+cmp -s "$TMP/i1/sl.tsv" "$TMP/j1/sl.tsv" && fail "j: exact only changes nothing on the fixture (vacuous)"
+# equal to the three values given explicitly with exact placements only
+runh "$TMP/j2" "${I[@]}" -search_engine msfragger -shortlist_exact_only -shortlist_max_evalue 10 -recon_min_length 6 \
+  -recon_missed_cleavages 2
+for f in t.tsv r.tsv red.fasta cfg; do cmp -s "$TMP/j1/$f" "$TMP/j2/$f" || fail "j: $f differs from the explicit exact-only values"; done
+diff <(grep -v '^# msfragger defaults' "$TMP/j1/sl.tsv") "$TMP/j2/sl.tsv" > /dev/null || fail "j: sl.tsv differs from the explicit exact-only values"
+# an INI can say it
+( cd "$TMP/j1" && "$BIN" -write_ini x.ini > /dev/null 2>&1 ) || fail "j: -write_ini"
+grep -q 'name="shortlist_exact_only" value="false"' "$TMP/j1/x.ini" || fail "j: INI lacks shortlist_exact_only"
+sed 's/name="shortlist_exact_only" value="false"/name="shortlist_exact_only" value="true"/' "$TMP/j1/x.ini" > "$TMP/j1/y.ini"
+runh "$TMP/j3" "${I[@]}" -search_engine msfragger -ini "$TMP/j1/y.ini"
+cmp -s "$TMP/j1/sl.tsv" "$TMP/j3/sl.tsv" || fail "j: the INI shortlist_exact_only is not read"
+# explicit -shortlist_gapped with msfragger stays on (i2); both together are refused, nothing written
+mkdir -p "$TMP/j4"
+( cd "$TMP/j4" && "$BIN" "${HARGS[@]}" "${I[@]}" -search_engine msfragger -shortlist_exact_only -shortlist_gapped > run.log 2>&1 ) \
+  && fail "j: -shortlist_exact_only with -shortlist_gapped accepted"
+grep -q 'shortlist_exact_only and -shortlist_gapped contradict' "$TMP/j4/run.log" || fail "j: no message for the contradiction"
+[ -e "$TMP/j4/sl.tsv" ] || [ -e "$TMP/j4/cfg" ] && fail "j: refused run wrote output"
+# Sage: already exact, outputs byte-identical to i3
+runh "$TMP/j5" "${I[@]}" -shortlist_exact_only
+for f in t.tsv r.tsv sl.tsv red.fasta cfg; do cmp -s "$TMP/i3/$f" "$TMP/j5/$f" || fail "j: Sage $f changed by -shortlist_exact_only"; done
+echo "j: -shortlist_exact_only turns the msfragger gapped default off, keeps the other three; INI; Sage unchanged"
 echo "msfragger_cli_test: all checks passed"

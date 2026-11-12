@@ -1246,6 +1246,14 @@
       "toppAdvanced": true
     },
     {
+      "name": "shortlist_exact_only",
+      "type": "bool",
+      "default": "false",
+      "description": "Count only exact placements for the shortlist, also where -search_engine msfragger turns -shortlist_gapped on by default (the other msfragger defaults stay). Without msfragger this is the default already. Not with -shortlist_gapped. Experimental",
+      "required": false,
+      "toppAdvanced": false
+    },
+    {
       "name": "shortlist_force",
       "type": "bool",
       "default": "false",
