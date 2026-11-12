@@ -1,0 +1,5 @@
+t2 rc=0
+t0 rc=0
+score t2 rc=0
+score t0 rc=0
+verdict rc=0
