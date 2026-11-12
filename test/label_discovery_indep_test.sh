@@ -11,7 +11,7 @@
 #   identity   the option off leaves every output byte-identical; with it on,
 #              every other output is byte-identical (sections 2, 10, 12)
 #   format     header, five non-empty fields, unique (section, key), the
-#              documented section order, ld_run format 4, no .part (section 9)
+#              documented section order, ld_run format 5, no .part (section 9)
 #   counts     ld_count against a recount of the tag TSV (sections 3, 4, 5)
 #   labels     TMT, TMTpro, iTRAQ4, Dimethyl (known_label; Dimethyl since evaluation 2, no b0),
 #              an unknown +123.4567 (unexplained), each at the N site, and the
@@ -112,7 +112,7 @@ check_format() {   # FILE NAME
   for s in run ld_run ld_count ld_site ld_call; do
     tr -d '\r' < "$f" | cut -f1 | grep -qx "$s" || check "$name: no $s section"
   done
-  [ "$(val "$f" ld_run format)" = 4 ] || check "$name: ld_run format is not 4"
+  [ "$(val "$f" ld_run format)" = 5 ] || check "$name: ld_run format is not 5"
   local st lab rs
   st=$(val "$f" ld_call status); lab=$(val "$f" ld_call labels); rs=$(val "$f" ld_call reason)
   case "$st" in
