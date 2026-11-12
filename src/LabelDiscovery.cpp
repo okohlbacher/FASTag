@@ -2069,19 +2069,74 @@ namespace FASTag::LabelDiscovery
 
   bool PairCounter::silacSingle() const
   {
-    const std::uint64_t m = std::max({lys8, arg10, lys6arg6, medium_heavy});
+    auto v = [&](std::uint64_t n, int bit) { return veto & bit ? std::uint64_t{0} : n; };
+    const std::uint64_t m = std::max({v(lys8, 1), v(arg10, 2), v(lys6arg6, 4), v(medium_heavy, 8)});
     return m >= 30 && ratio(m) >= kSingleRatio && !dimethyl();
   }
 
   std::string PairCounter::silacSingleLabels() const
   {
-    auto on = [&](std::uint64_t n) { return n >= 30 && ratio(n) >= kSingleRatio; };
+    auto on = [&](std::uint64_t n, int bit) { return !(veto & bit) && n >= 30 && ratio(n) >= kSingleRatio; };
     // +3.9891 and +3.9881 lie 1 mDa apart: the medium to heavy pair names both residues.
-    const bool k4 = on(medium_heavy), k6 = on(lys6arg6), k8 = on(lys8) || k4, r6 = k6 || k4, r10 = on(arg10) || k4;
+    const bool k4 = on(medium_heavy, 8), k6 = on(lys6arg6, 4), k8 = on(lys8, 1) || k4, r6 = k6 || k4, r10 = on(arg10, 2) || k4;
     std::string l;
     for (const auto& [b, name] : {std::pair{k4, "K:Lys4"}, {k6, "K:Lys6"}, {k8, "K:Lys8"}, {r6, "R:Arg6"}, {r10, "R:Arg10"}})
       if (b) l += (l.empty() ? "" : "+") + std::string(name);
     return l.empty() ? "-" : l;
+  }
+
+  namespace
+  {
+    // Site check of the single-spacing SILAC rule. A pair share f of the precursors at a SILAC spacing predicts
+    // f x (tag spectra of the unlabelled K/R control rows) tags at the heavy K/R mass. Where that is >= 60 (three
+    // times min_spectra) and the site scan lists no K/R candidate within 10 mDa of the label, the pairs are not K/R
+    // SILAC. Development runs: the chemoproteomics 13C(6) cysteine-probe run (PXD027767) expects 349 and shows none;
+    // the SILAC runs the rule calls expect <= 10 (ion-trap MS2: about 0).
+    constexpr double kVetoExpected = 60.0, kVetoTol = 0.01;
+
+    void siteVeto(Analysis& a)
+    {
+      PairCounter& pc = a.pairs;
+      pc.veto = 0;
+      pc.veto_expected = 0;
+      if (pc.precursors.empty()) return;
+      struct Spacing
+      {
+        std::uint64_t n;
+        int bit;
+        std::vector<std::pair<char, double>> heavy;  // residue, label mass over the unlabelled residue
+      };
+      const Spacing sp[] = {{pc.lys8, 1, {{'K', 8.014199}}},
+                            {pc.arg10, 2, {{'R', 10.008269}}},
+                            {pc.lys6arg6, 4, {{'K', 6.020129}, {'R', 6.020129}}},
+                            {pc.medium_heavy, 8, {{'K', 4.025107}, {'K', 8.014199}, {'R', 6.020129}, {'R', 10.008269}}}};
+      for (const Spacing& s : sp)
+      {
+        if (s.n < 30) continue;
+        double light = 0;
+        bool seen = false;
+        for (char r : {'K', 'R'})
+        {
+          bool used = false;
+          for (const auto& h : s.heavy) used = used || h.first == r;
+          if (!used) continue;
+          for (const SiteCandidate& c : a.sites)
+          {
+            if (c.site != r) continue;
+            if (c.control) light += static_cast<double>(c.spectra);
+            else
+              for (const auto& h : s.heavy)
+                if (h.first == r && std::fabs(c.delta - h.second) <= kVetoTol) seen = true;
+          }
+        }
+        const double expected = light * static_cast<double>(s.n) / static_cast<double>(pc.precursors.size());
+        if (expected >= kVetoExpected && !seen)
+        {
+          pc.veto |= static_cast<std::uint8_t>(s.bit);
+          pc.veto_expected = std::max(pc.veto_expected, expected);
+        }
+      }
+    }
   }
 
   void applyPairs(Analysis& a, PairCounter pc)
@@ -2089,6 +2144,7 @@ namespace FASTag::LabelDiscovery
     pc.count();
     a.pairs = std::move(pc);
     a.pairs.precursors.shrink_to_fit();
+    siteVeto(a);
     // Too few tags for the site scan, but reporters and label pairs were looked for and are absent.
     // ponytail: a sample labelled in one channel only (all heavy, light dimethyl) is called label-free here.
     // Format 5: dimethyl shows as pairs at one spacing and at twice that spacing, also where the site scan saw too few
@@ -2925,7 +2981,14 @@ namespace FASTag::LabelDiscovery
       row("ld_pair", "lys6arg6_pairs", num(pc.lys6arg6), n, "the same at +6.0201 Da (Lys6, Arg6)");
       row("ld_pair", "medium_heavy_pairs", num(pc.medium_heavy), n, "the larger count at +3.9891 Da (Lys4 to Lys8) and +3.9881 Da (Arg6 to Arg10)");
       row("ld_pair", "silac_single", pc.silacSingle() ? "yes" : "no", "-",
-          "yes: one SILAC spacing (Lys8, Arg10, +6.0201, medium to heavy) has >= 30 pairs and a ratio >= 20, and dimethyl is no");
+          "yes: one SILAC spacing (Lys8, Arg10, +6.0201, medium to heavy) not in silac_site_veto has >= 30 pairs and a ratio >= 20, and dimethyl is no");
+      {
+        std::string v;
+        for (const auto& [bit, name] : {std::pair{1, "lys8"}, {2, "arg10"}, {4, "lys6arg6"}, {8, "medium_heavy"}})
+          if (pc.veto & bit) v += (v.empty() ? "" : ",") + std::string(name);
+        row("ld_pair", "silac_site_veto", v.empty() ? "-" : v, v.empty() ? "-" : fix(pc.veto_expected, 1),
+            "spacings whose heavy K/R the tags would show in >= 60 spectra (n: the largest expected count) and the site scan does not");
+      }
       row("ld_pair", "dimethyl_pairs", num(pc.dimethyl2), n, "largest over the dimethyl spacings of the smaller count at the spacing and at twice the spacing");
       row("ld_pair", "dimethyl_ratio", fix(pc.ratio(pc.dimethyl2), 2), "-", "dimethyl_pairs / (control_pairs + 5)");
       row("ld_pair", "dimethyl", pc.dimethyl() ? "yes" : "no", "-", "yes: count >= 30, ratio >= 2 and above the largest SILAC spacing count");

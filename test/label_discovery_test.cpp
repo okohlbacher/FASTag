@@ -987,6 +987,7 @@ int main()
     CHECK(x.labels == "K:Lys4+K:Lys8+R:Arg6+R:Arg10" && rowsOf(x, S).at("ld_pair/medium_heavy_pairs") == "120",
           "medium to heavy pairs: %s", x.labels.c_str());
     x = lf;
+    x.sites.clear();  // the tags of lf show unlabelled K/R: the site check below would veto the spacing
     LD::applyPairs(x, single(6.020129, 120));
     CHECK(x.labels == "K:Lys6+R:Arg6", "single-spacing pairs replace a label-free call");
     x = few;
@@ -995,6 +996,38 @@ int main()
     CHECK(x.status == "no_call" && rowsOf(x, S).at("ld_pair/silac_single") == "no", "ratio below 20: no call");
     x = extended("K:Lys8", "K", single(6.020129, 120));
     CHECK(x.labels == "K:Lys8" && x.basis == "site_scan", "a label call is not changed by one spacing");
+
+    // site check: many tags with an unlabelled K/R and no K/R candidate at +6.0201 veto the spacing
+    auto withSites = [&](std::uint64_t k0, bool heavyK) {
+      LD::Analysis y = lf;
+      y.sites.clear();
+      for (char r : {'K', 'R'})
+      {
+        LD::SiteCandidate c;
+        c.site = r;
+        c.control = true;
+        c.spectra = k0;
+        y.sites.push_back(c);
+      }
+      if (heavyK)
+      {
+        LD::SiteCandidate c;
+        c.site = 'K';
+        c.delta = 6.0202;
+        c.spectra = 300;
+        y.sites.push_back(c);
+      }
+      LD::applyPairs(y, single(6.020129, 120));
+      return y;
+    };
+    x = withSites(100000, false);
+    CHECK(x.labels == "label-free" && rowsOf(x, S).at("ld_pair/silac_single") == "no" &&
+            rowsOf(x, S).at("ld_pair/silac_site_veto") == "lys6arg6",
+          "tags see unlabelled K/R only: %s veto %s", x.labels.c_str(), rowsOf(x, S).at("ld_pair/silac_site_veto").c_str());
+    x = withSites(100000, true);
+    CHECK(x.labels == "K:Lys6+R:Arg6" && rowsOf(x, S).at("ld_pair/silac_site_veto") == "-", "a K candidate at +6.0201: no veto");
+    x = withSites(10, false);
+    CHECK(x.labels == "K:Lys6+R:Arg6", "too few K/R tags to expect the heavy residue: no veto");
   }
 
   if (failures == 0) std::printf("label_discovery_test: all passed\n");

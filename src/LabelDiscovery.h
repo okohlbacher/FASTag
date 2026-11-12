@@ -452,6 +452,12 @@ namespace FASTag::LabelDiscovery
     std::uint64_t silac_top = 0;  ///< the largest count at a SILAC spacing (Lys8, Arg10, +6.0201, medium to heavy)
     std::uint64_t lys6arg6 = 0;      ///< count at +6.0201 (Lys6, Arg6: 13C(6))
     std::uint64_t medium_heavy = 0;  ///< the larger count at +3.9891 (Lys4 to Lys8) and +3.9881 (Arg6 to Arg10)
+    /// Spacings silacSingle() ignores (set by applyPairs() from the site scan): 1 Lys8, 2 Arg10, 4 +6.0201,
+    /// 8 medium to heavy. A spacing is ignored when the tags with an unlabelled K or R would show its heavy
+    /// residue in >= 60 spectra and the site scan has no K or R candidate at that mass (an isotope-coded
+    /// label on another residue, e.g. a 13C(6) cysteine probe, also gives pairs at +6.0201).
+    std::uint8_t veto = 0;
+    double veto_expected = 0;  ///< the largest expected heavy K/R tag spectra over the vetoed spacings
     double control = 0;  ///< median of the eight control counts
     void count();
     /// count / (control + 5): the excess of a label spacing over the controls.
@@ -464,7 +470,7 @@ namespace FASTag::LabelDiscovery
     /// Any label spacing has >= 30 pairs and a ratio >= 2.
     bool anyLabel() const;
     /// One SILAC spacing alone (Lys8, Arg10, +6.0201 or medium to heavy) has
-    /// >= 30 pairs and a ratio >= 20, and dimethyl() is false.
+    /// >= 30 pairs and a ratio >= 20, and dimethyl() is false; spacings in veto are ignored.
     bool silacSingle() const;
     /// The labels of the SILAC spacings that pass silacSingle()'s bar, in the
     /// order K:Lys4, K:Lys6, K:Lys8, R:Arg6, R:Arg10 ("-" when none).
