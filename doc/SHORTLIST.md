@@ -377,8 +377,7 @@ tested the 1.13 export with the default shortlist.
 
 **MSFragger shortlist defaults.** Since this test, `-search_engine msfragger`
 with `-search_config_out` and `-shortlist_protease trypsin` (the default)
-runs the tested configuration: `-shortlist_gapped` on (a flag: it cannot be
-switched off there), `-shortlist_max_evalue 10`, `-recon_min_length 6`,
+runs the tested configuration: `-shortlist_gapped` on, `-shortlist_max_evalue 10`, `-recon_min_length 6`,
 `-recon_missed_cleavages 2`. Each applies unless the option is given on the
 command line, or set in an INI to a value other than its 1.13.1 default (an
 INI value equal to that default cannot be told from it, as for
@@ -389,6 +388,13 @@ development run PXD003531 the export without these options is
 byte-identical to the one with them. Sage, Comet, a run without
 `-search_config_out` and a `-shortlist_protease` other than trypsin (not
 tested held-out with these values) keep 1.13.1's values.
+`-shortlist_gapped` is a flag and cannot be given off, so
+`-shortlist_exact_only` (experimental, after 1.13.1; `true` in an INI) turns
+gapped placement off there: only exact placements count, the other three
+values stay msfragger defaults and the header line names only those. It is
+refused together with `-shortlist_gapped`; without msfragger exact placement is
+the default already and the flag changes nothing. Exact-only with the other
+three values has no held-out test.
 
 `-search_engine msfragger` writes a complete `fragger.params` for MSFragger
 4.4.1 (`java -jar MSFragger-4.4.1.jar fragger.params <spectra>`), keys in the

@@ -1170,6 +1170,12 @@ export const PARAM_UI: Record<string, ParamUi> = {
       text: 'Let placements with one mismatched flank count for the shortlist.'
     }
   },
+  shortlist_exact_only: {
+    hidden: EXPERIMENTAL_1_13,
+    help: {
+      text: 'Count only exact placements for the shortlist, also with MSFragger, where gapped placements count by default; the other MSFragger shortlist defaults stay. Experimental, no held-out test.'
+    }
+  },
   shortlist_max_evalue: {
     hidden: OPT_IN_1_12,
     help: {

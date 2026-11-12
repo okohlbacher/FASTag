@@ -18,7 +18,7 @@ describe('map: param overlay vs CLI manifest', () => {
     expect(c).toContain('domain')
     expect(c).not.toContain('superkingdom')
   })
-  it('renders 68 parameters and hides 98, including the experimental TMT filters', () => {
+  it('renders 68 parameters and hides 99, including the experimental TMT filters', () => {
     // 1.10.0 added species_evidence (rendered) to the 1.9.0 set; 1.12.0 adds
     // 64 options (8 of them #17 -search_shifts), hidden until each has its GUI design, except
     // acquisition_check: its default refuses raw DIA, so the form offers warn/off.
@@ -37,7 +37,9 @@ describe('map: param overlay vs CLI manifest', () => {
     // TMT pseudo-residue and reporter filtering add two hidden experimental options.
     // post-1.13.1 adds search_missed_cleavages and search_nterm_acetyl (by engine), hidden.
     // species_reagents (reagent calls of -species_call explain) adds one hidden experimental option.
-    expect(HIDDEN_PARAMS.length).toBe(98)
+    // post-1.13.1 adds shortlist_exact_only (msfragger gapped default off), hidden as experimental.
+    expect(HIDDEN_PARAMS.length).toBe(99)
+    expect(HIDDEN_PARAMS).toContain('shortlist_exact_only')
     expect(HIDDEN_PARAMS).toContain('search_missed_cleavages')
     expect(HIDDEN_PARAMS).toContain('search_nterm_acetyl')
     expect(HIDDEN_PARAMS).toContain('species_reagents')
@@ -55,7 +57,7 @@ describe('map: param overlay vs CLI manifest', () => {
     for (const n of manifest.params.map((p) => p.name).filter((n) => n.startsWith('label_discovery_'))) expect(HIDDEN_PARAMS).toContain(n)
     expect(RENDERED).toContain('acquisition_check')
     expect(PARAM_BY_NAME.get('acquisition_check')?.choices).toEqual(['refuse', 'warn', 'off'])
-    expect(manifest.params.length).toBe(166)
+    expect(manifest.params.length).toBe(167)
   })
   it('renders or hides every parameter of the manifest once (mzpeak_read_memory hidden)', () => {
     // In addition to the pinned counts above: every manifest parameter is
