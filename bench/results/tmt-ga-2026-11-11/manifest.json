@@ -1,0 +1,452 @@
+{
+  "datasets": [
+    {
+      "id": "PXD004541_fr02",
+      "role": "development",
+      "source_input": "/scratch/kohlbach/gate-in/PXD004541/HF1_201501212_GM_RJ1511D_TMT10_hpHRP_DMSO1_2p5ug_4uL_fr02.mzML",
+      "fresh": true,
+      "source_config": "/scratch/kohlbach/fastag-tmt-filter-benchmark-20261111/PXD004541_fr02/sage.json",
+      "input": "/scratch/kohlbach/fastag-tmt-filter-20261111/data/PXD004541_fr02/HF1_201501212_GM_RJ1511D_TMT10_hpHRP_DMSO1_2p5ug_4uL_fr02.mzML",
+      "input_sha256": "c37656d3341c5ee804d989df072dff4ba7dca47c0a4ef3fbad5704f41c90ef8e",
+      "input_bytes": 419618034,
+      "source_truth": "/scratch/kohlbach/fastag-tmt-filter-benchmark-20261111/PXD004541_fr02/sage_out/results.sage.tsv",
+      "fresh_search_command": [
+        "/ceph/ibmi/abi/oliver/opt/sage-0.14.7/sage-v0.14.7-x86_64-unknown-linux-gnu/sage",
+        "/scratch/kohlbach/fastag-tmt-filter-benchmark-20261111/PXD004541_fr02/sage.json",
+        "-o",
+        "/scratch/kohlbach/fastag-tmt-filter-benchmark-20261111/PXD004541_fr02/sage_out"
+      ],
+      "fresh_search_wall_seconds": 16.69222402572632,
+      "sage_binary_sha256": "d3820543a31bfa2a556e04f91719204ce0ac6f34dcca6670314a13df87064625",
+      "fasta_sha256": "dffdff3807ec6eb7e752035b5475aaefa26d1b36e513e3344198d521a2169c42",
+      "config": "/ceph/ibmi/abi/oliver/fastag-tmt-filter-benchmark-20261111/PXD004541_fr02/sage.json",
+      "unfiltered_truth": "/ceph/ibmi/abi/oliver/fastag-tmt-filter-benchmark-20261111/PXD004541_fr02/results.sage.tsv",
+      "unfiltered_truth_sha256": "c2d6d80c8f70fb24e2511d29783dd146a8a540c9de1016952319bd7e7ab7aac5",
+      "fixed_masses": {
+        "C": 57.021464,
+        "K": 229.162932,
+        "^": 229.162932
+      },
+      "variable_masses": {
+        "M": [
+          15.994915
+        ]
+      },
+      "fixed_cli": [
+        "Carbamidomethyl (C)",
+        "TMT6plex (K)",
+        "TMT6plex (N-term)"
+      ],
+      "variable_cli": [
+        "Oxidation (M)"
+      ],
+      "fragment_tolerance": 20,
+      "fragment_tolerance_unit": "ppm",
+      "truth": "/scratch/kohlbach/fastag-tmt-filter-20261111/data/PXD004541_fr02/truth.filtered.sage.tsv",
+      "truth_sha256": "20e35b4e661f785d4c3c15ec328af3b764e5f34a199b625fb8e073c18877dc6b",
+      "total_psm_rows": 32130,
+      "target_rank1_q01_before_entrapment_filter": 11870,
+      "excluded_entrapment_or_decoy": 0,
+      "truth_psms": 11870,
+      "example_peptides": [
+        "[+229.16293]-SGGGSGGSGGQVSLK[+229.16293]",
+        "[+229.16293]-DLVDSVDDAEGLYVAVER",
+        "[+229.16293]-QELQEEEEQTK[+229.16293]PPR"
+      ],
+      "config_sha256": "5e39280e09f2fb4b036bff7db9d3c383b11af9d838c2da1be68eaffc0cd8d884",
+      "chemistries": [
+        {
+          "name": "label_blind",
+          "fixed_cli": [
+            "Carbamidomethyl (C)"
+          ],
+          "variable_cli": [
+            "Oxidation (M)"
+          ],
+          "fixed_masses": {
+            "C": 57.021464
+          }
+        },
+        {
+          "name": "label_aware",
+          "fixed_cli": [
+            "Carbamidomethyl (C)",
+            "TMT6plex (K)",
+            "TMT6plex (N-term)"
+          ],
+          "variable_cli": [
+            "Oxidation (M)"
+          ],
+          "fixed_masses": {
+            "C": 57.021464,
+            "K": 229.162932,
+            "^": 229.162932
+          }
+        }
+      ],
+      "tagger_variable_note": "Only Oxidation(M) in both arms; frozen Erwinia truth also allowed TMT(Y), unchanged.",
+      "shared_input": "/ceph/ibmi/abi/oliver/fastag-tmt-filter-benchmark-20261111/PXD004541_fr02/HF1_201501212_GM_RJ1511D_TMT10_hpHRP_DMSO1_2p5ug_4uL_fr02.mzML",
+      "shared_truth": "/ceph/ibmi/abi/oliver/fastag-tmt-filter-benchmark-20261111/PXD004541_fr02/truth.filtered.sage.tsv"
+    },
+    {
+      "id": "PXD037999",
+      "role": "validation",
+      "source_input": "/scratch/kohlbach/b113/shifts/heldout/stage/PXD037999/220819_UM171_RCOR1_NB4_TMT10_F13_of_F13_R2.mzML",
+      "source_config": "/scratch/kohlbach/b113/shifts/heldout/ho/PXD037999/base/sage.json",
+      "source_truth": "/scratch/kohlbach/b113/shifts/heldout/ho/PXD037999/base/sage_out/results.sage.tsv",
+      "input": "/scratch/kohlbach/fastag-tmt-filter-20261111/data/PXD037999/220819_UM171_RCOR1_NB4_TMT10_F13_of_F13_R2.mzML",
+      "input_sha256": "4ce8607cf57f5af6397860484a79c1db252a7cfd1e764d5cf972d9661c27c3b3",
+      "input_bytes": 489566950,
+      "config": "/ceph/ibmi/abi/oliver/fastag-tmt-filter-benchmark-20261111/PXD037999/sage.json",
+      "unfiltered_truth": "/ceph/ibmi/abi/oliver/fastag-tmt-filter-benchmark-20261111/PXD037999/results.sage.tsv",
+      "unfiltered_truth_sha256": "a75ece56f71249bbcea0f495113e3cff1d328be385f53973cf02299eed89a222",
+      "fixed_masses": {
+        "C": 57.021464,
+        "K": 229.162932,
+        "^": 229.162932
+      },
+      "variable_masses": {
+        "M": [
+          15.994915
+        ]
+      },
+      "fixed_cli": [
+        "Carbamidomethyl (C)",
+        "TMT6plex (K)",
+        "TMT6plex (N-term)"
+      ],
+      "variable_cli": [
+        "Oxidation (M)"
+      ],
+      "fragment_tolerance": 20,
+      "fragment_tolerance_unit": "ppm",
+      "truth": "/scratch/kohlbach/fastag-tmt-filter-20261111/data/PXD037999/truth.filtered.sage.tsv",
+      "truth_sha256": "e495a18268fdad3def4abdfff503ef853891b9122a574884fad31896a4489dea",
+      "total_psm_rows": 22369,
+      "target_rank1_q01_before_entrapment_filter": 8495,
+      "excluded_entrapment_or_decoy": 225,
+      "truth_psms": 8270,
+      "example_peptides": [
+        "[+229.16293]-VYVGNLGTGAGK[+229.16293]",
+        "[+229.16293]-ANPFGGASHAK[+229.16293]",
+        "[+229.16293]-AFTYTVAASGGGGVNMGSHQK[+229.16293]"
+      ],
+      "config_sha256": "23785701c7dcda7acee9e0daf87839502878261c40f385d4971607f5433cd687",
+      "chemistries": [
+        {
+          "name": "label_blind",
+          "fixed_cli": [
+            "Carbamidomethyl (C)"
+          ],
+          "variable_cli": [
+            "Oxidation (M)"
+          ],
+          "fixed_masses": {
+            "C": 57.021464
+          }
+        },
+        {
+          "name": "label_aware",
+          "fixed_cli": [
+            "Carbamidomethyl (C)",
+            "TMT6plex (K)",
+            "TMT6plex (N-term)"
+          ],
+          "variable_cli": [
+            "Oxidation (M)"
+          ],
+          "fixed_masses": {
+            "C": 57.021464,
+            "K": 229.162932,
+            "^": 229.162932
+          }
+        }
+      ],
+      "tagger_variable_note": "Only Oxidation(M) in both arms; frozen Erwinia truth also allowed TMT(Y), unchanged.",
+      "filename_normalization": {
+        "original": "run.mzML",
+        "canonical": "220819_UM171_RCOR1_NB4_TMT10_F13_of_F13_R2.mzML",
+        "verified_source": "/scratch/kohlbach/b113/shifts/heldout/ho/PXD037999/run.mzML",
+        "verification": "source mzML SHA256 equals staged input SHA256",
+        "preserved_in_column": "original_filename"
+      },
+      "shared_input": "/ceph/ibmi/abi/oliver/fastag-tmt-filter-benchmark-20261111/PXD037999/220819_UM171_RCOR1_NB4_TMT10_F13_of_F13_R2.mzML",
+      "shared_truth": "/ceph/ibmi/abi/oliver/fastag-tmt-filter-benchmark-20261111/PXD037999/truth.filtered.sage.tsv"
+    },
+    {
+      "id": "PXD000001",
+      "role": "validation",
+      "source_input": "/scratch/kohlbach/tagval/data/PXD000001_Erwinia_TMT6/spectra/TMT_Erwinia_1uLSike_Top10HCD_isol2_45stepped_60min_01-20141210.mzML",
+      "source_config": "/scratch/kohlbach/tagval/data/PXD000001_Erwinia_TMT6/sage/sage.json",
+      "source_truth": "/scratch/kohlbach/tagval/data/PXD000001_Erwinia_TMT6/sage/results.sage.tsv",
+      "input": "/scratch/kohlbach/fastag-tmt-filter-20261111/data/PXD000001/TMT_Erwinia_1uLSike_Top10HCD_isol2_45stepped_60min_01-20141210.mzML",
+      "input_sha256": "038dd84702b01463b1aadfae09cecc4176f319376ff85e9dba883cdc3208fa67",
+      "input_bytes": 450032788,
+      "config": "/ceph/ibmi/abi/oliver/fastag-tmt-filter-benchmark-20261111/PXD000001/sage.json",
+      "unfiltered_truth": "/ceph/ibmi/abi/oliver/fastag-tmt-filter-benchmark-20261111/PXD000001/results.sage.tsv",
+      "unfiltered_truth_sha256": "832a2205f645f669c75b41d378c82eb35a5f4fc4e83817b6d6b773cf27d1d524",
+      "fixed_masses": {
+        "C": 45.987721,
+        "K": 229.162932,
+        "^": 229.162932
+      },
+      "variable_masses": {
+        "M": [
+          15.994915
+        ],
+        "Y": [
+          229.162932
+        ]
+      },
+      "fixed_cli": [
+        "Methylthio (C)",
+        "TMT6plex (K)",
+        "TMT6plex (N-term)"
+      ],
+      "variable_cli": [
+        "Oxidation (M)",
+        "TMT6plex (Y)"
+      ],
+      "fragment_tolerance": 20,
+      "fragment_tolerance_unit": "ppm",
+      "truth": "/scratch/kohlbach/fastag-tmt-filter-20261111/data/PXD000001/truth.filtered.sage.tsv",
+      "truth_sha256": "b4d3deed931ad18290a68c5261d4c8123facd049591657a42b4824fb0cb9c53f",
+      "total_psm_rows": 4684,
+      "target_rank1_q01_before_entrapment_filter": 2642,
+      "excluded_entrapment_or_decoy": 0,
+      "truth_psms": 2642,
+      "example_peptides": [
+        "[+229.16293]-ALVEANGDIELAIENMR",
+        "[+229.16293]-GALDVGATTINEEMK[+229.16293]",
+        "[+229.16293]-AATILAEQLEAFVDLR"
+      ],
+      "config_sha256": "54a9a89de3883a0cc9858219ae7611bcbe705ed88cca9b46aa8eee5516f26e45",
+      "chemistries": [
+        {
+          "name": "label_blind",
+          "fixed_cli": [
+            "Methylthio (C)"
+          ],
+          "variable_cli": [
+            "Oxidation (M)"
+          ],
+          "fixed_masses": {
+            "C": 45.987721
+          }
+        },
+        {
+          "name": "label_aware",
+          "fixed_cli": [
+            "Methylthio (C)",
+            "TMT6plex (K)",
+            "TMT6plex (N-term)"
+          ],
+          "variable_cli": [
+            "Oxidation (M)"
+          ],
+          "fixed_masses": {
+            "C": 45.987721,
+            "K": 229.162932,
+            "^": 229.162932
+          }
+        }
+      ],
+      "tagger_variable_note": "Only Oxidation(M) in both arms; frozen Erwinia truth also allowed TMT(Y), unchanged.",
+      "shared_input": "/ceph/ibmi/abi/oliver/fastag-tmt-filter-benchmark-20261111/PXD000001/TMT_Erwinia_1uLSike_Top10HCD_isol2_45stepped_60min_01-20141210.mzML",
+      "shared_truth": "/ceph/ibmi/abi/oliver/fastag-tmt-filter-benchmark-20261111/PXD000001/truth.filtered.sage.tsv"
+    },
+    {
+      "id": "PXD004541_fr09",
+      "role": "within_project_validation",
+      "source_input": "/scratch/kohlbach/fastag-heldout-1.12/item17/heldout/PXD004541/HF1_201501216_GM_RJ1511D_TMT10_hpHRP_Drug2_2p5ug_4uL_fr09.mzML",
+      "source_config": "/scratch/kohlbach/b113/shifts/ho/PXD004541/base/sage.json",
+      "source_truth": "/scratch/kohlbach/b113/shifts/ho/PXD004541/base/sage_out/results.sage.tsv",
+      "input": "/scratch/kohlbach/fastag-tmt-filter-20261111/data/PXD004541_fr09/HF1_201501216_GM_RJ1511D_TMT10_hpHRP_Drug2_2p5ug_4uL_fr09.mzML",
+      "input_sha256": "7be0a4c9d0ac7fe0445b85e689c8e2575a639cfe42d4c6a0f89150ef56fd6e3a",
+      "input_bytes": 386210533,
+      "config": "/ceph/ibmi/abi/oliver/fastag-tmt-filter-benchmark-20261111/PXD004541_fr09/sage.json",
+      "unfiltered_truth": "/ceph/ibmi/abi/oliver/fastag-tmt-filter-benchmark-20261111/PXD004541_fr09/results.sage.tsv",
+      "unfiltered_truth_sha256": "12f575c96c607036e037840c785b63d85dc3d4039a12f5aa747957dc40737145",
+      "fixed_masses": {
+        "C": 57.021464,
+        "K": 229.162932,
+        "^": 229.162932
+      },
+      "variable_masses": {
+        "M": [
+          15.994915
+        ]
+      },
+      "fixed_cli": [
+        "Carbamidomethyl (C)",
+        "TMT6plex (K)",
+        "TMT6plex (N-term)"
+      ],
+      "variable_cli": [
+        "Oxidation (M)"
+      ],
+      "fragment_tolerance": 20,
+      "fragment_tolerance_unit": "ppm",
+      "truth": "/scratch/kohlbach/fastag-tmt-filter-20261111/data/PXD004541_fr09/truth.filtered.sage.tsv",
+      "truth_sha256": "d812b7e2159fb7eed65e6e57fec8281bd164cfb452189174f365e3b31a35a270",
+      "total_psm_rows": 27948,
+      "target_rank1_q01_before_entrapment_filter": 11268,
+      "excluded_entrapment_or_decoy": 196,
+      "truth_psms": 11072,
+      "example_peptides": [
+        "[+229.16293]-EVLGGANDGC[+57.021465]LYVFDR",
+        "[+229.16293]-NDSVVAGGGAIEMELSK[+229.16293]",
+        "[+229.16293]-TIAVDFASEDIYDK[+229.16293]"
+      ],
+      "config_sha256": "1644cc74c679ad1705b863079b635e729b51ec380bc080fecb6840cf3ba0296e",
+      "chemistries": [
+        {
+          "name": "label_blind",
+          "fixed_cli": [
+            "Carbamidomethyl (C)"
+          ],
+          "variable_cli": [
+            "Oxidation (M)"
+          ],
+          "fixed_masses": {
+            "C": 57.021464
+          }
+        },
+        {
+          "name": "label_aware",
+          "fixed_cli": [
+            "Carbamidomethyl (C)",
+            "TMT6plex (K)",
+            "TMT6plex (N-term)"
+          ],
+          "variable_cli": [
+            "Oxidation (M)"
+          ],
+          "fixed_masses": {
+            "C": 57.021464,
+            "K": 229.162932,
+            "^": 229.162932
+          }
+        }
+      ],
+      "tagger_variable_note": "Only Oxidation(M) in both arms; frozen Erwinia truth also allowed TMT(Y), unchanged.",
+      "filename_normalization": {
+        "original": "run.mzML",
+        "canonical": "HF1_201501216_GM_RJ1511D_TMT10_hpHRP_Drug2_2p5ug_4uL_fr09.mzML",
+        "verified_source": "/scratch/kohlbach/b113/shifts/ho/PXD004541/run.mzML",
+        "verification": "source mzML SHA256 equals staged input SHA256",
+        "preserved_in_column": "original_filename"
+      },
+      "shared_input": "/ceph/ibmi/abi/oliver/fastag-tmt-filter-benchmark-20261111/PXD004541_fr09/HF1_201501216_GM_RJ1511D_TMT10_hpHRP_Drug2_2p5ug_4uL_fr09.mzML",
+      "shared_truth": "/ceph/ibmi/abi/oliver/fastag-tmt-filter-benchmark-20261111/PXD004541_fr09/truth.filtered.sage.tsv"
+    },
+    {
+      "id": "PXD003531",
+      "role": "label_free_control",
+      "source_input": "/ceph/ibmi/abi/oliver/jpr-bench/data/PXD003531/20130611_QE3_UPLC10_CFR_SA_OC_T_NO_03_01_01.mzML",
+      "input": "/scratch/kohlbach/fastag-tmt-filter-20261111/data/PXD003531/20130611_QE3_UPLC10_CFR_SA_OC_T_NO_03_01_01.mzML",
+      "input_sha256": "2b1da22229a9d8e8d4cde05d889c3a74dedd68bb9f00f3bdd9d78d2a8d9ace4a",
+      "input_bytes": 381922596,
+      "source_truth": "/scratch/kohlbach/tagval/data/PXD003531_QE_NO_03/sage/results.sage.tsv",
+      "unfiltered_truth": "/ceph/ibmi/abi/oliver/fastag-tmt-filter-benchmark-20261111/PXD003531/results.sage.tsv",
+      "unfiltered_truth_sha256": "52e5de7b5b18f5ce1f9abfe5475861b0a32e2db86a1e9ef96f5d4fbfbce1eadb",
+      "source_config": "/scratch/kohlbach/tagval/data/PXD003531_QE_NO_03/sage/sage.json",
+      "config": "/ceph/ibmi/abi/oliver/fastag-tmt-filter-benchmark-20261111/PXD003531/sage.json",
+      "config_sha256": "5d68c3cd08857e4067aaa468107bb65426a651aa25c17eaa6ae84bc8e9c86281",
+      "truth": "/scratch/kohlbach/fastag-tmt-filter-20261111/data/PXD003531/truth.filtered.sage.tsv",
+      "truth_sha256": "15ad771612de11c9c383ff21dc99da0e56019c827c5000b941cc4aaca5fc7c6b",
+      "truth_psms": 8254,
+      "total_psm_rows": 26226,
+      "target_rank1_q01_before_entrapment_filter": 8254,
+      "excluded_entrapment_or_decoy": 0,
+      "fixed_masses": {
+        "C": 57.021464
+      },
+      "variable_masses": {
+        "M": [
+          15.994915
+        ],
+        "S": [
+          79.966331
+        ],
+        "T": [
+          79.966331
+        ],
+        "Y": [
+          79.966331
+        ],
+        "N": [
+          0.984016
+        ],
+        "Q": [
+          0.984016
+        ],
+        "[": [
+          42.010565
+        ]
+      },
+      "fixed_cli": [
+        "Carbamidomethyl (C)"
+      ],
+      "variable_cli": [
+        "Oxidation (M)",
+        "Phospho (S)",
+        "Phospho (T)",
+        "Phospho (Y)"
+      ],
+      "fragment_tolerance": 20,
+      "fragment_tolerance_unit": "ppm",
+      "example_peptides": [
+        "EM[+15.994915]EENFAVEAANYQDTIGR",
+        "EM[+15.994915]EENFAVEAANYQDTIGR",
+        "EM[+15.994915]EENFAVEAANYQDTIGR"
+      ],
+      "chemistries": [
+        {
+          "name": "control",
+          "fixed_cli": [
+            "Carbamidomethyl (C)"
+          ],
+          "variable_cli": [
+            "Oxidation (M)",
+            "Phospho (S)",
+            "Phospho (T)",
+            "Phospho (Y)"
+          ],
+          "fixed_masses": {
+            "C": 57.021464
+          }
+        }
+      ],
+      "shared_input": "/ceph/ibmi/abi/oliver/fastag-tmt-filter-benchmark-20261111/PXD003531/20130611_QE3_UPLC10_CFR_SA_OC_T_NO_03_01_01.mzML",
+      "shared_truth": "/ceph/ibmi/abi/oliver/fastag-tmt-filter-benchmark-20261111/PXD003531/truth.filtered.sage.tsv"
+    }
+  ],
+  "baseline_sha256": "615afc1946e399dcb2febaf46202ae0ae8db76a2133f8b3b60aaa2c49609e2f1",
+  "feature_sha256": "2b03654a786c5a1ac267a9b1c53615481a2f329afa2ace71faf3e9d869a68d32",
+  "harness_sha256": "cdfbb6730f59eb32a32bf7673edb5e44fbe234e0ece2e174db3c2a2c9c87bfd5",
+  "scorer_sha256": "2130853fb32867a8b19b717df3e2aca308a17ce07b3bafbc8ec44034a6507a9b",
+  "parser_sha256": "01e27548bcae489d3f205960730c8bc36624e16935ea5df0bec5a6a04ea51f49",
+  "platform": "Linux-6.8.0-134-generic-x86_64-with-glibc2.39",
+  "python": "3.11.18 (main, Oct 26 2026, 11:35:17) [GCC 15.3.0]",
+  "cpus": 384,
+  "args": {
+    "datasets_json": "/scratch/kohlbach/fastag-tmt-filter-20261111/datasets.json",
+    "output": "/scratch/kohlbach/fastag-tmt-filter-20261111/results-ga-v2",
+    "baseline": "/ceph/ibmi/abi/oliver/fastag-tmt-filter-20261111/bin/FASTag-baseline",
+    "feature": "/ceph/ibmi/abi/oliver/fastag-tmt-filter-20261111/bin/FASTag-ga-v2",
+    "threads": 8,
+    "reps": 3,
+    "length": 4,
+    "arms": [
+      "baseline",
+      "off",
+      "on",
+      "auto"
+    ],
+    "steps": [
+      "test",
+      "run"
+    ]
+  }
+}

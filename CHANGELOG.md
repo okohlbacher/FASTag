@@ -1,5 +1,85 @@
 # Changelog
 
+## Unreleased (after 1.13.1)
+
+- **mzML: a selected ion m/z of 0 is read as missing.** A selected ion m/z
+  (`MS:1000744`) of 0, below 0 or not a number now gives the precursor its
+  isolation window target m/z, as a missing `MS:1000744` does; before, the
+  spectrum yielded no tags. mzpeak-convert 0.18 (`--to mzml` from a Bruker
+  `.d`, via mzdata) writes 0 for every precursor Bruker stored without a
+  monoisotopic m/z; mzpeak-convert's own mzPeak output stores null there,
+  which the mzPeak reader already read as the target. The run summary warns
+  with the number of such spectra, how many took the target and that the
+  converter wrote m/z 0. This departs from OpenMS `MzMLFile`, which keeps the
+  0 (the documented exception to the indexed reader's parity with it). The
+  OpenMS-read paths (no usable index, `-out_spectra`, mzPeak with a stored 0)
+  do the same, and `-out_spectra` writes the target as the selected ion m/z;
+  `tools/mzml_to_mgf.py` writes the target as `PEPMASS`. PXD054073 mzML
+  (5,952 such MS2, all given the target): 7,506,097 tags instead of
+  7,309,985, byte-identical to the same mzML with those lines blanked out, with
+  and without `-out_spectra` (its point mzPeak gives 7,506,102; the rest is
+  the float32 isolation target there). PXD003531, PXD047793, PXD076528 and
+  PXD028735 (mzML) give byte-identical tags.
+
+- `-shortlist_protease` other than trypsin: the shortlist's protease check
+  calls Asp-N from 21 % D at the N-terminal tag ends (was 50 %; tag ends of
+  Asp-N digests show 33-78 % D, other digests at most 10 %). On the 176
+  development runs with a known protease, three Asp-N runs change from
+  `unspecific` to Asp-N and no other call changes. No held-out test: the
+  held-out result of `auto` (1.13.1) describes the old rule. On the three
+  runs the exported Sage search is about twice as fast as the full search
+  (the unspecific export was 1.2 to 7 times slower), and the shortlist keeps
+  fewer of the full search's proteins (0.18, 0.19, 0.57 against 0.25, 0.34,
+  0.66); `-shortlist_specificity semi` keeps 0.25, 0.29, 0.64 at about the
+  time of the full search. `-digest_out` and the default trypsin check are
+  unchanged.
+- `-shortlist_protease auto`: an Asp-N call is placed and exported
+  semi-specific (Sage `semi_enzymatic`, Comet and MSFragger
+  `num_enzyme_termini = 1`) unless `-shortlist_specificity` is given on the
+  command line (or is `semi` or `none` in an INI); the placement line of the
+  log and of the shortlist header says so. `-shortlist_protease asp-n` and
+  every other call of `auto` keep `full`. Development runs only, no held-out
+  test. On the three development runs now called Asp-N (PXD064794,
+  PXD068586, PXD051338; Sage 0.14.7, 8 threads), share of the full search's
+  proteins kept / Sage wall time / peak RSS: unspecific export (1.13.1)
+  0.25, 0.34, 0.66 / 162, 181, 7 s / 17.9, 20.8, 0.8 GB; Asp-N full 0.18,
+  0.19, 0.57 / 13, 12, 6 s / 0.3, 0.3, 0.1 GB; Asp-N semi (now the export)
+  0.25, 0.29, 0.64 / 27, 26, 5 s / 1.7, 1.7, 0.2 GB; the full search with
+  Asp-N takes 25, 25, 6 s and 2.0, 1.8, 0.4 GB.
+- `-shortlist_protease auto`: a WARN states when the tag ends call
+  `unspecific` that the exported search is unspecific and can take longer
+  than a full search. No run-time guard: no peptide-length cap made the
+  unspecific export as fast as the full search without losing identifications.
+- **`-search_shifts`: gain against an isotope-matched base, entrapment FDP
+  over 10 databases.** Development runs only (the spent held-out runs and two
+  earlier development runs); the two held-out FAIL results stand and no new
+  held-out test was run. Against a base search with the same isotope error
+  setting the option gives +0.2 to +80.3 % PSMs with Comet and 0.0 to
+  +64.7 % with Sage at 1 % FDR (means over 3 to 10 entrapment databases,
+  1 for PXD014764) (ten runs: PXD003531, PXD049248, PXD063151,
+  PXD014764, PXD065251, PXD004541 fr02 and fr09, PXD037999, PXD000001,
+  PXD073763; at least +2 % on eight of ten with each engine). The isotope
+  error setting alone gives +1.3 to +54 % (Comet). Entrapment FDP at 1 % FDR,
+  mean of 10 entrapment databases: PXD037999 Comet 1.09 % (base) and 1.21 %
+  (option), Sage 1.21 and 1.05 %; PXD003531 Comet 0.93 % (base), 1.21 %
+  (base with isotope errors 0..2), 1.19 % (option), Sage 0.95, 1.11, 1.04 %.
+  The 0.88 -> 1.28 % of the second held-out test was a single entrapment
+  database; the standard deviation between databases is 0.1 to 0.3 points.
+  The Comet export stays as it is. README and the option help say so.
+- `-species_reagents <fasta>` (experimental, off by default, with
+  `-species_call explain`): a taxon the explain call does not detect is
+  reported `present` with `call_reason` `reagent` when its tags in the listed
+  reagent proteins (`data/taxonomy/species_reagents.fasta`: porcine trypsin
+  and pepsin, bovine serum, milk and enzyme proteins, 38 entries) exceed the
+  same count on the decoy tags; new report columns `reagent_tags`,
+  `reagent_expected`; optional key `reagent_n_min` (8) in `species_call.tsv`.
+  The calls of the explain rule are unchanged. A reagent call is scored
+  neither as a true nor as a false genus call and is counted separately.
+  Development data only (62 spent held-out runs): 47 reagent calls in 37
+  runs, 40 of them with at least 3 Sage peptides in the listed proteins;
+  false genus calls per run 0.50, as for `explain` alone. Not held-out
+  tested.
+
 ## 1.13.1 (2026-11-10)
 
 No change to the program. Five test scripts compare and pass the Windows

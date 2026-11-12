@@ -3,3 +3,10 @@
 # and check byte lengths; the shipped tables are read as LF text.
 test/fixtures/** -text
 data/** -text
+
+# Frozen benchmark bytes participate in the provenance hashes. Empty final TSV
+# fields and csv.DictWriter's CRLF records are intentional, not formatting bugs.
+bench/results/tmt-ga-2026-11-11/** -text
+bench/results/tmt-ga-2026-11-11/summary.tsv whitespace=cr-at-eol
+bench/results/tmt-ga-2026-11-11/audit/engine_disagreements.tsv whitespace=-blank-at-eol
+bench/results/tmt-ga-2026-11-11/audit/failure_quality_strata.tsv whitespace=-blank-at-eol

@@ -20,6 +20,8 @@
 #include <fstream>
 #include <map>
 #include <numeric>
+#include <set>
+#include <utility>
 
 namespace FASTag::SpeciesCall
 {
@@ -71,7 +73,7 @@ namespace FASTag::SpeciesCall
       const std::string key = trim(t.substr(0, tab));
       const std::string val = trim(t.substr(tab + 1));
       if (key != "alpha" && key != "tau" && key != "n_min" && key != "decoys" && key != "version"
-          && key != "training_sha256")
+          && key != "training_sha256" && key != "reagent_n_min")
         return fail("unknown key '" + key + "' (line " + std::to_string(ln) + ")");
       if (kv.count(key)) return fail("duplicate key '" + key + "'");
       kv[key] = val;
@@ -92,6 +94,8 @@ namespace FASTag::SpeciesCall
         return fail("decoys must be an integer in [0, 1000], not '" + kv["decoys"] + "'");
       p.decoys = static_cast<int>(d);
     }
+    if (kv.count("reagent_n_min") && (!parseUInt(kv["reagent_n_min"], p.reagent_n_min) || p.reagent_n_min < 1))
+      return fail("reagent_n_min must be an integer >= 1, not '" + kv["reagent_n_min"] + "'");
     if (kv.count("version")) p.version = kv["version"];
     if (kv.count("training_sha256")) p.training_sha256 = kv["training_sha256"];
     out = p;
@@ -414,5 +418,42 @@ namespace FASTag::SpeciesCall
         s.reason = run.low_resolution ? "low_resolution" : "few_spectra";
       }
     return st;
+  }
+
+  void callReagents(std::vector<GenusStat>& st, const std::vector<ReagentHit>& hits, int decoys, const Params& params)
+  {
+    const std::size_t n = st.size();
+    const double R = static_cast<double>(std::max(1, decoys));
+    for (const ReagentHit& h : hits)
+      if (h.group < n) st[h.group].reagent = true;
+    const auto present = [&](uint32_t g) { return g < n && st[g].call == Call::Present; };
+    for (;;)
+    {
+      // ponytail: recounts all hits per step; steps <= groups with reagent proteins (two in the shipped list).
+      std::vector<std::set<uint32_t>> o(n);
+      std::vector<std::set<std::pair<int, uint32_t>>> k(n);
+      for (const ReagentHit& h : hits)
+      {
+        if (h.group >= n || present(h.group) || std::any_of(h.groups.begin(), h.groups.end(), present)) continue;
+        if (h.replicate >= 0) k[h.group].emplace(h.replicate, h.tag);
+        else if (std::find(h.groups.begin(), h.groups.end(), h.group) != h.groups.end()) o[h.group].insert(h.tag);
+      }
+      std::size_t m = 0, best = n;
+      double best_p = 1.0;
+      for (std::size_t g = 0; g < n; ++g)
+      {
+        GenusStat& s = st[g];
+        if (!s.reagent || s.call == Call::Present) continue;
+        s.reagent_tags = o[g].size();
+        s.reagent_expected = (static_cast<double>(k[g].size()) + 0.5) / R;
+        if (s.call != Call::NotDetected || s.reagent_tags < params.reagent_n_min) continue;
+        ++m;
+        const double p = poissonUpperTail(s.reagent_tags, s.reagent_expected);
+        if (best == n || p < best_p || (p == best_p && s.reagent_tags > st[best].reagent_tags)) { best = g; best_p = p; }
+      }
+      if (best == n || best_p * static_cast<double>(m) > params.alpha) break;
+      st[best].call = Call::Present;
+      st[best].reason = "reagent";
+    }
   }
 }

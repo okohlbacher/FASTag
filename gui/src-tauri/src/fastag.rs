@@ -1621,10 +1621,16 @@ mod tests {
                     d.join("a.tags.species.tsv").display().to_string()
                 ]
             );
-            // The stub writes the partial table, then prints progress 2/4:
-            // waiting for the file alone let the cancel land before that
-            // line, and the log check below failed now and then.
+            // The stub prints progress 2/4, then writes the partial table
+            // (testing/stub-fastag). Waiting for the file alone let the cancel
+            // land before that line, and the log check below failed now and
+            // then; waiting for the line alone let the check of the file run
+            // before it existed. Wait for both.
             wait_for_line(&r, "progress 2/4");
+            let until = std::time::Instant::now() + Duration::from_secs(10);
+            while !out.exists() && std::time::Instant::now() < until {
+                std::thread::sleep(Duration::from_millis(10));
+            }
             assert!(out.exists(), "the partial table is on disk");
             assert!(r.mgr.is_busy());
             cancel_of(&r.mgr);

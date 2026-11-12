@@ -30,7 +30,10 @@
 #   k. -search_engine msfragger (1.13 #18): fragger.params carries the rule
 #      (auto chymotrypsin; Asp-N semi with sense N; unspecific as nonspecific,
 #      cut '@'); with FASTAG_MSFRAGGER_JAR MSFragger 4.4.1 runs both and
-#      echoes the rules it read.
+#      echoes the rules it read;
+#   l. auto on the in-silico Asp-N MGF (post-1.13.1): the placement and the
+#      Sage export are Asp-N semi-specific; -shortlist_specificity full given,
+#      or asp-n named, keeps full specificity.
 # Exits 77 (ctest SKIP) when the binary cannot start.
 set -u
 BIN="$1"
@@ -257,6 +260,21 @@ grep -q 'but the tag ends call Arg-C' "$TMP/arl/run.log" || fail "lys-c on Arg-C
 [ ! -e "$TMP/arl/red.fasta" ] || fail "lys-c on Arg-C: -fasta_out written although refused"
 [ "$(go arlf "${AR[@]}" -out t.tsv -fasta_out red.fasta -shortlist_protease lys-c -shortlist_force)" = 0 ] \
   || fail "lys-c on Arg-C -shortlist_force: exit non-zero"
+
+# ---- l: auto on the Asp-N MGF exports Asp-N semi-specific (post-1.13.1);
+# -shortlist_specificity given, or asp-n named, keeps full specificity.
+ANS=(-out t.tsv -shortlist_out sl.tsv -fasta_out red.fasta -search_config_out sage.json)
+[ "$(go ans "${AN[@]}" "${ANS[@]}" -shortlist_protease auto)" = 0 ] || { cat "$TMP/ans/run.log" >&2; fail "auto on Asp-N: exit non-zero"; }
+grep -q '^# placement: Asp-N, semi specificity, .*(auto: the tag ends call Asp-N; semi-specific unless -shortlist_specificity is given)$' "$TMP/ans/sl.tsv" \
+  || { grep '^#' "$TMP/ans/sl.tsv" >&2; fail "auto on Asp-N: the placement is not Asp-N, semi specificity"; }
+grep -q '"cleave_at": *"D"' "$TMP/ans/sage.json" && grep -q '"semi_enzymatic": *true' "$TMP/ans/sage.json" \
+  || { cat "$TMP/ans/sage.json" >&2; fail "auto on Asp-N: the Sage export is not Asp-N semi_enzymatic"; }
+[ "$(go anfu "${AN[@]}" "${ANS[@]}" -shortlist_protease auto -shortlist_specificity full)" = 0 ] || fail "auto full on Asp-N: exit non-zero"
+grep -q '^# placement: Asp-N, full specificity' "$TMP/anfu/sl.tsv" || fail "auto on Asp-N: a given -shortlist_specificity full was not kept"
+grep -q 'semi_enzymatic' "$TMP/anfu/sage.json" && fail "auto full on Asp-N: wrote semi_enzymatic"
+[ "$(go annm "${AN[@]}" "${ANS[@]}" -shortlist_protease asp-n)" = 0 ] || fail "asp-n named on Asp-N: exit non-zero"
+grep -q '^# placement: Asp-N, full specificity' "$TMP/annm/sl.tsv" || fail "a named asp-n is not full specificity"
+grep -q 'semi_enzymatic' "$TMP/annm/sage.json" && fail "a named asp-n wrote semi_enzymatic"
 
 # ---- k: MSFragger (1.13 #18) gets the placement rule
 [ "$(go mf "${CH[@]}" -out t.tsv -fasta_out red.fasta -search_config_out fragger.params -search_engine msfragger \

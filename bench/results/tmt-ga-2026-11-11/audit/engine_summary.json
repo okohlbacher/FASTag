@@ -1,0 +1,46 @@
+[
+  {
+    "dataset": "PXD037999",
+    "engine": "Comet",
+    "sage_reference": 8270,
+    "independent_accepted": 7411,
+    "shared_accepted": 6774,
+    "same_sequence": 6773,
+    "same_modified_peptide": 6772,
+    "mapping_verified": true,
+    "method": "Comet rank1 per-spectrum min E, conservative any-decoy tie, tied-score cumulative D/T monotone q; exclude any entrapment assignments"
+  },
+  {
+    "dataset": "PXD004541_fr09",
+    "engine": "Comet",
+    "sage_reference": 11072,
+    "independent_accepted": 10030,
+    "shared_accepted": 9548,
+    "same_sequence": 9543,
+    "same_modified_peptide": 9541,
+    "mapping_verified": true,
+    "method": "Comet rank1 per-spectrum min E, conservative any-decoy tie, tied-score cumulative D/T monotone q; exclude any entrapment assignments"
+  },
+  {
+    "dataset": "PXD000001",
+    "engine": "Comet",
+    "sage_reference": 2642,
+    "independent_accepted": 1116,
+    "shared_accepted": 1101,
+    "same_sequence": 1088,
+    "same_modified_peptide": 1087,
+    "mapping_verified": false,
+    "method": "Comet rank1 per-spectrum min E, conservative any-decoy tie, tied-score cumulative D/T monotone q; exclude any entrapment assignments"
+  },
+  {
+    "dataset": "PXD000001",
+    "engine": "Mascot",
+    "sage_reference": 2642,
+    "independent_accepted": 2254,
+    "shared_accepted": 2142,
+    "same_sequence": 2132,
+    "same_modified_peptide": 2128,
+    "mapping_verified": false,
+    "method": "Deposited Mascot separate target and decoy top hits; tied-score cumulative D/T monotone q; variable modifications decoded"
+  }
+]

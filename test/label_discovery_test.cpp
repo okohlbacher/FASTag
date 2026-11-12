@@ -721,7 +721,7 @@ int main()
       if (order.empty() || order.substr(order.rfind(',') + 1) != r.section) order += "," + r.section;
     }
     CHECK(order == ",ld_run,ld_count,ld_peak,ld_site,ld_known,ld_reporter,ld_pair,ld_call", "section order %s", order.c_str());
-    CHECK(rowsOf(a, S).at("ld_run/format") == "4", "format");
+    CHECK(rowsOf(a, S).at("ld_run/format") == "5", "format");
     CHECK(a.labels == "TMT", "TMT set call %s [%s]", a.labels.c_str(), calledList(a).c_str());
     LD::Settings lr = S;
     lr.low_resolution = true;
@@ -795,6 +795,21 @@ int main()
     trap.merge(counter(tmt, 300));  // FT MS3 reporters in an ion-trap MS2 run
     LD::applyReporters(f, trap);
     CHECK(f.status == "call" && f.labels == "TMT" && f.basis == "reporter_ions", "ion-trap MS2 with MS3 reporters: %s", f.labels.c_str());
+    // format 5: TMTpro-only reporters (132-135) in at least half as many scans as the TMT reporters name TMTpro
+    const Low pro = {{126.1277, 50}, {127.1248, 40}, {132.1415, 30}, {133.1449, 30}, {120.0, 100}};
+    LD::ReporterCounter half = counter(pro, 150);
+    half.merge(counter(tmt, 150));
+    x = lf;
+    LD::applyReporters(x, half);
+    CHECK(x.labels == "TMTpro" && x.call_sites == "-" && x.basis == "reporter_ions", "TMTpro from reporters: %s", x.labels.c_str());
+    LD::ReporterCounter fifth = counter(pro, 60);
+    fifth.merge(counter(tmt, 240));
+    x = lf;
+    LD::applyReporters(x, fifth);
+    CHECK(x.labels == "TMT", "TMTpro reporters in a fifth of the TMT scans: %s", x.labels.c_str());
+    x = t;
+    LD::applyReporters(x, half);
+    CHECK(x.labels == t.labels && x.basis == "site_scan", "a site-scan TMT call stays");
   }
 
   // ---- precursor pairs (format 3): SILAC from Lys8/Arg10 partners ----
@@ -898,6 +913,56 @@ int main()
     LD::applyPairs(x, dim);
     CHECK(x.status == "no_call" && x.pairs.other == 60, "a +4.0251 pair spacing blocks the absence call (%llu)",
           static_cast<unsigned long long>(x.pairs.other));
+
+    // format 5: the absence call on ion-trap MS2 without a reporter gate
+    x = few;
+    x.reason = "low_resolution_ms2";
+    LD::applyPairs(x, many);
+    CHECK(x.status == "no_call", "no ion-trap absence call below 1500 precursors");
+    for (int i = 200; i < 1100; ++i) many.add(3.0 * i, 1200.0 + 1.7 * i, 3);
+    x = few;
+    x.reason = "low_resolution_ms2";
+    LD::applyPairs(x, many);
+    CHECK(x.status == "call" && x.labels == "label-free" && x.basis == "absence", "ion-trap absence call %s", x.reason.c_str());
+    x = few;
+    x.reason = "low_resolution_ms2";
+    x.reporter_gate = "unclear";
+    LD::applyPairs(x, many);
+    CHECK(x.status == "no_call", "no ion-trap absence call at gate unclear");
+    x = few;
+    x.reason = "low_resolution_ms2";
+    for (int i = 0; i < 150; ++i) x.reporters.add({{126.127726, 50}, {127.124761, 40}, {120.0, 100}}, 100.0);
+    LD::applyPairs(x, many);
+    CHECK(x.status == "no_call", "reporters in under 200 high-resolution scans block the ion-trap absence call");
+    // format 5: dimethyl needs the spacing (one site) and twice the spacing (two sites)
+    auto dimethyl = [&](double s, int one, int two) {
+      LD::PairCounter d = many;
+      for (int i = 0; i < one; ++i) d.add(3.0 * i + 1.0, 400.0 + 1.7 * i + s / 2, 2);
+      for (int i = 0; i < two; ++i) d.add(3.0 * (i + 100) + 1.0, 400.0 + 1.7 * (i + 100) + s, 2);
+      return d;
+    };
+    for (double s : {4.025107, 6.031812, 6.037660, 8.044366, 4.019259})
+    {
+      x = few;
+      x.reason = "low_resolution_ms2";
+      LD::applyPairs(x, dimethyl(s, 60, 40));
+      CHECK(x.status == "call" && x.labels == "Dimethyl" && x.call_sites == "-" && x.basis == "precursor_pairs" && x.pairs.dimethyl2 == 40,
+            "dimethyl call at %.4f: %s", s, x.labels.c_str());
+    }
+    x = lf;
+    LD::applyPairs(x, dimethyl(6.031812, 60, 40));
+    CHECK(x.labels == "Dimethyl" && rowsOf(x, S).at("ld_pair/dimethyl") == "yes", "dimethyl pairs replace a label-free call");
+    x = few;
+    x.reason = "low_resolution_ms2";
+    LD::applyPairs(x, dimethyl(6.031812, 60, 0));
+    CHECK(x.status == "no_call", "one spacing alone: no dimethyl call and no absence call");
+    x = extended("K:Lys8", "K", dimethyl(6.031812, 60, 40));
+    CHECK(x.labels == "K:Lys8", "a label call stays under dimethyl pairs");
+    LD::PairCounter lys4 = dimethyl(4.025107, 60, 40);  // SILAC with Lys4: the Arg6 spacing is stronger
+    for (int i = 0; i < 80; ++i) lys4.add(3.0 * (i + 200) + 1.0, 400.0 + 1.7 * (i + 200) + 6.020129 / 2, 2);
+    x = few;
+    LD::applyPairs(x, lys4);
+    CHECK(x.status == "no_call" && !x.pairs.dimethyl(), "Lys4 SILAC is not dimethyl");
   }
 
   if (failures == 0) std::printf("label_discovery_test: all passed\n");

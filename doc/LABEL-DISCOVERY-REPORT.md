@@ -1,6 +1,13 @@
-# The label discovery report (`-label_discovery_out`), format 4
+# The label discovery report (`-label_discovery_out`), format 5
 
-Experimental and opt-in. It failed its held-out test (acceptance/1.13
+Experimental and opt-in. Format 5 (post-1.13.1: TMTpro from the TMTpro-only reporters 132 to 135, a
+`Dimethyl` call from precursor pairs at the dimethyl spacings, the absence rule also on ion-trap MS2) passed
+its held-out test (acceptance/1.13.1 PREREG-labeldisc4.md; 144 public runs from new projects, scored once on
+2026-11-11): 0 of 42 label-free runs got a label call, weighted accuracy 0.954, 129 of 144 runs right by
+family against 125 for Param-Medic 0.2, recall TMT 17/17, TMTpro 20/20, iTRAQ 13/15, SILAC 14/22,
+dimethyl 24/28, and 5 of 102 labelled runs called label-free (criterion at most 0.05, met with no margin).
+
+The first format failed its held-out test (acceptance/1.13
 PREREG-labeldisc.md; 190 public runs, scored once on 2026-11-10):
 
 | Endpoint | Verdict | Result |

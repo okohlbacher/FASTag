@@ -231,6 +231,7 @@ install(FILES "${CMAKE_CURRENT_SOURCE_DIR}/data/taxonomy/nodes.dmp"
               "${CMAKE_CURRENT_SOURCE_DIR}/data/taxonomy/README.md"
               "${CMAKE_CURRENT_SOURCE_DIR}/data/taxonomy/reference-set.tsv"
               "${CMAKE_CURRENT_SOURCE_DIR}/data/taxonomy/species_call.tsv"
+              "${CMAKE_CURRENT_SOURCE_DIR}/data/taxonomy/species_reagents.fasta"
         DESTINATION share/FASTag/taxonomy)
 
 add_executable(buildtaxdb src/buildtaxdb.cpp)
@@ -295,7 +296,7 @@ if(FASTAG_BUILD_TESTS)
   # ---- 1.13 #18: unit tests ----
   set(FASTAG_UNIT_TESTS_B113_MSFRAGGER msfragger_config_test)
   # ---- 1.13: unit tests ----
-  set(FASTAG_UNIT_TESTS_113 complement_tol_test cleavage_test)
+  set(FASTAG_UNIT_TESTS_113 complement_tol_test cleavage_test tmt_pseudo_test)
   foreach(t ${FASTAG_UNIT_TESTS} ${FASTAG_UNIT_TESTS_E} ${FASTAG_UNIT_TESTS_A} ${FASTAG_UNIT_TESTS_D} ${FASTAG_UNIT_TESTS_F} ${FASTAG_UNIT_TESTS_113}
             ${FASTAG_UNIT_TESTS_B113_MSFRAGGER} ${FASTAG_UNIT_TESTS_DIGQUAL} ${FASTAG_UNIT_TESTS_LD})
     add_executable(${t} test/${t}.cpp)

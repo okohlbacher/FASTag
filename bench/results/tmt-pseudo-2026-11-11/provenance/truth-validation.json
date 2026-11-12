@@ -1,0 +1,35 @@
+{
+  "manifest_sha256": "39f91e71f4bbeca2c3c9204383dab559359f3b5d8d101835356abdae94b181a9",
+  "datasets": [
+    {
+      "id": "PXD004541_fr02",
+      "truth_psms": 11870,
+      "strict_actual_notation_checks": 200,
+      "sha256_verified": true
+    },
+    {
+      "id": "PXD037999",
+      "truth_psms": 8270,
+      "strict_actual_notation_checks": 200,
+      "sha256_verified": true
+    },
+    {
+      "id": "PXD000001",
+      "truth_psms": 2642,
+      "strict_actual_notation_checks": 200,
+      "sha256_verified": true
+    },
+    {
+      "id": "PXD004541_fr09",
+      "truth_psms": 11072,
+      "strict_actual_notation_checks": 200,
+      "sha256_verified": true
+    },
+    {
+      "id": "PXD003531",
+      "truth_psms": 8254,
+      "strict_actual_notation_checks": 200,
+      "sha256_verified": true
+    }
+  ]
+}

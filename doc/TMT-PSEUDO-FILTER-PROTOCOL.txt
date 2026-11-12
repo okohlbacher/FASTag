@@ -1,0 +1,66 @@
+TMT pseudo-residue filter experiment — frozen 2026-11-11 before scoring
+
+Objective
+Test whether automatically recognizing TMT6/10 mass patterns and removing
+specific tag-boundary artifacts improves recall@50 and rank-1 accuracy.
+This is an experimental optional mode, not a default change.
+
+Development provenance
+The rules were motivated by the complete PXD004541 DMSO1 fr02 terminal-gap
+analysis on 2026-11-11. That file is development data, not held-out evidence.
+Independent validation: PXD037999 and PXD000001; within-project fr09 if
+available. Label-free control: PXD003531. Truth is frozen Sage rank-1 target
+PSMs at spectrum q <= 0.01, excluding entrapment proteins. Exactly one input
+file must match each truth table; preserve chemistry and input/truth hashes.
+
+Detector
+Deterministic probe of up to 1,024 MS2 spectra spread across the input.
+Use four-residue ungapped, unextended tags and retain E <= 1 evidence.
+Count spectra, not tag rows. At least 100 spectra must supply eligible tags.
+N-site: n=L or c=L-H2O. K-site: c=K+L or n=K+L+H2O.
+L=229.162932 Da. Each site requires >= max(20,ceil(1% of eligible spectra)).
+N window +/-0.020 Da; C window +/-0.006 Da.
+Abstain if the analogous two-site gate also passes for TMTpro L=304.207146.
+Auto is limited to ppm fragment tolerances; explicit on is available for
+controlled experiments. Only b/y tags can be filtered. A streaming input
+cannot supply this prepass and must not silently act as automatic detection.
+
+Narrow filter (mass condition AND sequence condition)
+  n near L-G and first residue is unmodified G;
+  n near L-A and first residue is unmodified A;
+  c near L-H2O-G and last residue is unmodified G;
+  c near L-H2O-A and last residue is unmodified A;
+  c near L and last residue is bare K (not a fixed/variable modified K).
+Same windows as detection. Apply after scoring but before deduplication and
+the top-N cap; retain original candidate multiplicity and E-values.
+Do not reject ordinary residue flanks, a-ion counterparts, or all low masses.
+
+Secondary reporter filter
+Separately test deletion of b/y charge-1 tags whose raw C flank plus H2O
+plus proton equals a TMT6/10 reporter mass. It must use the same TMT gate.
+Report this separately from narrow pseudo-residue removal.
+
+Arms and settings
+Baseline release1.13.1; new binary default/off; forced narrow on; automatic
+narrow; automatic narrow plus reporter filter. Primary seed length4, no
+extension, one ordinary 2-residue gap, max50 tags, maxE20 before gap penalty100,
+max400 peaks,10 per window,20ppm on these high-resolution HCD runs.
+TMT datasets: compare within each of two unchanged-alphabet configurations:
+(1) label-blind (correct C treatment and variable mods, omit TMT);
+(2) label-aware (also fixed TMT K/N). Never attribute an alphabet change to
+filter efficacy. Label-free control uses its correct chemistry only.
+
+Scoring and reporting
+Primary: existing paper rule, tag or reverse sequence match (I=L) and at
+least one matching flank at the same peptide position, +/-0.05Da.
+Supplement: additionally require every residue mass (fixed+variable mods)
+to match the truth in that orientation. All truth spectra are in both
+denominators; no output is a miss. Report recall@50, rank1accuracy, counts,
+paired gains/losses and fraction of spectra with output. Do not interpret
+score-filtered subset accuracy as whole-run accuracy or E-value as FDR.
+Three serial timing repetitions per cell in randomized arm order on one
+host with fixed threads, preserving all outcomes and hash comparisons.
+Default-off must be byte-identical to baseline. The automatic label-free
+control should abstain and remain byte-identical. Report detector outcomes,
+probe counts, end-to-end timing including detection and output, and all
+failures rather than changing rules after looking at validation outcomes.

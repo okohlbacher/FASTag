@@ -78,6 +78,13 @@ namespace FASTag::Cleavage
     /// whose cleavage sites nest with the rule's (Trypsin vs Lys-C or Arg-C):
     /// the caller WARNs.
     bool mismatch = false;
+    /// `auto` and the tag ends call `unspecific`: the exported search is
+    /// unspecific and can take longer than a full search with the true
+    /// protease (post-1.13.1, aspn); the caller WARNs.
+    bool auto_unspecific = false;
+    /// `auto` called Asp-N and -shortlist_specificity was not given: the
+    /// specificity is Semi (post-1.13.1, aspn; development runs only).
+    bool auto_semi = false;
     std::string reason;  ///< one short phrase for the log and the TSV header
   };
 
@@ -101,7 +108,13 @@ namespace FASTag::Cleavage
   ///               other protease and is never a contradiction. A called model
   ///               without a rule: refused when NonTryptic, or Compatible for
   ///               a rule that is not trypsin-compatible.
-  Choice choose(const std::string& option, Specificity spec, const FASTag::Shortlist::ProteaseVerdict& v);
+  /// @p spec_given: the user set -shortlist_specificity. When not, an Asp-N
+  /// call under `auto` is kept and exported semi-specific (Choice::auto_semi):
+  /// Asp-N digests hold many semi-specific and E-cleaved peptides, and the
+  /// full-specificity shortlist kept fewer proteins than the unspecific one
+  /// it replaces on the development runs. A named `asp-n` keeps @p spec.
+  Choice choose(const std::string& option, Specificity spec, const FASTag::Shortlist::ProteaseVerdict& v,
+                bool spec_given = true);
 
   /// The engine's digestion for a rule: its residues, semi = 1 terminus,
   /// and an unspecific rule or Specificity::None as unspecific (Sage

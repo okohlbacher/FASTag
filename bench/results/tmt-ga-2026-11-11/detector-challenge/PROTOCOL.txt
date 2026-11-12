@@ -1,0 +1,34 @@
+Detector challenge, 2026-11-11
+
+The 22-file manifest was selected using archived label and acquisition metadata,
+before observing the new narrow gate's decisions. It is a convenience challenge
+of a corpus previously used for broad label-discovery development, not a fresh
+formal held-out validation. FASTag's broad label-discovery calls are not truth.
+Truth sources are cached public PRIDE protocols and the independent acquisition
+and reporter-ion scan preserved here. Primary IT-MS2 tolerance is 0.3 Da; an
+additional 20-ppm run is an intentionally mismatched tolerance stress test.
+The other primary runs use 20 ppm. All source checksums are verified.
+
+The frozen old feature binary is 81d2d34df21c1d3f752e947fcded203ace1b3ee820190d4bd8ad8d17672b07eb.
+The GA-only change preserves the gate source; these results apply to that gate.
+Normal output is restricted to one randomly chosen input spectrum, while the
+gate itself uses its unchanged deterministic 1,024-MS2 probe. These timings are
+not throughput benchmarks and are not compared with the main experiment.
+
+Synthetic extension: mixed_probe.py was launched before this note was written;
+the expected checks below were recorded before inspecting any mixture result.
+There is no outcome-dependent choice of spectra, thresholds, or mixture ratios.
+Select 1,024 positive-charge, nonempty MS2 spectra independently from each of
+PXD014616 (TMT), PXD055089 (TMTpro), PXD014274 (label-free) by shuffling all input
+spectrum IDs with seed 1947. Assemble MGF files with seed 402. Preserve all
+peaks and precursor charges. Ratios use spectrum counts, not intensities.
+
+Expected checks: pure TMT on; pure TMTpro and pure label-free off. TMT:TMTpro
+512:512 and 922:102 should be vetoed if both pro site counts reach the frozen
+20-count minimum. TMT:label-free 512:512 and 102:922 test whether a global
+positive decision is possible for a partially labelled file; on is compatible
+with detecting presence, but cannot establish that all spectra are labelled.
+These are mixtures of independently acquired spectra, not co-isolated/chimeric
+spectra, and cannot validate quantitative mixing proportions in an experiment.
+
+No detector or production source is edited or tuned by this challenge.

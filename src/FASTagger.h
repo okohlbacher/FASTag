@@ -113,6 +113,10 @@ namespace FASTag
     /// tags survive the cap. Off by default (not provably recall-neutral
     /// under a cap).
     bool   diversity      = false;
+    /// Experimental TMT6/10 endpoint-artifact filters. The CLI resolves auto
+    /// detection before tagging. No scores or candidate multiplicities change.
+    bool   tmt_pseudo_filter = false;
+    bool   tmt_reporter_filter = false;
     /// Emit per-residue confidences (Tag::res_conf). Off by default so the
     /// hot path allocates nothing extra and the TSV schema is unchanged.
     bool   per_residue_conf = false;

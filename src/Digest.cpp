@@ -497,6 +497,12 @@ namespace FASTag::Digest
     return r;
   }
 
+  void softenNterm(ModelTable& table, std::string_view name, double site_share)
+  {
+    for (Model& m : table.models)
+      if (m.name == name && !m.n_bg) m.n = mix(m.n, table.bg_n, 1.0 - site_share);
+  }
+
   void rankScores(Classification& r)
   {
     std::vector<int> rk(r.scores.size());
