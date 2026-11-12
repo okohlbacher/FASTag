@@ -1222,33 +1222,48 @@ jobs:
           gh release upload "${{ inputs.release_tag || github.ref_name }}" FASTag-windows-x64.zip --clobber \
             --repo "${{ github.repository }}"
 
-  # ------------------------------------------- installed app on ARM64
-  # The same installed-app check on Windows on ARM64, where the x64 app and
-  # CLI run emulated. 1.13.2 shipped a CLI that died there before main()
-  # (0xC0000142: mimalloc-redirect.dll's DllMain fails against the ARM64
-  # system ucrtbase.dll); x64 runners could not see it.
-  installed-app-arm64:
+  # ------------------------------------------- installed app, x64 + ARM64
+  # The installer as users get it, on x64 and on Windows on ARM64 (where the
+  # x64 app and CLI run emulated; 1.13.0-1.13.2 shipped a CLI that died there
+  # before main() with 0xC0000142, invisible on x64 runners):
+  #   - tools/windows_installed_check.ps1: silent install, the app's own
+  #     start-up probe, the bundled FASTag.exe --help, -write_ini and a tagging
+  #     run from the installed layout;
+  #   - the release zip's FASTag.bat against that CLI;
+  #   - gui/e2e-tauri/windows.test.mjs through tauri-driver: Export tags on
+  #     the mzML and MGF fixtures (tags TSV identical to the CLI's own run),
+  #     the Tags table, the spectrum inspector, Characterize with its Overview
+  #     and reports, and a refused run quoting FASTag's reason. Screenshots
+  #     and the record are uploaded.
+  installed-app:
     if: ${{ !cancelled() && ((startsWith(github.ref, 'refs/tags/v') || inputs.release_tag != '') || inputs.gui_dry_run) }}
     needs: [windows-x64]
-    runs-on: windows-11-arm
-    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, windows-11-arm]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
-          sparse-checkout: tools
+          sparse-checkout: |
+            tools
+            test/fixtures
+            gui/e2e-tauri
+            CMakeLists.txt
+          sparse-checkout-cone-mode: false
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
         with:
           name: FASTag-gui-windows-x64-installer-check
           path: installer
-      - name: Installed-app check (Windows on ARM64)
+      - name: Installed-app check
         shell: pwsh
         run: |
           $i = Get-ChildItem installer -Recurse -Filter *-setup.exe | Select-Object -First 1
           ./tools/windows_installed_check.ps1 -Installer $i.FullName -Dest "$env:RUNNER_TEMP\FASTag-app" -Out "$env:RUNNER_TEMP\installed-check" -Keep
           if ($LASTEXITCODE) { exit $LASTEXITCODE }
-      # The release zip's FASTag.bat applies the same ARM64 rule; run it, the
-      # way a zip user does, against the installed CLI renamed as in the zip.
-      - name: The zip's FASTag.bat on ARM64
+      - name: The zip's FASTag.bat
         shell: pwsh
         run: |
           $bin = "$env:RUNNER_TEMP\FASTag-app\resources\fastag\bin"
@@ -1256,9 +1271,41 @@ jobs:
           Copy-Item (Get-ChildItem installer -Recurse -Filter FASTag.bat | Select-Object -First 1).FullName "$bin\FASTag.bat"
           $o = cmd /c "`"$bin\FASTag.bat`" --help" 2>&1 | Out-String
           $code = $LASTEXITCODE
-          Write-Host ("FASTag.bat --help: exit {0} (0x{0:X8}); PROCESSOR_IDENTIFIER={1}" -f $code, $env:PROCESSOR_IDENTIFIER)
-          if ($code -ne 0 -or $o -notmatch 'Version:\s*[0-9]') { Write-Host $o; Write-Host "::error::FASTag.bat cannot start the CLI on ARM64"; exit 1 }
-          Start-Process "$env:RUNNER_TEMP\FASTag-app\uninstall.exe" -ArgumentList '/S' -Wait
+          Write-Host ("FASTag.bat --help: exit {0} (0x{0:X8}); PROCESSOR_ARCHITECTURE={1}; PROCESSOR_IDENTIFIER={2}" -f $code, $env:PROCESSOR_ARCHITECTURE, $env:PROCESSOR_IDENTIFIER)
+          Remove-Item "$bin\FASTag.core.exe", "$bin\FASTag.bat"
+          if ($code -ne 0 -or $o -notmatch 'Version:\s*[0-9]') { Write-Host $o; Write-Host "::error::FASTag.bat cannot start the CLI"; exit 1 }
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
+        with:
+          node-version: 24
+      - name: tauri-driver
+        shell: pwsh
+        run: |
+          if (-not (Get-Command cargo -ErrorAction SilentlyContinue)) {
+            Invoke-WebRequest https://win.rustup.rs/$(if ($env:PROCESSOR_ARCHITECTURE -eq 'ARM64') { 'aarch64' } else { 'x86_64' }) -OutFile rustup-init.exe
+            ./rustup-init.exe -y --profile minimal
+            "$env:USERPROFILE\.cargo\bin" | Out-File -FilePath $env:GITHUB_PATH -Append -Encoding utf8
+            $env:PATH = "$env:USERPROFILE\.cargo\bin;$env:PATH"
+          }
+          cargo install tauri-driver --version 2.1.0 --locked
+      - name: GUI end-to-end (installed app, real CLI)
+        shell: pwsh
+        run: |
+          ./gui/e2e-tauri/run-windows.ps1 -App "$env:RUNNER_TEMP\FASTag-app\fastag.exe" -Out "$env:RUNNER_TEMP\e2e"
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        if: always()
+        with:
+          name: FASTag-gui-e2e-${{ matrix.os }}
+          path: |
+            ${{ runner.temp }}/e2e/screens
+            ${{ runner.temp }}/e2e/windows-e2e.json
+            ${{ runner.temp }}/e2e/tauri-driver.log*
+            ${{ runner.temp }}/installed-check
+          if-no-files-found: warn
+      - name: Uninstall
+        if: always()
+        shell: pwsh
+        run: if (Test-Path "$env:RUNNER_TEMP\FASTag-app\uninstall.exe") { Start-Process "$env:RUNNER_TEMP\FASTag-app\uninstall.exe" -ArgumentList '/S' -Wait }
 
   # ------------------------------------------------- release completeness
   # Asserts the Windows zip only; ci.yml's mirror job asserts the unix

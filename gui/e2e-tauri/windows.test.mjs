@@ -1,0 +1,243 @@
+// End-to-end specs of the INSTALLED Windows app with its real bundled CLI
+// (tauri-driver + msedgedriver; run-windows.ps1 starts them). Where
+// app.test.mjs covers the Linux debug build, this drives what a user runs:
+// the app the NSIS installer put on disk, its resources\fastag CLI, the
+// public fixtures. Native dialogs cannot be driven, so a spec replaces only
+// window.fastag.pickInput with a function returning its path; everything
+// else goes through the real invoke, the Rust backend and the CLI.
+//
+// Environment (run-windows.ps1 sets it):
+//   FASTAG_APP    the installed app (<install dir>\fastag.exe)
+//   E2E_VERSION   the version the bundled CLI must report
+//   E2E_MZML      the public E. coli fixture (test/fixtures/Ecoli_MS2_small.mzML)
+//   E2E_MGF       the same spectra as MGF (test/fixtures/Ecoli_MS2_small.mgf)
+//   E2E_OUT       results: windows-e2e.json and screens\*.png
+import { test, after } from 'node:test'
+import assert from 'node:assert/strict'
+import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { basename, dirname, join } from 'node:path'
+import { spawnSync } from 'node:child_process'
+import { ELEMENT, Session, until } from './wd.mjs'
+
+const APP = process.env.FASTAG_APP
+const OUT = process.env.E2E_OUT || tmpdir()
+const SCREENS = join(OUT, 'screens')
+const CLI = join(dirname(APP), 'resources', 'fastag', 'bin', 'FASTag.exe')
+assert.ok(APP && existsSync(APP), `FASTAG_APP (${APP}) is not a file`)
+assert.ok(existsSync(CLI), `no bundled CLI at ${CLI}`)
+mkdirSync(SCREENS, { recursive: true })
+
+const record = { recorded: new Date().toISOString(), app: APP, steps: {} }
+after(() => writeFileSync(join(OUT, 'windows-e2e.json'), JSON.stringify(record, null, 2) + '\n'))
+
+const tagsOf = (input) => join(dirname(input), basename(input).replace(/\.[^.]+$/, '') + '.tags.tsv')
+const count = (s) => Number(s.replace(/,/g, ''))
+
+/** Processes whose executable is @p exe (a full path), by path: the app and
+ *  its CLI share the image name fastag.exe. */
+function running(exe) {
+  const ps = `@(Get-CimInstance Win32_Process | Where-Object { $_.ExecutablePath -eq '${exe.replace(/'/g, "''")}' }).Count`
+  const r = spawnSync('powershell', ['-NoProfile', '-Command', ps], { encoding: 'utf8' })
+  return Number(r.stdout.trim() || 0)
+}
+
+async function shot(s, name) {
+  const b64 = await s.cmd('GET', '/screenshot')
+  writeFileSync(join(SCREENS, `${name}.png`), Buffer.from(b64, 'base64'))
+}
+
+/** A fresh copy of @p src in a folder of its own, named @p name. */
+function copyIn(src, name) {
+  const d = mkdtempSync(join(tmpdir(), 'fastag-wd-'))
+  const p = join(d, name)
+  copyFileSync(src, p)
+  return p
+}
+
+/** Launch the app, wait for the probe, run @p fn, close the app. */
+async function withApp(fn) {
+  await until('the previous app to exit', () => running(APP) === 0, 30000, 300)
+  const s = await Session.start(APP)
+  try {
+    await s.waitText(/FASTag ready/, 90000)
+    // Every run's parameters, for the CLI comparison.
+    await s.exec(`const orig = window.fastag.run; window.__runs = [];
+      window.fastag.run = (params, onEvent) => { window.__runs.push(params); return orig(params, onEvent) }`)
+    return await fn(s)
+  } finally {
+    await s.end()
+    await until('the app to exit', () => running(APP) === 0, 30000, 300).catch(() =>
+      spawnSync('taskkill', ['/F', '/IM', 'fastag.exe', '/FI', `WINDOWTITLE eq FASTag`]))
+  }
+}
+
+async function view(s, id) {
+  const nav = await until(`the ${id} view button`, async () => {
+    const el = await s.exec(`return document.querySelector('nav[aria-label="Views"] button[data-view="' + arguments[0] + '"]')`, id)
+    return el && (el[ELEMENT] ?? Object.values(el)[0])
+  })
+  await s.click(nav)
+  await until(`the ${id} view`, () => s.exec(`const v = document.querySelector('.view[data-view="' + arguments[0] + '"]'); return !!v && !v.hidden`, id), 5000)
+}
+
+/** Pick the Setup task whose card reads @p label. */
+async function task(s, label) {
+  await view(s, 'setup')
+  const ok = await s.exec(`const want = arguments[0];
+    for (const l of document.querySelectorAll('label')) {
+      if ((l.textContent || '').includes(want)) { const r = l.querySelector('input[type=radio]'); if (r) { r.click(); return true } }
+    }
+    return false`, label)
+  assert.ok(ok, `no task "${label}" on Setup`)
+}
+
+async function chooseInput(s, path) {
+  await s.exec('const p = arguments[0]; window.fastag.pickInput = async () => p', path)
+  await s.click(await s.button('Choose file…'))
+}
+
+/** Run the CLI itself with the argv the app built for its last run, writing
+ *  to @p out instead; the app's own command_line (fastag.rs) builds it. */
+async function cliTwin(s, out) {
+  const params = await s.exec('return window.__runs[window.__runs.length - 1]')
+  const argv = await s.execAsync('const [p, done] = arguments; window.fastag.commandLine(p).then(done, (e) => done({ error: String(e) }))', params)
+  assert.ok(Array.isArray(argv), JSON.stringify(argv))
+  const args = argv.slice(1)
+  const i = args.indexOf('-out')
+  assert.ok(i >= 0, `no -out in ${JSON.stringify(argv)}`)
+  args[i + 1] = out
+  const env = { ...process.env, OPENMS_DATA_PATH: join(dirname(CLI), '..', 'share', 'OpenMS'), OPENBLAS_NUM_THREADS: '1' }
+  const r = spawnSync(CLI, args, { encoding: 'utf8', env, cwd: dirname(out), windowsHide: true })
+  assert.equal(r.status, 0, `the CLI twin exited ${r.status}: ${(r.stderr || '').slice(-1500)}`)
+  return { argv, args }
+}
+
+/** Tags TSVs equal apart from provenance comment lines (# ... lines naming
+ *  paths, dates or the command). */
+function sameTags(a, b) {
+  const body = (p) => readFileSync(p, 'utf8').split(/\r?\n/).filter((l) => !l.startsWith('#'))
+  const x = body(a)
+  const y = body(b)
+  if (x.length !== y.length) return `line counts differ: ${x.length} vs ${y.length}`
+  for (let k = 0; k < x.length; k++) if (x[k] !== y[k]) return `line ${k + 1} differs:\n${x[k]}\n${y[k]}`
+  return null
+}
+
+test('probe: the installed app runs its bundled CLI', { timeout: 180000 }, () =>
+  withApp(async (s) => {
+    const info = await s.execAsync('const done = arguments[arguments.length - 1]; window.fastag.probe().then(done, (e) => done({ error: String(e) }))')
+    record.steps.probe = info
+    assert.equal(info.ok, true, JSON.stringify(info))
+    assert.equal(info.source, 'bundled', JSON.stringify(info))
+    assert.equal(info.version, process.env.E2E_VERSION)
+    await shot(s, '01-setup-ready')
+  }))
+
+for (const [kind, env, name] of [
+  ['mzML', 'E2E_MZML', 'ecoli.mzML'],
+  ['MGF', 'E2E_MGF', 'ecoli.mgf']
+]) {
+  test(`export tags (${kind}): run with defaults, the Tags table, the CLI's own output`, { timeout: 600000 }, () =>
+    withApp(async (s) => {
+      await task(s, 'Export tags')
+      const input = copyIn(process.env[env], name)
+      await chooseInput(s, input)
+      await s.click(await s.button(`Run on ${name}`))
+      const m = await s.waitText(/Showing ([\d,]+) of ([\d,]+)/, 480000)
+      const out = tagsOf(input)
+      assert.ok(existsSync(out), `${out} was not written`)
+      const rows = readFileSync(out, 'utf8').split(/\r?\n/).filter((l) => l && !l.startsWith('#')).length - 1
+      assert.ok(rows > 0, 'the run wrote no tags')
+      assert.equal(count(m[2]), rows, 'the table total is not the row count of the file')
+      await shot(s, `02-tags-${kind}`)
+      const twin = join(dirname(input), 'cli-twin.tags.tsv')
+      const { argv } = await cliTwin(s, twin)
+      const diff = sameTags(out, twin)
+      record.steps[`export-${kind}`] = { rows, argv, identical: diff === null, diff }
+      assert.equal(diff, null, diff)
+      if (kind === 'mzML') {
+        // The spectrum inspector on the first tagged row.
+        const row = await until('the first row', async () => {
+          const el = await s.exec("return document.querySelector('.rt-rows .rt-row')")
+          return el && (el[ELEMENT] ?? Object.values(el)[0])
+        })
+        const spectrum = await s.exec("return document.querySelector('.rt-rows .rt-row [role=gridcell]').getAttribute('title')")
+        await s.click(row)
+        await s.click(await s.button('Open in Spectrum'))
+        let last = ''
+        const verdict = await until('the ladder', async () => {
+          const v = await s.exec(`const v = document.querySelector('[data-testid=ladder-verdict]');
+            const p = document.querySelector('.sp[role=region]');
+            return { verdict: v ? v.textContent : '', text: p ? p.innerText.replace(/\\s+/g, ' ').slice(0, 800) : '(no Spectrum panel)' }`)
+          last = v.text
+          return v.verdict
+        }, 90000, 200).catch((e) => { throw new Error(`${e.message}; the panel shows: ${last}`) })
+        assert.match(verdict, /^on \d+ of \d+ positions within the run's tolerance$/, verdict)
+        assert.equal(await s.exec("return document.querySelector('.sp-head h2').textContent"), spectrum)
+        record.steps.spectrum = { spectrum, verdict }
+        await shot(s, '03-spectrum-inspector')
+      }
+    }))
+}
+
+test('characterize: species, digest, label reports and the Overview', { timeout: 900000 }, () =>
+  withApp(async (s) => {
+    await task(s, 'Characterize a run')
+    const input = copyIn(process.env.E2E_MZML, 'char.mzML')
+    await chooseInput(s, input)
+    await shot(s, '04-characterize-setup')
+    await s.click(await s.button('Run on char.mzML'))
+    await until('the Overview', () => s.exec(`const t = [...document.querySelectorAll('[role=tab]')].find((t) => t.textContent.trim() === 'Overview');
+      return !!t && t.getAttribute('aria-selected') === 'true' && !!document.querySelector('.view[data-view="results"]:not([hidden])')`), 840000, 500)
+    const overview = await s.exec("const p = document.querySelector('[role=tabpanel]:not([hidden])'); return p ? p.innerText : ''")
+    await shot(s, '05-overview')
+    const tabs = await s.exec("return [...document.querySelectorAll('[role=tab]')].map((t) => t.textContent.trim())")
+    record.steps.characterize = { tabs, overview: overview.slice(0, 1500) }
+    assert.match(overview, /Overview of/)
+    const dir = dirname(input)
+    for (const f of ['digest.tsv', 'label.tsv']) assert.ok(existsSync(join(dir, f)), `${f} was not written next to the input (${dir})`)
+    // Each report tab renders.
+    for (const want of tabs.filter((t) => t !== 'Overview')) {
+      await s.exec(`const t = [...document.querySelectorAll('[role=tab]')].find((t) => t.textContent.trim() === arguments[0]); t && t.click()`, want)
+      await until(`the ${want} tab`, () => s.exec(`const t = [...document.querySelectorAll('[role=tab]')].find((t) => t.textContent.trim() === arguments[0]); return t && t.getAttribute('aria-selected') === 'true'`, want), 10000)
+      const text = await until(`the ${want} panel`, async () => {
+        const t = await s.exec("const p = document.querySelector('[role=tabpanel]:not([hidden])'); return p ? p.innerText.trim() : ''")
+        return t.length > 20 && t
+      }, 30000, 200)
+      record.steps.characterize[`tab:${want}`] = text.slice(0, 300)
+      await shot(s, `06-report-${want.replace(/[^A-Za-z0-9]+/g, '_')}`)
+    }
+  }))
+
+test('refusal: a run FASTag rejects shows its reason', { timeout: 300000 }, () =>
+  withApp(async (s) => {
+    await task(s, 'Export tags')
+    // DIA spectra: FASTag refuses them (exit 11) and says why.
+    const input = copyIn(process.env.E2E_REFUSED, 'dia_like.mzML')
+    const d = dirname(input)
+    const env = { ...process.env, OPENMS_DATA_PATH: join(dirname(CLI), '..', 'share', 'OpenMS'), OPENBLAS_NUM_THREADS: '1' }
+    const r = spawnSync(CLI, ['-in', input, '-out', join(d, 'cli.tsv')], { encoding: 'utf8', env, windowsHide: true })
+    const cliText = (r.stdout || '') + (r.stderr || '')
+    assert.notEqual(r.status, 0, 'the CLI accepted the DIA input')
+    await chooseInput(s, input)
+    // The pre-run input check may already stop the run; otherwise Run, and
+    // the failure banner. Either way the app must quote FASTag's reason.
+    const run = await s.button('Run on dia_like.mzML', 30000).catch(() => null)
+    let shown = ''
+    let where = 'pre-run check'
+    if (run) {
+      await s.click(run)
+      where = 'failure banner'
+      shown = await until('the failure banner', () => s.exec("const b = document.querySelector('.failure[role=alert]'); return b ? b.innerText : ''"), 120000, 300)
+    } else {
+      shown = await s.bodyText()
+    }
+    await shot(s, '07-refusal')
+    // The CLI's reason: its last line naming DIA (FASTag's refusal message).
+    const reason = cliText.split(/\r?\n/).map((l) => l.trim()).filter((l) => /DIA/.test(l)).pop() || ''
+    record.steps.refusal = { where, cliExit: r.status, reason, shown: shown.slice(0, 1500) }
+    assert.ok(reason, `no DIA reason in the CLI's output: ${cliText.slice(-800)}`)
+    const words = reason.replace(/^[^:]*error[^:]*:\s*/i, '').split(/\s+/).filter((w) => w.length > 4).slice(0, 5)
+    for (const w of words) assert.ok(shown.includes(w), `the ${where} does not quote FASTag's reason "${reason}"; it shows: ${shown.slice(0, 800)}`)
+  }))
