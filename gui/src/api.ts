@@ -28,6 +28,7 @@ import type {
   SpectrumDump,
   SpectrumSupport,
   TaxdbInfo,
+  TaxonomyStatus,
   TaxonomyDump
 } from './types'
 import { parseSpecies } from './results/species'
@@ -162,6 +163,7 @@ const api: FastagApi = {
   report: (path: string) => invoke<string | null>('report_text', { path }),
   reportHead: (path: string) => invoke<string | null>('report_head', { path }),
   taxdbInfo: (explicit?: string) => invoke<TaxdbInfo | null>('taxdb_info', { explicit }),
+  taxonomyStatus: (explicit?: string) => invoke<TaxonomyStatus>('taxonomy_status', { explicit }),
 
   loadSettings: () => invoke<Settings>('load_settings'),
   saveLast: (values: Record<string, unknown>) => invoke<boolean>('save_last', { values }),

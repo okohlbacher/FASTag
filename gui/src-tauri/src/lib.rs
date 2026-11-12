@@ -145,6 +145,7 @@ pub fn run() {
             denovo::denovo_export,
             drop::folder_spectra_list,
             species::taxdb_info,
+            species::taxonomy_status,
             spectrum::spectrum_support,
             spectrum::spectrum_peaks,
             settings::load_settings,
