@@ -1547,11 +1547,11 @@ protected:
     using S = FASTag::Probe::Status;
     switch (s)
     {
-      case S::Ok: return EXECUTION_OK;
-      case S::Unsupported: return ILLEGAL_PARAMETERS;
-      case S::NotReadable: return INPUT_FILE_NOT_READABLE;
-      case S::Empty: return INPUT_FILE_EMPTY;
-      case S::Corrupt: break;
+      case S::OK: return EXECUTION_OK;
+      case S::UNSUPPORTED: return ILLEGAL_PARAMETERS;
+      case S::NOT_READABLE: return INPUT_FILE_NOT_READABLE;
+      case S::EMPTY: return INPUT_FILE_EMPTY;
+      case S::CORRUPT: break;
     }
     return INPUT_FILE_CORRUPT;
   }
@@ -1579,7 +1579,7 @@ protected:
     opt.version = FASTAG_VERSION;
     const std::string file = getStringOption_("probe_input");
     const P::ProbeOutput r = P::probeInput(file, opt);
-    if (r.status != P::Status::Ok)
+    if (r.status != P::Status::OK)
     {
       OPENMS_LOG_ERROR << "-probe_input: " << r.error << std::endl;
       return probeExit_(r.status);
@@ -1626,7 +1626,7 @@ protected:
     opt.ion_mode = FASTag::IonSeries::modeFromString(stringOption_("ion_series"));
     const std::string id = getStringOption_("dump_spectrum");
     const P::DumpOutput r = P::dumpSpectrum(in, id, opt);
-    if (r.status != P::Status::Ok)
+    if (r.status != P::Status::OK)
     {
       OPENMS_LOG_ERROR << "-dump_spectrum: " << r.error << std::endl;
       return probeExit_(r.status);
@@ -5680,10 +5680,10 @@ protected:
       }
       const auto count = [&](FASTag::Census::Status st) { return tally.by_status[static_cast<size_t>(st)]; };
       OPENMS_LOG_INFO << "Census: " << tally.ms2_seen << " MS2 spectra read, "
-                      << count(FASTag::Census::Status::Tagged) + count(FASTag::Census::Status::Placed)
+                      << count(FASTag::Census::Status::TAGGED) + count(FASTag::Census::Status::PLACED)
                       << " with a reported tag ("
-                      << count(FASTag::Census::Status::Placed) << " placed), "
-                      << count(FASTag::Census::Status::NoTags) << " no_tags -> " << census_out
+                      << count(FASTag::Census::Status::PLACED) << " placed), "
+                      << count(FASTag::Census::Status::NO_TAGS) << " no_tags -> " << census_out
                       << ", summary -> " << census_summary_out << std::endl;
       if (census_ids_on)
         OPENMS_LOG_INFO << "Census ids: " << ids_tally.by_ident[1] << " identified, " << ids_tally.by_ident[0]

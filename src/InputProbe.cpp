@@ -306,9 +306,9 @@ namespace FASTag::Probe
   {
     enum class Kind
     {
-      MzML,
-      MzPeak,
-      Mgf
+      MZML,
+      MZPEAK,
+      MGF
     };
 
     bool isMzPeakPath(const std::string& p)
@@ -316,14 +316,14 @@ namespace FASTag::Probe
       return FileHandler::getTypeByFileName(p) == FileTypes::MZPEAK || MzPeakFile::isMzPeak(p);
     }
 
-    /// The input's kind as FASTag's run decides it, or Status::Unsupported.
+    /// The input's kind as FASTag's run decides it, or Status::UNSUPPORTED.
     Status kindOf(const std::string& in, Kind& kind, std::string& error)
     {
       const bool mzpeak = isMzPeakPath(in);
       if (!mzpeak && FileNameUtils::hasCompressionSuffix(in))
       {
         error = "Input '" + in + "' is compressed; FASTag reads uncompressed input only. Decompress it first.";
-        return Status::Unsupported;
+        return Status::UNSUPPORTED;
       }
       if (mzpeak)
       {
@@ -331,30 +331,30 @@ namespace FASTag::Probe
         {
           error = "This build has no mzPeak support: the OpenMS it uses was built without it "
                   "(OPENMS_ENABLE_MZPEAK). Supply mzML.";
-          return Status::Unsupported;
+          return Status::UNSUPPORTED;
         }
-        kind = Kind::MzPeak;
-        return Status::Ok;
+        kind = Kind::MZPEAK;
+        return Status::OK;
       }
       if (FileHandler::getTypeByFileName(in) == FileTypes::MGF)
       {
-        kind = Kind::Mgf;
-        return Status::Ok;
+        kind = Kind::MGF;
+        return Status::OK;
       }
       std::string lower = in;
       std::transform(lower.begin(), lower.end(), lower.begin(), [](unsigned char c) { return std::tolower(c); });
       if (lower.size() >= 5 && lower.compare(lower.size() - 5, 5, ".mzml") == 0)
       {
-        kind = Kind::MzML;
-        return Status::Ok;
+        kind = Kind::MZML;
+        return Status::OK;
       }
       error = "Input '" + in + "' is neither .mzML, .mzpeak nor .mgf.";
-      return Status::Unsupported;
+      return Status::UNSUPPORTED;
     }
 
     const char* kindName(Kind k)
     {
-      return k == Kind::MzML ? "mzML" : k == Kind::MzPeak ? "mzPeak" : "MGF";
+      return k == Kind::MZML ? "mzML" : k == Kind::MZPEAK ? "mzPeak" : "MGF";
     }
 
     /// The mzML readers, chosen as a run without -out_spectra chooses them.
@@ -473,7 +473,7 @@ namespace FASTag::Probe
     {
       if (!File::readable(in))
       {
-        out.status = Status::NotReadable;
+        out.status = Status::NOT_READABLE;
         out.error = "Cannot read '" + in + "'.";
         return out;
       }
@@ -483,8 +483,8 @@ namespace FASTag::Probe
       out.jsonl += JsonObject("end").line();
       return out;
     }
-    Kind kind = Kind::MzML;
-    if ((out.status = kindOf(in, kind, out.error)) != Status::Ok) return out;
+    Kind kind = Kind::MZML;
+    if ((out.status = kindOf(in, kind, out.error)) != Status::OK) return out;
     const Acq::ProbeLimits lim = Acq::probeLimits(opt.probe_spectra);
 
     // What the passes below collect.
@@ -500,7 +500,7 @@ namespace FASTag::Probe
       src.n_total = 0;
       std::unique_ptr<FASTag::MgfReader> mgf;
       MzmlReaders mz;
-      if (kind == Kind::MzPeak)
+      if (kind == Kind::MZPEAK)
       {
         const MzPeakRunScan scan = scanMzPeakRun(in, lim, opt.mzpeak_threads);
         ms1 = scan.ms1;
@@ -514,7 +514,7 @@ namespace FASTag::Probe
         src.mzpeak = true;
         src.mzpeak_threads = opt.mzpeak_threads;
       }
-      else if (kind == Kind::Mgf)
+      else if (kind == Kind::MGF)
       {
         try
         {
@@ -522,13 +522,13 @@ namespace FASTag::Probe
         }
         catch (const Exception::FileEmpty&)
         {
-          out.status = Status::Empty;
+          out.status = Status::EMPTY;
           out.error = "'" + in + "' contains no BEGIN IONS block; is it an MGF file?";
           return out;
         }
         catch (const Exception::FileNotReadable& e)
         {
-          out.status = Status::NotReadable;
+          out.status = Status::NOT_READABLE;
           out.error = e.what();
           return out;
         }
@@ -621,32 +621,32 @@ namespace FASTag::Probe
       acq = Acq::probeRun(in, src, opt.probe_spectra);
       if (!acq.ok)
       {
-        out.status = Status::Corrupt;
+        out.status = Status::CORRUPT;
         out.error = acq.error;
         return out;
       }
     }
     catch (const Exception::FileNotReadable& e)
     {
-      out.status = Status::NotReadable;
+      out.status = Status::NOT_READABLE;
       out.error = e.what();
       return out;
     }
     catch (const Exception::FileEmpty& e)
     {
-      out.status = Status::Empty;
+      out.status = Status::EMPTY;
       out.error = e.what();
       return out;
     }
     catch (const Exception::BaseException& e)
     {
-      out.status = Status::Corrupt;
+      out.status = Status::CORRUPT;
       out.error = e.what();
       return out;
     }
     catch (const std::exception& e)
     {
-      out.status = Status::Corrupt;
+      out.status = Status::CORRUPT;
       out.error = e.what();
       return out;
     }
@@ -674,7 +674,7 @@ namespace FASTag::Probe
       else if (unit == DriftTimeUnit::FAIMS_COMPENSATION_VOLTAGE) ++im_faims;
       // MGF declares no type, and FASTag tags it as read: centroid.
       const SpectrumSettings::SpectrumType t =
-          kind == Kind::Mgf ? SpectrumSettings::SpectrumType::CENTROID : s.SpectrumSettings::getType();
+          kind == Kind::MGF ? SpectrumSettings::SpectrumType::CENTROID : s.SpectrumSettings::getType();
       if (t == SpectrumSettings::SpectrumType::CENTROID) ++centroid;
       else if (t == SpectrumSettings::SpectrumType::PROFILE) ++profile;
       else ++untyped;
@@ -692,7 +692,7 @@ namespace FASTag::Probe
     j += inst.line();
 
     namespace FC = FASTag::Centroid;
-    const FC::Input input = kind == Kind::MzPeak ? FC::Input::MzPeak : kind == Kind::Mgf ? FC::Input::Mgf : FC::Input::MzML;
+    const FC::Input input = kind == Kind::MZPEAK ? FC::Input::MzPeak : kind == Kind::MGF ? FC::Input::Mgf : FC::Input::MzML;
     const FC::Policy policy = FC::policyFor(opt.pick_mode, input);
     const char* verdict = heads.empty()           ? "none"
                           : profile == 0 && untyped == 0 ? "centroid"
@@ -772,14 +772,14 @@ namespace FASTag::Probe
   {
     namespace FC = FASTag::Centroid;
     DumpOutput out;
-    Kind kind = Kind::MzML;
-    if ((out.status = kindOf(in, kind, out.error)) != Status::Ok) return out;
+    Kind kind = Kind::MZML;
+    if ((out.status = kindOf(in, kind, out.error)) != Status::OK) return out;
     MSSpectrum spec;
     std::size_t index = 0;
     int pick_result = 0;
     try
     {
-      if (kind == Kind::MzPeak)
+      if (kind == Kind::MZPEAK)
       {
         out.found = readMzPeakSpectrumById(in, opt.mzpeak_threads, id,
                                            FC::policyFor(opt.pick_mode, FC::Input::MzPeak),
@@ -791,7 +791,7 @@ namespace FASTag::Probe
         std::size_t n = 0;
         std::unique_ptr<FASTag::MgfReader> mgf;
         MzmlReaders mz;
-        if (kind == Kind::Mgf)
+        if (kind == Kind::MGF)
         {
           try
           {
@@ -799,7 +799,7 @@ namespace FASTag::Probe
           }
           catch (const Exception::FileEmpty&)
           {
-            out.status = Status::Empty;
+            out.status = Status::EMPTY;
             out.error = "'" + in + "' contains no BEGIN IONS block; is it an MGF file?";
             return out;
           }
@@ -825,7 +825,7 @@ namespace FASTag::Probe
         }
         // MGF native IDs are "index=<i>" (MgfReader.h): try that one first.
         std::size_t hint = n;
-        if (kind == Kind::Mgf && id.rfind("index=", 0) == 0)
+        if (kind == Kind::MGF && id.rfind("index=", 0) == 0)
         {
           std::size_t v = 0;
           const char* b = id.data() + 6;
@@ -840,25 +840,25 @@ namespace FASTag::Probe
           spec = read(index);
           PeakPickerHiRes picker;
           pick_result = FC::apply(spec, picker,
-                                  FC::policyFor(opt.pick_mode, kind == Kind::Mgf ? FC::Input::Mgf : FC::Input::MzML));
+                                  FC::policyFor(opt.pick_mode, kind == Kind::MGF ? FC::Input::Mgf : FC::Input::MzML));
         }
       }
     }
     catch (const Exception::FileNotReadable& e)
     {
-      out.status = Status::NotReadable;
+      out.status = Status::NOT_READABLE;
       out.error = e.what();
       return out;
     }
     catch (const Exception::BaseException& e)
     {
-      out.status = Status::Corrupt;
+      out.status = Status::CORRUPT;
       out.error = e.what();
       return out;
     }
     catch (const std::exception& e)
     {
-      out.status = Status::Corrupt;
+      out.status = Status::CORRUPT;
       out.error = e.what();
       return out;
     }
@@ -871,7 +871,7 @@ namespace FASTag::Probe
     namespace IS = FASTag::IonSeries;
     Param p = opt.param;
     const IS::Activation act = IS::activationClass(spec);
-    const bool reads_act = IS::autoReadsActivation(kind == Kind::MzPeak, kind == Kind::Mgf);
+    const bool reads_act = IS::autoReadsActivation(kind == Kind::MZPEAK, kind == Kind::MGF);
     const bool run_column = opt.ion_mode == IS::Mode::Cz
                             || (opt.ion_mode == IS::Mode::Auto && reads_act && act == IS::Activation::Electron);
     const IS::Series sr = IS::seriesInRun(opt.ion_mode, act, run_column);

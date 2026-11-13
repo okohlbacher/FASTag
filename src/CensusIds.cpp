@@ -365,8 +365,8 @@ namespace FASTag::CensusIds
       if (ident != Ident::Unknown)
       {
         triage = "0";
-        const bool reported = st == static_cast<std::size_t>(Census::Status::Tagged)
-                              || st == static_cast<std::size_t>(Census::Status::Placed);
+        const bool reported = st == static_cast<std::size_t>(Census::Status::TAGGED)
+                              || st == static_cast<std::size_t>(Census::Status::PLACED);
         if (ident == Ident::No && reported)
         {
           ++tally.triage_eligible;

@@ -59,15 +59,15 @@ namespace FASTag::Census
   */
   enum class Status : std::uint8_t
   {
-    Empty = 0,     ///< no peaks
-    NoPrecursor,   ///< no Precursor
-    NoSignal,      ///< peaks, but none with a positive, finite intensity
-    BadPrecursor,  ///< precursor m/z not finite or <= 0
-    TooFewPeaks,   ///< too few peaks after preprocessing
-    NoTags,        ///< no tag passed -max_evalue
-    Filtered,      ///< tags found, all rejected by -fasta
-    Placed,        ///< at least one -recon_out placement
-    Tagged,        ///< at least one reported row and no placement
+    EMPTY = 0,     ///< no peaks
+    NO_PRECURSOR,   ///< no Precursor
+    NO_SIGNAL,      ///< peaks, but none with a positive, finite intensity
+    BAD_PRECURSOR,  ///< precursor m/z not finite or <= 0
+    TOO_FEW_PEAKS,   ///< too few peaks after preprocessing
+    NO_TAGS,        ///< no tag passed -max_evalue
+    FILTERED,      ///< tags found, all rejected by -fasta
+    PLACED,        ///< at least one -recon_out placement
+    TAGGED,        ///< at least one reported row and no placement
   };
   /// Number of Status values.
   inline constexpr std::size_t kStatusCount = 9;
@@ -93,7 +93,7 @@ namespace FASTag::Census
     @param[in] s Status.
     @return True for the statuses of spectra the tagger processed (counted in n_ms2).
   */
-  inline bool processed(Status s) { return s != Status::Empty && s != Status::NoPrecursor; }
+  inline bool processed(Status s) { return s != Status::EMPTY && s != Status::NO_PRECURSOR; }
 
   /**
     @brief What the tagging loop knows about one MS2 spectrum.
@@ -119,15 +119,15 @@ namespace FASTag::Census
   */
   inline Status classify(const Facts& f)
   {
-    if (f.empty) return Status::Empty;
-    if (!f.has_precursor) return Status::NoPrecursor;
-    if (f.n_peaks == 0) return Status::NoSignal;
-    if (!(f.precursor_mz > 0) || !std::isfinite(f.precursor_mz)) return Status::BadPrecursor;
-    if (!f.enough_peaks) return Status::TooFewPeaks;
-    if (f.n_found == 0) return Status::NoTags;
-    if (f.n_reported == 0) return Status::Filtered;
-    if (f.count_placements && f.n_placed > 0) return Status::Placed;
-    return Status::Tagged;
+    if (f.empty) return Status::EMPTY;
+    if (!f.has_precursor) return Status::NO_PRECURSOR;
+    if (f.n_peaks == 0) return Status::NO_SIGNAL;
+    if (!(f.precursor_mz > 0) || !std::isfinite(f.precursor_mz)) return Status::BAD_PRECURSOR;
+    if (!f.enough_peaks) return Status::TOO_FEW_PEAKS;
+    if (f.n_found == 0) return Status::NO_TAGS;
+    if (f.n_reported == 0) return Status::FILTERED;
+    if (f.count_placements && f.n_placed > 0) return Status::PLACED;
+    return Status::TAGGED;
   }
 
   /**
@@ -335,7 +335,7 @@ namespace FASTag::Census
     double gini = 0;            ///< int_gini
     bool prepared = false;      ///< n_kept, n_edges and n_compl are valid
     std::size_t n_kept = 0, n_edges = 0, n_compl = 0;  ///< SpectrumDiag: peaks kept, graph edges, kept peaks with a complement at charge 1
-    Status status = Status::Empty;  ///< census status
+    Status status = Status::EMPTY;  ///< census status
     std::size_t n_found = 0, n_reported = 0;  ///< tags found, and rows reported
     bool has_best = false;      ///< best and tag_cover are valid
     TagView best;               ///< the best reported tag
@@ -505,7 +505,7 @@ namespace FASTag::Census
       if (r.charge_given <= 0) ++no_charge;
       if (r.prepared) n_kept.push_back(static_cast<double>(r.n_kept));
       if (r.has_gini) gini.push_back(r.gini);
-      if (r.has_best && (r.status == Status::Tagged || r.status == Status::Placed))
+      if (r.has_best && (r.status == Status::TAGGED || r.status == Status::PLACED))
         best_evalue.push_back(r.best.evalue);
     }
     /**

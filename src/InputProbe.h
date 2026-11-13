@@ -234,11 +234,11 @@ namespace FASTag::Probe
   */
   enum class Status
   {
-    Ok,           ///< the stream is complete; exit 0
-    Unsupported,  ///< neither mzML, mzPeak nor MGF, or compressed; exit ILLEGAL_PARAMETERS
-    NotReadable,  ///< exit INPUT_FILE_NOT_READABLE
-    Empty,        ///< an MGF without BEGIN IONS; exit INPUT_FILE_EMPTY
-    Corrupt,      ///< the reader failed; exit INPUT_FILE_CORRUPT
+    OK,           ///< the stream is complete; exit 0
+    UNSUPPORTED,  ///< neither mzML, mzPeak nor MGF, or compressed; exit ILLEGAL_PARAMETERS
+    NOT_READABLE,  ///< exit INPUT_FILE_NOT_READABLE
+    EMPTY,        ///< an MGF without BEGIN IONS; exit INPUT_FILE_EMPTY
+    CORRUPT,      ///< the reader failed; exit INPUT_FILE_CORRUPT
   };
 
   /**
@@ -246,7 +246,7 @@ namespace FASTag::Probe
   */
   struct ProbeOutput
   {
-    Status status = Status::Ok;  ///< how the probe ended
+    Status status = Status::OK;  ///< how the probe ended
     std::string error;  ///< for stderr, when status is not Ok
     std::string jsonl;  ///< the stream; complete (ends with the end record) only when Ok
   };
@@ -304,7 +304,7 @@ namespace FASTag::Probe
   */
   struct DumpOutput
   {
-    Status status = Status::Ok;  ///< how the dump ended
+    Status status = Status::OK;  ///< how the dump ended
     bool found = false;  ///< a spectrum with that native ID exists (status Ok)
     std::string error;  ///< for stderr, when status is not Ok
     std::string jsonl;  ///< the stream

@@ -399,15 +399,15 @@ int main(int argc, char** argv)
         r.best.n_res = 3;
         C::appendRow(buf, r, nid);
       };
-      row(0, NID + "1", C::Status::Tagged, true, 0.001);   // identified 1 -> triage 0
-      row(1, NID + "2", C::Status::Tagged, true, 0.001);   // identified 0 -> triage 1
-      row(2, NID + "3", C::Status::Placed, true, 0.0099);  // 0, placed, below -> 1
-      row(3, NID + "4", C::Status::Tagged, true, 0.5);     // 0, above -> 0
-      row(4, NID + "5", C::Status::NoTags, false, 0);      // 0, no tag -> 0
-      row(5, NID + "6", C::Status::Tagged, true, 0.001);   // unknown -> triage empty
-      row(6, NID + "6", C::Status::Tagged, true, 0.001);   // (same scan twice: unknown)
-      row(7, "a\tb", C::Status::Tagged, true, 0.001);      // escaped id, identified 1
-      row(8, NID + "9", C::Status::Empty, false, 0);       // not processed, 0
+      row(0, NID + "1", C::Status::TAGGED, true, 0.001);   // identified 1 -> triage 0
+      row(1, NID + "2", C::Status::TAGGED, true, 0.001);   // identified 0 -> triage 1
+      row(2, NID + "3", C::Status::PLACED, true, 0.0099);  // 0, placed, below -> 1
+      row(3, NID + "4", C::Status::TAGGED, true, 0.5);     // 0, above -> 0
+      row(4, NID + "5", C::Status::NO_TAGS, false, 0);      // 0, no tag -> 0
+      row(5, NID + "6", C::Status::TAGGED, true, 0.001);   // unknown -> triage empty
+      row(6, NID + "6", C::Status::TAGGED, true, 0.001);   // (same scan twice: unknown)
+      row(7, "a\tb", C::Status::TAGGED, true, 0.001);      // escaped id, identified 1
+      row(8, NID + "9", C::Status::EMPTY, false, 0);       // not processed, 0
       f << buf;
     }
     I::Index idx;
@@ -450,7 +450,7 @@ int main(int argc, char** argv)
           (unsigned long long)t.rows, (unsigned long long)t.triage, (unsigned long long)t.triage_eligible);
     CHECK(t.by_ident[1] == 2 && t.by_ident[0] == 5 && t.by_ident[2] == 2, "by_ident %llu %llu %llu",
           (unsigned long long)t.by_ident[0], (unsigned long long)t.by_ident[1], (unsigned long long)t.by_ident[2]);
-    const auto tg = static_cast<std::size_t>(C::Status::Tagged);
+    const auto tg = static_cast<std::size_t>(C::Status::TAGGED);
     CHECK(t.by_status[tg][1] == 2 && t.by_status[tg][0] == 2 && t.by_status[tg][2] == 2, "tagged cross-tab");
     // A triage threshold of 0.001 keeps only the E = 0.001 spectrum.
     I::Index idx2;
