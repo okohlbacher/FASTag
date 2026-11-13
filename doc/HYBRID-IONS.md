@@ -22,7 +22,7 @@ read as hybrid.
 
 - `by` (default): `auto` as in 1.12. Hybrid spectra are read as b/y, with the `Hybrid activation:` warning.
 - `both`: every hybrid mzML spectrum is tagged twice, once as b/y and once as c/z•.
-- Under `-ion_series by`, `cz` or `ax` the option is ignored with a warning (`-ion_series_hybrid is only read for
+- Under `-ion_series by` or `cz` the option is ignored with a warning (`-ion_series_hybrid is only read for
   -ion_series auto; it is ignored here`); `-stream` refuses it.
 
 ## The merge rule

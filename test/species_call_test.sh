@@ -13,6 +13,8 @@
 #     near_neighbour no_call or not_detected, the unrelated genera are never
 #     present;
 #   * a Da tolerance is a low_resolution no_call;
+#   * 1.14: -species_call explain and -species_reagents (removed) are accepted
+#     with one warning each and change no output;
 #   * the ignored-option warnings and the refusals.
 #
 # The toy index: Escherichia coli (562) = the 3 fixture proteins plus 500
@@ -160,48 +162,37 @@ run dec "${COMMON[@]}" -species "${TAX[@]}" "${CALL[@]}" -species_deconvolve -th
   || { cat "$TMP/dec.log" >&2; fail "-species_deconvolve"; }
 [ "$(col "$TMP/dec.species.tsv" 561 call)" = present ] || fail "Escherichia not present under -species_deconvolve"
 
-# ---- explain (1.13): same columns plus tags and unexplained_tags ----------------
-EXPL=(-species_call explain -species_call_min_units 10 -species_call_params "$TMP/params.tsv")
-for t in 1 3; do
-  run expl_t$t "${COMMON[@]}" -species "${TAX[@]}" "${EXPL[@]}" -threads $t || { cat "$TMP/expl_t$t.log" >&2; fail "explain, -threads $t"; }
-done
-E="$TMP/expl_t1.species.tsv"
-cmp -s "$E" "$TMP/expl_t3.species.tsv" || fail "explain report differs between 1 and 3 threads"
-cmp -s "$TMP/absent.tsv" "$TMP/expl_t1.tsv" || fail "-species_call explain changed the tags"
-[ "$(fields "$E")" = 17 ] || fail "explain report: not 17 fields on every line ($(fields "$E"))"
-tr -d '\r' < "$E" | cut -f1-8 | cmp -s <(tr -d '\r' < "$TMP/absent.species.tsv") - || fail "explain report: first 8 columns differ"
-[ "$(head -1 "$E" | cut -f9-)" = "$(printf 'call\tcall_reason\tdecoy_spectra\tdecoy_expected\tdecoy_qvalue\tshare\tlod\ttags\tunexplained_tags')" ] \
-  || fail "explain report: unexpected appended header: $(head -1 "$E" | cut -f9-)"
-[ "$(col "$E" 561 call)" = present ] || { cat "$E" >&2; fail "explain: Escherichia is not present"; }
-np=$(awk -F'\t' 'NR > 1 && $9 == "present"' "$E" | wc -l | tr -d ' ')
-[ "$np" = 1 ] || { cat "$E" >&2; fail "explain: $np genera present, expected only Escherichia"; }
-awk -F'\t' 'NR > 1 && ($17 + 0 > $16 + 0 || $13 + 0 < 0 || $13 + 0 > 1 || $15 != "NA") { exit 1 }' "$E" \
-  || { cat "$E" >&2; fail "explain: unexplained_tags > tags, decoy_qvalue out of range or lod set"; }
-grep -q "Species call (-species_call explain)" "$TMP/expl_t1.log" || fail "explain: no log line"
-run expl_da -in "$IN" -tag_length 7 -fragment_tolerance 0.5 -fragment_tolerance_unit Da -species "${TAX[@]}" "${EXPL[@]}" -threads 2 \
-  || { cat "$TMP/expl_da.log" >&2; fail "explain, Da run"; }
-bad=$(awk -F'\t' 'NR > 1 && !($9 == "no_call" && $10 == "low_resolution")' "$TMP/expl_da.species.tsv" | wc -l | tr -d ' ')
-[ "$bad" = 0 ] || fail "explain, Da run: $bad rows are not a low_resolution no_call"
-
-# ---- -species_reagents: two more columns; a taxon explain does not detect is called on its listed proteins ------
+# ---- 1.14: -species_call explain and -species_reagents removed ------------------
+# explain failed its held-out test and is read as the default (none);
+# -species_reagents was read only by explain. Each is accepted with exactly one
+# warning and changes no output; the reagent file is never opened.
+EX_WARN='-species_call explain was removed in 1.14 (failed its held-out test); it has no effect: -species_call none is used.'
+RG_WARN='-species_reagents was removed in 1.14 (read only by -species_call explain, which failed its held-out test); it has no effect.'
+run expl "${COMMON[@]}" -species "${TAX[@]}" -species_call explain -threads 2 || { cat "$TMP/expl.log" >&2; fail "-species_call explain"; }
+[ "$(grep -cF -- "$EX_WARN" "$TMP/expl.log")" -eq 1 ] || { cat "$TMP/expl.log" >&2; fail "-species_call explain: not exactly one removal warning"; }
+cmp -s "$TMP/absent.species.tsv" "$TMP/expl.species.tsv" || fail "-species_call explain: species report differs from the default"
+cmp -s "$TMP/absent.tsv" "$TMP/expl.tsv" || fail "-species_call explain: tags differ from the default"
+grep -q "Species call (" "$TMP/expl.log" && fail "-species_call explain still runs a species call"
 awk '/^>/ { print $1 " OX=562" ; next } { print }' "$DB" > "$TMP/reagents.fasta"
-run reag "${COMMON[@]}" -species "${TAX[@]}" "${EXPL[@]}" -species_reagents "$TMP/reagents.fasta" -threads 2 \
+run reag "${COMMON[@]}" -species "${TAX[@]}" "${CALL[@]}" -species_reagents "$TMP/reagents.fasta" -threads 1 \
   || { cat "$TMP/reag.log" >&2; fail "-species_reagents"; }
-G="$TMP/reag.species.tsv"
-[ "$(fields "$G")" = 19 ] || fail "-species_reagents: not 19 fields on every line ($(fields "$G"))"
-tr -d '\r' < "$G" | cut -f1-17 | cmp -s <(tr -d '\r' < "$E") - || fail "-species_reagents changed the explain columns of a run without a reagent call"
-[ "$(head -1 "$G" | tr -d '\r' | cut -f18-)" = "$(printf 'reagent_tags\treagent_expected')" ] || fail "-species_reagents: header"
-[ "$(col "$G" 590 reagent_tags)" = NA ] || fail "-species_reagents: a taxon without listed proteins is not NA"
-# With an explain n_min nothing reaches, Escherichia is found through the listed (fixture) proteins alone.
-printf 'alpha\t0.01\ntau\t0\nn_min\t100000\nreagent_n_min\t3\n' > "$TMP/params_r.tsv"
-run reag2 "${COMMON[@]}" -species "${TAX[@]}" -species_call explain -species_call_min_units 10 -species_call_params "$TMP/params_r.tsv" \
-  -species_reagents "$TMP/reagents.fasta" -threads 2 || { cat "$TMP/reag2.log" >&2; fail "-species_reagents, reagent call"; }
-G="$TMP/reag2.species.tsv"
-[ "$(col "$G" 561 call) $(col "$G" 561 call_reason)" = "present reagent" ] || { cat "$G" >&2; fail "-species_reagents: Escherichia is not present/reagent"; }
-[ "$(awk -F'\t' 'NR > 1 && $9 == "present"' "$G" | wc -l | tr -d ' ')" = 1 ] || { cat "$G" >&2; fail "-species_reagents: more than one taxon present"; }
-[ "$(col "$G" 561 reagent_tags)" -ge 3 ] || fail "-species_reagents: reagent_tags"
-printf '>x no taxid\nACDEFGHIKLMNPQRSTVWY\n' > "$TMP/bad.fasta"
-run reag3 "${COMMON[@]}" -species "${TAX[@]}" "${EXPL[@]}" -species_reagents "$TMP/bad.fasta" -threads 2 && fail "-species_reagents without OX= was accepted"
+[ "$(grep -cF -- "$RG_WARN" "$TMP/reag.log")" -eq 1 ] || { cat "$TMP/reag.log" >&2; fail "-species_reagents: not exactly one removal warning"; }
+grep -q -- "-species_reagents is only read" "$TMP/reag.log" && fail "-species_reagents still has an ignored-option warning"
+cmp -s "$TMP/call_t1.species.tsv" "$TMP/reag.species.tsv" || fail "-species_reagents: species report differs from without it"
+cmp -s "$TMP/call_t1.tsv" "$TMP/reag.tsv" || fail "-species_reagents: tags differ from without it"
+# A path that does not exist is never opened: no error.
+run reag_nx "${COMMON[@]}" -species "${TAX[@]}" "${CALL[@]}" -species_reagents "$TMP/no_such_reagents.fasta" -threads 1 \
+  || { cat "$TMP/reag_nx.log" >&2; fail "-species_reagents with a nonexistent path is refused"; }
+[ "$(grep -cF -- "$RG_WARN" "$TMP/reag_nx.log")" -eq 1 ] || fail "-species_reagents (nonexistent): not exactly one removal warning"
+cmp -s "$TMP/call_t1.species.tsv" "$TMP/reag_nx.species.tsv" || fail "-species_reagents (nonexistent): species report differs"
+# reagent_n_min in a parameter file still loads (ignored).
+printf 'version\ttest\nalpha\t0.05\ntau\t0\nn_min\t5\nreagent_n_min\t3\n' > "$TMP/params_r.tsv"
+run reag_p "${COMMON[@]}" -species "${TAX[@]}" -species_call decoy -species_call_min_units 10 -species_call_params "$TMP/params_r.tsv" -threads 1 \
+  || { cat "$TMP/reag_p.log" >&2; fail "a parameter file with reagent_n_min is refused"; }
+cmp -s "$TMP/call_t1.species.tsv" "$TMP/reag_p.species.tsv" || fail "reagent_n_min in the parameter file changed the report"
+# -stream refuses neither.
+"$BIN" -in "$IN" -out "$TMP/st_expl.tsv" -stream -species_call explain -species_reagents "$TMP/no_such_reagents.fasta" \
+  > "$TMP/st_expl.log" 2>&1 < /dev/null || { cat "$TMP/st_expl.log" >&2; fail "-stream refuses the removed -species_call explain / -species_reagents"; }
 
 # ---- negatives -----------------------------------------------------------------
 # Ion-trap tolerance in Da: low_resolution for every row.

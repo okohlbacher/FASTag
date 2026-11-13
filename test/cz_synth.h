@@ -1,4 +1,4 @@
-// Synthetic c/z-dot, a/x (1.13 item 11), hybrid (1.13 item 10) and b/y fragment spectra for the #15 phase B tests
+// Synthetic c/z-dot, hybrid (1.13 item 10) and b/y fragment spectra for the #15 phase B tests
 // (ion_series_test.cpp, tagrecon_test.cpp), from OpenMS's
 // TheoreticalSpectrumGenerator: never from FASTag's own ion formulas, so a
 // wrong offset in src/IonSeries.h cannot cancel out.
@@ -35,12 +35,6 @@ namespace CzSynth
     C,      ///< c ions only
     Z,      ///< z-dot ions only
     BY,     ///< b and y ions, as CID/HCD
-    AX,     ///< a and x ions (1.13 item 11, photodissociation)
-    A,      ///< a ions only
-    X,      ///< x ions only
-    ABXY,   ///< a, b, x and y ions (a UVPD-like mixture)
-    A1X,    ///< a+1 and x ions: one Calpha-C cleavage pair after an H shift (sum M - H)
-    A1X1,   ///< a+1 and x+1 ions: the homolytic radical pair (sum M)
     BYCZ,   ///< b, y, c and z-dot ions (1.13 item 10, an EThcD-like mixture)
     /// 1.13 item 10, mixed y/z: the C-terminal half of the cleavage sites as
     /// b/y ions (y_i and b_(n-i) for i <= n/2) and the N-terminal half as
@@ -119,43 +113,13 @@ namespace CzSynth
       }
       th.sortByPosition();
     }
-    else if (ions == Ions::A1X || ions == Ions::A1X1)
-    {
-      // a+1 and x+1 = the even-electron ion plus one hydrogen atom (not a
-      // proton): OpenMS's a and x ions per fragment charge z, shifted by H/z.
-      const double H = OpenMS::EmpiricalFormula("H").getMonoWeight();
-      for (const bool a_side : {true, false})
-        for (int z = 1; z <= max_frag_charge; ++z)
-        {
-          OpenMS::TheoreticalSpectrumGenerator g;
-          OpenMS::Param q = g.getParameters();
-          q.setValue("add_b_ions", "false");
-          q.setValue("add_y_ions", "false");
-          q.setValue("add_a_ions", a_side ? "true" : "false");
-          q.setValue("add_x_ions", a_side ? "false" : "true");
-          q.setValue("add_first_prefix_ion", "false");
-          q.setValue("add_metainfo", "false");
-          q.setValue("add_losses", "false");
-          q.setValue("add_precursor_peaks", "false");
-          g.setParameters(q);
-          OpenMS::PeakSpectrum one;
-          g.getSpectrum(one, aa, z, z);
-          const double shift = (a_side || ions == Ions::A1X1) ? H / z : 0.0;
-          for (auto pk : one)
-          {
-            pk.setMZ(pk.getMZ() + shift);
-            th.push_back(pk);
-          }
-        }
-      th.sortByPosition();
-    }
     OpenMS::TheoreticalSpectrumGenerator tsg;
     OpenMS::Param p = tsg.getParameters();
     const auto on = [](bool b) { return b ? "true" : "false"; };
-    p.setValue("add_b_ions", on(ions == Ions::BY || ions == Ions::ABXY || ions == Ions::BYCZ));
-    p.setValue("add_y_ions", on(ions == Ions::BY || ions == Ions::ABXY || ions == Ions::BYCZ));
-    p.setValue("add_a_ions", on(ions == Ions::AX || ions == Ions::A || ions == Ions::ABXY));
-    p.setValue("add_x_ions", on(ions == Ions::AX || ions == Ions::X || ions == Ions::ABXY));
+    p.setValue("add_b_ions", on(ions == Ions::BY || ions == Ions::BYCZ));
+    p.setValue("add_y_ions", on(ions == Ions::BY || ions == Ions::BYCZ));
+    p.setValue("add_a_ions", "false");
+    p.setValue("add_x_ions", "false");
     p.setValue("add_c_ions", on(ions == Ions::CZ || ions == Ions::C || ions == Ions::BYCZ));
     p.setValue("add_zp1_ions", on(ions == Ions::CZ || ions == Ions::Z || ions == Ions::BYCZ));
     p.setValue("add_first_prefix_ion", "false");
@@ -163,7 +127,7 @@ namespace CzSynth
     p.setValue("add_losses", "false");
     p.setValue("add_precursor_peaks", "false");
     tsg.setParameters(p);
-    if (ions != Ions::A1X && ions != Ions::A1X1 && ions != Ions::SPLIT) tsg.getSpectrum(th, aa, 1, max_frag_charge);
+    if (ions != Ions::SPLIT) tsg.getSpectrum(th, aa, 1, max_frag_charge);
 
     std::mt19937 rng(seed);
     const auto u01 = [&rng]() { return (rng() >> 8) * (1.0 / 16777216.0); };

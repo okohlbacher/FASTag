@@ -132,59 +132,29 @@ tr -d '\r' < "$TMP/label.tsv" | awk -F'\t' -v n="$(tr -d '\r' < "$TMP/label.tsv"
   || fail "-label_out: label_call is not the last five rows status, label, basis, silac, reason"
 [ "$(val "$TMP/label.tsv" label_call status) $(val "$TMP/label.tsv" label_call reason)" = "no_call low_resolution" ] \
   || fail "label_call: a Da run is not no_call low_resolution"
-# a ppm run (1.13, backlog #8): at the default -label_call_min_tags 175 (the 1.12 rule) few_tags below 175
-# C-terminal tag ends; called at -label_call_min_tags 0 (experimental), whatever its tag ends; few_tags
-# exactly when -label_call_min_tags exceeds the digest's C-terminal tag ends (count tot)
+# a ppm run: few_tags below 175 C-terminal tag ends (the 1.12 rule; -label_call_min_tags was removed in 1.14)
 run -in "$IN" -tag_length 4 -out "$TMP/p.tsv" -digest_out "$TMP/pdigest.tsv" -label_out "$TMP/plabel.tsv"
 ptot=$(val "$TMP/pdigest.tsv" count tot)
 case "$ptot" in ''|*[!0-9]*) fail "label_call: no count tot in the digest report ('$ptot')" ;; esac
-# The fixture must stay below 175 ends (it has 0 at 20 ppm): only there do 0 and the 1.12 rule differ,
-# so only there can this test see a CLI default changed away from 175.
-[ "$ptot" -lt 175 ] || fail "label_call: the ppm fixture now has $ptot >= 175 tag ends; the default test would be vacuous"
+# The fixture must stay below 175 ends (it has 0 at 20 ppm), so that it sees the minimum.
+[ "$ptot" -lt 175 ] || fail "label_call: the ppm fixture now has $ptot >= 175 tag ends; the few_tags test would be vacuous"
 lcall() { echo "$(val "$1" label_call status) $(val "$1" label_call reason)"; }
 pcall=$(lcall "$TMP/plabel.tsv")
 [ "$pcall" = "no_call few_tags" ] || fail "label_call: $ptot tag ends at 20 ppm and the default minimum 175 gave '$pcall'"
 # the default writes the 1.12.0 -label_out byte for byte, descriptions included
 # (test/fixtures/label_1.12.0_Ecoli_MS2_small_ppm.tsv: the 1.12.0 RC a117801 on the same command), the
-# run version row aside; so does an explicit -label_call_min_tags 175
+# run version row aside
 nover_label() { tr -d '\r' < "$1" | awk -F'\t' '!($1 == "run" && $2 == "version")'; }
 nover_label "$FIX/label_1.12.0_Ecoli_MS2_small_ppm.tsv" > "$TMP/plabel_112.cmp"
 nover_label "$TMP/plabel.tsv" > "$TMP/plabel_def.cmp"
 same "$TMP/plabel_112.cmp" "$TMP/plabel_def.cmp" "the default -label_out is not the 1.12.0 -label_out"
-run -in "$IN" -tag_length 4 -out "$TMP/p3.tsv" -label_out "$TMP/plabel_175.tsv" -label_call_min_tags 175
-nover_label "$TMP/plabel_175.tsv" > "$TMP/plabel_175.cmp"
-same "$TMP/plabel_112.cmp" "$TMP/plabel_175.cmp" "-label_call_min_tags 175 is not the 1.12.0 -label_out"
-# -label_call_min_tags 0: a call, with the weak-evidence sentence below 175 ends
-run -in "$IN" -tag_length 4 -out "$TMP/p0.tsv" -label_out "$TMP/plabel0.tsv" -label_call_min_tags 0
-[ "$(lcall "$TMP/plabel0.tsv")" = "call -" ] || fail "label_call: $ptot tag ends at -label_call_min_tags 0 gave '$(lcall "$TMP/plabel0.tsv")'"
-tr -d '\r' < "$TMP/plabel0.tsv" | awk -F'\t' '$1 == "label_call" && $2 == "status"' | grep -q "fewer than 175" \
-  || fail "label_call: a call from $ptot (< 175) tag ends lacks the weak-evidence sentence"
-run -in "$IN" -tag_length 4 -out "$TMP/p1.tsv" -label_out "$TMP/plabel_eq.tsv" -label_call_min_tags "$ptot"
-[ "$(lcall "$TMP/plabel_eq.tsv")" = "call -" ] || fail "label_call: -label_call_min_tags $ptot (= tot) gave '$(lcall "$TMP/plabel_eq.tsv")'"
-run -in "$IN" -tag_length 4 -out "$TMP/p2.tsv" -digest_out "$TMP/pdigest_gt.tsv" -label_out "$TMP/plabel_gt.tsv" \
-  -label_call_min_tags "$((ptot + 1))"
-same "$TMP/pdigest.tsv" "$TMP/pdigest_gt.tsv" "-label_call_min_tags changed -digest_out"
-[ "$(lcall "$TMP/plabel_gt.tsv")" = "no_call few_tags" ] \
-  || fail "label_call: -label_call_min_tags $((ptot + 1)) (> tot $ptot) gave '$(lcall "$TMP/plabel_gt.tsv")'"
-tr -d '\r' < "$TMP/plabel_gt.tsv" | awk -F'\t' '$1 == "label_call" && $2 == "status"' | grep -q "fewer than $((ptot + 1))" \
-  || fail "label_call: the few_tags row does not name -label_call_min_tags $((ptot + 1))"
-# only the label_call rows depend on the minimum
-legacy "$TMP/plabel.tsv" > "$TMP/plabel.old"
-for f in plabel0 plabel_eq plabel_gt; do
-  legacy "$TMP/$f.tsv" > "$TMP/$f.old"
-  same "$TMP/plabel.old" "$TMP/$f.old" "-label_call_min_tags changed rows before label_call"
-done
+# 1.14: -label_call_min_tags is a removed option: accepted, one warning, no effect
+"$BIN" -threads 2 -in "$IN" -tag_length 4 -out "$TMP/p0.tsv" -label_out "$TMP/plabel0.tsv" -label_call_min_tags 0 > "$TMP/log" 2>&1 \
+  || fail "-label_call_min_tags 0 was refused"
+[ "$(grep -c -- "-label_call_min_tags was removed in 1.14 (failed its held-out test); it has no effect" "$TMP/log")" = 1 ] \
+  || fail "-label_call_min_tags: not exactly one removal warning"
+same "$TMP/plabel.tsv" "$TMP/plabel0.tsv" "-label_call_min_tags 0 changed -label_out"
 same "$TMP/p.tsv" "$TMP/p0.tsv" "-label_call_min_tags 0 changed the tags"
-same "$TMP/p.tsv" "$TMP/p2.tsv" "-label_call_min_tags changed the tags"
-# a Da run is low_resolution at any minimum
-run "${COMMON[@]}" -out "$TMP/d0.tsv" -fixed_modifications -label_out "$TMP/dlabel0.tsv" -label_call_min_tags 0
-[ "$(lcall "$TMP/dlabel0.tsv")" = "no_call low_resolution" ] || fail "label_call: a Da run at minimum 0 is not low_resolution"
-# refused below 0; warned and ignored without -label_out
-"$BIN" -in "$IN" -tag_length 4 -out "$TMP/pn.tsv" -label_out "$TMP/pn.label" -label_call_min_tags -1 > "$TMP/log" 2>&1 \
-  && fail "-label_call_min_tags -1 was accepted"
-"$BIN" -in "$IN" -tag_length 4 -out "$TMP/pw.tsv" -label_call_min_tags 10 > "$TMP/log" 2>&1 \
-  || fail "-label_call_min_tags without -label_out was refused"
-grep -q -- "-label_call_min_tags is only read for -label_out" "$TMP/log" || fail "no warning for -label_call_min_tags"
 # label_call reads the tag ends only: the same with and without -recon_out/-massgap_out, at 1, 2 and 3
 # threads (all with R's empty -fixed_modifications, which changes the tags themselves)
 run "${COMMON[@]}" -out "$TMP/l0.tsv" -fixed_modifications -label_out "$TMP/label0.tsv"
@@ -199,162 +169,24 @@ same "$TMP/label0.tsv" "$TMP/label1.tsv" "-recon_out changed -label_out"
 same "$TMP/label3.tsv" "$TMP/label4.tsv" "-label_out differs between 1 and 3 threads"
 same "$TMP/label0.tsv" "$TMP/label3.tsv" "-label_out differs between 2 and 1 threads"
 
-# ---- -search_shifts (1.12 #17): -delta_out/-massgap_out unchanged, the decisions in the config
-# masked: the run version row aside (the baseline binary may carry another version)
-nover() { tr -d '\r' < "$1" | awk -F'\t' '!($1 == "run" && $2 == "version")'; }
-# The ion-trap fixture places too few spectra for a gap peak: shifts_insilico.mgf
-# (make_shift_fixture.py) carries Oxidation, Acetyl, a 13C spacing, an
-# unexplained and a negative unexplained N-terminal shift on Ecoli_MS2_small.fasta.
-SC=(-in "$FIX/shifts_insilico.mgf" -extension 3)
-SH=(-search_engine comet -search_config_out "$TMP/sh.params")
-G2=(-massgap_min_spectra 2)
-run "${SC[@]}" -out "$TMP/s0.tsv" "${R[@]}" -delta_out "$TMP/sdelta0.tsv" -massgap_out "$TMP/sgap0.tsv" "${G2[@]}"
-cp "$TMP/recon.tsv" "$TMP/srecon0.tsv"
-run "${SC[@]}" -out "$TMP/s1.tsv" "${R[@]}" -delta_out "$TMP/sdelta1.tsv" -massgap_out "$TMP/sgap1.tsv" "${G2[@]}" \
-  -search_shifts both "${SH[@]}" -search_shifts_out "$TMP/shifts.tsv"
-same "$TMP/s0.tsv" "$TMP/s1.tsv" "-search_shifts changed the tag TSV"
-same "$TMP/srecon0.tsv" "$TMP/recon.tsv" "-search_shifts changed -recon_out"
-same "$TMP/sdelta0.tsv" "$TMP/sdelta1.tsv" "-search_shifts changed -delta_out"
-same "$TMP/sgap0.tsv" "$TMP/sgap1.tsv" "-search_shifts changed -massgap_out"
-# at the -massgap_* defaults too, against the runs above without it
-run "${SC[@]}" -out "$TMP/s2a.tsv" "${R[@]}" -delta_out "$TMP/sdelta2a.tsv" -massgap_out "$TMP/sgap2a.tsv"
-run "${SC[@]}" -out "$TMP/s2.tsv" "${R[@]}" -delta_out "$TMP/sdelta2.tsv" -massgap_out "$TMP/sgap2.tsv" \
-  -search_shifts both -search_engine comet -search_config_out "$TMP/sh2.params"
-same "$TMP/sdelta2a.tsv" "$TMP/sdelta2.tsv" "-search_shifts changed -delta_out at the -massgap defaults"
-same "$TMP/sgap2a.tsv" "$TMP/sgap2.tsv" "-search_shifts changed -massgap_out at the -massgap defaults"
-# -search_shifts none equals the option absent
-run "${SC[@]}" -out "$TMP/s3.tsv" "${R[@]}" -delta_out "$TMP/sdelta3.tsv" -massgap_out "$TMP/sgap3.tsv" "${G2[@]}" -search_shifts none
-same "$TMP/sdelta0.tsv" "$TMP/sdelta3.tsv" "-search_shifts none changed -delta_out"
-same "$TMP/sgap0.tsv" "$TMP/sgap3.tsv" "-search_shifts none changed -massgap_out"
-if [ -n "${FASTAG_BASELINE_BIN:-}" ]; then
-  mkdir -p "$TMP/bl"
-  "$FASTAG_BASELINE_BIN" -threads 2 "${SC[@]}" -out "$TMP/bl/s.tsv" -recon_fasta "$DB" -recon_out "$TMP/bl/recon.tsv" \
-    -fixed_modifications -delta_out "$TMP/bl/delta.tsv" -massgap_out "$TMP/bl/gap.tsv" "${G2[@]}" > "$TMP/log" 2>&1 \
-    || { cat "$TMP/log" >&2; fail "baseline binary"; }
-  same "$TMP/bl/delta.tsv" "$TMP/sdelta1.tsv" "-delta_out with -search_shifts differs from the baseline binary"
-  nover "$TMP/bl/gap.tsv" > "$TMP/bl/gap.nv"; nover "$TMP/sgap1.tsv" > "$TMP/sgap1.nv"
-  same "$TMP/bl/gap.nv" "$TMP/sgap1.nv" "-massgap_out with -search_shifts differs from the baseline binary"
-  same "$TMP/bl/s.tsv" "$TMP/s1.tsv" "the tag TSV with -search_shifts differs from the baseline binary"
-elif [ "${FASTAG_BASELINE_REQUIRED:-0}" = 1 ]; then
-  fail "FASTAG_BASELINE_REQUIRED=1 but FASTAG_BASELINE_BIN is not set"
-else
-  echo "NOTE: FASTAG_BASELINE_BIN not set; -search_shifts baseline compare skipped" >&2
-fi
-# one row per gap peak, every exported row in the config, no dropped/skipped one
-npeaks=$(tr -d '\r' < "$TMP/sgap1.tsv" | awk -F'\t' '$1 == "peak" && $2 ~ /\.delta$/' | wc -l | tr -d ' ')
-tr -d '\r' < "$TMP/shifts.tsv" | grep -v '^#' > "$TMP/shifts.rows"
-head -1 "$TMP/shifts.rows" | grep -qx $'peak\tdelta\tspectra\texplanation\taction\tmod_id\tsites\texported\tsubstitution_share\tlocalized\treason' \
-  || fail "-search_shifts_out header"
-[ "$(($(wc -l < "$TMP/shifts.rows") - 1))" = "$npeaks" ] || fail "-search_shifts_out has not one row per -massgap_out peak ($npeaks)"
-[ "$npeaks" -gt 0 ] || fail "the fixture gives no gap peak at -massgap_min_spectra 2"
-nexp=$(awk -F'\t' 'NR > 1 && ($5 == "variable" || $5 == "offset" || $5 == "fixed")' "$TMP/shifts.rows" | wc -l | tr -d ' ')
-[ "$nexp" -gt 0 ] || fail "no exported shift on the fixture (the checks below would be vacuous)"
-nvar=$(awk -F'\t' 'NR > 1 && $5 == "variable"' "$TMP/shifts.rows" | wc -l | tr -d ' ')
-[ "$nvar" -le 3 ] || fail "$nvar variable shifts exceed -shift_max_variable 3"
-# the fixture's shifts, each with its rule
-act() { awk -F'\t' -v d="$1" 'NR > 1 && $2 == d { print $5 }' "$TMP/shifts.rows"; }
-[ "$(act 15.9950)" = variable ] || fail "Oxidation is not a variable modification: $(act 15.9950)"
-[ "$(act 42.0105)" = variable ] || fail "Acetyl is not a variable modification: $(act 42.0105)"
-[ "$(act 1.0035)" = skipped_isotope ] || fail "the 13C spacing is not skipped_isotope: $(act 1.0035)"
-[ "$(act 123.4565)" = offset ] || fail "the unexplained shift is not an offset: $(act 123.4565)"
-[ "$(act -77.7775)" = dropped_engine ] || fail "the negative offset is not dropped_engine: $(act -77.7775)"
-tr -d '\r' < "$TMP/sh.params" | grep -qx 'isotope_error = 1' || fail "the 13C peak did not set isotope_error 1"
-tr -d '\r' < "$TMP/sh.params" | grep -qx 'mass_offsets = 0.0 123.4565' || fail "mass_offsets is not 0.0 123.4565"
-# the in-silico fixture has no precursor bias: the 13C peak is no calibration
-# peak and the binning's error (within the centroid resolution) is not applied
-tr -d '\r' < "$TMP/shifts.tsv" | grep -q '^# calibration: offsets uncorrected, .* over 2 single-modification peaks' \
-  || { grep '^# calibration' "$TMP/shifts.tsv" >&2; fail "the calibration header: not uncorrected over the 2 non-isotope peaks"; }
-# Sage: no offsets, the variable ones written
-run "${SC[@]}" -out "$TMP/sg.tsv" "${R[@]}" "${G2[@]}" -search_shifts variable -search_config_out "$TMP/sg.json" \
-  -search_shifts_out "$TMP/sg.shifts.tsv"
-tr -d '\r' < "$TMP/sg.json" | grep -q '15\.99491' || fail "Sage config without the Oxidation shift"
-[ "$(awk -F'\t' '!/^#/ && $5 == "offset"' "$TMP/sg.shifts.tsv" | wc -l | tr -d ' ')" = 0 ] || fail "Sage got an offset"
-# the config's masses, 4 decimals: variable_modNN, mass_offsets and add_* values
-tr -d '\r' < "$TMP/sh.params" | awk '
-  /^variable_mod[0-9][0-9] = / && $3 + 0 != 0 { printf "v %.4f\n", $3 }
-  /^mass_offsets = / { for (i = 3; i <= NF; i++) printf "o %.4f\n", $i }
-  /^add_/ && $3 + 0 != 0 { printf "f %.4f\n", $3 }' | sort -u > "$TMP/cfg.masses"
-awk -F'\t' 'NR > 1 { k = ($5 == "variable" ? "v" : $5 == "offset" ? "o" : $5 == "fixed" ? "f" : "")
-  if (k != "") print k " " $8 }' "$TMP/shifts.rows" | sort -u > "$TMP/exp.masses"
-[ -z "$(comm -23 "$TMP/exp.masses" "$TMP/cfg.masses")" ] || { comm -23 "$TMP/exp.masses" "$TMP/cfg.masses" >&2; fail "an exported shift is not in the config"; }
-awk -F'\t' 'NR > 1 && ($5 ~ /^dropped_/ || $5 ~ /^skipped_/ || $5 == "expected_label" || $5 ~ /_questionable$/ || $5 == "label_incomplete") && $8 != "-" {
-  print "v " $8; print "o " $8 }' "$TMP/shifts.rows" | sort -u > "$TMP/drop.masses"
-[ -z "$(comm -12 "$TMP/drop.masses" "$TMP/cfg.masses" | comm -23 - "$TMP/exp.masses")" ] \
-  || fail "a dropped or skipped shift is in the config"
-if awk -F'\t' 'NR > 1 && $5 == "offset"' "$TMP/shifts.rows" | grep -q .; then
-  tr -d '\r' < "$TMP/sh.params" | grep -q '^mass_offsets = 0.0 ' || fail "offsets without 0 first"
-fi
-# the same at 1, 3 and 8 threads
-for t in 1 3 8; do
-  "$BIN" -threads $t "${SC[@]}" -out "$TMP/st$t.tsv" "${R[@]}" -massgap_min_spectra 2 -search_shifts both \
-    -search_engine comet -search_config_out "$TMP/sht$t.params" -search_shifts_out "$TMP/shiftst$t.tsv" > "$TMP/log" 2>&1 \
-    || { cat "$TMP/log" >&2; fail "-search_shifts at $t threads"; }
+# ---- 1.14: -search_shifts and its options are removed: accepted, one warning each, no effect
+run "${COMMON[@]}" -out "$TMP/s0.tsv" "${R[@]}" -search_engine comet -search_config_out "$TMP/s0.params"
+[ -s "$TMP/s0.params" ] || fail "no -search_config_out on the fixture (the check below would be vacuous)"
+"$BIN" -threads 2 "${COMMON[@]}" -out "$TMP/s1.tsv" "${R[@]}" -search_engine comet -search_config_out "$TMP/s1.params" \
+  -search_shifts both -shift_max_variable 5 > "$TMP/log" 2>&1 || { cat "$TMP/log" >&2; fail "-search_shifts both was refused"; }
+for o in search_shifts shift_max_variable; do
+  [ "$(grep -c -- "-$o was removed in 1.14 (failed its held-out test); it has no effect" "$TMP/log")" = 1 ] \
+    || fail "-$o: not exactly one removal warning"
 done
-same "$TMP/shiftst1.tsv" "$TMP/shiftst3.tsv" "-search_shifts_out differs between 1 and 3 threads"
-same "$TMP/sht1.params" "$TMP/sht3.params" "the shift config differs between 1 and 3 threads"
-same "$TMP/shiftst1.tsv" "$TMP/shiftst8.tsv" "-search_shifts_out differs between 1 and 8 threads"
-same "$TMP/sht1.params" "$TMP/sht8.params" "the shift config differs between 1 and 8 threads"
-same "$TMP/shifts.tsv" "$TMP/shiftst1.tsv" "-search_shifts_out differs between 2 and 1 threads"
-# report-free: no -recon_out, -delta_out, -massgap_out or -digest_out, with and without -recon_localize
-for loc in "" -recon_localize; do
-  rf="$TMP/rf$loc"; mkdir -p "$rf"
-  run "${SC[@]}" -out "$rf/t.tsv" -recon_fasta "$DB" -fixed_modifications -massgap_min_spectra 2 $loc \
-    -search_shifts both -search_engine comet -search_config_out "$rf/c.params"
-  [ -s "$rf/c.params" ] || fail "report-free -search_shifts$loc: no config"
-  [ "$(ls "$rf" | tr '\n' ' ')" = "c.params t.tsv " ] || fail "report-free -search_shifts$loc wrote $(ls "$rf" | tr '\n' ' ')"
-  same "$TMP/sht1.params" "$rf/c.params" "report-free -search_shifts$loc: the config differs from the run with reports"
-done
-# site expansion with -recon_localize runs
-run "${SC[@]}" -out "$TMP/se.tsv" "${R[@]}" -recon_localize -massgap_min_spectra 2 -search_shifts both \
-  -search_engine comet -search_config_out "$TMP/se.params" -shift_expand_sites -search_shifts_out "$TMP/se.shifts.tsv"
-[ -s "$TMP/se.params" ] || fail "-shift_expand_sites: no config"
-# -alkylation_out with -search_shifts: #3g's call is handed to the shift rules
-# (ShiftSettings::alkylation_call). The fixture's peptides hold no C, so the
-# call is no_call: no fixed Cys modification is added and every decision, the
-# config and the reports equal the run without -alkylation_out.
-run "${SC[@]}" -out "$TMP/sa.tsv" "${R[@]}" -delta_out "$TMP/sadelta.tsv" -massgap_out "$TMP/sagap.tsv" "${G2[@]}" \
-  -search_shifts both -search_engine comet -search_config_out "$TMP/sa.params" -search_shifts_out "$TMP/sa.shifts.tsv" \
-  -alkylation_out "$TMP/sa.alk.tsv"
-cp "$TMP/log" "$TMP/sa.log"
-[ -s "$TMP/sa.alk.tsv" ] || fail "-alkylation_out with -search_shifts wrote no alkylation report"
-sa_status=$(val "$TMP/sa.alk.tsv" alkylation_call status)
-if [ "$sa_status" = call ]; then sa_call=$(val "$TMP/sa.alk.tsv" alkylation_call reagent); else sa_call=no_call; fi
-[ "$sa_status" = no_call ] || fail "the C-free shift fixture made an alkylation call: $sa_status $sa_call"
-tr -d '\r' < "$TMP/sa.shifts.tsv" | grep -qx "# alkylation call: $sa_call (-alkylation_out; it decides the fixed Cys modification)" \
-  || fail "-search_shifts_out does not name -alkylation_out's call ($sa_call)"
-grep -q -- "-search_shifts: the alkylation call is $sa_call: no fixed Cys modification is added" "$TMP/sa.log" \
-  || fail "the alkylation call did not reach the shift rules"
-tr -d '\r' < "$TMP/sa.shifts.tsv" | grep -v '^# alkylation call: ' > "$TMP/sa.shifts.noalk"
-same "$TMP/shifts.tsv" "$TMP/sa.shifts.noalk" "-alkylation_out (no_call) changed -search_shifts_out beyond its call line"
-same "$TMP/sh.params" "$TMP/sa.params" "-alkylation_out (no_call) changed the shift config"
-same "$TMP/s1.tsv" "$TMP/sa.tsv" "-alkylation_out changed the tag TSV with -search_shifts"
-same "$TMP/srecon0.tsv" "$TMP/recon.tsv" "-alkylation_out changed -recon_out with -search_shifts"
-same "$TMP/sdelta1.tsv" "$TMP/sadelta.tsv" "-alkylation_out changed -delta_out with -search_shifts"
-same "$TMP/sgap1.tsv" "$TMP/sagap.tsv" "-alkylation_out changed -massgap_out with -search_shifts"
-# without -alkylation_out no call line (rule 3 decides)
-tr -d '\r' < "$TMP/shifts.tsv" | grep -q '^# alkylation call: ' && fail "-search_shifts_out names a call without -alkylation_out"
-# refusals
-nope() { local want="$1"; shift; "$BIN" "${SC[@]}" -out "$TMP/n.tsv" "$@" > "$TMP/log" 2>&1; local rc=$?
-  [ "$rc" = "$want" ] || { cat "$TMP/log" >&2; fail "exit $rc (want $want): $*"; }; }
-nope 6 "${R[@]}" -search_shifts both
-grep -q -- "-search_shifts writes into the engine configuration" "$TMP/log" || fail "no -search_config_out: message"
-nope 6 "${R[@]}" -search_shifts offsets -search_config_out "$TMP/n.json"
-grep -q -- "Sage has no mass offsets" "$TMP/log" || fail "offsets with sage: message"
-nope 6 -search_shifts both -search_engine comet -search_config_out "$TMP/n.params"
-grep -q -- "needs a database" "$TMP/log" || fail "no database: message"
-nope 6 "${R[@]}" -search_shifts both "${SH[@]}" -shift_expand_sites
-grep -q -- "-shift_expand_sites needs -recon_localize" "$TMP/log" || fail "expand without localize: message"
-printf '' | "$BIN" -stream -search_shifts both > "$TMP/log" 2>&1 && fail "-stream with -search_shifts was accepted"
-grep -q -- "-stream cannot be combined with -search_shifts" "$TMP/log" || fail "-stream: message"
+same "$TMP/s0.params" "$TMP/s1.params" "-search_shifts both changed -search_config_out"
+same "$TMP/s0.tsv" "$TMP/s1.tsv" "-search_shifts both changed the tag TSV"
+# an unknown modification in the shipped mass-gap table is refused
 mkdir -p "$TMP/baddig"; cp "$DATA"/* "$TMP/baddig/"
 printf 'Bogus\tBogusmod (X)\t1.0\n' >> "$TMP/baddig/massgap_mods.tsv"
-FASTAG_DIGEST_DIR="$TMP/baddig" nope 3 "${R[@]}" -search_shifts both "${SH[@]}"
-grep -q -- "-search_shifts: OpenMS does not know the modification 'Bogusmod (X)'" "$TMP/log" || fail "unknown mod id: message"
-"$BIN" "${SC[@]}" -out "$TMP/w.tsv" -search_shifts_out "$TMP/w.shifts.tsv" -shift_max_variable 5 > "$TMP/log" 2>&1 \
-  || fail "-search_shifts_out without -search_shifts was refused"
-grep -q -- "-search_shifts_out is only read for -search_shifts" "$TMP/log" || fail "no warning for -search_shifts_out"
-grep -q -- "-shift_max_variable is only read for -search_shifts" "$TMP/log" || fail "no warning for -shift_max_variable"
-[ ! -e "$TMP/w.shifts.tsv" ] || fail "-search_shifts_out written without -search_shifts"
+FASTAG_DIGEST_DIR="$TMP/baddig" "$BIN" "${COMMON[@]}" -out "$TMP/n.tsv" "${R[@]}" -massgap_out "$TMP/n.gap.tsv" > "$TMP/log" 2>&1
+rc=$?
+[ "$rc" = 3 ] || { cat "$TMP/log" >&2; fail "unknown mod id: exit $rc (want 3)"; }
+grep -q -- "-massgap_out: OpenMS does not know the modification 'Bogusmod (X)'" "$TMP/log" || fail "unknown mod id: message"
 
 # ---- refusals
 "$BIN" "${COMMON[@]}" -out "$TMP/x.tsv" -massgap_out "$TMP/x2.tsv" > "$TMP/log" 2>&1 \

@@ -61,7 +61,6 @@ namespace FASTag::SpeciesCall
     double alpha = 0.01;        ///< q-value threshold
     double tau = 0.0;           ///< minimum share of the run's units
     uint64_t n_min = 10;        ///< minimum observed spectra of a present genus
-    uint64_t reagent_n_min = 8; ///< -species_reagents: minimum tags in the listed reagent proteins (optional key)
     int decoys = 0;             ///< D the file was calibrated with; 0 = not stated
     std::string version;        ///< free text, e.g. "1.12.0-provisional"
     std::string training_sha256;///< sha256 of the training run list, or "none"
@@ -69,8 +68,9 @@ namespace FASTag::SpeciesCall
 
   /// Read a key<TAB>value table ('#' comments, blank lines ignored). Keys
   /// alpha, tau and n_min are required; decoys, version and training_sha256
-  /// and reagent_n_min are optional; any other key is an error, so a typo cannot silently keep
-  /// a default. Returns false and sets *err on a missing file, a missing or
+  /// are optional; reagent_n_min (of -species_reagents, removed in 1.14) is
+  /// accepted and ignored, so older files still load; any other key is an
+  /// error, so a typo cannot silently keep a default. Returns false and sets *err on a missing file, a missing or
   /// unknown key, or a value out of range (alpha in (0,1], tau in [0,1],
   /// n_min >= 1, decoys >= 0).
   bool loadParams(const std::string& path, Params& out, std::string* err);
@@ -103,9 +103,8 @@ namespace FASTag::SpeciesCall
   struct GenusStat
   {
     uint32_t taxid = 0;
-    uint64_t observed = 0;         ///< explain: distinct tags in spectra not explained at the decision
-    uint64_t tags = 0;             ///< explain only: distinct tags of the genus in the run
-    uint64_t decoy_spectra = 0;    ///< explain: decoy tags (same count), summed over the replicates
+    uint64_t observed = 0;
+    uint64_t decoy_spectra = 0;
     double random_expected = 0.0;  ///< r_g * N_trials
     double spill = 0.0;            ///< homology part
     double expected = 0.0;         ///< lambda_g = spill + random_expected
@@ -115,13 +114,10 @@ namespace FASTag::SpeciesCall
     double share = 0.0;
     double lod = -1.0;             ///< detection limit as a share; < 0 = not applicable
     bool tested = false;           ///< observed >= Taxonomy::kObservedFloor
-    bool reagent = false;          ///< -species_reagents: the group has listed reagent proteins
-    uint64_t reagent_tags = 0;     ///< distinct unexplained tags in its listed reagent proteins
-    double reagent_expected = 0.0; ///< the same count on the decoy tags, per replicate
     Call call = Call::NotDetected;
     std::string reason;            ///< pass, low_resolution, few_spectra, unstable,
                                    ///< near_neighbour, not_significant, low_share,
-                                   ///< few_genus_spectra; explain: explained, reagent
+                                   ///< few_genus_spectra
   };
 
   /// P(X >= o) for X ~ Poisson(lambda); 1 for o == 0.
@@ -144,79 +140,4 @@ namespace FASTag::SpeciesCall
   std::vector<GenusStat> callGenera(const std::vector<GenusInput>& genera,
                                     const std::vector<double>& C,
                                     const RunInput& run, const Params& params);
-
-  // ---- -species_call explain (1.13) ----------------------------------------
-  //
-  // The decoy call above counts spectra and lets a called genus explain a
-  // weaker one through an expected spill. The explain call lets it explain
-  // SPECTRA instead: genera are called one at a time, strongest first, and a
-  // spectrum that has a contributing tag of a called genus no longer counts
-  // for any other genus. The unit is the DISTINCT TAG (a peptide seen in 500
-  // spectra is one piece of evidence, as its decoy is one lookup).
-  //
-  // Per step, for every genus g not yet called: o_g = distinct tags of g in
-  // unexplained spectra; K_gj = the same count on decoy replicate j (decoys of
-  // the tags of unexplained spectra). Null: negative binomial with mean
-  // lambda_g = (sum_j K_gj + 0.5) / R and variance f * lambda_g,
-  // f = phi * (1 + 1/R): 1/R for the estimated mean (predictive), phi =
-  // max(1, sum_g var_j(K_gj) / sum_g mean_j(K_gj)) for the spread between
-  // replicates beyond Poisson, pooled over the genera not yet called. The
-  // genus with the smallest p (ties: more tags, then smaller taxid) is called
-  // present when p * m <= alpha, m = genera not yet called with o >= n_min
-  // (step-down Bonferroni); then its spectra become explained. The first
-  // failure ends the loop. alpha and n_min come from Params; tau and pi0 are
-  // not used. Run-level no_call as in callGenera().
-
-  /// One contributing tag of a spectrum for one report-rank group.
-  struct TagHit
-  {
-    uint32_t spectrum = 0;
-    uint32_t tag = 0;    ///< id of the (target) tag sequence; a decoy carries its target's id
-    uint32_t group = 0;  ///< index into group_taxid
-  };
-
-  /// P(X >= o) for X negative binomial with mean @p mean and variance
-  /// @p variance_factor * mean; Poisson when variance_factor <= 1. 1 for o == 0.
-  double negBinomialUpperTail(uint64_t o, double mean, double variance_factor);
-
-  /// The explain call for every group, in the order of @p group_taxid.
-  /// GenusStat: observed = o_g at the genus's decision (its step when called,
-  /// the stop otherwise), tags = o_g before anything was explained,
-  /// decoy_spectra = sum_j K_gj, expected = lambda_g, qvalue = min(1, p * m),
-  /// reason pass | not_significant | explained (tags >= n_min > observed);
-  /// share is left 0 for the caller, lod is not applicable.
-  std::vector<GenusStat> callExplain(const std::vector<uint32_t>& group_taxid,
-                                     const std::vector<TagHit>& target,
-                                     const std::vector<std::vector<TagHit>>& decoys,
-                                     const RunInput& run, const Params& params);
-
-  // ---- reagent organisms (-species_reagents, experimental, after 1.13.1) ----
-  //
-  // The explain call tests a genus on all its tags against the random matches
-  // of its whole proteome. A protein reagent (porcine trypsin, BSA, casein,
-  // serum) gives some tens of tags from a few proteins: far below that null,
-  // although each of them is specific. callReagents() tests the tags lying
-  // in the LISTED reagent proteins of a group against the decoy tags lying in
-  // the same proteins. Only tags no called group explains count (a tag whose
-  // index support holds a called group is homology, not reagent). Greedy as
-  // callExplain(): the group with the smallest Poisson p is called present
-  // with reason "reagent" when p * m <= alpha (m = candidate groups with
-  // >= reagent_n_min tags), and then explains tags like any called group. A reagent
-  // call says the protein reagent is in the sample, not the organism.
-
-  /// One evaluated tag lying in a listed reagent protein of @p group
-  /// (replicate < 0), or one whose decoy replicate @p replicate does.
-  struct ReagentHit
-  {
-    uint32_t tag = 0;              ///< id of the target tag
-    uint32_t group = 0;            ///< group of the reagent protein
-    int replicate = -1;            ///< < 0: the target tag; j >= 0: its decoy j
-    std::vector<uint32_t> groups;  ///< groups of the target tag's index support (may be empty)
-  };
-
-  /// Fills reagent, reagent_tags and reagent_expected of the groups in
-  /// @p hits and turns not_detected groups that pass into present / "reagent".
-  /// A target hit counts only if its index support holds the group. @p st is
-  /// the result of callExplain(); no_call rows are never changed.
-  void callReagents(std::vector<GenusStat>& st, const std::vector<ReagentHit>& hits, int decoys, const Params& params);
 }

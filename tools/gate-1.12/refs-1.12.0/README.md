@@ -54,7 +54,7 @@ Check a binary against this set on data:
 
     GATE_REFS=<repo>/tools/gate-1.12/refs-1.12.0 /ceph/ibmi/abi/oliver/fastag-gate/gate.sh <FASTag> <outdir>
     GATE_NEW_REFS=<repo>/tools/gate-1.12/refs-1.12.0 \
-      GATE_CASES="dia_refuse pseudo_pass profile_mzml etd_auto species_call chem_reports census_dda census_recon" \
+      GATE_CASES="dia_refuse pseudo_pass etd_auto species_call chem_reports census_dda census_recon" \
       bash <repo>/tools/gate_new_cases.sh <FASTag> <outdir>
 
 The digests do not depend on the thread count, except the -out_spectra mzML,
@@ -76,3 +76,11 @@ which first passed the old refs 8/8 under en_US.UTF-8: `chem_reports.digest`,
 `census_dda.digest`, `census_recon.digest` and their `BINARY.*.txt`. No other
 ref changed. With the new refs the RC, v1.12.1, main 702b45c and release/1.12.2
 pass 8/8 under LC_ALL=C and en_US.UTF-8, and gate.sh 9/9.
+
+## 1.14: profile_mzml removed
+
+The profile_mzml case (#9, PXD000865 under `-pick_profile auto`) is gone with
+that mode, which failed its held-out test and was removed in 1.14 (auto is
+now read as legacy). Its `profile_mzml.digest` and `BINARY.profile_mzml.txt`
+were deleted here and in `../refs-dev`; the mentions of profile_mzml above
+are the history of this set. No other reference changed.

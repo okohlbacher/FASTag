@@ -110,7 +110,6 @@ namespace FASTag::Probe
     std::size_t probe_spectra = 4000;  ///< -acquisition_probe_spectra
     int mzpeak_threads = 1;
     Centroid::Mode pick_mode = Centroid::Mode::Legacy;  ///< -pick_profile
-    bool pick_unknown_type = false;                     ///< -pick_unknown_type
     std::string acquisition_check = "refuse";           ///< -acquisition_check
     std::string fasta;                                  ///< -fasta, optional
     std::vector<std::string> decoy_affixes;             ///< -shortlist_decoy_affix
@@ -152,7 +151,6 @@ namespace FASTag::Probe
   struct DumpOptions
   {
     Centroid::Mode pick_mode = Centroid::Mode::Legacy;
-    bool pick_unknown_type = false;
     int mzpeak_threads = 1;
     Param param;  ///< the run's tagging parameters (one seed length serves)
     /// -ion_series (1.12 #15): the dumped spectrum is prepared with the ion
@@ -160,9 +158,6 @@ namespace FASTag::Probe
     /// cz, or auto on an electron-activated mzML spectrum, with the c/z-dot
     /// pair and its ETD precursor-window filter.
     IonSeries::Mode ion_mode = IonSeries::Mode::By;
-    /// -ion_series_photo ax (1.13 item 11): under auto, a photo-activated
-    /// mzML spectrum is dumped with the a/x pair.
-    bool photo_ax = false;
   };
 
   struct DumpOutput

@@ -107,7 +107,8 @@ export function proteaseCall(digest: Report | null | undefined): ProteaseCall {
 
 export type LabelCall =
   // weak: the status row says the call rests on fewer tag ends than 1.12 required
-  // (1.13 -label_call_min_tags below 175), so label-free only means no rule fired.
+  // (a 1.13 report made with -label_call_min_tags below 175, an option removed in 1.14), so
+  // label-free only means no rule fired.
   | { state: 'call'; label: string; basis: string; silac: string; ends: number | null; why: string; weak: boolean }
   | { state: 'no_call'; reason: string; why: string }
   // A label report without label_call rows: FASTag before 1.12 makes no call.

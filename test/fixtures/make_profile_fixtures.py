@@ -8,8 +8,10 @@ data: every centroid (m/z, intensity) becomes a Gaussian whose apex is that
 intensity at that m/z, sampled on a fixed lattice, with a zero-intensity point
 either side of every run of samples, as Thermo profile spectra look. Picking
 the profile with PeakPickerHiRes gives the source centroids back (within
-about 1 ppm), so FASTag's tags on the picked spectra can be compared with its
-tags on the source spectra (profile_cli_test).
+about 1 ppm). (FASTag 1.12 compared its tags on the picked spectra with its
+tags on the source spectra under -pick_profile auto, removed in 1.14; mzML is
+now tagged as read, and profile_cli_test picks these spectra only from the
+mzPeak archive it writes.)
 
 profile_ms2_small.mzML      spectra 0-9 (10 MS2), resolving power 60,000
                             (FWHM = m/z / 60000), 6 samples per FWHM on a

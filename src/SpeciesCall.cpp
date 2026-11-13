@@ -13,7 +13,6 @@
 #include <OpenMS/DATASTRUCTURES/StringUtils.h>
 #include <OpenMS/MATH/STATISTICS/MultipleTesting.h>
 
-#include <boost/math/special_functions/beta.hpp>
 #include <boost/math/special_functions/gamma.hpp>
 
 #include <algorithm>
@@ -23,7 +22,6 @@
 #include <fstream>
 #include <map>
 #include <numeric>
-#include <set>
 #include <utility>
 
 namespace FASTag::SpeciesCall
@@ -90,8 +88,7 @@ namespace FASTag::SpeciesCall
         return fail("decoys must be an integer in [0, 1000], not '" + kv["decoys"] + "'");
       p.decoys = static_cast<int>(d);
     }
-    if (kv.count("reagent_n_min") && (!parseUInt(kv["reagent_n_min"], p.reagent_n_min) || p.reagent_n_min < 1))
-      return fail("reagent_n_min must be an integer >= 1, not '" + kv["reagent_n_min"] + "'");
+    // reagent_n_min (-species_reagents, removed in 1.14) is accepted and ignored.
     if (kv.count("version")) p.version = kv["version"];
     if (kv.count("training_sha256")) p.training_sha256 = kv["training_sha256"];
     out = p;
@@ -320,136 +317,5 @@ namespace FASTag::SpeciesCall
       if (run.n_units > 0) s.lod = static_cast<double>(o_lod) / static_cast<double>(run.n_units);
     }
     return st;
-  }
-
-  double negBinomialUpperTail(uint64_t o, double mean, double variance_factor)
-  {
-    if (o == 0) return 1.0;
-    if (!(variance_factor > 1.0 + 1e-9)) return poissonUpperTail(o, mean);
-    if (!(mean > 0.0)) return 0.0;
-    // Size r = mean / (f - 1), success probability 1 / f:
-    // P(X >= o) = I_{1 - 1/f}(o, r), the regularised incomplete beta.
-    return boost::math::ibeta(static_cast<double>(o), mean / (variance_factor - 1.0), 1.0 - 1.0 / variance_factor);
-  }
-
-  std::vector<GenusStat> callExplain(const std::vector<uint32_t>& group_taxid,
-                                     const std::vector<TagHit>& target,
-                                     const std::vector<std::vector<TagHit>>& decoys,
-                                     const RunInput& run, const Params& params)
-  {
-    const std::size_t n = group_taxid.size(), R = decoys.size();
-    std::vector<GenusStat> st(n);
-    for (std::size_t g = 0; g < n; ++g) st[g].taxid = group_taxid[g];
-    if (n == 0) return st;
-    uint32_t n_spec = 0;
-    for (const TagHit& h : target) n_spec = std::max(n_spec, h.spectrum + 1);
-    std::vector<char> explained(n_spec, 0);
-    // Distinct tags per group in spectra not explained.
-    // ponytail: re-sorts all hits per step (steps <= groups); keep per-group counts incrementally if a run ever has thousands of groups.
-    std::vector<std::pair<uint32_t, uint32_t>> scratch;
-    const auto count = [&](const std::vector<TagHit>& hits) {
-      scratch.clear();
-      for (const TagHit& h : hits)
-        if (h.group < n && !(h.spectrum < n_spec && explained[h.spectrum])) scratch.emplace_back(h.group, h.tag);
-      std::sort(scratch.begin(), scratch.end());
-      scratch.erase(std::unique(scratch.begin(), scratch.end()), scratch.end());
-      std::vector<uint64_t> c(n, 0);
-      for (const auto& gt : scratch) ++c[gt.first];
-      return c;
-    };
-    const std::vector<uint64_t> total = count(target);
-    for (std::size_t g = 0; g < n; ++g) st[g].tags = total[g];
-    const double Rd = static_cast<double>(std::max<std::size_t>(1, R));
-    std::vector<char> called(n, 0);
-    for (;;)
-    {
-      const std::vector<uint64_t> o = count(target);
-      std::vector<std::vector<uint64_t>> K;
-      for (const auto& d : decoys) K.push_back(count(d));
-      std::vector<uint64_t> sum(n, 0);
-      double mean_sum = 0.0, var_sum = 0.0;
-      std::size_t m = 0;
-      for (std::size_t g = 0; g < n; ++g)
-      {
-        if (called[g]) continue;
-        for (const auto& k : K) sum[g] += k[g];
-        const double mu = static_cast<double>(sum[g]) / Rd;
-        double ss = 0.0;
-        for (const auto& k : K) ss += (static_cast<double>(k[g]) - mu) * (static_cast<double>(k[g]) - mu);
-        mean_sum += mu;
-        if (R > 1) var_sum += ss / (Rd - 1.0);
-        if (o[g] >= params.n_min) ++m;
-      }
-      const double f = std::max(1.0, mean_sum > 0.0 ? var_sum / mean_sum : 1.0) * (1.0 + 1.0 / Rd);
-      std::size_t best = n;
-      for (std::size_t g = 0; g < n; ++g)
-      {
-        if (called[g]) continue;
-        GenusStat& s = st[g];
-        s.observed = o[g];
-        s.decoy_spectra = sum[g];
-        s.random_expected = s.expected = (static_cast<double>(sum[g]) + 0.5) / Rd;
-        s.tested = o[g] >= params.n_min;
-        s.pvalue = s.tested ? negBinomialUpperTail(o[g], s.expected, f) : 1.0;
-        s.qvalue = s.qvalue_random = std::min(1.0, s.pvalue * static_cast<double>(std::max<std::size_t>(1, m)));
-        s.call = Call::NotDetected;
-        s.reason = (!s.tested && s.tags >= params.n_min) ? "explained" : "not_significant";
-        if (s.tested && (best == n || s.pvalue < st[best].pvalue
-                         || (s.pvalue == st[best].pvalue
-                             && (s.observed > st[best].observed
-                                 || (s.observed == st[best].observed && s.taxid < st[best].taxid)))))
-          best = g;
-      }
-      if (best == n || st[best].pvalue * static_cast<double>(m) > params.alpha) break;
-      called[best] = 1;
-      st[best].call = Call::Present;
-      st[best].reason = "pass";
-      for (const TagHit& h : target)
-        if (h.group == best) explained[h.spectrum] = 1;
-    }
-    if (run.low_resolution || run.n_units < run.min_units)
-      for (GenusStat& s : st)
-      {
-        s.call = Call::NoCall;
-        s.reason = run.low_resolution ? "low_resolution" : "few_spectra";
-      }
-    return st;
-  }
-
-  void callReagents(std::vector<GenusStat>& st, const std::vector<ReagentHit>& hits, int decoys, const Params& params)
-  {
-    const std::size_t n = st.size();
-    const double R = static_cast<double>(std::max(1, decoys));
-    for (const ReagentHit& h : hits)
-      if (h.group < n) st[h.group].reagent = true;
-    const auto present = [&](uint32_t g) { return g < n && st[g].call == Call::Present; };
-    for (;;)
-    {
-      // ponytail: recounts all hits per step; steps <= groups with reagent proteins (two in the shipped list).
-      std::vector<std::set<uint32_t>> o(n);
-      std::vector<std::set<std::pair<int, uint32_t>>> k(n);
-      for (const ReagentHit& h : hits)
-      {
-        if (h.group >= n || present(h.group) || std::any_of(h.groups.begin(), h.groups.end(), present)) continue;
-        if (h.replicate >= 0) k[h.group].emplace(h.replicate, h.tag);
-        else if (std::find(h.groups.begin(), h.groups.end(), h.group) != h.groups.end()) o[h.group].insert(h.tag);
-      }
-      std::size_t m = 0, best = n;
-      double best_p = 1.0;
-      for (std::size_t g = 0; g < n; ++g)
-      {
-        GenusStat& s = st[g];
-        if (!s.reagent || s.call == Call::Present) continue;
-        s.reagent_tags = o[g].size();
-        s.reagent_expected = (static_cast<double>(k[g].size()) + 0.5) / R;
-        if (s.call != Call::NotDetected || s.reagent_tags < params.reagent_n_min) continue;
-        ++m;
-        const double p = poissonUpperTail(s.reagent_tags, s.reagent_expected);
-        if (best == n || p < best_p || (p == best_p && s.reagent_tags > st[best].reagent_tags)) { best = g; best_p = p; }
-      }
-      if (best == n || best_p * static_cast<double>(m) > params.alpha) break;
-      st[best].call = Call::Present;
-      st[best].reason = "reagent";
-    }
   }
 }

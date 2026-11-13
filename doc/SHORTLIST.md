@@ -418,14 +418,8 @@ values:
 - `isotope_error` `0/1/2/3` (MSFragger's own default; FASTag's default since the
   held-out test, see below), or `0/1/../n` for `-search_isotope_errors n`
   (`0` for 0);
-- `mass_offsets`: 0 always first, then the `-search_shifts` offsets at 4
-  decimals, `/`-separated; negative offsets are kept (Comet's are dropped);
-  `localize_delta_mass 1` when offsets are exported, as the file recommends.
-  With a Da precursor window FASTag exports no offset: MSFragger 4.4.1 exited
-  1 on such a file in FASTag's test even with the true tolerance at the window
-  ("Could not find <delta> in the list"). `-search_shifts both` then marks each
-  offset `dropped_engine` (the variable modifications are still exported),
-  `-search_shifts offsets` is refused; use `-search_precursor_unit ppm`;
+- `mass_offsets 0` and `localize_delta_mass 0`: FASTag exports no mass
+  offset (the offsets of `-search_shifts` were removed in 1.14, see below);
 - trypsin (`search_enzyme_name_1 trypsin`, cut `KR`, nocut `P`, sense `C`),
   `allowed_missed_cleavage_1` from `-search_missed_cleavages` (2 by default
   with trypsin, else `-recon_missed_cleavages`; at most 5),
@@ -444,7 +438,7 @@ values:
   `-search_nterm_acetyl no`):
   `<mass> <site> <max>`, site the residue, `n^`/`c^` a peptide terminus,
   `[^`/`]^` a protein terminus, `nQ`/`[M` a terminus on one residue; max 3
-  on residues, 1 on termini. More than 16 is refused; `-search_shifts` caps at 16;
+  on residues, 1 on termini. More than 16 is refused;
 - fixed modifications as `add_*` (every key written, 0.0 unless set, so the
   default file's `add_C_cysteine 57.02146` is off without a fixed CAM). A fixed
   terminal modification on one residue, and fixed modifications on MSFragger's
@@ -477,174 +471,34 @@ offset and isotope errors 0..2
 modification must be modelled on the site OpenMS gives it. With
 `FASTAG_MSFRAGGER_JAR`, `search_engine_smoke_test` runs MSFragger on the
 fixture (20 target PSMs in the first run, prsA/metK/rplF found) and checks
-the echoed parameters again. `msfragger_cli_test` covers the decoys, the
-refusals and `-search_shifts` with MSFragger.
+the echoed parameters again. `msfragger_cli_test` covers the decoys and the
+refusals.
 
-## Mass shifts as engine configuration (1.12, #17)
+## Mass shifts as engine configuration (1.12, #17): removed in 1.14
 
-`-search_shifts variable|offsets|both` (needs `-search_config_out` and a
-database; refused with `-stream`) adds the run's mass-gap peaks to the
-configuration above. The peaks are one `FD::gapResult` over the delta
-histogram, the same result `-massgap_out` prints (same `-massgap_window`,
-`-massgap_min_spectra`, `-massgap_min_share`, `-massgap_min_bin`,
-`-massgap_max_mods`), so the export and the report never disagree, and the
-histogram runs without `-delta_out`/`-massgap_out` (report-free run). Each
-peak's evidence is the sum over the histogram rows it claimed
-(`GapPeak::members`): substitution interpretations, localized samples and,
-for site expansion, unique localized sites.
+`-search_shifts none|variable|offsets|both` added the run's mass-gap peaks (the
+`-massgap_out` peaks) to `-search_config_out` as variable modifications or
+mass offsets, with `-search_shifts_out`, `-shift_max_variable`,
+`-shift_max_offsets`, `-shift_expand_sites` and `-shift_site_min_share`,
+`-shift_site_min_count`, `-shift_site_min_ions`. It failed both held-out tests
+and was removed in 1.14: the eight names are accepted with a warning and have
+no effect; `-search_config_out` is the configuration without them.
 
-Deltas are relative to the peptide with the fixed modifications applied, and
-on the labelled side contain a fixed terminal label. Per peak, most spectra
-first (ties: smaller |delta|):
-
-0. within `-massgap_window` of n x 1.00335 (n = 1..3) and closer to it than to
-   any single modification: `skipped_isotope`; the largest n raises the
-   configuration's isotope errors (Sage `isotope_errors`, Comet
-   `isotope_error`). Deamidated is exported only when the centroid is closer to
-   0.98402 than to 1.00335.
-   The same test applies in the frame of a fixed terminal label L (TMT): a
-   peak at L + n x 1.00335 is `skipped_isotope` and raises the isotope errors
-   (up to the 1.13 held-out test it became a Comet offset near n x 1.0034
-   and Sage did not search it).
-1. a fixed terminal label L: a peak at L is `expected_label`, at -L
-   `label_incomplete` (WARN); a peak explained as L + X goes on as X (to
-   rules 2 to 4; rule 0 is not applied to X, see above).
-2. a fixed residue modification F: a peak at +F becomes the same Unimod name
-   on K, H and the peptide N-term where ModificationsDB knows it (the fixed
-   residue left out); a peak at -F is `fixed_mod_questionable` (WARN). Without
-   a fixed Cys modification, a Cys alkylation peak whose C-containing samples
-   are at least half the run's C-containing samples is written as a FIXED
-   modification (`fixed`, WARN). Only C-containing samples count, so +57 on
-   K, the N-term or a Gly-isobaric truncation does not.
-   With `-alkylation_out` (#3g) the run's alkylation call decides instead
-   (`ShiftSettings::alkylation_call`): a reagent call becomes the fixed Cys
-   modification when the configuration has none, the not-alkylated family
-   (`none`) and `no_call` add none, and a peak that would have been `fixed`
-   is `deferred_alkylation_call` (WARN). The `-search_shifts_out` header then
-   names the call.
-3. one modification: a variable modification under its `massgap_mods.tsv`
-   id, mass from ModificationsDB (`already_searched` when the configuration
-   has it; a SILAC label only when the SILAC call is not `none`, else
-   `skipped_silac`). A called SILAC channel is one unit: all its labels (Lys4
-   and Arg6, Lys8 and Arg10, or all four for triplex) are variable
-   modifications outside `-shift_max_variable`, or, when Comet's 15 slots
-   cannot hold them, none is (`dropped_cap`, WARN). A partial channel would
-   search one channel's R-peptides but not its K-peptides.
-4. a combination, no explanation, or a substitution share above 0.5: a Comet
-   mass offset at the 4-decimal centroid minus the run's calibration bias.
-   Sage and negative offsets are `dropped_engine`; 0 is always written first
-   and not counted. A combination made only of exported SILAC labels is
-   `already_searched` (Comet's variable labels cover it, up to 3 per peptide).
-   Calibration: a centroid carries the run's precursor mass bias (PXD003531:
-   about +0.007 Da on every explained peak), a modification mass does not. The
-   bias is the spectra-weighted median of centroid - mass over the peaks one
-   modification explains, other than a rule-0 isotope peak (its
-   Deamidated reading is the one rule 0 rejects). A bias within the centroid
-   resolution (0.00025 Da, half the 0.0005 Da histogram bin) is the binning,
-   not the run: it is reported but not applied, so an exact (in-silico)
-   offset is exported at its centroid; the `-search_shifts_out` header gives it, the number
-   of peaks and the residual (90th percentile of their remaining error), and
-   each offset row its centroid. When the residual (or, with no such peak,
-   the gap window) exceeds the precursor tolerance at 1000 Da, a WARN says
-   Comet can miss the shifted peptides.
-5. caps: `-shift_max_variable` (3) peaks as variable modifications,
-   `-shift_max_offsets` (10) offsets, at most 15 Comet variable slots with the
-   run's own: the rest `dropped_cap`. Under `variable` or `offsets` alone, what
-   the mode does not export is `dropped_mode` (under `offsets` rules 2 and 3
-   export the gap as an offset).
-
-`-shift_expand_sites` (off; needs `-recon_localize`; unvalidated, so not
-recommended) adds a residue to a rule-3 modification when it has at least
-`-shift_site_min_count` (10) samples and `-shift_site_min_share` (0.2) of the
-peak's counted samples, counting only samples with a unique site
-(`loc_ties` 1), at least `-shift_site_min_ions` (2) explaining ions and a
-region longer than one residue, and only residues ModificationsDB knows the
-name on.
-
-`-search_shifts_out` has `#` header lines (input, database, engine, mode,
-settings, counts) and one row per gap peak: `peak`, `delta`, `spectra`,
-`explanation`, `action`, `mod_id`, `sites`, `exported` (mass written, `-` for
-none), `substitution_share`, `localized`, `reason`.
-
-Limits: an undeclared label shows as a single-modification peak and becomes a
-variable modification; more variable modifications can lower sensitivity
-(cap 3). Comet 2026.03.0 ignores negative mass offsets (checked on the DEV
-run, acceptance/1.12 FREEZE-05-17.md), so dropping them loses nothing Comet
-could search; negative shifts reach Comet only as variable modifications.
-
-First held-out test (1.13, acceptance/1.13 `PREREG-item17.md`, `RESULT-item17.md`,
-scored once). Closed search with the run's declared chemistry vs the same
-search plus `-search_shifts` (defaults), Sage 0.14.7 and Comet 2026.03.0,
-shuffled entrapment at r = 1, 1 % PSM FDR, on PXD014764 (SILAC), PXD004541
-(TMT10), PXD000001 (TMT6) and PXD063151 (label-free):
-
-| Run | Comet PSMs | Sage PSMs |
-|---|---|---|
-| PXD014764 | 4224 -> 5979 (+41.6 %) | 4738 -> 6196 (+30.8 %) |
-| PXD004541 | 10079 -> 15053 (+49.4 %) | 11186 -> 11518 (+3.0 %) |
-| PXD000001 | 1116 -> 1133 (+1.5 %) | 1258 -> 1258 (0) |
-| PXD063151 | 34941 -> 43101 (+23.4 %) | 46530 -> 55805 (+20.0 %) |
-
-The identification gain (>= 2 % on 3 of 4 runs) and the no-loss criterion
-pass for both engines. The no-loss criterion (P3) is a net count,
-PSMs(cand) >= 0.99 x PSMs(base); it does not see base identifications that
-the candidate search loses while it adds others. As a secondary measure (no
-criterion), the candidate search lost up to 10.1 % of the base-identified
-scans with Comet (PXD063151; 3.8 % on PXD014764, 2.1 % on PXD004541) and up
-to 1.3 % with Sage (PXD063151). The test FAILED: an MSFragger open search's
-top mass shifts were recovered on only 1 of 4 runs (Comet) and 0 of 4 (Sage);
-Comet's one pass (PXD063151, 7 of 10 peaks) rests on three matches between
-near-zero or near-isotope open-search peaks (0.062, 0.948, 1.064) and offsets
-consistent with a precursor calibration error, without which it is 4 of 10
-(post-hoc note in RESULT-item17.md; the verdict is FAIL either way), and
-Sage's entrapment FDP exceeded 1.5 % on three runs (its closed search already
-did on PXD000001). Known causes: on labelled runs the isotope rule was not
-applied to the label-frame remainder (L + 1.003 became a Comet offset, and
-Sage searched no isotope errors; fixed after the test, see rule 0, checked on
-development data only); near-zero offsets on a run with a precursor
-calibration error widen the search instead; most of the open search's top
-shifts are not among the run's mass-gap peaks at all. The option stays
-experimental.
+First held-out test (1.13, acceptance/1.13 `PREREG-item17.md`,
+`RESULT-item17.md`): closed search against the same search plus the option,
+Sage 0.14.7 and Comet 2026.03.0, 1 % PSM FDR, shuffled entrapment, four runs.
+More PSMs (Comet +1.5 to +49.4 %, Sage 0 to +30.8 %), but an MSFragger open
+search's top mass shifts were recovered on only 1 of 4 runs (Comet) and 0 of 4
+(Sage), and Sage's entrapment FDP exceeded 1.5 % on three runs: **FAIL**.
 
 Second held-out test (1.13, branch `acc113r/shifts`: `PREREG-item17r.md`,
-`RESULT-item17r.md`, scored once; four new public runs, build with the rule 0
-fix). Same design with relaxed criteria (entrapment FDP at most base + 0.3
-points and at most 2.0 %; at least 60 % of the admissible open-search peaks
-recovered on at least 3 runs). **FAIL**: Comet on P2 and P4, Sage on P4.
-Target PSMs at 1 % FDR base -> candidate, entrapment FDP base -> candidate,
-peaks recovered / admissible:
-
-| Run | Comet PSMs | Comet FDP % | Comet peaks | Sage PSMs | Sage FDP % | Sage peaks |
-|---|---|---|---|---|---|---|
-| PXD049248 label-free | 11979 -> 13081 (+9.2 %) | 0.90 -> 0.96 | 1 / 10 | 15754 -> 17423 (+10.6 %) | 0.96 -> 0.96 | 1 / 3 |
-| PXD065251 SILAC | 27494 -> 29607 (+7.7 %) | 1.14 -> 0.95 | 2 / 7 | 29384 -> 31280 (+6.5 %) | 1.12 -> 1.13 | 0 / 1 (not evaluable) |
-| PXD037999 TMT10 | 7469 -> 10215 (+36.8 %) | 0.88 -> 1.28 | 1 / 8 | 8451 -> 10582 (+25.2 %) | 1.04 -> 0.98 | 1 / 3 |
-| PXD073763 TMTpro | 13321 -> 14747 (+10.7 %) | 1.31 -> 1.16 | 1 / 7 | 14195 -> 16074 (+13.2 %) | 1.18 -> 1.08 | 1 / 4 |
-
-- P1 (gain of at least 2 % on at least 3 runs) and P3 (net PSM count) pass on
-  4 of 4 runs for both engines. The candidate search lost 0.8 to 3.7 % of the
-  base-identified scans with Comet and 0.3 to 2.6 % with Sage (no criterion).
-- P2 fails for Comet on the TMT run PXD037999: entrapment FDP 0.88 -> 1.28 %
-  (+0.40 points; limit +0.30). Entrapment hits rose from 33 to 66 while
-  targets rose from 7469 to 10215. The shifts exported on this run are
-  variable TMT6plex on H and on the peptide N-terminus. The development run
-  PXD003531 showed the same rise (0.91 -> 1.34 %). Sage shows none. The cause
-  is not diagnosed.
-- Part of the gain is the isotope error setting: the base search uses isotope
-  error 0 and the option sets 0..1 on three of the four runs, which a
-  standard engine setting also gives. On Sage PXD065251 the only new masses
-  are Met-loss+Acetyl and the 13C error (+1896 PSMs). The gain over a base
-  search with the same isotope errors was not measured.
-- P4 fails on every evaluable run. Of the admissible open-search peaks the
-  option recovered 5 of 32 with Comet (9 are among the run's mass-gap peaks,
-  6 were exported) and 3 of 11 with Sage (5 among the mass-gap peaks). The
-  peaks that are not mass-gap peaks include catalogued modifications
-  (Acetyl, ammonia and water loss, Na, K).
-
-The test compared the option on against off; it did not measure the rule 0
-fix. `-search_shifts` does not replace an open search. With Comet on
-labelled data, check the error rate of the additional PSMs. The option stays
-experimental.
+`RESULT-item17r.md`; four new runs, relaxed criteria): more PSMs on 4 of 4
+runs (Comet +7.7 to +36.8 %, Sage +6.5 to +25.2 %), but Comet's entrapment
+FDP rose on the TMT run PXD037999 (0.88 -> 1.28 %, limit +0.30 points; Sage
+passes), and the option recovered only 5 of 32 (Comet) and 3 of 11 (Sage)
+admissible peaks of an MSFragger open search: **FAIL**. Part of the gain was
+the isotope error setting (base 0, option 0..1 on three runs). The option did
+not replace an open search.
 
 ## Known limits
 

@@ -569,6 +569,9 @@ int main()
     check(SC::loadParams(f, p, &err) && p.alpha == 0.05 && p.tau == 0.002 && p.n_min == 20 && p.decoys == 5
               && p.version == "1.12.0-test" && p.training_sha256 == "none",
           "loadParams: good file (" + err + ")");
+    // 1.14: reagent_n_min (of -species_reagents, removed) is accepted and ignored.
+    writeFile(f, "alpha\t0.05\ntau\t0.002\nn_min\t20\nreagent_n_min\tx\n");
+    check(SC::loadParams(f, p, &err) && p.alpha == 0.05 && p.n_min == 20, "loadParams: reagent_n_min ignored (" + err + ")");
     writeFile(f, "alpha\t0.05\ntau\t0.002\n");
     check(!SC::loadParams(f, p, &err) && err.find("n_min") != std::string::npos, "loadParams: missing key refused");
     writeFile(f, "alpha\t0.05\ntau\t0.002\nn_min\t20\nalhpa\t0.1\n");
@@ -583,121 +586,6 @@ int main()
     check(!SC::loadParams(f, p, &err), "loadParams: n_min 0 refused");
     check(!SC::loadParams(dir + "/no_such_species_call.tsv", p, &err), "loadParams: missing file refused");
     std::remove(f.c_str());
-  }
-
-  // ---- 12. -species_call explain (1.13) ----------------------------------------
-  {
-    using namespace FASTag::SpeciesCall;
-    check(negBinomialUpperTail(0, 2.0, 2.0) == 1.0, "NB tail: o = 0");
-    check(std::fabs(negBinomialUpperTail(7, 3.0, 1.0) - poissonUpperTail(7, 3.0)) < 1e-15, "NB tail: factor 1 is Poisson");
-    // mean 2, variance 4: size 2, p 1/2 -> P(0) = 1/4, P(1) = 1/4.
-    check(std::fabs(negBinomialUpperTail(1, 2.0, 2.0) - 0.75) < 1e-12, "NB tail: P(X >= 1)");
-    check(std::fabs(negBinomialUpperTail(2, 2.0, 2.0) - 0.5) < 1e-12, "NB tail: P(X >= 2)");
-    check(negBinomialUpperTail(20, 3.0, 2.0) > poissonUpperTail(20, 3.0), "NB tail: heavier than Poisson");
-
-    // contributingTags is the tag view of spectrumTaxa.
-    std::vector<TagSupport> tags(4);
-    tags[0].evalue = 0.5; tags[0].taxa = {1, 2};
-    tags[1].evalue = 0.1; tags[1].taxa = {3};
-    tags[2].evalue = 0.1; tags[2].taxa = {4};
-    tags[3].evalue = 0.01;  // best E but not informative
-    for (SpeciesEvidence mode : {SpeciesEvidence::Best, SpeciesEvidence::All})
-    {
-      std::set<uint32_t> u;
-      for (std::size_t i : contributingTags(tags, mode)) u.insert(tags[i].taxa.begin(), tags[i].taxa.end());
-      check(u == spectrumTaxa(tags, mode), "contributingTags: union of taxa equals spectrumTaxa");
-    }
-    check(contributingTags(tags, SpeciesEvidence::Best) == std::vector<std::size_t>({1, 2}), "contributingTags: the best informative E");
-
-    // Group 0 is the organism (40 tags), group 1 a relative that shares 15 of
-    // its tags and has nothing of its own, group 2 a second organism (12 tags
-    // in its own spectra), group 3 has chance hits only. One decoy hit per
-    // replicate.
-    const std::vector<uint32_t> taxid = {10, 20, 30, 40};
-    std::vector<TagHit> target;
-    for (uint32_t s = 0; s < 40; ++s) target.push_back({s, s, 0});
-    for (uint32_t s = 0; s < 15; ++s) target.push_back({s, s, 1});
-    for (uint32_t s = 100; s < 112; ++s) target.push_back({s, s, 2});
-    target.push_back({200, 200, 3});
-    std::vector<std::vector<TagHit>> decoys(5);
-    for (uint32_t j = 0; j < 5; ++j) decoys[j].push_back({j, j, j % 4});
-    Params prm;  // alpha 0.01, n_min 10
-    RunInput run;
-    run.n_units = 1000;
-    const std::vector<GenusStat> st = callExplain(taxid, target, decoys, run, prm);
-    check(st.size() == 4 && st[0].taxid == 10 && st[3].taxid == 40, "explain: one row per group, in order");
-    check(st[0].call == Call::Present && st[0].observed == 40 && st[0].tags == 40, "explain: the organism is present");
-    check(st[2].call == Call::Present && st[2].observed == 12, "explain: the second organism is present");
-    check(st[1].call == Call::NotDetected && st[1].reason == "explained" && st[1].tags == 15 && st[1].observed == 0,
-          "explain: the relative's tags are explained by the organism");
-    check(st[3].call == Call::NotDetected && st[3].reason == "not_significant", "explain: chance hits are not detected");
-    check(st[0].qvalue <= prm.alpha && st[1].qvalue == 1.0, "explain: decoy_qvalue");
-    // The relative alone would be called: the explaining is what removes it.
-    std::vector<TagHit> alone;
-    for (uint32_t s = 0; s < 15; ++s) alone.push_back({s, s, 1});
-    check(callExplain(taxid, alone, decoys, run, prm)[1].call == Call::Present, "explain: the same 15 tags alone are present");
-    // The same tag in many spectra is one tag.
-    std::vector<TagHit> repeat;
-    for (uint32_t s = 0; s < 500; ++s) repeat.push_back({s, 7, 0});
-    const GenusStat rs = callExplain(taxid, repeat, decoys, run, prm)[0];
-    check(rs.tags == 1 && rs.call == Call::NotDetected, "explain: 500 spectra of one tag are one tag");
-    // Targets that look like the decoys: nothing present.
-    std::vector<TagHit> flat;
-    std::vector<std::vector<TagHit>> dflat(5);
-    for (uint32_t g = 0; g < 4; ++g)
-    {
-      for (uint32_t t = 0; t < 12; ++t) flat.push_back({g * 100 + t, g * 100 + t, g});
-      for (uint32_t j = 0; j < 5; ++j)
-        for (uint32_t t = 0; t < 10 + (j + g) % 5; ++t) dflat[j].push_back({g * 100 + t, g * 100 + t, g});
-    }
-    for (const GenusStat& s : callExplain(taxid, flat, dflat, run, prm))
-      check(s.call == Call::NotDetected, "explain: targets at the decoy level are not detected");
-    // Run-level abstention as in the decoy call.
-    run.low_resolution = true;
-    for (const GenusStat& s : callExplain(taxid, target, decoys, run, prm))
-      check(s.call == Call::NoCall && s.reason == "low_resolution", "explain: low_resolution is a run-level no_call");
-    run.low_resolution = false;
-    run.n_units = 10;
-    check(callExplain(taxid, target, decoys, run, prm)[0].reason == "few_spectra", "explain: few_spectra is a run-level no_call");
-    check(callExplain({}, target, decoys, run, prm).empty(), "explain: no groups");
-  }
-
-  // ---- 13. reagent organisms (-species_reagents) --------------------------------
-  {
-    using namespace FASTag::SpeciesCall;
-    // Group 0 is called. Group 1: 12 tags of its own in listed proteins, 3 shared with group 0 (homology), 2
-    // without index support, one decoy hit. Group 2: 10 tags, all shared with group 1. Group 3: 7 tags (< 8).
-    std::vector<ReagentHit> hits;
-    for (uint32_t t = 0; t < 12; ++t) hits.push_back({t, 1, -1, {1}});
-    for (uint32_t t = 20; t < 23; ++t) hits.push_back({t, 1, -1, {0, 1}});
-    for (uint32_t t = 30; t < 32; ++t) hits.push_back({t, 1, -1, {}});
-    hits.push_back({40, 1, 0, {}});
-    hits.push_back({41, 1, 2, {0}});   // decoy of a tag the called group explains: not counted
-    for (uint32_t t = 0; t < 10; ++t) hits.push_back({t, 2, -1, {1, 2}});
-    for (int j = 0; j < 5; ++j) hits.push_back({60, 2, j, {}});   // group 2's null: 1.1, so group 1 is called first
-    for (uint32_t t = 50; t < 57; ++t) hits.push_back({t, 3, -1, {3}});
-    const auto fresh = [] {
-      std::vector<GenusStat> st(5);
-      st[0].call = Call::Present; st[0].reason = "pass";
-      for (std::size_t g = 1; g < 5; ++g) st[g].reason = "not_significant";
-      return st;
-    };
-    Params prm;  // alpha 0.01, reagent_n_min 8
-    std::vector<GenusStat> st = fresh();
-    callReagents(st, hits, 5, prm);
-    check(st[1].call == Call::Present && st[1].reason == "reagent", "reagent: tags in the listed proteins call the group");
-    check(st[1].reagent_tags == 12 && std::fabs(st[1].reagent_expected - 0.3) < 1e-12, "reagent: own tags and decoy mean");
-    check(st[2].call == Call::NotDetected && st[2].reagent && st[2].reagent_tags == 0, "reagent: a called reagent explains shared tags");
-    check(st[3].call == Call::NotDetected && st[3].reagent_tags == 7, "reagent: fewer than reagent_n_min tags");
-    check(st[0].reason == "pass" && !st[0].reagent && !st[4].reagent, "reagent: other groups untouched");
-    st = fresh();
-    for (GenusStat& s : st) { s.call = Call::NoCall; s.reason = "few_spectra"; }
-    callReagents(st, hits, 5, prm);
-    check(st[1].call == Call::NoCall && st[1].reason == "few_spectra" && st[1].reagent_tags == 15, "reagent: a run-level no_call stays");
-    st = fresh();
-    for (int j = 0; j < 5; ++j) for (uint32_t t = 100; t < 108; ++t) hits.push_back({t, 1, j, {}});
-    callReagents(st, hits, 5, prm);
-    check(st[1].call == Call::NotDetected && std::fabs(st[1].reagent_expected - 8.3) < 1e-12, "reagent: tags at the decoy level are not called");
   }
 
   if (failures) { std::cerr << failures << " species_call_test check(s) failed\n"; return 1; }

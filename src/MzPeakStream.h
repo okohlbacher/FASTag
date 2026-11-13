@@ -79,7 +79,7 @@ namespace FASTag
     /// take() and the copies do with profile MS2; the default, picking every
     /// PROFILE MS2, is -pick_profile legacy (FASTag 1.11).
     void start(std::vector<char> mask, std::set<std::size_t> keep_copy = {},
-               Centroid::Policy picking = Centroid::Policy{true, false});
+               Centroid::Policy picking = Centroid::Policy{true});
 
     /// Spectrum @p i, waiting until it is read. Each wanted index once.
     /// @p picker: the calling thread's own (PeakPickerHiRes is not
@@ -133,7 +133,7 @@ namespace FASTag
     std::unordered_map<std::size_t, OpenMS::MSSpectrum> slots_;
     std::vector<char> mask_;
     std::set<std::size_t> keep_copy_;
-    Centroid::Policy picking_{true, false};  ///< set by start(), before the first spectrum
+    Centroid::Policy picking_{true};  ///< set by start(), before the first spectrum
     std::map<std::size_t, OpenMS::MSSpectrum> copies_;
     std::atomic<std::size_t> picked_{0}, pick_failed_{0};
     std::thread reader_;
@@ -146,7 +146,7 @@ namespace FASTag
   /// is past the run's end.
   void readMzPeakSpectra(const std::string& path, int threads, const std::vector<std::size_t>& indices,
                          const std::function<void(OpenMS::MSSpectrum&)>& sink,
-                         Centroid::Policy picking = Centroid::Policy{true, false});
+                         Centroid::Policy picking = Centroid::Policy{true});
 
   /// The acquisition probe of an mzPeak archive (1.12 item #7): the
   /// Ms2Meta of its first MS2, in file order, within @p limits. A

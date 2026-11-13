@@ -97,10 +97,13 @@ const OPT_IN_1_13_EXPERIMENTAL = '1.13 experimental command-line option, not in 
 /// not offered in the form.
 const EXPERIMENTAL_1_13 = '1.13 experimental command-line option, not in the form (CLI default applies)'
 
-/// Label discovery (-label_discovery_out): experimental and opt-in; it failed its
-/// held-out tests; command line only until it has a GUI design.
-const EXPERIMENTAL_LABEL_DISCOVERY =
-  'experimental command-line option (label discovery), not in the form (CLI default applies)'
+/// FASTag 1.14 removed these options: they failed their held-out tests. The
+/// CLI still accepts each name, with a warning and no effect, so that saved
+/// command lines and INI files keep working; the form never offers them.
+const REMOVED_1_14 = 'removed in 1.14 (failed its held-out test); the CLI accepts it with a warning, no effect'
+const REMOVED_1_14_HELP: ParamHelp = {
+  text: 'Removed in FASTag 1.14 because it failed its held-out test. It has no effect; it is kept so that old command lines and INI files still run.'
+}
 
 const SPECIES_OFF: Dependency = { on: 'species', note: 'species detection is off' }
 const GLYCO_OFF: Dependency = { on: 'glyco', note: 'oxonium flagging is off' }
@@ -992,16 +995,13 @@ export const PARAM_UI: Record<string, ParamUi> = {
   },
   ion_series: {
     hidden: OPT_IN_1_12,
+    // 1.14: ax (a/x ions) was removed; the CLI still accepts it and reads by.
+    choices: ['by', 'cz', 'auto'],
     help: {
-      text: 'Read the spectra as b/y ions (the default), as c/z ions of ETD or ECD, choose per spectrum from its activation (auto), or read them as a/x ions of UVPD (ax, experimental; it failed its held-out test).'
+      text: 'Read the spectra as b/y ions (the default), as c/z ions of ETD or ECD, or choose per spectrum from its activation (auto). The a/x reading (ax) was removed in 1.14: it failed its held-out test.'
     }
   },
-  ion_series_photo: {
-    hidden: OPT_IN_1_13_EXPERIMENTAL,
-    help: {
-      text: 'Under ion series auto: read photodissociation (UVPD) spectra as b/y ions (the default) or as a/x ions. Experimental: the a/x reading failed its held-out test.'
-    }
-  },
+  ion_series_photo: { hidden: REMOVED_1_14, help: REMOVED_1_14_HELP },
   ion_series_hybrid: {
     hidden: OPT_IN_1_13_EXPERIMENTAL,
     help: {
@@ -1016,16 +1016,13 @@ export const PARAM_UI: Record<string, ParamUi> = {
   },
   pick_profile: {
     hidden: OPT_IN_1_12,
+    // 1.14: auto (centroid mzML too) was removed; the CLI still accepts it and reads legacy.
+    choices: ['legacy', 'off'],
     help: {
-      text: 'Centroid profile MS2 spectra before tagging. By default only mzPeak input is centroided (as in 1.11); auto also centroids mzML; off never centroids. Spectra that are already centroided are never picked again.'
+      text: 'Centroid profile MS2 spectra before tagging. By default only mzPeak input is centroided (as in 1.11); off never centroids. Spectra that are already centroided are never picked again. The auto mode, which also centroided mzML, was removed in 1.14: it failed its held-out test.'
     }
   },
-  pick_unknown_type: {
-    hidden: OPT_IN_1_12,
-    help: {
-      text: 'With profile picking on auto, also centroid spectra that do not say whether they are profile or centroided, when their data look like profile.'
-    }
-  },
+  pick_unknown_type: { hidden: REMOVED_1_14, help: REMOVED_1_14_HELP },
   probe_input: {
     hidden: 'metadata probe for programs; prints JSON lines and exits',
     help: {
@@ -1086,54 +1083,14 @@ export const PARAM_UI: Record<string, ParamUi> = {
       text: 'The unit of that precursor tolerance.'
     }
   },
-  search_shifts: {
-    hidden: OPT_IN_1_12,
-    help: {
-      text: 'Add the mass shifts FASTag sees in the run to the search settings: as variable modifications, as Comet mass offsets, or both. Experimental.'
-    }
-  },
-  search_shifts_out: {
-    hidden: OPT_IN_1_12,
-    help: {
-      text: 'Write a table of the mass shifts FASTag found and what it did with each one in the search settings.'
-    }
-  },
-  shift_expand_sites: {
-    hidden: OPT_IN_1_12,
-    help: {
-      text: 'Let a variable modification also sit on the residues where FASTag placed that shift.'
-    }
-  },
-  shift_max_offsets: {
-    hidden: OPT_IN_1_12,
-    help: {
-      text: 'How many mass shifts are written as Comet mass offsets, besides 0.'
-    }
-  },
-  shift_max_variable: {
-    hidden: OPT_IN_1_12,
-    help: {
-      text: 'How many mass shifts are written as variable modifications.'
-    }
-  },
-  shift_site_min_count: {
-    hidden: OPT_IN_1_12,
-    help: {
-      text: 'How many placed spectra a residue needs before a shift is allowed on it.'
-    }
-  },
-  shift_site_min_ions: {
-    hidden: OPT_IN_1_12,
-    help: {
-      text: 'How many fragment ions a placed spectrum needs to count for a residue.'
-    }
-  },
-  shift_site_min_share: {
-    hidden: OPT_IN_1_12,
-    help: {
-      text: 'The share of the placed spectra of a shift that a residue needs before the shift is allowed on it.'
-    }
-  },
+  search_shifts: { hidden: REMOVED_1_14, help: REMOVED_1_14_HELP },
+  search_shifts_out: { hidden: REMOVED_1_14, help: REMOVED_1_14_HELP },
+  shift_expand_sites: { hidden: REMOVED_1_14, help: REMOVED_1_14_HELP },
+  shift_max_offsets: { hidden: REMOVED_1_14, help: REMOVED_1_14_HELP },
+  shift_max_variable: { hidden: REMOVED_1_14, help: REMOVED_1_14_HELP },
+  shift_site_min_count: { hidden: REMOVED_1_14, help: REMOVED_1_14_HELP },
+  shift_site_min_ions: { hidden: REMOVED_1_14, help: REMOVED_1_14_HELP },
+  shift_site_min_share: { hidden: REMOVED_1_14, help: REMOVED_1_14_HELP },
   shortlist_background: {
     hidden: OPT_IN_1_12,
     help: {
@@ -1208,8 +1165,10 @@ export const PARAM_UI: Record<string, ParamUi> = {
   },
   species_call: {
     hidden: OPT_IN_1_12,
+    // 1.14: explain was removed; the CLI still accepts it and reads none.
+    choices: ['none', 'decoy'],
     help: {
-      text: 'Add experimental organism calls to the species report. none leaves calls off; decoy compares evidence with decoy tags; explain tests each organism using spectra not explained by an earlier call.',
+      text: 'Add experimental organism calls to the species report. none leaves calls off; decoy compares evidence with decoy tags. The explain call was removed in 1.14: it failed its held-out test.',
       tip: 'The decision settings are provisional. These calls and their decoy q-values are not calibrated error guarantees; not detected never proves biological absence.'
     }
   },
@@ -1238,12 +1197,7 @@ export const PARAM_UI: Record<string, ParamUi> = {
       tip: 'The optional decoy-based calls and decoy q-values remain experimental and uncalibrated.'
     }
   },
-  species_reagents: {
-    hidden: OPT_IN_1_13_EXPERIMENTAL,
-    help: {
-      text: 'A FASTA file of reagent proteins (trypsin, serum albumin, milk proteins). With the explain organism call, an organism seen only through these proteins is reported as a reagent, not as a sample organism.'
-    }
-  },
+  species_reagents: { hidden: REMOVED_1_14, help: REMOVED_1_14_HELP },
   species_pi0: {
     hidden: OPT_IN_1_12,
     help: {
@@ -1258,62 +1212,15 @@ export const PARAM_UI: Record<string, ParamUi> = {
   },
 
   // ---- Not in the form: FASTag 1.13 experimental options
-  label_call_min_tags: {
-    hidden: 'experimental 1.13 command-line option, not in the form (CLI default applies)',
-    depends: [{ on: 'label_out', note: 'only the label report uses it' }],
-    help: {
-      text: 'How many C-terminal tag ends the label call in the label report needs; with fewer it makes no call. The default 175 is the FASTag 1.12 call. At 0 every run with a ppm fragment tolerance gets a call, and with few tag ends a label-free call only means that none of the label rules fired (the mass-gap report can still show SILAC).',
-      tip: '0 is experimental: it failed its 1.13 held-out test.'
-    }
-  },
+  label_call_min_tags: { hidden: REMOVED_1_14, help: REMOVED_1_14_HELP },
 
-  // ---- Not in the form: label discovery (see EXPERIMENTAL_LABEL_DISCOVERY)
-  label_discovery_out: {
-    hidden: EXPERIMENTAL_LABEL_DISCOVERY,
-    help: {
-      text: 'Write the label discovery report: mass offsets the tag flanks carry at the peptide N-terminus, lysine, arginine or C-terminus, explained by residues, known labels or Unimod, with a label call supported by reporter ions and precursor pairs. Experimental and CLI-only. It failed its held-out tests (the third: weighted accuracy 0.572 against 0.80, TMTpro recall 11 of 18); a call is evidence to check, not a guarantee.'
-    }
-  },
-  label_discovery_depth: {
-    hidden: EXPERIMENTAL_LABEL_DISCOVERY,
-    help: {
-      text: 'How many residues an explanation of a flank peak may name in the label discovery report (0, 1 or 2).'
-    }
-  },
-  label_discovery_max_flank: {
-    hidden: EXPERIMENTAL_LABEL_DISCOVERY,
-    help: {
-      text: 'The largest flank mass the label discovery report looks at, in Da.'
-    }
-  },
-  label_discovery_min_share: {
-    hidden: EXPERIMENTAL_LABEL_DISCOVERY,
-    help: {
-      text: 'Which share of the counted spectra a peak of the label discovery report needs.'
-    }
-  },
-  label_discovery_min_spectra: {
-    hidden: EXPERIMENTAL_LABEL_DISCOVERY,
-    help: {
-      text: 'How many spectra a peak or an offset of the label discovery report needs.'
-    }
-  },
-  label_discovery_unimod_top: {
-    hidden: EXPERIMENTAL_LABEL_DISCOVERY,
-    help: {
-      text: 'How many Unimod alternatives the label discovery report lists per peak.'
-    }
-  },
-  label_discovery_window_c: {
-    hidden: EXPERIMENTAL_LABEL_DISCOVERY,
-    help: {
-      text: 'The mass window of the C-terminal flanks in the label discovery report, in Da. 0 means it is estimated from the run.'
-    }
-  },
-  label_discovery_window_n: {
-    hidden: EXPERIMENTAL_LABEL_DISCOVERY,
-    help: {
-      text: 'The mass window of the N-terminal flanks in the label discovery report, in Da. 0 means it is estimated from the run.'
-    }
-  }
+  // ---- Not in the form: removed in 1.14 (see REMOVED_1_14)
+  label_discovery_out: { hidden: REMOVED_1_14, help: REMOVED_1_14_HELP },
+  label_discovery_depth: { hidden: REMOVED_1_14, help: REMOVED_1_14_HELP },
+  label_discovery_max_flank: { hidden: REMOVED_1_14, help: REMOVED_1_14_HELP },
+  label_discovery_min_share: { hidden: REMOVED_1_14, help: REMOVED_1_14_HELP },
+  label_discovery_min_spectra: { hidden: REMOVED_1_14, help: REMOVED_1_14_HELP },
+  label_discovery_unimod_top: { hidden: REMOVED_1_14, help: REMOVED_1_14_HELP },
+  label_discovery_window_c: { hidden: REMOVED_1_14, help: REMOVED_1_14_HELP },
+  label_discovery_window_n: { hidden: REMOVED_1_14, help: REMOVED_1_14_HELP }
 }

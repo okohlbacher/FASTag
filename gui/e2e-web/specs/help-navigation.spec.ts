@@ -71,7 +71,7 @@ test('expanded command-line help and an unmatched long query fit the minimum win
   await page.getByRole('button', { name: 'Help', exact: true }).click()
   const panel = helpPanel(page)
   const search = panel.getByRole('searchbox', { name: 'Search Help' })
-  for (const name of ['species_call', 'label_discovery_out', 'fragment_tolerance']) {
+  for (const name of ['species_call', 'alkylation_tags_out', 'fragment_tolerance']) {
     await search.fill(`-${name}`)
     await search.press('Enter')
     const entry = panel.locator(`#param-${name}`)
