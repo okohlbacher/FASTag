@@ -1,3 +1,8 @@
+# Copyright (c) 2026 Oliver Kohlbacher and contributors
+# SPDX-License-Identifier: MIT
+# $Maintainer: Oliver Kohlbacher $
+# $Authors: Oliver Kohlbacher $
+
 cmake_minimum_required(VERSION 3.24 FATAL_ERROR)
 project(FASTag VERSION 1.13.3 LANGUAGES CXX)
 # The GUI carries that version in four more files; a bump that misses one

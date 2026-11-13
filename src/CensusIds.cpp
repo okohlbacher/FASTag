@@ -2,8 +2,11 @@
 //
 // Copyright (c) 2026 Oliver Kohlbacher and contributors
 // SPDX-License-Identifier: MIT
+// $Maintainer: Oliver Kohlbacher $
+// $Authors: Oliver Kohlbacher $
 #include "CensusIds.h"
 
+#include <OpenMS/DATASTRUCTURES/StringUtils.h>
 #include <OpenMS/FORMAT/FileHandler.h>
 #include <OpenMS/METADATA/PeptideHit.h>
 #include <OpenMS/METADATA/PeptideIdentification.h>
@@ -49,19 +52,6 @@ namespace FASTag::CensusIds
       for (std::size_t i = from; i < to; ++i)
         if (!std::isdigit(static_cast<unsigned char>(s[i]))) return false;
       return true;
-    }
-
-    std::string lower(std::string s)
-    {
-      for (char& c : s) c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
-      return s;
-    }
-
-    std::string trim(const std::string& s)
-    {
-      const auto b = s.find_first_not_of(" \t\r\n");
-      if (b == std::string::npos) return {};
-      return s.substr(b, s.find_last_not_of(" \t\r\n") - b + 1);
     }
 
     /// A reference or native id as the census writes it (Census::appendField).
@@ -129,7 +119,7 @@ namespace FASTag::CensusIds
     for (;;)
     {
       const std::size_t dot = name.rfind('.');
-      if (dot == std::string::npos || dot == 0 || !ext.count(lower(name.substr(dot + 1)))) break;
+      if (dot == std::string::npos || dot == 0 || !ext.count(OpenMS::StringUtils::toLowered(name.substr(dot + 1)))) break;
       name.resize(dot);
     }
     return name;
@@ -137,7 +127,7 @@ namespace FASTag::CensusIds
 
   bool isQValueScoreType(const std::string& score_type)
   {
-    const std::string s = lower(trim(score_type));
+    const std::string s = OpenMS::StringUtils::toLowered(OpenMS::StringUtils::trimmed(score_type));
     return s == "q-value" || s == "qvalue" || s == "q_value" || s == "ms:1002354" || s == "psm-level q-value";
   }
 
@@ -165,7 +155,7 @@ namespace FASTag::CensusIds
 
   bool Index::add(const std::string& ref, bool accepted)
   {
-    if (trim(ref).empty()) return false;
+    if (OpenMS::StringUtils::trimmed(ref).empty()) return false;
     auto [it, fresh] = refs_.try_emplace(escaped(ref));
     if (fresh) it->second.scan = scanOf(it->first);
     it->second.accepted = it->second.accepted || accepted;
@@ -234,7 +224,7 @@ namespace FASTag::CensusIds
       OpenMS::StringList paths;
       p.getPrimaryMSRunPath(paths);
       for (const std::string& s : paths)
-        if (!trim(s).empty()) runs.insert(runStem(trim(s)));
+        if (!OpenMS::StringUtils::trimmed(s).empty()) runs.insert(runStem(OpenMS::StringUtils::trimmed(s)));
     }
     L.runs.assign(runs.begin(), runs.end());
     for (const OpenMS::PeptideIdentification& id : peptides)

@@ -2,6 +2,8 @@
 //
 // Copyright (c) 2026 Oliver Kohlbacher and contributors
 // SPDX-License-Identifier: MIT
+// $Maintainer: Oliver Kohlbacher $
+// $Authors: Oliver Kohlbacher $
 //
 // Reimplements the DirecTag algorithm (Tabb et al., J Proteome Res 2008, 7:3838)
 // from its publication. No code was copied from the reference implementation.

@@ -2,11 +2,15 @@
 //
 // Copyright (c) 2026 Oliver Kohlbacher and contributors
 // SPDX-License-Identifier: MIT
+// $Maintainer: Oliver Kohlbacher $
+// $Authors: Oliver Kohlbacher $
 //
 // Compiled with -ffp-contract=off, like Digest.cpp, to match the reference's
 // floating-point results.
 
 #include "Digest.h"
+
+#include <OpenMS/DATASTRUCTURES/StringUtils.h>
 
 #include <algorithm>
 #include <cctype>
@@ -43,12 +47,6 @@ namespace FASTag::Digest
         out.push_back(Row{section, key, value, n, description});
       }
     };
-
-    std::string lower(std::string s)
-    {
-      for (char& c : s) c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
-      return s;
-    }
 
     const char* kKeys7[] = {"K", "K+TMT", "K+TMTpro", "K+iTRAQ4", "K+8", "R", "R+10"};
 
@@ -272,7 +270,7 @@ namespace FASTag::Digest
       }
 
     // no-call rules, in order
-    const std::string inst = lower(meta.instrument_name + " " + meta.instrument_model);
+    const std::string inst = OpenMS::StringUtils::toLowered(meta.instrument_name + " " + meta.instrument_model);
     const bool tims_yes = inst.find("timstof") != std::string::npos || meta.native_id_type == "MS:1002818" ||
                           meta.native_id_type == "MS:1002819" || meta.im_vssc > 0;
     const std::string tims = tims_yes ? "yes" : (have_inst || have_nid) ? "no" : "unknown";
@@ -466,7 +464,7 @@ namespace FASTag::Digest
   std::string instrumentClass(const RunMeta& meta)
   {
     // The timstof and ion_counts rules of digestRows(), read the same way.
-    const std::string inst = lower(meta.instrument_name + " " + meta.instrument_model);
+    const std::string inst = OpenMS::StringUtils::toLowered(meta.instrument_name + " " + meta.instrument_model);
     const bool tims = inst.find("timstof") != std::string::npos || meta.native_id_type == "MS:1002818" ||
                       meta.native_id_type == "MS:1002819" || meta.im_vssc > 0;
     if (tims) return "timstof";

@@ -3,11 +3,15 @@
 //
 // Copyright (c) 2026 Oliver Kohlbacher and contributors
 // SPDX-License-Identifier: MIT
+// $Maintainer: Oliver Kohlbacher $
+// $Authors: Oliver Kohlbacher $
 #include "Shortlist.h"
 
 #include "Digest.h"
 #include "NumFormat.h"
 #include "OutputGuard.h"
+
+#include <OpenMS/DATASTRUCTURES/StringUtils.h>
 
 #include <algorithm>
 #include <cctype>
@@ -21,12 +25,6 @@ namespace FASTag::Shortlist
 {
   namespace
   {
-    std::string lower(std::string s)
-    {
-      for (char& c : s) c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
-      return s;
-    }
-
     /// Tabs and line breaks would split a TSV field.
     std::string field(const std::string& s)
     {
@@ -63,11 +61,11 @@ namespace FASTag::Shortlist
 
   bool isDecoy(const std::string& accession, const std::vector<std::string>& affixes)
   {
-    const std::string acc = lower(accession);
+    const std::string acc = OpenMS::StringUtils::toLowered(accession);
     for (const std::string& raw : affixes)
     {
       if (raw.empty()) continue;
-      const std::string a = lower(raw);
+      const std::string a = OpenMS::StringUtils::toLowered(raw);
       const bool suffix = a.front() == '_' && a.back() != '_';
       if (a.size() > acc.size()) continue;
       if (suffix ? acc.compare(acc.size() - a.size(), a.size(), a) == 0 : acc.compare(0, a.size(), a) == 0)
