@@ -279,8 +279,9 @@ is left under the name, and no configuration is written.
 - The database in the configuration is `-fasta_out`, else the input database
   (WARN when that holds decoys, since the engine adds its own).
 - **MSFragger** (`-search_engine msfragger`, experimental since 1.13, first held-out
-  test FAILED, second test with the shortlist recipe PASSED and that recipe the
-  default since, pinned 4.4.1): see "MSFragger configuration" below.
+  test FAILED, second test with the shortlist recipe PASSED, third test with the
+  same recipe FAILED; the recipe is the default but not validated; pinned
+  4.4.1): see "MSFragger configuration" below.
 
 Engine acceptance (`test/search_engine_smoke_test.sh` with `FASTAG_SAGE_BIN`
 and `FASTAG_COMET_BIN`, mandatory with `FASTAG_ENGINES_REQUIRED=1`) runs on
@@ -388,13 +389,36 @@ development run PXD003531 the export without these options is
 byte-identical to the one with them. Sage, Comet, a run without
 `-search_config_out` and a `-shortlist_protease` other than trypsin (not
 tested held-out with these values) keep 1.13.1's values.
-`-shortlist_gapped` is a flag and cannot be given off, so
-`-shortlist_exact_only` (experimental, after 1.13.1; `true` in an INI) turns
-gapped placement off there: only exact placements count, the other three
-values stay msfragger defaults and the header line names only those. It is
-refused together with `-shortlist_gapped`; without msfragger exact placement is
-the default already and the flag changes nothing. Exact-only with the other
-three values has no held-out test.
+
+**Third held-out test: FAIL** (8 runs from 8 new PRIDE projects,
+PREREG-exactonly.md on `acc114/exactonly`, scored once on 2026-11-13; FASTag
+1.13.4, MSFragger 4.4.1, 12 threads; criteria of the first test). Primary arm:
+`-shortlist_exact_only` (1.13.3), the msfragger defaults with gapped placement
+off. Secondary arm: the msfragger defaults above, unchanged.
+
+| Arm | Kept share (C2) | Speed-up (G1) | Entrapment FDP (G2) | Verdict |
+|---|---|---|---|---|
+| `-shortlist_exact_only` | 0.503 to 0.963, median 0.916; below 0.80 in PXD003252 (0.503) and PXD014823 (0.732) | 2.17 to 3.47, median 3.06 | 1.04% pooled, at most 1.13% | FAIL (C2) |
+| msfragger defaults | 0.530 to 0.972, median 0.937; below 0.80 in PXD003252 (0.530) | 2.12 to 3.21, median 2.57 | 1.02% pooled, 2.12% in PXD045654 | FAIL (C2, G2) |
+
+Both arms ran unedited in 8 of 8 runs (C1). So the msfragger defaults passed
+the second test (9 runs, lowest kept share 0.833) and failed the third. They
+stay the default under `-search_engine msfragger`, but they are not
+validated. `-shortlist_exact_only` failed and was removed in 1.14: the name
+is still accepted (also in an INI) with one warning and has no effect, so
+gapped placement stays on under msfragger.
+
+Causes, examined after scoring (no score changed). In PXD003252 most spectra
+the defaults lose belong to a protein that is in the shortlist; MSFragger's
+calibration in the full search shows broad fragment errors (MS2 median
+2.0 ppm, MAD 5.4 ppm) and widened the fragment tolerance to 30 ppm, while the
+export fixes 20 ppm without calibration; that this causes the loss is a
+hypothesis, not tested. In
+PXD014823 most lost spectra have no protein in the shortlist, and gapped
+placement recovers about half of them (0.732 to 0.840); the full search shows
+a systematic mass offset (MS2 -7.8 ppm before calibration). The G2 failure in
+PXD045654 rests on 17 entrapment hits on a 384-protein shortlist, about 0.12
+points per hit.
 
 `-search_engine msfragger` writes a complete `fragger.params` for MSFragger
 4.4.1 (`java -jar MSFragger-4.4.1.jar fragger.params <spectra>`), keys in the

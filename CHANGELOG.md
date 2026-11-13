@@ -69,6 +69,20 @@ remaining configuration writes the same output as 1.13.4.
   All eight have no effect; the shift rules, the `-search_shifts_out` report,
   their tests and the `shifts_insilico.mgf` fixture are removed.
   `-search_config_out`, `-delta_out` and `-massgap_out` are unchanged.
+- **`-shortlist_exact_only`** (1.13.3): failed its held-out test (8 new
+  runs: kept share of the full MSFragger search 0.503 in PXD003252 and 0.732
+  in PXD014823, criterion at least 0.80 in every run). It has no effect;
+  under `-search_engine msfragger` gapped placement stays on, also when the
+  option is given together with `-shortlist_gapped`, which is no longer
+  refused.
+
+The msfragger shortlist defaults (`-shortlist_gapped` on,
+`-shortlist_max_evalue 10`, `-recon_min_length 6`,
+`-recon_missed_cleavages 2`) were the secondary arm of that test and failed
+it too: kept share 0.530 in PXD003252, entrapment FDP 2.12% in PXD045654
+(limit 2.0% per run). They passed the second held-out test (9 runs, lowest
+kept share 0.833). They stay the default, but the docs no longer call them
+validated (doc/SHORTLIST.md, "Third held-out test").
 
 ## 1.13.4 (2026-11-13)
 

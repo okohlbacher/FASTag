@@ -803,7 +803,8 @@ TOPPFASTag::ExitCodes TOPPFASTag::main_(int, const char**)
   }
   // post-1.13.1: with -search_engine msfragger (and -search_config_out) the
   // shortlist options take the configuration of the second held-out test
-  // (PREREG-msfragger2.md, PASS) unless the user set them. Tested with the
+  // (PREREG-msfragger2.md, PASS; the third, PREREG-exactonly.md, FAILED, so
+  // the defaults are not validated) unless the user set them. Tested with the
   // tryptic shortlist only, so a -shortlist_protease other than trypsin keeps
   // 1.13.1's values. The help of the two -recon_* options is frozen (1.11
   // interface, baseline_identity_test); -search_engine's help says it.
@@ -816,13 +817,7 @@ TOPPFASTag::ExitCodes TOPPFASTag::main_(int, const char**)
     return apply;
   };
   FASTag::Shortlist::Settings sl_settings;
-  const bool sl_exact_only = getFlag_("shortlist_exact_only");
-  if (sl_exact_only && getFlag_("shortlist_gapped"))
-  {
-    OPENMS_LOG_ERROR << "-shortlist_exact_only and -shortlist_gapped contradict each other; give one." << std::endl;
-    return ILLEGAL_PARAMETERS;
-  }
-  sl_settings.gapped = !sl_exact_only && (msfDefault("shortlist_gapped", "on") || getFlag_("shortlist_gapped"));
+  sl_settings.gapped = msfDefault("shortlist_gapped", "on") || getFlag_("shortlist_gapped");
   sl_settings.max_evalue = msfDefault("shortlist_max_evalue", "10") ? 10.0 : getDoubleOption_("shortlist_max_evalue");
   const int recon_min_length = msfDefault("recon_min_length", "6") ? 6 : getIntOption_("recon_min_length");
   const int recon_mc = msfDefault("recon_missed_cleavages", "2") ? 2 : getIntOption_("recon_missed_cleavages");
@@ -1242,7 +1237,6 @@ TOPPFASTag::ExitCodes TOPPFASTag::main_(int, const char**)
         {"shortlist_max_evalue", "-shortlist_out or -fasta_out", shortlist_on},
         {"shortlist_min_spectra", "-shortlist_out or -fasta_out", shortlist_on},
         {"shortlist_gapped", "-shortlist_out or -fasta_out", shortlist_on},
-        {"shortlist_exact_only", "-shortlist_out or -fasta_out", shortlist_on},
         {"shortlist_parsimony", "-shortlist_out or -fasta_out", shortlist_on},
         {"shortlist_top", "-shortlist_out or -fasta_out", shortlist_on},
         {"shortlist_protease", "-shortlist_out, -fasta_out or -search_config_out", handoff_on},
