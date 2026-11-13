@@ -196,10 +196,10 @@ describe('docs: code comments that promise the CLI will not reject a GUI value',
     await click(runButton())
     expect(mock.runCalls).toHaveLength(0)
   })
-  it('the 73 advanced FASTag parameters (14 before 1.12, 8 of label discovery (removed in 1.14, all advanced since), 12 from 1.13: alkylation_tags_out, complement_probe, ion_series_photo, ion_series_hybrid, label_call_min_tags, -check_header_*, shortlist_protease, shortlist_specificity, digest_quality, species_reagents) are in the manifest, and the ignored mzpeak_read_memory is hidden', () => {
+  it('the 75 advanced FASTag parameters (14 before 1.12, 8 of label discovery (removed in 1.14, all advanced since), search_shifts and search_shifts_out (removed in 1.14, advanced since), 12 from 1.13: alkylation_tags_out, complement_probe, ion_series_photo, ion_series_hybrid, label_call_min_tags, -check_header_*, shortlist_protease, shortlist_specificity, digest_quality, species_reagents) are in the manifest, and the ignored mzpeak_read_memory is hidden', () => {
     const own = ['version', 'log', 'debug', 'no_progress', 'force', 'test']
     const adv = (manifest.params as { name: string; toppAdvanced: boolean }[]).filter((p) => p.toppAdvanced && !own.includes(p.name))
-    expect(adv.length).toBe(73)
+    expect(adv.length).toBe(75)
     expect(adv.map((p) => p.name)).toContain('species_reagents')
     expect(adv.map((p) => p.name)).toContain('ion_series_photo')
     expect(adv.map((p) => p.name)).toContain('ion_series_hybrid')

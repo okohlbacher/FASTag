@@ -168,14 +168,8 @@ Recorded here so the integrator of D#3g finds them beside the format:
   or `-isotope_error`: `alk_run tags` equals a recount of the selected,
   ungapped, E <= 1 rows, and `-alkylation_out` is identical at defaults with
   and without E#6's options.
-- **A#17 (`-search_shifts`, merges before D#3g).** `ShiftSettings::alkylation_call`
-  is fed from the Call computed right after the per-thread merge (FASTag.cpp,
-  "the alkylation call (#3g), once, right after the merge"), which is before
-  the hand-off exports: pass the reagent name, or `none` / `no_call`, when
-  `-alkylation_out` is set. `-alkylation_out` writes the same Call. Add the
-  digest_cli_test case A#17 asks for: `-alkylation_out` with `-search_shifts`
-  writes no `fixed` row that contradicts the call, and a no_call writes
-  `deferred_alkylation_call`.
+- **A#17 (`-search_shifts`).** Removed in 1.14 (failed its held-out tests);
+  `-alkylation_out` is the only reader of the call.
 - **E#15B (c/z tags, merges last).** Contract 2: c/z tags do not vote. In
   `tag_one`, a c/z tag (`tag_cz`) that passes `countsTag` goes to
   `pt.acc.d.alk.excludeNonBy()` instead of `addTag`, and is not placed for the

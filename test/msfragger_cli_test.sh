@@ -10,18 +10,13 @@
 #      written; a target-decoy database (rev_ on half the entries) is accepted;
 #      -search_decoy_prefix sets the prefix of the appended decoys;
 #   d. -search_config_template with msfragger is refused;
-#   e. -search_shifts both with msfragger: mass_offsets starts with 0 and each
-#      decision row of an offset is in it; Comet's non-negative rule does not apply;
-#      the fixture must yield at least one exported offset (else the case is
-#      vacuous and fails);
+#   e. -search_shifts both and -shift_max_offsets with msfragger (removed in
+#      1.14): accepted, one warning each, the config and FASTA unchanged;
 #   f. decoys never enter the protease background: sage = msfragger on a
 #      decoy-heavy database, and Sage's protease call on it equals the one on
 #      the same targets without the decoys (no FASTAG_PREV_BIN needed); with
 #      FASTAG_PREV_BIN the Sage and Comet hand-off outputs and logs equal that
 #      build's (FASTAG_IDENTITY_REQUIRED=1: fail when it is unset);
-#   g. a Da precursor window: -search_shifts both exports no mass offset (each
-#      is dropped_engine, MSFragger 4.4.1 exits 1 on them) and keeps -threads
-#      as num_threads; -search_shifts offsets is refused;
 #   h. the by-engine export defaults (isotope errors, missed cleavages,
 #      precursor window, N-terminal acetylation);
 #   i. the msfragger shortlist defaults (post-1.13.1): without the four options
@@ -123,29 +118,18 @@ echo "x = 1" > "$TMP/d/t.params"
     -search_config_template t.params > run.log 2>&1 ) && fail "d: -search_config_template with msfragger accepted"
 grep -q 'needs -search_engine comet' "$TMP/d/run.log" || fail "d: no refusal message"
 
-# ---- e: the ion-trap fixture gives no gap peak; shifts_insilico.mgf
-# (make_shift_fixture.py, as digest_cli_test) carries Oxidation, Acetyl, a 13C
-# spacing and the unexplained shifts +123.4565 and -77.7775 on Ecoli_MS2_small.fasta.
-EARGS=(-in "$FIX/shifts_insilico.mgf" -recon_fasta "$FIX/Ecoli_MS2_small.fasta" -extension 3 -fixed_modifications
-       -search_precursor_tolerance 15 -threads 2 -fasta_out red.fasta -search_config_out f.params
-       -search_engine msfragger -search_shifts_out sh.tsv -massgap_min_spectra 2)
-rune() { local d=$1; shift; mkdir -p "$d"; ( cd "$d" && "$BIN" "${EARGS[@]}" -out t.tsv "$@" > run.log 2>&1 ); }
-rune "$TMP/e" -search_shifts both || { cat "$TMP/e/run.log" >&2; fail "e: exit non-zero"; }
-off=$(key "$TMP/e/f.params" mass_offsets)
-case "$off" in 0|0/*) ;; *) fail "e: mass_offsets '$off' does not start with 0" ;; esac
-awk -F'\t' '!/^#/ && $5 == "offset" { print $8 }' "$TMP/e/sh.tsv" > "$TMP/e/off.txt"
-while read -r o; do
-  case "/$off/" in *"/$o/"*) ;; *) fail "e: the exported offset $o is not in mass_offsets '$off'" ;; esac
-done < "$TMP/e/off.txt"
-grep -q 'kept non-negative' "$TMP/e/sh.tsv" && fail "e: Comet's non-negative rule applied to MSFragger"
-[ "$(key "$TMP/e/f.params" localize_delta_mass)" = "$([ "$off" = 0 ] && echo 0 || echo 1)" ] \
-  || fail "e: localize_delta_mass does not follow the offsets"
-n_off=$(wc -l < "$TMP/e/off.txt" | tr -d ' ')
-[ "$n_off" -ge 1 ] || fail "e: the fixture exports no offset, so case e checks nothing"
-awk '$1 < 0 { f = 1 } END { exit !f }' "$TMP/e/off.txt" || fail "e: no negative offset exported (mass_offsets '$off')"
-[ "$(key "$TMP/e/f.params" num_threads)" = 2 ] || fail "e: num_threads is not -threads"
-[ "$off" = 0/-77.7775/123.4565 ] || fail "e: mass_offsets '$off' is not the fixture's 0/-77.7775/123.4565"
-echo "e: mass_offsets $off ($n_off offsets)"
+# ---- e: -search_shifts and its options were removed in 1.14: no effect
+run "$TMP/e0" -out t.tsv -fasta_out red.fasta -search_config_out f.params -search_engine msfragger
+run "$TMP/e1" -out t.tsv -fasta_out red.fasta -search_config_out f.params -search_engine msfragger \
+  -search_shifts both -shift_max_offsets 3
+for o in search_shifts shift_max_offsets; do
+  [ "$(grep -c -- "-$o was removed in 1.14 (failed its held-out test); it has no effect" "$TMP/e1/run.log")" = 1 ] \
+    || fail "e: -$o: not exactly one removal warning"
+done
+for f in t.tsv red.fasta f.params; do cmp -s "$TMP/e0/$f" "$TMP/e1/$f" || fail "e: -search_shifts both changed $f"; done
+[ "$(key "$TMP/e1/f.params" mass_offsets)" = 0 ] && [ "$(key "$TMP/e1/f.params" localize_delta_mass)" = 0 ] \
+  || fail "e: mass offsets exported"
+[ "$(key "$TMP/e1/f.params" num_threads)" = 2 ] || fail "e: num_threads is not -threads"
 # ---- f: decoys stay out of the protease background (sage and msfragger alike),
 # and with FASTAG_PREV_BIN (a build without -search_engine msfragger) the Sage
 # and Comet hand-off outputs are byte-identical to it. The database has many
@@ -189,27 +173,6 @@ if [ -n "${FASTAG_PREV_BIN:-}" ]; then
   done
   echo "f: sage and comet hand-off outputs equal FASTAG_PREV_BIN"
 fi
-# ---- g: a Da precursor window (the case e fixture)
-EDA=()
-for x in "${EARGS[@]}"; do EDA+=("$x"); done
-for i in "${!EDA[@]}"; do
-  [ "${EDA[$i]}" = -search_precursor_tolerance ] && EDA[$((i + 1))]=0.02
-  [ "${EDA[$i]}" = -threads ] && EDA[$((i + 1))]=3
-done
-EARGS=("${EDA[@]}" -search_precursor_unit Da)
-rune "$TMP/g" -search_shifts both || { cat "$TMP/g/run.log" >&2; fail "g: exit non-zero"; }
-[ "$(key "$TMP/g/f.params" precursor_mass_units)" = 0 ] || fail "g: not a Da window"
-[ "$(key "$TMP/g/f.params" mass_offsets)" = 0 ] || fail "g: mass offsets exported with a Da precursor window"
-[ "$(key "$TMP/g/f.params" localize_delta_mass)" = 0 ] || fail "g: localize_delta_mass on without offsets"
-[ "$(key "$TMP/g/f.params" num_threads)" = 3 ] || fail "g: num_threads is not -threads 3"
-awk -F'\t' '!/^#/ && $5 == "offset"' "$TMP/g/sh.tsv" | grep -q . && fail "g: an offset decision with a Da window"
-awk -F'\t' '!/^#/ && $5 == "variable"' "$TMP/g/sh.tsv" | grep -q . || fail "g: the variable modifications were dropped too"
-n_da=$(awk -F'\t' '!/^#/ && $5 == "dropped_engine" && /Da precursor window/' "$TMP/g/sh.tsv" | wc -l | tr -d ' ')
-[ "$n_da" -eq "$n_off" ] || fail "g: $n_da offsets dropped for the Da window, case e exported $n_off"
-rune "$TMP/g2" -search_shifts offsets && fail "g: -search_shifts offsets with a Da window accepted"
-grep -q 'Da precursor' "$TMP/g2/run.log" || { cat "$TMP/g2/run.log" >&2; fail "g: no refusal message"; }
-[ -e "$TMP/g2/f.params" ] && fail "g: the refused config was written"
-echo "g: Da window, $n_da offsets dropped_engine"
 # ---- h: without -search_isotope_errors MSFragger gets its own default 0..3, Sage none; an explicit 0 stays 0
 HARGS=(-in "$IN" -recon_fasta "$DB" -tag_length 4 -extension 1 -fragment_tolerance 0.5 -fragment_tolerance_unit Da
        -out t.tsv -shortlist_out sl.tsv -fasta_out red.fasta -threads 2)

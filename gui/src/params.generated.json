@@ -1118,32 +1118,23 @@
       "name": "search_shifts",
       "type": "string",
       "default": "none",
-      "description": "Add the run's mass-gap peaks to -search_config_out: 'variable' as variable modifications, 'offsets' as Comet mass offsets, 'both'. Isotope errors, fixed labels and caps are applied; -search_shifts_out lists every decision. Experimental: failed both held-out tests; on development runs 0 to +80 % PSMs over a search with the same isotope errors at 1.0 to 1.2 % entrapment FDP (doc/SHORTLIST.md, README)",
+      "description": "Removed in 1.14; no effect (accepted so that existing command lines and INI files keep working)",
       "required": false,
-      "toppAdvanced": false,
-      "choices": [
-        "none",
-        "variable",
-        "offsets",
-        "both"
-      ]
+      "toppAdvanced": true
     },
     {
       "name": "search_shifts_out",
       "type": "output-file",
       "default": "",
-      "description": "One row per mass-gap peak: its explanation and what -search_shifts did with it",
+      "description": "Removed in 1.14; no effect (accepted so that existing command lines and INI files keep working)",
       "required": false,
-      "toppAdvanced": false,
-      "formats": [
-        "tsv"
-      ]
+      "toppAdvanced": true
     },
     {
       "name": "shift_expand_sites",
       "type": "bool",
       "default": "false",
-      "description": "Add the residues -recon_localize places a variable shift on (unique sites only) to that modification",
+      "description": "Removed in 1.14; no effect (accepted so that existing command lines and INI files keep working)",
       "required": false,
       "toppAdvanced": true
     },
@@ -1151,47 +1142,41 @@
       "name": "shift_max_offsets",
       "type": "int",
       "default": "10",
-      "description": "Mass-gap peaks exported as Comet mass offsets besides 0, most spectra first",
+      "description": "Removed in 1.14; no effect (accepted so that existing command lines and INI files keep working)",
       "required": false,
-      "toppAdvanced": true,
-      "min": 0
+      "toppAdvanced": true
     },
     {
       "name": "shift_max_variable",
       "type": "int",
       "default": "3",
-      "description": "Mass-gap peaks exported as variable modifications, most spectra first",
+      "description": "Removed in 1.14; no effect (accepted so that existing command lines and INI files keep working)",
       "required": false,
-      "toppAdvanced": true,
-      "min": 0
+      "toppAdvanced": true
     },
     {
       "name": "shift_site_min_count",
       "type": "int",
       "default": "10",
-      "description": "Localized samples a residue needs for -shift_expand_sites",
+      "description": "Removed in 1.14; no effect (accepted so that existing command lines and INI files keep working)",
       "required": false,
-      "toppAdvanced": true,
-      "min": 1
+      "toppAdvanced": true
     },
     {
       "name": "shift_site_min_ions",
       "type": "int",
       "default": "2",
-      "description": "b/y ions a localized sample needs to count for -shift_expand_sites",
+      "description": "Removed in 1.14; no effect (accepted so that existing command lines and INI files keep working)",
       "required": false,
-      "toppAdvanced": true,
-      "min": 1
+      "toppAdvanced": true
     },
     {
       "name": "shift_site_min_share",
       "type": "double",
       "default": "0.2",
-      "description": "Share of a peak's localized samples a residue needs for -shift_expand_sites",
+      "description": "Removed in 1.14; no effect (accepted so that existing command lines and INI files keep working)",
       "required": false,
-      "toppAdvanced": true,
-      "min": 0,
-      "max": 1
+      "toppAdvanced": true
     },
     {
       "name": "shortlist_background",

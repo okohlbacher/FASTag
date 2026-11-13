@@ -48,6 +48,17 @@ remaining configuration writes the same output as 1.13.4.
   under `auto`, has no effect. mzML MS2 is never centroided; the m/z-sorted
   picking, the unknown-type picking and the `profile_mzml` gate case are
   removed. `legacy` (mzPeak picked on read, as 1.11) and `off` are unchanged.
+- **Mass shifts as search configuration** (`-search_shifts` and
+  `-search_shifts_out`, `-shift_max_variable`, `-shift_max_offsets`,
+  `-shift_expand_sites`, `-shift_site_min_share`, `-shift_site_min_count`,
+  `-shift_site_min_ions`): failed both held-out tests (#17). Second test
+  (item17r, four new runs): more PSMs on 4 of 4 runs (Comet +7.7 to +36.8%,
+  Sage +6.5 to +25.2%), but Comet's entrapment FDP rose on PXD037999 (0.88%
+  -> 1.28%, limit +0.30 points), and the option recovered only 5 of 32
+  (Comet) and 3 of 11 (Sage) admissible peaks of an MSFragger open search.
+  All eight have no effect; the shift rules, the `-search_shifts_out` report,
+  their tests and the `shifts_insilico.mgf` fixture are removed.
+  `-search_config_out`, `-delta_out` and `-massgap_out` are unchanged.
 
 ## 1.13.4 (2026-11-13)
 

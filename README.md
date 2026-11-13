@@ -651,11 +651,7 @@ MGF→mzML direction is exact.
 | `-search_nterm_acetyl <engine\|yes\|no>` | engine | Add `Acetyl (Protein N-term)` to the variable modifications of the configuration; `engine` = only for msfragger, as in its own defaults (held-out test passed together with the shortlist recipe, see Held-out acceptance) |
 | `-search_isotope_errors <n>` | -1 | Precursor isotope errors 0..n (at most 3); 0 = none; -1 = by engine: none for Sage and Comet, 0..3 for MSFragger (held-out test passed together with the shortlist recipe, see Held-out acceptance) |
 | `-search_decoy_prefix <s>` | `rev_` (Sage, MSFragger) / `DECOY_` (Comet) | Prefix of the decoys the engine generates (MSFragger: the decoys FASTag appends to `-fasta_out`, or the ones the input database holds) |
-| `-search_shifts <none\|variable\|offsets\|both>` | none | Experimental (1.12): add the run's mass-gap peaks (the `-massgap_out` peaks, computed without writing it) to `-search_config_out` as variable modifications or Comet mass offsets (see Mass shifts as search configuration). Candidates for an FDR-controlling engine, NOT identifications; failed both held-out tests (see Held-out acceptance); on development runs 0 to +80 % PSMs over a search with the same isotope errors (see Mass shifts as search configuration). Needs `-search_config_out` and a database; `offsets` needs `-search_engine comet` or `msfragger` (MSFragger keeps negative offsets and has 16 variable slots; with a Da precursor window it gets no offsets, MSFragger 4.4.1 exits 1 on them) |
-| `-search_shifts_out <file>` | none | With `-search_shifts`: one row per mass-gap peak with its explanation and the action taken (`variable`, `offset`, `fixed`, `skipped_isotope`, `expected_label`, `label_incomplete`, `fixed_mod_questionable`, `skipped_silac`, `deferred_alkylation_call`, `already_searched`, `dropped_cap`, `dropped_engine`, `dropped_mode`) |
-| `-shift_max_variable <n>` / `-shift_max_offsets <n>` | 3 / 10 | Advanced: gap peaks exported as variable modifications / as offsets besides 0, most spectra first |
-| `-shift_expand_sites` | off | Advanced, unvalidated: add the residues `-recon_localize` places a variable shift on to that modification (needs `-recon_localize`) |
-| `-shift_site_min_share <f>` / `-shift_site_min_count <n>` / `-shift_site_min_ions <n>` | 0.2 / 10 / 2 | Advanced: share and count of a peak's localized samples a residue needs for `-shift_expand_sites`; b/y ions a sample needs to count |
+| `-search_shifts <mode>`, `-search_shifts_out <file>`, `-shift_max_variable`, `-shift_max_offsets`, `-shift_expand_sites`, `-shift_site_min_share`, `-shift_site_min_count`, `-shift_site_min_ions` | none | Removed in 1.14 (failed both held-out tests, see Mass shifts as search configuration): accepted with a warning, no effect; `-search_config_out` is unchanged |
 | `-entrapment_fasta <file>` | none | Entrapment database (foreign species) calibrating a `q_db` column: the estimated false-match rate of the `-fasta` filter at each E-value (see q_db). Requires `-fasta` |
 | `-glyco` | off | Flag oxonium-bearing MS2 spectra to `<out>` with its extension replaced by `.glyco.tsv` (see Glyco flag) |
 | `-glyco_out <file>` | `<out>` with its extension replaced by `.glyco.tsv` | With `-glyco`: per-spectrum oxonium report |
@@ -954,66 +950,20 @@ the human proteome), so give `-extension` (3 on the gate runs). See [doc/SHORTLI
 
 ### Mass shifts as search configuration
 
-Experimental in 1.12 and opt-in: `-search_shifts variable|offsets|both` adds
-the run's mass-gap peaks to `-search_config_out`, closing an open-search loop
-cheaply. The peaks are exactly the ones `-massgap_out` reports (same
-`-massgap_*` thresholds), computed whether or not a report is written;
-`-delta_out` and `-massgap_out` are byte-identical with and without it. A peak
-at a precursor isotope spacing, or at a fixed terminal label (TMT) plus an
-isotope spacing, raises the engine's isotope errors instead; a
-peak equal to a fixed terminal label is expected; a peak at minus a fixed
-modification or label is warned about; a fixed residue modification seen
-again becomes a variable modification on its other sites (overalkylation);
-one modification becomes a variable modification (at most
-`-shift_max_variable`); combinations, unexplained and substitution-dominated
-peaks become Comet mass offsets (Sage has none; negative offsets are left
-out; 0 is always first), corrected by the run's calibration bias (the
-spectra-weighted median error of the single-modification peaks other than
-13C isotope peaks, applied only when larger than the 0.00025 Da centroid
-resolution, in the `-search_shifts_out` header; a WARN when the remaining uncertainty exceeds the
-precursor tolerance). A called SILAC channel is exported as a whole (all its
-labels, outside `-shift_max_variable`) or not at all, with a WARN. Without a
-fixed Cys modification, a Cys alkylation on at least half the C-containing
-placements is written as a fixed modification, with a WARN; with
-`-alkylation_out` the run's alkylation call decides the fixed Cys modification
-instead (a reagent call becomes it; `none` or `no_call` adds none). `-search_shifts_out` lists every decision. These are candidates
-for an FDR-controlling engine, not identifications. Held-out test (1.13,
-acceptance/1.13 RESULT-item17.md; four public runs, SILAC, TMT10, TMT6,
-label-free): more PSMs at 1 % FDR on 3 of 4 runs with both engines (Comet
-+23 to +49 %, Sage +3 to +31 %; a net count: Comet also lost up to 10.1 % of
-the scans the base search identified, Sage up to 1.3 %), but the
-preregistered test FAILED on its other criteria (recovery of an open search's
-top mass shifts for both engines, Comet's one passing run resting on
-calibration artefacts; entrapment FDP above 1.5 % for Sage). A second
-held-out test with relaxed criteria on four new runs (`acc113r/shifts`,
-RESULT-item17r.md) FAILED as well: +7.7 to +36.8 % PSMs with Comet and +6.5
-to +25.2 % with Sage on all four runs, but Comet's entrapment FDP rose from
-0.88 to 1.28 % on the TMT run, and only 5 of 32 (Comet) and 3 of 11 (Sage)
-admissible open-search peaks were recovered. Part of the gain is the isotope
-error setting (0..1 against 0 in the base search). Both FAIL results stand.
-Measured afterwards on development runs only (the eight held-out runs, now
-spent, and two earlier development runs; no new held-out test): against a
-base search with the same isotope error setting the option gives, with
-Comet, +0.2 % (PXD000001, TMT6), +0.8 % (PXD073763, TMTpro), +2.2 %
-(PXD065251, SILAC), +4.5 and +4.8 % (PXD004541, TMT10, two fractions), +6.8 %
-(PXD049248, label-free), +10.1 % (PXD063151, label-free), +13.6 % (PXD014764,
-SILAC), +38.3 % (PXD037999, TMT10) and +80.3 % (PXD003531, label-free) PSMs
-at 1 % FDR; with Sage 0.0, +1.3, +2.5 to +2.8 (three runs), +3.1, +7.8,
-+7.9, +25.4 and +64.7 % in the same runs (means over 3 entrapment databases,
-10 for PXD037999 and PXD003531, 1 for PXD014764). The isotope error setting
-alone gives +1.3 to +54 % (Comet), which is most of the gain reported above on
-six of the ten runs. Entrapment FDP at 1 % FDR, mean of 10 entrapment
-databases: PXD037999 (isotope setting unchanged) Comet 1.09 % without and
-1.21 % with the option, Sage 1.21 and 1.05 %; PXD003531 Comet 0.93 %
-without, 1.21 % with isotope errors 0..2 alone and 1.19 % with the option,
-Sage 0.95, 1.11 and 1.04 %. The rise on PXD003531 comes with the isotope
-errors, not with the shifts; the 0.88 -> 1.28 % of the second held-out test
-was one entrapment database (standard deviation between databases 0.1 to
-0.3 points). The Comet search takes 1.1 to 17 times as long with the option.
-The option does not
-replace an open search and stays experimental. Offsets need a narrow precursor
-tolerance, which the configuration sets explicitly. See
-[doc/SHORTLIST.md](doc/SHORTLIST.md#mass-shifts-as-engine-configuration-112-17).
+`-search_shifts` (1.12, experimental) added the run's mass-gap peaks to
+`-search_config_out` as variable modifications or mass offsets. It failed
+both held-out tests and was removed in 1.14, with `-search_shifts_out`,
+`-shift_max_variable`, `-shift_max_offsets`, `-shift_expand_sites` and
+`-shift_site_min_*`: the names are accepted with a warning and have no
+effect. First test (acceptance/1.13 RESULT-item17.md, four runs): more PSMs
+at 1 % FDR, but an open search's top mass shifts were not recovered and
+Sage's entrapment FDP exceeded 1.5 %. Second test (`acc113r/shifts`,
+RESULT-item17r.md, four new runs): more PSMs on 4 of 4 runs (Comet +7.7 to
++36.8 %, Sage +6.5 to +25.2 %), but Comet's entrapment FDP rose on the TMT
+run PXD037999 (0.88 -> 1.28 %, limit +0.30 points), and the option recovered
+only 5 of 32 (Comet) and 3 of 11 (Sage) admissible peaks of an MSFragger
+open search. See
+[doc/SHORTLIST.md](doc/SHORTLIST.md#mass-shifts-as-engine-configuration-112-17-removed-in-114).
 
 ## Digest, label and mass-gap reports
 
@@ -1604,7 +1554,7 @@ data.
 | #6 `-unknown_charge infer` | **INCONCLUSIVE** (item06-H1-r2), then **FAIL** (item06-H2/H2r, high resolution) | Charge-call accuracy 0.751 (H1-r2, descriptive) and 0.745 (H2/H2r) against a 0.90 target; on the high-resolution sets, gains on 3+ and losses on 2+ (on ion trap in H1-r2, losses at every charge). Default stays `assume2` |
 | #14 `-check_header_charge` (1.13, `acceptance/1.13`) | **PASS** (item14r, revised rule); first rule **INCONCLUSIVE** (item14-hdrcharge: two Astral runs without enough truth) | First rule: On the three Q Exactive runs `warn` flags 0.31% of right header charges, and on a copy with every fifth charge changed it finds 28% of the wrong ones at precision 0.95. Overriding real header charges breaks more than it fixes: -2.2 per 1000 identified spectra, lower bound -2.9 (criterion -1.0). Q Exactive only: on Astral (PXD070049) all 9 flags as given and all 8 on the perturbed copy were false (false alarm 0.026), with no changed header found. That rule (range evidence, `override`) was replaced. The revised rule (MS1 isotope spacing, charge-aware pairs, `both`) passed its held-out test (item14r, five new runs, `warn`): it finds 26.9% of the wrong headers at precision 0.679 (95% lower bound 0.647) and flags 0.35% of the right ones (doc/HEADER-CHARGE-CHECK.md). Experimental |
 | 1.13 `-species_call explain` (`acc113r/species`) | **FAIL** | On 62 public runs (PREREG-species-explain.md) against the `decoy` call: 0.50 false genus calls per run (95% interval 0.29-0.73; 31 calls) against 5.98 (371 calls), so the primary endpoint passes (upper bound <= 0.75); the guard fails, recovery of the truth genera 38/105 against 77/105 (Sus or Bos 3/68 against 41/68). The mode selects the sample organism among the 50 indexed genera (42 of 49 runs) and does not report a second organism or contaminant; for organisms outside the index the closest indexed genus is called in 6 of 13 runs (assigned post hoc, not a test result), in the others another genus or none. Removed in 1.14 (with `-species_reagents`); `explain` is read as `none` (doc/SPECIES-DETECTOR.md) |
-| #17 `-search_shifts` (1.13, `acceptance/1.13`, `acc113r/shifts`) | **FAIL** (item17), **FAIL** (item17r, second test on four new runs) | Closed search against the same search plus the option, Comet 2026.03.0 and Sage 0.14.7, 1% FDR, shuffled entrapment. Second test: more PSMs on 4 of 4 runs (Comet +7.7 to +36.8%, Sage +6.5 to +25.2%), but Comet's entrapment FDP rises on the TMT run PXD037999 (0.88% -> 1.28%, limit +0.30 points; Sage passes), and the option recovers only 5 of 32 (Comet) and 3 of 11 (Sage) admissible peaks of an MSFragger open search. Part of the gain is the isotope error setting (base 0, option 0..1 on three runs); the gain over a base with the same setting was not measured. The option does not replace an open search. Experimental (doc/SHORTLIST.md) |
+| #17 `-search_shifts` (1.13, `acceptance/1.13`, `acc113r/shifts`) | **FAIL** (item17), **FAIL** (item17r, second test on four new runs) | Closed search against the same search plus the option, Comet 2026.03.0 and Sage 0.14.7, 1% FDR, shuffled entrapment. Second test: more PSMs on 4 of 4 runs (Comet +7.7 to +36.8%, Sage +6.5 to +25.2%), but Comet's entrapment FDP rises on the TMT run PXD037999 (0.88% -> 1.28%, limit +0.30 points; Sage passes), and the option recovers only 5 of 32 (Comet) and 3 of 11 (Sage) admissible peaks of an MSFragger open search. Part of the gain is the isotope error setting (base 0, option 0..1 on three runs); the gain over a base with the same setting was not measured. The option does not replace an open search. Removed in 1.14 |
 | 1.13 `-search_engine msfragger` (#18, `acceptance/1.13`, `acc113r/msfragger`; second test `post1131/msfragger-heldout2`) | **FAIL** (first test); **PASS** (second test, with the shortlist recipe) | 7 runs from 7 PRIDE projects (PREREG-msfragger.md, scored once on 2026-11-10; FASTag 1.12.2 at 9365ff1): MSFragger 4.4.1 on the exported shortlist FASTA and `fragger.params` against MSFragger's closed-search defaults on the full human proteome, 1% FDR on the hyperscore. C1 PASS: MSFragger ran on the unedited export in 7 of 7 runs. C2 FAIL: the shortlist search kept 48.6 to 73.2% of the spectra the full search identified (median 61.3%, pooled 60.9%; criterion at least 80% in every run, reached in none). G1 PASS: 2.03 to 3.91 times as fast (median 3.38). G2 FAIL: entrapment FDP 1.27% pooled (limit 1.5%), but 2.09% in one run (limit 2.0%). Most of the loss came from the exported parameters, not from the shortlist: the exported parameters on the full proteome kept 46 to 82%, the shortlist alone 81 to 95%. Since this test the export writes MSFragger's own `isotope_error 0/1/2/3` unless `-search_isotope_errors` is given: on the two development runs the kept share rose from 47.5 to 72.2% (PXD003531) and from 47.3 to 56.3% (PXD014764) at unchanged speed, entrapment FDP under 1%. After 1.13.1 the export also writes MSFragger's 2 missed cleavages, 20 ppm precursor window and variable protein N-terminal acetylation; on nine development runs (the two above and the seven of this test, now spent) the kept share is 0.678 to 0.915 with them (mean 0.831), and 0.888 or more in every run (mean 0.935) with `-shortlist_gapped -recon_min_length 6 -shortlist_max_evalue 10 -recon_missed_cleavages 2` added, entrapment FDP at most 1.43% per run. Second held-out test (10 runs from 10 new PRIDE projects, PREREG-msfragger2.md on `post1131/msfragger-heldout2`, scored once on 2026-11-11; criteria of the first test), export defaults with that recipe, unedited: **PASS**. MSFragger ran in 10 of 10 runs; in the 9 evaluable runs the kept share is 83.3 to 97.6% (median 93.4%), the search 1.64 to 4.72 times as fast (median 2.05), entrapment FDP 1.07% pooled and at most 1.88% per run (limit 2.0%; one more entrapment hit in that run would exceed it). One run had 10 identifications in the full search and is not evaluable. The test covers the recipe and the export defaults together; with the default shortlist (informational) the kept share is 52.6 to 94.6%, below 80% in 5 of 9 runs, so the recipe is needed; since then it is the default under `-search_engine msfragger` with the tryptic shortlist (each value unless given). Experimental (doc/SHORTLIST.md) |
 | #2 `-complement_rule both` | **INCONCLUSIVE** | By rule 5: the truth of one Astral run (PXD074582) has 0 PSMs at 1% FDR. On the other runs endpoints (i)-(iii) fail descriptively. Default stays `same_charge` |
 | 1.13 `-complement_tolerance_unit auto` | **FAIL** (first estimator); second test, revised estimator: **INCONCLUSIVE** | First test: on the #2 design (`acceptance/1.13`, PREREG-compltol.md; 11 runs): ion trap at 0.5 Da +2.1 to +5.1 points rank-1 correct in every powered 2+/3+ cell, pooled L3 gain +3.05 points (ii PASS), timsTOF 4+ and time (ratio 1.027) PASS; but three Astral cells fail non-inferiority (L5 2+ -0.50 points; two 4+ cells by their bound). Measured with the first estimator (c5f96b5), whose window varied with the cell; the second test used the current cell-independent median/MAD estimator with `-complement_tolerance` as its lower bound. Second test (`acc113r/compltol`, PREREG-compltol-heldout2.md; 8 new runs: Astral 2, ion trap 3, Q Exactive 3): no criterion failed. Non-inferiority: 44 of 54 cells pass, 0 fail, 10 are uninformative (all ion trap; four of them 3+ cells, which block a PASS). Ion-trap gain at L3 +1.07 points rank-1 correct (95% interval 0.87-1.27; PASS); timsTOF not tested; run time ratio 1.010 (PASS). On all five high-resolution files the window in force was 0.02 Da, so `auto` equals the default there. Limits: one Astral project, three ion-trap files, all at 0.5 Da (doc/COMPLEMENT-TOLERANCE.md). Experimental, default stays `Da` |

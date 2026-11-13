@@ -225,7 +225,7 @@ done
   && fail "-complement_rule nonsense ran (exit 0)"
 # Every other 1.12 floating-point option: NaN is refused (exit 6, the
 # option named, -out not written), as setMin/MaxFloat_ cannot refuse it.
-for o in charge_infer_margin shortlist_max_evalue search_precursor_tolerance shift_site_min_share species_pi0 \
+for o in charge_infer_margin shortlist_max_evalue search_precursor_tolerance species_pi0 \
          digest_min_confidence alkylation_min_share alkylation_window census_ids_fdr census_triage_evalue; do
   "$BIN" -in "$IN" -out "$TMP/nan_$o.tsv" -$o nan "${ARGS[@]}" >"$TMP/nan_$o.log" 2>&1
   rc=$?

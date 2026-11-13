@@ -34,6 +34,7 @@ describe('map: param overlay vs CLI manifest', () => {
     // 1.13 item 15 adds complement_probe (hidden, experimental).
     // 1.14 removes label discovery, label_call_min_tags, ion_series_photo, species_reagents and
     // pick_unknown_type: the names stay (no effect), hidden, so these counts do not change.
+    // 1.14 also removes -search_shifts and its 7 options, hidden before and after.
     expect(RENDERED.length).toBe(68)
     // 1.13 digqual adds digest_quality, hidden as experimental.
     // TMT pseudo-residue and reporter filtering add two hidden experimental options.

@@ -1083,54 +1083,14 @@ export const PARAM_UI: Record<string, ParamUi> = {
       text: 'The unit of that precursor tolerance.'
     }
   },
-  search_shifts: {
-    hidden: OPT_IN_1_12,
-    help: {
-      text: 'Add the mass shifts FASTag sees in the run to the search settings: as variable modifications, as Comet mass offsets, or both. Experimental.'
-    }
-  },
-  search_shifts_out: {
-    hidden: OPT_IN_1_12,
-    help: {
-      text: 'Write a table of the mass shifts FASTag found and what it did with each one in the search settings.'
-    }
-  },
-  shift_expand_sites: {
-    hidden: OPT_IN_1_12,
-    help: {
-      text: 'Let a variable modification also sit on the residues where FASTag placed that shift.'
-    }
-  },
-  shift_max_offsets: {
-    hidden: OPT_IN_1_12,
-    help: {
-      text: 'How many mass shifts are written as Comet mass offsets, besides 0.'
-    }
-  },
-  shift_max_variable: {
-    hidden: OPT_IN_1_12,
-    help: {
-      text: 'How many mass shifts are written as variable modifications.'
-    }
-  },
-  shift_site_min_count: {
-    hidden: OPT_IN_1_12,
-    help: {
-      text: 'How many placed spectra a residue needs before a shift is allowed on it.'
-    }
-  },
-  shift_site_min_ions: {
-    hidden: OPT_IN_1_12,
-    help: {
-      text: 'How many fragment ions a placed spectrum needs to count for a residue.'
-    }
-  },
-  shift_site_min_share: {
-    hidden: OPT_IN_1_12,
-    help: {
-      text: 'The share of the placed spectra of a shift that a residue needs before the shift is allowed on it.'
-    }
-  },
+  search_shifts: { hidden: REMOVED_1_14, help: REMOVED_1_14_HELP },
+  search_shifts_out: { hidden: REMOVED_1_14, help: REMOVED_1_14_HELP },
+  shift_expand_sites: { hidden: REMOVED_1_14, help: REMOVED_1_14_HELP },
+  shift_max_offsets: { hidden: REMOVED_1_14, help: REMOVED_1_14_HELP },
+  shift_max_variable: { hidden: REMOVED_1_14, help: REMOVED_1_14_HELP },
+  shift_site_min_count: { hidden: REMOVED_1_14, help: REMOVED_1_14_HELP },
+  shift_site_min_ions: { hidden: REMOVED_1_14, help: REMOVED_1_14_HELP },
+  shift_site_min_share: { hidden: REMOVED_1_14, help: REMOVED_1_14_HELP },
   shortlist_background: {
     hidden: OPT_IN_1_12,
     help: {
