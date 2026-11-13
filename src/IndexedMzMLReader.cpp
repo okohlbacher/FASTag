@@ -328,11 +328,11 @@ namespace FASTag
       PositionedFile() = default;
       PositionedFile(const PositionedFile&) = delete;
       PositionedFile& operator=(const PositionedFile&) = delete;
-      ~PositionedFile() { close(); }
+      ~PositionedFile() { close_(); }
 
       bool open(const std::string& path)
       {
-        close();
+        close_();
 #ifdef _WIN32
         // Shared as std::ifstream shares; CreateFileA, as it opens a narrow path: under FASTag's
         // UTF-8 code page manifest both take UTF-8. No FILE_FLAG_RANDOM_ACCESS: the scan reads
@@ -400,7 +400,7 @@ namespace FASTag
       const std::string& error() const { return error_; }
 
     private:
-      void close()
+      void close_()
       {
 #ifdef _WIN32
         if (h_ != INVALID_HANDLE_VALUE) CloseHandle(h_);
