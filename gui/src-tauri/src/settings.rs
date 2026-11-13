@@ -755,6 +755,77 @@ mod tests {
         let _ = std::fs::remove_dir_all(&d);
     }
 
+    /// 1.12.0 to 1.13.2 never ran init() (a second Builder::setup replaced
+    /// the hook that calls it, fixed in 73cbb92): no SettingsState, so the
+    /// session read no settings, saved none, opened no store and left the
+    /// config dir as it found it. 1.13.3+ then migrates the untouched v1
+    /// file on its first start, every preset and the last-used values kept.
+    #[test]
+    fn a_session_without_init_leaves_the_v1_file_for_the_next_init_to_migrate() {
+        let d = scratch("no-init");
+        let v1 = std::fs::read(V1_FIXTURE).unwrap();
+        std::fs::write(d.join(V1_FILE), &v1).unwrap();
+        // A 1.12.0-1.13.2 session: the store plugin, but no init().
+        {
+            let app = tauri::test::mock_builder()
+                .plugin(tauri_plugin_store::Builder::new().build())
+                .build(tauri::test::mock_context(tauri::test::noop_assets()))
+                .unwrap();
+            let st = load_in(app.handle());
+            assert!(st["presets"].as_object().unwrap().is_empty());
+            assert_eq!(st["lastUsed"], Value::Null);
+            assert!(!save_last_in(app.handle(), serde_json::json!({"tag_length": "9"})));
+            assert!(!save_preset_in(app.handle(), "x", serde_json::json!({"v": 2, "base": "defaults", "diff": {}})));
+            assert!(!delete_preset_in(app.handle(), "HCD paper"));
+            assert!(!exit_save(&app, &d), "no plugin store at settings.json");
+        }
+        let names: Vec<String> = std::fs::read_dir(&d).unwrap().map(|e| e.unwrap().file_name().to_string_lossy().into()).collect();
+        assert_eq!(names, vec![V1_FILE.to_string()]);
+        assert_eq!(std::fs::read(d.join(V1_FILE)).unwrap(), v1);
+        // The first 1.13.3+ start migrates it.
+        let app = mock_init(&d);
+        let old: Value = serde_json::from_slice(&v1).unwrap();
+        let st = load_in(app.handle());
+        assert_eq!(st["lastUsed"], old["lastUsed"]);
+        for (n, p) in old["presets"].as_object().unwrap() {
+            assert_eq!(st["presets"][n]["diff"], *p, "{n}");
+        }
+        assert_eq!(std::fs::read(d.join(V1_BACKUP)).unwrap(), v1);
+        assert!(!d.join(V1_FILE).exists());
+        let _ = std::fs::remove_dir_all(&d);
+    }
+
+    /// The cause, guarded: Builder::setup keeps one closure, so a second
+    /// .setup() in run() would drop the one that calls init() again.
+    #[test]
+    fn run_installs_one_setup_hook_and_it_calls_init() {
+        let src = include_str!("lib.rs");
+        let hooks = src.lines().filter(|l| l.trim_start().starts_with(".setup(")).count();
+        assert_eq!(hooks, 1, "lib.rs: one .setup() hook, or the earlier one is replaced");
+        assert!(src.contains("settings::init(app.handle())"));
+    }
+
+    /// A fresh profile under 1.12.0-1.13.2 wrote no file either: 1.13.3+
+    /// starts with empty settings and saves from then on.
+    #[test]
+    fn a_session_without_init_on_a_fresh_profile_writes_nothing() {
+        let d = scratch("no-init-fresh");
+        {
+            let app = tauri::test::mock_builder()
+                .plugin(tauri_plugin_store::Builder::new().build())
+                .build(tauri::test::mock_context(tauri::test::noop_assets()))
+                .unwrap();
+            assert!(!save_preset_in(app.handle(), "x", serde_json::json!({"v": 2, "base": "defaults", "diff": {"tag_length": "4"}})));
+            assert!(!exit_save(&app, &d));
+        }
+        assert_eq!(std::fs::read_dir(&d).unwrap().count(), 0);
+        let app = mock_init(&d);
+        assert!(load_in(app.handle())["presets"].as_object().unwrap().is_empty());
+        assert!(save_preset_in(app.handle(), "x", serde_json::json!({"v": 2, "base": "defaults", "diff": {"tag_length": "4"}})));
+        assert_eq!(store_doc(&d)["presets"]["x"]["diff"]["tag_length"], "4");
+        let _ = std::fs::remove_dir_all(&d);
+    }
+
     #[test]
     fn a_flat_preset_from_an_older_renderer_is_kept_as_it_is() {
         assert_eq!(sanitize_preset(serde_json::json!({"tag_length": "4", "prototype": 1})), Some(serde_json::json!({"tag_length": "4"})));
