@@ -41,7 +41,7 @@
 namespace FASTag::Probe
 {
   /// @brief The format of both streams; a reader refuses a higher one.
-  inline constexpr int kFormat = 1;
+  inline constexpr int FORMAT = 1;
 
   // ---- JSON ---------------------------------------------------------------
 

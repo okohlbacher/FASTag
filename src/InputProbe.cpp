@@ -203,11 +203,11 @@ namespace FASTag::Probe
   bool isAnalyzerAccession(std::string_view a)
   {
     // MS:1000443 mass analyzer type and its children (psi-ms.obo).
-    static const std::array<std::string_view, 18> kAnalyzers = {
+    static const std::array<std::string_view, 18> ANALYZERS = {
         "MS:1000443", "MS:1000078", "MS:1000079", "MS:1000080", "MS:1000081", "MS:1000082",
         "MS:1000083", "MS:1000084", "MS:1000254", "MS:1000264", "MS:1000284", "MS:1000288",
         "MS:1000291", "MS:1000484", "MS:1000139", "MS:1002806", "MS:1003379", "MS:1003378"};
-    return std::find(kAnalyzers.begin(), kAnalyzers.end(), a) != kAnalyzers.end();
+    return std::find(ANALYZERS.begin(), ANALYZERS.end(), a) != ANALYZERS.end();
   }
 
   MzmlHeader parseMzmlHeader(std::string_view xml)
@@ -252,13 +252,13 @@ namespace FASTag::Probe
   {
     std::ifstream f(path, std::ios::binary);
     if (!f) return {};
-    constexpr std::size_t MAX_BYTES = 8u << 20, kStep = 1u << 16;
+    constexpr std::size_t MAX_BYTES = 8u << 20, STEP = 1u << 16;
     std::string buf;
     while (buf.size() < MAX_BYTES)
     {
       const std::size_t have = buf.size();
-      buf.resize(have + kStep);
-      f.read(buf.data() + have, static_cast<std::streamsize>(kStep));
+      buf.resize(have + STEP);
+      f.read(buf.data() + have, static_cast<std::streamsize>(STEP));
       buf.resize(have + static_cast<std::size_t>(f.gcount()));
       // <run ...> precedes the spectrumList and carries the default ref.
       const std::size_t sl = buf.find("<spectrumList");
@@ -477,7 +477,7 @@ namespace FASTag::Probe
         out.error = "Cannot read '" + in + "'.";
         return out;
       }
-      out.jsonl = JsonObject("probe").integer("format", kFormat).str("version", opt.version).str("input", in)
+      out.jsonl = JsonObject("probe").integer("format", FORMAT).str("version", opt.version).str("input", in)
                       .str("file_format", "FASTA").line();
       out.jsonl += fastaRecord(in, opt.decoy_affixes);
       out.jsonl += JsonObject("end").line();
@@ -654,7 +654,7 @@ namespace FASTag::Probe
     // ---- the records
     std::string& j = out.jsonl;
     j += JsonObject("probe")
-             .integer("format", kFormat)
+             .integer("format", FORMAT)
              .str("version", opt.version)
              .str("input", in)
              .str("file_format", kindName(kind))
@@ -747,7 +747,7 @@ namespace FASTag::Probe
     const bool tagged = spec.getMSLevel() == 2 && !spec.empty() && has_prec;
     const MSSpectrum peaks = tagged ? preparedPeaks(spec, prec_mz, given, p) : MSSpectrum();
     JsonObject o("spectrum");
-    o.integer("format", kFormat).str("native_id", spec.getNativeID()).count("index", index);
+    o.integer("format", FORMAT).str("native_id", spec.getNativeID()).count("index", index);
     o.integer("ms_level", static_cast<long long>(spec.getMSLevel())).num("rt", spec.getRT());
     if (has_prec) o.num("precursor", prec_mz);
     else o.null("precursor");
