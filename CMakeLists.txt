@@ -367,7 +367,6 @@ if(FASTAG_BUILD_TESTS)
                    ${CMAKE_CURRENT_SOURCE_DIR}/test/fixtures/Ecoli_MS2_small.mzML
                    ${CMAKE_CURRENT_SOURCE_DIR}/test/fixtures/Ecoli_MS2_small.fasta
                    ${CMAKE_CURRENT_SOURCE_DIR}/data/digest
-                   ${CMAKE_CURRENT_SOURCE_DIR}/test/fixtures/profile_ms2_small.mzML
                    $<TARGET_FILE:ion_series_test>)
   set_tests_properties(threads_test PROPERTIES SKIP_RETURN_CODE 77)
 
@@ -478,7 +477,8 @@ if(FASTAG_BUILD_TESTS)
                    ${CMAKE_CURRENT_SOURCE_DIR}/test/fixtures/Ecoli_MS2_small.fasta
                    ${CMAKE_CURRENT_SOURCE_DIR}/data/digest)
   set_tests_properties(acquisition_cli_test PROPERTIES SKIP_RETURN_CODE 77)
-  # #9: -pick_profile / -pick_unknown_type on the profile fixtures
+  # #9: -pick_profile legacy/off (and the 1.14 tombstones of auto and
+  # -pick_unknown_type) on the profile fixtures
   # (test/fixtures/make_profile_fixtures.py), legacy against 1.11.0.
   add_test(NAME profile_cli_test
            COMMAND bash ${CMAKE_CURRENT_SOURCE_DIR}/test/profile_cli_test.sh $<TARGET_FILE:FASTag>

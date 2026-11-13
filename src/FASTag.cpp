@@ -303,6 +303,7 @@ class TOPPFASTag : public TOPPBase
       {"label_call_min_tags", kFailedHeldOut},
       {"ion_series_photo", kFailedHeldOut},
       {"species_reagents", "read only by -species_call explain, which failed its held-out test"},
+      {"pick_unknown_type", "read only by -pick_profile auto, which failed its held-out test"},
   };
   struct RemovedValue
   {
@@ -312,6 +313,7 @@ class TOPPFASTag : public TOPPBase
   static constexpr RemovedValue kRemovedValues[] = {
       {"ion_series", "ax"},
       {"species_call", "explain"},
+      {"pick_profile", "auto"},
   };
   static constexpr const char* kRemovedHelp =
       "Removed in 1.14; no effect (accepted so that existing command lines and INI files keep working)";
@@ -871,14 +873,11 @@ protected:
     // #9: centroiding of profile MS2 (src/Centroid.h).
     registerStringOption_("pick_profile", "<mode>", FASTag::Centroid::kModeDefault,
                           "Centroid profile MS2 (MS:1000128) with OpenMS PeakPickerHiRes before tagging: "
-                          "'legacy' on mzPeak input only (as FASTag 1.11), 'auto' on mzML and mzPeak "
-                          "input (not MGF), 'off' never. Centroided MS2 are never re-picked; "
+                          "'legacy' on mzPeak input only (as FASTag 1.11), 'off' never ('auto' was removed "
+                          "in 1.14 and is read as legacy). Centroided MS2 are never re-picked; "
                           "-out_spectra writes the spectra as they were tagged", false);
     setValidStrings_("pick_profile", ListUtils::create<std::string>(FASTag::Centroid::kModeValues));
-    registerFlag_("pick_unknown_type",
-                  "With -pick_profile auto, also centroid MS2 that declare no spectrum type "
-                  "(neither MS:1000127 nor MS:1000128) when OpenMS's PeakTypeEstimator reads "
-                  "their data as profile", true);
+    registerFlag_("pick_unknown_type", kRemovedHelp, true);  // 1.14: removed with -pick_profile auto
     // E2: complement-ion rules across fragment charges, tolerance tied to the
     // run. Defaults are FASTag 1.11 (src/CliParam.h); validation decides any
     // other default.
@@ -1586,8 +1585,7 @@ protected:
     P::ProbeOptions opt;
     opt.probe_spectra = static_cast<std::size_t>(getIntOption_("acquisition_probe_spectra"));
     opt.mzpeak_threads = std::min(std::max(1, omp_get_max_threads()), 8);
-    FASTag::Centroid::parseMode(getStringOption_("pick_profile"), opt.pick_mode);
-    opt.pick_unknown_type = getFlag_("pick_unknown_type");
+    FASTag::Centroid::parseMode(stringOption_("pick_profile"), opt.pick_mode);
     opt.acquisition_check = getStringOption_("acquisition_check");
     opt.fasta = getStringOption_("fasta");
     for (const std::string& a : getStringList_("shortlist_decoy_affix"))
@@ -1636,8 +1634,7 @@ protected:
       return ILLEGAL_PARAMETERS;
     }
     P::DumpOptions opt;
-    FASTag::Centroid::parseMode(getStringOption_("pick_profile"), opt.pick_mode);
-    opt.pick_unknown_type = getFlag_("pick_unknown_type");
+    FASTag::Centroid::parseMode(stringOption_("pick_profile"), opt.pick_mode);
     opt.mzpeak_threads = std::min(std::max(1, omp_get_max_threads()), 8);
     opt.param = p;
     opt.ion_mode = FASTag::IonSeries::modeFromString(stringOption_("ion_series"));
@@ -1871,7 +1868,6 @@ protected:
           {"glyco", "-stream cannot be combined with -species or -glyco."},
           // ---- 1.12 E: -stream refusals ----
           {"pick_profile", nullptr},
-          {"pick_unknown_type", nullptr},
           {"ion_series", nullptr},
           {"ion_series_hybrid", nullptr},
           {"unknown_charge", nullptr},
@@ -2706,8 +2702,7 @@ protected:
     const std::string digest_models = getStringOption_("digest_models");
     // #9: -pick_profile (validated by its valid strings).
     FASTag::Centroid::Mode pick_mode = FASTag::Centroid::Mode::Legacy;
-    FASTag::Centroid::parseMode(getStringOption_("pick_profile"), pick_mode);
-    const bool pick_unknown_type = getFlag_("pick_unknown_type");
+    FASTag::Centroid::parseMode(stringOption_("pick_profile"), pick_mode);
     // Report options set without the report that reads them: ignored, so say so.
     // Defaults are compared against the registered ones, never repeated here.
     // One row per option: {option, the report or switch that reads it,
@@ -2745,7 +2740,6 @@ protected:
           // ---- 1.12 E: ignored-option warnings ----
           {"acquisition_probe_spectra", "-acquisition_check refuse or warn",
            getStringOption_("acquisition_check") != "off"},
-          {"pick_unknown_type", "-pick_profile auto", pick_mode == FASTag::Centroid::Mode::Auto},
           {"ion_series_hybrid", "-ion_series auto", stringOption_("ion_series") == "auto"},
           {"charge_min", "-unknown_charge enumerate or infer, or -check_header_charge",
            hyp_param.mode != FASTag::Hyp::ChargeMode::Assume2 || hdr_check_on},
@@ -3353,17 +3347,10 @@ protected:
       OPENMS_LOG_ERROR << "-tmt_pseudo_filter auto needs random-access mzML or MGF input; use on only for known TMT6/10 input." << std::endl;
       return ILLEGAL_PARAMETERS;
     }
-    // #9: what each reader does with profile MS2 (src/Centroid.h). mzPeak
-    // centroids in MzPeakStream; mzML (any of its readers) in the tagging
-    // loop, the probe and the -out_spectra re-read; MGF never.
+    // #9: what the mzPeak reader does with profile MS2 (src/Centroid.h;
+    // MzPeakStream centroids). mzML and MGF are tagged as read.
     namespace FC = FASTag::Centroid;
-    const FC::Policy pick_mzpeak = FC::policyFor(pick_mode, FC::Input::MzPeak, pick_unknown_type);
-    const FC::Policy pick_mzml =
-        FC::policyFor(pick_mode, mgf_in ? FC::Input::Mgf : FC::Input::MzML, pick_unknown_type);
-    const bool pick_in_loop = !mzpeak_in && pick_mzml.pick;
-    if (mgf_in && pick_mode == FC::Mode::Auto)
-      OPENMS_LOG_WARN << "-pick_profile auto does not centroid MGF input (MGF declares no spectrum type); "
-                         "its spectra are tagged as read." << std::endl;
+    const FC::Policy pick_mzpeak = FC::policyFor(pick_mode, FC::Input::MzPeak);
     const bool mzpeak_out = !out_spectra.empty()
         && FileHandler::getTypeByFileName(out_spectra) == FileTypes::MZPEAK;
     if (!out_spectra.empty() && !mzpeak_out && !is_mzml(out_spectra))
@@ -3710,16 +3697,6 @@ protected:
     // mzPeak is read once, in file order, so its probe runs on copies the
     // reader keeps aside, after the loop.
     if (mzs) mzs->start(sample_mask, probe_idx, pick_mzpeak);
-    else if (pick_in_loop)
-    {
-      // The probe sees the spectra as they are tagged.
-      PeakPickerHiRes probe_picker;
-      tolerance_probe([&](Size i) {
-        MSSpectrum s = read_spectrum(i);
-        FC::apply(s, probe_picker, pick_mzml);
-        return s;
-      });
-    }
     else tolerance_probe(read_spectrum);
 
     // 1.13 item 15: -complement_tolerance_unit auto (src/ComplementTol.h).
@@ -3753,11 +3730,9 @@ protected:
       }
       std::vector<MSSpectrum> probe_specs;
       probe_specs.reserve(want);
-      PeakPickerHiRes ct_picker;
       for (const Size i : CT::pickProbe(ms2_idx, want, 0x50524F42u))
       {
         MSSpectrum s = read_spectrum(i);
-        if (pick_in_loop) FC::apply(s, ct_picker, pick_mzml);
         s.sortByPosition();
         probe_specs.push_back(std::move(s));
       }
@@ -3891,13 +3866,11 @@ protected:
         probe.per_residue_conf = false;
         probe.ion_pair = FASTag::IonSeries::ionPair(FASTag::IonSeries::Series::BY);
         const FASTag::Tables probe_tables(probe);
-        PeakPickerHiRes tmt_picker;
         for (const std::size_t i : FASTag::ComplTol::pickProbe(candidates, TP::kProbeCount, 0x544D5432u))
         {
           MSSpectrum s = read_spectrum(i);
           const auto series = FASTag::IonSeries::seriesInRun(ion_mode, FASTag::IonSeries::activationClass(s), ion_column);
           if (series != FASTag::IonSeries::Series::BY) continue;
-          if (pick_in_loop) FC::apply(s, tmt_picker, pick_mzml);
           s.sortByPosition();
           const Precursor& pc = s.getPrecursors().front();
           counts.add(FASTag::tagSpectrum(s, pc.getMZ(), pc.getCharge(), probe, probe_tables));
@@ -5116,9 +5089,8 @@ protected:
     auto secs = [](Clock::time_point a, Clock::time_point b)
     { return std::chrono::duration<double>(b - a).count(); };
 
-    // One reader per thread, built before the loop; for mzPeak, and for mzML
-    // under -pick_profile auto, a picker per thread (profile MS2 is
-    // centroided on the reading thread).
+    // One reader per thread, built before the loop; for mzPeak a picker per
+    // thread (profile MS2 is centroided on the reading thread).
     std::vector<std::unique_ptr<OnDiscMSExperiment>> readers(read_threads);
     std::vector<std::unique_ptr<FASTag::IndexedMzMLReader>> freaders(read_threads);
     std::vector<std::unique_ptr<FASTag::MgfReader>> mreaders(read_threads);
@@ -5132,7 +5104,7 @@ protected:
       if (streaming) readers[t] = std::make_unique<OnDiscMSExperiment>(*ondisc);
       if (fastmz) freaders[t] = std::make_unique<FASTag::IndexedMzMLReader>(*fastmz);
       if (mgf) mreaders[t] = std::make_unique<FASTag::MgfReader>(*mgf);
-      if (mzs || pick_in_loop) pickers[t] = std::make_unique<PeakPickerHiRes>();
+      if (mzs) pickers[t] = std::make_unique<PeakPickerHiRes>();
     }
     t_readers = secs(t_readers_a, Clock::now());
     // 1.13 -check_header_charge: MS1 access for the formats that keep MS1
@@ -5252,12 +5224,6 @@ protected:
           loaded_here = true;
         }
         if (!loaded_here && reader) { loaded = reader->getSpectrum(static_cast<Size>(i)); loaded_here = true; }
-        if (pick_in_loop)
-        {
-          // #9: mzML profile MS2, centroided before tagging.
-          if (!loaded_here) { loaded = exp[static_cast<Size>(i)]; loaded_here = true; }
-          per_thread[tid].acc.e.pick.add(FC::apply(loaded, *picker, pick_mzml));
-        }
         // A selected-ion m/z of 0 next to an isolation target, as OpenMS reads
         // it (OnDiscMSExperiment, in-memory mzML, mzPeak): the target instead,
         // as the indexed reader reads the same precursor. MGF has no target.
@@ -5513,14 +5479,10 @@ protected:
     }
     // ---- 1.12 E: run-level facts from the loop ----
     {
-      // #9: picking counts (RunMeta Versioned rows; the INFO line for mzML).
-      // -pick_profile auto on mzML is said whenever anything was profile, so
-      // a run whose picking yielded nothing does not look centroided.
-      const FASTag::Centroid::Counts& c = run_acc.e.pick;
-      if (pick_in_loop && (c.picked > 0 || c.failed > 0)) log_picked("mzML", c.picked, c.failed);
-      run_meta.pick_profile = getStringOption_("pick_profile");
-      run_meta.pick_picked = c.picked + (mzs ? mzs->picked() : 0);
-      run_meta.pick_failed = c.failed + (mzs ? mzs->pickFailed() : 0);
+      // #9: picking counts (RunMeta Versioned rows); only mzPeak picks.
+      run_meta.pick_profile = stringOption_("pick_profile");
+      run_meta.pick_picked = mzs ? mzs->picked() : 0;
+      run_meta.pick_failed = mzs ? mzs->pickFailed() : 0;
       // #15 phase A: activation counts (RunMeta Versioned rows only).
       using FASTag::IonSeries::Activation;
       const auto& act = run_acc.e.activation;
@@ -7266,12 +7228,9 @@ protected:
           FASTag::readMzPeakSpectra(in, mzpeak_decode_threads, kept_idx, clean, pick_mzpeak);
           return;
         }
-        // #9: exported as tagged, so centroided again under -pick_profile auto.
-        PeakPickerHiRes out_picker;
         for (const Size i : kept_idx)
         {
           MSSpectrum sp = read_spectrum(i);
-          if (pick_in_loop) FC::apply(sp, out_picker, pick_mzml);
           clean(sp);
         }
       };

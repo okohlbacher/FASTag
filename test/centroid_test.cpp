@@ -11,12 +11,11 @@
 //      resolvable peaks are picked within 0.1 Th, or the spectrum is left
 //      unpicked and counted (-1) -- never silently thinned;
 //  (f) MS1 and empty spectra are not touched;
-//  (g) an UNKNOWN-typed profile spectrum is picked only with pick_unknown,
-//      (h) an UNKNOWN-typed centroid spectrum not even then;
-//  (i) the -pick_profile mode table per reader, the option parser and the
-//      counters;
-//  (j) points out of m/z order are picked from a sorted copy under auto
-//      (the Thermo profile mzML case) and as stored under legacy.
+//  (g) an UNKNOWN-typed profile spectrum is never picked (-pick_unknown_type
+//      was removed in 1.14);
+//  (i) the -pick_profile mode table per reader and the option parser;
+//  (j) points out of m/z order are picked as stored (legacy, 1.11; the
+//      sorted copy of the removed auto is gone).
 //
 // Copyright (c) 2026 Oliver Kohlbacher and contributors
 // SPDX-License-Identifier: MIT
@@ -148,16 +147,13 @@ int main()
     check(apex, "(a) picked intensities within 1% of the apex heights");
   }
 
-  // (b) CENTROID is never re-picked, whatever pick_unknown says.
+  // (b) CENTROID is never re-picked.
   {
     const std::vector<double> c = spaced(200, 1500, 30, rng, 5.0), h = heights(30, rng);
     const MSSpectrum src = gaussians(c, h, 0.01, 0.01 / 6, SpectrumSettings::SpectrumType::CENTROID);
-    for (const bool unknown : {false, true})
-    {
-      MSSpectrum s = src;
-      check(centroidProfileMs2(s, picker, unknown) == 0, "(b) CENTROID returns 0");
-      check(samePeaks(s, src), "(b) CENTROID spectrum unchanged");
-    }
+    MSSpectrum s = src;
+    check(centroidProfileMs2(s, picker) == 0, "(b) CENTROID returns 0");
+    check(samePeaks(s, src), "(b) CENTROID spectrum unchanged");
   }
 
   // (c) sparse: isolated single samples have no peak shape.
@@ -243,36 +239,25 @@ int main()
     MSSpectrum ms1 = gaussians({500.0, 600.0, 700.0}, {1e5, 2e5, 3e5}, 0.01, 0.01 / 6,
                                SpectrumSettings::SpectrumType::PROFILE, 1);
     const MSSpectrum src = ms1;
-    check(centroidProfileMs2(ms1, picker, true) == 0 && samePeaks(ms1, src), "(f) MS1 not picked");
+    check(centroidProfileMs2(ms1, picker) == 0 && samePeaks(ms1, src), "(f) MS1 not picked");
     MSSpectrum empty;
     empty.setMSLevel(2);
     empty.setType(SpectrumSettings::SpectrumType::PROFILE);
-    check(centroidProfileMs2(empty, picker, true) == 0 && empty.empty(), "(f) empty PROFILE MS2 returns 0");
+    check(centroidProfileMs2(empty, picker) == 0 && empty.empty(), "(f) empty PROFILE MS2 returns 0");
   }
 
-  // (g) UNKNOWN-typed profile data, (h) UNKNOWN-typed centroid data.
+  // (g) UNKNOWN-typed profile data is never picked (-pick_unknown_type was
+  // removed in 1.14 with -pick_profile auto).
   {
     const std::vector<double> c = spaced(200, 1500, 30, rng, 5.0), h = heights(30, rng);
     const MSSpectrum src = gaussians(c, h, 0.01, 0.01 / 6, SpectrumSettings::SpectrumType::UNKNOWN);
     check(src.getType(true) == SpectrumSettings::SpectrumType::PROFILE,
           "(g) OpenMS estimates the untyped Gaussians as PROFILE (fixture sanity)");
     MSSpectrum s = src;
-    check(centroidProfileMs2(s, picker) == 0 && samePeaks(s, src), "(g) UNKNOWN not picked without pick_unknown");
-    check(centroidProfileMs2(s, picker, true) == 1 && s.getType() == SpectrumSettings::SpectrumType::CENTROID &&
-              s.size() == 30 && matched(s, c, 1.0, true) == 1.0,
-          "(g) UNKNOWN profile picked with pick_unknown, within 1 ppm");
-
-    MSSpectrum sticks;
-    sticks.setMSLevel(2);
-    for (size_t i = 0; i < c.size(); ++i) sticks.push_back(Peak1D(c[i], static_cast<float>(h[i])));
-    check(sticks.getType(true) == SpectrumSettings::SpectrumType::CENTROID,
-          "(h) OpenMS estimates untyped sticks as CENTROID (fixture sanity)");
-    const MSSpectrum sticks_src = sticks;
-    check(centroidProfileMs2(sticks, picker, true) == 0 && samePeaks(sticks, sticks_src),
-          "(h) UNKNOWN centroid data untouched with pick_unknown");
+    check(centroidProfileMs2(s, picker) == 0 && samePeaks(s, src), "(g) UNKNOWN not picked");
   }
 
-  // (i) modes, readers, parsing, counters.
+  // (i) modes, readers, parsing.
   {
     using M = C::Mode;
     using I = C::Input;
@@ -280,30 +265,22 @@ int main()
     {
       M mode;
       I input;
-      bool flag;
       bool pick;
-      bool unknown;
     };
     const Row rows[] = {
-        {M::Legacy, I::MzPeak, false, true, false}, {M::Legacy, I::MzML, false, false, false},
-        {M::Legacy, I::Mgf, false, false, false},   {M::Legacy, I::MzPeak, true, true, false},
-        {M::Legacy, I::MzML, true, false, false},   {M::Auto, I::MzPeak, false, true, false},
-        {M::Auto, I::MzML, false, true, false},     {M::Auto, I::Mgf, false, false, false},
-        {M::Auto, I::MzPeak, true, true, true},     {M::Auto, I::MzML, true, true, true},
-        {M::Auto, I::Mgf, true, false, false},      {M::Off, I::MzPeak, false, false, false},
-        {M::Off, I::MzML, true, false, false},      {M::Off, I::Mgf, true, false, false},
+        {M::Legacy, I::MzPeak, true}, {M::Legacy, I::MzML, false}, {M::Legacy, I::Mgf, false},
+        {M::Off, I::MzPeak, false},   {M::Off, I::MzML, false},    {M::Off, I::Mgf, false},
     };
     for (const Row& r : rows)
     {
-      const C::Policy p = C::policyFor(r.mode, r.input, r.flag);
-      // Auto picks from m/z-sorted points; legacy as stored (1.11).
-      check(p.pick == r.pick && p.unknown == r.unknown && p.sort == (r.mode == M::Auto && r.pick),
-            "(i) policy mode " + std::to_string(static_cast<int>(r.mode)) + " input " +
-                std::to_string(static_cast<int>(r.input)) + " flag " + std::to_string(r.flag));
+      const C::Policy p = C::policyFor(r.mode, r.input);
+      check(p.pick == r.pick, "(i) policy mode " + std::to_string(static_cast<int>(r.mode)) + " input " +
+                                  std::to_string(static_cast<int>(r.input)));
     }
     M m = M::Off;
     check(C::parseMode("legacy", m) && m == M::Legacy, "(i) parse legacy");
-    check(C::parseMode("auto", m) && m == M::Auto, "(i) parse auto");
+    // auto (removed in 1.14) never reaches parseMode: FASTag reads it as legacy.
+    check(!C::parseMode("auto", m), "(i) auto is no mode any more");
     check(C::parseMode("off", m) && m == M::Off, "(i) parse off");
     check(!C::parseMode("Auto", m) && !C::parseMode("", m), "(i) unknown mode strings refused");
     check(std::string(C::kModeDefault) == "legacy" && std::string(C::kModeValues) == "legacy,auto,off",
@@ -314,54 +291,20 @@ int main()
     MSSpectrum s = gaussians(c, h, 0.01, 0.01 / 6, SpectrumSettings::SpectrumType::PROFILE);
     const MSSpectrum src = s;
     check(C::apply(s, picker, C::Policy{}) == 0 && samePeaks(s, src), "(i) apply with pick off is a no-op");
-    check(C::apply(s, picker, C::Policy{true, false}) == 1, "(i) apply with pick on picks");
-
-    C::Counts a, b;
-    a.add(1);
-    a.add(1);
-    a.add(-1);
-    a.add(0);
-    b.add(1);
-    b.add(-1);
-    a.merge(b);
-    check(a.picked == 3 && a.failed == 2, "(i) counters add and merge");
+    check(C::apply(s, picker, C::Policy{true}) == 1, "(i) apply with pick on picks");
   }
 
-  // (j) points out of m/z order (Thermo profile mzML, PXD000865: the zero
-  // padding point after a peak's last sample sits at a slightly lower m/z).
-  // With sort the result is the pick of the m/z-sorted points; without it
-  // the points are picked as stored (legacy, 1.11), which moves peaks.
+  // (j) points out of m/z order are picked as stored (legacy, 1.11).
   {
     const std::vector<double> c = spaced(200, 1500, 40, rng, 5.0), h = heights(40, rng);
-    MSSpectrum sorted = gaussians(c, h, 0.01, 0.01 / 6, SpectrumSettings::SpectrumType::PROFILE);
-    // Every zero that follows a sample: moved to 30% of a step below that sample.
-    MSSpectrum unsorted = sorted;
-    size_t moved = 0;
+    MSSpectrum unsorted = gaussians(c, h, 0.01, 0.01 / 6, SpectrumSettings::SpectrumType::PROFILE);
     for (Size i = 1; i < unsorted.size(); ++i)
       if (unsorted[i].getIntensity() == 0 && unsorted[i - 1].getIntensity() > 0)
-      {
         unsorted[i].setMZ(unsorted[i - 1].getMZ() - 0.3 * (0.01 / 6));
-        ++moved;
-      }
-    check(moved >= 40 && !unsorted.isSorted(), "(j) the fixture is out of m/z order");
-    MSSpectrum resorted = unsorted;
-    resorted.sortByPosition();
-    MSSpectrum want = resorted, as_stored = unsorted, got = unsorted;
-    check(centroidProfileMs2(want, picker) == 1, "(j) the sorted points pick");
-    check(centroidProfileMs2(got, picker, false, true) == 1, "(j) sort: picked");
-    check(samePeaks(got, want), "(j) sort: the pick of the m/z-sorted points");
-    check(centroidProfileMs2(as_stored, picker, false, false) == 1, "(j) no sort: picked as stored");
-    check(!samePeaks(as_stored, want), "(j) no sort: unsorted points pick differently (the case is real)");
-    const MSSpectrum before = unsorted;
-    MSSpectrum c_sorted = unsorted;
-    c_sorted.setType(SpectrumSettings::SpectrumType::CENTROID);
-    check(centroidProfileMs2(c_sorted, picker, false, true) == 0 && c_sorted.size() == before.size() &&
-              !c_sorted.isSorted(),
-          "(j) sort never touches a spectrum that needs no picking");
-    MSSpectrum viaPolicy = unsorted;
-    check(C::apply(viaPolicy, picker, C::policyFor(C::Mode::Auto, C::Input::MzML, false)) == 1 &&
-              samePeaks(viaPolicy, want),
-          "(j) auto on mzML picks the sorted points");
+    check(!unsorted.isSorted(), "(j) the fixture is out of m/z order");
+    MSSpectrum as_stored = unsorted, direct;
+    picker.pick(unsorted, direct);
+    check(centroidProfileMs2(as_stored, picker) == 1 && samePeaks(as_stored, direct), "(j) picked as stored");
   }
 
   if (failures)

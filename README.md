@@ -443,9 +443,8 @@ nothing uses them.
 routinely store profile MS2 with an empty centroid facet, and tagging profile
 samples rather than peaks costs real recall, so FASTag centroids them on read
 (`PeakPickerHiRes`).
-Picking runs in the tagging threads, so it parallelises. `-pick_profile auto`
-does the same for profile MS2 in mzML (see Performance); `-pick_profile off`
-switches it off for mzPeak too.
+Picking runs in the tagging threads, so it parallelises. Profile MS2 in mzML
+is tagged as read; `-pick_profile off` switches picking off for mzPeak too.
 
 **Limitations of the mzPeak path** (in OpenMS's `MzPeakFile`, as of the OpenMS
 commit above):
@@ -691,8 +690,8 @@ MGF→mzML direction is exact.
 | `-mzpeak_read_memory <MB>` | 0 | No effect; accepted for existing command lines |
 | `-acquisition_check <refuse\|warn\|off>` | refuse | Refuse raw DIA input with exit code 11, tag it anyway with a warning, or skip the check. The 1.12 rule failed its release test E7-03 (8 of 202 DDA-labelled files refused, all Astral DIA runs filed as DDA; Orbitrap DIA refused 7/12); the revised 1.13 rule passed a second held-out test on Thermo files: 0 of 58 non-DIA and 35 of 37 DIA files refused (see Raw DIA input is refused) |
 | `-acquisition_probe_spectra <n>` | 4000 | MS2 spectra the acquisition check reads, metadata only, reading at most ten times as many spectra in all (advanced) |
-| `-pick_profile <legacy\|auto\|off>` | legacy | Centroid profile MS2 (MS:1000128) with OpenMS `PeakPickerHiRes` before tagging: `legacy` on mzPeak input only (as 1.11), `auto` on mzML and mzPeak input (not MGF), `off` never. Centroided MS2 are never re-picked. `-out_spectra` writes the spectra as they were tagged. Not with `-stream`. Experimental: `auto` failed its held-out test and is not recommended (see Performance) |
-| `-pick_unknown_type` | off | With `-pick_profile auto`: also centroid MS2 that declare no spectrum type, when OpenMS's `PeakTypeEstimator` reads their data as profile (advanced) |
+| `-pick_profile <legacy\|off>` | legacy | Centroid profile MS2 (MS:1000128) with OpenMS `PeakPickerHiRes` before tagging: `legacy` on mzPeak input only (as 1.11), `off` never. Centroided MS2 are never re-picked. `-out_spectra` writes the spectra as they were tagged. Not with `-stream`. `auto` was removed in 1.14 (failed its held-out test, see Held-out acceptance): accepted with a warning, read as `legacy` |
+| `-pick_unknown_type` | off | Removed in 1.14 (read only by `-pick_profile auto`, which failed its held-out test): accepted with a warning, no effect |
 | `-ion_series <by\|cz\|auto>` | by | Ion series the MS2 spectra are read as: `by` (b/y ions, as 1.11), `cz` (c/z• ions of ETD/ECD, every spectrum), `auto` (c/z• for spectra whose activation is ETD or ECD, b/y for all others, hybrid EThcD/ETciD included, with a warning). `ax` (1.13, a/x ions) was removed in 1.14 (failed its held-out test, see Held-out acceptance): accepted with a warning, read as `by`. Under `cz`, and under `auto` when the run has electron-activated spectra, the tag TSV gains a last `ion_series` column and the census a `best_ion_series` column (see Ion series). Not with `-stream`. Opt-in: on held-out Orbitrap ETD spectra `auto` gave 82.2% correct rank-1 tags against 0.9% under `by` (verdict inconclusive, see Validation) |
 | `-ion_series_hybrid <by\|both>` | by | 1.13, under `-ion_series auto` only: how hybrid EThcD/ETciD spectra are read. `by` is `auto` as in 1.12 (b/y ions, with the `Hybrid activation:` warning); `both` tags each hybrid mzML spectrum twice, as b/y and as c/z• ions, multiplies every E-value by 2 and merges the two passes' rows by E-value under one `-max_tags` cap; each row keeps its `ion_series` and every per-row consumer reads its offsets from it; `-species` and `-alkylation_out` count b/y rows only. The precursor hypotheses, `-check_header_charge`, the `-complement_tolerance_unit auto` probe, `-dump_spectrum` and the census diagnostics (`n_kept`, `n_edges`, `n_compl`) still read a hybrid spectrum as b/y (doc/HYBRID-IONS.md). Ignored with a warning under other modes; not with `-stream`. Experimental; **passed** its held-out test (see Held-out acceptance) |
 | `-ion_series_photo <series>` | by | Removed in 1.14 (the a/x reading failed its held-out test, see Held-out acceptance): accepted with a warning, no effect |
@@ -1508,20 +1507,12 @@ MS2, as in this run, they do not, and the times are not comparable either: the
 mzML path tags profile samples as they are, while the archive was centroided
 when written, so FASTag reads peaks and finds more tags (2,032,961 against
 1,376,019). Centroid before tagging profile mzML, or read the archive.
-`-pick_profile auto` (1.12, experimental; it failed its held-out test, see
-below) centroids profile mzML MS2 on read with the same picker as the mzPeak
-path. Under `auto` a spectrum whose points are out
-of m/z order is picked from an m/z-sorted copy (`PeakPickerHiRes` needs
-sorted input): msconvert's Thermo profile mzML puts the zero-intensity point
-after some peaks' last sample at a slightly lower m/z, while mzpeak-convert
-stores the same non-zero points in m/z order (with zero runs shortened). With
-that, the PXD000865 profile mzML under `auto` and its mzpeak-convert 0.18.0
-archive give byte-identical tags (2,011,636). Its default stays `legacy`
-(mzML tagged as sampled).
+FASTag does not centroid profile mzML MS2 (its 1.12 `-pick_profile auto`
+failed its held-out test, see below, and was removed in 1.14).
 
-**`-pick_profile auto` failed its held-out test; the default stays `legacy`
-and `auto` is not recommended.** The 1.12 test (#9, item09-H1, scored once
-against Sage 1% FDR truths) failed both non-inferiority (B1) and "no fewer
+**`-pick_profile auto` failed its held-out test and was removed in 1.14**
+(it is read as `legacy`; `-pick_unknown_type`, which only it read, went with
+it). The 1.12 test (#9, item09-H1, scored once against Sage 1% FDR truths) failed both non-inferiority (B1) and "no fewer
 tagged spectra" (B2). Measured on the ion-trap run (PXD009049): two charge-3
 cells failed non-inferiority (+0.49 points, lower bound below -1.0), the
 charge-4+ cells were underpowered, and `auto` tagged fewer spectra at tag
@@ -1609,7 +1600,7 @@ data.
 | Item | Verdict | What it means |
 |---|---|---|
 | #4 tags on unidentified spectra (default tagger) | **PASS** | On 9 ProteomeTools synthetic-peptide pools, spectra the database search does not identify still get a correct rank-1 tag 27.0 points above decoy chance (95% CI 23.7-30.7; margin 5 points; tag length 5: 23.7). That tags carry the *precision* measured on identified spectra over to unidentified ones is **not** shown (precision at E <= 0.01: 0.28 unidentified, 0.55 identified), and `-diversity` showed no benefit on chimeras |
-| #9 `-pick_profile auto` | **FAIL** | Ion trap (PXD009049): two charge-3 cells fail non-inferiority, 4+ underpowered, fewer tagged spectra at tag length 4 and 5. Orbitrap (PXD016519, PXD018024; no Astral or TOF run): all 9 cells +10.5 to +32.0 points, but 567 fewer tagged spectra on PXD016519 at tag length 3. Default stays `legacy`; `auto` is not recommended (see Performance) |
+| #9 `-pick_profile auto` | **FAIL** | Ion trap (PXD009049): two charge-3 cells fail non-inferiority, 4+ underpowered, fewer tagged spectra at tag length 4 and 5. Orbitrap (PXD016519, PXD018024; no Astral or TOF run): all 9 cells +10.5 to +32.0 points, but 567 fewer tagged spectra on PXD016519 at tag length 3. Default stays `legacy`. Removed in 1.14 (with `-pick_unknown_type`); `auto` is read as `legacy` (see Performance) |
 | #6 `-unknown_charge infer` | **INCONCLUSIVE** (item06-H1-r2), then **FAIL** (item06-H2/H2r, high resolution) | Charge-call accuracy 0.751 (H1-r2, descriptive) and 0.745 (H2/H2r) against a 0.90 target; on the high-resolution sets, gains on 3+ and losses on 2+ (on ion trap in H1-r2, losses at every charge). Default stays `assume2` |
 | #14 `-check_header_charge` (1.13, `acceptance/1.13`) | **PASS** (item14r, revised rule); first rule **INCONCLUSIVE** (item14-hdrcharge: two Astral runs without enough truth) | First rule: On the three Q Exactive runs `warn` flags 0.31% of right header charges, and on a copy with every fifth charge changed it finds 28% of the wrong ones at precision 0.95. Overriding real header charges breaks more than it fixes: -2.2 per 1000 identified spectra, lower bound -2.9 (criterion -1.0). Q Exactive only: on Astral (PXD070049) all 9 flags as given and all 8 on the perturbed copy were false (false alarm 0.026), with no changed header found. That rule (range evidence, `override`) was replaced. The revised rule (MS1 isotope spacing, charge-aware pairs, `both`) passed its held-out test (item14r, five new runs, `warn`): it finds 26.9% of the wrong headers at precision 0.679 (95% lower bound 0.647) and flags 0.35% of the right ones (doc/HEADER-CHARGE-CHECK.md). Experimental |
 | 1.13 `-species_call explain` (`acc113r/species`) | **FAIL** | On 62 public runs (PREREG-species-explain.md) against the `decoy` call: 0.50 false genus calls per run (95% interval 0.29-0.73; 31 calls) against 5.98 (371 calls), so the primary endpoint passes (upper bound <= 0.75); the guard fails, recovery of the truth genera 38/105 against 77/105 (Sus or Bos 3/68 against 41/68). The mode selects the sample organism among the 50 indexed genera (42 of 49 runs) and does not report a second organism or contaminant; for organisms outside the index the closest indexed genus is called in 6 of 13 runs (assigned post hoc, not a test result), in the others another genus or none. Removed in 1.14 (with `-species_reagents`); `explain` is read as `none` (doc/SPECIES-DETECTOR.md) |
@@ -1697,7 +1688,7 @@ tags fill the slots (hence the small change in total recall):
   collisional.
 - **Low-resolution (ion-trap) MS2 is not validated.** The validation numbers
   and the passing 1.12 held-out result (#4) are for high-resolution MS2. On ion-trap
-  data `-pick_profile auto` failed, `-unknown_charge infer` scored worse
+  data `-pick_profile auto` failed (removed in 1.14), `-unknown_charge infer` scored worse
   (in the INCONCLUSIVE item06-H1-r2 scoring), and the other 1.12 options
   were not scored there.
 - **A tag is not an identification.** No per-tag q-value or FDR is emitted, and

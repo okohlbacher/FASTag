@@ -12,16 +12,9 @@
 # on read with its own picker, not the vendor's, and the "readers agree" check
 # then reports ~96% -- a property of the two pickers, not of the reader.
 #
-# For a profile mzML and an archive converted from it (profile MS2 kept, e.g.
-# mzpeak-convert), set FASTAG_E2E_MZML_ARGS="-pick_profile auto": the mzML runs
-# then centroid with the picker the mzPeak reader uses (FASTag 1.12 #9), and
-# the mzML tags must EQUAL the mzPeak tags byte for byte (the plan's "mzML +
-# auto equals the mzPeak digest"). Measured on PXD000865
-# (0299_F1_R1_P77628B02_TMT8, msconvert profile mzML, mzpeak-convert 0.18.0):
-# the archive stores the same non-zero points, but in m/z order and with zero
-# runs shortened; the mzML puts a zero padding point after some peaks' last
-# sample at a lower m/z. auto picks from m/z-sorted points (Centroid.h), and
-# with that the two inputs give identical tags.
+# FASTAG_E2E_MZML_ARGS adds options to the mzML runs only. (Its 1.12 use,
+# "-pick_profile auto" for a profile mzML and its archive, was removed in
+# 1.14 with that mode.)
 #
 # Exits 77 (ctest SKIP) when they are not set, so a normal build is unaffected.
 set -u
@@ -51,11 +44,6 @@ rows() { [ -s "$1" ] || { echo MISSING; return; }; echo $(( $(grep -c . "$1") - 
 # -- so this asserts agreement, not equality: 99.9% of (spectrum, tag, length)
 # triples shared. An actual reader bug is nowhere near that line.
 a=$(rows "$W/ml.tsv"); b=$(rows "$W/mp.tsv")
-case " ${ML[*]:-} " in
-  *" -pick_profile auto "*)
-    ck "mzML -pick_profile auto equals the mzPeak tags (byte-identical)" \
-       "$(cmp -s "$W/ml.tsv" "$W/mp.tsv" && echo same || echo "differ ($a vs $b rows)")" "same" ;;
-esac
 ck "mzML produced tags"   "$([ "$a" != MISSING ] && [ "$a" -gt 0 ] && echo yes)" "yes"
 ck "mzPeak produced tags" "$([ "$b" != MISSING ] && [ "$b" -gt 0 ] && echo yes)" "yes"
 if [ "$a" != MISSING ] && [ "$b" != MISSING ]; then

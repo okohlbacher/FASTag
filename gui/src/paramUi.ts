@@ -1016,16 +1016,13 @@ export const PARAM_UI: Record<string, ParamUi> = {
   },
   pick_profile: {
     hidden: OPT_IN_1_12,
+    // 1.14: auto (centroid mzML too) was removed; the CLI still accepts it and reads legacy.
+    choices: ['legacy', 'off'],
     help: {
-      text: 'Centroid profile MS2 spectra before tagging. By default only mzPeak input is centroided (as in 1.11); auto also centroids mzML; off never centroids. Spectra that are already centroided are never picked again.'
+      text: 'Centroid profile MS2 spectra before tagging. By default only mzPeak input is centroided (as in 1.11); off never centroids. Spectra that are already centroided are never picked again. The auto mode, which also centroided mzML, was removed in 1.14: it failed its held-out test.'
     }
   },
-  pick_unknown_type: {
-    hidden: OPT_IN_1_12,
-    help: {
-      text: 'With profile picking on auto, also centroid spectra that do not say whether they are profile or centroided, when their data look like profile.'
-    }
-  },
+  pick_unknown_type: { hidden: REMOVED_1_14, help: REMOVED_1_14_HELP },
   probe_input: {
     hidden: 'metadata probe for programs; prints JSON lines and exits',
     help: {

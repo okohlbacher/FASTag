@@ -76,8 +76,8 @@ namespace FASTag::RunReport
     // yet (Emit::Versioned rows need a format bump and new references).
     std::string acquisition;
     std::string acquisition_why;
-    // #9: -pick_profile and its outcome on every reader (mzML in the tagging
-    // loop, mzPeak in MzPeakStream); filled after the tagging loop.
+    // #9: -pick_profile (as read: the removed auto reads as legacy) and its
+    // outcome (only mzPeak picks, in MzPeakStream); filled after the loop.
     std::string pick_profile = "legacy";  ///< -pick_profile
     std::size_t pick_picked = 0;          ///< profile MS2 centroided
     std::size_t pick_failed = 0;          ///< profile MS2 kept as profile (picking yielded nothing)

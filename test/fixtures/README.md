@@ -98,8 +98,10 @@ sha256: `dia_like.mzML` `85708ffbfecb481fe65fc4fac8fa1f4663077df4398deb930a2bd68
 
 `profile_ms2_small.mzML`, `profile_ms2_untyped.mzML`,
 `profile_ms2_paramgroup.mzML` and `profile_ms2_lowres.mzML` — the profile-MS2
-fixtures of `profile_cli_test` and `indexed_mzml_test` (FASTag 1.12 #9,
-`-pick_profile`). Written by `make_profile_fixtures.py` (Python 3.15.0, zlib
+fixtures of `profile_cli_test`, `gui_cli_test`, `input_probe_test` and
+`indexed_mzml_test` (FASTag 1.12 #9, `-pick_profile`; since 1.14, when
+`-pick_profile auto` was removed, mzML profile MS2 is never picked, and these
+check that, and the mzPeak archive `profile_cli_test` writes from them). Written by `make_profile_fixtures.py` (Python 3.15.0, zlib
 1.2.12, standard library only) from `Ecoli_MS2_small.mzML`: each centroid of
 the source spectra becomes a sampled Gaussian with its intensity as apex, so
 BSD-3-Clause as well. Native IDs, retention times, precursors and scan windows

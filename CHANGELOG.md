@@ -38,6 +38,16 @@ remaining configuration writes the same output as 1.13.4.
   `data/taxonomy/species_reagents.fasta` are removed; the `reagent_n_min` key
   of `-species_call_params` files is accepted and ignored. `none` and `decoy`
   are unchanged.
+- **Centroiding of profile mzML** (`-pick_profile auto` and
+  `-pick_unknown_type`): failed its held-out test (#9, item09-H1). Ion trap
+  (PXD009049): two charge-3 cells fail non-inferiority, 4+ underpowered,
+  fewer tagged spectra at tag length 4 and 5. Orbitrap (PXD016519,
+  PXD018024): all 9 cells +10.5 to +32.0 points, but 567 fewer tagged
+  spectra on PXD016519 at tag length 3. Default stays legacy.
+  `-pick_profile auto` is read as `legacy`; `-pick_unknown_type`, read only
+  under `auto`, has no effect. mzML MS2 is never centroided; the m/z-sorted
+  picking, the unknown-type picking and the `profile_mzml` gate case are
+  removed. `legacy` (mzPeak picked on read, as 1.11) and `off` are unchanged.
 
 ## 1.13.4 (2026-11-13)
 
