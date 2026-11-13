@@ -28,19 +28,19 @@
 namespace FASTag::Digest
 {
   /// The tag alphabet, I merged into L, in the order every sum runs.
-  inline constexpr std::string_view kAAs = "GASPVTCLNDQKEMHFRYW";
-  /// Number of residues in kAAs.
-  inline constexpr int kNumAA = 19;
+  inline constexpr std::string_view AAS = "GASPVTCLNDQKEMHFRYW";
+  /// Number of residues in AAS.
+  inline constexpr int NUM_AA = 19;
   /**
-    @brief Index of a residue letter in kAAs.
+    @brief Index of a residue letter in AAS.
 
     @param[in] c Residue letter (I counts as L).
-    @return Index of @p c in kAAs, or -1.
+    @return Index of @p c in AAS, or -1.
   */
   int aaIndex(char c);
 
   /// Monoisotopic mass of water (Da).
-  inline constexpr double kH2O = 18.010565;
+  inline constexpr double H2O_MASS = 18.010565;
 
   /**
     @brief Python's sum() over floats (CPython >= 3.12).
@@ -71,7 +71,7 @@ namespace FASTag::Digest
 
   /// Residue keys: the 19 residues, then lysine with TMT, TMTpro, iTRAQ4 or
   /// +8 Da (heavy), and arginine +10 Da (heavy).
-  inline constexpr int kNumKeys = 24;
+  inline constexpr int NUM_KEYS = 24;
   /**
     @brief One residue key: a residue, possibly labelled, with its mass.
   */
@@ -82,14 +82,14 @@ namespace FASTag::Digest
     int merged;  ///< residue index the key counts as (labelled K as K), -1 for R+10
   };
   /**
-    @brief The residue keys (see kNumKeys).
+    @brief The residue keys (see NUM_KEYS).
 
-    @return The kNumKeys residue keys, the 19 residues in kAAs order first.
+    @return The NUM_KEYS residue keys, the 19 residues in AAS order first.
   */
-  const std::array<ResidueKey, kNumKeys>& residueKeys();
+  const std::array<ResidueKey, NUM_KEYS>& residueKeys();
 
   /// The N-terminal labels counted.
-  inline constexpr int kNumLabels = 3;
+  inline constexpr int NUM_LABELS = 3;
   /**
     @brief One N-terminal label with its mass.
   */
@@ -101,9 +101,9 @@ namespace FASTag::Digest
   /**
     @brief The N-terminal labels counted.
 
-    @return The kNumLabels labels: TMT, TMTpro, iTRAQ4.
+    @return The NUM_LABELS labels: TMT, TMTpro, iTRAQ4.
   */
-  const std::array<LabelKey, kNumLabels>& labelKeys();
+  const std::array<LabelKey, NUM_LABELS>& labelKeys();
 
   struct Flank2Bins;  // 1.12 D #3d, below
 
@@ -177,26 +177,26 @@ namespace FASTag::Digest
     void merge(const TerminusCounter& o);
 
     std::uint64_t tags = 0;                         ///< number of tags counted
-    std::array<std::uint64_t, kNumKeys> c_near{};   ///< tags whose C-terminal flank mass is near key k's mass
-    std::array<std::uint64_t, kNumKeys> n_h2o{};    ///< tags whose N-terminal flank mass is near key k's mass + H2O
-    std::array<std::uint64_t, kNumKeys> n_near{};   ///< tags whose N-terminal flank mass is near key k's mass
+    std::array<std::uint64_t, NUM_KEYS> c_near{};   ///< tags whose C-terminal flank mass is near key k's mass
+    std::array<std::uint64_t, NUM_KEYS> n_h2o{};    ///< tags whose N-terminal flank mass is near key k's mass + H2O
+    std::array<std::uint64_t, NUM_KEYS> n_near{};   ///< tags whose N-terminal flank mass is near key k's mass
     /// Per labelKeys() entry: tags whose N- or C-terminal flank mass is near
     /// the label mass.
-    std::array<std::uint64_t, kNumLabels> lab_n{}, lab_c{};
+    std::array<std::uint64_t, NUM_LABELS> lab_n{}, lab_c{};
     /// The same counts at label mass + 0.5 Da, where no label sits: an
     /// off-mass control, written as <L>.background by the label report.
-    std::array<std::uint64_t, kNumLabels> lab_bg_n{}, lab_bg_c{};
-    /// Counts per position and residue (kAAs order). Positions use the
+    std::array<std::uint64_t, NUM_LABELS> lab_bg_n{}, lab_bg_c{};
+    /// Counts per position and residue (AAS order). Positions use the
     /// protease notation of Schechter and Berger: the cleavage falls between
     /// P1 and P1'; P1 is the last residue before it, P2 the one before P1, and
     /// P1' the first residue after it. cpos[0..3] = P1..P4 on the C end,
     /// npos[0..3] = P1'..P4' on the N end.
-    std::array<std::array<std::uint64_t, kNumAA>, 4> cpos{}, npos{};
+    std::array<std::array<std::uint64_t, NUM_AA>, 4> cpos{}, npos{};
     // ---- 1.13 digqual (backlog 23): read by digestQuality() only ----
     /// The residues at P2..P4 of the tags counted at P1, by their P1 residue:
-    /// cq[P1][residue] (kAAs order, labelled K merged into K as in cpos);
+    /// cq[P1][residue] (AAS order, labelled K merged into K as in cpos);
     /// nq the same for P2'..P4' by the P1' residue.
-    std::array<std::array<std::uint64_t, kNumAA>, kNumAA> cq{}, nq{};
+    std::array<std::array<std::uint64_t, NUM_AA>, NUM_AA> cq{}, nq{};
     // ---- end 1.13 digqual ----
 
     /**
@@ -212,12 +212,12 @@ namespace FASTag::Digest
     /// @brief res() summed over every key.
     /// @return The total number of matched tag ends.
     std::uint64_t tot() const;
-    /// @brief C-terminal counts at P1, labelled lysines merged into K, in kAAs order.
+    /// @brief C-terminal counts at P1, labelled lysines merged into K, in AAS order.
     /// @return cpos[0].
-    std::array<std::uint64_t, kNumAA> cterm() const { return cpos[0]; }
-    /// @brief N-terminal counts at P1', labelled lysines merged into K, in kAAs order.
+    std::array<std::uint64_t, NUM_AA> cterm() const { return cpos[0]; }
+    /// @brief N-terminal counts at P1', labelled lysines merged into K, in AAS order.
     /// @return npos[0].
-    std::array<std::uint64_t, kNumAA> nterm() const { return npos[0]; }
+    std::array<std::uint64_t, NUM_AA> nterm() const { return npos[0]; }
 
   private:
     void add_(double nterm, double cterm, std::string_view seq, const double* reversed_offset);
@@ -228,8 +228,8 @@ namespace FASTag::Digest
 
   // ---- model table ------------------------------------------------------
 
-  /// A distribution over the 19 residues, in kAAs order.
-  using Dist = std::array<double, kNumAA>;
+  /// A distribution over the 19 residues, in AAS order.
+  using Dist = std::array<double, NUM_AA>;
 
   /**
     @brief One protease model: residue distributions at the C (P1) and N (P1') ends.
@@ -245,9 +245,9 @@ namespace FASTag::Digest
   /// The header line ('#' and this text) that makes a table a v2 table. Only
   /// a v2 table reads the reserved model names detection, reference and
   /// specificity; in a table without it they are ordinary models, as in 1.11.
-  inline constexpr std::string_view kModelsV2Marker = "fastag_digest_models v2";
+  inline constexpr std::string_view MODELS_V2_MARKER = "fastag_digest_models v2";
   /// Instrument classes of the detection weights (instrumentClass()).
-  inline constexpr std::array<std::string_view, 3> kInstrumentClasses = {"orbitrap_hcd", "timstof", "other"};
+  inline constexpr std::array<std::string_view, 3> INSTRUMENT_CLASSES = {"orbitrap_hcd", "timstof", "other"};
 
   /**
     @brief Detection weights of one instrument class.
@@ -257,7 +257,7 @@ namespace FASTag::Digest
   */
   struct Detection
   {
-    std::string cls;  ///< instrument class (kInstrumentClasses)
+    std::string cls;  ///< instrument class (INSTRUMENT_CLASSES)
     Dist c{}, n{};    ///< weights at the C (P1) and N (P1') end
   };
   // ---- end 1.12 D ----
@@ -272,7 +272,7 @@ namespace FASTag::Digest
     bool has_bg = false;              ///< the table has background rows
     Dist bg_c{}, bg_n{};              ///< background at the C and N end
     // ---- 1.12 D: v2 rows (empty in a v1 table) ----
-    int version = 1;                   ///< 2 with the kModelsV2Marker header line
+    int version = 1;                   ///< 2 with the MODELS_V2_MARKER header line
     std::vector<Detection> detection;  ///< rows "detection <class> <end> <residue> <weight>"
     /// "reference - C K|R <freq>": the in-silico tryptic K and R shares of the
     /// fixed reference the detection weights were fitted against (provenance;
@@ -301,7 +301,7 @@ namespace FASTag::Digest
     a model to the background, as does an end without rows. Returns false
     with @p err on a malformed table.
 
-    A v2 table (header line kModelsV2Marker) may also hold detection,
+    A v2 table (header line MODELS_V2_MARKER) may also hold detection,
     reference and specificity rows (ModelTable). A v1 table parses as in
     FASTag 1.11.
 
@@ -328,7 +328,7 @@ namespace FASTag::Digest
     19 residues.
 
     @param[in] sequences Protein or peptide sequences.
-    @return The normalised residue composition in kAAs order.
+    @return The normalised residue composition in AAS order.
   */
   Dist composition(const std::vector<std::string>& sequences);
 
@@ -339,9 +339,9 @@ namespace FASTag::Digest
     held in memory.
 
     @param[in] seq Sequence whose residues are counted.
-    @param[in,out] cnt Residue counts in kAAs order, incremented.
+    @param[in,out] cnt Residue counts in AAS order, incremented.
   */
-  void addResidues(const std::string& seq, std::array<std::uint64_t, kNumAA>& cnt);
+  void addResidues(const std::string& seq, std::array<std::uint64_t, NUM_AA>& cnt);
 
   /**
     @brief Normalises residue counts to a composition.
@@ -350,12 +350,12 @@ namespace FASTag::Digest
     of them is 0, so no model scores -inf on a residue the FASTA lacks;
     @p added says whether that happened.
 
-    @param[in] cnt Residue counts in kAAs order.
+    @param[in] cnt Residue counts in AAS order.
     @param[in] pseudocount Whether to add the pseudocount when a residue count is 0.
     @param[out] added Set to whether the pseudocount was added; may be null.
     @return The normalised composition (all 0 when the total is 0).
   */
-  Dist composition(std::array<std::uint64_t, kNumAA> cnt, bool pseudocount, bool* added = nullptr);
+  Dist composition(std::array<std::uint64_t, NUM_AA> cnt, bool pseudocount, bool* added = nullptr);
 
   /**
     @brief The log-likelihood of one model.
@@ -394,15 +394,15 @@ namespace FASTag::Digest
     top model (ties to the one listed first); the runner-up the best model
     of another class.
 
-    @param[in] cterm Merged C-terminal (P1) counts in kAAs order.
-    @param[in] nterm Merged N-terminal (P1') counts in kAAs order.
+    @param[in] cterm Merged C-terminal (P1) counts in AAS order.
+    @param[in] nterm Merged N-terminal (P1') counts in AAS order.
     @param[in] table Model table with background.
     @param[in] share Background share mixed into each model.
     @param[in] tag_min Minimum number of counts at an end to score it.
     @return The classification.
   */
-  Classification classify(const std::array<std::uint64_t, kNumAA>& cterm,
-                          const std::array<std::uint64_t, kNumAA>& nterm,
+  Classification classify(const std::array<std::uint64_t, NUM_AA>& cterm,
+                          const std::array<std::uint64_t, NUM_AA>& nterm,
                           const ModelTable& table, double share, int tag_min);
 
   /// post-1.13.1 (aspn): the share of the counted N-terminal tag ends that
@@ -410,7 +410,7 @@ namespace FASTag::Digest
   /// background share Asp-N then beats `unspecific` from about 21 % D among
   /// the N-terminal tag ends (above 50 % before); the development runs have
   /// 33-78 % D in Asp-N digests and at most 10 % elsewhere.
-  inline constexpr double kNtermSiteShare = 0.5;
+  inline constexpr double NTERM_SITE_SHARE = 0.5;
   /**
     @brief Mixes the N end of one model with the background.
 
@@ -423,7 +423,7 @@ namespace FASTag::Digest
 
     @param[in,out] table Model table whose model is changed.
     @param[in] name Name of the model.
-    @param[in] site_share Share of the model at its N end (e.g. kNtermSiteShare).
+    @param[in] site_share Share of the model at its N end (e.g. NTERM_SITE_SHARE).
   */
   void softenNterm(ModelTable& table, std::string_view name, double site_share);
 
@@ -452,16 +452,16 @@ namespace FASTag::Digest
   /**
     @brief The protease call with the 1.12 options (see the overload without them).
 
-    @param[in] cterm Merged C-terminal (P1) counts in kAAs order.
-    @param[in] nterm Merged N-terminal (P1') counts in kAAs order.
+    @param[in] cterm Merged C-terminal (P1) counts in AAS order.
+    @param[in] nterm Merged N-terminal (P1') counts in AAS order.
     @param[in] table Model table with background.
     @param[in] share Background share mixed into each model (unless @p opt sets specificity).
     @param[in] tag_min Minimum number of counts at an end to score it.
     @param[in] opt Detection weights and specificity options.
     @return The classification.
   */
-  Classification classify(const std::array<std::uint64_t, kNumAA>& cterm,
-                          const std::array<std::uint64_t, kNumAA>& nterm,
+  Classification classify(const std::array<std::uint64_t, NUM_AA>& cterm,
+                          const std::array<std::uint64_t, NUM_AA>& nterm,
                           const ModelTable& table, double share, int tag_min,
                           const ClassifyOptions& opt);
 
@@ -478,7 +478,7 @@ namespace FASTag::Digest
   {
     double window = 0.0;                                  ///< the window the bins were built at (Da)
     std::vector<double> lo, hi;                           ///< per bin: lowest and highest pair sum
-    std::vector<std::vector<std::pair<int, int>>> pairs;  ///< per bin: (P2, P1) in kAAs indices
+    std::vector<std::vector<std::pair<int, int>>> pairs;  ///< per bin: (P2, P1) in AAS indices
     std::vector<double> sums;                             ///< every pair sum, ascending
     std::vector<int> bin_of;                              ///< the bin of sums[i]
     /**
@@ -800,7 +800,7 @@ namespace FASTag::Digest
 
   // ---- 1.12 D: instrument class (#3c) ----
   /**
-    @brief The detection class of a run (kInstrumentClasses).
+    @brief The detection class of a run (INSTRUMENT_CLASSES).
 
     Detection is a property of the MS2 analyzer and the fragmentation, not of
     the instrument's name:
@@ -817,7 +817,7 @@ namespace FASTag::Digest
         is other, not orbitrap_hcd.
 
     @param[in] meta Run metadata.
-    @return One of kInstrumentClasses.
+    @return One of INSTRUMENT_CLASSES.
   */
   std::string instrumentClass(const RunMeta& meta);
   // ---- end 1.12 D ----
@@ -873,7 +873,7 @@ namespace FASTag::Digest
   struct QualityEnd
   {
     char end = 'C';                   ///< 'C' (P1) or 'N' (P1')
-    std::vector<int> sites;           ///< kAAs indices whose model probability is above the background's
+    std::vector<int> sites;           ///< AAS indices whose model probability is above the background's
     bool measured = false;            ///< ends >= tag_min
     bool mc_measured = false;         ///< measured and specific >= tag_min (the mc_* ratios)
     std::uint64_t ends = 0;           ///< merged P1 (P1') counts
@@ -905,7 +905,7 @@ namespace FASTag::Digest
 
     @param[in] model_end Residue distribution of the model end.
     @param[in] bg Background distribution of the same end.
-    @return kAAs indices of the site residues; empty for a background end.
+    @return AAS indices of the site residues; empty for a background end.
   */
   std::vector<int> siteResidues(const Dist& model_end, const Dist& bg);
   /**
@@ -914,12 +914,12 @@ namespace FASTag::Digest
     The background share s in [0, 1] that maximises sum_a k_a ln((1 - s) p_a
     + s b_a) (p, b normalised); bisection on the derivative (concave in s).
 
-    @param[in] k Residue counts in kAAs order.
+    @param[in] k Residue counts in AAS order.
     @param[in] p Model distribution.
     @param[in] b Background distribution.
     @return The share s in [0, 1].
   */
-  double mixtureShareMle(const std::array<std::uint64_t, kNumAA>& k, const Dist& p, const Dist& b);
+  double mixtureShareMle(const std::array<std::uint64_t, NUM_AA>& k, const Dist& p, const Dist& b);
   /**
     @brief The digestion quality of one model.
 
@@ -978,21 +978,21 @@ namespace FASTag::Digest
   // result, so -massgap_out cannot change it.
   //   - no_call low_resolution: the fragment tolerance is in Da (prose-auto
   //     runs the termini only on ppm runs);
-  //   - no_call few_tags: fewer than kLabelTagMin C-terminal tag ends
+  //   - no_call few_tags: fewer than LABEL_TAG_MIN C-terminal tag ends
   //     (tot(); 175, prose-auto 0.1.10's TAG_MIN, the 1.12 rule);
   //   - an isobaric label (labelKeys() order) when its count reaches
-  //     kLabelMinShare of the filtered tags AND kLabelBackgroundFold times
+  //     LABEL_MIN_SHARE of the filtered tags AND LABEL_BACKGROUND_FOLD times
   //     max(its +0.5 Da background, 1);
   //   - SILAC (Lys8/Arg10) when the heavy K8 and R10 shares are both
-  //     >= kHeavyMin, the K/R share rounded to 3 decimals (as prose-auto
-  //     compares it) is >= kKrTryptic and the K- and R-terminal ends are each
+  //     >= HEAVY_MIN, the K/R share rounded to 3 decimals (as prose-auto
+  //     compares it) is >= KR_TRYPTIC and the K- and R-terminal ends are each
   //     >= DigestSettings::silac_min (50, prose-auto's SILAC_MIN_TAGS);
-  //     strong when both shares are >= kHeavyStrong;
+  //     strong when both shares are >= HEAVY_STRONG;
   //   - every label that passes is listed (isobaric first); none is
   //     label-free.
-  inline constexpr std::uint64_t kLabelTagMin = 175;
-  inline constexpr double kLabelMinShare = 0.01, kLabelBackgroundFold = 20.0;
-  inline constexpr double kHeavyMin = 0.2, kHeavyStrong = 0.3, kKrTryptic = 0.8;
+  inline constexpr std::uint64_t LABEL_TAG_MIN = 175;
+  inline constexpr double LABEL_MIN_SHARE = 0.01, LABEL_BACKGROUND_FOLD = 20.0;
+  inline constexpr double HEAVY_MIN = 0.2, HEAVY_STRONG = 0.3, KR_TRYPTIC = 0.8;
 
   /**
     @brief The label call over the tag-end counts.

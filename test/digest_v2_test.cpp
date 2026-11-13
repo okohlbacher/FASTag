@@ -32,11 +32,11 @@ static std::string background()
 {
   std::string t;
   for (const char* end : {"C", "N"})
-    for (int i = 0; i < D::kNumAA; ++i)
+    for (int i = 0; i < D::NUM_AA; ++i)
     {
       char b[16];
       std::snprintf(b, sizeof b, "0.%02d", i + 1);
-      t += std::string("background\t-\t") + end + "\t" + D::kAAs[static_cast<std::size_t>(i)] + "\t" + b + "\n";
+      t += std::string("background\t-\t") + end + "\t" + D::AAS[static_cast<std::size_t>(i)] + "\t" + b + "\n";
     }
   return t;
 }
@@ -70,33 +70,33 @@ static std::string v2Text(const std::string& extra = "", bool all_classes = true
   t += "specificity\ttrypsin\t-\t-\t0.05\nspecificity\tnontryptic\t-\t-\t0.05\n";
   return t + extra;
 }
-static std::array<std::uint64_t, D::kNumAA> counts(const std::map<char, std::uint64_t>& m)
+static std::array<std::uint64_t, D::NUM_AA> counts(const std::map<char, std::uint64_t>& m)
 {
-  std::array<std::uint64_t, D::kNumAA> a{};
+  std::array<std::uint64_t, D::NUM_AA> a{};
   for (const auto& [c, v] : m) a[static_cast<std::size_t>(D::aaIndex(c))] = v;
   return a;
 }
 /// Counts drawn as n * norm(e * ((1 - s) p + s bg)), rounded: what a model
 /// with detection weights e would show.
-static std::array<std::uint64_t, D::kNumAA> generate(const D::ModelTable& t, const std::string& model, const D::Dist* e,
+static std::array<std::uint64_t, D::NUM_AA> generate(const D::ModelTable& t, const std::string& model, const D::Dist* e,
                                                      double s, double n, bool cend = true)
 {
   const D::Model* m = nullptr;
   for (const D::Model& x : t.models)
     if (x.name == model) m = &x;
-  std::array<double, D::kNumAA> q{};
+  std::array<double, D::NUM_AA> q{};
   double z = 0;
-  for (int a = 0; a < D::kNumAA; ++a)
+  for (int a = 0; a < D::NUM_AA; ++a)
   {
     const D::Dist& p = cend ? (m->c_bg ? t.bg_c : m->c) : (m->n_bg ? t.bg_n : m->n);
     const D::Dist& bg = cend ? t.bg_c : t.bg_n;
     double zp = 0, zb = 0;
-    for (int b = 0; b < D::kNumAA; ++b) { zp += p[b]; zb += bg[b]; }
+    for (int b = 0; b < D::NUM_AA; ++b) { zp += p[b]; zb += bg[b]; }
     q[a] = (e ? (*e)[a] : 1.0) * ((1 - s) * p[a] / zp + s * bg[a] / zb);
     z += q[a];
   }
-  std::array<std::uint64_t, D::kNumAA> c{};
-  for (int a = 0; a < D::kNumAA; ++a) c[a] = static_cast<std::uint64_t>(std::llround(n * q[a] / z));
+  std::array<std::uint64_t, D::NUM_AA> c{};
+  for (int a = 0; a < D::NUM_AA; ++a) c[a] = static_cast<std::uint64_t>(std::llround(n * q[a] / z));
   return c;
 }
 static std::string top(const D::Classification& c)
@@ -137,12 +137,12 @@ static bool sameClassification(const D::Classification& a, const D::Classificati
   return true;
 }
 /// A counter whose C-terminal P1 counts are @p c (each count one y-tag end).
-static D::TerminusCounter counterOf(const std::array<std::uint64_t, D::kNumAA>& c, bool flank2 = false)
+static D::TerminusCounter counterOf(const std::array<std::uint64_t, D::NUM_AA>& c, bool flank2 = false)
 {
   D::TerminusCounter tc;
   if (flank2) tc.enableFlank2();
   const auto& keys = D::residueKeys();
-  for (int a = 0; a < D::kNumAA; ++a)
+  for (int a = 0; a < D::NUM_AA; ++a)
     for (std::uint64_t i = 0; i < c[a]; ++i) tc.add(500.0, keys[static_cast<std::size_t>(a)].mass, "PEPT");
   return tc;
 }
@@ -153,7 +153,7 @@ int main()
   const D::ModelTable v1 = parse(v1Text());
   check(v1.version == 1 && v1.detection.empty() && !v1.has_specificity && !v1.has_reference, "v1 table: no v2 rows");
   {
-    const std::vector<std::array<std::uint64_t, D::kNumAA>> sets = {
+    const std::vector<std::array<std::uint64_t, D::NUM_AA>> sets = {
         counts({{'K', 150}, {'R', 60}, {'L', 9}}), counts({{'R', 400}, {'K', 5}, {'A', 20}}),
         counts({{'K', 40}}), counts({{'D', 300}, {'E', 10}, {'K', 33}})};
     for (const auto& c : sets)
@@ -215,7 +215,7 @@ int main()
     check(D::loadModelTable(std::string(FASTAG_DIGEST_DATA) + "/digest_models_v2.tsv", shipped, &err),
           "shipped digest_models_v2.tsv parses: " + err);
     check(shipped.version == 2 && shipped.has_bg && shipped.has_specificity, "shipped v2: version 2, background, specificity");
-    for (std::string_view c : D::kInstrumentClasses) check(shipped.detectionFor(c) != nullptr, "shipped v2: detection " + std::string(c));
+    for (std::string_view c : D::INSTRUMENT_CLASSES) check(shipped.detectionFor(c) != nullptr, "shipped v2: detection " + std::string(c));
     bool lysarg = false, ambic = false;
     for (const D::Model& m : shipped.models)
     {
@@ -299,7 +299,7 @@ int main()
     for (std::uint64_t v : tc.dip) total += v;
     check(total == 1 && tc.dip[static_cast<std::size_t>(gg)] == 1, "flank2: a GG/N flank counts once");
     // reversed b tag: N-terminal flank less H2O
-    tc.add(A + G + D::kH2O, 900.0, "PEPT");
+    tc.add(A + G + D::H2O_MASS, 900.0, "PEPT");
     check(tc.dip[static_cast<std::size_t>(ag)] == 1, "flank2: a reversed b tag counts its N-terminal flank less H2O");
     // merge
     D::TerminusCounter m;
@@ -314,7 +314,7 @@ int main()
       std::vector<double> pred(bins.pairs.size(), 0.0);
       double z = 0;
       double zp = 0, zb = 0;
-      for (int a = 0; a < D::kNumAA; ++a) { zp += t->c[a]; zb += v2.bg_c[a]; }
+      for (int a = 0; a < D::NUM_AA; ++a) { zp += t->c[a]; zb += v2.bg_c[a]; }
       for (std::size_t k = 0; k < bins.pairs.size(); ++k)
       {
         for (const auto& [x, y] : bins.pairs[k])
@@ -323,7 +323,7 @@ int main()
       }
       for (std::size_t k = 0; k < pred.size(); ++k) dip[k] = static_cast<std::uint64_t>(std::llround(3000 * pred[k] / z));
     }
-    const std::array<std::uint64_t, D::kNumAA> zero{};
+    const std::array<std::uint64_t, D::NUM_AA> zero{};
     check(!D::classify(zero, zero, v2, 0.05, 100).scored, "flank2: zero P1 counts are not scored by classify");
     const D::Classification c2 = D::classify2(dip, bins, v2, 0.05, 100);
     check(c2.scored && top(c2) == "Trypsin", "flank2: classify2 recovers trypsin with zero P1 counts (" + top(c2) + ")");

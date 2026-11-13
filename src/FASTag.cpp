@@ -2375,7 +2375,7 @@ protected:
     std::vector<FASTag::Shortlist::ProteinInfo> sl_proteins;
     std::vector<FASTAFile::FASTAEntry> sl_background;
     std::vector<std::uint32_t> sl_bg_twins;  // database entries the background duplicates
-    std::array<std::uint64_t, FASTag::Digest::kNumAA> sl_db_residues{};
+    std::array<std::uint64_t, FASTag::Digest::NUM_AA> sl_db_residues{};
     std::size_t sl_decoys = 0;
     // 1.13 #18: entries starting with the MSFragger decoy prefix (MSFragger
     // generates no decoys; without -fasta_out the database must hold them).
@@ -2785,7 +2785,7 @@ protected:
       if (digest_models.empty()) resolved_inputs.emplace_back("digest_models (shipped)", models_path);
       digest_settings.models = digest_models.empty() ? (digest_v2 ? "shipped_v2" : "shipped") : digest_models;
       if (digest_settings.detection)
-        for (std::string_view cls : FD::kInstrumentClasses)
+        for (std::string_view cls : FD::INSTRUMENT_CLASSES)
           if (!protease_models.detectionFor(cls))
           {
             OPENMS_LOG_ERROR << "-digest_detection shipped needs detection rows for orbitrap_hcd, timstof and other in "
@@ -2814,7 +2814,7 @@ protected:
       else if (!background_fasta.empty())
       {
         // Streamed: only the residue counts are needed, not the entries.
-        std::array<std::uint64_t, FD::kNumAA> background_counts{};
+        std::array<std::uint64_t, FD::NUM_AA> background_counts{};
         FASTAFile background_file;
         background_file.readStart(background_fasta);
         FASTAFile::FASTAEntry background_entry;
@@ -2930,7 +2930,7 @@ protected:
       // post-1.13.1 (aspn): an Asp-N digest has D at a third of its counted
       // N-terminal tag ends, not at all of them; without this it is called
       // `unspecific`. Only the experimental non-trypsin placement path.
-      if (sl_nontryptic) FD::softenNterm(sl_models, "Asp-N", FD::kNtermSiteShare);
+      if (sl_nontryptic) FD::softenNterm(sl_models, "Asp-N", FD::NTERM_SITE_SHARE);
       if (!search_config_out.empty())
       {
         sl_plan.database = fasta_out.empty() ? recon_db : fasta_out;

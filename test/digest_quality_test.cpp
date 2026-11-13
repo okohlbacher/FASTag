@@ -30,8 +30,8 @@ static D::ModelTable table()
 {
   std::string t = "model\tclass\tend\tresidue\tfreq\n";
   for (const char* end : {"C", "N"})
-    for (int i = 0; i < D::kNumAA; ++i)
-      t += std::string("background\t-\t") + end + "\t" + D::kAAs[static_cast<std::size_t>(i)] + "\t1\n";
+    for (int i = 0; i < D::NUM_AA; ++i)
+      t += std::string("background\t-\t") + end + "\t" + D::AAS[static_cast<std::size_t>(i)] + "\t1\n";
   t += "Trypsin\tTrypsin\tC\tK\t0.5\nTrypsin\tTrypsin\tC\tR\t0.5\nTrypsin\tTrypsin\tN\t*\t-\n"
        "Asp-N\tAsp-N\tC\t*\t-\nAsp-N\tAsp-N\tN\tD\t1\n"
        "unspecific\tunspecific cleavage\tC\t*\t-\nunspecific\tunspecific cleavage\tN\t*\t-\n"
@@ -76,7 +76,7 @@ int main()
   {
     D::TerminusCounter tc;
     tc.add(500.0, K, "GAKS");        // C flank K: P2..P4 = S, K, A (tail)
-    tc.add(R + D::kH2O, 800.0, "LRTV");  // reversed b tag, P1 = R: P2..P4 = L, R, T (head)
+    tc.add(R + D::H2O_MASS, 800.0, "LRTV");  // reversed b tag, P1 = R: P2..P4 = L, R, T (head)
     tc.add(Dm, 900.0, "DGAV");      // N flank D: P2'..P4' = D, G, A
     check(tc.cq[ix('K')][ix('S')] == 1 && tc.cq[ix('K')][ix('K')] == 1 && tc.cq[ix('K')][ix('A')] == 1 &&
               tc.cq[ix('K')][ix('G')] == 0,
@@ -103,16 +103,16 @@ int main()
     const D::Model& tr = model(t, "Trypsin");
     // s = 0.2 with background 1/19: K and R each 0.8*0.5 + 0.2/19, others 0.2/19.
     // 19000 ends: K, R 7800 each; 17 others 200 each.
-    std::array<std::uint64_t, D::kNumAA> k{};
+    std::array<std::uint64_t, D::NUM_AA> k{};
     k.fill(200);
     k[ix('K')] = 7800;
     k[ix('R')] = 7800;
     close(D::mixtureShareMle(k, tr.c, t.bg_c), 0.2, 1e-9, "MLE recovers s = 0.2");
-    std::array<std::uint64_t, D::kNumAA> pure{};
+    std::array<std::uint64_t, D::NUM_AA> pure{};
     pure[ix('K')] = 60;
     pure[ix('R')] = 40;
     close(D::mixtureShareMle(pure, tr.c, t.bg_c), 0.0, 0.0, "only K/R ends: s = 0");
-    std::array<std::uint64_t, D::kNumAA> flat{};
+    std::array<std::uint64_t, D::NUM_AA> flat{};
     flat.fill(10);
     close(D::mixtureShareMle(flat, tr.c, t.bg_c), 1.0, 1e-9, "background-shaped ends: s = 1 (derivative 0 at s = 1)");
   }

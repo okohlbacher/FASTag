@@ -26,7 +26,7 @@ namespace FASTag::Digest
   int aaIndex(char c)
   {
     if (c == 'I') c = 'L';
-    const std::size_t k = kAAs.find(c);
+    const std::size_t k = AAS.find(c);
     return k == std::string_view::npos ? -1 : static_cast<int>(k);
   }
 
@@ -52,13 +52,13 @@ namespace FASTag::Digest
     return r;
   }
 
-  const std::array<ResidueKey, kNumKeys>& residueKeys()
+  const std::array<ResidueKey, NUM_KEYS>& residueKeys()
   {
     // The residue masses (C carbamidomethylated) and the labelled K/R, whose
     // masses are sums computed in double as the reference computes them.
-    static const std::array<ResidueKey, kNumKeys> keys = [] {
+    static const std::array<ResidueKey, NUM_KEYS> keys = [] {
       constexpr double K = 128.09496, R = 156.10111;
-      return std::array<ResidueKey, kNumKeys>{{
+      return std::array<ResidueKey, NUM_KEYS>{{
           {"G", 57.02146, 0},      {"A", 71.03711, 1},       {"S", 87.03203, 2},
           {"P", 97.05276, 3},      {"V", 99.06841, 4},       {"T", 101.04768, 5},
           {"C", 160.03065, 6},     {"L", 113.08406, 7},      {"N", 114.04293, 8},
@@ -73,9 +73,9 @@ namespace FASTag::Digest
     return keys;
   }
 
-  const std::array<LabelKey, kNumLabels>& labelKeys()
+  const std::array<LabelKey, NUM_LABELS>& labelKeys()
   {
-    static const std::array<LabelKey, kNumLabels> keys{{
+    static const std::array<LabelKey, NUM_LABELS> keys{{
         {"TMT", 229.162932}, {"TMTpro", 304.207146}, {"iTRAQ4", 144.102063}}};
     return keys;
   }
@@ -93,30 +93,30 @@ namespace FASTag::Digest
   void TerminusCounter::add_(double nterm, double cterm, std::string_view seq, const double* reversed_offset)
   {
     // The tag's reversed-read offset: 1.11's water for b/y (no offset given,
-    // the same double), offC - offN for c/z-dot. Named kH2O on purpose: it
-    // shadows Digest::kH2O in this body, so every nterm expression below --
+    // the same double), offC - offN for c/z-dot. Named H2O_MASS on purpose: it
+    // shadows Digest::H2O_MASS in this body, so every nterm expression below --
     // also one written against the b/y constant by a later item (#3d's
-    // two-residue dip, "nterm - kH2O") -- takes the tag's series (PLAN-
-    // INTEGRATION 2.3/2). Do not rename it or use Digest::kH2O here.
-    const double kH2O = reversed_offset ? *reversed_offset : FASTag::Digest::kH2O;
+    // two-residue dip, "nterm - H2O_MASS") -- takes the tag's series (PLAN-
+    // INTEGRATION 2.3/2). Do not rename it or use Digest::H2O_MASS here.
+    const double H2O_MASS = reversed_offset ? *reversed_offset : FASTag::Digest::H2O_MASS;
     ++tags;
     // P2..P4 from the residues next to the counted end: the tag's last three
     // for a y tag (cterm_mass), its first three for a reversed b tag
     // (nterm_mass + H2O) and for the N end (nterm_mass).
-    auto head = [&](std::array<std::array<std::uint64_t, kNumAA>, 4>& pos) {
+    auto head = [&](std::array<std::array<std::uint64_t, NUM_AA>, 4>& pos) {
       for (std::size_t j = 0; j < 3 && j < seq.size(); ++j)
         if (const int a = aaIndex(seq[j]); a >= 0) ++pos[j + 1][static_cast<std::size_t>(a)];
     };
-    auto tail = [&](std::array<std::array<std::uint64_t, kNumAA>, 4>& pos) {
+    auto tail = [&](std::array<std::array<std::uint64_t, NUM_AA>, 4>& pos) {
       for (std::size_t j = 0; j < 3 && j < seq.size(); ++j)
         if (const int a = aaIndex(seq[seq.size() - 1 - j]); a >= 0) ++pos[j + 1][static_cast<std::size_t>(a)];
     };
     // 1.13 digqual: the same residues, by the residue at P1 (P1').
-    auto qhead = [&](std::array<std::uint64_t, kNumAA>& row) {
+    auto qhead = [&](std::array<std::uint64_t, NUM_AA>& row) {
       for (std::size_t j = 0; j < 3 && j < seq.size(); ++j)
         if (const int a = aaIndex(seq[j]); a >= 0) ++row[static_cast<std::size_t>(a)];
     };
-    auto qtail = [&](std::array<std::uint64_t, kNumAA>& row) {
+    auto qtail = [&](std::array<std::uint64_t, NUM_AA>& row) {
       for (std::size_t j = 0; j < 3 && j < seq.size(); ++j)
         if (const int a = aaIndex(seq[seq.size() - 1 - j]); a >= 0) ++row[static_cast<std::size_t>(a)];
     };
@@ -130,8 +130,8 @@ namespace FASTag::Digest
         ++c_near[k];
         if (a >= 0) { ++cpos[0][static_cast<std::size_t>(a)]; tail(cpos); qtail(cq[static_cast<std::size_t>(a)]); }
       }
-      // b/y (no offset given): 1.11's m + kH2O; c/z-dot: m + offC - offN.
-      if (near_(nterm, m + kH2O))
+      // b/y (no offset given): 1.11's m + H2O_MASS; c/z-dot: m + offC - offN.
+      if (near_(nterm, m + H2O_MASS))
       {
         ++n_h2o[k];
         if (a >= 0) { ++cpos[0][static_cast<std::size_t>(a)]; head(cpos); qhead(cq[static_cast<std::size_t>(a)]); }
@@ -155,7 +155,7 @@ namespace FASTag::Digest
     if (bins_)
     {
       if (const int b = bins_->find(cterm); b >= 0) ++dip[static_cast<std::size_t>(b)];
-      if (const int b = bins_->find(nterm - kH2O); b >= 0) ++dip[static_cast<std::size_t>(b)];
+      if (const int b = bins_->find(nterm - H2O_MASS); b >= 0) ++dip[static_cast<std::size_t>(b)];
     }
   }
 
@@ -182,7 +182,7 @@ namespace FASTag::Digest
   std::uint64_t TerminusCounter::tot() const
   {
     std::uint64_t t = 0;
-    for (int k = 0; k < kNumKeys; ++k) t += res(k);
+    for (int k = 0; k < NUM_KEYS; ++k) t += res(k);
     return t;
   }
 
@@ -264,11 +264,11 @@ namespace FASTag::Digest
   bool parseModelTable(std::istream& in, ModelTable& out, std::string* err)
   {
     out = ModelTable();
-    std::array<bool, kNumAA> bgc_seen{}, bgn_seen{};
+    std::array<bool, NUM_AA> bgc_seen{}, bgn_seen{};
     // per model and end: rows given, '*' given
     std::map<std::string, std::array<int, 4>> state;  // c_rows, c_star, n_rows, n_star
     // per model: residue rows seen at the C (first) and N (second) end
-    std::map<std::string, std::pair<std::array<bool, kNumAA>, std::array<bool, kNumAA>>> res_seen;
+    std::map<std::string, std::pair<std::array<bool, NUM_AA>, std::array<bool, NUM_AA>>> res_seen;
     auto model_of = [&](const std::string& name, const std::string& cls) -> Model* {
       for (Model& m : out.models)
         if (m.name == name) return m.cls == cls ? &m : nullptr;
@@ -276,14 +276,14 @@ namespace FASTag::Digest
       return &out.models.back();
     };
     // 1.12 D (#3c, #3e): the v2 rows, read only below the v2 marker.
-    std::map<std::string, std::pair<std::array<bool, kNumAA>, std::array<bool, kNumAA>>> det_seen;
+    std::map<std::string, std::pair<std::array<bool, NUM_AA>, std::array<bool, NUM_AA>>> det_seen;
     bool ref_seen[2] = {false, false}, spec_seen[2] = {false, false};
     auto is_v2 = [&]() {
       for (const std::string& h : out.header)
       {
         const std::size_t a = h.find_first_not_of(" \t");
         const std::size_t b = h.find_last_not_of(" \t");
-        if (a != std::string::npos && h.compare(a, b - a + 1, kModelsV2Marker) == 0) return true;
+        if (a != std::string::npos && h.compare(a, b - a + 1, MODELS_V2_MARKER) == 0) return true;
       }
       return false;
     };
@@ -322,11 +322,11 @@ namespace FASTag::Digest
               out.has_reference = true;
               return true;
             }
-            if (std::find(kInstrumentClasses.begin(), kInstrumentClasses.end(), cls) == kInstrumentClasses.end())
+            if (std::find(INSTRUMENT_CLASSES.begin(), INSTRUMENT_CLASSES.end(), cls) == INSTRUMENT_CLASSES.end())
               return fail(err, at + "detection class must be orbitrap_hcd, timstof or other, not '" + cls + "'");
             if (end != "C" && end != "N") return fail(err, at + "end must be C or N, not '" + end + "'");
             if (res.size() != 1 || aaIndex(res[0]) < 0 || res[0] == 'I')
-              return fail(err, at + "residue '" + res + "' is none of " + std::string(kAAs));
+              return fail(err, at + "residue '" + res + "' is none of " + std::string(AAS));
             Detection* d = nullptr;
             for (Detection& x : out.detection)
               if (x.cls == cls) d = &x;
@@ -357,7 +357,7 @@ namespace FASTag::Digest
             return true;
           }
           if (res.size() != 1 || aaIndex(res[0]) < 0 || res[0] == 'I')
-            return fail(err, at + "residue '" + res + "' is none of " + std::string(kAAs) + " or '*'");
+            return fail(err, at + "residue '" + res + "' is none of " + std::string(AAS) + " or '*'");
           const std::size_t a = static_cast<std::size_t>(aaIndex(res[0]));
           double v = 0;
           if (!parseDouble(f[4], v) || !(v >= 0) || !std::isfinite(v))
@@ -395,9 +395,9 @@ namespace FASTag::Digest
       if (std::accumulate(d.c.begin(), d.c.end(), 0.0) <= 0.0 || std::accumulate(d.n.begin(), d.n.end(), 0.0) <= 0.0)
         return fail(err, "detection " + d.cls + " has an end whose weights are all 0");
     if (out.has_bg)
-      for (int a = 0; a < kNumAA; ++a)
+      for (int a = 0; a < NUM_AA; ++a)
         if (!bgc_seen[a] || !bgn_seen[a])
-          return fail(err, std::string("the background has no row for ") + kAAs[a] + " at the " +
+          return fail(err, std::string("the background has no row for ") + AAS[a] + " at the " +
                                (bgc_seen[a] ? "N" : "C") + " end; it needs all 19 residues at both ends");
     if (out.models.empty()) return fail(err, "no model");
     // An end with no mass makes loglik log(0/0) = NaN once mixed with an
@@ -421,7 +421,7 @@ namespace FASTag::Digest
     return parseModelTable(in, out, err);
   }
 
-  void addResidues(const std::string& seq, std::array<std::uint64_t, kNumAA>& cnt)
+  void addResidues(const std::string& seq, std::array<std::uint64_t, NUM_AA>& cnt)
   {
     for (char c : seq)
     {
@@ -430,7 +430,7 @@ namespace FASTag::Digest
     }
   }
 
-  Dist composition(std::array<std::uint64_t, kNumAA> cnt, bool pseudocount, bool* added)
+  Dist composition(std::array<std::uint64_t, NUM_AA> cnt, bool pseudocount, bool* added)
   {
     const bool add = pseudocount && std::find(cnt.begin(), cnt.end(), std::uint64_t{0}) != cnt.end();
     if (add)
@@ -438,14 +438,14 @@ namespace FASTag::Digest
     if (added) *added = add;
     const std::uint64_t total = std::accumulate(cnt.begin(), cnt.end(), std::uint64_t{0});
     Dist d{};
-    for (int a = 0; a < kNumAA; ++a)
+    for (int a = 0; a < NUM_AA; ++a)
       d[a] = total ? static_cast<double>(cnt[a]) / static_cast<double>(total) : 0.0;
     return d;
   }
 
   Dist composition(const std::vector<std::string>& sequences)
   {
-    std::array<std::uint64_t, kNumAA> cnt{};
+    std::array<std::uint64_t, NUM_AA> cnt{};
     for (const std::string& s : sequences) addResidues(s, cnt);
     return composition(cnt, false);
   }
@@ -454,13 +454,13 @@ namespace FASTag::Digest
   {
     /// Multinomial log-likelihood of the counts under p, normalised by p's
     /// sum.
-    double loglik(const std::array<std::uint64_t, kNumAA>& cnt, const Dist& p)
+    double loglik(const std::array<std::uint64_t, NUM_AA>& cnt, const Dist& p)
     {
       PySum z;
       for (double x : p) z.add(x);
       const double zz = z.value();
       PySum s;
-      for (int a = 0; a < kNumAA; ++a)
+      for (int a = 0; a < NUM_AA; ++a)
         if (cnt[a]) s.add(static_cast<double>(cnt[a]) * std::log(p[a] / zz));
       return s.value();
     }
@@ -468,7 +468,7 @@ namespace FASTag::Digest
     Dist mix(const Dist& p, const Dist& bg, double share)
     {
       Dist out{};
-      for (int a = 0; a < kNumAA; ++a) out[a] = (1 - share) * p[a] + share * bg[a];
+      for (int a = 0; a < NUM_AA; ++a) out[a] = (1 - share) * p[a] + share * bg[a];
       return out;
     }
   }
@@ -477,12 +477,12 @@ namespace FASTag::Digest
   /// and margin, as the 1.11 classifier did.
   void rankScores(Classification& r);
 
-  Classification classify(const std::array<std::uint64_t, kNumAA>& cterm,
-                          const std::array<std::uint64_t, kNumAA>& nterm,
+  Classification classify(const std::array<std::uint64_t, NUM_AA>& cterm,
+                          const std::array<std::uint64_t, NUM_AA>& nterm,
                           const ModelTable& table, double share, int tag_min)
   {
     Classification r;
-    for (int a = 0; a < kNumAA; ++a) { r.n_c += cterm[a]; r.n_n += nterm[a]; }
+    for (int a = 0; a < NUM_AA; ++a) { r.n_c += cterm[a]; r.n_n += nterm[a]; }
     const std::uint64_t min = static_cast<std::uint64_t>(std::max(0, tag_min));
     if (r.n_c < min) return r;
     r.scored = true;
@@ -548,7 +548,7 @@ namespace FASTag::Digest
       if (!e) return p;
       Dist out{};
       PySum z, zp;
-      for (int a = 0; a < kNumAA; ++a)
+      for (int a = 0; a < NUM_AA; ++a)
       {
         out[a] = (*e)[a] * p[a];
         z.add(out[a]);
@@ -589,14 +589,14 @@ namespace FASTag::Digest
     }
   }
 
-  Classification classify(const std::array<std::uint64_t, kNumAA>& cterm,
-                          const std::array<std::uint64_t, kNumAA>& nterm,
+  Classification classify(const std::array<std::uint64_t, NUM_AA>& cterm,
+                          const std::array<std::uint64_t, NUM_AA>& nterm,
                           const ModelTable& table, double share, int tag_min,
                           const ClassifyOptions& opt)
   {
     if (!opt.active()) return classify(cterm, nterm, table, share, tag_min);
     Classification r;
-    for (int a = 0; a < kNumAA; ++a) { r.n_c += cterm[a]; r.n_n += nterm[a]; }
+    for (int a = 0; a < NUM_AA; ++a) { r.n_c += cterm[a]; r.n_n += nterm[a]; }
     const std::uint64_t min = static_cast<std::uint64_t>(std::max(0, tag_min));
     if (r.n_c < min) return r;
     r.scored = true;
@@ -619,8 +619,8 @@ namespace FASTag::Digest
     const auto& keys = residueKeys();
     struct P { double m; int x, y; };
     std::vector<P> all;
-    for (int x = 0; x < kNumAA; ++x)
-      for (int y = 0; y < kNumAA; ++y)
+    for (int x = 0; x < NUM_AA; ++x)
+      for (int y = 0; y < NUM_AA; ++y)
         all.push_back({keys[static_cast<std::size_t>(x)].mass + keys[static_cast<std::size_t>(y)].mass, x, y});
     std::stable_sort(all.begin(), all.end(), [](const P& a, const P& c) { return a.m < c.m; });
     for (std::size_t i = 0; i < all.size(); ++i)
