@@ -4,7 +4,7 @@
 # $Authors: Oliver Kohlbacher $
 
 cmake_minimum_required(VERSION 3.24 FATAL_ERROR)
-project(FASTag VERSION 1.13.3 LANGUAGES CXX)
+project(FASTag VERSION 1.13.4 LANGUAGES CXX)
 # The GUI carries that version in four more files; a bump that misses one
 # fails here rather than shipping (cmake/version-guard.cmake says why).
 include(cmake/version-guard.cmake)
