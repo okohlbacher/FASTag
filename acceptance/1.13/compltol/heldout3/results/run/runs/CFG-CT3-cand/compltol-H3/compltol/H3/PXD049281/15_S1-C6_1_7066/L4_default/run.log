@@ -1,0 +1,8 @@
+Modifications: Carbamidomethyl (C, fixed)
+Acquisition check: DDA (no repeating window scheme (periodicity 0.02 over 2514 repeat gaps, cycle 8, 1446 distinct precursor m/z, 4% uncharged, 4000 MS2 probed))
+Complement tolerance (auto): measured 0.056264519769672693 Da, in force 0.056264519769672693 Da; probe 500 MS2, 104 confident tags, 110 pairs within 0.12 Da (signal 104, median error -0.0227257 Da, MAD 0.0115416 Da)
+62824 MS2 spectra, 2206558 tags
+1412 of 62824 MS2 spectra carry no precursor charge and were tagged as 2+: their peaks above the 2+ precursor mass are dropped, and their nterm_mass flanks assume charge 2 (wrong for a 3+ or higher precursor).
+1412 spectra have a selected ion m/z of 0 (or below 0, or not a number): the converter wrote m/z 0 for precursors it had no m/z for. 0 of them were tagged at their isolation window target m/z instead, as if the selected ion m/z were missing (OpenMS MzMLFile keeps the 0); the other 1412 have no isolation target and yield no tags.
+FASTag took 4.01 s (wall), 23.16 s (CPU), 1.16 s (system), 22.00 s (user); Peak Memory Usage: 403 MB.
+FASTAG_RC=0

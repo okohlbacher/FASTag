@@ -1,0 +1,2 @@
+{"manifest": "compltol-H3W", "sets": ["timstof"], "i": "PASS", "ii": "FAIL", "iii": "PASS", "iv": "PASS", "verdict": "FAIL", "runs_not_ok": []}
+SCORE_RC=0

@@ -1,0 +1,6 @@
+Modifications: Carbamidomethyl (C, fixed)
+'/scratch/kohlbach/acc114/compltol3/staged/compltol/H3/PXD016535/OVMMA161017_218.mzML' has no index, or one that no longer matches the file (edited after it was written?); found its 52002 spectra by scanning it instead (0.03 s). Re-index it, e.g. with FileConverter, to skip the scan.
+Acquisition check: DDA (no repeating window scheme (periodicity 0.02 over 1853 repeat gaps, cycle 22, 2143 distinct precursor m/z, 0% uncharged, 4000 MS2 probed))
+47109 MS2 spectra, 2147722 tags
+FASTag took 36.42 s (wall), 03:30 m (CPU), 1.37 s (system), 03:29 m (user); Peak Memory Usage: 438 MB.
+FASTAG_RC=0

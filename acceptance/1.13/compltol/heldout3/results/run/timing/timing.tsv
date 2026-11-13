@@ -1,0 +1,15 @@
+arm	repeat	seconds	rc	host
+CFG-CT3-base	1	19.632	0	data
+CFG-CT3-cand	1	20.123	0	data
+CFG-CT3-base	2	19.753	0	data
+CFG-CT3-cand	2	20.142	0	data
+CFG-CT3-base	3	19.563	0	data
+CFG-CT3-cand	3	19.925	0	data
+CFG-CT3-base	4	19.450	0	data
+CFG-CT3-cand	4	19.862	0	data
+CFG-CT3-base	5	19.298	0	data
+CFG-CT3-cand	5	20.016	0	data
+CFG-CT3-base	6	19.462	0	data
+CFG-CT3-cand	6	20.006	0	data
+CFG-CT3-base	7	19.402	0	data
+CFG-CT3-cand	7	19.910	0	data

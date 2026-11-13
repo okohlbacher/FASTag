@@ -1,0 +1,6 @@
+Modifications: Carbamidomethyl (C, fixed)
+'/scratch/kohlbach/acc114/compltol3/staged/compltol/H3/PXD042441/Lum_22aug0911.mzML' has no index, or one that no longer matches the file (edited after it was written?); found its 103858 spectra by scanning it instead (0.06 s). Re-index it, e.g. with FileConverter, to skip the scan.
+Acquisition check: DDA (no repeating window scheme (periodicity 0 over 2387 repeat gaps, cycle 182, 1611 distinct precursor m/z, 0% uncharged, 4000 MS2 probed))
+99379 MS2 spectra, 4229708 tags
+FASTag took 09:10 m (wall), 55:03 m (CPU), 7.53 s (system), 54:55 m (user); Peak Memory Usage: 1177 MB.
+FASTAG_RC=0

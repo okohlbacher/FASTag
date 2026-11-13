@@ -1,0 +1,2 @@
+{"manifest": "compltol-H3", "sets": ["ft_old", "ion_trap", "timstof"], "i": "INCONCLUSIVE", "ii": "PASS", "iii": "PASS", "iv": "PASS", "verdict": "INCONCLUSIVE", "runs_not_ok": []}
+SCORE_RC=0

@@ -1,0 +1,5 @@
+Modifications: Carbamidomethyl (C, fixed)
+'/scratch/kohlbach/gate-in/PXD003531/20130611_QE3_UPLC10_CFR_SA_OC_T_NO_03_01_01.mzML' has no index, or one that no longer matches the file (edited after it was written?); found its 32513 spectra by scanning it instead (0.37 s). Re-index it, e.g. with FileConverter, to skip the scan.
+Acquisition check: DDA (no repeating window scheme (periodicity 0.01 over 1694 repeat gaps, cycle 177, 2306 distinct precursor m/z, 0% uncharged, 4000 MS2 probed))
+27345 MS2 spectra, 1226728 tags
+FASTag took 19.38 s (wall), 19.43 s (CPU), 1.26 s (system), 18.17 s (user); Peak Memory Usage: 237 MB.

@@ -1,0 +1,7 @@
+cell	clusters	spectra	base_pct	cand_pct	diff	se	p2_5	p97_5
+compltol-H3W:timstof:L3_default:z1	2	2	50.0000	100.0000	50.0000	35.3288	0.0000	100.0000
+compltol-H3W:timstof:L4_default:z1	2	2	0.0000	50.0000	50.0000	35.5018	0.0000	100.0000
+compltol-H3W:timstof:L5_default:z1	2	2	0.0000	0.0000	0.0000	0.0000	0.0000	0.0000
+compltol-H3W:timstof:L3_nodeiso:z1	2	2	50.0000	100.0000	50.0000	35.5003	0.0000	100.0000
+compltol-H3W:timstof:L4_nodeiso:z1	2	2	0.0000	50.0000	50.0000	35.4505	0.0000	100.0000
+compltol-H3W:timstof:L5_nodeiso:z1	2	2	0.0000	0.0000	0.0000	0.0000	0.0000	0.0000

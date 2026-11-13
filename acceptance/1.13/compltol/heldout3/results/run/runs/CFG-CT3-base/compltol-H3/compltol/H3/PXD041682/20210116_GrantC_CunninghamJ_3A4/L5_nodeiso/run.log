@@ -1,0 +1,6 @@
+Modifications: Carbamidomethyl (C, fixed)
+'/scratch/kohlbach/acc114/compltol3/staged/compltol/H3/PXD041682/20210116_GrantC_CunninghamJ_3A4.mzML' has no index, or one that no longer matches the file (edited after it was written?); found its 29144 spectra by scanning it instead (0.03 s). Re-index it, e.g. with FileConverter, to skip the scan.
+Acquisition check: DDA (no repeating window scheme (periodicity 0.01 over 2286 repeat gaps, cycle 121, 1710 distinct precursor m/z, 0% uncharged, 4000 MS2 probed))
+23615 MS2 spectra, 589062 tags
+FASTag took 0.91 s (wall), 5.25 s (CPU), 0.52 s (system), 4.73 s (user); Peak Memory Usage: 145 MB.
+FASTAG_RC=0
