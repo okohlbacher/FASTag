@@ -1,0 +1,3 @@
+run	fastag_rc	a_rc	b_rc	aE_rc	bE_rc	export_unchanged	shortlist_targets	a_psm	b_psm	b_in_a_same_peptide	recall	b_in_a_scan	recall_scan	aE_t	aE_e	aE_fdp	bE_t	bE_e	bE_fdp	t_fastag	t_a	t_b	speedup	a_psm_expect	b_psm_expect	recall_expect	c_rc	c_psm	recall_of_c	b_in_c_recall
+DEV	0	0	0	0	0	1	1409	6442	7253	6099	0.8409	6170	0.8507	6348	43	0.0135	7110	17	0.0048	4.2700	17.6400	57.9100	2.6431	6175	7338	0.8145	NA	NA	NA	NA
+DEV	0	0	0	0	NA	1	3870	7082	7253	6813	0.9393	6857	0.9454	6962	45	0.0128	NA	NA	NA	4.0400	19.6000	57.9100	2.4497	7055	7338	0.9259	NA	NA	NA	NA
