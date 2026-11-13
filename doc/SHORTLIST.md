@@ -355,7 +355,8 @@ defaults under `-search_engine msfragger` with `-search_config_out` and the
 tryptic shortlist
 (`-recon_min_length` and `-recon_missed_cleavages` then also change
 `-recon_out`); Sage and Comet keep 1.13.1's values. MSFragger's mass calibration (`calibrate_mass 2`) and `stricttrypsin`
-added nothing on the two first runs and are not exported. All of this was
+added nothing on the two first runs and were not exported then (for
+`calibrate_mass` see "Mass calibration" below). All of this was
 set on development runs; the entrapment
 differences between the rows are within the noise of 8 to 290 entrapment hits
 per run.
@@ -420,6 +421,35 @@ a systematic mass offset (MS2 -7.8 ppm before calibration). The G2 failure in
 PXD045654 rests on 17 entrapment hits on a 384-protein shortlist, about 0.12
 points per hit.
 
+**Mass calibration (after 1.15; development runs only, not yet validated on
+held-out data).** Under the msfragger shortlist defaults the exported
+`fragger.params` sets `calibrate_mass 2`, MSFragger's own default: MSFragger
+first calibrates the masses on the shortlist, then optimizes the fragment
+tolerance, `use_topN_peaks`, `minimum_ratio`, `intensity_transform` and
+`remove_precursor_peak`, and searches with the result. Elsewhere (Sage, Comet,
+another `-shortlist_protease`) nothing changes; the log line `MSFragger
+defaults (development runs only, no held-out test): calibrate_mass 2` and the
+file's header comment say so. Paired measurement on 27 development runs (all
+spent: PXD003531, PXD014764 and the runs of three earlier MSFragger held-out tests),
+MSFragger 4.4.1, 12 threads, decision rule fixed before the measurement:
+
+| | `calibrate_mass 0` (1.15) | `calibrate_mass 2` |
+|---|---|---|
+| kept share, lowest run (EX04) | 0.530 | 0.800 |
+| kept share EX09 | 0.840 | 0.855 |
+| kept share, median of 26 evaluable runs | 0.934 | 0.946 |
+| runs with a lower kept share | – | 1 (MG04, 0.976 to 0.956) |
+| entrapment FDP pooled | 1.07% | 1.10% |
+| runs above 2.0% FDP | 1 (2.12%) | the same run (2.04%) |
+| speed-up over the full search, lowest / median | 2.02 / 2.59 | 1.03 / 1.49 |
+| MSFragger exit 0 | 27 of 27 | 27 of 27 |
+
+The kept share rose in 25 of 27 runs (one run with 10 identifications is not
+evaluable). The calibration is a first search, so every run is slower: three
+runs keep a speed-up of only 1.03 to 1.10. `calibrate_mass 1` (calibration
+only) gave 0.774 on EX04 and a median of 0.937. A held-out test
+(arm 0 against arm 2, fresh PRIDE runs) is drafted, not run.
+
 `-search_engine msfragger` writes a complete `fragger.params` for MSFragger
 4.4.1 (`java -jar MSFragger-4.4.1.jar fragger.params <spectra>`), keys in the
 order of the engine's own `--config closed` file
@@ -436,9 +466,10 @@ values:
   set to the same window: MSFragger assigns a PSM's delta to its offset or
   isotope window with them, and with the 20 ppm default and mass offsets
   4.4.1 exits 1 ("Could not find <delta> in the list");
-- fragment: `fragment_mass_tolerance`/`fragment_mass_units`; `calibrate_mass 0`
-  so the exported tolerances are the ones searched (set 2 for MSFragger's own
-  calibration);
+- fragment: `fragment_mass_tolerance`/`fragment_mass_units`; `calibrate_mass 2`
+  under the msfragger shortlist defaults (after 1.15, development runs only; see
+  "Mass calibration"), else `calibrate_mass 0` so the exported tolerances are
+  the ones searched;
 - `isotope_error` `0/1/2/3` (MSFragger's own default; FASTag's default since the
   held-out test, see below), or `0/1/../n` for `-search_isotope_errors n`
   (`0` for 0);

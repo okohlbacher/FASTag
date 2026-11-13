@@ -2,6 +2,20 @@
 
 ## Unreleased
 
+- **MSFragger export calibrates mass** (development runs only, not yet
+  validated on held-out data): under the msfragger shortlist defaults
+  (`-search_engine msfragger -search_config_out`, tryptic shortlist) the
+  exported `fragger.params` sets `calibrate_mass 2` (MSFragger's own default:
+  mass calibration, then fragment tolerance and peak filters optimized on the
+  shortlist) instead of 0. Paired measurement on 27 development runs: kept
+  share of the lowest run 0.530 -> 0.800 (EX09 0.840 -> 0.855; higher in 25 of
+  27 runs, lower in one, MG04 0.976 -> 0.956), entrapment FDP 1.07% -> 1.10%
+  pooled, speed-up over the full search median 2.59 -> 1.49 (lowest 1.03), all
+  MSFragger exits 0. The log line `MSFragger defaults (development runs only,
+  no held-out test): calibrate_mass 2` and the file's header say so; Sage,
+  Comet and other proteases are unchanged. A held-out test is drafted
+  (doc/SHORTLIST.md, "Mass calibration").
+
 - **GUI settings, 1.12.0 to 1.13.2 (fixed in 1.13.3; this note corrects the
   1.13.3 entry, which understated it):** these versions could neither read
   nor save settings: presets from 1.11 did not appear, new presets could not

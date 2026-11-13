@@ -695,7 +695,10 @@ void TOPPFASTag::registerOptionsAndFlags_()
                         "defaults are not validated: they passed the second held-out test (kept share 0.83-0.98 of "
                         "a full MSFragger search, 9 runs) and failed the third (8 new runs: kept share 0.53 in one "
                         "run, entrapment FDP 2.12% in another); the first test, with the 1.13 shortlist, FAILED at "
-                        "0.49-0.73", false);
+                        "0.49-0.73. After 1.15 the export under these defaults also sets calibrate_mass 2 (MSFragger "
+                        "calibrates the masses and optimizes the fragment tolerance on the shortlist): on 27 "
+                        "development runs, among them those of the three tests, the lowest kept share rose from 0.53 "
+                        "to 0.80 and the median speed-up fell from 2.59 to 1.49; not validated on held-out data", false);
   setValidStrings_("search_engine", ListUtils::create<std::string>("sage,comet,msfragger"));
   registerInputFile_("search_config_template", "<file>", "",
                      "Comet only: a `comet -p` parameter file the managed keys are merged into", false);
