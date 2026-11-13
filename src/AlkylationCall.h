@@ -73,13 +73,13 @@ namespace FASTag::Alkylation
   */
   enum CallClass : int
   {
-    Carbamidomethyl = 0,  ///< Carbamidomethyl (iodoacetamide)
-    Propionamide,         ///< Propionamide (acrylamide)
-    Nethylmaleimide,      ///< N-ethylmaleimide
-    Methylthio,           ///< Methylthio (MMTS)
-    Carboxymethyl,        ///< Carboxymethyl (iodoacetic acid)
-    None,                 ///< the "not alkylated" family
-    kNumClasses           ///< number of call classes
+    CARBAMIDOMETHYL = 0,  ///< Carbamidomethyl (iodoacetamide)
+    PROPIONAMIDE,         ///< Propionamide (acrylamide)
+    NETHYLMALEIMIDE,      ///< N-ethylmaleimide
+    METHYLTHIO,           ///< Methylthio (MMTS)
+    CARBOXYMETHYL,        ///< Carboxymethyl (iodoacetic acid)
+    NONE,                 ///< the "not alkylated" family
+    NUM_CLASSES           ///< number of call classes
   };
   /**
     @brief Report name of a call class.
@@ -100,7 +100,7 @@ namespace FASTag::Alkylation
     std::string name;  ///< report key: the Unimod name, "unmodified" for 0
     std::string site;  ///< OpenMS ModificationsDB id ("" for unmodified)
     double mass = 0;   ///< monoisotopic mass shift on C
-    int cls = None;    ///< call class
+    int cls = NONE;    ///< call class
   };
   /**
     @brief The eleven Cys forms, masses from OpenMS ModificationsDB.
@@ -149,16 +149,16 @@ namespace FASTag::Alkylation
   */
   enum class Outcome : int
   {
-    Binned = 0,        ///< reagent binned to a form
-    Unexplained,       ///< counted, but no form within the window
-    NoCys,             ///< peptide has no C
-    MultiCys,          ///< peptide has two or more C
-    CysInTag,          ///< the one C is in the tag
-    CysOutsideRegion,  ///< the one C is on the side without the gap
-    ProteinNTerm,      ///< the gap side is the protein N-terminus
-    Truncation,        ///< the gap equals the mass of one or two outermost residues
-    MetAmbiguous,      ///< Met oxidation changes the class
-    kCount             ///< number of outcomes
+    BINNED = 0,        ///< reagent binned to a form
+    UNEXPLAINED,       ///< counted, but no form within the window
+    NO_CYS,             ///< peptide has no C
+    MULTI_CYS,          ///< peptide has two or more C
+    CYS_IN_TAG,          ///< the one C is in the tag
+    CYS_OUTSIDE_REGION,  ///< the one C is on the side without the gap
+    PROTEIN_N_TERM,      ///< the gap side is the protein N-terminus
+    TRUNCATION,        ///< the gap equals the mass of one or two outermost residues
+    MET_AMBIGUOUS,      ///< Met oxidation changes the class
+    COUNT             ///< number of outcomes
   };
   /**
     @brief Report key of an outcome (alk_cys excluded.<key>).
@@ -187,7 +187,7 @@ namespace FASTag::Alkylation
   */
   struct Eval
   {
-    Outcome outcome = Outcome::NoCys;  ///< what became of the placement
+    Outcome outcome = Outcome::NO_CYS;  ///< what became of the placement
     int form = -1;         ///< index into forms() (Binned)
     double reagent = 0.0;  ///< (gap - terminal label) + fixed C delta (from NoCys on: 0)
   };
@@ -224,7 +224,7 @@ namespace FASTag::Alkylation
     @return The tag's vote.
   */
   Vote tagVote(const std::vector<Eval>& evals, const std::vector<Form>& forms,
-               std::array<std::uint64_t, static_cast<int>(Outcome::kCount)>& outcomes);
+               std::array<std::uint64_t, static_cast<int>(Outcome::COUNT)>& outcomes);
 
   /**
     @brief Whether a written tag row feeds the call.
@@ -247,9 +247,9 @@ namespace FASTag::Alkylation
     std::uint64_t tags = 0;      ///< filtered tags placed (E <= 1, ungapped)
     std::uint64_t spectra = 0;   ///< spectra with a vote
     std::uint64_t conflict = 0, unexplained = 0;  ///< votes without a class
-    std::array<std::uint64_t, kNumClasses> cls{};  ///< votes per call class
+    std::array<std::uint64_t, NUM_CLASSES> cls{};  ///< votes per call class
     std::array<std::uint64_t, kNumForms> form{};   ///< votes per form (forms() order; agreed form only)
-    std::array<std::uint64_t, static_cast<int>(Outcome::kCount)> outcomes{};  ///< placements per outcome
+    std::array<std::uint64_t, static_cast<int>(Outcome::COUNT)> outcomes{};  ///< placements per outcome
     /// Tags left out because they are not b/y tags (c/z, PLAN-INTEGRATION
     /// 2.3 contract 2; excludeNonBy()). Always 0 before c/z tagging (#15
     /// phase B): the E15B merge counts its c/z tags here instead of placing

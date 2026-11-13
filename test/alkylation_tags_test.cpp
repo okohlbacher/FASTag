@@ -102,7 +102,7 @@ int main(int argc, char** argv)
     check(cands.size() == 6, "six candidate forms");
     const char* want[] = {"Carbamidomethyl", "Propionamide", "Nethylmaleimide", "Methylthio", "Carboxymethyl", "unmodified"};
     for (int k = 0; k < 6; ++k) check(cands[static_cast<std::size_t>(k)].name == want[k], std::string("candidate ") + want[k]);
-    check(cands[AT::kUnmodified].cls == A::None && cands[AT::kUnmodified].mass == 0.0, "unmodified is class none, 0 Da");
+    check(cands[AT::kUnmodified].cls == A::NONE && cands[AT::kUnmodified].mass == 0.0, "unmodified is class none, 0 Da");
     check(std::fabs(cands[0].mass - 57.021464) < 1e-5, "Carbamidomethyl mass from ModificationsDB");
     check(std::fabs(cands[2].mass - 125.047679) < 1e-5, "Nethylmaleimide mass from ModificationsDB");
   }
@@ -279,11 +279,11 @@ int main(int argc, char** argv)
     t.votes[0] = 20;
     t.votes[AT::kUnmodified] = 3;
     A::Call c = A::callAlkylation(t.asAlkylationTally(cands), s);
-    check(c.called && c.cls == A::Carbamidomethyl && c.top == 20 && c.binned == 23, "20 CAM of 23: call CAM");
+    check(c.called && c.cls == A::CARBAMIDOMETHYL && c.top == 20 && c.binned == 23, "20 CAM of 23: call CAM");
     t.votes[0] = 3;
     t.votes[AT::kUnmodified] = 12;
     c = A::callAlkylation(t.asAlkylationTally(cands), s);
-    check(c.called && c.cls == A::None, "12 unmodified of 15: call none");
+    check(c.called && c.cls == A::NONE, "12 unmodified of 15: call none");
     t.votes[0] = 5;
     t.votes[AT::kUnmodified] = 2;
     c = A::callAlkylation(t.asAlkylationTally(cands), s);
@@ -485,7 +485,7 @@ int main(int argc, char** argv)
     st.min_spectra = 4;
     check(z3.spectra == z3.votes[0], "3+ CAM spectra: every vote is CAM");
     const A::Call c3 = A::callAlkylation(z3.asAlkylationTally(cands), st);
-    check(c3.called && c3.cls == A::Carbamidomethyl,
+    check(c3.called && c3.cls == A::CARBAMIDOMETHYL,
           "3+ CAM spectra: call " + (c3.called ? std::string(A::className(c3.cls)) : "no_call " + c3.reason));
   }
 

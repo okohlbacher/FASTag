@@ -54,15 +54,15 @@ static A::Placement place(const char* pep, int pos, char side, double gap = 0.0,
 }
 static std::string formOf(const A::Eval& e, const std::vector<A::Form>& f)
 {
-  if (e.outcome != A::Outcome::Binned) return A::outcomeName(e.outcome);
+  if (e.outcome != A::Outcome::BINNED) return A::outcomeName(e.outcome);
   return f[static_cast<std::size_t>(e.form)].name;
 }
 static A::Tally tally(std::uint64_t cam, std::uint64_t none, std::uint64_t prop = 0)
 {
   A::Tally t;
-  t.cls[A::Carbamidomethyl] = cam;
-  t.cls[A::None] = none;
-  t.cls[A::Propionamide] = prop;
+  t.cls[A::CARBAMIDOMETHYL] = cam;
+  t.cls[A::NONE] = none;
+  t.cls[A::PROPIONAMIDE] = prop;
   return t;
 }
 static std::string callOf(const A::Tally& t, const A::Settings& s)
@@ -95,11 +95,11 @@ int main()
   check(forms[0].name == "Carbamidomethyl" && std::fabs(forms[0].mass - 57.021464) < 1e-5, "CAM from ModificationsDB");
   {
     int none = 0;
-    for (const A::Form& f : forms) none += f.cls == A::None;
+    for (const A::Form& f : forms) none += f.cls == A::NONE;
     check(none == 6, "six forms in the not-alkylated family");
     std::set<std::string> want = {"unmodified", "Oxidation", "Dioxidation", "Trioxidation", "Cysteinyl", "Dehydroalanine"};
     for (const A::Form& f : forms)
-      if (f.cls == A::None) check(want.count(f.name) == 1, "family member " + f.name);
+      if (f.cls == A::NONE) check(want.count(f.name) == 1, "family member " + f.name);
   }
 
   // ---- the call rule
@@ -184,7 +184,7 @@ int main()
           "gap +15.995 without an M: no form (73.016)");
     check(formOf(A::evaluate(place("MDCAPLLTEVK", 5, 'N', OX - CAM), s, forms), forms) == "Oxidation",
           "an M and Cys oxidation or Met oxidation: both readings are not alkylated");
-    std::vector<A::Form> two = {A::Form{"X73", "", CAM + OX, A::Propionamide}, A::Form{"Carbamidomethyl", "", CAM, A::Carbamidomethyl}};
+    std::vector<A::Form> two = {A::Form{"X73", "", CAM + OX, A::PROPIONAMIDE}, A::Form{"Carbamidomethyl", "", CAM, A::CARBAMIDOMETHYL}};
     check(formOf(A::evaluate(place("MDCAPLLTEVK", 5, 'N', OX), s, two), two) == "met_ambiguous",
           "an M whose two readings are two classes is excluded");
     check(formOf(A::evaluate(place("PDCAPLLTEVK", 5, 'N', OX), s, two), two) == "X73", "without an M there is one reading");
@@ -249,20 +249,20 @@ int main()
     A::addTag(t, sv, {rec("PDCAGLLTEVK", 'E', 0)}, 0.1, s, forms);     // CAM, better E
     A::addTag(t, sv, {rec("PDAAGLLTEVK", 'E', 0)}, 0.01, s, forms);    // no C: no vote
     A::addTag(t, sv, {}, 0.001, s, forms);                             // no placement
-    check(t.tags == 4 && sv.have && sv.cls == A::Carbamidomethyl && sv.evalue == 0.1,
+    check(t.tags == 4 && sv.have && sv.cls == A::CARBAMIDOMETHYL && sv.evalue == 0.1,
           "addTag: every tag counted, the best tag with a counted placement votes");
-    check(t.outcomes[static_cast<std::size_t>(A::Outcome::NoCys)] == 1 && t.outcomes[static_cast<std::size_t>(A::Outcome::Binned)] == 2,
+    check(t.outcomes[static_cast<std::size_t>(A::Outcome::NO_CYS)] == 1 && t.outcomes[static_cast<std::size_t>(A::Outcome::BINNED)] == 2,
           "addTag: placement outcomes counted");
     A::addSpectrum(t, sv);
     A::addSpectrum(t, A::Vote());
-    check(t.spectra == 1 && t.cls[A::Carbamidomethyl] == 1, "addSpectrum: one vote per spectrum, none without one");
+    check(t.spectra == 1 && t.cls[A::CARBAMIDOMETHYL] == 1, "addSpectrum: one vote per spectrum, none without one");
     check(A::countsTag(false, 1.0) && !A::countsTag(true, 0.1) && !A::countsTag(false, 1.5), "countsTag: ungapped, E <= 1");
   }
 
   // ---- votes and run-level calls from placements
   {
     const A::Settings s = settings(CAM);
-    std::array<std::uint64_t, static_cast<int>(A::Outcome::kCount)> oc{};
+    std::array<std::uint64_t, static_cast<int>(A::Outcome::COUNT)> oc{};
     const A::Eval cam = A::evaluate(place("PDCAGLLTEVK", 5, 'E'), s, forms);
     const A::Eval un = A::evaluate(place("PDCAGLLTEVK", 5, 'N', -CAM), s, forms);
     const A::Eval ox = A::evaluate(place("PDCAGLLTEVK", 5, 'N', OX - CAM), s, forms);
@@ -270,10 +270,10 @@ int main()
     const A::Vote c = A::tagVote({cam, un}, forms, oc);
     check(c.have && c.conflict, "placements of two classes: a conflict");
     const A::Vote f = A::tagVote({un, ox}, forms, oc);
-    check(f.have && !f.conflict && f.cls == A::None && f.form == -1, "two family forms: class none, no single form");
+    check(f.have && !f.conflict && f.cls == A::NONE && f.form == -1, "two family forms: class none, no single form");
     const A::Vote n = A::tagVote({two}, forms, oc);
     check(!n.have, "no counted placement: no vote");
-    check(oc[static_cast<std::size_t>(A::Outcome::MultiCys)] == 1 && oc[static_cast<std::size_t>(A::Outcome::Binned)] == 4,
+    check(oc[static_cast<std::size_t>(A::Outcome::MULTI_CYS)] == 1 && oc[static_cast<std::size_t>(A::Outcome::BINNED)] == 4,
           "outcome counts");
 
     // a CAM run with N-terminal over-alkylation stays CAM
@@ -292,7 +292,7 @@ int main()
     A::Tally m;
     m.merge(t);
     m.merge(u);
-    check(m.spectra == t.spectra + u.spectra && m.cls[A::None] == t.cls[A::None] + u.cls[A::None] &&
+    check(m.spectra == t.spectra + u.spectra && m.cls[A::NONE] == t.cls[A::NONE] + u.cls[A::NONE] &&
               m.outcomes[0] == t.outcomes[0] + u.outcomes[0],
           "merge adds every count");
 

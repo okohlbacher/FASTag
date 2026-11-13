@@ -346,15 +346,15 @@ namespace FASTag::AlkylationTags
     {
       double mass = 0.0;
       for (const auto& f : cands)
-        if (f.cls == c.cls && f.cls != Alkylation::None) { mass = f.mass; break; }
+        if (f.cls == c.cls && f.cls != Alkylation::NONE) { mass = f.mass; break; }
       add(sec, "status", "call", u(c.binned),
-          c.cls == Alkylation::None
+          c.cls == Alkylation::NONE
               ? "The votes favour unalkylated cysteines (database-free; experimental)."
               : "The votes favour " + name +
                     " (database-free; experimental).");
       add(sec, "reagent", name, u(c.top), "The call is " + name + ".");
-      add(sec, "mass", c.cls == Alkylation::None ? "-" : num(mass), "-",
-          c.cls == Alkylation::None ? "A call of none has no reagent mass." : name + " adds " + num(mass) + " Da to C.");
+      add(sec, "mass", c.cls == Alkylation::NONE ? "-" : num(mass), "-",
+          c.cls == Alkylation::NONE ? "A call of none has no reagent mass." : name + " adds " + num(mass) + " Da to C.");
       add(sec, "share", num(c.share), u(c.binned), "A share of " + f3(c.share) + " of the " + u(c.binned) + " votes are " + name + ".");
       add(sec, "reason", "-", "-", "The call is made.");
     }
