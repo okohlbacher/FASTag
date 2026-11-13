@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+- **GUI settings, 1.12.0 to 1.13.2 (fixed in 1.13.3; this note corrects the
+  1.13.3 entry, which understated it):** these versions could neither read
+  nor save settings: presets from 1.11 did not appear, new presets could not
+  be saved ("could not be saved" error) and last-used values were not kept.
+  Nothing on disk was changed. From 1.13.3 on, the first start brings back
+  every preset and the last-used values from 1.11 (the old file is kept as
+  `settings.v1.json.bak`). Presets you tried to save in 1.12.0 to 1.13.2 were
+  never stored; save them again. New tests cover the recovery and fail if
+  the app ever registers two setup hooks again.
+
 Options and option values that failed their held-out test are removed. Each
 removed name stays registered (advanced, not in the GUI) with no effect, so
 that saved command lines and INI files of 1.12 and 1.13 keep loading: given
