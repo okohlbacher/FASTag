@@ -59,7 +59,7 @@ namespace FASTag
     inline constexpr const char* MODE_DEFAULT = "legacy";
     /// @brief The valid -pick_profile values.
     ///
-    /// auto stays valid (1.14: removed, read as legacy; FASTag.cpp kRemovedValues).
+    /// auto stays valid (1.14: removed, read as legacy; FASTag.cpp REMOVED_VALUES).
     inline constexpr const char* MODE_VALUES = "legacy,auto,off";
 
     /**

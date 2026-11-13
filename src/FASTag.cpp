@@ -290,45 +290,45 @@ class TOPPFASTag : public TOPPBase
     const char* name;
     const char* why;  ///< the reason the warning gives
   };
-  static constexpr const char* kFailedHeldOut = "failed its held-out test";
-  static constexpr RemovedOption kRemovedOptions[] = {
-      {"label_discovery_out", kFailedHeldOut},
-      {"label_discovery_max_flank", kFailedHeldOut},
-      {"label_discovery_depth", kFailedHeldOut},
-      {"label_discovery_min_spectra", kFailedHeldOut},
-      {"label_discovery_min_share", kFailedHeldOut},
-      {"label_discovery_window_n", kFailedHeldOut},
-      {"label_discovery_window_c", kFailedHeldOut},
-      {"label_discovery_unimod_top", kFailedHeldOut},
-      {"label_call_min_tags", kFailedHeldOut},
-      {"ion_series_photo", kFailedHeldOut},
+  static constexpr const char* FAILED_HELD_OUT = "failed its held-out test";
+  static constexpr RemovedOption REMOVED_OPTIONS[] = {
+      {"label_discovery_out", FAILED_HELD_OUT},
+      {"label_discovery_max_flank", FAILED_HELD_OUT},
+      {"label_discovery_depth", FAILED_HELD_OUT},
+      {"label_discovery_min_spectra", FAILED_HELD_OUT},
+      {"label_discovery_min_share", FAILED_HELD_OUT},
+      {"label_discovery_window_n", FAILED_HELD_OUT},
+      {"label_discovery_window_c", FAILED_HELD_OUT},
+      {"label_discovery_unimod_top", FAILED_HELD_OUT},
+      {"label_call_min_tags", FAILED_HELD_OUT},
+      {"ion_series_photo", FAILED_HELD_OUT},
       {"species_reagents", "read only by -species_call explain, which failed its held-out test"},
       {"pick_unknown_type", "read only by -pick_profile auto, which failed its held-out test"},
-      {"search_shifts", kFailedHeldOut},
-      {"search_shifts_out", kFailedHeldOut},
-      {"shift_max_variable", kFailedHeldOut},
-      {"shift_max_offsets", kFailedHeldOut},
-      {"shift_expand_sites", kFailedHeldOut},
-      {"shift_site_min_share", kFailedHeldOut},
-      {"shift_site_min_count", kFailedHeldOut},
-      {"shift_site_min_ions", kFailedHeldOut},
+      {"search_shifts", FAILED_HELD_OUT},
+      {"search_shifts_out", FAILED_HELD_OUT},
+      {"shift_max_variable", FAILED_HELD_OUT},
+      {"shift_max_offsets", FAILED_HELD_OUT},
+      {"shift_expand_sites", FAILED_HELD_OUT},
+      {"shift_site_min_share", FAILED_HELD_OUT},
+      {"shift_site_min_count", FAILED_HELD_OUT},
+      {"shift_site_min_ions", FAILED_HELD_OUT},
   };
   struct RemovedValue
   {
     const char* option;
     const char* value;
   };
-  static constexpr RemovedValue kRemovedValues[] = {
+  static constexpr RemovedValue REMOVED_VALUES[] = {
       {"ion_series", "ax"},
       {"species_call", "explain"},
       {"pick_profile", "auto"},
   };
-  static constexpr const char* kRemovedHelp =
+  static constexpr const char* REMOVED_HELP =
       "Removed in 1.14; no effect (accepted so that existing command lines and INI files keep working)";
 
   static bool isRemovedOption_(const std::string& name)
   {
-    for (const RemovedOption& r : kRemovedOptions)
+    for (const RemovedOption& r : REMOVED_OPTIONS)
       if (name == r.name) return true;
     return false;
   }
@@ -336,7 +336,7 @@ class TOPPFASTag : public TOPPBase
   /// True when option @p name holds one of its removed values.
   bool isRemovedValue_(const std::string& name) const
   {
-    for (const RemovedValue& r : kRemovedValues)
+    for (const RemovedValue& r : REMOVED_VALUES)
       if (name == r.option && getStringOption_(name) == r.value) return true;
     return false;
   }
@@ -352,7 +352,7 @@ class TOPPFASTag : public TOPPBase
   /// not opened), and for each removed value in force.
   void warnRemoved_() const
   {
-    for (const RemovedOption& r : kRemovedOptions)
+    for (const RemovedOption& r : REMOVED_OPTIONS)
     {
       const ParameterInformation& e = findEntry_(r.name);
       const bool given = g_cli_options.count(r.name) > 0
@@ -360,9 +360,9 @@ class TOPPFASTag : public TOPPBase
       if (given)
         OPENMS_LOG_WARN << "-" << r.name << " was removed in 1.14 (" << r.why << "); it has no effect." << std::endl;
     }
-    for (const RemovedValue& r : kRemovedValues)
+    for (const RemovedValue& r : REMOVED_VALUES)
       if (*r.option && getStringOption_(r.option) == r.value)
-        OPENMS_LOG_WARN << "-" << r.option << " " << r.value << " was removed in 1.14 (" << kFailedHeldOut
+        OPENMS_LOG_WARN << "-" << r.option << " " << r.value << " was removed in 1.14 (" << FAILED_HELD_OUT
                         << "); it has no effect: -" << r.option << " " << stringOption_(r.option) << " is used."
                         << std::endl;
   }
@@ -705,15 +705,15 @@ protected:
                         "Lys8/Arg10 shares of the tag ends", false);
     setValidFormats_("label_out", ListUtils::create<std::string>("tsv"));
     // 1.14: -label_discovery_* removed (failed its held-out tests); the
-    // names stay without effect (kRemovedOptions).
-    registerOutputFile_("label_discovery_out", "<file>", "", kRemovedHelp, false, true);
-    registerDoubleOption_("label_discovery_max_flank", "<Da>", 700.0, kRemovedHelp, false, true);
-    registerIntOption_("label_discovery_depth", "<n>", 2, kRemovedHelp, false, true);
-    registerIntOption_("label_discovery_min_spectra", "n", 20, kRemovedHelp, false, true);
-    registerDoubleOption_("label_discovery_min_share", "<f>", 0.005, kRemovedHelp, false, true);
-    registerDoubleOption_("label_discovery_window_n", "<Da>", 0.0, kRemovedHelp, false, true);
-    registerDoubleOption_("label_discovery_window_c", "<Da>", 0.0, kRemovedHelp, false, true);
-    registerIntOption_("label_discovery_unimod_top", "<n>", 3, kRemovedHelp, false, true);
+    // names stay without effect (REMOVED_OPTIONS).
+    registerOutputFile_("label_discovery_out", "<file>", "", REMOVED_HELP, false, true);
+    registerDoubleOption_("label_discovery_max_flank", "<Da>", 700.0, REMOVED_HELP, false, true);
+    registerIntOption_("label_discovery_depth", "<n>", 2, REMOVED_HELP, false, true);
+    registerIntOption_("label_discovery_min_spectra", "n", 20, REMOVED_HELP, false, true);
+    registerDoubleOption_("label_discovery_min_share", "<f>", 0.005, REMOVED_HELP, false, true);
+    registerDoubleOption_("label_discovery_window_n", "<Da>", 0.0, REMOVED_HELP, false, true);
+    registerDoubleOption_("label_discovery_window_c", "<Da>", 0.0, REMOVED_HELP, false, true);
+    registerIntOption_("label_discovery_unimod_top", "<n>", 3, REMOVED_HELP, false, true);
     registerOutputFile_("massgap_out", "<file>", "",
                         "Report the -delta_out mass-gap distribution (requires -recon_out): Cys "
                         "alkylation counts, gap peaks explained as combinations of Unimod "
@@ -737,7 +737,7 @@ protected:
                        "K- and R-terminal tag ends each before -label_out's heavy shares are gated in", false, true);
     setMinInt_("digest_silac_min", 0);
     // 1.14: -label_call_min_tags removed (0 failed its held-out test); 175 is a constant again.
-    registerIntOption_("label_call_min_tags", "<n>", 175, kRemovedHelp, false, true);
+    registerIntOption_("label_call_min_tags", "<n>", 175, REMOVED_HELP, false, true);
     registerDoubleOption_("massgap_window", "<Da>", 0.02,
                           "Gap window of -massgap_out on a ppm run", false, true);
     setMinFloat_("massgap_window", 0.0);
@@ -885,7 +885,7 @@ protected:
                           "in 1.14 and is read as legacy). Centroided MS2 are never re-picked; "
                           "-out_spectra writes the spectra as they were tagged", false);
     setValidStrings_("pick_profile", ListUtils::create<std::string>(FASTag::Centroid::MODE_VALUES));
-    registerFlag_("pick_unknown_type", kRemovedHelp, true);  // 1.14: removed with -pick_profile auto
+    registerFlag_("pick_unknown_type", REMOVED_HELP, true);  // 1.14: removed with -pick_profile auto
     // E2: complement-ion rules across fragment charges, tolerance tied to the
     // run. Defaults are FASTag 1.11 (src/CliParam.h); validation decides any
     // other default.
@@ -994,8 +994,8 @@ protected:
                           "read as by", false);
     setValidStrings_("ion_series", ListUtils::create<std::string>(FASTag::IonSeries::MODE_VALUES));
     // 1.14: -ion_series_photo removed (a/x failed its held-out test); the
-    // name stays without effect (kRemovedOptions).
-    registerStringOption_("ion_series_photo", "<series>", "by", kRemovedHelp, false, true);
+    // name stays without effect (REMOVED_OPTIONS).
+    registerStringOption_("ion_series_photo", "<series>", "by", REMOVED_HELP, false, true);
     // 1.13 backlog item 10: hybrid EThcD/ETciD read as b/y and c/z-dot; experimental.
     registerStringOption_("ion_series_hybrid", "<series>", FASTag::IonSeries::kHybridDefault,
                           "Under -ion_series auto: how hybrid-activated spectra (EThcD, ETciD) are read: by (b/y "
@@ -1114,15 +1114,15 @@ protected:
     registerStringOption_("search_decoy_prefix", "<s>", "",
                           "Decoy prefix the engine generates; empty = rev_ (Sage, MSFragger) or DECOY_ (Comet)", false);
     // 1.14: -search_shifts and its options removed (#17, failed both
-    // held-out tests); the names stay without effect (kRemovedOptions).
-    registerStringOption_("search_shifts", "<mode>", "none", kRemovedHelp, false, true);
-    registerOutputFile_("search_shifts_out", "<file>", "", kRemovedHelp, false, true);
-    registerIntOption_("shift_max_variable", "<n>", 3, kRemovedHelp, false, true);
-    registerIntOption_("shift_max_offsets", "<n>", 10, kRemovedHelp, false, true);
-    registerFlag_("shift_expand_sites", kRemovedHelp, true);
-    registerDoubleOption_("shift_site_min_share", "<f>", 0.2, kRemovedHelp, false, true);
-    registerIntOption_("shift_site_min_count", "<n>", 10, kRemovedHelp, false, true);
-    registerIntOption_("shift_site_min_ions", "<n>", 2, kRemovedHelp, false, true);
+    // held-out tests); the names stay without effect (REMOVED_OPTIONS).
+    registerStringOption_("search_shifts", "<mode>", "none", REMOVED_HELP, false, true);
+    registerOutputFile_("search_shifts_out", "<file>", "", REMOVED_HELP, false, true);
+    registerIntOption_("shift_max_variable", "<n>", 3, REMOVED_HELP, false, true);
+    registerIntOption_("shift_max_offsets", "<n>", 10, REMOVED_HELP, false, true);
+    registerFlag_("shift_expand_sites", REMOVED_HELP, true);
+    registerDoubleOption_("shift_site_min_share", "<f>", 0.2, REMOVED_HELP, false, true);
+    registerIntOption_("shift_site_min_count", "<n>", 10, REMOVED_HELP, false, true);
+    registerIntOption_("shift_site_min_ions", "<n>", 2, REMOVED_HELP, false, true);
     // ---- 1.12 D: options ----
     // #1 calibrated species presence or abstention (src/SpeciesCall.h). Off
     // by default: at 'none' nothing of it runs and the report is 1.11's. A
@@ -1137,8 +1137,8 @@ protected:
     setValidStrings_("species_call", ListUtils::create<std::string>("none,decoy,explain"));
     // 1.14: -species_reagents removed (read only by -species_call explain,
     // which failed its held-out test); the name stays without effect
-    // (kRemovedOptions) and the file is never opened.
-    registerInputFile_("species_reagents", "<file>", "", kRemovedHelp, false, true);
+    // (REMOVED_OPTIONS) and the file is never opened.
+    registerInputFile_("species_reagents", "<file>", "", REMOVED_HELP, false, true);
     registerInputFile_("species_call_params", "<file>", "",
                        "Decision parameters of -species_call decoy (alpha, tau, n_min). Default: "
                        "species_call.tsv in the taxonomy directory", false, true);
@@ -3338,7 +3338,7 @@ protected:
 
     // The tagging loop's dynamic chunks, here because the mzPeak window is
     // sized by them.
-    constexpr int kChunk = 256, kTailChunk = 16;
+    constexpr int CHUNK = 256, TAIL_CHUNK = 16;
     const int read_threads = std::max(1, omp_get_max_threads());
     // Decoding threads for mzPeak, capped: MzPeakFile opens a reader per
     // decoding thread for every batch of spectra, one at a time, so more
@@ -3353,7 +3353,7 @@ protected:
         const auto a = std::chrono::steady_clock::now();
         // Room for every thread's chunk, plus a decoded batch either side.
         mzs = std::make_unique<FASTag::MzPeakStream>(
-            in, mzpeak_decode_threads, static_cast<size_t>(read_threads) * kChunk + 4096);
+            in, mzpeak_decode_threads, static_cast<size_t>(read_threads) * CHUNK + 4096);
         static_cast<void>(mzs->size());
         g_t_open = std::chrono::duration<double>(std::chrono::steady_clock::now() - a).count();
       }
@@ -3591,12 +3591,12 @@ protected:
     // In a few CLUSTERS of consecutive spectra across the run: a run changes
     // over its gradient, and the probe wants the file's TIGHTEST peak
     // spacing, not a typical one.
-    constexpr Size kClusters = 8;  // 8 spectra each
+    constexpr Size CLUSTERS = 8;  // 8 spectra each
     const Size probe_want = std::min<Size>(n_total, 64);
-    const Size per_cluster = std::max<Size>(1, probe_want / kClusters);
-    const Size cluster_step = std::max<Size>(1, n_total / kClusters);
+    const Size per_cluster = std::max<Size>(1, probe_want / CLUSTERS);
+    const Size cluster_step = std::max<Size>(1, n_total / CLUSTERS);
     std::set<Size> probe_idx;
-    for (Size c = 0; c < kClusters; ++c)
+    for (Size c = 0; c < CLUSTERS; ++c)
       for (Size k = 0; k < per_cluster && c * cluster_step + k < n_total; ++k)
         probe_idx.insert(c * cluster_step + k);
     auto tolerance_probe = [&](auto&& read)
@@ -4092,7 +4092,7 @@ protected:
     // finished, being started), not the run.
     const SignedSize n_spec = static_cast<SignedSize>(n_total);
     constexpr size_t BLOCK = 65536;
-    // One block's results at block-local indices. There are kRing of them: the
+    // One block's results at block-local indices. There are RING of them: the
     // writer thread empties one while the team finishes one and starts the
     // next (see the loop).
     struct Block
@@ -4121,8 +4121,8 @@ protected:
     };
     // Three: a fourth only helped within noise, for another block of rows
     // held in memory.
-    constexpr size_t kRing = 3;
-    Block blocks[kRing];
+    constexpr size_t RING = 3;
+    Block blocks[RING];
     for (Block& b : blocks) b.acc.f.census = census_on;
     // Two-pass -out_spectra, whatever the formats: record kept INPUT indices
     // during tagging, re-read and stream them to the writer at the end. Every
@@ -4249,15 +4249,15 @@ protected:
     };
 
     // 1.13 -check_header_charge: the MS1 scan before spectrum @p index, at
-    // most kMs1Back spectra back, else nullptr. The answer depends on the
+    // most MS1_BACK spectra back, else nullptr. The answer depends on the
     // file only, never on which thread asks or what it read before.
-    constexpr size_t kMs1Back = 512;
+    constexpr size_t MS1_BACK = 512;
     std::function<MSSpectrum(size_t tid, size_t j, bool peaks)> ms1_read;  // set once the readers exist
     auto ms1_for = [&](size_t tid, size_t index) -> const MSSpectrum*
     {
       if (!ms1_read) return nullptr;
       PerThread& q = per_thread[tid];
-      const size_t stop = index > kMs1Back ? index - kMs1Back : 0;
+      const size_t stop = index > MS1_BACK ? index - MS1_BACK : 0;
       for (size_t j = index; j-- > stop;)
       {
         if (j >= q.ms1_lo && j <= q.ms1_hi)  // scanned before: skip to its lower end
@@ -4856,7 +4856,7 @@ protected:
     // to make the writer hold the loop back through the block ring at high
     // thread counts. 4 MB, emptied at the end of every block; larger only
     // holds more memory.
-    constexpr size_t kWriteChunk = size_t(4) << 20;
+    constexpr size_t WRITE_CHUNK = size_t(4) << 20;
     std::string tsv_pending, rtsv_pending, ctsv_pending;
     auto drain = [](std::ofstream& os, std::string& pending)
     {
@@ -4867,7 +4867,7 @@ protected:
     auto put_rows = [&](std::ofstream& os, std::string& pending, const std::string& text)
     {
       pending += text;
-      if (pending.size() >= kWriteChunk) drain(os, pending);
+      if (pending.size() >= WRITE_CHUNK) drain(os, pending);
     };
     auto write_block = [&](Block& b, size_t n_used)
     {
@@ -5050,9 +5050,9 @@ protected:
     // block would put a barrier at every block end; with one region the
     // stragglers of one block overlap the start of the next instead.
     //
-    // A ring of kRing buffers. Chunks are handed out in index order
+    // A ring of RING buffers. Chunks are handed out in index order
     // (monotonic), so a thread reaching block k knows every earlier chunk is
-    // taken; it waits only while block k's buffer still holds block k - kRing,
+    // taken; it waits only while block k's buffer still holds block k - RING,
     // which the writer is then writing. That cannot deadlock: the oldest block
     // that is still open is held only by threads that are not waiting. Three
     // buffers: one being written, one being finished by the stragglers, one
@@ -5072,7 +5072,7 @@ protected:
     for (size_t k = 0; k < n_blocks; ++k) pending[k].store(block_size(k), std::memory_order_relaxed);
     std::mutex ring_mutex;
     std::condition_variable ring_cv;
-    size_t open_upto = std::min(kRing, n_blocks);  ///< blocks below have a prepared buffer (ring_mutex)
+    size_t open_upto = std::min(RING, n_blocks);  ///< blocks below have a prepared buffer (ring_mutex)
     std::atomic<size_t> open_hint{open_upto};      ///< its lock-free copy, for the common case
     bool write_abort = false;                      ///< the writer failed (ring_mutex)
     std::atomic<bool> abort_hint{false};
@@ -5080,7 +5080,7 @@ protected:
     std::exception_ptr work_failed;                ///< first reader/tagger failure (ring_mutex)
 
     const auto t_prep_a = Clock::now();
-    for (size_t k = 0; k < open_upto; ++k) prep_block(blocks[k % kRing], k * BLOCK, block_size(k));
+    for (size_t k = 0; k < open_upto; ++k) prep_block(blocks[k % RING], k * BLOCK, block_size(k));
     t_prep = secs(t_prep_a, Clock::now());
 
     // FASTAG_TIMING: each thread's exit from its last chunk. Allocated before
@@ -5098,13 +5098,13 @@ protected:
             ring_cv.wait(lock, [&] { return pending[k].load(std::memory_order_acquire) == 0; });
           }
           const auto a = Clock::now();
-          Block& b = blocks[k % kRing];
+          Block& b = blocks[k % RING];
           write_block(b, block_size(k));
-          if (k + kRing < n_blocks) prep_block(b, (k + kRing) * BLOCK, block_size(k + kRing));
+          if (k + RING < n_blocks) prep_block(b, (k + RING) * BLOCK, block_size(k + RING));
           t_write_busy += secs(a, Clock::now());
           {
             std::lock_guard<std::mutex> guard(ring_mutex);
-            open_upto = std::min(n_blocks, k + kRing + 1);
+            open_upto = std::min(n_blocks, k + RING + 1);
             open_hint.store(open_upto, std::memory_order_release);
           }
           ring_cv.notify_all();
@@ -5191,7 +5191,7 @@ protected:
       // second loop keeps the hand-out monotonic: a thread only reaches it
       // once every chunk of the first has been handed out.
       const SignedSize tail_from =
-          std::max<SignedSize>(0, n_spec - static_cast<SignedSize>(read_threads) * kChunk);
+          std::max<SignedSize>(0, n_spec - static_cast<SignedSize>(read_threads) * CHUNK);
       auto one = [&](SignedSize i)
       {
         const size_t k = static_cast<size_t>(i) / BLOCK;
@@ -5209,7 +5209,7 @@ protected:
           // first, let every thread skip the rest, rethrow after the join.
           try
           {
-            work(i, blocks[k % kRing], static_cast<size_t>(i) - k * BLOCK);
+            work(i, blocks[k % RING], static_cast<size_t>(i) - k * BLOCK);
           }
           catch (...)
           {
@@ -5228,9 +5228,9 @@ protected:
           ring_cv.notify_all();
         }
       };
-#pragma omp for schedule(FASTAG_MONOTONIC dynamic, kChunk) nowait
+#pragma omp for schedule(FASTAG_MONOTONIC dynamic, CHUNK) nowait
       for (SignedSize i = 0; i < tail_from; ++i) one(i);
-#pragma omp for schedule(FASTAG_MONOTONIC dynamic, kTailChunk) nowait
+#pragma omp for schedule(FASTAG_MONOTONIC dynamic, TAIL_CHUNK) nowait
       for (SignedSize i = tail_from; i < n_spec; ++i) one(i);
       if (timing) t_done[tid] = Clock::now();
     }

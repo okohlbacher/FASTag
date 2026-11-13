@@ -376,7 +376,7 @@ namespace FASTag::IonSeries
   inline constexpr const char* MODE_DEFAULT = "by";
   /// The valid strings: ax (1.13 item 11) was removed in 1.14 and stays
   /// valid so that 1.13 command lines and INI files load; FASTag reads it as
-  /// the default (TOPPFASTag::kRemovedValues).
+  /// the default (TOPPFASTag::REMOVED_VALUES).
   inline constexpr const char* MODE_VALUES = "by,cz,auto,ax";
 
   /**
