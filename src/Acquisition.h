@@ -102,11 +102,11 @@ namespace FASTag::Acquisition
   */
   enum class Mode
   {
-    Undetermined,  ///< too few repeats to judge (or no MS2)
+    UNDETERMINED,  ///< too few repeats to judge (or no MS2)
     DDA,           ///< data-dependent acquisition
-    PseudoDDA,  ///< provenance of a pseudo-DDA generator
+    PSEUDO_DDA,  ///< provenance of a pseudo-DDA generator
     PRM,        ///< periodic, but the windows do not tile a range (targeted)
-    DIALike,    ///< periodic and tiling, but mostly charged: warn, tag
+    DIA_LIKE,    ///< periodic and tiling, but mostly charged: warn, tag
     DIA,        ///< raw DIA: refuse
   };
 
@@ -143,7 +143,7 @@ namespace FASTag::Acquisition
   */
   struct AcqCall
   {
-    Mode mode = Mode::Undetermined;  ///< the call
+    Mode mode = Mode::UNDETERMINED;  ///< the call
     bool warn = false;          ///< log a WARN (DIA-like, or a suspicious undetermined run)
     std::size_t n_ms2 = 0;      ///< MS2 probed
     std::size_t n_events = 0;   ///< after event collapse

@@ -60,11 +60,11 @@ namespace
   {
     switch (m)
     {
-      case Mode::Undetermined: return "Undetermined";
+      case Mode::UNDETERMINED: return "Undetermined";
       case Mode::DDA: return "DDA";
-      case Mode::PseudoDDA: return "PseudoDDA";
+      case Mode::PSEUDO_DDA: return "PseudoDDA";
       case Mode::PRM: return "PRM";
-      case Mode::DIALike: return "DIALike";
+      case Mode::DIA_LIKE: return "DIALike";
       case Mode::DIA: return "DIA";
     }
     return "?";
@@ -181,7 +181,7 @@ namespace
           r.push_back(meta(x, x - lo, hi - x, z(rng)));
         }
       // Few m/z repeat, so this is DDA or undetermined, never DIA.
-      expectNot(r, Mode::DIALike, "2 DIA windows, mono m/z, charged");
+      expectNot(r, Mode::DIA_LIKE, "2 DIA windows, mono m/z, charged");
     }
     // 3. diaTracer: +-0.011 Th windows on mono m/z, charged.
     expect(dda(rng, 4000, 0.011), Mode::DDA, "3 diaTracer-like");
@@ -225,7 +225,7 @@ namespace
       for (int block = 0; block < 9; ++block)
         for (int c = 0; c < 12; ++c)
           for (int k = 0; k < 8; ++k) r.push_back(meta(t[(block * 4 + k) % 40], 1, 1, 2));
-      expectNot(r, Mode::DIALike, "8 scheduled PRM");
+      expectNot(r, Mode::DIA_LIKE, "8 scheduled PRM");
     }
     // 9. DDA with dynamic exclusion: each precursor 1-3 times close together.
     {
@@ -254,7 +254,7 @@ namespace
       std::vector<Ms2Meta> r = scheme(w20, 1);
       for (int k = 0; k < 5; ++k) r.push_back(r[k]);
       const A::AcqCall c = A::classifyAcquisition(r);
-      check(c.mode == Mode::Undetermined && c.n_gaps == 5, std::string("11 five gaps: ") + name(c.mode));
+      check(c.mode == Mode::UNDETERMINED && c.n_gaps == 5, std::string("11 five gaps: ") + name(c.mode));
       // Wide and uncharged: a WARN, still tagged.
       check(c.warn, "11 wide uncharged undetermined warns");
       std::vector<Ms2Meta> d(r.begin(), r.end());
@@ -282,7 +282,7 @@ namespace
       check(A::collectMs2Meta(run.size(), read, few).size() == 50, "12 the MS2 cap bounds the probe");
     }
     // 13. No MS2 at all.
-    expect({}, Mode::Undetermined, "13 empty");
+    expect({}, Mode::UNDETERMINED, "13 empty");
     // 14. Frame-split diaPASEF: k = 2..10 consecutive MS2 per window.
     for (int k = 2; k <= 10; ++k)
     {
@@ -385,7 +385,7 @@ namespace
         for (double x : {445.12, 519.14, 593.16}) r.push_back(meta(x, 1, 1, 1));
       const std::vector<Ms2Meta> d = dda(rng, 3700);
       r.insert(r.end(), d.begin(), d.end());
-      expectNot(r, Mode::DIALike, "18 polysiloxane head then DDA");
+      expectNot(r, Mode::DIA_LIKE, "18 polysiloxane head then DDA");
     }
     // 19. Cyclic wide-window scheme with measured (mixed) charges: WARN, not
     // refuse.
@@ -394,7 +394,7 @@ namespace
       for (int c = 0; c < 3; ++c)
         for (int k = 0; k < 5; ++k) r.push_back(meta(400 + 25 * k, 12.5, 12.5, 2 + (c + k) % 2));
       const A::AcqCall c = A::classifyAcquisition(r);
-      check(c.mode == Mode::DIALike && c.warn, std::string("19 charged DIA-like warns: ") + name(c.mode) + " (" + c.why + ")");
+      check(c.mode == Mode::DIA_LIKE && c.warn, std::string("19 charged DIA-like warns: ") + name(c.mode) + " (" + c.why + ")");
       check(c.placeholder_charge == 0, "19 mixed charges are no placeholder");
       check(!A::warningMessage(c, "x.mzML").empty(), "19 a warning text");
     }
@@ -415,7 +415,7 @@ namespace
       check(c.mode == Mode::DIA && c.placeholder_charge == 2, std::string("19b 99% one charge: ") + name(c.mode));
       for (std::size_t i = 1; i < r.size(); i += 100) r[i].charge = 3;  // 2%: measured charges
       c = A::classifyAcquisition(r);
-      check(c.mode == Mode::DIALike && c.warn && c.placeholder_charge == 0, std::string("19b 98% one charge warns: ") + name(c.mode));
+      check(c.mode == Mode::DIA_LIKE && c.warn && c.placeholder_charge == 0, std::string("19b 98% one charge warns: ") + name(c.mode));
     }
     // 19c. (1.13) Closed window set without a single cycle (E7-03
     // DIA_orbitrap.12): 38 uncharged 16 Th windows in blocks of 12, each block
@@ -442,7 +442,7 @@ namespace
       // With measured charges it only warns; with one charge it is refused.
       std::vector<Ms2Meta> z = r;
       for (std::size_t i = 0; i < z.size(); ++i) z[i].charge = 2 + static_cast<int>(i % 3);
-      check(A::classifyAcquisition(z).mode == Mode::DIALike, "19c mixed charges warn");
+      check(A::classifyAcquisition(z).mode == Mode::DIA_LIKE, "19c mixed charges warn");
       for (Ms2Meta& m : z) m.charge = 3;
       check(A::classifyAcquisition(z).mode == Mode::DIA, "19c one charge is refused");
     }
@@ -456,7 +456,7 @@ namespace
       std::vector<Ms2Meta> r;
       for (int i = 0; i < 4000; ++i) r.push_back(meta(400.0 + 17.3 * pick(rng19), 0.8, 0.8, 0));
       A::AcqCall c = A::classifyAcquisition(r);
-      check(c.closed && c.mode != Mode::DIA && c.mode != Mode::DIALike,
+      check(c.closed && c.mode != Mode::DIA && c.mode != Mode::DIA_LIKE,
             std::string("19d closed, not tiling: ") + name(c.mode) + " (" + c.why + ")");
       // DDA whose windows happen to cover the range, most m/z seen once or
       // twice: not closed.
@@ -476,7 +476,7 @@ namespace
       std::vector<Ms2Meta> r = scheme(w20, 10);
       expect(r, Mode::DIA, "20 control: without provenance");
       for (Ms2Meta& m : r) m.provenance = true;
-      expect(r, Mode::PseudoDDA, "20 pseudo-DDA with provenance");
+      expect(r, Mode::PSEUDO_DDA, "20 pseudo-DDA with provenance");
       // A minority with provenance does not pass a file.
       for (std::size_t i = 0; i < r.size(); ++i) r[i].provenance = i % 3 == 0;
       expect(r, Mode::DIA, "20 a third with provenance is not pseudo-DDA");
@@ -601,8 +601,8 @@ namespace
   {
     const auto f = [&dir](const char* n) { return dir + "/" + n; };
     const std::vector<std::pair<const char*, Mode>> want = {
-        {"dia_like.mzML", Mode::DIA},          {"dia_pseudo_like.mzML", Mode::PseudoDDA},
-        {"diatracer_like.mzML", Mode::PseudoDDA}, {"dia_nowin_like.mgf", Mode::DIA},
+        {"dia_like.mzML", Mode::DIA},          {"dia_pseudo_like.mzML", Mode::PSEUDO_DDA},
+        {"diatracer_like.mzML", Mode::PSEUDO_DDA}, {"dia_nowin_like.mgf", Mode::DIA},
         {"prm_noz_like.mgf", Mode::PRM},       {"prm_like.mzML", Mode::PRM},
         {"Ecoli_MS2_small.mzML", Mode::DDA},   {"Ecoli_MS2_small.mgf", Mode::DDA}};
     for (const auto& [n, m] : want)
