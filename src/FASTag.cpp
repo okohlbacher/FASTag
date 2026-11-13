@@ -7172,10 +7172,10 @@ namespace
 /// the two json spellings. Whichever comes first returns before the rest run.
 enum class DescriptorRequest
 {
-  None,
-  Ini,
-  Ctd,
-  CwlOrJson
+  NONE,
+  INI,
+  CTD,
+  CWL_OR_JSON
 };
 
 DescriptorRequest requestedDescriptor(int argc, const char** argv)
@@ -7193,13 +7193,13 @@ DescriptorRequest requestedDescriptor(int argc, const char** argv)
     }
     return false;
   };
-  if (given("-write_ini")) return DescriptorRequest::Ini;
-  if (given("-write_ctd")) return DescriptorRequest::Ctd;
+  if (given("-write_ini")) return DescriptorRequest::INI;
+  if (given("-write_ctd")) return DescriptorRequest::CTD;
   if (given("-write_nested_cwl") || given("-write_cwl") || given("-write_nested_json") || given("-write_json"))
   {
-    return DescriptorRequest::CwlOrJson;
+    return DescriptorRequest::CWL_OR_JSON;
   }
-  return DescriptorRequest::None;
+  return DescriptorRequest::NONE;
 }
 
 } // namespace
@@ -7255,7 +7255,7 @@ int main(int argc, const char** argv)
   }
   const DescriptorRequest descriptor = requestedDescriptor(argc, argv);
   const bool want_descriptor =
-      !help && (descriptor == DescriptorRequest::Ctd || descriptor == DescriptorRequest::CwlOrJson);
+      !help && (descriptor == DescriptorRequest::CTD || descriptor == DescriptorRequest::CWL_OR_JSON);
 
 #ifndef ENABLE_TDL
   // ENABLE_TDL is a PUBLIC compile definition on OpenMS's exported CMake target
@@ -7265,7 +7265,7 @@ int main(int argc, const char** argv)
   // ParamCWLFile::store() open (and therefore TRUNCATE) the target file before
   // throwing a std::runtime_error from a depth TOPPBase does not catch: that
   // would replace an existing, good descriptor with an empty one.
-  if (want_descriptor && descriptor == DescriptorRequest::CwlOrJson)
+  if (want_descriptor && descriptor == DescriptorRequest::CWL_OR_JSON)
   {
     std::cerr << "FASTag: -write_cwl and -write_json need an OpenMS built with ENABLE_TDL=ON;\n"
                  "        the OpenMS this binary links has it off. Use -write_ctd instead."
