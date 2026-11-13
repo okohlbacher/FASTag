@@ -78,8 +78,8 @@ namespace FASTag
       inv_w = span > MAX_BUCKETS ? MAX_BUCKETS / span : 1.0;
       // The same expression buckets peaks here and targets in nearest(); it is
       // monotone in m/z, which is all correctness needs.
-      first.assign(bucket(mz.back()) + 1, static_cast<uint32_t>(n));
-      for (size_t i = n; i-- > 0;) first[bucket(mz[i])] = static_cast<uint32_t>(i);
+      first.assign(bucket_(mz.back()) + 1, static_cast<uint32_t>(n));
+      for (size_t i = n; i-- > 0;) first[bucket_(mz[i])] = static_cast<uint32_t>(i);
       for (size_t b = first.size() - 1; b-- > 0;) first[b] = std::min(first[b], first[b + 1]);
     }
 
@@ -111,7 +111,7 @@ namespace FASTag
     }
 
   private:
-    size_t bucket(double x) const { return static_cast<size_t>((x - lo) * inv_w); }
+    size_t bucket_(double x) const { return static_cast<size_t>((x - lo) * inv_w); }
   };
 
   /**
@@ -184,14 +184,14 @@ namespace FASTag
       off.assign(nbins + 1, 0);
       for (size_t r = 0; r < step.size(); ++r)
       {
-        const auto [b0, b1] = window(r);
+        const auto [b0, b1] = window_(r);
         for (size_t b = b0; b <= b1; ++b) ++off[b + 1];
       }
       for (size_t b = 0; b < nbins; ++b) off[b + 1] += off[b];
       cand.resize(off[nbins]);
       for (size_t r = 0; r < step.size(); ++r)
       {
-        const auto [b0, b1] = window(r);
+        const auto [b0, b1] = window_(r);
         for (size_t b = b0; b <= b1; ++b) cand[off[b]++] = static_cast<uint8_t>(r);
       }
       for (size_t b = nbins; b > 0; --b) off[b] = off[b - 1];
@@ -249,7 +249,7 @@ namespace FASTag
     std::vector<int> below, above;   ///< per step, scratch for nearestAbove
 
     /// Bins listing step r: its window +-w, widened by one bin on each side.
-    std::pair<size_t, size_t> window(size_t r) const
+    std::pair<size_t, size_t> window_(size_t r) const
     {
       return {static_cast<size_t>((step[r] - w) * BINS_PER_TH) - 1,
               static_cast<size_t>((step[r] + w) * BINS_PER_TH) + 1};
