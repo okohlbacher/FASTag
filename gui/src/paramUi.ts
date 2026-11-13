@@ -995,16 +995,13 @@ export const PARAM_UI: Record<string, ParamUi> = {
   },
   ion_series: {
     hidden: OPT_IN_1_12,
+    // 1.14: ax (a/x ions) was removed; the CLI still accepts it and reads by.
+    choices: ['by', 'cz', 'auto'],
     help: {
-      text: 'Read the spectra as b/y ions (the default), as c/z ions of ETD or ECD, choose per spectrum from its activation (auto), or read them as a/x ions of UVPD (ax, experimental; it failed its held-out test).'
+      text: 'Read the spectra as b/y ions (the default), as c/z ions of ETD or ECD, or choose per spectrum from its activation (auto). The a/x reading (ax) was removed in 1.14: it failed its held-out test.'
     }
   },
-  ion_series_photo: {
-    hidden: OPT_IN_1_13_EXPERIMENTAL,
-    help: {
-      text: 'Under ion series auto: read photodissociation (UVPD) spectra as b/y ions (the default) or as a/x ions. Experimental: the a/x reading failed its held-out test.'
-    }
-  },
+  ion_series_photo: { hidden: REMOVED_1_14, help: REMOVED_1_14_HELP },
   ion_series_hybrid: {
     hidden: OPT_IN_1_13_EXPERIMENTAL,
     help: {

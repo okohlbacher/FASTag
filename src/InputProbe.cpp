@@ -872,14 +872,10 @@ namespace FASTag::Probe
     namespace IS = FASTag::IonSeries;
     Param p = opt.param;
     const IS::Activation act = IS::activationClass(spec);
-    // 1.13 item 11: a/x under ax, and under auto with -ion_series_photo ax
-    // for a photo-activated mzML spectrum.
     const bool reads_act = IS::autoReadsActivation(kind == Kind::MzPeak, kind == Kind::Mgf);
-    const bool photo_ax = opt.ion_mode == IS::Mode::Auto && opt.photo_ax && reads_act && IS::photoActivated(spec);
-    const bool run_column = opt.ion_mode == IS::Mode::Cz || opt.ion_mode == IS::Mode::Ax
-                            || (opt.ion_mode == IS::Mode::Auto && reads_act
-                                && (act == IS::Activation::Electron || photo_ax));
-    const IS::Series sr = IS::seriesInRun(opt.ion_mode, act, run_column, photo_ax);
+    const bool run_column = opt.ion_mode == IS::Mode::Cz
+                            || (opt.ion_mode == IS::Mode::Auto && reads_act && act == IS::Activation::Electron);
+    const IS::Series sr = IS::seriesInRun(opt.ion_mode, act, run_column);
     if (spec.getMSLevel() == 2 && sr != IS::Series::BY) p.ion_pair = IS::ionPair(sr);
     out.jsonl = spectrumRecord(spec, index, pick_result > 0, p);
     out.jsonl += JsonObject("end").line();

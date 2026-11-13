@@ -20,6 +20,13 @@ remaining configuration writes the same output as 1.13.4.
 - **`-label_call_min_tags`**: its only alternative to the 1.12 rule, 0, failed
   its held-out test (149/172 runs right, 0.866, against the threshold 0.922).
   The minimum is the constant 175 again; `-label_out` is unchanged.
+- **a/x ion series** (`-ion_series ax` and `-ion_series_photo`): failed its
+  held-out test (UVPD spectra of PXD018176: rank-1 tags correct for 0.04%
+  under `ax` against 30.87% under `by`, -30.83 points, 95% interval -31.63 to
+  -30.02; criterion +5). `-ion_series ax` is read as `by`;
+  `-ion_series_photo`, whose only other value was `ax`, has no effect. The
+  a/x code, tests and doc/AX-IONS.md are removed; `by`, `cz`, `auto` and
+  `-ion_series_hybrid` are unchanged.
 
 ## 1.13.4 (2026-11-13)
 

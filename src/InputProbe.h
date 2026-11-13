@@ -160,9 +160,6 @@ namespace FASTag::Probe
     /// cz, or auto on an electron-activated mzML spectrum, with the c/z-dot
     /// pair and its ETD precursor-window filter.
     IonSeries::Mode ion_mode = IonSeries::Mode::By;
-    /// -ion_series_photo ax (1.13 item 11): under auto, a photo-activated
-    /// mzML spectrum is dumped with the a/x pair.
-    bool photo_ax = false;
   };
 
   struct DumpOutput

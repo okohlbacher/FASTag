@@ -471,10 +471,10 @@ export const TAGS: HelpPage = {
           </p>
           <p>
             Hybrid EThcD/ETciD spectra stay b/y under <code>auto</code> unless the experimental{' '}
-            <L to="param-ion_series_hybrid">hybrid option</L> is set to both. The a/x option for UVPD is also
-            experimental and failed its held-out test. Tags read with a non-default series carry an{' '}
-            <code>ion_series</code> column. Species detection uses only b/y tags, so it cannot use the c/z• or
-            a/x rows from these runs.
+            <L to="param-ion_series_hybrid">hybrid option</L> is set to both. The a/x reading for UVPD was
+            removed in 1.14: it failed its held-out test. Tags read with a non-default series carry an{' '}
+            <code>ion_series</code> column. Species detection uses only b/y tags, so it cannot use the c/z• rows
+            from these runs.
           </p>
         </>
       )

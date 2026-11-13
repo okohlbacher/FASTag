@@ -398,7 +398,6 @@ Limits of this result:
   1 of them as `none`. It does not confirm the absence of alkylation.
 - Only Thermo data-dependent runs with high-resolution MS2 (Orbitrap, Astral)
   were tested; timsTOF and other TOF data were not.
-- The second pass on spectra read as a/x ions (`-ion_series ax`) is untested.
 
 **Cost.** One more tagging of every MS2 spectrum. The alphabet has five more
 residues and no gap edges.
