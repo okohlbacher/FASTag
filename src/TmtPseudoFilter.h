@@ -20,7 +20,7 @@ namespace FASTag::TmtPseudo
   /// TMT6/10 label mass and TMTpro label mass (Da).
   inline constexpr double kLabel = 229.162932, kProLabel = 304.207146;
   /// Water and proton masses (Da).
-  inline constexpr double kWater = 18.010564684, PROTON_MASS = 1.007276466621;
+  inline constexpr double WATER_MASS = 18.010564684, PROTON_MASS = 1.007276466621;
   /// Residue masses of G, A and K (Da).
   inline constexpr double kG = 57.021463735, kA = 71.037113805, kK = 128.094963015;
   /// Mass windows for the N-terminal and C-terminal tag flanks (Da).
@@ -114,13 +114,13 @@ namespace FASTag::TmtPseudo
         const char residue = i == 0 ? 'G' : 'A';
         const double mass = i == 0 ? kG : kA;
         if (first == residue && near(tag.nterm_mass, kLabel - mass, kWindowN)) return true;
-        if (last == residue && near(tag.cterm_mass, kLabel - kWater - mass, kWindowC)) return true;
+        if (last == residue && near(tag.cterm_mass, kLabel - WATER_MASS - mass, kWindowC)) return true;
       }
       // A terminal K can carry its TMT mass in the C flank while preserving
       // the correct sequence. That mass allocation is not a pseudo-residue.
       if (reporters_ && tag.charge == 1)
         for (const double reporter : kReporters)
-          if (near(tag.cterm_mass + kWater + PROTON_MASS, reporter, kWindowC)) return true;
+          if (near(tag.cterm_mass + WATER_MASS + PROTON_MASS, reporter, kWindowC)) return true;
       return false;
     }
   private:
@@ -141,9 +141,9 @@ namespace FASTag::TmtPseudo
   inline std::array<bool, 4> anchors(const Tag& tag, double label)
   {
     return {near(tag.nterm_mass, label, kWindowN),
-            near(tag.cterm_mass, label - kWater, kWindowC),
+            near(tag.cterm_mass, label - WATER_MASS, kWindowC),
             near(tag.cterm_mass, kK + label, kWindowC),
-            near(tag.nterm_mass, kK + label + kWater, kWindowN)};
+            near(tag.nterm_mass, kK + label + WATER_MASS, kWindowN)};
   }
 
   /**

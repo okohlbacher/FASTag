@@ -26,7 +26,7 @@
 // hybrid spectrum carries b/y and c/z-dot ions together, and no one ion pair
 // gives its tags the right flanks. Under auto with -ion_series_hybrid both,
 // each hybrid spectrum is tagged twice, once as b/y and once as c/z-dot, with
-// every E-value multiplied by kHybridPasses (two readings were tested, as for
+// every E-value multiplied by HYBRID_PASSES (two readings were tested, as for
 // precursor hypotheses), and the two row lists are merged by E-value under one
 // cap (FASTag::mergeSeriesPasses). Every row keeps the series it was read as
 // (Tag::ion_series), and every consumer takes its offsets from that row. The
@@ -81,7 +81,7 @@ namespace FASTag::IonSeries
     UNKNOWN = 3,      ///< no classified method or filter token
   };
   /// Number of Activation values.
-  inline constexpr std::size_t kActivationClasses = 4;
+  inline constexpr std::size_t ACTIVATION_CLASSES = 4;
 
   /**
     @brief The name of an activation class.
@@ -210,7 +210,7 @@ namespace FASTag::IonSeries
   */
   struct ActivationCounts
   {
-    std::array<std::size_t, kActivationClasses> n{};  ///< spectra per Activation value
+    std::array<std::size_t, ACTIVATION_CLASSES> n{};  ///< spectra per Activation value
 
     /// @brief Counts one spectrum of class @p a.
     /// @param[in] a Activation class.
@@ -222,7 +222,7 @@ namespace FASTag::IonSeries
     */
     void merge(const ActivationCounts& o)
     {
-      for (std::size_t i = 0; i < kActivationClasses; ++i) n[i] += o.n[i];
+      for (std::size_t i = 0; i < ACTIVATION_CLASSES; ++i) n[i] += o.n[i];
     }
     /// @brief The count of one class.
     /// @param[in] a Activation class.
@@ -344,7 +344,7 @@ namespace FASTag::IonSeries
   inline IonPair ionPair(Series s)
   {
     using OpenMS::Residue;
-    static const double kWater = OpenMS::EmpiricalFormula("H2O").getMonoWeight();
+    static const double WATER_MASS = OpenMS::EmpiricalFormula("H2O").getMonoWeight();
     IonPair p;
     p.kind = s;
     if (s == Series::CZ)
@@ -358,7 +358,7 @@ namespace FASTag::IonSeries
       p.offN = Residue::getInternalToBIon().getMonoWeight();
       p.offC = Residue::getInternalToYIon().getMonoWeight();
     }
-    p.compl_delta = s == Series::BY ? 0.0 : p.offN + p.offC - kWater;
+    p.compl_delta = s == Series::BY ? 0.0 : p.offN + p.offC - WATER_MASS;
     p.compl_deltas = {p.compl_delta};
     return p;
   }
@@ -412,11 +412,11 @@ namespace FASTag::IonSeries
   /// -ion_series_hybrid (1.13 item 10): what -ion_series auto does with a
   /// hybrid (EThcD, ETciD) spectrum: by (the default, 1.12's auto) or both
   /// (a b/y and a c/z-dot pass, merged per row).
-  inline constexpr const char* kHybridDefault = "by";
+  inline constexpr const char* HYBRID_DEFAULT = "by";
   /// The valid -ion_series_hybrid strings.
-  inline constexpr const char* kHybridValues = "by,both";
+  inline constexpr const char* HYBRID_VALUES = "by,both";
   /// The E-value factor of a two-pass hybrid reading: two series tested.
-  inline constexpr double kHybridPasses = 2.0;
+  inline constexpr double HYBRID_PASSES = 2.0;
 
   /**
     @brief Whether a spectrum is read in two passes (b/y and c/z-dot).

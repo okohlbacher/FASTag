@@ -997,13 +997,13 @@ protected:
     // name stays without effect (REMOVED_OPTIONS).
     registerStringOption_("ion_series_photo", "<series>", "by", REMOVED_HELP, false, true);
     // 1.13 backlog item 10: hybrid EThcD/ETciD read as b/y and c/z-dot; experimental.
-    registerStringOption_("ion_series_hybrid", "<series>", FASTag::IonSeries::kHybridDefault,
+    registerStringOption_("ion_series_hybrid", "<series>", FASTag::IonSeries::HYBRID_DEFAULT,
                           "Under -ion_series auto: how hybrid-activated spectra (EThcD, ETciD) are read: by (b/y "
                           "ions, as before 1.13) or both (tagged twice, as b/y and as c/z-dot ions; the rows of "
                           "both passes merged by E-value under one -max_tags cap, every E-value multiplied by 2, "
                           "each row with its ion_series). mzML input only. "
                           "Experimental; passed its held-out test (5 projects: +43 points of identified spectra with a correct tag, 1.6x CPU time)", false, true);
-    setValidStrings_("ion_series_hybrid", ListUtils::create<std::string>(FASTag::IonSeries::kHybridValues));
+    setValidStrings_("ion_series_hybrid", ListUtils::create<std::string>(FASTag::IonSeries::HYBRID_VALUES));
     // ---- 1.12 A: options ----
     // #5: ranked protein shortlist, reduced FASTA and a search-engine
     // configuration from the tag placements. A search-space reduction, NOT an
@@ -4425,12 +4425,12 @@ protected:
       // the selected one. #15 phase B: the ion series (read_cz, decided once
       // per spectrum above) picks the tables, for every hypothesis alike.
       // 1.13 item 10: a two-pass hybrid spectrum is tagged as b/y (with the
-      // census diagnostics) and as c/z-dot, each at H x kHybridPasses, and
+      // census diagnostics) and as c/z-dot, each at H x HYBRID_PASSES, and
       // the rows merged under the cap one pass has (mergeSeriesPasses).
       const auto tag_at = [&](const FASTag::Hyp::Hypothesis& hy, double H, FASTag::SpectrumDiag* diag) {
         if (read_hybrid)
         {
-          const double Hh = H * FASTag::IonSeries::kHybridPasses;
+          const double Hh = H * FASTag::IonSeries::HYBRID_PASSES;
           const size_t cap = p.max_tag_count > 0 ? static_cast<size_t>(p.max_tag_count) * lengths.size() : 0;
           return FASTag::mergeSeriesPasses(
               tag_all(spec, hy.mz, hy.charge, tables, diag, Hh, FASTag::IonSeries::Series::BY),

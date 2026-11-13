@@ -144,7 +144,7 @@ namespace
                                     "YLGYLEQLLR"};
 
   /// The tool's two-pass reading of one spectrum (FASTag.cpp tag_at):
-  /// b/y and c/z-dot at multiplicity kHybridPasses, merged under the cap.
+  /// b/y and c/z-dot at multiplicity HYBRID_PASSES, merged under the cap.
   struct Reader
   {
     FASTag::Param pby, pcz;
@@ -163,7 +163,7 @@ namespace
     }
     std::vector<FASTag::Tag> both(const CzSynth::Spec& s, int z) const
     {
-      return FASTag::mergeSeriesPasses(by(s, z, IS::kHybridPasses), cz(s, z, IS::kHybridPasses),
+      return FASTag::mergeSeriesPasses(by(s, z, IS::HYBRID_PASSES), cz(s, z, IS::HYBRID_PASSES),
                                        static_cast<size_t>(std::max(0, pby.max_tag_count)));
     }
   };
@@ -257,9 +257,9 @@ int main(int argc, char** argv)
 
   // ---- (a) rules ----
   {
-    check(std::string(IS::kHybridDefault) == "by" && std::string(IS::kHybridValues) == "by,both",
+    check(std::string(IS::HYBRID_DEFAULT) == "by" && std::string(IS::HYBRID_VALUES) == "by,both",
           "-ion_series_hybrid values; default by");
-    check(IS::kHybridPasses == 2.0, "two passes, factor 2");
+    check(IS::HYBRID_PASSES == 2.0, "two passes, factor 2");
     for (IS::Mode m : {IS::Mode::BY, IS::Mode::CZ, IS::Mode::AUTO})
       for (A a : {A::COLLISIONAL, A::ELECTRON, A::HYBRID, A::UNKNOWN})
         for (bool col : {false, true})

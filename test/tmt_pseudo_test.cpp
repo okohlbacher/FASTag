@@ -23,8 +23,8 @@ int main()
   p.tmt_pseudo_filter = true;
   require(TP::Filter(p).rejects(pseudo_g), "G pseudo-prefix not filtered");
   require(TP::Filter(p).rejects(tag("APEP", TP::kLabel - TP::kA, 300)), "A pseudo-prefix not filtered");
-  require(TP::Filter(p).rejects(tag("PEPG", 300, TP::kLabel - TP::kWater - TP::kG)), "G pseudo-suffix not filtered");
-  require(TP::Filter(p).rejects(tag("PEPA", 300, TP::kLabel - TP::kWater - TP::kA)), "A pseudo-suffix not filtered");
+  require(TP::Filter(p).rejects(tag("PEPG", 300, TP::kLabel - TP::WATER_MASS - TP::kG)), "G pseudo-suffix not filtered");
+  require(TP::Filter(p).rejects(tag("PEPA", 300, TP::kLabel - TP::WATER_MASS - TP::kA)), "A pseudo-suffix not filtered");
   require(!TP::Filter(p).rejects(tag("PEPK", 300, TP::kLabel)), "terminal K with TMT mass in its flank rejected");
   // PXD037999 scan 15823: a sequence-correct rank-1 tag from
   // [TMT]-HSEVETDSK[TMT], lost by the former bare-K rejection.
@@ -41,7 +41,7 @@ int main()
   p.mods.clear();
   Tag cz = pseudo_g; cz.ion_series = FASTag::IonSeries::Series::CZ;
   require(!TP::Filter(p).rejects(cz), "c/z tag filtered using b/y formula");
-  Tag reporter = tag("PEPF", 300, TP::kReporters[0] - TP::kWater - TP::PROTON_MASS);
+  Tag reporter = tag("PEPF", 300, TP::kReporters[0] - TP::WATER_MASS - TP::PROTON_MASS);
   require(!TP::Filter(p).rejects(reporter), "reporter filter ran without flag");
   p.tmt_reporter_filter = true;
   require(TP::Filter(p).rejects(reporter), "reporter endpoint not filtered");
@@ -93,11 +93,11 @@ int main()
   // starts inside the TMT mass; the weaker PEPQ starts at intact TMT.
   OpenMS::MSSpectrum spectrum;
   constexpr double massP = 97.052763875, massE = 129.042593135, massQ = 128.05857754;
-  double mz = 300.0 - massQ + TP::kWater + TP::PROTON_MASS;
+  double mz = 300.0 - massQ + TP::WATER_MASS + TP::PROTON_MASS;
   spectrum.emplace_back(mz, 1.0f);
   for (double mass : {massQ, massP, massE, massP, TP::kG})
   { mz += mass; spectrum.emplace_back(mz, 100.0f); }
-  const double precursor = (TP::kLabel + 2 * massP + massE + 300.0 + TP::kWater + 2 * TP::PROTON_MASS) / 2;
+  const double precursor = (TP::kLabel + 2 * massP + massE + 300.0 + TP::WATER_MASS + 2 * TP::PROTON_MASS) / 2;
   p = FASTag::Param(); p.tag_length = 4; p.max_tag_count = 0; p.max_evalue = 0;
   const FASTag::Tables tables(p);
   const auto all = FASTag::tagSpectrum(spectrum, precursor, 2, p, tables);

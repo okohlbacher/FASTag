@@ -133,7 +133,7 @@ namespace
 #include "complement_ref_1_11.inc"
   };
 
-  const double kWater = OpenMS::EmpiricalFormula("H2O").getMonoWeight();
+  const double WATER_MASS = OpenMS::EmpiricalFormula("H2O").getMonoWeight();
 
   double resMass(char c)
   {
@@ -208,7 +208,7 @@ namespace
       const int bin = tc_cz.flank2Table()->find(er);
       // cterm 1000 Da: no pair sum, so only the nterm end can count.
       tc_cz.add(er + rev_cz, 1000.0, "AAAA", rev_cz);
-      tc_by.add(er + kWater, 1000.0, "AAAA");
+      tc_by.add(er + WATER_MASS, 1000.0, "AAAA");
       std::uint64_t n_cz = 0, n_by = 0;
       for (auto v : tc_cz.dip) n_cz += v;
       for (auto v : tc_by.dip) n_by += v;
@@ -464,10 +464,10 @@ int main(int argc, char** argv)
             std::fabs(cz.offC - OpenMS::Residue::getInternalToZp1Ion().getMonoWeight()) < 1e-12,
           "c/z-dot offsets are OpenMS's internal-to-C/Zp1");
     check(std::fabs(cz.offN - kOffN) < 1e-5 && std::fabs(cz.offC - kOffC) < 1e-5, "c = residues + NH3, z-dot = residues + O - N");
-    check(std::fabs(by.offN) < 1e-12 && std::fabs(by.offC - kWater) < 1e-12, "b = residues, y = residues + H2O");
+    check(std::fabs(by.offN) < 1e-12 && std::fabs(by.offC - WATER_MASS) < 1e-12, "b = residues, y = residues + H2O");
     check(std::fabs(cz.compl_delta - 1.007825) <= 1e-6, "compl_delta(c/z-dot) = +H = 1.007825");
     check(by.compl_delta == 0.0, "compl_delta(b/y) = 0 exactly");
-    check(std::fabs(by.reversedOffset() - kWater) < 1e-12, "b/y reversed offset is one water");
+    check(std::fabs(by.reversedOffset() - WATER_MASS) < 1e-12, "b/y reversed offset is one water");
     check(std::fabs(cz.reversedOffset() - (kOffC - kOffN)) < 1e-5 && std::fabs(cz.reversedOffset() + 15.034708) < 1e-5,
           "c/z-dot reversed offset offC - offN = -15.0347");
     // The default Param and Tag are b/y, the 1.11 reading.
@@ -590,9 +590,9 @@ int main(int argc, char** argv)
     const auto byFlanks = [&](const std::string& pep, size_t pos, size_t len, bool rev) {
       const double nside = sumMass(pep.substr(0, pos)), cside = sumMass(pep.substr(pos + len));
       const double low = rev ? nside + czp.offN : cside + czp.offC;
-      const double M = sumMass(pep) + kWater;
+      const double M = sumMass(pep) + WATER_MASS;
       const double high = low + sumMass(pep.substr(pos, len));
-      return std::pair<double, double>{std::max(0.0, M - high), std::max(0.0, low - kWater)};
+      return std::pair<double, double>{std::max(0.0, M - high), std::max(0.0, low - WATER_MASS)};
     };
     for (const auto& [pname, base] : bothParams())
     {
