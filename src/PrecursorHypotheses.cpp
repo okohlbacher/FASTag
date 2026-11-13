@@ -18,7 +18,7 @@ namespace FASTag::Hyp
 {
   namespace
   {
-    const double kProton = OpenMS::Constants::PROTON_MASS_U;
+    const double PROTON_MASS = OpenMS::Constants::PROTON_MASS_U;
     const double kC13 = OpenMS::Constants::C13C12_MASSDIFF_U;
     /// c/z range evidence: a charge-reduced species' window, as the tagger's
     /// ETD filter (FASTagger.cpp ETD_REDUCED_ABOVE): one H below (hydrogen
@@ -99,7 +99,7 @@ namespace FASTag::Hyp
         const std::vector<double> one{0.0};
         for (const double pd : cs.pair_deltas.empty() ? one : cs.pair_deltas)
         {
-          const double target = M + z_aware * kProton + pd;
+          const double target = M + z_aware * PROTON_MASS + pd;
           double off = 0;
           for (const double d : kOffTargetShifts) off += pairCountW(mz, target + d, z_aware - 1, cs);
           e += pairCountW(mz, target, z_aware - 1, cs) - off / static_cast<double>(std::size(kOffTargetShifts));
@@ -111,7 +111,7 @@ namespace FASTag::Hyp
       // it was, bit for bit. A series with several deltas (none since a/x,
       // 1.13 item 11, was removed in 1.14) sums the excess over them; one
       // delta is the old code.
-      const double base = M + 2.0 * kProton;
+      const double base = M + 2.0 * PROTON_MASS;
       if (cs.pair_deltas.size() <= 1)
       {
         double target = base;
@@ -145,7 +145,7 @@ namespace FASTag::Hyp
     int bestIso(const std::vector<double>& mz, double prec_mz, int charge, const std::vector<int>& order,
                 const ComplementSpec& cs, double* excess, bool charge_aware = false)
     {
-      const double M = prec_mz * charge - charge * kProton;
+      const double M = prec_mz * charge - charge * PROTON_MASS;
       int best_k = order.empty() ? 0 : order.front();
       double best = -std::numeric_limits<double>::infinity();
       for (const int k : order)
@@ -213,7 +213,7 @@ namespace FASTag::Hyp
       };
       std::vector<int> left;
       for (const int c : charges)
-        if (c >= 1 && !(top_for(c) > c * prec_mz - (c - 1) * kProton + kCeilingMargin)) left.push_back(c);
+        if (c >= 1 && !(top_for(c) > c * prec_mz - (c - 1) * PROTON_MASS + kCeilingMargin)) left.push_back(c);
       std::vector<int> all;
       for (const int c : charges)
         if (c >= 1) all.push_back(c);
@@ -383,7 +383,7 @@ namespace FASTag::Hyp
     // above the 2+ ceiling never meant a higher charge (DIAGNOSIS.md).
     if (cs.charge_loss <= 0)
     {
-      const double ceil = header * prec.getMZ() - (header - 1) * kProton + kCeilingMargin;
+      const double ceil = header * prec.getMZ() - (header - 1) * PROTON_MASS + kCeilingMargin;
       r.header_peaks_above = static_cast<int>(top.end() - std::upper_bound(top.begin(), top.end(), ceil));
     }
     const ChargeCall& c = r.call;

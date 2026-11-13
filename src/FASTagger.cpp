@@ -220,12 +220,12 @@ namespace FASTag
     void etdPrecursorWindows(double M, int charge, const Param& p, std::vector<std::pair<double, double>>& out)
     {
       out.clear();
-      const double kH = EmpiricalFormula("H").getMonoWeight();
+      const double H_MASS = EmpiricalFormula("H").getMonoWeight();
       for (int k = 0; k < charge; ++k)
       {
         const int zr = charge - k;
         const double cr = (M + charge * PROTON) / zr;
-        out.emplace_back(cr - kH / zr - tolAt(p, cr), cr + ETD_REDUCED_ABOVE / zr + tolAt(p, cr));
+        out.emplace_back(cr - H_MASS / zr - tolAt(p, cr), cr + ETD_REDUCED_ABOVE / zr + tolAt(p, cr));
       }
     }
 

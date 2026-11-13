@@ -20,7 +20,7 @@ namespace FASTag::TmtPseudo
   /// TMT6/10 label mass and TMTpro label mass (Da).
   inline constexpr double kLabel = 229.162932, kProLabel = 304.207146;
   /// Water and proton masses (Da).
-  inline constexpr double kWater = 18.010564684, kProton = 1.007276466621;
+  inline constexpr double kWater = 18.010564684, PROTON_MASS = 1.007276466621;
   /// Residue masses of G, A and K (Da).
   inline constexpr double kG = 57.021463735, kA = 71.037113805, kK = 128.094963015;
   /// Mass windows for the N-terminal and C-terminal tag flanks (Da).
@@ -120,7 +120,7 @@ namespace FASTag::TmtPseudo
       // the correct sequence. That mass allocation is not a pseudo-residue.
       if (reporters_ && tag.charge == 1)
         for (const double reporter : kReporters)
-          if (near(tag.cterm_mass + kWater + kProton, reporter, kWindowC)) return true;
+          if (near(tag.cterm_mass + kWater + PROTON_MASS, reporter, kWindowC)) return true;
       return false;
     }
   private:

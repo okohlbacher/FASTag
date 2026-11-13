@@ -101,7 +101,7 @@ namespace FASTag
     ComplementTolMode complement_tol_mode = ComplementTolMode::DA;
     double complement_tol_factor = 0.5;  ///< k of the Fragment mode
     /// Complement p-value as DirecTag's mid-p P(X > c) + P(X = c)/2 of the
-    /// hypergeometric for tags with c <= kComplementMidpMaxCount (0 or 1)
+    /// hypergeometric for tags with c <= COMPLEMENT_MIDP_MAX_COUNT (0 or 1)
     /// complemented peaks; larger counts keep the plain tail P(X >= c).
     /// Off reproduces 1.11.
     bool   complement_midp = false;
@@ -238,13 +238,13 @@ namespace FASTag
   */
   inline double complementMz(double M, int prec_charge, int z, double mz, ComplementRule rule)
   {
-    const double kProton = OpenMS::Constants::PROTON_MASS_U;
+    const double PROTON_MASS = OpenMS::Constants::PROTON_MASS_U;
     if (rule == ComplementRule::PRECURSOR)
     {
       if (z >= prec_charge) return std::numeric_limits<double>::quiet_NaN();
-      return (M + prec_charge * kProton - z * mz) / (prec_charge - z);
+      return (M + prec_charge * PROTON_MASS - z * mz) / (prec_charge - z);
     }
-    return M / z + 2.0 * kProton - mz;
+    return M / z + 2.0 * PROTON_MASS - mz;
   }
 
   /**
@@ -316,18 +316,18 @@ namespace FASTag
   /// mid-p for 0 or 1 complemented peaks"): counts up to this use mid-p,
   /// larger ones the plain tail. The p-value stays monotone in the count:
   /// mid-p at 1 is P(X>1) + P(X=1)/2 >= P(X>=2), the plain value at 2.
-  inline constexpr unsigned kComplementMidpMaxCount = 1;
+  inline constexpr unsigned COMPLEMENT_MIDP_MAX_COUNT = 1;
 
   /**
     @brief Whether a tag with @p obs complemented peaks is scored with mid-p.
 
     @param[in] midp Param::complement_midp
     @param[in] obs the number of complemented peaks of the tag
-    @return true when @p midp is set and @p obs <= kComplementMidpMaxCount
+    @return true when @p midp is set and @p obs <= COMPLEMENT_MIDP_MAX_COUNT
   */
   inline bool complementMidpApplies(bool midp, unsigned obs)
   {
-    return midp && obs <= kComplementMidpMaxCount;
+    return midp && obs <= COMPLEMENT_MIDP_MAX_COUNT;
   }
 
   /**
