@@ -268,8 +268,8 @@ int main()
       bool pick;
     };
     const Row rows[] = {
-        {M::Legacy, I::MzPeak, true}, {M::Legacy, I::MzML, false}, {M::Legacy, I::Mgf, false},
-        {M::Off, I::MzPeak, false},   {M::Off, I::MzML, false},    {M::Off, I::Mgf, false},
+        {M::LEGACY, I::MZPEAK, true}, {M::LEGACY, I::MZML, false}, {M::LEGACY, I::MGF, false},
+        {M::OFF, I::MZPEAK, false},   {M::OFF, I::MZML, false},    {M::OFF, I::MGF, false},
     };
     for (const Row& r : rows)
     {
@@ -277,11 +277,11 @@ int main()
       check(p.pick == r.pick, "(i) policy mode " + std::to_string(static_cast<int>(r.mode)) + " input " +
                                   std::to_string(static_cast<int>(r.input)));
     }
-    M m = M::Off;
-    check(C::parseMode("legacy", m) && m == M::Legacy, "(i) parse legacy");
+    M m = M::OFF;
+    check(C::parseMode("legacy", m) && m == M::LEGACY, "(i) parse legacy");
     // auto (removed in 1.14) never reaches parseMode: FASTag reads it as legacy.
     check(!C::parseMode("auto", m), "(i) auto is no mode any more");
-    check(C::parseMode("off", m) && m == M::Off, "(i) parse off");
+    check(C::parseMode("off", m) && m == M::OFF, "(i) parse off");
     check(!C::parseMode("Auto", m) && !C::parseMode("", m), "(i) unknown mode strings refused");
     check(std::string(C::kModeDefault) == "legacy" && std::string(C::kModeValues) == "legacy,auto,off",
           "(i) registered default and valid strings");

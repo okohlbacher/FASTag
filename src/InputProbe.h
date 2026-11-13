@@ -222,7 +222,7 @@ namespace FASTag::Probe
   {
     std::size_t probe_spectra = 4000;  ///< -acquisition_probe_spectra
     int mzpeak_threads = 1;  ///< threads for the mzPeak reader
-    Centroid::Mode pick_mode = Centroid::Mode::Legacy;  ///< -pick_profile
+    Centroid::Mode pick_mode = Centroid::Mode::LEGACY;  ///< -pick_profile
     std::string acquisition_check = "refuse";           ///< -acquisition_check
     std::string fasta;                                  ///< -fasta, optional
     std::vector<std::string> decoy_affixes;             ///< -shortlist_decoy_affix
@@ -289,7 +289,7 @@ namespace FASTag::Probe
   */
   struct DumpOptions
   {
-    Centroid::Mode pick_mode = Centroid::Mode::Legacy;  ///< -pick_profile
+    Centroid::Mode pick_mode = Centroid::Mode::LEGACY;  ///< -pick_profile
     int mzpeak_threads = 1;  ///< threads for the mzPeak reader
     Param param;  ///< the run's tagging parameters (one seed length serves)
     /// -ion_series (1.12 #15): the dumped spectrum is prepared with the ion

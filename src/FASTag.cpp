@@ -2647,7 +2647,7 @@ protected:
     FD::ModelTable protease_models;
     const std::string digest_models = getStringOption_("digest_models");
     // #9: -pick_profile (validated by its valid strings).
-    FASTag::Centroid::Mode pick_mode = FASTag::Centroid::Mode::Legacy;
+    FASTag::Centroid::Mode pick_mode = FASTag::Centroid::Mode::LEGACY;
     FASTag::Centroid::parseMode(stringOption_("pick_profile"), pick_mode);
     // Report options set without the report that reads them: ignored, so say so.
     // Defaults are compared against the registered ones, never repeated here.
@@ -3288,7 +3288,7 @@ protected:
     // #9: what the mzPeak reader does with profile MS2 (src/Centroid.h;
     // MzPeakStream centroids). mzML and MGF are tagged as read.
     namespace FC = FASTag::Centroid;
-    const FC::Policy pick_mzpeak = FC::policyFor(pick_mode, FC::Input::MzPeak);
+    const FC::Policy pick_mzpeak = FC::policyFor(pick_mode, FC::Input::MZPEAK);
     const bool mzpeak_out = !out_spectra.empty()
         && FileHandler::getTypeByFileName(out_spectra) == FileTypes::MZPEAK;
     if (!out_spectra.empty() && !mzpeak_out && !is_mzml(out_spectra))

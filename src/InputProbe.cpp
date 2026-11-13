@@ -692,14 +692,14 @@ namespace FASTag::Probe
     j += inst.line();
 
     namespace FC = FASTag::Centroid;
-    const FC::Input input = kind == Kind::MZPEAK ? FC::Input::MzPeak : kind == Kind::MGF ? FC::Input::Mgf : FC::Input::MzML;
+    const FC::Input input = kind == Kind::MZPEAK ? FC::Input::MZPEAK : kind == Kind::MGF ? FC::Input::MGF : FC::Input::MZML;
     const FC::Policy policy = FC::policyFor(opt.pick_mode, input);
     const char* verdict = heads.empty()           ? "none"
                           : profile == 0 && untyped == 0 ? "centroid"
                           : centroid == 0 && untyped == 0 ? "profile"
                           : profile == 0 && centroid == 0 ? "unknown"
                                                           : "mixed";
-    const char* mode_name = opt.pick_mode == FC::Mode::Off ? "off" : "legacy";
+    const char* mode_name = opt.pick_mode == FC::Mode::OFF ? "off" : "legacy";
     j += JsonObject("spectra")
              .count("ms1", ms1)
              .count("ms2", ms2)
@@ -782,7 +782,7 @@ namespace FASTag::Probe
       if (kind == Kind::MZPEAK)
       {
         out.found = readMzPeakSpectrumById(in, opt.mzpeak_threads, id,
-                                           FC::policyFor(opt.pick_mode, FC::Input::MzPeak),
+                                           FC::policyFor(opt.pick_mode, FC::Input::MZPEAK),
                                            spec, index, pick_result);
       }
       else
@@ -840,7 +840,7 @@ namespace FASTag::Probe
           spec = read(index);
           PeakPickerHiRes picker;
           pick_result = FC::apply(spec, picker,
-                                  FC::policyFor(opt.pick_mode, kind == Kind::MGF ? FC::Input::Mgf : FC::Input::MzML));
+                                  FC::policyFor(opt.pick_mode, kind == Kind::MGF ? FC::Input::MGF : FC::Input::MZML));
         }
       }
     }

@@ -52,8 +52,8 @@ namespace FASTag
     */
     enum class Mode
     {
-      Legacy,  ///< mzPeak only, as in 1.11 (the default)
-      Off      ///< no picking, mzPeak included
+      LEGACY,  ///< mzPeak only, as in 1.11 (the default)
+      OFF      ///< no picking, mzPeak included
     };
     /// @brief The default -pick_profile value.
     inline constexpr const char* kModeDefault = "legacy";
@@ -67,9 +67,9 @@ namespace FASTag
     */
     enum class Input
     {
-      MzML,
-      MzPeak,
-      Mgf
+      MZML,
+      MZPEAK,
+      MGF
     };
 
     /**
