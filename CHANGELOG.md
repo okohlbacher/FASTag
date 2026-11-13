@@ -1,5 +1,26 @@
 # Changelog
 
+## Unreleased
+
+Options and option values that failed their held-out test are removed. Each
+removed name stays registered (advanced, not in the GUI) with no effect, so
+that saved command lines and INI files of 1.12 and 1.13 keep loading: given
+on the command line or with a non-default INI value, it prints one warning
+"-<option> was removed in 1.14 (...); it has no effect". A removed value is
+accepted with the same warning and the option's default is used. Every
+remaining configuration writes the same output as 1.13.4.
+
+- **Label discovery** (`-label_discovery_out` and its seven knobs
+  `-label_discovery_max_flank`, `_depth`, `_min_spectra`, `_min_share`,
+  `_window_n`, `_window_c`, `_unimod_top`): failed both held-out tests (6 of
+  150 label-free runs got a label call; third test, report formats 2 to 4:
+  three of nine criteria failed, weighted accuracy 0.572 against 0.80).
+  The report, its code (src/LabelDiscovery.*), tests and design documents
+  are removed. `-label_out` is unchanged.
+- **`-label_call_min_tags`**: its only alternative to the 1.12 rule, 0, failed
+  its held-out test (149/172 runs right, 0.866, against the threshold 0.922).
+  The minimum is the constant 175 again; `-label_out` is unchanged.
+
 ## 1.13.4 (2026-11-13)
 
 Windows installation, GUI fixes and code cleanup; tag output is unchanged.

@@ -46,7 +46,6 @@
 #include "IndexedMzMLReader.h"
 #include "InputProbe.h"
 #include "IonSeries.h"
-#include "LabelDiscovery.h"
 #include "MgfReader.h"
 #include "NumFormat.h"
 #include "OutputGuard.h"
@@ -277,6 +276,84 @@ namespace
 
 class TOPPFASTag : public TOPPBase
 {
+  // ---- 1.14: removed options and values ------------------------------------
+  // Options and option values removed in 1.14 because they failed their
+  // held-out test (CHANGELOG 1.14). TOPPBase refuses an INI file with an
+  // unknown key or value, and -write_ini (like the GUI's INI export) writes
+  // every key, so each removed name stays registered, advanced and without
+  // effect, as -mzpeak_read_memory does for 1.11's decode cache, and a removed
+  // value stays valid. Given on the command line or with a non-default INI
+  // value, each one warns once (warnRemoved_()); a removed value is read as
+  // the option's default (stringOption_()).
+  struct RemovedOption
+  {
+    const char* name;
+    const char* why;  ///< the reason the warning gives
+  };
+  static constexpr const char* kFailedHeldOut = "failed its held-out test";
+  static constexpr RemovedOption kRemovedOptions[] = {
+      {"label_discovery_out", kFailedHeldOut},
+      {"label_discovery_max_flank", kFailedHeldOut},
+      {"label_discovery_depth", kFailedHeldOut},
+      {"label_discovery_min_spectra", kFailedHeldOut},
+      {"label_discovery_min_share", kFailedHeldOut},
+      {"label_discovery_window_n", kFailedHeldOut},
+      {"label_discovery_window_c", kFailedHeldOut},
+      {"label_discovery_unimod_top", kFailedHeldOut},
+      {"label_call_min_tags", kFailedHeldOut},
+  };
+  struct RemovedValue
+  {
+    const char* option;
+    const char* value;
+  };
+  static constexpr RemovedValue kRemovedValues[] = {
+      {"", ""},  // placeholder until a value is removed
+  };
+  static constexpr const char* kRemovedHelp =
+      "Removed in 1.14; no effect (accepted so that existing command lines and INI files keep working)";
+
+  static bool isRemovedOption_(const std::string& name)
+  {
+    for (const RemovedOption& r : kRemovedOptions)
+      if (name == r.name) return true;
+    return false;
+  }
+
+  /// True when option @p name holds one of its removed values.
+  bool isRemovedValue_(const std::string& name) const
+  {
+    for (const RemovedValue& r : kRemovedValues)
+      if (name == r.option && getStringOption_(name) == r.value) return true;
+    return false;
+  }
+
+  /// getStringOption_, with a removed value read as the registered default.
+  std::string stringOption_(const std::string& name) const
+  {
+    return isRemovedValue_(name) ? static_cast<std::string>(findEntry_(name).default_value) : getStringOption_(name);
+  }
+
+  /// One WARN for each removed option given on the command line or with a
+  /// non-default value (read through the Param, so a removed input file is
+  /// not opened), and for each removed value in force.
+  void warnRemoved_() const
+  {
+    for (const RemovedOption& r : kRemovedOptions)
+    {
+      const ParameterInformation& e = findEntry_(r.name);
+      const bool given = g_cli_options.count(r.name) > 0
+          || (e.type == ParameterInformation::FLAG ? getFlag_(r.name) : getParam_().getValue(r.name) != e.default_value);
+      if (given)
+        OPENMS_LOG_WARN << "-" << r.name << " was removed in 1.14 (" << r.why << "); it has no effect." << std::endl;
+    }
+    for (const RemovedValue& r : kRemovedValues)
+      if (*r.option && getStringOption_(r.option) == r.value)
+        OPENMS_LOG_WARN << "-" << r.option << " " << r.value << " was removed in 1.14 (" << kFailedHeldOut
+                        << "); it has no effect: -" << r.option << " " << stringOption_(r.option) << " is used."
+                        << std::endl;
+  }
+
   // -out_spectra (mzML) compatibility shim (1.12 P3, decided in P0).
   // TOPPBase::getProcessingInfo_ lists EVERY registered parameter as a
   // "parameter: <name>" userParam of the exported mzML, so an option added
@@ -297,10 +374,9 @@ class TOPPFASTag : public TOPPBase
       if (k.compare(0, prefix.size(), prefix) != 0) continue;
       const std::string name = k.substr(prefix.size());
       if (FASTag::Cli::isLegacyOutSpectraParameter(name)) continue;
-      // -label_discovery_* never: the report writes its own settings, and
-      // with the option on every other output stays byte-identical
-      // (doc/DESIGN-label-discovery.md sections 2 and 10).
-      if (name.rfind("label_discovery_", 0) == 0)
+      // A removed option (1.14) never: it had no effect. A removed value is
+      // read as the default, so it is listed as the default would be.
+      if (isRemovedOption_(name))
       {
         p.removeMetaValue(k);
         continue;
@@ -310,6 +386,7 @@ class TOPPFASTag : public TOPPBase
       // the flag itself.
       const ParameterInformation& e = findEntry_(name);
       const bool at_default = e.type == ParameterInformation::FLAG ? !getFlag_(name)
+                              : isRemovedValue_(name)              ? true
                                                                    : getParam_().getValue(name) == e.default_value;
       if (at_default) p.removeMetaValue(k);
     }
@@ -614,45 +691,16 @@ protected:
                         "Report N-terminal isobaric label gaps (TMT, TMTpro, iTRAQ4) and the heavy "
                         "Lys8/Arg10 shares of the tag ends", false);
     setValidFormats_("label_out", ListUtils::create<std::string>("tsv"));
-    // Database-free label discovery (doc/DESIGN-label-discovery.md). Opt-in;
-    // every other output is the same with or without it.
-    registerOutputFile_("label_discovery_out", "<file>", "",
-                        "Experimental: report every terminal or lysine mass offset the tag flanks carry, known or "
-                        "not, explained by residues, the known labels or Unimod, and a label call "
-                        "(failed its held-out test: 6 of 150 label-free runs got a label call; "
-                        "format in doc/LABEL-DISCOVERY-REPORT.md)", false);
-    setValidFormats_("label_discovery_out", ListUtils::create<std::string>("tsv"));
-    registerDoubleOption_("label_discovery_max_flank", "<Da>", 700.0,
-                          "Largest flank mass -label_discovery_out histograms, and the largest composition mass "
-                          "of its null image set (above 0, at most 1500)", false, true);
-    setMinFloat_("label_discovery_max_flank", 0.0);
-    // the null image set's memory grows faster than linearly with it
-    // (LabelDiscovery.h kMaxFlankLimit: peak RSS about 700 MB at 1500 Da, GBs at 5000 Da)
-    setMaxFloat_("label_discovery_max_flank", FASTag::LabelDiscovery::kMaxFlankLimit);
-    registerIntOption_("label_discovery_depth", "<n>", 2,
-                       "Most residues a -label_discovery_out channel-peak explanation names (0, 1 or 2)", false, true);
-    setMinInt_("label_discovery_depth", 0);
-    setMaxInt_("label_discovery_depth", 2);
-    registerIntOption_("label_discovery_min_spectra", "n", 20,
-                       "Spectra a -label_discovery_out peak or site candidate needs", false, true);
-    setMinInt_("label_discovery_min_spectra", 1);
-    registerDoubleOption_("label_discovery_min_share", "<f>", 0.005,
-                          "Share of the counted spectra a -label_discovery_out peak needs", false, true);
-    setMinFloat_("label_discovery_min_share", 0.0);
-    setMaxFloat_("label_discovery_min_share", 1.0);
-    registerDoubleOption_("label_discovery_window_n", "<Da>", 0.0,
-                          "Half-window of the N-terminal flank channel of -label_discovery_out; 0 = estimate it "
-                          "from the run (at most 0.05)", false, true);
-    setMinFloat_("label_discovery_window_n", 0.0);
-    setMaxFloat_("label_discovery_window_n", FASTag::LabelDiscovery::kWindowOptionMax);
-    registerDoubleOption_("label_discovery_window_c", "<Da>", 0.0,
-                          "Half-window of the C-terminal flank channel of -label_discovery_out; 0 = estimate it "
-                          "from the run (at most 0.05)", false, true);
-    setMinFloat_("label_discovery_window_c", 0.0);
-    setMaxFloat_("label_discovery_window_c", FASTag::LabelDiscovery::kWindowOptionMax);
-    registerIntOption_("label_discovery_unimod_top", "<n>", 3,
-                       "Unimod alternatives -label_discovery_out lists per peak", false, true);
-    setMinInt_("label_discovery_unimod_top", 0);
+    // 1.14: -label_discovery_* removed (failed its held-out tests); the
+    // names stay without effect (kRemovedOptions).
+    registerOutputFile_("label_discovery_out", "<file>", "", kRemovedHelp, false, true);
+    registerDoubleOption_("label_discovery_max_flank", "<Da>", 700.0, kRemovedHelp, false, true);
+    registerIntOption_("label_discovery_depth", "<n>", 2, kRemovedHelp, false, true);
+    registerIntOption_("label_discovery_min_spectra", "n", 20, kRemovedHelp, false, true);
+    registerDoubleOption_("label_discovery_min_share", "<f>", 0.005, kRemovedHelp, false, true);
+    registerDoubleOption_("label_discovery_window_n", "<Da>", 0.0, kRemovedHelp, false, true);
+    registerDoubleOption_("label_discovery_window_c", "<Da>", 0.0, kRemovedHelp, false, true);
+    registerIntOption_("label_discovery_unimod_top", "<n>", 3, kRemovedHelp, false, true);
     registerOutputFile_("massgap_out", "<file>", "",
                         "Report the -delta_out mass-gap distribution (requires -recon_out): Cys "
                         "alkylation counts, gap peaks explained as combinations of Unimod "
@@ -675,12 +723,8 @@ protected:
     registerIntOption_("digest_silac_min", "<n>", 50,
                        "K- and R-terminal tag ends each before -label_out's heavy shares are gated in", false, true);
     setMinInt_("digest_silac_min", 0);
-    // ---- 1.13: label call refit (backlog #8) ----
-    registerIntOption_("label_call_min_tags", "<n>", 175,
-                       "C-terminal tag ends -label_out's label_call needs; fewer give no_call few_tags "
-                       "(175: the FASTag 1.12 rule; 0, experimental, failed its held-out test: every ppm run is called)",
-                       false, true);
-    setMinInt_("label_call_min_tags", 0);
+    // 1.14: -label_call_min_tags removed (0 failed its held-out test); 175 is a constant again.
+    registerIntOption_("label_call_min_tags", "<n>", 175, kRemovedHelp, false, true);
     registerDoubleOption_("massgap_window", "<Da>", 0.02,
                           "Gap window of -massgap_out on a ppm run", false, true);
     setMinFloat_("massgap_window", 0.0);
@@ -1288,7 +1332,7 @@ protected:
       case ParameterInformation::INT: return getIntOption_(name) != static_cast<int>(e.default_value);
       case ParameterInformation::DOUBLE: return getDoubleOption_(name) != static_cast<double>(e.default_value);
       case ParameterInformation::INTLIST: return getIntList_(name) != e.default_value.toIntVector();
-      default: return getStringOption_(name) != static_cast<std::string>(e.default_value);
+      default: return stringOption_(name) != static_cast<std::string>(e.default_value);
     }
   }
 
@@ -1690,6 +1734,8 @@ protected:
       signal(SIGPIPE, SIG_IGN);
 #endif
     }
+    // 1.14: removed options and values, after the seal (stderr only).
+    warnRemoved_();
     // After the seal, so that a refusal, too, leaves stdout empty.
     if (probe_mode && dump_mode)
     {
@@ -1751,9 +1797,7 @@ protected:
     // unidentified, both with exit 0. Refused here, before any output opens.
     for (const char* o : {"charge_infer_margin", "check_header_margin", "shortlist_max_evalue", "search_precursor_tolerance",
                           "shift_site_min_share", "species_pi0", "digest_min_confidence", "alkylation_min_share",
-                          "alkylation_window", "census_ids_fdr", "census_triage_evalue",
-                          "label_discovery_max_flank", "label_discovery_min_share", "label_discovery_window_n",
-                          "label_discovery_window_c"})
+                          "alkylation_window", "census_ids_fdr", "census_triage_evalue"})
     {
       if (!std::isfinite(getDoubleOption_(o)))
       {
@@ -1832,7 +1876,6 @@ protected:
           {"usi_collection", nullptr},
           {"digest_out", nullptr},
           {"label_out", nullptr},
-          {"label_discovery_out", nullptr},
           {"massgap_out", nullptr},
           {"species", "-stream cannot be combined with -species or -glyco."},
           {"glyco", "-stream cannot be combined with -species or -glyco."},
@@ -2659,16 +2702,6 @@ protected:
           ;
     };
     const bool count_on = needCounting();
-    // -label_discovery_out: its own collector at the same place in the loop
-    // (never count_on, so no existing counter sees a different input).
-    const std::string label_discovery_out = getStringOption_("label_discovery_out");
-    const bool ldisc_on = !label_discovery_out.empty();
-    if (ldisc_on && !(getDoubleOption_("label_discovery_max_flank") > 0.0))
-    {
-      OPENMS_LOG_ERROR << "-label_discovery_max_flank must be above 0 (got "
-                       << getDoubleOption_("label_discovery_max_flank") << ")." << std::endl;
-      return ILLEGAL_PARAMETERS;
-    }
     const bool massgap_on = !massgap_out.empty();
     // gap_needed: the mass-gap tables are loaded and the histogram rows are
     // kept as gaps (GapRow), for -massgap_out and every other gap reader.
@@ -2695,41 +2728,7 @@ protected:
       return ILLEGAL_PARAMETERS;
     }
     digest_settings.silac_min = getIntOption_("digest_silac_min");
-    digest_settings.label_min_tags = getIntOption_("label_call_min_tags");
     digest_settings.low_resolution = !p.tol_ppm;
-    // -label_discovery_out settings (the run alphabet from the run's own
-    // residue modifications; the fixed terminal ones are not subtracted).
-    FASTag::LabelDiscovery::Settings ldisc_settings;
-    if (ldisc_on)
-    {
-      namespace LD = FASTag::LabelDiscovery;
-      ldisc_settings.max_flank = getDoubleOption_("label_discovery_max_flank");
-      ldisc_settings.depth = getIntOption_("label_discovery_depth");
-      ldisc_settings.min_spectra = static_cast<std::uint64_t>(getIntOption_("label_discovery_min_spectra"));
-      ldisc_settings.min_share = getDoubleOption_("label_discovery_min_share");
-      ldisc_settings.window_n = getDoubleOption_("label_discovery_window_n");
-      ldisc_settings.window_c = getDoubleOption_("label_discovery_window_c");
-      ldisc_settings.unimod_top = getIntOption_("label_discovery_unimod_top");
-      ldisc_settings.low_resolution = !p.tol_ppm;
-      ldisc_settings.fasta_filtered = !fasta.empty();
-      ldisc_settings.known_window = digest_settings.window;
-      ldisc_settings.fixed_nterm = fixed_term_n;
-      ldisc_settings.fixed_cterm = fixed_term_c;
-      for (const auto& f : fixed_mods)
-      {
-        const std::string fs(f);
-        const std::string id = fs.substr(0, fs.find(" ("));
-        if (fs.find("N-term)") != std::string::npos) ldisc_settings.fixed_nterm_name = id;
-        else if (fs.find("C-term)") != std::string::npos) ldisc_settings.fixed_cterm_name = id;
-      }
-      std::vector<LD::AlphabetMod> amods;
-      for (const auto& m : p.mods)
-      {
-        amods.push_back({m.residue, m.delta, m.name, m.variable});
-        if (!m.variable && m.residue == 'K') ldisc_settings.fixed_k.push_back({m.name, m.delta});
-      }
-      ldisc_settings.alphabet = LD::runAlphabet(amods);
-    }
     FD::ModelTable protease_models;
     const std::string digest_models = getStringOption_("digest_models");
     // #9: -pick_profile (validated by its valid strings).
@@ -2757,7 +2756,6 @@ protected:
           {"digest_background_share", "-digest_out", digest_on},
           {"digest_window", "-digest_out or -label_out", count_on},
           {"digest_silac_min", "-label_out", label_on},
-          {"label_call_min_tags", "-label_out", label_on},
           {"glyco_out", "-glyco", glyco_flag},
           {"glyco_min_fraction", "-glyco", glyco_flag},
           {"species_out", "-species", want_species},
@@ -2836,14 +2834,6 @@ protected:
           {"census_ids", "-census", getFlag_("census")},
           {"census_ids_fdr", "-census_ids", getFlag_("census") && !getStringOption_("census_ids").empty()},
           {"census_triage_evalue", "-census_ids", getFlag_("census") && !getStringOption_("census_ids").empty()},
-          // ---- label discovery: ignored-option warnings ----
-          {"label_discovery_max_flank", "-label_discovery_out", ldisc_on},
-          {"label_discovery_depth", "-label_discovery_out", ldisc_on},
-          {"label_discovery_min_spectra", "-label_discovery_out", ldisc_on},
-          {"label_discovery_min_share", "-label_discovery_out", ldisc_on},
-          {"label_discovery_window_n", "-label_discovery_out", ldisc_on},
-          {"label_discovery_window_c", "-label_discovery_out", ldisc_on},
-          {"label_discovery_unimod_top", "-label_discovery_out", ldisc_on},
       };
       for (const IgnoredOption& r : ignored)
       {
@@ -4076,7 +4066,6 @@ protected:
       guard.output("recon_id_out", recon_id_out);
       guard.output("digest_out", digest_out);
       guard.output("label_out", label_out);
-      guard.output("label_discovery_out", label_discovery_out, true);
       guard.output("massgap_out", massgap_out);
       if (hdr_check_on) guard.output("check_header_out", check_header_out, true);
       // The q_db post-pass writes <out>.qtmp and renames it onto -out.
@@ -4345,16 +4334,12 @@ protected:
       MSSpectrum ms1;
       size_t ms1_lo = 1, ms1_hi = 0;
       bool ms1_has = false;
-      FASTag::LabelDiscovery::Collector ldisc;  ///< -label_discovery_out only
-      FASTag::LabelDiscovery::ReporterCounter reporters;  ///< -label_discovery_out only
-      FASTag::LabelDiscovery::PairCounter pairs;          ///< -label_discovery_out only
     };
     std::vector<PerThread> per_thread(static_cast<size_t>(std::max(1, omp_get_max_threads())));
     for (PerThread& q : per_thread)
     {
       q.digest = FASTag::Digest::TerminusCounter(digest_settings.window);
       if (digest_on && digest_settings.flank2) q.digest.enableFlank2();  // 1.12 D #3d
-      if (ldisc_on) q.ldisc.configure(ldisc_settings.knownSets(), ldisc_settings.known_window);
     }
     // 1.12 D #3g: -alkylation_out's Cys forms and settings; placements are
     // read for every tag only when another reader needs them all.
@@ -4767,16 +4752,6 @@ protected:
             pt.digest.add(t.nterm_mass, t.cterm_mass, FASTag::baseSequence(t.seq), ax_pair.reversedOffset());
           else pt.digest.add(t.nterm_mass, t.cterm_mass, FASTag::baseSequence(t.seq));
         }
-        // -label_discovery_out: the same rows, through its own collector.
-        // M as FASTagger's prepare() computes it (charge <= 0 is tagged as 2).
-        if (ldisc_on && sel && !t.gapped && t.evalue <= 1.0)
-        {
-          const int zp = hy.charge > 0 ? hy.charge : 2;
-          pt.ldisc.add(t.nterm_mass, t.cterm_mass, hy.mz * zp - zp * Constants::PROTON_MASS_U,
-                       static_cast<std::uint32_t>(index), static_cast<std::uint16_t>(std::min<size_t>(ti, 65535)),
-                       FASTag::baseSequence(t.seq), tag_cz);
-        }
-
         // 1.12 D #3g: the tags -alkylation_out reads (as the digest report),
         // of the selected hypothesis only (#6, PLAN-INTEGRATION 2.4). A c/z
         // tag (#15 phase B) is not placed for the call: the Cys form rules
@@ -5334,14 +5309,6 @@ protected:
       {
         if (!sample_mask.empty() && !sample_mask[static_cast<size_t>(i)])
         {
-          // SILAC pairs (label discovery, format 3) need the precursors of the spectra the subsample skips as well;
-          // the indexed mzML reader gives them without decoding peaks. Other readers: pairs among the sampled spectra only.
-          if (ldisc_on && freader)
-          {
-            const MSSpectrum head = freader->getSpectrumMetadata(static_cast<Size>(i), 0);
-            if (head.getMSLevel() == 2 && !head.getPrecursors().empty())
-              per_thread[tid].pairs.add(head.getRT(), head.getPrecursors()[0].getMZ(), head.getPrecursors()[0].getCharge());
-          }
           tick();
           return;
         }
@@ -5374,33 +5341,6 @@ protected:
         }
         const MSSpectrum& spec = loaded_here ? loaded : exp[static_cast<Size>(i)];
         if (mzpeak_out && spec.getMSLevel() == 2 && spec.containsIMData()) throw IonMobilityRefused{};
-        if (ldisc_on && spec.getMSLevel() >= 2)
-        {
-          // Reporter ions (label discovery, format 2). The indexed reader decodes MS2 peaks only, so an MS3 scan is read again.
-          MSSpectrum ms3;
-          if (spec.getMSLevel() > 2 && spec.empty() && freader) ms3 = freader->getSpectrumAnyLevel(static_cast<Size>(i));
-          const MSSpectrum& rs = ms3.empty() ? spec : ms3;
-          FASTag::LabelDiscovery::ReporterCounter& rc = per_thread[tid].reporters;
-          const bool trap = rs.metaValueExists("filter string") && rs.getMetaValue("filter string").toString().rfind("ITMS", 0) == 0;
-          if (rs.getMSLevel() == 2)
-          {
-            ++rc.ms2;
-            rc.ms2_ion_trap += trap;
-            if (!rs.getPrecursors().empty())
-              per_thread[tid].pairs.add(rs.getRT(), rs.getPrecursors()[0].getMZ(), rs.getPrecursors()[0].getCharge());
-          }
-          if (!trap && !rs.empty())
-          {
-            std::vector<std::pair<double, double>> low;
-            double base = 0;
-            for (const Peak1D& p : rs)
-            {
-              base = std::max(base, static_cast<double>(p.getIntensity()));
-              if (p.getMZ() >= 112.0 && p.getMZ() <= 137.0) low.emplace_back(p.getMZ(), p.getIntensity());
-            }
-            rc.add(low, base);
-          }
-        }
         const Clock::time_point tb = timing ? Clock::now() : ta;
         record(blk, idx, tag_one(spec, tid, static_cast<size_t>(i)), spec);
         tick();
@@ -6561,41 +6501,6 @@ protected:
         }
         OPENMS_LOG_INFO << "Labels: " << tc.tags << " filtered tags -> " << label_out << std::endl;
       }
-    }
-
-    // ---- label discovery: -label_discovery_out ----
-    if (ldisc_on)
-    {
-      namespace LD = FASTag::LabelDiscovery;
-      LD::Collector col;
-      col.configure(ldisc_settings.knownSets(), ldisc_settings.known_window);
-      for (PerThread& pt : per_thread)
-      {
-        col.merge(pt.ldisc);
-        pt.ldisc = LD::Collector();
-      }
-      col.finish();
-      // ModificationsDB once, in one thread (section 8).
-      const LD::UnimodTable unimod = ldisc_settings.low_resolution ? LD::UnimodTable() : LD::UnimodTable::fromModificationsDB();
-      LD::Analysis ana = LD::analyze(col, ldisc_settings, unimod);
-      LD::ReporterCounter reporters;
-      for (const PerThread& pt : per_thread) reporters.merge(pt.reporters);
-      LD::applyReporters(ana, reporters);
-      LD::PairCounter pairs;
-      for (PerThread& pt : per_thread) pairs.merge(std::move(pt.pairs));
-      LD::applyPairs(ana, std::move(pairs));
-      col = LD::Collector();
-      std::vector<FD::Row> rows = FASTag::RunReport::runRows(run_meta, FASTag::RunReport::Emit::Versioned);
-      for (FD::Row& r : LD::reportRows(ana, ldisc_settings)) rows.push_back(std::move(r));
-      FASTag::PartFile ld_part(label_discovery_out);
-      if (!ld_part.begin() || !FD::writeReport(ld_part.writePath(), rows) || !ld_part.commit())
-      {
-        OPENMS_LOG_ERROR << "Failed writing " << label_discovery_out
-                         << (ld_part.error().empty() ? std::string() : ": " + ld_part.error()) << std::endl;
-        return CANNOT_WRITE_OUTPUT_FILE;
-      }
-      OPENMS_LOG_INFO << "Label discovery: " << ana.tags_counted << " tags, " << ana.status << " "
-                      << (ana.status == "call" ? ana.labels : ana.reason) << " -> " << label_discovery_out << std::endl;
     }
 
     // ---- 1.12 D: -alkylation_out (#3g) ----

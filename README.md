@@ -611,18 +611,14 @@ MGF→mzML direction is exact.
 | `-delta_out <file>` | none | Aggregated mass-shift histogram over reconciliations (one best placement per spectrum). Region-level candidates, NOT localized identifications, NOT FDR-controlled. Requires `-recon_out` |
 | `-digest_out <file>` | none | Terminal residues of the tags (ungapped, E-value ≤ 1) at P4..P1 and P1'..P4', and the protease call they support with its margin, or `no_call` with the reason (see Digest, label and mass-gap reports) |
 | `-label_out <file>` | none | TMT, TMTpro and iTRAQ4 gaps at either tag end (N- and C-terminal counts pooled, each given in the description) and the heavy Lys8/Arg10 shares |
-| `-label_discovery_out <file>` | none | Experimental (1.13); failed its held-out test (6 of 150 label-free runs got a label call, see Validation): every N-terminal, lysine, arginine or C-terminal mass offset the tag flanks carry, known or not, explained by residues, the known labels or Unimod, and a label call (see Digest, label and mass-gap reports; format in doc/LABEL-DISCOVERY-REPORT.md) |
-| `-label_discovery_max_flank <Da>` / `-label_discovery_depth <n>` | 700 / 2 | Advanced: largest flank mass histogrammed and of the null compositions (above 0, at most 1500; the post-processing adds about 110 MB of peak memory at 700 Da and about 670 MB at 1500 Da); most residues a peak explanation names (0-2) |
-| `-label_discovery_min_spectra <n>` / `-label_discovery_min_share <f>` | 20 / 0.005 | Advanced: spectra and share of the counted spectra a peak or site candidate needs |
-| `-label_discovery_window_n <Da>` / `-label_discovery_window_c <Da>` | 0 / 0 | Advanced: half-window of the N- and C-terminal flank channel (at most 0.05 Da, so the half-integer background stays outside it); 0 = estimate it from the run |
-| `-label_discovery_unimod_top <n>` | 3 | Advanced: Unimod alternatives listed per peak |
+| `-label_discovery_out <file>`, `-label_discovery_max_flank`, `-label_discovery_depth`, `-label_discovery_min_spectra`, `-label_discovery_min_share`, `-label_discovery_window_n`, `-label_discovery_window_c`, `-label_discovery_unimod_top` | none | Removed in 1.14 (failed its held-out tests, see Held-out acceptance): accepted with a warning, no effect |
 | `-massgap_out <file>` | none | The `-delta_out` gap distribution with Cys alkylation counts, gap peaks explained as combinations of up to 3 Unimod modifications, and SILAC labels among them. Requires `-recon_out` |
 | `-digest_models <file>` | shipped | Protease model table for `-digest_out` (columns `model`, `class`, `end`, `residue`, `freq`); its `background` rows win over a FASTA |
 | `-digest_tag_min <n>` | 100 | Advanced: tag ends a call needs; the N-terminal ends count from as many |
 | `-digest_window <Da>` | 0.008 | Advanced: window around a residue or label mass at the tag ends |
 | `-digest_background_share <f>` | 0.05 | Advanced: share of the background mixed into every model |
 | `-digest_silac_min <n>` | 50 | Advanced: K- and R-terminal tag ends each for `-label_out`'s heavy-share gate |
-| `-label_call_min_tags <n>` | 175 | Advanced, experimental (1.13): C-terminal tag ends `-label_out`'s `label_call` needs; fewer give `no_call few_tags`. 175 is the FASTag 1.12 rule; 0 calls every ppm run (failed its held-out test: 0.866 against the threshold 0.922) |
+| `-label_call_min_tags <n>` | 175 | Removed in 1.14 (0 failed its held-out test): accepted with a warning, no effect; the minimum is 175 |
 | `-massgap_window <Da>` / `-massgap_window_da <Da>` | 0.02 / 0.5 | Advanced: gap window on ppm runs / on Da runs |
 | `-massgap_min_spectra <n>` / `-massgap_min_share <f>` / `-massgap_min_bin <n>` | 20 / 0.005 / 2 | Advanced: spectra and share a gap peak needs; spectra a histogram row needs to take part |
 | `-massgap_max_mods <n>` / `-massgap_top <n>` | 3 / 5 | Advanced: modifications per explanation; modifications listed by share |
@@ -1082,44 +1078,12 @@ options and their values.
   C-terminal K and R. Its last five rows (section `label_call`) give a label
   call from these counts with prose-auto's thresholds: TMT, TMTpro, iTRAQ4,
   SILAC or label-free, or no call on a Da tolerance or below 175 C-terminal
-  tag ends. The experimental `-label_call_min_tags 0` (1.13) calls every ppm
-  run; below 175 ends a label-free call then means only that no label rule
-  fired, and the status row says so. It scored 178/193 on the development
-  runs (in-sample; 150/193 at 175, 159/193 always label-free) but failed its
-  preregistered held-out test: 149/172 (0.866) against the threshold 0.922,
-  below always label-free (0.872); so 175 stays the default
-  (doc/DESIGN-digest.md, "Label call minimum").
-- **`-label_discovery_out`** (experimental, opt-in) finds every mass offset the tag flanks carry at the peptide N-terminus, at
-  K, at R or at the C-terminus, known or not, without a protein database. It
-  reads the tags `-label_out` reads, histograms the two flank channels
-  (`nterm_mass`, `cterm_mass`) at 0.0005 Da after a per-run calibration, and
-  turns every hypothesis into the masses it predicts in both channels and
-  both readings (b and y). Offsets the unlabelled flanks of any residue
-  composition, the precursor 13C picks or an accepted label explain are
-  classed and never called (the unlabelled flanks are read as y, b and a
-  ions with their NH3 and H2O losses, and the precursor less NH3 or H2O);
-  the others are explained by the known labels or Unimod (ModificationsDB),
-  and iTRAQ8plex is told from TMTpro by the calibrated C-terminal channel or
-  written `ambiguous`. A known label (TMT, TMTpro, iTRAQ4/8, dimethyl, SILAC
-  Lys4/6/8 and Arg6/10) is called on a lower evidence bar than a Unimod label,
-  and an unknown mass only when it sits on most of the peptides on a ladder
-  of many residues (bar set on development data only). The call is a label
-  set (`TMT+K:TMT`, `Dimethyl`, `unknown:N+123.4567`), `label-free`, or no
-  call on a Da tolerance, with c/z tags only, below 175 spectra or without
-  N-terminal flanks. Its `ld_known` rows give `-label_out`'s counts again. It
-  never feeds `-label_out`'s `label_call`, and every other output is the
-  same with or without it (the `-out_spectra` provenance leaves its options
-  out). It failed its held-out test (190 public runs, scored once on
-  2026-11-10): 6 of 150 label-free runs got a label call (4.0 %; criterion
-  0), and 96/190 runs were right against 150/190 for "always label-free"
-  and 91/190 for `label_call`. Do not rely on it as free of false label
-  calls. Rules added after that test (set on the development runs, no
-  held-out test): TMT and iTRAQ reporter ions set or remove an isobaric
-  call, precursor pairs at the Lys8 and Arg10 spacings call SILAC and
-  (format 4) add `K:Lys8` and `R:Arg10` to a call of SILAC labels only that
-  lacks them, and a run with few tags, no reporter ions and no pairs is
-  called `label-free` (not when the reporter gate is `unclear`). Format, classes and the call rule:
-  doc/LABEL-DISCOVERY-REPORT.md; design: doc/DESIGN-label-discovery.md.
+  tag ends. The experimental `-label_call_min_tags 0` (1.13), which called
+  every ppm run, failed its held-out test (149/172, 0.866, against the
+  threshold 0.922) and was removed in 1.14 (doc/DESIGN-digest.md, "Label call
+  minimum").
+- **`-label_discovery_out`** (1.13) was removed in 1.14: it failed its
+  held-out tests (see Held-out acceptance).
 - **`-massgap_out`** reads the `-delta_out` histogram (built even when
   `-delta_out` is not written; run it without fixed modifications to see the
   Cys alkylation): spectra near each Cys alkylation mass, and gap peaks
@@ -1696,9 +1660,9 @@ data.
 | 1.13 `-complement_tolerance_unit auto` | **FAIL** (first estimator); second test, revised estimator: **INCONCLUSIVE** | First test: on the #2 design (`acceptance/1.13`, PREREG-compltol.md; 11 runs): ion trap at 0.5 Da +2.1 to +5.1 points rank-1 correct in every powered 2+/3+ cell, pooled L3 gain +3.05 points (ii PASS), timsTOF 4+ and time (ratio 1.027) PASS; but three Astral cells fail non-inferiority (L5 2+ -0.50 points; two 4+ cells by their bound). Measured with the first estimator (c5f96b5), whose window varied with the cell; the second test used the current cell-independent median/MAD estimator with `-complement_tolerance` as its lower bound. Second test (`acc113r/compltol`, PREREG-compltol-heldout2.md; 8 new runs: Astral 2, ion trap 3, Q Exactive 3): no criterion failed. Non-inferiority: 44 of 54 cells pass, 0 fail, 10 are uninformative (all ion trap; four of them 3+ cells, which block a PASS). Ion-trap gain at L3 +1.07 points rank-1 correct (95% interval 0.87-1.27; PASS); timsTOF not tested; run time ratio 1.010 (PASS). On all five high-resolution files the window in force was 0.02 Da, so `auto` equals the default there. Limits: one Astral project, three ion-trap files, all at 0.5 Da (doc/COMPLEMENT-TOLERANCE.md). Experimental, default stays `Da` |
 | #7 raw-DIA check (`-acquisition_check`), release test E7-03 (`acceptance/1.13`) | **FAIL** | 8 of 202 files that had to pass were refused (upper 95% bound 7.0%), all from Astral projects labelled DDA. Raw diaPASEF and Astral DIA were refused 12/12 each, Orbitrap DIA 7/12 and SWATH 10/12 (criterion >= 90%); pseudo-DDA passed 37/37. Default stays `refuse`; override a wrong refusal with `warn` or `off` (see Raw DIA input is refused) |
 | #7 raw-DIA check, revised rule (closed window set, default charge), held-out test acqcheck2 (`acc113r/acqcheck`) | **PASS** | 98 fresh public Thermo files, truth per file from scan filters and isolation windows. Refused: 0 of 58 non-DIA files (criterion 0), 35 of 37 DIA files (criterion >= 90%; the 1.12 rule 19 of 37). Misses: one DIA run with mixed charges (warned) and one non-dependent run with 5384 windows of 2 Th. No Astral, timsTOF or SCIEX file in the sample |
-| 1.13 `-label_call_min_tags 0` | **FAIL** | 149/172 runs right (0.866) against the threshold 0.922; always label-free gives 0.872 and the 1.12 rule 83/172. Default stays 175; 0 stays experimental |
-| 1.13 `-label_discovery_out` | **FAIL** | `acceptance/1.13`, PREREG-labeldisc.md; 190 runs, scored once on 2026-11-10. P1 FAIL: 6 of 150 label-free runs got a label call (4.0 %; criterion 0). P2 FAIL: 96/190 runs right against 150/190 for "always label-free" (65 label-free runs got no call). P3 PASS: 96 against 91 for `label_call` (sign test p = 0.33). Experimental, opt-in; do not rely on it as free of false label calls |
-| 1.13 `-label_discovery_out`, report formats 2 to 4, third held-out test (`acc113r/labeldisc3`) | **FAIL** | PREREG-labeldisc3.md; 163 runs from 163 new PRIDE projects (Thermo Orbitrap-family instruments only), scored once on 2026-11-10 against the stated label, with Param-Medic 0.2 as comparison. Three of nine criteria fail. PASS: no label call on 64 label-free runs; recall TMT 18/18, iTRAQ 19/19, SILAC 18/22, dimethyl 13/22; 1 of 99 labelled runs called label-free. FAIL: weighted accuracy 0.572 (criterion above 0.80); 119 runs right by label family against 149 for Param-Medic; TMTpro recall 11/18 (criterion 0.8). Both causes are ion-trap MS2: the rule makes no call there (all 31 label-free ion-trap runs, 8 dimethyl, 4 SILAC), and the 7 TMTpro runs acquired as SPS-MS3 are called TMT, because the call does not use the TMTpro-only reporter ions. With Orbitrap MS2, 95 of 96 runs are right. Experimental, opt-in |
+| 1.13 `-label_call_min_tags 0` | **FAIL** | 149/172 runs right (0.866) against the threshold 0.922; always label-free gives 0.872 and the 1.12 rule 83/172. Removed in 1.14; the minimum stays 175 |
+| 1.13 `-label_discovery_out` | **FAIL** | `acceptance/1.13`, PREREG-labeldisc.md; 190 runs, scored once on 2026-11-10. P1 FAIL: 6 of 150 label-free runs got a label call (4.0 %; criterion 0). P2 FAIL: 96/190 runs right against 150/190 for "always label-free" (65 label-free runs got no call). P3 PASS: 96 against 91 for `label_call` (sign test p = 0.33). Removed in 1.14 |
+| 1.13 `-label_discovery_out`, report formats 2 to 4, third held-out test (`acc113r/labeldisc3`) | **FAIL** | PREREG-labeldisc3.md; 163 runs from 163 new PRIDE projects (Thermo Orbitrap-family instruments only), scored once on 2026-11-10 against the stated label, with Param-Medic 0.2 as comparison. Three of nine criteria fail. PASS: no label call on 64 label-free runs; recall TMT 18/18, iTRAQ 19/19, SILAC 18/22, dimethyl 13/22; 1 of 99 labelled runs called label-free. FAIL: weighted accuracy 0.572 (criterion above 0.80); 119 runs right by label family against 149 for Param-Medic; TMTpro recall 11/18 (criterion 0.8). Both causes are ion-trap MS2: the rule makes no call there (all 31 label-free ion-trap runs, 8 dimethyl, 4 SILAC), and the 7 TMTpro runs acquired as SPS-MS3 are called TMT, because the call does not use the TMTpro-only reporter ions. With Orbitrap MS2, 95 of 96 runs are right. Removed in 1.14 |
 | 1.13 `-ion_series ax` | **FAIL** | On the UVPD spectra of PXD018176 replicate 2, rank-1 tags are correct for 0.04% under `ax` against 30.87% under `by`: -30.83 points (95% interval -31.63 to -30.02; criterion +5). Tested as an a/x-only reading with even-electron flanks; an a+1/x+1 reading and a mixed b/y + a/x reading are untested (doc/AX-IONS.md). Experimental |
 | 1.13 census triage (`-census_ids`) | **PASS** (second test); first test **FAIL** | Second test, 8 runs, 7 evaluable: the triage candidates are identified by a semi-enzymatic second search 5.32 times as often as the other unidentified spectra (95% CI 2.59-8.25), 0.023 above a peak-count baseline. Against an open search they are enriched but not better than that baseline (doc/CENSUS-TRIAGE-EVAL.md) |
 | 1.13 `-alkylation_tags_out` | **PASS**, at the margin | 57 runs from 57 PRIDE projects: 40 called, 37 right (0.925, Wilson 95% interval 0.801-0.974; criterion: at least 30 calls and a lower end of at least 0.80). It abstains on samples that are not alkylated (2 of 12 called); spectra read as a/x ions are untested (doc/ALKYLATION-REPORT.md). Experimental |

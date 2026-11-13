@@ -313,8 +313,8 @@ table. Tests use synthetic tables.
 `termini_evidence`, commit e15aaf7), ported rule for rule (`FASTag::Digest::labelCall`):
 
 - no call on a Da tolerance (`low_resolution`; prose-auto runs the termini only on ppm runs) and below
-  `-label_call_min_tags` C-terminal tag ends, `count.tot` of `-digest_out` (`few_tags`; 1.12 used
-  prose-auto's `TAG_MIN` 175; 1.13 makes it `-label_call_min_tags`, default 175, see "Label call minimum" below);
+  175 C-terminal tag ends, `count.tot` of `-digest_out` (`few_tags`; prose-auto's `TAG_MIN`; see
+  "Label call minimum" below);
 - an isobaric label when `<L>.count` ≥ 0.01 × `tags_filtered` and ≥ 20 × max(`<L>.background`, 1);
   the TMTpro row says that iTRAQ8plex has the same mass;
 - SILAC (Lys8/Arg10) when `K8.share` and `R10.share` are both ≥ 0.2, the K/R share (`share.kr` of
@@ -327,7 +327,7 @@ calls with prose-auto 0.1.10 on the 193 label-evaluable SDRF runs of
 the digest validation (fastag-bench `table_s3_digest_truth_v190.tsv`), run with prose-auto's own
 termini command.
 
-### Label call minimum (1.13, backlog #8; `-label_call_min_tags`)
+### Label call minimum (1.13, backlog #8; `-label_call_min_tags`, removed in 1.14)
 
 1.12 ported prose-auto 0.1.10's `TAG_MIN` (175 C-terminal tag ends) as `no_call few_tags`. prose-auto
 itself never returns "no call" for the label: below `TAG_MIN` its termini give no label evidence and its
@@ -336,7 +336,7 @@ them label-free), and `label_call` scored 150/193 (77.7 %), below "always label-
 other 163 runs its label equalled the harness's (prose-auto 0.1.3's thresholds, no tag minimum; 178/193)
 (project output `output/jpr-paper/carryover-1.12/label_call.md`, not in this repository; all in-sample).
 
-- `-label_call_min_tags <n>` (default **175**, the 1.12 rule): the `count.tot` a call needs. At 0
+1.13 added `-label_call_min_tags <n>` (default **175**, the 1.12 rule): the `count.tot` a call needs. At 0
   (experimental) every ppm run is called:
   the isobaric, SILAC and `KR_TRYPTIC` rules above run on whatever ends there are, and when none fires the
   call is label-free. This is the harness rule except that `label_call` compares the K/R share rounded
@@ -352,7 +352,8 @@ other 163 runs its label equalled the harness's (prose-auto 0.1.3's thresholds, 
 - `low_resolution` stays a no-call and comes first at any minimum.
 - The default (175) writes the 1.12 rows byte for byte.
 
-Status: experimental; 0 is not the default. Held-out test (`acceptance/1.13`, `PREREG-item08.md`,
+Status: removed in 1.14 (the option is accepted with a warning and has no effect; the minimum is the
+constant 175 again, `Digest::kLabelTagMin`). Held-out test (`acceptance/1.13`, `PREREG-item08.md`,
 preregistered before the run; 172 public runs of the never-scored item03 held-out draw, label-free 150,
 SILAC 15, TMT 4, TMTpro/iTRAQ8 3): **FAIL**. At 0, 149/172 correct (0.866, Wilson 0.807-0.909)
 against the threshold 0.922 (always label-free 0.872 + 0.05); at 175, 83/172. The gain is the 66
@@ -408,7 +409,7 @@ Input is the `-delta_out` histogram (0.0005 Da bins, local-max grouped), built w
 | `-digest_window` | 0.008 Da | advanced |
 | `-digest_background_share` | 0.05 | advanced; below 1 |
 | `-digest_silac_min` | 50 | advanced |
-| `-label_call_min_tags` | 175 | advanced, experimental (1.13) |
+| `-label_call_min_tags` | 175 | removed in 1.14; no effect |
 | `-massgap_window`, `-massgap_window_da` | 0.02, 0.5 Da | advanced |
 | `-massgap_min_spectra`, `-massgap_min_share`, `-massgap_min_bin` | 20, 0.005, 2 | advanced |
 | `-massgap_max_mods`, `-massgap_top` | 3, 5 | advanced |
@@ -416,8 +417,8 @@ Input is the `-delta_out` histogram (0.0005 Da bins, local-max grouped), built w
 | `-digest_quality <enzyme\|auto>` | empty (off) | experimental (1.13); requires `-digest_out` |
 
 `-digest_models`, `-digest_tag_min` and `-digest_background_share` without `-digest_out`,
-`-digest_window` without `-digest_out` or `-label_out`, and `-digest_silac_min` and `-label_call_min_tags` (1.13)
-without `-label_out` are ignored with a warning.
+`-digest_window` without `-digest_out` or `-label_out`, and `-digest_silac_min` without `-label_out`
+are ignored with a warning.
 
 **`FASTAG_FULL_PRECISION=1`** (environment, not in `--help`): the tag TSV writes `nterm_mass`,
 `cterm_mass` and `evalue` in shortest round-trip form instead of 4 decimals and 6 significant digits,

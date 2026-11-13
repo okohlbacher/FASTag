@@ -87,13 +87,11 @@ set(FASTAG_CORE_SOURCES_A src/Shortlist.cpp src/SearchConfig.cpp)
 set(FASTAG_CORE_SOURCES_D src/SpeciesLookup.cpp src/SpeciesCall.cpp src/AlkylationCall.cpp src/AlkylationTags.cpp src/Sha256.cpp)
 # ---- 1.12 F: core sources ----
 set(FASTAG_CORE_SOURCES_F src/OutputGuard.cpp src/CensusIds.cpp)
-# ---- label discovery (-label_discovery_out): core sources ----
-set(FASTAG_CORE_SOURCES_LD src/LabelDiscovery.cpp)
 # ---- 1.13: core sources ----
 set(FASTAG_CORE_SOURCES_113 src/Cleavage.cpp)
 add_library(fastag_core STATIC ${FASTAG_CORE_SOURCES}
             ${FASTAG_CORE_SOURCES_E} ${FASTAG_CORE_SOURCES_A} ${FASTAG_CORE_SOURCES_D} ${FASTAG_CORE_SOURCES_F}
-            ${FASTAG_CORE_SOURCES_113} ${FASTAG_CORE_SOURCES_LD})
+            ${FASTAG_CORE_SOURCES_113})
 target_include_directories(fastag_core PUBLIC
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/src>)
@@ -294,8 +292,6 @@ if(FASTAG_BUILD_TESTS)
   set(FASTAG_UNIT_TESTS_D species_call_test digest_v2_test alkylation_test alkylation_tags_test)
   # ---- 1.12 F: unit tests ----
   set(FASTAG_UNIT_TESTS_F output_guard_test census_test census_ids_test)
-  # ---- label discovery: unit tests ----
-  set(FASTAG_UNIT_TESTS_LD label_discovery_test)
   # ---- 1.13 digqual: unit tests ----
   set(FASTAG_UNIT_TESTS_DIGQUAL digest_quality_test)
   # ---- 1.13 #18: unit tests ----
@@ -303,7 +299,7 @@ if(FASTAG_BUILD_TESTS)
   # ---- 1.13: unit tests ----
   set(FASTAG_UNIT_TESTS_113 complement_tol_test cleavage_test tmt_pseudo_test)
   foreach(t ${FASTAG_UNIT_TESTS} ${FASTAG_UNIT_TESTS_E} ${FASTAG_UNIT_TESTS_A} ${FASTAG_UNIT_TESTS_D} ${FASTAG_UNIT_TESTS_F} ${FASTAG_UNIT_TESTS_113}
-            ${FASTAG_UNIT_TESTS_B113_MSFRAGGER} ${FASTAG_UNIT_TESTS_DIGQUAL} ${FASTAG_UNIT_TESTS_LD})
+            ${FASTAG_UNIT_TESTS_B113_MSFRAGGER} ${FASTAG_UNIT_TESTS_DIGQUAL})
     add_executable(${t} test/${t}.cpp)
     target_link_libraries(${t} PRIVATE fastag_core)
     add_test(NAME ${t} COMMAND ${t})
@@ -420,16 +416,6 @@ if(FASTAG_BUILD_TESTS)
                    ${CMAKE_CURRENT_SOURCE_DIR}/data/digest
                    ${CMAKE_CURRENT_SOURCE_DIR}/data/alkylation)
   set_tests_properties(proteomes_cli_test PROPERTIES SKIP_RETURN_CODE 77)
-
-  # Independent suite for -label_discovery_out, written from
-  # doc/DESIGN-label-discovery.md only, on the synthetic fixtures of
-  # test/fixtures/make_label_discovery_fixtures.py: known labels, label-free
-  # controls, reversed tags, threads, opt-in identity and edge inputs.
-  add_test(NAME label_discovery_indep_test
-           COMMAND bash ${CMAKE_CURRENT_SOURCE_DIR}/test/label_discovery_indep_test.sh $<TARGET_FILE:FASTag>
-                   ${CMAKE_CURRENT_SOURCE_DIR}/test/fixtures/label_discovery
-                   ${CMAKE_CURRENT_SOURCE_DIR}/data/digest)
-  set_tests_properties(label_discovery_indep_test PROPERTIES SKIP_RETURN_CODE 77)
 
   # Integration: -recon_id_out in mzid, idXML and mzTab holds what -recon_out
   # holds; .mzid is empty (0 bytes) without placements; with

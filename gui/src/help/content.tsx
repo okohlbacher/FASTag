@@ -877,7 +877,7 @@ export const DIGEST: HelpPage = {
             hold.
           </p>
           <p>
-            The label call needs at least 175 counted C-terminal ends by default and a ppm tolerance. Otherwise it
+            The label call needs at least 175 counted C-terminal ends and a ppm tolerance. Otherwise it
             reports <code>no_call</code> with reason <code>few_tags</code> or <code>low_resolution</code>.
             An isobaric-label call needs the label count to reach 1% of filtered tags and 20 times its background.
             SILAC additionally needs both heavy shares to reach 20% and K/R to account for at least 80% of the
@@ -886,9 +886,7 @@ export const DIGEST: HelpPage = {
             to distinguish them.
           </p>
           <p>
-            These calls belong to <L to="param-label_out">Label report</L>. The separate experimental
-            command-line <L to="param-label_discovery_out">label discovery</L> searches for additional offsets
-            and does not change this report&apos;s call.
+            These calls belong to <L to="param-label_out">Label report</L>.
           </p>
         </>
       )
