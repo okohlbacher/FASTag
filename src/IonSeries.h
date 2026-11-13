@@ -75,10 +75,10 @@ namespace FASTag::IonSeries
   */
   enum class Activation : std::size_t
   {
-    Collisional = 0,  ///< CID, HCD, trap-type CID, PQD, low/high-energy CID, SORI
-    Electron = 1,     ///< ETD, ECD
-    Hybrid = 2,       ///< EThcD, ETciD, or electron and collisional methods together
-    Unknown = 3,      ///< no classified method or filter token
+    COLLISIONAL = 0,  ///< CID, HCD, trap-type CID, PQD, low/high-energy CID, SORI
+    ELECTRON = 1,     ///< ETD, ECD
+    HYBRID = 2,       ///< EThcD, ETciD, or electron and collisional methods together
+    UNKNOWN = 3,      ///< no classified method or filter token
   };
   /// Number of Activation values.
   inline constexpr std::size_t kActivationClasses = 4;
@@ -93,10 +93,10 @@ namespace FASTag::IonSeries
   {
     switch (a)
     {
-      case Activation::Collisional: return "collisional";
-      case Activation::Electron: return "electron";
-      case Activation::Hybrid: return "hybrid";
-      case Activation::Unknown: break;
+      case Activation::COLLISIONAL: return "collisional";
+      case Activation::ELECTRON: return "electron";
+      case Activation::HYBRID: return "hybrid";
+      case Activation::UNKNOWN: break;
     }
     return "unknown";
   }
@@ -113,10 +113,10 @@ namespace FASTag::IonSeries
       /// @return The activation class.
       Activation result() const
       {
-        if (hybrid || (electron && collisional)) return Activation::Hybrid;
-        if (electron) return Activation::Electron;
-        if (collisional) return Activation::Collisional;
-        return Activation::Unknown;
+        if (hybrid || (electron && collisional)) return Activation::HYBRID;
+        if (electron) return Activation::ELECTRON;
+        if (collisional) return Activation::COLLISIONAL;
+        return Activation::UNKNOWN;
       }
     };
   }
@@ -198,11 +198,11 @@ namespace FASTag::IonSeries
     if (!spec.getPrecursors().empty())
     {
       const Activation a = activationClass(spec.getPrecursors().front().getActivationMethods());
-      if (a != Activation::Unknown) return a;
+      if (a != Activation::UNKNOWN) return a;
     }
     if (spec.metaValueExists("filter string"))
       return activationClassFromFilter(spec.getMetaValue("filter string").toString());
-    return Activation::Unknown;
+    return Activation::UNKNOWN;
   }
 
   /**
@@ -246,7 +246,7 @@ namespace FASTag::IonSeries
     */
     bool warnUnderBy() const
     {
-      const std::size_t e = of(Activation::Electron) + of(Activation::Hybrid);
+      const std::size_t e = of(Activation::ELECTRON) + of(Activation::HYBRID);
       return e > 0 && 100 * e > total();
     }
   };
@@ -263,12 +263,12 @@ namespace FASTag::IonSeries
   inline std::string byModeWarning(const ActivationCounts& c)
   {
     const auto s = [](std::size_t v) { return std::to_string(v); };
-    return "Electron activation: " + s(c.of(Activation::Electron) + c.of(Activation::Hybrid)) + " of " + s(c.total())
+    return "Electron activation: " + s(c.of(Activation::ELECTRON) + c.of(Activation::HYBRID)) + " of " + s(c.total())
          + " MS2 spectra were activated by electron transfer or capture (ETD, ECD) or by a hybrid method (EThcD, "
            "ETciD), but tags are read as b/y ions only; electron activation yields mostly c/z ions, so tags and "
            "flanks from these spectra are unreliable. Activation per MS2 spectrum: "
-         + s(c.of(Activation::Collisional)) + " collisional, " + s(c.of(Activation::Electron)) + " electron, "
-         + s(c.of(Activation::Hybrid)) + " hybrid, " + s(c.of(Activation::Unknown)) + " unknown.";
+         + s(c.of(Activation::COLLISIONAL)) + " collisional, " + s(c.of(Activation::ELECTRON)) + " electron, "
+         + s(c.of(Activation::HYBRID)) + " hybrid, " + s(c.of(Activation::UNKNOWN)) + " unknown.";
   }
 
   // ------------------------------------------------------------ phase B
@@ -368,9 +368,9 @@ namespace FASTag::IonSeries
   */
   enum class Mode
   {
-    By,    ///< every spectrum as b/y (FASTag 1.11; the default)
-    Cz,    ///< every spectrum as c/z-dot
-    Auto,  ///< electron-activated spectra as c/z-dot, all others as b/y
+    BY,    ///< every spectrum as b/y (FASTag 1.11; the default)
+    CZ,    ///< every spectrum as c/z-dot
+    AUTO,  ///< electron-activated spectra as c/z-dot, all others as b/y
   };
   /// Default value of -ion_series.
   inline constexpr const char* kModeDefault = "by";
@@ -387,9 +387,9 @@ namespace FASTag::IonSeries
   */
   inline Mode modeFromString(std::string_view s)
   {
-    if (s == "cz") return Mode::Cz;
-    if (s == "auto") return Mode::Auto;
-    return Mode::By;
+    if (s == "cz") return Mode::CZ;
+    if (s == "auto") return Mode::AUTO;
+    return Mode::BY;
   }
 
   /**
@@ -402,9 +402,9 @@ namespace FASTag::IonSeries
   {
     switch (m)
     {
-      case Mode::Cz: return "cz";
-      case Mode::Auto: return "auto";
-      case Mode::By: break;
+      case Mode::CZ: return "cz";
+      case Mode::AUTO: return "auto";
+      case Mode::BY: break;
     }
     return "by";
   }
@@ -434,7 +434,7 @@ namespace FASTag::IonSeries
   */
   inline bool hybridTwoPass(Mode m, Activation a, bool run_column, bool hybrid_both)
   {
-    return m == Mode::Auto && hybrid_both && a == Activation::Hybrid && run_column;
+    return m == Mode::AUTO && hybrid_both && a == Activation::HYBRID && run_column;
   }
 
   /**
@@ -450,8 +450,8 @@ namespace FASTag::IonSeries
   */
   inline Series seriesFor(Mode m, Activation a)
   {
-    if (m == Mode::Cz) return Series::CZ;
-    if (m == Mode::Auto && a == Activation::Electron) return Series::CZ;
+    if (m == Mode::CZ) return Series::CZ;
+    if (m == Mode::AUTO && a == Activation::ELECTRON) return Series::CZ;
     return Series::BY;
   }
 
@@ -472,9 +472,9 @@ namespace FASTag::IonSeries
   */
   inline bool seriesColumn(Mode m, const ActivationCounts& c, bool hybrid_both = false)
   {
-    if (m == Mode::Cz) return true;
-    return m == Mode::Auto
-        && (c.of(Activation::Electron) > 0 || (hybrid_both && c.of(Activation::Hybrid) > 0));
+    if (m == Mode::CZ) return true;
+    return m == Mode::AUTO
+        && (c.of(Activation::ELECTRON) > 0 || (hybrid_both && c.of(Activation::HYBRID) > 0));
   }
 
   /**
@@ -562,11 +562,11 @@ namespace FASTag::IonSeries
     return std::string("Ion series (-ion_series ") + modeName(m) + "): " + n(s.ms2_cz)
          + " MS2 spectra tagged as c/z-dot ions, " + n(s.ms2_by) + " as b/y ions"
          // 1.13 item 10: only under auto with -ion_series_hybrid both.
-         + (m == Mode::Auto && hybrid_both ? ", " + n(s.ms2_hybrid) + " as b/y and c/z-dot ions (hybrid, two passes)"
+         + (m == Mode::AUTO && hybrid_both ? ", " + n(s.ms2_hybrid) + " as b/y and c/z-dot ions (hybrid, two passes)"
                                            : std::string())
          + " (activation: "
-         + n(c.of(Activation::Collisional)) + " collisional, " + n(c.of(Activation::Electron)) + " electron, "
-         + n(c.of(Activation::Hybrid)) + " hybrid, " + n(c.of(Activation::Unknown)) + " unknown).";
+         + n(c.of(Activation::COLLISIONAL)) + " collisional, " + n(c.of(Activation::ELECTRON)) + " electron, "
+         + n(c.of(Activation::HYBRID)) + " hybrid, " + n(c.of(Activation::UNKNOWN)) + " unknown).";
   }
 
   /**
@@ -579,7 +579,7 @@ namespace FASTag::IonSeries
   */
   inline bool warnHybridUnderAuto(const ActivationCounts& c)
   {
-    const std::size_t h = c.of(Activation::Hybrid);
+    const std::size_t h = c.of(Activation::HYBRID);
     return h > 0 && 100 * h > c.total();
   }
 
@@ -591,7 +591,7 @@ namespace FASTag::IonSeries
   */
   inline std::string hybridAutoWarning(const ActivationCounts& c)
   {
-    return "Hybrid activation: " + std::to_string(c.of(Activation::Hybrid)) + " of " + std::to_string(c.total())
+    return "Hybrid activation: " + std::to_string(c.of(Activation::HYBRID)) + " of " + std::to_string(c.total())
          + " MS2 spectra were activated by a hybrid method (EThcD, ETciD) and were tagged as b/y ions under "
            "-ion_series auto; reading them as b/y and c/z ions together is not supported yet.";
   }
@@ -607,7 +607,7 @@ namespace FASTag::IonSeries
   */
   inline bool warnCollisionalUnderCz(const ActivationCounts& c)
   {
-    const std::size_t k = c.of(Activation::Collisional);
+    const std::size_t k = c.of(Activation::COLLISIONAL);
     return k > 0 && 100 * k > c.total();
   }
 
@@ -619,7 +619,7 @@ namespace FASTag::IonSeries
   */
   inline std::string collisionalCzWarning(const ActivationCounts& c)
   {
-    return "Collisional activation: " + std::to_string(c.of(Activation::Collisional)) + " of "
+    return "Collisional activation: " + std::to_string(c.of(Activation::COLLISIONAL)) + " of "
          + std::to_string(c.total())
          + " MS2 spectra were activated by collision (CID, HCD), which yields b/y ions, but -ion_series cz reads "
            "every spectrum as c/z-dot ions; use -ion_series auto or by for them.";

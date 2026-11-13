@@ -302,66 +302,66 @@ int main(int argc, char** argv)
   using A = IS::Activation;
 
   // ---- classes of the PSI-MS dissociation methods the readers map ----
-  check(cls({AM::CID}) == A::Collisional, "CID (MS:1000133) is collisional");
-  check(cls({AM::HCD}) == A::Collisional, "HCD (MS:1000422) is collisional");
-  check(cls({AM::TRAP}) == A::Collisional, "trap-type CID (MS:1002472) is collisional");
-  check(cls({AM::PQD}) == A::Collisional, "PQD (MS:1000599) is collisional");
-  check(cls({AM::LCID}) == A::Collisional && cls({AM::HCID}) == A::Collisional && cls({AM::SORI}) == A::Collisional,
+  check(cls({AM::CID}) == A::COLLISIONAL, "CID (MS:1000133) is collisional");
+  check(cls({AM::HCD}) == A::COLLISIONAL, "HCD (MS:1000422) is collisional");
+  check(cls({AM::TRAP}) == A::COLLISIONAL, "trap-type CID (MS:1002472) is collisional");
+  check(cls({AM::PQD}) == A::COLLISIONAL, "PQD (MS:1000599) is collisional");
+  check(cls({AM::LCID}) == A::COLLISIONAL && cls({AM::HCID}) == A::COLLISIONAL && cls({AM::SORI}) == A::COLLISIONAL,
         "low/high-energy CID and SORI are collisional");
-  check(cls({AM::ETD}) == A::Electron, "ETD (MS:1000598) is electron");
-  check(cls({AM::ECD}) == A::Electron, "ECD (MS:1000250) is electron");
-  check(cls({AM::EThcD}) == A::Hybrid, "EThcD (MS:1002631) is hybrid");
-  check(cls({AM::ETciD}) == A::Hybrid, "ETciD (MS:1003182) is hybrid");
+  check(cls({AM::ETD}) == A::ELECTRON, "ETD (MS:1000598) is electron");
+  check(cls({AM::ECD}) == A::ELECTRON, "ECD (MS:1000250) is electron");
+  check(cls({AM::EThcD}) == A::HYBRID, "EThcD (MS:1002631) is hybrid");
+  check(cls({AM::ETciD}) == A::HYBRID, "ETciD (MS:1003182) is hybrid");
   // ETD with a supplemental term: both readers give {ETD, EThcD} or {ETD, ETciD}.
-  check(cls({AM::ETD, AM::EThcD}) == A::Hybrid, "ETD + supplemental beam-type CID is hybrid");
-  check(cls({AM::ETD, AM::ETciD}) == A::Hybrid, "ETD + supplemental CID is hybrid");
-  check(cls({AM::ETD, AM::HCD}) == A::Hybrid, "ETD and HCD listed together is hybrid");
-  check(cls({AM::ECD, AM::CID}) == A::Hybrid, "ECD and CID listed together is hybrid");
-  check(cls({}) == A::Unknown, "no method is unknown");
-  check(cls({AM::PD}) == A::Unknown && cls({AM::BIRD}) == A::Unknown && cls({AM::IMD}) == A::Unknown
-          && cls({AM::PSD}) == A::Unknown && cls({AM::SID}) == A::Unknown && cls({AM::LIFT}) == A::Unknown,
+  check(cls({AM::ETD, AM::EThcD}) == A::HYBRID, "ETD + supplemental beam-type CID is hybrid");
+  check(cls({AM::ETD, AM::ETciD}) == A::HYBRID, "ETD + supplemental CID is hybrid");
+  check(cls({AM::ETD, AM::HCD}) == A::HYBRID, "ETD and HCD listed together is hybrid");
+  check(cls({AM::ECD, AM::CID}) == A::HYBRID, "ECD and CID listed together is hybrid");
+  check(cls({}) == A::UNKNOWN, "no method is unknown");
+  check(cls({AM::PD}) == A::UNKNOWN && cls({AM::BIRD}) == A::UNKNOWN && cls({AM::IMD}) == A::UNKNOWN
+          && cls({AM::PSD}) == A::UNKNOWN && cls({AM::SID}) == A::UNKNOWN && cls({AM::LIFT}) == A::UNKNOWN,
         "photo/IR/surface/post-source methods are unknown, not collisional");
-  check(cls({AM::HCD, AM::PD}) == A::Collisional, "an unclassified method next to HCD does not hide it");
+  check(cls({AM::HCD, AM::PD}) == A::COLLISIONAL, "an unclassified method next to HCD does not hide it");
 
   // ---- the filter-string fallback (Thermo @<method><energy> tokens) ----
   using IS::activationClassFromFilter;
-  check(activationClassFromFilter("FTMS + p NSI d Full ms2 652.83@hcd28.00 [110.00-1355.00]") == A::Collisional,
+  check(activationClassFromFilter("FTMS + p NSI d Full ms2 652.83@hcd28.00 [110.00-1355.00]") == A::COLLISIONAL,
         "filter @hcd is collisional");
-  check(activationClassFromFilter("ITMS + c NSI d w Full ms2 617.32@cid35.00 [155.00-1245.00]") == A::Collisional,
+  check(activationClassFromFilter("ITMS + c NSI d w Full ms2 617.32@cid35.00 [155.00-1245.00]") == A::COLLISIONAL,
         "filter @cid is collisional");
-  check(activationClassFromFilter("ITMS + c NSI d Full ms2 700.12@pqd27.00 [50.00-2000.00]") == A::Collisional,
+  check(activationClassFromFilter("ITMS + c NSI d Full ms2 700.12@pqd27.00 [50.00-2000.00]") == A::COLLISIONAL,
         "filter @pqd is collisional");
-  check(activationClassFromFilter("ITMS + c NSI d Full ms2 652.83@etd66.67 [50.00-1320.00]") == A::Electron,
+  check(activationClassFromFilter("ITMS + c NSI d Full ms2 652.83@etd66.67 [50.00-1320.00]") == A::ELECTRON,
         "filter @etd is electron");
-  check(activationClassFromFilter("FTMS + p NSI d Full ms2 900.00@ecd [100.00-2000.00]") == A::Electron,
+  check(activationClassFromFilter("FTMS + p NSI d Full ms2 900.00@ecd [100.00-2000.00]") == A::ELECTRON,
         "filter @ecd without an energy is electron");
   check(activationClassFromFilter("FTMS + p NSI d sa Full ms2 865.94@etd50.00@hcd25.00 [120.00-2000.00]")
-          == A::Hybrid,
+          == A::HYBRID,
         "filter @etd..@hcd.. (EThcD) is hybrid");
   check(activationClassFromFilter("ITMS + c NSI d sa Full ms2 865.94@etd50.00@cid20.00 [120.00-2000.00]")
-          == A::Hybrid,
+          == A::HYBRID,
         "filter @etd..@cid.. (ETciD) is hybrid");
-  check(activationClassFromFilter("FTMS + p NSI d Full ms2 652.83@ETD66.67 [50.00-1320.00]") == A::Electron,
+  check(activationClassFromFilter("FTMS + p NSI d Full ms2 652.83@ETD66.67 [50.00-1320.00]") == A::ELECTRON,
         "filter tokens are case-insensitive");
-  check(activationClassFromFilter("FTMS + p NSI d Full ms2 652.83@uvpd25.00 [50.00-1320.00]") == A::Unknown,
+  check(activationClassFromFilter("FTMS + p NSI d Full ms2 652.83@uvpd25.00 [50.00-1320.00]") == A::UNKNOWN,
         "filter @uvpd is unknown");
-  check(activationClassFromFilter("FTMS + p NSI Full ms [350.00-2000.00]") == A::Unknown, "MS1 filter is unknown");
-  check(activationClassFromFilter("") == A::Unknown, "empty filter is unknown");
-  check(activationClassFromFilter("@") == A::Unknown && activationClassFromFilter("x@") == A::Unknown,
+  check(activationClassFromFilter("FTMS + p NSI Full ms [350.00-2000.00]") == A::UNKNOWN, "MS1 filter is unknown");
+  check(activationClassFromFilter("") == A::UNKNOWN, "empty filter is unknown");
+  check(activationClassFromFilter("@") == A::UNKNOWN && activationClassFromFilter("x@") == A::UNKNOWN,
         "a bare @ is unknown");
-  check(activationClassFromFilter("ms2 500.00@etd.5@hcd") == A::Hybrid, "tokens end at the first non-letter");
-  check(activationClassFromFilter("ms2 500.00@etdx25") == A::Unknown, "a token is the whole letter run after @");
-  check(activationClassFromFilter("ms2 500.00@etdhcd25") == A::Unknown, "an unlisted token is not split");
+  check(activationClassFromFilter("ms2 500.00@etd.5@hcd") == A::HYBRID, "tokens end at the first non-letter");
+  check(activationClassFromFilter("ms2 500.00@etdx25") == A::UNKNOWN, "a token is the whole letter run after @");
+  check(activationClassFromFilter("ms2 500.00@etdhcd25") == A::UNKNOWN, "an unlisted token is not split");
 
   // ---- one spectrum: the precursor's methods first, then the filter ----
-  check(IS::activationClass(ms2({AM::CID})) == A::Collisional, "spectrum with CID");
-  check(IS::activationClass(ms2({AM::ETD}, "ITMS + c NSI d Full ms2 617.32@cid35.00 [1-2]")) == A::Electron,
+  check(IS::activationClass(ms2({AM::CID})) == A::COLLISIONAL, "spectrum with CID");
+  check(IS::activationClass(ms2({AM::ETD}, "ITMS + c NSI d Full ms2 617.32@cid35.00 [1-2]")) == A::ELECTRON,
         "the precursor's methods win over the filter string");
-  check(IS::activationClass(ms2({}, "ITMS + c NSI d Full ms2 617.32@etd35.00 [1-2]")) == A::Electron,
+  check(IS::activationClass(ms2({}, "ITMS + c NSI d Full ms2 617.32@etd35.00 [1-2]")) == A::ELECTRON,
         "no methods: the filter string decides");
-  check(IS::activationClass(ms2({AM::PD}, "ITMS + c NSI d Full ms2 617.32@etd35.00 [1-2]")) == A::Electron,
+  check(IS::activationClass(ms2({AM::PD}, "ITMS + c NSI d Full ms2 617.32@etd35.00 [1-2]")) == A::ELECTRON,
         "only unclassified methods: the filter string decides");
-  check(IS::activationClass(ms2({})) == A::Unknown, "no methods and no filter string is unknown");
+  check(IS::activationClass(ms2({})) == A::UNKNOWN, "no methods and no filter string is unknown");
   {
     MSSpectrum s = ms2({AM::CID});
     Precursor second;
@@ -369,61 +369,61 @@ int main(int argc, char** argv)
     auto precs = s.getPrecursors();
     precs.push_back(second);
     s.setPrecursors(precs);
-    check(IS::activationClass(s) == A::Collisional, "the first precursor, as tagging uses it");
+    check(IS::activationClass(s) == A::COLLISIONAL, "the first precursor, as tagging uses it");
   }
   {
     MSSpectrum s;
     s.setMSLevel(2);
     s.setMetaValue("filter string", "ITMS + c NSI d Full ms2 617.32@etd35.00 [1-2]");
-    check(IS::activationClass(s) == A::Electron, "no precursor: the filter string decides");
+    check(IS::activationClass(s) == A::ELECTRON, "no precursor: the filter string decides");
   }
 
   // ---- names ----
-  check(std::string(IS::activationName(A::Collisional)) == "collisional" &&
-          std::string(IS::activationName(A::Electron)) == "electron" &&
-          std::string(IS::activationName(A::Hybrid)) == "hybrid" &&
-          std::string(IS::activationName(A::Unknown)) == "unknown",
+  check(std::string(IS::activationName(A::COLLISIONAL)) == "collisional" &&
+          std::string(IS::activationName(A::ELECTRON)) == "electron" &&
+          std::string(IS::activationName(A::HYBRID)) == "hybrid" &&
+          std::string(IS::activationName(A::UNKNOWN)) == "unknown",
         "class names");
 
   // ---- counts and the threshold: more than 1% electron or hybrid ----
   {
     IS::ActivationCounts c;
     check(c.total() == 0 && !c.warnUnderBy(), "no MS2, no warning");
-    for (int i = 0; i < 99; ++i) c.add(A::Collisional);
-    c.add(A::Electron);
-    check(c.total() == 100 && c.of(A::Electron) == 1 && c.of(A::Collisional) == 99, "counts per class");
+    for (int i = 0; i < 99; ++i) c.add(A::COLLISIONAL);
+    c.add(A::ELECTRON);
+    check(c.total() == 100 && c.of(A::ELECTRON) == 1 && c.of(A::COLLISIONAL) == 99, "counts per class");
     check(!c.warnUnderBy(), "exactly 1% electron does not warn");
-    c.add(A::Collisional);
+    c.add(A::COLLISIONAL);
     check(!c.warnUnderBy(), "1 of 101 does not warn");
-    c.add(A::Hybrid);
+    c.add(A::HYBRID);
     check(c.warnUnderBy(), "2 of 102 (electron + hybrid) warns");
 
     IS::ActivationCounts u;
-    for (int i = 0; i < 1000; ++i) u.add(A::Unknown);
+    for (int i = 0; i < 1000; ++i) u.add(A::UNKNOWN);
     check(!u.warnUnderBy(), "an all-unknown run (MGF, mzPeak) does not warn");
 
     IS::ActivationCounts h;
-    h.add(A::Hybrid);
+    h.add(A::HYBRID);
     check(h.warnUnderBy(), "a single hybrid MS2 of 1 warns");
 
     // Merging is a plain sum, so thread order cannot change it.
     IS::ActivationCounts a, b;
-    a.add(A::Electron);
-    a.add(A::Collisional);
-    b.add(A::Unknown);
-    b.add(A::Hybrid);
-    b.add(A::Electron);
+    a.add(A::ELECTRON);
+    a.add(A::COLLISIONAL);
+    b.add(A::UNKNOWN);
+    b.add(A::HYBRID);
+    b.add(A::ELECTRON);
     IS::ActivationCounts ab = a, ba = b;
     ab.merge(b);
     ba.merge(a);
-    check(ab.n == ba.n && ab.total() == 5 && ab.of(A::Electron) == 2, "merge is a commutative sum");
+    check(ab.n == ba.n && ab.total() == 5 && ab.of(A::ELECTRON) == 2, "merge is a commutative sum");
   }
 
   // ---- the warning line ----
   {
     IS::ActivationCounts c;
-    for (int i = 0; i < 3491; ++i) c.add(A::Collisional);
-    for (int i = 0; i < 3492; ++i) c.add(A::Electron);
+    for (int i = 0; i < 3491; ++i) c.add(A::COLLISIONAL);
+    for (int i = 0; i < 3492; ++i) c.add(A::ELECTRON);
     const std::string w = IS::byModeWarning(c);
     check(w.find("ETD") != std::string::npos, "the warning names ETD");
     check(w.find("3492 of 6983 MS2 spectra") != std::string::npos, "the warning gives electron of total");
@@ -432,7 +432,7 @@ int main(int argc, char** argv)
     check(w.find('\n') == std::string::npos, "the warning is one line");
     check(!std::regex_search(w, kGateSummary), "the warning cannot match the gate's summary-line pattern");
     IS::ActivationCounts h;
-    h.add(A::Hybrid);
+    h.add(A::HYBRID);
     const std::string wh = IS::byModeWarning(h);
     check(wh.find("EThcD") != std::string::npos, "the warning names EThcD for hybrid spectra");
     check(!std::regex_search(wh, kGateSummary), "the hybrid warning cannot match the gate pattern");
@@ -441,12 +441,12 @@ int main(int argc, char** argv)
   // ---- the E accumulator of the tagging loop (src/ClusterAcc.h) ----
   {
     FASTag::ClusterAcc::ClusterThread t1, t2, run;
-    t1.e.activation.add(A::Electron);
-    t2.e.activation.add(A::Collisional);
-    t2.e.activation.add(A::Electron);
+    t1.e.activation.add(A::ELECTRON);
+    t2.e.activation.add(A::COLLISIONAL);
+    t2.e.activation.add(A::ELECTRON);
     run.merge(t1);
     run.merge(t2);
-    check(run.e.activation.total() == 3 && run.e.activation.of(A::Electron) == 2,
+    check(run.e.activation.total() == 3 && run.e.activation.of(A::ELECTRON) == 2,
           "ClusterThread::merge sums the activation counts");
   }
 
@@ -496,38 +496,38 @@ int main(int argc, char** argv)
 
   // ---- modes ----
   {
-    check(IS::modeFromString("by") == IS::Mode::By && IS::modeFromString("cz") == IS::Mode::Cz &&
-            IS::modeFromString("auto") == IS::Mode::Auto,
+    check(IS::modeFromString("by") == IS::Mode::BY && IS::modeFromString("cz") == IS::Mode::CZ &&
+            IS::modeFromString("auto") == IS::Mode::AUTO,
           "mode names");
     check(std::string(IS::kModeDefault) == "by", "the default mode is by");
-    check(std::string(IS::modeName(IS::Mode::Auto)) == "auto" && std::string(IS::seriesName(IS::Series::CZ)) == "cz" &&
+    check(std::string(IS::modeName(IS::Mode::AUTO)) == "auto" && std::string(IS::seriesName(IS::Series::CZ)) == "cz" &&
             std::string(IS::seriesName(IS::Series::BY)) == "by",
           "names round-trip");
-    for (A a : {A::Collisional, A::Electron, A::Hybrid, A::Unknown})
+    for (A a : {A::COLLISIONAL, A::ELECTRON, A::HYBRID, A::UNKNOWN})
     {
-      check(IS::seriesFor(IS::Mode::By, a) == IS::Series::BY, "by reads every class as b/y");
-      check(IS::seriesFor(IS::Mode::Cz, a) == IS::Series::CZ, "cz reads every class as c/z");
+      check(IS::seriesFor(IS::Mode::BY, a) == IS::Series::BY, "by reads every class as b/y");
+      check(IS::seriesFor(IS::Mode::CZ, a) == IS::Series::CZ, "cz reads every class as c/z");
     }
-    check(IS::seriesFor(IS::Mode::Auto, A::Electron) == IS::Series::CZ, "auto reads electron as c/z");
-    check(IS::seriesFor(IS::Mode::Auto, A::Hybrid) == IS::Series::BY, "auto reads hybrid as b/y (deferred)");
-    check(IS::seriesFor(IS::Mode::Auto, A::Collisional) == IS::Series::BY &&
-            IS::seriesFor(IS::Mode::Auto, A::Unknown) == IS::Series::BY,
+    check(IS::seriesFor(IS::Mode::AUTO, A::ELECTRON) == IS::Series::CZ, "auto reads electron as c/z");
+    check(IS::seriesFor(IS::Mode::AUTO, A::HYBRID) == IS::Series::BY, "auto reads hybrid as b/y (deferred)");
+    check(IS::seriesFor(IS::Mode::AUTO, A::COLLISIONAL) == IS::Series::BY &&
+            IS::seriesFor(IS::Mode::AUTO, A::UNKNOWN) == IS::Series::BY,
           "auto reads collisional and unknown as b/y");
     IS::ActivationCounts col, el;
-    col.add(A::Collisional);
-    col.add(A::Hybrid);
-    el.add(A::Electron);
-    check(!IS::seriesColumn(IS::Mode::By, el), "by never writes the ion_series column");
-    check(IS::seriesColumn(IS::Mode::Cz, col), "cz always writes it");
-    check(!IS::seriesColumn(IS::Mode::Auto, col), "auto on a run without electron activation writes what by writes");
-    check(IS::seriesColumn(IS::Mode::Auto, el), "auto with electron activation writes the column");
+    col.add(A::COLLISIONAL);
+    col.add(A::HYBRID);
+    el.add(A::ELECTRON);
+    check(!IS::seriesColumn(IS::Mode::BY, el), "by never writes the ion_series column");
+    check(IS::seriesColumn(IS::Mode::CZ, col), "cz always writes it");
+    check(!IS::seriesColumn(IS::Mode::AUTO, col), "auto on a run without electron activation writes what by writes");
+    check(IS::seriesColumn(IS::Mode::AUTO, el), "auto with electron activation writes the column");
     // One rule for the column and the per-spectrum series: auto reads the
     // activation of mzML only, and a c/z row exists only with the column.
     check(IS::autoReadsActivation(false, false) && !IS::autoReadsActivation(true, false) &&
             !IS::autoReadsActivation(false, true),
           "auto reads activation from mzML, not from mzPeak or MGF");
-    for (A a : {A::Collisional, A::Electron, A::Hybrid, A::Unknown})
-      for (IS::Mode m : {IS::Mode::By, IS::Mode::Cz, IS::Mode::Auto})
+    for (A a : {A::COLLISIONAL, A::ELECTRON, A::HYBRID, A::UNKNOWN})
+      for (IS::Mode m : {IS::Mode::BY, IS::Mode::CZ, IS::Mode::AUTO})
       {
         check(IS::seriesInRun(m, a, true) == IS::seriesFor(m, a), "with the column the run reads seriesFor()");
         check(IS::seriesInRun(m, a, false) == IS::Series::BY, "without the column every spectrum is read as b/y");
@@ -538,8 +538,8 @@ int main(int argc, char** argv)
     for (int in = 0; in < 3; ++in)
     {
       const bool mzpeak = in == 1, mgf = in == 2;
-      const bool column = IS::autoReadsActivation(mzpeak, mgf) && IS::seriesColumn(IS::Mode::Auto, el);
-      const bool cz_row = IS::seriesInRun(IS::Mode::Auto, A::Electron, column) == IS::Series::CZ;
+      const bool column = IS::autoReadsActivation(mzpeak, mgf) && IS::seriesColumn(IS::Mode::AUTO, el);
+      const bool cz_row = IS::seriesInRun(IS::Mode::AUTO, A::ELECTRON, column) == IS::Series::CZ;
       check(cz_row == column, "auto: a c/z row only with the ion_series column");
       check(cz_row == (in == 0), "auto: ETD is read as c/z from mzML only");
     }
@@ -549,23 +549,23 @@ int main(int argc, char** argv)
           "the auto no-column warning");
     // Warnings and the INFO line: one line each, never the gate pattern.
     IS::ActivationCounts h;
-    for (int i = 0; i < 99; ++i) h.add(A::Electron);
-    h.add(A::Hybrid);
+    for (int i = 0; i < 99; ++i) h.add(A::ELECTRON);
+    h.add(A::HYBRID);
     check(!IS::warnHybridUnderAuto(h), "1 hybrid of 100 (exactly 1%) does not warn under auto");
-    h.add(A::Hybrid);
+    h.add(A::HYBRID);
     check(IS::warnHybridUnderAuto(h), "2 hybrid of 101 warns under auto");
     const std::string hw = IS::hybridAutoWarning(h);
     check(hw.find("EThcD") != std::string::npos && hw.find("2 of 101") != std::string::npos &&
             hw.find('\n') == std::string::npos && !std::regex_search(hw, kGateSummary),
           "the hybrid warning names EThcD and the counts on one line");
     IS::ActivationCounts k;
-    k.add(A::Collisional);
-    k.add(A::Electron);
+    k.add(A::COLLISIONAL);
+    k.add(A::ELECTRON);
     check(IS::warnCollisionalUnderCz(k) && !IS::warnCollisionalUnderCz(el), "cz warns on collisional spectra only");
     IS::SeriesCounts sc;
     sc.ms2_cz = 3;
     sc.ms2_by = 4;
-    const std::string info = IS::seriesInfo(IS::Mode::Auto, sc, h);
+    const std::string info = IS::seriesInfo(IS::Mode::AUTO, sc, h);
     check(info.rfind("Ion series (-ion_series auto): 3 MS2 spectra tagged as c/z-dot ions, 4 as b/y ions", 0) == 0 &&
             !std::regex_search(info, kGateSummary) && info.find('\n') == std::string::npos,
           "the INFO line");

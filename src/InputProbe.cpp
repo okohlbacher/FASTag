@@ -715,10 +715,10 @@ namespace FASTag::Probe
 
     j += JsonObject("activation")
              .count("of", act.total())
-             .count("collisional", act.of(IS::Activation::Collisional))
-             .count("electron", act.of(IS::Activation::Electron))
-             .count("hybrid", act.of(IS::Activation::Hybrid))
-             .count("unknown", act.of(IS::Activation::Unknown))
+             .count("collisional", act.of(IS::Activation::COLLISIONAL))
+             .count("electron", act.of(IS::Activation::ELECTRON))
+             .count("hybrid", act.of(IS::Activation::HYBRID))
+             .count("unknown", act.of(IS::Activation::UNKNOWN))
              .line();
 
     j += JsonObject("index").str("state", index_state).line();
@@ -872,8 +872,8 @@ namespace FASTag::Probe
     Param p = opt.param;
     const IS::Activation act = IS::activationClass(spec);
     const bool reads_act = IS::autoReadsActivation(kind == Kind::MZPEAK, kind == Kind::MGF);
-    const bool run_column = opt.ion_mode == IS::Mode::Cz
-                            || (opt.ion_mode == IS::Mode::Auto && reads_act && act == IS::Activation::Electron);
+    const bool run_column = opt.ion_mode == IS::Mode::CZ
+                            || (opt.ion_mode == IS::Mode::AUTO && reads_act && act == IS::Activation::ELECTRON);
     const IS::Series sr = IS::seriesInRun(opt.ion_mode, act, run_column);
     if (spec.getMSLevel() == 2 && sr != IS::Series::BY) p.ion_pair = IS::ionPair(sr);
     out.jsonl = spectrumRecord(spec, index, pick_result > 0, p);

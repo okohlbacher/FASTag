@@ -853,7 +853,7 @@ int main(int argc, char** argv)
       ++ms2n;
       const IS::Activation ag = IS::activationClass(g), aw = IS::activationClass(w);
       if (ag != aw) ++bad;
-      if (ag == IS::Activation::Electron) ++electron;
+      if (ag == IS::Activation::ELECTRON) ++electron;
     }
     check(ms2n > 0 && bad == 0 && electron == ms2n,
           "etd_like: the fast activation class equals OnDisc's, all electron (" + std::to_string(electron) + " of " +
@@ -885,8 +885,8 @@ int main(int argc, char** argv)
     try { MzMLFile().load(pgf, want); }
     catch (const Exception::BaseException& e) { check(false, std::string("etd_paramgroup: OpenMS loads it (") + e.what() + ")"); }
     FASTag::IndexedMzMLReader r(pgf);
-    const IS::Activation expect[6] = {IS::Activation::Unknown, IS::Activation::Electron, IS::Activation::Hybrid,
-                                      IS::Activation::Electron, IS::Activation::Collisional, IS::Activation::Hybrid};
+    const IS::Activation expect[6] = {IS::Activation::UNKNOWN, IS::Activation::ELECTRON, IS::Activation::HYBRID,
+                                      IS::Activation::ELECTRON, IS::Activation::COLLISIONAL, IS::Activation::HYBRID};
     check(r.ok() && r.getNrSpectra() == 6 && want.size() == 6, "etd_paramgroup: 6 spectra on both sides");
     for (Size i = 0; r.ok() && i < 6 && i < want.size(); ++i)
     {

@@ -2111,8 +2111,8 @@ protected:
     // 1.13 item 10: auto with -ion_series_hybrid both reads a hybrid spectrum
     // in two passes, with the b/y and the c/z-dot sets (no third set).
     const bool hybrid_both =
-        ion_mode == FASTag::IonSeries::Mode::Auto && getStringOption_("ion_series_hybrid") == "both";
-    const bool cz_tables = ion_mode == FASTag::IonSeries::Mode::Cz || ion_mode == FASTag::IonSeries::Mode::Auto;
+        ion_mode == FASTag::IonSeries::Mode::AUTO && getStringOption_("ion_series_hybrid") == "both";
+    const bool cz_tables = ion_mode == FASTag::IonSeries::Mode::CZ || ion_mode == FASTag::IonSeries::Mode::AUTO;
     std::vector<FASTag::Param> len_params_cz;
     if (cz_tables)
     {
@@ -3529,14 +3529,14 @@ protected:
     // output opens, that stops at the first one -- so a collisional run
     // under auto writes exactly what by writes. MGF and mzPeak carry no
     // activation (IonSeries.h): auto reads them as b/y, without the column.
-    bool ion_column = ion_mode == FASTag::IonSeries::Mode::Cz;
-    if (ion_mode == FASTag::IonSeries::Mode::Auto && FASTag::IonSeries::autoReadsActivation(mzpeak_in, mgf_in))
+    bool ion_column = ion_mode == FASTag::IonSeries::Mode::CZ;
+    if (ion_mode == FASTag::IonSeries::Mode::AUTO && FASTag::IonSeries::autoReadsActivation(mzpeak_in, mgf_in))
     {
       std::shared_ptr<PeakMap> od_meta;
       if (!fastmz && streaming) od_meta = ondisc->getMetaData();
       FASTag::IonSeries::ActivationCounts scan;
-      for (size_t i = 0; i < n_total && scan.of(FASTag::IonSeries::Activation::Electron) == 0
-                         && !(hybrid_both && scan.of(FASTag::IonSeries::Activation::Hybrid) > 0); ++i)
+      for (size_t i = 0; i < n_total && scan.of(FASTag::IonSeries::Activation::ELECTRON) == 0
+                         && !(hybrid_both && scan.of(FASTag::IonSeries::Activation::HYBRID) > 0); ++i)
       {
         MSSpectrum head;
         // Activation and filter string only (1.12.2): all activationClass() reads.
@@ -5412,10 +5412,10 @@ protected:
       // #15 phase A: activation counts (RunMeta Versioned rows only).
       using FASTag::IonSeries::Activation;
       const auto& act = run_acc.e.activation;
-      run_meta.activation_collisional = act.of(Activation::Collisional);
-      run_meta.activation_electron = act.of(Activation::Electron);
-      run_meta.activation_hybrid = act.of(Activation::Hybrid);
-      run_meta.activation_unknown = act.of(Activation::Unknown);
+      run_meta.activation_collisional = act.of(Activation::COLLISIONAL);
+      run_meta.activation_electron = act.of(Activation::ELECTRON);
+      run_meta.activation_hybrid = act.of(Activation::HYBRID);
+      run_meta.activation_unknown = act.of(Activation::UNKNOWN);
       // #6: where the selected hypotheses' charges came from (RunMeta
       // Versioned rows; zero at the defaults, where no hypothesis step runs).
       using FASTag::Hyp::ChargeSource;
@@ -6963,7 +6963,7 @@ protected:
     {
       namespace IS = FASTag::IonSeries;
       const IS::ActivationCounts& act = run_acc.e.activation;
-      if (ion_mode == IS::Mode::By)
+      if (ion_mode == IS::Mode::BY)
       {
         if (act.warnUnderBy()) OPENMS_LOG_WARN << IS::byModeWarning(act) << std::endl;
       }
@@ -6972,9 +6972,9 @@ protected:
         std::cerr << IS::seriesInfo(ion_mode, run_acc.e.series, act, hybrid_both) << std::endl;
         // 1.13 item 10: under -ion_series_hybrid both the hybrid spectra are
         // read as both series, so the 1.12 hybrid WARN does not apply.
-        if (ion_mode == IS::Mode::Auto && !hybrid_both && IS::warnHybridUnderAuto(act))
+        if (ion_mode == IS::Mode::AUTO && !hybrid_both && IS::warnHybridUnderAuto(act))
           OPENMS_LOG_WARN << IS::hybridAutoWarning(act) << std::endl;
-        if (ion_mode == IS::Mode::Cz && IS::warnCollisionalUnderCz(act))
+        if (ion_mode == IS::Mode::CZ && IS::warnCollisionalUnderCz(act))
           OPENMS_LOG_WARN << IS::collisionalCzWarning(act) << std::endl;
       }
       if (species_cz_excluded > 0) OPENMS_LOG_WARN << IS::speciesExcludedWarning(species_cz_excluded) << std::endl;

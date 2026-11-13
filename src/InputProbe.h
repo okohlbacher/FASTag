@@ -296,7 +296,7 @@ namespace FASTag::Probe
     /// pair the tagging loop reads it as (IonSeries::seriesInRun), so under
     /// cz, or auto on an electron-activated mzML spectrum, with the c/z-dot
     /// pair and its ETD precursor-window filter.
-    IonSeries::Mode ion_mode = IonSeries::Mode::By;
+    IonSeries::Mode ion_mode = IonSeries::Mode::BY;
   };
 
   /**

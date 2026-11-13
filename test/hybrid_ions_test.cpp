@@ -260,26 +260,26 @@ int main(int argc, char** argv)
     check(std::string(IS::kHybridDefault) == "by" && std::string(IS::kHybridValues) == "by,both",
           "-ion_series_hybrid values; default by");
     check(IS::kHybridPasses == 2.0, "two passes, factor 2");
-    for (IS::Mode m : {IS::Mode::By, IS::Mode::Cz, IS::Mode::Auto})
-      for (A a : {A::Collisional, A::Electron, A::Hybrid, A::Unknown})
+    for (IS::Mode m : {IS::Mode::BY, IS::Mode::CZ, IS::Mode::AUTO})
+      for (A a : {A::COLLISIONAL, A::ELECTRON, A::HYBRID, A::UNKNOWN})
         for (bool col : {false, true})
           for (bool hb : {false, true})
-            check(IS::hybridTwoPass(m, a, col, hb) == (m == IS::Mode::Auto && a == A::Hybrid && col && hb),
+            check(IS::hybridTwoPass(m, a, col, hb) == (m == IS::Mode::AUTO && a == A::HYBRID && col && hb),
                   std::string("hybridTwoPass ") + IS::modeName(m) + " " + IS::activationName(a) + (col ? " col" : "") +
                       (hb ? " both" : ""));
     // 1.12's per-spectrum rule is untouched: hybrid stays b/y in seriesFor.
-    check(IS::seriesFor(IS::Mode::Auto, A::Hybrid) == IS::Series::BY, "seriesFor(auto, hybrid) stays b/y");
+    check(IS::seriesFor(IS::Mode::AUTO, A::HYBRID) == IS::Series::BY, "seriesFor(auto, hybrid) stays b/y");
     IS::ActivationCounts hyb, col, ele;
-    hyb.add(A::Hybrid);
-    col.add(A::Collisional);
-    ele.add(A::Electron);
-    check(!IS::seriesColumn(IS::Mode::Auto, hyb), "auto on a hybrid run: no column (1.12)");
-    check(!IS::seriesColumn(IS::Mode::Auto, hyb, false), "hybrid_both off: no column");
-    check(IS::seriesColumn(IS::Mode::Auto, hyb, true), "auto + both on a hybrid run: the column");
-    check(!IS::seriesColumn(IS::Mode::Auto, col, true), "auto + both on a collisional run: no column");
-    check(IS::seriesColumn(IS::Mode::Auto, ele, true) == IS::seriesColumn(IS::Mode::Auto, ele),
+    hyb.add(A::HYBRID);
+    col.add(A::COLLISIONAL);
+    ele.add(A::ELECTRON);
+    check(!IS::seriesColumn(IS::Mode::AUTO, hyb), "auto on a hybrid run: no column (1.12)");
+    check(!IS::seriesColumn(IS::Mode::AUTO, hyb, false), "hybrid_both off: no column");
+    check(IS::seriesColumn(IS::Mode::AUTO, hyb, true), "auto + both on a hybrid run: the column");
+    check(!IS::seriesColumn(IS::Mode::AUTO, col, true), "auto + both on a collisional run: no column");
+    check(IS::seriesColumn(IS::Mode::AUTO, ele, true) == IS::seriesColumn(IS::Mode::AUTO, ele),
           "auto + both on an electron run: as auto");
-    check(!IS::seriesColumn(IS::Mode::By, hyb, true), "by never writes the column");
+    check(!IS::seriesColumn(IS::Mode::BY, hyb, true), "by never writes the column");
     IS::SeriesCounts s1, s2;
     s1.ms2_hybrid = 2;
     s2.ms2_hybrid = 5;
@@ -476,19 +476,19 @@ int main(int argc, char** argv)
     sc.ms2_by = 4;
     sc.ms2_cz = 3;
     IS::ActivationCounts act;
-    act.add(A::Electron);
-    act.add(A::Hybrid);
+    act.add(A::ELECTRON);
+    act.add(A::HYBRID);
     const std::string v112 =
         "Ion series (-ion_series auto): 3 MS2 spectra tagged as c/z-dot ions, 4 as b/y ions (activation: 0 "
         "collisional, 1 electron, 1 hybrid, 0 unknown).";
-    check(IS::seriesInfo(IS::Mode::Auto, sc, act) == v112, "auto without hybrid_both: 1.12's INFO line");
-    check(IS::seriesInfo(IS::Mode::Auto, sc, act, false) == v112, "hybrid_both false is the 1.12 line");
+    check(IS::seriesInfo(IS::Mode::AUTO, sc, act) == v112, "auto without hybrid_both: 1.12's INFO line");
+    check(IS::seriesInfo(IS::Mode::AUTO, sc, act, false) == v112, "hybrid_both false is the 1.12 line");
     sc.ms2_hybrid = 2;
-    const std::string hb = IS::seriesInfo(IS::Mode::Auto, sc, act, true);
+    const std::string hb = IS::seriesInfo(IS::Mode::AUTO, sc, act, true);
     check(hb == "Ion series (-ion_series auto): 3 MS2 spectra tagged as c/z-dot ions, 4 as b/y ions, 2 as b/y and "
                 "c/z-dot ions (hybrid, two passes) (activation: 0 collisional, 1 electron, 1 hybrid, 0 unknown).",
           "auto + both: the hybrid count (" + hb + ")");
-    check(IS::seriesInfo(IS::Mode::Cz, sc, act, true).find("hybrid, two") == std::string::npos,
+    check(IS::seriesInfo(IS::Mode::CZ, sc, act, true).find("hybrid, two") == std::string::npos,
           "cz never names two passes");
     check(!std::regex_search(hb, kGateSummary) && hb.find('\n') == std::string::npos, "one line, not the gate pattern");
   }
