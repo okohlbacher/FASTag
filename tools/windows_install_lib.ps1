@@ -92,6 +92,63 @@ function Get-InstallProcesses([string]$Dir) {
   return , @(Get-CimInstance Win32_Process | Where-Object { $_.ExecutablePath -and $_.ExecutablePath.StartsWith($root, [StringComparison]::OrdinalIgnoreCase) })
 }
 
+# The %TEMP% copies of an NSIS uninstaller (~nsuX.tmp\Un_X.exe) still running.
+function Get-UninstallerCopies {
+  return , @(Get-CimInstance Win32_Process | Where-Object { $_.ExecutablePath -match '\\~nsu[^\\]*\.tmp\\[^\\]+\.exe$' })
+}
+
+# Who holds files under @p Dir: the Restart Manager over its executables and
+# DLLs (processes that map or open them), Sysinternals handle where it can be
+# fetched, and every process by name and command line (x64 processes under
+# emulation on ARM64 included).
+function Show-FileHolders([string]$Dir) {
+  if (-not ('FastagRm' -as [type])) {
+    Add-Type -TypeDefinition @'
+using System;
+using System.Collections.Generic;
+using System.Runtime.InteropServices;
+public static class FastagRm {
+  [StructLayout(LayoutKind.Sequential)] struct UNIQUE_PROCESS { public int pid; public System.Runtime.InteropServices.ComTypes.FILETIME t; }
+  [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)] struct INFO {
+    public UNIQUE_PROCESS p; [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 256)] public string app;
+    [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 64)] public string svc; public int type; public int status; public int session;
+    [MarshalAs(UnmanagedType.Bool)] public bool restartable; }
+  [DllImport("rstrtmgr.dll", CharSet = CharSet.Unicode)] static extern int RmStartSession(out uint h, int f, string key);
+  [DllImport("rstrtmgr.dll")] static extern int RmEndSession(uint h);
+  [DllImport("rstrtmgr.dll", CharSet = CharSet.Unicode)] static extern int RmRegisterResources(uint h, uint n, string[] files, uint a, IntPtr b, uint c, string[] d);
+  [DllImport("rstrtmgr.dll")] static extern int RmGetList(uint h, out uint needed, ref uint n, [In, Out] INFO[] info, ref uint reasons);
+  public static List<string> Who(string[] files) {
+    var r = new List<string>(); uint h; int e = RmStartSession(out h, 0, Guid.NewGuid().ToString());
+    if (e != 0) { r.Add("RmStartSession error " + e); return r; }
+    try {
+      e = RmRegisterResources(h, (uint)files.Length, files, 0, IntPtr.Zero, 0, null);
+      if (e != 0) { r.Add("RmRegisterResources error " + e); return r; }
+      uint needed = 0, n = 0, reasons = 0; e = RmGetList(h, out needed, ref n, null, ref reasons);
+      if (e == 234) { var a = new INFO[needed]; n = needed; e = RmGetList(h, out needed, ref n, a, ref reasons);
+        for (int i = 0; i < n; i++) r.Add("pid " + a[i].p.pid + " " + a[i].app + (a[i].svc != "" ? " (service " + a[i].svc + ")" : "")); }
+      if (e != 0) r.Add("RmGetList error " + e);
+      else if (n == 0) r.Add("no process holds them");
+    } finally { RmEndSession(h); }
+    return r;
+  }
+}
+'@
+  }
+  $files = @(Get-ChildItem $Dir -Recurse -Force -File -ErrorAction SilentlyContinue | ForEach-Object FullName)
+  if (-not $files.Count) { return }
+  foreach ($l in [FastagRm]::Who($files)) { Write-Host "  restart manager: $l" }
+  $arm = (Get-CimInstance Win32_Processor | Select-Object -First 1).Architecture -eq 12
+  $h = Join-Path ([IO.Path]::GetTempPath()) ("sysinternals-" + [guid]::NewGuid().ToString('N'))
+  $exe = Join-Path $h $(if ($arm) { 'handle64a.exe' } else { 'handle64.exe' })
+  try {
+    New-Item -ItemType Directory -Force $h | Out-Null
+    Invoke-WebRequest "https://live.sysinternals.com/$(Split-Path $exe -Leaf)" -OutFile $exe -TimeoutSec 60
+    & $exe -accepteula -nobanner -u $Dir 2>&1 | Select-Object -First 40 | ForEach-Object { Write-Host "  handle: $_" }
+  } catch { Write-Host "  handle: not available ($($_.Exception.Message))" }
+  Get-CimInstance Win32_Process | Where-Object { $_.Name -match 'fastag|msedge|webview|tauri|^Un_' -or $_.ExecutablePath -match '~nsu' -or ($_.CommandLine -and $_.CommandLine -match 'fastag') } |
+    ForEach-Object { Write-Host ("  process: pid {0} ppid {1} {2} '{3}'" -f $_.ProcessId, $_.ParentProcessId, $_.Name, $_.CommandLine) }
+}
+
 function Uninstall-Fastag($Install, [string[]]$Allow = @()) {
   Write-Host "uninstall: $($Install.Scope) $($Install.Dir)"
   # A process still running from the install keeps its exe and DLLs locked,
@@ -103,12 +160,25 @@ function Uninstall-Fastag($Install, [string[]]$Allow = @()) {
   if ($p.Count) { Fail "still running from $($Install.Dir) after 60 s: $(($p | ForEach-Object { "$($_.ProcessId) $($_.CommandLine)" }) -join '; ')" }
   if ($t.Elapsed.TotalSeconds -ge 1) { Write-Host ("waited {0:N1} s for FASTag processes to end before uninstalling" -f $t.Elapsed.TotalSeconds) }
   Start-Process -FilePath $Install.Uninstall -ArgumentList '/S' -Wait | Out-Null
-  # Without _?= the uninstaller copies itself to %TEMP% and returns at once:
-  # wait for its copy to finish.
+  # Without _?= the uninstaller copies itself to %TEMP%\~nsuX.tmp\Un_X.exe and
+  # returns at once: wait for that copy to end (the registry key goes before
+  # its post-uninstall hook retries files still in use, for up to 30 s).
   $t = [Diagnostics.Stopwatch]::StartNew()
-  # The registry key goes last, after the files and uninstall.exe.
-  while (((Test-Path $Install.Key) -or (Test-Path (Join-Path $Install.Dir 'uninstall.exe'))) -and $t.Elapsed.TotalSeconds -lt 300) { Start-Sleep -Milliseconds 500 }
-  Start-Sleep -Seconds 2
+  while (((Test-Path $Install.Key) -or (Get-UninstallerCopies).Count) -and $t.Elapsed.TotalSeconds -lt 300) { Start-Sleep -Milliseconds 500 }
+  if (($u = Get-UninstallerCopies).Count) { Fail "the uninstaller still runs after 300 s: $(($u | ForEach-Object { "$($_.ProcessId) $($_.ExecutablePath)" }) -join '; ')" }
+  Write-Host ("uninstaller finished after {0:N1} s" -f $t.Elapsed.TotalSeconds)
+  $all = Get-Leftovers $Install.Dir
+  $held = @($all | Where-Object { $Allow -notcontains $_ })
+  if ($held.Count) {
+    # Name who holds them, then give them a bounded time to go: a file still
+    # held after 60 s fails, with its holder.
+    Write-Host "uninstall left $($held.Count) files; holders:"
+    Show-FileHolders $Install.Dir
+    $w = [Diagnostics.Stopwatch]::StartNew()
+    while (@(Get-Leftovers $Install.Dir | Where-Object { $Allow -notcontains $_ }).Count -and $w.Elapsed.TotalSeconds -lt 60) { Start-Sleep -Seconds 1 }
+    Write-Host ("after {0:N0} s more: {1} files left" -f $w.Elapsed.TotalSeconds, @(Get-Leftovers $Install.Dir | Where-Object { $Allow -notcontains $_ }).Count)
+    if (@(Get-Leftovers $Install.Dir | Where-Object { $Allow -notcontains $_ }).Count) { Show-FileHolders $Install.Dir }
+  }
   $all = Get-Leftovers $Install.Dir
   $mine = @($all | Where-Object { $Allow -contains $_ })
   $left = @($all | Where-Object { $Allow -notcontains $_ })
