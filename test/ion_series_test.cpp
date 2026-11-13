@@ -704,7 +704,7 @@ int main(int argc, char** argv)
     for (const auto& [pname, base0] : bothParams())
     {
       FASTag::Param base = base0;
-      base.complement_rule = FASTag::ComplementRule::Precursor;
+      base.complement_rule = FASTag::ComplementRule::PRECURSOR;
       const FASTag::Param pcz = withPair(base, IS::Series::CZ);
       const FASTag::Tables tcz(pcz);
       size_t peaks3 = 0, compl3 = 0, compl2 = 0, compl3_both = 0;
@@ -720,7 +720,7 @@ int main(int argc, char** argv)
           if (z == 3)
           {
             FASTag::Param pb = pcz;
-            pb.complement_rule = FASTag::ComplementRule::Both;
+            pb.complement_rule = FASTag::ComplementRule::BOTH;
             const FASTag::Tables tb(pb);
             FASTag::SpectrumDiag db;
             FASTag::tagSpectrum(s.spec, s.prec_mz, z, pb, tb, &db);

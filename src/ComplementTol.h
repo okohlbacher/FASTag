@@ -132,7 +132,7 @@ namespace FASTag::ComplTol
     q.ion_pair = p.ion_pair;
     q.complement_rule = p.complement_rule;
     q.mods = p.mods;
-    q.complement_tol_mode = ComplementTolMode::Da;
+    q.complement_tol_mode = ComplementTolMode::DA;
     q.complement_tol = window;
     return q;
   }
@@ -189,8 +189,8 @@ namespace FASTag::ComplTol
     const double P = OpenMS::Constants::PROTON_MASS_U;
     const double M0 = precursor_mz * charge - charge * P;  // tagSpectrum's precursor_mass
     const int z = tag.charge;
-    const bool same_rule = cs.rule != ComplementRule::Precursor;
-    const bool prec_rule = cs.rule != ComplementRule::SameCharge;
+    const bool same_rule = cs.rule != ComplementRule::PRECURSOR;
+    const bool prec_rule = cs.rule != ComplementRule::SAME_CHARGE;
     // The nearest peak to target, as prepare()'s complement test takes it
     // (PeakGrid::nearest): when that peak is the end itself, the end has no
     // partner under this rule (infinity), as there.
@@ -220,7 +220,7 @@ namespace FASTag::ComplTol
         {
           if (r == 0 ? !same_rule : !prec_rule) continue;
           const double cmz = complementMz(M, charge - cs.charge_loss, z, mz,
-                                          r == 0 ? ComplementRule::SameCharge : ComplementRule::Precursor);
+                                          r == 0 ? ComplementRule::SAME_CHARGE : ComplementRule::PRECURSOR);
           if (std::isnan(cmz)) continue;
           const double e = nearestOther(cmz, mz);
           if (std::fabs(e) < std::fabs(best)) best = e;

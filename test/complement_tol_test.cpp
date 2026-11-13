@@ -75,7 +75,7 @@ namespace
   {
     // The complement test made neutral as probeParam makes it, keeping the
     // test's own preprocessing (probeParam's defaults are checked in (b)).
-    p.complement_tol_mode = FASTag::ComplementTolMode::Da;
+    p.complement_tol_mode = FASTag::ComplementTolMode::DA;
     p.complement_tol = w;
     const FASTag::Tables tab(p);
     const std::vector<FASTag::Tag> tg = FASTag::tagSpectrum(s.spec, s.prec_mz, charge, p, tab);
@@ -98,10 +98,10 @@ int main()
   // (b)
   {
     FASTag::Param p = FASTag::cliDefaultParam();
-    p.complement_tol_mode = FASTag::ComplementTolMode::Fragment;
+    p.complement_tol_mode = FASTag::ComplementTolMode::FRAGMENT;
     p.frag_tol = 0.5;
     p.tol_ppm = false;
-    p.complement_rule = FASTag::ComplementRule::Both;
+    p.complement_rule = FASTag::ComplementRule::BOTH;
     p.ion_pair = FASTag::IonSeries::ionPair(FASTag::IonSeries::Series::CZ);
     p.tag_length = 5;
     p.deisotope = false;
@@ -114,8 +114,8 @@ int main()
     p.diversity = true;
     const FASTag::Param q = CT::probeParam(p, 0.12);
     const FASTag::Param d = FASTag::cliDefaultParam();
-    CHECK(q.complement_tol_mode == FASTag::ComplementTolMode::Da && q.complement_tol == 0.12, "probe window");
-    CHECK(q.frag_tol == 0.5 && !q.tol_ppm && q.complement_rule == FASTag::ComplementRule::Both
+    CHECK(q.complement_tol_mode == FASTag::ComplementTolMode::DA && q.complement_tol == 0.12, "probe window");
+    CHECK(q.frag_tol == 0.5 && !q.tol_ppm && q.complement_rule == FASTag::ComplementRule::BOTH
             && q.ion_pair.kind == FASTag::IonSeries::Series::CZ && q.mods.size() == p.mods.size(),
           "probeParam dropped a measurement setting of the run");
     CHECK(q.tag_length == CT::kAutoProbeLength && CT::kAutoProbeLength == 3, "probe seed length %d", q.tag_length);
@@ -128,7 +128,7 @@ int main()
     FASTag::Param r = FASTag::cliDefaultParam();
     r.frag_tol = 0.5;
     r.tol_ppm = false;
-    r.complement_rule = FASTag::ComplementRule::Both;
+    r.complement_rule = FASTag::ComplementRule::BOTH;
     r.ion_pair = p.ion_pair;
     const FASTag::Param qr = CT::probeParam(r, 0.12);
     CHECK(qr.tag_length == q.tag_length && qr.deisotope == q.deisotope && qr.max_gaps == q.max_gaps
@@ -174,7 +174,7 @@ int main()
     {
       const ComplementSynth::Spec sp = ComplementSynth::make("SAMPLERKDLVEGFNTWQR", 3, true, 0, 0.0, 0, 12);
       FASTag::Param pr = p;
-      pr.complement_rule = FASTag::ComplementRule::Precursor;
+      pr.complement_rule = FASTag::ComplementRule::PRECURSOR;
       const std::vector<double> e_prec = errorsOf(sp, 3, pr, 0.12);
       std::size_t exact = 0;
       for (const double x : e_prec) exact += std::fabs(x) < 1e-6;

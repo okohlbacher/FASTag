@@ -55,9 +55,9 @@ namespace FASTag::Cli
   */
   inline ComplementRule complementRuleFromString(std::string_view s)
   {
-    if (s == "precursor") return ComplementRule::Precursor;
-    if (s == "both") return ComplementRule::Both;
-    return ComplementRule::SameCharge;
+    if (s == "precursor") return ComplementRule::PRECURSOR;
+    if (s == "both") return ComplementRule::BOTH;
+    return ComplementRule::SAME_CHARGE;
   }
 
   /**
@@ -77,7 +77,7 @@ namespace FASTag::Cli
   {
     p.complement_tol = tol_da;
     p.complement_tol_factor = factor;
-    p.complement_tol_mode = unit == "fragment" ? ComplementTolMode::Fragment : ComplementTolMode::Da;
+    p.complement_tol_mode = unit == "fragment" ? ComplementTolMode::FRAGMENT : ComplementTolMode::DA;
   }
 
   /**

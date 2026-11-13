@@ -48,15 +48,15 @@ int main(int argc, char** argv)
   check(p.max_evalue == 20.0, "max_evalue 20");
   check(p.gap_penalty == 100.0, "gap_penalty 100");
   check(p.complement_tol == lib.complement_tol, "complement_tol 0.02 Da, the library's");
-  check(p.complement_rule == lib.complement_rule && p.complement_rule == FASTag::ComplementRule::SameCharge,
+  check(p.complement_rule == lib.complement_rule && p.complement_rule == FASTag::ComplementRule::SAME_CHARGE,
         "complement_rule same_charge (1.11)");
-  check(p.complement_tol_mode == FASTag::ComplementTolMode::Da, "complement tolerance in Da (1.11)");
+  check(p.complement_tol_mode == FASTag::ComplementTolMode::DA, "complement tolerance in Da (1.11)");
   check(p.complement_tol_factor == lib.complement_tol_factor && p.complement_tol_factor == 0.5,
         "complement factor k 0.5, the library's (its own option, not the Da value)");
   check(!p.complement_midp, "complement mid-p off (1.11)");
-  check(FASTag::Cli::complementRuleFromString("precursor") == FASTag::ComplementRule::Precursor
-            && FASTag::Cli::complementRuleFromString("both") == FASTag::ComplementRule::Both
-            && FASTag::Cli::complementRuleFromString("same_charge") == FASTag::ComplementRule::SameCharge,
+  check(FASTag::Cli::complementRuleFromString("precursor") == FASTag::ComplementRule::PRECURSOR
+            && FASTag::Cli::complementRuleFromString("both") == FASTag::ComplementRule::BOTH
+            && FASTag::Cli::complementRuleFromString("same_charge") == FASTag::ComplementRule::SAME_CHARGE,
         "complement_rule strings");
   check(p.mods.size() == 1, "one default modification");
   if (p.mods.size() == 1)

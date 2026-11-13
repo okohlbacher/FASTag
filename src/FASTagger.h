@@ -59,12 +59,12 @@ namespace FASTag
   {
     /// Both partners carry the fragment charge z: partner at M/z + 2p - m.
     /// FASTag 1.11's rule and the default.
-    SameCharge,
+    SAME_CHARGE,
     /// The partner carries the remaining c - z charges of a charge-c
     /// precursor (DirecTag's rule): (M + c*p - z*m)/(c - z); none when z >= c.
-    Precursor,
+    PRECURSOR,
     /// A peak has a partner when either rule finds one.
-    Both,
+    BOTH,
   };
 
   /**
@@ -72,8 +72,8 @@ namespace FASTag
   */
   enum class ComplementTolMode
   {
-    Da,        ///< complement_tol, absolute; FASTag 1.11's mode and the default
-    Fragment,  ///< complement_tol_factor * (fragment tol at m + at the partner)
+    DA,        ///< complement_tol, absolute; FASTag 1.11's mode and the default
+    FRAGMENT,  ///< complement_tol_factor * (fragment tol at m + at the partner)
   };
 
   /**
@@ -94,11 +94,11 @@ namespace FASTag
     bool   tol_ppm        = true;   ///< frag_tol in ppm (true) or Da (false)
     double complement_tol = 0.02;   ///< absolute (Da); used when complement_tol_mode is Da
     /// Which fragment pairs count as complements. SameCharge is FASTag 1.11.
-    ComplementRule complement_rule = ComplementRule::SameCharge;
+    ComplementRule complement_rule = ComplementRule::SAME_CHARGE;
     /// Da: complement_tol. Fragment: complement_tol_factor times the sum of
     /// the fragment tolerance at the peak and at its partner, so the window
     /// follows the run's own -fragment_tolerance.
-    ComplementTolMode complement_tol_mode = ComplementTolMode::Da;
+    ComplementTolMode complement_tol_mode = ComplementTolMode::DA;
     double complement_tol_factor = 0.5;  ///< k of the Fragment mode
     /// Complement p-value as DirecTag's mid-p P(X > c) + P(X = c)/2 of the
     /// hypergeometric for tags with c <= kComplementMidpMaxCount (0 or 1)
@@ -239,7 +239,7 @@ namespace FASTag
   inline double complementMz(double M, int prec_charge, int z, double mz, ComplementRule rule)
   {
     const double kProton = OpenMS::Constants::PROTON_MASS_U;
-    if (rule == ComplementRule::Precursor)
+    if (rule == ComplementRule::PRECURSOR)
     {
       if (z >= prec_charge) return std::numeric_limits<double>::quiet_NaN();
       return (M + prec_charge * kProton - z * mz) / (prec_charge - z);
@@ -256,8 +256,8 @@ namespace FASTag
   */
   struct ComplementSpec
   {
-    ComplementRule rule = ComplementRule::SameCharge;  ///< which pairs count
-    ComplementTolMode tol_mode = ComplementTolMode::Da;  ///< how the tolerance is set
+    ComplementRule rule = ComplementRule::SAME_CHARGE;  ///< which pairs count
+    ComplementTolMode tol_mode = ComplementTolMode::DA;  ///< how the tolerance is set
     double tol_da = 0.02;          ///< Da mode
     double tol_factor = 0.5;       ///< Fragment mode
     double frag_tol = 20.0;        ///< the run's fragment tolerance, Fragment mode
@@ -306,7 +306,7 @@ namespace FASTag
     */
     double tol(double mz, double cmz) const
     {
-      if (tol_mode == ComplementTolMode::Da) return tol_da;
+      if (tol_mode == ComplementTolMode::DA) return tol_da;
       const auto at = [this](double x) { return frag_tol_ppm ? x * frag_tol * 1e-6 : frag_tol; };
       return tol_factor * (at(mz) + at(cmz));
     }

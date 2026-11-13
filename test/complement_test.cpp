@@ -83,25 +83,25 @@ int main()
   // ---------------------------------------------------------------- (a)
   {
     const double M = 1500.73, m = 612.31;
-    const double s21 = FASTag::complementMz(M, 2, 1, m, ComplementRule::SameCharge);
-    const double p21 = FASTag::complementMz(M, 2, 1, m, ComplementRule::Precursor);
+    const double s21 = FASTag::complementMz(M, 2, 1, m, ComplementRule::SAME_CHARGE);
+    const double p21 = FASTag::complementMz(M, 2, 1, m, ComplementRule::PRECURSOR);
     CHECK(s21 == p21, "c=2 z=1: same_charge %.17g != precursor %.17g", s21, p21);
     CHECK(s21 == M / 1 + 2.0 * P - m, "same_charge is not M/z + 2p - m");
-    const double p31 = FASTag::complementMz(M, 3, 1, m, ComplementRule::Precursor);
+    const double p31 = FASTag::complementMz(M, 3, 1, m, ComplementRule::PRECURSOR);
     CHECK(std::fabs(p31 - (M + 3 * P - m) / 2) < 1e-12, "c=3 z=1: %.17g, want (M+3p-m)/2", p31);
-    const double s32 = FASTag::complementMz(M, 3, 2, m, ComplementRule::SameCharge);
+    const double s32 = FASTag::complementMz(M, 3, 2, m, ComplementRule::SAME_CHARGE);
     CHECK(std::fabs(s32 - (M / 2 + 2 * P - m)) < 1e-12, "c=3 z=2 same_charge");
-    const double p42 = FASTag::complementMz(M, 4, 2, m, ComplementRule::Precursor);
+    const double p42 = FASTag::complementMz(M, 4, 2, m, ComplementRule::PRECURSOR);
     CHECK(std::fabs(p42 - (M + 4 * P - 2 * m) / 2) < 1e-12, "c=4 z=2: partner at 2+");
-    CHECK(std::isnan(FASTag::complementMz(M, 2, 2, m, ComplementRule::Precursor)), "z == c has a partner");
-    CHECK(std::isnan(FASTag::complementMz(M, 1, 1, m, ComplementRule::Precursor)), "c=1 has a partner");
-    CHECK(std::isnan(FASTag::complementMz(M, 3, 4, m, ComplementRule::Precursor)), "z > c has a partner");
+    CHECK(std::isnan(FASTag::complementMz(M, 2, 2, m, ComplementRule::PRECURSOR)), "z == c has a partner");
+    CHECK(std::isnan(FASTag::complementMz(M, 1, 1, m, ComplementRule::PRECURSOR)), "c=1 has a partner");
+    CHECK(std::isnan(FASTag::complementMz(M, 3, 4, m, ComplementRule::PRECURSOR)), "z > c has a partner");
     // A real pair: b at 1+ and y at 2+ of a 3+ precursor.
     const double nb = 700.0, ny = M - nb;
     const double y2 = (ny + 2 * P) / 2, b1 = nb + P;
-    CHECK(std::fabs(FASTag::complementMz(M, 3, 1, b1, ComplementRule::Precursor) - y2) < 1e-9,
+    CHECK(std::fabs(FASTag::complementMz(M, 3, 1, b1, ComplementRule::PRECURSOR) - y2) < 1e-9,
           "precursor rule misses the 2+ partner of a 1+ b ion");
-    CHECK(std::fabs(FASTag::complementMz(M, 3, 2, y2, ComplementRule::Precursor) - b1) < 1e-9,
+    CHECK(std::fabs(FASTag::complementMz(M, 3, 2, y2, ComplementRule::PRECURSOR) - b1) < 1e-9,
           "precursor rule misses the 1+ partner of a 2+ y ion");
     std::printf("a. complementMz identities\n");
   }
@@ -115,12 +115,12 @@ int main()
     off.deisotope = false;
     const FASTag::Param cli = FASTag::cliDefaultParam();
 
-    const auto off_same = FASTag::complementPopulation(s.spec, s.prec_mz, 3, withRule(off, ComplementRule::SameCharge));
-    const auto off_prec = FASTag::complementPopulation(s.spec, s.prec_mz, 3, withRule(off, ComplementRule::Precursor));
-    const auto off_both = FASTag::complementPopulation(s.spec, s.prec_mz, 3, withRule(off, ComplementRule::Both));
-    const auto cli_same = FASTag::complementPopulation(s.spec, s.prec_mz, 3, withRule(cli, ComplementRule::SameCharge));
-    const auto cli_prec = FASTag::complementPopulation(s.spec, s.prec_mz, 3, withRule(cli, ComplementRule::Precursor));
-    const auto cli_both = FASTag::complementPopulation(s.spec, s.prec_mz, 3, withRule(cli, ComplementRule::Both));
+    const auto off_same = FASTag::complementPopulation(s.spec, s.prec_mz, 3, withRule(off, ComplementRule::SAME_CHARGE));
+    const auto off_prec = FASTag::complementPopulation(s.spec, s.prec_mz, 3, withRule(off, ComplementRule::PRECURSOR));
+    const auto off_both = FASTag::complementPopulation(s.spec, s.prec_mz, 3, withRule(off, ComplementRule::BOTH));
+    const auto cli_same = FASTag::complementPopulation(s.spec, s.prec_mz, 3, withRule(cli, ComplementRule::SAME_CHARGE));
+    const auto cli_prec = FASTag::complementPopulation(s.spec, s.prec_mz, 3, withRule(cli, ComplementRule::PRECURSOR));
+    const auto cli_both = FASTag::complementPopulation(s.spec, s.prec_mz, 3, withRule(cli, ComplementRule::BOTH));
     std::printf("b. 3+ precursor, y 2+ / b 1+: kept %d/%d peaks; z=1 complements "
                 "off: same %d prec %d both %d | cli: same %d prec %d both %d\n",
                 pop(off_same, 0), pop(cli_same, 0), pop(off_same, 1), pop(off_prec, 1),
@@ -147,8 +147,8 @@ int main()
       for (const auto& t : FASTag::tagSpectrum(s.spec, s.prec_mz, 3, p, tab)) below += t.p_complement < 1.0;
       return below;
     };
-    const int same_below = pcompl(withRule(off, ComplementRule::SameCharge));
-    const int prec_below = pcompl(withRule(off, ComplementRule::Precursor));
+    const int same_below = pcompl(withRule(off, ComplementRule::SAME_CHARGE));
+    const int prec_below = pcompl(withRule(off, ComplementRule::PRECURSOR));
     CHECK(prec_below > same_below, "deisotope off: precursor rule gives %d tags with complement "
           "evidence, same_charge %d", prec_below, same_below);
   }
@@ -165,7 +165,7 @@ int main()
     FASTag::Cli::setComplementTolerance(frag, FASTag::Cli::kComplementTolerance, 0.5, "fragment");
     FASTag::Param da = p;
     FASTag::Cli::setComplementTolerance(da, 0.02, FASTag::Cli::kComplementTolFactor, "Da");
-    CHECK(frag.complement_tol_mode == ComplementTolMode::Fragment && frag.complement_tol_factor == 0.5
+    CHECK(frag.complement_tol_mode == ComplementTolMode::FRAGMENT && frag.complement_tol_factor == 0.5
           && frag.complement_tol == base.complement_tol, "fragment unit: k in force, the Da value kept");
     // The fragment unit with both values at their CLI defaults runs at the
     // library's k (0.5), not at the Da default 0.02 read as k.
@@ -313,7 +313,7 @@ int main()
                 rows, worst, worst_rank);
     CHECK(rows >= 40, "only %d reference rows; the check would prove little", rows);
     // The spelled-out generator Param is the CLI's.
-    CHECK(cli.complement_rule == ComplementRule::SameCharge && cli.complement_tol_mode == ComplementTolMode::Da
+    CHECK(cli.complement_rule == ComplementRule::SAME_CHARGE && cli.complement_tol_mode == ComplementTolMode::DA
           && cli.complement_tol == 0.02 && !cli.complement_midp, "CLI complement defaults are not 1.11's");
   }
 
@@ -321,7 +321,7 @@ int main()
   for (const auto& [name, base] : bothParams())
   {
     const ComplementSynth::Spec s = ComplementSynth::make("VGAHAGEYGAEALER", 1, false, 1, 0.0, 10, 51);
-    const FASTag::Param prec = withRule(base, ComplementRule::Precursor);
+    const FASTag::Param prec = withRule(base, ComplementRule::PRECURSOR);
     const auto v = FASTag::complementPopulation(s.spec, s.prec_mz, 1, prec);
     CHECK(v.size() == 2 && v[1] == 0, "[%s] charge 1 under precursor: %d complements", name, pop(v, 1));
     const FASTag::Tables tab(prec);
@@ -338,7 +338,7 @@ int main()
 
     // The fragment-charge cap: a 12+ precursor tries charges 1..8.
     const ComplementSynth::Spec s12 = ComplementSynth::make("VGAHAGEYGAEALERSAMPLERKDLVEGFNTWQR", 12, false, 0, 0.0, 0, 52);
-    for (ComplementRule r : {ComplementRule::SameCharge, ComplementRule::Precursor, ComplementRule::Both})
+    for (ComplementRule r : {ComplementRule::SAME_CHARGE, ComplementRule::PRECURSOR, ComplementRule::BOTH})
     {
       const auto v12 = FASTag::complementPopulation(s12.spec, s12.prec_mz, 12, withRule(base, r));
       CHECK(v12.size() == 9, "[%s] charge 12: %zu fragment-charge slots, want 8 + 1", name, v12.size());
