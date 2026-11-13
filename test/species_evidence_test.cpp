@@ -37,11 +37,11 @@ int main()
   //    adding wrong tags raises the count of unrelated taxa; Best does not.
   {
     std::vector<TagSupport> tags = {{0.001, {1, 2}}, {3.5, {7}}, {12.0, {8, 9}}};
-    CHECK(spectrumTaxa(tags, SpeciesEvidence::All) == (Set{1, 2, 7, 8, 9}), "All is the union");
-    CHECK(spectrumTaxa(tags, SpeciesEvidence::Best) == (Set{1, 2}), "Best keeps the best tag's taxa");
+    CHECK(spectrumTaxa(tags, SpeciesEvidence::ALL) == (Set{1, 2, 7, 8, 9}), "All is the union");
+    CHECK(spectrumTaxa(tags, SpeciesEvidence::BEST) == (Set{1, 2}), "Best keeps the best tag's taxa");
     tags.push_back({15.0, {3}});
     tags.push_back({18.0, {4, 5}});
-    CHECK(spectrumTaxa(tags, SpeciesEvidence::Best) == (Set{1, 2}),
+    CHECK(spectrumTaxa(tags, SpeciesEvidence::BEST) == (Set{1, 2}),
           "Best does not change when more low-ranked tags are reported");
   }
 
@@ -49,32 +49,32 @@ int main()
   //    rows are grouped by length, not sorted by E-value).
   {
     std::vector<TagSupport> tags = {{9.0, {7}}, {0.5, {3}}, {0.02, {1}}};
-    CHECK(spectrumTaxa(tags, SpeciesEvidence::Best) == (Set{1}), "best tag found anywhere in the list");
+    CHECK(spectrumTaxa(tags, SpeciesEvidence::BEST) == (Set{1}), "best tag found anywhere in the list");
   }
 
   // 3. Ties at the best E-value are united, so the result is order-independent.
   {
     std::vector<TagSupport> a = {{0.1, {1}}, {0.1, {2}}, {4.0, {3}}};
     std::vector<TagSupport> b = {{4.0, {3}}, {0.1, {2}}, {0.1, {1}}};
-    CHECK(spectrumTaxa(a, SpeciesEvidence::Best) == (Set{1, 2}), "tied best tags are united");
-    CHECK(spectrumTaxa(a, SpeciesEvidence::Best) == spectrumTaxa(b, SpeciesEvidence::Best), "order-independent");
+    CHECK(spectrumTaxa(a, SpeciesEvidence::BEST) == (Set{1, 2}), "tied best tags are united");
+    CHECK(spectrumTaxa(a, SpeciesEvidence::BEST) == spectrumTaxa(b, SpeciesEvidence::BEST), "order-independent");
   }
 
   // 4. Tags that do not map (empty taxa) never become the best tag.
   {
     std::vector<TagSupport> tags = {{0.0001, {}}, {2.0, {5}}};
-    CHECK(spectrumTaxa(tags, SpeciesEvidence::Best) == (Set{5}), "an unmapped tag cannot be best");
-    CHECK(spectrumTaxa({}, SpeciesEvidence::Best).empty(), "no tags, no taxa");
-    CHECK(spectrumTaxa({{1.0, {}}}, SpeciesEvidence::All).empty(), "no informative tag, no taxa");
+    CHECK(spectrumTaxa(tags, SpeciesEvidence::BEST) == (Set{5}), "an unmapped tag cannot be best");
+    CHECK(spectrumTaxa({}, SpeciesEvidence::BEST).empty(), "no tags, no taxa");
+    CHECK(spectrumTaxa({{1.0, {}}}, SpeciesEvidence::ALL).empty(), "no informative tag, no taxa");
   }
 
   // 5. A NaN E-value (unparsable) never wins; with only NaNs every tag counts.
   {
     const double nan = std::numeric_limits<double>::quiet_NaN();
     std::vector<TagSupport> tags = {{nan, {1}}, {3.0, {2}}};
-    CHECK(spectrumTaxa(tags, SpeciesEvidence::Best) == (Set{2}), "NaN does not beat a finite E-value");
+    CHECK(spectrumTaxa(tags, SpeciesEvidence::BEST) == (Set{2}), "NaN does not beat a finite E-value");
     std::vector<TagSupport> only_nan = {{nan, {1}}, {nan, {2}}};
-    CHECK(spectrumTaxa(only_nan, SpeciesEvidence::Best) == (Set{1, 2}), "only NaN: union");
+    CHECK(spectrumTaxa(only_nan, SpeciesEvidence::BEST) == (Set{1, 2}), "only NaN: union");
   }
 
   // 6. The decoy list of -species_call (1.12 #1): every target tag's decoys
@@ -97,7 +97,7 @@ int main()
       t.evalue = r.second;
       if (FASTag::tagSupport(idx, r.first, 4, 2, 0.0, t.taxa, c)) target.push_back(t);
     }
-    CHECK(spectrumTaxa(target, SpeciesEvidence::Best) == (Set{1}), "decoy list: the target counts for taxon 1");
+    CHECK(spectrumTaxa(target, SpeciesEvidence::BEST) == (Set{1}), "decoy list: the target counts for taxon 1");
     for (uint32_t j = 0; j < 5; ++j)
     {
       std::vector<TagSupport> decoy;
@@ -110,7 +110,7 @@ int main()
         CHECK(!d.empty() && d != r.first, "decoy list: each tag has a decoy that is not the tag");
         if (FASTag::tagSupport(idx, d, 4, 2, 0.0, t.taxa, dc)) decoy.push_back(t);
       }
-      CHECK(spectrumTaxa(decoy, SpeciesEvidence::Best).count(1) == 0, "decoy list: decoys do not reproduce the target taxon");
+      CHECK(spectrumTaxa(decoy, SpeciesEvidence::BEST).count(1) == 0, "decoy list: decoys do not reproduce the target taxon");
       CHECK(c.kmer_skipped == 0 && c.tag_generic == 0, "decoy list: target counters untouched by the decoy pass");
     }
   }
@@ -120,16 +120,16 @@ int main()
     using FASTag::OrientationOutcome;
     using V = std::vector<uint32_t>;
     V out;
-    CHECK(FASTag::combineOrientations({1, 2}, {}, out) == OrientationOutcome::Forward && out == (V{1, 2}),
+    CHECK(FASTag::combineOrientations({1, 2}, {}, out) == OrientationOutcome::FORWARD && out == (V{1, 2}),
           "orientations: forward only is used as it is");
-    CHECK(FASTag::combineOrientations({}, {3}, out) == OrientationOutcome::Reverse && out == (V{3}),
+    CHECK(FASTag::combineOrientations({}, {3}, out) == OrientationOutcome::REVERSE && out == (V{3}),
           "orientations: reverse only is used as it is");
-    CHECK(FASTag::combineOrientations({1, 2, 3}, {2, 3, 4}, out) == OrientationOutcome::Intersection
+    CHECK(FASTag::combineOrientations({1, 2, 3}, {2, 3, 4}, out) == OrientationOutcome::INTERSECTION
               && out == (V{2, 3}),
           "orientations: both informative -> the intersection, not the union");
-    CHECK(FASTag::combineOrientations({1}, {2}, out) == OrientationOutcome::Ambiguous && out.empty(),
+    CHECK(FASTag::combineOrientations({1}, {2}, out) == OrientationOutcome::AMBIGUOUS && out.empty(),
           "orientations: disjoint -> ambiguous, supports nothing");
-    CHECK(FASTag::combineOrientations({}, {}, out) == OrientationOutcome::None && out.empty(),
+    CHECK(FASTag::combineOrientations({}, {}, out) == OrientationOutcome::NONE && out.empty(),
           "orientations: neither informative");
     out = {9};
     FASTag::combineOrientations({}, {}, out);
@@ -144,8 +144,8 @@ int main()
         V ab, ba;
         const OrientationOutcome o1 = FASTag::combineOrientations(a, b, ab);
         const OrientationOutcome o2 = FASTag::combineOrientations(b, a, ba);
-        const OrientationOutcome mirrored = o1 == OrientationOutcome::Forward ? OrientationOutcome::Reverse
-            : o1 == OrientationOutcome::Reverse ? OrientationOutcome::Forward : o1;
+        const OrientationOutcome mirrored = o1 == OrientationOutcome::FORWARD ? OrientationOutcome::REVERSE
+            : o1 == OrientationOutcome::REVERSE ? OrientationOutcome::FORWARD : o1;
         if (ab != ba || o2 != mirrored) sym = false;
         if (!ab.empty() && !a.empty() && !b.empty())
           for (uint32_t t : ab)
@@ -179,15 +179,15 @@ int main()
     {
       TagSupport t;
       t.evalue = r.second;
-      if (FASTag::orientedTagSupport(idx, r.first, 4, 3, 0.0, SpeciesOrientation::Forward, t.taxa, c, rc, &oc))
+      if (FASTag::orientedTagSupport(idx, r.first, 4, 3, 0.0, SpeciesOrientation::FORWARD, t.taxa, c, rc, &oc))
         fwd_list.push_back(t);
       TagSupport u;
       u.evalue = r.second;
-      if (FASTag::orientedTagSupport(idx, r.first, 4, 3, 0.0, SpeciesOrientation::Both, u.taxa, c, rc, &oc))
+      if (FASTag::orientedTagSupport(idx, r.first, 4, 3, 0.0, SpeciesOrientation::BOTH, u.taxa, c, rc, &oc))
         both_list.push_back(u);
     }
-    CHECK(spectrumTaxa(fwd_list, SpeciesEvidence::Best) == (Set{1}), "orientation: forward sees only taxon 1");
-    CHECK(spectrumTaxa(both_list, SpeciesEvidence::Best) == (Set{2}),
+    CHECK(spectrumTaxa(fwd_list, SpeciesEvidence::BEST) == (Set{1}), "orientation: forward sees only taxon 1");
+    CHECK(spectrumTaxa(both_list, SpeciesEvidence::BEST) == (Set{2}),
           "orientation: both keeps the reverse-only tag's E-value, which is best");
     CHECK(both_list.size() == 2 && both_list[1].evalue == 0.01, "orientation: E-value preserved");
     CHECK(oc.forward == 1 && oc.reverse == 1 && oc.intersection == 0 && oc.ambiguous == 0,
@@ -197,14 +197,14 @@ int main()
     FASTag::TagLookupCounters pc, prc;
     FASTag::OrientationCounts poc;
     V taxa;
-    CHECK(FASTag::orientedTagSupport(idx, "KLMMLK", 4, 1, 0.0, SpeciesOrientation::Both, taxa, pc, prc, &poc),
+    CHECK(FASTag::orientedTagSupport(idx, "KLMMLK", 4, 1, 0.0, SpeciesOrientation::BOTH, taxa, pc, prc, &poc),
           "orientation: palindrome informative");
     CHECK(taxa == (V{3}) && poc.palindrome == 1 && poc.forward + poc.reverse + poc.intersection == 0,
           "orientation: palindrome counted once as a palindrome");
     CHECK(pc.kmer_skipped == 1 && prc.kmer_skipped == 0, "orientation: palindrome looked up once");
     // I/L folding: KIMMLK folds to KLMMLK, a palindrome after folding.
     poc = {};
-    CHECK(FASTag::orientedTagSupport(idx, "KIMMLK", 4, 1, 0.0, SpeciesOrientation::Both, taxa, pc, prc, &poc)
+    CHECK(FASTag::orientedTagSupport(idx, "KIMMLK", 4, 1, 0.0, SpeciesOrientation::BOTH, taxa, pc, prc, &poc)
               && taxa == (V{3}) && poc.palindrome == 1,
           "orientation: a palindrome after I/L folding");
   }

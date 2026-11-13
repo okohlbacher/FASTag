@@ -43,7 +43,7 @@ namespace FASTag
   /**
     @brief Which tags of a spectrum count for -species (see the file comment).
   */
-  enum class SpeciesEvidence { Best, All };
+  enum class SpeciesEvidence { BEST, ALL };
 
   /**
     @brief The taxa the tags of one spectrum make it count for.
@@ -59,7 +59,7 @@ namespace FASTag
   inline std::set<uint32_t> spectrumTaxa(const std::vector<TagSupport>& tags, SpeciesEvidence mode)
   {
     std::set<uint32_t> out;
-    if (mode == SpeciesEvidence::All)
+    if (mode == SpeciesEvidence::ALL)
     {
       for (const TagSupport& t : tags) out.insert(t.taxa.begin(), t.taxa.end());
       return out;
@@ -82,18 +82,18 @@ namespace FASTag
 
     Independent of -orientation, which governs -fasta and reconciliation only.
   */
-  enum class SpeciesOrientation { Forward, Both };
+  enum class SpeciesOrientation { FORWARD, BOTH };
 
   /**
     @brief What combineOrientations() made of one tag.
   */
   enum class OrientationOutcome
   {
-    None,          ///< neither orientation is informative
-    Forward,       ///< only the tag as written is informative
-    Reverse,       ///< only the reversed tag is informative
-    Intersection,  ///< both are informative and share taxa: the shared taxa
-    Ambiguous      ///< both are informative with no common taxon: skipped
+    NONE,          ///< neither orientation is informative
+    FORWARD,       ///< only the tag as written is informative
+    REVERSE,       ///< only the reversed tag is informative
+    INTERSECTION,  ///< both are informative and share taxa: the shared taxa
+    AMBIGUOUS      ///< both are informative with no common taxon: skipped
   };
 
   /**
@@ -116,10 +116,10 @@ namespace FASTag
                                                 std::vector<uint32_t>& out)
   {
     out.clear();
-    if (fwd.empty() && rev.empty()) return OrientationOutcome::None;
-    if (rev.empty()) { out = fwd; return OrientationOutcome::Forward; }
-    if (fwd.empty()) { out = rev; return OrientationOutcome::Reverse; }
+    if (fwd.empty() && rev.empty()) return OrientationOutcome::NONE;
+    if (rev.empty()) { out = fwd; return OrientationOutcome::FORWARD; }
+    if (fwd.empty()) { out = rev; return OrientationOutcome::REVERSE; }
     std::set_intersection(fwd.begin(), fwd.end(), rev.begin(), rev.end(), std::back_inserter(out));
-    return out.empty() ? OrientationOutcome::Ambiguous : OrientationOutcome::Intersection;
+    return out.empty() ? OrientationOutcome::AMBIGUOUS : OrientationOutcome::INTERSECTION;
   }
 }

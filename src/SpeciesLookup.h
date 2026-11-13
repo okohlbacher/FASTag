@@ -115,7 +115,7 @@ namespace FASTag
   /**
     @brief Run-level counts of the orientation rule (1.12 #10).
 
-    One per tag looked up under SpeciesOrientation::Both. Tags that are
+    One per tag looked up under SpeciesOrientation::BOTH. Tags that are
     informative in neither orientation are not counted.
   */
   struct OrientationCounts

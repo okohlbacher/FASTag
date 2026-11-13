@@ -547,10 +547,10 @@ int main()
     // The decoys of a spectrum's tags carry the targets' E-values; the decoy
     // spectrum counts for the taxa of its best informative decoy tag.
     std::vector<TagSupport> dec = {{0.01, {}}, {5.0, {7}}, {9.0, {8}}};
-    check(spectrumTaxa(dec, SpeciesEvidence::Best) == std::set<uint32_t>({7}), "decoy list: best informative decoy");
+    check(spectrumTaxa(dec, SpeciesEvidence::BEST) == std::set<uint32_t>({7}), "decoy list: best informative decoy");
     const double nan = std::numeric_limits<double>::quiet_NaN();
     std::vector<TagSupport> dn = {{nan, {7}}, {nan, {8}}};
-    check(spectrumTaxa(dn, SpeciesEvidence::Best) == std::set<uint32_t>({7, 8}), "decoy list: NaN E-values unite");
+    check(spectrumTaxa(dn, SpeciesEvidence::BEST) == std::set<uint32_t>({7, 8}), "decoy list: NaN E-values unite");
     // NaN in callGenera inputs cannot produce a present call.
     SC::Params pr; pr.alpha = 0.01; pr.n_min = 5;
     SC::RunInput run; run.n_units = 1000; run.n_trials = 1000; run.decoys = 5; run.min_units = 50;

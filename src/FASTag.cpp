@@ -1729,8 +1729,8 @@ protected:
     const bool species_call_on = want_species && stringOption_("species_call") != "none";
     // 1.12 #10: both tag orientations in the species lookup.
     const FASTag::SpeciesOrientation species_orient = getStringOption_("species_orientation") == "both"
-        ? FASTag::SpeciesOrientation::Both : FASTag::SpeciesOrientation::Forward;
-    const bool species_both = want_species && species_orient == FASTag::SpeciesOrientation::Both;
+        ? FASTag::SpeciesOrientation::BOTH : FASTag::SpeciesOrientation::FORWARD;
+    const bool species_both = want_species && species_orient == FASTag::SpeciesOrientation::BOTH;
 
     // The seed lengths this run tags at, ascending and distinct: -tag_lengths
     // when given, else the one -tag_length.
@@ -6408,7 +6408,7 @@ protected:
       size_t n_units = 0;
       FASTag::TagLookupCounters lookup_counters;
       const FASTag::SpeciesEvidence ev_mode = getStringOption_("species_evidence") == "all"
-          ? FASTag::SpeciesEvidence::All : FASTag::SpeciesEvidence::Best;
+          ? FASTag::SpeciesEvidence::ALL : FASTag::SpeciesEvidence::BEST;
       std::vector<FASTag::TagSupport> support;  // this spectrum's informative tags
       // 1.12 #1 (-species_call decoy): every tag the target lookup evaluates
       // is also looked up as D decoys through the same rule, with the
