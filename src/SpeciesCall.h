@@ -22,7 +22,7 @@
 //     count of h.
 //
 // p_g = P(X >= o_g), X ~ Poisson(lambda_g); q_g by Benjamini-Hochberg (or
-// Storey's pi0, opt-in) over the genera with o_g >= Taxonomy::kObservedFloor.
+// Storey's pi0, opt-in) over the genera with o_g >= Taxonomy::OBSERVED_FLOOR.
 // Decision, in this order: run-level no_call (low_resolution, few_spectra);
 // present (q <= alpha, share >= tau, o >= n_min); no_call unstable (see
 // below); no_call near_neighbour (spill > 0, and q <= alpha on the random part
@@ -140,7 +140,7 @@ namespace FASTag::SpeciesCall
     double qvalue_random = 1.0;    ///< the same with the random part alone
     double share = 0.0;            ///< share_g of the run's units
     double lod = -1.0;             ///< detection limit as a share; < 0 = not applicable
-    bool tested = false;           ///< observed >= Taxonomy::kObservedFloor
+    bool tested = false;           ///< observed >= Taxonomy::OBSERVED_FLOOR
     Call call = Call::NOT_DETECTED; ///< the decision
     std::string reason;            ///< pass, low_resolution, few_spectra, unstable,
                                    ///< near_neighbour, not_significant, low_share,

@@ -131,8 +131,8 @@ public:
     @brief Natural log of P(X >= k) for X ~ Binomial(n, p).
 
     Regimes (documented in the .cpp):
-      n <= kExactMaxN:          exact summation in log space (log-sum-exp).
-      n large, n*p < kPoissonMaxLambda: Poisson approximation, log space.
+      n <= EXACT_MAX_N:          exact summation in log space (log-sum-exp).
+      n large, n*p < POISSON_MAX_LAMBDA: Poisson approximation, log space.
       otherwise:                normal approximation with continuity
                                 correction, erfc-based with asymptotic tail.
 
@@ -146,7 +146,7 @@ public:
   /**
     @brief Statistical call over the rolled nodes.
 
-    For every rolled node with subtree_hits >= kObservedFloor and a supplied
+    For every rolled node with subtree_hits >= OBSERVED_FLOOR and a supplied
     background probability p_T, computes expected = n_total*p_T and
     log_pvalue = binomialUpperTailLogP(subtree_hits, n_total, p_T), then
     applies Benjamini-Hochberg across all tested nodes. Rank and name are
@@ -168,7 +168,7 @@ public:
       uint64_t n_total, double q_threshold) const;
 
   /// Minimum subtree_hits for a node to enter the multiple-testing pool.
-  static constexpr uint64_t kObservedFloor = 5;
+  static constexpr uint64_t OBSERVED_FLOOR = 5;
 
 private:
   struct Node {
@@ -181,8 +181,8 @@ private:
   // Regime thresholds for binomialUpperTailLogP.
   /// log P(X >= k) for X ~ Poisson(lambda), k <= lambda, as 1 - lower tail.
   static double poissonLowerComplementLogP_(uint64_t k, double lambda);
-  static constexpr uint64_t kExactMaxN = 20000;
-  static constexpr double kPoissonMaxLambda = 1000.0;
+  static constexpr uint64_t EXACT_MAX_N = 20000;
+  static constexpr double POISSON_MAX_LAMBDA = 1000.0;
 };
 
 }  // namespace FASTag

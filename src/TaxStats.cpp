@@ -30,7 +30,7 @@ namespace FASTag {
 
 namespace {
 
-constexpr double kNegInf = -std::numeric_limits<double>::infinity();
+constexpr double NEG_INF = -std::numeric_limits<double>::infinity();
 
 // Split a taxdump line on '|' and trim whitespace (tabs/spaces/CR) from each
 // field. The trailing "\t|" of well-formed lines yields a final empty field,
@@ -221,11 +221,11 @@ double Taxonomy::poissonLowerComplementLogP_(uint64_t k, double lambda) {
 
 double Taxonomy::binomialUpperTailLogP(uint64_t k, uint64_t n, double p) const {
   if (k == 0) return 0.0;               // P(X >= 0) == 1
-  if (k > n) return kNegInf;            // impossible
-  if (p <= 0.0) return kNegInf;         // P(X >= k > 0) == 0 when p == 0
+  if (k > n) return NEG_INF;            // impossible
+  if (p <= 0.0) return NEG_INF;         // P(X >= k > 0) == 0 when p == 0
   if (p >= 1.0) return 0.0;             // X == n >= k with probability 1
 
-  if (n <= kExactMaxN) {
+  if (n <= EXACT_MAX_N) {
     // Exact: sum_{i=k}^n C(n,i) p^i (1-p)^(n-i) via log-sum-exp.
     const double lp = std::log(p);
     const double lq = std::log1p(-p);
@@ -236,7 +236,7 @@ double Taxonomy::binomialUpperTailLogP(uint64_t k, uint64_t n, double p) const {
              static_cast<double>(i) * lp +
              static_cast<double>(n - i) * lq;
     };
-    double maxlog = kNegInf;
+    double maxlog = NEG_INF;
     for (uint64_t i = k; i <= n; ++i) {
       const double t = log_term(i);
       if (t > maxlog) maxlog = t;
@@ -247,7 +247,7 @@ double Taxonomy::binomialUpperTailLogP(uint64_t k, uint64_t n, double p) const {
   }
 
   const double lambda = static_cast<double>(n) * p;
-  if (lambda < kPoissonMaxLambda) {
+  if (lambda < POISSON_MAX_LAMBDA) {
     // Poisson approximation (valid for large n, small p): P(X >= k) with
     // X ~ Poisson(n*p). Sum relative terms from i = k upward; the ratio
     // t_{i+1}/t_i = lambda/(i+1) makes the recursion stable. Terminates once
@@ -295,7 +295,7 @@ std::vector<TaxonCall> Taxonomy::call(
   };
   std::vector<Tested> tested;
   for (const NodeEvidence& ev : rolled) {
-    if (ev.subtree_hits < kObservedFloor) continue;
+    if (ev.subtree_hits < OBSERVED_FLOOR) continue;
     auto it = pmap.find(ev.taxid);
     if (it == pmap.end()) continue;
     double p = it->second;

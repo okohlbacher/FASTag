@@ -165,7 +165,7 @@ namespace FASTag::SpeciesCall
       s.decoy_spectra = genera[i].decoy_spectra;
       s.share = genera[i].share;
       s.random_expected = randomExpected(s.decoy_spectra, run.decoys, run.n_trials);
-      s.tested = s.observed >= Taxonomy::kObservedFloor;
+      s.tested = s.observed >= Taxonomy::OBSERVED_FLOOR;
       if (s.tested) tested.push_back(i);
     }
     // Descending observed count, ties by taxid: the order in which spill
@@ -313,7 +313,7 @@ namespace FASTag::SpeciesCall
         o_star = hi;
       }
       const uint64_t by_tau = static_cast<uint64_t>(std::ceil(params.tau * static_cast<double>(run.n_units) - 1e-9));
-      const uint64_t o_lod = std::max<uint64_t>({o_star, params.n_min, Taxonomy::kObservedFloor, by_tau});
+      const uint64_t o_lod = std::max<uint64_t>({o_star, params.n_min, Taxonomy::OBSERVED_FLOOR, by_tau});
       if (run.n_units > 0) s.lod = static_cast<double>(o_lod) / static_cast<double>(run.n_units);
     }
     return st;

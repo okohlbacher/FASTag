@@ -333,7 +333,7 @@ int main()
     const double thr = pr.alpha * (R + 1) / m;
     uint64_t o = 0;
     while (tailRef(o, 4.5) > thr) ++o;
-    o = std::max<uint64_t>({o, pr.n_min, Taxonomy::kObservedFloor,
+    o = std::max<uint64_t>({o, pr.n_min, Taxonomy::OBSERVED_FLOOR,
                             static_cast<uint64_t>(std::ceil(pr.tau * run.n_units))});
     check(near(t2.lod, static_cast<double>(o) / 1000.0), "LOD by hand");
     // Monotone: a larger lambda never lowers the LOD.
