@@ -679,11 +679,11 @@ MGF→mzML direction is exact.
 | `-species_use_gapped` | off | Let gapped tags contribute taxonomic evidence (see Species detection) |
 | `-species_deconvolve` | off | Correct taxon counts for sequence shared between taxa |
 | `-species_evidence <mode>` | best | Which of a spectrum's tags make it count for a taxon: `best` = the taxa of its lowest-E-value tag that maps into the index (compared as printed in the `evalue` column; ties united), `all` = the union over every reported tag (the rule up to 1.9.0) |
-| `-species_call <mode>` | none | `decoy`: call each reported taxon present, no_call or not_detected against a decoy-tag null plus homology spill; appends 7 columns (see Species detection). `explain` (1.13, experimental; failed the recovery guard of its held-out test, see Held-out acceptance): call the taxa one at a time on their distinct tags in spectra no taxon called before explains; appends the same 7 columns plus `tags` and `unexplained_tags` |
+| `-species_call <mode>` | none | `decoy`: call each reported taxon present, no_call or not_detected against a decoy-tag null plus homology spill; appends 7 columns (see Species detection). `explain` was removed in 1.14 (failed its held-out test, see Held-out acceptance): accepted with a warning, read as `none` |
 | `-species_call_params <file>` | `species_call.tsv` in the taxonomy dir | With `-species_call decoy`: the decision parameters (alpha, tau, n_min) |
 | `-species_call_min_units <n>` | 200 | With `-species_call decoy`: fewer spectra with taxon evidence make the run a few_spectra no_call |
 | `-species_call_decoys <n>` | 5 | With `-species_call decoy`: decoy tags per tag (1-100) |
-| `-species_reagents <fasta>` | none | Experimental, with `-species_call explain`: protein reagents (UniProt headers with `OX=`; `species_reagents.fasta` in the taxonomy dir). A taxon the explain call does not detect is called present with `call_reason` `reagent` when its tags in the listed proteins exceed the decoy tags' count; appends `reagent_tags`, `reagent_expected`. Not held-out tested |
+| `-species_reagents <fasta>` | none | Removed in 1.14 (read only by `-species_call explain`, which failed its held-out test): accepted with a warning, no effect; the file is not read |
 | `-species_pi0 <f>` | 1 | With `-species_call decoy`: pi0 of the q-values; 1 = Benjamini-Hochberg, 0 = estimate (Storey) |
 | `-species_orientation <mode>` | forward | `both`: also look each tag up reversed (a tag read from b ions is written reversed); one informative reading is used as it is, two are intersected, two without a common taxon skip the tag. Independent of `-orientation` (which applies to `-fasta` and `-recon_fasta`). The analytic `log_pvalue` and `qvalue` columns are NA under `both`, also with `-species_call decoy`; the decoy-based value is its `decoy_qvalue` (not calibrated in 1.12.0; see `-species_call`) |
 | `-subsample_spectra <n>` / `-subsample_fraction <f>` | 0 | Tag only a random subset (count or fraction; if both are given, the count wins); 0 = all |
@@ -1393,47 +1393,15 @@ the decoy null failed its development check on real runs, so `call` and
 `decoy_qvalue` are not calibrated. See
 [doc/SPECIES-DETECTOR.md](doc/SPECIES-DETECTOR.md).
 
-**Explain-away calls (opt-in, experimental, 1.13).** `-species_call explain`
-calls the taxa one at a time, strongest first. A taxon is tested on its
-distinct tags in spectra that no taxon called before it explains, against the
-same count on the decoy tags, and once it is called its spectra no longer count
-for any other taxon: a relative that only shares tags with the organism in the
-sample is left with nothing. The report has the columns of `decoy` plus `tags`
-(distinct tags of the taxon) and `unexplained_tags` (those left at its
-decision); `decoy_spectra`, `decoy_expected` and `decoy_qvalue` are then in tags
-(decoy tags over all replicates, the null's expectation, p times the number of
-taxa still tested), `lod` is NA. It reads alpha and n_min from the same
-parameter file and uses `-species_call_decoys` and `-species_call_min_units`;
-`-species_pi0` does not apply. Its held-out test FAILED (62 public runs,
-`acc113r/species`): 0.50 false genus calls per run against 5.98 for the decoy
-call (primary, passes), but recovery 38/105 against 77/105 (guard, fails).
-Scope: experimental selection of the sample organism among the 50 indexed
-genera (42 of 49 runs; wrong relative as only call in 2 of 37 confirmed
-runs); failed the recovery guard; a second organism or contaminant is not
-reported (Sus/Bos 3 of 68); for organisms outside the index the closest
-indexed genus is called in 6 of 13 runs (assigned post hoc, not a test
-result), in the others another genus or none; 12-fold
-fewer calls labelled false under the frozen genus rule. Post hoc reading of
-the spent runs, not a test result: of the 23 calls in the 13 runs whose
-organism is outside the index, 14 name a nearest indexed relative, 6 name
-material that is in the sample (such as keratin or host protein) and 3 are
-unsupported. The default (`none`) and the decoy call are unchanged; see
-[doc/SPECIES-DETECTOR.md](doc/SPECIES-DETECTOR.md).
-
-**Reagent organisms (opt-in, experimental, not held-out tested).** With
-`-species_call explain`, `-species_reagents <fasta>` reports a taxon the
-explain call does not detect as `present` with `call_reason` `reagent` when
-its tags in the listed reagent proteins (porcine trypsin, bovine serum
-proteins, caseins; `species_reagents.fasta` in the taxonomy directory, 38
-entries) exceed the same count on the decoy tags. The calls of the explain
-rule itself do not change. A `reagent` call names the source of a protein
-reagent, not a sample organism: it is scored neither as a true nor as a
-false genus call and is counted separately. On development data (62 spent
-held-out runs) there are 47 reagent calls in 37 runs, 40 of them with at
-least 3 Sage peptides in the listed proteins of the called genus; false
-genus calls per run stay at the 0.50 of `explain` alone (decoy call 5.98);
-see
-[doc/SPECIES-DETECTOR.md](doc/SPECIES-DETECTOR.md).
+**Explain-away calls (removed in 1.14).** `-species_call explain` (1.13)
+called the taxa one at a time, strongest first, each on its distinct tags in
+spectra no taxon called before it explained. Its held-out test FAILED (62
+public runs, `acc113r/species`): 0.50 false genus calls per run against 5.98
+for the decoy call (primary, passes), but recovery 38/105 against 77/105
+(guard, fails). It was removed in 1.14 with `-species_reagents`, which only it
+read: `-species_call explain` is accepted with a warning and read as `none`,
+`-species_reagents` is accepted with a warning and has no effect. The default
+(`none`) and the decoy call are unchanged.
 
 **Both tag orientations (opt-in).** Tags are written N->C under a y-ion
 assumption, so a tag read from b ions is written reversed, and `-species`
@@ -1644,7 +1612,7 @@ data.
 | #9 `-pick_profile auto` | **FAIL** | Ion trap (PXD009049): two charge-3 cells fail non-inferiority, 4+ underpowered, fewer tagged spectra at tag length 4 and 5. Orbitrap (PXD016519, PXD018024; no Astral or TOF run): all 9 cells +10.5 to +32.0 points, but 567 fewer tagged spectra on PXD016519 at tag length 3. Default stays `legacy`; `auto` is not recommended (see Performance) |
 | #6 `-unknown_charge infer` | **INCONCLUSIVE** (item06-H1-r2), then **FAIL** (item06-H2/H2r, high resolution) | Charge-call accuracy 0.751 (H1-r2, descriptive) and 0.745 (H2/H2r) against a 0.90 target; on the high-resolution sets, gains on 3+ and losses on 2+ (on ion trap in H1-r2, losses at every charge). Default stays `assume2` |
 | #14 `-check_header_charge` (1.13, `acceptance/1.13`) | **PASS** (item14r, revised rule); first rule **INCONCLUSIVE** (item14-hdrcharge: two Astral runs without enough truth) | First rule: On the three Q Exactive runs `warn` flags 0.31% of right header charges, and on a copy with every fifth charge changed it finds 28% of the wrong ones at precision 0.95. Overriding real header charges breaks more than it fixes: -2.2 per 1000 identified spectra, lower bound -2.9 (criterion -1.0). Q Exactive only: on Astral (PXD070049) all 9 flags as given and all 8 on the perturbed copy were false (false alarm 0.026), with no changed header found. That rule (range evidence, `override`) was replaced. The revised rule (MS1 isotope spacing, charge-aware pairs, `both`) passed its held-out test (item14r, five new runs, `warn`): it finds 26.9% of the wrong headers at precision 0.679 (95% lower bound 0.647) and flags 0.35% of the right ones (doc/HEADER-CHARGE-CHECK.md). Experimental |
-| 1.13 `-species_call explain` (`acc113r/species`) | **FAIL** | On 62 public runs (PREREG-species-explain.md) against the `decoy` call: 0.50 false genus calls per run (95% interval 0.29-0.73; 31 calls) against 5.98 (371 calls), so the primary endpoint passes (upper bound <= 0.75); the guard fails, recovery of the truth genera 38/105 against 77/105 (Sus or Bos 3/68 against 41/68). The mode selects the sample organism among the 50 indexed genera (42 of 49 runs) and does not report a second organism or contaminant; for organisms outside the index the closest indexed genus is called in 6 of 13 runs (assigned post hoc, not a test result), in the others another genus or none. Experimental, opt-in (doc/SPECIES-DETECTOR.md) |
+| 1.13 `-species_call explain` (`acc113r/species`) | **FAIL** | On 62 public runs (PREREG-species-explain.md) against the `decoy` call: 0.50 false genus calls per run (95% interval 0.29-0.73; 31 calls) against 5.98 (371 calls), so the primary endpoint passes (upper bound <= 0.75); the guard fails, recovery of the truth genera 38/105 against 77/105 (Sus or Bos 3/68 against 41/68). The mode selects the sample organism among the 50 indexed genera (42 of 49 runs) and does not report a second organism or contaminant; for organisms outside the index the closest indexed genus is called in 6 of 13 runs (assigned post hoc, not a test result), in the others another genus or none. Removed in 1.14 (with `-species_reagents`); `explain` is read as `none` (doc/SPECIES-DETECTOR.md) |
 | #17 `-search_shifts` (1.13, `acceptance/1.13`, `acc113r/shifts`) | **FAIL** (item17), **FAIL** (item17r, second test on four new runs) | Closed search against the same search plus the option, Comet 2026.03.0 and Sage 0.14.7, 1% FDR, shuffled entrapment. Second test: more PSMs on 4 of 4 runs (Comet +7.7 to +36.8%, Sage +6.5 to +25.2%), but Comet's entrapment FDP rises on the TMT run PXD037999 (0.88% -> 1.28%, limit +0.30 points; Sage passes), and the option recovers only 5 of 32 (Comet) and 3 of 11 (Sage) admissible peaks of an MSFragger open search. Part of the gain is the isotope error setting (base 0, option 0..1 on three runs); the gain over a base with the same setting was not measured. The option does not replace an open search. Experimental (doc/SHORTLIST.md) |
 | 1.13 `-search_engine msfragger` (#18, `acceptance/1.13`, `acc113r/msfragger`; second test `post1131/msfragger-heldout2`) | **FAIL** (first test); **PASS** (second test, with the shortlist recipe) | 7 runs from 7 PRIDE projects (PREREG-msfragger.md, scored once on 2026-11-10; FASTag 1.12.2 at 9365ff1): MSFragger 4.4.1 on the exported shortlist FASTA and `fragger.params` against MSFragger's closed-search defaults on the full human proteome, 1% FDR on the hyperscore. C1 PASS: MSFragger ran on the unedited export in 7 of 7 runs. C2 FAIL: the shortlist search kept 48.6 to 73.2% of the spectra the full search identified (median 61.3%, pooled 60.9%; criterion at least 80% in every run, reached in none). G1 PASS: 2.03 to 3.91 times as fast (median 3.38). G2 FAIL: entrapment FDP 1.27% pooled (limit 1.5%), but 2.09% in one run (limit 2.0%). Most of the loss came from the exported parameters, not from the shortlist: the exported parameters on the full proteome kept 46 to 82%, the shortlist alone 81 to 95%. Since this test the export writes MSFragger's own `isotope_error 0/1/2/3` unless `-search_isotope_errors` is given: on the two development runs the kept share rose from 47.5 to 72.2% (PXD003531) and from 47.3 to 56.3% (PXD014764) at unchanged speed, entrapment FDP under 1%. After 1.13.1 the export also writes MSFragger's 2 missed cleavages, 20 ppm precursor window and variable protein N-terminal acetylation; on nine development runs (the two above and the seven of this test, now spent) the kept share is 0.678 to 0.915 with them (mean 0.831), and 0.888 or more in every run (mean 0.935) with `-shortlist_gapped -recon_min_length 6 -shortlist_max_evalue 10 -recon_missed_cleavages 2` added, entrapment FDP at most 1.43% per run. Second held-out test (10 runs from 10 new PRIDE projects, PREREG-msfragger2.md on `post1131/msfragger-heldout2`, scored once on 2026-11-11; criteria of the first test), export defaults with that recipe, unedited: **PASS**. MSFragger ran in 10 of 10 runs; in the 9 evaluable runs the kept share is 83.3 to 97.6% (median 93.4%), the search 1.64 to 4.72 times as fast (median 2.05), entrapment FDP 1.07% pooled and at most 1.88% per run (limit 2.0%; one more entrapment hit in that run would exceed it). One run had 10 identifications in the full search and is not evaluable. The test covers the recipe and the export defaults together; with the default shortlist (informational) the kept share is 52.6 to 94.6%, below 80% in 5 of 9 runs, so the recipe is needed; since then it is the default under `-search_engine msfragger` with the tryptic shortlist (each value unless given). Experimental (doc/SHORTLIST.md) |
 | #2 `-complement_rule both` | **INCONCLUSIVE** | By rule 5: the truth of one Astral run (PXD074582) has 0 PSMs at 1% FDR. On the other runs endpoints (i)-(iii) fail descriptively. Default stays `same_charge` |

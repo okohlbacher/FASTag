@@ -302,6 +302,7 @@ class TOPPFASTag : public TOPPBase
       {"label_discovery_unimod_top", kFailedHeldOut},
       {"label_call_min_tags", kFailedHeldOut},
       {"ion_series_photo", kFailedHeldOut},
+      {"species_reagents", "read only by -species_call explain, which failed its held-out test"},
   };
   struct RemovedValue
   {
@@ -310,6 +311,7 @@ class TOPPFASTag : public TOPPBase
   };
   static constexpr RemovedValue kRemovedValues[] = {
       {"ion_series", "ax"},
+      {"species_call", "explain"},
   };
   static constexpr const char* kRemovedHelp =
       "Removed in 1.14; no effect (accepted so that existing command lines and INI files keep working)";
@@ -1145,20 +1147,13 @@ protected:
                           "'decoy' tests its count against a null of decoy tags (looked up like the "
                           "tags) plus the spill expected from stronger related taxa, and appends the "
                           "columns call, call_reason, decoy_spectra, decoy_expected, decoy_qvalue, "
-                          "share and lod. 'explain' (1.13, experimental; failed the recovery guard of its "
-                          "held-out test, doc/SPECIES-DETECTOR.md) calls the taxa one at a time, "
-                          "strongest first, on their distinct tags in spectra that no taxon called before "
-                          "explains, against the same count on the decoy tags; it appends the same columns "
-                          "plus tags and unexplained_tags. 'none' = the ranked report only", false, true);
+                          "share and lod. 'none' = the ranked report only. 'explain' was removed in 1.14 "
+                          "(failed its held-out test); it is read as none", false, true);
     setValidStrings_("species_call", ListUtils::create<std::string>("none,decoy,explain"));
-    registerInputFile_("species_reagents", "<file>", "",
-                       "Experimental, with -species_call explain: FASTA of protein reagents (UniProt headers with "
-                       "OX=<taxid>; species_reagents.fasta in the taxonomy directory lists porcine trypsin and "
-                       "pepsin, bovine serum, milk and enzyme proteins). A taxon the explain call does not detect "
-                       "is called present with call_reason 'reagent' when its tags in these proteins exceed the "
-                       "same count on the decoy tags: the reagent is in the sample, not the organism. Appends "
-                       "the columns reagent_tags and reagent_expected. Not held-out tested", false, true);
-    setValidFormats_("species_reagents", ListUtils::create<std::string>("fasta"));
+    // 1.14: -species_reagents removed (read only by -species_call explain,
+    // which failed its held-out test); the name stays without effect
+    // (kRemovedOptions) and the file is never opened.
+    registerInputFile_("species_reagents", "<file>", "", kRemovedHelp, false, true);
     registerInputFile_("species_call_params", "<file>", "",
                        "Decision parameters of -species_call decoy (alpha, tau, n_min). Default: "
                        "species_call.tsv in the taxonomy directory", false, true);
@@ -1747,9 +1742,8 @@ protected:
     const bool want_species = getFlag_("species")
         || (!getStringOption_("taxdb").empty() && !getStringOption_("species_out").empty());
     // 1.12 #1: the calibrated call runs only with species detection.
-    const bool species_call_on = want_species && getStringOption_("species_call") != "none";
-    // 1.13: the explain-away call (callExplain in src/SpeciesCall.h) on the same decoy lookups.
-    const bool species_explain = species_call_on && getStringOption_("species_call") == "explain";
+    // 1.14: -species_call explain (removed) is read as the default, none.
+    const bool species_call_on = want_species && stringOption_("species_call") != "none";
     // 1.12 #10: both tag orientations in the species lookup.
     const FASTag::SpeciesOrientation species_orient = getStringOption_("species_orientation") == "both"
         ? FASTag::SpeciesOrientation::Both : FASTag::SpeciesOrientation::Forward;
@@ -2789,10 +2783,9 @@ protected:
           // ---- 1.12 D: ignored-option warnings ----
           {"species_call", "-species", want_species},
           {"species_call_params", "-species_call decoy", species_call_on},
-          {"species_reagents", "-species_call explain", species_explain},
           {"species_call_min_units", "-species_call decoy", species_call_on},
           {"species_call_decoys", "-species_call decoy", species_call_on},
-          {"species_pi0", "-species_call decoy", species_call_on && !species_explain},
+          {"species_pi0", "-species_call decoy", species_call_on},
           {"species_orientation", "-species", want_species},
           {"digest_models_version", "-digest_out", digest_on},
           {"digest_detection", "-digest_out", digest_on},
@@ -3988,7 +3981,7 @@ protected:
       guard.input("in", in);
       guard.input("fasta", fasta);
       for (const char* opt : {"recon_fasta", "entrapment_fasta", "digest_models", "taxdb",
-                              "taxonomy_nodes", "taxonomy_names", "species_reagents"})
+                              "taxonomy_nodes", "taxonomy_names"})
         guard.input(opt, getStringOption_(opt));
       // ---- 1.12 E: guarded inputs ----
       // ---- 1.12 A: guarded inputs ----
@@ -6638,55 +6631,6 @@ protected:
       FASTag::TagLookupCounters rev_counters, decoy_rev_counters;
       FASTag::OrientationCounts orient_counts;
       std::vector<std::vector<FASTag::TagSupport>> decoy_support(static_cast<size_t>(n_decoys));
-      // 1.13 (-species_call explain): the contributing tags per spectrum, target and decoy replicate, with
-      // the index taxon in .group until the report-rank groups exist. A decoy carries its target's tag id.
-      std::unordered_map<std::string, uint32_t> explain_tag_id;
-      std::vector<FASTag::SpeciesCall::TagHit> explain_target;
-      std::vector<std::vector<FASTag::SpeciesCall::TagHit>> explain_decoys(static_cast<size_t>(species_explain ? n_decoys : 0));
-      uint32_t explain_spec = 0;
-      // -species_reagents: folded k-mer -> taxids (OX=) of the listed reagent proteins holding it, and the tags
-      // (target or decoy replicate) holding one. ReagentHit.group is that taxid, .groups the target tag's index
-      // taxa, until the report-rank groups exist.
-      // ponytail: the reading as written only; under -species_orientation both a reversed tag is not matched.
-      std::unordered_map<std::string, std::vector<uint32_t>> reagent_kmers;
-      std::vector<FASTag::SpeciesCall::ReagentHit> reagent_hits;
-      const std::string reagents_path = species_explain ? getStringOption_("species_reagents") : std::string();
-      if (!reagents_path.empty())
-      {
-        std::vector<FASTAFile::FASTAEntry> entries;
-        FASTAFile().load(reagents_path, entries);
-        for (const auto& e : entries)
-        {
-          const std::string hd = e.identifier + " " + e.description;
-          const size_t ox = hd.find("OX=");
-          const uint32_t tx = ox == std::string::npos ? 0 : static_cast<uint32_t>(std::strtoul(hd.c_str() + ox + 3, nullptr, 10));
-          if (tx == 0)
-          {
-            OPENMS_LOG_ERROR << "-species_reagents: no OX=<taxid> in the header of '" << e.identifier << "'." << std::endl;
-            return INPUT_FILE_CORRUPT;
-          }
-          const std::string f = FASTag::TaxIndex::fold(e.sequence);
-          for (size_t i = 0; i + static_cast<size_t>(index_k) <= f.size(); ++i)
-          {
-            std::vector<uint32_t>& v = reagent_kmers[f.substr(i, static_cast<size_t>(index_k))];
-            if (std::find(v.begin(), v.end(), tx) == v.end()) v.push_back(tx);
-          }
-        }
-      }
-      const auto reagent_add = [&](const std::string& s, uint32_t tag, int replicate) {
-        const std::string f = FASTag::TaxIndex::fold(s);
-        std::set<uint32_t> tx;
-        for (size_t i = 0; i + static_cast<size_t>(index_k) <= f.size(); ++i)
-        {
-          auto it = reagent_kmers.find(f.substr(i, static_cast<size_t>(index_k)));
-          if (it != reagent_kmers.end()) tx.insert(it->second.begin(), it->second.end());
-        }
-        for (uint32_t t : tx) reagent_hits.push_back({tag, t, replicate, {}});
-      };
-      const auto explain_add = [&](const std::vector<FASTag::TagSupport>& tags, std::vector<FASTag::SpeciesCall::TagHit>& out) {
-        for (size_t i : FASTag::contributingTags(tags, ev_mode))
-          for (uint32_t tx : tags[i].taxa) out.push_back({explain_spec, tags[i].tag, tx});
-      };
       // DEV PROTOTYPE (1.13 species redesign): FASTAG_SPECIES_DUMP=<file> writes every evaluated tag with
       // its target taxa, FASTAG_SPECIES_DUMP_DECOYS k-mer-keyed decoy replicates and, with
       // FASTAG_SPECIES_DECOYDB=<taxdb>, its taxa in a decoy index. Diagnostic only; no other output changes.
@@ -6748,9 +6692,6 @@ protected:
           const std::string seq = FASTag::baseSequence(row.first);
           if (static_cast<int>(seq.size()) < min_len) continue;
           trial = true;
-          const uint32_t tag_id = species_explain
-              ? explain_tag_id.emplace(FASTag::TaxIndex::fold(seq), static_cast<uint32_t>(explain_tag_id.size())).first->second
-              : 0;
           if (dump)
           {
             FASTag::TagLookupCounters dc;
@@ -6776,22 +6717,18 @@ protected:
             *dump << '\n';
           }
           bool decoy_less = false;
-          const size_t reagent_first = reagent_hits.size();
-          if (!reagent_kmers.empty()) reagent_add(seq, tag_id, -1);
           for (int j = 0; j < n_decoys; ++j)
           {
             // A homopolymer (or a periodic tag whose permutation cannot leave
             // both orientations) has no decoy j: it is counted, not looked up.
             const std::string dseq = FASTag::decoyTag(seq, static_cast<uint32_t>(j));
             if (dseq.empty()) { decoy_less = true; continue; }
-            if (!reagent_kmers.empty()) reagent_add(dseq, tag_id, j);
             FASTag::TagSupport dts;
             // Under both orientations the decoy takes the target's rule.
             if (!FASTag::orientedTagSupport(idx, dseq, index_k, share_cap, min_margin, species_orient, dts.taxa,
                                             decoy_counters, decoy_rev_counters, nullptr))
               continue;
             dts.evalue = row.second;
-            dts.tag = tag_id;
             decoy_support[static_cast<size_t>(j)].push_back(std::move(dts));
           }
           if (decoy_less) ++n_decoy_less;
@@ -6802,18 +6739,10 @@ protected:
           if (!FASTag::orientedTagSupport(idx, seq, index_k, share_cap, min_margin, species_orient, ts.taxa,
                                           lookup_counters, rev_counters, &orient_counts))
             continue;
-          for (size_t i = reagent_first; i < reagent_hits.size(); ++i) reagent_hits[i].groups = ts.taxa;
           ts.evalue = row.second;
-          ts.tag = tag_id;
           support.push_back(std::move(ts));
         }
         if (trial) ++n_trials;
-        if (species_explain)
-        {
-          explain_add(support, explain_target);
-          for (size_t j = 0; j < explain_decoys.size(); ++j) explain_add(decoy_support[j], explain_decoys[j]);
-          ++explain_spec;
-        }
         for (const auto& ds : decoy_support)
         {
           const std::set<uint32_t> dtaxa = FASTag::spectrumTaxa(ds, ev_mode);
@@ -6985,45 +6914,8 @@ protected:
         call_run.min_units = static_cast<uint64_t>(getIntOption_("species_call_min_units"));
         call_run.low_resolution = getStringOption_("fragment_tolerance_unit") == "Da";
         call_run.pi0 = getDoubleOption_("species_pi0");
-        std::vector<FASTag::SpeciesCall::GenusStat> stats;
-        if (species_explain)
-        {
-          // Index taxon -> report-rank group; a taxon without an ancestor at that rank drops out.
-          std::unordered_map<uint32_t, uint32_t> leaf_group;
-          for (size_t i = 0; i < idx_taxa.size(); ++i)
-            if (group_of[i] >= 0) leaf_group[idx_taxa[i]] = static_cast<uint32_t>(group_of[i]);
-          const auto to_groups = [&](std::vector<FASTag::SpeciesCall::TagHit>& v) {
-            for (auto& h : v)
-            {
-              auto it = leaf_group.find(h.group);
-              h.group = it == leaf_group.end() ? static_cast<uint32_t>(ng) : it->second;
-            }
-          };
-          to_groups(explain_target);
-          for (auto& d : explain_decoys) to_groups(d);
-          stats = FASTag::SpeciesCall::callExplain(group_taxid, explain_target, explain_decoys, call_run, species_call_params);
-          for (size_t g = 0; g < ng; ++g) stats[g].share = in_g[g].share;
-          if (!reagents_path.empty())
-          {
-            const auto group = [&](uint32_t tx) {   // index taxon, or any taxon below a report-rank group
-              auto it = leaf_group.find(tx);
-              if (it != leaf_group.end()) return it->second;
-              for (uint32_t a : tax.lineage(tx))
-              {
-                auto gi = group_index.find(a);
-                if (gi != group_index.end()) return static_cast<uint32_t>(gi->second);
-              }
-              return static_cast<uint32_t>(ng);
-            };
-            for (auto& h : reagent_hits)
-            {
-              h.group = group(h.group);
-              for (uint32_t& g : h.groups) g = group(g);
-            }
-            FASTag::SpeciesCall::callReagents(stats, reagent_hits, n_decoys, species_call_params);
-          }
-        }
-        else stats = FASTag::SpeciesCall::callGenera(in_g, C, call_run, species_call_params);
+        const std::vector<FASTag::SpeciesCall::GenusStat> stats =
+            FASTag::SpeciesCall::callGenera(in_g, C, call_run, species_call_params);
         for (const auto& st : stats) call_stats[st.taxid] = st;
       }
 
@@ -7035,8 +6927,6 @@ protected:
       }
       so << "rank\ttaxid\tname\tobserved\tadjusted\texpected\tlog_pvalue\tqvalue";
       if (species_call_on) so << "\tcall\tcall_reason\tdecoy_spectra\tdecoy_expected\tdecoy_qvalue\tshare\tlod";
-      if (species_explain) so << "\ttags\tunexplained_tags";
-      if (!reagents_path.empty()) so << "\treagent_tags\treagent_expected";
       so << '\n';
 
       // Order by the corrected count, not by q. Significance ranks a near
@@ -7089,8 +6979,6 @@ protected:
             // Not an ancestor of any index taxon at this rank: cannot happen
             // for a counted taxon, but never leave the columns short.
             so << "\tnot_detected\tnot_significant\t0\tNA\tNA\tNA\tNA";
-            if (species_explain) so << "\t0\t0";
-            if (!reagents_path.empty()) so << "\tNA\tNA";
             ++n_call[2];
           }
           else
@@ -7104,13 +6992,6 @@ protected:
                           static_cast<unsigned long long>(st.decoy_spectra), st.expected, st.qvalue,
                           st.share, lod);
             so << '\t' << FASTag::SpeciesCall::callName(st.call) << '\t' << st.reason << cnum;
-            if (species_explain) so << '\t' << st.tags << '\t' << st.observed;
-            if (!reagents_path.empty())
-            {
-              char rnum[64] = "\tNA\tNA";   // a taxon without listed reagent proteins
-              if (st.reagent) std::snprintf(rnum, sizeof rnum, "\t%llu\t%.3f", static_cast<unsigned long long>(st.reagent_tags), st.reagent_expected);
-              so << rnum;
-            }
             ++n_call[st.call == FASTag::SpeciesCall::Call::Present ? 0
                      : st.call == FASTag::SpeciesCall::Call::NoCall ? 1 : 2];
           }
@@ -7144,7 +7025,7 @@ protected:
       }
       if (species_call_on)
       {
-        OPENMS_LOG_INFO << "Species call (-species_call " << (species_explain ? "explain" : "decoy") << "): " << n_call[0] << " present, " << n_call[1]
+        OPENMS_LOG_INFO << "Species call (-species_call decoy): " << n_call[0] << " present, " << n_call[1]
                         << " no_call, " << n_call[2] << " not_detected among the reported " << want_rank
                         << " rows";
         if (call_run.low_resolution) OPENMS_LOG_INFO << " (run-level no_call: low_resolution, Da tolerance)";

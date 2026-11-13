@@ -27,6 +27,17 @@ remaining configuration writes the same output as 1.13.4.
   `-ion_series_photo`, whose only other value was `ax`, has no effect. The
   a/x code, tests and doc/AX-IONS.md are removed; `by`, `cz`, `auto` and
   `-ion_series_hybrid` are unchanged.
+- **Explain-away species call** (`-species_call explain` and
+  `-species_reagents`): failed its held-out test (62 public runs: 0.50 false
+  genus calls per run against 5.98 for the decoy call, primary endpoint
+  passed; recovery guard failed, truth genera recovered 38/105 against
+  77/105). `-species_call explain` is read as `none`; `-species_reagents`,
+  read only under `explain`, has no effect and its file is not read. The
+  explain and reagent code, their report columns (`tags`, `unexplained_tags`,
+  `reagent_tags`, `reagent_expected`), tests and
+  `data/taxonomy/species_reagents.fasta` are removed; the `reagent_n_min` key
+  of `-species_call_params` files is accepted and ignored. `none` and `decoy`
+  are unchanged.
 
 ## 1.13.4 (2026-11-13)
 

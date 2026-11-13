@@ -1087,8 +1087,8 @@ export const SPECIES: HelpPage = {
           <li>
             <strong>Optional calls are experimental.</strong> The command-line <L to="param-species_call">species
             call</L> is off by default. Its decoy model and decision settings are provisional; neither its calls
-            nor its decoy q-values are calibrated error guarantees. The alternative explain-away method also
-            failed its held-out recovery criterion. A <code>no_call</code> means the evidence or checks were
+            nor its decoy q-values are calibrated error guarantees. The alternative explain-away method failed
+            its held-out recovery criterion and was removed in 1.14. A <code>no_call</code> means the evidence or checks were
             insufficient; <code>not_detected</code> is a result under that method&apos;s detection limit, never
             proof of biological absence.
           </li>

@@ -254,46 +254,14 @@ calibrated for D = 5) are PROVISIONAL: they are not fitted yet, and
 `-species_call_decoys` from the one the file states gives a warning.
 `-species_call` refuses `-stream`.
 
-## Explain-away call (`-species_call explain`, opt-in, experimental, 1.13)
+## Explain-away call (`-species_call explain`, 1.13; removed in 1.14)
 
-The decoy call counts spectra and subtracts an expected spill from related
-taxa. On real runs that null is too small: a peptide seen in hundreds of
-spectra counts hundreds of times, its decoy at most as often, and the spill
-model does not cover real homology. `-species_call explain` changes the unit
-and the way a called taxon accounts for its relatives.
-
-- **Unit.** A taxon is counted by its DISTINCT TAGS (I/L-folded sequence)
-  among the tags that contribute under `-species_evidence`, not by spectra.
-- **Explaining.** Taxa are called one at a time. Once a taxon is called, every
-  spectrum with a contributing tag of it is explained and counts for no other
-  taxon. A relative that only shares tags with the organism in the sample has
-  no unexplained tags left; a second organism keeps its own.
-- **Null.** Each step counts, for every taxon not yet called, its tags in
-  unexplained spectra (o) and the same on each of the D decoy replicates of
-  those spectra's tags. The null is negative binomial with mean
-  (sum of the decoy counts + 0.5) / D and variance phi (1 + 1/D) times the
-  mean: 1/D for the estimated mean, phi (at least 1) the spread between
-  replicates relative to Poisson, pooled over the taxa not yet called.
-- **Decision.** The taxon with the smallest p is called present when
-  p times m is at most alpha, m being the taxa not yet called with at least
-  n_min unexplained tags (step-down Bonferroni). The first failure ends the
-  loop; everything left is `not_detected` (`explained` when the taxon had
-  n_min tags in the run but fewer left, `not_significant` otherwise). The
-  run-level `no_call` rows (low_resolution, few_spectra) are those of the
-  decoy call.
-
-Report: the columns of the decoy call plus `tags` and `unexplained_tags`.
-`decoy_spectra` is the decoy tag count over the D replicates, `decoy_expected`
-the null's mean, `decoy_qvalue` min(1, p m), all at the taxon's decision (its
-step when called, the stop otherwise); `share` is as in the decoy call, `lod`
-is NA. alpha and n_min come from `species_call.tsv`; tau and `-species_pi0` are
-not used.
-
-Limits. A taxon that is in the sample but not in the index is not explained by
-anything: its conserved tags can call the nearest indexed relative. Reagent and
-expression-host proteins (protease, Protein A, E. coli from a recombinant
-protein) are real material and are called. Developed on 36 FTMS runs of the
-1.12 development set and the same runs against a shuffled-proteome index.
+`-species_call explain` (1.13) counted a taxon by its distinct tags instead of
+spectra and called the taxa one at a time, strongest first: once a taxon was
+called, every spectrum with a contributing tag of it counted for no other
+taxon, so a relative that only shared tags with the organism in the sample was
+left with nothing. Each step tested the taxa against the same count on the
+decoy tags (negative binomial, step-down Bonferroni).
 
 Held-out result (1.13, branch `acc113r/species`: `PREREG-species-explain.md`,
 `species/results/summary.tsv`; 62 public runs, scored once): **FAIL**. The
@@ -307,81 +275,14 @@ primary endpoint passes, the recovery guard fails.
 
 "False" is the label under the frozen genus rule, not established absence.
 
-Scope: experimental selection of the sample organism among the 50 indexed
-genera (42 of 49 runs; wrong relative as only call in 2 of 37 confirmed
-runs); failed the recovery guard; a second organism or contaminant is not
-reported (Sus/Bos 3 of 68); organisms outside the index are usually reported
-as their nearest indexed relative (10 of 13 runs) or not at all; 12-fold
-fewer calls labelled false under the frozen genus rule.
-
-Post hoc reading of the spent runs, not a test result: of the 23 calls in the
-13 runs whose organism is outside the index, 14 name a nearest indexed
-relative, 6 name material that is in the sample (such as keratin or host
-protein) and 3 are unsupported.
-
-The mode stays opt-in and experimental; the default (`none`) and the decoy
-call are unchanged.
-
-## Reagent organisms (`-species_reagents`, opt-in, experimental, after 1.13.1)
-
-Why `explain` does not report porcine trypsin or bovine serum: after the
-sample organism is called, a genus is tested on all its unexplained tags
-against the random matches of its whole proteome. A protein reagent gives
-some tens of tags from a few proteins; the null of a mammalian proteome is
-several hundred (PXD001587: Bos 467 unexplained tags against 468.7 expected,
-of which 376 lie in listed bovine serum proteins). All 65 lost Sus/Bos
-positives of the spent runs end as `not_significant`. The `decoy` call
-reports them through tags shared with the sample organism, the channel that
-also gives its 5.98 false calls per run.
-
-`-species_reagents <fasta>` (with `-species_call explain` only) tests a
-smaller hypothesis. The file lists reagent proteins with UniProt headers
-(`OX=` gives the taxon); `data/taxonomy/species_reagents.fasta` has 38
-entries (porcine trypsin and pepsin; bovine serum proteins, caseins and whey
-proteins, trypsin, chymotrypsin, aprotinin, RNase A, DNase I). For a taxon
-the explain call did not call, the distinct tags that lie in its listed
-proteins, whose index support holds that taxon and no called taxon, are
-counted against the same membership of the decoy tags. Greedy over the
-reagent taxa; a taxon with at least `reagent_n_min` tags (8; optional key of
-`species_call.tsv`) and Poisson p times the number of candidates <= alpha is
-reported `present` with `call_reason` `reagent`. The report gets the columns
-`reagent_tags` and `reagent_expected` (NA for taxa without listed proteins).
-No row of the explain call changes: on 98 runs the calls with reason `pass`
-are identical with and without the option. A `reagent` call says that the
-protein reagent is in the sample, not that the organism is the sample.
-
-Development data only (62 spent held-out runs and 35 runs of the 1.12
-development set with a Sage truth search; frozen genus rule of
-`PREREG-species-explain.md`, Sus/Bos counted as positives; branch
-`post1131/species`). **Not held-out tested.**
-
-Scoring: a reagent call (a row with `call` `present` and `call_reason`
-`reagent`, read from the report alone) is neither a true nor a false genus
-call. It is left out of the false genus calls; a positive genus that is not
-a sample genus and has a reagent call is left out of the recovery of all
-three columns; the reagent calls are counted on their own.
-
-| | decoy call | explain (1.13.1) | explain + reagents |
-|---|---|---|---|
-| Spent runs (62): false genus calls per run | 5.98 [4.68, 7.48] | 0.50 [0.29, 0.73] | 0.50 [0.29, 0.73] |
-| Spent runs: recovery (42 of 105 positives left out) | 52/63 | 38/63 | 38/63 |
-| Spent runs: reagent calls | | | 47 in 37 runs |
-| of these: >= 3 / 1 or 2 / no Sage peptides in listed proteins | | | 40 / 5 / 2 |
-| Development runs (35): false genus calls per run | 7.37 [6.03, 8.89] | 0.40 [0.17, 0.66] | 0.40 [0.17, 0.66] |
-| Development runs: recovery (34 of 102 positives left out) | 61/68 | 50/68 | 50/68 |
-| Development runs: reagent calls | | | 37 in 28 runs |
-| of these: >= 3 / 1 or 2 / no Sage peptides in listed proteins | | | 32 / 3 / 2 |
-
-Scored this way the option changes neither false genus calls nor recovery
-against `explain` alone; what it adds is the reagent calls. Sus or Bos
-positives with a reagent call: 42 of 68 on the spent runs, 34 of 54 on the
-development runs. Of the 68 Sus/Bos positives of the spent
-runs none is a sample organism: in 53 the Sage peptides come from reagent
-proteins (>= 3 peptides), in 11 from one or two such peptides, in 4 from
-none. Limits: a genuine second organism at low level (meat or milk
-admixture, xenograft host) is still not recovered by `explain`; only Sus and
-Bos have listed proteins; a reagent protein that is absent from the list is
-not found.
+The mode was removed in 1.14, together with `-species_reagents` (after
+1.13.1, not held-out tested), which tested the tags in listed reagent
+proteins (porcine trypsin, bovine serum and milk proteins) of the taxa
+`explain` did not call and was read only under `-species_call explain`.
+`-species_call explain` is accepted with a warning and read as `none`;
+`-species_reagents` is accepted with a warning, has no effect and its file is
+not read; the optional `reagent_n_min` key of `species_call.tsv` files is
+accepted and ignored. The default (`none`) and the decoy call are unchanged.
 
 ## Both tag orientations (`-species_orientation both`, opt-in, 1.12)
 

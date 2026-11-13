@@ -1208,8 +1208,10 @@ export const PARAM_UI: Record<string, ParamUi> = {
   },
   species_call: {
     hidden: OPT_IN_1_12,
+    // 1.14: explain was removed; the CLI still accepts it and reads none.
+    choices: ['none', 'decoy'],
     help: {
-      text: 'Add experimental organism calls to the species report. none leaves calls off; decoy compares evidence with decoy tags; explain tests each organism using spectra not explained by an earlier call.',
+      text: 'Add experimental organism calls to the species report. none leaves calls off; decoy compares evidence with decoy tags. The explain call was removed in 1.14: it failed its held-out test.',
       tip: 'The decision settings are provisional. These calls and their decoy q-values are not calibrated error guarantees; not detected never proves biological absence.'
     }
   },
@@ -1238,12 +1240,7 @@ export const PARAM_UI: Record<string, ParamUi> = {
       tip: 'The optional decoy-based calls and decoy q-values remain experimental and uncalibrated.'
     }
   },
-  species_reagents: {
-    hidden: OPT_IN_1_13_EXPERIMENTAL,
-    help: {
-      text: 'A FASTA file of reagent proteins (trypsin, serum albumin, milk proteins). With the explain organism call, an organism seen only through these proteins is reported as a reagent, not as a sample organism.'
-    }
-  },
+  species_reagents: { hidden: REMOVED_1_14, help: REMOVED_1_14_HELP },
   species_pi0: {
     hidden: OPT_IN_1_12,
     help: {

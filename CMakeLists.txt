@@ -234,7 +234,6 @@ install(FILES "${CMAKE_CURRENT_SOURCE_DIR}/data/taxonomy/nodes.dmp"
               "${CMAKE_CURRENT_SOURCE_DIR}/data/taxonomy/README.md"
               "${CMAKE_CURRENT_SOURCE_DIR}/data/taxonomy/reference-set.tsv"
               "${CMAKE_CURRENT_SOURCE_DIR}/data/taxonomy/species_call.tsv"
-              "${CMAKE_CURRENT_SOURCE_DIR}/data/taxonomy/species_reagents.fasta"
         DESTINATION share/FASTag/taxonomy)
 
 add_executable(buildtaxdb src/buildtaxdb.cpp)
