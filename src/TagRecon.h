@@ -194,12 +194,12 @@ namespace FASTag
     void setFixedTermMods(double nterm, double cterm) { fixed_n_ = nterm; fixed_c_ = cterm; }
 
   private:
-    double tolAt(double m) const { return tol_ppm_ ? m * frag_tol_ * 1e-6 : frag_tol_; }
+    double tolAt_(double m) const { return tol_ppm_ ? m * frag_tol_ * 1e-6 : frag_tol_; }
     /// The database flank masses tryPlace compares an occurrence with (the
     /// y-ion convention and the reversed-reading swap, see reconcile()).
-    static void wantedFlanks(bool reversed, double nterm_mass, double cterm_mass,
+    static void wantedFlanks_(bool reversed, double nterm_mass, double cterm_mass,
                              const IonSeries::IonPair* series, double& want_n, double& want_c);
-    void tryPlace(const ProteomeIndex::TagOcc& occ, const ProteomeIndex::Window& w,
+    void tryPlace_(const ProteomeIndex::TagOcc& occ, const ProteomeIndex::Window& w,
                   double nterm_mass, double cterm_mass, const OpenMS::MSSpectrum* spec,
                   int frag_charges, const std::vector<double>* tag_shift,
                   const IonSeries::IonPair* series, std::vector<Reconciliation>& out) const;
