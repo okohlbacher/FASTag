@@ -102,9 +102,10 @@ describe('preStartChecks (from the probe)', () => {
     expect(ids(pre(fastaProbe).checks)).toEqual(['warn:stale-index', 'warn:fasta-decoys'])
   })
 
-  it('profile MS2: mzML names -pick_profile auto, MGF centroiding first, and mzPeak (centroided by FASTag) is not flagged', () => {
+  it('profile MS2: mzML and MGF recommend centroiding first (never the removed -pick_profile auto), and mzPeak (centroided by FASTag) is not flagged', () => {
     expect(profileProbe).toContain('"file_format":"mzML"') // guard
-    expect(pre(profileProbe).checks[0].detail).toContain('-pick_profile auto')
+    expect(pre(profileProbe).checks[0].detail).toContain('centroid them first')
+    expect(pre(profileProbe).checks[0].detail).not.toContain('-pick_profile')
     const mgf = pre(profileProbe.replace('"file_format":"mzML"', '"file_format":"MGF"')).checks
     expect(ids(mgf)).toEqual(['flag:profile'])
     expect(mgf[0].detail).toContain('Centroid them first')

@@ -568,7 +568,7 @@
       "name": "ion_series",
       "type": "string",
       "default": "by",
-      "description": "Ion series the MS2 spectra are read as: by (b/y ions, as before 1.12), cz (c/z-dot ions of electron transfer or capture dissociation, ETD/ECD), or auto (c/z-dot for spectra whose activation is ETD or ECD, b/y for all others, hybrid EThcD/ETciD included), or ax (a/x ions of photodissociation, UVPD, every spectrum; experimental, failed its held-out test). Under cz, auto and ax the tag TSV gains an ion_series column when some spectrum can be read as c/z or a/x",
+      "description": "Ion series the MS2 spectra are read as: by (b/y ions, as before 1.12), cz (c/z-dot ions of electron transfer or capture dissociation, ETD/ECD), or auto (c/z-dot for spectra whose activation is ETD or ECD, b/y for all others, hybrid EThcD/ETciD included). Under cz and auto the tag TSV gains an ion_series column when some spectrum can be read as c/z. ax was removed in 1.14 (failed its held-out test); it is read as by",
       "required": false,
       "toppAdvanced": false,
       "choices": [
@@ -594,13 +594,9 @@
       "name": "ion_series_photo",
       "type": "string",
       "default": "by",
-      "description": "Under -ion_series auto: the series photodissociation spectra (UVPD; activation MS:1000435 or a Thermo @uvpd filter token, and no collisional or electron method) are read as: by (as before 1.13) or ax (a/x ions). -ion_series ax reads every spectrum as a/x ions. Experimental: the a/x reading failed its held-out test",
+      "description": "Removed in 1.14; no effect (accepted so that existing command lines and INI files keep working)",
       "required": false,
-      "toppAdvanced": true,
-      "choices": [
-        "by",
-        "ax"
-      ]
+      "toppAdvanced": true
     },
     {
       "name": "isobaric_tolerance",
@@ -628,89 +624,73 @@
       "name": "label_call_min_tags",
       "type": "int",
       "default": "175",
-      "description": "C-terminal tag ends -label_out's label_call needs; fewer give no_call few_tags (175: the FASTag 1.12 rule; 0, experimental, failed its held-out test: every ppm run is called)",
+      "description": "Removed in 1.14; no effect (accepted so that existing command lines and INI files keep working)",
       "required": false,
-      "toppAdvanced": true,
-      "min": 0
+      "toppAdvanced": true
     },
     {
       "name": "label_discovery_depth",
       "type": "int",
       "default": "2",
-      "description": "Most residues a -label_discovery_out channel-peak explanation names (0, 1 or 2)",
+      "description": "Removed in 1.14; no effect (accepted so that existing command lines and INI files keep working)",
       "required": false,
-      "toppAdvanced": true,
-      "min": 0,
-      "max": 2
+      "toppAdvanced": true
     },
     {
       "name": "label_discovery_max_flank",
       "type": "double",
       "default": "700.0",
-      "description": "Largest flank mass -label_discovery_out histograms, and the largest composition mass of its null image set (above 0, at most 1500)",
+      "description": "Removed in 1.14; no effect (accepted so that existing command lines and INI files keep working)",
       "required": false,
-      "toppAdvanced": true,
-      "min": 0,
-      "max": 1500
+      "toppAdvanced": true
     },
     {
       "name": "label_discovery_min_share",
       "type": "double",
       "default": "0.005",
-      "description": "Share of the counted spectra a -label_discovery_out peak needs",
+      "description": "Removed in 1.14; no effect (accepted so that existing command lines and INI files keep working)",
       "required": false,
-      "toppAdvanced": true,
-      "min": 0,
-      "max": 1
+      "toppAdvanced": true
     },
     {
       "name": "label_discovery_min_spectra",
       "type": "int",
       "default": "20",
-      "description": "Spectra a -label_discovery_out peak or site candidate needs",
+      "description": "Removed in 1.14; no effect (accepted so that existing command lines and INI files keep working)",
       "required": false,
-      "toppAdvanced": true,
-      "min": 1
+      "toppAdvanced": true
     },
     {
       "name": "label_discovery_out",
       "type": "output-file",
       "default": "",
-      "description": "Experimental: report every terminal or lysine mass offset the tag flanks carry, known or not, explained by residues, the known labels or Unimod, and a label call (failed its held-out test: 6 of 150 label-free runs got a label call; format in doc/LABEL-DISCOVERY-REPORT.md)",
+      "description": "Removed in 1.14; no effect (accepted so that existing command lines and INI files keep working)",
       "required": false,
-      "toppAdvanced": false,
-      "formats": [
-        "tsv"
-      ]
+      "toppAdvanced": true
     },
     {
       "name": "label_discovery_unimod_top",
       "type": "int",
       "default": "3",
-      "description": "Unimod alternatives -label_discovery_out lists per peak",
+      "description": "Removed in 1.14; no effect (accepted so that existing command lines and INI files keep working)",
       "required": false,
-      "toppAdvanced": true,
-      "min": 0
+      "toppAdvanced": true
     },
     {
       "name": "label_discovery_window_c",
       "type": "double",
       "default": "0.0",
-      "description": "Half-window of the C-terminal flank channel of -label_discovery_out; 0 = estimate it from the run (at most 0.05)",
+      "description": "Removed in 1.14; no effect (accepted so that existing command lines and INI files keep working)",
       "required": false,
-      "toppAdvanced": true,
-      "min": 0,
-      "max": 0.05
+      "toppAdvanced": true
     },
     {
       "name": "label_discovery_window_n",
       "type": "double",
       "default": "0.0",
-      "description": "Half-window of the N-terminal flank channel of -label_discovery_out; 0 = estimate it from the run (at most 0.05)",
+      "description": "Removed in 1.14; no effect (accepted so that existing command lines and INI files keep working)",
       "required": false,
-      "toppAdvanced": true,
-      "min": 0,
-      "max": 0.05
+      "toppAdvanced": true
     },
     {
       "name": "label_out",
@@ -930,7 +910,7 @@
       "name": "pick_profile",
       "type": "string",
       "default": "legacy",
-      "description": "Centroid profile MS2 (MS:1000128) with OpenMS PeakPickerHiRes before tagging: 'legacy' on mzPeak input only (as FASTag 1.11), 'auto' on mzML and mzPeak input (not MGF), 'off' never. Centroided MS2 are never re-picked; -out_spectra writes the spectra as they were tagged",
+      "description": "Centroid profile MS2 (MS:1000128) with OpenMS PeakPickerHiRes before tagging: 'legacy' on mzPeak input only (as FASTag 1.11), 'off' never ('auto' was removed in 1.14 and is read as legacy). Centroided MS2 are never re-picked; -out_spectra writes the spectra as they were tagged",
       "required": false,
       "toppAdvanced": false,
       "choices": [
@@ -943,7 +923,7 @@
       "name": "pick_unknown_type",
       "type": "bool",
       "default": "false",
-      "description": "With -pick_profile auto, also centroid MS2 that declare no spectrum type (neither MS:1000127 nor MS:1000128) when OpenMS's PeakTypeEstimator reads their data as profile",
+      "description": "Removed in 1.14; no effect (accepted so that existing command lines and INI files keep working)",
       "required": false,
       "toppAdvanced": true
     },
@@ -1364,7 +1344,7 @@
       "name": "species_call",
       "type": "string",
       "default": "none",
-      "description": "Call each taxon of the -species report present, no_call or not_detected: 'decoy' tests its count against a null of decoy tags (looked up like the tags) plus the spill expected from stronger related taxa, and appends the columns call, call_reason, decoy_spectra, decoy_expected, decoy_qvalue, share and lod. 'explain' (1.13, experimental; failed the recovery guard of its held-out test, doc/SPECIES-DETECTOR.md) calls the taxa one at a time, strongest first, on their distinct tags in spectra that no taxon called before explains, against the same count on the decoy tags; it appends the same columns plus tags and unexplained_tags. 'none' = the ranked report only",
+      "description": "Call each taxon of the -species report present, no_call or not_detected: 'decoy' tests its count against a null of decoy tags (looked up like the tags) plus the spill expected from stronger related taxa, and appends the columns call, call_reason, decoy_spectra, decoy_expected, decoy_qvalue, share and lod. 'none' = the ranked report only. 'explain' was removed in 1.14 (failed its held-out test); it is read as none",
       "required": false,
       "toppAdvanced": true,
       "choices": [
@@ -1497,14 +1477,9 @@
       "name": "species_reagents",
       "type": "input-file",
       "default": "",
-      "description": "Experimental, with -species_call explain: FASTA of protein reagents (UniProt headers with OX=<taxid>; species_reagents.fasta in the taxonomy directory lists porcine trypsin and pepsin, bovine serum, milk and enzyme proteins). A taxon the explain call does not detect is called present with call_reason 'reagent' when its tags in these proteins exceed the same count on the decoy tags: the reagent is in the sample, not the organism. Appends the columns reagent_tags and reagent_expected. Not held-out tested",
+      "description": "Removed in 1.14; no effect (accepted so that existing command lines and INI files keep working)",
       "required": false,
-      "toppAdvanced": true,
-      "formats": [
-        "fasta",
-        "fa",
-        "faa"
-      ]
+      "toppAdvanced": true
     },
     {
       "name": "species_use_gapped",
