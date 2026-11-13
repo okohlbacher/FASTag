@@ -91,9 +91,9 @@ namespace FASTag::Hyp
   */
   enum class ChargeMode
   {
-    Assume2,    ///< 2, as FASTag 1.11; the default
-    Enumerate,  ///< possible charges, else charge_min .. charge_max
-    Infer,      ///< inferCharge()
+    ASSUME2,    ///< 2, as FASTag 1.11; the default
+    ENUMERATE,  ///< possible charges, else charge_min .. charge_max
+    INFER,      ///< inferCharge()
   };
 
   /**
@@ -103,13 +103,13 @@ namespace FASTag::Hyp
   */
   enum class ChargeSource : std::uint8_t
   {
-    Header = 0,      ///< the precursor's charge
-    Possible = 1,    ///< a listed possible charge
-    Inferred = 2,    ///< inferCharge()'s unambiguous call
-    Ambiguous = 3,   ///< one of the two charges of an ambiguous call
-    Assumed = 4,     ///< 2 without evidence (assume2, or infer without a call)
-    Enumerated = 5,  ///< one of charge_min .. charge_max under enumerate
-    CheckCall = 6,   ///< 1.13: the check's charge of a disagreeing header (tagged beside the header charge)
+    HEADER = 0,      ///< the precursor's charge
+    POSSIBLE = 1,    ///< a listed possible charge
+    INFERRED = 2,    ///< inferCharge()'s unambiguous call
+    AMBIGUOUS = 3,   ///< one of the two charges of an ambiguous call
+    ASSUMED = 4,     ///< 2 without evidence (assume2, or infer without a call)
+    ENUMERATED = 5,  ///< one of charge_min .. charge_max under enumerate
+    CHECK_CALL = 6,   ///< 1.13: the check's charge of a disagreeing header (tagged beside the header charge)
   };
   inline constexpr std::size_t kChargeSources = 7;  ///< number of ChargeSource values
 
@@ -124,13 +124,13 @@ namespace FASTag::Hyp
   {
     switch (s)
     {
-      case ChargeSource::Header: return "header";
-      case ChargeSource::Possible: return "possible";
-      case ChargeSource::Inferred: return "inferred";
-      case ChargeSource::Ambiguous: return "ambiguous";
-      case ChargeSource::Assumed: return "assumed";
-      case ChargeSource::Enumerated: return "enumerated";
-      case ChargeSource::CheckCall: return "check_call";
+      case ChargeSource::HEADER: return "header";
+      case ChargeSource::POSSIBLE: return "possible";
+      case ChargeSource::INFERRED: return "inferred";
+      case ChargeSource::AMBIGUOUS: return "ambiguous";
+      case ChargeSource::ASSUMED: return "assumed";
+      case ChargeSource::ENUMERATED: return "enumerated";
+      case ChargeSource::CHECK_CALL: return "check_call";
     }
     return "assumed";
   }
@@ -144,9 +144,9 @@ namespace FASTag::Hyp
   */
   inline bool parseMode(std::string_view s, ChargeMode& out)
   {
-    if (s == "assume2") { out = ChargeMode::Assume2; return true; }
-    if (s == "enumerate") { out = ChargeMode::Enumerate; return true; }
-    if (s == "infer") { out = ChargeMode::Infer; return true; }
+    if (s == "assume2") { out = ChargeMode::ASSUME2; return true; }
+    if (s == "enumerate") { out = ChargeMode::ENUMERATE; return true; }
+    if (s == "infer") { out = ChargeMode::INFER; return true; }
     return false;
   }
 
@@ -155,9 +155,9 @@ namespace FASTag::Hyp
   */
   enum class HeaderCheck
   {
-    Off,       ///< no check; the default
-    Warn,      ///< check and report, tag at the header charge
-    Both,      ///< check and report, tag a disagreeing spectrum at the header charge and at the check's charge
+    OFF,       ///< no check; the default
+    WARN,      ///< check and report, tag at the header charge
+    BOTH,      ///< check and report, tag a disagreeing spectrum at the header charge and at the check's charge
   };
 
   /**
@@ -169,9 +169,9 @@ namespace FASTag::Hyp
   */
   inline bool parseHeaderCheck(std::string_view s, HeaderCheck& out)
   {
-    if (s == "off") { out = HeaderCheck::Off; return true; }
-    if (s == "warn") { out = HeaderCheck::Warn; return true; }
-    if (s == "both") { out = HeaderCheck::Both; return true; }
+    if (s == "off") { out = HeaderCheck::OFF; return true; }
+    if (s == "warn") { out = HeaderCheck::WARN; return true; }
+    if (s == "both") { out = HeaderCheck::BOTH; return true; }
     return false;
   }
   inline constexpr const char* kHeaderCheckDefault = "off";
@@ -218,12 +218,12 @@ namespace FASTag::Hyp
   */
   struct HypParam
   {
-    ChargeMode mode = ChargeMode::Assume2;      ///< -unknown_charge
+    ChargeMode mode = ChargeMode::ASSUME2;      ///< -unknown_charge
     int charge_min = kChargeMinDefault;         ///< -charge_min
     int charge_max = kChargeMaxDefault;         ///< -charge_max
     double infer_margin = kInferMarginDefault;  ///< -charge_infer_margin
     std::vector<int> isotope_errors{0};         ///< -isotope_error: the isotope offsets k
-    HeaderCheck header_check = HeaderCheck::Off;  ///< 1.13 -check_header_charge
+    HeaderCheck header_check = HeaderCheck::OFF;  ///< 1.13 -check_header_charge
     double header_margin = kHeaderMarginDefault;  ///< 1.13 -check_header_margin
 
     /**
@@ -235,8 +235,8 @@ namespace FASTag::Hyp
     */
     bool isDefault() const
     {
-      return mode == ChargeMode::Assume2 && isotope_errors.size() == 1 && isotope_errors[0] == 0
-          && header_check != HeaderCheck::Both;
+      return mode == ChargeMode::ASSUME2 && isotope_errors.size() == 1 && isotope_errors[0] == 0
+          && header_check != HeaderCheck::BOTH;
     }
   };
 
@@ -262,7 +262,7 @@ namespace FASTag::Hyp
     int charge = 2;      ///< the charge tagged (for the 1.11 hypothesis: the header value, may be <= 0)
     int iso = 0;         ///< isotope offset k
     double mz = 0;       ///< precursor m/z handed to the tagger (shifted by -k*C13/charge)
-    ChargeSource src = ChargeSource::Assumed;  ///< where the charge came from
+    ChargeSource src = ChargeSource::ASSUMED;  ///< where the charge came from
     bool selected = false;  ///< feeds the reports that aggregate over spectra
   };
 
@@ -271,11 +271,11 @@ namespace FASTag::Hyp
   */
   enum class CallBasis : std::uint8_t
   {
-    None = 0,        ///< no evidence (assumed)
-    OnePlus = 1,     ///< the 1+ test
-    Range = 2,       ///< range evidence alone (no complement excess above 0)
-    Complement = 3,  ///< the complement-pair excess
-    Ms1Isotope = 4,  ///< header check only: the precursor's isotope spacing in the preceding MS1 scan
+    NONE = 0,        ///< no evidence (assumed)
+    ONE_PLUS = 1,     ///< the 1+ test
+    RANGE = 2,       ///< range evidence alone (no complement excess above 0)
+    COMPLEMENT = 3,  ///< the complement-pair excess
+    MS1_ISOTOPE = 4,  ///< header check only: the precursor's isotope spacing in the preceding MS1 scan
   };
   inline constexpr std::size_t kCallBases = 5;  ///< number of CallBasis values
 
@@ -284,9 +284,9 @@ namespace FASTag::Hyp
   */
   struct ChargeCall
   {
-    CallBasis basis = CallBasis::None;  ///< what the call rests on
+    CallBasis basis = CallBasis::NONE;  ///< what the call rests on
     int charge = 2;               ///< the call, one of the candidates (2, else the lowest, when assumed)
-    ChargeSource src = ChargeSource::Assumed;  ///< Inferred, Ambiguous or Assumed
+    ChargeSource src = ChargeSource::ASSUMED;  ///< Inferred, Ambiguous or Assumed
     int runner_up = 0;            ///< the second charge of an ambiguous call, else 0
     double above_share = 0;       ///< intensity share above the precursor (1+ test)
     int range_min = 0;            ///< lowest charge the range evidence leaves (0 = none ruled out)
@@ -348,10 +348,10 @@ namespace FASTag::Hyp
   */
   enum class HeaderVerdict : std::uint8_t
   {
-    Agree = 0,      ///< the call is the header charge (one of two, when ambiguous)
-    Disagree = 1,   ///< evidence against the header: see checkHeaderCharge()
-    Ambiguous = 2,  ///< two close charges, neither the header, no evidence against it
-    NoCall = 3,     ///< no evidence either way
+    AGREE = 0,      ///< the call is the header charge (one of two, when ambiguous)
+    DISAGREE = 1,   ///< evidence against the header: see checkHeaderCharge()
+    AMBIGUOUS = 2,  ///< two close charges, neither the header, no evidence against it
+    NO_CALL = 3,     ///< no evidence either way
   };
   inline constexpr std::size_t kHeaderVerdicts = 4;  ///< number of HeaderVerdict values
 
@@ -365,10 +365,10 @@ namespace FASTag::Hyp
   {
     switch (v)
     {
-      case HeaderVerdict::Agree: return "agree";
-      case HeaderVerdict::Disagree: return "disagree";
-      case HeaderVerdict::Ambiguous: return "ambiguous";
-      case HeaderVerdict::NoCall: return "nocall";
+      case HeaderVerdict::AGREE: return "agree";
+      case HeaderVerdict::DISAGREE: return "disagree";
+      case HeaderVerdict::AMBIGUOUS: return "ambiguous";
+      case HeaderVerdict::NO_CALL: return "nocall";
     }
     return "nocall";
   }
@@ -383,11 +383,11 @@ namespace FASTag::Hyp
   {
     switch (b)
     {
-      case CallBasis::None: return "none";
-      case CallBasis::OnePlus: return "one_plus";
-      case CallBasis::Range: return "range";
-      case CallBasis::Complement: return "complement";
-      case CallBasis::Ms1Isotope: return "ms1_isotope";
+      case CallBasis::NONE: return "none";
+      case CallBasis::ONE_PLUS: return "one_plus";
+      case CallBasis::RANGE: return "range";
+      case CallBasis::COMPLEMENT: return "complement";
+      case CallBasis::MS1_ISOTOPE: return "ms1_isotope";
     }
     return "none";
   }
@@ -398,7 +398,7 @@ namespace FASTag::Hyp
   struct HeaderCheckResult
   {
     int header = 0;                  ///< the header charge (> 0)
-    HeaderVerdict verdict = HeaderVerdict::NoCall;  ///< the verdict
+    HeaderVerdict verdict = HeaderVerdict::NO_CALL;  ///< the verdict
     ChargeCall call;                 ///< the infer call over the check's candidates (complement pairs counted charge-aware)
     bool header_ruled_out = false;   ///< peaks above the header's fragment ceiling (reported; no ground to disagree)
     int header_peaks_above = 0;      ///< strongest peaks above the header's fragment ceiling (b/y)
@@ -406,12 +406,12 @@ namespace FASTag::Hyp
     double call_excess = 0;          ///< complement excess at the call (0 without complement basis)
     int ms1_charge = 0;              ///< ms1Charge() of the preceding MS1 scan (0 = no call or no scan)
     int ms1_peaks = 0;               ///< isotope positions (-1/z, +1/z, +2/z) found for ms1_charge
-    CallBasis flag_basis = CallBasis::None;  ///< what the verdict rests on (Ms1Isotope, or the call's basis)
+    CallBasis flag_basis = CallBasis::NONE;  ///< what the verdict rests on (Ms1Isotope, or the call's basis)
     int flag_charge = 0;             ///< the charge the verdict rests on (the MS1 charge, or the call)
     /// @brief The check's charge of a disagreeing header (tagged beside the
     /// header under both); else the header.
     /// @return flag_charge when the verdict is Disagree, else header
-    int replacement() const { return verdict == HeaderVerdict::Disagree ? flag_charge : header; }
+    int replacement() const { return verdict == HeaderVerdict::DISAGREE ? flag_charge : header; }
   };
 
   /**
@@ -482,7 +482,7 @@ namespace FASTag::Hyp
     @param[out] call optional; the infer call when one was computed
     @param[in] header_check optional (1.13); under -check_header_charge both,
                a Disagree verdict adds a hypothesis at the check's charge
-               (ChargeSource::CheckCall); the header charge stays selected
+               (ChargeSource::CHECK_CALL); the header charge stays selected
     @return the hypotheses
   */
   std::vector<Hypothesis> precursorHypotheses(const OpenMS::MSSpectrum& spec, const OpenMS::Precursor& prec,
@@ -513,7 +513,7 @@ namespace FASTag::Hyp
       if (r.header <= 0) return;
       ++checked;
       ++verdict[static_cast<std::size_t>(r.verdict)];
-      if (r.verdict == HeaderVerdict::Disagree)
+      if (r.verdict == HeaderVerdict::DISAGREE)
       {
         ++disagree_by[static_cast<std::size_t>(r.flag_basis)];
         if (r.header <= kChargeLimit && r.flag_charge >= 1 && r.flag_charge <= kChargeLimit)

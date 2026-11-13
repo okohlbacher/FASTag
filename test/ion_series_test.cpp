@@ -760,7 +760,7 @@ int main(int argc, char** argv)
     // (the 1+ one at M + c*p lies above every fragment, so the b/y range
     // evidence would rule the true charge out).
     FASTag::Hyp::HypParam hp;
-    hp.mode = FASTag::Hyp::ChargeMode::Infer;
+    hp.mode = FASTag::Hyp::ChargeMode::INFER;
     int right = 0, total = 0;
     const double P = OpenMS::Constants::PROTON_MASS_U;
     for (const char* pep : kPeptides)
@@ -771,7 +771,7 @@ int main(int argc, char** argv)
         s.spec.sortByPosition();
         const auto call = FASTag::Hyp::inferCharge(s.spec, s.prec_mz, {2, 3, 4}, hp, cs_cz);
         ++total;
-        if (call.charge == z && call.src != FASTag::Hyp::ChargeSource::Assumed) ++right;
+        if (call.charge == z && call.src != FASTag::Hyp::ChargeSource::ASSUMED) ++right;
       }
     std::cout << "b3. infer on 10 ETD spectra with charge-reduced species: " << right << " at the true charge\n";
     check(right >= 8, "b3: infer calls the true charge of c/z spectra with charge-reduced species");

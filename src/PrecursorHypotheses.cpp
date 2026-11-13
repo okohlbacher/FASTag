@@ -180,8 +180,8 @@ namespace FASTag::Hyp
       if (one_plus_test && tic > 0 && call.above_share < kOnePlusMaxShare)
       {
         call.charge = 1;
-        call.src = ChargeSource::Inferred;
-        call.basis = CallBasis::OnePlus;
+        call.src = ChargeSource::INFERRED;
+        call.basis = CallBasis::ONE_PLUS;
         return call;
       }
       const std::vector<int> order = isoOrder(hp.isotope_errors);
@@ -240,22 +240,22 @@ namespace FASTag::Hyp
         if (call.range_min > 0)
         {
           call.charge = call.range_min;
-          call.src = ChargeSource::Inferred;
-          call.basis = CallBasis::Range;
+          call.src = ChargeSource::INFERRED;
+          call.basis = CallBasis::RANGE;
           return call;
         }
         call.charge = left.empty() || std::find(left.begin(), left.end(), 2) != left.end() ? 2 : left.front();
-        call.src = ChargeSource::Assumed;
+        call.src = ChargeSource::ASSUMED;
         return call;
       }
       call.charge = c1;
-      call.basis = CallBasis::Complement;
+      call.basis = CallBasis::COMPLEMENT;
       if (c2 != 0 && e1 - e2 < hp.infer_margin)
       {
-        call.src = ChargeSource::Ambiguous;
+        call.src = ChargeSource::AMBIGUOUS;
         call.runner_up = c2;
       }
-      else call.src = ChargeSource::Inferred;
+      else call.src = ChargeSource::INFERRED;
       return call;
     }
 
@@ -399,52 +399,52 @@ namespace FASTag::Hyp
     // header is not among them (the 1+ test returns before any is tested).
     // A header above kChargeLimit is no candidate: it is never "ruled out".
     const bool header_candidate = std::find(cands.begin(), cands.end(), header) != cands.end();
-    r.header_ruled_out = header_candidate && c.basis != CallBasis::OnePlus && !c.excess.empty() && !header_seen;
+    r.header_ruled_out = header_candidate && c.basis != CallBasis::ONE_PLUS && !c.excess.empty() && !header_seen;
     // A header the table lacks (ruled out by range, or above kChargeLimit)
     // still has complement pairs of its own: the margin comparisons below
     // are against its real excess, never against 0.
-    if (!header_seen && c.basis != CallBasis::OnePlus && !c.excess.empty())
+    if (!header_seen && c.basis != CallBasis::ONE_PLUS && !c.excess.empty())
       bestIso(top, prec.getMZ(), header, isoOrder(hp.isotope_errors), cs, &r.header_excess, true);
-    if (c.src == ChargeSource::Ambiguous)
+    if (c.src == ChargeSource::AMBIGUOUS)
     {
       // Two close charges. With the header one of them it agrees; else the
       // evidence is against the header when both charges beat its excess by
       // the margin (the runner-up's excess is the lower one): a disagreement
       // whose call is the better of the two.
-      if (c.charge == header || c.runner_up == header) r.verdict = HeaderVerdict::Agree;
+      if (c.charge == header || c.runner_up == header) r.verdict = HeaderVerdict::AGREE;
       else
       {
         double runner_excess = 0;
         for (const auto& e : c.excess)
           if (e.first == c.runner_up) runner_excess = e.second.first;
         const bool against = runner_excess > 0 && runner_excess - r.header_excess >= hp.header_margin;
-        r.verdict = against ? HeaderVerdict::Disagree : HeaderVerdict::Ambiguous;
+        r.verdict = against ? HeaderVerdict::DISAGREE : HeaderVerdict::AMBIGUOUS;
       }
       return r;
     }
-    if (c.src == ChargeSource::Assumed || c.basis == CallBasis::None)
+    if (c.src == ChargeSource::ASSUMED || c.basis == CallBasis::NONE)
     {
-      r.verdict = HeaderVerdict::NoCall;
+      r.verdict = HeaderVerdict::NO_CALL;
       return r;
     }
     if (c.charge == header)
     {
-      r.verdict = HeaderVerdict::Agree;
+      r.verdict = HeaderVerdict::AGREE;
       return r;
     }
     // An unambiguous call other than the header.
     bool against = false;
     switch (c.basis)
     {
-      case CallBasis::OnePlus: against = true; break;
-      case CallBasis::Complement:
+      case CallBasis::ONE_PLUS: against = true; break;
+      case CallBasis::COMPLEMENT:
         against = r.call_excess > 0 && r.call_excess - r.header_excess >= hp.header_margin;
         break;
-      case CallBasis::Range:  // no ground to disagree
-      case CallBasis::Ms1Isotope:
-      case CallBasis::None: break;
+      case CallBasis::RANGE:  // no ground to disagree
+      case CallBasis::MS1_ISOTOPE:
+      case CallBasis::NONE: break;
     }
-    r.verdict = against ? HeaderVerdict::Disagree : HeaderVerdict::NoCall;
+    r.verdict = against ? HeaderVerdict::DISAGREE : HeaderVerdict::NO_CALL;
     return r;
   }
   }
@@ -467,9 +467,9 @@ namespace FASTag::Hyp
       const double mz = prec.getMZ();
       const bool header_spaced = r.ms1_charge != r.header
                                  && ms1At(*ms1, mz + kC13 / r.header) >= kMs1FirstMin * ms1At(*ms1, mz);
-      r.flag_basis = CallBasis::Ms1Isotope;
+      r.flag_basis = CallBasis::MS1_ISOTOPE;
       r.flag_charge = header_spaced ? r.header : r.ms1_charge;
-      r.verdict = r.flag_charge == r.header ? HeaderVerdict::Agree : HeaderVerdict::Disagree;
+      r.verdict = r.flag_charge == r.header ? HeaderVerdict::AGREE : HeaderVerdict::DISAGREE;
     }
     return r;
   }
@@ -481,7 +481,7 @@ namespace FASTag::Hyp
     const int header = prec.getCharge();
     const double prec_mz = prec.getMZ();
     if (hp.isDefault())
-      return {Hypothesis{header, 0, prec_mz, header > 0 ? ChargeSource::Header : ChargeSource::Assumed, true}};
+      return {Hypothesis{header, 0, prec_mz, header > 0 ? ChargeSource::HEADER : ChargeSource::ASSUMED, true}};
 
     const std::vector<int> order = isoOrder(hp.isotope_errors);
     std::vector<double> top;  // built on first use
@@ -507,23 +507,23 @@ namespace FASTag::Hyp
     {
       // 1.13 -check_header_charge both: a disagreeing header is tagged at
       // the header charge (selected) and at the check's charge.
-      if (hp.header_check == HeaderCheck::Both && header_check && header_check->header == header
-          && header_check->verdict == HeaderVerdict::Disagree)
+      if (hp.header_check == HeaderCheck::BOTH && header_check && header_check->header == header
+          && header_check->verdict == HeaderVerdict::DISAGREE)
       {
         const int z = header_check->replacement();
         if (z >= 1 && z <= kChargeLimit && z != header)
         {
-          out.push_back(make(std::min(z, header), z < header ? ChargeSource::CheckCall : ChargeSource::Header));
-          out.push_back(make(std::max(z, header), z < header ? ChargeSource::Header : ChargeSource::CheckCall));
+          out.push_back(make(std::min(z, header), z < header ? ChargeSource::CHECK_CALL : ChargeSource::HEADER));
+          out.push_back(make(std::max(z, header), z < header ? ChargeSource::HEADER : ChargeSource::CHECK_CALL));
           return finish(header);
         }
       }
-      out.push_back(make(header, ChargeSource::Header));
+      out.push_back(make(header, ChargeSource::HEADER));
       return finish(header);
     }
-    if (hp.mode == ChargeMode::Assume2)
+    if (hp.mode == ChargeMode::ASSUME2)
     {
-      out.push_back(make(2, ChargeSource::Assumed));
+      out.push_back(make(2, ChargeSource::ASSUMED));
       return finish(2);
     }
 
@@ -535,7 +535,7 @@ namespace FASTag::Hyp
     possible.erase(std::unique(possible.begin(), possible.end()), possible.end());
     if (possible.size() == 1)
     {
-      out.push_back(make(possible.front(), ChargeSource::Possible));
+      out.push_back(make(possible.front(), ChargeSource::POSSIBLE));
       return finish(possible.front());
     }
 
@@ -545,23 +545,23 @@ namespace FASTag::Hyp
     const ChargeCall call = inferFromTop(spec, top_mz(), prec_mz, cands, one_plus, hp, cs);
     if (call_out) *call_out = call;
 
-    if (hp.mode == ChargeMode::Enumerate)
+    if (hp.mode == ChargeMode::ENUMERATE)
     {
-      const ChargeSource src = possible.empty() ? ChargeSource::Enumerated : ChargeSource::Possible;
+      const ChargeSource src = possible.empty() ? ChargeSource::ENUMERATED : ChargeSource::POSSIBLE;
       for (const int c : cands) out.push_back(make(c, src));
       const auto has = [&](int c) { return std::find(cands.begin(), cands.end(), c) != cands.end(); };
       int sel = cands.front();
-      if (call.src != ChargeSource::Assumed && has(call.charge)) sel = call.charge;
+      if (call.src != ChargeSource::ASSUMED && has(call.charge)) sel = call.charge;
       else if (has(2)) sel = 2;
       return finish(sel);
     }
 
     // infer
-    if (call.src == ChargeSource::Ambiguous)
+    if (call.src == ChargeSource::AMBIGUOUS)
     {
       const int lo = std::min(call.charge, call.runner_up), hi = std::max(call.charge, call.runner_up);
-      out.push_back(make(lo, ChargeSource::Ambiguous));
-      out.push_back(make(hi, ChargeSource::Ambiguous));
+      out.push_back(make(lo, ChargeSource::AMBIGUOUS));
+      out.push_back(make(hi, ChargeSource::AMBIGUOUS));
       return finish(call.charge);
     }
     out.push_back(make(call.charge, call.src));

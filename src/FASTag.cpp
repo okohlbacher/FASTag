@@ -2042,7 +2042,7 @@ protected:
     // 1.13 (backlog #14): -check_header_charge; off leaves every output as before.
     FASTag::Hyp::parseHeaderCheck(getStringOption_("check_header_charge"), hyp_param.header_check);
     hyp_param.header_margin = getDoubleOption_("check_header_margin");
-    const bool hdr_check_on = hyp_param.header_check != FASTag::Hyp::HeaderCheck::Off;
+    const bool hdr_check_on = hyp_param.header_check != FASTag::Hyp::HeaderCheck::OFF;
     const std::string check_header_out = getStringOption_("check_header_out");
     if (const std::string herr = FASTag::Hyp::validate(hyp_param, p.frag_tol, p.tol_ppm); !herr.empty())
     {
@@ -2050,7 +2050,7 @@ protected:
       return ILLEGAL_PARAMETERS;
     }
     // 1.13: experimental; say so whenever it runs.
-    if (hyp_param.header_check == FASTag::Hyp::HeaderCheck::Both)
+    if (hyp_param.header_check == FASTag::Hyp::HeaderCheck::BOTH)
       OPENMS_LOG_WARN << "-check_header_charge both is experimental: a flagged spectrum is tagged under two "
                          "charges, and on held-out data about one flag in three was wrong (doc/HEADER-CHARGE-CHECK.md)."
                       << std::endl;
@@ -2688,11 +2688,11 @@ protected:
            getStringOption_("acquisition_check") != "off"},
           {"ion_series_hybrid", "-ion_series auto", stringOption_("ion_series") == "auto"},
           {"charge_min", "-unknown_charge enumerate or infer, or -check_header_charge",
-           hyp_param.mode != FASTag::Hyp::ChargeMode::Assume2 || hdr_check_on},
+           hyp_param.mode != FASTag::Hyp::ChargeMode::ASSUME2 || hdr_check_on},
           {"charge_max", "-unknown_charge enumerate or infer, or -check_header_charge",
-           hyp_param.mode != FASTag::Hyp::ChargeMode::Assume2 || hdr_check_on},
+           hyp_param.mode != FASTag::Hyp::ChargeMode::ASSUME2 || hdr_check_on},
           {"charge_infer_margin", "-unknown_charge enumerate or infer, or -check_header_charge",
-           hyp_param.mode != FASTag::Hyp::ChargeMode::Assume2 || hdr_check_on},
+           hyp_param.mode != FASTag::Hyp::ChargeMode::ASSUME2 || hdr_check_on},
           {"check_header_margin", "-check_header_charge warn or both", hdr_check_on},
           {"check_header_out", "-check_header_charge warn or both", hdr_check_on},
           // ---- 1.12 A: ignored-option warnings ----
@@ -4410,7 +4410,7 @@ protected:
       {
         hdr_res = FASTag::Hyp::checkHeaderCharge(spec, prec, hyp_param, read_cz ? hyp_cs_cz : hyp_cs,
                                                  ms1_for(tid, index));
-        pt.hdr.add(hdr_res, hyp_param.header_check == FASTag::Hyp::HeaderCheck::Both);
+        pt.hdr.add(hdr_res, hyp_param.header_check == FASTag::Hyp::HeaderCheck::BOTH);
         if (!check_header_out.empty()) pt.hdr_rows.push_back({index, spec.getNativeID(), prec.getMZ(), hdr_res});
       }
       const std::vector<FASTag::Hyp::Hypothesis> hyps = FASTag::Hyp::precursorHypotheses(
@@ -5425,19 +5425,19 @@ protected:
       run_meta.isotope_error.clear();
       for (const int k : hyp_param.isotope_errors)
         run_meta.isotope_error += (run_meta.isotope_error.empty() ? "" : ",") + std::to_string(k);
-      run_meta.charge_header = sel_of(ChargeSource::Header);
-      run_meta.charge_possible = sel_of(ChargeSource::Possible);
-      run_meta.charge_inferred = sel_of(ChargeSource::Inferred);
-      run_meta.charge_ambiguous = sel_of(ChargeSource::Ambiguous);
-      run_meta.charge_assumed = sel_of(ChargeSource::Assumed);
-      run_meta.charge_enumerated = sel_of(ChargeSource::Enumerated);
+      run_meta.charge_header = sel_of(ChargeSource::HEADER);
+      run_meta.charge_possible = sel_of(ChargeSource::POSSIBLE);
+      run_meta.charge_inferred = sel_of(ChargeSource::INFERRED);
+      run_meta.charge_ambiguous = sel_of(ChargeSource::AMBIGUOUS);
+      run_meta.charge_assumed = sel_of(ChargeSource::ASSUMED);
+      run_meta.charge_enumerated = sel_of(ChargeSource::ENUMERATED);
       // 1.13 -check_header_charge (rows only when it is on).
       run_meta.check_header_charge = getStringOption_("check_header_charge");
       run_meta.header_checked = hdr_counts.checked;
-      run_meta.header_agree = hdr_counts.verdict[static_cast<size_t>(FASTag::Hyp::HeaderVerdict::Agree)];
-      run_meta.header_disagree = hdr_counts.verdict[static_cast<size_t>(FASTag::Hyp::HeaderVerdict::Disagree)];
-      run_meta.header_ambiguous = hdr_counts.verdict[static_cast<size_t>(FASTag::Hyp::HeaderVerdict::Ambiguous)];
-      run_meta.header_nocall = hdr_counts.verdict[static_cast<size_t>(FASTag::Hyp::HeaderVerdict::NoCall)];
+      run_meta.header_agree = hdr_counts.verdict[static_cast<size_t>(FASTag::Hyp::HeaderVerdict::AGREE)];
+      run_meta.header_disagree = hdr_counts.verdict[static_cast<size_t>(FASTag::Hyp::HeaderVerdict::DISAGREE)];
+      run_meta.header_ambiguous = hdr_counts.verdict[static_cast<size_t>(FASTag::Hyp::HeaderVerdict::AMBIGUOUS)];
+      run_meta.header_nocall = hdr_counts.verdict[static_cast<size_t>(FASTag::Hyp::HeaderVerdict::NO_CALL)];
       run_meta.header_both = hdr_counts.both;
       run_meta.iso_shifted = hc.iso_shifted;
       run_meta.multi_hypothesis = hc.multi;
@@ -6849,9 +6849,9 @@ protected:
                                                    + " of them list several possible charges)"
                                              : std::string())
                       << "; under -unknown_charge " << getStringOption_("unknown_charge") << " their reports use "
-                      << sel_of(ChargeSource::Inferred) << " inferred, " << sel_of(ChargeSource::Ambiguous)
-                      << " ambiguous (better of two), " << sel_of(ChargeSource::Possible) << " listed, "
-                      << sel_of(ChargeSource::Enumerated) << " enumerated and " << sel_of(ChargeSource::Assumed)
+                      << sel_of(ChargeSource::INFERRED) << " inferred, " << sel_of(ChargeSource::AMBIGUOUS)
+                      << " ambiguous (better of two), " << sel_of(ChargeSource::POSSIBLE) << " listed, "
+                      << sel_of(ChargeSource::ENUMERATED) << " enumerated and " << sel_of(ChargeSource::ASSUMED)
                       << " assumed (2+, or the lowest candidate when 2 is none) charges; " << hc.multi << " spectra were tagged under several "
                       << "hypotheses, with their E-values multiplied by the number tagged." << std::endl;
     }
@@ -6880,7 +6880,7 @@ protected:
       using FASTag::Hyp::CallBasis;
       const auto v = [&](HeaderVerdict x) { return hdr_counts.verdict[static_cast<size_t>(x)]; };
       const auto by = [&](CallBasis b) { return hdr_counts.disagree_by[static_cast<size_t>(b)]; };
-      const bool both = hyp_param.header_check == FASTag::Hyp::HeaderCheck::Both;
+      const bool both = hyp_param.header_check == FASTag::Hyp::HeaderCheck::BOTH;
       std::string moves;
       for (int a = 1; a <= FASTag::Hyp::kChargeLimit; ++a)
         for (int b = 1; b <= FASTag::Hyp::kChargeLimit; ++b)
@@ -6889,14 +6889,14 @@ protected:
                    + std::to_string(hdr_counts.moves[a][b]);
       std::ostringstream m;
       m << "Header charge check (-check_header_charge " << getStringOption_("check_header_charge") << "): "
-        << hdr_counts.checked << " of " << n_ms2 << " MS2 spectra carry a precursor charge; " << v(HeaderVerdict::Agree)
-        << " agree with their charge evidence, " << v(HeaderVerdict::Disagree) << " disagree ("
-        << by(CallBasis::Ms1Isotope) << " by MS1 isotope spacing, " << by(CallBasis::Complement) << " by complement pairs, "
-        << by(CallBasis::OnePlus) << " by the 1+ test" << (moves.empty() ? std::string() : "; " + moves) << "), "
-        << v(HeaderVerdict::Ambiguous) << " ambiguous and " << v(HeaderVerdict::NoCall) << " without evidence; "
+        << hdr_counts.checked << " of " << n_ms2 << " MS2 spectra carry a precursor charge; " << v(HeaderVerdict::AGREE)
+        << " agree with their charge evidence, " << v(HeaderVerdict::DISAGREE) << " disagree ("
+        << by(CallBasis::MS1_ISOTOPE) << " by MS1 isotope spacing, " << by(CallBasis::COMPLEMENT) << " by complement pairs, "
+        << by(CallBasis::ONE_PLUS) << " by the 1+ test" << (moves.empty() ? std::string() : "; " + moves) << "), "
+        << v(HeaderVerdict::AMBIGUOUS) << " ambiguous and " << v(HeaderVerdict::NO_CALL) << " without evidence; "
         << (both ? std::to_string(hdr_counts.both) + " disagreeing spectra were tagged under both charges."
                  : std::string("every spectrum was tagged at its header charge."));
-      if (v(HeaderVerdict::Disagree) > 0) OPENMS_LOG_WARN << m.str() << std::endl;
+      if (v(HeaderVerdict::DISAGREE) > 0) OPENMS_LOG_WARN << m.str() << std::endl;
       else OPENMS_LOG_INFO << m.str() << std::endl;
       if (!check_header_out.empty())
       {

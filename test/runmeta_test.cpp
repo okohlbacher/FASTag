@@ -270,15 +270,15 @@ int main()
   {
     namespace HY = FASTag::Hyp;
     FASTag::ClusterAcc::ClusterThread t1, t2, run;
-    HY::Hypothesis a3{3, 0, 500.0, HY::ChargeSource::Ambiguous, true}, a4{4, 0, 500.0, HY::ChargeSource::Ambiguous, false};
+    HY::Hypothesis a3{3, 0, 500.0, HY::ChargeSource::AMBIGUOUS, true}, a4{4, 0, 500.0, HY::ChargeSource::AMBIGUOUS, false};
     t1.e.hyp.add({a3, a4});
-    t2.e.hyp.add({HY::Hypothesis{2, 1, 600.0, HY::ChargeSource::Header, true}});
+    t2.e.hyp.add({HY::Hypothesis{2, 1, 600.0, HY::ChargeSource::HEADER, true}});
     run.merge(t1);
     run.merge(t2);
     const auto& c = run.e.hyp;
-    check(c.tagged[static_cast<size_t>(HY::ChargeSource::Ambiguous)] == 2 &&
-            c.selected[static_cast<size_t>(HY::ChargeSource::Ambiguous)] == 1 &&
-            c.selected[static_cast<size_t>(HY::ChargeSource::Header)] == 1 && c.iso_shifted == 1 && c.multi == 1,
+    check(c.tagged[static_cast<size_t>(HY::ChargeSource::AMBIGUOUS)] == 2 &&
+            c.selected[static_cast<size_t>(HY::ChargeSource::AMBIGUOUS)] == 1 &&
+            c.selected[static_cast<size_t>(HY::ChargeSource::HEADER)] == 1 && c.iso_shifted == 1 && c.multi == 1,
           "ThreadE::merge sums the hypothesis counts");
   }
   FASTag::ClusterAcc::ClusterBlock blk;
