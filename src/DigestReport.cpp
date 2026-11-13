@@ -48,7 +48,7 @@ namespace FASTag::Digest
       }
     };
 
-    const char* kKeys7[] = {"K", "K+TMT", "K+TMTpro", "K+iTRAQ4", "K+8", "R", "R+10"};
+    const char* KEYS7[] = {"K", "K+TMT", "K+TMTpro", "K+iTRAQ4", "K+8", "R", "R+10"};
 
     int keyIndex(const std::string& name)
     {
@@ -182,14 +182,14 @@ namespace FASTag::Digest
     if (v2 && s.flank2)
       r.add("count", "flank2_n", u(n_f2), u(tc.tags), u(n_f2) + " tag ends are a two-residue flank sum (C-terminal, or N-terminal less H2O).");
 
-    for (const char* key : kKeys7)
+    for (const char* key : KEYS7)
     {
       const int k = keyIndex(key);
       r.add("residue", std::string("C.") + key, u(tc.res(k)), u(tot),
             u(tc.res(k)) + " tag ends are a C-terminal " + key + " (" + u(tc.c_near[k]) + " after a y tag, " +
                 u(tc.n_h2o[k]) + " before a reversed b tag).");
     }
-    for (const char* key : kKeys7)
+    for (const char* key : KEYS7)
     {
       const int k = keyIndex(key);
       r.add("residue", std::string("N.") + key, u(tc.n_near[k]), "-", u(tc.n_near[k]) + " tag ends are an N-terminal " + key + ".");
@@ -274,14 +274,14 @@ namespace FASTag::Digest
     const bool tims_yes = inst.find("timstof") != std::string::npos || meta.native_id_type == "MS:1002818" ||
                           meta.native_id_type == "MS:1002819" || meta.im_vssc > 0;
     const std::string tims = tims_yes ? "yes" : (have_inst || have_nid) ? "no" : "unknown";
-    constexpr double kY1K = 147.1128;
-    const std::string scan = meta.scan_low.empty() ? "unknown" : low > kY1K + 0.1 ? "yes" : "no";
+    constexpr double Y1K = 147.1128;
+    const std::string scan = meta.scan_low.empty() ? "unknown" : low > Y1K + 0.1 ? "yes" : "no";
     // The reference's gate: the median lowest MS2 peak, which needs no metadata.
-    const std::string fpk = meta.first_peak.empty() ? "unknown" : first > kY1K + 0.1 ? "yes" : "no";
+    const std::string fpk = meta.first_peak.empty() ? "unknown" : first > Y1K + 0.1 ? "yes" : "no";
     // Without instrument metadata (MGF, converted pseudo-spectra), intensities
     // that are mostly whole numbers are ion counts, as timsTOF data are.
-    constexpr double kWholeShare = 0.5;
-    const std::string counts = tims != "unknown" ? "no" : meta.peaks == 0 ? "unknown" : whole >= kWholeShare ? "yes" : "no";
+    constexpr double WHOLE_SHARE = 0.5;
+    const std::string counts = tims != "unknown" ? "no" : meta.peaks == 0 ? "unknown" : whole >= WHOLE_SHARE ? "yes" : "no";
     const std::string few = (tot < static_cast<std::uint64_t>(std::max(0, s.tag_min)) || !c.scored) ? "yes" : "no";
     const std::string lowres = s.low_resolution ? "yes" : "no";
     const std::string nonfin = c.scored && c.nonfinite ? "yes" : "no";
@@ -407,7 +407,7 @@ namespace FASTag::Digest
           tims != "unknown" ? "The input names its instrument or native ID format, so the timstof rule decides."
           : meta.peaks == 0 ? "No MS2 spectrum has a peak with an intensity above 0."
                             : "The input names no instrument, and a share of " + f(whole, 4) + " of the MS2 peak intensities above 0 are whole numbers (" +
-                                  (counts == "yes" ? "at least " : "below ") + f(kWholeShare, 2) + ").");
+                                  (counts == "yes" ? "at least " : "below ") + f(WHOLE_SHARE, 2) + ").");
     r.add("nocall", "few_tags", few, u(n_c),
           u(tot) + " residue-key and " + u(n_c) + " C-terminal tag ends against a minimum of " + std::to_string(s.tag_min) + ".");
     r.add("nocall", "nonfinite_score", nonfin, "-",
