@@ -47,7 +47,7 @@ message(STATUS "FASTag: using OpenMS ${OpenMS_VERSION} (${OpenMS_DIR})")
 # The parallel loop is the tool's central performance claim, and it was working
 # only because OpenMS happened to propagate the flags transitively. A clean build
 # against an OpenMS that did not would compile silently -- the #pragmas become
-# no-ops and the omp_* fallback stubs in FASTag.cpp return 1 -- producing a
+# no-ops and the omp_* fallback stubs in FASTagTool.h return 1 -- producing a
 # correct but SERIAL binary that still claims to scale. Ask explicitly, and say
 # so when it is missing.
 find_package(OpenMP)
@@ -116,7 +116,8 @@ find_package(ZLIB REQUIRED)
 # ---- 1.12 G: executable sources ----
 # G1: -probe_input and -dump_spectrum, which read through the readers below.
 set(FASTAG_EXE_SOURCES_G src/InputProbe.cpp)
-add_executable(FASTag src/FASTag.cpp src/IndexedMzMLReader.cpp src/MzMLDirectDecoder.cpp src/MgfReader.cpp src/MzPeakStream.cpp
+add_executable(FASTag src/FASTag.cpp src/FASTagOptions.cpp src/FASTagReports.cpp src/FASTagModes.cpp
+               src/IndexedMzMLReader.cpp src/MzMLDirectDecoder.cpp src/MgfReader.cpp src/MzPeakStream.cpp
                src/AcquisitionProbe.cpp ${FASTAG_EXE_SOURCES_G})
 
 # mimalloc on Windows, with redirection of the C runtime heap.
