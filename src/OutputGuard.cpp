@@ -95,14 +95,14 @@ namespace FASTag
     // under the mutex (never taken in the handler) and published by its
     // atomic state. A file that finds no free slot, or whose path is too
     // long, is still written; it is just not removed on SIGTERM.
-    constexpr int kSlots = 64;
-    constexpr std::size_t kPathMax = 4096;
+    constexpr int SLOTS = 64;
+    constexpr std::size_t PATH_BUFFER_MAX = 4096;
     struct Slot
     {
       std::atomic<int> live{0};
-      char path[kPathMax];
+      char path[PATH_BUFFER_MAX];
     };
-    std::array<Slot, kSlots> g_slots;
+    std::array<Slot, SLOTS> g_slots;
     std::mutex g_slots_mu;
     static_assert(std::atomic<int>::is_always_lock_free, "the SIGTERM handler needs a lock-free flag");
 
@@ -161,9 +161,9 @@ namespace FASTag
 
     int registerPart(const std::string& part)
     {
-      if (part.size() >= kPathMax) return -1;
+      if (part.size() >= PATH_BUFFER_MAX) return -1;
       std::lock_guard<std::mutex> lock(g_slots_mu);
-      for (int i = 0; i < kSlots; ++i)
+      for (int i = 0; i < SLOTS; ++i)
       {
         if (g_slots[i].live.load(std::memory_order_acquire) != 0) continue;
         std::memcpy(g_slots[i].path, part.c_str(), part.size() + 1);
