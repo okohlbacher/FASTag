@@ -85,8 +85,23 @@ function Get-Leftovers([string]$Dir) {
 # files (relative to the install folder) the user put there themselves,
 # which the uninstaller rightly keeps (the taxonomy index unpacked into the
 # install).
+# Processes running an executable from @p Dir (the GUI, its CLI children).
+function Get-InstallProcesses([string]$Dir) {
+  $root = (Resolve-Path -LiteralPath $Dir -ErrorAction SilentlyContinue).Path
+  if (-not $root) { return , @() }
+  return , @(Get-CimInstance Win32_Process | Where-Object { $_.ExecutablePath -and $_.ExecutablePath.StartsWith($root, [StringComparison]::OrdinalIgnoreCase) })
+}
+
 function Uninstall-Fastag($Install, [string[]]$Allow = @()) {
   Write-Host "uninstall: $($Install.Scope) $($Install.Dir)"
+  # A process still running from the install keeps its exe and DLLs locked,
+  # and the uninstaller then leaves them. Wait for them to end (slower under
+  # x64 emulation on ARM64); one that does not end within 60 s is a failure,
+  # named, not killed.
+  $t = [Diagnostics.Stopwatch]::StartNew()
+  while (($p = Get-InstallProcesses $Install.Dir).Count -and $t.Elapsed.TotalSeconds -lt 60) { Start-Sleep -Milliseconds 500 }
+  if ($p.Count) { Fail "still running from $($Install.Dir) after 60 s: $(($p | ForEach-Object { "$($_.ProcessId) $($_.CommandLine)" }) -join '; ')" }
+  if ($t.Elapsed.TotalSeconds -ge 1) { Write-Host ("waited {0:N1} s for FASTag processes to end before uninstalling" -f $t.Elapsed.TotalSeconds) }
   Start-Process -FilePath $Install.Uninstall -ArgumentList '/S' -Wait | Out-Null
   # Without _?= the uninstaller copies itself to %TEMP% and returns at once:
   # wait for its copy to finish.
