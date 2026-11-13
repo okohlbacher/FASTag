@@ -81,7 +81,7 @@ namespace FASTag::CensusIds
 
     bool statusIndex(const std::string& name, std::size_t& out)
     {
-      for (std::size_t i = 0; i < Census::kStatusCount; ++i)
+      for (std::size_t i = 0; i < Census::STATUS_COUNT; ++i)
         if (name == Census::name(static_cast<Census::Status>(i))) { out = i; return true; }
       return false;
     }
@@ -413,8 +413,8 @@ namespace FASTag::CensusIds
     if (const auto s = file.rfind('/'); s != std::string::npos) file = file.substr(s + 1);
     const std::string rows = num(t.rows), refs = num(static_cast<std::uint64_t>(c.refs));
     const auto u = [](std::size_t v) { return num(static_cast<std::uint64_t>(v)); };
-    r.push_back({sec, "census_ids_version", std::to_string(kVersion), "-",
-                 "The ids join follows format " + std::to_string(kVersion) +
+    r.push_back({sec, "census_ids_version", std::to_string(TABLE_VERSION), "-",
+                 "The ids join follows format " + std::to_string(TABLE_VERSION) +
                      ": identified is 1, 0 or empty (unknown); triage is an E-value threshold, not a quality call."});
     r.push_back({sec, "ids_file", file, "-", "Identifications were read from " + file + "."});
     r.push_back({sec, "ids_fdr", num(fdr), "-",
@@ -447,7 +447,7 @@ namespace FASTag::CensusIds
       r.push_back({sec, std::string("identified_") + key(id), num(t.by_ident[i]), rows,
                    num(t.by_ident[i]) + " census rows have identified " + key(id) + "."});
     }
-    for (std::size_t s = 0; s < Census::kStatusCount; ++s)
+    for (std::size_t s = 0; s < Census::STATUS_COUNT; ++s)
     {
       const std::string nm = Census::name(static_cast<Census::Status>(s));
       for (std::size_t i = 0; i < kIdentCount; ++i)

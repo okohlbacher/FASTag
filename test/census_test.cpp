@@ -181,8 +181,8 @@ int main(int argc, char** argv)
   {
     const char* want[] = {"empty", "no_precursor", "no_signal", "bad_precursor", "too_few_peaks",
                           "no_tags", "filtered", "placed", "tagged"};
-    CHECK(C::kStatusCount == 9, "status count %zu", C::kStatusCount);
-    for (size_t i = 0; i < C::kStatusCount; ++i)
+    CHECK(C::STATUS_COUNT == 9, "status count %zu", C::STATUS_COUNT);
+    for (size_t i = 0; i < C::STATUS_COUNT; ++i)
     {
       const auto s = static_cast<C::Status>(i);
       CHECK(std::string(C::name(s)) == want[i], "status %zu is named %s", i, C::name(s));
@@ -254,7 +254,7 @@ int main(int argc, char** argv)
     CHECK(C::bestTag(rows) == 3, "best tag is row %zu, not the length-5 row 3", C::bestTag(rows));
     const std::vector<C::TagView> tie = {tv(0.1, 3, 200), tv(0.01, 3, 300), tv(0.01, 5, 100)};
     CHECK(C::bestTag(tie) == 1, "a tie went to row %zu, not the first (1)", C::bestTag(tie));
-    CHECK(C::bestTag({}) == C::kNone, "no rows has a best tag");
+    CHECK(C::bestTag({}) == C::NO_INDEX, "no rows has a best tag");
     CHECK(rows[0].evalue == 0.5 && rows[3].n_res == 5, "bestTag reordered its input");
     std::printf("4. best tag by minimum E-value\n");
   }
@@ -352,7 +352,7 @@ int main(int argc, char** argv)
     CHECK(find("ms2_processed") && find("ms2_processed")->value == "3", "ms2_processed");
     CHECK(find("ms2_total") && find("ms2_total")->value == "5", "ms2_total without subsampling");
     CHECK(find("subsampled") && find("subsampled")->value == "0", "subsampled");
-    for (size_t i = 0; i < C::kStatusCount; ++i)
+    for (size_t i = 0; i < C::STATUS_COUNT; ++i)
     {
       const std::string nm = C::name(static_cast<C::Status>(i));
       CHECK(find("count_" + nm) && find("share_" + nm), "status %s missing", nm.c_str());

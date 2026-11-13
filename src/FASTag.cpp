@@ -4739,7 +4739,7 @@ protected:
         crow.n_found = sel_found;
         crow.n_reported = ctags.size();
         const size_t best = FASTag::Census::bestTag(ctags);
-        if (best != FASTag::Census::kNone)
+        if (best != FASTag::Census::NO_INDEX)
         {
           crow.has_best = true;
           crow.best = ctags[best];

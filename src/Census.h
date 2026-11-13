@@ -12,7 +12,7 @@
 // are, with or without -census.
 //
 // Status, first matching rule wins (append-only: a new status gets a new
-// enum value at the end and bumps kVersion):
+// enum value at the end and bumps TABLE_VERSION):
 //   empty          the spectrum has no peaks (the tagging gate; not in n_ms2)
 //   no_precursor   no Precursor (the tagging gate; not in n_ms2)
 //   no_signal      peaks, but none with a positive, finite intensity
@@ -50,7 +50,7 @@
 namespace FASTag::Census
 {
   /// Census format version, written as `census_version` in the summary.
-  inline constexpr int kVersion = 1;
+  inline constexpr int TABLE_VERSION = 1;
 
   /**
     @brief Per-spectrum status.
@@ -70,7 +70,7 @@ namespace FASTag::Census
     TAGGED,        ///< at least one reported row and no placement
   };
   /// Number of Status values.
-  inline constexpr std::size_t kStatusCount = 9;
+  inline constexpr std::size_t STATUS_COUNT = 9;
 
   /**
     @brief The name of a status as written in the census.
@@ -80,11 +80,11 @@ namespace FASTag::Census
   */
   inline const char* name(Status s)
   {
-    static constexpr const char* names[kStatusCount] = {
+    static constexpr const char* names[STATUS_COUNT] = {
         "empty", "no_precursor", "no_signal", "bad_precursor", "too_few_peaks",
         "no_tags", "filtered", "placed", "tagged"};
     const auto i = static_cast<std::size_t>(s);
-    return i < kStatusCount ? names[i] : "unknown";
+    return i < STATUS_COUNT ? names[i] : "unknown";
   }
 
   /**
@@ -249,7 +249,7 @@ namespace FASTag::Census
   };
 
   /// Index value meaning "no tag".
-  inline constexpr std::size_t kNone = static_cast<std::size_t>(-1);
+  inline constexpr std::size_t NO_INDEX = static_cast<std::size_t>(-1);
 
   /**
     @brief The reported tag with the minimum E-value.
@@ -258,13 +258,13 @@ namespace FASTag::Census
     length, so this is not necessarily row 0. The rows are not reordered.
 
     @param[in] rows Reported tags.
-    @return Index of the best tag; kNone for none.
+    @return Index of the best tag; NO_INDEX for none.
   */
   inline std::size_t bestTag(const std::vector<TagView>& rows)
   {
-    std::size_t best = kNone;
+    std::size_t best = NO_INDEX;
     for (std::size_t i = 0; i < rows.size(); ++i)
-      if (best == kNone || rows[i].evalue < rows[best].evalue) best = i;
+      if (best == NO_INDEX || rows[i].evalue < rows[best].evalue) best = i;
     return best;
   }
 
@@ -485,7 +485,7 @@ namespace FASTag::Census
   */
   struct Tally
   {
-    std::array<std::uint64_t, kStatusCount> by_status{};  ///< rows per status
+    std::array<std::uint64_t, STATUS_COUNT> by_status{};  ///< rows per status
     std::uint64_t ms2_seen = 0;   ///< rows written
     std::uint64_t no_charge = 0;  ///< processed spectra without a precursor charge
     std::vector<double> best_evalue;  ///< tagged and placed spectra
@@ -515,7 +515,7 @@ namespace FASTag::Census
     */
     void merge(const Tally& o)
     {
-      for (std::size_t i = 0; i < kStatusCount; ++i) by_status[i] += o.by_status[i];
+      for (std::size_t i = 0; i < STATUS_COUNT; ++i) by_status[i] += o.by_status[i];
       ms2_seen += o.ms2_seen;
       no_charge += o.no_charge;
       best_evalue.insert(best_evalue.end(), o.best_evalue.begin(), o.best_evalue.end());
@@ -527,7 +527,7 @@ namespace FASTag::Census
     std::uint64_t n_processed() const
     {
       std::uint64_t n = 0;
-      for (std::size_t i = 0; i < kStatusCount; ++i)
+      for (std::size_t i = 0; i < STATUS_COUNT; ++i)
         if (Census::processed(static_cast<Status>(i))) n += by_status[i];
       return n;
     }
@@ -548,8 +548,8 @@ namespace FASTag::Census
     const std::string sec = "census";
     const std::string seen = num(t.ms2_seen);
     std::vector<Digest::Row> r;
-    r.push_back({sec, "census_version", std::to_string(kVersion), "-",
-                 "The census follows format " + std::to_string(kVersion) +
+    r.push_back({sec, "census_version", std::to_string(TABLE_VERSION), "-",
+                 "The census follows format " + std::to_string(TABLE_VERSION) +
                      ": one row per MS2 spectrum read; statuses are append-only; no status is a quality call."});
     r.push_back({sec, "input_spectra", num(input_spectra), "-",
                  num(input_spectra) + " input spectra of all MS levels (the basis of subsampling)."});
@@ -564,7 +564,7 @@ namespace FASTag::Census
                  subsampled ? "The spectra were subsampled." : "Every spectrum was read."});
     r.push_back({sec, "subsample_basis", "input_spectra", "-",
                  "Subsampling draws from the input spectra of all MS levels, not from MS2 only."});
-    for (std::size_t i = 0; i < kStatusCount; ++i)
+    for (std::size_t i = 0; i < STATUS_COUNT; ++i)
     {
       const std::string nm = name(static_cast<Status>(i));
       const std::uint64_t c = t.by_status[i];

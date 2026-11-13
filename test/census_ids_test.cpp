@@ -527,7 +527,7 @@ int main(int argc, char** argv)
     CHECK(find(sum, "identified_0") && find(sum, "identified_0")->value == "5", "identified_0");
     CHECK(find(sum, "identified_unknown") && find(sum, "identified_unknown")->value == "2", "identified_unknown");
     CHECK(find(sum, "triage_candidates") && find(sum, "triage_candidates")->value == "2", "triage_candidates");
-    for (std::size_t s = 0; s < C::kStatusCount; ++s)
+    for (std::size_t s = 0; s < C::STATUS_COUNT; ++s)
       for (const char* k : {"1", "0", "unknown"})
       {
         const std::string key = std::string(C::name(static_cast<C::Status>(s))) + "_identified_" + k;

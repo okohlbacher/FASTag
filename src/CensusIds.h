@@ -75,7 +75,7 @@ namespace OpenMS
 namespace FASTag::CensusIds
 {
   /// Format version of the `census_ids` summary section and the two columns.
-  inline constexpr int kVersion = 1;
+  inline constexpr int TABLE_VERSION = 1;
 
   /// Default of -census_ids_fdr.
   inline constexpr double kDefaultFdr = 0.01;
@@ -260,7 +260,7 @@ namespace FASTag::CensusIds
   */
   struct JoinTally
   {
-    std::array<std::array<std::uint64_t, kIdentCount>, Census::kStatusCount> by_status{};  ///< rows per status and identified value
+    std::array<std::array<std::uint64_t, kIdentCount>, Census::STATUS_COUNT> by_status{};  ///< rows per status and identified value
     std::array<std::uint64_t, kIdentCount> by_ident{};  ///< rows per identified value
     std::uint64_t rows = 0;             ///< rows joined
     std::uint64_t triage = 0;           ///< triage = 1
