@@ -21,16 +21,24 @@
 
 namespace FASTag
 {
-  /// P(rank sum <= s) under the null that k peaks are drawn uniformly from n
-  /// ranked peaks, for EVERY n in [k, n_max]: entry n of the result is the CDF
-  /// over s in [0, sum of the top k ranks], and the entries below k are empty.
-  ///
-  /// dp[j][s] counts the j-subsets of the values seen so far that sum to s.
-  /// Values ascend; j and s descend, so each value is used at most once. After
-  /// value v, row k holds the counts for n = v, so one pass yields every n:
-  /// O(k^2 * n_max^2). Counts are doubles, exact while C(n,k) <= 2^53, and
-  /// only their ratios are used. The CDF is stored as float: it indexes a
-  /// binned lookup, so double precision buys nothing and costs twice the cache.
+  /**
+    @brief Null CDFs of the sum of k distinct ranks drawn from 1..n, for every n in [k, n_max].
+
+    P(rank sum <= s) under the null that k peaks are drawn uniformly from n
+    ranked peaks, for EVERY n in [k, n_max]: entry n of the result is the CDF
+    over s in [0, sum of the top k ranks], and the entries below k are empty.
+
+    dp[j][s] counts the j-subsets of the values seen so far that sum to s.
+    Values ascend; j and s descend, so each value is used at most once. After
+    value v, row k holds the counts for n = v, so one pass yields every n:
+    O(k^2 * n_max^2). Counts are doubles, exact while C(n,k) <= 2^53, and
+    only their ratios are used. The CDF is stored as float: it indexes a
+    binned lookup, so double precision buys nothing and costs twice the cache.
+
+    @param[in] k Number of ranks summed (tag peak count); k <= 0 yields only empty entries.
+    @param[in] n_max Largest number of ranked peaks n to tabulate.
+    @return Vector of size n_max + 1 (empty if n_max < 0); entry n is the CDF indexed by rank sum s for n >= k, empty for n < k.
+  */
   inline std::vector<std::vector<float>> ranksumCdfs(int k, int n_max)
   {
     std::vector<std::vector<float>> out(n_max < 0 ? 0 : static_cast<size_t>(n_max) + 1);

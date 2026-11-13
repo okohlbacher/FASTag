@@ -58,7 +58,11 @@ namespace FASTag::RunReport
   inline constexpr int kFormatVersionNoAuto = 5;
   inline constexpr int kTmtFormatVersion = 7;  ///< adds opt-in TMT filtering decision
 
-  /// Run-level facts shared by every long-form report. Filled once per run.
+  /**
+    @brief Run-level facts shared by every long-form report.
+
+    Filled once per run, after option parsing (counts after the tagging loop).
+  */
   struct RunMeta
   {
     // ---- run (FASTag 1.11; frozen, written by every report) ----
@@ -74,8 +78,8 @@ namespace FASTag::RunReport
     // #7: the acquisition class (Acquisition::modeName) and why; empty when
     // -acquisition_check off. A field only: no report writes a row for it
     // yet (Emit::Versioned rows need a format bump and new references).
-    std::string acquisition;
-    std::string acquisition_why;
+    std::string acquisition;              ///< acquisition class (Acquisition::modeName)
+    std::string acquisition_why;          ///< why that class was called
     // #9: -pick_profile (as read: the removed auto reads as legacy) and its
     // outcome (only mzPeak picks, in MzPeakStream); filled after the loop.
     std::string pick_profile = "legacy";  ///< -pick_profile
@@ -83,10 +87,10 @@ namespace FASTag::RunReport
     std::size_t pick_failed = 0;          ///< profile MS2 kept as profile (picking yielded nothing)
     // #15 phase A: tagged MS2 spectra per activation class (src/IonSeries.h);
     // filled after the tagging loop.
-    std::size_t activation_collisional = 0;
-    std::size_t activation_electron = 0;
-    std::size_t activation_hybrid = 0;
-    std::size_t activation_unknown = 0;
+    std::size_t activation_collisional = 0;  ///< MS2 activated by collision (CID, HCD, PQD)
+    std::size_t activation_electron = 0;     ///< MS2 activated by electron transfer or capture (ETD, ECD)
+    std::size_t activation_hybrid = 0;       ///< MS2 activated by a hybrid method (EThcD, ETciD)
+    std::size_t activation_unknown = 0;      ///< MS2 without an activation FASTag classifies
     // #6: -unknown_charge, -isotope_error and, per spectrum tagged, where its
     // selected hypothesis' charge came from (src/PrecursorHypotheses.h);
     // filled after the tagging loop. All zero at the defaults (no hypothesis
@@ -101,31 +105,31 @@ namespace FASTag::RunReport
     std::size_t charge_enumerated = 0;       ///< selected: one of -charge_min..-charge_max
     // 1.13 (backlog #14): -check_header_charge and its verdicts; rows only
     // when it is not off, so every report is unchanged at the default.
-    std::string check_header_charge = "off";
-    std::size_t header_checked = 0;
-    std::size_t header_agree = 0;
-    std::size_t header_disagree = 0;
-    std::size_t header_ambiguous = 0;
-    std::size_t header_nocall = 0;
+    std::string check_header_charge = "off";  ///< -check_header_charge
+    std::size_t header_checked = 0;          ///< header-charged MS2 spectra checked
+    std::size_t header_agree = 0;            ///< verdict agree
+    std::size_t header_disagree = 0;         ///< verdict disagree
+    std::size_t header_ambiguous = 0;        ///< verdict ambiguous
+    std::size_t header_nocall = 0;           ///< verdict nocall
     std::size_t header_both = 0;             ///< tagged under the header charge and the check's
     std::size_t iso_shifted = 0;             ///< selected hypothesis with an isotope offset
     std::size_t multi_hypothesis = 0;        ///< spectra tagged under more than one hypothesis
     // #15 phase B: -ion_series and the tagged MS2 spectra per series; filled
     // after the tagging loop.
-    std::string ion_series = "by";
-    std::size_t ion_series_ms2_by = 0;
-    std::size_t ion_series_ms2_cz = 0;
+    std::string ion_series = "by";           ///< -ion_series
+    std::size_t ion_series_ms2_by = 0;       ///< MS2 tagged as b/y ions
+    std::size_t ion_series_ms2_cz = 0;       ///< MS2 tagged as c/z-dot ions
     // 1.13 item 10: spectra read in two passes (b/y and c/z-dot), and whether
     // the run ran under auto + -ion_series_hybrid both: only then the
     // ion_series_hybrid row is written.
-    std::size_t ion_series_ms2_hybrid = 0;
-    bool ion_series_hybrid_row = false;
+    std::size_t ion_series_ms2_hybrid = 0;   ///< MS2 tagged in two passes (b/y and c/z-dot)
+    bool ion_series_hybrid_row = false;      ///< write the ion_series_hybrid row
     // ---- 1.13 item 15 ----
     // -complement_tolerance_unit auto (src/ComplementTol.h): whether it ran,
     // whether the probe measured a window, the window in force (Da) and the
     // probe's statistics. Written (format 6) only when complement_tol_auto.
-    bool complement_tol_auto = false;
-    bool complement_tol_measured = false;
+    bool complement_tol_auto = false;     ///< -complement_tolerance_unit auto ran (format-6 rows)
+    bool complement_tol_measured = false; ///< the probe measured a window
     double complement_tol = 0;          ///< Da, in force (measured, or -complement_tolerance)
     std::string complement_tol_source = "fallback";  ///< measured, lower_bound or fallback
     double complement_tol_measured_value = 0;        ///< Da as measured (measured only)
@@ -137,21 +141,28 @@ namespace FASTag::RunReport
     double complement_probe_median = 0;          ///< floor-corrected median error, Da (measured only)
     double complement_probe_mad = 0;             ///< floor-corrected MAD, Da (measured only)
     std::string complement_tol_why;              ///< why not measured (fallback only)
-    std::string tmt_filter_mode = "off";
-    std::string tmt_filter_resolved;
+    std::string tmt_filter_mode = "off";         ///< requested TMT filter mode; rows unless "off"
+    std::string tmt_filter_resolved;             ///< run-level TMT filter decision and probe counts
     // ---- 1.12 A ----
     // ---- 1.12 D ----
     // ---- 1.12 F ----
   };
 
-  /// Which rows runRows() writes.
+  /**
+    @brief Which rows runRows() writes.
+  */
   enum class Emit
   {
     Legacy,     ///< the 7 FASTag 1.11 `run` rows; the default
     Versioned,  ///< Legacy, then `run_report_version`, then the cluster rows
   };
 
-  /// The comma-joined seed lengths ("5" or "3,5").
+  /**
+    @brief The comma-joined seed lengths ("5" or "3,5").
+
+    @param[in] lengths the seed lengths
+    @return the lengths joined by commas
+  */
   inline std::string joinLengths(const std::vector<int>& lengths)
   {
     std::string s;
@@ -159,7 +170,17 @@ namespace FASTag::RunReport
     return s;
   }
 
-  /// The run rows every long-form report starts with.
+  /**
+    @brief The run rows every long-form report starts with.
+
+    Legacy: the 7 FASTag 1.11 `run` rows. Versioned: those, then
+    `run_report_version` (kFormatVersion, kFormatVersionNoAuto or
+    kTmtFormatVersion), then the cluster rows.
+
+    @param[in] m the run's facts
+    @param[in] emit which rows to write
+    @return the rows, in report order
+  */
   inline std::vector<Digest::Row> runRows(const RunMeta& m, Emit emit = Emit::Legacy)
   {
     using Digest::num;

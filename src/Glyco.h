@@ -30,16 +30,25 @@
 
 namespace FASTag
 {
+  /**
+    @brief One diagnostic oxonium ion.
+  */
   struct OxoniumIon
   {
     double mz;         ///< singly-protonated m/z
-    const char* name;
+    const char* name;  ///< glycan fragment name, e.g. "HexNAc"
   };
 
-  /// Canonical oxonium ions -- a superset of MSFragger-Glyco's defaults, plus
-  /// the phospho-glycan diagnostics. HexNAc fragment 126.055 sits 0.073 Da
-  /// from the TMT reporter 126.128: separated cleanly at ppm tolerances,
-  /// coincident at 0.3 Da -- the README carries that caveat.
+  /**
+    @brief Canonical oxonium ions.
+
+    A superset of MSFragger-Glyco's defaults, plus the phospho-glycan
+    diagnostics. HexNAc fragment 126.055 sits 0.073 Da from the TMT reporter
+    126.128: separated cleanly at ppm tolerances, coincident at 0.3 Da -- the
+    README carries that caveat.
+
+    @return The static ion table, sorted by m/z.
+  */
   inline const std::vector<OxoniumIon>& oxoniumTable()
   {
     static const std::vector<OxoniumIon> T = {
@@ -55,17 +64,30 @@ namespace FASTag
     return T;
   }
 
+  /**
+    @brief Result of the oxonium scan of one spectrum.
+  */
   struct OxoniumScan
   {
     int n_matched = 0;        ///< distinct oxonium species found
     double frac = 0.0;        ///< summed matched intensity / base peak (can exceed 1)
     std::string ions;         ///< semicolon-joined names, "-" if none
-    bool glyco = false;
+    bool glyco = false;       ///< flagged: n_matched >= 2 and frac >= min_fraction
   };
 
-  /// Scan a RAW (m/z-sorted) spectrum for the table's ions at the run's
-  /// fragment tolerance (`tol_ppm` ? mz*tol*1e-6 : tol Da), taking the most
-  /// intense peak in each window.
+  /**
+    @brief Scans a raw spectrum for the table's oxonium ions.
+
+    Takes the most intense peak in each ion's window. The spectrum is flagged
+    when at least two distinct ions match and their summed intensity is at
+    least @p min_fraction of the base peak.
+
+    @param[in] spec RAW spectrum, sorted by m/z.
+    @param[in] frag_tol Fragment tolerance (ppm or Da, see @p tol_ppm).
+    @param[in] tol_ppm True: window is mz*frag_tol*1e-6; false: frag_tol Da.
+    @param[in] min_fraction Minimum summed matched intensity relative to the base peak.
+    @return The scan result; empty or zero-intensity spectra give no match.
+  */
   inline OxoniumScan scanOxonium(const OpenMS::MSSpectrum& spec, double frag_tol,
                                  bool tol_ppm, double min_fraction)
   {

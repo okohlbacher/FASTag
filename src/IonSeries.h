@@ -68,17 +68,27 @@
 
 namespace FASTag::IonSeries
 {
-  /// The activation class of one MS2 spectrum. The values index
-  /// ActivationCounts::n.
+  /**
+    @brief The activation class of one MS2 spectrum.
+
+    The values index ActivationCounts::n.
+  */
   enum class Activation : std::size_t
   {
-    Collisional = 0,
-    Electron = 1,
-    Hybrid = 2,
-    Unknown = 3,
+    Collisional = 0,  ///< CID, HCD, trap-type CID, PQD, low/high-energy CID, SORI
+    Electron = 1,     ///< ETD, ECD
+    Hybrid = 2,       ///< EThcD, ETciD, or electron and collisional methods together
+    Unknown = 3,      ///< no classified method or filter token
   };
+  /// Number of Activation values.
   inline constexpr std::size_t kActivationClasses = 4;
 
+  /**
+    @brief The name of an activation class.
+
+    @param[in] a Activation class.
+    @return "collisional", "electron", "hybrid" or "unknown".
+  */
   inline const char* activationName(Activation a)
   {
     switch (a)
@@ -93,10 +103,14 @@ namespace FASTag::IonSeries
 
   namespace detail
   {
-    /// What one method or filter token says.
+    /**
+      @brief What one method or filter token says.
+    */
     struct Seen
     {
-      bool collisional = false, electron = false, hybrid = false;
+      bool collisional = false, electron = false, hybrid = false;  ///< classes seen
+      /// @brief The class of what was seen (electron and collisional together is hybrid).
+      /// @return The activation class.
       Activation result() const
       {
         if (hybrid || (electron && collisional)) return Activation::Hybrid;
@@ -107,7 +121,14 @@ namespace FASTag::IonSeries
     };
   }
 
-  /// The class of a precursor's dissociation methods.
+  /**
+    @brief The class of a precursor's dissociation methods.
+
+    A method of no class never hides one that has a class.
+
+    @param[in] methods The precursor's activation methods.
+    @return The activation class.
+  */
   inline Activation activationClass(const std::set<OpenMS::Precursor::ActivationMethod>& methods)
   {
     using AM = OpenMS::Precursor::ActivationMethod;
@@ -133,10 +154,16 @@ namespace FASTag::IonSeries
     return s.result();
   }
 
-  /// The class of a Thermo filter string's @<method><energy> tokens
-  /// ("...@etd50.00@hcd25.00 [..]" is EThcD). A token is the run of letters
-  /// after an '@', compared case-insensitively: cid, hcd, pqd are collisional;
-  /// etd, ecd electron; ethcd, etcid hybrid; any other token has no class.
+  /**
+    @brief The class of a Thermo filter string's @<method><energy> tokens.
+
+    ("...@etd50.00@hcd25.00 [..]" is EThcD). A token is the run of letters
+    after an '@', compared case-insensitively: cid, hcd, pqd are collisional;
+    etd, ecd electron; ethcd, etcid hybrid; any other token has no class.
+
+    @param[in] filter Thermo filter string.
+    @return The activation class.
+  */
   inline Activation activationClassFromFilter(std::string_view filter)
   {
     detail::Seen s;
@@ -157,8 +184,15 @@ namespace FASTag::IonSeries
     return s.result();
   }
 
-  /// The class of one MS2 spectrum: its first precursor's methods (the one
-  /// tagging uses), else the "filter string" meta value the mzML readers set.
+  /**
+    @brief The class of one MS2 spectrum.
+
+    Its first precursor's methods (the one tagging uses), else the "filter
+    string" meta value the mzML readers set.
+
+    @param[in] spec MS2 spectrum.
+    @return The activation class; Unknown when neither source classifies.
+  */
   inline Activation activationClass(const OpenMS::MSSpectrum& spec)
   {
     if (!spec.getPrecursors().empty())
@@ -171,25 +205,45 @@ namespace FASTag::IonSeries
     return Activation::Unknown;
   }
 
-  /// Per-run (or per-thread) counts of the activation classes.
+  /**
+    @brief Per-run (or per-thread) counts of the activation classes.
+  */
   struct ActivationCounts
   {
-    std::array<std::size_t, kActivationClasses> n{};
+    std::array<std::size_t, kActivationClasses> n{};  ///< spectra per Activation value
 
+    /// @brief Counts one spectrum of class @p a.
+    /// @param[in] a Activation class.
     void add(Activation a) { ++n[static_cast<std::size_t>(a)]; }
+    /**
+      @brief Adds the counts of another instance.
+
+      @param[in] o Counts to add.
+    */
     void merge(const ActivationCounts& o)
     {
       for (std::size_t i = 0; i < kActivationClasses; ++i) n[i] += o.n[i];
     }
+    /// @brief The count of one class.
+    /// @param[in] a Activation class.
+    /// @return Spectra counted with class @p a.
     std::size_t of(Activation a) const { return n[static_cast<std::size_t>(a)]; }
+    /// @brief The count over all classes.
+    /// @return Spectra counted.
     std::size_t total() const
     {
       std::size_t t = 0;
       for (std::size_t v : n) t += v;
       return t;
     }
-    /// Tagging reads b/y ions: warn when more than 1% of the MS2 spectra are
-    /// electron or hybrid activated.
+    /**
+      @brief Whether to warn about electron activation under -ion_series by.
+
+      Tagging reads b/y ions: warn when more than 1% of the MS2 spectra are
+      electron or hybrid activated.
+
+      @return True when the warning applies.
+    */
     bool warnUnderBy() const
     {
       const std::size_t e = of(Activation::Electron) + of(Activation::Hybrid);
@@ -197,9 +251,15 @@ namespace FASTag::IonSeries
     }
   };
 
-  /// The one-line warning for a run that warnUnderBy(). It starts with
-  /// "Electron activation:", so it can never match gate.sh's summary-line
-  /// pattern ^[0-9]+ MS2 spectra, [0-9]+ tags.
+  /**
+    @brief The one-line warning for a run that warnUnderBy().
+
+    It starts with "Electron activation:", so it can never match gate.sh's
+    summary-line pattern ^[0-9]+ MS2 spectra, [0-9]+ tags.
+
+    @param[in] c Activation counts of the run.
+    @return The warning text.
+  */
   inline std::string byModeWarning(const ActivationCounts& c)
   {
     const auto s = [](std::size_t v) { return std::to_string(v); };
@@ -213,7 +273,11 @@ namespace FASTag::IonSeries
 
   // ------------------------------------------------------------ phase B
 
-  /// The ion series a tag was read as. The values are stable (Tag::ion_series).
+  /**
+    @brief The ion series a tag was read as.
+
+    The values are stable (Tag::ion_series).
+  */
   enum class Series : std::uint8_t
   {
     BY = 0,  ///< b/y: FASTag 1.11, collisional activation
@@ -221,6 +285,12 @@ namespace FASTag::IonSeries
     // 2 was a/x (1.13 item 11), removed in 1.14.
   };
 
+  /**
+    @brief The name of an ion series.
+
+    @param[in] s Ion series.
+    @return "cz" or "by".
+  */
   inline const char* seriesName(Series s)
   {
     switch (s)
@@ -231,14 +301,17 @@ namespace FASTag::IonSeries
     return "by";
   }
 
-  /// One N-/C-terminal ion pair (see the file comment); ionPair() fills it.
-  /// The b/y consumers (tagger flanks, TagRecon, Digest) keep FASTag 1.11's
-  /// own expressions and constants and never read these offsets, so b/y stays
-  /// bit-identical; a default-constructed pair has NaN offsets, so a consumer
-  /// that wrongly reads them shows it.
+  /**
+    @brief One N-/C-terminal ion pair (see the file comment); ionPair() fills it.
+
+    The b/y consumers (tagger flanks, TagRecon, Digest) keep FASTag 1.11's
+    own expressions and constants and never read these offsets, so b/y stays
+    bit-identical; a default-constructed pair has NaN offsets, so a consumer
+    that wrongly reads them shows it.
+  */
   struct IonPair
   {
-    Series kind = Series::BY;
+    Series kind = Series::BY;  ///< the series of the pair
     double offN = std::numeric_limits<double>::quiet_NaN();  ///< N-terminal ion neutral mass minus its residues
     double offC = std::numeric_limits<double>::quiet_NaN();  ///< C-terminal ion neutral mass minus its residues
     double compl_delta = 0.0;   ///< offN + offC - H2O: the even-electron ions' neutral masses sum to M + this
@@ -250,13 +323,24 @@ namespace FASTag::IonSeries
     /// c/z-dot, since [M+cH]^c+ takes up one electron and its c and z-dot
     /// fragments share c - 1 charges (the complement's precursor rule).
     int charge_loss = 0;
-    /// What a reversed read (the low peak an N-terminal ion) adds to the
-    /// residue sum it reports: N-side residues = cterm_mass + this, C-side
-    /// residues = nterm_mass - this. b/y: +H2O; c/z-dot: -15.034708.
+    /**
+      @brief The reversed-read offset offC - offN.
+
+      What a reversed read (the low peak an N-terminal ion) adds to the
+      residue sum it reports: N-side residues = cterm_mass + this, C-side
+      residues = nterm_mass - this. b/y: +H2O; c/z-dot: -15.034708.
+
+      @return offC - offN (Da).
+    */
     double reversedOffset() const { return offC - offN; }
   };
 
-  /// The ion pair of @p s, from OpenMS's residue-to-ion formulas.
+  /**
+    @brief The ion pair of a series, from OpenMS's residue-to-ion formulas.
+
+    @param[in] s Ion series.
+    @return The filled ion pair.
+  */
   inline IonPair ionPair(Series s)
   {
     using OpenMS::Residue;
@@ -279,19 +363,28 @@ namespace FASTag::IonSeries
     return p;
   }
 
-  /// -ion_series: which series the spectra are read as.
+  /**
+    @brief -ion_series: which series the spectra are read as.
+  */
   enum class Mode
   {
     By,    ///< every spectrum as b/y (FASTag 1.11; the default)
     Cz,    ///< every spectrum as c/z-dot
     Auto,  ///< electron-activated spectra as c/z-dot, all others as b/y
   };
+  /// Default value of -ion_series.
   inline constexpr const char* kModeDefault = "by";
   /// The valid strings: ax (1.13 item 11) was removed in 1.14 and stays
   /// valid so that 1.13 command lines and INI files load; FASTag reads it as
   /// the default (TOPPFASTag::kRemovedValues).
   inline constexpr const char* kModeValues = "by,cz,auto,ax";
 
+  /**
+    @brief Parses an -ion_series value.
+
+    @param[in] s Option value.
+    @return Cz for "cz", Auto for "auto", By for anything else (including the removed "ax").
+  */
   inline Mode modeFromString(std::string_view s)
   {
     if (s == "cz") return Mode::Cz;
@@ -299,6 +392,12 @@ namespace FASTag::IonSeries
     return Mode::By;
   }
 
+  /**
+    @brief The -ion_series value of a mode.
+
+    @param[in] m Mode.
+    @return "by", "cz" or "auto".
+  */
   inline const char* modeName(Mode m)
   {
     switch (m)
@@ -314,23 +413,41 @@ namespace FASTag::IonSeries
   /// hybrid (EThcD, ETciD) spectrum: by (the default, 1.12's auto) or both
   /// (a b/y and a c/z-dot pass, merged per row).
   inline constexpr const char* kHybridDefault = "by";
+  /// The valid -ion_series_hybrid strings.
   inline constexpr const char* kHybridValues = "by,both";
   /// The E-value factor of a two-pass hybrid reading: two series tested.
   inline constexpr double kHybridPasses = 2.0;
 
-  /// Whether a spectrum of class @p a is read in two passes (b/y and c/z-dot)
-  /// in a run under @p m with -ion_series_hybrid both (@p hybrid_both) whose
-  /// tag TSV carries the ion_series column iff @p run_column. As with
-  /// seriesInRun(), c/z rows only in a run with the column.
+  /**
+    @brief Whether a spectrum is read in two passes (b/y and c/z-dot).
+
+    Whether a spectrum of class @p a is read in two passes in a run under
+    @p m with -ion_series_hybrid both (@p hybrid_both) whose tag TSV carries
+    the ion_series column iff @p run_column. As with seriesInRun(), c/z rows
+    only in a run with the column.
+
+    @param[in] m -ion_series mode.
+    @param[in] a Activation class of the spectrum.
+    @param[in] run_column Whether the run's tag TSV carries the ion_series column.
+    @param[in] hybrid_both Whether -ion_series_hybrid is both.
+    @return True for a hybrid spectrum under auto with hybrid_both and the column.
+  */
   inline bool hybridTwoPass(Mode m, Activation a, bool run_column, bool hybrid_both)
   {
     return m == Mode::Auto && hybrid_both && a == Activation::Hybrid && run_column;
   }
 
-  /// The series a spectrum of activation class @p a is read as under @p m.
-  /// auto reads electron activation as c/z-dot and everything else -- hybrid
-  /// (unless -ion_series_hybrid both: hybridTwoPass()), collisional and
-  /// unknown -- as b/y.
+  /**
+    @brief The series a spectrum of an activation class is read as under a mode.
+
+    auto reads electron activation as c/z-dot and everything else -- hybrid
+    (unless -ion_series_hybrid both: hybridTwoPass()), collisional and
+    unknown -- as b/y.
+
+    @param[in] m -ion_series mode.
+    @param[in] a Activation class of the spectrum.
+    @return The ion series.
+  */
   inline Series seriesFor(Mode m, Activation a)
   {
     if (m == Mode::Cz) return Series::CZ;
@@ -338,12 +455,21 @@ namespace FASTag::IonSeries
     return Series::BY;
   }
 
-  /// Whether a run under @p m can tag any spectrum of class counts @p c as
-  /// c/z: then the tag TSV (and the census) carry an ion_series column. Under
-  /// by never; under cz always; under auto when some spectrum is electron
-  /// activated, so a collisional run's outputs stay those of by.
-  /// 1.13 item 10: under auto with -ion_series_hybrid both (@p hybrid_both)
-  /// also when some spectrum is hybrid activated.
+  /**
+    @brief Whether a run writes the ion_series column.
+
+    Whether a run under @p m can tag any spectrum of class counts @p c as
+    c/z: then the tag TSV (and the census) carry an ion_series column. Under
+    by never; under cz always; under auto when some spectrum is electron
+    activated, so a collisional run's outputs stay those of by.
+    1.13 item 10: under auto with -ion_series_hybrid both (@p hybrid_both)
+    also when some spectrum is hybrid activated.
+
+    @param[in] m -ion_series mode.
+    @param[in] c Activation counts of the run.
+    @param[in] hybrid_both Whether -ion_series_hybrid is both.
+    @return True when the ion_series column is written.
+  */
   inline bool seriesColumn(Mode m, const ActivationCounts& c, bool hybrid_both = false)
   {
     if (m == Mode::Cz) return true;
@@ -351,31 +477,51 @@ namespace FASTag::IonSeries
         && (c.of(Activation::Electron) > 0 || (hybrid_both && c.of(Activation::Hybrid) > 0));
   }
 
-  /// Whether -ion_series auto reads the activation of an input: mzML yes;
-  /// MGF and mzPeak no (the file comment), so auto reads them as b/y and
-  /// writes no ion_series column, whatever activation a reader may deliver.
+  /**
+    @brief Whether -ion_series auto reads the activation of an input.
+
+    mzML yes; MGF and mzPeak no (the file comment), so auto reads them as
+    b/y and writes no ion_series column, whatever activation a reader may
+    deliver.
+
+    @param[in] mzpeak_in Whether the input is mzPeak.
+    @param[in] mgf_in Whether the input is MGF.
+    @return True for neither mzPeak nor MGF input.
+  */
   inline bool autoReadsActivation(bool mzpeak_in, bool mgf_in) { return !mzpeak_in && !mgf_in; }
 
-  /// The series a spectrum of class @p a is read as in a run under @p m whose
-  /// tag TSV carries the ion_series column iff @p run_column: seriesFor(),
-  /// but c/z only in a run with the column. The tagging loop and the column
-  /// rule thus cannot disagree: a c/z row always says so. Under cz the column
-  /// is always written, so this is seriesFor(); under auto a spectrum the
-  /// column rule did not foresee (an input auto does not read the activation
-  /// of, autoReadsActivation()) is read as b/y and counted (SeriesCounts::
-  /// auto_by_no_column).
+  /**
+    @brief The series a spectrum is read as in a run, given the run's column rule.
+
+    The series a spectrum of class @p a is read as in a run under @p m whose
+    tag TSV carries the ion_series column iff @p run_column: seriesFor(),
+    but c/z only in a run with the column. The tagging loop and the column
+    rule thus cannot disagree: a c/z row always says so. Under cz the column
+    is always written, so this is seriesFor(); under auto a spectrum the
+    column rule did not foresee (an input auto does not read the activation
+    of, autoReadsActivation()) is read as b/y and counted (SeriesCounts::
+    auto_by_no_column).
+
+    @param[in] m -ion_series mode.
+    @param[in] a Activation class of the spectrum.
+    @param[in] run_column Whether the run's tag TSV carries the ion_series column.
+    @return The ion series.
+  */
   inline Series seriesInRun(Mode m, Activation a, bool run_column)
   {
     const Series s = seriesFor(m, a);
     return s != Series::BY && !run_column ? Series::BY : s;
   }
 
-  /// Per-run (or per-thread) phase B counts: MS2 spectra tagged per series,
-  /// and the c/z tags a consumer that reads b/y only left out (PLAN-
-  /// INTEGRATION 2.3, contract 2).
+  /**
+    @brief Per-run (or per-thread) phase B counts.
+
+    MS2 spectra tagged per series, and the c/z tags a consumer that reads
+    b/y only left out (PLAN-INTEGRATION 2.3, contract 2).
+  */
   struct SeriesCounts
   {
-    std::size_t ms2_by = 0, ms2_cz = 0;
+    std::size_t ms2_by = 0, ms2_cz = 0;  ///< MS2 tagged as b/y and as c/z-dot
     /// 1.13 item 10: MS2 read in two passes (b/y and c/z-dot), counted in
     /// neither ms2_by nor ms2_cz.
     std::size_t ms2_hybrid = 0;
@@ -383,6 +529,11 @@ namespace FASTag::IonSeries
     /// MS2 that seriesFor() reads as c/z but seriesInRun() read as b/y: the
     /// run writes no ion_series column (auto on mzPeak or MGF input).
     std::size_t auto_by_no_column = 0;
+    /**
+      @brief Adds the counts of another instance.
+
+      @param[in] o Counts to add.
+    */
     void merge(const SeriesCounts& o)
     {
       ms2_by += o.ms2_by;
@@ -393,8 +544,18 @@ namespace FASTag::IonSeries
     }
   };
 
-  /// The stderr INFO line of a run under auto or cz. It starts with "Ion
-  /// series", so it can never match gate.sh's summary-line pattern.
+  /**
+    @brief The stderr INFO line of a run under auto or cz.
+
+    It starts with "Ion series", so it can never match gate.sh's
+    summary-line pattern.
+
+    @param[in] m -ion_series mode.
+    @param[in] s Series counts of the run.
+    @param[in] c Activation counts of the run.
+    @param[in] hybrid_both Whether -ion_series_hybrid is both (adds the two-pass count under auto).
+    @return The INFO line.
+  */
   inline std::string seriesInfo(Mode m, const SeriesCounts& s, const ActivationCounts& c, bool hybrid_both = false)
   {
     const auto n = [](std::size_t v) { return std::to_string(v); };
@@ -408,13 +569,26 @@ namespace FASTag::IonSeries
          + n(c.of(Activation::Hybrid)) + " hybrid, " + n(c.of(Activation::Unknown)) + " unknown).";
   }
 
-  /// auto reads hybrid spectra as b/y: warn when more than 1% are hybrid.
+  /**
+    @brief Whether to warn about hybrid spectra under -ion_series auto.
+
+    auto reads hybrid spectra as b/y: warn when more than 1% are hybrid.
+
+    @param[in] c Activation counts of the run.
+    @return True when the warning applies.
+  */
   inline bool warnHybridUnderAuto(const ActivationCounts& c)
   {
     const std::size_t h = c.of(Activation::Hybrid);
     return h > 0 && 100 * h > c.total();
   }
 
+  /**
+    @brief The warning for a run that warnHybridUnderAuto().
+
+    @param[in] c Activation counts of the run.
+    @return The warning text.
+  */
   inline std::string hybridAutoWarning(const ActivationCounts& c)
   {
     return "Hybrid activation: " + std::to_string(c.of(Activation::Hybrid)) + " of " + std::to_string(c.total())
@@ -422,14 +596,27 @@ namespace FASTag::IonSeries
            "-ion_series auto; reading them as b/y and c/z ions together is not supported yet.";
   }
 
-  /// cz reads every spectrum as c/z-dot: warn when more than 1% are
-  /// collisional.
+  /**
+    @brief Whether to warn about collisional spectra under -ion_series cz.
+
+    cz reads every spectrum as c/z-dot: warn when more than 1% are
+    collisional.
+
+    @param[in] c Activation counts of the run.
+    @return True when the warning applies.
+  */
   inline bool warnCollisionalUnderCz(const ActivationCounts& c)
   {
     const std::size_t k = c.of(Activation::Collisional);
     return k > 0 && 100 * k > c.total();
   }
 
+  /**
+    @brief The warning for a run that warnCollisionalUnderCz().
+
+    @param[in] c Activation counts of the run.
+    @return The warning text.
+  */
   inline std::string collisionalCzWarning(const ActivationCounts& c)
   {
     return "Collisional activation: " + std::to_string(c.of(Activation::Collisional)) + " of "
@@ -438,7 +625,12 @@ namespace FASTag::IonSeries
            "every spectrum as c/z-dot ions; use -ion_series auto or by for them.";
   }
 
-  /// The warning for SeriesCounts::auto_by_no_column > 0.
+  /**
+    @brief The warning for SeriesCounts::auto_by_no_column > 0.
+
+    @param[in] n SeriesCounts::auto_by_no_column.
+    @return The warning text.
+  */
   inline std::string autoNoColumnWarning(std::size_t n)
   {
     return "Ion series: " + std::to_string(n)
@@ -446,7 +638,12 @@ namespace FASTag::IonSeries
            "input only and writes no ion_series column here; use -ion_series cz to read them as c/z-dot ions.";
   }
 
-  /// A c/z tag that -species left out (it reads b/y tags only): the warning.
+  /**
+    @brief The warning for c/z tags that -species left out (it reads b/y tags only).
+
+    @param[in] n Number of c/z tag rows left out.
+    @return The warning text.
+  */
   inline std::string speciesExcludedWarning(std::size_t n)
   {
     return "Ion series: " + std::to_string(n)

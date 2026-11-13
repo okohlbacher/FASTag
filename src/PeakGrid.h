@@ -37,19 +37,23 @@
 
 namespace FASTag
 {
-  /// Index over one m/z-sorted spectrum; nearest() equals the spectrum's
-  /// findNearest(mz, tol) for every query, including ties, duplicate m/z,
-  /// targets outside the peak range and non-finite targets.
-  ///
-  /// build() reuses the vectors' capacity, so a PeakGrid kept per thread costs
-  /// no allocation per spectrum once warm.
+  /**
+    @brief Nearest-peak index over one m/z-sorted spectrum.
+
+    nearest() equals the spectrum's findNearest(mz, tol) for every query,
+    including ties, duplicate m/z, targets outside the peak range and
+    non-finite targets.
+
+    build() reuses the vectors' capacity, so a PeakGrid kept per thread costs
+    no allocation per spectrum once warm.
+  */
   struct PeakGrid
   {
-    // 1-Th buckets up to MAX_BUCKETS of them (16 KB), wider beyond.
-    // At the <= 400 retained peaks of a fragment spectrum 1 Th holds under one
-    // peak on average, so the step to lower_bound is usually zero or one peak;
-    // the ceiling only bounds memory on a spectrum spanning more than 4096 Th
-    // (a corrupt precursor would otherwise ask for one bucket per Th of it).
+    /// 1-Th buckets up to MAX_BUCKETS of them (16 KB), wider beyond.
+    /// At the <= 400 retained peaks of a fragment spectrum 1 Th holds under one
+    /// peak on average, so the step to lower_bound is usually zero or one peak;
+    /// the ceiling only bounds memory on a spectrum spanning more than 4096 Th
+    /// (a corrupt precursor would otherwise ask for one bucket per Th of it).
     static constexpr double MAX_BUCKETS = 4096;
 
     std::vector<double>   mz;     ///< peak m/z, contiguous
@@ -57,6 +61,11 @@ namespace FASTag
     double lo = 0;                ///< m/z of bucket 0's lower edge (first peak)
     double inv_w = 1;             ///< buckets per Th
 
+    /**
+      @brief Indexes spectrum @p s, replacing the previous index.
+
+      @param[in] s The spectrum, sorted by m/z.
+    */
     void build(const OpenMS::MSSpectrum& s)
     {
       const size_t n = s.size();
@@ -74,9 +83,16 @@ namespace FASTag
       for (size_t b = first.size() - 1; b-- > 0;) first[b] = std::min(first[b], first[b + 1]);
     }
 
-    /// Index of the nearest peak to @p t if it lies within +-@p tol, else -1:
-    /// lower_bound, then the lower index on an equal-distance tie, then the
-    /// same two-sided test as MSSpectrum::findNearest(mz, tol).
+    /**
+      @brief Index of the nearest peak to @p t if it lies within +-@p tol.
+
+      lower_bound, then the lower index on an equal-distance tie, then the
+      same two-sided test as MSSpectrum::findNearest(mz, tol).
+
+      @param[in] t Target m/z (Th).
+      @param[in] tol Absolute tolerance (Th).
+      @return The peak index, or -1 when none is within tolerance.
+    */
     int nearest(double t, double tol) const
     {
       const size_t n = mz.size();
@@ -98,35 +114,38 @@ namespace FASTag
     size_t bucket(double x) const { return static_cast<size_t>((x - lo) * inv_w); }
   };
 
-  /// Residue-difference table for one fragment charge. nearestAbove() gives,
-  /// for peak i and every step r, exactly the index
-  /// MSSpectrum::findNearest(mz_i + step[r], tol) returns when it is above i,
-  /// else -1 -- from one walk over the peaks after i instead of one search per
-  /// step.
-  ///
-  /// Why that is exact. findNearest looks only at the two peaks straddling the
-  /// target, L-1 (last below it) and L (first at or above), keeps the nearer
-  /// (L-1 on a tie) and only THEN applies the tolerance test -- so the nearer
-  /// neighbour decides even when it fails and the farther one would pass. The
-  /// walk reproduces that selection rather than picking among passing peaks:
-  /// step r is listed in every bin within w plus one bin of step[r], and bins
-  /// are monotone in m/z, so the peaks r is offered form one contiguous run of
-  /// indices. If any of them lies below the target, L-1 is among them (the last
-  /// one), and if any lies at or above it, L is (the first one). A neighbour
-  /// that is not offered is more than w from the target, beyond every
-  /// tolerance the table was fitted for, so it can neither pass nor be nearer
-  /// than a neighbour that does. Peaks at or below i are never walked; they
-  /// are at least the lightest step away, which fit() requires to exceed w.
+  /**
+    @brief Residue-difference table for one fragment charge.
+
+    nearestAbove() gives, for peak i and every step r, exactly the index
+    MSSpectrum::findNearest(mz_i + step[r], tol) returns when it is above i,
+    else -1 -- from one walk over the peaks after i instead of one search per
+    step.
+
+    Why that is exact. findNearest looks only at the two peaks straddling the
+    target, L-1 (last below it) and L (first at or above), keeps the nearer
+    (L-1 on a tie) and only THEN applies the tolerance test -- so the nearer
+    neighbour decides even when it fails and the farther one would pass. The
+    walk reproduces that selection rather than picking among passing peaks:
+    step r is listed in every bin within w plus one bin of step[r], and bins
+    are monotone in m/z, so the peaks r is offered form one contiguous run of
+    indices. If any of them lies below the target, L-1 is among them (the last
+    one), and if any lies at or above it, L is (the first one). A neighbour
+    that is not offered is more than w from the target, beyond every
+    tolerance the table was fitted for, so it can neither pass nor be nearer
+    than a neighbour that does. Peaks at or below i are never walked; they
+    are at least the lightest step away, which fit() requires to exceed w.
+  */
   struct StepTable
   {
-    // 0.01-Th bins, and w capped at 1 Th. Neither affects the
-    // answer: a bin lists a step up to one bin beyond its window, which only
-    // offers a peak that the exact test then settles. Width trades table size
-    // (off is ~75 KB at charge 1) against steps offered per peak; the cap
-    // stops a ppm tolerance on a corrupt m/z from building a table that offers
-    // every step everywhere -- such a spectrum falls back to the grid.
+    /// 0.01-Th bins, and w capped at 1 Th. Neither affects the
+    /// answer: a bin lists a step up to one bin beyond its window, which only
+    /// offers a peak that the exact test then settles. Width trades table size
+    /// (off is ~75 KB at charge 1) against steps offered per peak; the cap
+    /// stops a ppm tolerance on a corrupt m/z from building a table that offers
+    /// every step everywhere -- such a spectrum falls back to the grid.
     static constexpr double BINS_PER_TH = 100;
-    static constexpr double MAX_W = 1.0;
+    static constexpr double MAX_W = 1.0;  ///< cap on w (Th), see BINS_PER_TH
 
     std::vector<double>   step;   ///< residue mass / charge, alphabet order
     double w = -1;                ///< tolerance the bins cover
@@ -134,11 +153,17 @@ namespace FASTag
     std::vector<uint32_t> off;    ///< bin -> first entry in cand; nbins + 1
     std::vector<uint8_t>  cand;   ///< step indices listed per bin
 
-    /// Make the table serve @p steps for every tolerance up to @p need; false
-    /// when it cannot, and the caller searches per query instead. Rebuilt only
-    /// when the steps change or @p need outgrows w, with headroom, so a ppm run
-    /// -- whose need follows each spectrum's top m/z -- rebuilds a few times per
-    /// thread rather than per spectrum.
+    /**
+      @brief Makes the table serve @p steps for every tolerance up to @p need.
+
+      Rebuilt only when the steps change or @p need outgrows w, with headroom,
+      so a ppm run -- whose need follows each spectrum's top m/z -- rebuilds a
+      few times per thread rather than per spectrum.
+
+      @param[in] steps Residue mass / charge per step, alphabet order (at most 256).
+      @param[in] need Largest tolerance (Th) the table must cover (at most MAX_W).
+      @return false when it cannot, and the caller searches per query instead.
+    */
     bool fit(const std::vector<double>& steps, double need)
     {
       if (!(need <= MAX_W) || steps.empty() || steps.size() > 256) return false;   // NaN too
@@ -174,9 +199,17 @@ namespace FASTag
       return true;
     }
 
-    /// For peak @p i of the m/z-sorted @p mz: out[r] = findNearest(mz[i] +
-    /// step[r], tol(target)) if that is above i, else -1. Only after fit()
-    /// returned true, and @p tol must never exceed the need it was given.
+    /**
+      @brief For peak @p i: out[r] = findNearest(mz[i] + step[r], tol(target)) if that is above i, else -1.
+
+      Only after fit() returned true, and @p tol must never exceed the need it
+      was given.
+
+      @param[in] mz Peak m/z values, sorted ascending.
+      @param[in] i Index of the peak to step from.
+      @param[in] tol Callable giving the tolerance (Th) for a target m/z.
+      @param[out] out Per step, the matched peak index or -1 (resized to the number of steps).
+    */
     template <class Tol>
     void nearestAbove(const std::vector<double>& mz, size_t i, Tol tol, std::vector<int>& out)
     {

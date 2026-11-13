@@ -28,7 +28,12 @@
 
 namespace FASTag
 {
-  /// Append @p v as "%d" / "%zu" would.
+  /**
+    @brief Append an integer as "%d" / "%zu" would.
+
+    @param[in,out] buf the string the digits are appended to
+    @param[in] v the integer to format
+  */
   template <typename Int>
   inline void appendNum(std::string& buf, Int v)
   {
@@ -37,17 +42,30 @@ namespace FASTag
     buf.append(num, std::to_chars(num, num + sizeof num, v).ptr);
   }
 
-  /// Append @p v as "%.<prec>f" (chars_format::fixed) or "%.<prec>g"
-  /// (chars_format::general) would; "%g" is general with precision 6. A float
-  /// argument is promoted to double first, as printf's varargs promote it.
-  /// @p prec <= 16.
+  /**
+    @brief Append a double as "%.<prec>f" or "%.<prec>g" would.
+
+    chars_format::fixed gives "%.<prec>f", chars_format::general gives
+    "%.<prec>g"; "%g" is general with precision 6. A float argument is
+    promoted to double first, as printf's varargs promote it.
+
+    @param[in,out] buf the string the number is appended to
+    @param[in] v the value to format
+    @param[in] fmt chars_format::fixed or chars_format::general
+    @param[in] prec the precision; must be <= 16
+  */
   inline void appendNum(std::string& buf, double v, std::chars_format fmt, int prec)
   {
     char num[330];  // fixed DBL_MAX: a sign, 309 digits, '.', prec digits
     buf.append(num, std::to_chars(num, num + sizeof num, v, fmt, prec).ptr);
   }
 
-  /// Append @p v in shortest round-trip form (std::to_chars without a format).
+  /**
+    @brief Append a double in shortest round-trip form (std::to_chars without a format).
+
+    @param[in,out] buf the string the number is appended to
+    @param[in] v the value to format
+  */
   inline void appendShortest(std::string& buf, double v)
   {
     char num[32];

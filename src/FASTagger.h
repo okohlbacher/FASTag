@@ -29,16 +29,20 @@
 
 namespace FASTag
 {
-  struct Alphabet;  ///< residue/pair tables built from Param.mods; defined in the .cpp
+  /// @brief Residue/pair tables built from Param.mods; defined in the .cpp.
+  struct Alphabet;
 
-  /// One residue-specific modification, resolved to a mass by the TOPP tool
-  /// (from OpenMS ModificationsDB) so this library needs no modification
-  /// database of its own.
-  ///
-  /// Terminal modifications are NOT represented here: a fixed N- or C-terminal
-  /// mod shifts the whole precursor mass and is therefore absorbed into the
-  /// reported flanking masses automatically, with no effect on which internal
-  /// edges the graph has. Only residue-specific mods change the alphabet.
+  /**
+    @brief One residue-specific modification, resolved to a mass.
+
+    Resolved by the TOPP tool (from OpenMS ModificationsDB) so this library
+    needs no modification database of its own.
+
+    Terminal modifications are NOT represented here: a fixed N- or C-terminal
+    mod shifts the whole precursor mass and is therefore absorbed into the
+    reported flanking masses automatically, with no effect on which internal
+    edges the graph has. Only residue-specific mods change the alphabet.
+  */
   struct ModSpec
   {
     char        residue;   ///< the residue this applies to (e.g. 'C', 'S', 'K')
@@ -48,7 +52,9 @@ namespace FASTag
                            ///< false: shifts the residue's mass unconditionally
   };
 
-  /// Which fragment pairs count as complements (Param::complement_rule).
+  /**
+    @brief Which fragment pairs count as complements (Param::complement_rule).
+  */
   enum class ComplementRule
   {
     /// Both partners carry the fragment charge z: partner at M/z + 2p - m.
@@ -61,15 +67,20 @@ namespace FASTag
     Both,
   };
 
-  /// How the complement tolerance is set (Param::complement_tol_mode).
+  /**
+    @brief How the complement tolerance is set (Param::complement_tol_mode).
+  */
   enum class ComplementTolMode
   {
     Da,        ///< complement_tol, absolute; FASTag 1.11's mode and the default
     Fragment,  ///< complement_tol_factor * (fragment tol at m + at the partner)
   };
 
-  /// Tagging parameters, set by the TOPP tool (src/CliParam.h holds the
-  /// values it starts from).
+  /**
+    @brief Tagging parameters, set by the TOPP tool.
+
+    src/CliParam.h holds the values it starts from.
+  */
   struct Param
   {
     int    tag_length     = 3;      ///< seed length in residues
@@ -80,7 +91,7 @@ namespace FASTag
     /// singly-charged scale.
     bool   deisotope      = false;
     double frag_tol       = 20.0;   ///< fragment tolerance
-    bool   tol_ppm        = true;
+    bool   tol_ppm        = true;   ///< frag_tol in ppm (true) or Da (false)
     double complement_tol = 0.02;   ///< absolute (Da); used when complement_tol_mode is Da
     /// Which fragment pairs count as complements. SameCharge is FASTag 1.11.
     ComplementRule complement_rule = ComplementRule::SameCharge;
@@ -117,8 +128,8 @@ namespace FASTag
     bool   diversity      = false;
     /// Experimental TMT6/10 endpoint-artifact filters. The CLI resolves auto
     /// detection before tagging. No scores or candidate multiplicities change.
-    bool   tmt_pseudo_filter = false;
-    bool   tmt_reporter_filter = false;
+    bool   tmt_pseudo_filter = false;    ///< TMT pseudo-tag endpoint filter
+    bool   tmt_reporter_filter = false;  ///< TMT reporter-region endpoint filter
     /// Emit per-residue confidences (Tag::res_conf). Off by default so the
     /// hot path allocates nothing extra and the TSV schema is unchanged.
     bool   per_residue_conf = false;
@@ -147,11 +158,15 @@ namespace FASTag
     std::vector<ModSpec> mods;
   };
 
-  /// One tag. Flanking masses assume the low-m/z peak is a C-terminal ion (y,
-  /// or z-dot under Param::ion_pair c/z), as DirecTag does for y; a tag read off
-  /// the N-terminal series (b, c) therefore reads reversed relative to the
-  /// peptide and its flanks carry the offset ion_pair.reversedOffset() (one
-  /// water for b/y).
+  /**
+    @brief One sequence tag of one spectrum.
+
+    Flanking masses assume the low-m/z peak is a C-terminal ion (y, or z-dot
+    under Param::ion_pair c/z), as DirecTag does for y; a tag read off the
+    N-terminal series (b, c) therefore reads reversed relative to the peptide
+    and its flanks carry the offset ion_pair.reversedOffset() (one water for
+    b/y).
+  */
   struct Tag
   {
     std::string seq;            ///< N->C. Modified residues are written inline as
@@ -161,7 +176,7 @@ namespace FASTag
     double nterm_mass = 0;      ///< residue mass N-terminal to the tag
     double cterm_mass = 0;      ///< residue mass C-terminal to the tag
     int    charge = 1;          ///< fragment charge the tag was read at
-    double p_intensity = 1, p_mzfidelity = 1, p_complement = 1;
+    double p_intensity = 1, p_mzfidelity = 1, p_complement = 1;  ///< intensity, m/z-fidelity and complement p-values
     double evalue = 1;          ///< combined p-value x tags enumerated
     /// Per-edge confidence in [0,1], summarised. Each edge (one residue, or two
     /// for a gap) scores m/z fit x endpoint intensity; min_conf is the weakest
@@ -176,7 +191,7 @@ namespace FASTag
     /// pair, not either identity or their order -- consumers of assembly-style
     /// exports should read gap residues as sharing one observation.
     std::vector<uint8_t> res_conf;
-    bool   extended = false;
+    bool   extended = false;    ///< extended beyond the seed (Param::max_extension)
     bool   gapped = false;      ///< crossed a missing peak; two residues are a
                                 ///< mass-only inference, not two observed steps
     double low_mz = 0;          ///< lowest peak; also the output tie-break
@@ -187,8 +202,11 @@ namespace FASTag
     IonSeries::Series ion_series = IonSeries::Series::BY;
   };
 
-  /// What tagSpectrum saw of one spectrum, for the census (-census). Filled
-  /// only when a pointer is passed; passing one never changes the tags.
+  /**
+    @brief What tagSpectrum saw of one spectrum, for the census (-census).
+
+    Filled only when a pointer is passed; passing one never changes the tags.
+  */
   struct SpectrumDiag
   {
     bool bad_precursor = false;  ///< precursor m/z not finite or <= 0: nothing was prepared
@@ -201,13 +219,23 @@ namespace FASTag
     bool enough_peaks = false;   ///< n_kept reaches the minimum of some seed length
   };
 
-  /// Partner m/z of a fragment at m/z @p mz and fragment charge @p z, from
-  /// a precursor of neutral mass @p M and charge @p prec_charge under one
-  /// rule (SameCharge or Precursor; Both is a pair of these calls, not a
-  /// formula of its own). NaN when the rule has no partner: Precursor with
-  /// z >= prec_charge. The SameCharge branch is the expression FASTag 1.11
-  /// evaluates, so its doubles are unchanged; at prec_charge 2, z 1 the two
-  /// rules give the same value bit for bit.
+  /**
+    @brief Partner m/z of a fragment under one complement rule.
+
+    Rule SameCharge or Precursor; Both is a pair of these calls, not a
+    formula of its own (any rule other than Precursor is evaluated as
+    SameCharge). The SameCharge branch is the expression FASTag 1.11
+    evaluates, so its doubles are unchanged; at prec_charge 2, z 1 the two
+    rules give the same value bit for bit.
+
+    @param[in] M precursor neutral mass (Da)
+    @param[in] prec_charge precursor charge
+    @param[in] z fragment charge
+    @param[in] mz fragment m/z
+    @param[in] rule the complement rule
+    @return the partner m/z; NaN when the rule has no partner (Precursor
+            with z >= prec_charge)
+  */
   inline double complementMz(double M, int prec_charge, int z, double mz, ComplementRule rule)
   {
     const double kProton = OpenMS::Constants::PROTON_MASS_U;
@@ -219,25 +247,35 @@ namespace FASTag
     return M / z + 2.0 * kProton - mz;
   }
 
-  /// The complement test of one Param, built once per Param (Tables holds
-  /// it): the rule, the tolerance and the ion-pair mass deltas. A pair's
-  /// neutral masses sum to M + delta; b/y gives the single delta 0. Later
-  /// ion series (#15) and precursor hypotheses (#6) add entries here.
+  /**
+    @brief The complement test of one Param: rule, tolerance and ion-pair mass deltas.
+
+    Built once per Param (Tables holds it). A pair's neutral masses sum to
+    M + delta; b/y gives the single delta 0. Later ion series (#15) and
+    precursor hypotheses (#6) add entries here.
+  */
   struct ComplementSpec
   {
-    ComplementRule rule = ComplementRule::SameCharge;
-    ComplementTolMode tol_mode = ComplementTolMode::Da;
+    ComplementRule rule = ComplementRule::SameCharge;  ///< which pairs count
+    ComplementTolMode tol_mode = ComplementTolMode::Da;  ///< how the tolerance is set
     double tol_da = 0.02;          ///< Da mode
     double tol_factor = 0.5;       ///< Fragment mode
     double frag_tol = 20.0;        ///< the run's fragment tolerance, Fragment mode
-    bool   frag_tol_ppm = true;
-    std::vector<double> pair_deltas{0.0};
+    bool   frag_tol_ppm = true;   ///< frag_tol in ppm (true) or Da (false)
+    std::vector<double> pair_deltas{0.0};  ///< pair mass deltas: neutral masses sum to M + delta
     /// Charges the pair lost against the precursor (IonPair::charge_loss):
     /// the Precursor rule looks for a partner at prec_charge - charge_loss
     /// minus the fragment's charge. b/y 0 (1.11's expression); c/z-dot 1.
     int    charge_loss = 0;
-    bool   midp = false;
+    bool   midp = false;          ///< mid-p complement p-value (Param::complement_midp)
 
+    /**
+      @brief The complement test of @p p.
+
+      @param[in] p the tagging parameters
+      @return the complement test; non-b/y series take their pair deltas and
+              charge loss from Param::ion_pair
+    */
     static ComplementSpec fromParam(const Param& p)
     {
       ComplementSpec c;
@@ -258,7 +296,14 @@ namespace FASTag
       return c;
     }
 
-    /// Search window around the partner m/z @p cmz of a peak at @p mz.
+    /**
+      @brief Search window around the partner m/z of a peak.
+
+      @param[in] mz the peak's m/z
+      @param[in] cmz the partner m/z
+      @return the half-width of the window (Da): tol_da in Da mode, else
+              tol_factor times the sum of the fragment tolerance at both m/z
+    */
     double tol(double mz, double cmz) const
     {
       if (tol_mode == ComplementTolMode::Da) return tol_da;
@@ -267,64 +312,121 @@ namespace FASTag
     }
   };
 
-  /// Scope of Param::complement_midp (PLAN-data-types E2 item 3: "DirecTag's
+  /// @brief Scope of Param::complement_midp (PLAN-data-types E2 item 3: "DirecTag's
   /// mid-p for 0 or 1 complemented peaks"): counts up to this use mid-p,
   /// larger ones the plain tail. The p-value stays monotone in the count:
   /// mid-p at 1 is P(X>1) + P(X=1)/2 >= P(X>=2), the plain value at 2.
   inline constexpr unsigned kComplementMidpMaxCount = 1;
 
-  /// Whether a tag with @p obs complemented peaks is scored with mid-p.
+  /**
+    @brief Whether a tag with @p obs complemented peaks is scored with mid-p.
+
+    @param[in] midp Param::complement_midp
+    @param[in] obs the number of complemented peaks of the tag
+    @return true when @p midp is set and @p obs <= kComplementMidpMaxCount
+  */
   inline bool complementMidpApplies(bool midp, unsigned obs)
   {
     return midp && obs <= kComplementMidpMaxCount;
   }
 
-  /// P-value of @p obs complemented peaks among @p n drawn from @p N, of
-  /// which @p K are complemented (hypergeometric). Plain: P(X >= obs);
-  /// @p midp: P(X > obs) + P(X = obs)/2. Outside the support [max(0,
-  /// n+K-N), min(K, n)] the plain tail is resolved analytically (1 at or
-  /// below the lower end, 0 above the upper end), as FASTag 1.11 does; mid-p
-  /// gives 1 below the lower end and 0 above the upper one.
+  /**
+    @brief Hypergeometric p-value of a tag's complemented peak count.
+
+    Plain: P(X >= obs); @p midp: P(X > obs) + P(X = obs)/2. Outside the
+    support [max(0, n+K-N), min(K, n)] the plain tail is resolved
+    analytically (1 at or below the lower end, 0 above the upper end), as
+    FASTag 1.11 does; mid-p gives 1 below the lower end and 0 above the
+    upper one.
+
+    @param[in] N the number of peaks
+    @param[in] K the number of complemented peaks among them
+    @param[in] n the number of peaks drawn (the tag's peaks)
+    @param[in] obs the number of complemented peaks among the drawn
+    @param[in] midp use mid-p instead of the plain tail
+    @return the p-value
+  */
   double complementPValue(unsigned N, unsigned K, unsigned n, unsigned obs, bool midp);
 
-  /// The complement population of one spectrum as tagSpectrum prepares it:
-  /// entry z (1 .. the fragment charges tried) counts the kept peaks with a
-  /// partner at fragment charge z; entry 0 is the number of kept peaks. For
-  /// tests and diagnostics; the charge is defaulted as tagSpectrum does.
+  /**
+    @brief The complement population of one spectrum as tagSpectrum prepares it.
+
+    For tests and diagnostics; the charge is defaulted as tagSpectrum does.
+
+    @param[in] spec fragment spectrum
+    @param[in] precursor_mz precursor m/z
+    @param[in] charge precursor charge; <= 0 is treated as 2
+    @param[in] p the tagging parameters
+    @return entry z (1 .. the fragment charges tried) counts the kept peaks
+            with a partner at fragment charge z; entry 0 is the number of
+            kept peaks
+  */
   std::vector<int> complementPopulation(const OpenMS::MSSpectrum& spec, double precursor_mz,
                                         int charge, const Param& p);
 
-  /// The peaks tagSpectrum tags of @p spec: the precursor cut, the m/z
-  /// collapse, deisotoping (Param::deisotope) and the peak budget, m/z
-  /// sorted, exactly as tagSpectrum prepares them (1.12 -dump_spectrum).
-  /// Empty when tagSpectrum would prepare nothing (no peaks, a precursor
-  /// m/z that is not finite and positive). The charge is defaulted as
-  /// tagSpectrum does. Reads no tag_length, so any Param of a run serves.
+  /**
+    @brief The peaks tagSpectrum tags of a spectrum (1.12 -dump_spectrum).
+
+    The precursor cut, the m/z collapse, deisotoping (Param::deisotope) and
+    the peak budget, m/z sorted, exactly as tagSpectrum prepares them. The
+    charge is defaulted as tagSpectrum does. Reads no tag_length, so any
+    Param of a run serves.
+
+    @param[in] spec fragment spectrum
+    @param[in] precursor_mz precursor m/z
+    @param[in] charge precursor charge; <= 0 is treated as 2
+    @param[in] p the tagging parameters
+    @return the prepared peaks; empty when tagSpectrum would prepare nothing
+            (no peaks, a precursor m/z that is not finite and positive)
+  */
   OpenMS::MSSpectrum preparedPeaks(const OpenMS::MSSpectrum& spec, double precursor_mz, int charge,
                                    const Param& p);
 
-  /// Precomputed nulls, built once and shared read-only.
-  ///
-  /// Eager construction is what lets several spectra be tagged concurrently: a
-  /// lazily-filled cache would be written from every thread. Everything needed is
-  /// known from Param, since the realised tag length spans
-  /// [tag_length+1, tag_length+1+2*max_extension] peaks.
+  /**
+    @brief Precomputed nulls, built once and shared read-only.
+
+    Eager construction is what lets several spectra be tagged concurrently: a
+    lazily-filled cache would be written from every thread. Everything needed is
+    known from Param, since the realised tag length spans
+    [tag_length+1, tag_length+1+2*max_extension] peaks.
+  */
   class Tables
   {
   public:
+    /**
+      @brief Build the null tables, the alphabet and the complement test for @p p.
+
+      @param[in] p the tagging parameters
+    */
     explicit Tables(const Param& p);
 
-    /// P(rank sum <= observed) for a tag of @p tag_peaks peaks among @p npeaks.
-    /// Conservative (1.0) outside the built range rather than out-of-bounds.
+    /**
+      @brief P(rank sum <= observed) for a tag of @p tag_peaks peaks among @p npeaks.
+
+      Conservative (1.0) outside the built range rather than out-of-bounds.
+
+      @param[in] tag_peaks the number of peaks of the tag
+      @param[in] npeaks the number of peaks of the spectrum
+      @param[in] ranksum the observed intensity rank sum
+      @return the cumulative probability
+    */
     double intensityP(int tag_peaks, int npeaks, int ranksum) const;
 
-    /// P(SSE <= observed) for the m/z-fidelity statistic.
+    /**
+      @brief P(SSE <= observed) for the m/z-fidelity statistic.
+
+      @param[in] tag_peaks the number of peaks of the tag
+      @param[in] sse the observed sum of squared m/z errors
+      @return the cumulative probability
+    */
     double mzFidelityP(int tag_peaks, double sse) const;
 
-    /// The residue/pair alphabet for this run, built once from Param.mods.
+    /// @brief The residue/pair alphabet for this run, built once from Param.mods.
+    /// @return the alphabet
     const Alphabet& alphabet() const { return *alpha_; }
 
-    /// The complement test for this run, built once from Param.
+    /// @brief The complement test for this run, built once from Param.
+    /// @return the complement test
     const ComplementSpec& complement() const { return compl_; }
 
   private:
@@ -336,60 +438,92 @@ namespace FASTag
     ComplementSpec compl_;                                  ///< complement rule and tolerance
   };
 
-  /// Infer sequence tags from one centroided MS/MS spectrum.
-  ///
-  /// @param spec       fragment spectrum; must be sorted by m/z
-  /// @param precursor_mz  precursor m/z
-  /// @param charge     precursor charge; <= 0 is treated as 2
-  /// @return tags ordered by E-value, best first
-  /// @param diag       optional; filled with what the census reads
-  /// @param multiplicity  factor on every E-value with the seed count, before
-  ///                   the max_evalue cut and the max_tag_count cap: the number
-  ///                   of precursor hypotheses tagged for this spectrum (1.12
-  ///                   #6, src/PrecursorHypotheses.h). 1 changes nothing.
+  /**
+    @brief Infer sequence tags from one centroided MS/MS spectrum.
+
+    @param[in] spec fragment spectrum; must be sorted by m/z
+    @param[in] precursor_mz precursor m/z
+    @param[in] charge precursor charge; <= 0 is treated as 2
+    @param[in] p the tagging parameters
+    @param[in] tables the nulls built from @p p
+    @param[out] diag optional; reset, then filled with what the census reads
+    @param[in] multiplicity factor on every E-value with the seed count, before
+               the max_evalue cut and the max_tag_count cap: the number
+               of precursor hypotheses tagged for this spectrum (1.12
+               #6, src/PrecursorHypotheses.h). 1 changes nothing.
+    @return tags ordered by E-value, best first
+  */
   std::vector<Tag> tagSpectrum(const OpenMS::MSSpectrum& spec, double precursor_mz,
                                int charge, const Param& p, const Tables& tables,
                                SpectrumDiag* diag = nullptr, double multiplicity = 1.0);
 
-  /// Tag one spectrum at several seed lengths, preprocessing it and building
-  /// its graphs once. Entry i is exactly tagSpectrum(spec, precursor_mz,
-  /// charge, params[i], tables[i]).
-  ///
-  /// @param params  one per length; they may differ in tag_length only
-  /// @param tables  built from the matching params entry
-  /// @param diag    optional; one preprocessing serves every length, so one
-  ///                diag; enough_peaks when some length has enough
-  /// @param multiplicity  as for the single-length overload
+  /**
+    @brief Tag one spectrum at several seed lengths, preprocessing it and building its graphs once.
+
+    Entry i is exactly tagSpectrum(spec, precursor_mz, charge, params[i],
+    tables[i]).
+
+    @param[in] spec fragment spectrum; must be sorted by m/z
+    @param[in] precursor_mz precursor m/z
+    @param[in] charge precursor charge; <= 0 is treated as 2
+    @param[in] params one per length; they may differ in tag_length only
+    @param[in] tables built from the matching params entry
+    @param[out] diag optional; one preprocessing serves every length, so one
+                diag; enough_peaks when some length has enough
+    @param[in] multiplicity as for the single-length overload
+    @return per length (the order of @p params), tags ordered by E-value
+  */
   std::vector<std::vector<Tag>> tagSpectrum(const OpenMS::MSSpectrum& spec, double precursor_mz,
                                             int charge, const std::vector<Param>& params,
                                             const std::vector<Tables>& tables,
                                             SpectrumDiag* diag = nullptr, double multiplicity = 1.0);
 
-  /// One spectrum's rows for a multi-length run, from its per-length tag lists
-  /// (ascending length, as the overload above returns them). A tag several
-  /// lengths report -- the same seq as written, charge, flanking masses and
-  /// gapped flag -- is kept only from the length whose best (lowest) E-value
-  /// for it is lowest, ties to the shorter length, with every row that length
-  /// has for it; the other lengths' rows for it are dropped. Rows otherwise
-  /// keep their order: ascending length, each length's own order within it.
-  ///
-  /// Masses and E-values are compared exactly: a reading's values come from one
-  /// computation whatever the seed length, so its copies compare equal, while
-  /// two readings that merely print alike (e.g. a gap placed one residue
-  /// apart, ~1e-6 Da) stay two tags.
+  /**
+    @brief One spectrum's rows for a multi-length run, deduplicated across lengths.
+
+    From its per-length tag lists (ascending length, as the multi-length
+    tagSpectrum returns them). A tag several
+    lengths report -- the same seq as written, charge, flanking masses and
+    gapped flag -- is kept only from the length whose best (lowest) E-value
+    for it is lowest, ties to the shorter length, with every row that length
+    has for it; the other lengths' rows for it are dropped. Rows otherwise
+    keep their order: ascending length, each length's own order within it.
+
+    Masses and E-values are compared exactly: a reading's values come from one
+    computation whatever the seed length, so its copies compare equal, while
+    two readings that merely print alike (e.g. a gap placed one residue
+    apart, ~1e-6 Da) stay two tags.
+
+    @param[in] per_length the tag lists, ascending length
+    @return the merged rows
+  */
   std::vector<Tag> mergeLengths(std::vector<std::vector<Tag>> per_length);
 
-  /// One hybrid spectrum's rows from its b/y and its c/z-dot pass (1.13 item
-  /// 10, -ion_series_hybrid both): both lists in one, stably sorted by E-value
-  /// (ties: b/y first, each pass's own order within it), cut to the @p cap
-  /// best rows (0: no cap). Every row keeps its Tag::ion_series; nothing is
-  /// deduplicated across passes, since the same peaks read as b/y and as c/z
-  /// give different flanks (two readings, not one).
+  /**
+    @brief One hybrid spectrum's rows from its b/y and its c/z-dot pass.
+
+    1.13 item 10, -ion_series_hybrid both: both lists in one, stably sorted
+    by E-value (ties: b/y first, each pass's own order within it), cut to the
+    @p cap best rows. Every row keeps its Tag::ion_series; nothing is
+    deduplicated across passes, since the same peaks read as b/y and as c/z
+    give different flanks (two readings, not one).
+
+    @param[in] by the b/y pass's tags
+    @param[in] cz the c/z-dot pass's tags
+    @param[in] cap the maximum number of rows; 0 = no cap
+    @return the merged rows
+  */
   std::vector<Tag> mergeSeriesPasses(std::vector<Tag> by, std::vector<Tag> cz, size_t cap);
 
-  /// Strip inline modification annotations, leaving one base residue per
-  /// position: "GS[Phospho]TK[TMT6plex]" -> "GSTK". Used for FASTA matching,
-  /// which is against unmodified protein sequences.
+  /**
+    @brief Strip inline modification annotations, leaving one base residue per position.
+
+    "GS[Phospho]TK[TMT6plex]" -> "GSTK". Used for FASTA matching, which is
+    against unmodified protein sequences.
+
+    @param[in] annotated a tag sequence with inline X[ModName] annotations
+    @return the base residues
+  */
   inline std::string baseSequence(const std::string& annotated)
   {
     std::string out;
@@ -404,9 +538,16 @@ namespace FASTag
     return out;
   }
 
-  /// Per base residue of @p annotated (N->C), the mass shift of its variable
-  /// modification ("X[Name]" with a variable ModSpec of that name on X), 0
-  /// otherwise. One entry per baseSequence() residue.
+  /**
+    @brief Per base residue, the mass shift of its variable modification.
+
+    The shift of "X[Name]" with a variable ModSpec of that name on X, 0
+    otherwise.
+
+    @param[in] annotated a tag sequence with inline X[ModName] annotations (N->C)
+    @param[in] mods the run's modifications
+    @return one entry per baseSequence() residue (Da)
+  */
   inline std::vector<double> variableModShifts(const std::string& annotated,
                                                const std::vector<ModSpec>& mods)
   {

@@ -95,51 +95,90 @@
 
 namespace FASTag
 {
+  /**
+    @brief Random access over an indexed mzML that also fills spectrum metadata.
+
+    Reads each spectrum's byte range from the mzML index (or from a parallel
+    rescan when the index is missing or stale) and parses peaks, native id,
+    MS level, retention time, precursors, scan windows and ion mobility from
+    it; see the file comment for scope, the step-0 fields and the deliberate
+    differences from MzMLFile.
+  */
   class IndexedMzMLReader
   {
   public:
-    /// Reads the index, or rebuilds the offsets by scanning the file when it
-    /// has no index or one that does not point at its spectra (see
-    /// indexRebuilt()). Never throws: check ok(), and fall back to
-    /// OnDiscMSExperiment when it is false (an unreadable file, or one with
-    /// no spectrumList).
+    /**
+      @brief Opens @p path and reads its index.
+
+      Reads the index, or rebuilds the offsets by scanning the file when it
+      has no index or one that does not point at its spectra (see
+      indexRebuilt()). Never throws: check ok(), and fall back to
+      OnDiscMSExperiment when it is false (an unreadable file, or one with
+      no spectrumList).
+
+      @param[in] path Path of the mzML file.
+    */
     explicit IndexedMzMLReader(const std::string& path);
-    /// A per-thread reader over the same file: shares the parsed index,
-    /// opens its own handle and owns its own decoder. Safe to call
-    /// concurrently; the copies must not be used from more than one thread.
+    /**
+      @brief A per-thread reader over the same file.
+
+      Shares the parsed index, opens its own handle and owns its own decoder.
+      Safe to call concurrently; the copies must not be used from more than
+      one thread.
+
+      @param[in] other The reader to share the index with.
+    */
     IndexedMzMLReader(const IndexedMzMLReader& other);
     IndexedMzMLReader& operator=(const IndexedMzMLReader&) = delete;
     ~IndexedMzMLReader();
 
+    /// @brief Whether the file was opened and has a spectrum index.
+    /// @return true when the reader can be used.
     bool ok() const;
+    /// @brief Number of spectra in the file.
+    /// @return The spectrum count; 0 when not ok().
     OpenMS::Size getNrSpectra() const;
-    /// True when the file's own index was missing or stale and the offsets
-    /// came from scanning the file instead.
+    /**
+      @brief Whether the offsets came from scanning the file.
+
+      @return true when the file's own index was missing or stale and the
+        offsets came from scanning the file instead.
+    */
     bool indexRebuilt() const;
 
-    /// The byte offset of every <spectrum> element inside the spectrumList,
-    /// ascending, followed by the offset of </spectrumList> as the end of the
-    /// last one; empty when the file has no complete spectrumList. Found by
-    /// scanning the bytes, not by trusting an index: pieces of @p chunk_bytes
-    /// are searched in parallel (up to 16 threads, within
-    /// omp_get_max_threads()), each reading a few bytes past its end so a tag
-    /// split across two pieces is found by the piece it starts in.
-    /// @p chunk_bytes changes only how the work is split, never the result;
-    /// it is a parameter so the test can prove that.
-    ///
-    /// Known limit: a <spectrum tag inside an XML comment within the
-    /// spectrumList would be taken for a spectrum. No mzML writer emits one;
-    /// skip comments here if one ever does.
+    /**
+      @brief The byte offset of every <spectrum> element inside the spectrumList.
+
+      Ascending, followed by the offset of </spectrumList> as the end of the
+      last one; empty when the file has no complete spectrumList. Found by
+      scanning the bytes, not by trusting an index: pieces of @p chunk_bytes
+      are searched in parallel (up to 16 threads, within
+      omp_get_max_threads()), each reading a few bytes past its end so a tag
+      split across two pieces is found by the piece it starts in.
+      @p chunk_bytes changes only how the work is split, never the result;
+      it is a parameter so the test can prove that.
+
+      Known limit: a <spectrum tag inside an XML comment within the
+      spectrumList would be taken for a spectrum. No mzML writer emits one;
+      skip comments here if one ever does.
+
+      @param[in] path Path of the mzML file.
+      @param[in] chunk_bytes Size of the pieces searched in parallel (bytes).
+      @return The offsets, or an empty vector.
+    */
     static std::vector<std::uint64_t> scanSpectrumOffsets(const std::string& path,
                                                           std::size_t chunk_bytes = std::size_t{4} << 20);
 
-    /// The step-0 fields (see the file comment) a read fills, as a bit mask
-    /// (1.12.2). Everything else -- peaks, native id, MS level, RT, scan
-    /// windows, ion mobility, the 1.11 precursor fields -- is read always.
-    /// A field left out is simply not set; every field that IS set is
-    /// exactly what kAllFields gives. Callers pass only what they consume,
-    /// so the per-spectrum parse costs what 1.11's did where nothing more
-    /// is needed (the tagging loop, the acquisition probe).
+    /**
+      @brief The step-0 fields (see the file comment) a read fills, as a bit mask (1.12.2).
+
+      Everything else -- peaks, native id, MS level, RT, scan windows, ion
+      mobility, the 1.11 precursor fields -- is read always. A field left out
+      is simply not set; every field that IS set is exactly what kAllFields
+      gives. Callers pass only what they consume, so the per-spectrum parse
+      costs what 1.11's did where nothing more is needed (the tagging loop,
+      the acquisition probe).
+    */
     enum Field : unsigned
     {
       kStep0Type = 1u << 0,              ///< centroid / profile (MS:1000127/128)
@@ -148,7 +187,7 @@ namespace FASTag
       kStep0ActivationEnergy = 1u << 3,  ///< each precursor's activation energy
       kStep0PossibleCharges = 1u << 4,   ///< possible charge states (MS:1000633)
       kStep0TargetMeta = 1u << 5,        ///< the "isolation window target m/z" meta value
-      kAllFields = (1u << 6) - 1,
+      kAllFields = (1u << 6) - 1,        ///< every step-0 field
       /// What the tagging loop reads: the type (-pick_profile), activation
       /// and filter string (IonSeries::activationClass, -digest_out) and the
       /// possible charges (precursor hypotheses, the no-charge warning).
@@ -159,58 +198,112 @@ namespace FASTag
       kActivationFields = kStep0FilterString | kStep0Activation,
     };
 
-    /// Spectrum @p i with native id, MS level, retention time (in SECONDS, as
-    /// OpenMS wants) and precursors; the step-0 fields in @p fields.
-    ///
-    /// PEAKS ARE DECODED FOR MS2 ONLY. Decoding is the expensive half of a
-    /// read (a DOM parse plus zlib per spectrum) and FASTag tags MS2, so an
-    /// MS1 comes back with its metadata and no peaks -- the same bargain the
-    /// mzPeak reader strikes. That makes this reader unsuitable for anything
-    /// that needs MS1 signal, which is why -out_spectra does not use it.
-    ///
-    /// @throws OpenMS::Exception::ParseError if the range cannot be read or
-    ///   the decoder rejects an MS2 spectrum (OpenMS's reader fails the same
-    ///   file; a silent empty spectrum would drop its tags).
+    /**
+      @brief Spectrum @p i with native id, MS level, retention time and precursors.
+
+      Retention time in SECONDS, as OpenMS wants; the step-0 fields in
+      @p fields.
+
+      PEAKS ARE DECODED FOR MS2 ONLY. Decoding is the expensive half of a
+      read (a DOM parse plus zlib per spectrum) and FASTag tags MS2, so an
+      MS1 comes back with its metadata and no peaks -- the same bargain the
+      mzPeak reader strikes. That makes this reader unsuitable for anything
+      that needs MS1 signal, which is why -out_spectra does not use it.
+
+      @param[in] i Spectrum index.
+      @param[in] fields Step-0 fields to fill (Field bit mask).
+      @return The spectrum; empty when not ok() or @p i is out of range.
+      @throw OpenMS::Exception::ParseError if the range cannot be read or
+        the decoder rejects an MS2 spectrum (OpenMS's reader fails the same
+        file; a silent empty spectrum would drop its tags).
+    */
     OpenMS::MSSpectrum getSpectrum(OpenMS::Size i, unsigned fields = kAllFields);
-    /// As getSpectrum() with every field, but with the peaks of a spectrum of
-    /// any MS level (1.13 -check_header_charge reads the MS1 scan before an MS2).
+    /**
+      @brief As getSpectrum() with every field, but with peaks at any MS level.
+
+      1.13 -check_header_charge reads the MS1 scan before an MS2.
+
+      @param[in] i Spectrum index.
+      @return The spectrum with peaks.
+      @throw OpenMS::Exception::ParseError as getSpectrum().
+    */
     OpenMS::MSSpectrum getSpectrumAnyLevel(OpenMS::Size i);
 
-    /// Spectrum @p i WITHOUT peaks: every metadata field getSpectrum() fills
-    /// (native id, MS level, retention time, type, scan windows, ion
-    /// mobility, filter string, precursors with their activation), read from
-    /// the head of the element. Lenient: an unreadable spectrum comes back
-    /// empty instead of throwing. For a probe over many spectra (the 1.12
-    /// acquisition check) that must not pay for decoding.
+    /**
+      @brief Spectrum @p i WITHOUT peaks.
+
+      Every metadata field getSpectrum() fills (native id, MS level,
+      retention time, type, scan windows, ion mobility, filter string,
+      precursors with their activation), read from the head of the element.
+      Lenient: an unreadable spectrum comes back empty instead of throwing.
+      For a probe over many spectra (the 1.12 acquisition check) that must
+      not pay for decoding.
+
+      @param[in] i Spectrum index.
+      @param[in] fields Step-0 fields to fill (Field bit mask).
+      @return The spectrum without peaks, or an empty one.
+    */
     OpenMS::MSSpectrum getSpectrumMetadata(OpenMS::Size i, unsigned fields = kAllFields);
-    /// Byte range [first, second) of spectrum @p i in the file, as the
-    /// offsets in use give it; {0, 0} when there is no such spectrum. Read
-    /// only, for callers that scrape what the reader does not keep (1.12
-    /// -probe_input: a scan's instrumentConfigurationRef).
+    /**
+      @brief Byte range [first, second) of spectrum @p i in the file.
+
+      As the offsets in use give it. Read only, for callers that scrape what
+      the reader does not keep (1.12 -probe_input: a scan's
+      instrumentConfigurationRef).
+
+      @param[in] i Spectrum index.
+      @return The byte range; {0, 0} when there is no such spectrum.
+    */
     std::pair<std::uint64_t, std::uint64_t> spectrumByteRange(OpenMS::Size i) const;
 
-    /// MS2 peaks are decoded by MzMLDirectDecoder, and by OpenMS's
-    /// domParseSpectrum for every spectrum it declines. On by default;
-    /// FASTAG_OPENMS_DECODER=1 turns it off for every reader, this for one.
+    /**
+      @brief Turns direct decoding of MS2 peaks on or off for this reader.
+
+      MS2 peaks are decoded by MzMLDirectDecoder, and by OpenMS's
+      domParseSpectrum for every spectrum it declines. On by default;
+      FASTAG_OPENMS_DECODER=1 turns it off for every reader, this for one.
+
+      @param[in] on Whether to use the direct decoder.
+    */
     void setDirectDecoding(bool on);
-    /// MS2 spectra this reader decoded directly, and through OpenMS.
+    /// @brief MS2 spectra this reader decoded directly.
+    /// @return The count.
     std::size_t directDecoded() const;
+    /// @brief MS2 spectra this reader decoded through OpenMS.
+    /// @return The count.
     std::size_t openmsDecoded() const;
-    /// Spectra read by getSpectrum() with a selected-ion m/z of 0, below 0
-    /// or not finite (see the file comment), and those of them whose
-    /// precursor took the isolation window target instead (the rest have
-    /// none and yield no tags). Metadata and any-level reads are not counted.
+    /**
+      @brief Spectra read by getSpectrum() with an invalid selected-ion m/z.
+
+      A selected-ion m/z of 0, below 0 or not finite (see the file comment).
+      Metadata and any-level reads are not counted.
+
+      @return The count.
+    */
     std::size_t invalidSelectedMz() const;
+    /**
+      @brief Those invalidSelectedMz() spectra whose precursor took the isolation window target instead.
+
+      The rest have none and yield no tags.
+
+      @return The count.
+    */
     std::size_t invalidSelectedMzFromTarget() const;
     /// Declined this many times in a row from the start, a reader stops
     /// trying the direct decoder.
     static constexpr std::size_t kDirectProbe = 64;
 
-    /// Does this file give up MS level and precursors to the scrape? Reads
-    /// metadata WITHOUT decoding peaks, up to the first MS2 (at most
-    /// kMetadataProbe spectra): true if that MS2 has a precursor, or if no
-    /// MS2 comes within the cap but MS levels were read.
+    /**
+      @brief Does this file give up MS level and precursors to the scrape?
+
+      Reads metadata WITHOUT decoding peaks, up to the first MS2 (at most
+      kMetadataProbe spectra).
+
+      @return true if that MS2 has a precursor, or if no MS2 comes within the
+        cap but MS levels were read.
+    */
     bool reportsSpectrumMetadata();
+    /// Maximum number of spectra reportsSpectrumMetadata() reads.
     static constexpr OpenMS::Size kMetadataProbe = 5000;
 
   private:
@@ -220,12 +313,25 @@ namespace FASTag
     std::unique_ptr<Impl> impl_;
   };
 
-  /// For a spectrum read by OpenMS (OnDiscMSExperiment, MzMLFile, MzPeakFile):
-  /// does a precursor have an m/z of 0, below 0 or not finite while its
-  /// "isolation window target m/z" meta value is positive? That is how
-  /// OpenMS reads a selected-ion m/z of 0 next to an isolation target.
+  /**
+    @brief Whether a spectrum read by OpenMS needs its isolation target as precursor m/z.
+
+    For a spectrum read by OpenMS (OnDiscMSExperiment, MzMLFile, MzPeakFile):
+    does a precursor have an m/z of 0, below 0 or not finite while its
+    "isolation window target m/z" meta value is positive? That is how
+    OpenMS reads a selected-ion m/z of 0 next to an isolation target.
+
+    @param[in] spec The spectrum.
+    @return true if any precursor is such a case.
+  */
   bool needsSelectedIonTarget(const OpenMS::MSSpectrum& spec);
-  /// Gives each such precursor the target as its m/z and drops the meta
-  /// value, as IndexedMzMLReader reads the same precursor. True if any changed.
+  /**
+    @brief Gives each such precursor the target as its m/z.
+
+    Also drops the meta value, as IndexedMzMLReader reads the same precursor.
+
+    @param[in,out] spec The spectrum whose precursors are changed.
+    @return true if any changed.
+  */
   bool useSelectedIonTarget(OpenMS::MSSpectrum& spec);
 }

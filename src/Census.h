@@ -52,21 +52,32 @@ namespace FASTag::Census
   /// Census format version, written as `census_version` in the summary.
   inline constexpr int kVersion = 1;
 
-  /// Per-spectrum status. Append-only (see the file comment).
+  /**
+    @brief Per-spectrum status.
+
+    Append-only (see the file comment); the first matching rule wins.
+  */
   enum class Status : std::uint8_t
   {
-    Empty = 0,
-    NoPrecursor,
-    NoSignal,
-    BadPrecursor,
-    TooFewPeaks,
-    NoTags,
-    Filtered,
-    Placed,
-    Tagged,
+    Empty = 0,     ///< no peaks
+    NoPrecursor,   ///< no Precursor
+    NoSignal,      ///< peaks, but none with a positive, finite intensity
+    BadPrecursor,  ///< precursor m/z not finite or <= 0
+    TooFewPeaks,   ///< too few peaks after preprocessing
+    NoTags,        ///< no tag passed -max_evalue
+    Filtered,      ///< tags found, all rejected by -fasta
+    Placed,        ///< at least one -recon_out placement
+    Tagged,        ///< at least one reported row and no placement
   };
+  /// Number of Status values.
   inline constexpr std::size_t kStatusCount = 9;
 
+  /**
+    @brief The name of a status as written in the census.
+
+    @param[in] s Status.
+    @return The status name, or "unknown" for a value out of range.
+  */
   inline const char* name(Status s)
   {
     static constexpr const char* names[kStatusCount] = {
@@ -76,10 +87,17 @@ namespace FASTag::Census
     return i < kStatusCount ? names[i] : "unknown";
   }
 
-  /// True for the statuses of spectra the tagger processed (counted in n_ms2).
+  /**
+    @brief Whether a status belongs to a spectrum the tagger processed.
+
+    @param[in] s Status.
+    @return True for the statuses of spectra the tagger processed (counted in n_ms2).
+  */
   inline bool processed(Status s) { return s != Status::Empty && s != Status::NoPrecursor; }
 
-  /// What the tagging loop knows about one MS2 spectrum.
+  /**
+    @brief What the tagging loop knows about one MS2 spectrum.
+  */
   struct Facts
   {
     bool empty = false;           ///< spec.empty()
@@ -93,6 +111,12 @@ namespace FASTag::Census
     bool count_placements = false;  ///< -recon_out is written
   };
 
+  /**
+    @brief The status of a spectrum from its facts (first matching rule wins).
+
+    @param[in] f Facts of the spectrum.
+    @return The status.
+  */
   inline Status classify(const Facts& f)
   {
     if (f.empty) return Status::Empty;
@@ -106,11 +130,17 @@ namespace FASTag::Census
     return Status::Tagged;
   }
 
-  /// Sort non-negative, finite floats ascending (+0.0 and -0.0 must already
-  /// be one value: signal() stores +0.0). LSD radix sort on the bit patterns,
-  /// which order exactly as the values do for non-negative floats: the census
-  /// sorts every spectrum's intensities, and at a few hundred peaks or more
-  /// std::sort was most of the -census cost. The result equals std::sort's.
+  /**
+    @brief Sorts non-negative, finite floats ascending.
+
+    +0.0 and -0.0 must already be one value: signal() stores +0.0. LSD radix
+    sort on the bit patterns, which order exactly as the values do for
+    non-negative floats: the census sorts every spectrum's intensities, and
+    at a few hundred peaks or more std::sort was most of the -census cost.
+    The result equals std::sort's.
+
+    @param[in,out] v Values to sort in place.
+  */
   inline void sortNonNegative(std::vector<float>& v)
   {
     const std::size_t n = v.size();
@@ -135,9 +165,15 @@ namespace FASTag::Census
     std::memcpy(v.data(), a.data(), n * sizeof(float));
   }
 
-  /// Gini coefficient of @p v (sorted in place): 0 for equal values, 1 - 1/n
-  /// for one non-zero value among n. The values must be >= 0 with a positive
-  /// sum.
+  /**
+    @brief Gini coefficient of a set of values.
+
+    0 for equal values, 1 - 1/n for one non-zero value among n. The values
+    must be >= 0 with a positive sum.
+
+    @param[in,out] v Values; sorted in place.
+    @return The Gini coefficient; 0 when the sum is not positive.
+  */
   template <typename T>
   double gini(std::vector<T>& v)
   {
@@ -154,7 +190,9 @@ namespace FASTag::Census
     return 2.0 * weighted / (n * sum) - (n + 1.0) / n;
   }
 
-  /// Peak facts read from the input spectrum itself.
+  /**
+    @brief Peak facts read from the input spectrum itself.
+  */
   struct Signal
   {
     std::size_t n_peaks = 0;  ///< finite m/z, positive and finite intensity
@@ -162,10 +200,17 @@ namespace FASTag::Census
     double gini = 0;          ///< int_gini
   };
 
-  /// n_peaks and int_gini of @p spec. int_gini is over every peak with a
-  /// finite m/z and a finite, non-negative intensity: zero-intensity peaks
-  /// (profile padding) are part of the population, NaN and negative ones are
-  /// not. It is our own training-free signal, not Xrea.
+  /**
+    @brief n_peaks and int_gini of a spectrum.
+
+    int_gini is over every peak with a finite m/z and a finite, non-negative
+    intensity: zero-intensity peaks (profile padding) are part of the
+    population, NaN and negative ones are not. It is our own training-free
+    signal, not Xrea.
+
+    @param[in] spec Input spectrum (peaks with getMZ() and getIntensity()).
+    @return The signal facts.
+  */
   template <typename Spectrum>
   Signal signal(const Spectrum& spec)
   {
@@ -190,22 +235,31 @@ namespace FASTag::Census
     return s;
   }
 
-  /// The facts of one reported tag that the census reads.
+  /**
+    @brief The facts of one reported tag that the census reads.
+  */
   struct TagView
   {
-    double evalue = 0;
-    double low_mz = 0, high_mz = 0;
-    std::size_t n_res = 0;
-    float min_conf = 0, mean_conf = 0;
+    double evalue = 0;               ///< E-value
+    double low_mz = 0, high_mz = 0;  ///< m/z range the tag covers
+    std::size_t n_res = 0;           ///< tag length (residues)
+    float min_conf = 0, mean_conf = 0;  ///< minimum and mean residue confidence
     float peak_tic = 0;  ///< summed intensity of the tag's path peaks (BestTagTIC)
     bool cz = false;     ///< read as c/z-dot ions (1.12 #15 phase B), else b/y
   };
 
+  /// Index value meaning "no tag".
   inline constexpr std::size_t kNone = static_cast<std::size_t>(-1);
 
-  /// The reported tag with the minimum E-value, ties to the first output
-  /// position; kNone for none. Multi-length rows are ordered by length, so
-  /// this is not necessarily row 0. The rows are not reordered.
+  /**
+    @brief The reported tag with the minimum E-value.
+
+    Ties to the first output position. Multi-length rows are ordered by
+    length, so this is not necessarily row 0. The rows are not reordered.
+
+    @param[in] rows Reported tags.
+    @return Index of the best tag; kNone for none.
+  */
   inline std::size_t bestTag(const std::vector<TagView>& rows)
   {
     std::size_t best = kNone;
@@ -214,7 +268,12 @@ namespace FASTag::Census
     return best;
   }
 
-  /// Total length of the union of the intervals [lo, hi] in @p iv (sorted in place).
+  /**
+    @brief Total length of the union of intervals.
+
+    @param[in,out] iv Intervals [lo, hi]; sorted in place.
+    @return Total length of the union of the intervals in @p iv.
+  */
   inline double unionLength(std::vector<std::pair<double, double>>& iv)
   {
     std::sort(iv.begin(), iv.end());
@@ -235,10 +294,20 @@ namespace FASTag::Census
     return total;
   }
 
-  /// Total length of the union of the intervals [lo, hi].
+  /**
+    @brief Total length of the union of the intervals [lo, hi].
+
+    @param[in] iv Intervals [lo, hi] (copied).
+    @return Total length of their union.
+  */
   inline double tagCover(std::vector<std::pair<double, double>> iv) { return unionLength(iv); }
 
-  /// tag_cover of the reported rows: the union of their [low_mz, high_mz].
+  /**
+    @brief tag_cover of the reported rows.
+
+    @param[in] rows Reported tags.
+    @return The length of the union of their [low_mz, high_mz].
+  */
   inline double tagCoverOf(const std::vector<TagView>& rows)
   {
     static thread_local std::vector<std::pair<double, double>> iv;
@@ -247,30 +316,39 @@ namespace FASTag::Census
     return unionLength(iv);
   }
 
-  /// One census row. Fields that were not computed for a spectrum are written
-  /// empty (see appendRow).
+  /**
+    @brief One census row.
+
+    Fields that were not computed for a spectrum are written empty (see
+    appendRow).
+  */
   struct Row
   {
     std::size_t index = 0;      ///< input index
-    double rt = 0;
-    bool has_precursor = false;
-    double precursor_mz = 0;
+    double rt = 0;              ///< retention time (seconds)
+    bool has_precursor = false; ///< the spectrum has a precursor
+    double precursor_mz = 0;    ///< precursor m/z
     int charge_given = 0;       ///< 0 = none
     int charge_used = 0;        ///< 2 when none was given
-    std::size_t n_peaks = 0;
-    bool has_gini = false;
-    double gini = 0;
+    std::size_t n_peaks = 0;    ///< peaks with finite m/z and positive, finite intensity
+    bool has_gini = false;      ///< gini is valid
+    double gini = 0;            ///< int_gini
     bool prepared = false;      ///< n_kept, n_edges and n_compl are valid
-    std::size_t n_kept = 0, n_edges = 0, n_compl = 0;
-    Status status = Status::Empty;
-    std::size_t n_found = 0, n_reported = 0;
+    std::size_t n_kept = 0, n_edges = 0, n_compl = 0;  ///< SpectrumDiag: peaks kept, graph edges, kept peaks with a complement at charge 1
+    Status status = Status::Empty;  ///< census status
+    std::size_t n_found = 0, n_reported = 0;  ///< tags found, and rows reported
     bool has_best = false;      ///< best and tag_cover are valid
-    TagView best;
-    double tag_cover = 0;
+    TagView best;               ///< the best reported tag
+    double tag_cover = 0;       ///< tag_cover of the reported rows
   };
 
-  /// The census TSV header line with or without best_ion_series (@p
-  /// ion_series: a run that can read c/z, IonSeries::seriesColumn).
+  /**
+    @brief The census TSV header line with or without best_ion_series.
+
+    @param[in] ion_series Whether to include best_ion_series (a run that can
+      read c/z, IonSeries::seriesColumn).
+    @return The header line, ending in a newline.
+  */
   inline std::string header(bool ion_series)
   {
     return std::string("index\tspectrum\trt\tprecursor_mz\tcharge_given\tcharge_used\tn_peaks\tn_peaks_kept"
@@ -279,33 +357,62 @@ namespace FASTag::Census
          + (ion_series ? "\tbest_ion_series\n" : "\n");
   }
 
-  /// The run's optional census columns: one run-level setting, set once by
-  /// the tool before the census table opens (and before any thread starts),
-  /// read by header(). A reader of the census that takes header() as the
-  /// layout (-census_ids, CensusIds::joinTable) thus sees the columns this
-  /// run writes, with no argument of its own (PLAN-INTEGRATION 2.3/2). The
-  /// default is the 1.11 layout.
+  /**
+    @brief The run's optional census columns.
+
+    One run-level setting, set once by the tool before the census table
+    opens (and before any thread starts), read by header(). A reader of the
+    census that takes header() as the layout (-census_ids,
+    CensusIds::joinTable) thus sees the columns this run writes, with no
+    argument of its own (PLAN-INTEGRATION 2.3/2). The default is the 1.11
+    layout.
+  */
   struct RunColumns
   {
     bool ion_series = false;  ///< best_ion_series (#15 phase B)
   };
+  /**
+    @brief The process-wide RunColumns setting.
+
+    @return A reference to the single RunColumns instance.
+  */
   inline RunColumns& runColumns()
   {
     static RunColumns c;
     return c;
   }
 
-  /// The census TSV header line of this run (runColumns()).
+  /**
+    @brief The census TSV header line of this run (runColumns()).
+
+    @return The header line, ending in a newline.
+  */
   inline std::string header() { return header(runColumns().ion_series); }
 
-  /// Free text as one TSV field: a tab, CR or LF becomes a space.
+  /**
+    @brief Appends free text as one TSV field.
+
+    A tab, CR or LF becomes a space.
+
+    @param[in,out] buf Buffer appended to.
+    @param[in] text Text to append.
+  */
   inline void appendField(std::string& buf, const std::string& text)
   {
     if (text.find_first_of("\t\r\n") == std::string::npos) { buf += text; return; }
     for (char c : text) buf += (c == '\t' || c == '\r' || c == '\n') ? ' ' : c;
   }
 
-  /// Append one census row (20 fields, 21 with @p ion_series, and a newline).
+  /**
+    @brief Appends one census row.
+
+    20 fields, 21 with @p ion_series, and a newline.
+
+    @param[in,out] buf Buffer appended to.
+    @param[in] r The row.
+    @param[in] native_id Native ID of the spectrum (the spectrum column).
+    @param[in] ion_series Whether to write the best_ion_series column.
+  */
   inline void appendRow(std::string& buf, const Row& r, const std::string& native_id, bool ion_series = false)
   {
     constexpr auto fixed = std::chars_format::fixed;
@@ -356,8 +463,13 @@ namespace FASTag::Census
     buf += '\n';
   }
 
-  /// Linear-interpolation quantile (type 7, numpy's default) of @p v, sorted
-  /// in place; NaN for none.
+  /**
+    @brief Linear-interpolation quantile (type 7, numpy's default).
+
+    @param[in,out] v Values; sorted in place.
+    @param[in] q Quantile in [0, 1].
+    @return The quantile; NaN for none.
+  */
   inline double quantile(std::vector<double>& v, double q)
   {
     if (v.empty()) return std::numeric_limits<double>::quiet_NaN();
@@ -368,16 +480,23 @@ namespace FASTag::Census
     return v[lo] + (h - static_cast<double>(lo)) * (v[lo + 1] - v[lo]);
   }
 
-  /// Run-level counts and samples, one per thread, merged in thread order.
+  /**
+    @brief Run-level counts and samples, one per thread, merged in thread order.
+  */
   struct Tally
   {
-    std::array<std::uint64_t, kStatusCount> by_status{};
+    std::array<std::uint64_t, kStatusCount> by_status{};  ///< rows per status
     std::uint64_t ms2_seen = 0;   ///< rows written
     std::uint64_t no_charge = 0;  ///< processed spectra without a precursor charge
     std::vector<double> best_evalue;  ///< tagged and placed spectra
     std::vector<double> n_kept;       ///< processed spectra that were prepared
     std::vector<double> gini;         ///< processed spectra with a Gini
 
+    /**
+      @brief Counts one census row.
+
+      @param[in] r The row.
+    */
     void add(const Row& r)
     {
       ++by_status[static_cast<std::size_t>(r.status)];
@@ -389,6 +508,11 @@ namespace FASTag::Census
       if (r.has_best && (r.status == Status::Tagged || r.status == Status::Placed))
         best_evalue.push_back(r.best.evalue);
     }
+    /**
+      @brief Adds the counts and samples of another tally (appended after this one's).
+
+      @param[in] o Tally to add.
+    */
     void merge(const Tally& o)
     {
       for (std::size_t i = 0; i < kStatusCount; ++i) by_status[i] += o.by_status[i];
@@ -398,7 +522,8 @@ namespace FASTag::Census
       n_kept.insert(n_kept.end(), o.n_kept.begin(), o.n_kept.end());
       gini.insert(gini.end(), o.gini.begin(), o.gini.end());
     }
-    /// Spectra the tagger processed: the "N MS2 spectra" of the log.
+    /// @brief Spectra the tagger processed: the "N MS2 spectra" of the log.
+    /// @return The number of rows with a processed() status.
     std::uint64_t n_processed() const
     {
       std::uint64_t n = 0;
@@ -408,9 +533,15 @@ namespace FASTag::Census
     }
   };
 
-  /// The `census` section of -census_summary_out (after the run rows).
-  /// @p input_spectra counts every input spectrum, all MS levels (the
-  /// subsampling basis); @p subsampled is -subsample_spectra/-subsample_fraction.
+  /**
+    @brief The `census` section of -census_summary_out (after the run rows).
+
+    @param[in] t The run's tally.
+    @param[in] input_spectra Every input spectrum, all MS levels (the
+      subsampling basis).
+    @param[in] subsampled Whether -subsample_spectra/-subsample_fraction was used.
+    @return The summary rows.
+  */
   inline std::vector<Digest::Row> summaryRows(const Tally& t, std::uint64_t input_spectra, bool subsampled)
   {
     using Digest::num;

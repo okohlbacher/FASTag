@@ -77,55 +77,115 @@ namespace FASTag::CensusIds
   /// Format version of the `census_ids` summary section and the two columns.
   inline constexpr int kVersion = 1;
 
-  /// Default of -census_ids_fdr and -census_triage_evalue.
+  /// Default of -census_ids_fdr.
   inline constexpr double kDefaultFdr = 0.01;
+  /// Default of -census_triage_evalue.
   inline constexpr double kDefaultTriageEvalue = 0.01;
 
-  /// Shares of unmatched references that warn and that refuse.
+  /// Share of unmatched references that warns.
   inline constexpr double kWarnUnmatched = 0.01;
+  /// Share of unmatched references that refuses.
   inline constexpr double kRefuseUnmatched = 0.5;
 
-  /// The identified value of one spectrum. Append-only.
+  /**
+    @brief The identified value of one spectrum. Append-only.
+  */
   enum class Ident : std::uint8_t { No = 0, Yes = 1, Unknown = 2 };
+  /// Number of Ident values.
   inline constexpr std::size_t kIdentCount = 3;
-  /// "0", "1" or "" (unknown), as written in the table.
+  /**
+    @brief Table text of an identified value.
+
+    @param[in] i The value.
+    @return "0", "1" or "" (unknown), as written in the table.
+  */
   const char* text(Ident i);
-  /// "0", "1" or "unknown", as used in the summary keys.
+  /**
+    @brief Summary key of an identified value.
+
+    @param[in] i The value.
+    @return "0", "1" or "unknown", as used in the summary keys.
+  */
   const char* key(Ident i);
 
-  /// The scan number in a native id or spectrum reference: the digits after a
-  /// `scan=` field (at the start or after a space), or the whole reference
-  /// when it is a plain non-negative integer; -1 otherwise. `index=` and MGF
-  /// titles name no scan.
+  /**
+    @brief The scan number in a native id or spectrum reference.
+
+    The digits after a `scan=` field (at the start or after a space), or the
+    whole reference when it is a plain non-negative integer. `index=` and MGF
+    titles name no scan.
+
+    @param[in] id Native id or spectrum reference.
+    @return The scan number; -1 otherwise.
+  */
   long long scanOf(const std::string& id);
 
-  /// File name of @p path without directory and without its MS/compression
-  /// extensions (.mzML, .mzXML, .mgf, .raw, .d, .mzpeak, .wiff, .gz, .bz2,
-  /// .zip, case-insensitive, repeatedly); a file:// prefix and backslashes
-  /// are accepted.
+  /**
+    @brief File name of @p path without directory and MS/compression extensions.
+
+    Extensions .mzML, .mzXML, .mgf, .raw, .d, .mzpeak, .wiff, .gz, .bz2,
+    .zip are removed, case-insensitive, repeatedly; a file:// prefix and
+    backslashes are accepted.
+
+    @param[in] path File path or URI.
+    @return The stem.
+  */
   std::string runStem(const std::string& path);
 
-  /// True for a score type that is a q-value (q-value, qvalue, q_value,
-  /// MS:1002354, PSM-level q-value; case-insensitive).
+  /**
+    @brief Whether a score type is a q-value.
+
+    @param[in] score_type Score type name.
+    @return true for q-value, qvalue, q_value, MS:1002354, PSM-level q-value
+      (case-insensitive).
+  */
   bool isQValueScoreType(const std::string& score_type);
 
-  /// The q-value of @p hit within @p id (see the file comment); NaN when none.
+  /**
+    @brief The q-value of @p hit within @p id (see the file comment).
+
+    @param[in] id The identification (its score type).
+    @param[in] hit The hit.
+    @return The q-value; NaN when none.
+  */
   double qValue(const OpenMS::PeptideIdentification& id, const OpenMS::PeptideHit& hit);
 
-  /// References and their acceptance, matched to census rows in two passes.
+  /**
+    @brief References and their acceptance, matched to census rows in two passes.
+  */
   class Index
   {
   public:
-    /// One PeptideIdentification's reference (escaped as a census field) and
-    /// whether it holds an accepted hit. The same reference twice is one
-    /// reference, accepted if either is. An empty or blank reference is not
-    /// added (false); interpret() counts it in Loaded::n_no_ref.
+    /**
+      @brief Adds one PeptideIdentification's reference.
+
+      The reference is escaped as a census field, with whether it holds an
+      accepted hit. The same reference twice is one reference, accepted if
+      either is. An empty or blank reference is not added; interpret()
+      counts it in Loaded::n_no_ref.
+
+      @param[in] ref Spectrum reference.
+      @param[in] accepted Whether the identification holds an accepted hit.
+      @return false when the reference is empty or blank (not added).
+    */
     bool add(const std::string& ref, bool accepted);
-    /// Pass 1: a spectrum read (its census native id, escaped).
+    /**
+      @brief Pass 1: registers a spectrum read.
+
+      @param[in] native_id Its census native id, escaped.
+    */
     void see(const std::string& native_id);
-    /// Pass 2, after every see(): the identified value of a spectrum.
+    /**
+      @brief Pass 2, after every see(): the identified value of a spectrum.
+
+      @param[in] native_id Its census native id, escaped.
+      @return Yes, No or Unknown (ambiguous scan).
+    */
     Ident lookup(const std::string& native_id);
 
+    /**
+      @brief How the references matched (counts()).
+    */
     struct Counts
     {
       std::size_t refs = 0;       ///< distinct references
@@ -134,6 +194,8 @@ namespace FASTag::CensusIds
       std::size_t ambiguous = 0;  ///< their scan matched several spectra or references
       std::size_t unmatched = 0;  ///< matched no spectrum read
     };
+    /// @brief How the references matched.
+    /// @return Counts per match kind.
     Counts counts() const;
 
   private:
@@ -149,7 +211,9 @@ namespace FASTag::CensusIds
     bool scans_built_ = false;
   };
 
-  /// What the identification file held.
+  /**
+    @brief What the identification file held.
+  */
   struct Loaded
   {
     std::size_t n_ids = 0;          ///< PeptideIdentifications
@@ -164,21 +228,41 @@ namespace FASTag::CensusIds
     std::string refusal;            ///< non-empty: the file is refused (the message)
   };
 
-  /// Interprets loaded identifications into @p index (see the file comment).
-  /// Sets Loaded::refusal for a file without q-values, with several runs or
-  /// with identifications (with hits) that carry no spectrum_reference.
+  /**
+    @brief Interprets loaded identifications into @p index (see the file comment).
+
+    Sets Loaded::refusal for a file without q-values, with several runs or
+    with identifications (with hits) that carry no spectrum_reference.
+
+    @param[in] proteins Protein identifications (primary MS run paths).
+    @param[in] peptides Peptide identifications.
+    @param[in] fdr q-value threshold for an accepted hit.
+    @param[in,out] index Receives each identification's reference (add()).
+    @return Counts, run stems and the refusal message.
+  */
   Loaded interpret(const std::vector<OpenMS::ProteinIdentification>& proteins,
                    const OpenMS::PeptideIdentificationList& peptides, double fdr, Index& index);
 
-  /// Loads @p path (idXML or mzid) and interprets it; a load error is a refusal.
+  /**
+    @brief Loads @p path (idXML or mzid) and interprets it.
+
+    A load error is a refusal (Loaded::refusal), not an exception.
+
+    @param[in] path Identification file.
+    @param[in] fdr q-value threshold for an accepted hit.
+    @param[in,out] index Receives each identification's reference (add()).
+    @return As interpret().
+  */
   Loaded load(const std::string& path, double fdr, Index& index);
 
-  /// Counts of the joined table.
+  /**
+    @brief Counts of the joined table.
+  */
   struct JoinTally
   {
-    std::array<std::array<std::uint64_t, kIdentCount>, Census::kStatusCount> by_status{};
-    std::array<std::uint64_t, kIdentCount> by_ident{};
-    std::uint64_t rows = 0;
+    std::array<std::array<std::uint64_t, kIdentCount>, Census::kStatusCount> by_status{};  ///< rows per status and identified value
+    std::array<std::uint64_t, kIdentCount> by_ident{};  ///< rows per identified value
+    std::uint64_t rows = 0;             ///< rows joined
     std::uint64_t triage = 0;           ///< triage = 1
     std::uint64_t triage_eligible = 0;  ///< identified 0 and tagged or placed
   };
@@ -186,33 +270,85 @@ namespace FASTag::CensusIds
   /// The two columns' header suffix, appended to Census::header().
   inline constexpr const char* kHeaderSuffix = "\tidentified\ttriage";
 
-  /// Reads the census table @p in (Census::header() and its rows) twice and
-  /// writes it to @p out with the columns identified and triage appended.
-  /// False with @p error set on a read, format or write failure.
+  /**
+    @brief Joins the identifications into the census table.
+
+    Reads the census table @p in (Census::header() and its rows) twice and
+    writes it to @p out with the columns identified and triage appended.
+
+    @param[in] in Census table path.
+    @param[in] out Output path.
+    @param[in,out] index The references; see() and lookup() update its match state.
+    @param[in] triage_evalue E-value threshold of the triage column.
+    @param[out] tally Counts of the joined table (reset first).
+    @param[out] error The message on failure.
+    @return false on a read, format or write failure.
+  */
   bool joinTable(const std::string& in, const std::string& out, Index& index, double triage_evalue,
                  JoinTally& tally, std::string& error);
 
-  /// Where the join reads a census row: field count and the 0-based columns
-  /// spectrum, status and best_evalue, found by name in a header line.
+  /**
+    @brief Where the join reads a census row.
+
+    Field count and the 0-based columns spectrum, status and best_evalue,
+    found by name in a header line.
+  */
   struct Layout
   {
+    /// Field count, and the 0-based columns spectrum, status and best_evalue.
     std::size_t fields = 0, spectrum = 0, status = 0, best_evalue = 0;
   };
-  /// The layout of @p header_line (tab-separated names, no newline); false
-  /// when a column the join reads is missing.
+  /**
+    @brief The layout of a census header line.
+
+    @param[in] header_line Tab-separated names, no newline.
+    @param[out] layout The layout (reset first).
+    @return false when a column the join reads is missing.
+  */
   bool layoutOf(const std::string& header_line, Layout& layout);
 
-  /// joinTable() for a census table whose header line is @p header_line (no
-  /// newline) instead of Census::header(); joinTable() calls it with
-  /// Census::header(). Exposed so a test can join a table with more columns.
+  /**
+    @brief joinTable() for a census table with header line @p header_line.
+
+    Uses @p header_line (no newline) instead of Census::header();
+    joinTable() calls it with Census::header(). Exposed so a test can join a
+    table with more columns.
+
+    @param[in] header_line The table's header line.
+    @param[in] in Census table path.
+    @param[in] out Output path.
+    @param[in,out] index The references; see() and lookup() update its match state.
+    @param[in] triage_evalue E-value threshold of the triage column.
+    @param[out] tally Counts of the joined table (reset first).
+    @param[out] error The message on failure.
+    @return false on a read, format or write failure.
+  */
   bool joinTableAs(const std::string& header_line, const std::string& in, const std::string& out, Index& index,
                    double triage_evalue, JoinTally& tally, std::string& error);
 
-  /// Run-provenance verdict for the summary: "match", "mismatch" or "unnamed".
+  /**
+    @brief Run-provenance verdict for the summary.
+
+    @param[in] loaded What the identification file held (its run stems).
+    @param[in] in_path Path of -in.
+    @return "match", "mismatch" or "unnamed".
+  */
   std::string runCheck(const Loaded& loaded, const std::string& in_path);
 
-  /// The `census_ids` section of -census_summary_out. @p unmatched_known is
-  /// false under subsampling (refs_unmatched is then written empty).
+  /**
+    @brief The `census_ids` section of -census_summary_out.
+
+    @param[in] loaded What the identification file held.
+    @param[in] counts How the references matched.
+    @param[in] tally Counts of the joined table.
+    @param[in] ids_path Path of -census_ids.
+    @param[in] run_check Verdict of runCheck().
+    @param[in] fdr -census_ids_fdr.
+    @param[in] triage_evalue -census_triage_evalue.
+    @param[in] unmatched_known false under subsampling (refs_unmatched is
+      then written empty).
+    @return The summary rows.
+  */
   std::vector<Digest::Row> summaryRows(const Loaded& loaded, const Index::Counts& counts, const JoinTally& tally,
                                        const std::string& ids_path, const std::string& run_check, double fdr,
                                        double triage_evalue, bool unmatched_known);

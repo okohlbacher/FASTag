@@ -19,10 +19,21 @@
 
 namespace FASTag
 {
+  /**
+    @brief Empirical q-values from target E-values and weighted decoy (entrapment) E-values.
+
+    q(e) = D_w(e) / T(e), monotonized non-decreasing in e, evaluated by binary
+    search over the target thresholds. With no decoys every q is 0.
+  */
   class TagFDR
   {
   public:
-    /// @p weighted_decoys: (evalue, weight) per decoy event.
+    /**
+      @brief Builds the monotone q-value table from targets and weighted decoys.
+
+      @param[in] targets E-values of the target events (taken by value and sorted).
+      @param[in] weighted_decoys (evalue, weight) per decoy event.
+    */
     TagFDR(std::vector<double> targets,
            std::vector<std::pair<double, double>> weighted_decoys)
     {
@@ -45,13 +56,20 @@ namespace FASTag
       for (size_t i = es_.size(); i-- > 0;) qs_[i] = m = std::min(m, qs_[i]);
     }
 
-    /// q of accepting everything with evalue <= e: the q at the LAST target
-    /// threshold <= e (that threshold accepts the identical set). Below the
-    /// best target the acceptance set is empty -- return the first
-    /// threshold's q, the conservative continuation; beyond the worst target
-    /// the set is all targets, so its q is the last threshold's. 1.0 only
-    /// when there are no targets at all. In-pipeline queries are always exact
-    /// target evalues, where this and any step convention agree.
+    /**
+      @brief Returns the q-value of accepting everything with evalue <= e.
+
+      The q at the LAST target threshold <= e (that threshold accepts the
+      identical set). Below the best target the acceptance set is empty --
+      return the first threshold's q, the conservative continuation; beyond
+      the worst target the set is all targets, so its q is the last
+      threshold's. 1.0 only when there are no targets at all. In-pipeline
+      queries are always exact target evalues, where this and any step
+      convention agree.
+
+      @param[in] e E-value acceptance threshold.
+      @return The q-value for threshold @p e.
+    */
     double qOf(double e) const
     {
       if (es_.empty()) return 1.0;

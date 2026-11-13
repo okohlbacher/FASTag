@@ -34,9 +34,12 @@ namespace FASTag::Shortlist
 
 namespace FASTag::Cleavage
 {
-  /// One cleavage rule: a FASTag protease model (digest_models.tsv) with the
-  /// OpenMS ProteaseDB enzyme that tests its windows and the spelling the
-  /// engines take.
+  /**
+    @brief One cleavage rule.
+
+    A FASTag protease model (digest_models.tsv) with the OpenMS ProteaseDB
+    enzyme that tests its windows and the spelling the engines take.
+  */
   struct Rule
   {
     std::string name;       ///< the model name, as -shortlist_protease and the protease report spell it
@@ -48,31 +51,54 @@ namespace FASTag::Cleavage
     /// when that entry is the same rule; -1 when it has none (Asp-N there
     /// cuts before D and N), so a Comet configuration needs a template.
     int comet_default = -1;
+    /// @brief Whether the rule accepts every window.
+    /// @return True when no ProteaseDB enzyme is set (openms is empty).
     bool unspecific() const { return openms.empty(); }
   };
 
-  /// Every rule, in the protease report's model order, then `unspecific`.
+  /**
+    @brief Every rule, in the protease report's model order, then `unspecific`.
+    @return The static rule table.
+  */
   const std::vector<Rule>& rules();
 
-  /// The rule of model @p name (case-insensitive); nullptr if none.
+  /**
+    @brief Looks up the rule of a model by name (case-insensitive).
+    @param[in] name Model name.
+    @return The rule, or nullptr if none.
+  */
   const Rule* findRule(const std::string& name);
 
+  /**
+    @brief How many ends of a window must be at a cleavage site.
+  */
   enum class Specificity
   {
     Full,  ///< both ends at a cleavage site (or a protein terminus)
     Semi,  ///< at least one end
     None   ///< any window
   };
-  /// "full", "semi", "none".
+  /**
+    @brief Returns the option spelling of a specificity.
+    @param[in] s The specificity.
+    @return "full", "semi" or "none".
+  */
   const char* specificityName(Specificity s);
-  /// Parses "full", "semi" or "none"; false otherwise.
+  /**
+    @brief Parses "full", "semi" or "none".
+    @param[in] s Text to parse.
+    @param[out] out Parsed specificity (unchanged on failure).
+    @return True on success; false for any other text.
+  */
   bool parseSpecificity(const std::string& s, Specificity& out);
 
-  /// What the shortlist's placements are kept by, and why.
+  /**
+    @brief What the shortlist's placements are kept by, and why.
+  */
   struct Choice
   {
-    const Rule* rule = nullptr;
-    Specificity specificity = Specificity::Full;
+    const Rule* rule = nullptr;                    ///< the chosen rule
+    Specificity specificity = Specificity::Full;   ///< the chosen specificity
     /// The run's confident protease call contradicts a named rule: the
     /// hand-off outputs are withheld unless -shortlist_force.
     bool refuse = false;
@@ -90,50 +116,90 @@ namespace FASTag::Cleavage
     std::string reason;  ///< one short phrase for the log and the TSV header
   };
 
-  /// True when one rule's cleavage sites are a subset of the other's: same
-  /// side of the residue, same no-cut residue, and one cut set within the
-  /// other (Trypsin with Lys-C or Arg-C; a rule with itself). Lys-C and
-  /// Arg-C are disjoint, so not nested. Unspecific rules nest with none.
+  /**
+    @brief Tests whether one rule's cleavage sites are a subset of the other's.
+
+    Same side of the residue, same no-cut residue, and one cut set within the
+    other (Trypsin with Lys-C or Arg-C; a rule with itself). Lys-C and Arg-C
+    are disjoint, so not nested. Unspecific rules nest with none.
+
+    @param[in] a First rule.
+    @param[in] b Second rule.
+    @return True when the rules are nested.
+  */
   bool nested(const Rule& a, const Rule& b);
 
-  /// @p option is -shortlist_protease other than `trypsin` (`auto`,
-  /// `unspecific` or a model name, which the caller validated with findRule),
-  /// @p spec -shortlist_specificity, @p v the protease check of the run.
-  ///   auto:       a Compatible or NonTryptic call -> the called model's rule;
-  ///               Inconclusive -> Trypsin (what FASTag 1.12 assumes);
-  ///   unspecific: every window, never refused (the specificity is None);
-  ///   a model:    that rule; refused when the call is confident and names
-  ///               another protease whose cleavage sites do not nest with the
-  ///               rule's (nested(): so Lys-C vs Arg-C is refused, Trypsin vs
-  ///               Lys-C or Arg-C is kept with Choice::mismatch set), unless
-  ///               @p spec is None. A call of the `unspecific` model names no
-  ///               other protease and is never a contradiction. A called model
-  ///               without a rule: refused when NonTryptic, or Compatible for
-  ///               a rule that is not trypsin-compatible.
-  /// @p spec_given: the user set -shortlist_specificity. When not, an Asp-N
-  /// call under `auto` is kept and exported semi-specific (Choice::auto_semi):
-  /// Asp-N digests hold many semi-specific and E-cleaved peptides, and the
-  /// full-specificity shortlist kept fewer proteins than the unspecific one
-  /// it replaces on the development runs. A named `asp-n` keeps @p spec.
+  /**
+    @brief Chooses the rule and specificity that keep the shortlist's placements.
+
+      auto:       a Compatible or NonTryptic call -> the called model's rule;
+                  Inconclusive -> Trypsin (what FASTag 1.12 assumes);
+      unspecific: every window, never refused (the specificity is None);
+      a model:    that rule; refused when the call is confident and names
+                  another protease whose cleavage sites do not nest with the
+                  rule's (nested(): so Lys-C vs Arg-C is refused, Trypsin vs
+                  Lys-C or Arg-C is kept with Choice::mismatch set), unless
+                  @p spec is None. A call of the `unspecific` model names no
+                  other protease and is never a contradiction. A called model
+                  without a rule: refused when NonTryptic, or Compatible for
+                  a rule that is not trypsin-compatible.
+
+    When @p spec_given is false, an Asp-N call under `auto` is kept and
+    exported semi-specific (Choice::auto_semi): Asp-N digests hold many
+    semi-specific and E-cleaved peptides, and the full-specificity shortlist
+    kept fewer proteins than the unspecific one it replaces on the development
+    runs. A named `asp-n` keeps @p spec.
+
+    @param[in] option -shortlist_protease other than `trypsin` (`auto`,
+      `unspecific` or a model name, which the caller validated with findRule).
+    @param[in] spec -shortlist_specificity.
+    @param[in] v The protease check of the run.
+    @param[in] spec_given The user set -shortlist_specificity.
+    @return The chosen rule, specificity and flags.
+  */
   Choice choose(const std::string& option, Specificity spec, const FASTag::Shortlist::ProteaseVerdict& v,
                 bool spec_given = true);
 
-  /// The engine's digestion for a rule: its residues, semi = 1 terminus,
-  /// and an unspecific rule or Specificity::None as unspecific (Sage
-  /// cleave_at "", Comet's Cut_everywhere entry 0).
+  /**
+    @brief The engine's digestion for a rule.
+
+    Its residues, semi = 1 terminus, and an unspecific rule or
+    Specificity::None as unspecific (Sage cleave_at "", Comet's Cut_everywhere
+    entry 0).
+
+    @param[in] rule The cleavage rule.
+    @param[in] spec The specificity.
+    @return The enzyme settings for the engine configuration.
+  */
   FASTag::SearchConfig::Enzyme engineEnzyme(const Rule& rule, Specificity spec);
 
-  /// The window test of one Choice: OpenMS ProteaseDigestion::isValidProduct
-  /// with the rule's enzyme, the specificity and at most @p missed_cleavages
-  /// internal sites (not counted for an unspecific rule or Specificity::None).
-  /// A window at the protein's start, or at position 1 after an initiator
-  /// Met, counts as cleaved there (allow_nterm_protein_cleavage).
+  /**
+    @brief The window test of one Choice.
+
+    OpenMS ProteaseDigestion::isValidProduct with the rule's enzyme, the
+    specificity and at most a given number of internal missed cleavage sites
+    (not counted for an unspecific rule or Specificity::None). A window at the
+    protein's start, or at position 1 after an initiator Met, counts as
+    cleaved there (allow_nterm_protein_cleavage).
+  */
   class WindowFilter
   {
   public:
+    /**
+      @brief Sets up the digestion for a rule and specificity.
+      @param[in] rule The cleavage rule.
+      @param[in] spec The specificity; None accepts every window.
+      @param[in] missed_cleavages Maximum internal cleavage sites in a window.
+    */
     WindowFilter(const Rule& rule, Specificity spec, int missed_cleavages);
-    /// @p protein the database sequence (ambiguity residues as 'X'),
-    /// [@p start, @p start + @p len) the window in it.
+    /**
+      @brief Tests one window of a protein.
+      @param[in] protein The database sequence (ambiguity residues as 'X').
+      @param[in] start Start of the window in @p protein (0-based).
+      @param[in] len Length of the window; [@p start, @p start + @p len) is the window.
+      @return True when the window passes; always true for an unspecific
+        filter; false for an empty window or one past the protein's end.
+    */
     bool accepts(const std::string& protein, std::uint32_t start, std::uint32_t len) const;
 
   private:

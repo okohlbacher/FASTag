@@ -36,48 +36,78 @@ namespace FASTag
 
 namespace FASTag::Acquisition
 {
-  /// The reader a run is read through, for the probe: mzPeak (read by path),
-  /// else the first non-null of mgf, fastmz, ondisc (an indexed mzML opened
-  /// by OnDiscMSExperiment) and exp (an mzML loaded into memory).
+  /**
+    @brief The reader a run is read through, for the probe.
+
+    mzPeak (read by path), else the first non-null of mgf, fastmz, ondisc (an
+    indexed mzML opened by OnDiscMSExperiment) and exp (an mzML loaded into
+    memory).
+  */
   struct ProbeSource
   {
-    bool mzpeak = false;
+    bool mzpeak = false;     ///< the run is mzPeak, read by path
     int mzpeak_threads = 1;  ///< OpenMP threads of the mzPeak metadata read
-    FASTag::MgfReader* mgf = nullptr;
-    FASTag::IndexedMzMLReader* fastmz = nullptr;
-    OpenMS::OnDiscMSExperiment* ondisc = nullptr;
-    const OpenMS::PeakMap* exp = nullptr;
+    FASTag::MgfReader* mgf = nullptr;              ///< MGF reader, or null
+    FASTag::IndexedMzMLReader* fastmz = nullptr;   ///< FASTag's fast indexed mzML reader, or null
+    OpenMS::OnDiscMSExperiment* ondisc = nullptr;  ///< indexed mzML opened by OnDiscMSExperiment, or null
+    const OpenMS::PeakMap* exp = nullptr;          ///< mzML loaded into memory, or null
     std::size_t n_total = 0;  ///< spectra in the run (not used for mzPeak)
   };
 
-  /// What a probe found. ok = false: the input could not be read (FASTag
-  /// exits INPUT_FILE_CORRUPT with @c error), @c call is then empty.
+  /**
+    @brief What a probe found.
+
+    ok = false: the input could not be read (FASTag exits INPUT_FILE_CORRUPT
+    with @c error), @c call is then empty.
+  */
   struct ProbeResult
   {
-    bool ok = true;
-    std::string error;
-    std::vector<Ms2Meta> ms2;
-    AcqCall call;
+    bool ok = true;            ///< false when the input could not be read
+    std::string error;         ///< the read error when ok is false
+    std::vector<Ms2Meta> ms2;  ///< metadata of the probed MS2 spectra
+    AcqCall call;              ///< the acquisition classification
   };
 
-  /// -acquisition_probe_spectra n: the first n MS2, reading at most 10 n spectra.
+  /**
+    @brief Probe limits for -acquisition_probe_spectra.
+    @param[in] probe_spectra n: the number of MS2 to probe.
+    @return Limits of the first n MS2, reading at most 10 n spectra.
+  */
   ProbeLimits probeLimits(std::size_t probe_spectra);
 
-  /// Probe run @p in through @p src and classify it. Reads metadata only:
-  /// the fast reader's getSpectrumMetadata(), OnDisc's metadata map, or the
-  /// map in memory; MGF leniently (a block that cannot be parsed is the
-  /// tagging loop's to report, as before the check, so it counts as no MS2
-  /// here). mzML is marked pseudo-DDA from its header too
-  /// (mzmlHeaderProvenance()). A reader error (an OpenMS exception) gives
-  /// ok = false, as FASTag exits INPUT_FILE_CORRUPT on it.
+  /**
+    @brief Probes a run through an opened reader and classifies it.
+
+    Reads metadata only: the fast reader's getSpectrumMetadata(), OnDisc's
+    metadata map, or the map in memory; MGF leniently (a block that cannot be
+    parsed is the tagging loop's to report, as before the check, so it counts
+    as no MS2 here). mzML is marked pseudo-DDA from its header too
+    (mzmlHeaderProvenance()). A reader error (an OpenMS exception) gives
+    ok = false, as FASTag exits INPUT_FILE_CORRUPT on it.
+
+    @param[in] in Input path (read directly for mzPeak; header provenance for mzML).
+    @param[in] src The opened reader to probe through.
+    @param[in] probe_spectra Number of MS2 to probe (see probeLimits()).
+    @param[in] t Classification thresholds.
+    @return The probe result.
+  */
   ProbeResult probeRun(const std::string& in, const ProbeSource& src, std::size_t probe_spectra = 4000,
                        const Thresholds& t = Thresholds());
 
-  /// Open @p in as FASTag does without -out_spectra (mzPeak; MGF; mzML
-  /// through the fast reader when it reports spectrum metadata, else
-  /// OnDiscMSExperiment, else loaded into memory) and probeRun() it.
-  /// FASTag's own readers give the same Ms2Meta on every path
-  /// (acquisition_test). An input that cannot be opened gives ok = false.
+  /**
+    @brief Opens an input as FASTag does and probes it with probeRun().
+
+    Opens as FASTag does without -out_spectra (mzPeak; MGF; mzML through the
+    fast reader when it reports spectrum metadata, else OnDiscMSExperiment,
+    else loaded into memory). FASTag's own readers give the same Ms2Meta on
+    every path (acquisition_test).
+
+    @param[in] in Input path.
+    @param[in] probe_spectra Number of MS2 to probe (see probeLimits()).
+    @param[in] mzpeak_threads OpenMP threads of the mzPeak metadata read.
+    @param[in] t Classification thresholds.
+    @return The probe result; ok = false for an input that cannot be opened.
+  */
   ProbeResult probeFile(const std::string& in, std::size_t probe_spectra = 4000, int mzpeak_threads = 1,
                         const Thresholds& t = Thresholds());
 }

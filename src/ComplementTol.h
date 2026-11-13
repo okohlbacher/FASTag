@@ -92,20 +92,37 @@ namespace FASTag::ComplTol
   /// The floor band is |error| in [kAutoFloorFrom * W, W].
   inline constexpr double kAutoFloorFrom = 2.0 / 3.0;
 
-  /// The measurement window W (Da) for a run's fragment tolerance.
+  /**
+    @brief The measurement window W (Da) for a run's fragment tolerance.
+
+    kAutoWindowFactor times the fragment tolerance at m/z 1000, clamped to
+    [kAutoWindowMin, kAutoWindowMax].
+
+    @param[in] frag_tol the run's fragment tolerance
+    @param[in] ppm true when @p frag_tol is in ppm, false for Da
+    @return the window W in Da
+  */
   inline double measurementWindow(double frag_tol, bool ppm)
   {
     const double at1000 = ppm ? 1000.0 * frag_tol * 1e-6 : frag_tol;
     return std::clamp(kAutoWindowFactor * at1000, kAutoWindowMin, kAutoWindowMax);
   }
 
-  /// The Param the probe tags with: @p p's measurement settings (fragment
-  /// tolerance and unit, ion series, complement rule, modifications), the
-  /// command line's default preprocessing and search settings
-  /// (Cli::cliDefaultParam) at seed length kAutoProbeLength, and the
-  /// complement test made neutral (Da mode, window @p window). So the window
-  /// a file gives does not depend on the run's -tag_length, -no_deisotope,
-  /// -gaps, -extension, peak budget, E-value cut or gap penalty.
+  /**
+    @brief The Param the probe tags with.
+
+    @p p's measurement settings (fragment tolerance and unit, ion series,
+    complement rule, modifications), the command line's default
+    preprocessing and search settings (Cli::cliDefaultParam) at seed length
+    kAutoProbeLength, and the complement test made neutral (Da mode, window
+    @p window). So the window a file gives does not depend on the run's
+    -tag_length, -no_deisotope, -gaps, -extension, peak budget, E-value cut
+    or gap penalty.
+
+    @param[in] p the run's Param (only its measurement settings are read)
+    @param[in] window the measurement window W (Da), used as complement tolerance
+    @return the probe's Param
+  */
   inline Param probeParam(const Param& p, double window)
   {
     Param q = Cli::cliDefaultParam(/*resolve_mods=*/false);
@@ -120,10 +137,18 @@ namespace FASTag::ComplTol
     return q;
   }
 
-  /// The probe: @p want of the @p candidates (spectrum indices, ascending),
-  /// drawn uniformly without replacement with @p seed, returned ascending.
-  /// All of them when there are at most @p want. Uniform over the run, not
-  /// the first @p want in file order.
+  /**
+    @brief The probe: a uniform sample of the candidate spectra.
+
+    @p want of the @p candidates, drawn uniformly without replacement with
+    @p seed, returned ascending. All of them when there are at most @p want.
+    Uniform over the run, not the first @p want in file order.
+
+    @param[in] candidates spectrum indices, ascending
+    @param[in] want the sample size
+    @param[in] seed the random seed (sampleByCount)
+    @return the sampled indices, ascending
+  */
   inline std::vector<std::size_t> pickProbe(const std::vector<std::size_t>& candidates, std::size_t want,
                                             std::uint32_t seed)
   {
@@ -136,15 +161,25 @@ namespace FASTag::ComplTol
     return out;
   }
 
-  /// Signed complement errors of one spectrum's rank-1 tag, appended to
-  /// @p out. @p prepared is the spectrum as tagSpectrum prepared it (the
-  /// tag's peaks are among its peaks; m/z sorted), @p precursor_mz and
-  /// @p charge as tagged (charge <= 0 is 2, as tagSpectrum). @p cs gives the
-  /// rule(s), the ion-pair deltas and the charge loss of the run. For each
-  /// end of the tag (low_mz, high_mz at the tag's fragment charge), the
-  /// nearest other peak to each complement m/z the rules give; the one
-  /// closest over the rules is kept when within @p window. Returns the number
-  /// of errors appended (0, 1 or 2).
+  /**
+    @brief Append the signed complement errors of one spectrum's rank-1 tag.
+
+    For each end of the tag (low_mz, high_mz at the tag's fragment charge),
+    the nearest other peak to each complement m/z the rules give; the one
+    closest over the rules is kept when within @p window. Nothing is
+    appended for an empty spectrum or a precursor m/z that is not finite and
+    positive.
+
+    @param[in] prepared the spectrum as tagSpectrum prepared it (the tag's
+               peaks are among its peaks; m/z sorted)
+    @param[in] precursor_mz precursor m/z as tagged
+    @param[in] charge precursor charge as tagged; <= 0 is 2, as tagSpectrum
+    @param[in] tag the rank-1 tag
+    @param[in] cs the rule(s), the ion-pair deltas and the charge loss of the run
+    @param[in] window the measurement window W (Da)
+    @param[in,out] out signed errors (Da); new ones are appended
+    @return the number of errors appended (0, 1 or 2)
+  */
   inline std::size_t collectErrors(const OpenMS::MSSpectrum& prepared, double precursor_mz, int charge,
                                    const Tag& tag, const ComplementSpec& cs, double window,
                                    std::vector<double>& out)
@@ -200,7 +235,9 @@ namespace FASTag::ComplTol
     return added;
   }
 
-  /// The measurement of one run.
+  /**
+    @brief The measurement of one run.
+  */
   struct Estimate
   {
     bool ok = false;           ///< a tolerance was measured
@@ -214,15 +251,37 @@ namespace FASTag::ComplTol
     std::string why;           ///< when not ok: why not
   };
 
-  /// The window in force under auto: the measured tolerance, but never
-  /// below @p fallback (-complement_tolerance); @p fallback when nothing was
-  /// measured.
+  /**
+    @brief The window in force under auto.
+
+    The measured tolerance, but never below @p fallback; @p fallback when
+    nothing was measured.
+
+    @param[in] e the run's measurement
+    @param[in] fallback -complement_tolerance (Da)
+    @return the complement window in force (Da)
+  */
   inline double inForce(const Estimate& e, double fallback)
   {
     return e.ok ? std::max(e.tol, fallback) : fallback;
   }
 
-  /// The tolerance from signed errors (any order; values beyond W ignored).
+  /**
+    @brief The tolerance from signed complement errors.
+
+    The tolerance is |m| + kAutoZ * kAutoMadToSd * MAD, with m the
+    floor-corrected median and MAD the floor-corrected median absolute
+    deviation; at least kAutoMinTol. No measurement (Estimate::ok false,
+    Estimate::why set) when the signal above the chance floor is too small,
+    or median or spread cannot be read inside the window, or the tolerance
+    is not below kAutoFloorFrom * W.
+
+    @param[in] errors signed errors (Da), any order; non-finite values and
+               values beyond @p window are ignored
+    @param[in] window the measurement window W (Da)
+    @param[in] min_signal the minimum signal (pairs above the floor)
+    @return the measurement
+  */
   inline Estimate estimate(std::vector<double> errors, double window, double min_signal = kAutoMinSignal)
   {
     Estimate e;

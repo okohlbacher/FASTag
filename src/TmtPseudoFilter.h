@@ -17,22 +17,43 @@
 
 namespace FASTag::TmtPseudo
 {
+  /// TMT6/10 label mass and TMTpro label mass (Da).
   inline constexpr double kLabel = 229.162932, kProLabel = 304.207146;
+  /// Water and proton masses (Da).
   inline constexpr double kWater = 18.010564684, kProton = 1.007276466621;
+  /// Residue masses of G, A and K (Da).
   inline constexpr double kG = 57.021463735, kA = 71.037113805, kK = 128.094963015;
+  /// Mass windows for the N-terminal and C-terminal tag flanks (Da).
   inline constexpr double kWindowN = 0.020, kWindowC = 0.006;
+  /// Number of spectra probed, and minimum eligible spectra for a label call.
   inline constexpr std::size_t kProbeCount = 1024, kMinEligible = 100;
+  /// TMT10 reporter ion m/z values (Th).
   inline constexpr std::array<double, 10> kReporters = {
     126.127726, 127.124761, 127.131081, 128.128116, 128.134436,
     129.131471, 129.137790, 130.134825, 130.141145, 131.138180};
 
+  /**
+    @brief Tests whether a finite observed mass lies within a window of an expected mass.
+    @param[in] observed Observed mass (Da).
+    @param[in] expected Expected mass (Da).
+    @param[in] window Absolute tolerance (Da).
+    @return True when @p observed is finite and |observed - expected| <= @p window.
+  */
   inline bool near(double observed, double expected, double window)
   {
     return std::isfinite(observed) && std::fabs(observed - expected) <= window;
   }
 
-  /// An inline-modified endpoint is not a bare residue. Fixed modifications
-  /// are tested separately because FASTag omits them from the tag spelling.
+  /**
+    @brief Returns the first or last residue of a tag spelling if it is unmodified.
+
+    An inline-modified endpoint is not a bare residue. Fixed modifications
+    are tested separately because FASTag omits them from the tag spelling.
+
+    @param[in] seq Tag spelling, with inline modifications in brackets.
+    @param[in] first True for the first residue, false for the last.
+    @return The residue, or 0 when it carries an inline modification (or @p seq is empty).
+  */
   inline char bareEndpoint(std::string_view seq, bool first)
   {
     char last = 0;
@@ -49,9 +70,19 @@ namespace FASTag::TmtPseudo
     return last;
   }
 
+  /**
+    @brief Rejects b/y tags whose terminal G or A is a TMT label image (-tmt_pseudo_filter).
+
+    Optionally (-tmt_reporter_filter) also rejects charge-1 tags whose C flank
+    matches a TMT reporter ion.
+  */
   class Filter
   {
   public:
+    /**
+      @brief Reads the filter options and the fixed G/A modifications.
+      @param[in] p Tagging parameters.
+    */
     explicit Filter(const Param& p) : enabled_(p.tmt_pseudo_filter), reporters_(p.tmt_reporter_filter)
     {
       if (!enabled_) return;
@@ -62,6 +93,17 @@ namespace FASTag::TmtPseudo
         if (mod.residue == 'A') fixed_[1] += mod.delta;
       }
     }
+    /**
+      @brief Tests whether a tag is a TMT pseudo-residue artefact.
+
+      A terminal G or A without a fixed modification is rejected when its
+      flank matches the TMT label minus the residue; with reporter filtering,
+      a charge-1 tag whose C flank plus water and proton matches a reporter.
+
+      @param[in] tag The tag.
+      @return True when the tag is rejected; always false when disabled or
+        for non-b/y tags.
+    */
     bool rejects(const Tag& tag) const
     {
       if (!enabled_ || tag.ion_series != IonSeries::Series::BY) return false;
@@ -86,7 +128,16 @@ namespace FASTag::TmtPseudo
     std::array<double, 2> fixed_{};
   };
 
-  /// Four tag-flank images, excluding the ambiguous raw-C bare-label peak.
+  /**
+    @brief Tests the four tag-flank images of a label.
+
+    Excludes the ambiguous raw-C bare-label peak.
+
+    @param[in] tag The tag.
+    @param[in] label Label mass (Da).
+    @return Matches of: N flank = label, C flank = label - water,
+      C flank = K + label, N flank = K + label + water.
+  */
   inline std::array<bool, 4> anchors(const Tag& tag, double label)
   {
     return {near(tag.nterm_mass, label, kWindowN),
@@ -95,11 +146,22 @@ namespace FASTag::TmtPseudo
             near(tag.nterm_mass, kK + label + kWater, kWindowN)};
   }
 
+  /**
+    @brief Counts of TMT and TMTpro flank images over probed spectra, and the label call.
+  */
   struct ProbeCounts
   {
-    std::size_t eligible = 0;
-    std::array<std::size_t, 4> tmt{}, pro{};
-    std::size_t tmt_n = 0, tmt_k = 0, pro_n = 0, pro_k = 0;
+    std::size_t eligible = 0;                ///< spectra with at least one eligible tag
+    std::array<std::size_t, 4> tmt{}, pro{}; ///< spectra per anchor image, TMT and TMTpro
+    std::size_t tmt_n = 0, tmt_k = 0, pro_n = 0, pro_k = 0;  ///< spectra with an N-site or K-site image
+    /**
+      @brief Adds the tags of one spectrum.
+
+      Only ungapped b/y tags with E-value <= 1 are eligible; a spectrum
+      without eligible tags is not counted.
+
+      @param[in] tags The tags of the spectrum.
+    */
     void add(const std::vector<Tag>& tags)
     {
       bool any = false;
@@ -117,8 +179,19 @@ namespace FASTag::TmtPseudo
       tmt_n += a[0] || a[1]; tmt_k += a[2] || a[3];
       pro_n += b[0] || b[1]; pro_k += b[2] || b[3];
     }
+    /// @brief Minimum spectra per site for a TMT call.
+    /// @return max(20, ceil(eligible / 100)).
     std::size_t threshold() const { return std::max<std::size_t>(20, (eligible + 99) / 100); }
+    /// @brief Minimum spectra per site for the TMTpro/iTRAQ8 veto.
+    /// @return max(5, ceil(eligible / 100)).
     std::size_t vetoThreshold() const { return std::max<std::size_t>(5, (eligible + 99) / 100); }
+    /**
+      @brief Reason of the label call.
+      @param[in] high_resolution The fragment tolerance is in ppm (not Da).
+      @return "Da_tolerance", "few_eligible_spectra",
+        "conflicting_304Da_label_evidence", "insufficient_two_site_TMT_evidence"
+        or "TMT6_10_two_site_evidence".
+    */
     std::string reason(bool high_resolution) const
     {
       if (!high_resolution) return "Da_tolerance";
@@ -129,7 +202,14 @@ namespace FASTag::TmtPseudo
       if (tmt_n < limit || tmt_k < limit) return "insufficient_two_site_TMT_evidence";
       return "TMT6_10_two_site_evidence";
     }
+    /**
+      @brief Whether TMT6/10 labelling is detected.
+      @param[in] high_resolution The fragment tolerance is in ppm (not Da).
+      @return True when reason() is "TMT6_10_two_site_evidence".
+    */
     bool detected(bool high_resolution) const { return reason(high_resolution) == "TMT6_10_two_site_evidence"; }
+    /// @brief One-line summary of the counts and thresholds for the log.
+    /// @return Comma-separated key=value pairs.
     std::string summary() const
     {
       return "eligible=" + std::to_string(eligible) + ", threshold=" + std::to_string(threshold())
