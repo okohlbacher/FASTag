@@ -1500,6 +1500,13 @@ TOPPFASTag::ExitCodes TOPPFASTag::main_(int, const char**)
       sl_plan.decoy_prefix = getStringOption_("search_decoy_prefix");
       sl_plan.fastag_version = FASTAG_VERSION;
       sl_plan.threads = getIntOption_("threads");  // MSFragger num_threads; 0 = every CPU
+      // post-1.15: under the msfragger defaults MSFragger calibrates its masses
+      // on the shortlist (calibrate_mass, MSFragger's own default 2); set on
+      // development runs only, no held-out test yet. Elsewhere 0, as before.
+      sl_plan.calibrate_mass = msf_shortlist ? FASTag::SearchConfig::MSFRAGGER_DEFAULT_CALIBRATION : 0;
+      if (msf_shortlist)
+        OPENMS_LOG_INFO << "MSFragger defaults (development runs only, no held-out test): calibrate_mass "
+                        << sl_plan.calibrate_mass << " in the exported fragger.params." << std::endl;
       std::string err;
       // 1.13 item 20: a named rule is known now and validated with the
       // template below; 'auto' knows its rule only after the run.

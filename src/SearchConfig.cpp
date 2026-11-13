@@ -401,7 +401,9 @@ namespace FASTag::SearchConfig
       return "MSFragger 4.4.1 exits 1 on mass offsets with a Da precursor window (\"Could not find <delta> in the "
              "list\"); use a ppm precursor window";
     if (p.threads < 0) return "a negative number of threads";
+    if (p.calibrate_mass < 0 || p.calibrate_mass > 2) return "MSFragger calibrate_mass is 0, 1 or 2";
     std::map<std::string, std::string> v;
+    v["calibrate_mass"] = std::to_string(p.calibrate_mass);
     v["num_threads"] = std::to_string(p.threads);
     v["database_name"] = p.database;
     v["decoy_prefix"] = decoyPrefix(p, "msfragger");
@@ -526,7 +528,9 @@ namespace FASTag::SearchConfig
        << "# A complete fragger.params: java -jar MSFragger.jar <this file> <spectra>. Database\n"
        << "# search-space reduction from tag placements, not an identification and not FDR-controlled.\n"
        << "# MSFragger does not generate decoys: the database holds them (decoy_prefix).\n"
-       << "# calibrate_mass is 0 so the exported tolerances are searched; 2 lets MSFragger calibrate.\n"
+       << (p.calibrate_mass == 0 ? "# calibrate_mass is 0 so the exported tolerances are searched; 2 lets MSFragger calibrate.\n"
+                                 : "# calibrate_mass is not 0: MSFragger calibrates the masses (and with 2 also optimizes\n"
+                                   "# the fragment tolerance and peak filters) on the shortlist; 0 searches the tolerances below.\n")
        << "# spectra: " << p.spectra << "\n";
     for (const auto& kv : keys) os << kv.first << " = " << kv.second << "\n";
     return os.str();

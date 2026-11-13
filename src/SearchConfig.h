@@ -70,6 +70,9 @@ namespace FASTag::SearchConfig
     }
   };
 
+  /// calibrate_mass of the MSFragger export under the msfragger defaults (post-1.15, development runs only).
+  constexpr int MSFRAGGER_DEFAULT_CALIBRATION = 2;
+
   /**
     @brief What FASTag knows about the run that a database search needs.
   */
@@ -89,6 +92,7 @@ namespace FASTag::SearchConfig
     std::string fastag_version;        ///< written into the header comment
     Enzyme enzyme;                     ///< 1.13 item 20; default trypsin
     int threads = 0;                   ///< MSFragger num_threads (FASTag's -threads; 0 = all CPUs)
+    int calibrate_mass = 0;            ///< MSFragger calibrate_mass (0 off, 1 calibrate, 2 also optimize parameters)
   };
 
   /**
@@ -189,7 +193,7 @@ namespace FASTag::SearchConfig
 
     With FASTag's values: database, decoy prefix, the precursor window
     (precursor_mass_lower/upper/units) and the same
-    precursor_true_tolerance/units, fragment tolerance, calibrate_mass 0,
+    precursor_true_tolerance/units, fragment tolerance, the plan's calibrate_mass,
     isotope_error 0/../n, mass_offsets with 0 first ('/'-separated),
     trypsin and missed cleavages, the used variable_mod_NN slots only and
     every add_* key (0.0 unless the plan sets it). The other keys keep the
