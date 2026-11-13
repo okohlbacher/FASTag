@@ -28,7 +28,7 @@ namespace FASTag::SearchConfig
 {
   namespace
   {
-    constexpr int kCometVariableSlots = 15;
+    constexpr int COMET_VARIABLE_SLOTS = 15;
 
     /// Comet's residue mass keys, in the order `comet -p` writes them.
     const std::vector<std::pair<char, const char*>>& cometResidueKeys()
@@ -195,8 +195,8 @@ namespace FASTag::SearchConfig
     keys.clear();
     if (p.missed_cleavages > 5) return "Comet allows at most 5 missed cleavages (allowed_missed_cleavage)";
     if (p.isotope_errors < 0 || p.isotope_errors > 3) return "Comet's isotope_error covers at most 0..3";
-    if (static_cast<int>(p.variable.size()) > kCometVariableSlots)
-      return "Comet has " + std::to_string(kCometVariableSlots) + " variable modification slots";
+    if (static_cast<int>(p.variable.size()) > COMET_VARIABLE_SLOTS)
+      return "Comet has " + std::to_string(COMET_VARIABLE_SLOTS) + " variable modification slots";
     keys.emplace_back("database_name", p.database);
     keys.emplace_back("decoy_search", "1");
     keys.emplace_back("decoy_prefix", decoyPrefix(p, "comet"));
@@ -209,7 +209,7 @@ namespace FASTag::SearchConfig
     keys.emplace_back("sample_enzyme_number", std::to_string(p.enzyme.comet_default));
     keys.emplace_back("num_enzyme_termini", p.enzyme.termini == 1 && !p.enzyme.unspecific() ? "1" : "2");
     keys.emplace_back("allowed_missed_cleavage", std::to_string(p.missed_cleavages));
-    for (int slot = 1; slot <= kCometVariableSlots; ++slot)
+    for (int slot = 1; slot <= COMET_VARIABLE_SLOTS; ++slot)
     {
       std::string name = "variable_mod";
       if (slot < 10) name += '0';
@@ -314,7 +314,7 @@ namespace FASTag::SearchConfig
 
   namespace
   {
-    constexpr int kMSFraggerVariableSlots = 16;
+    constexpr int MSFRAGGER_VARIABLE_SLOTS = 16;
 
     /// `java -jar MSFragger-4.4.1.jar --config closed`, in its order, without
     /// the comments (test/fixtures/msfragger_4.4.1_closed.params). The
@@ -395,8 +395,8 @@ namespace FASTag::SearchConfig
     if (p.missed_cleavages > 5) return "MSFragger allows at most 5 missed cleavages (allowed_missed_cleavage_1)";
     if (p.missed_cleavages < 0) return "a negative number of missed cleavages";
     if (p.isotope_errors < 0 || p.isotope_errors > 3) return "FASTag exports MSFragger isotope errors 0..3 only";
-    if (static_cast<int>(p.variable.size()) > kMSFraggerVariableSlots)
-      return "MSFragger has " + std::to_string(kMSFraggerVariableSlots) + " variable modification slots";
+    if (static_cast<int>(p.variable.size()) > MSFRAGGER_VARIABLE_SLOTS)
+      return "MSFragger has " + std::to_string(MSFRAGGER_VARIABLE_SLOTS) + " variable modification slots";
     if (!p.precursor_ppm && !p.mass_offsets.empty())
       return "MSFragger 4.4.1 exits 1 on mass offsets with a Da precursor window (\"Could not find <delta> in the "
              "list\"); use a ppm precursor window";
