@@ -27,7 +27,9 @@
 #      line or in an INI wins;
 #   j. -shortlist_exact_only (removed in 1.14, failed its held-out test): with
 #      msfragger, with -shortlist_gapped, from an INI and with Sage, one warning
-#      and outputs byte-identical to the same run without it.
+#      and outputs byte-identical to the same run without it;
+#   k. calibrate_mass 2 under the msfragger defaults (post-1.15, development
+#      runs only), 0 outside them.
 # Cases a, b and f give the four options explicitly (1.13.1 values, gapped on:
 # a flag cannot be given off), so Sage and MSFragger runs share one shortlist.
 # Exits 77 (ctest SKIP) when the binary cannot start.
@@ -262,4 +264,15 @@ for p in j1:i1 j3:i1 j2:j4 j5:i3; do
 done
 grep -q '^# settings: max_evalue 10, min_spectra 2, gapped yes,' "$TMP/j1/sl.tsv" || fail "j: msfragger gapped default lost"
 echo "j: -shortlist_exact_only has no effect and warns once (msfragger, with -shortlist_gapped, INI, Sage)"
+# ---- k: calibrate_mass (post-1.15, development runs only): 2 under the msfragger defaults (also with the four
+#      options given), 0 with -shortlist_protease auto; the log and header say so
+for d in i1 i2; do
+  [ "$(key "$TMP/$d/cfg" calibrate_mass)" = 2 ] || fail "k: $d: calibrate_mass is not 2 under the msfragger defaults"
+  grep -q 'MSFragger defaults (development runs only, no held-out test): calibrate_mass 2' "$TMP/$d/run.log" \
+    || fail "k: $d: no log line for calibrate_mass"
+done
+grep -q '^# calibrate_mass is not 0: MSFragger calibrates' "$TMP/i1/cfg" || fail "k: header comment"
+[ "$(key "$TMP/i7/cfg" calibrate_mass)" = 0 ] || fail "k: calibrate_mass is not 0 with -shortlist_protease auto"
+grep -q 'calibrate_mass 2' "$TMP/i7/run.log" && fail "k: calibrate_mass logged with -shortlist_protease auto"
+echo "k: calibrate_mass 2 under the msfragger defaults, 0 outside them"
 echo "msfragger_cli_test: all checks passed"

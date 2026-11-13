@@ -401,6 +401,17 @@ int main(int argc, char** argv)
     q.threads = 16;
     check(SC::msfraggerKeys(q, k).empty() && asMap(k).at("num_threads") == "16", "threads 16 -> num_threads 16");
   }
+  // ---- calibrate_mass follows the plan (post-1.15: 2 under the msfragger defaults, else 0)
+  {
+    SC::SearchPlan q = p;
+    Keys k;
+    check(p.calibrate_mass == 0 && SC::msfraggerKeys(q, k).empty() && asMap(k).at("calibrate_mass") == "0",
+          "a plan's default calibrate_mass is 0");
+    q.calibrate_mass = SC::MSFRAGGER_DEFAULT_CALIBRATION;
+    check(SC::msfraggerKeys(q, k).empty() && asMap(k).at("calibrate_mass") == "2", "calibrate_mass 2 written");
+    q.calibrate_mass = 3;
+    check(!SC::msfraggerKeys(q, k).empty(), "calibrate_mass 3 refused");
+  }
   // ---- defaults: no offsets -> mass_offsets 0, localize_delta_mass 0; Da units
   {
     SC::SearchPlan q;
