@@ -252,9 +252,9 @@ namespace FASTag::Probe
   {
     std::ifstream f(path, std::ios::binary);
     if (!f) return {};
-    constexpr std::size_t kMax = 8u << 20, kStep = 1u << 16;
+    constexpr std::size_t MAX_BYTES = 8u << 20, kStep = 1u << 16;
     std::string buf;
-    while (buf.size() < kMax)
+    while (buf.size() < MAX_BYTES)
     {
       const std::size_t have = buf.size();
       buf.resize(have + kStep);

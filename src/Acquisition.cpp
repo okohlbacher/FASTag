@@ -367,10 +367,10 @@ namespace FASTag::Acquisition
   {
     std::ifstream in(path, std::ios::binary);
     if (!in) return false;
-    constexpr std::size_t kMax = std::size_t{4} << 20, kPiece = 1 << 16;
+    constexpr std::size_t MAX_BYTES = std::size_t{4} << 20, PIECE = 1 << 16;
     std::string head;
-    std::vector<char> buf(kPiece);
-    while (head.size() < kMax && in)
+    std::vector<char> buf(PIECE);
+    while (head.size() < MAX_BYTES && in)
     {
       in.read(buf.data(), static_cast<std::streamsize>(buf.size()));
       head.append(buf.data(), static_cast<std::size_t>(in.gcount()));
