@@ -443,14 +443,14 @@ namespace FASTag::Digest
       if (tok == "hcd") beam = true;
       else if (tok == "cid" || tok == "pqd") res = true;
     }
-    return beam ? Fragmentation::Beam : res ? Fragmentation::Resonance : Fragmentation::Unknown;
+    return beam ? Fragmentation::BEAM : res ? Fragmentation::RESONANCE : Fragmentation::UNKNOWN;
   }
 
   void addFragmentation(RunMeta& meta, Fragmentation frag, std::string_view filter)
   {
-    if (frag == Fragmentation::Unknown) frag = fragmentationFromFilter(filter);
-    if (frag == Fragmentation::Beam) ++meta.ms2_beam;
-    else if (frag == Fragmentation::Resonance) ++meta.ms2_resonance;
+    if (frag == Fragmentation::UNKNOWN) frag = fragmentationFromFilter(filter);
+    if (frag == Fragmentation::BEAM) ++meta.ms2_beam;
+    else if (frag == Fragmentation::RESONANCE) ++meta.ms2_resonance;
     const std::size_t b = filter.find_first_not_of(" \t");
     if (b != std::string_view::npos && filter.size() - b >= 4)
     {

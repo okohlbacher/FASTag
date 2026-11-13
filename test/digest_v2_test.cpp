@@ -371,21 +371,21 @@ int main()
     // The class follows the MS2 analyzer and fragmentation, not the name.
     D::RunMeta ltq;  // the LTQ Orbitrap XL fixture: ion-trap CID MS2
     ltq.instrument_model = "LTQ Orbitrap XL";
-    for (int i = 0; i < 10; ++i) D::addFragmentation(ltq, D::Fragmentation::Resonance, "ITMS + c NSI d Full ms2 445.12@cid35.00 [110.00-905.00]");
+    for (int i = 0; i < 10; ++i) D::addFragmentation(ltq, D::Fragmentation::RESONANCE, "ITMS + c NSI d Full ms2 445.12@cid35.00 [110.00-905.00]");
     check(ltq.ms2_resonance == 10 && ltq.ms2_itms == 10 && D::instrumentClass(ltq) == "other",
           "instrument class: LTQ Orbitrap XL with ion-trap CID MS2 is other");
     D::RunMeta ltq_cid_nofilter;
     ltq_cid_nofilter.instrument_model = "LTQ Orbitrap XL";
-    for (int i = 0; i < 10; ++i) D::addFragmentation(ltq_cid_nofilter, D::Fragmentation::Resonance, "");
+    for (int i = 0; i < 10; ++i) D::addFragmentation(ltq_cid_nofilter, D::Fragmentation::RESONANCE, "");
     check(D::instrumentClass(ltq_cid_nofilter) == "other", "instrument class: Orbitrap-family name, resonance CID: other");
     D::RunMeta ltq_hcd;
     ltq_hcd.instrument_model = "LTQ Orbitrap Velos";
-    for (int i = 0; i < 10; ++i) D::addFragmentation(ltq_hcd, D::Fragmentation::Unknown, "FTMS + p NSI d Full ms2 445.12@hcd35.00 [110.00-905.00]");
+    for (int i = 0; i < 10; ++i) D::addFragmentation(ltq_hcd, D::Fragmentation::UNKNOWN, "FTMS + p NSI d Full ms2 445.12@hcd35.00 [110.00-905.00]");
     check(ltq_hcd.ms2_beam == 10 && ltq_hcd.ms2_ftms == 10 && D::instrumentClass(ltq_hcd) == "orbitrap_hcd",
           "instrument class: Velos HCD read in the Orbitrap (from the filter string) is orbitrap_hcd");
     D::RunMeta fusion_it;
     fusion_it.instrument_model = "Orbitrap Fusion Lumos";
-    for (int i = 0; i < 10; ++i) D::addFragmentation(fusion_it, D::Fragmentation::Beam, "ITMS + c NSI r d Full ms2 445.12@hcd30.00 [110.00-905.00]");
+    for (int i = 0; i < 10; ++i) D::addFragmentation(fusion_it, D::Fragmentation::BEAM, "ITMS + c NSI r d Full ms2 445.12@hcd30.00 [110.00-905.00]");
     check(D::instrumentClass(fusion_it) == "other", "instrument class: HCD read in the ion trap is other");
     D::RunMeta velos_none;
     velos_none.instrument_model = "LTQ Orbitrap Velos";
@@ -400,12 +400,12 @@ int main()
     check(D::instrumentClass(an) == "other", "instrument class: Orbitrap and ion trap, no activation: other");
     D::RunMeta mixed;
     mixed.instrument_model = "Orbitrap Elite";
-    for (int i = 0; i < 6; ++i) D::addFragmentation(mixed, D::Fragmentation::Beam, "");
-    for (int i = 0; i < 4; ++i) D::addFragmentation(mixed, D::Fragmentation::Resonance, "");
+    for (int i = 0; i < 6; ++i) D::addFragmentation(mixed, D::Fragmentation::BEAM, "");
+    for (int i = 0; i < 4; ++i) D::addFragmentation(mixed, D::Fragmentation::RESONANCE, "");
     check(D::instrumentClass(mixed) == "orbitrap_hcd", "instrument class: mostly HCD is orbitrap_hcd");
-    check(D::fragmentationFromFilter("FTMS + p NSI sa Full ms2 600.0@etd50.00@hcd20.00 [..]") == D::Fragmentation::Beam &&
-              D::fragmentationFromFilter("ITMS + c ESI d w Full ms2 600.0@pqd35.00 [..]") == D::Fragmentation::Resonance &&
-              D::fragmentationFromFilter("FTMS + p NSI Full ms [350.0-1800.0]") == D::Fragmentation::Unknown,
+    check(D::fragmentationFromFilter("FTMS + p NSI sa Full ms2 600.0@etd50.00@hcd20.00 [..]") == D::Fragmentation::BEAM &&
+              D::fragmentationFromFilter("ITMS + c ESI d w Full ms2 600.0@pqd35.00 [..]") == D::Fragmentation::RESONANCE &&
+              D::fragmentationFromFilter("FTMS + p NSI Full ms [350.0-1800.0]") == D::Fragmentation::UNKNOWN,
           "fragmentation from filter strings");
   }
 

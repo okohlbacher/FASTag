@@ -737,7 +737,7 @@ namespace FASTag::Digest
   /**
     @brief What one MS2 spectrum says about its fragmentation and analyzer.
   */
-  enum class Fragmentation : int { Unknown = 0, Beam, Resonance };
+  enum class Fragmentation : int { UNKNOWN = 0, BEAM, RESONANCE };
   /**
     @brief Counts one MS2 into the run metadata.
 

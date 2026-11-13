@@ -4362,10 +4362,10 @@ protected:
         {
           using AM = Precursor::ActivationMethod;
           const auto& am = spec.getPrecursors().front().getActivationMethods();
-          FASTag::Digest::Fragmentation fr = FASTag::Digest::Fragmentation::Unknown;
-          if (am.count(AM::HCD) || am.count(AM::HCID)) fr = FASTag::Digest::Fragmentation::Beam;
+          FASTag::Digest::Fragmentation fr = FASTag::Digest::Fragmentation::UNKNOWN;
+          if (am.count(AM::HCD) || am.count(AM::HCID)) fr = FASTag::Digest::Fragmentation::BEAM;
           else if (am.count(AM::CID) || am.count(AM::TRAP) || am.count(AM::PQD) || am.count(AM::LCID))
-            fr = FASTag::Digest::Fragmentation::Resonance;
+            fr = FASTag::Digest::Fragmentation::RESONANCE;
           const std::string filter =
               spec.metaValueExists("filter string") ? std::string(spec.getMetaValue("filter string").toString()) : std::string();
           FASTag::Digest::addFragmentation(pt.frag, fr, filter);
