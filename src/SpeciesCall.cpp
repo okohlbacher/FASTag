@@ -99,9 +99,9 @@ namespace FASTag::SpeciesCall
   {
     switch (c)
     {
-      case Call::Present: return "present";
-      case Call::NoCall: return "no_call";
-      case Call::NotDetected: return "not_detected";
+      case Call::PRESENT: return "present";
+      case Call::NO_CALL: return "no_call";
+      case Call::NOT_DETECTED: return "not_detected";
     }
     return "not_detected";
   }
@@ -274,17 +274,17 @@ namespace FASTag::SpeciesCall
       s.qvalue = q[i];
       s.qvalue_random = q_rand[i];
       s.lod = -1.0;
-      if (run.low_resolution) { s.call = Call::NoCall; s.reason = "low_resolution"; continue; }
-      if (run.n_units < run.min_units) { s.call = Call::NoCall; s.reason = "few_spectra"; continue; }
-      if (present[i]) { s.call = Call::Present; s.reason = "pass"; continue; }
-      if (qual[i]) { s.call = Call::NoCall; s.reason = "unstable"; continue; }
+      if (run.low_resolution) { s.call = Call::NO_CALL; s.reason = "low_resolution"; continue; }
+      if (run.n_units < run.min_units) { s.call = Call::NO_CALL; s.reason = "few_spectra"; continue; }
+      if (present[i]) { s.call = Call::PRESENT; s.reason = "pass"; continue; }
+      if (qual[i]) { s.call = Call::NO_CALL; s.reason = "unstable"; continue; }
       if (s.tested && s.spill > 0.0 && s.qvalue_random <= params.alpha && s.qvalue > params.alpha)
       {
-        s.call = Call::NoCall;
+        s.call = Call::NO_CALL;
         s.reason = "near_neighbour";
         continue;
       }
-      s.call = Call::NotDetected;
+      s.call = Call::NOT_DETECTED;
       if (!s.tested || s.qvalue > params.alpha) s.reason = "not_significant";
       else if (!(s.share >= params.tau)) s.reason = "low_share";
       else s.reason = "few_genus_spectra";

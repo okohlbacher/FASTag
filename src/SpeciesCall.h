@@ -90,7 +90,7 @@ namespace FASTag::SpeciesCall
   /**
     @brief Outcome of the species call for one genus.
   */
-  enum class Call { Present, NoCall, NotDetected };
+  enum class Call { PRESENT, NO_CALL, NOT_DETECTED };
 
   /**
     @brief Returns the report name of a call.
@@ -141,7 +141,7 @@ namespace FASTag::SpeciesCall
     double share = 0.0;            ///< share_g of the run's units
     double lod = -1.0;             ///< detection limit as a share; < 0 = not applicable
     bool tested = false;           ///< observed >= Taxonomy::kObservedFloor
-    Call call = Call::NotDetected; ///< the decision
+    Call call = Call::NOT_DETECTED; ///< the decision
     std::string reason;            ///< pass, low_resolution, few_spectra, unstable,
                                    ///< near_neighbour, not_significant, low_share,
                                    ///< few_genus_spectra

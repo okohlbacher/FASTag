@@ -6786,8 +6786,8 @@ protected:
                           static_cast<unsigned long long>(st.decoy_spectra), st.expected, st.qvalue,
                           st.share, lod);
             so << '\t' << FASTag::SpeciesCall::callName(st.call) << '\t' << st.reason << cnum;
-            ++n_call[st.call == FASTag::SpeciesCall::Call::Present ? 0
-                     : st.call == FASTag::SpeciesCall::Call::NoCall ? 1 : 2];
+            ++n_call[st.call == FASTag::SpeciesCall::Call::PRESENT ? 0
+                     : st.call == FASTag::SpeciesCall::Call::NO_CALL ? 1 : 2];
           }
         }
         so << '\n';
