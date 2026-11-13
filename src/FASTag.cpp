@@ -4535,7 +4535,7 @@ protected:
         {
           ++pt.len[static_cast<int>(t.n_res)].first;
           const auto h = filt.match(FASTag::baseSequence(t.seq));
-          if (h == FASTag::FastaFilter::Hit::None)
+          if (h == FASTag::FastaFilter::Hit::NONE)
           {
             // Target-first attribution: only a tag the TARGET rejects may
             // count as entrapment evidence (a tag hitting both is a target
@@ -4543,9 +4543,9 @@ protected:
             // the r_len correction is computed over).
             if (!entrap_on) continue;
             const auto he = entrap.match(FASTag::baseSequence(t.seq));
-            if (he == FASTag::FastaFilter::Hit::None) continue;
+            if (he == FASTag::FastaFilter::Hit::NONE) continue;
             row_entrap = true;
-            hit = (he == FASTag::FastaFilter::Hit::Forward) ? "efwd" : "erev";
+            hit = (he == FASTag::FastaFilter::Hit::FORWARD) ? "efwd" : "erev";
             pt.entrap_e.emplace_back(t.evalue, static_cast<int>(t.n_res));
           }
           else
@@ -4553,7 +4553,7 @@ protected:
             ++pt.len[static_cast<int>(t.n_res)].second;
             // A reverse-only match identifies the ion series: the tag was read off
             // the b series, so its flanking masses carry a one-water offset.
-            hit = (h == FASTag::FastaFilter::Hit::Forward) ? "fwd" : "rev";
+            hit = (h == FASTag::FastaFilter::Hit::FORWARD) ? "fwd" : "rev";
             if (entrap_on) pt.target_e.push_back(t.evalue);
           }
         }

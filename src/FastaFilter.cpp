@@ -270,15 +270,15 @@ namespace FASTag
 
   FastaFilter::Hit FastaFilter::match(const std::string& tag) const
   {
-    if (static_cast<int>(tag.size()) < minLen()) return Hit::None;
+    if (static_cast<int>(tag.size()) < minLen()) return Hit::NONE;
     std::string t = tag;
     for (char& c : t) if (c == 'I') c = 'L';
-    if (contains_(t)) return Hit::Forward;
+    if (contains_(t)) return Hit::FORWARD;
     if (both_)
     {
       std::reverse(t.begin(), t.end());
-      if (contains_(t)) return Hit::Reverse;
+      if (contains_(t)) return Hit::REVERSE;
     }
-    return Hit::None;
+    return Hit::NONE;
   }
 }

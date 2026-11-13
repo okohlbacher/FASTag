@@ -81,7 +81,7 @@ namespace FASTag
   {
   public:
     /// @brief How a tag matched.
-    enum class Hit { None, Forward, Reverse };
+    enum class Hit { NONE, FORWARD, REVERSE };
 
     /**
       @brief Creates an empty filter.
