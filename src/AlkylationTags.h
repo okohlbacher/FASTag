@@ -17,7 +17,7 @@
 // a singly charged S, so a 1+ S ladder also reads as a 2+ Propionamide one.
 // A spectrum votes only when its best (lowest E-value) counted tag holds a
 // C, no C is the first or last residue of that tag, and its E-value is at
-// most kVoteMaxEvalue (1e-4): the vote is for the form all its C residues
+// most VOTE_MAX_EVALUE (1e-4): the vote is for the form all its C residues
 // share, else a conflict; a tag of equal E-value with another form also
 // makes the vote a conflict. (The first rule, the best C tag of every
 // spectrum at E <= 1, failed: chance C edges in weak or terminal positions
@@ -65,21 +65,21 @@ namespace FASTag::AlkylationTags
   inline constexpr int REPORT_FORMAT = 1;
 
   /// @brief The 13C - 12C spacing (Da) the alias check uses for isotope-shifted edges.
-  inline constexpr double kC13Spacing = 1.0033548378;
+  inline constexpr double C13_SPACING = 1.0033548378;
 
   /// @brief The number of candidate forms.
   ///
-  /// The candidate forms: Alkylation::forms() 0 .. kNumCandidates-1, the five
+  /// The candidate forms: Alkylation::forms() 0 .. NUM_CANDIDATES-1, the five
   /// reagents then "unmodified" (class none).
-  inline constexpr int kNumCandidates = 6;
+  inline constexpr int NUM_CANDIDATES = 6;
   /// @brief Index of the unmodified form among the candidates.
-  inline constexpr int kUnmodified = 5;
+  inline constexpr int UNMODIFIED = 5;
 
   /**
-    @brief The candidate forms (the first kNumCandidates of Alkylation::forms()).
+    @brief The candidate forms (the first NUM_CANDIDATES of Alkylation::forms()).
     @param[in] forms Alkylation::forms()
-    @return the first kNumCandidates forms
-    @throw std::runtime_error when @p forms is shorter than kNumCandidates or its entry kUnmodified is not "unmodified"
+    @return the first NUM_CANDIDATES forms
+    @throw std::runtime_error when @p forms is shorter than NUM_CANDIDATES or its entry UNMODIFIED is not "unmodified"
   */
   std::vector<Alkylation::Form> candidates(const std::vector<Alkylation::Form>& forms);
 
@@ -120,7 +120,7 @@ namespace FASTag::AlkylationTags
     @param[in] cands the candidate forms
     @return the count per candidate
   */
-  std::array<std::uint32_t, kNumCandidates> formsInTag(const std::string& seq,
+  std::array<std::uint32_t, NUM_CANDIDATES> formsInTag(const std::string& seq,
                                                        const std::vector<Alkylation::Form>& cands);
 
   /// @brief The largest E-value of a voting tag.
@@ -128,7 +128,7 @@ namespace FASTag::AlkylationTags
   /// A spectrum votes only when its best counted tag has an E-value of at
   /// most this (reassessment on development data: chance C edges fill the
   /// looser tags).
-  inline constexpr double kVoteMaxEvalue = 1e-4;
+  inline constexpr double VOTE_MAX_EVALUE = 1e-4;
 
   /**
     @brief Whether the first or the last residue of the tag sequence @p seq is a C (any form).
@@ -186,7 +186,7 @@ namespace FASTag::AlkylationTags
     @brief Per candidate, the masses that could be mistaken for its C mass.
 
     The two-residue sums (unmodified base residues, I as L) and the other
-    candidate C forms shifted by +/- kC13Spacing within 2 * @p tol_da of the
+    candidate C forms shifted by +/- C13_SPACING within 2 * @p tol_da of the
     candidate's C mass: "G+C:0.0000" and "C[Carbamidomethyl]+13C:0.0193"
     entries, by distance, comma-separated, "-" when none.
 
@@ -208,8 +208,8 @@ namespace FASTag::AlkylationTags
     std::uint64_t tags_with_c = 0;     ///< of those, tags with a C
     std::uint64_t spectra = 0;         ///< spectra with a vote
     std::uint64_t conflict = 0;        ///< votes whose tag holds two forms
-    std::array<std::uint64_t, kNumCandidates> votes{};     ///< votes per form
-    std::array<std::uint64_t, kNumCandidates> residues{};  ///< C residues per form over counted tags
+    std::array<std::uint64_t, NUM_CANDIDATES> votes{};     ///< votes per form
+    std::array<std::uint64_t, NUM_CANDIDATES> residues{};  ///< C residues per form over counted tags
 
     /**
       @brief Adds one shadow tag of a spectrum.
@@ -226,7 +226,7 @@ namespace FASTag::AlkylationTags
       @brief Adds the spectrum's vote (after its tags).
 
       Cast only when that tag is the spectrum's best counted tag and its
-      E-value is at most kVoteMaxEvalue; also counts the spectrum as tagged.
+      E-value is at most VOTE_MAX_EVALUE; also counts the spectrum as tagged.
 
       @param[in] v the spectrum's vote
     */
