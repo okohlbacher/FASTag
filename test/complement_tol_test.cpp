@@ -118,7 +118,7 @@ int main()
     CHECK(q.frag_tol == 0.5 && !q.tol_ppm && q.complement_rule == FASTag::ComplementRule::BOTH
             && q.ion_pair.kind == FASTag::IonSeries::Series::CZ && q.mods.size() == p.mods.size(),
           "probeParam dropped a measurement setting of the run");
-    CHECK(q.tag_length == CT::kAutoProbeLength && CT::kAutoProbeLength == 3, "probe seed length %d", q.tag_length);
+    CHECK(q.tag_length == CT::AUTO_PROBE_LENGTH && CT::AUTO_PROBE_LENGTH == 3, "probe seed length %d", q.tag_length);
     CHECK(q.deisotope == d.deisotope && q.max_gaps == d.max_gaps && q.max_extension == d.max_extension
             && q.peaks_per_window == d.peaks_per_window && q.max_peak_count == d.max_peak_count
             && q.max_evalue == d.max_evalue && q.gap_penalty == d.gap_penalty && q.diversity == d.diversity
@@ -265,7 +265,7 @@ int main()
     {
       std::vector<double> e(500, 0.0);
       const CT::Estimate a = CT::estimate(e, w);
-      CHECK(a.ok && a.tol == CT::kAutoMinTol, "exact pairs: tol %.6g, want the 0.001 bound", a.tol);
+      CHECK(a.ok && a.tol == CT::AUTO_MIN_TOL, "exact pairs: tol %.6g, want the 0.001 bound", a.tol);
     }
   }
 
@@ -289,7 +289,7 @@ int main()
     // must separate from: the smallest |error| t whose floor-corrected
     // count reaches 95% of the signal.
     const auto order95 = [w](std::vector<double> e) {
-      const double from = CT::kAutoFloorFrom * w;
+      const double from = CT::AUTO_FLOOR_FROM * w;
       std::vector<double> a;
       for (const double x : e)
         if (std::fabs(x) <= w) a.push_back(std::fabs(x));
@@ -299,7 +299,7 @@ int main()
       const double sig = a.size() - f * 2.0 * w;
       std::sort(a.begin(), a.end());
       for (std::size_t i = 0; i < a.size() && a[i] < from; ++i)
-        if (static_cast<double>(i + 1) - f * 2.0 * a[i] >= 0.95 * sig) return std::max(a[i], CT::kAutoMinTol);
+        if (static_cast<double>(i + 1) - f * 2.0 * a[i] >= 0.95 * sig) return std::max(a[i], CT::AUTO_MIN_TOL);
       return std::numeric_limits<double>::quiet_NaN();
     };
     struct Case { std::size_t n_sig, n_floor; double sigma, offset; };

@@ -11,17 +11,17 @@
 // longer depends on the configured window, so the probe does not favour tags
 // whose partners happen to sit inside it (a partner anywhere within W counts
 // alike, whatever its error). The probe tags at a fixed seed length
-// (kAutoProbeLength) with the command line's default preprocessing and search
+// (AUTO_PROBE_LENGTH) with the command line's default preprocessing and search
 // settings (probeParam), so one input file gives one window whatever the
 // run's -tag_length, -no_deisotope, -gaps or peak budget; only the settings
 // that describe the measurement (fragment tolerance, ion series, complement
 // rule, modifications) are the run's. For each spectrum
-// whose rank-1 tag reaches kAutoMaxEvalue, both ends of that tag (two
+// whose rank-1 tag reaches AUTO_MAX_EVALUE, both ends of that tag (two
 // observed peaks) give one signed error each: the observed partner peak
 // nearest the complement m/z, minus the complement m/z, when it lies within
 // the measurement window W. Those errors are a peak near 0 (true partners)
 // on a flat floor (chance peaks). The floor's density is read from the outer
-// third of the window. The tolerance is |m| + kAutoZ * 1.4826 * MAD, with m
+// third of the window. The tolerance is |m| + AUTO_Z * 1.4826 * MAD, with m
 // the floor-corrected median of the signed errors and MAD the floor-corrected
 // median absolute deviation from m: the two-sided 95% bound of a normal error
 // distribution, read from the middle half of the signal. The middle half is
@@ -67,36 +67,36 @@ namespace FASTag::ComplTol
 {
   /// Rank-1 tags at or below this E-value count as high-confidence (the probe
   /// reads only them). Fixed on DEV data (DESIGN.md), not an option.
-  inline constexpr double kAutoMaxEvalue = 0.01;
-  /// The tolerance is |median| + kAutoZ standard deviations (two-sided 95%
+  inline constexpr double AUTO_MAX_EVALUE = 0.01;
+  /// The tolerance is |median| + AUTO_Z standard deviations (two-sided 95%
   /// of a normal error distribution); the standard deviation is
-  /// kAutoMadToSd times the median absolute deviation.
-  inline constexpr double kAutoZ = 1.96;
-  inline constexpr double kAutoMadToSd = 1.4826;
+  /// AUTO_MAD_TO_SD times the median absolute deviation.
+  inline constexpr double AUTO_Z = 1.96;
+  inline constexpr double AUTO_MAD_TO_SD = 1.4826;
   /// The seed length the probe tags at, whatever the run's -tag_length.
-  inline constexpr int kAutoProbeLength = 3;
+  inline constexpr int AUTO_PROBE_LENGTH = 3;
   /// Fewer signal pairs than this (count minus floor), or fewer than 3
   /// standard deviations of the floor's fluctuation, is no measurement: the
   /// run keeps -complement_tolerance (Da).
-  inline constexpr double kAutoMinSignal = 40.0;
+  inline constexpr double AUTO_MIN_SIGNAL = 40.0;
   /// Lower bound of a measured tolerance (Da): below it the window is
   /// narrower than the m/z precision a centroid reports.
-  inline constexpr double kAutoMinTol = 0.001;
-  /// The measurement window: kAutoWindowFactor times the fragment tolerance
-  /// at m/z 1000, within [kAutoWindowMin, kAutoWindowMax] Da. The upper bound
+  inline constexpr double AUTO_MIN_TOL = 0.001;
+  /// The measurement window: AUTO_WINDOW_FACTOR times the fragment tolerance
+  /// at m/z 1000, within [AUTO_WINDOW_MIN, AUTO_WINDOW_MAX] Da. The upper bound
   /// stays below one 13C spacing, so a partner's isotope peak never enters
   /// the floor band.
-  inline constexpr double kAutoWindowFactor = 6.0;
-  inline constexpr double kAutoWindowMin = 0.1;
-  inline constexpr double kAutoWindowMax = 0.9;
-  /// The floor band is |error| in [kAutoFloorFrom * W, W].
-  inline constexpr double kAutoFloorFrom = 2.0 / 3.0;
+  inline constexpr double AUTO_WINDOW_FACTOR = 6.0;
+  inline constexpr double AUTO_WINDOW_MIN = 0.1;
+  inline constexpr double AUTO_WINDOW_MAX = 0.9;
+  /// The floor band is |error| in [AUTO_FLOOR_FROM * W, W].
+  inline constexpr double AUTO_FLOOR_FROM = 2.0 / 3.0;
 
   /**
     @brief The measurement window W (Da) for a run's fragment tolerance.
 
-    kAutoWindowFactor times the fragment tolerance at m/z 1000, clamped to
-    [kAutoWindowMin, kAutoWindowMax].
+    AUTO_WINDOW_FACTOR times the fragment tolerance at m/z 1000, clamped to
+    [AUTO_WINDOW_MIN, AUTO_WINDOW_MAX].
 
     @param[in] frag_tol the run's fragment tolerance
     @param[in] ppm true when @p frag_tol is in ppm, false for Da
@@ -105,7 +105,7 @@ namespace FASTag::ComplTol
   inline double measurementWindow(double frag_tol, bool ppm)
   {
     const double at1000 = ppm ? 1000.0 * frag_tol * 1e-6 : frag_tol;
-    return std::clamp(kAutoWindowFactor * at1000, kAutoWindowMin, kAutoWindowMax);
+    return std::clamp(AUTO_WINDOW_FACTOR * at1000, AUTO_WINDOW_MIN, AUTO_WINDOW_MAX);
   }
 
   /**
@@ -114,7 +114,7 @@ namespace FASTag::ComplTol
     @p p's measurement settings (fragment tolerance and unit, ion series,
     complement rule, modifications), the command line's default
     preprocessing and search settings (Cli::cliDefaultParam) at seed length
-    kAutoProbeLength, and the complement test made neutral (Da mode, window
+    AUTO_PROBE_LENGTH, and the complement test made neutral (Da mode, window
     @p window). So the window a file gives does not depend on the run's
     -tag_length, -no_deisotope, -gaps, -extension, peak budget, E-value cut
     or gap penalty.
@@ -126,7 +126,7 @@ namespace FASTag::ComplTol
   inline Param probeParam(const Param& p, double window)
   {
     Param q = Cli::cliDefaultParam(/*resolve_mods=*/false);
-    q.tag_length = kAutoProbeLength;
+    q.tag_length = AUTO_PROBE_LENGTH;
     q.frag_tol = p.frag_tol;
     q.tol_ppm = p.tol_ppm;
     q.ion_pair = p.ion_pair;
@@ -269,12 +269,12 @@ namespace FASTag::ComplTol
   /**
     @brief The tolerance from signed complement errors.
 
-    The tolerance is |m| + kAutoZ * kAutoMadToSd * MAD, with m the
+    The tolerance is |m| + AUTO_Z * AUTO_MAD_TO_SD * MAD, with m the
     floor-corrected median and MAD the floor-corrected median absolute
-    deviation; at least kAutoMinTol. No measurement (Estimate::ok false,
+    deviation; at least AUTO_MIN_TOL. No measurement (Estimate::ok false,
     Estimate::why set) when the signal above the chance floor is too small,
     or median or spread cannot be read inside the window, or the tolerance
-    is not below kAutoFloorFrom * W.
+    is not below AUTO_FLOOR_FROM * W.
 
     @param[in] errors signed errors (Da), any order; non-finite values and
                values beyond @p window are ignored
@@ -282,7 +282,7 @@ namespace FASTag::ComplTol
     @param[in] min_signal the minimum signal (pairs above the floor)
     @return the measurement
   */
-  inline Estimate estimate(std::vector<double> errors, double window, double min_signal = kAutoMinSignal)
+  inline Estimate estimate(std::vector<double> errors, double window, double min_signal = AUTO_MIN_SIGNAL)
   {
     Estimate e;
     e.window = window;
@@ -292,7 +292,7 @@ namespace FASTag::ComplTol
       if (std::isfinite(x) && std::fabs(x) <= window) kept.push_back(x);
     e.n = kept.size();
     std::sort(kept.begin(), kept.end());
-    const double from = kAutoFloorFrom * window;
+    const double from = AUTO_FLOOR_FROM * window;
     std::size_t n_floor = 0;
     for (const double x : kept)
       if (std::fabs(x) >= from) ++n_floor;
@@ -355,14 +355,14 @@ namespace FASTag::ComplTol
     }
     e.median = m;
     e.mad = mad;
-    const double t = std::fabs(m) + kAutoZ * kAutoMadToSd * mad;
+    const double t = std::fabs(m) + AUTO_Z * AUTO_MAD_TO_SD * mad;
     if (!(t < from))
     {
       e.why = "the complement errors are not contained well inside the measurement window";
       return e;
     }
     e.ok = true;
-    e.tol = std::max(t, kAutoMinTol);
+    e.tol = std::max(t, AUTO_MIN_TOL);
     return e;
   }
 }

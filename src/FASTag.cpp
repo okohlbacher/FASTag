@@ -3640,12 +3640,12 @@ protected:
     // 1.13 item 15: -complement_tolerance_unit auto (src/ComplementTol.h).
     // A probe of up to -complement_probe MS2 spectra, drawn uniformly over
     // the run with a fixed seed and read as the tagging pass reads them, is
-    // tagged at seed length ComplTol::kAutoProbeLength with the default
+    // tagged at seed length ComplTol::AUTO_PROBE_LENGTH with the default
     // preprocessing and search settings (ComplTol::probeParam: one file, one
     // window, whatever -tag_length or -no_deisotope) and the complement
     // window set to the whole measurement window, at the header charge (the precursor
     // hypotheses of -unknown_charge and -isotope_error are not probed);
-    // the rank-1 tags at or below ComplTol::kAutoMaxEvalue give the signed
+    // the rank-1 tags at or below ComplTol::AUTO_MAX_EVALUE give the signed
     // complement errors, and their floor-corrected median and MAD give the
     // window (|median| + 1.96 x 1.4826 x MAD). Too few
     // pairs keep -complement_tolerance (Da). Not reached under Da or fragment.
@@ -3700,7 +3700,7 @@ protected:
           const FASTag::Param& pp = cz ? probe_cz : probe_by;
           const std::vector<FASTag::Tag> tg =
               FASTag::tagSpectrum(s, pc.getMZ(), pc.getCharge(), pp, cz ? probe_tab_cz : probe_tab_by);
-          if (tg.empty() || !(tg.front().evalue <= CT::kAutoMaxEvalue)) continue;
+          if (tg.empty() || !(tg.front().evalue <= CT::AUTO_MAX_EVALUE)) continue;
           confident[static_cast<Size>(k)] = 1;
           const MSSpectrum prep = FASTag::preparedPeaks(s, pc.getMZ(), pc.getCharge(), pp);
           CT::collectErrors(prep, pc.getMZ(), pc.getCharge(), tg.front(), FASTag::ComplementSpec::fromParam(pp),
