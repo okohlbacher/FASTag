@@ -64,6 +64,15 @@ function Install-Fastag([string]$Installer, [string[]]$Switches, [string]$Expect
 }
 
 # What a folder still holds (files, relative), or @() when it is gone.
+# Wait up to @p Seconds for @p Dir to disappear (an uninstaller may still be
+# deleting large files, slower under ARM64 emulation and on-access scanning);
+# return what is left, by name.
+function Wait-Gone([string]$Dir, [int]$Seconds = 60) {
+  $end = (Get-Date).AddSeconds($Seconds)
+  while ((Test-Path $Dir) -and (Get-Date) -lt $end) { Start-Sleep -Seconds 2 }
+  return , (Get-Leftovers $Dir)
+}
+
 function Get-Leftovers([string]$Dir) {
   if (-not (Test-Path $Dir)) { return , @() }
   return , @(Get-ChildItem $Dir -Recurse -Force -File | ForEach-Object { $_.FullName.Substring($Dir.Length).TrimStart('\') })
