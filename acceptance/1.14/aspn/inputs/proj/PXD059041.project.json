@@ -1,0 +1,115 @@
+{
+  "accession" : "PXD059041",
+  "title" : "A novel approach to tagging tubulin reveals MT assembly dynamics of the axoneme in Trypanosoma brucei",
+  "additionalAttributes" : [ ],
+  "projectDescription" : "The protozoan parasite Trypanosoma brucei is a mono-flagellated cell during the G1-phase of its cell cycle. In order to duplicate, it assembles a new flagellum alongside the mature one, in which further elongation is prevented. Our group proposed a model where the mature flagellum is locked after construction to full length (Bertiaux et al. 2018) and access of new building blocks for elongation is exclusive to the new flagellum. To test this hypothesis directly, we developed a tool for the inducible expression of tagged tubulin. Alpha-tubulin that was tagged with an intragenic Ty-1-epitope behaved indistinguishable from untagged tubulin. Its incorporation was monitored after inducible expression, to follow the assembly dynamics of microtubules in the cell body, the mitotic spindle and the flagellum. In this study we present direct evidence that integration of tubulin occurs at the distal flagellum tip at a linear rate and is indeed restricted to the new flagellum in bi-flagellated cells. This is direct evidence that trypanosomes avoid competition between the two flagella by allowing tubulin incorporation only in the new but not the old organelle. However, by tracing flagella over several cell cycles we could also show that mature flagella do not remain locked indefinitely. The restriction is lifted briefly after the bi-flagellated cell has divided and the daughter cell inheriting the old flagellum shows incorporation of newly synthesized building blocks again. It then has to lock again before the cell can assemble a new flagellum. Our findings suggest regular incorporation of tubulin at the tip of previously locked flagella. Since flagellum length in trypanosomes is stable, it is likely that regular dis-assembly needs to occur to prevent a net elongation over time. This evidence was supported with an orthogonal approach, with which we monitored the incorporation of HALO-tagged radial spoke protein 4/6",
+  "sampleProcessingProtocol" : "To purify flagella 3 x 107 cells were harvested and washed in SDM-79 without serum for 3 times. They were then resuspended in 300 µl of 1% NP-40 in PEM buffer containing protease inhibitor (Roche cOmplete Mini EDTA free, #Cat: 11826153001) and 1 µl benzonase and then incubated for 15 min at RT. After that they were spun down and resuspended again in 1% NP-40 in PEM buffer containing protease inhibitor without benzonase. Samples were incubated at RT for 2 minutes and then spun down and washed in PEM buffer. Incubation in 1% NP-40 in PEM buffer followed by washing was repeated twice more and the samples spun down at 15000g. They were then resuspended in 1ml of 1M NaCl and incubated for 15 min. The samples were then spun down and washed in PBS and the NaCl treatment repeated one more time. After a last washing step, the samples were resuspended in water and the purity of the preparation was assessed at the microscope. The samples were then spun down and all Proteins were denatured by adding 8 M urea in 100 mM Tris buffer (pH 7.5). Proteins were reduced using 5 mM DTT for 30 minutes at room temperature. Alkylation of the reduced disulfide bridges was performed using 20 mM iodoacetamide for 30 minutes at room temperature in the dark. Urea was diluted to below 1.5 M with 50 mM ammonium bicarbonate. Each sample was divided into three aliquots, each digested with a different enzyme. For one aliquot, sequencing-grade chymotrypsin was added at an enzyme-to-protein ratio of 1:50 (wt:wt) in 100 mM ammonium bicarbonate, and digestion was performed overnight at 37°C. For the second aliquot, thermolysin was added at an enzyme-to-protein ratio of 1:20 (wt:wt) in 0.5 mM CaCl₂, and digestion was performed for 6 hours at 65°C. For the third aliquot, sequencing-grade Asp-N was added at an enzyme-to-protein ratio of 1:10 (wt:wt) in 10 mM Tris-HCl (pH 8.0), and digestion was performed overnight at 37°C. Digestion was stopped by adding 1% formic acid. Samples were centrifuged at 16,000 × g for 10 minutes, and the supernatant containing peptides was collected. Peptide clean-up was performed using an Agilent AssayMap Bravo robot on C18 tips according to the supplier’s protocol. Peptides were resuspended in 2% acetonitrile/0.1% formic acid prior to LC-MS injection.supernatant was removed. The pellet containing purified flagella was stored at -80°C. The peptides were analyzed by nano-liquid chromatography-tandem mass spectrometry (LC-MS/MS) using a Proxeon EASY-nLC 1200 system (Thermo Fisher Scientific) coupled to an Orbitrap Q Exactive Plus Mass Spectrometer (Thermo Fisher Scientific). One microgram of peptides was injected onto a homemade 38 cm C18 column (1.9 μm particles, 100 Å pore size). Column equilibration and peptide loading were performed at 900 bar in buffer A (0.1% formic acid). Peptides were separated using a multi-step gradient: 3–6% buffer B (80% acetonitrile, 0.1% formic acid) in 3 minutes, 6–31% buffer B in 67 minutes, 31–62% buffer B in 25 minutes, 62–100% buffer B in 5 minutes, followed by 100% buffer B for 5 minutes and re-equilibration at 3% buffer B for 3 minutes, at a flow rate of 250 nL/min. The column temperature was maintained at 60°C.  Mass spectrometry (MS) data were acquired using the Xcalibur software in data-dependent acquisition mode. Full MS scans were acquired at a resolution of 70,000, while MS/MS scans (fixed first mass at 100 m/z) were acquired at a resolution of 17,500. The AGC target and maximum injection times were set to 3 × 10⁶ and 20 ms for the survey scans, and 1 × 10⁶ and 60 ms for the MS/MS scans, respectively. The 10 most intense precursor ions were selected for fragmentation (Top 10 method) with a dynamic exclusion of 45 seconds. The isolation window was set to 1.6 m/z, and a normalized collision energy of 28 was used for higher-energy collision dissociation (HCD) fragmentation. The underfill ratio was set to 1.0%, corresponding to an intensity threshold of 1.7 × 10⁵. Precursor ions with unassigned charge states, or with charge states of 1, 7, 8, or >8, were excluded. The peptide match option was disabled.",
+  "dataProcessingProtocol" : "Acquired raw files were analyzed using MaxQuant software version 2.1.4.0 (Cox et al., 2011) with the Andromeda search engine (Cox and Mann, 2008; Tyanova et al., 2016). Samples were grouped by the type of experiment. The MS/MS spectra were searched against the Trypanosoma brucei brucei database (8,832 entries). All searches included the oxidation of methionine, protein N-terminal acetylation, and lysine acetylation as variable modifications, while cysteine carbamidomethylation was set as a fixed modification. Chymotrypsin, Asp-N, or thermolysin were selected as proteases, allowing for up to two missed cleavages. The minimum peptide length was set to five amino acids, and the peptide mass was limited to a maximum of 8,000 Da. The false discovery rate (FDR) for both peptide and protein identification was set to 0.01. The main search peptide tolerance was set to 4.5 ppm, and the MS/MS match tolerance was set to 20 ppm. The \"second peptides\" option was enabled to account for co-fragmentation events. Protein identification required at least one unique peptide assigned to the protein group. A false discovery rate cutoff of 1% was applied at both the peptide and protein levels.",
+  "projectTags" : [ ],
+  "keywords" : [ "Ptms", "Acetylation", "Tubbulines" ],
+  "doi" : "",
+  "submissionType" : "PARTIAL",
+  "license" : "Creative Commons Public Domain (CC0)",
+  "submissionDate" : "2024-12-19",
+  "publicationDate" : "2025-06-18",
+  "submitters" : [ {
+    "title" : "Ms",
+    "firstName" : "MARIETTE",
+    "lastName" : "MATONDO ",
+    "identifier" : "116390100",
+    "affiliation" : "Pasteur",
+    "email" : "mariette.matondo@pasteur.fr",
+    "country" : "France",
+    "orcid" : "0000-0003-3958-7710",
+    "name" : "MARIETTE MATONDO ",
+    "id" : "116390100"
+  } ],
+  "labPIs" : [ {
+    "title" : "Dr",
+    "firstName" : "Bastin",
+    "lastName" : "Philippe",
+    "identifier" : "3081114",
+    "affiliation" : "rypanosome Cell Biology Unit & INSERM U1201   Institut Pasteur, 25, rue du Docteur Roux, 75015 Paris (France)",
+    "email" : "philippe.bastin@pasteur.fr",
+    "country" : "",
+    "orcid" : "",
+    "name" : "Bastin Philippe",
+    "id" : "3081114"
+  } ],
+  "instruments" : [ {
+    "@type" : "CvParam",
+    "cvLabel" : "MS",
+    "accession" : "MS:1002634",
+    "name" : "Q Exactive Plus"
+  } ],
+  "softwares" : [ {
+    "@type" : "CvParam",
+    "cvLabel" : "MS",
+    "accession" : "MS:1001583",
+    "name" : "MaxQuant"
+  } ],
+  "experimentTypes" : [ {
+    "@type" : "CvParam",
+    "cvLabel" : "PRIDE",
+    "accession" : "PRIDE:0000428",
+    "name" : "Bottom-up proteomics"
+  } ],
+  "quantificationMethods" : [ {
+    "@type" : "CvParam",
+    "cvLabel" : "PRIDE",
+    "accession" : "EFO:0030054",
+    "name" : "label-free quantification"
+  } ],
+  "countries" : [ "France" ],
+  "sampleAttributes" : [ {
+    "@type" : "Tuple",
+    "key" : {
+      "cvLabel" : "EFO",
+      "accession" : "OBI:0100026",
+      "name" : "organism"
+    },
+    "value" : [ {
+      "cvLabel" : "NEWT",
+      "accession" : "NEWT:5691",
+      "name" : "Trypanosoma brucei"
+    } ]
+  }, {
+    "@type" : "Tuple",
+    "key" : {
+      "cvLabel" : "EFO",
+      "accession" : "EFO:0000408",
+      "name" : "disease"
+    },
+    "value" : [ {
+      "cvLabel" : "DOID",
+      "accession" : "DOID:101112",
+      "name" : "Trypanosomiasis",
+      "value" : "African"
+    } ]
+  } ],
+  "organisms" : [ {
+    "@type" : "CvParam",
+    "cvLabel" : "NEWT",
+    "accession" : "NEWT:5691",
+    "name" : "Trypanosoma brucei"
+  } ],
+  "organismParts" : [ ],
+  "diseases" : [ {
+    "@type" : "CvParam",
+    "cvLabel" : "DOID",
+    "accession" : "DOID:101112",
+    "name" : "Trypanosomiasis",
+    "value" : "African"
+  } ],
+  "references" : [ ],
+  "identifiedPTMStrings" : [ {
+    "@type" : "CvParam",
+    "cvLabel" : "MOD",
+    "accession" : "MOD:00394",
+    "name" : "acetylated residue"
+  } ],
+  "totalFileDownloads" : 213,
+  "botCount" : 95,
+  "hubCount" : 116,
+  "organicCount" : 2
+}

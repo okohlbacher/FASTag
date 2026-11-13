@@ -1,0 +1,178 @@
+{
+  "accession" : "PXD049174",
+  "title" : "A pseudoautosomal glycosylation disorder prompts the revision of dolichol biosynthesis",
+  "additionalAttributes" : [ ],
+  "projectDescription" : "Dolichol is a lipid critical for N-glycosylation as a carrier for activated sugars and nascent oligosaccharides. It is commonly thought to be directly produced from polyprenol by the enzyme SRD5A3. Instead, we found that dolichol synthesis requires a three-step detour involving additional metabolites, where SRD5A3 catalyzes only the second reaction. The first and third steps are performed by DHRSX, whose gene resides on the pseudoautosomal regions of the X and Y chromosomes. Accordingly, we report a pseudoautosomal-recessive disease presenting as a congenital disorder of glycosylation in patients with missense variants in DHRSX (DHRSX-CDG). Of note, DHRSX has a unique dual substrate and cofactor specificity, allowing it to act as a NAD+-dependent dehydrogenase and as a NADPH-dependent reductase in two non-consecutive steps. Thus, our work reveals unexpected complexity in the terminal steps of dolichol biosynthesis. Furthermore, we provide insights into the mechanism by which dolichol metabolism defects contribute to disease.",
+  "sampleProcessingProtocol" : "100 ug of membrane extracts were resuspended in 23 µl of a solution containing 5% SDS, 50 mM Tris pH 8.5 and 5 mM DTT. After 15 min at 55°C for 15 minutes, chloracetamide was added to a f.c. of 20 mM followed by another 10 min at 55°C. Samples where then acidified by addition of phosphoric acid to a f.c. of 2.5%, and transferred onto a micro S-Trap column (Protifi LLC, USA). Digestion was performed at 37°C overnight with a 1:100 ratio of Trypsin and LysC. Digested peptides were eluted in three steps using 40 ul each of 50 mM Tris pH 8.5, 0.2 % formic acid and 50 % acetonitrile. The eluted peptides were dried down in a vacuum concentrator (SpeedVac, Thermo Scientific) and resuspended in 2% Acetonitrile and 0.2% formic acid. Peptide concentration was determined by Pierce™ Quantitative Peptide Assay (Thermo Scientific). Peptides were directly loaded onto reversed-phase trap-column (Acclaim PepMap 100, Thermo Scientific) and eluted in backflush mode. Peptide separation was performed using a reversed-phase analytical column (EasySpray, 0.075 x 250 mm,Thermo Scientific) with a linear gradient of 4%-27.5% solvent B (0.1% FA in 98% CAN) for 100 min, 27.5%-40% solvent B for 10 min, 40%-95% solvent B for 10 min at a constant flow rate of 300 nl/min on a Vanquish Neo HPLC system. The peptides were analyzed by an Orbitrap Fusion Lumos tribrid mass spectrometer with an ESI source (ThermoFisher Scientific) coupled online to the nano-LC. Peptides were detected in the Orbitrap at a resolution of 120,000. Peptides were selected for MS/MS using the HCD setting at 30; ion fragments were detected in the Orbitrap at a resolution of 30 000. A data-dependent procedure alternating between one MS scan followed by MS/MS scans was applied for 3 seconds for ions above a threshold ion count of 3.8E4 in the MS survey scan with 30.0s dynamic exclusion. The electrospray voltage applied was 2.1 kV. MS1 spectra were obtained with an AGC target of 4E5 ions and a maximum injection time set to custom, and MS2 spectra were acquired with an AGC target of 1E4 ions and a maximum injection time set to custom. For MS scans, the m/z scan range was 350 to 1800.",
+  "dataProcessingProtocol" : "The resulting MS/MS data were processed using the Sequest HT search engine within Proteome Discoverer 2.5 SP1 against a Homo sapiens protein database obtained from Uniprot (sp_canonical TaxID=9606). Trypsin was specified as cleavage enzyme allowing up to 2 missed cleavages, 4 modifications per peptide and up to 7 charges. Mass error was set to 20 ppm for precursor ions and 0.05 Da for fragment ions. Oxidation on Met (+15.995 Da), Hex(1)HexNAc(2), (+568.212 Da), Hex(2)HexNAc(2) (+730.264 Da), Hex(3)HexNAc(2) (+892.317 Da), Hex(4)HexNAc(2) (+1054.370 Da), Hex(5)HexNAc(2) (+1216.423) Da Hex(6)HexNAc(2)  (+1378.476 Da), Hex(7)HexNAc(2) (+1540.529 Da), Hex(8)HexNAc(2) (+1702.581 Da), Hex(9)HexNAc(2) (+1864.634 Da), Hex(10)HexNAc(2) (+2026.687 Da) on Asn and Methionine loss (-131.040 Da) on the N-terminus of the protein and peptides were considered as variable modifications, whereas carbamidomethylation of cysteine was considered as a fixed modification. The False discovery rate (FDR) was assessed using Percolator and thresholds for the identification of proteins, peptides and modification sites were specified at 1%. Label-free quantification of peptides is based on the precursor ion intensity. Signals were normalized to the sum of all signals within each individual sample. Protein abundances were calculated as the sum of the abundances of unmodified peptides.",
+  "projectTags" : [ ],
+  "keywords" : [ "Lipid droplets", "Congenital disorders of glycosylation", "Polyprenal", "N-glycosylation", "Dolichal", "Pseudoautosomal region", "Dolichol", "Polyprenol" ],
+  "doi" : "10.6019/PXD049174",
+  "submissionType" : "COMPLETE",
+  "license" : "Creative Commons Public Domain (CC0)",
+  "submissionDate" : "2024-02-05",
+  "publicationDate" : "2024-06-12",
+  "submitters" : [ {
+    "title" : "Mr",
+    "firstName" : "Francesco",
+    "lastName" : "Caligiore",
+    "identifier" : "3179952",
+    "affiliation" : "UCLouvain",
+    "email" : "francesco.caligiore@uclouvain.be",
+    "country" : "Belgium",
+    "orcid" : "0000-0002-4038-3136",
+    "name" : "Francesco Caligiore",
+    "id" : "3179952"
+  } ],
+  "labPIs" : [ {
+    "title" : "Dr",
+    "firstName" : "Guido",
+    "lastName" : "T.",
+    "identifier" : "2831171",
+    "affiliation" : "de Duve Institute UCLouvain and WELBIO",
+    "email" : "guido.bommer@uclouvain.be",
+    "country" : "",
+    "orcid" : "",
+    "name" : "Guido T.",
+    "id" : "2831171"
+  } ],
+  "instruments" : [ {
+    "@type" : "CvParam",
+    "cvLabel" : "MS",
+    "accession" : "MS:1002732",
+    "name" : "Orbitrap Fusion Lumos"
+  } ],
+  "softwares" : [ {
+    "@type" : "CvParam",
+    "cvLabel" : "MS",
+    "accession" : "MS:1001208",
+    "name" : "Sequest"
+  }, {
+    "@type" : "CvParam",
+    "cvLabel" : "MS",
+    "accession" : "MS:1000650",
+    "name" : "Proteome Discoverer"
+  } ],
+  "experimentTypes" : [ {
+    "@type" : "CvParam",
+    "cvLabel" : "PRIDE",
+    "accession" : "PRIDE:0000428",
+    "name" : "Bottom-up proteomics"
+  } ],
+  "quantificationMethods" : [ {
+    "@type" : "CvParam",
+    "cvLabel" : "PRIDE",
+    "accession" : "PRIDE:0000425",
+    "name" : "MS1 intensity based label-free quantification method"
+  } ],
+  "countries" : [ "Belgium" ],
+  "sampleAttributes" : [ {
+    "@type" : "Tuple",
+    "key" : {
+      "cvLabel" : "EFO",
+      "accession" : "EFO:0000635",
+      "name" : "organism part"
+    },
+    "value" : [ {
+      "cvLabel" : "BTO",
+      "accession" : "BTO:0000214",
+      "name" : "cell culture"
+    }, {
+      "cvLabel" : "CL",
+      "accession" : "CL:0000081",
+      "name" : "blood cell"
+    } ]
+  }, {
+    "@type" : "Tuple",
+    "key" : {
+      "cvLabel" : "EFO",
+      "accession" : "OBI:0100026",
+      "name" : "organism"
+    },
+    "value" : [ {
+      "cvLabel" : "NEWT",
+      "accession" : "NEWT:9606",
+      "name" : "Homo sapiens (Human)"
+    } ]
+  }, {
+    "@type" : "Tuple",
+    "key" : {
+      "cvLabel" : "EFO",
+      "accession" : "EFO:0000408",
+      "name" : "disease"
+    },
+    "value" : [ {
+      "cvLabel" : "DOID",
+      "accession" : "DOID:8552",
+      "name" : "chronic myeloid leukemia"
+    } ]
+  } ],
+  "organisms" : [ {
+    "@type" : "CvParam",
+    "cvLabel" : "NEWT",
+    "accession" : "NEWT:9606",
+    "name" : "Homo sapiens (human)"
+  } ],
+  "organismParts" : [ {
+    "@type" : "CvParam",
+    "cvLabel" : "BTO",
+    "accession" : "BTO:0000214",
+    "name" : "Cell culture"
+  }, {
+    "@type" : "CvParam",
+    "cvLabel" : "CL",
+    "accession" : "CL:0000081",
+    "name" : "Blood cell"
+  } ],
+  "diseases" : [ {
+    "@type" : "CvParam",
+    "cvLabel" : "DOID",
+    "accession" : "DOID:8552",
+    "name" : "Chronic myeloid leukemia"
+  } ],
+  "references" : [ {
+    "referenceLine" : "Wilson MP, Kentache T, Althoff CR, Schulz C, de Bettignies G, Mateu Cabrera G, Cimbalistiene L, Burnyte B, Yoon G, Costain G, Vuillaumier-Barrot S, Cheillan D, Rymen D, Rychtarova L, Hansikova H, Bury M, Dewulf JP, Caligiore F, Jaeken J, Cantagrel V, Van Schaftingen E, Matthijs G, Foulquier F, Bommer GT. A pseudoautosomal glycosylation disorder prompts the revision of dolichol biosynthesis. Cell. 2024:S0092-8674(24)00467-7",
+    "pubmedID" : 38821050,
+    "doi" : "10.1016/j.cell.2024.04.041"
+  } ],
+  "identifiedPTMStrings" : [ {
+    "@type" : "CvParam",
+    "cvLabel" : "MOD",
+    "accession" : "MOD:00425",
+    "name" : "monohydroxylated residue"
+  }, {
+    "@type" : "CvParam",
+    "cvLabel" : "MOD",
+    "accession" : "MOD:02037",
+    "name" : "Hex7HexNAc2 N4-glycosylated asparagine"
+  }, {
+    "@type" : "CvParam",
+    "cvLabel" : "MOD",
+    "accession" : "MOD:00516",
+    "name" : "Hex1HexNAc2 N4-glycosylated asparagine"
+  }, {
+    "@type" : "CvParam",
+    "cvLabel" : "MOD",
+    "accession" : "MOD:00527",
+    "name" : "Hex3HexNAc2 N4-glycosylated asparagine"
+  }, {
+    "@type" : "CvParam",
+    "cvLabel" : "MOD",
+    "accession" : "MOD:02036",
+    "name" : "Hex9HexNAc2 N4-glycosylated asparagine"
+  }, {
+    "@type" : "CvParam",
+    "cvLabel" : "MOD",
+    "accession" : "MOD:00521",
+    "name" : "Hex2HexNAc2 N4-glycosylated asparagine"
+  }, {
+    "@type" : "CvParam",
+    "cvLabel" : "MOD",
+    "accession" : "MOD:00397",
+    "name" : "iodoacetamide derivatized residue"
+  } ],
+  "totalFileDownloads" : 1903,
+  "botCount" : 639,
+  "hubCount" : 1207,
+  "organicCount" : 57
+}

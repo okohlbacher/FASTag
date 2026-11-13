@@ -1,0 +1,140 @@
+{
+  "accession" : "PXD044780",
+  "title" : "A synthetic lethal strategy to target chromosome 8p deleted cancers",
+  "additionalAttributes" : [ ],
+  "projectDescription" : "This project aimed to identify a specific target for chromosome 8p deletions. Using large-scale functional-genomic screening data of over 527 well-characterized cancer cell lines. We were able to identify the dependency of SLC25A28 (Mitoferrin-2, MFRN2), a mitochondrial iron transporter, in chromosome 8p deleted cancer cell lines. Interestingly, we found that SLC25A37 (Mitoferrin-1, MFRN1), the paralog of MFRN2, resides on chromosome 8p and is frequently deleted in liver cancer. We found a strong correlation between the cellular dependency on MFRN2 and the MFRN1 expression levels, possibly explaining why MFRN2 is a synthetic lethal target for 8p deletions. Our study discovered MFRN2 as a target for a therapeutic strategy in chromosome 8p deleted cancer specimens. Further, it revealed MFRN1 as a biomarker that predicts the response to MFRN2-directed therapy.",
+  "sampleProcessingProtocol" : "After experimental manipulation, whole cell lysates were extracted.  Protein extraction was performed by directly adding complete RIPA-lysis buffer solution to the cells, collecting the primary lysates and proceed to determine the protein concertation. Protein concentration was measured performing the Bradford assay using Protein Assay Dye Reagent Concentrate (Bio-Rad). Primary protein samples were diluted 1:1000 in Protein assay dye and measured in triplicates at 595 nm on a spectrophotometer  (SPECTROStar Nano microplate reader, BMG Labtech). The individual absorbance was compared to a BSA protein standard curve to derive the respective protein concentrations.",
+  "dataProcessingProtocol" : "Data analysis was performed as described by Ganing et al7. Briefly, using an organism specific database extracted from Uniprot.org and data was analyzed by MaxQuant (version 1.6.14.0,). The identification FDR cutoffs were set at 0.01 on peptide - and protein level, respectively. The ‘Match between runs’ option was enabled to transfer peptide identifications across RAW files based on accurate retention time and m/z. Quantification was done using a label free quantification (LFQ) approach based on the MaxLFQ algorithm8. A minimum of 2 quantified peptides per protein was required for protein quantification.  The statistical analysis was performed with the R-package “limma”9. The LFQ values were normalized via quantile normalization. Adapted from the Perseus recommendations, protein groups with non-zero intensity values in 70 % of the samples of at least one of the conditions were used and applied for the imputation of randomly drawn values from a downshifted (1.8 standard deviation) and narrowed (0.3 standard deviation) intensity distribution of the individual sample10. The p-values were adjusted with the Benjamini–Hochberg method for multiple testing11. The LFQ values were used for further downstream processing and differential expression analysis. Proteins were considered as differentially expressed with a log2FC ≥0.6 (upregulated) or ≤ - 0.6 (downregulated) and an adjusted p-value <0.05. Based on these data the pathway- and functional annotation analysis was performed using Ingenuity pathway analysis (IPA, Qiagen) and the Database for Annotation, Visualization and Integrated Discovery (DAVID, v6.8, https://david.ncifcrf.gov/home.jsp), respectively.",
+  "projectTags" : [ ],
+  "keywords" : [ "Synthetic lethality", "Mitoferrin-1", "Mfrn2", "Mfrn1", "Mitoferrin-2" ],
+  "doi" : "",
+  "submissionType" : "PARTIAL",
+  "license" : "Creative Commons Public Domain (CC0)",
+  "submissionDate" : "2023-08-23",
+  "publicationDate" : "2024-06-03",
+  "submitters" : [ {
+    "title" : "Professor",
+    "firstName" : "Darjus",
+    "lastName" : "Tschaharganeh",
+    "identifier" : "2957905",
+    "affiliation" : "German Cancer Research Center",
+    "email" : "d.tschaharganeh@dkfz.de",
+    "country" : "Germany",
+    "orcid" : "",
+    "name" : "Darjus Tschaharganeh",
+    "id" : "2957905"
+  } ],
+  "labPIs" : [ {
+    "title" : "Dr",
+    "firstName" : "Darjus",
+    "lastName" : "Tschaharganeh",
+    "identifier" : "2723108",
+    "affiliation" : "Cell Plasticity and Epigenetic Remodeling (F190) Deutsches Krebsforschungszentrum Im Neuenheimer Feld 280 69120 Heidelberg",
+    "email" : "d.tschaharganeh@dkfz-heidelberg.de",
+    "country" : "",
+    "orcid" : "",
+    "name" : "Darjus Tschaharganeh",
+    "id" : "2723108"
+  } ],
+  "instruments" : [ {
+    "@type" : "CvParam",
+    "cvLabel" : "MS",
+    "accession" : "MS:1003028",
+    "name" : "Orbitrap Exploris 480"
+  } ],
+  "softwares" : [ {
+    "@type" : "CvParam",
+    "cvLabel" : "MS",
+    "accession" : "MS:1001583",
+    "name" : "MaxQuant"
+  } ],
+  "experimentTypes" : [ {
+    "@type" : "CvParam",
+    "cvLabel" : "PRIDE",
+    "accession" : "PRIDE:0000429",
+    "name" : "Shotgun proteomics"
+  } ],
+  "quantificationMethods" : [ {
+    "@type" : "CvParam",
+    "cvLabel" : "PRIDE",
+    "accession" : "PRIDE:0000312",
+    "name" : "Label free"
+  } ],
+  "countries" : [ "Germany" ],
+  "sampleAttributes" : [ {
+    "@type" : "Tuple",
+    "key" : {
+      "cvLabel" : "EFO",
+      "accession" : "EFO:0000635",
+      "name" : "organism part"
+    },
+    "value" : [ {
+      "cvLabel" : "CL",
+      "accession" : "CL:0000182",
+      "name" : "hepatocyte"
+    }, {
+      "cvLabel" : "BTO",
+      "accession" : "BTO:0003191",
+      "name" : "SNU-387 cell"
+    } ]
+  }, {
+    "@type" : "Tuple",
+    "key" : {
+      "cvLabel" : "EFO",
+      "accession" : "OBI:0100026",
+      "name" : "organism"
+    },
+    "value" : [ {
+      "cvLabel" : "NEWT",
+      "accession" : "NEWT:9606",
+      "name" : "Homo sapiens (Human)"
+    } ]
+  }, {
+    "@type" : "Tuple",
+    "key" : {
+      "cvLabel" : "EFO",
+      "accession" : "EFO:0000408",
+      "name" : "disease"
+    },
+    "value" : [ {
+      "cvLabel" : "DOID",
+      "accession" : "DOID:684",
+      "name" : "hepatocellular carcinoma"
+    } ]
+  } ],
+  "organisms" : [ {
+    "@type" : "CvParam",
+    "cvLabel" : "NEWT",
+    "accession" : "NEWT:9606",
+    "name" : "Homo sapiens (human)"
+  } ],
+  "organismParts" : [ {
+    "@type" : "CvParam",
+    "cvLabel" : "BTO",
+    "accession" : "BTO:0003191",
+    "name" : "Snu-387 cell"
+  }, {
+    "@type" : "CvParam",
+    "cvLabel" : "CL",
+    "accession" : "CL:0000182",
+    "name" : "Hepatocyte"
+  } ],
+  "diseases" : [ {
+    "@type" : "CvParam",
+    "cvLabel" : "DOID",
+    "accession" : "DOID:684",
+    "name" : "Hepatocellular carcinoma"
+  } ],
+  "references" : [ {
+    "referenceLine" : "Krieg S, Rohde T, Rausch T, Butthof L, Wendler-Link L, Eckert C, Breuhahn K, Galy B, Korbel J, Billmann M, Breinig M, Tschaharganeh DF. Mitoferrin2 is a synthetic lethal target for chromosome 8p deleted cancers. Genome Med. 2024 16(1):83",
+    "pubmedID" : 38886830,
+    "doi" : "10.1186/s13073-024-01357-w"
+  } ],
+  "identifiedPTMStrings" : [ {
+    "@type" : "CvParam",
+    "cvLabel" : "MOD",
+    "accession" : "MOD:00398",
+    "name" : "carbamoylated residue"
+  } ],
+  "totalFileDownloads" : 693
+}

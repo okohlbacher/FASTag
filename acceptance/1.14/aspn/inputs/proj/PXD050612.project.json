@@ -1,0 +1,117 @@
+{
+  "accession" : "PXD050612",
+  "title" : "Proteomics analysis of mycobacterium marinum culture filtrate",
+  "additionalAttributes" : [ ],
+  "projectDescription" : "Mycobacterium marinum is a pathogenic bacterium that causes infections in both fish and humans. The PE/PPE protein family is unique to mycobacteria and has been implicated in various aspects of mycobacterial pathogenicity. Understanding the presence and potential function of these proteins in M. marinum is essential for unraveling the mechanisms underlying its virulence. In this study, we conducted a proteomics analysis to investigate the secretion and potential role of the PE/PPE protein family in the culture filtrate of M. marinum. To investigate the presence of PE/PPE proteins in the culture filtrate, we employed a proteomics approach combining Asp-N and trypsin based digestion. Cultures of M. marinum were grown under laboratory conditions, and the culture filtrate was collected and subjected to digestion and LC-MS injection. Our proteomics analysis revealed the secretion of about half PE/PPE proteins in the culture filtrate of M. marinum. Majority of these proteins are confirmed to be involved in EspG5 interaction. The identification of these proteins in the culture filtrate suggests their secretion and potential role in M. marinum. Our proteomics analysis highlights the presence of PE/PPE proteins in the culture filtrate of M. marinum, suggesting their secretion and potential involvement in the pathogenicity of this bacterium.",
+  "sampleProcessingProtocol" : "Protease Digestion. Protein samples were denatured by adding urea to a final concentration of 8 M, followed by cysteine reduction by adding DTT to a final concentration of 0.5 M and incubation at 56°C for 45 mins. 0.6 M iodoacetamide were added and incubated for 30 mins at room temperature in dark for the alkylation. Before protease digestion, the urea was diluted to 2 M with 50 mM ammonium bicarbonate buffer for trypsin digestion or 50mM tris buffer for AspN digestion, respectively. Then, the samples were digested in 37°C for 16 hours using trypsin or Asp-N (Promega), respectively. Samples were desalted using Pierce™ C18 Spin Tips (Thermo Scientific, USA) according to the manufacturer instructions and reconstituted in 0.1% formic acid (v/v) in milliQ-H2O for injection. Mass spectrometry. The peptide samples were analyzed by the Orbitrap Fusion Lumos Tribrid Mass Spectrometer (Themo, Fisher Scientific). To separate 200 ng of peptides, the injections were performed at 1 ml/min flow rate in 98% Milli-Q/ 2% ACN + 0.1% formic acid (A) and 98% Acetonitrile ACN/ 2% Milli-Q + 0.1% formic acid (B) buffer for 10 mins. The mass spectrometry was acquired in the Orbitrap at a resolution 60,000 resolution with the mass range 375 to 1,500 m/z. Fragmentation was selected by the Monoisotopic Peak Determination (MIPS) and precursors with charge states between 2 and 7 with reporter ions intensity threshold setting higher than 5,000. In-source CID (Collision-induced dissociation) was set to the fixed mode, with 30% collision energy and 10 ms activation time. The MS spectra were acquired under the Orbitrap full scan resolution of 30,000 and a maximum injection time of 100 ms. The error tolerances were set at 10 ppm for the precursor mass and dynamic exclusion was set to 60 s after 1 count.",
+  "dataProcessingProtocol" : "Data Analysis. Proteome Discoverer 2.4.0.305 software (Thermo Scientific, USA) was used to search RAW files against Mycobacterium marinum M databases (MycoBrowser portal, released in June 2018). The MS precursor filter was set at 350Da to 5000Da. Peak lists were generated with the spectrum selector node (default parameters) of Proteome Discoverer. And MS spectra to database matching was carried out by SEQUEST-HT algorithm. Peak filters were set as S/N threshold (FT-only): 1.5. Either full trypsin or Asp-N was chosen appropriately. The proteolytic enzymes specificity with two possible missed cleavage sites, methionine oxidation/+15.995 Da (M) and N-acetylation/+42.011 Da (N-terminus) were set as variable modifications. Cysteine carbamidomethylating/+57.021 Da (C) was set as fixed modifications. In spectrum matching, neutral loss of a ions, b ions, y ions and flanking ions were used with weight of a ions: 0, weight of b ions: 1, weight of c ions: 0, weight of x ions: 0, weight of y ions: 1, and weight of z ions: 0. The tolerance for precursor mass and fragment mass search were 10 ppm and 0.02 Da respectively. All MS spectra were searched by SEQUEST combined with the Percolator algorithm with a maximum Delta Cn parameter 0.05 for PSM filtering. Only high confidence peptides of the target false discovery rate (FDR) between 0.01(strict) and 0.05 (relaxed) with validation based on the q-Value were finally considered.  Label-free quantifications (LFQ) were applied for the PE/PPE protein abundance analysis. Protein abundance was calculated by the sum of all unique peptide ion abundances for a specific protein in each run. Normalization and scale were executed by Log2(Abundance) of their source proteins as detected in proteomic analysis. The phylogenetic analysis was performed by CLUSTALW. Branches showed the paths by which genetic information was passed from one generation to the next. Typically, the extent of genetic change was measured by estimating the average number of protein substitutions per site. All statistical analysis were processed as described in figure legend by prism 9.",
+  "projectTags" : [ ],
+  "keywords" : [ "Mycobacterium marinum", "Lc-ms", "Culture filtrate" ],
+  "doi" : "",
+  "submissionType" : "PARTIAL",
+  "license" : "Creative Commons Public Domain (CC0)",
+  "submissionDate" : "2024-03-14",
+  "publicationDate" : "2025-05-13",
+  "submitters" : [ {
+    "title" : "Miss",
+    "firstName" : "lily",
+    "lastName" : "yan",
+    "identifier" : "3177952",
+    "affiliation" : "Department of biochemistry, School of life science, The Chinese University of Hong Kong ",
+    "email" : "liliyan85@foxmail.com",
+    "country" : "Hong Kong",
+    "orcid" : "0000-0002-2730-5213",
+    "name" : "lily yan",
+    "id" : "3177952"
+  } ],
+  "labPIs" : [ {
+    "title" : "Dr",
+    "firstName" : "Au Wing Ngor",
+    "lastName" : "Shannon",
+    "identifier" : "2859138",
+    "affiliation" : "Professor, School of Life Sciences, The Chinese University of Hong Kong Director, Centre for Protein Science and Crystallography Assistant Dean (Student Affairs), Faculty of Sciences Fellow, Shaw College",
+    "email" : "shannon-au@cuhk.edu.hk",
+    "country" : "",
+    "orcid" : "",
+    "name" : "Au Wing Ngor Shannon",
+    "id" : "2859138"
+  } ],
+  "instruments" : [ {
+    "@type" : "CvParam",
+    "cvLabel" : "MS",
+    "accession" : "MS:1002732",
+    "name" : "Orbitrap Fusion Lumos"
+  } ],
+  "softwares" : [ {
+    "@type" : "CvParam",
+    "cvLabel" : "MS",
+    "accession" : "MS:1000650",
+    "name" : "Proteome Discoverer"
+  } ],
+  "experimentTypes" : [ {
+    "@type" : "CvParam",
+    "cvLabel" : "PRIDE",
+    "accession" : "PRIDE:0000428",
+    "name" : "Bottom-up proteomics"
+  } ],
+  "quantificationMethods" : [ {
+    "@type" : "CvParam",
+    "cvLabel" : "PRIDE",
+    "accession" : "PRIDE:0000312",
+    "name" : "Label free"
+  } ],
+  "countries" : [ "Hong Kong" ],
+  "sampleAttributes" : [ {
+    "@type" : "Tuple",
+    "key" : {
+      "cvLabel" : "EFO",
+      "accession" : "EFO:0000635",
+      "name" : "organism part"
+    },
+    "value" : [ {
+      "cvLabel" : "BTO",
+      "accession" : "BTO:0002233",
+      "name" : "culture fluid"
+    } ]
+  }, {
+    "@type" : "Tuple",
+    "key" : {
+      "cvLabel" : "EFO",
+      "accession" : "OBI:0100026",
+      "name" : "organism"
+    },
+    "value" : [ {
+      "cvLabel" : "NEWT",
+      "accession" : "NEWT:216594",
+      "name" : "Mycobacterium marinum (strain ATCC BAA-535 / M)"
+    } ]
+  } ],
+  "organisms" : [ {
+    "@type" : "CvParam",
+    "cvLabel" : "NEWT",
+    "accession" : "NEWT:216594",
+    "name" : "Mycobacterium marinum (strain atcc baa-535 / m)"
+  } ],
+  "organismParts" : [ {
+    "@type" : "CvParam",
+    "cvLabel" : "BTO",
+    "accession" : "BTO:0002233",
+    "name" : "Culture fluid"
+  } ],
+  "diseases" : [ ],
+  "references" : [ {
+    "referenceLine" : "Yan L, Lai HY, Leung TCN, Cheng HF, Chen X, Tsui SKW, Ngai SM, Au SWN. PE/PPE Proteome and ESX-5 Substrate Spectrum in <i>Mycobacterium marinum</i>. Int J Mol Sci. 2024 25(17):9550",
+    "pubmedID" : 39273496,
+    "doi" : "10.3390/ijms25179550"
+  } ],
+  "identifiedPTMStrings" : [ {
+    "@type" : "CvParam",
+    "cvLabel" : "MOD",
+    "accession" : "MOD:00398",
+    "name" : "carbamoylated residue"
+  } ],
+  "totalFileDownloads" : 804,
+  "botCount" : 171,
+  "hubCount" : 622,
+  "organicCount" : 11
+}

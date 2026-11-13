@@ -1,0 +1,117 @@
+{
+  "accession" : "PXD067401",
+  "title" : "Proteomic Comparisoadsfasn of Intact and Fetoscopy-Induced Fetal Membrane Sites",
+  "additionalAttributes" : [ ],
+  "projectDescription" : "Iatrogenic preterm premature rupture of fetal membranes (iPPROM) following fetoscopic interventions remains a major barrier to the advancement of fetal therapies. The mechanisms underlying iPPROM are poorly understood, but the inability of fetal membrane (FM) defects to heal spontaneously likely plays a key role, contrasting with the regenerative potential of amniotic membranes in other contexts. To assess the impact of fetoscopic procedures on FMs, tissue samples from patients who underwent laser surgery for twin-to-twin transfusion syndrome (16–27 weeks gestation, n=8) were collected after cesarean delivery at 29–35 weeks. Samples were categorized by proximity to the trocar site and analyzed using proteomic and histological methods. While differential expression analysis in the amnion revealed no significant changes, pathway enrichment indicated increased collagen deposition at defect sites. In the chorion, sevendifferentially expressed proteins were identified, largely linked to enhanced intercellular contact stability. These findings suggest the amnion may respond to mechanical stress by reinforcing structural integrity through collagen deposition, while the chorion may attempt to stabilize cell junctions. However, no other signs of tissue regeneration were observed. This study provides molecular and cellular evidence that FMs lacks a substantial healing response post-surgery, underscoring the need for biologically informed repair strategies.",
+  "sampleProcessingProtocol" : "The amnion and chorion layers were carefully separated, snap-frozen in liquid nitrogen, and stored at -80°C until further use. The details of which donors were included in each experiment are provided in the supplementary information. The preterm and term controls for PCR were also collected after ceasearen section and washed in PBS. Afterwards the tissue was separated in amnion and chorion by blunt dissection and pieces of around 90 mg were snap-frozen and stored at -80°C until further use. Exclusion criteria included mothers with HIV, hepatitis B, or chromosomal abnormalities. Midterm FMs used as PCR controls (N=1) were obtained during the surgical repair of spina bifida (myelomeningocele, MMC), with written consent and ethical approval from the District of Zurich (KEK Nr. 2015-0247). Tissue samples were ground using a mortar and pestle on dry ice. For each milligram of tissue, 5 µL of lysis buffer (0.1 M Tris-HCl, pH 7.8, 4% dodecyl sulfate (SDS)) was added. 30 mg glass beads (SIGMA G9268-250G, Sigma-Aldrich, St. Louis, MO, USA) were included per 50 µL of lysis buffer. Samples were lysed using a Qiagen Retsch TissueLyser II (two cycles of 2 minutes at 30 Hz). Following lysis, samples were centrifuged at 14,680 rpm for10 minutes, and the supernatant was collected. Protein concentrations were measured using UV-Vis spectrophotometry (280 nm) on a DeNovix DS11 spectrophotometer. Samples were then stored at -20°C until further analysis. Upon thawing, samples were sonicated for seven minutes. Protein concentrations were standardized to 25 mg per sample and diluted to a final volume of 50 µL with lysis buffer. If samples exhibited a gel-like consistency, they were incubated for ten minutes at 90°C to ensure complete solubilization. Protein digestion was carried out using a KingFisher system. Any precipitate was removed by centrifugation, and the supernatant was filtered using StageTips to remove residual beads and debris. StageTips were prepared by first loading 150 µL of 100% acetonitrile (ACN) into each tip, centrifuging at 2000 × g for one minute, and discarding the flow-through. The tips were then equilibrated with 150 µL of 60% ACN and 0.1% TFA, centrifuged at 2000 × g for one minute, with the flow-through discarded. Up to 300 µL of peptide solution was loaded onto the StageTips and centrifuged at 2500 × g for three minutes. Peptides were eluted with 150 µL of 60% ACN and 0.1% TFA, centrifuged at 2500 × g for three minutes. The eluted peptides were dried using a speed-vac set to 36°C for approximately three hours and stored at -20°C until further analysis. Peptide samples were reconstituted in 20 µL of MS buffer containing 3% acetonitrile and 0.1% formic acid in water, then diluted to a concentration of 90.1 µg/µL. iRT peptides (Biognosys, Schlieren, Switzerland) were spiked into each sample. A volume of 3 µL of the peptide solution was loaded onto a nanoAcquity UPLC system (Waters, Milford, MA, USA) interfaced with a QExactive HF mass spectrometer. Peptide separation was performed on a C18column (Acquity UPLC M-Class HSS T3 C18, 1.8 µm, 75 µm x 250 mm, Waters) at 50°C. The gradient program was as follows: 5%-40% solvent B over 0-90 minutes, 95% solvent B from 90-95 minutes, and 5% solvent B from 95-105 minutes. The sample injection order was randomized, with an quality control sample injected every four runs to monitor quality control. Mass spectrometry (MS) data were acquired on an Orbitrap Fusion Lumos instrument with a MS/MS. The first MS (MS1) was operated in positive ion mode, scanning an m/z range of 350–1205 with an Orbitrap resolution of 60,000. The (automatic gain control) AGC target was set to 1,000,000, with a maximum injection time of 50 ms, and data were collected in profile mode. The second MS (MS2) employed data-independent acquisition (DIA) in positive mode, scanning an m/z range of 350–1800 with a precursor range of 400–960. An isolation window of 8 m/z with a 1 m/z overlap was used, and the Orbitrap resolution was set to 15,000. The collision energy was fixed at 33%, the AGC target was 1,000,000, and the maximum injection time was 22 ms. A total of 70 scan events per cycle were collected in centroid mode. Calibration and enhanced resolution modes were disabled for all experiments.",
+  "dataProcessingProtocol" : "Protein quantification was performed using DIA-NN (v1.8.1.8) with a false discovery rate (FDR) threshold of 1%. Peptides were generated through tryptic digestion, allowing cleavage after Lysine (K) and Arginine (R), with a minimum peptide length of 6 amino acids and a maximum of 30 amino acids. Up to one missed cleavage was permitted. Oxidation of Methionine (UniMod:35) and a mass shift of 15.994915 Da on Methionine were considered as variable modifications, with only one modification per peptide allowed. Precursor ions with charge states from +2 to +3 were considered, and the precursor m/z range was set between 400 and 1500 m/z. Fragment ions were analyzed within an m/z range of 200 to 1800 m/z. Mass accuracy was set to 15 ppm for MS1 and 20 ppm for MS2. Data analysis was conducted using the prolfqua R package (version 1.2.5 ). Logarithmic scaling followed by robust scaling (robscale) was used for data transformation. Peptide abundances were aggregated using the median polish method to estimate normalized protein abundance. A linear model was employed to evaluate the effects of tissue type, location, and donor on protein abundance, with a mixed linear model incorporating donor as a random effect (TissueType * Location + Donor). This model was used to identify differentially expressed proteins and their significance. Volcano plots, as all other plots in this manuscript, were generated in Python (3.12.3), and heatmaps were created using Seaborn (0.13.2) with Euclidean distance metric and Ward’s method. Proteins of interest were identified by applying the log fold change of proteins to the STRING value/rank based functional enrichment analysis tool, and the significantly expressed REACTOME terms (p-value ≤ 0.05) were displayed in a rank-based plot.",
+  "projectTags" : [ ],
+  "keywords" : [ "Fetal membrane", "Ttts", "Human", "Ipprom" ],
+  "doi" : "",
+  "submissionType" : "PARTIAL",
+  "license" : "Creative Commons Public Domain (CC0)",
+  "submissionDate" : "2025-08-15",
+  "publicationDate" : "2026-01-05",
+  "submitters" : [ {
+    "title" : "Mr",
+    "firstName" : "Lukas",
+    "lastName" : "Moser",
+    "identifier" : "2140888",
+    "affiliation" : "University of Zurich, University Hospital Zurich",
+    "email" : "lukas.moser@usz.ch",
+    "country" : "Switzerland",
+    "orcid" : "0000-0001-7167-3577",
+    "name" : "Lukas Moser",
+    "id" : "2140888"
+  } ],
+  "labPIs" : [ {
+    "title" : "Dr",
+    "firstName" : "Martin",
+    "lastName" : "Ehrbar",
+    "identifier" : "3251135",
+    "affiliation" : "University of Zurich, University Hospital of Zurich",
+    "email" : "martin.ehrbar@usz.ch",
+    "country" : "",
+    "orcid" : "",
+    "name" : "Martin Ehrbar",
+    "id" : "3251135"
+  } ],
+  "instruments" : [ {
+    "@type" : "CvParam",
+    "cvLabel" : "MS",
+    "accession" : "MS:1002732",
+    "name" : "Orbitrap Fusion Lumos",
+    "value" : ""
+  } ],
+  "softwares" : [ {
+    "@type" : "CvParam",
+    "cvLabel" : "MS",
+    "accession" : "MS:1003253",
+    "name" : "DIA-NN"
+  } ],
+  "experimentTypes" : [ {
+    "@type" : "CvParam",
+    "cvLabel" : "PRIDE",
+    "accession" : "PRIDE:0000450",
+    "name" : "Data-independent acquisition"
+  } ],
+  "quantificationMethods" : [ ],
+  "countries" : [ "Switzerland" ],
+  "sampleAttributes" : [ {
+    "@type" : "Tuple",
+    "key" : {
+      "cvLabel" : "EFO",
+      "accession" : "EFO:0000635",
+      "name" : "organism part"
+    },
+    "value" : [ {
+      "cvLabel" : "BTO",
+      "accession" : "BTO:0000473",
+      "name" : "fetal membrane",
+      "value" : ""
+    } ]
+  }, {
+    "@type" : "Tuple",
+    "key" : {
+      "cvLabel" : "EFO",
+      "accession" : "OBI:0100026",
+      "name" : "organism"
+    },
+    "value" : [ {
+      "cvLabel" : "NEWT",
+      "accession" : "NEWT:9606",
+      "name" : "Homo sapiens (Human)",
+      "value" : ""
+    } ]
+  } ],
+  "organisms" : [ {
+    "@type" : "CvParam",
+    "cvLabel" : "NEWT",
+    "accession" : "NEWT:9606",
+    "name" : "Homo sapiens (human)",
+    "value" : ""
+  } ],
+  "organismParts" : [ {
+    "@type" : "CvParam",
+    "cvLabel" : "BTO",
+    "accession" : "BTO:0000473",
+    "name" : "Fetal membrane",
+    "value" : ""
+  } ],
+  "diseases" : [ ],
+  "references" : [ {
+    "pubmedID" : 0,
+    "doi" : "10.1038/S41390-025-04692-9"
+  } ],
+  "identifiedPTMStrings" : [ {
+    "@type" : "CvParam",
+    "cvLabel" : "PRIDE",
+    "accession" : "PRIDE:0000398",
+    "name" : "No PTMs are included in the dataset",
+    "value" : ""
+  } ],
+  "totalFileDownloads" : 109,
+  "botCount" : 6,
+  "hubCount" : 102,
+  "organicCount" : 1
+}
