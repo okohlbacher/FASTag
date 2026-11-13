@@ -102,3 +102,10 @@ units than a minimum, that row is INCONCLUSIVE; no criterion is lowered.
 A unit whose default run did not exit (stopped or timed out) counts as not refused. No rerun of the scored run,
 except after a failure of the node or the scripts that produced no `summary.txt`; such a rerun uses the same frozen
 files and is reported. Deviations are recorded in RESULT.
+
+## Addendum 1 (2026-11-13, staging only, before any file was downloaded on data)
+
+`stage.sh` as frozen built an empty first-pass list (awk `NR == FNR` with an empty list of staged files) and
+ended without downloading anything; `files/` did not exist. The one-line fix selects the staged-file list by
+`FILENAME == ARGV[1]`; stage.sh is now sha256 e8fd7cd78a62c03c43f9db6f3555540fc98a860389f36ca7800bee180d5cbd16. Nothing else changes. SCIEX staging on flash
+(`stage_sciex.ps1`, unchanged) had started at the same time and is unaffected.

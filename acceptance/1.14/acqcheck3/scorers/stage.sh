@@ -61,7 +61,7 @@ awk -F'\t' 'NR > 1 && ($6 ~ /\.raw$/ || $6 ~ /\.d\.zip$/) { s = ($8 == "") ? "-"
 touch stage.all
 for p in 1 2 3 4; do
   [ $(date +%s) -lt $STOP ] || break
-  good > stage.good; awk -F'\t' 'NR == FNR { g[$1] = 1; next } !($1 in g)' stage.good stage.todo > stage.pass$p.list
+  good > stage.good; awk -F'\t' 'FILENAME == ARGV[1] { g[$1] = 1; next } !($1 in g)' stage.good stage.todo > stage.pass$p.list
   [ -s stage.pass$p.list ] || break
   timeout $(( STOP - $(date +%s) )) xargs -d "\n" -P 3 -I{} bash -c 'one "{}"' < stage.pass$p.list > stage.pass$p.tsv
   cat stage.pass$p.tsv >> stage.all; echo "pass $p rows $(wc -l < stage.pass$p.list) staged_total $(good | wc -l) $(date -Is)" >> stage.passes
