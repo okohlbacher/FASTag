@@ -419,13 +419,13 @@ namespace FASTag
       std::string_view base64;
       std::string_view name;   ///< "name" of its m/z or intensity cvParam, or the MS:1000786 value
       int bits = 0;            ///< 32 or 64; 0: no float type given
-      int numpress = 0;        ///< 0 none, else kLinear, kPic, kSlof
+      int numpress = 0;        ///< 0 none, else NUMPRESS_LINEAR, NUMPRESS_PIC, NUMPRESS_SLOF
       bool zlib = false;
       bool has_binary = false;
       bool standard = false;   ///< carries the m/z or intensity term
       bool other = false;      ///< carries MS:1000786, a non-standard array named by its value
     };
-    enum { kLinear = 1, kPic, kSlof };
+    enum { NUMPRESS_LINEAR = 1, NUMPRESS_PIC, NUMPRESS_SLOF };
     /// More arrays than this in one spectrum are declined.
     constexpr std::size_t kMaxArrays = 8;
     /// The most bytes MS-Numpress writes for @p n values: 8 for the fixed
@@ -529,8 +529,8 @@ namespace FASTag
     width = 8;
     if (!bytes_of(a, packed, numpress_bound(n)) || packed.size > numpress_bound(n)) return false;
     MSNumpressCoder::NumpressConfig config;
-    config.np_compression = a.numpress == kLinear ? MSNumpressCoder::LINEAR
-                          : a.numpress == kPic ? MSNumpressCoder::PIC : MSNumpressCoder::SLOF;
+    config.np_compression = a.numpress == NUMPRESS_LINEAR ? MSNumpressCoder::LINEAR
+                          : a.numpress == NUMPRESS_PIC ? MSNumpressCoder::PIC : MSNumpressCoder::SLOF;
     // ponytail: decodeNPRaw is the public entry (the ms::numpress functions are
     // not exported from libOpenMS); it wants a std::string and zero-fills 16
     // bytes of output per input byte. Both are locals: kept per thread at
@@ -620,8 +620,8 @@ namespace FASTag
     // while it reads them (a table lookup per plain ASCII byte; references,
     // controls and non-ASCII bytes take the slow path). The base64 text is
     // not scanned here: decode_base64 refuses any byte outside its alphabet.
-    enum class Region { meta, arrays, after };
-    Region region = Region::meta;
+    enum class Region { META, ARRAYS, AFTER };
+    Region region = Region::META;
     std::array<std::string_view, 32> stack{};
     std::size_t depth = 0;
     stack[depth++] = root.name;
@@ -644,7 +644,7 @@ namespace FASTag
     Tag t;
     while (depth > 0)
     {
-      const char* const lt = region == Region::meta ? scan_text(p, xe) : next_lt_blank(p);
+      const char* const lt = region == Region::META ? scan_text(p, xe) : next_lt_blank(p);
       if (!lt) return false; // bad text, or the root never ends
 
       if (xe - lt >= 4 && std::memcmp(lt, "<!--", 4) == 0)
@@ -652,7 +652,7 @@ namespace FASTag
         // A comment, in the metadata only: XML characters, no "--" inside.
         const std::size_t at = static_cast<std::size_t>(lt - xb);
         const std::size_t ce = xml.find("--", at + 4);
-        if (region != Region::meta || ce == std::string_view::npos || xml.compare(ce, 3, "-->") != 0) return false;
+        if (region != Region::META || ce == std::string_view::npos || xml.compare(ce, 3, "-->") != 0) return false;
         if (!xml_chars(xml.substr(at + 4, ce - at - 4))) return false;
         p = xb + ce + 3;
         continue;
@@ -671,23 +671,23 @@ namespace FASTag
         stack[depth++] = t.name;
       }
 
-      if (region == Region::meta)
+      if (region == Region::META)
       {
         if (t.name == "binaryDataArrayList" && !t.closing)
         {
           if (depth != 2 || t.self_closing) return false; // a direct child of <spectrum>, with arrays
-          region = Region::arrays;
+          region = Region::ARRAYS;
         }
         // OpenMS decodes a <binaryDataArray> wherever it sits.
         else if (t.name == "binaryDataArray" || t.name == "binary" || t.name == "binaryDataArrayList") return false;
         continue;
       }
-      if (region == Region::after) return false; // only </spectrum>, which ends the loop
+      if (region == Region::AFTER) return false; // only </spectrum>, which ends the loop
 
       if (t.name == "binaryDataArrayList")
       {
         if (!t.closing || cur) return false;
-        region = Region::after;
+        region = Region::AFTER;
       }
       else if (t.name == "binaryDataArray")
       {
@@ -734,12 +734,12 @@ namespace FASTag
         // terms set both, "no compression" clears both.
         else if (accession == "MS:1000574") cur->zlib = true;
         else if (accession == "MS:1000576") { cur->zlib = false; cur->numpress = 0; }
-        else if (accession == "MS:1002312") cur->numpress = kLinear;
-        else if (accession == "MS:1002313") cur->numpress = kPic;
-        else if (accession == "MS:1002314") cur->numpress = kSlof;
-        else if (accession == "MS:1002746") { cur->numpress = kLinear; cur->zlib = true; }
-        else if (accession == "MS:1002747") { cur->numpress = kPic; cur->zlib = true; }
-        else if (accession == "MS:1002748") { cur->numpress = kSlof; cur->zlib = true; }
+        else if (accession == "MS:1002312") cur->numpress = NUMPRESS_LINEAR;
+        else if (accession == "MS:1002313") cur->numpress = NUMPRESS_PIC;
+        else if (accession == "MS:1002314") cur->numpress = NUMPRESS_SLOF;
+        else if (accession == "MS:1002746") { cur->numpress = NUMPRESS_LINEAR; cur->zlib = true; }
+        else if (accession == "MS:1002747") { cur->numpress = NUMPRESS_PIC; cur->zlib = true; }
+        else if (accession == "MS:1002748") { cur->numpress = NUMPRESS_SLOF; cur->zlib = true; }
         else if (accession == "MS:1000786")
         {
           // A non-standard array, named by its value (pwiz: "Ion Mobility").
@@ -777,7 +777,7 @@ namespace FASTag
         return false; // </spectrum> before </binaryDataArrayList>, userParam, referenceableParamGroupRef, ...
       }
     }
-    if (region != Region::after) return false; // no arrays
+    if (region != Region::AFTER) return false; // no arrays
 
     // Exactly one m/z and one intensity array; any further array must be a
     // non-standard one (MS:1000786). All float. An array with both kinds of
