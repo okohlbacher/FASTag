@@ -76,17 +76,17 @@ namespace
 
   /// (d): ulps of p_complement allowed against the glibc-made 1.11 reference.
 #if defined(__GLIBC__)
-  constexpr std::int64_t kPcUlps = 0;
+  constexpr std::int64_t PC_ULPS = 0;
 #else
-  constexpr std::int64_t kPcUlps = 4;
+  constexpr std::int64_t PC_ULPS = 4;
 #endif
   /// (d): ulps of the E-value allowed. Exact on glibc and Apple's libm; MSVC's
   /// C runtime puts one row 1 ulp away (windows.yml run 42455067821: case 1
   /// rank 2, LVE/1, dE/E 2.2e-16, tag, charge and p_complement equal).
 #if defined(_MSC_VER)
-  constexpr std::int64_t kEUlps = 4;
+  constexpr std::int64_t E_ULPS = 4;
 #else
-  constexpr std::int64_t kEUlps = 0;
+  constexpr std::int64_t E_ULPS = 0;
 #endif
   /// Distance of two non-negative finite doubles in units in the last place.
   std::int64_t pcUlps(double a, double b)
@@ -118,7 +118,7 @@ namespace
   }
 
   /// gate.sh digests the first line of the run log matching this pattern.
-  const std::regex kGateSummary("^[0-9]+ MS2 spectra, [0-9]+ tags");
+  const std::regex GATE_SUMMARY("^[0-9]+ MS2 spectra, [0-9]+ tags");
 
   // ---- phase B helpers ----
   struct RefRow
@@ -129,11 +129,11 @@ namespace
     int charge;
     double evalue, p_complement;
   };
-  const RefRow kRef[] = {
+  const RefRow REF[] = {
 #include "complement_ref_1_11.inc"
   };
 
-  const double kWater = OpenMS::EmpiricalFormula("H2O").getMonoWeight();
+  const double WATER_MASS = OpenMS::EmpiricalFormula("H2O").getMonoWeight();
 
   double resMass(char c)
   {
@@ -189,7 +189,7 @@ namespace
   }
 
   // Tryptic peptides without C (fixed CAM), I (read as L) or P.
-  const char* const kPeptides[5] = {"VGAHAGEYGAEALER", "LLEQTHGGLNAWK", "DLVEGFNTWQR", "GDFQAMVYTNSAWR",
+  const char* const PEPTIDES[5] = {"VGAHAGEYGAEALER", "LLEQTHGGLNAWK", "DLVEGFNTWQR", "GDFQAMVYTNSAWR",
                                     "YLGYLEQLLR"};
 
   /// (f2) #3d's two-residue flank histogram (D3cg, TerminusCounter::
@@ -208,7 +208,7 @@ namespace
       const int bin = tc_cz.flank2Table()->find(er);
       // cterm 1000 Da: no pair sum, so only the nterm end can count.
       tc_cz.add(er + rev_cz, 1000.0, "AAAA", rev_cz);
-      tc_by.add(er + kWater, 1000.0, "AAAA");
+      tc_by.add(er + WATER_MASS, 1000.0, "AAAA");
       std::uint64_t n_cz = 0, n_by = 0;
       for (auto v : tc_cz.dip) n_cz += v;
       for (auto v : tc_by.dip) n_by += v;
@@ -302,66 +302,66 @@ int main(int argc, char** argv)
   using A = IS::Activation;
 
   // ---- classes of the PSI-MS dissociation methods the readers map ----
-  check(cls({AM::CID}) == A::Collisional, "CID (MS:1000133) is collisional");
-  check(cls({AM::HCD}) == A::Collisional, "HCD (MS:1000422) is collisional");
-  check(cls({AM::TRAP}) == A::Collisional, "trap-type CID (MS:1002472) is collisional");
-  check(cls({AM::PQD}) == A::Collisional, "PQD (MS:1000599) is collisional");
-  check(cls({AM::LCID}) == A::Collisional && cls({AM::HCID}) == A::Collisional && cls({AM::SORI}) == A::Collisional,
+  check(cls({AM::CID}) == A::COLLISIONAL, "CID (MS:1000133) is collisional");
+  check(cls({AM::HCD}) == A::COLLISIONAL, "HCD (MS:1000422) is collisional");
+  check(cls({AM::TRAP}) == A::COLLISIONAL, "trap-type CID (MS:1002472) is collisional");
+  check(cls({AM::PQD}) == A::COLLISIONAL, "PQD (MS:1000599) is collisional");
+  check(cls({AM::LCID}) == A::COLLISIONAL && cls({AM::HCID}) == A::COLLISIONAL && cls({AM::SORI}) == A::COLLISIONAL,
         "low/high-energy CID and SORI are collisional");
-  check(cls({AM::ETD}) == A::Electron, "ETD (MS:1000598) is electron");
-  check(cls({AM::ECD}) == A::Electron, "ECD (MS:1000250) is electron");
-  check(cls({AM::EThcD}) == A::Hybrid, "EThcD (MS:1002631) is hybrid");
-  check(cls({AM::ETciD}) == A::Hybrid, "ETciD (MS:1003182) is hybrid");
+  check(cls({AM::ETD}) == A::ELECTRON, "ETD (MS:1000598) is electron");
+  check(cls({AM::ECD}) == A::ELECTRON, "ECD (MS:1000250) is electron");
+  check(cls({AM::EThcD}) == A::HYBRID, "EThcD (MS:1002631) is hybrid");
+  check(cls({AM::ETciD}) == A::HYBRID, "ETciD (MS:1003182) is hybrid");
   // ETD with a supplemental term: both readers give {ETD, EThcD} or {ETD, ETciD}.
-  check(cls({AM::ETD, AM::EThcD}) == A::Hybrid, "ETD + supplemental beam-type CID is hybrid");
-  check(cls({AM::ETD, AM::ETciD}) == A::Hybrid, "ETD + supplemental CID is hybrid");
-  check(cls({AM::ETD, AM::HCD}) == A::Hybrid, "ETD and HCD listed together is hybrid");
-  check(cls({AM::ECD, AM::CID}) == A::Hybrid, "ECD and CID listed together is hybrid");
-  check(cls({}) == A::Unknown, "no method is unknown");
-  check(cls({AM::PD}) == A::Unknown && cls({AM::BIRD}) == A::Unknown && cls({AM::IMD}) == A::Unknown
-          && cls({AM::PSD}) == A::Unknown && cls({AM::SID}) == A::Unknown && cls({AM::LIFT}) == A::Unknown,
+  check(cls({AM::ETD, AM::EThcD}) == A::HYBRID, "ETD + supplemental beam-type CID is hybrid");
+  check(cls({AM::ETD, AM::ETciD}) == A::HYBRID, "ETD + supplemental CID is hybrid");
+  check(cls({AM::ETD, AM::HCD}) == A::HYBRID, "ETD and HCD listed together is hybrid");
+  check(cls({AM::ECD, AM::CID}) == A::HYBRID, "ECD and CID listed together is hybrid");
+  check(cls({}) == A::UNKNOWN, "no method is unknown");
+  check(cls({AM::PD}) == A::UNKNOWN && cls({AM::BIRD}) == A::UNKNOWN && cls({AM::IMD}) == A::UNKNOWN
+          && cls({AM::PSD}) == A::UNKNOWN && cls({AM::SID}) == A::UNKNOWN && cls({AM::LIFT}) == A::UNKNOWN,
         "photo/IR/surface/post-source methods are unknown, not collisional");
-  check(cls({AM::HCD, AM::PD}) == A::Collisional, "an unclassified method next to HCD does not hide it");
+  check(cls({AM::HCD, AM::PD}) == A::COLLISIONAL, "an unclassified method next to HCD does not hide it");
 
   // ---- the filter-string fallback (Thermo @<method><energy> tokens) ----
   using IS::activationClassFromFilter;
-  check(activationClassFromFilter("FTMS + p NSI d Full ms2 652.83@hcd28.00 [110.00-1355.00]") == A::Collisional,
+  check(activationClassFromFilter("FTMS + p NSI d Full ms2 652.83@hcd28.00 [110.00-1355.00]") == A::COLLISIONAL,
         "filter @hcd is collisional");
-  check(activationClassFromFilter("ITMS + c NSI d w Full ms2 617.32@cid35.00 [155.00-1245.00]") == A::Collisional,
+  check(activationClassFromFilter("ITMS + c NSI d w Full ms2 617.32@cid35.00 [155.00-1245.00]") == A::COLLISIONAL,
         "filter @cid is collisional");
-  check(activationClassFromFilter("ITMS + c NSI d Full ms2 700.12@pqd27.00 [50.00-2000.00]") == A::Collisional,
+  check(activationClassFromFilter("ITMS + c NSI d Full ms2 700.12@pqd27.00 [50.00-2000.00]") == A::COLLISIONAL,
         "filter @pqd is collisional");
-  check(activationClassFromFilter("ITMS + c NSI d Full ms2 652.83@etd66.67 [50.00-1320.00]") == A::Electron,
+  check(activationClassFromFilter("ITMS + c NSI d Full ms2 652.83@etd66.67 [50.00-1320.00]") == A::ELECTRON,
         "filter @etd is electron");
-  check(activationClassFromFilter("FTMS + p NSI d Full ms2 900.00@ecd [100.00-2000.00]") == A::Electron,
+  check(activationClassFromFilter("FTMS + p NSI d Full ms2 900.00@ecd [100.00-2000.00]") == A::ELECTRON,
         "filter @ecd without an energy is electron");
   check(activationClassFromFilter("FTMS + p NSI d sa Full ms2 865.94@etd50.00@hcd25.00 [120.00-2000.00]")
-          == A::Hybrid,
+          == A::HYBRID,
         "filter @etd..@hcd.. (EThcD) is hybrid");
   check(activationClassFromFilter("ITMS + c NSI d sa Full ms2 865.94@etd50.00@cid20.00 [120.00-2000.00]")
-          == A::Hybrid,
+          == A::HYBRID,
         "filter @etd..@cid.. (ETciD) is hybrid");
-  check(activationClassFromFilter("FTMS + p NSI d Full ms2 652.83@ETD66.67 [50.00-1320.00]") == A::Electron,
+  check(activationClassFromFilter("FTMS + p NSI d Full ms2 652.83@ETD66.67 [50.00-1320.00]") == A::ELECTRON,
         "filter tokens are case-insensitive");
-  check(activationClassFromFilter("FTMS + p NSI d Full ms2 652.83@uvpd25.00 [50.00-1320.00]") == A::Unknown,
+  check(activationClassFromFilter("FTMS + p NSI d Full ms2 652.83@uvpd25.00 [50.00-1320.00]") == A::UNKNOWN,
         "filter @uvpd is unknown");
-  check(activationClassFromFilter("FTMS + p NSI Full ms [350.00-2000.00]") == A::Unknown, "MS1 filter is unknown");
-  check(activationClassFromFilter("") == A::Unknown, "empty filter is unknown");
-  check(activationClassFromFilter("@") == A::Unknown && activationClassFromFilter("x@") == A::Unknown,
+  check(activationClassFromFilter("FTMS + p NSI Full ms [350.00-2000.00]") == A::UNKNOWN, "MS1 filter is unknown");
+  check(activationClassFromFilter("") == A::UNKNOWN, "empty filter is unknown");
+  check(activationClassFromFilter("@") == A::UNKNOWN && activationClassFromFilter("x@") == A::UNKNOWN,
         "a bare @ is unknown");
-  check(activationClassFromFilter("ms2 500.00@etd.5@hcd") == A::Hybrid, "tokens end at the first non-letter");
-  check(activationClassFromFilter("ms2 500.00@etdx25") == A::Unknown, "a token is the whole letter run after @");
-  check(activationClassFromFilter("ms2 500.00@etdhcd25") == A::Unknown, "an unlisted token is not split");
+  check(activationClassFromFilter("ms2 500.00@etd.5@hcd") == A::HYBRID, "tokens end at the first non-letter");
+  check(activationClassFromFilter("ms2 500.00@etdx25") == A::UNKNOWN, "a token is the whole letter run after @");
+  check(activationClassFromFilter("ms2 500.00@etdhcd25") == A::UNKNOWN, "an unlisted token is not split");
 
   // ---- one spectrum: the precursor's methods first, then the filter ----
-  check(IS::activationClass(ms2({AM::CID})) == A::Collisional, "spectrum with CID");
-  check(IS::activationClass(ms2({AM::ETD}, "ITMS + c NSI d Full ms2 617.32@cid35.00 [1-2]")) == A::Electron,
+  check(IS::activationClass(ms2({AM::CID})) == A::COLLISIONAL, "spectrum with CID");
+  check(IS::activationClass(ms2({AM::ETD}, "ITMS + c NSI d Full ms2 617.32@cid35.00 [1-2]")) == A::ELECTRON,
         "the precursor's methods win over the filter string");
-  check(IS::activationClass(ms2({}, "ITMS + c NSI d Full ms2 617.32@etd35.00 [1-2]")) == A::Electron,
+  check(IS::activationClass(ms2({}, "ITMS + c NSI d Full ms2 617.32@etd35.00 [1-2]")) == A::ELECTRON,
         "no methods: the filter string decides");
-  check(IS::activationClass(ms2({AM::PD}, "ITMS + c NSI d Full ms2 617.32@etd35.00 [1-2]")) == A::Electron,
+  check(IS::activationClass(ms2({AM::PD}, "ITMS + c NSI d Full ms2 617.32@etd35.00 [1-2]")) == A::ELECTRON,
         "only unclassified methods: the filter string decides");
-  check(IS::activationClass(ms2({})) == A::Unknown, "no methods and no filter string is unknown");
+  check(IS::activationClass(ms2({})) == A::UNKNOWN, "no methods and no filter string is unknown");
   {
     MSSpectrum s = ms2({AM::CID});
     Precursor second;
@@ -369,89 +369,89 @@ int main(int argc, char** argv)
     auto precs = s.getPrecursors();
     precs.push_back(second);
     s.setPrecursors(precs);
-    check(IS::activationClass(s) == A::Collisional, "the first precursor, as tagging uses it");
+    check(IS::activationClass(s) == A::COLLISIONAL, "the first precursor, as tagging uses it");
   }
   {
     MSSpectrum s;
     s.setMSLevel(2);
     s.setMetaValue("filter string", "ITMS + c NSI d Full ms2 617.32@etd35.00 [1-2]");
-    check(IS::activationClass(s) == A::Electron, "no precursor: the filter string decides");
+    check(IS::activationClass(s) == A::ELECTRON, "no precursor: the filter string decides");
   }
 
   // ---- names ----
-  check(std::string(IS::activationName(A::Collisional)) == "collisional" &&
-          std::string(IS::activationName(A::Electron)) == "electron" &&
-          std::string(IS::activationName(A::Hybrid)) == "hybrid" &&
-          std::string(IS::activationName(A::Unknown)) == "unknown",
+  check(std::string(IS::activationName(A::COLLISIONAL)) == "collisional" &&
+          std::string(IS::activationName(A::ELECTRON)) == "electron" &&
+          std::string(IS::activationName(A::HYBRID)) == "hybrid" &&
+          std::string(IS::activationName(A::UNKNOWN)) == "unknown",
         "class names");
 
   // ---- counts and the threshold: more than 1% electron or hybrid ----
   {
     IS::ActivationCounts c;
     check(c.total() == 0 && !c.warnUnderBy(), "no MS2, no warning");
-    for (int i = 0; i < 99; ++i) c.add(A::Collisional);
-    c.add(A::Electron);
-    check(c.total() == 100 && c.of(A::Electron) == 1 && c.of(A::Collisional) == 99, "counts per class");
+    for (int i = 0; i < 99; ++i) c.add(A::COLLISIONAL);
+    c.add(A::ELECTRON);
+    check(c.total() == 100 && c.of(A::ELECTRON) == 1 && c.of(A::COLLISIONAL) == 99, "counts per class");
     check(!c.warnUnderBy(), "exactly 1% electron does not warn");
-    c.add(A::Collisional);
+    c.add(A::COLLISIONAL);
     check(!c.warnUnderBy(), "1 of 101 does not warn");
-    c.add(A::Hybrid);
+    c.add(A::HYBRID);
     check(c.warnUnderBy(), "2 of 102 (electron + hybrid) warns");
 
     IS::ActivationCounts u;
-    for (int i = 0; i < 1000; ++i) u.add(A::Unknown);
+    for (int i = 0; i < 1000; ++i) u.add(A::UNKNOWN);
     check(!u.warnUnderBy(), "an all-unknown run (MGF, mzPeak) does not warn");
 
     IS::ActivationCounts h;
-    h.add(A::Hybrid);
+    h.add(A::HYBRID);
     check(h.warnUnderBy(), "a single hybrid MS2 of 1 warns");
 
     // Merging is a plain sum, so thread order cannot change it.
     IS::ActivationCounts a, b;
-    a.add(A::Electron);
-    a.add(A::Collisional);
-    b.add(A::Unknown);
-    b.add(A::Hybrid);
-    b.add(A::Electron);
+    a.add(A::ELECTRON);
+    a.add(A::COLLISIONAL);
+    b.add(A::UNKNOWN);
+    b.add(A::HYBRID);
+    b.add(A::ELECTRON);
     IS::ActivationCounts ab = a, ba = b;
     ab.merge(b);
     ba.merge(a);
-    check(ab.n == ba.n && ab.total() == 5 && ab.of(A::Electron) == 2, "merge is a commutative sum");
+    check(ab.n == ba.n && ab.total() == 5 && ab.of(A::ELECTRON) == 2, "merge is a commutative sum");
   }
 
   // ---- the warning line ----
   {
     IS::ActivationCounts c;
-    for (int i = 0; i < 3491; ++i) c.add(A::Collisional);
-    for (int i = 0; i < 3492; ++i) c.add(A::Electron);
+    for (int i = 0; i < 3491; ++i) c.add(A::COLLISIONAL);
+    for (int i = 0; i < 3492; ++i) c.add(A::ELECTRON);
     const std::string w = IS::byModeWarning(c);
     check(w.find("ETD") != std::string::npos, "the warning names ETD");
     check(w.find("3492 of 6983 MS2 spectra") != std::string::npos, "the warning gives electron of total");
     check(w.find("3491 collisional, 3492 electron, 0 hybrid, 0 unknown") != std::string::npos,
           "the warning gives the per-class counts");
     check(w.find('\n') == std::string::npos, "the warning is one line");
-    check(!std::regex_search(w, kGateSummary), "the warning cannot match the gate's summary-line pattern");
+    check(!std::regex_search(w, GATE_SUMMARY), "the warning cannot match the gate's summary-line pattern");
     IS::ActivationCounts h;
-    h.add(A::Hybrid);
+    h.add(A::HYBRID);
     const std::string wh = IS::byModeWarning(h);
     check(wh.find("EThcD") != std::string::npos, "the warning names EThcD for hybrid spectra");
-    check(!std::regex_search(wh, kGateSummary), "the hybrid warning cannot match the gate pattern");
+    check(!std::regex_search(wh, GATE_SUMMARY), "the hybrid warning cannot match the gate pattern");
   }
 
   // ---- the E accumulator of the tagging loop (src/ClusterAcc.h) ----
   {
     FASTag::ClusterAcc::ClusterThread t1, t2, run;
-    t1.e.activation.add(A::Electron);
-    t2.e.activation.add(A::Collisional);
-    t2.e.activation.add(A::Electron);
+    t1.e.activation.add(A::ELECTRON);
+    t2.e.activation.add(A::COLLISIONAL);
+    t2.e.activation.add(A::ELECTRON);
     run.merge(t1);
     run.merge(t2);
-    check(run.e.activation.total() == 3 && run.e.activation.of(A::Electron) == 2,
+    check(run.e.activation.total() == 3 && run.e.activation.of(A::ELECTRON) == 2,
           "ClusterThread::merge sums the activation counts");
   }
 
   // ================================================================ phase B
-  const double kOffN = 17.026549, kOffC = 1.991841;  // NH3; O - N (OpenMS Zp1)
+  const double OFF_N = 17.026549, OFF_C = 1.991841;  // NH3; O - N (OpenMS Zp1)
 
   // ---- (a) ion pairs ----
   {
@@ -463,12 +463,12 @@ int main(int argc, char** argv)
     check(std::fabs(cz.offN - OpenMS::Residue::getInternalToCIon().getMonoWeight()) < 1e-12 &&
             std::fabs(cz.offC - OpenMS::Residue::getInternalToZp1Ion().getMonoWeight()) < 1e-12,
           "c/z-dot offsets are OpenMS's internal-to-C/Zp1");
-    check(std::fabs(cz.offN - kOffN) < 1e-5 && std::fabs(cz.offC - kOffC) < 1e-5, "c = residues + NH3, z-dot = residues + O - N");
-    check(std::fabs(by.offN) < 1e-12 && std::fabs(by.offC - kWater) < 1e-12, "b = residues, y = residues + H2O");
+    check(std::fabs(cz.offN - OFF_N) < 1e-5 && std::fabs(cz.offC - OFF_C) < 1e-5, "c = residues + NH3, z-dot = residues + O - N");
+    check(std::fabs(by.offN) < 1e-12 && std::fabs(by.offC - WATER_MASS) < 1e-12, "b = residues, y = residues + H2O");
     check(std::fabs(cz.compl_delta - 1.007825) <= 1e-6, "compl_delta(c/z-dot) = +H = 1.007825");
     check(by.compl_delta == 0.0, "compl_delta(b/y) = 0 exactly");
-    check(std::fabs(by.reversedOffset() - kWater) < 1e-12, "b/y reversed offset is one water");
-    check(std::fabs(cz.reversedOffset() - (kOffC - kOffN)) < 1e-5 && std::fabs(cz.reversedOffset() + 15.034708) < 1e-5,
+    check(std::fabs(by.reversedOffset() - WATER_MASS) < 1e-12, "b/y reversed offset is one water");
+    check(std::fabs(cz.reversedOffset() - (OFF_C - OFF_N)) < 1e-5 && std::fabs(cz.reversedOffset() + 15.034708) < 1e-5,
           "c/z-dot reversed offset offC - offN = -15.0347");
     // The default Param and Tag are b/y, the 1.11 reading.
     check(FASTag::Param().ion_pair.kind == IS::Series::BY && FASTag::cliDefaultParam().ion_pair.kind == IS::Series::BY,
@@ -496,38 +496,38 @@ int main(int argc, char** argv)
 
   // ---- modes ----
   {
-    check(IS::modeFromString("by") == IS::Mode::By && IS::modeFromString("cz") == IS::Mode::Cz &&
-            IS::modeFromString("auto") == IS::Mode::Auto,
+    check(IS::modeFromString("by") == IS::Mode::BY && IS::modeFromString("cz") == IS::Mode::CZ &&
+            IS::modeFromString("auto") == IS::Mode::AUTO,
           "mode names");
-    check(std::string(IS::kModeDefault) == "by", "the default mode is by");
-    check(std::string(IS::modeName(IS::Mode::Auto)) == "auto" && std::string(IS::seriesName(IS::Series::CZ)) == "cz" &&
+    check(std::string(IS::MODE_DEFAULT) == "by", "the default mode is by");
+    check(std::string(IS::modeName(IS::Mode::AUTO)) == "auto" && std::string(IS::seriesName(IS::Series::CZ)) == "cz" &&
             std::string(IS::seriesName(IS::Series::BY)) == "by",
           "names round-trip");
-    for (A a : {A::Collisional, A::Electron, A::Hybrid, A::Unknown})
+    for (A a : {A::COLLISIONAL, A::ELECTRON, A::HYBRID, A::UNKNOWN})
     {
-      check(IS::seriesFor(IS::Mode::By, a) == IS::Series::BY, "by reads every class as b/y");
-      check(IS::seriesFor(IS::Mode::Cz, a) == IS::Series::CZ, "cz reads every class as c/z");
+      check(IS::seriesFor(IS::Mode::BY, a) == IS::Series::BY, "by reads every class as b/y");
+      check(IS::seriesFor(IS::Mode::CZ, a) == IS::Series::CZ, "cz reads every class as c/z");
     }
-    check(IS::seriesFor(IS::Mode::Auto, A::Electron) == IS::Series::CZ, "auto reads electron as c/z");
-    check(IS::seriesFor(IS::Mode::Auto, A::Hybrid) == IS::Series::BY, "auto reads hybrid as b/y (deferred)");
-    check(IS::seriesFor(IS::Mode::Auto, A::Collisional) == IS::Series::BY &&
-            IS::seriesFor(IS::Mode::Auto, A::Unknown) == IS::Series::BY,
+    check(IS::seriesFor(IS::Mode::AUTO, A::ELECTRON) == IS::Series::CZ, "auto reads electron as c/z");
+    check(IS::seriesFor(IS::Mode::AUTO, A::HYBRID) == IS::Series::BY, "auto reads hybrid as b/y (deferred)");
+    check(IS::seriesFor(IS::Mode::AUTO, A::COLLISIONAL) == IS::Series::BY &&
+            IS::seriesFor(IS::Mode::AUTO, A::UNKNOWN) == IS::Series::BY,
           "auto reads collisional and unknown as b/y");
     IS::ActivationCounts col, el;
-    col.add(A::Collisional);
-    col.add(A::Hybrid);
-    el.add(A::Electron);
-    check(!IS::seriesColumn(IS::Mode::By, el), "by never writes the ion_series column");
-    check(IS::seriesColumn(IS::Mode::Cz, col), "cz always writes it");
-    check(!IS::seriesColumn(IS::Mode::Auto, col), "auto on a run without electron activation writes what by writes");
-    check(IS::seriesColumn(IS::Mode::Auto, el), "auto with electron activation writes the column");
+    col.add(A::COLLISIONAL);
+    col.add(A::HYBRID);
+    el.add(A::ELECTRON);
+    check(!IS::seriesColumn(IS::Mode::BY, el), "by never writes the ion_series column");
+    check(IS::seriesColumn(IS::Mode::CZ, col), "cz always writes it");
+    check(!IS::seriesColumn(IS::Mode::AUTO, col), "auto on a run without electron activation writes what by writes");
+    check(IS::seriesColumn(IS::Mode::AUTO, el), "auto with electron activation writes the column");
     // One rule for the column and the per-spectrum series: auto reads the
     // activation of mzML only, and a c/z row exists only with the column.
     check(IS::autoReadsActivation(false, false) && !IS::autoReadsActivation(true, false) &&
             !IS::autoReadsActivation(false, true),
           "auto reads activation from mzML, not from mzPeak or MGF");
-    for (A a : {A::Collisional, A::Electron, A::Hybrid, A::Unknown})
-      for (IS::Mode m : {IS::Mode::By, IS::Mode::Cz, IS::Mode::Auto})
+    for (A a : {A::COLLISIONAL, A::ELECTRON, A::HYBRID, A::UNKNOWN})
+      for (IS::Mode m : {IS::Mode::BY, IS::Mode::CZ, IS::Mode::AUTO})
       {
         check(IS::seriesInRun(m, a, true) == IS::seriesFor(m, a), "with the column the run reads seriesFor()");
         check(IS::seriesInRun(m, a, false) == IS::Series::BY, "without the column every spectrum is read as b/y");
@@ -538,36 +538,36 @@ int main(int argc, char** argv)
     for (int in = 0; in < 3; ++in)
     {
       const bool mzpeak = in == 1, mgf = in == 2;
-      const bool column = IS::autoReadsActivation(mzpeak, mgf) && IS::seriesColumn(IS::Mode::Auto, el);
-      const bool cz_row = IS::seriesInRun(IS::Mode::Auto, A::Electron, column) == IS::Series::CZ;
+      const bool column = IS::autoReadsActivation(mzpeak, mgf) && IS::seriesColumn(IS::Mode::AUTO, el);
+      const bool cz_row = IS::seriesInRun(IS::Mode::AUTO, A::ELECTRON, column) == IS::Series::CZ;
       check(cz_row == column, "auto: a c/z row only with the ion_series column");
       check(cz_row == (in == 0), "auto: ETD is read as c/z from mzML only");
     }
     const std::string nw = IS::autoNoColumnWarning(7);
     check(nw.find("7 electron-activated") != std::string::npos && nw.find('\n') == std::string::npos &&
-            !std::regex_search(nw, kGateSummary),
+            !std::regex_search(nw, GATE_SUMMARY),
           "the auto no-column warning");
     // Warnings and the INFO line: one line each, never the gate pattern.
     IS::ActivationCounts h;
-    for (int i = 0; i < 99; ++i) h.add(A::Electron);
-    h.add(A::Hybrid);
+    for (int i = 0; i < 99; ++i) h.add(A::ELECTRON);
+    h.add(A::HYBRID);
     check(!IS::warnHybridUnderAuto(h), "1 hybrid of 100 (exactly 1%) does not warn under auto");
-    h.add(A::Hybrid);
+    h.add(A::HYBRID);
     check(IS::warnHybridUnderAuto(h), "2 hybrid of 101 warns under auto");
     const std::string hw = IS::hybridAutoWarning(h);
     check(hw.find("EThcD") != std::string::npos && hw.find("2 of 101") != std::string::npos &&
-            hw.find('\n') == std::string::npos && !std::regex_search(hw, kGateSummary),
+            hw.find('\n') == std::string::npos && !std::regex_search(hw, GATE_SUMMARY),
           "the hybrid warning names EThcD and the counts on one line");
     IS::ActivationCounts k;
-    k.add(A::Collisional);
-    k.add(A::Electron);
+    k.add(A::COLLISIONAL);
+    k.add(A::ELECTRON);
     check(IS::warnCollisionalUnderCz(k) && !IS::warnCollisionalUnderCz(el), "cz warns on collisional spectra only");
     IS::SeriesCounts sc;
     sc.ms2_cz = 3;
     sc.ms2_by = 4;
-    const std::string info = IS::seriesInfo(IS::Mode::Auto, sc, h);
+    const std::string info = IS::seriesInfo(IS::Mode::AUTO, sc, h);
     check(info.rfind("Ion series (-ion_series auto): 3 MS2 spectra tagged as c/z-dot ions, 4 as b/y ions", 0) == 0 &&
-            !std::regex_search(info, kGateSummary) && info.find('\n') == std::string::npos,
+            !std::regex_search(info, GATE_SUMMARY) && info.find('\n') == std::string::npos,
           "the INFO line");
     IS::SeriesCounts a2 = sc, b2;
     b2.ms2_cz = 1;
@@ -590,16 +590,16 @@ int main(int argc, char** argv)
     const auto byFlanks = [&](const std::string& pep, size_t pos, size_t len, bool rev) {
       const double nside = sumMass(pep.substr(0, pos)), cside = sumMass(pep.substr(pos + len));
       const double low = rev ? nside + czp.offN : cside + czp.offC;
-      const double M = sumMass(pep) + kWater;
+      const double M = sumMass(pep) + WATER_MASS;
       const double high = low + sumMass(pep.substr(pos, len));
-      return std::pair<double, double>{std::max(0.0, M - high), std::max(0.0, low - kWater)};
+      return std::pair<double, double>{std::max(0.0, M - high), std::max(0.0, low - WATER_MASS)};
     };
     for (const auto& [pname, base] : bothParams())
     {
       const FASTag::Param pcz = withPair(base, IS::Series::CZ), pby = withPair(base, IS::Series::BY);
       const FASTag::Tables tcz(pcz), tby(pby);
       int spectra_with_true = 0, true_tags = 0, compl_ok = 0, by_true = 0, coincidental_spectra = 0;
-      for (const char* pep : kPeptides)
+      for (const char* pep : PEPTIDES)
         for (int z : {2, 3})
         {
           // 20 noise peaks: with every peak complemented the hypergeometric
@@ -704,11 +704,11 @@ int main(int argc, char** argv)
     for (const auto& [pname, base0] : bothParams())
     {
       FASTag::Param base = base0;
-      base.complement_rule = FASTag::ComplementRule::Precursor;
+      base.complement_rule = FASTag::ComplementRule::PRECURSOR;
       const FASTag::Param pcz = withPair(base, IS::Series::CZ);
       const FASTag::Tables tcz(pcz);
       size_t peaks3 = 0, compl3 = 0, compl2 = 0, compl3_both = 0;
-      for (const char* pep : kPeptides)
+      for (const char* pep : PEPTIDES)
         for (int z : {2, 3})
         {
           const CzSynth::Spec s = CzSynth::make(pep, z, CzSynth::Ions::CZ, 1, 0, 300u + static_cast<unsigned>(z));
@@ -720,7 +720,7 @@ int main(int argc, char** argv)
           if (z == 3)
           {
             FASTag::Param pb = pcz;
-            pb.complement_rule = FASTag::ComplementRule::Both;
+            pb.complement_rule = FASTag::ComplementRule::BOTH;
             const FASTag::Tables tb(pb);
             FASTag::SpectrumDiag db;
             FASTag::tagSpectrum(s.spec, s.prec_mz, z, pb, tb, &db);
@@ -745,7 +745,7 @@ int main(int argc, char** argv)
     const auto cs_by = FASTag::ComplementSpec::fromParam(FASTag::cliDefaultParam());
     const auto cs_cz = FASTag::ComplementSpec::fromParam(withPair(FASTag::cliDefaultParam(), IS::Series::CZ));
     double e_cz = 0, e_by = 0;
-    for (const char* pep : kPeptides)
+    for (const char* pep : PEPTIDES)
     {
       const CzSynth::Spec s = CzSynth::make(pep, 2, CzSynth::Ions::CZ, 1, 0, 400u);
       e_cz += FASTag::Hyp::complementExcess(s.spec, s.M, cs_cz);
@@ -760,10 +760,10 @@ int main(int argc, char** argv)
     // (the 1+ one at M + c*p lies above every fragment, so the b/y range
     // evidence would rule the true charge out).
     FASTag::Hyp::HypParam hp;
-    hp.mode = FASTag::Hyp::ChargeMode::Infer;
+    hp.mode = FASTag::Hyp::ChargeMode::INFER;
     int right = 0, total = 0;
     const double P = OpenMS::Constants::PROTON_MASS_U;
-    for (const char* pep : kPeptides)
+    for (const char* pep : PEPTIDES)
       for (int z : {2, 3})
       {
         CzSynth::Spec s = CzSynth::make(pep, z, CzSynth::Ions::CZ, z - 1, 0, 500u + static_cast<unsigned>(z));
@@ -771,7 +771,7 @@ int main(int argc, char** argv)
         s.spec.sortByPosition();
         const auto call = FASTag::Hyp::inferCharge(s.spec, s.prec_mz, {2, 3, 4}, hp, cs_cz);
         ++total;
-        if (call.charge == z && call.src != FASTag::Hyp::ChargeSource::Assumed) ++right;
+        if (call.charge == z && call.src != FASTag::Hyp::ChargeSource::ASSUMED) ++right;
       }
     std::cout << "b3. infer on 10 ETD spectra with charge-reduced species: " << right << " at the true charge\n";
     check(right >= 8, "b3: infer calls the true charge of c/z spectra with charge-reduced species");
@@ -787,7 +787,7 @@ int main(int argc, char** argv)
         // every precursor species below the cut, so "no fragment dropped" is
         // a property of the filter, not of luck.
         std::string pick;
-        for (const char* cand : kPeptides)
+        for (const char* cand : PEPTIDES)
         {
           const CzSynth::Spec t = CzSynth::make(cand, z, CzSynth::Ions::CZ, 1);
           double nf = 1e9;
@@ -863,7 +863,7 @@ int main(int argc, char** argv)
     };
     for (const auto& [pname, base] : bothParams())
       for (int z : {2, 3})
-        for (const char* pep : kPeptides)
+        for (const char* pep : PEPTIDES)
         {
           const CzSynth::Spec lad = CzSynth::make(pep, z, CzSynth::Ions::CZ, 1);
           CzSynth::Spec s = lad;
@@ -911,10 +911,10 @@ int main(int argc, char** argv)
       const FASTag::Tables tab(p);
       for (int ci = 0; ci < 5; ++ci)
       {
-        const ComplementSynth::Case& c = ComplementSynth::kRefCases[ci];
+        const ComplementSynth::Case& c = ComplementSynth::REF_CASES[ci];
         const ComplementSynth::Spec s = ComplementSynth::make(c.pep, c.charge, c.y2, c.iso, 0.0, c.noise, c.seed);
         const auto tags = FASTag::tagSpectrum(s.spec, s.prec_mz, c.charge, p, tab);
-        for (const RefRow& r : kRef)
+        for (const RefRow& r : REF)
         {
           if (r.ci != ci || r.pi != pi) continue;
           if (r.rank == 999) { check(tags.size() == static_cast<size_t>(r.evalue), "(d) tag count as 1.11"); continue; }
@@ -927,16 +927,16 @@ int main(int argc, char** argv)
                         std::fabs(t.evalue - r.evalue) / std::max(1e-300, std::fabs(r.evalue)),
                         std::fabs(t.p_complement - r.p_complement));
           // The tag and its charge equal 1.11 bit for bit everywhere, the E-value
-          // too except under MSVC (kEUlps).
+          // too except under MSVC (E_ULPS).
           // p_complement is Boost's hypergeometric tail, whose result follows the
           // C library's math functions: glibc (where the .inc was made, x86-64 and
           // aarch64 alike) gives it bit for bit, Apple's libm 1-2 ulps away (CI
           // run 42427807615: 51 of 100 rows, E-value difference 0 in every row).
-          // Off glibc p_complement is therefore held to kPcUlps ulps.
-          check(t.seq == r.seq && t.charge == r.charge && pcUlps(t.evalue, r.evalue) <= kEUlps && pcUlps(t.p_complement, r.p_complement) <= kPcUlps,
+          // Off glibc p_complement is therefore held to PC_ULPS ulps.
+          check(t.seq == r.seq && t.charge == r.charge && pcUlps(t.evalue, r.evalue) <= E_ULPS && pcUlps(t.p_complement, r.p_complement) <= PC_ULPS,
                 "(d) case " + std::to_string(ci) + " rank " + std::to_string(r.rank) + " equals 1.11 bit for bit" +
-                    (kPcUlps ? " (p_complement within " + std::to_string(kPcUlps) + " ulps)" : std::string()) +
-                    (kEUlps ? " (E-value within " + std::to_string(kEUlps) + " ulps, MSVC)" : std::string()) + got);
+                    (PC_ULPS ? " (p_complement within " + std::to_string(PC_ULPS) + " ulps)" : std::string()) +
+                    (E_ULPS ? " (E-value within " + std::to_string(E_ULPS) + " ulps, MSVC)" : std::string()) + got);
           if (t.p_complement != r.p_complement) ++pc_off;
           check(t.ion_series == IS::Series::BY, "(d) b/y tags");
         }
@@ -944,7 +944,7 @@ int main(int argc, char** argv)
     }
     check(rows >= 40, "(d) enough 1.11 reference rows");
     std::cout << "d. " << rows << " rows equal FASTag 1.11.0 under an explicit b/y pair (" << pc_off
-              << " with p_complement off by at most " << kPcUlps << " ulps)\n";
+              << " with p_complement off by at most " << PC_ULPS << " ulps)\n";
   }
 
   // ---- (e) a reversed c-derived tag: TagRecon and Digest ----
@@ -1033,7 +1033,7 @@ int main(int argc, char** argv)
     FASTag::Digest::TerminusCounter tc_cz, tc_by;
     std::uint64_t expect_kr = 0;
     size_t reads = 0;
-    for (const char* pc : kPeptides)
+    for (const char* pc : PEPTIDES)
     {
       const std::string pep = pc;
       for (size_t pos = 0; pos + 3 <= pep.size(); ++pos)

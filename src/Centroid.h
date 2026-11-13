@@ -31,47 +31,78 @@ namespace OpenMS
 
 namespace FASTag
 {
-  /// Centroids @p s in place if it is a non-empty PROFILE MS2, with @p picker
-  /// (one per thread: PeakPickerHiRes is not thread-safe). Points are picked
-  /// as stored (FASTag 1.11 on mzPeak). A picker that yields nothing (data
-  /// too sparse for peak shapes) leaves the spectrum as it was. Returns +1
-  /// when picked, -1 when picking yielded nothing (or threw), 0 when the
-  /// spectrum needed no picking.
+  /**
+    @brief Centroids @p s in place if it is a non-empty PROFILE MS2.
+
+    Points are picked as stored (FASTag 1.11 on mzPeak). A picker that
+    yields nothing (data too sparse for peak shapes) leaves the spectrum as
+    it was.
+
+    @param[in,out] s the spectrum; replaced by its centroided form when picked
+    @param[in,out] picker the peak picker, one per thread (PeakPickerHiRes is not thread-safe)
+    @return +1 when picked, -1 when picking yielded nothing (or threw), 0 when
+      the spectrum needed no picking
+  */
   int centroidProfileMs2(OpenMS::MSSpectrum& s, OpenMS::PeakPickerHiRes& picker);
 
   namespace Centroid
   {
-    /// -pick_profile.
+    /**
+      @brief The -pick_profile mode.
+    */
     enum class Mode
     {
-      Legacy,
-      Off
+      LEGACY,  ///< mzPeak only, as in 1.11 (the default)
+      OFF      ///< no picking, mzPeak included
     };
-    inline constexpr const char* kModeDefault = "legacy";
-    /// auto stays valid (1.14: removed, read as legacy; FASTag.cpp kRemovedValues).
-    inline constexpr const char* kModeValues = "legacy,auto,off";
+    /// @brief The default -pick_profile value.
+    inline constexpr const char* MODE_DEFAULT = "legacy";
+    /// @brief The valid -pick_profile values.
+    ///
+    /// auto stays valid (1.14: removed, read as legacy; FASTag.cpp REMOVED_VALUES).
+    inline constexpr const char* MODE_VALUES = "legacy,auto,off";
 
-    /// The reader a spectrum comes from.
+    /**
+      @brief The reader a spectrum comes from.
+    */
     enum class Input
     {
-      MzML,
-      MzPeak,
-      Mgf
+      MZML,
+      MZPEAK,
+      MGF
     };
 
-    /// What a reader does with each MS2 it reads.
+    /**
+      @brief What a reader does with each MS2 it reads.
+    */
     struct Policy
     {
       bool pick = false;     ///< run centroidProfileMs2
     };
 
-    /// Parses a -pick_profile value; false (and @p mode untouched) if invalid.
+    /**
+      @brief Parses a -pick_profile value.
+      @param[in] value "legacy" or "off"
+      @param[out] mode the parsed mode; untouched if @p value is invalid
+      @return false if @p value is invalid
+    */
     bool parseMode(const std::string& value, Mode& mode);
 
-    /// The policy of @p mode on @p input: legacy picks mzPeak only.
+    /**
+      @brief The policy of @p mode on @p input: legacy picks mzPeak only.
+      @param[in] mode the -pick_profile mode
+      @param[in] input the reader
+      @return the policy
+    */
     Policy policyFor(Mode mode, Input input);
 
-    /// centroidProfileMs2 when @p policy picks, else 0.
+    /**
+      @brief Applies centroidProfileMs2 when @p policy picks.
+      @param[in,out] s the spectrum
+      @param[in,out] picker the calling thread's peak picker
+      @param[in] policy the reader's policy
+      @return centroidProfileMs2()'s result when @p policy picks, else 0
+    */
     int apply(OpenMS::MSSpectrum& s, OpenMS::PeakPickerHiRes& picker, const Policy& policy);
   }
 }

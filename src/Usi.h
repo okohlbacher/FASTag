@@ -22,10 +22,17 @@
 
 namespace FASTag
 {
-  /// A collection identifier the USI permits. The list is closed and kept by
-  /// HUPO-PSI (github.com/HUPO-PSI/usi, CollectionIdentifiers.md): PXD, RPXD
-  /// and PXL with six digits, MSV and RMSV with nine, and USI000000, the
-  /// placeholder for a dataset that has no identifier yet.
+  /**
+    @brief Tests whether a string is a collection identifier the USI permits.
+
+    The list is closed and kept by HUPO-PSI (github.com/HUPO-PSI/usi,
+    CollectionIdentifiers.md): PXD, RPXD and PXL with six digits, MSV and RMSV
+    with nine, and USI000000, the placeholder for a dataset that has no
+    identifier yet.
+
+    @param[in] c Candidate collection identifier.
+    @return True when @p c is a permitted collection identifier.
+  */
   inline bool isUsiCollection(const std::string& c)
   {
     const auto is = [&c](const std::string& prefix, size_t digits) {
@@ -37,25 +44,32 @@ namespace FASTag
         || is("MSV", 9) || is("RMSV", 9);
   }
 
-  /// "<indexType>:<indexNumber>" for one spectrum, as USI 1.0 prescribes
-  /// (sections 3.3.5, 3.6.2, 3.6.4):
-  ///
-  ///   controllerType=0 controllerNumber=1 scan=N  (Thermo)      scan:N
-  ///   scan=N  (scan number only, Bruker BAF/YEP, Shimadzu)      scan:N
-  ///   another PSI-MS nativeID format made of integer fields     nativeId:a,b,...
-  ///     -- Waters, WIFF, Bruker TDF/U2, UIMF, Agilent, spectrum=N, Thermo on
-  ///     another controller: the integers in the format's key order
-  ///   anything else                                             index:<i>
-  ///
-  /// where <i> is the spectrum's 0-based position in the input, the form the
-  /// spec requires when no original scan can be named: no native ID, a merged
-  /// or derived spectrum whose ID extends a format's keys, and index=N, which
-  /// converters number from 0 or 1 alike, so only the position is certain.
-  ///
-  /// Known limit: the ID's own keys name its format; the file's declared nativeID
-  /// format is not read. So Bruker TSF's frame=N, the layout diaTracer also
-  /// writes for its pseudo-spectra (declaring Thermo), is left to index:<i>,
-  /// which is right for both.
+  /**
+    @brief Derives "<indexType>:<indexNumber>" for one spectrum, as USI 1.0 prescribes.
+
+    Sections 3.3.5, 3.6.2, 3.6.4:
+
+      controllerType=0 controllerNumber=1 scan=N  (Thermo)      scan:N
+      scan=N  (scan number only, Bruker BAF/YEP, Shimadzu)      scan:N
+      another PSI-MS nativeID format made of integer fields     nativeId:a,b,...
+        -- Waters, WIFF, Bruker TDF/U2, UIMF, Agilent, spectrum=N, Thermo on
+        another controller: the integers in the format's key order
+      anything else                                             index:<i>
+
+    where <i> is the spectrum's 0-based position in the input, the form the
+    spec requires when no original scan can be named: no native ID, a merged
+    or derived spectrum whose ID extends a format's keys, and index=N, which
+    converters number from 0 or 1 alike, so only the position is certain.
+
+    Known limit: the ID's own keys name its format; the file's declared nativeID
+    format is not read. So Bruker TSF's frame=N, the layout diaTracer also
+    writes for its pseudo-spectra (declaring Thermo), is left to index:<i>,
+    which is right for both.
+
+    @param[in] native_id The spectrum's native ID.
+    @param[in] position The spectrum's 0-based position in the input.
+    @return The USI index part, e.g. "scan:123", "nativeId:1,2,3" or "index:42".
+  */
   inline std::string usiIndex(const std::string& native_id, size_t position)
   {
     // The integer-only layouts among the PSI-MS nativeID formats (the children
@@ -109,11 +123,19 @@ namespace FASTag
     return out;
   }
 
-  /// The same for a block of an MGF, whose msRun is the MGF itself:
-  /// scan:<n> when the block's SCANS= is one non-negative integer, otherwise
-  /// what usiIndex gives its native ID (index=k, so index:<position>).
-  /// FileConverter writes SCANS=-1 for "no scan", and a range or list (1-3,
-  /// 5,6) names no single scan.
+  /**
+    @brief Derives the USI index part for a block of an MGF, whose msRun is the MGF itself.
+
+    scan:<n> when the block's SCANS= is one non-negative integer (at most 18
+    digits), otherwise what usiIndex gives its native ID (index=k, so
+    index:<position>). FileConverter writes SCANS=-1 for "no scan", and a
+    range or list (1-3, 5,6) names no single scan.
+
+    @param[in] scans The block's SCANS= value (may be empty).
+    @param[in] native_id The block's native ID.
+    @param[in] position The block's 0-based position in the input.
+    @return The USI index part.
+  */
   inline std::string usiIndexMgf(const std::string& scans, const std::string& native_id, size_t position)
   {
     std::string digits = scans;

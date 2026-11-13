@@ -39,8 +39,8 @@ namespace FASTag
   {
     bool parseMode(const std::string& value, Mode& mode)
     {
-      if (value == "legacy") mode = Mode::Legacy;
-      else if (value == "off") mode = Mode::Off;
+      if (value == "legacy") mode = Mode::LEGACY;
+      else if (value == "off") mode = Mode::OFF;
       else return false;
       return true;
     }
@@ -48,7 +48,7 @@ namespace FASTag
     Policy policyFor(Mode mode, Input input)
     {
       Policy p;
-      p.pick = mode == Mode::Legacy && input == Input::MzPeak;
+      p.pick = mode == Mode::LEGACY && input == Input::MZPEAK;
       return p;
     }
 

@@ -138,7 +138,7 @@ int main()
       for (int i = 0; i < 4; ++i) tag += AA[rng() % 19];
       std::vector<ProteomeIndex::TagOcc> o2;
       idx.locateTag(tag, true, o2);
-      const bool filter_hit = filt.match(tag) != FastaFilter::Hit::None;
+      const bool filter_hit = filt.match(tag) != FastaFilter::Hit::NONE;
       const bool index_hit = !o2.empty();
       check(filter_hit == index_hit,
             "filter/index disagreement on " + tag);

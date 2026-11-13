@@ -62,8 +62,8 @@ static int failures = 0;
 
 namespace
 {
-  const double kP = Constants::PROTON_MASS_U;
-  const double kC13 = Constants::C13C12_MASSDIFF_U;
+  const double PROTON = Constants::PROTON_MASS_U;
+  const double C13_MASS_DIFF = Constants::C13C12_MASSDIFF_U;
 
   Precursor precursor(double mz, int charge, std::vector<Int> possible = {})
   {
@@ -115,12 +115,12 @@ namespace
       const auto s3 = ComplementSynth::make("SAMPLERKDLVEGFNTWQR", 3, false, 0, 0.0, 40, 12);
       const auto h = H::precursorHypotheses(s3.spec, precursor(s3.prec_mz, 0, {3, 4}), H::HypParam{}, cs);
       CHECK(h.size() == 1 && h[0].charge == 0 && h[0].iso == 0 && h[0].mz == s3.prec_mz && h[0].selected
-                && h[0].src == H::ChargeSource::Assumed,
+                && h[0].src == H::ChargeSource::ASSUMED,
             "%s: defaults give the 1.11 hypothesis (charge as given, m/z unchanged)", label);
       const auto hh = H::precursorHypotheses(s3.spec, precursor(s3.prec_mz, 3), H::HypParam{}, cs);
-      CHECK(hh.size() == 1 && hh[0].charge == 3 && hh[0].src == H::ChargeSource::Header, "%s: defaults, header", label);
-      CHECK(H::HypParam{}.isDefault() && !mode(H::ChargeMode::Infer).isDefault()
-                && !mode(H::ChargeMode::Assume2, {0, 1}).isDefault(),
+      CHECK(hh.size() == 1 && hh[0].charge == 3 && hh[0].src == H::ChargeSource::HEADER, "%s: defaults, header", label);
+      CHECK(H::HypParam{}.isDefault() && !mode(H::ChargeMode::INFER).isDefault()
+                && !mode(H::ChargeMode::ASSUME2, {0, 1}).isDefault(),
             "%s: isDefault", label);
     }
 
@@ -131,9 +131,9 @@ namespace
     {
       const auto s = ComplementSynth::make(c.pep, 3, c.y2, c.iso, 0.0, c.noise, c.seed);
       H::ChargeCall call;
-      const auto h = H::precursorHypotheses(s.spec, precursor(s.prec_mz, 0), mode(H::ChargeMode::Infer), cs, &call);
+      const auto h = H::precursorHypotheses(s.spec, precursor(s.prec_mz, 0), mode(H::ChargeMode::INFER), cs, &call);
       const H::Hypothesis* sel = selected(h);
-      CHECK(h.size() == 1 && sel && sel->charge == 3 && sel->src == H::ChargeSource::Inferred && sel->iso == 0,
+      CHECK(h.size() == 1 && sel && sel->charge == 3 && sel->src == H::ChargeSource::INFERRED && sel->iso == 0,
             "%s (a): %s 3+ infers 3 (got %zu hyps, charge %d, src %s)", label, c.pep, h.size(),
             sel ? sel->charge : -1, sel ? H::sourceName(sel->src) : "-");
     }
@@ -142,9 +142,9 @@ namespace
     for (const auto& c : cases2)
     {
       const auto s = ComplementSynth::make(c.pep, 2, c.y2, c.iso, 0.0, c.noise, c.seed);
-      const auto h = H::precursorHypotheses(s.spec, precursor(s.prec_mz, 0), mode(H::ChargeMode::Infer), cs);
+      const auto h = H::precursorHypotheses(s.spec, precursor(s.prec_mz, 0), mode(H::ChargeMode::INFER), cs);
       const H::Hypothesis* sel = selected(h);
-      CHECK(h.size() == 1 && sel && sel->charge == 2 && sel->src == H::ChargeSource::Inferred,
+      CHECK(h.size() == 1 && sel && sel->charge == 2 && sel->src == H::ChargeSource::INFERRED,
             "%s (a): %s 2+ infers 2 (got charge %d, src %s)", label, c.pep, sel ? sel->charge : -1,
             sel ? H::sourceName(sel->src) : "-");
     }
@@ -158,15 +158,15 @@ namespace
       MSSpectrum s;
       std::mt19937 rng(31);
       for (size_t i = 1; i < aa.size(); ++i)
-        ComplementSynth::addFragment(s, aa.getPrefix(i).getMonoWeight(Residue::BIon, 1) - kP, 1,
+        ComplementSynth::addFragment(s, aa.getPrefix(i).getMonoWeight(Residue::BIon, 1) - PROTON, 1,
                                      0.5 + 0.5 * ComplementSynth::u01(rng), 0);
       for (int k = 0; k < 30; ++k) s.emplace_back(150.0 + (M - 200.0) * ComplementSynth::u01(rng), 0.05);
       s.sortByPosition();
-      const double mz3 = (M + 3 * kP) / 3.0;
+      const double mz3 = (M + 3 * PROTON) / 3.0;
       H::ChargeCall call;
-      const auto h = H::precursorHypotheses(s, precursor(mz3, 0), mode(H::ChargeMode::Infer), cs, &call);
+      const auto h = H::precursorHypotheses(s, precursor(mz3, 0), mode(H::ChargeMode::INFER), cs, &call);
       const H::Hypothesis* sel = selected(h);
-      CHECK(h.size() == 1 && sel && sel->charge == 3 && sel->src == H::ChargeSource::Inferred && call.range_min == 3,
+      CHECK(h.size() == 1 && sel && sel->charge == 3 && sel->src == H::ChargeSource::INFERRED && call.range_min == 3,
             "%s (a2): b-only 3+ infers 3 by range (got charge %d, src %s, range_min %d)", label,
             sel ? sel->charge : -1, sel ? H::sourceName(sel->src) : "-", call.range_min);
       // Its complement evidence alone has nothing: the 2+ call would be assumed.
@@ -178,11 +178,11 @@ namespace
       // 1 is a candidate only from -charge_min 1 on (the default range is 2..4).
       const auto s = ComplementSynth::make("GDFQKMVYTNPAWSR", 1, false, 1, 0.0, 20, 21);
       H::ChargeCall call;
-      H::HypParam hp1 = mode(H::ChargeMode::Infer);
+      H::HypParam hp1 = mode(H::ChargeMode::INFER);
       hp1.charge_min = 1;
       const auto h = H::precursorHypotheses(s.spec, precursor(s.prec_mz, 0), hp1, cs, &call);
       const H::Hypothesis* sel = selected(h);
-      CHECK(h.size() == 1 && sel && sel->charge == 1 && sel->src == H::ChargeSource::Inferred,
+      CHECK(h.size() == 1 && sel && sel->charge == 1 && sel->src == H::ChargeSource::INFERRED,
             "%s (b): 1+ infers 1 (got charge %d, above share %.3f)", label, sel ? sel->charge : -1, call.above_share);
       // The 1+ hypothesis tags at charge 1.
       const auto tags = FASTag::tagSpectrum(s.spec, sel ? sel->mz : 0.0, 1, P, T);
@@ -192,14 +192,14 @@ namespace
     // ---- (c) isotope shift on an uncharged 3+ ----
     {
       const auto s = ComplementSynth::make("SAMPLERKDLVEGFNTWQR", 3, false, 0, 0.0, 40, 12);
-      const double shifted = s.prec_mz + kC13 / 3.0;
-      const auto h = H::precursorHypotheses(s.spec, precursor(shifted, 0), mode(H::ChargeMode::Infer, {0, 1}), cs);
+      const double shifted = s.prec_mz + C13_MASS_DIFF / 3.0;
+      const auto h = H::precursorHypotheses(s.spec, precursor(shifted, 0), mode(H::ChargeMode::INFER, {0, 1}), cs);
       const H::Hypothesis* sel = selected(h);
       CHECK(sel && sel->charge == 3 && sel->iso == 1, "%s (c): iso 1 at charge 3 (got charge %d iso %d)", label,
             sel ? sel->charge : -1, sel ? sel->iso : -9);
       if (sel)
       {
-        const double M = sel->mz * 3 - 3 * kP;
+        const double M = sel->mz * 3 - 3 * PROTON;
         CHECK(std::fabs(M - s.M) < 0.01, "%s (c): corrected neutral mass %.4f vs %.4f", label, M, s.M);
         const auto ref = FASTag::tagSpectrum(s.spec, s.prec_mz, 3, P, T);
         const auto got = FASTag::tagSpectrum(s.spec, sel->mz, 3, P, T);
@@ -228,15 +228,15 @@ namespace
     }
 
     // ---- (c2) header-charged 3+ with a +1 isotope shift ----
-    for (const H::ChargeMode m : {H::ChargeMode::Assume2, H::ChargeMode::Infer})
+    for (const H::ChargeMode m : {H::ChargeMode::ASSUME2, H::ChargeMode::INFER})
     {
       const auto s = ComplementSynth::make("LLEQTHGGLNAIPKDEFAR", 3, false, 0, 0.0, 25, 13);
-      const auto h = H::precursorHypotheses(s.spec, precursor(s.prec_mz + kC13 / 3.0, 3), mode(m, {0, 1}), cs);
+      const auto h = H::precursorHypotheses(s.spec, precursor(s.prec_mz + C13_MASS_DIFF / 3.0, 3), mode(m, {0, 1}), cs);
       const H::Hypothesis* sel = selected(h);
-      CHECK(h.size() == 1 && sel && sel->charge == 3 && sel->iso == 1 && sel->src == H::ChargeSource::Header,
+      CHECK(h.size() == 1 && sel && sel->charge == 3 && sel->iso == 1 && sel->src == H::ChargeSource::HEADER,
             "%s (c2): header 3+ with a +1 isotope gives iso 1 (got %d/%d)", label, sel ? sel->charge : -1,
             sel ? sel->iso : -9);
-      if (sel) CHECK(std::fabs(sel->mz * 3 - 3 * kP - s.M) < 0.01, "%s (c2): corrected mass", label);
+      if (sel) CHECK(std::fabs(sel->mz * 3 - 3 * PROTON - s.M) < 0.01, "%s (c2): corrected mass", label);
       // Without a shift the same list keeps k = 0.
       const auto h0 = H::precursorHypotheses(s.spec, precursor(s.prec_mz, 3), mode(m, {0, 1}), cs);
       CHECK(h0.size() == 1 && h0[0].iso == 0 && h0[0].mz == s.prec_mz, "%s (c2): no shift keeps k 0", label);
@@ -254,13 +254,13 @@ namespace
       {
         const MSSpectrum s = randomPeaks(rng, 150, 150.0, 1400.0);
         H::ChargeCall call;
-        const auto h = H::precursorHypotheses(s, precursor(700.0, 0), mode(H::ChargeMode::Infer), cs, &call);
+        const auto h = H::precursorHypotheses(s, precursor(700.0, 0), mode(H::ChargeMode::INFER), cs, &call);
         const H::Hypothesis* sel = selected(h);
         double best = -1e300;
         for (const auto& e : call.excess) best = std::max(best, e.second.first);
-        if (h.size() == 1 && sel && sel->charge == 2 && sel->src == H::ChargeSource::Assumed) ++assumed;
-        else if (!(best < H::kInferMarginDefault)) ++confident;
-        else if (best > 0 && sel && sel->src != H::ChargeSource::Assumed) ++weak;
+        if (h.size() == 1 && sel && sel->charge == 2 && sel->src == H::ChargeSource::ASSUMED) ++assumed;
+        else if (!(best < H::INFER_MARGIN_DEFAULT)) ++confident;
+        else if (best > 0 && sel && sel->src != H::ChargeSource::ASSUMED) ++weak;
       }
       CHECK(confident == 0, "%s (d): %d of 20 random spectra reach the margin", label, confident);
       CHECK(assumed >= 10, "%s (d): only %d of 20 random spectra assumed 2", label, assumed);
@@ -272,26 +272,26 @@ namespace
     // ---- (e) possible charges under enumerate ----
     {
       const auto s = ComplementSynth::make("SAMPLERKDLVEGFNTWQR", 3, false, 0, 0.0, 40, 12);
-      const auto h = H::precursorHypotheses(s.spec, precursor(s.prec_mz, 0, {3, 2}), mode(H::ChargeMode::Enumerate), cs);
-      CHECK(h.size() == 2 && h[0].charge == 2 && h[1].charge == 3 && h[0].src == H::ChargeSource::Possible
-                && h[1].src == H::ChargeSource::Possible,
+      const auto h = H::precursorHypotheses(s.spec, precursor(s.prec_mz, 0, {3, 2}), mode(H::ChargeMode::ENUMERATE), cs);
+      CHECK(h.size() == 2 && h[0].charge == 2 && h[1].charge == 3 && h[0].src == H::ChargeSource::POSSIBLE
+                && h[1].src == H::ChargeSource::POSSIBLE,
             "%s (e): possible {2,3} gives exactly 2 and 3 (got %zu)", label, h.size());
       const H::Hypothesis* sel = selected(h);
       CHECK(sel && sel->charge == 3, "%s (e): the infer call selects 3", label);
       // Without possible charges: charge_min .. charge_max.
-      const auto r = H::precursorHypotheses(s.spec, precursor(s.prec_mz, 0), mode(H::ChargeMode::Enumerate), cs);
-      CHECK(r.size() == 3 && r[0].charge == 2 && r[2].charge == 4 && r[1].src == H::ChargeSource::Enumerated,
+      const auto r = H::precursorHypotheses(s.spec, precursor(s.prec_mz, 0), mode(H::ChargeMode::ENUMERATE), cs);
+      CHECK(r.size() == 3 && r[0].charge == 2 && r[2].charge == 4 && r[1].src == H::ChargeSource::ENUMERATED,
             "%s (e): enumerate without possible charges gives 2..4", label);
       // One possible charge is that charge, in every non-default mode.
-      for (const H::ChargeMode m : {H::ChargeMode::Enumerate, H::ChargeMode::Infer})
+      for (const H::ChargeMode m : {H::ChargeMode::ENUMERATE, H::ChargeMode::INFER})
       {
         const auto o = H::precursorHypotheses(s.spec, precursor(s.prec_mz, 0, {4}), mode(m), cs);
-        CHECK(o.size() == 1 && o[0].charge == 4 && o[0].src == H::ChargeSource::Possible && o[0].selected,
+        CHECK(o.size() == 1 && o[0].charge == 4 && o[0].src == H::ChargeSource::POSSIBLE && o[0].selected,
               "%s (e): a single possible charge is used", label);
       }
       // Under assume2 the possible charges are ignored, as in 1.11.
-      const auto a = H::precursorHypotheses(s.spec, precursor(s.prec_mz, 0, {3, 4}), mode(H::ChargeMode::Assume2, {0, 1}), cs);
-      CHECK(a.size() == 1 && a[0].charge == 2 && a[0].src == H::ChargeSource::Assumed, "%s (e): assume2 gives 2", label);
+      const auto a = H::precursorHypotheses(s.spec, precursor(s.prec_mz, 0, {3, 4}), mode(H::ChargeMode::ASSUME2, {0, 1}), cs);
+      CHECK(a.size() == 1 && a[0].charge == 2 && a[0].src == H::ChargeSource::ASSUMED, "%s (e): assume2 gives 2", label);
     }
 
     // ---- (f) peak order ----
@@ -300,11 +300,11 @@ namespace
       MSSpectrum shuffled = s.spec;
       std::mt19937 rng(7);
       std::shuffle(shuffled.begin(), shuffled.end(), rng);
-      for (const H::ChargeMode m : {H::ChargeMode::Enumerate, H::ChargeMode::Infer})
+      for (const H::ChargeMode m : {H::ChargeMode::ENUMERATE, H::ChargeMode::INFER})
       {
         H::ChargeCall c1, c2;
-        const auto a = H::precursorHypotheses(s.spec, precursor(s.prec_mz + kC13 / 3, 0), mode(m, {-1, 0, 1, 2}), cs, &c1);
-        const auto b = H::precursorHypotheses(shuffled, precursor(s.prec_mz + kC13 / 3, 0), mode(m, {-1, 0, 1, 2}), cs, &c2);
+        const auto a = H::precursorHypotheses(s.spec, precursor(s.prec_mz + C13_MASS_DIFF / 3, 0), mode(m, {-1, 0, 1, 2}), cs, &c1);
+        const auto b = H::precursorHypotheses(shuffled, precursor(s.prec_mz + C13_MASS_DIFF / 3, 0), mode(m, {-1, 0, 1, 2}), cs, &c2);
         bool same = a.size() == b.size() && c1.excess == c2.excess && c1.charge == c2.charge;
         for (size_t i = 0; same && i < a.size(); ++i)
           same = a[i].charge == b[i].charge && a[i].iso == b[i].iso && a[i].mz == b[i].mz && a[i].src == b[i].src
@@ -316,10 +316,10 @@ namespace
     // ---- (g) a header charge is never replaced ----
     {
       const auto s = ComplementSynth::make("SAMPLERKDLVEGFNTWQR", 3, false, 0, 0.0, 40, 12);
-      for (const H::ChargeMode m : {H::ChargeMode::Enumerate, H::ChargeMode::Infer})
+      for (const H::ChargeMode m : {H::ChargeMode::ENUMERATE, H::ChargeMode::INFER})
       {
         const auto h = H::precursorHypotheses(s.spec, precursor(s.prec_mz, 2, {3}), mode(m), cs);
-        CHECK(h.size() == 1 && h[0].charge == 2 && h[0].src == H::ChargeSource::Header && h[0].selected
+        CHECK(h.size() == 1 && h[0].charge == 2 && h[0].src == H::ChargeSource::HEADER && h[0].selected
                   && h[0].mz == s.prec_mz,
               "%s (g): header 2 kept on a 3+ spectrum", label);
       }
@@ -329,7 +329,7 @@ namespace
     {
       std::mt19937 rng(1312);
       long n_assume = 0, n_enum = 0, n_enum_raw = 0;
-      const auto hp = mode(H::ChargeMode::Enumerate);
+      const auto hp = mode(H::ChargeMode::ENUMERATE);
       for (int k = 0; k < 500; ++k)
       {
         const double prec_mz = 450.0 + 500.0 * ComplementSynth::u01(rng);
@@ -363,11 +363,11 @@ namespace
       const AASequence other = AASequence::fromString("WHFYWHMYFWK");
       for (size_t i = 3; i < other.size(); ++i)
       {
-        const double ny = other.getSuffix(i).getMonoWeight(Residue::YIon, 1) - kP;
-        s.spec.emplace_back((ny + 3 * kP) / 3.0, 3.0);
+        const double ny = other.getSuffix(i).getMonoWeight(Residue::YIon, 1) - PROTON;
+        s.spec.emplace_back((ny + 3 * PROTON) / 3.0, 3.0);
       }
       s.spec.sortByPosition();
-      const auto hp = mode(H::ChargeMode::Enumerate);
+      const auto hp = mode(H::ChargeMode::ENUMERATE);
       H::ChargeCall call;
       const auto h = H::precursorHypotheses(s.spec, precursor(s.prec_mz, 0), hp, cs, &call);
       double best3 = 1e300, best4 = 1e300;
@@ -414,9 +414,9 @@ namespace
         specs.push_back(c->spec);
         mzs.push_back(c->prec_mz);
       }
-      for (const H::ChargeMode m : {H::ChargeMode::Infer, H::ChargeMode::Enumerate})
+      for (const H::ChargeMode m : {H::ChargeMode::INFER, H::ChargeMode::ENUMERATE})
       {
-        const char* mn = m == H::ChargeMode::Infer ? "infer" : "enumerate";
+        const char* mn = m == H::ChargeMode::INFER ? "infer" : "enumerate";
         int n_out = 0;
         for (size_t k = 0; k < specs.size(); ++k)
         {
@@ -439,9 +439,9 @@ namespace
       int assumed = 0, low = 0;
       for (int k = 0; k < 10; ++k)
       {
-        const auto h = H::precursorHypotheses(specs[k], precursor(mzs[k], 0, {3, 4}), mode(H::ChargeMode::Infer), cs);
+        const auto h = H::precursorHypotheses(specs[k], precursor(mzs[k], 0, {3, 4}), mode(H::ChargeMode::INFER), cs);
         const H::Hypothesis* sel = selected(h);
-        if (!sel || sel->src != H::ChargeSource::Assumed) continue;
+        if (!sel || sel->src != H::ChargeSource::ASSUMED) continue;
         ++assumed;
         low += h.size() == 1 && sel->charge == 3;
       }
@@ -450,13 +450,13 @@ namespace
       // The 1+ spectrum under -charge_min 2: the 1+ test does not run, and with
       // -charge_min 1 it does (the construct is a valid 1+).
       H::ChargeCall c2, c1;
-      const auto h2 = H::precursorHypotheses(s1.spec, precursor(s1.prec_mz, 0), ranged(H::ChargeMode::Infer, 2, 4), cs, &c2);
-      const auto h1 = H::precursorHypotheses(s1.spec, precursor(s1.prec_mz, 0), ranged(H::ChargeMode::Infer, 1, 4), cs, &c1);
+      const auto h2 = H::precursorHypotheses(s1.spec, precursor(s1.prec_mz, 0), ranged(H::ChargeMode::INFER, 2, 4), cs, &c2);
+      const auto h1 = H::precursorHypotheses(s1.spec, precursor(s1.prec_mz, 0), ranged(H::ChargeMode::INFER, 1, 4), cs, &c1);
       const H::Hypothesis* sel1 = selected(h1);
       CHECK(c2.charge >= 2 && sel1 && sel1->charge == 1, "%s (j): 1+ spectrum gives %d at -charge_min 2, %d at 1",
             label, c2.charge, sel1 ? sel1->charge : -1);
       // A 2+ spectrum at -charge_min = -charge_max = 4: 4, never the 2 it would infer.
-      const auto h44 = H::precursorHypotheses(s2.spec, precursor(s2.prec_mz, 0), ranged(H::ChargeMode::Infer, 4, 4), cs);
+      const auto h44 = H::precursorHypotheses(s2.spec, precursor(s2.prec_mz, 0), ranged(H::ChargeMode::INFER, 4, 4), cs);
       CHECK(h44.size() == 1 && h44[0].charge == 4 && h44[0].selected, "%s (j): 2+ spectrum at range 4..4 gives 4", label);
     }
 
@@ -464,31 +464,31 @@ namespace
     {
       using V = H::HeaderVerdict;
       H::HypParam warn, both;
-      warn.header_check = H::HeaderCheck::Warn;
-      both.header_check = H::HeaderCheck::Both;
-      CHECK(warn.isDefault() && !both.isDefault() && H::HypParam{}.header_check == H::HeaderCheck::Off,
+      warn.header_check = H::HeaderCheck::WARN;
+      both.header_check = H::HeaderCheck::BOTH;
+      CHECK(warn.isDefault() && !both.isDefault() && H::HypParam{}.header_check == H::HeaderCheck::OFF,
             "%s (k): warn keeps the 1.11 hypothesis path, both does not", label);
       const auto s3 = ComplementSynth::make("SAMPLERKDLVEGFNTWQR", 3, false, 0, 0.0, 40, 12);
       const auto s2 = ComplementSynth::make("VGAHAGEYGAEALER", 2, false, 1, 0.0, 30, 11);
       // header 2 on a 3+ spectrum: its complement pairs call 3; the peaks
       // above the 2+ ceiling are reported, never the ground.
       const auto r32 = H::checkHeaderCharge(s3.spec, precursor(s3.prec_mz, 2), warn, cs);
-      CHECK(r32.header == 2 && r32.verdict == V::Disagree && r32.call.charge == 3 && r32.header_ruled_out
-                && r32.flag_basis == H::CallBasis::Complement && r32.flag_charge == 3,
+      CHECK(r32.header == 2 && r32.verdict == V::DISAGREE && r32.call.charge == 3 && r32.header_ruled_out
+                && r32.flag_basis == H::CallBasis::COMPLEMENT && r32.flag_charge == 3,
             "%s (k): 3+ with header 2 disagrees by complement pairs (got %s, call %d, basis %s, ruled out %d)", label,
             H::verdictName(r32.verdict), r32.call.charge, H::basisName(r32.flag_basis), int(r32.header_ruled_out));
       // header 4 on a 3+ spectrum: 4 is never ruled out by range; complement pairs call 3.
       const auto r34 = H::checkHeaderCharge(s3.spec, precursor(s3.prec_mz, 4), warn, cs);
-      CHECK(r34.verdict == V::Disagree && r34.call.charge == 3 && r34.call.basis == H::CallBasis::Complement
+      CHECK(r34.verdict == V::DISAGREE && r34.call.charge == 3 && r34.call.basis == H::CallBasis::COMPLEMENT
                 && !r34.header_ruled_out && r34.call_excess - r34.header_excess >= warn.header_margin,
             "%s (k): 3+ with header 4 disagrees by complement pairs (got %s, call %d, basis %s, %.2f vs %.2f)", label,
             H::verdictName(r34.verdict), r34.call.charge, H::basisName(r34.call.basis), r34.call_excess,
             r34.header_excess);
       const auto r33 = H::checkHeaderCharge(s3.spec, precursor(s3.prec_mz, 3), warn, cs);
-      CHECK(r33.verdict == V::Agree && r33.call.charge == 3, "%s (k): 3+ with header 3 agrees (got %s)", label,
+      CHECK(r33.verdict == V::AGREE && r33.call.charge == 3, "%s (k): 3+ with header 3 agrees (got %s)", label,
             H::verdictName(r33.verdict));
       const auto r22 = H::checkHeaderCharge(s2.spec, precursor(s2.prec_mz, 2), warn, cs);
-      CHECK(r22.verdict == V::Agree && r22.call.charge == 2, "%s (k): 2+ with header 2 agrees (got %s, call %d)", label,
+      CHECK(r22.verdict == V::AGREE && r22.call.charge == 2, "%s (k): 2+ with header 2 agrees (got %s, call %d)", label,
             H::verdictName(r22.verdict), r22.call.charge);
       // No header: no check.
       CHECK(H::checkHeaderCharge(s3.spec, precursor(s3.prec_mz, 0), warn, cs).header == 0, "%s (k): no header, no check",
@@ -496,30 +496,30 @@ namespace
       // A large margin: no disagreement, peaks above the header's ceiling or not.
       H::HypParam wide = warn;
       wide.header_margin = 1e9;
-      CHECK(H::checkHeaderCharge(s3.spec, precursor(s3.prec_mz, 4), wide, cs).verdict == V::NoCall
-                && H::checkHeaderCharge(s3.spec, precursor(s3.prec_mz, 2), wide, cs).verdict != V::Disagree,
+      CHECK(H::checkHeaderCharge(s3.spec, precursor(s3.prec_mz, 4), wide, cs).verdict == V::NO_CALL
+                && H::checkHeaderCharge(s3.spec, precursor(s3.prec_mz, 2), wide, cs).verdict != V::DISAGREE,
             "%s (k): range evidence alone is no ground to disagree", label);
       // Ambiguous calls (a margin no runner-up can miss): with the header one of
       // the two it agrees; a ruled-out header is ambiguous, not a disagreement.
       H::HypParam amb = warn;
       amb.infer_margin = 1e9;
       const auto a2 = H::checkHeaderCharge(s3.spec, precursor(s3.prec_mz, 2), amb, cs);
-      CHECK(a2.call.src == H::ChargeSource::Ambiguous && a2.verdict == V::Ambiguous && a2.call.charge == 3
+      CHECK(a2.call.src == H::ChargeSource::AMBIGUOUS && a2.verdict == V::AMBIGUOUS && a2.call.charge == 3
                 && a2.header_ruled_out,
             "%s (k): ambiguous call, header 2 ruled out: ambiguous (got %s, %s, call %d/%d)", label,
             H::sourceName(a2.call.src), H::verdictName(a2.verdict), a2.call.charge, a2.call.runner_up);
       const auto a4 = H::checkHeaderCharge(s3.spec, precursor(s3.prec_mz, 4), amb, cs);
-      CHECK(a4.call.src == H::ChargeSource::Ambiguous && a4.verdict == V::Agree && a4.call.runner_up == 4,
+      CHECK(a4.call.src == H::ChargeSource::AMBIGUOUS && a4.verdict == V::AGREE && a4.call.runner_up == 4,
             "%s (k): ambiguous call 3/4 agrees with header 4 (got %s, call %d/%d)", label, H::verdictName(a4.verdict),
             a4.call.charge, a4.call.runner_up);
       // both: disagreeing -> header charge (selected) and the check's charge,
       // ascending; agreeing -> header.
       const auto ho = H::precursorHypotheses(s3.spec, precursor(s3.prec_mz, 4), both, cs, nullptr, &r34);
-      CHECK(ho.size() == 2 && ho[0].charge == 3 && ho[0].src == H::ChargeSource::CheckCall && !ho[0].selected
-                && ho[1].charge == 4 && ho[1].src == H::ChargeSource::Header && ho[1].selected,
+      CHECK(ho.size() == 2 && ho[0].charge == 3 && ho[0].src == H::ChargeSource::CHECK_CALL && !ho[0].selected
+                && ho[1].charge == 4 && ho[1].src == H::ChargeSource::HEADER && ho[1].selected,
             "%s (k): both tags header 4 at 3 and 4, 4 selected (got %zu hypotheses)", label, ho.size());
       const auto ha = H::precursorHypotheses(s3.spec, precursor(s3.prec_mz, 3), both, cs, nullptr, &r33);
-      CHECK(ha.size() == 1 && ha[0].charge == 3 && ha[0].src == H::ChargeSource::Header,
+      CHECK(ha.size() == 1 && ha[0].charge == 3 && ha[0].src == H::ChargeSource::HEADER,
             "%s (k): both keeps an agreeing header", label);
       // MS1 isotope spacing: a 3+ pattern at the precursor outranks the
       // fragment evidence; profile or centroid; no pattern, no MS1 charge.
@@ -527,8 +527,8 @@ namespace
         MSSpectrum m3;
         m3.emplace_back(s3.prec_mz - 7.3, 500.0);
         m3.emplace_back(s3.prec_mz, 100.0);
-        m3.emplace_back(s3.prec_mz + kC13 / 3, 60.0);
-        m3.emplace_back(s3.prec_mz + 2 * kC13 / 3, 20.0);
+        m3.emplace_back(s3.prec_mz + C13_MASS_DIFF / 3, 60.0);
+        m3.emplace_back(s3.prec_mz + 2 * C13_MASS_DIFF / 3, 20.0);
         m3.emplace_back(s3.prec_mz + 5.1, 300.0);
         int n = 0;
         CHECK(H::ms1Charge(m3, s3.prec_mz, &n) == 3 && n == 2, "%s (k): MS1 3+ pattern gives 3 (%d peaks)", label, n);
@@ -537,8 +537,8 @@ namespace
         CHECK(H::ms1Charge(prof, s3.prec_mz) == 3, "%s (k): MS1 charge on a profile scan", label);
         MSSpectrum m2;
         m2.emplace_back(s3.prec_mz, 100.0);
-        m2.emplace_back(s3.prec_mz + kC13 / 2, 50.0);
-        m2.emplace_back(s3.prec_mz + kC13, 15.0);
+        m2.emplace_back(s3.prec_mz + C13_MASS_DIFF / 2, 50.0);
+        m2.emplace_back(s3.prec_mz + C13_MASS_DIFF, 15.0);
         CHECK(H::ms1Charge(m2, s3.prec_mz) == 2, "%s (k): MS1 2+ pattern gives 2", label);
         MSSpectrum lone;
         lone.emplace_back(s3.prec_mz, 100.0);
@@ -546,26 +546,26 @@ namespace
                   && H::ms1Charge(m3, s3.prec_mz + 2.0) == 0,
               "%s (k): no isotope pattern, no MS1 charge", label);
         const auto q2 = H::checkHeaderCharge(s3.spec, precursor(s3.prec_mz, 2), wide, cs, &m3);
-        CHECK(q2.verdict == V::Disagree && q2.flag_basis == H::CallBasis::Ms1Isotope && q2.flag_charge == 3
+        CHECK(q2.verdict == V::DISAGREE && q2.flag_basis == H::CallBasis::MS1_ISOTOPE && q2.flag_charge == 3
                   && q2.ms1_charge == 3 && q2.replacement() == 3,
               "%s (k): MS1 3+ against header 2 disagrees at 3 (got %s, %s)", label, H::verdictName(q2.verdict),
               H::basisName(q2.flag_basis));
         // The MS1 charge agrees with header 4 on a spectrum whose pairs say 3: agree.
         MSSpectrum m4;
         m4.emplace_back(s3.prec_mz, 100.0);
-        m4.emplace_back(s3.prec_mz + kC13 / 4, 60.0);
-        m4.emplace_back(s3.prec_mz + 2 * kC13 / 4, 20.0);
+        m4.emplace_back(s3.prec_mz + C13_MASS_DIFF / 4, 60.0);
+        m4.emplace_back(s3.prec_mz + 2 * C13_MASS_DIFF / 4, 20.0);
         const auto q4 = H::checkHeaderCharge(s3.spec, precursor(s3.prec_mz, 4), warn, cs, &m4);
-        CHECK(q4.verdict == V::Agree && q4.flag_basis == H::CallBasis::Ms1Isotope && q4.call.charge == 3,
+        CHECK(q4.verdict == V::AGREE && q4.flag_basis == H::CallBasis::MS1_ISOTOPE && q4.call.charge == 3,
               "%s (k): MS1 4+ keeps header 4 against the pairs (got %s)", label, H::verdictName(q4.verdict));
         // A doubled MS1 call (4 on a 2+ pattern with a peak at 1/4) leaves a
         // header 2 whose own +1/2 peak is there.
         MSSpectrum m24 = m2;
-        m24.emplace_back(s3.prec_mz + kC13 / 4, 30.0);
+        m24.emplace_back(s3.prec_mz + C13_MASS_DIFF / 4, 30.0);
         m24.sortByPosition();
         const auto qd = H::checkHeaderCharge(s3.spec, precursor(s3.prec_mz, 2), wide, cs, &m24);
-        CHECK(H::ms1Charge(m24, s3.prec_mz) == 4 && qd.ms1_charge == 4 && qd.verdict == V::Agree
-                  && qd.flag_basis == H::CallBasis::Ms1Isotope && qd.flag_charge == 2 && qd.replacement() == 2,
+        CHECK(H::ms1Charge(m24, s3.prec_mz) == 4 && qd.ms1_charge == 4 && qd.verdict == V::AGREE
+                  && qd.flag_basis == H::CallBasis::MS1_ISOTOPE && qd.flag_charge == 2 && qd.replacement() == 2,
               "%s (k): a doubled MS1 charge keeps a header with its own spacing (got %s)", label,
               H::verdictName(qd.verdict));
         const auto q0 = H::checkHeaderCharge(s3.spec, precursor(s3.prec_mz, 4), warn, cs, &lone);
@@ -584,18 +584,18 @@ namespace
         }
         sp.sortByPosition();
         const auto r = H::checkHeaderCharge(sp, precursor(pm, 2), warn, cs);
-        CHECK(r.verdict == V::Disagree && r.flag_charge == 3 && r.flag_basis == H::CallBasis::Complement
+        CHECK(r.verdict == V::DISAGREE && r.flag_charge == 3 && r.flag_basis == H::CallBasis::COMPLEMENT
                   && !r.header_ruled_out,
               "%s (k): 1+/2+ pairs call a 3+ against header 2 (got %s, call %d, %.2f vs %.2f)", label,
               H::verdictName(r.verdict), r.call.charge, r.call_excess, r.header_excess);
       }
       // warn: the 1.11 hypothesis whatever the verdict.
       const auto hw = H::precursorHypotheses(s3.spec, precursor(s3.prec_mz, 4), warn, cs, nullptr, &r34);
-      CHECK(hw.size() == 1 && hw[0].charge == 4 && hw[0].src == H::ChargeSource::Header,
+      CHECK(hw.size() == 1 && hw[0].charge == 4 && hw[0].src == H::ChargeSource::HEADER,
             "%s (k): warn tags at the header charge", label);
       // A verdict for another header charge is not applied.
       const auto hx = H::precursorHypotheses(s3.spec, precursor(s3.prec_mz, 2), both, cs, nullptr, &r34);
-      CHECK(hx.size() == 1 && hx[0].charge == 2 && hx[0].src == H::ChargeSource::Header,
+      CHECK(hx.size() == 1 && hx[0].charge == 2 && hx[0].src == H::ChargeSource::HEADER,
             "%s (k): a verdict for another header is ignored", label);
       // Random peaks never disagree.
       std::mt19937 rng(1414);
@@ -606,7 +606,7 @@ namespace
         const int z = 2 + i % 2;
         // m/z such that the random peaks stay below every candidate's ceiling.
         const auto r = H::checkHeaderCharge(rs, precursor(760.0, z), warn, cs);
-        if (r.verdict == V::Disagree && r.call.basis == H::CallBasis::Complement) ++dis;
+        if (r.verdict == V::DISAGREE && r.call.basis == H::CallBasis::COMPLEMENT) ++dis;
       }
       CHECK(dis <= 3, "%s (k): %d of 300 random-peak spectra disagree by complement pairs", label, dis);
       // Peak order.
@@ -619,7 +619,7 @@ namespace
       // A header above the fragment-charge cap is no candidate and never ruled
       // out: no range disagreement for it.
       const auto r39 = H::checkHeaderCharge(s3.spec, precursor(s3.prec_mz, 12), warn, cs);
-      CHECK(!r39.header_ruled_out && r39.call.basis != H::CallBasis::Range,
+      CHECK(!r39.header_ruled_out && r39.call.basis != H::CallBasis::RANGE,
             "%s (k): header 12 is not ruled out by range (got ruled out %d, %s, %s)", label, int(r39.header_ruled_out),
             H::basisName(r39.call.basis), H::verdictName(r39.verdict));
       // One stray peak above a right header's ceiling (too few for range
@@ -643,14 +643,14 @@ namespace
         st.sortByPosition();
         const auto rs = H::checkHeaderCharge(st, precursor(s2.prec_mz, 2), warn, cs);
         CHECK(rs.header_ruled_out && rs.header_peaks_above == 1 && rs.call.charge == 3
-                  && rs.call.basis == H::CallBasis::Complement && rs.call_excess >= warn.header_margin
-                  && rs.header_excess > rs.call_excess && rs.verdict != V::Disagree,
+                  && rs.call.basis == H::CallBasis::COMPLEMENT && rs.call_excess >= warn.header_margin
+                  && rs.header_excess > rs.call_excess && rs.verdict != V::DISAGREE,
               "%s (k): one stray peak above a right header 2: no disagreement against its excess (got %s, call %d, "
               "basis %s, ruled out %d, peaks above %d, %.2f vs header %.2f)",
               label, H::verdictName(rs.verdict), rs.call.charge, H::basisName(rs.call.basis), int(rs.header_ruled_out),
               rs.header_peaks_above, rs.call_excess, rs.header_excess);
         const auto ra = H::checkHeaderCharge(st, precursor(s2.prec_mz, 2), amb, cs);
-        CHECK(ra.call.src == H::ChargeSource::Ambiguous && ra.header_ruled_out && ra.verdict == V::Ambiguous,
+        CHECK(ra.call.src == H::ChargeSource::AMBIGUOUS && ra.header_ruled_out && ra.verdict == V::AMBIGUOUS,
               "%s (k): ambiguous call, one stray peak above header 2: ambiguous, not disagree (got %s, %s)", label,
               H::sourceName(ra.call.src), H::verdictName(ra.verdict));
         // Header 12 (above the cap, no table entry): its excess is computed too.
@@ -671,9 +671,9 @@ namespace
       hc.add(r34, true);
       hc.add(r33, true);
       hc.add(H::HeaderCheckResult{}, true);
-      CHECK(hc.checked == 2 && hc.verdict[size_t(V::Disagree)] == 1 && hc.verdict[size_t(V::Agree)] == 1
+      CHECK(hc.checked == 2 && hc.verdict[size_t(V::DISAGREE)] == 1 && hc.verdict[size_t(V::AGREE)] == 1
                 && hc.both == 1 && hc.moves[4][3] == 1
-                && hc.disagree_by[size_t(H::CallBasis::Complement)] == 1,
+                && hc.disagree_by[size_t(H::CallBasis::COMPLEMENT)] == 1,
             "%s (k): counts", label);
     }
   }

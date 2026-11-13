@@ -39,7 +39,7 @@ namespace FASTag::Digest
       for (int a : s)
       {
         if (!o.empty()) o += ',';
-        o += kAAs[static_cast<std::size_t>(a)];
+        o += AAS[static_cast<std::size_t>(a)];
       }
       return o.empty() ? "-" : o;
     }
@@ -49,12 +49,12 @@ namespace FASTag::Digest
   {
     const Dist p = normalised(model_end), b = normalised(bg);
     std::vector<int> s;
-    for (int a = 0; a < kNumAA; ++a)
+    for (int a = 0; a < NUM_AA; ++a)
       if (p[static_cast<std::size_t>(a)] > b[static_cast<std::size_t>(a)]) s.push_back(a);
     return s;
   }
 
-  double mixtureShareMle(const std::array<std::uint64_t, kNumAA>& k, const Dist& p_in, const Dist& b_in)
+  double mixtureShareMle(const std::array<std::uint64_t, NUM_AA>& k, const Dist& p_in, const Dist& b_in)
   {
     const Dist p = normalised(p_in), b = normalised(b_in);
     // dL/ds = sum_a k_a (b_a - p_a) / ((1 - s) p_a + s b_a), decreasing in s.
@@ -101,13 +101,13 @@ namespace FASTag::Digest
       const auto& joint = end == 'C' ? tc.cq : tc.nq;
       for (std::uint64_t c : counts) e.ends += c;
       const Dist bn = normalised(bg);
-      std::array<bool, kNumAA> is_site{};
+      std::array<bool, NUM_AA> is_site{};
       for (int a : e.sites) is_site[static_cast<std::size_t>(a)] = true;
       for (int a : e.sites)
       {
         e.specific += counts[static_cast<std::size_t>(a)];
         e.mc_background_share += bn[static_cast<std::size_t>(a)];
-        for (int r = 0; r < kNumAA; ++r)
+        for (int r = 0; r < NUM_AA; ++r)
         {
           const std::uint64_t n = joint[static_cast<std::size_t>(a)][static_cast<std::size_t>(r)];
           e.mc_positions += n;

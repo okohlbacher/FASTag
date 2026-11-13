@@ -24,25 +24,25 @@ namespace FASTag::Alkylation
 {
   const char* className(int cls)
   {
-    static const char* const names[kNumClasses] = {"Carbamidomethyl", "Propionamide", "Nethylmaleimide",
+    static const char* const names[NUM_CLASSES] = {"Carbamidomethyl", "Propionamide", "Nethylmaleimide",
                                                    "Methylthio", "Carboxymethyl", "none"};
-    return cls >= 0 && cls < kNumClasses ? names[cls] : "-";
+    return cls >= 0 && cls < NUM_CLASSES ? names[cls] : "-";
   }
 
   std::vector<Form> forms()
   {
-    static const struct { const char* name; const char* site; int cls; } defs[kNumForms] = {
-        {"Carbamidomethyl", "Carbamidomethyl (C)", Carbamidomethyl},
-        {"Propionamide", "Propionamide (C)", Propionamide},
-        {"Nethylmaleimide", "Nethylmaleimide (C)", Nethylmaleimide},
-        {"Methylthio", "Methylthio (C)", Methylthio},
-        {"Carboxymethyl", "Carboxymethyl (C)", Carboxymethyl},
-        {"unmodified", "", None},
-        {"Oxidation", "Oxidation (C)", None},
-        {"Dioxidation", "Dioxidation (C)", None},
-        {"Trioxidation", "Trioxidation (C)", None},
-        {"Cysteinyl", "Cysteinyl (C)", None},
-        {"Dehydroalanine", "Cys->Dha (C)", None}};
+    static const struct { const char* name; const char* site; int cls; } defs[NUM_FORMS] = {
+        {"Carbamidomethyl", "Carbamidomethyl (C)", CARBAMIDOMETHYL},
+        {"Propionamide", "Propionamide (C)", PROPIONAMIDE},
+        {"Nethylmaleimide", "Nethylmaleimide (C)", NETHYLMALEIMIDE},
+        {"Methylthio", "Methylthio (C)", METHYLTHIO},
+        {"Carboxymethyl", "Carboxymethyl (C)", CARBOXYMETHYL},
+        {"unmodified", "", NONE},
+        {"Oxidation", "Oxidation (C)", NONE},
+        {"Dioxidation", "Dioxidation (C)", NONE},
+        {"Trioxidation", "Trioxidation (C)", NONE},
+        {"Cysteinyl", "Cysteinyl (C)", NONE},
+        {"Dehydroalanine", "Cys->Dha (C)", NONE}};
     std::vector<Form> out;
     const OpenMS::ModificationsDB* mdb = OpenMS::ModificationsDB::getInstance();
     for (const auto& d : defs)
@@ -79,15 +79,15 @@ namespace FASTag::Alkylation
   {
     switch (o)
     {
-      case Outcome::Binned: return "binned";
-      case Outcome::Unexplained: return "unexplained";
-      case Outcome::NoCys: return "no_cys";
-      case Outcome::MultiCys: return "multi_cys";
-      case Outcome::CysInTag: return "cys_in_tag";
-      case Outcome::CysOutsideRegion: return "cys_outside_region";
-      case Outcome::ProteinNTerm: return "protein_nterm";
-      case Outcome::Truncation: return "truncation";
-      case Outcome::MetAmbiguous: return "met_ambiguous";
+      case Outcome::BINNED: return "binned";
+      case Outcome::UNEXPLAINED: return "unexplained";
+      case Outcome::NO_CYS: return "no_cys";
+      case Outcome::MULTI_CYS: return "multi_cys";
+      case Outcome::CYS_IN_TAG: return "cys_in_tag";
+      case Outcome::CYS_OUTSIDE_REGION: return "cys_outside_region";
+      case Outcome::PROTEIN_N_TERM: return "protein_nterm";
+      case Outcome::TRUNCATION: return "truncation";
+      case Outcome::MET_AMBIGUOUS: return "met_ambiguous";
       default: return "-";
     }
   }
@@ -120,9 +120,9 @@ namespace FASTag::Alkylation
     for (int i = 0; i < L; ++i)
       if (up(p.peptide[static_cast<std::size_t>(i)]) == 'C') { ++ncys; cpos = i; }
     if (ncys == 0) return e;  // NoCys
-    if (ncys > 1) { e.outcome = Outcome::MultiCys; return e; }
+    if (ncys > 1) { e.outcome = Outcome::MULTI_CYS; return e; }
     const int tag_end = p.tag_pos + p.tag_len;  // one past the tag
-    if (cpos >= p.tag_pos && cpos < tag_end) { e.outcome = Outcome::CysInTag; return e; }
+    if (cpos >= p.tag_pos && cpos < tag_end) { e.outcome = Outcome::CYS_IN_TAG; return e; }
     bool exact = p.nterm_match && p.cterm_match;
     bool nside = cpos < p.tag_pos;
     double gap = 0.0;
@@ -141,9 +141,9 @@ namespace FASTag::Alkylation
       }
       if (!exact)
       {
-        if (gap_n != nside) { e.outcome = Outcome::CysOutsideRegion; return e; }
+        if (gap_n != nside) { e.outcome = Outcome::CYS_OUTSIDE_REGION; return e; }
         gap = rest;
-        if (nside && p.start == 0) { e.outcome = Outcome::ProteinNTerm; return e; }
+        if (nside && p.start == 0) { e.outcome = Outcome::PROTEIN_N_TERM; return e; }
       }
     }
     // The gap side: [0, tag_pos) or [tag_end, L).
@@ -153,11 +153,11 @@ namespace FASTag::Alkylation
       // Truncation guard: the outermost one or two residues of the gap side.
       const int o1 = nside ? lo : hi, o2 = nside ? lo + 1 : hi - 1;
       const double m1 = massOf(p.peptide[static_cast<std::size_t>(o1)], s);
-      if (std::fabs(std::fabs(gap) - m1) <= s.window) { e.outcome = Outcome::Truncation; return e; }
+      if (std::fabs(std::fabs(gap) - m1) <= s.window) { e.outcome = Outcome::TRUNCATION; return e; }
       if (hi - lo >= 1)
       {
         const double m2 = m1 + massOf(p.peptide[static_cast<std::size_t>(o2)], s);
-        if (std::fabs(std::fabs(gap) - m2) <= s.window) { e.outcome = Outcome::Truncation; return e; }
+        if (std::fabs(std::fabs(gap) - m2) <= s.window) { e.outcome = Outcome::TRUNCATION; return e; }
       }
     }
     e.reagent = gap + s.fixed_c;
@@ -170,25 +170,25 @@ namespace FASTag::Alkylation
       const int b_ox = bin(e.reagent - s.met_oxidation, s, forms);
       if (b >= 0 && b_ox >= 0 && forms[static_cast<std::size_t>(b)].cls != forms[static_cast<std::size_t>(b_ox)].cls)
       {
-        e.outcome = Outcome::MetAmbiguous;
+        e.outcome = Outcome::MET_AMBIGUOUS;
         return e;
       }
       if (b < 0) b = b_ox;
     }
-    e.outcome = b >= 0 ? Outcome::Binned : Outcome::Unexplained;
+    e.outcome = b >= 0 ? Outcome::BINNED : Outcome::UNEXPLAINED;
     e.form = b;
     return e;
   }
 
   Vote tagVote(const std::vector<Eval>& evals, const std::vector<Form>& forms,
-               std::array<std::uint64_t, static_cast<int>(Outcome::kCount)>& outcomes)
+               std::array<std::uint64_t, static_cast<int>(Outcome::COUNT)>& outcomes)
   {
     Vote v;
     for (const Eval& e : evals)
     {
       ++outcomes[static_cast<std::size_t>(e.outcome)];
-      if (e.outcome != Outcome::Binned && e.outcome != Outcome::Unexplained) continue;
-      const int form = e.outcome == Outcome::Binned ? e.form : -1;
+      if (e.outcome != Outcome::BINNED && e.outcome != Outcome::UNEXPLAINED) continue;
+      const int form = e.outcome == Outcome::BINNED ? e.form : -1;
       const int cls = form >= 0 ? forms[static_cast<std::size_t>(form)].cls : -1;  // -1 = unexplained
       if (!v.have)
       {
@@ -239,7 +239,7 @@ namespace FASTag::Alkylation
     else
     {
       ++cls[static_cast<std::size_t>(v.cls)];
-      if (v.form >= 0 && v.form < kNumForms) ++form[static_cast<std::size_t>(v.form)];
+      if (v.form >= 0 && v.form < NUM_FORMS) ++form[static_cast<std::size_t>(v.form)];
     }
   }
 
@@ -260,7 +260,7 @@ namespace FASTag::Alkylation
     Call c;
     int top = -1;
     bool tie = false;
-    for (int k = 0; k < kNumClasses; ++k)
+    for (int k = 0; k < NUM_CLASSES; ++k)
     {
       c.binned += t.cls[static_cast<std::size_t>(k)];
       if (top < 0 || t.cls[static_cast<std::size_t>(k)] > t.cls[static_cast<std::size_t>(top)]) { top = k; tie = false; }
@@ -301,8 +301,8 @@ namespace FASTag::Alkylation
     auto add = [&](const char* sec, const std::string& key, const std::string& value, const std::string& n,
                    const std::string& d) { r.push_back(Digest::Row{sec, key, value, n, d}); };
     // ---- alk_run: settings and what was counted
-    add("alk_run", "format", std::to_string(kReportFormat), "-",
-        "The alkylation report follows format " + std::to_string(kReportFormat) + " (doc/ALKYLATION-REPORT.md).");
+    add("alk_run", "format", std::to_string(REPORT_FORMAT), "-",
+        "The alkylation report follows format " + std::to_string(REPORT_FORMAT) + " (doc/ALKYLATION-REPORT.md).");
     add("alk_run", "database", info.database, "-", "The placements are on the database " + info.database + ".");
     add("alk_run", "database_source", info.database_source, "-",
         info.database_source == "recon_fasta" ? "The database is -recon_fasta."
@@ -347,17 +347,17 @@ namespace FASTag::Alkylation
       add("alk_cys", forms[k].name, u(t.form[k]), u(binned),
           u(t.form[k]) + " spectra bin to " + forms[k].name + " (" + num(forms[k].mass) + " Da on C; class " +
               className(forms[k].cls) + ").");
-    for (int k = 0; k < kNumClasses; ++k)
+    for (int k = 0; k < NUM_CLASSES; ++k)
       add("alk_cys", std::string("class.") + className(k), u(t.cls[static_cast<std::size_t>(k)]), u(binned),
           u(t.cls[static_cast<std::size_t>(k)]) + " of " + u(binned) + " binned spectra are of the class " + className(k) +
-              (k == None ? " (unmodified, oxidised, cysteinylated or dehydroalanine Cys)." : "."));
+              (k == NONE ? " (unmodified, oxidised, cysteinylated or dehydroalanine Cys)." : "."));
     add("alk_cys", "unexplained", u(t.unexplained), u(t.spectra),
         u(t.unexplained) + " spectra have a reagent mass no Cys form explains within the window.");
     add("alk_cys", "conflict", u(t.conflict), u(t.spectra),
         u(t.conflict) + " spectra have a best tag whose counted placements disagree on the class.");
     std::uint64_t placements = 0;
     for (std::uint64_t v : t.outcomes) placements += v;
-    for (int k = static_cast<int>(Outcome::NoCys); k < static_cast<int>(Outcome::kCount); ++k)
+    for (int k = static_cast<int>(Outcome::NO_CYS); k < static_cast<int>(Outcome::COUNT); ++k)
     {
       const Outcome o = static_cast<Outcome>(k);
       static const char* const why[] = {"", "", "have no C in the peptide", "have two or more C in the peptide",
@@ -378,13 +378,13 @@ namespace FASTag::Alkylation
     {
       double mass = 0.0;
       for (const Form& fm : forms)
-        if (fm.cls == c.cls && fm.cls != None) { mass = fm.mass; break; }
+        if (fm.cls == c.cls && fm.cls != NONE) { mass = fm.mass; break; }
       add("alkylation_call", "status", "call", u(c.binned),
-          c.cls == None ? "The cysteines are not alkylated (not validated on held-out data)."
+          c.cls == NONE ? "The cysteines are not alkylated (not validated on held-out data)."
                         : "The cysteines are alkylated with " + name + " (not validated on held-out data).");
       add("alkylation_call", "reagent", name, u(c.top), "The call is " + name + ".");
-      add("alkylation_call", "mass", c.cls == None ? "-" : num(mass), "-",
-          c.cls == None ? "A call of none has no reagent mass." : name + " adds " + num(mass) + " Da to C.");
+      add("alkylation_call", "mass", c.cls == NONE ? "-" : num(mass), "-",
+          c.cls == NONE ? "A call of none has no reagent mass." : name + " adds " + num(mass) + " Da to C.");
       add("alkylation_call", "share", num(c.share), u(c.binned),
           "A share of " + f3(c.share) + " of the " + u(c.binned) + " binned spectra are " + name + ".");
       add("alkylation_call", "reason", "-", "-", "The call is made.");
@@ -483,7 +483,7 @@ namespace FASTag::Alkylation
 
   bool findShippedProteome(const std::string& manifest_text, const std::string& name, ShippedProteome& out)
   {
-    static const char* const kCols[] = {"name", "proteome", "taxon", "release", "release_date",
+    static const char* const COLS[] = {"name", "proteome", "taxon", "release", "release_date",
                                         "entries", "sha256", "fasta_sha256", "file"};
     std::vector<int> col(9, -1);
     bool header = false, found = false;
@@ -502,7 +502,7 @@ namespace FASTag::Alkylation
       {
         for (std::size_t i = 0; i < f.size(); ++i)
           for (int c = 0; c < 9; ++c)
-            if (f[i] == kCols[c]) col[c] = static_cast<int>(i);
+            if (f[i] == COLS[c]) col[c] = static_cast<int>(i);
         for (int c : col)
           if (c < 0) return false;
         header = true;

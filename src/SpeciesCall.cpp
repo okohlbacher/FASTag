@@ -99,9 +99,9 @@ namespace FASTag::SpeciesCall
   {
     switch (c)
     {
-      case Call::Present: return "present";
-      case Call::NoCall: return "no_call";
-      case Call::NotDetected: return "not_detected";
+      case Call::PRESENT: return "present";
+      case Call::NO_CALL: return "no_call";
+      case Call::NOT_DETECTED: return "not_detected";
     }
     return "not_detected";
   }
@@ -165,7 +165,7 @@ namespace FASTag::SpeciesCall
       s.decoy_spectra = genera[i].decoy_spectra;
       s.share = genera[i].share;
       s.random_expected = randomExpected(s.decoy_spectra, run.decoys, run.n_trials);
-      s.tested = s.observed >= Taxonomy::kObservedFloor;
+      s.tested = s.observed >= Taxonomy::OBSERVED_FLOOR;
       if (s.tested) tested.push_back(i);
     }
     // Descending observed count, ties by taxid: the order in which spill
@@ -274,17 +274,17 @@ namespace FASTag::SpeciesCall
       s.qvalue = q[i];
       s.qvalue_random = q_rand[i];
       s.lod = -1.0;
-      if (run.low_resolution) { s.call = Call::NoCall; s.reason = "low_resolution"; continue; }
-      if (run.n_units < run.min_units) { s.call = Call::NoCall; s.reason = "few_spectra"; continue; }
-      if (present[i]) { s.call = Call::Present; s.reason = "pass"; continue; }
-      if (qual[i]) { s.call = Call::NoCall; s.reason = "unstable"; continue; }
+      if (run.low_resolution) { s.call = Call::NO_CALL; s.reason = "low_resolution"; continue; }
+      if (run.n_units < run.min_units) { s.call = Call::NO_CALL; s.reason = "few_spectra"; continue; }
+      if (present[i]) { s.call = Call::PRESENT; s.reason = "pass"; continue; }
+      if (qual[i]) { s.call = Call::NO_CALL; s.reason = "unstable"; continue; }
       if (s.tested && s.spill > 0.0 && s.qvalue_random <= params.alpha && s.qvalue > params.alpha)
       {
-        s.call = Call::NoCall;
+        s.call = Call::NO_CALL;
         s.reason = "near_neighbour";
         continue;
       }
-      s.call = Call::NotDetected;
+      s.call = Call::NOT_DETECTED;
       if (!s.tested || s.qvalue > params.alpha) s.reason = "not_significant";
       else if (!(s.share >= params.tau)) s.reason = "low_share";
       else s.reason = "few_genus_spectra";
@@ -313,7 +313,7 @@ namespace FASTag::SpeciesCall
         o_star = hi;
       }
       const uint64_t by_tau = static_cast<uint64_t>(std::ceil(params.tau * static_cast<double>(run.n_units) - 1e-9));
-      const uint64_t o_lod = std::max<uint64_t>({o_star, params.n_min, Taxonomy::kObservedFloor, by_tau});
+      const uint64_t o_lod = std::max<uint64_t>({o_star, params.n_min, Taxonomy::OBSERVED_FLOOR, by_tau});
       if (run.n_units > 0) s.lod = static_cast<double>(o_lod) / static_cast<double>(run.n_units);
     }
     return st;

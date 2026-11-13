@@ -17,7 +17,7 @@ using namespace OpenMS;
 
 namespace FASTag
 {
-  Kmer128 FastaFilter::encode(const char* s, int n)
+  Kmer128 FastaFilter::encode_(const char* s, int n)
   {
     Kmer128 v;
     for (int i = 0; i < n; ++i)
@@ -71,14 +71,14 @@ namespace FASTag
 
   /// Emit every length-k reading from position i, applying collapses. Depth is k
   /// and branching at most 2 per step, but real sequences give ~1; capped anyway.
-  void FastaFilter::emitReadings(const std::string& seq, size_t i, int k, std::string& cur,
+  void FastaFilter::emitReadings_(const std::string& seq, size_t i, int k, std::string& cur,
                                  std::vector<Kmer128>& out, size_t& budget) const
   {
-    if (static_cast<int>(cur.size()) == k) { out.push_back(encode(cur.data(), k)); return; }
+    if (static_cast<int>(cur.size()) == k) { out.push_back(encode_(cur.data(), k)); return; }
     if (i >= seq.size() || budget == 0 || seq[i] == RESIDUE_AMBIG) return;
 
     cur.push_back(seq[i]);
-    emitReadings(seq, i + 1, k, cur, out, budget);
+    emitReadings_(seq, i + 1, k, cur, out, budget);
     cur.pop_back();
 
     if (i + 1 < seq.size() && seq[i + 1] != RESIDUE_AMBIG)
@@ -88,7 +88,7 @@ namespace FASTag
           if (budget == 0) break;
           --budget;
           cur.push_back(r.one);
-          emitReadings(seq, i + 2, k, cur, out, budget);
+          emitReadings_(seq, i + 2, k, cur, out, budget);
           cur.pop_back();
         }
   }
@@ -183,14 +183,14 @@ namespace FASTag
           if (rules_.empty())
           {
             if (std::memchr(seq.data() + i, RESIDUE_AMBIG, static_cast<size_t>(k))) continue;
-            v.keys.push_back(encode(seq.data() + i, k));
+            v.keys.push_back(encode_(seq.data() + i, k));
           }
           else
           {
             std::string cur;
             cur.reserve(static_cast<size_t>(k));
             size_t budget = 64;
-            emitReadings(seq, i, k, cur, v.keys, budget);
+            emitReadings_(seq, i, k, cur, v.keys, budget);
           }
         }
       }
@@ -215,9 +215,9 @@ namespace FASTag
     }
   }
 
-  Kmer128 FastaFilter::reverseKey(Kmer128 v, int k)
+  Kmer128 FastaFilter::reverseKey_(Kmer128 v, int k)
   {
-    // encode() pushes characters front-to-back, so the LOW 5 bits hold the
+    // encode_() pushes characters front-to-back, so the LOW 5 bits hold the
     // LAST character -- extracting low-first and re-pushing yields exactly
     // the reversed key.
     Kmer128 r;
@@ -231,7 +231,7 @@ namespace FASTag
     return r;
   }
 
-  bool FastaFilter::hasKey(int k, const Kmer128& e) const
+  bool FastaFilter::hasKey_(int k, const Kmer128& e) const
   {
     if (k < 1 || static_cast<size_t>(k) >= idx_.size() || !built_[static_cast<size_t>(k)])
       return false;
@@ -253,32 +253,32 @@ namespace FASTag
     size_t n = 0;
     for (const Kmer128& e : idx_[static_cast<size_t>(k)].keys)
     {
-      if (other.hasKey(k, e)) { ++n; continue; }
+      if (other.hasKey_(k, e)) { ++n; continue; }
       // The reversal belongs to the ACCEPTING side's matching semantics.
-      if (other.both_ && other.hasKey(k, reverseKey(e, k))) ++n;
+      if (other.both_ && other.hasKey_(k, reverseKey_(e, k))) ++n;
     }
     return n;
   }
 
-  bool FastaFilter::contains(const std::string& t) const
+  bool FastaFilter::contains_(const std::string& t) const
   {
     const int k = static_cast<int>(t.size());
     if (k > MAX_FILTER_LEN) return false;
-    const Kmer128 e = encode(t.data(), k);
-    return e != Kmer128::invalid() && hasKey(k, e);
+    const Kmer128 e = encode_(t.data(), k);
+    return e != Kmer128::invalid() && hasKey_(k, e);
   }
 
   FastaFilter::Hit FastaFilter::match(const std::string& tag) const
   {
-    if (static_cast<int>(tag.size()) < minLen()) return Hit::None;
+    if (static_cast<int>(tag.size()) < minLen()) return Hit::NONE;
     std::string t = tag;
     for (char& c : t) if (c == 'I') c = 'L';
-    if (contains(t)) return Hit::Forward;
+    if (contains_(t)) return Hit::FORWARD;
     if (both_)
     {
       std::reverse(t.begin(), t.end());
-      if (contains(t)) return Hit::Reverse;
+      if (contains_(t)) return Hit::REVERSE;
     }
-    return Hit::None;
+    return Hit::NONE;
   }
 }

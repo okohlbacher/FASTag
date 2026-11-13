@@ -40,10 +40,10 @@ on:
         type: boolean
         default: false
       # A plain dry run ships no taxonomy index (~450 MB), so its dmg is far
-      # smaller than a release dmg and the size ceiling on the ULMO step says
+      # smaller than a release dmg and the size reported by the ULMO step says
       # nothing about the real payload. With this switch on as well, the
       # macos-arm64 and linux-x64 legs embed the same pinned index a tag build
-      # embeds, and the dry run builds, notarizes and size-checks the real
+      # embeds, and the dry run builds, notarizes and measures the real
       # release image -- and builds, smoke-tests and size-checks the
       # release-sized Linux .deb, tarball and AppImage (gui-linux).
       gui_full_payload:
@@ -1194,12 +1194,11 @@ jobs:
       #
       # Then the image a user downloads is mounted and its CLI run from
       # there, with an empty environment: the portability check on the
-      # shipped artifact, not on the staging folder. The size ceiling (330
-      # MB, decimal: 330,000,000 bytes; 310 MB until 1.12, raised for the
-      # 16 MB of reference proteomes shipped since 1.13: 312.5 MB) is what keeps a regression of the conversion, or of the
-      # bundle, from shipping silently. A plain dry run carries no taxonomy
-      # index and is far below it; dispatch with gui_full_payload as well to
-      # size-check the real release payload before the tag.
+      # shipped artifact, not on the staging folder. The image size is
+      # reported in the log and the step summary; there is no size ceiling
+      # (the 330 MB ceiling was dropped in 1.15). A plain dry run carries no
+      # taxonomy index; dispatch with gui_full_payload as well to see the
+      # real release payload's size before the tag.
       - name: Recompress the desktop app's dmg as ULMO, sign, notarize, staple (macOS)
         if: steps.mac-signing.outputs.enabled == 'true' || (inputs.gui_dry_run && matrix.name == 'macos-arm64')
         timeout-minutes: 75
@@ -1276,11 +1275,9 @@ jobs:
           trap - EXIT
 
           size=$(stat -f %z "$DMG")
-          limit=$((330 * 1000 * 1000))
           mb() { awk -v b="$1" 'BEGIN { printf "%.1f", b / 1000000 }'; }
-          echo "ULMO dmg: $size bytes ($(mb "$size") MB), was $before bytes; ceiling $limit bytes (330 MB)"
-          echo "### Desktop dmg: $(mb "$size") MB (ULMO), from $(mb "$before") MB (UDZO); ceiling 330 MB" >> "$GITHUB_STEP_SUMMARY"
-          [ "$size" -le "$limit" ] || { echo "::error::the desktop dmg is $(mb "$size") MB, above the 330 MB ceiling"; exit 1; }
+          echo "ULMO dmg: $size bytes ($(mb "$size") MB), was $before bytes"
+          echo "### Desktop dmg: $(mb "$size") MB (ULMO), from $(mb "$before") MB (UDZO)" >> "$GITHUB_STEP_SUMMARY"
 
       - name: Attach the signed desktop app to the release (macOS)
         if: steps.mac-signing.outputs.enabled == 'true' && startsWith(github.ref, 'refs/tags/v')

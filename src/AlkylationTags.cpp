@@ -17,9 +17,9 @@ namespace FASTag::AlkylationTags
 {
   std::vector<Alkylation::Form> candidates(const std::vector<Alkylation::Form>& forms)
   {
-    if (forms.size() < static_cast<std::size_t>(kNumCandidates) || forms[kUnmodified].name != "unmodified")
+    if (forms.size() < static_cast<std::size_t>(NUM_CANDIDATES) || forms[UNMODIFIED].name != "unmodified")
       throw std::runtime_error("the Cys forms are not in the expected order");
-    return std::vector<Alkylation::Form>(forms.begin(), forms.begin() + kNumCandidates);
+    return std::vector<Alkylation::Form>(forms.begin(), forms.begin() + NUM_CANDIDATES);
   }
 
   std::vector<ModSpec> shadowMods(const std::vector<ModSpec>& run_mods, const std::vector<Alkylation::Form>& cands,
@@ -35,8 +35,8 @@ namespace FASTag::AlkylationTags
       }
       out.push_back(m);
     }
-    for (int k = 0; k < kNumCandidates; ++k)
-      if (k != kUnmodified) out.push_back(ModSpec{'C', cands[static_cast<std::size_t>(k)].mass, cands[static_cast<std::size_t>(k)].name, true});
+    for (int k = 0; k < NUM_CANDIDATES; ++k)
+      if (k != UNMODIFIED) out.push_back(ModSpec{'C', cands[static_cast<std::size_t>(k)].mass, cands[static_cast<std::size_t>(k)].name, true});
     return out;
   }
 
@@ -105,7 +105,7 @@ namespace FASTag::AlkylationTags
         if (&g == &f) continue;
         for (int sign : {+1, -1})
         {
-          const double d = std::fabs(g.mass + sign * kC13Spacing - f.mass);
+          const double d = std::fabs(g.mass + sign * C13_SPACING - f.mass);
           if (d <= 2.0 * tol_da) hits.emplace_back(d, "C[" + g.name + "]" + (sign > 0 ? "+13C" : "-13C"));
         }
       }
@@ -134,9 +134,9 @@ namespace FASTag::AlkylationTags
     return c;
   }
 
-  std::array<std::uint32_t, kNumCandidates> formsInTag(const std::string& seq, const std::vector<Alkylation::Form>& cands)
+  std::array<std::uint32_t, NUM_CANDIDATES> formsInTag(const std::string& seq, const std::vector<Alkylation::Form>& cands)
   {
-    std::array<std::uint32_t, kNumCandidates> n{};
+    std::array<std::uint32_t, NUM_CANDIDATES> n{};
     for (std::size_t i = 0; i < seq.size(); ++i)
     {
       if (seq[i] == '[')  // skip another residue's annotation
@@ -152,12 +152,12 @@ namespace FASTag::AlkylationTags
         const std::size_t e = seq.find(']', i + 1);
         if (e == std::string::npos) break;
         const std::string name = seq.substr(i + 2, e - i - 2);
-        for (int k = 0; k < kNumCandidates; ++k)
-          if (k != kUnmodified && cands[static_cast<std::size_t>(k)].name == name) { ++n[static_cast<std::size_t>(k)]; break; }
+        for (int k = 0; k < NUM_CANDIDATES; ++k)
+          if (k != UNMODIFIED && cands[static_cast<std::size_t>(k)].name == name) { ++n[static_cast<std::size_t>(k)]; break; }
         i = e;
       }
       else
-        ++n[kUnmodified];
+        ++n[UNMODIFIED];
     }
     return n;
   }
@@ -184,7 +184,7 @@ namespace FASTag::AlkylationTags
     v.any = true;
     const auto n = formsInTag(t.seq, cands);
     int form = -1, kinds = 0;
-    for (int k = 0; k < kNumCandidates; ++k)
+    for (int k = 0; k < NUM_CANDIDATES; ++k)
       if (n[static_cast<std::size_t>(k)])
       {
         residues[static_cast<std::size_t>(k)] += n[static_cast<std::size_t>(k)];
@@ -214,7 +214,7 @@ namespace FASTag::AlkylationTags
   void Tally::addSpectrum(const Vote& v)
   {
     ++spectra_tagged;
-    if (!v.have || v.evalue > v.best || v.evalue > kVoteMaxEvalue) return;
+    if (!v.have || v.evalue > v.best || v.evalue > VOTE_MAX_EVALUE) return;
     ++spectra;
     if (v.conflict) ++conflict;
     else ++votes[static_cast<std::size_t>(v.form)];
@@ -239,7 +239,7 @@ namespace FASTag::AlkylationTags
     a.tags = tags;
     a.spectra = spectra;
     a.conflict = conflict;
-    for (int k = 0; k < kNumCandidates; ++k)
+    for (int k = 0; k < NUM_CANDIDATES; ++k)
     {
       a.cls[static_cast<std::size_t>(cands[static_cast<std::size_t>(k)].cls)] += votes[static_cast<std::size_t>(k)];
       a.form[static_cast<std::size_t>(k)] = votes[static_cast<std::size_t>(k)];
@@ -266,8 +266,8 @@ namespace FASTag::AlkylationTags
     auto add = [&](const char* sec, const std::string& key, const std::string& value, const std::string& n,
                    const std::string& d) { r.push_back(Digest::Row{sec, key, value, n, d}); };
     // ---- alkt_run
-    add("alkt_run", "format", std::to_string(kReportFormat), "-",
-        "The database-free alkylation report follows format " + std::to_string(kReportFormat) +
+    add("alkt_run", "format", std::to_string(REPORT_FORMAT), "-",
+        "The database-free alkylation report follows format " + std::to_string(REPORT_FORMAT) +
             " (doc/ALKYLATION-REPORT.md, -alkylation_tags_out).");
     add("alkt_run", "method", "shadow_tags", "-",
         "Every MS2 spectrum is tagged a second time with unmodified C and one alternative C edge per reagent; "
@@ -296,7 +296,7 @@ namespace FASTag::AlkylationTags
     add("alkt_run", "tags_with_c", u(t.tags_with_c), u(t.tags), u(t.tags_with_c) + " of them hold a C.");
     add("alkt_run", "spectra", u(t.spectra), u(t.spectra_tagged),
         u(t.spectra) + " spectra vote: their best counted tag holds a C, none at an end of the tag, with an E-value of at most " +
-            num(kVoteMaxEvalue) + ".");
+            num(VOTE_MAX_EVALUE) + ".");
     add("alkt_run", "min_spectra", u(s.min_spectra), "-",
         "A call needs " + u(s.min_spectra) + " votes in total and for the called class.");
     add("alkt_run", "min_share", num(s.min_share), "-", "A call needs a share of " + num(s.min_share) + " of the votes.");
@@ -313,21 +313,21 @@ namespace FASTag::AlkylationTags
     for (std::uint64_t v : t.votes) binned += v;
     std::uint64_t res_all = 0;
     for (std::uint64_t v : t.residues) res_all += v;
-    for (int k = 0; k < kNumCandidates; ++k)
+    for (int k = 0; k < NUM_CANDIDATES; ++k)
     {
       const auto& f = cands[static_cast<std::size_t>(k)];
       add("alkt_form", f.name, u(t.votes[static_cast<std::size_t>(k)]), u(binned),
           u(t.votes[static_cast<std::size_t>(k)]) + " spectra vote " + f.name + " (" + num(f.mass) + " Da on C; class " +
               Alkylation::className(f.cls) + ").");
     }
-    for (int k = 0; k < kNumCandidates; ++k)
+    for (int k = 0; k < NUM_CANDIDATES; ++k)
     {
       const auto& f = cands[static_cast<std::size_t>(k)];
       add("alkt_form", "residues." + f.name, u(t.residues[static_cast<std::size_t>(k)]), u(res_all),
           u(t.residues[static_cast<std::size_t>(k)]) + " of " + u(res_all) + " C residues in counted tags are " + f.name + ".");
     }
     const std::vector<std::string> al = aliases(cands, info.tol_da);
-    for (int k = 0; k < kNumCandidates; ++k)
+    for (int k = 0; k < NUM_CANDIDATES; ++k)
     {
       const auto& f = cands[static_cast<std::size_t>(k)];
       add("alkt_form", "alias." + f.name, al[static_cast<std::size_t>(k)], "-",
@@ -346,15 +346,15 @@ namespace FASTag::AlkylationTags
     {
       double mass = 0.0;
       for (const auto& f : cands)
-        if (f.cls == c.cls && f.cls != Alkylation::None) { mass = f.mass; break; }
+        if (f.cls == c.cls && f.cls != Alkylation::NONE) { mass = f.mass; break; }
       add(sec, "status", "call", u(c.binned),
-          c.cls == Alkylation::None
+          c.cls == Alkylation::NONE
               ? "The votes favour unalkylated cysteines (database-free; experimental)."
               : "The votes favour " + name +
                     " (database-free; experimental).");
       add(sec, "reagent", name, u(c.top), "The call is " + name + ".");
-      add(sec, "mass", c.cls == Alkylation::None ? "-" : num(mass), "-",
-          c.cls == Alkylation::None ? "A call of none has no reagent mass." : name + " adds " + num(mass) + " Da to C.");
+      add(sec, "mass", c.cls == Alkylation::NONE ? "-" : num(mass), "-",
+          c.cls == Alkylation::NONE ? "A call of none has no reagent mass." : name + " adds " + num(mass) + " Da to C.");
       add(sec, "share", num(c.share), u(c.binned), "A share of " + f3(c.share) + " of the " + u(c.binned) + " votes are " + name + ".");
       add(sec, "reason", "-", "-", "The call is made.");
     }

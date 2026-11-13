@@ -48,12 +48,12 @@ namespace FASTag::Digest
       }
     };
 
-    const char* kKeys7[] = {"K", "K+TMT", "K+TMTpro", "K+iTRAQ4", "K+8", "R", "R+10"};
+    const char* KEYS7[] = {"K", "K+TMT", "K+TMTpro", "K+iTRAQ4", "K+8", "R", "R+10"};
 
     int keyIndex(const std::string& name)
     {
       const auto& keys = residueKeys();
-      for (int k = 0; k < kNumKeys; ++k)
+      for (int k = 0; k < NUM_KEYS; ++k)
         if (name == keys[static_cast<std::size_t>(k)].name) return k;
       return -1;
     }
@@ -170,7 +170,7 @@ namespace FASTag::Digest
     // ---- counts
     const auto cterm = tc.cterm(), nterm = tc.nterm();
     std::uint64_t n_c = 0, n_n = 0;
-    for (int a = 0; a < kNumAA; ++a) { n_c += cterm[a]; n_n += nterm[a]; }
+    for (int a = 0; a < NUM_AA; ++a) { n_c += cterm[a]; n_n += nterm[a]; }
     const std::uint64_t tot = tc.tot();
     r.add("count", "tags_filtered", u(tc.tags), u(tc.tags), u(tc.tags) + " reported tags are ungapped with an E-value of at most 1.");
     r.add("count", "tot", u(tot), u(tc.tags),
@@ -182,14 +182,14 @@ namespace FASTag::Digest
     if (v2 && s.flank2)
       r.add("count", "flank2_n", u(n_f2), u(tc.tags), u(n_f2) + " tag ends are a two-residue flank sum (C-terminal, or N-terminal less H2O).");
 
-    for (const char* key : kKeys7)
+    for (const char* key : KEYS7)
     {
       const int k = keyIndex(key);
       r.add("residue", std::string("C.") + key, u(tc.res(k)), u(tot),
             u(tc.res(k)) + " tag ends are a C-terminal " + key + " (" + u(tc.c_near[k]) + " after a y tag, " +
                 u(tc.n_h2o[k]) + " before a reversed b tag).");
     }
-    for (const char* key : kKeys7)
+    for (const char* key : KEYS7)
     {
       const int k = keyIndex(key);
       r.add("residue", std::string("N.") + key, u(tc.n_near[k]), "-", u(tc.n_near[k]) + " tag ends are an N-terminal " + key + ".");
@@ -198,18 +198,18 @@ namespace FASTag::Digest
     for (int p = 3; p >= 0; --p)
     {
       std::uint64_t col = 0;
-      for (int a = 0; a < kNumAA; ++a) col += tc.cpos[p][a];
-      for (int a = 0; a < kNumAA; ++a)
-        r.add("pos", "C.P" + std::to_string(p + 1) + "." + kAAs[a], u(tc.cpos[p][a]), u(col),
-              u(tc.cpos[p][a]) + " of " + u(col) + " C-terminal tag ends have " + kAAs[a] + " at P" + std::to_string(p + 1) + ".");
+      for (int a = 0; a < NUM_AA; ++a) col += tc.cpos[p][a];
+      for (int a = 0; a < NUM_AA; ++a)
+        r.add("pos", "C.P" + std::to_string(p + 1) + "." + AAS[a], u(tc.cpos[p][a]), u(col),
+              u(tc.cpos[p][a]) + " of " + u(col) + " C-terminal tag ends have " + AAS[a] + " at P" + std::to_string(p + 1) + ".");
     }
     for (int p = 0; p < 4; ++p)
     {
       std::uint64_t col = 0;
-      for (int a = 0; a < kNumAA; ++a) col += tc.npos[p][a];
-      for (int a = 0; a < kNumAA; ++a)
-        r.add("pos", "N.P" + std::to_string(p + 1) + "'." + kAAs[a], u(tc.npos[p][a]), u(col),
-              u(tc.npos[p][a]) + " of " + u(col) + " N-terminal tag ends have " + kAAs[a] + " at P" + std::to_string(p + 1) + "'.");
+      for (int a = 0; a < NUM_AA; ++a) col += tc.npos[p][a];
+      for (int a = 0; a < NUM_AA; ++a)
+        r.add("pos", "N.P" + std::to_string(p + 1) + "'." + AAS[a], u(tc.npos[p][a]), u(col),
+              u(tc.npos[p][a]) + " of " + u(col) + " N-terminal tag ends have " + AAS[a] + " at P" + std::to_string(p + 1) + "'.");
     }
 
     // ---- shares, from res / tot as the reference computes them
@@ -254,10 +254,10 @@ namespace FASTag::Digest
                     const std::string& who) {
       double z = 0.0;
       for (double x : d) z += x;
-      for (int a = 0; a < kNumAA; ++a)
+      for (int a = 0; a < NUM_AA; ++a)
       {
         const double v = z > 0.0 ? d[a] / z : 0.0;
-        r.add(section, prefix + kAAs[a], num(v), "-", who + " gives " + kAAs[a] + " a share of " + f(v, 4) + ".");
+        r.add(section, prefix + AAS[a], num(v), "-", who + " gives " + AAS[a] + " a share of " + f(v, 4) + ".");
       }
     };
     dist("background", "C.", table.bg_c, "The C-terminal background");
@@ -274,14 +274,14 @@ namespace FASTag::Digest
     const bool tims_yes = inst.find("timstof") != std::string::npos || meta.native_id_type == "MS:1002818" ||
                           meta.native_id_type == "MS:1002819" || meta.im_vssc > 0;
     const std::string tims = tims_yes ? "yes" : (have_inst || have_nid) ? "no" : "unknown";
-    constexpr double kY1K = 147.1128;
-    const std::string scan = meta.scan_low.empty() ? "unknown" : low > kY1K + 0.1 ? "yes" : "no";
+    constexpr double Y1K = 147.1128;
+    const std::string scan = meta.scan_low.empty() ? "unknown" : low > Y1K + 0.1 ? "yes" : "no";
     // The reference's gate: the median lowest MS2 peak, which needs no metadata.
-    const std::string fpk = meta.first_peak.empty() ? "unknown" : first > kY1K + 0.1 ? "yes" : "no";
+    const std::string fpk = meta.first_peak.empty() ? "unknown" : first > Y1K + 0.1 ? "yes" : "no";
     // Without instrument metadata (MGF, converted pseudo-spectra), intensities
     // that are mostly whole numbers are ion counts, as timsTOF data are.
-    constexpr double kWholeShare = 0.5;
-    const std::string counts = tims != "unknown" ? "no" : meta.peaks == 0 ? "unknown" : whole >= kWholeShare ? "yes" : "no";
+    constexpr double WHOLE_SHARE = 0.5;
+    const std::string counts = tims != "unknown" ? "no" : meta.peaks == 0 ? "unknown" : whole >= WHOLE_SHARE ? "yes" : "no";
     const std::string few = (tot < static_cast<std::uint64_t>(std::max(0, s.tag_min)) || !c.scored) ? "yes" : "no";
     const std::string lowres = s.low_resolution ? "yes" : "no";
     const std::string nonfin = c.scored && c.nonfinite ? "yes" : "no";
@@ -407,7 +407,7 @@ namespace FASTag::Digest
           tims != "unknown" ? "The input names its instrument or native ID format, so the timstof rule decides."
           : meta.peaks == 0 ? "No MS2 spectrum has a peak with an intensity above 0."
                             : "The input names no instrument, and a share of " + f(whole, 4) + " of the MS2 peak intensities above 0 are whole numbers (" +
-                                  (counts == "yes" ? "at least " : "below ") + f(kWholeShare, 2) + ").");
+                                  (counts == "yes" ? "at least " : "below ") + f(WHOLE_SHARE, 2) + ").");
     r.add("nocall", "few_tags", few, u(n_c),
           u(tot) + " residue-key and " + u(n_c) + " C-terminal tag ends against a minimum of " + std::to_string(s.tag_min) + ".");
     r.add("nocall", "nonfinite_score", nonfin, "-",
@@ -443,14 +443,14 @@ namespace FASTag::Digest
       if (tok == "hcd") beam = true;
       else if (tok == "cid" || tok == "pqd") res = true;
     }
-    return beam ? Fragmentation::Beam : res ? Fragmentation::Resonance : Fragmentation::Unknown;
+    return beam ? Fragmentation::BEAM : res ? Fragmentation::RESONANCE : Fragmentation::UNKNOWN;
   }
 
   void addFragmentation(RunMeta& meta, Fragmentation frag, std::string_view filter)
   {
-    if (frag == Fragmentation::Unknown) frag = fragmentationFromFilter(filter);
-    if (frag == Fragmentation::Beam) ++meta.ms2_beam;
-    else if (frag == Fragmentation::Resonance) ++meta.ms2_resonance;
+    if (frag == Fragmentation::UNKNOWN) frag = fragmentationFromFilter(filter);
+    if (frag == Fragmentation::BEAM) ++meta.ms2_beam;
+    else if (frag == Fragmentation::RESONANCE) ++meta.ms2_resonance;
     const std::size_t b = filter.find_first_not_of(" \t");
     if (b != std::string_view::npos && filter.size() - b >= 4)
     {
@@ -495,7 +495,7 @@ namespace FASTag::Digest
     const auto& keys = residueKeys();
     const std::uint64_t tot = tc.tot();
     PySum kr;
-    for (int k = 0; k < kNumKeys; ++k)
+    for (int k = 0; k < NUM_KEYS; ++k)
       if (keys[k].name[0] == 'K' || keys[k].name[0] == 'R')
         kr.add(static_cast<double>(tc.res(k)) / static_cast<double>(tot));
     return kr.value();
@@ -575,7 +575,7 @@ namespace FASTag::Digest
     const std::uint64_t tot = tc.tot();
     if (tot > 0) c.kr_rounded = round3(krShare(tc));
     if (s.low_resolution) { c.reason = "low_resolution"; return c; }
-    if (tot < kLabelTagMin) { c.reason = "few_tags"; return c; }
+    if (tot < LABEL_TAG_MIN) { c.reason = "few_tags"; return c; }
     c.called = true;
     const double tags = static_cast<double>(tc.tags);
     const auto& labs = labelKeys();
@@ -583,7 +583,7 @@ namespace FASTag::Digest
     {
       const double x = static_cast<double>(tc.lab_n[l] + tc.lab_c[l]);
       const double bg = static_cast<double>(tc.lab_bg_n[l] + tc.lab_bg_c[l]);
-      if (x >= kLabelMinShare * tags && x >= kLabelBackgroundFold * std::max(bg, 1.0))
+      if (x >= LABEL_MIN_SHARE * tags && x >= LABEL_BACKGROUND_FOLD * std::max(bg, 1.0))
       {
         c.labels.push_back(labs[l].name);
         c.isobaric = true;
@@ -594,11 +594,11 @@ namespace FASTag::Digest
     const double hk = heavyShare(tc, K, K8), hr = heavyShare(tc, R, R10);
     const std::uint64_t nk = tc.res(K) + tc.res(K8), nr = tc.res(R) + tc.res(R10);
     const std::uint64_t smin = static_cast<std::uint64_t>(std::max(0, s.silac_min));
-    if (hk >= kHeavyMin && hr >= kHeavyMin && c.kr_rounded >= kKrTryptic && std::min(nk, nr) >= smin)
+    if (hk >= HEAVY_MIN && hr >= HEAVY_MIN && c.kr_rounded >= KR_TRYPTIC && std::min(nk, nr) >= smin)
     {
       c.labels.push_back("SILAC");
       c.silac = true;
-      c.silac_strong = std::min(hk, hr) >= kHeavyStrong;
+      c.silac_strong = std::min(hk, hr) >= HEAVY_STRONG;
     }
     return c;
   }
@@ -614,7 +614,7 @@ namespace FASTag::Digest
       const std::string why =
           c.reason == "low_resolution"
               ? "the fragment tolerance is in Da, so the label windows do not hold"
-              : u(tot) + " C-terminal tag ends are fewer than " + std::to_string(kLabelTagMin);
+              : u(tot) + " C-terminal tag ends are fewer than " + std::to_string(LABEL_TAG_MIN);
       r.add(sec, "status", "no_call", u(tot), "No label is called: " + why + ".");
       r.add(sec, "label", "-", "-", "There is no label call.");
       r.add(sec, "basis", "-", "-", "There is no label call.");
@@ -629,8 +629,8 @@ namespace FASTag::Digest
           "A label call is made from " + u(tot) + " C-terminal tag ends and " + u(tc.tags) + " filtered tags.");
     std::string desc;
     if (c.labels.empty())
-      desc = "No label passes: no isobaric gap reaches " + g(kLabelMinShare * 100, 3) + "% of the filtered tags and " +
-             g(kLabelBackgroundFold, 3) + "x its background, and the heavy shares do not make SILAC.";
+      desc = "No label passes: no isobaric gap reaches " + g(LABEL_MIN_SHARE * 100, 3) + "% of the filtered tags and " +
+             g(LABEL_BACKGROUND_FOLD, 3) + "x its background, and the heavy shares do not make SILAC.";
     else
     {
       desc = "The run is labelled " + label + ".";
@@ -644,19 +644,19 @@ namespace FASTag::Digest
     r.add(sec, "basis", basis, "-",
           basis == "none" ? "No label rule fired."
           : "The call rests on " +
-                std::string(c.isobaric && c.silac ? "N-terminal label gaps of at least " + g(kLabelMinShare * 100, 3) +
+                std::string(c.isobaric && c.silac ? "N-terminal label gaps of at least " + g(LABEL_MIN_SHARE * 100, 3) +
                                                         "% of the filtered tags and the heavy Lys8/Arg10 shares"
-                            : c.isobaric ? "N-terminal label gaps of at least " + g(kLabelMinShare * 100, 3) +
-                                               "% of the filtered tags and " + g(kLabelBackgroundFold, 3) + "x their background"
+                            : c.isobaric ? "N-terminal label gaps of at least " + g(LABEL_MIN_SHARE * 100, 3) +
+                                               "% of the filtered tags and " + g(LABEL_BACKGROUND_FOLD, 3) + "x their background"
                                          : "the heavy Lys8/Arg10 shares") +
                 ".");
     const std::string sil = c.silac ? (c.silac_strong ? "strong" : "weak") : "none";
     r.add(sec, "silac", sil, "-",
-          c.silac ? "Lys8 and Arg10 are each at least " + g(c.silac_strong ? kHeavyStrong : kHeavyMin, 3) +
+          c.silac ? "Lys8 and Arg10 are each at least " + g(c.silac_strong ? HEAVY_STRONG : HEAVY_MIN, 3) +
                         " of their residue's C-terminal ends, the K/R share is " + f(c.kr_rounded, 3) + " and " +
                         std::to_string(s.silac_min) + " K- and R-terminal ends each are reached."
-                  : "SILAC needs Lys8 and Arg10 shares of at least " + g(kHeavyMin, 3) + ", a K/R share of at least " +
-                        g(kKrTryptic, 3) + " and " + std::to_string(s.silac_min) + " K- and R-terminal ends each.");
+                  : "SILAC needs Lys8 and Arg10 shares of at least " + g(HEAVY_MIN, 3) + ", a K/R share of at least " +
+                        g(KR_TRYPTIC, 3) + " and " + std::to_string(s.silac_min) + " K- and R-terminal ends each.");
     r.add(sec, "reason", "-", "-", "A label call is made.");
     return out;
   }

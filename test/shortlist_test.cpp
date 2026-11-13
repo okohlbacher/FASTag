@@ -159,19 +159,19 @@ int main()
   // ---- 3. gapped, label-exact, label + shift, unlabelled
   {
     const double tmt = 229.162932, tol = 0.02;
-    check(SL::classifyPlacement(true, true, 0.0, tmt, 0, tol) == SL::Placement::Exact, "both flanks: exact");
-    check(SL::classifyPlacement(false, true, tmt + 0.005, tmt, 0, tol) == SL::Placement::LabelExact,
+    check(SL::classifyPlacement(true, true, 0.0, tmt, 0, tol) == SL::Placement::EXACT, "both flanks: exact");
+    check(SL::classifyPlacement(false, true, tmt + 0.005, tmt, 0, tol) == SL::Placement::LABEL_EXACT,
           "N-side gap equal to the fixed N-term label is label-exact");
-    check(SL::classifyPlacement(false, true, tmt + 15.994915, tmt, 0, tol) == SL::Placement::Gapped,
+    check(SL::classifyPlacement(false, true, tmt + 15.994915, tmt, 0, tol) == SL::Placement::GAPPED,
           "label plus another shift is gapped");
-    check(SL::classifyPlacement(false, true, tmt, 0, 0, tol) == SL::Placement::Gapped,
+    check(SL::classifyPlacement(false, true, tmt, 0, 0, tol) == SL::Placement::GAPPED,
           "without a fixed label the same gap is gapped");
-    check(SL::classifyPlacement(true, false, tmt, tmt, 0, tol) == SL::Placement::Gapped,
+    check(SL::classifyPlacement(true, false, tmt, tmt, 0, tol) == SL::Placement::GAPPED,
           "an N-terminal label does not excuse a C-side gap");
-    check(SL::classifyPlacement(true, false, 0.984, 0, 0.984, tol) == SL::Placement::LabelExact,
+    check(SL::classifyPlacement(true, false, 0.984, 0, 0.984, tol) == SL::Placement::LABEL_EXACT,
           "C-side gap equal to a fixed C-term mod is label-exact");
     // incompletely labelled peptide: both flanks match -> exact
-    check(SL::classifyPlacement(true, true, 0.0, tmt, 0, tol) == SL::Placement::Exact, "unlabelled peptide is exact");
+    check(SL::classifyPlacement(true, true, 0.0, tmt, 0, tol) == SL::Placement::EXACT, "unlabelled peptide is exact");
 
     auto p = proteins(2);
     std::vector<SL::Evidence> e = {ev(1, 0, 0.01f), ev(2, 0, 0.01f, false), ev(3, 1, 0.01f, false),
@@ -214,7 +214,7 @@ int main()
         ev(3, 3, 0.01f), ev(4, 3, 0.01f),                    // P03 {3,4} overlap
         ev(9, 4, 0.01f)};                                    // P04 {9}
     auto s = open_settings();
-    s.parsimony = SL::Parsimony::Subset;
+    s.parsimony = SL::Parsimony::SUBSET;
     const auto rows = SL::rankProteins(e, p, s);
     check(row(rows, "P00")->kept, "the first of an equal set is kept");
     check(row(rows, "P01")->reason == "subset_of:P00", "an equal set later in rank order is subset_of the first");
@@ -231,7 +231,7 @@ int main()
                                    ev(1, 1, 0.01f), ev(2, 1, 0.01f), ev(5, 1, 0.01f), ev(5, 2, 0.01f),
                                    ev(6, 2, 0.01f), ev(3, 3, 0.01f), ev(4, 3, 0.01f), ev(6, 4, 0.01f)};
     auto s = open_settings();
-    s.parsimony = SL::Parsimony::Greedy;
+    s.parsimony = SL::Parsimony::GREEDY;
     const auto rows = SL::rankProteins(e, p, s);
     check(row(rows, "P00")->kept && row(rows, "P02")->kept, "greedy picks P00 then P02");
     check(row(rows, "P01")->reason == "not_in_cover" && row(rows, "P03")->reason == "not_in_cover" &&
@@ -400,7 +400,7 @@ int main()
       }
     auto s = open_settings();
     s.gapped = true;
-    s.parsimony = SL::Parsimony::Greedy;
+    s.parsimony = SL::Parsimony::GREEDY;
     s.top = 7;
     const auto a = SL::rankProteins(e, p, s);
     std::shuffle(e.begin(), e.end(), rng);
@@ -489,23 +489,23 @@ int main()
     c.scores = {{"Trypsin", "Trypsin", -1000.0}, {"Lys-C", "Lys-C", -1100.0}, {"Chymotrypsin", "Chymotrypsin", -1500.0}};
     c.top = 0;
     c.runner_up = 2;
-    check(SL::proteaseVerdict(c, false, 500).kind == SL::ProteaseVerdict::Compatible, "trypsin call proceeds");
+    check(SL::proteaseVerdict(c, false, 500).kind == SL::ProteaseVerdict::Kind::COMPATIBLE, "trypsin call proceeds");
     c.top = 1;
-    check(SL::proteaseVerdict(c, false, 500).kind == SL::ProteaseVerdict::Compatible, "Lys-C call proceeds");
+    check(SL::proteaseVerdict(c, false, 500).kind == SL::ProteaseVerdict::Kind::COMPATIBLE, "Lys-C call proceeds");
     c.scores[2].loglik = -800.0;
     c.top = 2;
     auto v = SL::proteaseVerdict(c, false, 500);
-    check(v.kind == SL::ProteaseVerdict::NonTryptic && v.model == "Chymotrypsin" && std::abs(v.margin - 0.4) < 1e-12,
+    check(v.kind == SL::ProteaseVerdict::Kind::NON_TRYPTIC && v.model == "Chymotrypsin" && std::abs(v.margin - 0.4) < 1e-12,
           "a confident chymotrypsin call refuses");
-    check(SL::proteaseVerdict(c, true, 500).kind == SL::ProteaseVerdict::Inconclusive, "a Da run is inconclusive");
-    check(SL::proteaseVerdict(c, false, 99).kind == SL::ProteaseVerdict::Inconclusive, "fewer than 100 spectra");
+    check(SL::proteaseVerdict(c, true, 500).kind == SL::ProteaseVerdict::Kind::INCONCLUSIVE, "a Da run is inconclusive");
+    check(SL::proteaseVerdict(c, false, 99).kind == SL::ProteaseVerdict::Kind::INCONCLUSIVE, "fewer than 100 spectra");
     c.scores[2].loglik = -999.0;  // margin 1/500 = 0.002 < 0.05
-    check(SL::proteaseVerdict(c, false, 500).kind == SL::ProteaseVerdict::Inconclusive, "a thin margin is inconclusive");
+    check(SL::proteaseVerdict(c, false, 500).kind == SL::ProteaseVerdict::Kind::INCONCLUSIVE, "a thin margin is inconclusive");
     c.scored = false;
-    check(SL::proteaseVerdict(c, false, 500).kind == SL::ProteaseVerdict::Inconclusive, "too few tag ends");
+    check(SL::proteaseVerdict(c, false, 500).kind == SL::ProteaseVerdict::Kind::INCONCLUSIVE, "too few tag ends");
     c.scored = true;
     c.tied = {"Chymotrypsin", "Trypsin"};
-    check(SL::proteaseVerdict(c, false, 500).kind == SL::ProteaseVerdict::Inconclusive, "a tie is inconclusive");
+    check(SL::proteaseVerdict(c, false, 500).kind == SL::ProteaseVerdict::Kind::INCONCLUSIVE, "a tie is inconclusive");
   }
 
   std::error_code ec;

@@ -36,15 +36,21 @@
 
 namespace FASTag
 {
-  /// ProForma string for a tag:
-  ///   <global-fixed-mods>[+<nterm>]-<residues>-[+<cterm>]
-  ///
-  /// @param residues   the tag sequence, possibly with inline `X[Name]` var mods
-  /// @param nterm,cterm flank masses; a flank < 0.5 Da (tag at the terminus) is
-  ///                    omitted rather than written as `[+0.0000]`. Non-finite or
-  ///                    absurd masses are skipped, never emitted as `[+inf]`.
-  /// @param global     ProForma global fixed-mod prefix, e.g. `<[Carbamidomethyl]@C>`
-  ///                    (empty when there are no fixed mods)
+  /**
+    @brief ProForma string for a tag.
+
+    Form: <global-fixed-mods>[+<nterm>]-<residues>-[+<cterm>]. Every L outside
+    a `[...]` mod token is written as J. A flank < 0.5 Da (tag at the
+    terminus) is omitted rather than written as `[+0.0000]`. Non-finite or
+    absurd masses are skipped, never emitted as `[+inf]`.
+
+    @param[in] residues the tag sequence, possibly with inline `X[Name]` var mods
+    @param[in] nterm the N-terminal flank mass (Da)
+    @param[in] cterm the C-terminal flank mass (Da)
+    @param[in] global ProForma global fixed-mod prefix, e.g. `<[Carbamidomethyl]@C>`
+      (empty when there are no fixed mods)
+    @return the ProForma string
+  */
   inline std::string toProforma(const std::string& residues, double nterm, double cterm,
                                 const std::string& global = "")
   {

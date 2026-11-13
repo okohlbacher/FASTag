@@ -220,12 +220,12 @@ namespace FASTag
     void etdPrecursorWindows(double M, int charge, const Param& p, std::vector<std::pair<double, double>>& out)
     {
       out.clear();
-      const double kH = EmpiricalFormula("H").getMonoWeight();
+      const double H_MASS = EmpiricalFormula("H").getMonoWeight();
       for (int k = 0; k < charge; ++k)
       {
         const int zr = charge - k;
         const double cr = (M + charge * PROTON) / zr;
-        out.emplace_back(cr - kH / zr - tolAt(p, cr), cr + ETD_REDUCED_ABOVE / zr + tolAt(p, cr));
+        out.emplace_back(cr - H_MASS / zr - tolAt(p, cr), cr + ETD_REDUCED_ABOVE / zr + tolAt(p, cr));
       }
     }
 
@@ -575,8 +575,8 @@ namespace FASTag
       // has both; ComplementSpec picks the rule(s), the window and the
       // ion-pair deltas (b/y: one delta, 0).
       s.has_compl.assign(n, 0);
-      const bool same_rule = cs.rule != ComplementRule::Precursor;
-      const bool prec_rule = cs.rule != ComplementRule::SameCharge;
+      const bool same_rule = cs.rule != ComplementRule::PRECURSOR;
+      const bool prec_rule = cs.rule != ComplementRule::SAME_CHARGE;
       for (size_t i = 0; i < n; ++i)
         for (int z = 1; z <= s.n_frag_charges; ++z)
         {
@@ -598,8 +598,8 @@ namespace FASTag
               // complementMz() gives NaN when z leaves none for the partner.
               const int pair_charge = s.prec_charge - cs.charge_loss;
               const double cmz = complementMz(M, pair_charge, z, mz,
-                                              r == 0 ? ComplementRule::SameCharge
-                                                     : ComplementRule::Precursor);
+                                              r == 0 ? ComplementRule::SAME_CHARGE
+                                                     : ComplementRule::PRECURSOR);
               if (std::isnan(cmz)) continue;
               // j != i: a peak at the midpoint would otherwise be its own partner,
               // manufacturing complement evidence from a single ion and inflating

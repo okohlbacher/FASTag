@@ -29,80 +29,95 @@ namespace FASTag::Cli
 {
   // Registered defaults of the options that fill FASTag::Param. Changing one
   // changes --help, the CTD and every run that relies on it.
-  inline constexpr int kTagLength = 3;
-  inline constexpr int kExtension = 0;
-  inline constexpr int kGaps = 1;
-  inline constexpr bool kDeisotope = true;  ///< -no_deisotope is a flag, off
-  inline constexpr int kPeaksPerWindow = 10;
-  inline constexpr double kFragmentTolerance = 20.0;
-  inline constexpr const char* kFragmentToleranceUnit = "ppm";
-  inline constexpr int kMaxPeaks = 400;
-  inline constexpr int kMaxTags = 50;
-  inline constexpr double kMaxEvalue = 20.0;
-  inline constexpr double kGapPenalty = 100.0;
-  inline constexpr const char* kFixedModifications = "Carbamidomethyl (C)";
+  inline constexpr int TAG_LENGTH = 3;  ///< -tag_length
+  inline constexpr int EXTENSION = 0;  ///< -extension
+  inline constexpr int GAPS = 1;       ///< -gaps
+  inline constexpr bool DEISOTOPE = true;  ///< -no_deisotope is a flag, off
+  inline constexpr int PEAKS_PER_WINDOW = 10;                ///< -peaks_per_window
+  inline constexpr double FRAGMENT_TOLERANCE = 20.0;        ///< -fragment_tolerance
+  inline constexpr const char* FRAGMENT_TOLERANCE_UNIT = "ppm";  ///< -fragment_tolerance_unit
+  inline constexpr int MAX_PEAKS = 400;                     ///< -max_peaks
+  inline constexpr int MAX_TAGS = 50;                       ///< -max_tags
+  inline constexpr double MAX_EVALUE = 20.0;                ///< -max_evalue
+  inline constexpr double GAP_PENALTY = 100.0;              ///< -gap_penalty
+  inline constexpr const char* FIXED_MODIFICATIONS = "Carbamidomethyl (C)";  ///< -fixed_modifications
   // 1.12 E2 complement options (-complement_*): defaults are FASTag 1.11.
-  inline constexpr const char* kComplementRule = "same_charge";
-  inline constexpr double kComplementTolerance = 0.02;      ///< Da, unit Da
-  inline constexpr double kComplementTolFactor = 0.5;       ///< k, unit fragment
-  inline constexpr const char* kComplementToleranceUnit = "Da";
-  inline constexpr bool kComplementMidp = false;  ///< -complement_midp is a flag, off
+  inline constexpr const char* COMPLEMENT_RULE = "same_charge";  ///< -complement_rule
+  inline constexpr double COMPLEMENT_TOLERANCE = 0.02;      ///< Da, unit Da
+  inline constexpr double COMPLEMENT_TOL_FACTOR = 0.5;       ///< k, unit fragment
+  inline constexpr const char* COMPLEMENT_TOLERANCE_UNIT = "Da";  ///< -complement_tolerance_unit
+  inline constexpr bool COMPLEMENT_MIDP = false;  ///< -complement_midp is a flag, off
 
-  /// -complement_rule value to the library's rule; unknown values (TOPPBase
-  /// refuses them first) map to SameCharge.
+  /**
+    @brief Converts a -complement_rule value to the library's rule.
+    @param[in] s "precursor", "both" or "same_charge"
+    @return the rule; unknown values (TOPPBase refuses them first) map to SameCharge
+  */
   inline ComplementRule complementRuleFromString(std::string_view s)
   {
-    if (s == "precursor") return ComplementRule::Precursor;
-    if (s == "both") return ComplementRule::Both;
-    return ComplementRule::SameCharge;
+    if (s == "precursor") return ComplementRule::PRECURSOR;
+    if (s == "both") return ComplementRule::BOTH;
+    return ComplementRule::SAME_CHARGE;
   }
 
-  /// Applies -complement_tolerance (Da), -complement_tol_factor (k) and
-  /// -complement_tolerance_unit, which selects the one in force: Da uses the
-  /// absolute window, fragment k*(fragment tol at m + at the partner). Each
-  /// value has its own default, so "-complement_tolerance_unit fragment"
-  /// alone runs at the library's k = 0.5, not at the Da default 0.02.
+  /**
+    @brief Applies -complement_tolerance (Da), -complement_tol_factor (k) and -complement_tolerance_unit to @p p.
+
+    The unit selects the one in force: Da uses the absolute window, fragment
+    k*(fragment tol at m + at the partner). Each value has its own default,
+    so "-complement_tolerance_unit fragment" alone runs at the library's
+    k = 0.5, not at the Da default 0.02.
+
+    @param[out] p the Param whose complement tolerance fields are set
+    @param[in] tol_da the absolute tolerance (Da)
+    @param[in] factor the factor k on the fragment tolerance
+    @param[in] unit "fragment" selects the factor; anything else the Da window
+  */
   inline void setComplementTolerance(Param& p, double tol_da, double factor, std::string_view unit)
   {
     p.complement_tol = tol_da;
     p.complement_tol_factor = factor;
-    p.complement_tol_mode = unit == "fragment" ? ComplementTolMode::Fragment : ComplementTolMode::Da;
+    p.complement_tol_mode = unit == "fragment" ? ComplementTolMode::FRAGMENT : ComplementTolMode::DA;
   }
 
-  /// The Param the tool runs with when no option is given.
-  ///
-  /// The complement options (1.12 E2) are set to their registered defaults,
-  /// which equal the library's: same-charge rule, 0.02 Da (k 0.5 in the
-  /// fragment unit), no mid-p.
-  /// With @p resolve_mods the default fixed modification is resolved through
-  /// ModificationsDB exactly as the tool's resolveMods_ resolves a residue
-  /// modification (I folded to L); without it `mods` stays empty, which is
-  /// what the tool wants before it resolves -fixed_modifications and
-  /// -variable_modifications itself (and what keeps a run with
-  /// -fixed_modifications "" from parsing UniMod).
+  /**
+    @brief The Param the tool runs with when no option is given.
+
+    The complement options (1.12 E2) are set to their registered defaults,
+    which equal the library's: same-charge rule, 0.02 Da (k 0.5 in the
+    fragment unit), no mid-p.
+
+    @param[in] resolve_mods when true, the default fixed modification is
+      resolved through ModificationsDB exactly as the tool's resolveMods_
+      resolves a residue modification (I folded to L); when false `mods`
+      stays empty, which is what the tool wants before it resolves
+      -fixed_modifications and -variable_modifications itself (and what
+      keeps a run with -fixed_modifications "" from parsing UniMod)
+    @return the default Param
+  */
   inline Param cliDefaultParam(bool resolve_mods = true)
   {
     Param p;
-    p.tag_length = kTagLength;
-    p.max_extension = kExtension;
-    p.max_gaps = kGaps;
-    p.deisotope = kDeisotope;
-    p.peaks_per_window = kPeaksPerWindow;
-    p.frag_tol = kFragmentTolerance;
-    p.tol_ppm = std::string_view(kFragmentToleranceUnit) == "ppm";
-    p.max_peak_count = static_cast<size_t>(kMaxPeaks);
-    p.max_tag_count = kMaxTags;
+    p.tag_length = TAG_LENGTH;
+    p.max_extension = EXTENSION;
+    p.max_gaps = GAPS;
+    p.deisotope = DEISOTOPE;
+    p.peaks_per_window = PEAKS_PER_WINDOW;
+    p.frag_tol = FRAGMENT_TOLERANCE;
+    p.tol_ppm = std::string_view(FRAGMENT_TOLERANCE_UNIT) == "ppm";
+    p.max_peak_count = static_cast<size_t>(MAX_PEAKS);
+    p.max_tag_count = MAX_TAGS;
     p.diversity = false;
     p.per_residue_conf = false;
-    p.max_evalue = kMaxEvalue;
-    p.gap_penalty = kGapPenalty;
-    p.complement_rule = complementRuleFromString(kComplementRule);
-    setComplementTolerance(p, kComplementTolerance, kComplementTolFactor, kComplementToleranceUnit);
-    p.complement_midp = kComplementMidp;
+    p.max_evalue = MAX_EVALUE;
+    p.gap_penalty = GAP_PENALTY;
+    p.complement_rule = complementRuleFromString(COMPLEMENT_RULE);
+    setComplementTolerance(p, COMPLEMENT_TOLERANCE, COMPLEMENT_TOL_FACTOR, COMPLEMENT_TOLERANCE_UNIT);
+    p.complement_midp = COMPLEMENT_MIDP;
     if (resolve_mods)
     {
       const OpenMS::ResidueModification* mod =
-          OpenMS::ModificationsDB::getInstance()->getModification(kFixedModifications);
+          OpenMS::ModificationsDB::getInstance()->getModification(FIXED_MODIFICATIONS);
       ModSpec ms;
       ms.residue = mod->getOrigin() == 'I' ? 'L' : mod->getOrigin();
       ms.delta = mod->getDiffMonoMass();
@@ -113,7 +128,7 @@ namespace FASTag::Cli
     return p;
   }
 
-  /// The "parameter: <name>" entries FASTag 1.11 (78390cd) writes into the
+  /// @brief The "parameter: <name>" entries FASTag 1.11 (78390cd) writes into the
   /// processing info of an -out_spectra mzML, in the order it writes them:
   /// its 71 tool options and TOPPBase's 6 common ones. Equal to the header of
   /// the refs-1.10.0 gate reference out_spectra_mzml (checked on 2026-11-06).
@@ -124,7 +139,7 @@ namespace FASTag::Cli
   /// listed, so the provenance stays truthful whenever an option acted.
   /// out_spectra_params_test checks that the tool writes exactly this list at
   /// defaults.
-  inline constexpr std::array<std::string_view, 77> kLegacyOutSpectraParameters = {
+  inline constexpr std::array<std::string_view, 77> LEGACY_OUT_SPECTRA_PARAMETERS = {
       "in", "out", "fasta", "out_spectra", "tag_length", "tag_lengths", "extension", "gaps",
       "no_deisotope", "fragment_tolerance", "fragment_tolerance_unit", "max_peaks",
       "peaks_per_window", "max_tags", "subsample_spectra", "subsample_fraction",
@@ -142,10 +157,14 @@ namespace FASTag::Cli
       "orientation", "fixed_modifications", "variable_modifications", "log", "debug",
       "threads", "no_progress", "force", "test"};
 
-  /// True if @p name is one of kLegacyOutSpectraParameters.
+  /**
+    @brief Whether @p name is one of LEGACY_OUT_SPECTRA_PARAMETERS.
+    @param[in] name a parameter name
+    @return true when listed
+  */
   inline bool isLegacyOutSpectraParameter(std::string_view name)
   {
-    for (std::string_view n : kLegacyOutSpectraParameters)
+    for (std::string_view n : LEGACY_OUT_SPECTRA_PARAMETERS)
       if (n == name) return true;
     return false;
   }

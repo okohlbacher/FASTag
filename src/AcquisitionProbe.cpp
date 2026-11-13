@@ -43,12 +43,12 @@ namespace FASTag::Acquisition
     /// order exactly as the serial loop takes it. A read that throws is
     /// rethrown when the serial loop would have reached it, and not at all
     /// otherwise. Only the fields fromSpectrum() reads are parsed
-    /// (IndexedMzMLReader::kProbeFields). One thread, or a per-thread reader
+    /// (IndexedMzMLReader::PROBE_FIELDS). One thread, or a per-thread reader
     /// that cannot open the file, gives the serial loop.
     std::vector<Ms2Meta> collectFastMs2Meta(FASTag::IndexedMzMLReader& reader, std::size_t n_total,
                                             const ProbeLimits& limits, bool run_provenance)
     {
-      constexpr unsigned kFields = FASTag::IndexedMzMLReader::kProbeFields;
+      constexpr unsigned FIELDS = FASTag::IndexedMzMLReader::PROBE_FIELDS;
       const std::size_t heads = std::min(n_total, limits.max_spectra);
       int threads = 1;
 #ifdef _OPENMP
@@ -72,7 +72,7 @@ namespace FASTag::Acquisition
       if (copies.empty())
       {
         for (std::size_t i = 0; i < heads && out.size() < limits.max_ms2; ++i)
-          if (auto m = fromSpectrum(reader.getSpectrumMetadata(i, kFields), run_provenance)) out.push_back(*m);
+          if (auto m = fromSpectrum(reader.getSpectrumMetadata(i, FIELDS), run_provenance)) out.push_back(*m);
         return out;
       }
       const int team = static_cast<int>(copies.size()) + 1;
@@ -96,7 +96,7 @@ namespace FASTag::Acquisition
           try
           {
             got[static_cast<std::size_t>(k)] =
-                fromSpectrum(r.getSpectrumMetadata(i + static_cast<std::size_t>(k), kFields), run_provenance);
+                fromSpectrum(r.getSpectrumMetadata(i + static_cast<std::size_t>(k), FIELDS), run_provenance);
           }
           catch (...)
           {

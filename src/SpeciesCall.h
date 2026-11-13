@@ -22,7 +22,7 @@
 //     count of h.
 //
 // p_g = P(X >= o_g), X ~ Poisson(lambda_g); q_g by Benjamini-Hochberg (or
-// Storey's pi0, opt-in) over the genera with o_g >= Taxonomy::kObservedFloor.
+// Storey's pi0, opt-in) over the genera with o_g >= Taxonomy::OBSERVED_FLOOR.
 // Decision, in this order: run-level no_call (low_resolution, few_spectra);
 // present (q <= alpha, share >= tau, o >= n_min); no_call unstable (see
 // below); no_call near_neighbour (spill > 0, and q <= alpha on the random part
@@ -55,7 +55,9 @@
 
 namespace FASTag::SpeciesCall
 {
-  /// The frozen decision parameters (data/taxonomy/species_call.tsv).
+  /**
+    @brief The frozen decision parameters (data/taxonomy/species_call.tsv).
+  */
   struct Params
   {
     double alpha = 0.01;        ///< q-value threshold
@@ -66,30 +68,52 @@ namespace FASTag::SpeciesCall
     std::string training_sha256;///< sha256 of the training run list, or "none"
   };
 
-  /// Read a key<TAB>value table ('#' comments, blank lines ignored). Keys
-  /// alpha, tau and n_min are required; decoys, version and training_sha256
-  /// are optional; reagent_n_min (of -species_reagents, removed in 1.14) is
-  /// accepted and ignored, so older files still load; any other key is an
-  /// error, so a typo cannot silently keep a default. Returns false and sets *err on a missing file, a missing or
-  /// unknown key, or a value out of range (alpha in (0,1], tau in [0,1],
-  /// n_min >= 1, decoys >= 0).
+  /**
+    @brief Reads the decision parameters from a key<TAB>value table.
+
+    '#' comments and blank lines are ignored. Keys alpha, tau and n_min are
+    required; decoys, version and training_sha256 are optional; reagent_n_min
+    (of -species_reagents, removed in 1.14) is accepted and ignored, so older
+    files still load; any other key is an error, so a typo cannot silently keep
+    a default. A duplicate key is also an error. @p out is assigned only on
+    success.
+
+    @param[in] path Path of the parameter file.
+    @param[out] out Parsed parameters (unchanged on failure).
+    @param[out] err If not null, receives the error message (prefixed with @p path) on failure.
+    @return False on a missing file, a malformed line, a missing, duplicate or
+      unknown key, or a value out of range (alpha in (0,1], tau in [0,1],
+      n_min >= 1, decoys in [0,1000]); true otherwise.
+  */
   bool loadParams(const std::string& path, Params& out, std::string* err);
 
-  enum class Call { Present, NoCall, NotDetected };
+  /**
+    @brief Outcome of the species call for one genus.
+  */
+  enum class Call { PRESENT, NO_CALL, NOT_DETECTED };
 
-  /// "present", "no_call", "not_detected".
+  /**
+    @brief Returns the report name of a call.
+    @param[in] c The call.
+    @return "present", "no_call" or "not_detected".
+  */
   const char* callName(Call c);
 
-  /// One genus (or whatever -species_rank is) entering the call.
+  /**
+    @brief One genus (or whatever -species_rank is) entering the call.
+  */
   struct GenusInput
   {
-    uint32_t taxid = 0;
+    uint32_t taxid = 0;          ///< NCBI taxonomy id of the genus
     uint64_t observed = 0;       ///< o_g: target spectra counted for g
     uint64_t decoy_spectra = 0;  ///< d_g: decoy spectra, summed over the D replicates
     double share = 0.0;          ///< share_g of the run's units (deconvolved or o_g / n_units)
     double deconvolved = 0.0;    ///< N_g: what g contributes as spill source once called present
   };
 
+  /**
+    @brief Run-level inputs of the species call.
+  */
   struct RunInput
   {
     uint64_t n_units = 0;        ///< spectra with any target taxon evidence
@@ -100,43 +124,78 @@ namespace FASTag::SpeciesCall
     double pi0 = 1.0;            ///< 1 = BH; in (0,1) a fixed pi0; 0 = estimate (Storey)
   };
 
+  /**
+    @brief Statistics and call of one genus, as reported.
+  */
   struct GenusStat
   {
-    uint32_t taxid = 0;
-    uint64_t observed = 0;
-    uint64_t decoy_spectra = 0;
+    uint32_t taxid = 0;            ///< NCBI taxonomy id of the genus
+    uint64_t observed = 0;         ///< o_g: target spectra counted for g
+    uint64_t decoy_spectra = 0;    ///< d_g: decoy spectra, summed over the D replicates
     double random_expected = 0.0;  ///< r_g * N_trials
     double spill = 0.0;            ///< homology part
     double expected = 0.0;         ///< lambda_g = spill + random_expected
     double pvalue = 1.0;           ///< P(X >= o_g | lambda_g)
     double qvalue = 1.0;           ///< over the tested genera; 1 when not tested
     double qvalue_random = 1.0;    ///< the same with the random part alone
-    double share = 0.0;
+    double share = 0.0;            ///< share_g of the run's units
     double lod = -1.0;             ///< detection limit as a share; < 0 = not applicable
-    bool tested = false;           ///< observed >= Taxonomy::kObservedFloor
-    Call call = Call::NotDetected;
+    bool tested = false;           ///< observed >= Taxonomy::OBSERVED_FLOOR
+    Call call = Call::NOT_DETECTED; ///< the decision
     std::string reason;            ///< pass, low_resolution, few_spectra, unstable,
                                    ///< near_neighbour, not_significant, low_share,
                                    ///< few_genus_spectra
   };
 
-  /// P(X >= o) for X ~ Poisson(lambda); 1 for o == 0.
+  /**
+    @brief Upper tail of the Poisson distribution.
+    @param[in] o Observed count.
+    @param[in] lambda Poisson mean.
+    @return P(X >= o) for X ~ Poisson(lambda); 1 for o == 0.
+  */
   double poissonUpperTail(uint64_t o, double lambda);
 
-  /// The random part of the null: r_g * N_trials with r_g = (d + 0.5) / (D * N_trials).
+  /**
+    @brief The random part of the null.
+    @param[in] decoy_spectra d: decoy spectra summed over the D replicates.
+    @param[in] decoys D: number of decoy replicates.
+    @param[in] n_trials N_trials: spectra with at least one evaluated target tag.
+    @return r_g * N_trials with r_g = (d + 0.5) / (D * N_trials).
+  */
   double randomExpected(uint64_t decoy_spectra, int decoys, uint64_t n_trials);
 
-  /// q-values over @p p (all entries tested) with a fixed @p pi0 in (0, 1]:
-  /// pi0 = 1 is Benjamini-Hochberg. Through OpenMS MultipleTesting::qValue.
+  /**
+    @brief q-values with a fixed pi0.
+
+    pi0 = 1 is Benjamini-Hochberg. Through OpenMS MultipleTesting::qValue.
+
+    @param[in] p p-values (all entries tested).
+    @param[in] pi0 Fixed pi0 in (0, 1].
+    @return One q-value per entry of @p p, in the same order.
+  */
   std::vector<double> qValues(const std::vector<double>& p, double pi0);
 
-  /// Storey's pi0 of @p p (OpenMS MultipleTesting::pi0Est), clamped to
-  /// (0, 1]; 1 when there are fewer than 2 values or the estimate fails.
+  /**
+    @brief Storey's pi0 estimate (OpenMS MultipleTesting::pi0Est).
+    @param[in] p p-values.
+    @return The estimate clamped to (0, 1]; 1 when there are fewer than 2
+      values or the estimate fails.
+  */
   double estimatePi0(const std::vector<double>& p);
 
-  /// The call for every genus of @p genera. @p C is the n x n conditional
-  /// matrix in the order of @p genera (n = genera.size()); empty means no
-  /// homology term. Output in the order of @p genera.
+  /**
+    @brief The call for every genus of @p genera.
+
+    Iterates the present set to a self-consistent set as described in the file
+    header; spill only comes from genera called present.
+
+    @param[in] genera The genera entering the call.
+    @param[in] C The n x n conditional overlap matrix in the order of @p genera
+      (n = genera.size()); empty means no homology term.
+    @param[in] run Run-level inputs.
+    @param[in] params Decision parameters.
+    @return One GenusStat per entry of @p genera, in the same order.
+  */
   std::vector<GenusStat> callGenera(const std::vector<GenusInput>& genera,
                                     const std::vector<double>& C,
                                     const RunInput& run, const Params& params);

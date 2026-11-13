@@ -422,14 +422,14 @@ namespace
   MSSpectrum masked(MSSpectrum full, unsigned fields)
   {
     using R = FASTag::IndexedMzMLReader;
-    if (!(fields & R::kStep0Type)) full.setType(SpectrumSettings::SpectrumType::UNKNOWN);
-    if (!(fields & R::kStep0FilterString) && full.metaValueExists("filter string")) full.removeMetaValue("filter string");
+    if (!(fields & R::STEP0_TYPE)) full.setType(SpectrumSettings::SpectrumType::UNKNOWN);
+    if (!(fields & R::STEP0_FILTER_STRING) && full.metaValueExists("filter string")) full.removeMetaValue("filter string");
     for (Precursor& p : full.getPrecursors())
     {
-      if (!(fields & R::kStep0Activation)) p.setActivationMethods({});
-      if (!(fields & R::kStep0ActivationEnergy)) p.setActivationEnergy(0.0);
-      if (!(fields & R::kStep0PossibleCharges)) p.setPossibleChargeStates({});
-      if (!(fields & R::kStep0TargetMeta) && p.metaValueExists("isolation window target m/z"))
+      if (!(fields & R::STEP0_ACTIVATION)) p.setActivationMethods({});
+      if (!(fields & R::STEP0_ACTIVATION_ENERGY)) p.setActivationEnergy(0.0);
+      if (!(fields & R::STEP0_POSSIBLE_CHARGES)) p.setPossibleChargeStates({});
+      if (!(fields & R::STEP0_TARGET_META) && p.metaValueExists("isolation window target m/z"))
         p.removeMetaValue("isolation window target m/z");
     }
     return full;
@@ -440,8 +440,8 @@ namespace
   std::vector<unsigned> field_masks()
   {
     using R = FASTag::IndexedMzMLReader;
-    std::vector<unsigned> m = {0u, R::kTaggingFields, R::kProbeFields, R::kActivationFields};
-    for (unsigned b = 1; b < R::kAllFields; b <<= 1) m.push_back(b);
+    std::vector<unsigned> m = {0u, R::TAGGING_FIELDS, R::PROBE_FIELDS, R::ACTIVATION_FIELDS};
+    for (unsigned b = 1; b < R::ALL_FIELDS; b <<= 1) m.push_back(b);
     return m;
   }
 
@@ -853,7 +853,7 @@ int main(int argc, char** argv)
       ++ms2n;
       const IS::Activation ag = IS::activationClass(g), aw = IS::activationClass(w);
       if (ag != aw) ++bad;
-      if (ag == IS::Activation::Electron) ++electron;
+      if (ag == IS::Activation::ELECTRON) ++electron;
     }
     check(ms2n > 0 && bad == 0 && electron == ms2n,
           "etd_like: the fast activation class equals OnDisc's, all electron (" + std::to_string(electron) + " of " +
@@ -885,8 +885,8 @@ int main(int argc, char** argv)
     try { MzMLFile().load(pgf, want); }
     catch (const Exception::BaseException& e) { check(false, std::string("etd_paramgroup: OpenMS loads it (") + e.what() + ")"); }
     FASTag::IndexedMzMLReader r(pgf);
-    const IS::Activation expect[6] = {IS::Activation::Unknown, IS::Activation::Electron, IS::Activation::Hybrid,
-                                      IS::Activation::Electron, IS::Activation::Collisional, IS::Activation::Hybrid};
+    const IS::Activation expect[6] = {IS::Activation::UNKNOWN, IS::Activation::ELECTRON, IS::Activation::HYBRID,
+                                      IS::Activation::ELECTRON, IS::Activation::COLLISIONAL, IS::Activation::HYBRID};
     check(r.ok() && r.getNrSpectra() == 6 && want.size() == 6, "etd_paramgroup: 6 spectra on both sides");
     for (Size i = 0; r.ok() && i < 6 && i < want.size(); ++i)
     {
@@ -1444,8 +1444,8 @@ int main(int argc, char** argv)
     for (std::size_t k = 0; r.ok() && k < cases.size() && k < ref.size(); ++k)
     {
       const Case& c = cases[k];
-      for (const unsigned fields : {unsigned(FASTag::IndexedMzMLReader::kAllFields),
-                                    unsigned(FASTag::IndexedMzMLReader::kTaggingFields)})
+      for (const unsigned fields : {unsigned(FASTag::IndexedMzMLReader::ALL_FIELDS),
+                                    unsigned(FASTag::IndexedMzMLReader::TAGGING_FIELDS)})
       {
         const MSSpectrum got = r.getSpectrum(k, fields);
         check(got.getPrecursors().size() == 1, std::string("mz0: one precursor: ") + c.what);
@@ -1454,7 +1454,7 @@ int main(int argc, char** argv)
         check(p.getMZ() == c.want, std::string("mz0: reader precursor m/z: ") + c.what);
         // Read as a missing MS:1000744: no target meta value then; with a
         // valid m/z away from the target, the meta value as before.
-        const bool want_meta = (fields & FASTag::IndexedMzMLReader::kStep0TargetMeta) && k == 4;
+        const bool want_meta = (fields & FASTag::IndexedMzMLReader::STEP0_TARGET_META) && k == 4;
         check(p.metaValueExists("isolation window target m/z") == want_meta,
               std::string("mz0: reader target meta value: ") + c.what);
       }

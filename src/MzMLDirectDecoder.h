@@ -65,22 +65,44 @@
 
 namespace FASTag
 {
+  /**
+    @brief Decodes the peaks and native id of one mzML <spectrum> element without building an XML tree.
+
+    Accepts only the subset described in the file comment, where the result
+    equals OpenMS's MzMLSpectrumDecoder::domParseSpectrum bit for bit; the
+    caller falls back to domParseSpectrum otherwise. Buffers are reused
+    between calls; use one instance per thread.
+  */
   class MzMLDirectDecoder
   {
   public:
+    /// @brief Creates a decoder with empty reusable buffers.
     MzMLDirectDecoder();
+    /// @brief Releases the reusable buffers.
     ~MzMLDirectDecoder();
     MzMLDirectDecoder(const MzMLDirectDecoder&) = delete;
     MzMLDirectDecoder& operator=(const MzMLDirectDecoder&) = delete;
 
-    /// Appends the peaks of the <spectrum> element at the start of @p xml to
-    /// @p spec and sets its native id, as domParseSpectrum does; bytes after
-    /// the element's end tag are ignored. False when the element is outside
-    /// the supported subset (see above): @p spec is then unchanged.
+    /**
+      @brief Decodes one <spectrum> element into a spectrum, as domParseSpectrum does.
+
+      Bytes after the element's end tag are ignored.
+
+      @param[in] xml Text starting with the <spectrum> element.
+      @param[in,out] spec Receives the peaks (appended), the native id and any
+        float data array; unchanged when false is returned.
+      @return False when the element is outside the supported subset (see the
+        file comment); true otherwise.
+    */
     bool decode(std::string_view xml, OpenMS::MSSpectrum& spec);
 
-    /// True when FASTAG_OPENMS_DECODER is set (to anything but "0"): every
-    /// spectrum then goes through OpenMS, for comparison runs.
+    /**
+      @brief Whether the direct decoder is disabled by the environment.
+
+      Every spectrum then goes through OpenMS, for comparison runs.
+
+      @return True when FASTAG_OPENMS_DECODER is set (to anything but "0").
+    */
     static bool disabledByEnvironment();
 
   private:

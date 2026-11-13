@@ -19,7 +19,9 @@
 
 namespace FASTag
 {
-  /// One reconciliation of a tag against one database peptide placement.
+  /**
+    @brief One reconciliation of a tag against one database peptide placement.
+  */
   struct Reconciliation
   {
     std::string protein;    ///< accession of the protein the peptide came from
@@ -36,8 +38,8 @@ namespace FASTag
     bool        reversed = false;  ///< tag matched the peptide reading C->N (b-derived)
     /// Flank mass agreement, within the tolerances reconcile() documents.
     /// Both true = exact placement (no mass gap).
-    bool        nterm_match = false;
-    bool        cterm_match = false;
+    bool        nterm_match = false;  ///< the N-terminal flank agrees
+    bool        cterm_match = false;  ///< the C-terminal flank agrees
     double      delta_mass = 0.0;  ///< spectrum flank - database flank on the mismatched side; 0 if exact
     /// Inclusive residue range (in peptide coordinates) the mass gap localizes to
     /// -- the residues between the tag and the mismatched terminus. Empty (lo>hi)
@@ -58,59 +60,85 @@ namespace FASTag
     int         loc_ties = 0;   ///< region positions sharing loc_score; 1 = unique
   };
 
-  /// A candidate variable modification for interpreting a mass gap: its
-  /// monoisotopic mass shift and the residues it can sit on ("" = any). Supplied
-  /// by the caller (the TOPP tool resolves names via OpenMS ModificationsDB), so
-  /// this library needs no modification database of its own.
+  /**
+    @brief A candidate variable modification for interpreting a mass gap.
+
+    Its monoisotopic mass shift and the residues it can sit on ("" = any).
+    Supplied by the caller (the TOPP tool resolves names via OpenMS
+    ModificationsDB), so this library needs no modification database of its own.
+  */
   struct ModCandidate
   {
-    std::string name;
-    double      delta = 0.0;
+    std::string name;  ///< modification name, as reported in "mod:Name@X"
+    double      delta = 0.0;  ///< monoisotopic mass shift (Da)
     std::string residues;  ///< e.g. "STY" for Phospho; "" matches any residue
   };
 
-  /// Reconciles tags against a tryptically digested protein database.
-  ///
-  /// Locates each tag in a ProteomeIndex, enumerates the tryptic windows around
-  /// every occurrence, and compares the database flanking masses to the
-  /// spectrum's. I is folded to L, exactly as the tagger and FastaFilter do,
-  /// since a spectrum cannot distinguish them.
+  /**
+    @brief Reconciles tags against a tryptically digested protein database.
+
+    Locates each tag in a ProteomeIndex, enumerates the tryptic windows around
+    every occurrence, and compares the database flanking masses to the
+    spectrum's. I is folded to L, exactly as the tagger and FastaFilter do,
+    since a spectrum cannot distinguish them.
+  */
   class TagReconciler
   {
   public:
-    /// @param frag_tol,tol_ppm  flank-mass agreement tolerance (per flank).
-    ///   ppm is evaluated at the flank mass itself.
-    /// @param both_orientations also try the tag reversed (b-ion reading).
+    /**
+      @brief Creates a reconciler with the given flank-mass tolerance.
+      @param[in] frag_tol flank-mass agreement tolerance (per flank), in Da or ppm
+      @param[in] tol_ppm whether @p frag_tol is in ppm; ppm is evaluated at the flank mass itself
+      @param[in] both_orientations also try the tag reversed (b-ion reading)
+    */
     TagReconciler(double frag_tol, bool tol_ppm, bool both_orientations = true)
       : frag_tol_(frag_tol), tol_ppm_(tol_ppm), both_(both_orientations) {}
 
-    /// Reconcile against a caller-owned ProteomeIndex (any tag length in
-    /// [min_len, MAX_FILTER_LEN], collapse rules as the index was built with).
-    /// The index must outlive this object. Call once; reconcile() is
-    /// const/thread-safe after.
+    /**
+      @brief Reconcile against a caller-owned ProteomeIndex.
+
+      Any tag length in [min_len, MAX_FILTER_LEN], collapse rules as the index
+      was built with. The index must outlive this object. Call once;
+      reconcile() is const/thread-safe after.
+
+      @param[in] idx the index (not owned)
+      @param[in] missed_cleavages missed cleavages for window enumeration
+      @param[in] min_len shortest tag reconciled
+    */
     void attach(const ProteomeIndex* idx, int missed_cleavages, int min_len);
 
-    /// All placements of @p tag consistent with the flanking masses, at most one
-    /// flank mismatch each. @p tag is base residues (bracket annotations already
-    /// stripped), N->C.
-    ///
-    /// With @p spec (m/z-sorted fragment peaks) every placement with a mass gap
-    /// is also site-localized against it, at fragment charges
-    /// 1..max(1, @p precursor_charge - 1) (a charge <= 0 counts as 2, as in
-    /// the tagger). @p tag_shift, if given, holds the mass shift of each tag
-    /// residue's variable modification (0 when unmodified), N->C, one entry
-    /// per residue of @p tag; localization puts those shifts on the ladder.
-    ///
-    /// Flanks follow the tagger's y-ion convention: a reversed (b-derived)
-    /// placement expects cterm_mass = N-side residues - H2O and nterm_mass =
-    /// C-side residues + H2O. The precursor-derived flank is judged at the
-    /// peptide's mass, the other at its own.
-    ///
-    /// @p series: the ion pair the tag was read as (Tag::ion_series, 1.12
-    /// #15). nullptr or b/y is the above, FASTag 1.11's code. Another pair
-    /// (c/z-dot) takes the reversed offset from it -- cterm_mass = N-side -
-    /// reversedOffset(), nterm_mass = C-side + reversedOffset() -- and
-    /// localizes on its own ladders (c = prefix + offN, z-dot = suffix + offC).
+    /**
+      @brief All placements of @p tag consistent with the flanking masses, at most one flank mismatch each.
+
+      @p tag is base residues (bracket annotations already stripped), N->C.
+
+      With @p spec (m/z-sorted fragment peaks) every placement with a mass gap
+      is also site-localized against it, at fragment charges
+      1..max(1, @p precursor_charge - 1) (a charge <= 0 counts as 2, as in
+      the tagger). @p tag_shift, if given, holds the mass shift of each tag
+      residue's variable modification (0 when unmodified), N->C, one entry
+      per residue of @p tag; localization puts those shifts on the ladder.
+
+      Flanks follow the tagger's y-ion convention: a reversed (b-derived)
+      placement expects cterm_mass = N-side residues - H2O and nterm_mass =
+      C-side residues + H2O. The precursor-derived flank is judged at the
+      peptide's mass, the other at its own.
+
+      @p series: the ion pair the tag was read as (Tag::ion_series, 1.12
+      #15). nullptr or b/y is the above, FASTag 1.11's code. Another pair
+      (c/z-dot) takes the reversed offset from it -- cterm_mass = N-side -
+      reversedOffset(), nterm_mass = C-side + reversedOffset() -- and
+      localizes on its own ladders (c = prefix + offN, z-dot = suffix + offC).
+
+      @param[in] tag the tag's base residues, N->C
+      @param[in] nterm_mass the spectrum's N-terminal flank mass (Da)
+      @param[in] cterm_mass the spectrum's C-terminal flank mass (Da)
+      @param[in] spec m/z-sorted fragment peaks for site localization, or nullptr
+      @param[in] precursor_charge the precursor charge (<= 0 counts as 2)
+      @param[in] tag_shift per-residue variable modification shifts of the tag, or nullptr
+      @param[in] series the ion pair the tag was read as, or nullptr for b/y
+      @return the placements
+    */
     std::vector<Reconciliation> reconcile(const std::string& tag, double nterm_mass,
                                           double cterm_mass,
                                           const OpenMS::MSSpectrum* spec = nullptr,
@@ -118,40 +146,60 @@ namespace FASTag
                                           const std::vector<double>* tag_shift = nullptr,
                                           const IonSeries::IonPair* series = nullptr) const;
 
-    /// 1.13 item 20: placements on windows chosen by mass, not by cleavage
-    /// site (ProteomeIndex::windowsByMass), for the shortlist's protease-aware
-    /// mode. Per occurrence of @p tag the windows are those whose database
-    /// flanks match the spectrum flanks (the wanted masses tryPlace derives,
-    /// each also less the fixed terminal modification on its side), and each
-    /// goes through tryPlace, so the flags, deltas and the peptide-mass
-    /// tolerance are those of reconcile(). Without a spectrum (no site
-    /// localization). Only placements where tryPlace finds both flanks, or one
-    /// flank off by exactly a fixed terminal modification, are useful; the
-    /// caller classifies them (Shortlist::classifyPlacement). Ascending
-    /// window order per occurrence; independent of mc and the cleavage rule.
+    /**
+      @brief Placements on windows chosen by mass, not by cleavage site (1.13 item 20).
+
+      Uses ProteomeIndex::windowsByMass, for the shortlist's protease-aware
+      mode. Per occurrence of @p tag the windows are those whose database
+      flanks match the spectrum flanks (the wanted masses tryPlace derives,
+      each also less the fixed terminal modification on its side), and each
+      goes through tryPlace, so the flags, deltas and the peptide-mass
+      tolerance are those of reconcile(). Without a spectrum (no site
+      localization). Only placements where tryPlace finds both flanks, or one
+      flank off by exactly a fixed terminal modification, are useful; the
+      caller classifies them (Shortlist::classifyPlacement). Ascending
+      window order per occurrence; independent of mc and the cleavage rule.
+
+      @param[in] tag the tag's base residues, N->C
+      @param[in] nterm_mass the spectrum's N-terminal flank mass (Da)
+      @param[in] cterm_mass the spectrum's C-terminal flank mass (Da)
+      @param[in] series the ion pair the tag was read as, or nullptr for b/y
+      @return the placements
+    */
     std::vector<Reconciliation> reconcileByMass(const std::string& tag, double nterm_mass, double cterm_mass,
                                                 const IonSeries::IonPair* series = nullptr) const;
 
-    /// Candidate variable modifications for interpreting a mass gap. Set
-    /// before reconcile(); read-only after. Empty means only substitutions and
-    /// "?" are ever reported.
+    /**
+      @brief Sets the candidate variable modifications for interpreting a mass gap.
+
+      Set before reconcile(); read-only after. Empty means only substitutions
+      and "?" are ever reported.
+
+      @param[in] mods the candidates (moved in)
+    */
     void setModCandidates(std::vector<ModCandidate> mods) { mods_ = std::move(mods); }
 
-    /// Fixed peptide-terminal modification masses (e.g. a TMT/iTRAQ N-term
-    /// label). The spectrum flanks carry them, the index prefixes do not, so a
-    /// labelled peptide's gap on that side includes them; localization scores
-    /// that gap with them on every ion of the terminus and only the rest
-    /// placed, and without them (an unlabelled peptide), keeping the reading
-    /// that explains more ions. Set before reconcile().
+    /**
+      @brief Sets the fixed peptide-terminal modification masses (e.g. a TMT/iTRAQ N-term label).
+
+      The spectrum flanks carry them, the index prefixes do not, so a
+      labelled peptide's gap on that side includes them; localization scores
+      that gap with them on every ion of the terminus and only the rest
+      placed, and without them (an unlabelled peptide), keeping the reading
+      that explains more ions. Set before reconcile().
+
+      @param[in] nterm the fixed N-terminal modification mass (Da)
+      @param[in] cterm the fixed C-terminal modification mass (Da)
+    */
     void setFixedTermMods(double nterm, double cterm) { fixed_n_ = nterm; fixed_c_ = cterm; }
 
   private:
-    double tolAt(double m) const { return tol_ppm_ ? m * frag_tol_ * 1e-6 : frag_tol_; }
+    double tolAt_(double m) const { return tol_ppm_ ? m * frag_tol_ * 1e-6 : frag_tol_; }
     /// The database flank masses tryPlace compares an occurrence with (the
     /// y-ion convention and the reversed-reading swap, see reconcile()).
-    static void wantedFlanks(bool reversed, double nterm_mass, double cterm_mass,
+    static void wantedFlanks_(bool reversed, double nterm_mass, double cterm_mass,
                              const IonSeries::IonPair* series, double& want_n, double& want_c);
-    void tryPlace(const ProteomeIndex::TagOcc& occ, const ProteomeIndex::Window& w,
+    void tryPlace_(const ProteomeIndex::TagOcc& occ, const ProteomeIndex::Window& w,
                   double nterm_mass, double cterm_mass, const OpenMS::MSSpectrum* spec,
                   int frag_charges, const std::vector<double>* tag_shift,
                   const IonSeries::IonPair* series, std::vector<Reconciliation>& out) const;

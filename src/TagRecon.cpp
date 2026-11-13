@@ -34,7 +34,7 @@ namespace FASTag
           r->getMonoWeight(Residue::Internal);
   }
 
-  void TagReconciler::wantedFlanks(bool reversed, double nterm_mass, double cterm_mass,
+  void TagReconciler::wantedFlanks_(bool reversed, double nterm_mass, double cterm_mass,
                                    const IonSeries::IonPair* series, double& want_n, double& want_c)
   {
     static const double WATER = EmpiricalFormula("H2O").getMonoWeight();
@@ -54,7 +54,7 @@ namespace FASTag
     }
   }
 
-  void TagReconciler::tryPlace(const ProteomeIndex::TagOcc& occ, const ProteomeIndex::Window& w,
+  void TagReconciler::tryPlace_(const ProteomeIndex::TagOcc& occ, const ProteomeIndex::Window& w,
                                double nterm_mass, double cterm_mass,
                                const MSSpectrum* spec, int frag_charges,
                                const std::vector<double>* tag_shift,
@@ -73,7 +73,7 @@ namespace FASTag
     // C-side residues + H2O. (The C-side clamp mirrors the tagger's at 0.)
     static const double WATER = EmpiricalFormula("H2O").getMonoWeight();
     double want_n, want_c;
-    wantedFlanks(occ.reversed, nterm_mass, cterm_mass, series, want_n, want_c);
+    wantedFlanks_(occ.reversed, nterm_mass, cterm_mass, series, want_n, want_c);
 
     // The spectrum flank that is the precursor less the top fragment (want_n
     // forward, want_c reversed) carries an error on the PEPTIDE's mass scale,
@@ -81,12 +81,12 @@ namespace FASTag
     // nearly the peptide's mass. Judge it at the peptide mass; the other
     // flank comes from a low fragment alone and is judged at its own mass.
     // (In Da mode both tolerances are the same constant.)
-    const double pep_tol = tolAt(idx_->massBetween(w.start, w.end) + WATER);
+    const double pep_tol = tolAt_(idx_->massBetween(w.start, w.end) + WATER);
     const bool n_from_prec = !occ.reversed;
     const bool n_ok = std::fabs(db_n - want_n) <=
-                      (n_from_prec ? pep_tol : tolAt(std::max(db_n, want_n)));
+                      (n_from_prec ? pep_tol : tolAt_(std::max(db_n, want_n)));
     const bool c_ok = std::fabs(db_c - want_c) <=
-                      (n_from_prec ? tolAt(std::max(db_c, want_c)) : pep_tol);
+                      (n_from_prec ? tolAt_(std::max(db_c, want_c)) : pep_tol);
 
     // Only ONE flank may carry a mass gap: a peptide with mismatches on both
     // sides of the tag is under-constrained and, in TagRecon's own words, hurts
@@ -189,13 +189,13 @@ namespace FASTag
     }
     const double label = r.nterm_match ? fixed_c_ : fixed_n_;
     const bool alone = std::fabs(r.delta_mass - label) <=
-                       tolAt(idx_->massBetween(w.start, w.end) + label);
+                       tolAt_(idx_->massBetween(w.start, w.end) + label);
     auto hits = [&](double neutral) {
       int n = 0;
       for (int z = 1; z <= frag_charges; ++z)
       {
         const double mz = (neutral + z * Constants::PROTON_MASS_U) / z;
-        if (spec.findNearest(mz, tolAt(mz)) >= 0) ++n;
+        if (spec.findNearest(mz, tolAt_(mz)) >= 0) ++n;
       }
       return n;
     };
@@ -243,7 +243,7 @@ namespace FASTag
     //                   replaced by any residue Y (unmodified masses; see attach()).
     // The best fit (smallest mass error) wins; a modification breaks a near-tie
     // because it is the more common explanation of a given mass shift.
-    const double tol = tolAt(std::fabs(delta) > 1.0 ? std::fabs(delta) : 200.0);
+    const double tol = tolAt_(std::fabs(delta) > 1.0 ? std::fabs(delta) : 200.0);
     std::string best;
     double best_err = tol;
     bool best_is_mod = false;
@@ -308,7 +308,7 @@ namespace FASTag
       windows.clear();
       idx_->windowsAt(occ.pos, occ.len, mc_, windows);
       for (const auto& w : windows)
-        tryPlace(occ, w, nterm_mass, cterm_mass, spec, frag_charges, tag_shift, series, out);
+        tryPlace_(occ, w, nterm_mass, cterm_mass, spec, frag_charges, tag_shift, series, out);
     }
     return out;
   }
@@ -330,7 +330,7 @@ namespace FASTag
     for (const auto& occ : occs)
     {
       double wn, wc;
-      wantedFlanks(occ.reversed, nterm_mass, cterm_mass, series, wn, wc);
+      wantedFlanks_(occ.reversed, nterm_mass, cterm_mass, series, wn, wc);
       want_n.assign(1, wn);
       want_c.assign(1, wc);
       if (fixed_n_ != 0.0 && wn - fixed_n_ >= 0.0) want_n.push_back(wn - fixed_n_);
@@ -340,12 +340,12 @@ namespace FASTag
       // water (fixed masses are never negative in this bound's use; a
       // negative one only lowers the window mass).
       const double tag_mass = idx_->massBetween(occ.pos, occ.pos + occ.len);
-      const double tol = tolAt(std::max(wn, 0.0) + std::max(wc, 0.0) + tag_mass + WATER +
+      const double tol = tolAt_(std::max(wn, 0.0) + std::max(wc, 0.0) + tag_mass + WATER +
                                std::fabs(fixed_n_) + std::fabs(fixed_c_)) * 1.5;
       windows.clear();
       idx_->windowsByMass(occ.pos, occ.len, want_n, want_c, tol, windows);
       for (const auto& w : windows)
-        tryPlace(occ, w, nterm_mass, cterm_mass, nullptr, 1, nullptr, series, out);
+        tryPlace_(occ, w, nterm_mass, cterm_mass, nullptr, 1, nullptr, series, out);
     }
     return out;
   }

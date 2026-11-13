@@ -44,11 +44,11 @@ static std::string syntheticTable()
 {
   std::string t = "# synthetic test models\nmodel\tclass\tend\tresidue\tfreq\n";
   for (const char* end : {"C", "N"})
-    for (int i = 0; i < D::kNumAA; ++i)
+    for (int i = 0; i < D::NUM_AA; ++i)
     {
       char b[16];
       std::snprintf(b, sizeof b, "0.%02d", i + 1);
-      t += std::string("background\t-\t") + end + "\t" + D::kAAs[static_cast<std::size_t>(i)] + "\t" + b + "\n";
+      t += std::string("background\t-\t") + end + "\t" + D::AAS[static_cast<std::size_t>(i)] + "\t" + b + "\n";
     }
   t += "Trypsin\tTrypsin\tC\tK\t0.5\nTrypsin\tTrypsin\tC\tR\t0.5\nTrypsin\tTrypsin\tN\t*\t-\n"
        "Lys-C\tLys-C\tC\tK\t1\n"
@@ -85,16 +85,16 @@ static D::TerminusCounter count(const std::vector<std::pair<TagRow, int>>& rows)
       if (!r.gapped && r.evalue <= 1.0) tc.add(r.nterm, r.cterm, r.seq);
   return tc;
 }
-static std::array<std::uint64_t, D::kNumAA> counts(std::map<char, std::uint64_t> m)
+static std::array<std::uint64_t, D::NUM_AA> counts(std::map<char, std::uint64_t> m)
 {
-  std::array<std::uint64_t, D::kNumAA> a{};
+  std::array<std::uint64_t, D::NUM_AA> a{};
   for (const auto& [c, v] : m) a[static_cast<std::size_t>(D::aaIndex(c))] = v;
   return a;
 }
 static std::map<char, std::uint64_t> bgc_all()
 {
   std::map<char, std::uint64_t> m;
-  for (int i = 0; i < D::kNumAA; ++i) m[D::kAAs[static_cast<std::size_t>(i)]] = 1;
+  for (int i = 0; i < D::NUM_AA; ++i) m[D::AAS[static_cast<std::size_t>(i)]] = 1;
   return m;
 }
 static std::string value(const std::vector<D::Row>& rows, const std::string& section, const std::string& key)
@@ -108,15 +108,15 @@ static std::string value(const std::vector<D::Row>& rows, const std::string& sec
 static int key(const char* name)
 {
   const auto& keys = D::residueKeys();
-  for (int k = 0; k < D::kNumKeys; ++k)
+  for (int k = 0; k < D::NUM_KEYS; ++k)
     if (std::string(name) == keys[static_cast<std::size_t>(k)].name) return k;
   return -1;
 }
 /// @p tags filtered tags; C-terminal tag ends per residue key (c_near);
 /// N-terminal label gaps and their +0.5 Da background per labelKeys() entry.
 static D::TerminusCounter labelCounter(std::uint64_t tags, const std::map<std::string, std::uint64_t>& ends,
-                                       std::array<std::uint64_t, D::kNumLabels> lab = {},
-                                       std::array<std::uint64_t, D::kNumLabels> bg = {})
+                                       std::array<std::uint64_t, D::NUM_LABELS> lab = {},
+                                       std::array<std::uint64_t, D::NUM_LABELS> bg = {})
 {
   D::TerminusCounter tc;
   tc.tags = tags;
@@ -331,7 +331,7 @@ int main()
     // C ends shaped as the background, 50 N ends (< 100): unspecific and
     // Asp-N both score the background at both ends.
     std::map<char, std::uint64_t> bgc;
-    for (int i = 0; i < D::kNumAA; ++i) bgc[D::kAAs[static_cast<std::size_t>(i)]] = 4 * static_cast<std::uint64_t>(i + 1);
+    for (int i = 0; i < D::NUM_AA; ++i) bgc[D::AAS[static_cast<std::size_t>(i)]] = 4 * static_cast<std::uint64_t>(i + 1);
     const D::Classification c = D::classify(counts(bgc), counts({{'D', 50}}), table(), 0.05, 100);
     check(c.tied == std::vector<std::string>{"unspecific", "Asp-N"}, "tie: unspecific and Asp-N tie");
     D::TerminusCounter none;
@@ -344,15 +344,15 @@ int main()
   // model and Asp-N under the softened one; 12 % D stays unspecific.
   {
     std::map<char, std::uint64_t> bgc;
-    for (int i = 0; i < D::kNumAA; ++i) bgc[D::kAAs[static_cast<std::size_t>(i)]] = 4 * static_cast<std::uint64_t>(i + 1);
+    for (int i = 0; i < D::NUM_AA; ++i) bgc[D::AAS[static_cast<std::size_t>(i)]] = 4 * static_cast<std::uint64_t>(i + 1);
     auto third = bgc, eighth = bgc;
     third['D'] += 300;   // 340 of 1060
     eighth['D'] += 60;   // 100 of 820
     const auto top = [](const D::Classification& c) { return c.scores[static_cast<std::size_t>(c.top)].name; };
     D::ModelTable soft = table();
-    D::softenNterm(soft, "Asp-N", D::kNtermSiteShare);
-    D::softenNterm(soft, "Trypsin", D::kNtermSiteShare);  // N end is the background: no-op
-    D::softenNterm(soft, "no such model", D::kNtermSiteShare);
+    D::softenNterm(soft, "Asp-N", D::NTERM_SITE_SHARE);
+    D::softenNterm(soft, "Trypsin", D::NTERM_SITE_SHARE);  // N end is the background: no-op
+    D::softenNterm(soft, "no such model", D::NTERM_SITE_SHARE);
     check(top(D::classify(counts(bgc), counts(third), table(), 0.05, 100)) == "unspecific", "soften: 32 % D is unspecific before");
     check(top(D::classify(counts(bgc), counts(third), soft, 0.05, 100)) == "Asp-N", "soften: 32 % D is Asp-N after");
     check(top(D::classify(counts(bgc), counts(eighth), soft, 0.05, 100)) == "unspecific", "soften: 12 % D stays unspecific");
@@ -364,9 +364,9 @@ int main()
   {
     std::string t = "model\tclass\tend\tresidue\tfreq\n";
     for (const char* end : {"C", "N"})
-      for (int i = 0; i < D::kNumAA; ++i)
-        t += std::string("background\t-\t") + end + "\t" + D::kAAs[static_cast<std::size_t>(i)] + "\t" +
-             (D::kAAs[static_cast<std::size_t>(i)] == 'W' ? "0" : "0.05") + "\n";
+      for (int i = 0; i < D::NUM_AA; ++i)
+        t += std::string("background\t-\t") + end + "\t" + D::AAS[static_cast<std::size_t>(i)] + "\t" +
+             (D::AAS[static_cast<std::size_t>(i)] == 'W' ? "0" : "0.05") + "\n";
     t += "Trypsin\tTrypsin\tC\tK\t0.5\nTrypsin\tTrypsin\tC\tR\t0.5\n"
          "Chymotrypsin\tChymotrypsin\tC\tF\t0.25\nChymotrypsin\tChymotrypsin\tC\tY\t0.25\n"
          "Chymotrypsin\tChymotrypsin\tC\tW\t0.25\nChymotrypsin\tChymotrypsin\tC\tL\t0.25\n";
@@ -607,7 +607,7 @@ int main()
     check(callOf(lf) == "call label-free none none -", "label_call: 175 ends, no label: label-free (" + callOf(lf) + ")");
     // the minimum is 175 C-terminal tag ends, the 1.12 rule (prose-auto 0.1.10's TAG_MIN;
     // -label_call_min_tags 0 failed its 1.13 held-out test and was removed in 1.14)
-    check(D::kLabelTagMin == 175, "label_call: the tag minimum is 175");
+    check(D::LABEL_TAG_MIN == 175, "label_call: the tag minimum is 175");
     const D::TerminusCounter lf174 = labelCounter(1000, {{"K", 100}, {"R", 74}});
     check(callOf(lf174) == "no_call - - - few_tags",
           "label_call: 174 ends at the minimum 175 (prose-auto 0.1.10's TAG_MIN) is few_tags (" + callOf(lf174) + ")");

@@ -32,15 +32,15 @@ static std::string background()
 {
   std::string t;
   for (const char* end : {"C", "N"})
-    for (int i = 0; i < D::kNumAA; ++i)
+    for (int i = 0; i < D::NUM_AA; ++i)
     {
       char b[16];
       std::snprintf(b, sizeof b, "0.%02d", i + 1);
-      t += std::string("background\t-\t") + end + "\t" + D::kAAs[static_cast<std::size_t>(i)] + "\t" + b + "\n";
+      t += std::string("background\t-\t") + end + "\t" + D::AAS[static_cast<std::size_t>(i)] + "\t" + b + "\n";
     }
   return t;
 }
-static const char* kModels =
+static const char* MODELS =
     "Trypsin\tTrypsin\tC\tK\t0.5\nTrypsin\tTrypsin\tC\tR\t0.5\nTrypsin\tTrypsin\tN\t*\t-\n"
     "Lys-C\tLys-C\tC\tK\t1\nLys-C\tLys-C\tN\t*\t-\n"
     "Arg-C\tArg-C\tC\tR\t1\nArg-C\tArg-C\tN\t*\t-\n"
@@ -58,45 +58,45 @@ static D::ModelTable parse(const std::string& text, bool want_ok = true, std::st
   check(ok == want_ok, std::string("table parses ") + (want_ok ? "" : "not ") + "as expected: " + err);
   return t;
 }
-static std::string v1Text() { return "# synthetic v1\nmodel\tclass\tend\tresidue\tfreq\n" + background() + kModels; }
+static std::string v1Text() { return "# synthetic v1\nmodel\tclass\tend\tresidue\tfreq\n" + background() + MODELS; }
 /// A v2 table: detection weights for all three classes (orbitrap_hcd R 0.4,
 /// timstof K 1.5), a reference and a specificity.
 static std::string v2Text(const std::string& extra = "", bool all_classes = true)
 {
-  std::string t = "# fastag_digest_models v2\n# synthetic\nmodel\tclass\tend\tresidue\tfreq\n" + background() + kModels;
+  std::string t = "# fastag_digest_models v2\n# synthetic\nmodel\tclass\tend\tresidue\tfreq\n" + background() + MODELS;
   t += "detection\torbitrap_hcd\tC\tR\t0.4\n";
   if (all_classes) t += "detection\ttimstof\tC\tK\t1.5\ndetection\tother\tC\tK\t1\n";
   t += "reference\t-\tC\tK\t0.55\nreference\t-\tC\tR\t0.45\n";
   t += "specificity\ttrypsin\t-\t-\t0.05\nspecificity\tnontryptic\t-\t-\t0.05\n";
   return t + extra;
 }
-static std::array<std::uint64_t, D::kNumAA> counts(const std::map<char, std::uint64_t>& m)
+static std::array<std::uint64_t, D::NUM_AA> counts(const std::map<char, std::uint64_t>& m)
 {
-  std::array<std::uint64_t, D::kNumAA> a{};
+  std::array<std::uint64_t, D::NUM_AA> a{};
   for (const auto& [c, v] : m) a[static_cast<std::size_t>(D::aaIndex(c))] = v;
   return a;
 }
 /// Counts drawn as n * norm(e * ((1 - s) p + s bg)), rounded: what a model
 /// with detection weights e would show.
-static std::array<std::uint64_t, D::kNumAA> generate(const D::ModelTable& t, const std::string& model, const D::Dist* e,
+static std::array<std::uint64_t, D::NUM_AA> generate(const D::ModelTable& t, const std::string& model, const D::Dist* e,
                                                      double s, double n, bool cend = true)
 {
   const D::Model* m = nullptr;
   for (const D::Model& x : t.models)
     if (x.name == model) m = &x;
-  std::array<double, D::kNumAA> q{};
+  std::array<double, D::NUM_AA> q{};
   double z = 0;
-  for (int a = 0; a < D::kNumAA; ++a)
+  for (int a = 0; a < D::NUM_AA; ++a)
   {
     const D::Dist& p = cend ? (m->c_bg ? t.bg_c : m->c) : (m->n_bg ? t.bg_n : m->n);
     const D::Dist& bg = cend ? t.bg_c : t.bg_n;
     double zp = 0, zb = 0;
-    for (int b = 0; b < D::kNumAA; ++b) { zp += p[b]; zb += bg[b]; }
+    for (int b = 0; b < D::NUM_AA; ++b) { zp += p[b]; zb += bg[b]; }
     q[a] = (e ? (*e)[a] : 1.0) * ((1 - s) * p[a] / zp + s * bg[a] / zb);
     z += q[a];
   }
-  std::array<std::uint64_t, D::kNumAA> c{};
-  for (int a = 0; a < D::kNumAA; ++a) c[a] = static_cast<std::uint64_t>(std::llround(n * q[a] / z));
+  std::array<std::uint64_t, D::NUM_AA> c{};
+  for (int a = 0; a < D::NUM_AA; ++a) c[a] = static_cast<std::uint64_t>(std::llround(n * q[a] / z));
   return c;
 }
 static std::string top(const D::Classification& c)
@@ -137,12 +137,12 @@ static bool sameClassification(const D::Classification& a, const D::Classificati
   return true;
 }
 /// A counter whose C-terminal P1 counts are @p c (each count one y-tag end).
-static D::TerminusCounter counterOf(const std::array<std::uint64_t, D::kNumAA>& c, bool flank2 = false)
+static D::TerminusCounter counterOf(const std::array<std::uint64_t, D::NUM_AA>& c, bool flank2 = false)
 {
   D::TerminusCounter tc;
   if (flank2) tc.enableFlank2();
   const auto& keys = D::residueKeys();
-  for (int a = 0; a < D::kNumAA; ++a)
+  for (int a = 0; a < D::NUM_AA; ++a)
     for (std::uint64_t i = 0; i < c[a]; ++i) tc.add(500.0, keys[static_cast<std::size_t>(a)].mass, "PEPT");
   return tc;
 }
@@ -153,7 +153,7 @@ int main()
   const D::ModelTable v1 = parse(v1Text());
   check(v1.version == 1 && v1.detection.empty() && !v1.has_specificity && !v1.has_reference, "v1 table: no v2 rows");
   {
-    const std::vector<std::array<std::uint64_t, D::kNumAA>> sets = {
+    const std::vector<std::array<std::uint64_t, D::NUM_AA>> sets = {
         counts({{'K', 150}, {'R', 60}, {'L', 9}}), counts({{'R', 400}, {'K', 5}, {'A', 20}}),
         counts({{'K', 40}}), counts({{'D', 300}, {'E', 10}, {'K', 33}})};
     for (const auto& c : sets)
@@ -194,7 +194,7 @@ int main()
     check(v2.has_specificity && v2.s_trypsin == 0.05 && v2.s_nontryptic == 0.05, "v2: specificity");
     check(v2.models.size() == v1.models.size(), "v2: reserved rows are not models");
     // the marker alone makes a v2 table (version 2 without detection, reference or specificity rows)
-    const D::ModelTable bare = parse("# fastag_digest_models v2\nmodel\tclass\tend\tresidue\tfreq\n" + background() + kModels);
+    const D::ModelTable bare = parse("# fastag_digest_models v2\nmodel\tclass\tend\tresidue\tfreq\n" + background() + MODELS);
     check(bare.version == 2 && bare.detection.empty() && !bare.has_specificity, "v2: the marker line alone gives version 2");
     std::string err;
     parse(v2Text("detection\tqtof\tC\tK\t1\n"), false, &err);
@@ -202,11 +202,11 @@ int main()
     parse(v2Text("detection\tother\tC\tK\t1\n"), false, &err);
     check(err.find("given twice") != std::string::npos, "v2: a repeated detection row is refused");
     parse(v2Text("detection\tother\tC\tR\t-1\n"), false, &err);
-    parse("# fastag_digest_models v2\nmodel\tclass\tend\tresidue\tfreq\n" + background() + kModels +
+    parse("# fastag_digest_models v2\nmodel\tclass\tend\tresidue\tfreq\n" + background() + MODELS +
               "specificity\ttrypsin\t-\t-\t0.05\n", false, &err);
     check(err.find("nontryptic") != std::string::npos, "v2: a specificity needs both rows");
     parse(v2Text("specificity\ttrypsin\t-\t-\t0.1\n"), false, &err);
-    parse("# fastag_digest_models v2\nmodel\tclass\tend\tresidue\tfreq\n" + background() + kModels +
+    parse("# fastag_digest_models v2\nmodel\tclass\tend\tresidue\tfreq\n" + background() + MODELS +
               "reference\t-\tC\tK\t0.5\n", false, &err);
     check(err.find("reference") != std::string::npos, "v2: a reference needs K and R");
     // the shipped v2 table parses and has every class
@@ -215,7 +215,7 @@ int main()
     check(D::loadModelTable(std::string(FASTAG_DIGEST_DATA) + "/digest_models_v2.tsv", shipped, &err),
           "shipped digest_models_v2.tsv parses: " + err);
     check(shipped.version == 2 && shipped.has_bg && shipped.has_specificity, "shipped v2: version 2, background, specificity");
-    for (std::string_view c : D::kInstrumentClasses) check(shipped.detectionFor(c) != nullptr, "shipped v2: detection " + std::string(c));
+    for (std::string_view c : D::INSTRUMENT_CLASSES) check(shipped.detectionFor(c) != nullptr, "shipped v2: detection " + std::string(c));
     bool lysarg = false, ambic = false;
     for (const D::Model& m : shipped.models)
     {
@@ -299,7 +299,7 @@ int main()
     for (std::uint64_t v : tc.dip) total += v;
     check(total == 1 && tc.dip[static_cast<std::size_t>(gg)] == 1, "flank2: a GG/N flank counts once");
     // reversed b tag: N-terminal flank less H2O
-    tc.add(A + G + D::kH2O, 900.0, "PEPT");
+    tc.add(A + G + D::H2O_MASS, 900.0, "PEPT");
     check(tc.dip[static_cast<std::size_t>(ag)] == 1, "flank2: a reversed b tag counts its N-terminal flank less H2O");
     // merge
     D::TerminusCounter m;
@@ -314,7 +314,7 @@ int main()
       std::vector<double> pred(bins.pairs.size(), 0.0);
       double z = 0;
       double zp = 0, zb = 0;
-      for (int a = 0; a < D::kNumAA; ++a) { zp += t->c[a]; zb += v2.bg_c[a]; }
+      for (int a = 0; a < D::NUM_AA; ++a) { zp += t->c[a]; zb += v2.bg_c[a]; }
       for (std::size_t k = 0; k < bins.pairs.size(); ++k)
       {
         for (const auto& [x, y] : bins.pairs[k])
@@ -323,7 +323,7 @@ int main()
       }
       for (std::size_t k = 0; k < pred.size(); ++k) dip[k] = static_cast<std::uint64_t>(std::llround(3000 * pred[k] / z));
     }
-    const std::array<std::uint64_t, D::kNumAA> zero{};
+    const std::array<std::uint64_t, D::NUM_AA> zero{};
     check(!D::classify(zero, zero, v2, 0.05, 100).scored, "flank2: zero P1 counts are not scored by classify");
     const D::Classification c2 = D::classify2(dip, bins, v2, 0.05, 100);
     check(c2.scored && top(c2) == "Trypsin", "flank2: classify2 recovers trypsin with zero P1 counts (" + top(c2) + ")");
@@ -371,21 +371,21 @@ int main()
     // The class follows the MS2 analyzer and fragmentation, not the name.
     D::RunMeta ltq;  // the LTQ Orbitrap XL fixture: ion-trap CID MS2
     ltq.instrument_model = "LTQ Orbitrap XL";
-    for (int i = 0; i < 10; ++i) D::addFragmentation(ltq, D::Fragmentation::Resonance, "ITMS + c NSI d Full ms2 445.12@cid35.00 [110.00-905.00]");
+    for (int i = 0; i < 10; ++i) D::addFragmentation(ltq, D::Fragmentation::RESONANCE, "ITMS + c NSI d Full ms2 445.12@cid35.00 [110.00-905.00]");
     check(ltq.ms2_resonance == 10 && ltq.ms2_itms == 10 && D::instrumentClass(ltq) == "other",
           "instrument class: LTQ Orbitrap XL with ion-trap CID MS2 is other");
     D::RunMeta ltq_cid_nofilter;
     ltq_cid_nofilter.instrument_model = "LTQ Orbitrap XL";
-    for (int i = 0; i < 10; ++i) D::addFragmentation(ltq_cid_nofilter, D::Fragmentation::Resonance, "");
+    for (int i = 0; i < 10; ++i) D::addFragmentation(ltq_cid_nofilter, D::Fragmentation::RESONANCE, "");
     check(D::instrumentClass(ltq_cid_nofilter) == "other", "instrument class: Orbitrap-family name, resonance CID: other");
     D::RunMeta ltq_hcd;
     ltq_hcd.instrument_model = "LTQ Orbitrap Velos";
-    for (int i = 0; i < 10; ++i) D::addFragmentation(ltq_hcd, D::Fragmentation::Unknown, "FTMS + p NSI d Full ms2 445.12@hcd35.00 [110.00-905.00]");
+    for (int i = 0; i < 10; ++i) D::addFragmentation(ltq_hcd, D::Fragmentation::UNKNOWN, "FTMS + p NSI d Full ms2 445.12@hcd35.00 [110.00-905.00]");
     check(ltq_hcd.ms2_beam == 10 && ltq_hcd.ms2_ftms == 10 && D::instrumentClass(ltq_hcd) == "orbitrap_hcd",
           "instrument class: Velos HCD read in the Orbitrap (from the filter string) is orbitrap_hcd");
     D::RunMeta fusion_it;
     fusion_it.instrument_model = "Orbitrap Fusion Lumos";
-    for (int i = 0; i < 10; ++i) D::addFragmentation(fusion_it, D::Fragmentation::Beam, "ITMS + c NSI r d Full ms2 445.12@hcd30.00 [110.00-905.00]");
+    for (int i = 0; i < 10; ++i) D::addFragmentation(fusion_it, D::Fragmentation::BEAM, "ITMS + c NSI r d Full ms2 445.12@hcd30.00 [110.00-905.00]");
     check(D::instrumentClass(fusion_it) == "other", "instrument class: HCD read in the ion trap is other");
     D::RunMeta velos_none;
     velos_none.instrument_model = "LTQ Orbitrap Velos";
@@ -400,12 +400,12 @@ int main()
     check(D::instrumentClass(an) == "other", "instrument class: Orbitrap and ion trap, no activation: other");
     D::RunMeta mixed;
     mixed.instrument_model = "Orbitrap Elite";
-    for (int i = 0; i < 6; ++i) D::addFragmentation(mixed, D::Fragmentation::Beam, "");
-    for (int i = 0; i < 4; ++i) D::addFragmentation(mixed, D::Fragmentation::Resonance, "");
+    for (int i = 0; i < 6; ++i) D::addFragmentation(mixed, D::Fragmentation::BEAM, "");
+    for (int i = 0; i < 4; ++i) D::addFragmentation(mixed, D::Fragmentation::RESONANCE, "");
     check(D::instrumentClass(mixed) == "orbitrap_hcd", "instrument class: mostly HCD is orbitrap_hcd");
-    check(D::fragmentationFromFilter("FTMS + p NSI sa Full ms2 600.0@etd50.00@hcd20.00 [..]") == D::Fragmentation::Beam &&
-              D::fragmentationFromFilter("ITMS + c ESI d w Full ms2 600.0@pqd35.00 [..]") == D::Fragmentation::Resonance &&
-              D::fragmentationFromFilter("FTMS + p NSI Full ms [350.0-1800.0]") == D::Fragmentation::Unknown,
+    check(D::fragmentationFromFilter("FTMS + p NSI sa Full ms2 600.0@etd50.00@hcd20.00 [..]") == D::Fragmentation::BEAM &&
+              D::fragmentationFromFilter("ITMS + c ESI d w Full ms2 600.0@pqd35.00 [..]") == D::Fragmentation::RESONANCE &&
+              D::fragmentationFromFilter("FTMS + p NSI Full ms [350.0-1800.0]") == D::Fragmentation::UNKNOWN,
           "fragmentation from filter strings");
   }
 

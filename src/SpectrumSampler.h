@@ -24,14 +24,23 @@ namespace FASTag
   /// A mask over [0, n_total): mask[i] is 1 iff spectrum i is selected, else 0.
   using SampleMask = std::vector<char>;
 
-  /// Select @p n_want of @p n_total indices uniformly at random without
-  /// replacement, deterministically from @p seed. Returns a mask of length
-  /// n_total. n_want >= n_total selects everything; n_want == 0 selects nothing.
-  ///
-  /// Partial Fisher-Yates: shuffle only the first n_want positions of an index
-  /// array, so it is O(n_total) time and memory and draws a uniform subset (each
-  /// n_want-subset equally likely). mt19937 keeps the draw identical across
-  /// platforms for a given seed.
+  /**
+    @brief Selects a given number of spectrum indices uniformly at random, reproducibly.
+
+    Select @p n_want of @p n_total indices uniformly at random without
+    replacement, deterministically from @p seed. n_want >= n_total selects
+    everything; n_want == 0 selects nothing.
+
+    Partial Fisher-Yates: shuffle only the first n_want positions of an index
+    array, so it is O(n_total) time and memory and draws a uniform subset (each
+    n_want-subset equally likely). mt19937 keeps the draw identical across
+    platforms for a given seed.
+
+    @param[in] n_total Number of spectra to select from.
+    @param[in] n_want Number of spectra to select.
+    @param[in] seed Seed of the mt19937 generator.
+    @return A mask of length n_total with exactly min(n_want, n_total) entries set to 1.
+  */
   inline SampleMask sampleByCount(size_t n_total, size_t n_want, uint32_t seed)
   {
     SampleMask mask(n_total, 0);
@@ -50,8 +59,18 @@ namespace FASTag
     return mask;
   }
 
-  /// Select a @p fraction (0..1] of @p n_total indices, rounding to nearest,
-  /// at least one when fraction > 0 and n_total > 0.
+  /**
+    @brief Selects a fraction of spectrum indices uniformly at random, reproducibly.
+
+    Select a @p fraction (0..1] of @p n_total indices, rounding to nearest,
+    at least one when fraction > 0 and n_total > 0. fraction <= 0 selects
+    nothing; fraction >= 1 selects everything.
+
+    @param[in] n_total Number of spectra to select from.
+    @param[in] fraction Fraction of spectra to select.
+    @param[in] seed Seed of the mt19937 generator (see sampleByCount()).
+    @return A mask of length n_total, 1 for selected indices.
+  */
   inline SampleMask sampleByFraction(size_t n_total, double fraction, uint32_t seed)
   {
     if (fraction <= 0.0 || n_total == 0) return SampleMask(n_total, 0);

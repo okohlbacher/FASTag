@@ -83,7 +83,7 @@ namespace FASTag
     // Prefix-mass checkpoints; sentinels and ambiguity residues contribute 0.
     // Double is mandatory: float's 24-bit mantissa is ~0.25 Da at a titin-scale
     // cumulative prefix, which would destroy ppm flank checks. One running sum
-    // over the whole text, exactly what prefixMass() re-adds from.
+    // over the whole text, exactly what prefixMass_() re-adds from.
     const size_t n = text_.size();
     ckpt_.resize(n / PREFIX_STRIDE + 1);
     double run = 0.0;
@@ -180,20 +180,20 @@ namespace FASTag
     return sa;
   }
 
-  ProteomeIndex::Range ProteomeIndex::refine(Range r, uint32_t depth, char c) const
+  ProteomeIndex::Range ProteomeIndex::refine_(Range r, uint32_t depth, char c) const
   {
     // Within sa_[r.lo, r.hi) every suffix shares the first `depth` chars, so
     // the block is ordered by the char AT depth (valid to SORT_DEPTH); narrow
     // to the sub-block whose next char is c.
     const uint32_t* base = sa_.data();
     const auto lo = std::lower_bound(base + r.lo, base + r.hi, c,
-        [this, depth](uint32_t s, char ch) { return charAt(s + depth) < ch; });
+        [this, depth](uint32_t s, char ch) { return charAt_(s + depth) < ch; });
     const auto hi = std::upper_bound(lo, base + r.hi, c,
-        [this, depth](char ch, uint32_t s) { return ch < charAt(s + depth); });
+        [this, depth](char ch, uint32_t s) { return ch < charAt_(s + depth); });
     return {static_cast<uint32_t>(lo - base), static_cast<uint32_t>(hi - base)};
   }
 
-  void ProteomeIndex::descend(const std::string& tag, size_t i, Range r, uint32_t depth,
+  void ProteomeIndex::descend_(const std::string& tag, size_t i, Range r, uint32_t depth,
                               bool reversed, size_t& budget, std::vector<TagOcc>& out) const
   {
     if (r.lo >= r.hi || budget == 0) return;
@@ -205,7 +205,7 @@ namespace FASTag
     }
     const char c = tag[i];
     --budget;
-    descend(tag, i + 1, refine(r, depth, c), depth + 1, reversed, budget, out);
+    descend_(tag, i + 1, refine_(r, depth, c), depth + 1, reversed, budget, out);
     // Collapse branch: this tag residue may be spelled as a two-residue pair
     // in the database (query-side inversion of FastaFilter's DB-side
     // contraction; coverage-equivalent, established in the unit test).
@@ -214,9 +214,9 @@ namespace FASTag
       if (rule.one != c) continue;
       if (budget == 0) return;
       --budget;
-      const Range ra = refine(r, depth, rule.a);
+      const Range ra = refine_(r, depth, rule.a);
       if (ra.lo >= ra.hi) continue;
-      descend(tag, i + 1, refine(ra, depth + 1, rule.b), depth + 2, reversed, budget, out);
+      descend_(tag, i + 1, refine_(ra, depth + 1, rule.b), depth + 2, reversed, budget, out);
     }
   }
 
@@ -224,7 +224,7 @@ namespace FASTag
                                 std::vector<TagOcc>& out) const
   {
     // The SA comparator sorts to SORT_DEPTH chars and ties BY POSITION past
-    // it, so refine() is only valid to that depth. A collapse branch spends
+    // it, so refine_() is only valid to that depth. A collapse branch spends
     // up to two database chars per tag residue -- gate on the worst case, or
     // an over-long public-API query would binary-search position-ordered
     // blocks and silently miss occurrences. (TagReconciler's MAX_FILTER_LEN
@@ -243,11 +243,11 @@ namespace FASTag
     const size_t before = out.size();
     size_t budget = LOCATE_BUDGET;
     const Range all{0, static_cast<uint32_t>(sa_.size())};
-    descend(tag, 0, all, 0, /*reversed=*/false, budget, out);
+    descend_(tag, 0, all, 0, /*reversed=*/false, budget, out);
     if (both)
     {
       std::string rev(tag.rbegin(), tag.rend());
-      if (rev != tag) descend(rev, 0, all, 0, /*reversed=*/true, budget, out);
+      if (rev != tag) descend_(rev, 0, all, 0, /*reversed=*/true, budget, out);
     }
     // Dedup: a palindromic pattern or two collapse spellings can land on the
     // same (pos, len, reversed).

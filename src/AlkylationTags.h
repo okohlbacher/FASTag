@@ -17,7 +17,7 @@
 // a singly charged S, so a 1+ S ladder also reads as a 2+ Propionamide one.
 // A spectrum votes only when its best (lowest E-value) counted tag holds a
 // C, no C is the first or last residue of that tag, and its E-value is at
-// most kVoteMaxEvalue (1e-4): the vote is for the form all its C residues
+// most VOTE_MAX_EVALUE (1e-4): the vote is for the form all its C residues
 // share, else a conflict; a tag of equal E-value with another form also
 // makes the vote a conflict. (The first rule, the best C tag of every
 // spectrum at E <= 1, failed: chance C edges in weak or terminal positions
@@ -61,81 +61,144 @@
 
 namespace FASTag::AlkylationTags
 {
-  /// Version of the -alkylation_tags_out sections (alkt_run.format).
-  inline constexpr int kReportFormat = 1;
+  /// @brief Version of the -alkylation_tags_out sections (alkt_run.format).
+  inline constexpr int REPORT_FORMAT = 1;
 
-  /// The 13C - 12C spacing (Da) the alias check uses for isotope-shifted edges.
-  inline constexpr double kC13Spacing = 1.0033548378;
+  /// @brief The 13C - 12C spacing (Da) the alias check uses for isotope-shifted edges.
+  inline constexpr double C13_SPACING = 1.0033548378;
 
-  /// The candidate forms: Alkylation::forms() 0 .. kNumCandidates-1, the five
+  /// @brief The number of candidate forms.
+  ///
+  /// The candidate forms: Alkylation::forms() 0 .. NUM_CANDIDATES-1, the five
   /// reagents then "unmodified" (class none).
-  inline constexpr int kNumCandidates = 6;
-  /// Index of the unmodified form among the candidates.
-  inline constexpr int kUnmodified = 5;
+  inline constexpr int NUM_CANDIDATES = 6;
+  /// @brief Index of the unmodified form among the candidates.
+  inline constexpr int UNMODIFIED = 5;
 
-  /// The candidate forms (the first kNumCandidates of Alkylation::forms()).
+  /**
+    @brief The candidate forms (the first NUM_CANDIDATES of Alkylation::forms()).
+    @param[in] forms Alkylation::forms()
+    @return the first NUM_CANDIDATES forms
+    @throw std::runtime_error when @p forms is shorter than NUM_CANDIDATES or its entry UNMODIFIED is not "unmodified"
+  */
   std::vector<Alkylation::Form> candidates(const std::vector<Alkylation::Form>& forms);
 
-  /// The shadow pass' modifications: @p run_mods without any modification
-  /// on C (fixed or variable), then one variable C modification per reagent
-  /// candidate, named as the form. @p dropped receives the names of the C
-  /// modifications taken out ("Carbamidomethyl (fixed)").
+  /**
+    @brief The shadow pass' modifications.
+
+    @p run_mods without any modification on C (fixed or variable), then one
+    variable C modification per reagent candidate, named as the form.
+
+    @param[in] run_mods the run's modifications
+    @param[in] cands the candidate forms
+    @param[out] dropped if not null, receives (appended) the names of the C modifications taken out ("Carbamidomethyl (fixed)")
+    @return the shadow modifications
+  */
   std::vector<ModSpec> shadowMods(const std::vector<ModSpec>& run_mods,
                                   const std::vector<Alkylation::Form>& cands,
                                   std::vector<std::string>* dropped = nullptr);
 
-  /// The shadow Param of a run Param: shadowMods(), no gap edges, b/y, no
-  /// tag cap, no diversity, E cutoff 1.
+  /**
+    @brief The shadow Param of a run Param.
+
+    shadowMods(), no gap edges, b/y, no tag cap, no diversity, E cutoff 1.
+
+    @param[in] run the run's Param
+    @param[in] cands the candidate forms
+    @param[out] dropped if not null, receives (appended) the names of the C modifications taken out
+    @return the shadow Param
+  */
   Param shadowParam(const Param& run, const std::vector<Alkylation::Form>& cands,
                     std::vector<std::string>* dropped = nullptr);
 
-  /// Per candidate, how many of the C residues of the tag sequence @p seq
-  /// (as the tagger writes it: "AC[Carbamidomethyl]DK") are of that form. A
-  /// bare C is unmodified; a C with a name no candidate has is not counted.
-  std::array<std::uint32_t, kNumCandidates> formsInTag(const std::string& seq,
+  /**
+    @brief Per candidate, how many of the C residues of the tag sequence @p seq are of that form.
+
+    A bare C is unmodified; a C with a name no candidate has is not counted.
+
+    @param[in] seq the tag sequence as the tagger writes it ("AC[Carbamidomethyl]DK")
+    @param[in] cands the candidate forms
+    @return the count per candidate
+  */
+  std::array<std::uint32_t, NUM_CANDIDATES> formsInTag(const std::string& seq,
                                                        const std::vector<Alkylation::Form>& cands);
 
+  /// @brief The largest E-value of a voting tag.
+  ///
   /// A spectrum votes only when its best counted tag has an E-value of at
   /// most this (reassessment on development data: chance C edges fill the
   /// looser tags).
-  inline constexpr double kVoteMaxEvalue = 1e-4;
+  inline constexpr double VOTE_MAX_EVALUE = 1e-4;
 
-  /// Whether the first or the last residue of the tag sequence @p seq is a C
-  /// (any form). A terminal edge has one neighbour less to confirm it.
+  /**
+    @brief Whether the first or the last residue of the tag sequence @p seq is a C (any form).
+
+    A terminal edge has one neighbour less to confirm it.
+
+    @param[in] seq the tag sequence as the tagger writes it
+    @return true when a C is at either end
+  */
   bool cAtEnd(const std::string& seq);
 
-  /// One spectrum's vote: its best counted tag whose C residues are all
-  /// inside the tag (have, evalue, conflict, form), and the best E-value of
-  /// any counted tag (best).
+  /**
+    @brief One spectrum's vote.
+
+    Its best counted tag whose C residues are all inside the tag (have,
+    evalue, conflict, form), and the best E-value of any counted tag (best).
+  */
   struct Vote
   {
-    bool any = false;
+    bool any = false;  ///< a counted tag was seen
     double best = 0.0;  ///< lowest E-value over the counted tags, with or without C
-    bool have = false;
-    double evalue = 0.0;
-    bool conflict = false;
+    bool have = false;  ///< a voting C tag was kept
+    double evalue = 0.0;  ///< E-value of the kept C tag
+    bool conflict = false;  ///< the kept vote is a conflict between forms
     int form = -1;  ///< candidate index (no conflict)
   };
 
-  /// The number of alphabet entries the tagger builds for @p mods (19 base
-  /// residues plus one per variable modification on a base residue); the
-  /// tagger indexes them with 8 bits, so a Param needs at most 255.
+  /**
+    @brief The number of alphabet entries the tagger builds for @p mods.
+
+    19 base residues plus one per variable modification on a base residue;
+    the tagger indexes them with 8 bits, so a Param needs at most 255.
+
+    @param[in] mods the modifications
+    @return the alphabet size
+  */
   std::size_t alphabetSize(const std::vector<ModSpec>& mods);
 
-  /// The edge tolerance in Da the report reasons with: the fragment
-  /// tolerance, or in ppm at 1000 m/z.
+  /**
+    @brief The edge tolerance in Da the report reasons with.
+    @param[in] p the run's Param
+    @return the fragment tolerance, or, when in ppm, its value at 1000 m/z (Da)
+  */
   double edgeToleranceDa(const Param& p);
 
-  /// Whether every two candidate C masses are more than 2 * @p tol_da apart.
+  /**
+    @brief Whether every two candidate C masses are more than 2 * @p tol_da apart.
+    @param[in] cands the candidate forms
+    @param[in] tol_da the edge tolerance (Da)
+    @return true when all pairs are resolved
+  */
   bool formsResolved(const std::vector<Alkylation::Form>& cands, double tol_da);
 
-  /// Per candidate, the two-residue sums (unmodified base residues, I as L)
-  /// and the other candidate C forms shifted by +/- kC13Spacing within
-  /// 2 * @p tol_da of the candidate's C mass: "G+C:0.0000" and
-  /// "C[Carbamidomethyl]+13C:0.0193" entries, by distance, comma-separated,
-  /// "-" when none.
+  /**
+    @brief Per candidate, the masses that could be mistaken for its C mass.
+
+    The two-residue sums (unmodified base residues, I as L) and the other
+    candidate C forms shifted by +/- C13_SPACING within 2 * @p tol_da of the
+    candidate's C mass: "G+C:0.0000" and "C[Carbamidomethyl]+13C:0.0193"
+    entries, by distance, comma-separated, "-" when none.
+
+    @param[in] cands the candidate forms
+    @param[in] tol_da the edge tolerance (Da)
+    @return one entry per candidate
+  */
   std::vector<std::string> aliases(const std::vector<Alkylation::Form>& cands, double tol_da);
 
+  /**
+    @brief The run's counts of shadow tags and votes.
+  */
   struct Tally
   {
     std::uint64_t spectra_tagged = 0;  ///< spectra the shadow pass tagged
@@ -145,23 +208,45 @@ namespace FASTag::AlkylationTags
     std::uint64_t tags_with_c = 0;     ///< of those, tags with a C
     std::uint64_t spectra = 0;         ///< spectra with a vote
     std::uint64_t conflict = 0;        ///< votes whose tag holds two forms
-    std::array<std::uint64_t, kNumCandidates> votes{};     ///< votes per form
-    std::array<std::uint64_t, kNumCandidates> residues{};  ///< C residues per form over counted tags
+    std::array<std::uint64_t, NUM_CANDIDATES> votes{};     ///< votes per form
+    std::array<std::uint64_t, NUM_CANDIDATES> residues{};  ///< C residues per form over counted tags
 
-    /// One shadow tag of a spectrum: counted when countsTag(); its vote kept
-    /// in @p v when it has a C, none at an end, and is the best such so far.
+    /**
+      @brief Adds one shadow tag of a spectrum.
+
+      Counted when countsTag(); its vote kept in @p v when it has a C, none
+      at an end, and is the best such so far.
+
+      @param[in,out] v the spectrum's vote so far
+      @param[in] t the shadow tag
+      @param[in] cands the candidate forms
+    */
     void addTag(Vote& v, const Tag& t, const std::vector<Alkylation::Form>& cands);
-    /// The spectrum's vote (after its tags), cast only when that tag is the
-    /// spectrum's best counted tag and its E-value is at most kVoteMaxEvalue;
-    /// also counts the spectrum as tagged.
+    /**
+      @brief Adds the spectrum's vote (after its tags).
+
+      Cast only when that tag is the spectrum's best counted tag and its
+      E-value is at most VOTE_MAX_EVALUE; also counts the spectrum as tagged.
+
+      @param[in] v the spectrum's vote
+    */
     void addSpectrum(const Vote& v);
+    /**
+      @brief Adds all counts of @p o to this tally.
+      @param[in] o another tally (e.g. of another thread)
+    */
     void merge(const Tally& o);
-    /// The vote counts as an Alkylation::Tally (class = candidate class), for
-    /// Alkylation::callAlkylation.
+    /**
+      @brief The vote counts as an Alkylation::Tally (class = candidate class), for Alkylation::callAlkylation.
+      @param[in] cands the candidate forms
+      @return the converted tally
+    */
     Alkylation::Tally asAlkylationTally(const std::vector<Alkylation::Form>& cands) const;
   };
 
-  /// What the report states about the run.
+  /**
+    @brief What the report states about the run.
+  */
   struct ReportInfo
   {
     std::vector<std::string> dropped;  ///< C modifications the shadow pass took out
@@ -169,12 +254,30 @@ namespace FASTag::AlkylationTags
     double tol_da = 0.0;               ///< edgeToleranceDa() of the run
   };
 
-  /// #3g's call over the votes, then no_call unresolved_forms when the
-  /// candidates are not resolved at @p tol_da (formsResolved()).
+  /**
+    @brief The alkylation call over the votes.
+
+    #3g's call over the votes, then no_call unresolved_forms when the
+    candidates are not resolved at @p tol_da (formsResolved()).
+
+    @param[in] t the run's tally
+    @param[in] s the call settings
+    @param[in] cands the candidate forms
+    @param[in] tol_da the edge tolerance (Da)
+    @return the call
+  */
   Alkylation::Call callTags(const Tally& t, const Alkylation::Settings& s,
                             const std::vector<Alkylation::Form>& cands, double tol_da);
 
-  /// The alkt_run, alkt_form and alkylation_tags_call rows of -alkylation_tags_out.
+  /**
+    @brief The alkt_run, alkt_form and alkylation_tags_call rows of -alkylation_tags_out.
+    @param[in] t the run's tally
+    @param[in] c the call
+    @param[in] s the call settings
+    @param[in] cands the candidate forms
+    @param[in] info what the report states about the run
+    @return the report rows
+  */
   std::vector<Digest::Row> rows(const Tally& t, const Alkylation::Call& c, const Alkylation::Settings& s,
                                 const std::vector<Alkylation::Form>& cands, const ReportInfo& info);
 }

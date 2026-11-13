@@ -28,8 +28,8 @@ namespace FASTag::CensusIds
   {
     switch (i)
     {
-      case Ident::Yes: return "1";
-      case Ident::No: return "0";
+      case Ident::YES: return "1";
+      case Ident::NO: return "0";
       default: return "";
     }
   }
@@ -38,8 +38,8 @@ namespace FASTag::CensusIds
   {
     switch (i)
     {
-      case Ident::Yes: return "1";
-      case Ident::No: return "0";
+      case Ident::YES: return "1";
+      case Ident::NO: return "0";
       default: return "unknown";
     }
   }
@@ -81,7 +81,7 @@ namespace FASTag::CensusIds
 
     bool statusIndex(const std::string& name, std::size_t& out)
     {
-      for (std::size_t i = 0; i < Census::kStatusCount; ++i)
+      for (std::size_t i = 0; i < Census::STATUS_COUNT; ++i)
         if (name == Census::name(static_cast<Census::Status>(i))) { out = i; return true; }
       return false;
     }
@@ -179,23 +179,23 @@ namespace FASTag::CensusIds
   Ident Index::lookup(const std::string& native_id)
   {
     const auto it = refs_.find(native_id);
-    if (it != refs_.end()) return it->second.accepted ? Ident::Yes : Ident::No;
+    if (it != refs_.end()) return it->second.accepted ? Ident::YES : Ident::NO;
     const long long s = scanOf(native_id);
-    if (s < 0) return Ident::No;
+    if (s < 0) return Ident::NO;
     const auto bs = by_scan_.find(s);
-    if (bs == by_scan_.end()) return Ident::No;
+    if (bs == by_scan_.end()) return Ident::NO;
     std::vector<Ref*> cand;
     for (Ref* r : bs->second)
       if (!r->exact) cand.push_back(r);
-    if (cand.empty()) return Ident::No;
+    if (cand.empty()) return Ident::NO;
     const auto ic = input_scans_.find(s);
     if (cand.size() > 1 || ic == input_scans_.end() || ic->second != 1)
     {
       for (Ref* r : cand) r->ambiguous = true;
-      return Ident::Unknown;
+      return Ident::UNKNOWN;
     }
     cand[0]->by_scan = true;
-    return cand[0]->accepted ? Ident::Yes : Ident::No;
+    return cand[0]->accepted ? Ident::YES : Ident::NO;
   }
 
   Index::Counts Index::counts() const
@@ -345,7 +345,7 @@ namespace FASTag::CensusIds
     if (!f) { error = "cannot read " + in; return false; }
     if (!o) { error = "cannot write " + out; return false; }
     std::getline(f, line);
-    o << head << kHeaderSuffix << '\n';
+    o << head << HEADER_SUFFIX << '\n';
     std::string buf;
     while (std::getline(f, line))
     {
@@ -362,12 +362,12 @@ namespace FASTag::CensusIds
       ++tally.by_ident[ix];
       ++tally.by_status[st][ix];
       const char* triage = "";
-      if (ident != Ident::Unknown)
+      if (ident != Ident::UNKNOWN)
       {
         triage = "0";
-        const bool reported = st == static_cast<std::size_t>(Census::Status::Tagged)
-                              || st == static_cast<std::size_t>(Census::Status::Placed);
-        if (ident == Ident::No && reported)
+        const bool reported = st == static_cast<std::size_t>(Census::Status::TAGGED)
+                              || st == static_cast<std::size_t>(Census::Status::PLACED);
+        if (ident == Ident::NO && reported)
         {
           ++tally.triage_eligible;
           char* end = nullptr;
@@ -413,8 +413,8 @@ namespace FASTag::CensusIds
     if (const auto s = file.rfind('/'); s != std::string::npos) file = file.substr(s + 1);
     const std::string rows = num(t.rows), refs = num(static_cast<std::uint64_t>(c.refs));
     const auto u = [](std::size_t v) { return num(static_cast<std::uint64_t>(v)); };
-    r.push_back({sec, "census_ids_version", std::to_string(kVersion), "-",
-                 "The ids join follows format " + std::to_string(kVersion) +
+    r.push_back({sec, "census_ids_version", std::to_string(TABLE_VERSION), "-",
+                 "The ids join follows format " + std::to_string(TABLE_VERSION) +
                      ": identified is 1, 0 or empty (unknown); triage is an E-value threshold, not a quality call."});
     r.push_back({sec, "ids_file", file, "-", "Identifications were read from " + file + "."});
     r.push_back({sec, "ids_fdr", num(fdr), "-",
@@ -441,16 +441,16 @@ namespace FASTag::CensusIds
     r.push_back({sec, "refs_unmatched", unmatched_known ? u(c.unmatched) : std::string(), refs,
                  unmatched_known ? u(c.unmatched) + " references name no spectrum read."
                                  : "Not known: unread spectra cannot be told from foreign references when subsampling."});
-    for (std::size_t i = 0; i < kIdentCount; ++i)
+    for (std::size_t i = 0; i < IDENT_COUNT; ++i)
     {
       const Ident id = static_cast<Ident>(i);
       r.push_back({sec, std::string("identified_") + key(id), num(t.by_ident[i]), rows,
                    num(t.by_ident[i]) + " census rows have identified " + key(id) + "."});
     }
-    for (std::size_t s = 0; s < Census::kStatusCount; ++s)
+    for (std::size_t s = 0; s < Census::STATUS_COUNT; ++s)
     {
       const std::string nm = Census::name(static_cast<Census::Status>(s));
-      for (std::size_t i = 0; i < kIdentCount; ++i)
+      for (std::size_t i = 0; i < IDENT_COUNT; ++i)
       {
         const Ident id = static_cast<Ident>(i);
         r.push_back({sec, nm + "_identified_" + key(id), num(t.by_status[s][i]), rows,

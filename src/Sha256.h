@@ -16,12 +16,30 @@
 
 namespace FASTag
 {
+  /**
+    @brief Incremental SHA-256 (FIPS 180-4) hasher for one message.
+
+    Feed bytes with update(), then call hexDigest() once.
+  */
   class Sha256
   {
   public:
+    /// @brief Starts a new hash with the FIPS 180-4 initial state.
     Sha256();
+    /**
+      @brief Appends bytes to the message being hashed.
+
+      @param[in] data Pointer to the bytes to append.
+      @param[in] n Number of bytes to append.
+    */
     void update(const void* data, std::size_t n);
-    /// The digest as 64 lowercase hex digits; the object is spent afterwards.
+    /**
+      @brief Finishes the hash and returns the digest.
+
+      The digest as 64 lowercase hex digits; the object is spent afterwards.
+
+      @return The SHA-256 digest as 64 lowercase hex digits.
+    */
     std::string hexDigest();
 
   private:
@@ -32,10 +50,19 @@ namespace FASTag
     std::uint64_t bytes_ = 0;
   };
 
-  /// SHA-256 of a file's bytes as 64 lowercase hex digits; "" when the file
-  /// cannot be read.
+  /**
+    @brief Computes the SHA-256 of a file's bytes.
+
+    @param[in] path Path of the file to hash.
+    @return The digest as 64 lowercase hex digits; "" when the file cannot be read.
+  */
   std::string sha256File(const std::string& path);
 
-  /// Whether @p s is 64 lowercase hex digits (a sha256 as sha256sum prints it).
+  /**
+    @brief Checks whether a string is a SHA-256 digest in hex form.
+
+    @param[in] s String to check.
+    @return Whether @p s is 64 lowercase hex digits (a sha256 as sha256sum prints it).
+  */
   bool isSha256Hex(const std::string& s);
 }

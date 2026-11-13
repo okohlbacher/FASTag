@@ -58,14 +58,14 @@ int main()
       for (int j = 0; j < 8; ++j) t.push_back(alpha[pick(rng)]);
       const std::string ft = fold(t), rev(ft.rbegin(), ft.rend());
       const bool want = p.find(ft) != std::string::npos || p.find(rev) != std::string::npos;
-      const bool got = f.match(t) != FASTag::FastaFilter::Hit::None;
+      const bool got = f.match(t) != FASTag::FastaFilter::Hit::NONE;
       if (want != got) ++wrong;
       ++checked;
     }
     // and every genuine 8-mer of the protein must be found
     int missed = 0;
     for (size_t i = 0; i + 8 <= prot.size(); i += 37)
-      if (f.match(prot.substr(i, 8)) == FASTag::FastaFilter::Hit::None) ++missed;
+      if (f.match(prot.substr(i, 8)) == FASTag::FastaFilter::Hit::NONE) ++missed;
     CHECK(wrong == 0, "%d/%d random tags misclassified", wrong, checked);
     CHECK(missed == 0, "%d genuine 8-mers not found", missed);
     std::printf("1. soundness+completeness vs naive oracle: %d random tags, 0 errors\n", checked);
@@ -78,9 +78,9 @@ int main()
     FASTag::FastaFilter both(true), fwd(false);
     both.load(entries({prot})); both.setMinLen(9); both.build(9, 9);
     fwd.load(entries({prot}));  fwd.setMinLen(9);  fwd.build(9, 9);
-    CHECK(both.match(sub) == FASTag::FastaFilter::Hit::Forward, "forward hit expected");
-    CHECK(both.match(rev) == FASTag::FastaFilter::Hit::Reverse, "reverse hit expected");
-    CHECK(fwd.match(rev) == FASTag::FastaFilter::Hit::None, "forward-only must reject a reversal");
+    CHECK(both.match(sub) == FASTag::FastaFilter::Hit::FORWARD, "forward hit expected");
+    CHECK(both.match(rev) == FASTag::FastaFilter::Hit::REVERSE, "reverse hit expected");
+    CHECK(fwd.match(rev) == FASTag::FastaFilter::Hit::NONE, "forward-only must reject a reversal");
     std::printf("2. orientation: fwd/rev distinguished; forward-only rejects reversals\n");
   }
 
@@ -94,9 +94,9 @@ int main()
     CHECK(iso.collapseRules() > 0, "no collapse rules derived");
     // "QEGGH" read with N in place of GG is "QENH" -- 4 residues, so the
     // length floor does not interfere.
-    CHECK(exact.match("QENH") == FASTag::FastaFilter::Hit::None,
+    CHECK(exact.match("QENH") == FASTag::FastaFilter::Hit::NONE,
           "exact matching must reject the N reading");
-    CHECK(iso.match("QENH") != FASTag::FastaFilter::Hit::None,
+    CHECK(iso.match("QENH") != FASTag::FastaFilter::Hit::NONE,
           "collapse must accept N where the sequence spells GG");
     std::printf("3. isobaric collapse: %zu rules; N accepted where the sequence spells GG\n",
                 iso.collapseRules());
@@ -112,7 +112,7 @@ int main()
     modded.setMinLen(4);
     modded.deriveCollapses(0.04, {{'G', 57.02146}});
     modded.build(4, 6);
-    CHECK(modded.match("QENH") == FASTag::FastaFilter::Hit::None,
+    CHECK(modded.match("QENH") == FASTag::FastaFilter::Hit::NONE,
           "with +57 on G, N must no longer collapse to GG");
     std::printf("3b. fixed-mod deltas change the derived rules (N=GG gone at G+57)\n");
   }
@@ -138,7 +138,7 @@ int main()
     {
       std::string t;
       for (int j = 0; j < 3; ++j) t.push_back(alpha[pick(rng)]);
-      if (noop.match(t) != FASTag::FastaFilter::Hit::None) ++hits;
+      if (noop.match(t) != FASTag::FastaFilter::Hit::NONE) ++hits;
     }
     // Against a proteome-sized database every 3-mer is present, so the filter
     // degenerates to the identity function. That is why the floor exists.
@@ -155,10 +155,10 @@ int main()
     FASTag::FastaFilter g(true);
     CHECK(g.load(entries({"acdefghk"})), "lowercase must be accepted");
     g.setMinLen(4); g.build(4, 4);
-    CHECK(g.match("ACDE") != FASTag::FastaFilter::Hit::None, "lowercase should have been folded");
+    CHECK(g.match("ACDE") != FASTag::FastaFilter::Hit::NONE, "lowercase should have been folded");
     FASTag::FastaFilter h(true);
     h.load(entries({"AAXAA"})); h.setMinLen(3); h.build(3, 3);
-    CHECK(h.match("AXA") == FASTag::FastaFilter::Hit::None, "ambiguity codes must not match");
+    CHECK(h.match("AXA") == FASTag::FastaFilter::Hit::NONE, "ambiguity codes must not match");
     std::printf("5. degenerate input: empty rejected, lowercase folded, X not matchable\n");
   }
 
@@ -189,16 +189,16 @@ int main()
     for (int k = 13; k <= 24; ++k)
     {
       const std::string tag = std::string("ACDEFGHKLMNPQRSTVWYACDEF").substr(0, k);
-      CHECK(f.match(tag) == FASTag::FastaFilter::Hit::Forward,
+      CHECK(f.match(tag) == FASTag::FastaFilter::Hit::FORWARD,
             "length-%d key spanning both halves did not match", k);
     }
 
     // A single residue changed must NOT match -- otherwise the assertions above
     // would pass on a key that had silently collapsed to a constant.
-    CHECK(f.match("ACDEFGHKLMNPQRW") == FASTag::FastaFilter::Hit::None,
+    CHECK(f.match("ACDEFGHKLMNPQRW") == FASTag::FastaFilter::Hit::NONE,
           "a 15-residue tag absent from the sequence matched anyway");
     // Transposing two residues past the boundary must also be rejected.
-    CHECK(f.match("ACDEFGHKLMNPQSR") == FASTag::FastaFilter::Hit::None,
+    CHECK(f.match("ACDEFGHKLMNPQSR") == FASTag::FastaFilter::Hit::NONE,
           "a transposition past residue 13 was not distinguished");
     // COLLISION tests. The two checks above cannot catch a corrupt packing,
     // because the same corruption is applied when indexing and when matching --
@@ -213,11 +213,11 @@ int main()
       CHECK(g.load(e2), "collision fixture did not load");
       g.setMinLen(20);
       g.build(20, 20);
-      CHECK(g.match("AAAAAAAAAAAAWWWWWWWW") == FASTag::FastaFilter::Hit::Forward,
+      CHECK(g.match("AAAAAAAAAAAAWWWWWWWW") == FASTag::FastaFilter::Hit::FORWARD,
             "the indexed 20-mer did not match itself");
       // Differs only in residues 13-20. If the carry into the high half is
       // wrong, those bits are lost and this collides with the key above.
-      CHECK(g.match("AAAAAAAAAAAAYYYYYYYY") == FASTag::FastaFilter::Hit::None,
+      CHECK(g.match("AAAAAAAAAAAAYYYYYYYY") == FASTag::FastaFilter::Hit::NONE,
             "two 20-mers differing only past residue 12 collided -- the carry "
             "into the high half of the key is dropping bits");
     }
@@ -230,9 +230,9 @@ int main()
       CHECK(g.load(e3), "5-bit fixture did not load");
       g.setMinLen(16);
       g.build(16, 16);
-      CHECK(g.match("WWWWWWWWWWWWWWWW") == FASTag::FastaFilter::Hit::Forward,
+      CHECK(g.match("WWWWWWWWWWWWWWWW") == FASTag::FastaFilter::Hit::FORWARD,
             "the indexed W-mer did not match itself");
-      CHECK(g.match("GGGGGGGGGGGGGGGG") == FASTag::FastaFilter::Hit::None,
+      CHECK(g.match("GGGGGGGGGGGGGGGG") == FASTag::FastaFilter::Hit::NONE,
             "W and G collided -- the residue code is being masked to fewer than "
             "5 bits, so codes 16-24 fold onto codes 0-8");
     }

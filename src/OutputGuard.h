@@ -41,31 +41,60 @@
 
 namespace FASTag
 {
-  /// True when `a` and `b` name the same regular file: the same path after
-  /// weakly_canonical, or the same file by fs::equivalent (hard link, symlink).
-  /// A device or other non-regular file is never "the same": writing it twice
-  /// truncates nothing. On Windows, NUL never matches.
+  /**
+    @brief Tests whether two paths name the same regular file.
+
+    The same path after weakly_canonical, or the same file by fs::equivalent
+    (hard link, symlink). A device or other non-regular file is never "the
+    same": writing it twice truncates nothing. On Windows, NUL never matches.
+
+    @param[in] a First path.
+    @param[in] b Second path.
+    @return True when @p a and @p b name the same regular file.
+  */
   bool samePath(const std::string& a, const std::string& b);
 
-  /// The temporary path a PartFile for `path` writes: `<target>.part`, where
-  /// the target is `path` with a symlink resolved (see PartFile).
+  /**
+    @brief The temporary path a PartFile for @p path writes.
+    @param[in] path The output path.
+    @return `<target>.part`, where the target is @p path with a symlink
+      resolved (see PartFile).
+  */
   std::string partPathFor(const std::string& path);
 
-  /// The input/output collision guard (see the file comment).
+  /**
+    @brief The input/output collision guard.
+
+    No output may be an input the run consumes, or another output, by any
+    name (see the file comment).
+  */
   class PathGuard
   {
   public:
-    /// A consumed input, named by its option without the dash. Empty paths
-    /// are ignored.
+    /**
+      @brief Registers a consumed input.
+      @param[in] opt The option name without the dash.
+      @param[in] path The input path; an empty path is ignored.
+    */
     void input(const char* opt, const std::string& path);
-    /// An output, named by its option without the dash. Empty paths are
-    /// ignored. With `via_part`, the PartFile temporary path is checked too;
-    /// with `part_of_part` also the temporary of a PartFile on that temporary
-    /// path (partPathFor(partPathFor(path)), the -census_ids join).
+    /**
+      @brief Registers an output.
+      @param[in] opt The option name without the dash.
+      @param[in] path The output path; an empty path is ignored.
+      @param[in] via_part The output is written through a PartFile: its
+        temporary path is checked too.
+      @param[in] part_of_part Also check the temporary of a PartFile on that
+        temporary path (partPathFor(partPathFor(path)), the -census_ids join).
+    */
     void output(const char* opt, const std::string& path, bool via_part = false, bool part_of_part = false);
-    /// The first collision as an error message, or "" when there is none.
-    /// Outputs are checked in registration order: against every input (in
-    /// registration order), then against every earlier output.
+    /**
+      @brief Checks the registered paths for collisions.
+
+      Outputs are checked in registration order: against every input (in
+      registration order), then against every earlier output.
+
+      @return The first collision as an error message, or "" when there is none.
+    */
     std::string check() const;
 
   private:
@@ -78,42 +107,77 @@ namespace FASTag
     std::vector<Entry> ins_, outs_;
   };
 
-  /// Removes every .part file a live PartFile holds. Async-signal-safe; the
-  /// SIGTERM handler calls it. Exposed for tests and for fatal-error paths.
+  /**
+    @brief Removes every .part file a live PartFile holds.
+
+    Async-signal-safe; the SIGTERM handler calls it. Exposed for tests and for
+    fatal-error paths.
+  */
   void dropPartialOutputs() noexcept;
 
-  /// One output written to `<target>.part` and renamed on success.
+  /**
+    @brief One output written to `<target>.part` and renamed on success.
+
+    See the file comment for how an existing target (regular file, symlink,
+    device) is handled.
+  */
   class PartFile
   {
   public:
+    /**
+      @brief Creates the writer for an output path; nothing is touched on disk yet.
+      @param[in] path The output path the caller named.
+    */
     explicit PartFile(std::string path);
+    /// @brief Removes the .part file unless commit() succeeded.
     ~PartFile();
     PartFile(const PartFile&) = delete;
     PartFile& operator=(const PartFile&) = delete;
 
-    /// Prepares the write: resolves the target, removes a stale .part file and
-    /// registers the .part file for removal on SIGTERM. For a writer that
-    /// opens the file itself: write to writePath() after this. False (with
-    /// error() set) when the stale .part file cannot be removed.
+    /**
+      @brief Prepares the write.
+
+      Resolves the target, removes a stale .part file and registers the .part
+      file for removal on SIGTERM. For a writer that opens the file itself:
+      write to writePath() after this. Calling it again does nothing.
+
+      @return False (with error() set) when the stale .part file cannot be
+        removed; true otherwise.
+    */
     bool begin();
-    /// begin(), then creates the .part file exclusively and opens `os` on it
-    /// with `mode`. False (with error() set) on failure.
+    /**
+      @brief Calls begin(), then creates the .part file exclusively and opens a stream on it.
+      @param[out] os The stream to open on writePath().
+      @param[in] mode The open mode.
+      @return False (with error() set) on failure; true otherwise.
+    */
     bool open(std::ofstream& os, std::ios::openmode mode = std::ios::out);
-    /// Renames the finished .part file onto the target (nothing to do for a
-    /// direct write). Close the stream first. False (with error() set, the
-    /// .part file removed) on failure.
+    /**
+      @brief Renames the finished .part file onto the target.
+
+      Nothing to do for a direct write. Close the stream first.
+
+      @return False (with error() set, the .part file removed) on failure;
+        true otherwise.
+    */
     bool commit();
-    /// Removes the .part file. Also what the destructor does without commit().
+    /// @brief Removes the .part file. Also what the destructor does without commit().
     void discard() noexcept;
 
-    /// The path the caller named.
+    /// @brief The path the caller named.
+    /// @return The output path as given to the constructor.
     const std::string& path() const { return path_; }
-    /// The file the rename replaces (path() with a symlink resolved).
+    /// @brief The file the rename replaces (path() with a symlink resolved).
+    /// @return The resolved target path (set by begin()).
     const std::string& target() const { return target_; }
-    /// Where the data go: the .part file, or the target for a direct write.
+    /// @brief Where the data go: the .part file, or the target for a direct write.
+    /// @return The path to write to.
     const std::string& writePath() const { return direct_ ? target_ : part_; }
-    /// True when the target is not a regular file and is written directly.
+    /// @brief Whether the target is not a regular file and is written directly.
+    /// @return True for a direct write.
     bool direct() const { return direct_; }
+    /// @brief The last error message.
+    /// @return The message, or "" when no step failed.
     const std::string& error() const { return error_; }
 
   private:

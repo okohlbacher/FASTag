@@ -3,7 +3,7 @@
 //
 // The Legacy bytes below are what FASTag 1.11.0 (78390cd) writes at the top
 // of -digest_out, -label_out and -massgap_out. Changing them, or the
-// Versioned rows, needs a kFormatVersion bump and new references. Format 6
+// Versioned rows, needs a FORMAT_VERSION bump and new references. Format 6
 // (1.13 item 15) adds rows only under -complement_tolerance_unit auto; the
 // section without them stays format 5, byte for byte.
 //
@@ -60,7 +60,7 @@ int main()
     "run\tsubsample_fraction\t0.25\t-\tA fraction of 0.25 of the spectra was tagged (0 = all).\n"
     "run\tsubsample_spectra\t0\t-\t0 spectra were drawn for tagging (0 = all).\n";
   check(written(RR::runRows(m)) == legacy, "default rows are the 1.11 run rows");
-  check(written(RR::runRows(m, RR::Emit::Legacy)) == legacy, "Emit::Legacy is the default");
+  check(written(RR::runRows(m, RR::Emit::LEGACY)) == legacy, "Emit::Legacy is the default");
   check(RR::runRows(m).size() == 7, "7 legacy rows");
 
   // Shortest round-trip doubles and a single length, as 1.11 writes them.
@@ -79,9 +79,9 @@ int main()
   check(RR::joinLengths({}).empty(), "no lengths, empty string");
 
   // Versioned: the legacy rows are a byte prefix, then the version row.
-  const std::string versioned = written(RR::runRows(m, RR::Emit::Versioned));
-  check(RR::kFormatVersion == 6, "format version 6");
-  check(RR::kFormatVersionNoAuto == 5, "without -complement_tolerance_unit auto the run section is format 5");
+  const std::string versioned = written(RR::runRows(m, RR::Emit::VERSIONED));
+  check(RR::FORMAT_VERSION == 6, "format version 6");
+  check(RR::FORMAT_VERSION_NO_AUTO == 5, "without -complement_tolerance_unit auto the run section is format 5");
   check(versioned.rfind(legacy, 0) == 0, "Versioned starts with the legacy bytes");
   check(versioned.substr(legacy.size()) ==
           "run\trun_report_version\t5\t-\tThe run section follows FASTag run report format 5.\n"
@@ -116,7 +116,7 @@ int main()
     e.pick_profile = "legacy";  // the only mode that picks (mzPeak); auto was removed in 1.14
     e.pick_picked = 47470;
     e.pick_failed = 3;
-    const auto re = RR::runRows(e, RR::Emit::Versioned);
+    const auto re = RR::runRows(e, RR::Emit::VERSIONED);
     check(re.size() == 28, "Versioned format 5 has 28 rows");
     check(re[8].key == "pick_profile" && re[8].value == "legacy" && re[8].n == "-" &&
             re[8].description == "Profile MS2 was centroided under -pick_profile legacy.",
@@ -135,7 +135,7 @@ int main()
     a.activation_electron = 3492;
     a.activation_hybrid = 1;
     a.activation_unknown = 0;
-    const auto ra = RR::runRows(a, RR::Emit::Versioned);
+    const auto ra = RR::runRows(a, RR::Emit::VERSIONED);
     check(ra.size() == 28, "Versioned format 5 has 28 rows");
     check(ra[11].key == "activation_collisional" && ra[11].value == "3491" && ra[11].n == "6984",
           "activation_collisional row");
@@ -160,7 +160,7 @@ int main()
     h.charge_enumerated = 0;
     h.iso_shifted = 7;
     h.multi_hypothesis = 5;
-    const auto rh = RR::runRows(h, RR::Emit::Versioned);
+    const auto rh = RR::runRows(h, RR::Emit::VERSIONED);
     check(rh.size() == 28, "Versioned format 5 has 28 rows");
     check(rh[15].key == "unknown_charge" && rh[15].value == "infer" && rh[15].n == "-", "unknown_charge row");
     check(rh[16].key == "isotope_error" && rh[16].value == "0,1" &&
@@ -181,7 +181,7 @@ int main()
     s.ion_series = "auto";
     s.ion_series_ms2_by = 3492;
     s.ion_series_ms2_cz = 3491;
-    const auto rs = RR::runRows(s, RR::Emit::Versioned);
+    const auto rs = RR::runRows(s, RR::Emit::VERSIONED);
     check(rs.size() == 28, "Versioned format 5 has 28 rows");
     check(rs[25].key == "ion_series" && rs[25].value == "auto" && rs[25].n == "-" &&
             rs[25].description == "MS2 spectra were read under -ion_series auto.",
@@ -210,7 +210,7 @@ int main()
     c.complement_probe_signal = 259.4;
     c.complement_probe_median = 0.0547615;
     c.complement_probe_mad = 0.0583168;
-    const auto rc = RR::runRows(c, RR::Emit::Versioned);
+    const auto rc = RR::runRows(c, RR::Emit::VERSIONED);
     check(rc.size() == 35, "Versioned format 6 (measured) has 35 rows");
     check(rc[7].key == "run_report_version" && rc[7].value == "6" &&
             rc[7].description == "The run section follows FASTag run report format 6.",
@@ -239,7 +239,7 @@ int main()
     lb.complement_tol_source = "lower_bound";
     lb.complement_tol = 0.02;
     lb.complement_tol_measured_value = 0.013872973632812499;
-    const auto rl = RR::runRows(lb, RR::Emit::Versioned);
+    const auto rl = RR::runRows(lb, RR::Emit::VERSIONED);
     check(rl.size() == 35 && rl[28].value == "0.02" && rl[29].value == "lower_bound" &&
             rl[29].description == "The measured window was below -complement_tolerance, the lower bound." &&
             rl[30].value == "0.013872973632812499",
@@ -249,7 +249,7 @@ int main()
     fb.complement_tol_source = "fallback";
     fb.complement_tol = 0.02;
     fb.complement_tol_why = "too few complement pairs above the chance floor (signal 18, needs 40)";
-    const auto rf = RR::runRows(fb, RR::Emit::Versioned);
+    const auto rf = RR::runRows(fb, RR::Emit::VERSIONED);
     check(rf.size() == 32, "Versioned format 6 (fallback) has 32 rows");
     check(rf.size() == 32 && rf[28].value == "0.02" && rf[29].value == "fallback" &&
             rf[29].description == "The window is -complement_tolerance: too few complement pairs above the "
@@ -259,7 +259,7 @@ int main()
     check(written(RR::runRows(c)) == legacy, "complement rows never reach the Legacy rows");
     RR::RunMeta off = c;
     off.complement_tol_auto = false;
-    check(written(RR::runRows(off, RR::Emit::Versioned)) == versioned,
+    check(written(RR::runRows(off, RR::Emit::VERSIONED)) == versioned,
           "without auto the complement fields write nothing (format 5 bytes)");
   }
 
@@ -270,15 +270,15 @@ int main()
   {
     namespace HY = FASTag::Hyp;
     FASTag::ClusterAcc::ClusterThread t1, t2, run;
-    HY::Hypothesis a3{3, 0, 500.0, HY::ChargeSource::Ambiguous, true}, a4{4, 0, 500.0, HY::ChargeSource::Ambiguous, false};
+    HY::Hypothesis a3{3, 0, 500.0, HY::ChargeSource::AMBIGUOUS, true}, a4{4, 0, 500.0, HY::ChargeSource::AMBIGUOUS, false};
     t1.e.hyp.add({a3, a4});
-    t2.e.hyp.add({HY::Hypothesis{2, 1, 600.0, HY::ChargeSource::Header, true}});
+    t2.e.hyp.add({HY::Hypothesis{2, 1, 600.0, HY::ChargeSource::HEADER, true}});
     run.merge(t1);
     run.merge(t2);
     const auto& c = run.e.hyp;
-    check(c.tagged[static_cast<size_t>(HY::ChargeSource::Ambiguous)] == 2 &&
-            c.selected[static_cast<size_t>(HY::ChargeSource::Ambiguous)] == 1 &&
-            c.selected[static_cast<size_t>(HY::ChargeSource::Header)] == 1 && c.iso_shifted == 1 && c.multi == 1,
+    check(c.tagged[static_cast<size_t>(HY::ChargeSource::AMBIGUOUS)] == 2 &&
+            c.selected[static_cast<size_t>(HY::ChargeSource::AMBIGUOUS)] == 1 &&
+            c.selected[static_cast<size_t>(HY::ChargeSource::HEADER)] == 1 && c.iso_shifted == 1 && c.multi == 1,
           "ThreadE::merge sums the hypothesis counts");
   }
   FASTag::ClusterAcc::ClusterBlock blk;

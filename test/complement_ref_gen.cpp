@@ -55,7 +55,7 @@ int main()
     const FASTag::Tables tab(*params[pi]);
     for (int ci = 0; ci < 5; ++ci)
     {
-      const ComplementSynth::Case& c = ComplementSynth::kRefCases[ci];
+      const ComplementSynth::Case& c = ComplementSynth::REF_CASES[ci];
       const ComplementSynth::Spec s =
           ComplementSynth::make(c.pep, c.charge, c.y2, c.iso, 0.0, c.noise, c.seed);
       const auto tags = FASTag::tagSpectrum(s.spec, s.prec_mz, c.charge, *params[pi], tab);

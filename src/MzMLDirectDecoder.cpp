@@ -57,11 +57,11 @@ namespace FASTag
     /// Byte classes for the one-pass scanner below.
     enum : unsigned char
     {
-      kSpace = 1,     ///< XML whitespace: ' ', '\t', '\n', '\r'
-      kNameStart = 2, ///< first character of a name this decoder takes
-      kName = 4,      ///< further characters of such a name
-      kTextStop = 8,  ///< character data: anything but plain ASCII needs a closer look
-      kValueStop = 16 ///< attribute values: likewise, quotes included
+      SPACE = 1,     ///< XML whitespace: ' ', '\t', '\n', '\r'
+      NAME_START = 2, ///< first character of a name this decoder takes
+      NAME = 4,      ///< further characters of such a name
+      TEXT_STOP = 8,  ///< character data: anything but plain ASCII needs a closer look
+      VALUE_STOP = 16 ///< attribute values: likewise, quotes included
     };
 
     constexpr std::array<unsigned char, 256> make_class_table()
@@ -76,21 +76,21 @@ namespace FASTag
         // three whitespace controls. Other controls and every byte >= 0x80
         // go through next_char() (UTF-8 and the XML character ranges).
         const bool plain = (c >= 0x20 && c < 0x80) || space;
-        if (space) v |= kSpace;
-        if (alpha) v |= kNameStart | kName;
-        if ((c >= '0' && c <= '9') || c == '-' || c == '.') v |= kName;
-        if (!plain || c == '&' || c == '<' || c == '>') v |= kTextStop;
-        if (!plain || c == '&' || c == '<' || c == '"' || c == '\'') v |= kValueStop;
+        if (space) v |= SPACE;
+        if (alpha) v |= NAME_START | NAME;
+        if ((c >= '0' && c <= '9') || c == '-' || c == '.') v |= NAME;
+        if (!plain || c == '&' || c == '<' || c == '>') v |= TEXT_STOP;
+        if (!plain || c == '&' || c == '<' || c == '"' || c == '\'') v |= VALUE_STOP;
         t[c] = static_cast<unsigned char>(v);
       }
       return t;
     }
-    constexpr std::array<unsigned char, 256> kClass = make_class_table();
+    constexpr std::array<unsigned char, 256> CHAR_CLASS = make_class_table();
 
-    inline unsigned char cls(const char* p) { return kClass[static_cast<unsigned char>(*p)]; }
+    inline unsigned char cls(const char* p) { return CHAR_CLASS[static_cast<unsigned char>(*p)]; }
 
-    /// The first byte from @p p on whose class has @p Stop (kTextStop or
-    /// kValueStop), or @p e. With SSE2, 16 bytes per step: a signed compare
+    /// The first byte from @p p on whose class has @p Stop (TEXT_STOP or
+    /// VALUE_STOP), or @p e. With SSE2, 16 bytes per step: a signed compare
     /// against 0x20 finds controls and bytes >= 0x80 at once, whitespace
     /// controls are taken out again, and the few stop characters are
     /// compared directly. The table loop does the rest, and the same.
@@ -105,7 +105,7 @@ namespace FASTag
         __m128i m = _mm_cmplt_epi8(v, _mm_set1_epi8(0x20));
         m = _mm_andnot_si128(_mm_or_si128(_mm_or_si128(eq(v, '\t'), eq(v, '\n')), eq(v, '\r')), m);
         m = _mm_or_si128(m, _mm_or_si128(eq(v, '&'), eq(v, '<')));
-        if constexpr (Stop == kTextStop) m = _mm_or_si128(m, eq(v, '>'));
+        if constexpr (Stop == TEXT_STOP) m = _mm_or_si128(m, eq(v, '>'));
         else m = _mm_or_si128(m, _mm_or_si128(eq(v, '"'), eq(v, '\'')));
         const unsigned bits = static_cast<unsigned>(_mm_movemask_epi8(m));
         if (bits) return p + std::countr_zero(bits);
@@ -195,7 +195,7 @@ namespace FASTag
       const char* const b = p;
       while (true)
       {
-        p = skip_plain<kTextStop>(p, e);
+        p = skip_plain<TEXT_STOP>(p, e);
         if (p == e) return nullptr;
         const char c = *p;
         if (c == '<') return p;
@@ -242,14 +242,14 @@ namespace FASTag
         std::uint32_t name_len;
         std::uint32_t value_len;
       };
-      static constexpr std::size_t kMaxAttrs = 32; ///< more are declined
+      static constexpr std::size_t MAX_ATTRS = 32; ///< more are declined
 
       std::string_view name;
       const char* end = nullptr; ///< past its '>'
       bool closing = false;
       bool self_closing = false;
       std::size_t n_attrs = 0;
-      Attr attrs[kMaxAttrs]; // filled up to n_attrs; left uninitialised on purpose
+      Attr attrs[MAX_ATTRS]; // filled up to n_attrs; left uninitialised on purpose
 
       std::string_view attr_name(std::size_t i) const { return {attrs[i].name, attrs[i].name_len}; }
       std::string_view attr_value(std::size_t i) const { return {attrs[i].value, attrs[i].value_len}; }
@@ -262,14 +262,14 @@ namespace FASTag
         else closing = false;
         self_closing = false;
         const char* const nb = p;
-        if (p == e || !(cls(p) & kNameStart)) return false;
+        if (p == e || !(cls(p) & NAME_START)) return false;
         ++p;
-        while (p < e && (cls(p) & kName)) ++p;
+        while (p < e && (cls(p) & NAME)) ++p;
         if (p == e) return false;
         name = std::string_view(nb, static_cast<std::size_t>(p - nb));
         if (closing)
         {
-          while (p < e && (cls(p) & kSpace)) ++p;
+          while (p < e && (cls(p) & SPACE)) ++p;
           if (p == e || *p != '>') return false;
           end = p + 1;
           return true;
@@ -286,27 +286,27 @@ namespace FASTag
             end = p + 2;
             return true;
           }
-          if (!(cls(p) & kSpace)) return false;
-          do ++p; while (p < e && (cls(p) & kSpace));
+          if (!(cls(p) & SPACE)) return false;
+          do ++p; while (p < e && (cls(p) & SPACE));
           if (p == e) return false;
           if (*p == '>' || *p == '/') continue;
 
           // name = "value" (or 'value')
           const char* const an = p;
-          if (!(cls(p) & kNameStart)) return false;
+          if (!(cls(p) & NAME_START)) return false;
           ++p;
-          while (p < e && (cls(p) & kName)) ++p;
+          while (p < e && (cls(p) & NAME)) ++p;
           const std::size_t an_len = static_cast<std::size_t>(p - an);
-          while (p < e && (cls(p) & kSpace)) ++p;
+          while (p < e && (cls(p) & SPACE)) ++p;
           if (p == e || *p != '=') return false;
           ++p;
-          while (p < e && (cls(p) & kSpace)) ++p;
+          while (p < e && (cls(p) & SPACE)) ++p;
           if (p == e || (*p != '"' && *p != '\'')) return false;
           const char q = *p++;
           const char* const vb = p;
           while (true)
           {
-            p = skip_plain<kValueStop>(p, e);
+            p = skip_plain<VALUE_STOP>(p, e);
             if (p == e) return false;
             const char c = *p;
             if (c == q) break;
@@ -321,7 +321,7 @@ namespace FASTag
           // "a='1' a='2'" is a fatal error in libxml2.
           for (std::size_t i = 0; i < n_attrs; ++i)
             if (attrs[i].name_len == an_len && std::memcmp(attrs[i].name, an, an_len) == 0) return false;
-          if (n_attrs == kMaxAttrs) return false;
+          if (n_attrs == MAX_ATTRS) return false;
           attrs[n_attrs++] = Attr{an, vb, static_cast<std::uint32_t>(an_len), static_cast<std::uint32_t>(vlen)};
         }
       }
@@ -350,7 +350,7 @@ namespace FASTag
       t[static_cast<unsigned char>('\r')] = 65;
       return t;
     }
-    constexpr std::array<unsigned char, 256> kB64 = make_b64_table();
+    constexpr std::array<unsigned char, 256> B64 = make_b64_table();
 
     /// Strict base64 into @p out, whitespace skipped as OpenMS strips it.
     /// False on a character outside the alphabet, a length (whitespace
@@ -371,7 +371,7 @@ namespace FASTag
       // Fast path: four alphabet characters at a time, no whitespace, no '='.
       while (e - p >= 4)
       {
-        const unsigned a = kB64[p[0]], b = kB64[p[1]], c = kB64[p[2]], d = kB64[p[3]];
+        const unsigned a = B64[p[0]], b = B64[p[1]], c = B64[p[2]], d = B64[p[3]];
         if ((a | b | c | d) >= 64) break;
         const std::uint32_t v = (a << 18) | (b << 12) | (c << 6) | d;
         o[0] = static_cast<unsigned char>(v >> 16);
@@ -383,7 +383,7 @@ namespace FASTag
       }
       for (; p < e; ++p)
       {
-        const unsigned v = kB64[*p];
+        const unsigned v = B64[*p];
         if (v == 65) continue;
         if (v == 255) return false;
         ++n;
@@ -419,15 +419,15 @@ namespace FASTag
       std::string_view base64;
       std::string_view name;   ///< "name" of its m/z or intensity cvParam, or the MS:1000786 value
       int bits = 0;            ///< 32 or 64; 0: no float type given
-      int numpress = 0;        ///< 0 none, else kLinear, kPic, kSlof
+      int numpress = 0;        ///< 0 none, else NUMPRESS_LINEAR, NUMPRESS_PIC, NUMPRESS_SLOF
       bool zlib = false;
       bool has_binary = false;
       bool standard = false;   ///< carries the m/z or intensity term
       bool other = false;      ///< carries MS:1000786, a non-standard array named by its value
     };
-    enum { kLinear = 1, kPic, kSlof };
+    enum { NUMPRESS_LINEAR = 1, NUMPRESS_PIC, NUMPRESS_SLOF };
     /// More arrays than this in one spectrum are declined.
-    constexpr std::size_t kMaxArrays = 8;
+    constexpr std::size_t MAX_ARRAYS = 8;
     /// The most bytes MS-Numpress writes for @p n values: 8 for the fixed
     /// point, at most 4.5 per value (linear and pic), 2 per value (slof). A
     /// longer stream cannot decode to n values.
@@ -529,8 +529,8 @@ namespace FASTag
     width = 8;
     if (!bytes_of(a, packed, numpress_bound(n)) || packed.size > numpress_bound(n)) return false;
     MSNumpressCoder::NumpressConfig config;
-    config.np_compression = a.numpress == kLinear ? MSNumpressCoder::LINEAR
-                          : a.numpress == kPic ? MSNumpressCoder::PIC : MSNumpressCoder::SLOF;
+    config.np_compression = a.numpress == NUMPRESS_LINEAR ? MSNumpressCoder::LINEAR
+                          : a.numpress == NUMPRESS_PIC ? MSNumpressCoder::PIC : MSNumpressCoder::SLOF;
     // ponytail: decodeNPRaw is the public entry (the ms::numpress functions are
     // not exported from libOpenMS); it wants a std::string and zero-fills 16
     // bytes of output per input byte. Both are locals: kept per thread at
@@ -620,19 +620,19 @@ namespace FASTag
     // while it reads them (a table lookup per plain ASCII byte; references,
     // controls and non-ASCII bytes take the slow path). The base64 text is
     // not scanned here: decode_base64 refuses any byte outside its alphabet.
-    enum class Region { meta, arrays, after };
-    Region region = Region::meta;
+    enum class Region { META, ARRAYS, AFTER };
+    Region region = Region::META;
     std::array<std::string_view, 32> stack{};
     std::size_t depth = 0;
     stack[depth++] = root.name;
     const char* p = root.end;
-    std::array<Array, kMaxArrays> arrays;
+    std::array<Array, MAX_ARRAYS> arrays;
     int n_arrays = 0;
     Array* cur = nullptr;
     const auto blank = [](const char* b, const char* e)
     {
       for (; b < e; ++b)
-        if (!(cls(b) & kSpace)) return false;
+        if (!(cls(b) & SPACE)) return false;
       return true;
     };
     // The next '<' from q on (whitespace only before it), or null.
@@ -644,7 +644,7 @@ namespace FASTag
     Tag t;
     while (depth > 0)
     {
-      const char* const lt = region == Region::meta ? scan_text(p, xe) : next_lt_blank(p);
+      const char* const lt = region == Region::META ? scan_text(p, xe) : next_lt_blank(p);
       if (!lt) return false; // bad text, or the root never ends
 
       if (xe - lt >= 4 && std::memcmp(lt, "<!--", 4) == 0)
@@ -652,7 +652,7 @@ namespace FASTag
         // A comment, in the metadata only: XML characters, no "--" inside.
         const std::size_t at = static_cast<std::size_t>(lt - xb);
         const std::size_t ce = xml.find("--", at + 4);
-        if (region != Region::meta || ce == std::string_view::npos || xml.compare(ce, 3, "-->") != 0) return false;
+        if (region != Region::META || ce == std::string_view::npos || xml.compare(ce, 3, "-->") != 0) return false;
         if (!xml_chars(xml.substr(at + 4, ce - at - 4))) return false;
         p = xb + ce + 3;
         continue;
@@ -671,23 +671,23 @@ namespace FASTag
         stack[depth++] = t.name;
       }
 
-      if (region == Region::meta)
+      if (region == Region::META)
       {
         if (t.name == "binaryDataArrayList" && !t.closing)
         {
           if (depth != 2 || t.self_closing) return false; // a direct child of <spectrum>, with arrays
-          region = Region::arrays;
+          region = Region::ARRAYS;
         }
         // OpenMS decodes a <binaryDataArray> wherever it sits.
         else if (t.name == "binaryDataArray" || t.name == "binary" || t.name == "binaryDataArrayList") return false;
         continue;
       }
-      if (region == Region::after) return false; // only </spectrum>, which ends the loop
+      if (region == Region::AFTER) return false; // only </spectrum>, which ends the loop
 
       if (t.name == "binaryDataArrayList")
       {
         if (!t.closing || cur) return false;
-        region = Region::after;
+        region = Region::AFTER;
       }
       else if (t.name == "binaryDataArray")
       {
@@ -698,7 +698,7 @@ namespace FASTag
         }
         else
         {
-          if (cur || t.self_closing || n_arrays == static_cast<int>(kMaxArrays)) return false;
+          if (cur || t.self_closing || n_arrays == static_cast<int>(MAX_ARRAYS)) return false;
           cur = &arrays[static_cast<std::size_t>(n_arrays++)];
         }
       }
@@ -734,12 +734,12 @@ namespace FASTag
         // terms set both, "no compression" clears both.
         else if (accession == "MS:1000574") cur->zlib = true;
         else if (accession == "MS:1000576") { cur->zlib = false; cur->numpress = 0; }
-        else if (accession == "MS:1002312") cur->numpress = kLinear;
-        else if (accession == "MS:1002313") cur->numpress = kPic;
-        else if (accession == "MS:1002314") cur->numpress = kSlof;
-        else if (accession == "MS:1002746") { cur->numpress = kLinear; cur->zlib = true; }
-        else if (accession == "MS:1002747") { cur->numpress = kPic; cur->zlib = true; }
-        else if (accession == "MS:1002748") { cur->numpress = kSlof; cur->zlib = true; }
+        else if (accession == "MS:1002312") cur->numpress = NUMPRESS_LINEAR;
+        else if (accession == "MS:1002313") cur->numpress = NUMPRESS_PIC;
+        else if (accession == "MS:1002314") cur->numpress = NUMPRESS_SLOF;
+        else if (accession == "MS:1002746") { cur->numpress = NUMPRESS_LINEAR; cur->zlib = true; }
+        else if (accession == "MS:1002747") { cur->numpress = NUMPRESS_PIC; cur->zlib = true; }
+        else if (accession == "MS:1002748") { cur->numpress = NUMPRESS_SLOF; cur->zlib = true; }
         else if (accession == "MS:1000786")
         {
           // A non-standard array, named by its value (pwiz: "Ion Mobility").
@@ -777,7 +777,7 @@ namespace FASTag
         return false; // </spectrum> before </binaryDataArrayList>, userParam, referenceableParamGroupRef, ...
       }
     }
-    if (region != Region::after) return false; // no arrays
+    if (region != Region::AFTER) return false; // no arrays
 
     // Exactly one m/z and one intensity array; any further array must be a
     // non-standard one (MS:1000786). All float. An array with both kinds of

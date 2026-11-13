@@ -97,15 +97,15 @@ namespace FASTag
     return out;
   }
 
-  TaxIndex::~TaxIndex() { reset(); }
+  TaxIndex::~TaxIndex() { reset_(); }
 
-  uint32_t TaxIndex::postingAt(uint32_t p) const
+  uint32_t TaxIndex::postingAt_(uint32_t p) const
   {
     return static_cast<uint32_t>(
         rdKey(post_ + static_cast<size_t>(p) * static_cast<size_t>(tax_bytes_), tax_bytes_));
   }
 
-  void TaxIndex::reset()
+  void TaxIndex::reset_()
   {
     if (map_base_ != nullptr)
     {
@@ -130,7 +130,7 @@ namespace FASTag
   void TaxIndex::build(const std::vector<OpenMS::FASTAFile::FASTAEntry>& entries,
                        const std::vector<uint32_t>& taxids, int k)
   {
-    reset();
+    reset_();
     k_ = k;
     legacy_ = true;   // build fills the maps; save() packs them into the v2 image
     if (k < 1 || k > MAX_K) { k_ = 0; return; }
@@ -196,7 +196,7 @@ namespace FASTag
         ids.clear();
         for (uint32_t p = offsets_[i]; p < offsets_[i + 1]; ++p)
         {
-          const uint32_t idx = postingAt(p);
+          const uint32_t idx = postingAt_(p);
           if (idx < n_taxa_) ids.push_back(idx);
         }
         bump();
@@ -247,7 +247,7 @@ namespace FASTag
         gs.clear();
         for (uint32_t p = offsets_[i]; p < offsets_[i + 1]; ++p)
         {
-          const uint32_t idx = postingAt(p);
+          const uint32_t idx = postingAt_(p);
           if (idx < n_taxa_) add(idx);
         }
         bump();
@@ -312,7 +312,7 @@ namespace FASTag
       out.reserve(e - b);
       for (uint32_t p = b; p < e; ++p)
       {
-        const uint32_t idx = postingAt(p);
+        const uint32_t idx = postingAt_(p);
         if (idx < n_taxa_) out.push_back(taxa_[idx]);
       }
       return;
@@ -376,7 +376,7 @@ namespace FASTag
       for (uint64_t i = 0; i < n_kmers_; ++i)
       {
         std::vector<uint32_t> idx;
-        for (uint32_t p = offsets_[i]; p < offsets_[i + 1]; ++p) idx.push_back(postingAt(p));
+        for (uint32_t p = offsets_[i]; p < offsets_[i + 1]; ++p) idx.push_back(postingAt_(p));
         rows.emplace_back(rdKey(keys_ + i * static_cast<size_t>(key_bytes_), key_bytes_), std::move(idx));
       }
     }
@@ -431,7 +431,7 @@ namespace FASTag
 
   bool TaxIndex::load(const std::string& path, std::string* err)
   {
-    reset();
+    reset_();
 
     char magic[4] = {0, 0, 0, 0};
     {
@@ -500,15 +500,15 @@ namespace FASTag
 #endif
     map_base_ = base;
 
-    if (map_len_ < 40) { reset(); if (err) *err = "index is truncated"; return false; }
+    if (map_len_ < 40) { reset_(); if (err) *err = "index is truncated"; return false; }
     const uint8_t* p = static_cast<const uint8_t*>(base);
     auto u32at = [p](size_t o) { uint32_t v; std::memcpy(&v, p + o, 4); return v; };
     auto u64at = [p](size_t o) { uint64_t v; std::memcpy(&v, p + o, 8); return v; };
 
     // Re-check the magic in the MAPPED bytes, not just the earlier probe read:
     // the file could have been replaced between the two opens.
-    if (std::memcmp(p, "FTX2", 4) != 0) { reset(); if (err) *err = "not a FASTag taxonomy index"; return false; }
-    if (u32at(4) != 2) { reset(); if (err) *err = "unsupported index version"; return false; }
+    if (std::memcmp(p, "FTX2", 4) != 0) { reset_(); if (err) *err = "not a FASTag taxonomy index"; return false; }
+    if (u32at(4) != 2) { reset_(); if (err) *err = "unsupported index version"; return false; }
     k_ = static_cast<int>(u32at(8));
     n_taxa_ = u32at(12);
     n_kmers_ = u64at(16);
@@ -520,7 +520,7 @@ namespace FASTag
         || k_ <= 0 || k_ > MAX_K
         || key_bytes_ != keyBytes(k_)
         || n_kmers_ == 0 || n_taxa_ == 0)
-    { reset(); if (err) *err = "index header is malformed"; return false; }
+    { reset_(); if (err) *err = "index header is malformed"; return false; }
 
     // Every section is bounds-checked BEFORE its pointer is formed, with
     // subtraction rather than addition so attacker-controlled counts cannot wrap
@@ -537,29 +537,29 @@ namespace FASTag
     };
     auto bump = [&](uint64_t count, size_t size) { off = align8(off + static_cast<size_t>(count) * size); };
 
-    if (!fits(n_taxa_, 4)) { reset(); if (err) *err = "index is truncated (taxa)"; return false; }
+    if (!fits(n_taxa_, 4)) { reset_(); if (err) *err = "index is truncated (taxa)"; return false; }
     taxa_ = reinterpret_cast<const uint32_t*>(p + off);
     bump(n_taxa_, 4);
-    if (!fits(n_taxa_, 8)) { reset(); if (err) *err = "index is truncated (taxpost)"; return false; }
+    if (!fits(n_taxa_, 8)) { reset_(); if (err) *err = "index is truncated (taxpost)"; return false; }
     taxpost_ = reinterpret_cast<const uint64_t*>(p + off);
     bump(n_taxa_, 8);
-    if (!fits(n_kmers_, static_cast<size_t>(key_bytes_))) { reset(); if (err) *err = "index is truncated (keys)"; return false; }
+    if (!fits(n_kmers_, static_cast<size_t>(key_bytes_))) { reset_(); if (err) *err = "index is truncated (keys)"; return false; }
     keys_ = p + off;
     bump(n_kmers_, static_cast<size_t>(key_bytes_));
-    if (!fits(n_kmers_ + 1, 4)) { reset(); if (err) *err = "index is truncated (offsets)"; return false; }
+    if (!fits(n_kmers_ + 1, 4)) { reset_(); if (err) *err = "index is truncated (offsets)"; return false; }
     offsets_ = reinterpret_cast<const uint32_t*>(p + off);
     bump(n_kmers_ + 1, 4);
-    if (!fits(n_post, static_cast<size_t>(tax_bytes_))) { reset(); if (err) *err = "index is truncated (postings)"; return false; }
+    if (!fits(n_post, static_cast<size_t>(tax_bytes_))) { reset_(); if (err) *err = "index is truncated (postings)"; return false; }
     post_ = p + off;
 
     // The offsets array must be a valid CSR structure, or lookup() would read
     // arbitrary bytes of the postings section (or far past it). Checked once here
     // so the hot path can trust it.
     if (offsets_[0] != 0 || offsets_[n_kmers_] != n_post)
-    { reset(); if (err) *err = "index offsets are malformed"; return false; }
+    { reset_(); if (err) *err = "index offsets are malformed"; return false; }
     for (uint64_t i = 1; i <= n_kmers_; ++i)
       if (offsets_[i] < offsets_[i - 1])
-      { reset(); if (err) *err = "index offsets are not monotonic"; return false; }
+      { reset_(); if (err) *err = "index offsets are not monotonic"; return false; }
 
     legacy_ = false;
     return true;

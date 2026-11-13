@@ -217,7 +217,7 @@ namespace FASTag::Acquisition
     // 4. The call.
     if (c.frac_provenance >= t.min_provenance)
     {
-      c.mode = Mode::PseudoDDA;
+      c.mode = Mode::PSEUDO_DDA;
       c.why = pct(c.frac_provenance) + " of the MS2 were written by a pseudo-DDA generator (DIAspeXtract or "
               "diaTracer)";
       return c;
@@ -243,7 +243,7 @@ namespace FASTag::Acquisition
       }
       else
       {
-        c.mode = Mode::DIALike;
+        c.mode = Mode::DIA_LIKE;
         c.warn = true;
         c.why = head + win_stats + "), but most MS2 carry a charge; " + stats;
       }
@@ -283,7 +283,7 @@ namespace FASTag::Acquisition
     }
     if (c.n_gaps < t.min_gaps)
     {
-      c.mode = Mode::Undetermined;
+      c.mode = Mode::UNDETERMINED;
       c.warn = c.median_width >= t.warn_min_width && c.frac_uncharged >= t.warn_min_uncharged;
       c.why = "too few repeated precursor m/z to judge (" + std::to_string(c.n_gaps) + " repeat gaps, " +
               std::to_string(c.n_ms2) + " MS2 probed" +
@@ -299,11 +299,11 @@ namespace FASTag::Acquisition
   {
     switch (c.mode)
     {
-      case Mode::Undetermined: return "undetermined";
+      case Mode::UNDETERMINED: return "undetermined";
       case Mode::DDA: return "DDA";
-      case Mode::PseudoDDA: return "pseudo-DDA";
+      case Mode::PSEUDO_DDA: return "pseudo-DDA";
       case Mode::PRM: return "PRM/targeted";
-      case Mode::DIALike: return "DIA-like";
+      case Mode::DIA_LIKE: return "DIA-like";
       case Mode::DIA: return c.im ? "DIA (diaPASEF)" : "DIA";
     }
     return "undetermined";
@@ -367,10 +367,10 @@ namespace FASTag::Acquisition
   {
     std::ifstream in(path, std::ios::binary);
     if (!in) return false;
-    constexpr std::size_t kMax = std::size_t{4} << 20, kPiece = 1 << 16;
+    constexpr std::size_t MAX_BYTES = std::size_t{4} << 20, PIECE = 1 << 16;
     std::string head;
-    std::vector<char> buf(kPiece);
-    while (head.size() < kMax && in)
+    std::vector<char> buf(PIECE);
+    while (head.size() < MAX_BYTES && in)
     {
       in.read(buf.data(), static_cast<std::streamsize>(buf.size()));
       head.append(buf.data(), static_cast<std::size_t>(in.gcount()));
@@ -435,7 +435,7 @@ namespace FASTag::Acquisition
   std::string warningMessage(const AcqCall& c, const std::string& in)
   {
     if (!c.warn) return {};
-    if (c.mode == Mode::DIALike)
+    if (c.mode == Mode::DIA_LIKE)
       return "'" + in + "' looks like DIA (" + c.why + "). It is tagged because most of its MS2 carry a precursor "
              "charge, as DDA does. If it is raw DIA with placeholder charges, its tags have wrong flanks and "
              "complements: generate pseudo-DDA spectra with DIAspeXtract first. -acquisition_check off skips "

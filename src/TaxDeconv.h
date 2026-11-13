@@ -48,30 +48,51 @@
 
 namespace FASTag
 {
-  /// Column-conditional matrix from a pairwise overlap matrix (row-major, n x n).
-  ///
-  /// P[i][j] = overlap(i,j) / overlap(j,j), so every column j sums the chance
-  /// that a k-mer of j is also seen in i, and P[j][j] == 1. A taxon with no
-  /// postings gets a unit column, which leaves it estimated from its own count
-  /// alone rather than dividing by zero.
+  /**
+    @brief Column-conditional matrix from a pairwise overlap matrix.
+
+    P[i][j] = overlap(i,j) / overlap(j,j), so every column j sums the chance
+    that a k-mer of j is also seen in i, and P[j][j] == 1. A taxon with no
+    postings gets a unit column, which leaves it estimated from its own count
+    alone rather than dividing by zero.
+
+    @param[in] overlap Pairwise k-mer overlap (row-major, n x n).
+    @param[in] n Number of taxa.
+    @return P (row-major, n x n); all zeros when n is 0 or @p overlap is too small.
+  */
   std::vector<double> conditionalMatrix(const std::vector<uint64_t>& overlap, std::size_t n);
 
-  /// Non-negative least squares: minimise ||A x - b||^2 subject to x >= 0.
-  ///
-  /// Projected coordinate descent on the normal equations, which for a system
-  /// this small is exact enough and, unlike an active-set method, cannot cycle.
-  /// Deterministic: same inputs, same output, no RNG and no threading.
-  /// Stops after 2000 sweeps, or earlier when no coordinate moves by more than
-  /// 1e-12 times the largest estimate. Because the tolerance is relative, it
-  /// means the same thing on a run of 100 spectra and one of 100,000.
+  /**
+    @brief Non-negative least squares: minimise ||A x - b||^2 subject to x >= 0.
+
+    Projected coordinate descent on the normal equations, which for a system
+    this small is exact enough and, unlike an active-set method, cannot cycle.
+    Deterministic: same inputs, same output, no RNG and no threading.
+    Stops after 2000 sweeps, or earlier when no coordinate moves by more than
+    1e-12 times the largest estimate. Because the tolerance is relative, it
+    means the same thing on a run of 100 spectra and one of 100,000.
+
+    @param[in] A The system matrix (row-major, n x n).
+    @param[in] b The right-hand side (n entries).
+    @param[in] n The dimension.
+    @return x (n entries); all zeros when n is 0 or an input is too small.
+  */
   std::vector<double> nnls(const std::vector<double>& A, const std::vector<double>& b,
                            std::size_t n);
 
-  /// observed -> deconvolved counts, both indexed like the overlap matrix.
-  ///
-  /// Returns @p observed unchanged when n is 0 or the matrix is degenerate, so a
-  /// caller can always use the result and a broken index costs accuracy rather
-  /// than correctness.
+  /**
+    @brief Deconvolves observed counts: N = P^-1 E, constrained to N >= 0.
+
+    Solves conditionalMatrix(@p overlap) N = @p observed with nnls().
+
+    @param[in] overlap Pairwise k-mer overlap (row-major, n x n).
+    @param[in] observed Observed counts E, indexed like the overlap matrix.
+    @param[in] n Number of taxa.
+    @return Deconvolved counts, indexed like the overlap matrix; @p observed
+      unchanged when n is 0, an input is too small or the matrix is
+      degenerate, so a caller can always use the result and a broken index
+      costs accuracy rather than correctness.
+  */
   std::vector<double> deconvolve(const std::vector<uint64_t>& overlap,
                                  const std::vector<double>& observed, std::size_t n);
 }

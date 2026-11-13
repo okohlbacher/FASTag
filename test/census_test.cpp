@@ -124,29 +124,29 @@ int main(int argc, char** argv)
     const MSSpectrum clean = ladder("VGAHAGEYGAEALER", pmz);
 
     MSSpectrum empty;
-    CHECK(census(empty, pmz, true, 2, p, tab).status == C::Status::Empty, "an empty MS2 is not 'empty'");
+    CHECK(census(empty, pmz, true, 2, p, tab).status == C::Status::EMPTY, "an empty MS2 is not 'empty'");
     // Empty wins over a missing precursor: the gate tests spec.empty() first.
-    CHECK(census(empty, pmz, false, 2, p, tab).status == C::Status::Empty, "empty without precursor is not 'empty'");
-    CHECK(census(clean, pmz, false, 2, p, tab).status == C::Status::NoPrecursor, "no precursor is not 'no_precursor'");
+    CHECK(census(empty, pmz, false, 2, p, tab).status == C::Status::EMPTY, "empty without precursor is not 'empty'");
+    CHECK(census(clean, pmz, false, 2, p, tab).status == C::Status::NO_PRECURSOR, "no precursor is not 'no_precursor'");
 
     MSSpectrum zero = clean;
     for (auto& pk : zero) pk.setIntensity(0.0f);
-    CHECK(census(zero, pmz, true, 2, p, tab).status == C::Status::NoSignal, "all-zero intensities are not 'no_signal'");
+    CHECK(census(zero, pmz, true, 2, p, tab).status == C::Status::NO_SIGNAL, "all-zero intensities are not 'no_signal'");
     MSSpectrum nanint = clean;
     for (auto& pk : nanint) pk.setIntensity(std::numeric_limits<float>::quiet_NaN());
-    CHECK(census(nanint, pmz, true, 2, p, tab).status == C::Status::NoSignal, "all-NaN intensities are not 'no_signal'");
+    CHECK(census(nanint, pmz, true, 2, p, tab).status == C::Status::NO_SIGNAL, "all-NaN intensities are not 'no_signal'");
     // no_signal comes before bad_precursor.
-    CHECK(census(zero, nan, true, 2, p, tab).status == C::Status::NoSignal, "no_signal does not precede bad_precursor");
+    CHECK(census(zero, nan, true, 2, p, tab).status == C::Status::NO_SIGNAL, "no_signal does not precede bad_precursor");
 
-    CHECK(census(clean, nan, true, 2, p, tab).status == C::Status::BadPrecursor, "a NaN precursor is not 'bad_precursor'");
-    CHECK(census(clean, -5.0, true, 2, p, tab).status == C::Status::BadPrecursor, "a negative precursor is not 'bad_precursor'");
-    CHECK(census(clean, 0.0, true, 2, p, tab).status == C::Status::BadPrecursor, "a zero precursor is not 'bad_precursor'");
+    CHECK(census(clean, nan, true, 2, p, tab).status == C::Status::BAD_PRECURSOR, "a NaN precursor is not 'bad_precursor'");
+    CHECK(census(clean, -5.0, true, 2, p, tab).status == C::Status::BAD_PRECURSOR, "a negative precursor is not 'bad_precursor'");
+    CHECK(census(clean, 0.0, true, 2, p, tab).status == C::Status::BAD_PRECURSOR, "a zero precursor is not 'bad_precursor'");
 
     MSSpectrum two;
     two.emplace_back(300.1, 10.0f);
     two.emplace_back(400.2, 20.0f);
     const C::Row r2 = census(two, pmz, true, 2, p, tab);
-    CHECK(r2.status == C::Status::TooFewPeaks, "2 peaks are not 'too_few_peaks' (status %s)", C::name(r2.status));
+    CHECK(r2.status == C::Status::TOO_FEW_PEAKS, "2 peaks are not 'too_few_peaks' (status %s)", C::name(r2.status));
     CHECK(r2.prepared && r2.n_kept == 2 && r2.n_edges == 0, "2-peak diag: prepared %d kept %zu edges %zu",
           int(r2.prepared), r2.n_kept, r2.n_edges);
 
@@ -154,26 +154,26 @@ int main(int argc, char** argv)
     MSSpectrum noise;
     for (int i = 0; i < 40; ++i) noise.emplace_back(200.0 + 1.5 * i + 0.0001 * i * i, 1.0f + float(i % 7));
     const C::Row rn = census(noise, pmz, true, 2, p, tab);
-    CHECK(rn.status == C::Status::NoTags, "noise is not 'no_tags' (status %s, %zu found)", C::name(rn.status), rn.n_found);
+    CHECK(rn.status == C::Status::NO_TAGS, "noise is not 'no_tags' (status %s, %zu found)", C::name(rn.status), rn.n_found);
     CHECK(rn.prepared && rn.n_kept >= 3, "noise was not prepared");
 
     const C::Row rc = census(clean, pmz, true, 2, p, tab);
-    CHECK(rc.status == C::Status::Tagged, "a clean y ladder is not 'tagged' (status %s)", C::name(rc.status));
+    CHECK(rc.status == C::Status::TAGGED, "a clean y ladder is not 'tagged' (status %s)", C::name(rc.status));
     CHECK(rc.n_edges > 0 && rc.n_compl > 0, "clean ladder: edges %zu compl %zu", rc.n_edges, rc.n_compl);
 
     // Placements count only with -recon_out, and then win over tagged.
-    CHECK(census(clean, pmz, true, 2, p, tab, 3, true).status == C::Status::Placed, "placed does not precede tagged");
-    CHECK(census(clean, pmz, true, 2, p, tab, 0, true).status == C::Status::Tagged, "no placement is not tagged");
-    CHECK(census(clean, pmz, true, 2, p, tab, 3, false).status == C::Status::Tagged,
+    CHECK(census(clean, pmz, true, 2, p, tab, 3, true).status == C::Status::PLACED, "placed does not precede tagged");
+    CHECK(census(clean, pmz, true, 2, p, tab, 0, true).status == C::Status::TAGGED, "no placement is not tagged");
+    CHECK(census(clean, pmz, true, 2, p, tab, 3, false).status == C::Status::TAGGED,
           "placements counted without -recon_out");
 
     // filtered: found but none reported.
     C::Facts f;
     f.has_precursor = true; f.n_peaks = 20; f.precursor_mz = 500; f.enough_peaks = true;
     f.n_found = 4; f.n_reported = 0;
-    CHECK(C::classify(f) == C::Status::Filtered, "found-but-unreported is not 'filtered'");
+    CHECK(C::classify(f) == C::Status::FILTERED, "found-but-unreported is not 'filtered'");
     f.n_reported = 1;
-    CHECK(C::classify(f) == C::Status::Tagged, "one reported row is not 'tagged'");
+    CHECK(C::classify(f) == C::Status::TAGGED, "one reported row is not 'tagged'");
     std::printf("1. status precedence on synthetic spectra\n");
   }
 
@@ -181,8 +181,8 @@ int main(int argc, char** argv)
   {
     const char* want[] = {"empty", "no_precursor", "no_signal", "bad_precursor", "too_few_peaks",
                           "no_tags", "filtered", "placed", "tagged"};
-    CHECK(C::kStatusCount == 9, "status count %zu", C::kStatusCount);
-    for (size_t i = 0; i < C::kStatusCount; ++i)
+    CHECK(C::STATUS_COUNT == 9, "status count %zu", C::STATUS_COUNT);
+    for (size_t i = 0; i < C::STATUS_COUNT; ++i)
     {
       const auto s = static_cast<C::Status>(i);
       CHECK(std::string(C::name(s)) == want[i], "status %zu is named %s", i, C::name(s));
@@ -254,7 +254,7 @@ int main(int argc, char** argv)
     CHECK(C::bestTag(rows) == 3, "best tag is row %zu, not the length-5 row 3", C::bestTag(rows));
     const std::vector<C::TagView> tie = {tv(0.1, 3, 200), tv(0.01, 3, 300), tv(0.01, 5, 100)};
     CHECK(C::bestTag(tie) == 1, "a tie went to row %zu, not the first (1)", C::bestTag(tie));
-    CHECK(C::bestTag({}) == C::kNone, "no rows has a best tag");
+    CHECK(C::bestTag({}) == C::NO_INDEX, "no rows has a best tag");
     CHECK(rows[0].evalue == 0.5 && rows[3].n_res == 5, "bestTag reordered its input");
     std::printf("4. best tag by minimum E-value\n");
   }
@@ -305,7 +305,7 @@ int main(int argc, char** argv)
     CHECK(f[14].empty(), "best_evalue written without a best tag");
 
     C::Row e;
-    e.status = C::Status::NoPrecursor;
+    e.status = C::Status::NO_PRECURSOR;
     e.index = 3;
     std::string le;
     C::appendRow(le, e, "s");
@@ -322,21 +322,21 @@ int main(int argc, char** argv)
     auto row = [](C::Status s, int charge, double best) {
       C::Row r;
       r.status = s;
-      r.has_precursor = s != C::Status::NoPrecursor;
+      r.has_precursor = s != C::Status::NO_PRECURSOR;
       r.charge_given = charge;
-      r.prepared = C::processed(s) && s != C::Status::BadPrecursor && s != C::Status::NoSignal;
+      r.prepared = C::processed(s) && s != C::Status::BAD_PRECURSOR && s != C::Status::NO_SIGNAL;
       r.n_kept = 10;
       r.has_gini = C::processed(s);
       r.gini = 0.5;
-      r.has_best = s == C::Status::Tagged || s == C::Status::Placed;
+      r.has_best = s == C::Status::TAGGED || s == C::Status::PLACED;
       r.best.evalue = best;
       return r;
     };
-    a.add(row(C::Status::Empty, 2, 0));
-    a.add(row(C::Status::Tagged, 0, 0.1));
-    b.add(row(C::Status::Placed, 2, 0.3));
-    b.add(row(C::Status::NoTags, 3, 0));
-    b.add(row(C::Status::NoPrecursor, 0, 0));
+    a.add(row(C::Status::EMPTY, 2, 0));
+    a.add(row(C::Status::TAGGED, 0, 0.1));
+    b.add(row(C::Status::PLACED, 2, 0.3));
+    b.add(row(C::Status::NO_TAGS, 3, 0));
+    b.add(row(C::Status::NO_PRECURSOR, 0, 0));
     a.merge(b);
     CHECK(a.ms2_seen == 5 && a.n_processed() == 3 && a.no_charge == 1, "tally seen %llu processed %llu no_charge %llu",
           (unsigned long long)a.ms2_seen, (unsigned long long)a.n_processed(), (unsigned long long)a.no_charge);
@@ -352,7 +352,7 @@ int main(int argc, char** argv)
     CHECK(find("ms2_processed") && find("ms2_processed")->value == "3", "ms2_processed");
     CHECK(find("ms2_total") && find("ms2_total")->value == "5", "ms2_total without subsampling");
     CHECK(find("subsampled") && find("subsampled")->value == "0", "subsampled");
-    for (size_t i = 0; i < C::kStatusCount; ++i)
+    for (size_t i = 0; i < C::STATUS_COUNT; ++i)
     {
       const std::string nm = C::name(static_cast<C::Status>(i));
       CHECK(find("count_" + nm) && find("share_" + nm), "status %s missing", nm.c_str());

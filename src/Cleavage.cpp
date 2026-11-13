@@ -72,18 +72,18 @@ namespace FASTag::Cleavage
   {
     switch (s)
     {
-      case Specificity::Full: return "full";
-      case Specificity::Semi: return "semi";
-      case Specificity::None: return "none";
+      case Specificity::FULL: return "full";
+      case Specificity::SEMI: return "semi";
+      case Specificity::NONE: return "none";
     }
     return "full";
   }
 
   bool parseSpecificity(const std::string& s, Specificity& out)
   {
-    if (s == "full") out = Specificity::Full;
-    else if (s == "semi") out = Specificity::Semi;
-    else if (s == "none") out = Specificity::None;
+    if (s == "full") out = Specificity::FULL;
+    else if (s == "semi") out = Specificity::SEMI;
+    else if (s == "none") out = Specificity::NONE;
     else return false;
     return true;
   }
@@ -94,7 +94,7 @@ namespace FASTag::Cleavage
     using Verdict = FASTag::Shortlist::ProteaseVerdict;
     Choice c;
     c.specificity = spec;
-    const bool confident = v.kind != Verdict::Inconclusive;
+    const bool confident = v.kind != Verdict::Kind::INCONCLUSIVE;
     if (OpenMS::StringUtils::toLowered(option) == "auto")
     {
       const Rule* called = confident ? findRule(v.model) : nullptr;
@@ -104,7 +104,7 @@ namespace FASTag::Cleavage
         c.reason = "auto: the tag ends call " + called->name;
         if (!spec_given && called->name == "Asp-N")
         {
-          c.specificity = Specificity::Semi;
+          c.specificity = Specificity::SEMI;
           c.auto_semi = true;
           c.reason += "; semi-specific unless -shortlist_specificity is given";
         }
@@ -115,7 +115,7 @@ namespace FASTag::Cleavage
         c.reason = confident ? "auto: the called model " + v.model + " has no cleavage rule; Trypsin assumed"
                              : "auto: no confident protease call; Trypsin assumed";
       }
-      if (c.rule->unspecific()) c.specificity = Specificity::None;
+      if (c.rule->unspecific()) c.specificity = Specificity::NONE;
       c.auto_unspecific = c.rule->unspecific();
       return c;
     }
@@ -123,12 +123,12 @@ namespace FASTag::Cleavage
     if (!c.rule) c.rule = findRule("unspecific");  // the caller validated the name
     if (c.rule->unspecific())
     {
-      c.specificity = Specificity::None;
+      c.specificity = Specificity::NONE;
       c.reason = "unspecific: every window whose flanks match";
       return c;
     }
     c.reason = "-shortlist_protease " + c.rule->name;
-    if (!confident || spec == Specificity::None || v.model == c.rule->name) return c;
+    if (!confident || spec == Specificity::NONE || v.model == c.rule->name) return c;
     // An `unspecific` call says no protease model fits better than the
     // background; it names no other protease, so it does not contradict the
     // named rule (a broad protease such as chymotrypsin often calls it).
@@ -154,7 +154,7 @@ namespace FASTag::Cleavage
       return c;
     }
     const bool rule_tc = trypsinCompatible(c.rule->name);
-    if (v.kind == Verdict::NonTryptic || (v.kind == Verdict::Compatible && !rule_tc))
+    if (v.kind == Verdict::Kind::NON_TRYPTIC || (v.kind == Verdict::Kind::COMPATIBLE && !rule_tc))
     {
       c.refuse = true;
       c.reason += ", but the tag ends call " + v.model;
@@ -167,7 +167,7 @@ namespace FASTag::Cleavage
   FASTag::SearchConfig::Enzyme engineEnzyme(const Rule& rule, Specificity spec)
   {
     FASTag::SearchConfig::Enzyme e;
-    if (rule.unspecific() || spec == Specificity::None)
+    if (rule.unspecific() || spec == Specificity::NONE)
     {
       e.name = "unspecific";
       e.cut.clear();
@@ -181,17 +181,17 @@ namespace FASTag::Cleavage
     e.cut = rule.cut;
     e.nocut = rule.nocut;
     e.c_terminal = rule.c_terminal;
-    e.termini = spec == Specificity::Semi ? 1 : 2;
+    e.termini = spec == Specificity::SEMI ? 1 : 2;
     e.comet_default = rule.comet_default;
     return e;
   }
 
   WindowFilter::WindowFilter(const Rule& rule, Specificity spec, int missed_cleavages)
   {
-    all_ = rule.unspecific() || spec == Specificity::None;
+    all_ = rule.unspecific() || spec == Specificity::NONE;
     if (all_) return;
     dig_.setEnzyme(rule.openms);
-    dig_.setSpecificity(spec == Specificity::Full ? OpenMS::EnzymaticDigestion::SPEC_FULL
+    dig_.setSpecificity(spec == Specificity::FULL ? OpenMS::EnzymaticDigestion::SPEC_FULL
                                                   : OpenMS::EnzymaticDigestion::SPEC_SEMI);
     dig_.setMissedCleavages(static_cast<OpenMS::Size>(missed_cleavages < 0 ? 0 : missed_cleavages));
   }

@@ -35,49 +35,89 @@
 
 namespace FASTag
 {
-  /// Run-level counters of the per-tag filters.
+  /**
+    @brief Run-level counters of the per-tag filters.
+  */
   struct TagLookupCounters
   {
     uint64_t kmer_skipped = 0;  ///< k-mers skipped by the share cap (also in tags later rejected)
     uint64_t tag_generic = 0;   ///< tags rejected by the margin filter
   };
 
-  /// The taxa supporting one tag. @p seq is the tag's base sequence (unfolded;
-  /// each k-mer is folded before lookup), @p k the index k. Returns true and
-  /// fills @p taxa (ascending, the taxa carrying every evaluated k-mer) when the
-  /// tag is informative; returns false and leaves @p taxa empty otherwise.
-  /// @p counters is updated exactly as the 1.11 inline loop did.
+  /**
+    @brief The taxa supporting one tag, by the rule in the file comment.
+    @param[in] idx The taxon k-mer index.
+    @param[in] seq The tag's base sequence (unfolded; each k-mer is folded before lookup).
+    @param[in] k The index k.
+    @param[in] share_cap K-mers carried by more taxa than this are skipped.
+    @param[in] min_margin Minimum (best - runner-up) / n_eval margin.
+    @param[out] taxa Ascending taxa carrying every evaluated k-mer; empty when
+      the tag is not informative.
+    @param[in,out] counters Updated exactly as the 1.11 inline loop did.
+    @return True when the tag is informative.
+  */
   bool tagSupport(const TaxIndex& idx, const std::string& seq, int k,
                   std::size_t share_cap, double min_margin,
                   std::vector<uint32_t>& taxa, TagLookupCounters& counters);
 
-  /// Decoy @p j of a tag for the -species_call null (1.12 #1): a permutation
-  /// of the I/L-folded @p seq, seeded by FNV-1a 64 over (folded seq, j), so it
-  /// depends on nothing but the tag and j (not on thread, order or the
-  /// standard library's shuffle). It keeps composition and length. It never
-  /// equals the folded tag or the folded tag reversed: a permutation that does
-  /// is rotated by one position until it differs. Returns the empty string
-  /// when no rotation differs from both (a homopolymer, a two-residue tag):
-  /// that tag has no decoy.
+  /**
+    @brief Decoy @p j of a tag for the -species_call null (1.12 #1).
+
+    A permutation of the I/L-folded @p seq, seeded by FNV-1a 64 over (folded
+    seq, j), so it depends on nothing but the tag and j (not on thread, order
+    or the standard library's shuffle). It keeps composition and length. It
+    never equals the folded tag or the folded tag reversed: a permutation that
+    does is rotated by one position until it differs.
+
+    @param[in] seq The tag's base sequence.
+    @param[in] j Decoy replicate number.
+    @return The decoy, or the empty string when no rotation differs from both
+      (a homopolymer, a two-residue tag): that tag has no decoy.
+  */
   std::string decoyTag(const std::string& seq, uint32_t j);
-  /// The k-mer-keyed decoy @p j of a tag of exactly @p k residues (1.13
-  /// species redesign, DEV prototype): tagSupport() of decoyTag(@p seq, @p j).
-  /// Such a tag is one k-mer, so two tags with the same k-mer share its decoy
-  /// and decoy hits repeat across spectra the way target hits do. A tag longer
-  /// than k has no decoy here (*@p no_decoy set): per-k-mer decoys would lose
-  /// the k-1 overlaps the whole-tag rule depends on (they almost never hit, an
-  /// anti-conservative null) and a whole-tag shuffle is not k-mer keyed. The
-  /// 1.12 DEV species runs evaluate only 7-residue tags at index k 7.
+  /**
+    @brief The k-mer-keyed decoy @p j of a tag of exactly @p k residues.
+
+    1.13 species redesign, DEV prototype: tagSupport() of decoyTag(@p seq, @p j).
+    Such a tag is one k-mer, so two tags with the same k-mer share its decoy
+    and decoy hits repeat across spectra the way target hits do. A tag of
+    another length than k has no decoy here: per-k-mer decoys would lose the
+    k-1 overlaps the whole-tag rule depends on (they almost never hit, an
+    anti-conservative null) and a whole-tag shuffle is not k-mer keyed. The
+    1.12 DEV species runs evaluate only 7-residue tags at index k 7.
+
+    @param[in] idx The taxon k-mer index.
+    @param[in] seq The tag's base sequence.
+    @param[in] k The index k.
+    @param[in] j Decoy replicate number.
+    @param[in] share_cap K-mers carried by more taxa than this are skipped.
+    @param[in] min_margin Minimum (best - runner-up) / n_eval margin.
+    @param[out] taxa Taxa supporting the decoy (cleared first).
+    @param[in,out] counters Updated by tagSupport() of the decoy.
+    @param[out] no_decoy If not null, set to true when the tag has no decoy
+      (length != k or no decoyTag()), false otherwise.
+    @return True when the decoy is informative.
+  */
   bool kmerDecoySupport(const TaxIndex& idx, const std::string& seq, int k, uint32_t j,
                         std::size_t share_cap, double min_margin,
                         std::vector<uint32_t>& taxa, TagLookupCounters& counters, bool* no_decoy);
-  /// @p seq reversed and I/L folded: the reading of a tag written N->C under a
-  /// y-ion assumption when it was really read from b ions.
+  /**
+    @brief A tag reversed and I/L folded.
+
+    The reading of a tag written N->C under a y-ion assumption when it was
+    really read from b ions.
+
+    @param[in] seq The tag's base sequence.
+    @return @p seq reversed and I/L folded.
+  */
   std::string reversedFolded(const std::string& seq);
 
-  /// Run-level counts of the orientation rule (1.12 #10), one per tag looked
-  /// up under SpeciesOrientation::Both. Tags that are informative in neither
-  /// orientation are not counted.
+  /**
+    @brief Run-level counts of the orientation rule (1.12 #10).
+
+    One per tag looked up under SpeciesOrientation::BOTH. Tags that are
+    informative in neither orientation are not counted.
+  */
   struct OrientationCounts
   {
     uint64_t forward = 0;       ///< informative only as written
@@ -87,13 +127,27 @@ namespace FASTag
     uint64_t palindrome = 0;    ///< folded tag equals its reverse: looked up once
   };
 
-  /// The taxa supporting one tag in the orientations @p orient asks for.
-  /// Forward: tagSupport(seq) exactly, @p rev_counters and @p oc untouched.
-  /// Both: tagSupport() of @p seq (counted in @p counters) and of
-  /// reversedFolded(@p seq) (counted in @p rev_counters, so the forward
-  /// counters equal a forward run's), combined by combineOrientations(); a
-  /// palindrome (folded) is looked up once. Returns true and fills @p taxa
-  /// when the combined support is non-empty. @p oc may be null.
+  /**
+    @brief The taxa supporting one tag in the orientations @p orient asks for.
+
+    Forward: tagSupport(seq) exactly, @p rev_counters and @p oc untouched.
+    Both: tagSupport() of @p seq (counted in @p counters) and of
+    reversedFolded(@p seq) (counted in @p rev_counters, so the forward
+    counters equal a forward run's), combined by combineOrientations(); a
+    palindrome (folded) is looked up once.
+
+    @param[in] idx The taxon k-mer index.
+    @param[in] seq The tag's base sequence.
+    @param[in] k The index k.
+    @param[in] share_cap K-mers carried by more taxa than this are skipped.
+    @param[in] min_margin Minimum (best - runner-up) / n_eval margin.
+    @param[in] orient Forward only, or both orientations.
+    @param[out] taxa The combined supporting taxa.
+    @param[in,out] counters Filter counters of the forward lookup.
+    @param[in,out] rev_counters Filter counters of the reversed lookup.
+    @param[in,out] oc If not null, the orientation outcome is counted here.
+    @return True when the combined support is non-empty.
+  */
   bool orientedTagSupport(const TaxIndex& idx, const std::string& seq, int k,
                           std::size_t share_cap, double min_margin, SpeciesOrientation orient,
                           std::vector<uint32_t>& taxa, TagLookupCounters& counters,

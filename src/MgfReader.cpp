@@ -29,11 +29,11 @@ namespace FASTag
 {
   namespace
   {
-    constexpr std::string_view kBegin = "BEGIN IONS";
-    constexpr std::string_view kEnd = "END IONS";
+    constexpr std::string_view BEGIN_IONS = "BEGIN IONS";
+    constexpr std::string_view END_IONS = "END IONS";
     /// A block buffer above this is released after use, so one huge block
     /// does not stay resident in every thread.
-    constexpr std::size_t kKeepBuffer = std::size_t{4} << 20;
+    constexpr std::size_t KEEP_BUFFER = std::size_t{4} << 20;
 
     /// What OpenMS's trim() removes, less '\n', which ends the line.
     bool is_trim(char c) { return c == ' ' || c == '\t' || c == '\r'; }
@@ -87,7 +87,7 @@ namespace FASTag
     }
 
     /// The TITLE line of @p block, for a message: sanitised and cut to
-    /// kTitleInMessages bytes on a character boundary. Empty when none.
+    /// TITLE_IN_MESSAGES bytes on a character boundary. Empty when none.
     std::string title_for_message(std::string_view block)
     {
       std::size_t pos = 0;
@@ -100,9 +100,9 @@ namespace FASTag
         if (line.substr(0, 6) != "TITLE=") continue;
         bool changed = false;
         std::string t = sanitise(trim(line.substr(6)), changed);
-        if (t.size() > MgfReader::kTitleInMessages)
+        if (t.size() > MgfReader::TITLE_IN_MESSAGES)
         {
-          std::size_t cut = MgfReader::kTitleInMessages;
+          std::size_t cut = MgfReader::TITLE_IN_MESSAGES;
           while (cut > 0 && (static_cast<unsigned char>(t[cut]) & 0xC0) == 0x80) --cut;
           t.resize(cut);
           t += "...";
@@ -208,12 +208,12 @@ namespace FASTag
 
     /// A marker line, in one word: where a BEGIN IONS line starts, or the
     /// byte past an END IONS line (past its '\n'), which is all the merge
-    /// needs of each, with kEndBit set for END IONS. 16 bytes per block while
+    /// needs of each, with END_BIT set for END IONS. 16 bytes per block while
     /// the scan runs instead of 48.
     using Marker = std::uint64_t;
-    constexpr Marker kEndBit = Marker{1} << 63;
-    std::uint64_t marker_at(Marker m) { return m & ~kEndBit; }
-    bool is_end(Marker m) { return (m & kEndBit) != 0; }
+    constexpr Marker END_BIT = Marker{1} << 63;
+    std::uint64_t marker_at(Marker m) { return m & ~END_BIT; }
+    bool is_end(Marker m) { return (m & END_BIT) != 0; }
     /// File order. An END IONS line's end can be the next BEGIN IONS line's
     /// start; the END comes first.
     bool marker_less(Marker a, Marker b)
@@ -274,7 +274,7 @@ namespace FASTag
 
     // Read past each piece's end by one needle length less a byte, so a marker
     // whose first byte is in the piece is seen whole by that piece.
-    constexpr std::size_t kOverlap = kBegin.size() - 1;
+    constexpr std::size_t OVERLAP = BEGIN_IONS.size() - 1;
     chunk_bytes = std::max<std::size_t>(chunk_bytes, 64);
     const std::uint64_t n_pieces = (size + chunk_bytes - 1) / chunk_bytes;
     std::vector<ScanPiece> pieces(static_cast<std::size_t>(n_pieces));
@@ -298,7 +298,7 @@ namespace FASTag
         {
           const std::uint64_t begin = static_cast<std::uint64_t>(p) * chunk_bytes;
           const std::uint64_t own = std::min<std::uint64_t>(chunk_bytes, size - begin);
-          const std::uint64_t len = std::min<std::uint64_t>(own + kOverlap, size - begin);
+          const std::uint64_t len = std::min<std::uint64_t>(own + OVERLAP, size - begin);
           buf.resize(static_cast<std::size_t>(len));
           in.clear();
           in.seekg(static_cast<std::streamoff>(begin));
@@ -312,7 +312,7 @@ namespace FASTag
           const std::string_view v(buf);
           for (const bool is_begin : {true, false})
           {
-            const std::string_view needle = is_begin ? kBegin : kEnd;
+            const std::string_view needle = is_begin ? BEGIN_IONS : END_IONS;
             for (std::size_t k = v.find(needle); k != std::string_view::npos && k < own; k = v.find(needle, k + 1))
             {
               const std::uint64_t at = begin + k;
@@ -338,7 +338,7 @@ namespace FASTag
                 if (!is_trim(c)) { ok = false; break; }
                 ++line_end;
               }
-              if (ok) piece.markers.push_back(is_begin ? line_begin : (line_end | kEndBit));
+              if (ok) piece.markers.push_back(is_begin ? line_begin : (line_end | END_BIT));
             }
           }
           std::sort(piece.markers.begin(), piece.markers.end(), marker_less);
@@ -356,7 +356,7 @@ namespace FASTag
 
     // In file order, so an error names the lowest bad block.
     const auto structural = [&](std::uint64_t at, const std::string& reason) {
-      block_error(path, out.begin.size() - 1, at, read_some(path, at, kHeaderScan), reason);
+      block_error(path, out.begin.size() - 1, at, read_some(path, at, HEADER_SCAN), reason);
     };
     // Sized once (an upper bound: a block per BEGIN IONS), so the offsets do
     // not double while the markers are still held; each piece's markers are
@@ -418,7 +418,7 @@ namespace FASTag
       std::string text;
       const auto look = [&](std::uint64_t from, std::uint64_t to) {
         if (to <= from + 2) return;
-        const std::uint64_t n = std::min<std::uint64_t>(to - from, kHeaderScan);
+        const std::uint64_t n = std::min<std::uint64_t>(to - from, HEADER_SCAN);
         text.resize(static_cast<std::size_t>(n));
         in.clear();
         in.seekg(static_cast<std::streamoff>(from));
@@ -469,15 +469,15 @@ namespace FASTag
       if (line.empty()) continue;
       if (!begun)
       {
-        begun = line == kBegin;
+        begun = line == BEGIN_IONS;
         continue;
       }
-      if (line == kEnd)
+      if (line == END_IONS)
       {
         ended = true;
         break;
       }
-      if (line == kBegin) bad("a second BEGIN IONS inside the block");
+      if (line == BEGIN_IONS) bad("a second BEGIN IONS inside the block");
       const char c0 = line[0];
       // Mascot's comment characters, anywhere in a block.
       if (c0 == '#' || c0 == ';' || c0 == '!' || c0 == '/') continue;
@@ -630,12 +630,12 @@ namespace FASTag
   {
     impl_->path = path;
     impl_->blocks = std::make_shared<const Blocks>(scanBlocks(path, chunk_bytes, max_block));
-    // The text before the first block, at most kHeaderScan bytes of it: a
+    // The text before the first block, at most HEADER_SCAN bytes of it: a
     // file-level CHARGE= there is a Mascot default this reader does not apply.
     {
       const Blocks& b = *impl_->blocks;
       const std::string head =
-          read_some(path, b.data_start, std::min<std::uint64_t>(b.begin[0] - b.data_start, kHeaderScan));
+          read_some(path, b.data_start, std::min<std::uint64_t>(b.begin[0] - b.data_start, HEADER_SCAN));
       std::size_t pos = 0;
       while (pos < head.size() && !impl_->header_charge)
       {
@@ -691,7 +691,7 @@ namespace FASTag
                                       "): its bytes could not be read (the file changed after it was scanned?)");
     }
     parseBlock(buf, i, b.begin[i], impl_->path, spec, impl_->counts);
-    if (buf.capacity() > kKeepBuffer) std::string().swap(buf);
+    if (buf.capacity() > KEEP_BUFFER) std::string().swap(buf);
     return spec;
   }
 

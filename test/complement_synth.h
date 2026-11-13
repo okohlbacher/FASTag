@@ -30,7 +30,7 @@
 
 namespace ComplementSynth
 {
-  constexpr double kC13 = 1.0033548378;  ///< 13C - 12C
+  constexpr double C13_MASS_DIFF = 1.0033548378;  ///< 13C - 12C
 
   inline double u01(std::mt19937& rng) { return (rng() >> 8) * (1.0 / 16777216.0); }
 
@@ -47,7 +47,7 @@ namespace ComplementSynth
     for (int k = 0; k <= iso; ++k)
     {
       if (k > 0) term *= lambda / k;
-      s.emplace_back(mz + k * kC13 / z, intensity * term);
+      s.emplace_back(mz + k * C13_MASS_DIFF / z, intensity * term);
     }
   }
 
@@ -102,7 +102,7 @@ namespace ComplementSynth
     int noise;
     unsigned seed;
   };
-  inline constexpr Case kRefCases[5] = {
+  inline constexpr Case REF_CASES[5] = {
       {"VGAHAGEYGAEALER", 2, false, 2, 30, 11},
       {"SAMPLERKDLVEGFNTWQR", 3, true, 2, 40, 12},
       {"LLEQTHGGLNAIPKDEFAR", 3, false, 0, 25, 13},

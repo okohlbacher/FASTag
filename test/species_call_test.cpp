@@ -284,16 +284,16 @@ int main()
     SC::Params pr; pr.alpha = 0.01; pr.tau = 0.0; pr.n_min = 5;
     SC::RunInput run; run.n_units = 1100; run.n_trials = 1200; run.decoys = 5; run.min_units = 200;
     const auto s = SC::callGenera(g, C, run, pr);
-    check(find(s, 1)->call == SC::Call::Present, "homology: the strong genus is present");
+    check(find(s, 1)->call == SC::Call::PRESENT, "homology: the strong genus is present");
     check(near(find(s, 2)->spill, 0.02 * 1000.0), "homology: spill = C[g][h] * N_h");
-    check(find(s, 2)->call == SC::Call::NoCall && find(s, 2)->reason == "near_neighbour",
+    check(find(s, 2)->call == SC::Call::NO_CALL && find(s, 2)->reason == "near_neighbour",
           "homology: a sister at C*N is a near_neighbour no_call");
     check(find(s, 2)->qvalue_random <= pr.alpha, "homology: the sister is significant on the random part alone");
-    check(find(s, 3)->call == SC::Call::Present, "homology: a sister at 3x C*N is present");
-    check(find(s, 4)->call == SC::Call::NotDetected && !find(s, 4)->tested, "homology: unrelated genus not_detected");
+    check(find(s, 3)->call == SC::Call::PRESENT, "homology: a sister at 3x C*N is present");
+    check(find(s, 4)->call == SC::Call::NOT_DETECTED && !find(s, 4)->tested, "homology: unrelated genus not_detected");
     // Without the homology term the sister at C*N would have been called.
     const auto s0 = SC::callGenera(g, {}, run, pr);
-    check(find(s0, 2)->call == SC::Call::Present, "without C the sister is called present (what the spill prevents)");
+    check(find(s0, 2)->call == SC::Call::PRESENT, "without C the sister is called present (what the spill prevents)");
     // Spill flows only from genera called present that rank above.
     std::vector<SC::GenusInput> g2 = g;
     g2[0].observed = 3;  // genus 1 no longer present (below the floor)
@@ -313,12 +313,12 @@ int main()
         {1, 300, 0, 0.30, 300}, {2, 5, 4, 0.005, 5}, {3, 9, 0, 0.009, 9},
         {4, 8, 0, 0.02, 8},     {5, 2, 0, 0.002, 2}};
     const auto s = SC::callGenera(g, {}, run, pr);
-    check(find(s, 1)->call == SC::Call::Present && find(s, 1)->reason == "pass", "outcome: present");
+    check(find(s, 1)->call == SC::Call::PRESENT && find(s, 1)->reason == "pass", "outcome: present");
     check(find(s, 1)->lod < 0, "present has no LOD");
-    check(find(s, 2)->call == SC::Call::NotDetected && find(s, 2)->reason == "not_significant", "outcome: not_significant");
-    check(find(s, 3)->call == SC::Call::NotDetected && find(s, 3)->reason == "low_share", "outcome: low_share");
-    check(find(s, 4)->call == SC::Call::NotDetected && find(s, 4)->reason == "few_genus_spectra", "outcome: few_genus_spectra");
-    check(find(s, 5)->call == SC::Call::NotDetected && !find(s, 5)->tested, "outcome: untested genus not_detected");
+    check(find(s, 2)->call == SC::Call::NOT_DETECTED && find(s, 2)->reason == "not_significant", "outcome: not_significant");
+    check(find(s, 3)->call == SC::Call::NOT_DETECTED && find(s, 3)->reason == "low_share", "outcome: low_share");
+    check(find(s, 4)->call == SC::Call::NOT_DETECTED && find(s, 4)->reason == "few_genus_spectra", "outcome: few_genus_spectra");
+    check(find(s, 5)->call == SC::Call::NOT_DETECTED && !find(s, 5)->tested, "outcome: untested genus not_detected");
     for (uint32_t tx : {2u, 3u, 4u, 5u})
       check(std::isfinite(find(s, tx)->lod) && find(s, tx)->lod > 0 && find(s, tx)->lod <= 1.0,
             "not_detected carries a finite LOD");
@@ -333,7 +333,7 @@ int main()
     const double thr = pr.alpha * (R + 1) / m;
     uint64_t o = 0;
     while (tailRef(o, 4.5) > thr) ++o;
-    o = std::max<uint64_t>({o, pr.n_min, Taxonomy::kObservedFloor,
+    o = std::max<uint64_t>({o, pr.n_min, Taxonomy::OBSERVED_FLOOR,
                             static_cast<uint64_t>(std::ceil(pr.tau * run.n_units))});
     check(near(t2.lod, static_cast<double>(o) / 1000.0), "LOD by hand");
     // Monotone: a larger lambda never lowers the LOD.
@@ -344,16 +344,16 @@ int main()
     // Run-level no_calls override everything.
     SC::RunInput few = run; few.n_units = 150;
     for (const auto& x : SC::callGenera(g, {}, few, pr))
-      check(x.call == SC::Call::NoCall && x.reason == "few_spectra" && x.lod < 0, "outcome: few_spectra");
+      check(x.call == SC::Call::NO_CALL && x.reason == "few_spectra" && x.lod < 0, "outcome: few_spectra");
     SC::RunInput da = run; da.low_resolution = true;
     for (const auto& x : SC::callGenera(g, {}, da, pr))
-      check(x.call == SC::Call::NoCall && x.reason == "low_resolution", "outcome: low_resolution");
+      check(x.call == SC::Call::NO_CALL && x.reason == "low_resolution", "outcome: low_resolution");
     // low_resolution wins over few_spectra.
     SC::RunInput both = few; both.low_resolution = true;
     check(SC::callGenera(g, {}, both, pr)[0].reason == "low_resolution", "low_resolution checked first");
-    check(std::string(SC::callName(SC::Call::Present)) == "present"
-              && std::string(SC::callName(SC::Call::NoCall)) == "no_call"
-              && std::string(SC::callName(SC::Call::NotDetected)) == "not_detected",
+    check(std::string(SC::callName(SC::Call::PRESENT)) == "present"
+              && std::string(SC::callName(SC::Call::NO_CALL)) == "no_call"
+              && std::string(SC::callName(SC::Call::NOT_DETECTED)) == "not_detected",
           "call names");
   }
 
@@ -459,7 +459,7 @@ int main()
     check(near(find(s2, 10)->random_expected, 76.3), "cycle: X random part 76.3");
     for (uint32_t t : {10u, 20u})
     {
-      check(find(s2, t)->call == SC::Call::NoCall && find(s2, t)->reason == "unstable",
+      check(find(s2, t)->call == SC::Call::NO_CALL && find(s2, t)->reason == "unstable",
             "cycle: genus " + std::to_string(t) + " is no_call unstable");
       check(find(s2, t)->spill == 0.0, "cycle: no spill from a genus that is not called present");
     }
@@ -479,8 +479,8 @@ int main()
       std::vector<SC::GenusInput> g = {{10, 200, 381, 0.2, 200.0}, {20, 40, 0, 0.04, 40.0}};
       const std::vector<double> C = {1.0, 0.0, 0.2, 1.0};
       const auto s = SC::callGenera(g, C, run, pr);
-      check(find(s, 10)->call == SC::Call::Present, "no cycle: X present");
-      check(find(s, 20)->call == SC::Call::NoCall && find(s, 20)->reason == "near_neighbour" &&
+      check(find(s, 10)->call == SC::Call::PRESENT, "no cycle: X present");
+      check(find(s, 20)->call == SC::Call::NO_CALL && find(s, 20)->reason == "near_neighbour" &&
                 near(find(s, 20)->spill, 0.2 * 200.0),
             "no cycle: Y near_neighbour on X's spill");
     }
@@ -504,10 +504,10 @@ int main()
                                      0.0, 0.0, 1.0};
       const auto s = SC::callGenera(g, C, run, pr);
       const auto* z = find(s, 30);
-      check(find(s, 10)->call == SC::Call::Present, "BH coupling: X present");
+      check(find(s, 10)->call == SC::Call::PRESENT, "BH coupling: X present");
       check(z->spill == 0.0 && z->qvalue_random <= pr.alpha && z->qvalue > pr.alpha,
             "BH coupling: Z significant on the random part only, without spill");
-      check(z->call == SC::Call::NotDetected && z->reason == "not_significant",
+      check(z->call == SC::Call::NOT_DETECTED && z->reason == "not_significant",
             "BH coupling: Z not_detected, not near_neighbour");
     }
   }
@@ -537,7 +537,7 @@ int main()
       for (auto& x : g) x.share = static_cast<double>(x.observed) / static_cast<double>(units);
       SC::Params pr; pr.alpha = 0.01; pr.tau = 0.0; pr.n_min = 5;
       SC::RunInput run; run.n_units = units; run.n_trials = units; run.decoys = 5; run.min_units = 50;
-      for (const auto& s : SC::callGenera(g, {}, run, pr)) if (s.call == SC::Call::Present) ++false_present;
+      for (const auto& s : SC::callGenera(g, {}, run, pr)) if (s.call == SC::Call::PRESENT) ++false_present;
     }
     check(false_present == 0, "all-decoy runs: no genus present (" + std::to_string(false_present) + ")");
   }
@@ -547,15 +547,15 @@ int main()
     // The decoys of a spectrum's tags carry the targets' E-values; the decoy
     // spectrum counts for the taxa of its best informative decoy tag.
     std::vector<TagSupport> dec = {{0.01, {}}, {5.0, {7}}, {9.0, {8}}};
-    check(spectrumTaxa(dec, SpeciesEvidence::Best) == std::set<uint32_t>({7}), "decoy list: best informative decoy");
+    check(spectrumTaxa(dec, SpeciesEvidence::BEST) == std::set<uint32_t>({7}), "decoy list: best informative decoy");
     const double nan = std::numeric_limits<double>::quiet_NaN();
     std::vector<TagSupport> dn = {{nan, {7}}, {nan, {8}}};
-    check(spectrumTaxa(dn, SpeciesEvidence::Best) == std::set<uint32_t>({7, 8}), "decoy list: NaN E-values unite");
+    check(spectrumTaxa(dn, SpeciesEvidence::BEST) == std::set<uint32_t>({7, 8}), "decoy list: NaN E-values unite");
     // NaN in callGenera inputs cannot produce a present call.
     SC::Params pr; pr.alpha = 0.01; pr.n_min = 5;
     SC::RunInput run; run.n_units = 1000; run.n_trials = 1000; run.decoys = 5; run.min_units = 50;
     std::vector<SC::GenusInput> g = {{1, 50, 0, nan, 50}};
-    check(SC::callGenera(g, {}, run, pr)[0].call != SC::Call::Present, "NaN share is never present");
+    check(SC::callGenera(g, {}, run, pr)[0].call != SC::Call::PRESENT, "NaN share is never present");
   }
 
   // ---- 11. the parameter file -------------------------------------------------

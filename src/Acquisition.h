@@ -83,7 +83,9 @@
 
 namespace FASTag::Acquisition
 {
-  /// What the probe records per MS2 (from its first precursor).
+  /**
+    @brief What the probe records per MS2 (from its first precursor).
+  */
   struct Ms2Meta
   {
     double x = 0;       ///< selected-ion m/z: what FASTag tags with
@@ -95,19 +97,25 @@ namespace FASTag::Acquisition
     bool provenance = false;  ///< written by a pseudo-DDA generator (DIAspeXtract, diaTracer)
   };
 
+  /**
+    @brief The acquisition mode a run is classified as.
+  */
   enum class Mode
   {
-    Undetermined,  ///< too few repeats to judge (or no MS2)
-    DDA,
-    PseudoDDA,  ///< provenance of a pseudo-DDA generator
+    UNDETERMINED,  ///< too few repeats to judge (or no MS2)
+    DDA,           ///< data-dependent acquisition
+    PSEUDO_DDA,  ///< provenance of a pseudo-DDA generator
     PRM,        ///< periodic, but the windows do not tile a range (targeted)
-    DIALike,    ///< periodic and tiling, but mostly charged: warn, tag
+    DIA_LIKE,    ///< periodic and tiling, but mostly charged: warn, tag
     DIA,        ///< raw DIA: refuse
   };
 
-  /// The classifier's thresholds, frozen after the development sweep
-  /// (validation-registry E7-09); the values of PLAN-data-types.md (item #7)
-  /// except min_periodicity.
+  /**
+    @brief The classifier's thresholds.
+
+    Frozen after the development sweep (validation-registry E7-09); the
+    values of PLAN-data-types.md (item #7) except min_periodicity.
+  */
   struct Thresholds
   {
     std::size_t min_gaps = 10;         ///< repeat gaps needed to judge periodicity
@@ -130,10 +138,12 @@ namespace FASTag::Acquisition
     double min_provenance = 0.5;       ///< MS2 share with pseudo-DDA provenance to pass
   };
 
-  /// The classification and the statistics behind it.
+  /**
+    @brief The classification and the statistics behind it.
+  */
   struct AcqCall
   {
-    Mode mode = Mode::Undetermined;
+    Mode mode = Mode::UNDETERMINED;  ///< the call
     bool warn = false;          ///< log a WARN (DIA-like, or a suspicious undetermined run)
     std::size_t n_ms2 = 0;      ///< MS2 probed
     std::size_t n_events = 0;   ///< after event collapse
@@ -141,7 +151,7 @@ namespace FASTag::Acquisition
     double per = 0;             ///< periodicity: share of gaps equal to the cycle
     std::size_t cycle = 0;      ///< the commonest gap, in events
     std::size_t n_win = 0;      ///< distinct rounded m/z values
-    bool periodic = false;
+    bool periodic = false;      ///< periodicity, cycle and window count pass the Thresholds
     bool closed = false;        ///< a closed window set (Thresholds::closed_*), 1.13
     double visits = 0;          ///< events per distinct rounded m/z
     double closed_share = 0;    ///< share of second-half events on an m/z seen in the first half
@@ -153,54 +163,117 @@ namespace FASTag::Acquisition
     double spacing = 0;         ///< median spacing of the distinct m/z values, Th
     double grid_share = 0;      ///< share of those spacings within nowin_grid_tolerance of the median
     double frac_uncharged = 0;  ///< of the MS2 probed
-    double frac_provenance = 0;
+    double frac_provenance = 0; ///< share of the MS2 probed with pseudo-DDA provenance
     bool im = false;            ///< most MS2 carry an ion mobility (diaPASEF)
     std::string why;            ///< one sentence for the log
   };
 
-  /// Classify the MS2 of a run, in file order.
+  /**
+    @brief Classifies the MS2 of a run.
+
+    @param[in] ms2 Per MS2, in file order (collectMs2Meta()).
+    @param[in] t Thresholds.
+    @return The classification and its statistics.
+  */
   AcqCall classifyAcquisition(const std::vector<Ms2Meta>& ms2, const Thresholds& t = Thresholds());
 
-  /// "DDA", "pseudo-DDA", "PRM/targeted", "DIA-like", "DIA", "DIA (diaPASEF)"
-  /// or "undetermined".
+  /**
+    @brief Report name of a call's mode.
+
+    @param[in] c The call.
+    @return "DDA", "pseudo-DDA", "PRM/targeted", "DIA-like", "DIA",
+      "DIA (diaPASEF)" or "undetermined".
+  */
   std::string modeName(const AcqCall& c);
 
-  /// The Ms2Meta of @p s: empty unless it is an MS2 with a precursor (what
-  /// FASTag tags). Reads only metadata. @p run_provenance marks every MS2 as
-  /// pseudo-DDA (from the file header, see mzmlHeaderProvenance()); a
-  /// spectrum also has provenance on its own when it carries a userParam
-  /// "spx_*" (DIAspeXtract) or its data processing names DIAspeXtract or
-  /// diaTracer.
+  /**
+    @brief The Ms2Meta of one spectrum.
+
+    Reads only metadata. A spectrum also has provenance on its own when it
+    carries a userParam "spx_*" (DIAspeXtract) or its data processing names
+    DIAspeXtract or diaTracer.
+
+    @param[in] s The spectrum.
+    @param[in] run_provenance Marks every MS2 as pseudo-DDA (from the file
+      header, see mzmlHeaderProvenance()).
+    @return Empty unless @p s is an MS2 with a precursor (what FASTag tags).
+  */
   std::optional<Ms2Meta> fromSpectrum(const OpenMS::MSSpectrum& s, bool run_provenance = false);
 
-  /// Probe limits: the first @p max_ms2 MS2 with a precursor, reading at
-  /// most @p max_spectra spectra (heads) in all.
+  /**
+    @brief Probe limits.
+
+    The first max_ms2 MS2 with a precursor, reading at most max_spectra
+    spectra (heads) in all.
+  */
   struct ProbeLimits
   {
-    std::size_t max_ms2 = 4000;
-    std::size_t max_spectra = 40000;
+    std::size_t max_ms2 = 4000;       ///< MS2 with a precursor to collect
+    std::size_t max_spectra = 40000;  ///< spectra to read in all
   };
 
-  /// Ms2Meta of the first MS2 among spectra 0..n_total-1, read through
-  /// @p read (metadata only is enough). A leading MS1-only stretch is crossed
-  /// up to the spectra limit.
+  /**
+    @brief Ms2Meta of the first MS2 of a run.
+
+    A leading MS1-only stretch is crossed up to the spectra limit.
+
+    @param[in] n_total Number of spectra (indices 0..n_total-1).
+    @param[in] read Reads spectrum i (metadata only is enough).
+    @param[in] limits Probe limits.
+    @param[in] run_provenance Marks every MS2 as pseudo-DDA (fromSpectrum()).
+    @return Per MS2 with a precursor, in file order.
+  */
   std::vector<Ms2Meta> collectMs2Meta(std::size_t n_total, const std::function<OpenMS::MSSpectrum(std::size_t)>& read,
                                       const ProbeLimits& limits, bool run_provenance = false);
 
-  /// True when the head of mzML @p path (up to its spectrumList) names a
-  /// pseudo-DDA generator: DIAspeXtract (its software entry or an spx:
-  /// userParam) or diaTracer (its software id). Reads at most 4 MB.
+  /**
+    @brief Whether the head of an mzML names a pseudo-DDA generator.
+
+    The head is the part up to its spectrumList; the generators are
+    DIAspeXtract (its software entry or an spx: userParam) or diaTracer (its
+    software id). Reads at most 4 MB.
+
+    @param[in] path mzML path.
+    @return true when a generator is named; false also when the file cannot be opened.
+  */
   bool mzmlHeaderProvenance(const std::string& path);
 
-  /// The refusal message (one paragraph) for raw DIA @p in.
+  /**
+    @brief The refusal message (one paragraph) for raw DIA @p in.
+
+    @param[in] c The call.
+    @param[in] in Input path.
+    @return The message.
+  */
   std::string refusalMessage(const AcqCall& c, const std::string& in);
-  /// The machine-readable stderr line of a refusal:
-  /// "FASTAG_REFUSED reason=raw_dia windows=<n> median_width=<w>".
+  /**
+    @brief The machine-readable stderr line of a refusal.
+
+    @param[in] c The call.
+    @return "FASTAG_REFUSED reason=raw_dia windows=<n> median_width=<w>".
+  */
   std::string refusalSentinel(const AcqCall& c);
-  /// The WARN for a DIA-like or suspicious undetermined run; empty if none.
+  /**
+    @brief The WARN for a DIA-like or suspicious undetermined run.
+
+    @param[in] c The call.
+    @param[in] in Input path.
+    @return The message; empty if none.
+  */
   std::string warningMessage(const AcqCall& c, const std::string& in);
-  /// The WARN when -acquisition_check warn tags raw DIA anyway.
+  /**
+    @brief The WARN when -acquisition_check warn tags raw DIA anyway.
+
+    @param[in] c The call.
+    @param[in] in Input path.
+    @return The message.
+  */
   std::string taggedAnywayMessage(const AcqCall& c, const std::string& in);
-  /// The one INFO line every probed run logs.
+  /**
+    @brief The one INFO line every probed run logs.
+
+    @param[in] c The call.
+    @return The line.
+  */
   std::string infoLine(const AcqCall& c);
 }

@@ -114,7 +114,7 @@ namespace FASTag
                           std::vector<uint32_t>& taxa, TagLookupCounters& counters,
                           TagLookupCounters& rev_counters, OrientationCounts* oc)
   {
-    if (orient == SpeciesOrientation::Forward)
+    if (orient == SpeciesOrientation::FORWARD)
       return tagSupport(idx, seq, k, share_cap, min_margin, taxa, counters);
     std::vector<uint32_t> fwd;
     tagSupport(idx, seq, k, share_cap, min_margin, fwd, counters);
@@ -133,11 +133,11 @@ namespace FASTag
     {
       switch (o)
       {
-        case OrientationOutcome::Forward: ++oc->forward; break;
-        case OrientationOutcome::Reverse: ++oc->reverse; break;
-        case OrientationOutcome::Intersection: ++oc->intersection; break;
-        case OrientationOutcome::Ambiguous: ++oc->ambiguous; break;
-        case OrientationOutcome::None: break;
+        case OrientationOutcome::FORWARD: ++oc->forward; break;
+        case OrientationOutcome::REVERSE: ++oc->reverse; break;
+        case OrientationOutcome::INTERSECTION: ++oc->intersection; break;
+        case OrientationOutcome::AMBIGUOUS: ++oc->ambiguous; break;
+        case OrientationOutcome::NONE: break;
       }
     }
     return !taxa.empty();

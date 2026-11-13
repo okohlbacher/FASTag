@@ -180,7 +180,7 @@ namespace
     P::ProbeOptions opt;
     opt.version = "test";
     const P::ProbeOutput e = P::probeInput(dir + "/Ecoli_MS2_small.mzML", opt);
-    check(e.status == P::Status::Ok, "Ecoli probe ok: " + e.error);
+    check(e.status == P::Status::OK, "Ecoli probe ok: " + e.error);
     check(e.jsonl.rfind("{\"record\":\"probe\",\"format\":1", 0) == 0, "probe record first");
     check(has(e.jsonl, "{\"record\":\"end\"}\n") && e.jsonl.size() >= 17 &&
               e.jsonl.compare(e.jsonl.size() - 17, 17, "{\"record\":\"end\"}\n") == 0,
@@ -194,7 +194,7 @@ namespace
     check(field(record(e.jsonl, "acquisition"), "refuse") == "false", "Ecoli not refused");
 
     const P::ProbeOutput d = P::probeInput(dir + "/dia_like.mzML", opt);
-    check(d.status == P::Status::Ok, "dia probe ok");
+    check(d.status == P::Status::OK, "dia probe ok");
     const std::string a = record(d.jsonl, "acquisition");
     check(field(a, "mode") == "DIA" && field(a, "refuse") == "true", "raw DIA refused: " + a);
     opt.acquisition_check = "warn";
@@ -203,7 +203,7 @@ namespace
     opt.acquisition_check = "refuse";
 
     const P::ProbeOutput m = P::probeInput(dir + "/Ecoli_MS2_small.mgf", opt);
-    check(m.status == P::Status::Ok, "MGF probe ok");
+    check(m.status == P::Status::OK, "MGF probe ok");
     check(field(record(m.jsonl, "probe"), "file_format") == "MGF", "MGF format");
     check(field(record(m.jsonl, "index"), "state") == "not_applicable", "MGF index n/a");
     check(field(record(m.jsonl, "spectra"), "ms2") == "139", "MGF 139 MS2");
@@ -217,17 +217,17 @@ namespace
               !P::isFastaPath(".fa"),
           "FASTA names");
     const P::ProbeOutput fa = P::probeInput(dir + "/Ecoli_MS2_small.fasta", opt);
-    check(fa.status == P::Status::Ok, "FASTA probe ok: " + fa.error);
+    check(fa.status == P::Status::OK, "FASTA probe ok: " + fa.error);
     check(field(record(fa.jsonl, "probe"), "file_format") == "FASTA", "FASTA format");
     const std::string fr = record(fa.jsonl, "fasta");
     check(!fr.empty() && field(fr, "decoys") == "0" && field(fr, "proteins") != "null", "FASTA counts: " + fr);
     check(record(fa.jsonl, "spectra").empty() && record(fa.jsonl, "acquisition").empty(), "FASTA alone reads no spectra");
     check(fa.jsonl.size() >= 17 && fa.jsonl.compare(fa.jsonl.size() - 17, 17, "{\"record\":\"end\"}\n") == 0,
           "FASTA probe ends with the end record");
-    check(P::probeInput(dir + "/missing.fasta", opt).status == P::Status::NotReadable, "missing FASTA not readable");
+    check(P::probeInput(dir + "/missing.fasta", opt).status == P::Status::NOT_READABLE, "missing FASTA not readable");
 
-    check(P::probeInput(dir + "/nope.txt", opt).status == P::Status::Unsupported, "unsupported extension");
-    check(P::probeInput(dir + "/x.mzML.gz", opt).status == P::Status::Unsupported, "compressed refused");
+    check(P::probeInput(dir + "/nope.txt", opt).status == P::Status::UNSUPPORTED, "unsupported extension");
+    check(P::probeInput(dir + "/x.mzML.gz", opt).status == P::Status::UNSUPPORTED, "compressed refused");
   }
 
   void dumps(const std::string& dir)
@@ -240,13 +240,13 @@ namespace
     while (i < exp.size() && exp[i].getMSLevel() != 2) ++i;
     const MSSpectrum& s = exp[i];
     const P::DumpOutput r = P::dumpSpectrum(dir + "/Ecoli_MS2_small.mzML", s.getNativeID(), opt);
-    check(r.status == P::Status::Ok && r.found, "dump found " + s.getNativeID());
+    check(r.status == P::Status::OK && r.found, "dump found " + s.getNativeID());
     const std::string rec = record(r.jsonl, "spectrum");
     check(rec == P::spectrumRecord(s, i, false, opt.param).substr(0, rec.size()), "dump equals the record of OpenMS's read");
     const P::DumpOutput mg = P::dumpSpectrum(dir + "/Ecoli_MS2_small.mgf", "index=" + std::to_string(i), opt);
     check(mg.found && field(record(mg.jsonl, "spectrum"), "mz") == field(rec, "mz"), "MGF twin: same peaks");
     const P::DumpOutput no = P::dumpSpectrum(dir + "/Ecoli_MS2_small.mzML", "scan=does-not-exist", opt);
-    check(no.status == P::Status::Ok && !no.found && no.jsonl.empty(), "unknown id: not found, no stream");
+    check(no.status == P::Status::OK && !no.found && no.jsonl.empty(), "unknown id: not found, no stream");
   }
 }
 
