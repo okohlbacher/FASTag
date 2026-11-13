@@ -227,11 +227,11 @@ namespace FASTag
     size_t residueCount() const { return residues_; }
 
   private:
-    static Kmer128 encode(const char* s, int n);
-    static Kmer128 reverseKey(Kmer128 v, int k);
-    bool hasKey(int k, const Kmer128& e) const;
-    bool contains(const std::string& t) const;
-    void emitReadings(const std::string& seq, size_t i, int k, std::string& cur,
+    static Kmer128 encode_(const char* s, int n);
+    static Kmer128 reverseKey_(Kmer128 v, int k);
+    bool hasKey_(int k, const Kmer128& e) const;
+    bool contains_(const std::string& t) const;
+    void emitReadings_(const std::string& seq, size_t i, int k, std::string& cur,
                       std::vector<Kmer128>& out, size_t& budget) const;
 
     bool both_;
