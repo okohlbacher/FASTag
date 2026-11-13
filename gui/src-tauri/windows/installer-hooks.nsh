@@ -23,6 +23,7 @@ Var FastagOtherUninst
 Var FastagOtherDir
 Var FastagOtherArgs
 Var FastagOtherCode
+Var FastagTries
 
 !macro NSIS_HOOK_PREINSTALL
   StrCpy $FastagOtherUninst ""
@@ -57,7 +58,20 @@ Var FastagOtherCode
         MessageBox MB_OK|MB_ICONEXCLAMATION "The ${PRODUCTNAME} installed earlier in $FastagOtherDir could not be removed (uninstaller: $FastagOtherCode). Uninstall it in Settings > Apps after this installation." /SD IDOK
       ${Else}
         ; Run in place, the uninstaller cannot delete itself or its folder.
-        Delete "$FastagOtherDir\uninstall.exe"
+        ; Its process can hold the file for a moment after ExecWait returns
+        ; (seen under x64 emulation on Windows on ARM64), so retry for 10 s.
+        StrCpy $FastagTries 0
+        fastag_del_uninst:
+          Delete "$FastagOtherDir\uninstall.exe"
+          ${If} ${FileExists} "$FastagOtherDir\uninstall.exe"
+          ${AndIf} $FastagTries < 20
+            IntOp $FastagTries $FastagTries + 1
+            Sleep 500
+            Goto fastag_del_uninst
+          ${EndIf}
+        ${If} ${FileExists} "$FastagOtherDir\uninstall.exe"
+          DetailPrint "Could not delete $FastagOtherDir\uninstall.exe; delete it by hand."
+        ${EndIf}
         RMDir "$FastagOtherDir"
         DetailPrint "Removed the old ${PRODUCTNAME} in $FastagOtherDir (uninstaller exit $FastagOtherCode)."
       ${EndIf}
