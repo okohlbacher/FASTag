@@ -116,7 +116,7 @@ find_package(ZLIB REQUIRED)
 # ---- 1.12 G: executable sources ----
 # G1: -probe_input and -dump_spectrum, which read through the readers below.
 set(FASTAG_EXE_SOURCES_G src/InputProbe.cpp)
-add_executable(FASTag src/FASTag.cpp src/FASTagOptions.cpp src/FASTagReports.cpp src/FASTagModes.cpp
+add_executable(FASTag src/FASTag.cpp src/FASTagOptions.cpp src/FASTagReports.cpp src/FASTagModes.cpp src/FASTagSpecies.cpp
                src/IndexedMzMLReader.cpp src/MzMLDirectDecoder.cpp src/MgfReader.cpp src/MzPeakStream.cpp
                src/AcquisitionProbe.cpp ${FASTAG_EXE_SOURCES_G})
 

@@ -13,6 +13,8 @@
 
 #pragma once
 
+#include <optional>
+
 #include <OpenMS/CONCEPT/VersionInfo.h>
 #include <OpenMS/APPLICATIONS/ParameterInformation.h>
 #include <OpenMS/APPLICATIONS/TOPPBase.h>
@@ -135,6 +137,9 @@ static inline int omp_get_max_threads() { return 1; }
 static inline int omp_get_thread_num() { return 0; }
 #endif
 
+
+/// Directory holding the bundled taxonomy, or "" when there is none (FASTag.cpp).
+std::string taxonomyDir_();
 
 /// @name State shared by the tool units
 //@{
@@ -341,6 +346,29 @@ protected:
 
   /// 1.12 G1 -dump_spectrum: one spectrum's tagged peaks as JSON lines.
   ExitCodes dumpSpectrumMode_(const std::string& in, const FASTag::Param& p);
+
+  /**
+    @brief Species detection from the tags (-species, -species_call): phase 10 of main_().
+
+    Taxonomic / species detection from the tags.
+
+    For every spectrum, the SET of taxa its tags support (a tag supports a
+    taxon when every one of its k-mers is in that taxon -- intersection, so a
+    longer tag is more specific). Each taxon is counted ONCE per spectrum, not
+    per tag, so correlated tags from one spectrum cannot manufacture evidence.
+    Roll the per-leaf counts up the taxonomy, compare each node against the
+    breadth it has in the index, and rank. The q-value is a ranking aid, not a
+    calibrated FDR: the per-k-mer background is a proxy and the chimeric-null
+    problem described for -entrapment_fasta applies here too.
+
+    The parameters are main_()'s locals of the same names.
+    @return the exit code main_() returns, or std::nullopt to continue
+  */
+  std::optional<ExitCodes> detectSpecies_(bool want_species, FASTag::SpeciesOrientation species_orient, bool species_both,
+                                          bool species_call_on, FASTag::SpeciesCall::Params& species_call_params,
+                                          std::string& species_call_params_path, const std::string& in,
+                                          const std::string& out, std::vector<int>& lengths, const char* length_opt,
+                                          std::map<std::string, std::vector<std::pair<std::string, double>>>& by_spec);
 
   ExitCodes main_(int, const char**) override;
 };
