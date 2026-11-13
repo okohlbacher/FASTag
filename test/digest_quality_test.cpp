@@ -64,7 +64,7 @@ int main()
   // ---- site residues: model above background
   {
     const auto s = D::siteResidues(model(t, "Trypsin").c, t.bg_c);
-    check(s.size() == 2 && s[0] == D::aaIndex('K') && s[1] == D::aaIndex('R'), "Trypsin C sites are K, R (kAAs order)");
+    check(s.size() == 2 && s[0] == D::aaIndex('K') && s[1] == D::aaIndex('R'), "Trypsin C sites are K, R (AAS order)");
     check(D::siteResidues(model(t, "Asp-N").n, t.bg_n) == std::vector<int>{D::aaIndex('D')}, "Asp-N N site is D");
     D::Dist flat{};
     flat.fill(1.0);

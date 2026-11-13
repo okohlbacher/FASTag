@@ -210,7 +210,7 @@ int main(int argc, char** argv)
     check(q.spectra == 0 && q.tags_with_c == 4, "no vote with a C at an end of the best tag");
     q.addTag(q4, tag("LC[Carbamidomethyl]EK", 2.0 * AT::VOTE_MAX_EVALUE), cands);
     q.addSpectrum(q4);
-    check(q.spectra == 0, "no vote above kVoteMaxEvalue");
+    check(q.spectra == 0, "no vote above VOTE_MAX_EVALUE");
     q.addTag(q5, tag("LC[Carbamidomethyl]EK", AT::VOTE_MAX_EVALUE), cands);
     q.addTag(q5, tag("PEPTK", AT::VOTE_MAX_EVALUE), cands);  // a tie with a tag without C keeps the vote
     q.addSpectrum(q5);

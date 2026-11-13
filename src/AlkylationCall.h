@@ -164,7 +164,7 @@ namespace FASTag::Alkylation
     @brief Report key of an outcome (alk_cys excluded.<key>).
 
     @param[in] o The outcome.
-    @return The key, "-" for kCount.
+    @return The key, "-" for Outcome::COUNT.
   */
   const char* outcomeName(Outcome o);
 
