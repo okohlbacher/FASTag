@@ -78,3 +78,58 @@ Var FastagTries
     ${EndIf}
   ${EndIf}
 !macroend
+
+; NSIS_HOOK_POSTUNINSTALL: the template deletes each file once (plain
+; Delete, errors ignored). Right after the app or its CLI ran, an executable
+; or DLL can still be held for a moment (the image section of a process that
+; is just ending, an on-access scan; seen as leftovers under x64 emulation on
+; Windows on ARM64), and the uninstaller then leaves the CLI, its DLLs and
+; uninstall.exe behind. Retry those for up to 30 s, then schedule what is
+; still held for deletion at the next restart (/REBOOTOK) and say so.
+; uninstall.exe is retried only when this uninstaller runs from its %TEMP%
+; copy; run in place (_?=, as the pre-install hook does) it is the running
+; image, which its caller deletes.
+!macro FASTAG_DELETE_HELD FLAGS
+  Delete ${FLAGS} "$INSTDIR\${MAINBINARYNAME}.exe"
+  Delete ${FLAGS} "$INSTDIR\resources\fastag\bin\*.exe"
+  Delete ${FLAGS} "$INSTDIR\resources\fastag\bin\*.dll"
+  ${If} $EXEDIR != $INSTDIR
+    Delete ${FLAGS} "$INSTDIR\uninstall.exe"
+  ${EndIf}
+!macroend
+
+!macro NSIS_HOOK_POSTUNINSTALL
+  StrCpy $FastagTries 0
+  fastag_un_retry:
+    StrCpy $FastagOtherCode 0
+    ${If} ${FileExists} "$INSTDIR\${MAINBINARYNAME}.exe"
+    ${OrIf} ${FileExists} "$INSTDIR\resources\fastag\bin\*.exe"
+    ${OrIf} ${FileExists} "$INSTDIR\resources\fastag\bin\*.dll"
+      StrCpy $FastagOtherCode 1
+    ${EndIf}
+    ${If} $EXEDIR != $INSTDIR
+    ${AndIf} ${FileExists} "$INSTDIR\uninstall.exe"
+      StrCpy $FastagOtherCode 1
+    ${EndIf}
+    ${If} $FastagOtherCode = 1
+      ${If} $FastagTries < 60
+        ${If} $FastagTries = 0
+          DetailPrint "Files of ${PRODUCTNAME} in $INSTDIR are still in use; retrying for up to 30 s."
+        ${EndIf}
+        IntOp $FastagTries $FastagTries + 1
+        Sleep 500
+        !insertmacro FASTAG_DELETE_HELD ""
+        Goto fastag_un_retry
+      ${EndIf}
+      DetailPrint "Some files in $INSTDIR are still in use; they will be deleted when Windows restarts."
+      !insertmacro FASTAG_DELETE_HELD "/REBOOTOK"
+    ${ElseIf} $FastagTries > 0
+      DetailPrint "Deleted the remaining files after $FastagTries retries."
+    ${EndIf}
+  ; Only empty folders: a file the user put into the install (the taxonomy
+  ; index) keeps its folder.
+  RMDir "$INSTDIR\resources\fastag\bin"
+  RMDir "$INSTDIR\resources\fastag"
+  RMDir "$INSTDIR\resources"
+  RMDir "$INSTDIR"
+!macroend
