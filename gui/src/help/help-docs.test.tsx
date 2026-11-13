@@ -55,7 +55,7 @@ describe('help vs docs', () => {
     [tagger, 'use_compl ? 3 : 2', 'results', 'This component is omitted when the spectrum has no complementary pairs'],
     [tagger, 'pair shares one score', 'results', 'That step counts once in Mean conf., even though its score appears twice in the residue list'],
     [readme, '`auto` reads the activation of mzML input only', 'tags', 'Automatic selection uses activation metadata from mzML only'],
-    [readme, 'or no call on a Da tolerance or below 175 C-terminal tag ends', 'digest', 'The label call needs at least 175 counted C-terminal ends by default and a ppm tolerance'],
+    [readme, 'or no call on a Da tolerance or below 175 C-terminal tag ends', 'digest', 'The label call needs at least 175 counted C-terminal ends and a ppm tolerance'],
     [readme, '`decoy_qvalue` are not calibrated', 'species', 'neither its calls nor its decoy q-values are calibrated error guarantees'],
     [readme, 'The E-value ranks tags; it is not a calibrated expected count.', 'results', 'The E-value ranks tags; it is not an error rate, and its value does not tell how many such tags arise by chance'],
     [readme, 'so it can exceed `-max_evalue`; divide by the penalty for the raw E-value', 'results', 'divide it by the gap penalty (100 by default) to compare it with the cutoff'],

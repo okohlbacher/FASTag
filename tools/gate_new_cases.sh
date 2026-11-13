@@ -13,7 +13,6 @@
 #                     line, and the sentinel at -out unchanged (nothing written)
 #   pseudo_pass   #7  the DIAspeXtract 1.7.0 pseudo-DDA mzML of the same run: exit 0, and the
 #                     tags equal to -acquisition_check off
-#   profile_mzml  #9  PXD000865 (Q Exactive, TMT8, profile MS2), -pick_profile auto
 #   charge_infer  #6  PXD003531 (Q Exactive DDA) with every precursor charge (MS:1000041)
 #                     removed (a derived input, written by --stage), -unknown_charge infer
 #                     -census: tags with the hypothesis columns and the census charge_used;
@@ -55,7 +54,7 @@ export OPENBLAS_NUM_THREADS=${OPENBLAS_NUM_THREADS:-1}
 export OPENMS_DISABLE_UPDATE_CHECK=ON
 mkdir -p "$OPENMS_TMPDIR"
 
-ALL_CASES="dia_refuse pseudo_pass profile_mzml charge_infer etd_auto species_call chem_reports census_dda census_recon"
+ALL_CASES="dia_refuse pseudo_pass charge_infer etd_auto species_call chem_reports census_dda census_recon"
 CASES=${GATE_CASES:-${GATE_NEW_CASES:-$ALL_CASES}}
 
 PA=/ceph/ibmi/abi/oliver/prose-auto-20261029
@@ -72,7 +71,6 @@ R2=PXD014764/20190412_KEH_HF_SA_ANW_R11_100419_CNOT_R1_f008
 TAXSRC=$PA/opt/FASTag/share-FASTag-taxonomy
 INPUTS="PXD006096/100815_MM_ABPP_H1993_DMSO_DIA1_new.mzML	$PA/bench2/mzml/PXD006096/100815_MM_ABPP_H1993_DMSO_DIA1_new.mzML	1a27eee3b164ec355620a02a20860a7f49b2b900fe5a6cfc9fd14bc11d6b0d42
 PXD006096/100815_MM_ABPP_H1993_DMSO_DIA1_new.pseudo.mzML	$PA/borg_ho_v9b/out/PXD006096/auto/100815_MM_ABPP_H1993_DMSO_DIA1_new.pseudo.mzML	6020bd4eaa135083d9dbd4455e1d9b2b38cb1c29c1f0f72db3cfa0cdebab27da
-PXD000865/0299_F1_R1_P77628B02_TMT8.mzML	/ceph/ibmi/abi/projects/proteomics/kuster_proteome/MZML/8/0299_F1_R1_P77628B02_TMT8.mzML	8ec0952126809c9516cb476f5a79287d1b26ce11dcf631a78d6342340c54441c
 $R1.nocharge.mzML	strip_charge:$PA/valset_all/in/$R1.mzML	19d8ee3ffc40d98f1c05a145ab3909f77334e1da0afff9b4d8db6b6ab8cdccbd
 PXD060724/Chymotrypsin_EThCD_WZ20spd_161224_1.mzML	$PA/bench2/mzml/PXD060724/Chymotrypsin_EThCD_WZ20spd_161224_1.mzML	119da2307db02cc5b9300a2ee7bcb014b99293c54d41dc8c071ee393c5f784ae
 $R1.mzML	$PA/valset_all/in/$R1.mzML	2b1da22229a9d8e8d4cde05d889c3a74dedd68bb9f00f3bdd9d78d2a8d9ace4a
@@ -98,8 +96,6 @@ define_case() { # sets PXD IN ARGS, EXTRA (further inputs under IN_DIR) and ENVS
   case $1 in
     dia_refuse)   PXD=PXD006096; IN=PXD006096/100815_MM_ABPP_H1993_DMSO_DIA1_new.mzML ;;
     pseudo_pass)  PXD=PXD006096; IN=PXD006096/100815_MM_ABPP_H1993_DMSO_DIA1_new.pseudo.mzML ;;
-    profile_mzml) PXD=PXD000865; IN=PXD000865/0299_F1_R1_P77628B02_TMT8.mzML
-                  ARGS=(-pick_profile auto -fixed_modifications 'Carbamidomethyl (C)' 'TMT6plex (K)' 'TMT6plex (N-term)') ;;
     charge_infer) PXD=PXD003531; IN=PXD003531/20130611_QE3_UPLC10_CFR_SA_OC_T_NO_03_01_01.nocharge.mzML
                   ARGS=(-unknown_charge infer -census) ;;
     etd_auto)     PXD=PXD060724; IN=PXD060724/Chymotrypsin_EThCD_WZ20spd_161224_1.mzML

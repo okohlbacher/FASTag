@@ -211,11 +211,6 @@ namespace
     const P::ProbeOutput pr = P::probeInput(dir + "/profile_ms2_small.mzML", opt);
     const std::string ps = record(pr.jsonl, "spectra");
     check(field(ps, "verdict") == "profile" && field(ps, "will_pick") == "false", "profile, legacy keeps it: " + ps);
-    opt.pick_mode = FASTag::Centroid::Mode::Auto;
-    check(field(record(P::probeInput(dir + "/profile_ms2_small.mzML", opt).jsonl, "spectra"), "will_pick") == "true",
-          "auto picks profile mzML");
-    check(field(record(P::probeInput(dir + "/Ecoli_MS2_small.mgf", opt).jsonl, "spectra"), "will_pick") == "false",
-          "auto never picks MGF");
 
     // A FASTA alone: probe, fasta and end records, no spectra records.
     check(P::isFastaPath("a/B.FASTA") && P::isFastaPath("x.fa") && P::isFastaPath("x.faa") && !P::isFastaPath("x.mzML") &&

@@ -108,8 +108,9 @@ namespace FASTag::Hyp
       }
       // 1+ pairs sum to M + 2p (b/y); a series with a pair delta (c/z-dot:
       // M + H, #15 phase B) adds it. b/y's single delta 0 leaves the sum as
-      // it was, bit for bit. A series with several deltas (a/x: M - H and M,
-      // 1.13 item 11) sums the excess over them; one delta is the old code.
+      // it was, bit for bit. A series with several deltas (none since a/x,
+      // 1.13 item 11, was removed in 1.14) sums the excess over them; one
+      // delta is the old code.
       const double base = M + 2.0 * kProton;
       if (cs.pair_deltas.size() <= 1)
       {

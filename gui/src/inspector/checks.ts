@@ -211,7 +211,7 @@ export function preStartChecks(o: {
       detail: `${pct(sp.profile, sp.probed)} of the ${sp.probed.toLocaleString('en-US')} MS2 spectra probed are profile data. They give fewer tags than centroided spectra. ${
         fmt === 'mgf'
           ? 'Centroid them first, or convert the run to mzML or mzPeak.'
-          : 'FASTag 1.12 centroids them itself with -pick_profile auto (an option of the command line); or centroid them first, or convert the run to mzPeak.'
+          : 'FASTag does not centroid profile mzML: centroid them first (e.g. msconvert with the vendor peakPicking filter), or convert the run to mzPeak, which FASTag centroids on read.'
       }`,
       faq: 'faq-no-tags',
       source: 'the probe'

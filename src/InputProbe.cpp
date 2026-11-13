@@ -693,13 +693,13 @@ namespace FASTag::Probe
 
     namespace FC = FASTag::Centroid;
     const FC::Input input = kind == Kind::MzPeak ? FC::Input::MzPeak : kind == Kind::Mgf ? FC::Input::Mgf : FC::Input::MzML;
-    const FC::Policy policy = FC::policyFor(opt.pick_mode, input, opt.pick_unknown_type);
+    const FC::Policy policy = FC::policyFor(opt.pick_mode, input);
     const char* verdict = heads.empty()           ? "none"
                           : profile == 0 && untyped == 0 ? "centroid"
                           : centroid == 0 && untyped == 0 ? "profile"
                           : profile == 0 && centroid == 0 ? "unknown"
                                                           : "mixed";
-    const char* mode_name = opt.pick_mode == FC::Mode::Auto ? "auto" : opt.pick_mode == FC::Mode::Off ? "off" : "legacy";
+    const char* mode_name = opt.pick_mode == FC::Mode::Off ? "off" : "legacy";
     j += JsonObject("spectra")
              .count("ms1", ms1)
              .count("ms2", ms2)
@@ -710,7 +710,7 @@ namespace FASTag::Probe
              .str("verdict", verdict)
              .str("pick_profile", mode_name)
              .boolean("will_pick", policy.pick && profile > 0)
-             .boolean("may_pick_unknown", policy.pick && policy.unknown && untyped > 0)
+             .boolean("may_pick_unknown", false)  // -pick_unknown_type, removed in 1.14
              .line();
 
     j += JsonObject("activation")
@@ -782,7 +782,7 @@ namespace FASTag::Probe
       if (kind == Kind::MzPeak)
       {
         out.found = readMzPeakSpectrumById(in, opt.mzpeak_threads, id,
-                                           FC::policyFor(opt.pick_mode, FC::Input::MzPeak, opt.pick_unknown_type),
+                                           FC::policyFor(opt.pick_mode, FC::Input::MzPeak),
                                            spec, index, pick_result);
       }
       else
@@ -840,8 +840,7 @@ namespace FASTag::Probe
           spec = read(index);
           PeakPickerHiRes picker;
           pick_result = FC::apply(spec, picker,
-                                  FC::policyFor(opt.pick_mode, kind == Kind::Mgf ? FC::Input::Mgf : FC::Input::MzML,
-                                                opt.pick_unknown_type));
+                                  FC::policyFor(opt.pick_mode, kind == Kind::Mgf ? FC::Input::Mgf : FC::Input::MzML));
         }
       }
     }
@@ -872,14 +871,10 @@ namespace FASTag::Probe
     namespace IS = FASTag::IonSeries;
     Param p = opt.param;
     const IS::Activation act = IS::activationClass(spec);
-    // 1.13 item 11: a/x under ax, and under auto with -ion_series_photo ax
-    // for a photo-activated mzML spectrum.
     const bool reads_act = IS::autoReadsActivation(kind == Kind::MzPeak, kind == Kind::Mgf);
-    const bool photo_ax = opt.ion_mode == IS::Mode::Auto && opt.photo_ax && reads_act && IS::photoActivated(spec);
-    const bool run_column = opt.ion_mode == IS::Mode::Cz || opt.ion_mode == IS::Mode::Ax
-                            || (opt.ion_mode == IS::Mode::Auto && reads_act
-                                && (act == IS::Activation::Electron || photo_ax));
-    const IS::Series sr = IS::seriesInRun(opt.ion_mode, act, run_column, photo_ax);
+    const bool run_column = opt.ion_mode == IS::Mode::Cz
+                            || (opt.ion_mode == IS::Mode::Auto && reads_act && act == IS::Activation::Electron);
+    const IS::Series sr = IS::seriesInRun(opt.ion_mode, act, run_column);
     if (spec.getMSLevel() == 2 && sr != IS::Series::BY) p.ion_pair = IS::ionPair(sr);
     out.jsonl = spectrumRecord(spec, index, pick_result > 0, p);
     out.jsonl += JsonObject("end").line();

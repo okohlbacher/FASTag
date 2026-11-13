@@ -28,6 +28,8 @@
 #   - -species leaves c/z rows out and says how many, also under
 #     -species_orientation both (its orientation counts exclude them);
 #   - -stream refuses -ion_series away from by;
+#   - 1.14: -ion_series ax and -ion_series_photo (a/x, removed) are accepted
+#     with one warning each and change no output;
 #   - auto through OnDisc (-out_spectra) equals the fast reader; threads 1/3/8;
 #   - with #6: -ion_series auto -unknown_charge infer on uncharged ETD spectra
 #     is identical at 1/3/8 threads, ion_series after #6's columns;
@@ -399,6 +401,30 @@ fi
 grep -q 'ion_series' "$TMP/st.out" "$TMP/st.err" || fail "the -stream refusal does not name -ion_series"
 "$BIN" -in "$SRC" -out "$TMP/st_by.tsv" -stream -ion_series by -fragment_tolerance 0.3 -fragment_tolerance_unit Da > /dev/null 2>&1 \
   || fail "-stream refuses -ion_series by (the default)"
+
+# ---- 1.14: a/x removed (failed its held-out test) ----
+# -ion_series ax is read as by and -ion_series_photo has no effect: each is
+# accepted with exactly one warning, every output as without it.
+untimed() { grep -v 'took .* (wall)' "$1" | sed -E 's/\([0-9.]+ s\)/(T s)/g'; }
+AX_WARN='-ion_series ax was removed in 1.14 (failed its held-out test); it has no effect: -ion_series by is used.'
+PH_WARN='-ion_series_photo was removed in 1.14 (failed its held-out test); it has no effect.'
+runb ax_etd "$TMP/etd_all.mzML" 2 -ion_series ax
+[ "$(grep -cF -- "$AX_WARN" "$TMP/ax_etd.err")" -eq 1 ] || fail "-ion_series ax: not exactly one removal warning"
+cmp -s "$TMP/by_etd_all.tsv" "$TMP/ax_etd.tsv" || fail "-ion_series ax: tags differ from -ion_series by"
+cmp -s "$TMP/by_etd_all.stdout" "$TMP/ax_etd.stdout" || fail "-ion_series ax: stdout differs from -ion_series by"
+cmp -s <(untimed "$TMP/by_etd_all.err") <(untimed "$TMP/ax_etd.err" | grep -vF -- "$AX_WARN") \
+  || fail "-ion_series ax: stderr differs from -ion_series by beyond the warning"
+runb ph_etd "$TMP/etd_all.mzML" 2 -ion_series auto -ion_series_photo ax -census -census_out "$TMP/ph_etd.census.tsv"
+[ "$(grep -cF -- "$PH_WARN" "$TMP/ph_etd.err")" -eq 1 ] || fail "-ion_series_photo ax: not exactly one removal warning"
+cmp -s "$TMP/auto_etd.tsv" "$TMP/ph_etd.tsv" || fail "-ion_series_photo ax: tags differ from auto"
+cmp -s "$TMP/auto_etd.census.tsv" "$TMP/ph_etd.census.tsv" || fail "-ion_series_photo ax: census differs from auto"
+cmp -s "$TMP/auto_etd.lines" "$TMP/ph_etd.lines" || fail "-ion_series_photo ax: INFO/WARN lines differ from auto"
+runb ph_by "$SRC" 2 -ion_series_photo ax
+[ "$(grep -cF -- "$PH_WARN" "$TMP/ph_by.err")" -eq 1 ] || fail "-ion_series_photo ax under by: not exactly one removal warning"
+grep -q 'only read for -ion_series auto' "$TMP/ph_by.err" && fail "-ion_series_photo still has an ignored-option warning"
+cmp -s "$TMP/base.tsv" "$TMP/ph_by.tsv" || fail "-ion_series_photo ax under by: tags differ"
+"$BIN" -in "$SRC" -out "$TMP/st_ax.tsv" -stream -ion_series ax -ion_series_photo ax -fragment_tolerance 0.3 \
+  -fragment_tolerance_unit Da > /dev/null 2>&1 || fail "-stream refuses the removed -ion_series ax / -ion_series_photo"
 
 # ---- OnDisc (-out_spectra) and threads ----
 runb od_auto "$TMP/etd_all.mzML" 2 -ion_series auto -out_spectra "$TMP/od_auto.spectra.mzML"

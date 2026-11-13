@@ -471,10 +471,10 @@ export const TAGS: HelpPage = {
           </p>
           <p>
             Hybrid EThcD/ETciD spectra stay b/y under <code>auto</code> unless the experimental{' '}
-            <L to="param-ion_series_hybrid">hybrid option</L> is set to both. The a/x option for UVPD is also
-            experimental and failed its held-out test. Tags read with a non-default series carry an{' '}
-            <code>ion_series</code> column. Species detection uses only b/y tags, so it cannot use the c/z• or
-            a/x rows from these runs.
+            <L to="param-ion_series_hybrid">hybrid option</L> is set to both. The a/x reading for UVPD was
+            removed in 1.14: it failed its held-out test. Tags read with a non-default series carry an{' '}
+            <code>ion_series</code> column. Species detection uses only b/y tags, so it cannot use the c/z• rows
+            from these runs.
           </p>
         </>
       )
@@ -877,7 +877,7 @@ export const DIGEST: HelpPage = {
             hold.
           </p>
           <p>
-            The label call needs at least 175 counted C-terminal ends by default and a ppm tolerance. Otherwise it
+            The label call needs at least 175 counted C-terminal ends and a ppm tolerance. Otherwise it
             reports <code>no_call</code> with reason <code>few_tags</code> or <code>low_resolution</code>.
             An isobaric-label call needs the label count to reach 1% of filtered tags and 20 times its background.
             SILAC additionally needs both heavy shares to reach 20% and K/R to account for at least 80% of the
@@ -886,9 +886,7 @@ export const DIGEST: HelpPage = {
             to distinguish them.
           </p>
           <p>
-            These calls belong to <L to="param-label_out">Label report</L>. The separate experimental
-            command-line <L to="param-label_discovery_out">label discovery</L> searches for additional offsets
-            and does not change this report&apos;s call.
+            These calls belong to <L to="param-label_out">Label report</L>.
           </p>
         </>
       )
@@ -1089,8 +1087,8 @@ export const SPECIES: HelpPage = {
           <li>
             <strong>Optional calls are experimental.</strong> The command-line <L to="param-species_call">species
             call</L> is off by default. Its decoy model and decision settings are provisional; neither its calls
-            nor its decoy q-values are calibrated error guarantees. The alternative explain-away method also
-            failed its held-out recovery criterion. A <code>no_call</code> means the evidence or checks were
+            nor its decoy q-values are calibrated error guarantees. The alternative explain-away method failed
+            its held-out recovery criterion and was removed in 1.14. A <code>no_call</code> means the evidence or checks were
             insufficient; <code>not_detected</code> is a result under that method&apos;s detection limit, never
             proof of biological absence.
           </li>

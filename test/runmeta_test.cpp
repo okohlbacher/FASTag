@@ -113,13 +113,13 @@ int main()
   // The E picking rows (#9): value the count, n the profile MS2 that needed picking.
   {
     RR::RunMeta e = m;
-    e.pick_profile = "auto";
+    e.pick_profile = "legacy";  // the only mode that picks (mzPeak); auto was removed in 1.14
     e.pick_picked = 47470;
     e.pick_failed = 3;
     const auto re = RR::runRows(e, RR::Emit::Versioned);
     check(re.size() == 28, "Versioned format 5 has 28 rows");
-    check(re[8].key == "pick_profile" && re[8].value == "auto" && re[8].n == "-" &&
-            re[8].description == "Profile MS2 was centroided under -pick_profile auto.",
+    check(re[8].key == "pick_profile" && re[8].value == "legacy" && re[8].n == "-" &&
+            re[8].description == "Profile MS2 was centroided under -pick_profile legacy.",
           "pick_profile row");
     check(re[9].key == "profile_ms2_picked" && re[9].value == "47470" && re[9].n == "47473" &&
             re[9].description == "47470 of 47473 profile MS2 spectra were centroided before tagging.",
@@ -266,15 +266,6 @@ int main()
   // ClusterAcc: composes and merges without touching anything.
   FASTag::ClusterAcc::ClusterThread a, b;
   a.merge(b);
-  // ThreadE (#9): the picking counts add up across threads.
-  {
-    FASTag::ClusterAcc::ClusterThread t1, t2, run;
-    t1.e.pick.add(1); t1.e.pick.add(1); t1.e.pick.add(0);
-    t2.e.pick.add(1); t2.e.pick.add(-1);
-    run.merge(t1);
-    run.merge(t2);
-    check(run.e.pick.picked == 3 && run.e.pick.failed == 1, "ThreadE::merge sums the picking counts");
-  }
   // ThreadE (#6): the hypothesis counts add up across threads.
   {
     namespace HY = FASTag::Hyp;

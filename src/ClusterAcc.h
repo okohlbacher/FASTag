@@ -41,9 +41,6 @@ namespace FASTag::ClusterAcc
   // ---- 1.12 E ----
   struct ThreadE
   {
-    /// #9: profile MS2 of an mzML input centroided in the tagging loop
-    /// (-pick_profile auto; mzPeak counts its own, in MzPeakStream).
-    Centroid::Counts pick;
     /// #15 phase A: activation class of every tagged MS2. Counted at every
     /// run (no option): the b/y warning needs it, and it changes no output.
     IonSeries::ActivationCounts activation;
@@ -54,7 +51,6 @@ namespace FASTag::ClusterAcc
     IonSeries::SeriesCounts series;
     void merge(const ThreadE& o)
     {
-      pick.merge(o.pick);
       activation.merge(o.activation);
       hyp.merge(o.hyp);
       series.merge(o.series);

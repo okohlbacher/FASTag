@@ -17,8 +17,8 @@
 #       tolerance, tolerance_unit, ...}; the peaks are the peaks the tagger
 #       tags, checked against the run's own -census row of every dumped
 #       spectrum (n_peaks_kept, precursor_mz, charge_used) at the CLI
-#       default and at 0.3 Da, with -pick_profile auto on profile MS2 (the
-#       picked peaks), under -ion_series cz and auto on an ETD run (the c/z
+#       default and at 0.3 Da, on profile MS2 (the points as read; the
+#       removed -pick_profile auto reads as legacy), under -ion_series cz and auto on an ETD run (the c/z
 #       preparation with its ETD precursor-window cut), and against the tag ladders of the run's tag TSV
 #       (every unmodified tag's b or y ladder lies on dumped peaks within
 #       the tolerance; both ends of it for a gapped tag); the MGF twin and the mzPeak export
@@ -330,10 +330,10 @@ V="$TMP/p_mgf.v"
 probe prof "$FIX/profile_ms2_small.mzML"
 [ "$(val "$TMP/p_prof.v" verdict)" = '"profile"' ] && [ "$(val "$TMP/p_prof.v" will_pick)" = false ] \
   || fail "(b) profile MS2 under legacy: $(cat "$TMP/p_prof.v" | tr '\n' ' ')"
+# -pick_profile auto (removed in 1.14) reads as legacy.
 probe profauto "$FIX/profile_ms2_small.mzML" -pick_profile auto
-[ "$(val "$TMP/p_profauto.v" will_pick)" = true ] || fail "(b) -pick_profile auto does not pick profile MS2"
-probe mgfauto "$MGF" -pick_profile auto
-[ "$(val "$TMP/p_mgfauto.v" will_pick)" = false ] || fail "(b) MGF is never picked"
+[ "$(val "$TMP/p_profauto.v" will_pick)" = false ] || fail "(b) the removed -pick_profile auto picks profile MS2"
+cmp -s "$TMP/p_prof.jsonl" "$TMP/p_profauto.jsonl" || fail "(b) -pick_profile auto probes otherwise than legacy"
 
 probe dia "$FIX/dia_like.mzML"
 [ "$(val "$TMP/p_dia.v" mode)" = '"DIA"' ] && [ "$(val "$TMP/p_dia.v" refuse)" = true ] \
@@ -439,21 +439,20 @@ rm -rf "$TMP/dout"; run_in "$TMP/dout" "$TMP/dout.jsonl" "$TMP/dout.err" -in "$I
 only_files "$TMP/dout" ""
 cmp -s "$TMP/dout.jsonl" "$TMP/d_default/0.jsonl" || fail "(d) -out changes the dump"
 
-# Profile MS2: under -pick_profile auto the dump has the picked peaks the
-# tagger tags; under legacy the profile points as read.
+# Profile MS2: the dump has the profile points as read, as the tagger tags
+# them; -pick_profile auto (removed in 1.14) dumps and tags as legacy.
 PIDS=(); while IFS= read -r _id; do PIDS+=("$_id"); done < <(ids "$FIX/profile_ms2_small.mzML")
-census_run pauto "$FIX/profile_ms2_small.mzML" -pick_profile auto -threads 2
 census_run pleg "$FIX/profile_ms2_small.mzML" -threads 2
+census_run pauto "$FIX/profile_ms2_small.mzML" -pick_profile auto -threads 2
+cmp -s "$TMP/c_pleg/tags.census.tsv" "$TMP/c_pauto/tags.census.tsv" || fail "(d) -pick_profile auto: census differs from legacy"
 mkdir -p "$TMP/d_pauto" "$TMP/d_pleg"
 for k in "${!PIDS[@]}"; do
   dump "$FIX/profile_ms2_small.mzML" "${PIDS[$k]}" "$TMP/d_pauto/$k.jsonl" -pick_profile auto
   dump "$FIX/profile_ms2_small.mzML" "${PIDS[$k]}" "$TMP/d_pleg/$k.jsonl"
+  cmp -s "$TMP/d_pauto/$k.jsonl" "$TMP/d_pleg/$k.jsonl" || fail "(d) -pick_profile auto dumps ${PIDS[$k]} otherwise than legacy"
 done
-J census "$TMP/d_pauto" "$TMP/c_pauto/tags.census.tsv" > /dev/null || fail "(d) auto: dumps differ from the picked spectra the tagger tags"
 J census "$TMP/d_pleg" "$TMP/c_pleg/tags.census.tsv" > /dev/null || fail "(d) legacy: dumps differ from the census"
-[ "$(val "$TMP/d_pauto/0.jsonl.v" picked)" = true ] && [ "$(val "$TMP/d_pleg/0.jsonl.v" picked)" = false ] \
-  || fail "(d) picked flag: auto $(val "$TMP/d_pauto/0.jsonl.v" picked), legacy $(val "$TMP/d_pleg/0.jsonl.v" picked)"
-cmp -s <(val "$TMP/d_pauto/0.jsonl.v" peaks) <(val "$TMP/d_pleg/0.jsonl.v" peaks) && fail "(d) auto dumps the unpicked peaks"
+[ "$(val "$TMP/d_pleg/0.jsonl.v" picked)" = false ] || fail "(d) picked flag under legacy: $(val "$TMP/d_pleg/0.jsonl.v" picked)"
 
 # Ion series (1.12 #15): under -ion_series cz, and auto on an ETD run, the
 # dump prepares the peaks as the tagger reads that spectrum, as c/z-dot ions

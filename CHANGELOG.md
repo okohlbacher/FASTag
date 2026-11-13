@@ -1,5 +1,65 @@
 # Changelog
 
+## Unreleased
+
+Options and option values that failed their held-out test are removed. Each
+removed name stays registered (advanced, not in the GUI) with no effect, so
+that saved command lines and INI files of 1.12 and 1.13 keep loading: given
+on the command line or with a non-default INI value, it prints one warning
+"-<option> was removed in 1.14 (...); it has no effect". A removed value is
+accepted with the same warning and the option's default is used. Every
+remaining configuration writes the same output as 1.13.4.
+
+- **Label discovery** (`-label_discovery_out` and its seven knobs
+  `-label_discovery_max_flank`, `_depth`, `_min_spectra`, `_min_share`,
+  `_window_n`, `_window_c`, `_unimod_top`): failed both held-out tests (6 of
+  150 label-free runs got a label call; third test, report formats 2 to 4:
+  three of nine criteria failed, weighted accuracy 0.572 against 0.80).
+  The report, its code (src/LabelDiscovery.*), tests and design documents
+  are removed. `-label_out` is unchanged.
+- **`-label_call_min_tags`**: its only alternative to the 1.12 rule, 0, failed
+  its held-out test (149/172 runs right, 0.866, against the threshold 0.922).
+  The minimum is the constant 175 again; `-label_out` is unchanged.
+- **a/x ion series** (`-ion_series ax` and `-ion_series_photo`): failed its
+  held-out test (UVPD spectra of PXD018176: rank-1 tags correct for 0.04%
+  under `ax` against 30.87% under `by`, -30.83 points, 95% interval -31.63 to
+  -30.02; criterion +5). `-ion_series ax` is read as `by`;
+  `-ion_series_photo`, whose only other value was `ax`, has no effect. The
+  a/x code, tests and doc/AX-IONS.md are removed; `by`, `cz`, `auto` and
+  `-ion_series_hybrid` are unchanged.
+- **Explain-away species call** (`-species_call explain` and
+  `-species_reagents`): failed its held-out test (62 public runs: 0.50 false
+  genus calls per run against 5.98 for the decoy call, primary endpoint
+  passed; recovery guard failed, truth genera recovered 38/105 against
+  77/105). `-species_call explain` is read as `none`; `-species_reagents`,
+  read only under `explain`, has no effect and its file is not read. The
+  explain and reagent code, their report columns (`tags`, `unexplained_tags`,
+  `reagent_tags`, `reagent_expected`), tests and
+  `data/taxonomy/species_reagents.fasta` are removed; the `reagent_n_min` key
+  of `-species_call_params` files is accepted and ignored. `none` and `decoy`
+  are unchanged.
+- **Centroiding of profile mzML** (`-pick_profile auto` and
+  `-pick_unknown_type`): failed its held-out test (#9, item09-H1). Ion trap
+  (PXD009049): two charge-3 cells fail non-inferiority, 4+ underpowered,
+  fewer tagged spectra at tag length 4 and 5. Orbitrap (PXD016519,
+  PXD018024): all 9 cells +10.5 to +32.0 points, but 567 fewer tagged
+  spectra on PXD016519 at tag length 3. Default stays legacy.
+  `-pick_profile auto` is read as `legacy`; `-pick_unknown_type`, read only
+  under `auto`, has no effect. mzML MS2 is never centroided; the m/z-sorted
+  picking, the unknown-type picking and the `profile_mzml` gate case are
+  removed. `legacy` (mzPeak picked on read, as 1.11) and `off` are unchanged.
+- **Mass shifts as search configuration** (`-search_shifts` and
+  `-search_shifts_out`, `-shift_max_variable`, `-shift_max_offsets`,
+  `-shift_expand_sites`, `-shift_site_min_share`, `-shift_site_min_count`,
+  `-shift_site_min_ions`): failed both held-out tests (#17). Second test
+  (item17r, four new runs): more PSMs on 4 of 4 runs (Comet +7.7 to +36.8%,
+  Sage +6.5 to +25.2%), but Comet's entrapment FDP rose on PXD037999 (0.88%
+  -> 1.28%, limit +0.30 points), and the option recovered only 5 of 32
+  (Comet) and 3 of 11 (Sage) admissible peaks of an MSFragger open search.
+  All eight have no effect; the shift rules, the `-search_shifts_out` report,
+  their tests and the `shifts_insilico.mgf` fixture are removed.
+  `-search_config_out`, `-delta_out` and `-massgap_out` are unchanged.
+
 ## 1.13.4 (2026-11-13)
 
 Windows installation, GUI fixes and code cleanup; tag output is unchanged.
