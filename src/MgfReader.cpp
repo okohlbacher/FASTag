@@ -274,7 +274,7 @@ namespace FASTag
 
     // Read past each piece's end by one needle length less a byte, so a marker
     // whose first byte is in the piece is seen whole by that piece.
-    constexpr std::size_t kOverlap = kBegin.size() - 1;
+    constexpr std::size_t OVERLAP = kBegin.size() - 1;
     chunk_bytes = std::max<std::size_t>(chunk_bytes, 64);
     const std::uint64_t n_pieces = (size + chunk_bytes - 1) / chunk_bytes;
     std::vector<ScanPiece> pieces(static_cast<std::size_t>(n_pieces));
@@ -298,7 +298,7 @@ namespace FASTag
         {
           const std::uint64_t begin = static_cast<std::uint64_t>(p) * chunk_bytes;
           const std::uint64_t own = std::min<std::uint64_t>(chunk_bytes, size - begin);
-          const std::uint64_t len = std::min<std::uint64_t>(own + kOverlap, size - begin);
+          const std::uint64_t len = std::min<std::uint64_t>(own + OVERLAP, size - begin);
           buf.resize(static_cast<std::size_t>(len));
           in.clear();
           in.seekg(static_cast<std::streamoff>(begin));

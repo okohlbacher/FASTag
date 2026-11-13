@@ -129,7 +129,7 @@ namespace
     int charge;
     double evalue, p_complement;
   };
-  const RefRow kRef[] = {
+  const RefRow REF[] = {
 #include "complement_ref_1_11.inc"
   };
 
@@ -914,7 +914,7 @@ int main(int argc, char** argv)
         const ComplementSynth::Case& c = ComplementSynth::kRefCases[ci];
         const ComplementSynth::Spec s = ComplementSynth::make(c.pep, c.charge, c.y2, c.iso, 0.0, c.noise, c.seed);
         const auto tags = FASTag::tagSpectrum(s.spec, s.prec_mz, c.charge, p, tab);
-        for (const RefRow& r : kRef)
+        for (const RefRow& r : REF)
         {
           if (r.ci != ci || r.pi != pi) continue;
           if (r.rank == 999) { check(tags.size() == static_cast<size_t>(r.evalue), "(d) tag count as 1.11"); continue; }

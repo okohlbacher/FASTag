@@ -291,20 +291,20 @@ namespace FASTag
     std::size_t invalidSelectedMzFromTarget() const;
     /// Declined this many times in a row from the start, a reader stops
     /// trying the direct decoder.
-    static constexpr std::size_t kDirectProbe = 64;
+    static constexpr std::size_t DIRECT_PROBE = 64;
 
     /**
       @brief Does this file give up MS level and precursors to the scrape?
 
       Reads metadata WITHOUT decoding peaks, up to the first MS2 (at most
-      kMetadataProbe spectra).
+      METADATA_PROBE spectra).
 
       @return true if that MS2 has a precursor, or if no MS2 comes within the
         cap but MS levels were read.
     */
     bool reportsSpectrumMetadata();
     /// Maximum number of spectra reportsSpectrumMetadata() reads.
-    static constexpr OpenMS::Size kMetadataProbe = 5000;
+    static constexpr OpenMS::Size METADATA_PROBE = 5000;
 
   private:
     OpenMS::MSSpectrum read_(OpenMS::Size i, bool want_peaks, unsigned fields, bool any_level = false);

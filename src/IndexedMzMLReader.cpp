@@ -89,28 +89,28 @@ namespace FASTag
     // The needles are spelled out so nothing is built per call: a spectrum
     // scrape runs a dozen of these, and constructing a std::string each time
     // cost more than the searches did.
-    constexpr std::string_view kMsLevel = "accession=\"MS:1000511\"";
-    constexpr std::string_view kScanTime = "accession=\"MS:1000016\"";
-    constexpr std::string_view kSelectedMz = "accession=\"MS:1000744\"";
-    constexpr std::string_view kChargeState = "accession=\"MS:1000041\"";
-    constexpr std::string_view kPeakIntensity = "accession=\"MS:1000042\"";
-    constexpr std::string_view kIsoTarget = "accession=\"MS:1000827\"";
-    constexpr std::string_view kIsoLower = "accession=\"MS:1000828\"";
-    constexpr std::string_view kIsoUpper = "accession=\"MS:1000829\"";
-    constexpr std::string_view kScanLow = "accession=\"MS:1000501\"";
-    constexpr std::string_view kScanHigh = "accession=\"MS:1000500\"";
-    constexpr std::string_view kInvK0 = "accession=\"MS:1002815\"";
-    constexpr std::string_view kDriftTime = "accession=\"MS:1002476\"";
-    constexpr std::string_view kFaimsCV = "accession=\"MS:1001581\"";
+    constexpr std::string_view MS_LEVEL = "accession=\"MS:1000511\"";
+    constexpr std::string_view SCAN_TIME = "accession=\"MS:1000016\"";
+    constexpr std::string_view SELECTED_MZ = "accession=\"MS:1000744\"";
+    constexpr std::string_view CHARGE_STATE = "accession=\"MS:1000041\"";
+    constexpr std::string_view PEAK_INTENSITY = "accession=\"MS:1000042\"";
+    constexpr std::string_view ISO_TARGET = "accession=\"MS:1000827\"";
+    constexpr std::string_view ISO_LOWER = "accession=\"MS:1000828\"";
+    constexpr std::string_view ISO_UPPER = "accession=\"MS:1000829\"";
+    constexpr std::string_view SCAN_LOW = "accession=\"MS:1000501\"";
+    constexpr std::string_view SCAN_HIGH = "accession=\"MS:1000500\"";
+    constexpr std::string_view INV_K0 = "accession=\"MS:1002815\"";
+    constexpr std::string_view DRIFT_TIME = "accession=\"MS:1002476\"";
+    constexpr std::string_view FAIMS_CV = "accession=\"MS:1001581\"";
     // Step 0 (1.12): fields OpenMS's MzMLHandler reads and this reader did not.
-    constexpr std::string_view kCentroid = "accession=\"MS:1000127\"";
-    constexpr std::string_view kProfile = "accession=\"MS:1000128\"";
-    constexpr std::string_view kPossibleCharge = "accession=\"MS:1000633\"";
-    constexpr std::string_view kFilterString = "accession=\"MS:1000512\"";
-    constexpr std::string_view kActivationEnergy = "accession=\"MS:1000509\"";
-    constexpr std::string_view kArrays = "<binaryDataArrayList";
-    constexpr std::string_view kValue = "value";
-    constexpr std::string_view kUnit = "unitAccession";
+    constexpr std::string_view CV_CENTROID = "accession=\"MS:1000127\"";
+    constexpr std::string_view CV_PROFILE = "accession=\"MS:1000128\"";
+    constexpr std::string_view POSSIBLE_CHARGE = "accession=\"MS:1000633\"";
+    constexpr std::string_view FILTER_STRING = "accession=\"MS:1000512\"";
+    constexpr std::string_view ACTIVATION_ENERGY = "accession=\"MS:1000509\"";
+    constexpr std::string_view ARRAYS = "<binaryDataArrayList";
+    constexpr std::string_view VALUE = "value";
+    constexpr std::string_view UNIT = "unitAccession";
 
     /// xml.find(what, from) if that starts before @p to, else npos -- without
     /// scanning past @p to (1.12.2). A match may still END after @p to, as
@@ -140,7 +140,7 @@ namespace FASTag
                               std::string_view needle,
                               std::size_t from,
                               std::size_t to,
-                              std::string_view attr = kValue)
+                              std::string_view attr = VALUE)
     {
       const std::size_t k = find_before(xml, needle, from, to);
       if (k == std::string_view::npos) return {};
@@ -162,7 +162,7 @@ namespace FASTag
       std::string_view accession;
       Precursor::ActivationMethod method;
     };
-    constexpr ActivationTerm kActivationTerms[] = {
+    constexpr ActivationTerm ACTIVATION_TERMS[] = {
         {"MS:1000133", Precursor::ActivationMethod::CID},   {"MS:1000134", Precursor::ActivationMethod::PD},
         {"MS:1000135", Precursor::ActivationMethod::PSD},   {"MS:1000136", Precursor::ActivationMethod::SID},
         {"MS:1000242", Precursor::ActivationMethod::BIRD},  {"MS:1000250", Precursor::ActivationMethod::ECD},
@@ -311,12 +311,12 @@ namespace FASTag
     /// scope, not inside scanSpectrumOffsets: MSVC refuses to construct a
     /// vector of a function-local struct whose member initialisers name a
     /// constant of the enclosing function.
-    constexpr std::uint64_t kNoOffset = std::numeric_limits<std::uint64_t>::max();
+    constexpr std::uint64_t NO_OFFSET = std::numeric_limits<std::uint64_t>::max();
 
-    constexpr std::size_t kPage = 4096;
+    constexpr std::size_t PAGE = 4096;
     struct AlignedDelete
     {
-      void operator()(char* p) const { ::operator delete[](p, std::align_val_t{kPage}); }
+      void operator()(char* p) const { ::operator delete[](p, std::align_val_t{PAGE}); }
     };
 
     /// A file read at explicit offsets: one call per read (pread, or
@@ -354,14 +354,14 @@ namespace FASTag
       {
         // At most 1 GiB per call: ReadFile takes a DWORD, and Darwin's pread
         // fails with EINVAL above INT_MAX bytes (Linux shortens the read).
-        constexpr std::size_t kMaxCall = std::size_t{1} << 30;
+        constexpr std::size_t MAX_CALL = std::size_t{1} << 30;
         while (n > 0)
         {
 #ifdef _WIN32
           OVERLAPPED ov{};
           ov.Offset = static_cast<DWORD>(offset & 0xffffffffu);
           ov.OffsetHigh = static_cast<DWORD>(offset >> 32);
-          const DWORD want = static_cast<DWORD>(std::min(n, kMaxCall));
+          const DWORD want = static_cast<DWORD>(std::min(n, MAX_CALL));
           DWORD got = 0;
           if (!ReadFile(h_, dst, want, &got, &ov))
           {
@@ -376,7 +376,7 @@ namespace FASTag
             return false;
           }
 #else
-          const ssize_t got = ::pread(fd_, dst, std::min(n, kMaxCall), static_cast<off_t>(offset));
+          const ssize_t got = ::pread(fd_, dst, std::min(n, MAX_CALL), static_cast<off_t>(offset));
           if (got < 0 && errno == EINTR) continue;
           if (got < 0)
           {
@@ -432,7 +432,7 @@ namespace FASTag
         std::size_t c = cap ? cap : 65536;
         while (c < n) c *= 2;
         std::unique_ptr<char[], AlignedDelete> p(
-            static_cast<char*>(::operator new[](c, std::align_val_t{kPage}, std::nothrow)));
+            static_cast<char*>(::operator new[](c, std::align_val_t{PAGE}, std::nothrow)));
         if (!p) return false;
         if (keep) std::memcpy(p.get(), data.get(), keep);
         data = std::move(p);
@@ -445,8 +445,8 @@ namespace FASTag
     struct Piece
     {
       std::vector<std::uint64_t> spectra;
-      std::uint64_t list_open = kNoOffset;  ///< first <spectrumList starting in this piece
-      std::uint64_t list_close = kNoOffset; ///< first </spectrumList starting in this piece
+      std::uint64_t list_open = NO_OFFSET;  ///< first <spectrumList starting in this piece
+      std::uint64_t list_close = NO_OFFSET; ///< first </spectrumList starting in this piece
       bool read = true;
     };
   }
@@ -472,8 +472,8 @@ namespace FASTag
       {
         // The header of a real mzML is a few KB; a file whose first spectrum
         // starts beyond this cap keeps no groups rather than a huge read.
-        constexpr std::uint64_t kMaxHead = std::uint64_t{64} << 20;
-        if (head_len == 0 || head_len > kMaxHead) return groups;
+        constexpr std::uint64_t MAX_HEAD = std::uint64_t{64} << 20;
+        if (head_len == 0 || head_len > MAX_HEAD) return groups;
         std::ifstream f(path, std::ios::binary);
         if (!f) return groups;
         std::string head(static_cast<std::size_t>(head_len), '\0');
@@ -483,12 +483,12 @@ namespace FASTag
         const std::size_t lb = h.find("<referenceableParamGroupList");
         if (lb == std::string_view::npos) return groups;
         const std::size_t le = find_or(h, "</referenceableParamGroupList>", lb, h.size());
-        constexpr std::string_view kGroup = "<referenceableParamGroup";
-        for (std::size_t g = h.find(kGroup, lb + 1); g != std::string_view::npos && g < le;
-             g = h.find(kGroup, g + kGroup.size()))
+        constexpr std::string_view GROUP = "<referenceableParamGroup";
+        for (std::size_t g = h.find(GROUP, lb + 1); g != std::string_view::npos && g < le;
+             g = h.find(GROUP, g + GROUP.size()))
         {
           // Not <referenceableParamGroupList> or a ...Ref.
-          if (g + kGroup.size() >= h.size() || !is_name_end(h[g + kGroup.size()])) continue;
+          if (g + GROUP.size() >= h.size() || !is_name_end(h[g + GROUP.size()])) continue;
           const std::string_view id = tag_attr(h, g + 1, "id");
           const std::size_t ge = find_or(h, "</referenceableParamGroup>", g, le);
           std::vector<GroupParam>& params = (*groups)[std::string(id)];
@@ -692,12 +692,12 @@ namespace FASTag
   std::vector<std::uint64_t> IndexedMzMLReader::scanSpectrumOffsets(const std::string& path,
                                                                      std::size_t chunk_bytes)
   {
-    constexpr std::string_view kOpen = "<spectrum";
-    constexpr std::string_view kListOpen = "<spectrumList";
-    constexpr std::string_view kListClose = "</spectrumList";
+    constexpr std::string_view OPEN = "<spectrum";
+    constexpr std::string_view LIST_OPEN = "<spectrumList";
+    constexpr std::string_view LIST_CLOSE = "</spectrumList";
     // Read past each piece's end by more than the longest needle plus the
     // byte after it, so a tag that starts in this piece is always seen whole.
-    constexpr std::size_t kOverlap = 32;
+    constexpr std::size_t OVERLAP = 32;
 
     std::uint64_t size = 0;
     {
@@ -707,7 +707,7 @@ namespace FASTag
       if (end <= 0) return {};
       size = static_cast<std::uint64_t>(end);
     }
-    chunk_bytes = std::max(chunk_bytes, kOverlap);
+    chunk_bytes = std::max(chunk_bytes, OVERLAP);
     const std::uint64_t n_pieces = (size + chunk_bytes - 1) / chunk_bytes;
 
     std::vector<Piece> pieces(static_cast<std::size_t>(n_pieces));
@@ -736,9 +736,9 @@ namespace FASTag
       // ran at half the speed: a 3.2 GB scan took 1.69 s against 0.77 s on
       // one thread and 0.141 s against 0.078 s on 16 (AMD EPYC 7763,
       // ibminode05).
-      const std::size_t cap = static_cast<std::size_t>(std::min<std::uint64_t>(chunk_bytes + kOverlap, size));
+      const std::size_t cap = static_cast<std::size_t>(std::min<std::uint64_t>(chunk_bytes + OVERLAP, size));
       std::unique_ptr<char[], AlignedDelete> buf(
-          static_cast<char*>(::operator new[](cap, std::align_val_t{kPage}, std::nothrow)));
+          static_cast<char*>(::operator new[](cap, std::align_val_t{PAGE}, std::nothrow)));
 #pragma omp for schedule(dynamic, 1)
       for (std::int64_t p = 0; p < static_cast<std::int64_t>(n_pieces); ++p)
       {
@@ -749,7 +749,7 @@ namespace FASTag
         {
           const std::uint64_t begin = static_cast<std::uint64_t>(p) * chunk_bytes;
           const std::uint64_t own = std::min<std::uint64_t>(chunk_bytes, size - begin);
-          const std::uint64_t len = std::min<std::uint64_t>(own + kOverlap, size - begin);
+          const std::uint64_t len = std::min<std::uint64_t>(own + OVERLAP, size - begin);
           if (!opened || !buf || !in.read(begin, buf.get(), static_cast<std::size_t>(len)))
           {
             piece.read = false;
@@ -758,9 +758,9 @@ namespace FASTag
           const std::string_view v(buf.get(), static_cast<std::size_t>(len));
           for (std::size_t k = v.find('<'); k != std::string_view::npos && k < own; k = v.find('<', k + 1))
           {
-            if (tag_at(v, k, kOpen)) piece.spectra.push_back(begin + k);
-            else if (piece.list_open == kNoOffset && tag_at(v, k, kListOpen)) piece.list_open = begin + k;
-            else if (piece.list_close == kNoOffset && tag_at(v, k, kListClose)) piece.list_close = begin + k;
+            if (tag_at(v, k, OPEN)) piece.spectra.push_back(begin + k);
+            else if (piece.list_open == NO_OFFSET && tag_at(v, k, LIST_OPEN)) piece.list_open = begin + k;
+            else if (piece.list_close == NO_OFFSET && tag_at(v, k, LIST_CLOSE)) piece.list_close = begin + k;
           }
         }
         catch (...)
@@ -770,18 +770,18 @@ namespace FASTag
       }
     }
 
-    std::uint64_t list_open = kNoOffset, list_close = kNoOffset;
+    std::uint64_t list_open = NO_OFFSET, list_close = NO_OFFSET;
     for (const Piece& piece : pieces)
     {
       if (!piece.read) return {};
-      if (list_open == kNoOffset) list_open = piece.list_open;
-      if (list_open != kNoOffset && list_close == kNoOffset && piece.list_close != kNoOffset &&
+      if (list_open == NO_OFFSET) list_open = piece.list_open;
+      if (list_open != NO_OFFSET && list_close == NO_OFFSET && piece.list_close != NO_OFFSET &&
           piece.list_close > list_open)
       {
         list_close = piece.list_close;
       }
     }
-    if (list_open == kNoOffset || list_close == kNoOffset) return {};
+    if (list_open == NO_OFFSET || list_close == NO_OFFSET) return {};
 
     std::vector<std::uint64_t> offsets;
     for (const Piece& piece : pieces)
@@ -886,7 +886,7 @@ namespace FASTag
     // MS1-only scans (loading, void volume), and a fixed 64-spectrum window
     // would reject this reader for a file it reads correctly.
     // The head-only read is cheap; the cap bounds an MS1-only file.
-    const Size probe = std::min<Size>(getNrSpectra(), kMetadataProbe);
+    const Size probe = std::min<Size>(getNrSpectra(), METADATA_PROBE);
     bool any_level = false;
     for (Size i = 0; i < probe; ++i)
     {
@@ -925,8 +925,8 @@ namespace FASTag
     // spectrum). Reading every spectrum whole to discover it is an MS1 and
     // then discarding it moved 81 MB per run for nothing.
     const std::uint64_t len = end - begin;
-    constexpr std::uint64_t kHead = 16384;
-    const std::uint64_t head_len = std::min(len, kHead);
+    constexpr std::uint64_t HEAD = 16384;
+    const std::uint64_t head_len = std::min(len, HEAD);
     if (!impl_->raw.reserve(static_cast<std::size_t>(head_len), 0))
       return unreadable("no memory for " + std::to_string(head_len) + " bytes");
     if (!impl_->in.read(begin, impl_->raw.data.get(), static_cast<std::size_t>(head_len)))
@@ -948,7 +948,7 @@ namespace FASTag
       impl_->bytes = std::string_view(impl_->raw.data.get(), static_cast<std::size_t>(len));
       return {};
     };
-    std::size_t cut = impl_->bytes.find(kArrays);
+    std::size_t cut = impl_->bytes.find(ARRAYS);
     std::size_t cut_in = impl_->bytes.size();  ///< the buffer size `cut` was searched in
     if (cut == std::string_view::npos && len > head_len)
     {
@@ -966,7 +966,7 @@ namespace FASTag
       const std::string_view all = impl_->bytes;
       if (cut == std::string_view::npos && all.size() != cut_in)
       {
-        cut = all.find(kArrays);
+        cut = all.find(ARRAYS);
         cut_in = all.size();
       }
       return cut == std::string_view::npos ? all : all.substr(0, cut);
@@ -989,17 +989,17 @@ namespace FASTag
     // changes tags on mzMLs that keep them in a group (1.11: an MS level only
     // in a group is no MS2, a charge only in a group is tagged as 2+); that
     // is a separate, declared output-changing item, not part of step 0.
-    static const ParamGroups kNoGroups;
-    const ParamGroups& groups = impl_->groups ? *impl_->groups : kNoGroups;
+    static const ParamGroups NO_GROUPS;
+    const ParamGroups& groups = impl_->groups ? *impl_->groups : NO_GROUPS;
     // The cvParam with accession @p acc in a group referenced directly in
     // [from, to) of @p xml, or null. The caller bounds the range to the
     // element whose references count.
     auto group_param = [&groups](std::string_view xml, std::string_view acc, std::size_t from,
                                  std::size_t to) -> const GroupParam* {
       if (groups.empty()) return nullptr;
-      constexpr std::string_view kRef = "<referenceableParamGroupRef";
-      for (std::size_t r = find_before(xml, kRef, from, to); r != std::string_view::npos;
-           r = find_before(xml, kRef, r + kRef.size(), to))
+      constexpr std::string_view REF = "<referenceableParamGroupRef";
+      for (std::size_t r = find_before(xml, REF, from, to); r != std::string_view::npos;
+           r = find_before(xml, REF, r + REF.size(), to))
       {
         const auto it = groups.find(std::string(tag_attr(xml, r + 1, "ref")));
         if (it == groups.end()) continue;
@@ -1011,9 +1011,9 @@ namespace FASTag
     // Every group cvParam with an accession in a referenced group, in order.
     auto for_group_params = [&groups](std::string_view xml, std::size_t from, std::size_t to, auto&& fn) {
       if (groups.empty()) return;
-      constexpr std::string_view kRef = "<referenceableParamGroupRef";
-      for (std::size_t r = find_before(xml, kRef, from, to); r != std::string_view::npos;
-           r = find_before(xml, kRef, r + kRef.size(), to))
+      constexpr std::string_view REF = "<referenceableParamGroupRef";
+      for (std::size_t r = find_before(xml, REF, from, to); r != std::string_view::npos;
+           r = find_before(xml, REF, r + REF.size(), to))
       {
         const auto it = groups.find(std::string(tag_attr(xml, r + 1, "ref")));
         if (it == groups.end()) continue;
@@ -1023,12 +1023,12 @@ namespace FASTag
     // cv_value() with the group fallback: the element's own cvParam if it
     // has one, else the referenced group's.
     auto cvg = [&](std::string_view xml, std::string_view needle, std::size_t from, std::size_t to,
-                   std::string_view attr = kValue) -> std::string_view {
+                   std::string_view attr = VALUE) -> std::string_view {
       const std::size_t k = find_before(xml, needle, from, to);
       if (k != std::string_view::npos) return tag_attr(xml, k, attr);
       const GroupParam* gp = group_param(xml, needle_accession(needle), from, to);
       if (!gp) return {};
-      return attr == kUnit ? std::string_view(gp->unit) : std::string_view(gp->value);
+      return attr == UNIT ? std::string_view(gp->unit) : std::string_view(gp->value);
     };
     // Where the spectrum's own cvParams and references end: at its first
     // child list (the arrays are already cut off by meta()). One walk over
@@ -1037,11 +1037,11 @@ namespace FASTag
     // opens any of the three is where the earliest of the three searches
     // would have stopped.
     auto spectrum_params_end = [](std::string_view xml) {
-      constexpr std::string_view kChildren[] = {"<scanList", "<precursorList", "<productList"};
+      constexpr std::string_view CHILDREN[] = {"<scanList", "<precursorList", "<productList"};
       for (std::size_t k = xml.find('<'); k != std::string_view::npos; k = xml.find('<', k + 1))
       {
         const std::string_view rest = xml.substr(k);
-        for (const std::string_view c : kChildren)
+        for (const std::string_view c : CHILDREN)
           if (rest.starts_with(c)) return k;
       }
       return xml.size();
@@ -1051,7 +1051,7 @@ namespace FASTag
     int ms_level = 0;
     {
       const std::string_view h = meta();
-      if (to_number(cv_value(h, kMsLevel, 0, h.size()), ms_level) && ms_level > 0)
+      if (to_number(cv_value(h, MS_LEVEL, 0, h.size()), ms_level) && ms_level > 0)
         spec.setMSLevel(static_cast<UInt>(ms_level));
     }
 
@@ -1075,7 +1075,7 @@ namespace FASTag
         // A file the direct decoder cannot read (numpress, say) is left to
         // OpenMS for good once its first spectra all came back declined, so
         // such a file does not pay for a failed scan per spectrum.
-        if (impl_->direct_on && impl_->n_direct == 0 && impl_->n_openms >= kDirectProbe)
+        if (impl_->direct_on && impl_->n_direct == 0 && impl_->n_openms >= DIRECT_PROBE)
           impl_->direct_on = false;
         try
         {
@@ -1110,13 +1110,13 @@ namespace FASTag
     const std::size_t n = xml.size();
 
     double rt = 0;
-    if (to_number(cv_value(xml, kScanTime, 0, n), rt))
+    if (to_number(cv_value(xml, SCAN_TIME, 0, n), rt))
     {
       // mzML records the unit; OpenMS wants seconds. As OpenMS's MzMLHandler
       // reads it: minutes (UO:0000031) are converted and anything else is
       // taken as seconds -- an absent unit included -- so RTs in -recon_id_out
       // match the OpenMS path that -out_spectra takes.
-      const std::string_view unit = cv_value(xml, kScanTime, 0, n, kUnit);
+      const std::string_view unit = cv_value(xml, SCAN_TIME, 0, n, UNIT);
       spec.setRT(unit == "UO:0000031" ? rt * 60.0 : rt);
     }
 
@@ -1137,19 +1137,19 @@ namespace FASTag
         if (w + 11 >= n || !(is_name_end(xml[w + 11]) || xml[w + 11] == '/')) continue;  // <scanWindowList
         const std::size_t we = find_or(xml, "</scanWindow>", w, sle);
         ScanWindow win;
-        if (to_number(cv_value(xml, kScanLow, w, we), win.begin))
+        if (to_number(cv_value(xml, SCAN_LOW, w, we), win.begin))
         {
-          to_number(cv_value(xml, kScanHigh, w, we), win.end);
+          to_number(cv_value(xml, SCAN_HIGH, w, we), win.end);
           spec.getInstrumentSettings().getScanWindows().push_back(win);
         }
       }
       double im = 0;
-      if (to_number(cv_value(xml, kInvK0, slb, sle), im))
+      if (to_number(cv_value(xml, INV_K0, slb, sle), im))
       {
         spec.setDriftTime(im);
         spec.setDriftTimeUnit(DriftTimeUnit::VSSC);
       }
-      else if (to_number(cv_value(xml, kDriftTime, slb, sle), im))
+      else if (to_number(cv_value(xml, DRIFT_TIME, slb, sle), im))
       {
         spec.setDriftTime(im);
         spec.setDriftTimeUnit(DriftTimeUnit::MILLISECOND);
@@ -1157,7 +1157,7 @@ namespace FASTag
     }
     // FAIMS: the compensation voltage among the spectrum's own cvParams.
     if (double cv = 0; spec.getDriftTimeUnit() == DriftTimeUnit::NONE &&
-                       to_number(cv_value(xml, kFaimsCV, 0, std::min(plb, n)), cv))
+                       to_number(cv_value(xml, FAIMS_CV, 0, std::min(plb, n)), cv))
     {
       spec.setDriftTime(cv);
       spec.setDriftTimeUnit(DriftTimeUnit::FAIMS_COMPENSATION_VOLTAGE);
@@ -1175,13 +1175,13 @@ namespace FASTag
         const std::size_t k = find_before(xml, needle, 0, se);
         return k == std::string_view::npos ? se : k;
       };
-      const std::size_t c = before_se(kCentroid), pr = before_se(kProfile);
+      const std::size_t c = before_se(CV_CENTROID), pr = before_se(CV_PROFILE);
       if (c < se || pr < se)
         spec.setType(pr >= se || (c < se && c > pr) ? SpectrumSettings::SpectrumType::CENTROID
                                                      : SpectrumSettings::SpectrumType::PROFILE);
-      else if (group_param(xml, needle_accession(kCentroid), 0, se))
+      else if (group_param(xml, needle_accession(CV_CENTROID), 0, se))
         spec.setType(SpectrumSettings::SpectrumType::CENTROID);
-      else if (group_param(xml, needle_accession(kProfile), 0, se))
+      else if (group_param(xml, needle_accession(CV_PROFILE), 0, se))
         spec.setType(SpectrumSettings::SpectrumType::PROFILE);
     }
 
@@ -1201,12 +1201,12 @@ namespace FASTag
         const std::size_t sce = wl != std::string_view::npos || se_ != std::string_view::npos
                                     ? std::min(wl, se_)
                                     : std::min(find_or(xml, "<scanWindowList", sc, sle), find_or(xml, "</scan>", sc, sle));
-        const std::size_t k = find_before(xml, kFilterString, sc, sce);
-        const GroupParam* gp = k != std::string_view::npos ? nullptr : group_param(xml, needle_accession(kFilterString), sc, sce);
+        const std::size_t k = find_before(xml, FILTER_STRING, sc, sce);
+        const GroupParam* gp = k != std::string_view::npos ? nullptr : group_param(xml, needle_accession(FILTER_STRING), sc, sce);
         if (k != std::string_view::npos || gp)
         {
-          static const UInt kFilterIdx = MetaInfoInterface::metaRegistry().registerName("filter string");
-          spec.setMetaValue(kFilterIdx, DataValue(xml_unescape(gp ? std::string_view(gp->value) : tag_attr(xml, k, kValue))));
+          static const UInt FILTER_IDX = MetaInfoInterface::metaRegistry().registerName("filter string");
+          spec.setMetaValue(FILTER_IDX, DataValue(xml_unescape(gp ? std::string_view(gp->value) : tag_attr(xml, k, VALUE))));
         }
       }
     }
@@ -1258,10 +1258,10 @@ namespace FASTag
       if (iwb != std::string_view::npos)
       {
         const std::size_t iwe = find_or(xml, "</isolationWindow>", iwb, p_end);
-        to_number(cv_value(xml, kIsoTarget, iwb, iwe), target);
-        to_number(cv_value(xml, kIsoLower, iwb, iwe), lower);
-        to_number(cv_value(xml, kIsoUpper, iwb, iwe), upper);
-        if (fields & STEP0_TARGET_META) has_meta_target = to_number(cvg(xml, kIsoTarget, iwb, iwe), meta_target);
+        to_number(cv_value(xml, ISO_TARGET, iwb, iwe), target);
+        to_number(cv_value(xml, ISO_LOWER, iwb, iwe), lower);
+        to_number(cv_value(xml, ISO_UPPER, iwb, iwe), upper);
+        if (fields & STEP0_TARGET_META) has_meta_target = to_number(cvg(xml, ISO_TARGET, iwb, iwe), meta_target);
       }
 
       // The activation (step 0): dissociation methods and activation energy,
@@ -1279,7 +1279,7 @@ namespace FASTag
         if (fields & STEP0_ACTIVATION)
         {
           auto add_method = [&methods](std::string_view acc) {
-            for (const ActivationTerm& t : kActivationTerms)
+            for (const ActivationTerm& t : ACTIVATION_TERMS)
               if (t.accession == acc) methods.insert(t.method);
           };
           for_group_params(xml, acb, ace, [&](const GroupParam& gp) { add_method(gp.accession); });
@@ -1288,7 +1288,7 @@ namespace FASTag
             add_method(tag_attr(xml, c + 1, "accession"));
         }
         if (fields & STEP0_ACTIVATION_ENERGY)
-          has_activation_energy = to_number(cvg(xml, kActivationEnergy, acb, ace), activation_energy);
+          has_activation_energy = to_number(cvg(xml, ACTIVATION_ENERGY, acb, ace), activation_energy);
       }
       auto set_activation = [&](Precursor& prec) {
         if (!methods.empty()) prec.setActivationMethods(methods);
@@ -1308,7 +1308,7 @@ namespace FASTag
         double mz = 0;
         int charge = 0;
         double intensity = 0;
-        const bool has_mz = to_number(cv_value(xml, kSelectedMz, s, s_end), mz);
+        const bool has_mz = to_number(cv_value(xml, SELECTED_MZ, s, s_end), mz);
         // A selected-ion m/z of 0, below 0 or not finite is no m/z:
         // it is read as a missing MS:1000744, so the isolation target stands
         // in for it. A converter writes 0 for a precursor without a
@@ -1330,28 +1330,28 @@ namespace FASTag
           const double window_mz = has_meta_target ? meta_target : 0.0;
           if ((fields & STEP0_TARGET_META) && mz != window_mz)
           {
-            static const UInt kTargetIdx =
+            static const UInt TARGET_IDX =
                 MetaInfoInterface::metaRegistry().registerName("isolation window target m/z");
-            prec.setMetaValue(kTargetIdx, DataValue(window_mz));
+            prec.setMetaValue(TARGET_IDX, DataValue(window_mz));
           }
         }
         else if (target > 0) prec.setMZ(target);
-        if (to_number(cv_value(xml, kChargeState, s, s_end), charge)) prec.setCharge(charge);
-        if (to_number(cv_value(xml, kPeakIntensity, s, s_end), intensity))
+        if (to_number(cv_value(xml, CHARGE_STATE, s, s_end), charge)) prec.setCharge(charge);
+        if (to_number(cv_value(xml, PEAK_INTENSITY, s, s_end), intensity))
           prec.setIntensity(static_cast<float>(intensity));
         // Possible charge states (MS:1000633, step 0), every one listed, in
         // the order OpenMS reads them: referenced groups, then own cvParams.
         if (fields & STEP0_POSSIBLE_CHARGES)
         {
-          const std::string_view acc = needle_accession(kPossibleCharge);
+          const std::string_view acc = needle_accession(POSSIBLE_CHARGE);
           for_group_params(xml, s, s_end, [&](const GroupParam& gp) {
             if (int z = 0; gp.accession == acc && to_number(std::string_view(gp.value), z))
               prec.getPossibleChargeStates().push_back(z);
           });
-          for (std::size_t k = find_before(xml, kPossibleCharge, s, s_end); k != std::string_view::npos;
-               k = find_before(xml, kPossibleCharge, k + kPossibleCharge.size(), s_end))
+          for (std::size_t k = find_before(xml, POSSIBLE_CHARGE, s, s_end); k != std::string_view::npos;
+               k = find_before(xml, POSSIBLE_CHARGE, k + POSSIBLE_CHARGE.size(), s_end))
           {
-            if (int z = 0; to_number(tag_attr(xml, k, kValue), z)) prec.getPossibleChargeStates().push_back(z);
+            if (int z = 0; to_number(tag_attr(xml, k, VALUE), z)) prec.getPossibleChargeStates().push_back(z);
           }
         }
         if (lower > 0) prec.setIsolationWindowLowerOffset(lower);
