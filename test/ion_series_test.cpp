@@ -76,17 +76,17 @@ namespace
 
   /// (d): ulps of p_complement allowed against the glibc-made 1.11 reference.
 #if defined(__GLIBC__)
-  constexpr std::int64_t kPcUlps = 0;
+  constexpr std::int64_t PC_ULPS = 0;
 #else
-  constexpr std::int64_t kPcUlps = 4;
+  constexpr std::int64_t PC_ULPS = 4;
 #endif
   /// (d): ulps of the E-value allowed. Exact on glibc and Apple's libm; MSVC's
   /// C runtime puts one row 1 ulp away (windows.yml run 42455067821: case 1
   /// rank 2, LVE/1, dE/E 2.2e-16, tag, charge and p_complement equal).
 #if defined(_MSC_VER)
-  constexpr std::int64_t kEUlps = 4;
+  constexpr std::int64_t E_ULPS = 4;
 #else
-  constexpr std::int64_t kEUlps = 0;
+  constexpr std::int64_t E_ULPS = 0;
 #endif
   /// Distance of two non-negative finite doubles in units in the last place.
   std::int64_t pcUlps(double a, double b)
@@ -118,7 +118,7 @@ namespace
   }
 
   /// gate.sh digests the first line of the run log matching this pattern.
-  const std::regex kGateSummary("^[0-9]+ MS2 spectra, [0-9]+ tags");
+  const std::regex GATE_SUMMARY("^[0-9]+ MS2 spectra, [0-9]+ tags");
 
   // ---- phase B helpers ----
   struct RefRow
@@ -189,7 +189,7 @@ namespace
   }
 
   // Tryptic peptides without C (fixed CAM), I (read as L) or P.
-  const char* const kPeptides[5] = {"VGAHAGEYGAEALER", "LLEQTHGGLNAWK", "DLVEGFNTWQR", "GDFQAMVYTNSAWR",
+  const char* const PEPTIDES[5] = {"VGAHAGEYGAEALER", "LLEQTHGGLNAWK", "DLVEGFNTWQR", "GDFQAMVYTNSAWR",
                                     "YLGYLEQLLR"};
 
   /// (f2) #3d's two-residue flank histogram (D3cg, TerminusCounter::
@@ -430,12 +430,12 @@ int main(int argc, char** argv)
     check(w.find("3491 collisional, 3492 electron, 0 hybrid, 0 unknown") != std::string::npos,
           "the warning gives the per-class counts");
     check(w.find('\n') == std::string::npos, "the warning is one line");
-    check(!std::regex_search(w, kGateSummary), "the warning cannot match the gate's summary-line pattern");
+    check(!std::regex_search(w, GATE_SUMMARY), "the warning cannot match the gate's summary-line pattern");
     IS::ActivationCounts h;
     h.add(A::HYBRID);
     const std::string wh = IS::byModeWarning(h);
     check(wh.find("EThcD") != std::string::npos, "the warning names EThcD for hybrid spectra");
-    check(!std::regex_search(wh, kGateSummary), "the hybrid warning cannot match the gate pattern");
+    check(!std::regex_search(wh, GATE_SUMMARY), "the hybrid warning cannot match the gate pattern");
   }
 
   // ---- the E accumulator of the tagging loop (src/ClusterAcc.h) ----
@@ -451,7 +451,7 @@ int main(int argc, char** argv)
   }
 
   // ================================================================ phase B
-  const double kOffN = 17.026549, kOffC = 1.991841;  // NH3; O - N (OpenMS Zp1)
+  const double OFF_N = 17.026549, OFF_C = 1.991841;  // NH3; O - N (OpenMS Zp1)
 
   // ---- (a) ion pairs ----
   {
@@ -463,12 +463,12 @@ int main(int argc, char** argv)
     check(std::fabs(cz.offN - OpenMS::Residue::getInternalToCIon().getMonoWeight()) < 1e-12 &&
             std::fabs(cz.offC - OpenMS::Residue::getInternalToZp1Ion().getMonoWeight()) < 1e-12,
           "c/z-dot offsets are OpenMS's internal-to-C/Zp1");
-    check(std::fabs(cz.offN - kOffN) < 1e-5 && std::fabs(cz.offC - kOffC) < 1e-5, "c = residues + NH3, z-dot = residues + O - N");
+    check(std::fabs(cz.offN - OFF_N) < 1e-5 && std::fabs(cz.offC - OFF_C) < 1e-5, "c = residues + NH3, z-dot = residues + O - N");
     check(std::fabs(by.offN) < 1e-12 && std::fabs(by.offC - WATER_MASS) < 1e-12, "b = residues, y = residues + H2O");
     check(std::fabs(cz.compl_delta - 1.007825) <= 1e-6, "compl_delta(c/z-dot) = +H = 1.007825");
     check(by.compl_delta == 0.0, "compl_delta(b/y) = 0 exactly");
     check(std::fabs(by.reversedOffset() - WATER_MASS) < 1e-12, "b/y reversed offset is one water");
-    check(std::fabs(cz.reversedOffset() - (kOffC - kOffN)) < 1e-5 && std::fabs(cz.reversedOffset() + 15.034708) < 1e-5,
+    check(std::fabs(cz.reversedOffset() - (OFF_C - OFF_N)) < 1e-5 && std::fabs(cz.reversedOffset() + 15.034708) < 1e-5,
           "c/z-dot reversed offset offC - offN = -15.0347");
     // The default Param and Tag are b/y, the 1.11 reading.
     check(FASTag::Param().ion_pair.kind == IS::Series::BY && FASTag::cliDefaultParam().ion_pair.kind == IS::Series::BY,
@@ -545,7 +545,7 @@ int main(int argc, char** argv)
     }
     const std::string nw = IS::autoNoColumnWarning(7);
     check(nw.find("7 electron-activated") != std::string::npos && nw.find('\n') == std::string::npos &&
-            !std::regex_search(nw, kGateSummary),
+            !std::regex_search(nw, GATE_SUMMARY),
           "the auto no-column warning");
     // Warnings and the INFO line: one line each, never the gate pattern.
     IS::ActivationCounts h;
@@ -556,7 +556,7 @@ int main(int argc, char** argv)
     check(IS::warnHybridUnderAuto(h), "2 hybrid of 101 warns under auto");
     const std::string hw = IS::hybridAutoWarning(h);
     check(hw.find("EThcD") != std::string::npos && hw.find("2 of 101") != std::string::npos &&
-            hw.find('\n') == std::string::npos && !std::regex_search(hw, kGateSummary),
+            hw.find('\n') == std::string::npos && !std::regex_search(hw, GATE_SUMMARY),
           "the hybrid warning names EThcD and the counts on one line");
     IS::ActivationCounts k;
     k.add(A::COLLISIONAL);
@@ -567,7 +567,7 @@ int main(int argc, char** argv)
     sc.ms2_by = 4;
     const std::string info = IS::seriesInfo(IS::Mode::AUTO, sc, h);
     check(info.rfind("Ion series (-ion_series auto): 3 MS2 spectra tagged as c/z-dot ions, 4 as b/y ions", 0) == 0 &&
-            !std::regex_search(info, kGateSummary) && info.find('\n') == std::string::npos,
+            !std::regex_search(info, GATE_SUMMARY) && info.find('\n') == std::string::npos,
           "the INFO line");
     IS::SeriesCounts a2 = sc, b2;
     b2.ms2_cz = 1;
@@ -599,7 +599,7 @@ int main(int argc, char** argv)
       const FASTag::Param pcz = withPair(base, IS::Series::CZ), pby = withPair(base, IS::Series::BY);
       const FASTag::Tables tcz(pcz), tby(pby);
       int spectra_with_true = 0, true_tags = 0, compl_ok = 0, by_true = 0, coincidental_spectra = 0;
-      for (const char* pep : kPeptides)
+      for (const char* pep : PEPTIDES)
         for (int z : {2, 3})
         {
           // 20 noise peaks: with every peak complemented the hypergeometric
@@ -708,7 +708,7 @@ int main(int argc, char** argv)
       const FASTag::Param pcz = withPair(base, IS::Series::CZ);
       const FASTag::Tables tcz(pcz);
       size_t peaks3 = 0, compl3 = 0, compl2 = 0, compl3_both = 0;
-      for (const char* pep : kPeptides)
+      for (const char* pep : PEPTIDES)
         for (int z : {2, 3})
         {
           const CzSynth::Spec s = CzSynth::make(pep, z, CzSynth::Ions::CZ, 1, 0, 300u + static_cast<unsigned>(z));
@@ -745,7 +745,7 @@ int main(int argc, char** argv)
     const auto cs_by = FASTag::ComplementSpec::fromParam(FASTag::cliDefaultParam());
     const auto cs_cz = FASTag::ComplementSpec::fromParam(withPair(FASTag::cliDefaultParam(), IS::Series::CZ));
     double e_cz = 0, e_by = 0;
-    for (const char* pep : kPeptides)
+    for (const char* pep : PEPTIDES)
     {
       const CzSynth::Spec s = CzSynth::make(pep, 2, CzSynth::Ions::CZ, 1, 0, 400u);
       e_cz += FASTag::Hyp::complementExcess(s.spec, s.M, cs_cz);
@@ -763,7 +763,7 @@ int main(int argc, char** argv)
     hp.mode = FASTag::Hyp::ChargeMode::INFER;
     int right = 0, total = 0;
     const double P = OpenMS::Constants::PROTON_MASS_U;
-    for (const char* pep : kPeptides)
+    for (const char* pep : PEPTIDES)
       for (int z : {2, 3})
       {
         CzSynth::Spec s = CzSynth::make(pep, z, CzSynth::Ions::CZ, z - 1, 0, 500u + static_cast<unsigned>(z));
@@ -787,7 +787,7 @@ int main(int argc, char** argv)
         // every precursor species below the cut, so "no fragment dropped" is
         // a property of the filter, not of luck.
         std::string pick;
-        for (const char* cand : kPeptides)
+        for (const char* cand : PEPTIDES)
         {
           const CzSynth::Spec t = CzSynth::make(cand, z, CzSynth::Ions::CZ, 1);
           double nf = 1e9;
@@ -863,7 +863,7 @@ int main(int argc, char** argv)
     };
     for (const auto& [pname, base] : bothParams())
       for (int z : {2, 3})
-        for (const char* pep : kPeptides)
+        for (const char* pep : PEPTIDES)
         {
           const CzSynth::Spec lad = CzSynth::make(pep, z, CzSynth::Ions::CZ, 1);
           CzSynth::Spec s = lad;
@@ -911,7 +911,7 @@ int main(int argc, char** argv)
       const FASTag::Tables tab(p);
       for (int ci = 0; ci < 5; ++ci)
       {
-        const ComplementSynth::Case& c = ComplementSynth::kRefCases[ci];
+        const ComplementSynth::Case& c = ComplementSynth::REF_CASES[ci];
         const ComplementSynth::Spec s = ComplementSynth::make(c.pep, c.charge, c.y2, c.iso, 0.0, c.noise, c.seed);
         const auto tags = FASTag::tagSpectrum(s.spec, s.prec_mz, c.charge, p, tab);
         for (const RefRow& r : REF)
@@ -927,16 +927,16 @@ int main(int argc, char** argv)
                         std::fabs(t.evalue - r.evalue) / std::max(1e-300, std::fabs(r.evalue)),
                         std::fabs(t.p_complement - r.p_complement));
           // The tag and its charge equal 1.11 bit for bit everywhere, the E-value
-          // too except under MSVC (kEUlps).
+          // too except under MSVC (E_ULPS).
           // p_complement is Boost's hypergeometric tail, whose result follows the
           // C library's math functions: glibc (where the .inc was made, x86-64 and
           // aarch64 alike) gives it bit for bit, Apple's libm 1-2 ulps away (CI
           // run 42427807615: 51 of 100 rows, E-value difference 0 in every row).
-          // Off glibc p_complement is therefore held to kPcUlps ulps.
-          check(t.seq == r.seq && t.charge == r.charge && pcUlps(t.evalue, r.evalue) <= kEUlps && pcUlps(t.p_complement, r.p_complement) <= kPcUlps,
+          // Off glibc p_complement is therefore held to PC_ULPS ulps.
+          check(t.seq == r.seq && t.charge == r.charge && pcUlps(t.evalue, r.evalue) <= E_ULPS && pcUlps(t.p_complement, r.p_complement) <= PC_ULPS,
                 "(d) case " + std::to_string(ci) + " rank " + std::to_string(r.rank) + " equals 1.11 bit for bit" +
-                    (kPcUlps ? " (p_complement within " + std::to_string(kPcUlps) + " ulps)" : std::string()) +
-                    (kEUlps ? " (E-value within " + std::to_string(kEUlps) + " ulps, MSVC)" : std::string()) + got);
+                    (PC_ULPS ? " (p_complement within " + std::to_string(PC_ULPS) + " ulps)" : std::string()) +
+                    (E_ULPS ? " (E-value within " + std::to_string(E_ULPS) + " ulps, MSVC)" : std::string()) + got);
           if (t.p_complement != r.p_complement) ++pc_off;
           check(t.ion_series == IS::Series::BY, "(d) b/y tags");
         }
@@ -944,7 +944,7 @@ int main(int argc, char** argv)
     }
     check(rows >= 40, "(d) enough 1.11 reference rows");
     std::cout << "d. " << rows << " rows equal FASTag 1.11.0 under an explicit b/y pair (" << pc_off
-              << " with p_complement off by at most " << kPcUlps << " ulps)\n";
+              << " with p_complement off by at most " << PC_ULPS << " ulps)\n";
   }
 
   // ---- (e) a reversed c-derived tag: TagRecon and Digest ----
@@ -1033,7 +1033,7 @@ int main(int argc, char** argv)
     FASTag::Digest::TerminusCounter tc_cz, tc_by;
     std::uint64_t expect_kr = 0;
     size_t reads = 0;
-    for (const char* pc : kPeptides)
+    for (const char* pc : PEPTIDES)
     {
       const std::string pep = pc;
       for (size_t pos = 0; pos + 3 <= pep.size(); ++pos)

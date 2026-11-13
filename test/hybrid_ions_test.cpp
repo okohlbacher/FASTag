@@ -67,7 +67,7 @@ namespace
     if (!ok) { std::cerr << "FAIL: " << what << "\n"; ++failures; }
   }
 
-  const std::regex kGateSummary("^[0-9]+ MS2 spectra, [0-9]+ tags");
+  const std::regex GATE_SUMMARY("^[0-9]+ MS2 spectra, [0-9]+ tags");
 
   double resMass(char c)
   {
@@ -140,7 +140,7 @@ namespace
     return t;
   }
 
-  const char* const kPeptides[5] = {"VGAHAGEYGAEALER", "LLEQTHGGLNAWK", "DLVEGFNTWQR", "GDFQAMVYTNSAWR",
+  const char* const PEPTIDES[5] = {"VGAHAGEYGAEALER", "LLEQTHGGLNAWK", "DLVEGFNTWQR", "GDFQAMVYTNSAWR",
                                     "YLGYLEQLLR"};
 
   /// The tool's two-pass reading of one spectrum (FASTag.cpp tag_at):
@@ -317,7 +317,7 @@ int main(int argc, char** argv)
   {
     int spectra = 0, both_halves = 0, by_nhalf = 0, cz_chalf = 0, by_chalf = 0, cz_nhalf = 0, e_mismatch = 0,
         e_checked = 0, wrong_series = 0;
-    for (const char* pc : kPeptides)
+    for (const char* pc : PEPTIDES)
       for (int z : {2, 3})
       {
         const std::string pep = pc;
@@ -394,7 +394,7 @@ int main(int argc, char** argv)
     for (const Kind k : {Kind{CzSynth::Ions::BY, "b/y"}, Kind{CzSynth::Ions::CZ, "c/z"}, Kind{CzSynth::Ions::BYCZ, "b/y+c/z"}})
     {
       int r_by = 0, r_cz = 0, r_both = 0;
-      for (const char* pc : kPeptides)
+      for (const char* pc : PEPTIDES)
         for (int z : {2, 3})
         {
           const CzSynth::Spec s = CzSynth::make(pc, z, k.ions, z - 1, 20, 900u + static_cast<unsigned>(z));
@@ -490,7 +490,7 @@ int main(int argc, char** argv)
           "auto + both: the hybrid count (" + hb + ")");
     check(IS::seriesInfo(IS::Mode::CZ, sc, act, true).find("hybrid, two") == std::string::npos,
           "cz never names two passes");
-    check(!std::regex_search(hb, kGateSummary) && hb.find('\n') == std::string::npos, "one line, not the gate pattern");
+    check(!std::regex_search(hb, GATE_SUMMARY) && hb.find('\n') == std::string::npos, "one line, not the gate pattern");
   }
 
   // ---- (g) RunMeta rows ----

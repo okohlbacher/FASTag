@@ -62,7 +62,7 @@ static int failures = 0;
 
 namespace
 {
-  const double kP = Constants::PROTON_MASS_U;
+  const double PROTON = Constants::PROTON_MASS_U;
   const double C13_MASS_DIFF = Constants::C13C12_MASSDIFF_U;
 
   Precursor precursor(double mz, int charge, std::vector<Int> possible = {})
@@ -158,11 +158,11 @@ namespace
       MSSpectrum s;
       std::mt19937 rng(31);
       for (size_t i = 1; i < aa.size(); ++i)
-        ComplementSynth::addFragment(s, aa.getPrefix(i).getMonoWeight(Residue::BIon, 1) - kP, 1,
+        ComplementSynth::addFragment(s, aa.getPrefix(i).getMonoWeight(Residue::BIon, 1) - PROTON, 1,
                                      0.5 + 0.5 * ComplementSynth::u01(rng), 0);
       for (int k = 0; k < 30; ++k) s.emplace_back(150.0 + (M - 200.0) * ComplementSynth::u01(rng), 0.05);
       s.sortByPosition();
-      const double mz3 = (M + 3 * kP) / 3.0;
+      const double mz3 = (M + 3 * PROTON) / 3.0;
       H::ChargeCall call;
       const auto h = H::precursorHypotheses(s, precursor(mz3, 0), mode(H::ChargeMode::INFER), cs, &call);
       const H::Hypothesis* sel = selected(h);
@@ -199,7 +199,7 @@ namespace
             sel ? sel->charge : -1, sel ? sel->iso : -9);
       if (sel)
       {
-        const double M = sel->mz * 3 - 3 * kP;
+        const double M = sel->mz * 3 - 3 * PROTON;
         CHECK(std::fabs(M - s.M) < 0.01, "%s (c): corrected neutral mass %.4f vs %.4f", label, M, s.M);
         const auto ref = FASTag::tagSpectrum(s.spec, s.prec_mz, 3, P, T);
         const auto got = FASTag::tagSpectrum(s.spec, sel->mz, 3, P, T);
@@ -236,7 +236,7 @@ namespace
       CHECK(h.size() == 1 && sel && sel->charge == 3 && sel->iso == 1 && sel->src == H::ChargeSource::HEADER,
             "%s (c2): header 3+ with a +1 isotope gives iso 1 (got %d/%d)", label, sel ? sel->charge : -1,
             sel ? sel->iso : -9);
-      if (sel) CHECK(std::fabs(sel->mz * 3 - 3 * kP - s.M) < 0.01, "%s (c2): corrected mass", label);
+      if (sel) CHECK(std::fabs(sel->mz * 3 - 3 * PROTON - s.M) < 0.01, "%s (c2): corrected mass", label);
       // Without a shift the same list keeps k = 0.
       const auto h0 = H::precursorHypotheses(s.spec, precursor(s.prec_mz, 3), mode(m, {0, 1}), cs);
       CHECK(h0.size() == 1 && h0[0].iso == 0 && h0[0].mz == s.prec_mz, "%s (c2): no shift keeps k 0", label);
@@ -363,8 +363,8 @@ namespace
       const AASequence other = AASequence::fromString("WHFYWHMYFWK");
       for (size_t i = 3; i < other.size(); ++i)
       {
-        const double ny = other.getSuffix(i).getMonoWeight(Residue::YIon, 1) - kP;
-        s.spec.emplace_back((ny + 3 * kP) / 3.0, 3.0);
+        const double ny = other.getSuffix(i).getMonoWeight(Residue::YIon, 1) - PROTON;
+        s.spec.emplace_back((ny + 3 * PROTON) / 3.0, 3.0);
       }
       s.spec.sortByPosition();
       const auto hp = mode(H::ChargeMode::ENUMERATE);

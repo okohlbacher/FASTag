@@ -39,7 +39,7 @@ static void check(bool ok, const std::string& what)
 
 /// Single-Cys tryptic peptides, no G or A next to the C (the CAM / Propionamide
 /// twins G+C and A+C), no M. The C is written as "C" and replaced by the form.
-static const char* const kPeptides[] = {"LTSEFCYQEK", "DVHLPWCEFR", "SYELPDCQVK", "NFEECLTSVR",
+static const char* const PEPTIDES[] = {"LTSEFCYQEK", "DVHLPWCEFR", "SYELPDCQVK", "NFEECLTSVR",
                                         "TPEVCDHLWK", "QLSECYFTER", "VLDECFNPSK", "WYEPCLSVDR",
                                         "HTDFCEVLPK", "SPLECQYTWR", "FEDSCVLQPK", "TYLVCEDHFR"};
 
@@ -56,7 +56,7 @@ static int writeMzml(const std::string& out, const std::string& form, int n)
   OpenMS::PeakMap exp;
   int scan = 0;
   for (int rep = 0; scan < n; ++rep)
-    for (const char* pep : kPeptides)
+    for (const char* pep : PEPTIDES)
     {
       if (scan >= n) break;
       // "mixed": two of three spectra Carbamidomethyl, one Nethylmaleimide.
@@ -343,7 +343,7 @@ int main(int argc, char** argv)
       const std::string form = cands[static_cast<std::size_t>(k)].name;
       AT::Tally t;
       unsigned seed = 7;
-      for (const char* pep : kPeptides)
+      for (const char* pep : PEPTIDES)
       {
         const ComplementSynth::Spec s = ComplementSynth::make(withForm(pep, form), 2, false, 0, 0.0, 20, seed++);
         AT::Vote v;
@@ -362,7 +362,7 @@ int main(int argc, char** argv)
         // Control: the run's own alphabet (fixed CAM) never spells a NEM C, so
         // the call needs the shadow pass.
         AT::Tally r;
-        for (const char* pep : kPeptides)
+        for (const char* pep : PEPTIDES)
         {
           const ComplementSynth::Spec s = ComplementSynth::make(withForm(pep, form), 2, false, 0, 0.0, 20, 99);
           AT::Vote v;
@@ -423,7 +423,7 @@ int main(int argc, char** argv)
     AT::Tally t;
     int cm_reads = 0;
     unsigned seed = 300;
-    for (const char* pep : kPeptides)
+    for (const char* pep : PEPTIDES)
     {
       const ComplementSynth::Spec s = ComplementSynth::make(withForm(pep, "Carbamidomethyl"), 2, false, 2, 0.0, 20, seed++);
       AT::Vote v;
@@ -453,7 +453,7 @@ int main(int argc, char** argv)
     const FASTag::Tables tabs(sp);
     AT::Tally none, z3;
     unsigned seed = 50;
-    for (const char* pep : kPeptides)
+    for (const char* pep : PEPTIDES)
     {
       std::string nc = pep;
       nc[nc.find('C')] = 'S';

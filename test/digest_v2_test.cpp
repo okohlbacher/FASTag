@@ -40,7 +40,7 @@ static std::string background()
     }
   return t;
 }
-static const char* kModels =
+static const char* MODELS =
     "Trypsin\tTrypsin\tC\tK\t0.5\nTrypsin\tTrypsin\tC\tR\t0.5\nTrypsin\tTrypsin\tN\t*\t-\n"
     "Lys-C\tLys-C\tC\tK\t1\nLys-C\tLys-C\tN\t*\t-\n"
     "Arg-C\tArg-C\tC\tR\t1\nArg-C\tArg-C\tN\t*\t-\n"
@@ -58,12 +58,12 @@ static D::ModelTable parse(const std::string& text, bool want_ok = true, std::st
   check(ok == want_ok, std::string("table parses ") + (want_ok ? "" : "not ") + "as expected: " + err);
   return t;
 }
-static std::string v1Text() { return "# synthetic v1\nmodel\tclass\tend\tresidue\tfreq\n" + background() + kModels; }
+static std::string v1Text() { return "# synthetic v1\nmodel\tclass\tend\tresidue\tfreq\n" + background() + MODELS; }
 /// A v2 table: detection weights for all three classes (orbitrap_hcd R 0.4,
 /// timstof K 1.5), a reference and a specificity.
 static std::string v2Text(const std::string& extra = "", bool all_classes = true)
 {
-  std::string t = "# fastag_digest_models v2\n# synthetic\nmodel\tclass\tend\tresidue\tfreq\n" + background() + kModels;
+  std::string t = "# fastag_digest_models v2\n# synthetic\nmodel\tclass\tend\tresidue\tfreq\n" + background() + MODELS;
   t += "detection\torbitrap_hcd\tC\tR\t0.4\n";
   if (all_classes) t += "detection\ttimstof\tC\tK\t1.5\ndetection\tother\tC\tK\t1\n";
   t += "reference\t-\tC\tK\t0.55\nreference\t-\tC\tR\t0.45\n";
@@ -194,7 +194,7 @@ int main()
     check(v2.has_specificity && v2.s_trypsin == 0.05 && v2.s_nontryptic == 0.05, "v2: specificity");
     check(v2.models.size() == v1.models.size(), "v2: reserved rows are not models");
     // the marker alone makes a v2 table (version 2 without detection, reference or specificity rows)
-    const D::ModelTable bare = parse("# fastag_digest_models v2\nmodel\tclass\tend\tresidue\tfreq\n" + background() + kModels);
+    const D::ModelTable bare = parse("# fastag_digest_models v2\nmodel\tclass\tend\tresidue\tfreq\n" + background() + MODELS);
     check(bare.version == 2 && bare.detection.empty() && !bare.has_specificity, "v2: the marker line alone gives version 2");
     std::string err;
     parse(v2Text("detection\tqtof\tC\tK\t1\n"), false, &err);
@@ -202,11 +202,11 @@ int main()
     parse(v2Text("detection\tother\tC\tK\t1\n"), false, &err);
     check(err.find("given twice") != std::string::npos, "v2: a repeated detection row is refused");
     parse(v2Text("detection\tother\tC\tR\t-1\n"), false, &err);
-    parse("# fastag_digest_models v2\nmodel\tclass\tend\tresidue\tfreq\n" + background() + kModels +
+    parse("# fastag_digest_models v2\nmodel\tclass\tend\tresidue\tfreq\n" + background() + MODELS +
               "specificity\ttrypsin\t-\t-\t0.05\n", false, &err);
     check(err.find("nontryptic") != std::string::npos, "v2: a specificity needs both rows");
     parse(v2Text("specificity\ttrypsin\t-\t-\t0.1\n"), false, &err);
-    parse("# fastag_digest_models v2\nmodel\tclass\tend\tresidue\tfreq\n" + background() + kModels +
+    parse("# fastag_digest_models v2\nmodel\tclass\tend\tresidue\tfreq\n" + background() + MODELS +
               "reference\t-\tC\tK\t0.5\n", false, &err);
     check(err.find("reference") != std::string::npos, "v2: a reference needs K and R");
     // the shipped v2 table parses and has every class

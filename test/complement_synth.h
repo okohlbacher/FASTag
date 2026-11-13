@@ -102,7 +102,7 @@ namespace ComplementSynth
     int noise;
     unsigned seed;
   };
-  inline constexpr Case kRefCases[5] = {
+  inline constexpr Case REF_CASES[5] = {
       {"VGAHAGEYGAEALER", 2, false, 2, 30, 11},
       {"SAMPLERKDLVEGFNTWQR", 3, true, 2, 40, 12},
       {"LLEQTHGGLNAIPKDEFAR", 3, false, 0, 25, 13},

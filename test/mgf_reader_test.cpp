@@ -70,7 +70,7 @@ namespace
     out.write(bytes.data(), static_cast<std::streamsize>(bytes.size()));
   }
 
-  const std::vector<std::size_t> kChunks = {1024, 1500, 4096, 65536, std::size_t{4} << 20};
+  const std::vector<std::size_t> CHUNKS = {1024, 1500, 4096, 65536, std::size_t{4} << 20};
 
   /// The message of the ParseError @p f throws, or "" when it throws none.
   template <typename F> std::string parse_error(F&& f)
@@ -138,7 +138,7 @@ namespace
 
     const std::string path = tmp_path("scan.mgf");
     write_file(path, b.bytes);
-    for (const std::size_t chunk : kChunks)
+    for (const std::size_t chunk : CHUNKS)
     {
       const auto blocks = MgfReader::scanBlocks(path, chunk);
       check(blocks.begin == b.begin, "begin offsets at chunk " + std::to_string(chunk));
@@ -194,7 +194,7 @@ namespace
       {
         const std::string p = tmp_path("lost.mgf");
         write_file(p, c.bytes);
-        for (const std::size_t chunk : kChunks)
+        for (const std::size_t chunk : CHUNKS)
         {
           const auto bl = MgfReader::scanBlocks(p, chunk);
           const std::string at = c.name + " at chunk " + std::to_string(chunk);
@@ -228,7 +228,7 @@ namespace
     {
       const std::string p = tmp_path("structural.mgf");
       write_file(p, c.bytes);
-      for (const std::size_t chunk : kChunks)
+      for (const std::size_t chunk : CHUNKS)
       {
         const std::string msg = parse_error([&] { MgfReader::scanBlocks(p, chunk, c.cap); });
         check(has(msg, c.expect), c.name + " at chunk " + std::to_string(chunk) + ": got '" + msg + "'");
