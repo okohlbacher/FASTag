@@ -1,11 +1,16 @@
 <#
-  Installs the Windows desktop app (the NSIS installer) silently into -Dest and
-  runs the CLI the app bundles exactly where the installer put it, the way the
+  Installs the Windows desktop app (the NSIS installer) silently for -Scope
+  (AllUsers: %ProgramFiles%\FASTag, needs an elevated shell; CurrentUser:
+  %LOCALAPPDATA%\Programs\FASTag, or an earlier per-user install's folder)
+  and runs the CLI the app bundles exactly where the installer put it, the way the
   app starts it: no console window (CREATE_NO_WINDOW), OPENMS_DATA_PATH and
   FASTAG_TAXONOMY_DIR pointing into the installed resources, OPENBLAS_NUM_THREADS=1,
   and on an ARM64 host MIMALLOC_DISABLE_REDIRECT=1 (gui/src-tauri/src/fastag.rs cli_env).
 
-    windows_installed_check.ps1 -Installer <setup.exe> -Dest <dir> [-Out <dir>] [-Keep]
+    windows_installed_check.ps1 -Installer <setup.exe> [-Scope AllUsers|CurrentUser]
+                                [-Out <dir>] [-Keep] [-DirOut <file>]
+
+  -DirOut: a file the install folder is written to (for the steps after).
 
   Checks, each with the exit code printed in hex (0xC0000142 is
   STATUS_DLL_INIT_FAILED, 0xC0000135 STATUS_DLL_NOT_FOUND):
@@ -15,23 +20,24 @@
     - FASTag.exe --help exits 0 and prints "Version: X.Y.Z";
     - FASTag.exe -write_ini writes the INI the Setup page is built from;
     - a tagging run on the bundled fixture exits 0 and writes tags.
-  Uninstalls afterwards unless -Keep. Exits 1 on the first failure.
+  Exactly one Apps entry must remain, in -Scope. Uninstalls afterwards unless
+  -Keep, and checks that no file, folder, Apps entry or shortcut is left
+  (windows_install_lib.ps1). Exits 1 on the first failure.
 #>
 param(
   [Parameter(Mandatory = $true)][string]$Installer,
-  [Parameter(Mandatory = $true)][string]$Dest,
+  [ValidateSet('AllUsers', 'CurrentUser')][string]$Scope = 'AllUsers',
   [string]$Out = (Join-Path ([IO.Path]::GetTempPath()) 'fastag-installed-check'),
-  [switch]$Keep
+  [switch]$Keep,
+  [string]$DirOut = ''
 )
 $ErrorActionPreference = 'Stop'
+. (Join-Path $PSScriptRoot 'windows_install_lib.ps1')
 New-Item -ItemType Directory -Force $Out | Out-Null
-$Dest = [IO.Path]::GetFullPath($Dest)
 
-function Fail([string]$msg) { Write-Host "::error::$msg"; exit 1 }
-
-# NSIS: /S silent, /D= the install directory (must be the last argument, unquoted).
-$p = Start-Process -FilePath $Installer -ArgumentList '/S', "/D=$Dest" -Wait -PassThru
-if ($p.ExitCode -ne 0) { Fail "installer exited $($p.ExitCode)" }
+$install = Install-Fastag $Installer @("/$Scope") $Scope
+$Dest = $install.Dir
+if ($DirOut) { Set-Content -Path $DirOut -Value $Dest -Encoding utf8 }
 $R = Join-Path $Dest 'resources\fastag'
 $exe = Join-Path $R 'bin\FASTag.exe'
 if (-not (Test-Path $exe)) { Fail "no bundled CLI at $exe (installed: $((Get-ChildItem $Dest -Name) -join ', '))" }
@@ -100,8 +106,5 @@ $rows = (Get-Content $tsv | Measure-Object -Line).Lines
 if ($rows -lt 2) { Fail "the tagging run wrote $rows lines to $tsv" }
 Write-Host "tagging run: $rows lines in $tsv"
 
-if (-not $Keep) {
-  $u = Join-Path $Dest 'uninstall.exe'
-  if (Test-Path $u) { Start-Process -FilePath $u -ArgumentList '/S' -Wait | Out-Null; Write-Host 'uninstalled' }
-}
-Write-Host 'installed-app check passed'
+if (-not $Keep) { Uninstall-Fastag $install }
+Write-Host "installed-app check passed ($Scope, $Dest)"

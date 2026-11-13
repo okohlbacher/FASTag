@@ -21,7 +21,7 @@ export interface FaqEntry {
   fixes: ReactNode[]
 }
 
-export const FAQ_GROUPS = ['Running', 'Few or no tags', 'Species tab', 'Digest tab', 'Files', 'Batch runs']
+export const FAQ_GROUPS = ['Running', 'Few or no tags', 'Species tab', 'Digest tab', 'Files', 'Batch runs', 'Installing']
 
 const C = ({ children }: { children: string }): JSX.Element => <code className="cli">{children}</code>
 
@@ -312,7 +312,14 @@ export const FAQ: FaqEntry[] = [
       <>The species reference (about 1 GB) is not where FASTag looks for it, next to the program.</>,
       <>An index, nodes or names file of your own was given without the other two.</>
     ],
-    fixes: [<>Clear all three reference fields to use the bundled reference, or give all three. If the bundled one is missing, install the app again.</>]
+    fixes: [
+      <>Clear all three reference fields to use the bundled reference, or give all three.</>,
+      <>
+        The Windows desktop app ships without the index (tax_k7.taxdb, 1.14 GB): download FASTag-taxonomy-k7.tar.gz from the release page, unpack it (tar -xzf FASTag-taxonomy-k7.tar.gz) and copy share-FASTag-taxonomy\tax_k7.taxdb into the folder the check before the run names, or set FASTAG_TAXONOMY_DIR to a folder that holds it. Or turn the species report off. See{' '}
+        <L to="faq-windows-install">Where FASTag installs on Windows</L>.
+      </>,
+      <>If the taxonomy files that come with the app are missing, install the app again.</>
+    ]
   },
 
   // Digest tab
@@ -386,6 +393,31 @@ export const FAQ: FaqEntry[] = [
     symptoms: <>A red box "N of M batch jobs failed", and failed files marked in the batch list.</>,
     causes: [<>Each failed file has its own reason, shown in the red box and on the file in the batch list.</>],
     fixes: [<>Fix the cause, then click Retry failed: it runs only the failed files again. See <L to="start-batch">Batch runs</L>.</>]
+  },
+
+  // Installing
+  {
+    id: 'faq-windows-install',
+    group: 'Installing',
+    question: 'Where FASTag installs on Windows, and what uninstall leaves',
+    symptoms: <>You need to know where the app, its data and its settings are, how much space it takes, or how to deploy it to many PCs.</>,
+    causes: [
+      <>
+        The app: for all users in C:\Program Files\FASTag (the choice preselected when an administrator starts the installer), or for one user in
+        %LOCALAPPDATA%\Programs\FASTag (no administrator needed; an install of 1.13.3 or earlier stays in %LOCALAPPDATA%\FASTag). About 365 MB,
+        and about 1.5 GB with the taxonomy index of the species report, which is a separate download.
+      </>,
+      <>Settings: %APPDATA%\de.openms.fastag (they follow you to other PCs). History, run records and the failure log: %LOCALAPPDATA%\de.openms.fastag, with the WebView2 data. Outputs: where you chose, beside the input by default.</>,
+      <>The app needs the Microsoft Edge WebView2 runtime, which current Windows 10 and 11 have. It also runs on Windows on ARM64 (emulated).</>
+    ],
+    fixes: [
+      <>Silent install: FASTag-gui-windows-x64-setup.exe /S (for all users when run as administrator), /S /AllUsers or /S /CurrentUser. Silent uninstall: uninstall.exe /S in the install folder.</>,
+      <>Installing for all users removes a per-user install of FASTag first (and the other way round, for an administrator), so an upgrade leaves one copy.</>,
+      <>
+        Uninstall removes the installed files and the Start-menu entry. It keeps your settings and history unless you tick Delete app data, keeps a taxonomy index you
+        unpacked into the install folder, and never touches your outputs.
+      </>
+    ]
   }
 ]
 

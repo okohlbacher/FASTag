@@ -10,6 +10,7 @@ import { shellLine } from '../app/format'
 import { focusLater } from '../app/focus'
 import { INSTRUMENTS, presetText } from '../setup/presets'
 import type { Check, Detected, Level } from './checks'
+import type { ParamValue } from '../ParamField'
 
 const LEVEL_WORD: Record<Level, string> = { block: 'Blocks the run', flag: 'Red flag', warn: 'Warning', info: 'Note' }
 
@@ -125,6 +126,8 @@ export interface PreStartPanelProps {
   onRunAnyway(id: string): void
   onUndoRunAnyway(id: string): void
   onInstrument(id: string): void
+  // A fix that sets parameters (CheckFix.params).
+  onParams?(values: Record<string, ParamValue>): void
   onRecheck(): void
   // A spectra file is chosen: the summary is announced only then.
   hasInput: boolean
@@ -216,7 +219,12 @@ export function PreStartPanel(p: PreStartPanelProps): JSX.Element {
                       p.onInstrument(c.fix!.instrument!)
                       next()
                     }
-                  : undefined
+                  : c.fix?.params && p.onParams
+                    ? () => {
+                        p.onParams!(c.fix!.params!)
+                        next()
+                      }
+                    : undefined
               }
             />
           ))}

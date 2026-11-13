@@ -561,6 +561,7 @@ export default function App({ start = LANDING }: { start?: Origin } = {}): JSX.E
                     onUndoRunAnyway={inspector.undoRunAnyway}
                     hasInput={!!input}
                     onInstrument={session.chooseInstrument}
+                    onParams={(v) => Object.entries(v).forEach(([n, x]) => session.setValue(n, x))}
                     onRecheck={inspector.recheck}
                   />
                 }

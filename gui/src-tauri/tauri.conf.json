@@ -64,7 +64,9 @@
     ],
     "windows": {
       "nsis": {
-        "compression": "lzma"
+        "compression": "lzma",
+        "installMode": "both",
+        "installerHooks": "windows/installer-hooks.nsh"
       }
     },
     "macOS": {

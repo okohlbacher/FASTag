@@ -238,6 +238,19 @@ export interface TaxdbInfo {
   k: number
 }
 
+/// Where the CLI finds its taxonomy for -species (species.rs taxonomy_status).
+export interface TaxonomyStatus {
+  // The index the run would load; null when there is none.
+  index: string | null
+  // The folder the CLI looks in (where the index belongs); null when it
+  // finds no taxonomy folder at all.
+  dir: string | null
+  // <dir>/tax_k7.taxdb, or the -taxdb given.
+  expected: string | null
+  // The folder comes from FASTAG_TAXONOMY_DIR.
+  fromEnv: boolean
+}
+
 export interface Settings {
   schemaVersion: number
   lastUsed: Record<string, unknown> | null
@@ -280,6 +293,8 @@ export interface FastagApi {
   savePreset: (name: string, values: Record<string, unknown>) => Promise<boolean>
   deletePreset: (name: string) => Promise<boolean>
   taxdbInfo: (explicit?: string) => Promise<TaxdbInfo | null>
+  // Where a run with -species finds the taxonomy index (@p explicit: -taxdb).
+  taxonomyStatus: (explicit?: string) => Promise<TaxonomyStatus>
   // The -species report, parsed in the renderer (results/species.ts); null
   // when it is missing, unreadable or empty.
   species: (path: string) => Promise<SpeciesReport | null>

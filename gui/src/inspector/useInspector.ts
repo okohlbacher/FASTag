@@ -14,6 +14,7 @@ import { PARAM_BY_NAME } from '../paramLayout'
 import { capabilitiesOf, NO_CAPABILITIES, type CliCapabilities } from './capabilities'
 import { preStartChecks, type Check, type PreStart } from './checks'
 import { parseProbe, type ProbeFasta, type ProbeReport } from './probe'
+import type { TaxonomyStatus } from '../types'
 
 interface Probed {
   report?: ProbeReport
@@ -72,6 +73,30 @@ export function useInspector(o: { input: string; values: Record<string, ParamVal
   // `${input} ${check id}` of the red flags answered with Run anyway.
   const [answered, setAnswered] = useState<Set<string>>(() => new Set())
   const [generation, setGeneration] = useState(0)
+  // Where a -species run finds the taxonomy index; undefined while unknown.
+  const [taxonomy, setTaxonomy] = useState<TaxonomyStatus | undefined>(undefined)
+  const speciesOn = values['species'] === true
+  const taxdbField = typeof values['taxdb'] === 'string' ? values['taxdb'].trim() : ''
+  // The taxonomy: whenever the species report is on, its -taxdb field
+  // changes, Check again is pressed, or the window gets the focus back (the
+  // index may just have been unpacked).
+  const [focusCount, setFocusCount] = useState(0)
+  useEffect(() => {
+    const onFocus = (): void => setFocusCount((n) => n + 1)
+    window.addEventListener('focus', onFocus)
+    return () => window.removeEventListener('focus', onFocus)
+  }, [])
+  useEffect(() => {
+    if (!binOk || !speciesOn) return
+    let live = true
+    window.fastag
+      .taxonomyStatus(taxdbField || undefined)
+      .then((t) => live && setTaxonomy(t))
+      .catch(() => live && setTaxonomy(undefined))
+    return () => {
+      live = false
+    }
+  }, [binOk, speciesOn, taxdbField, generation, focusCount])
 
   useEffect(() => {
     if (!binOk) return
@@ -130,7 +155,7 @@ export function useInspector(o: { input: string; values: Record<string, ParamVal
   const pre = useMemo<PreStart>(() => {
     if (!input) {
       // No file: only the checks of the settings.
-      const s = preStartChecks({ input, values, supported: false, probe: null })
+      const s = preStartChecks({ input, values, supported: false, probe: null, taxonomy })
       return { ...s, notChecked: null }
     }
     const report = probed?.report
@@ -141,9 +166,10 @@ export function useInspector(o: { input: string; values: Record<string, ParamVal
       supported: caps ? caps.probeInput : true,
       // The FASTA record comes from its own probe only.
       probe: report ? { ...report, fasta: fastaRecord ?? undefined } : null,
-      probeError: probed?.error ?? null
+      probeError: probed?.error ?? null,
+      taxonomy
     })
-  }, [input, values, caps, probed, fastaRecord])
+  }, [input, values, caps, probed, fastaRecord, taxonomy])
 
   const isAnswered = useCallback((id: string) => answered.has(`${input} ${id}`), [answered, input])
   const blocks = pre.checks.filter((c) => c.level === 'block')

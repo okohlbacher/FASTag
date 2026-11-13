@@ -59,6 +59,46 @@ async function playRun(mock: MockBridge, logs: string[], done: { ok: boolean; co
 }
 
 describe('inspector before a run', () => {
+  // A fresh install has no taxonomy index (a separate release asset): the
+  // Characterize preset's species report would stop with exit 6. Run is
+  // blocked with the how-to; the fix runs without the species report, and
+  // an index unpacked meanwhile is found when the window has the focus back.
+  it('Characterize without the taxonomy index: blocked, with the way to run without the species report', async () => {
+    const mock = installMockBridge()
+    const dir = 'C:\\Users\\u\\AppData\\Local\\Programs\\FASTag\\resources\\fastag\\share\\FASTag\\taxonomy'
+    mock.taxonomyStatusResult = { index: null, dir, expected: `${dir}\\tax_k7.taxdb`, fromEnv: false }
+    await renderCharacterizeApp(mock)
+    await pickSingle(mock, IN)
+    await flush()
+    const block = checkItem(/^Blocks the run: The species report needs the taxonomy index/)
+    expect(block.textContent).toContain(`not found at ${dir}\\tax_k7.taxdb`)
+    expect(block.textContent).toContain('FASTag-taxonomy-k7.tar.gz')
+    expect(runDisabled()).toBe(true)
+    expect(summary()).toMatch(/1 block/)
+    expect(mock.taxonomyStatusCalls.length).toBeGreaterThan(0)
+    // Unpacked meanwhile: the focus back re-checks.
+    mock.taxonomyStatusResult = { ...mock.taxonomyStatusResult, index: `${dir}\\tax_k7.taxdb` }
+    await act(async () => {
+      window.dispatchEvent(new Event('focus'))
+    })
+    await flush()
+    expect(document.querySelector('li.check[data-check="no-taxdb"]')).toBeNull()
+    expect(runDisabled()).toBe(false)
+    // Gone again: the fix turns the species report off and the run goes.
+    mock.taxonomyStatusResult = { ...mock.taxonomyStatusResult, index: null }
+    await act(async () => {
+      window.dispatchEvent(new Event('focus'))
+    })
+    await flush()
+    await click(within(checkItem(/needs the taxonomy index/)).getByRole('button', { name: 'Run without the species report' }))
+    await settle()
+    expect(document.querySelector('li.check[data-check="no-taxdb"]')).toBeNull()
+    expect(runDisabled()).toBe(false)
+    await click(runButton())
+    expect(mock.runCalls).toHaveLength(1)
+    expect(mock.runCalls[0].params['species']).not.toBe(true)
+  })
+
   it('with a CLI that has no -probe_input, the file is "not checked", never probed and Run is not held', async () => {
     const mock = installMockBridge()
     await renderApp(mock)

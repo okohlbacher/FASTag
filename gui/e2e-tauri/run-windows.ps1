@@ -5,8 +5,9 @@
     run-windows.ps1 -App <install dir>\fastag.exe -Out <dir> [-TaxDb <tax_k7.taxdb>]
 
   -TaxDb: the taxonomy k-mer index of the release asset
-  FASTag-taxonomy-k7.tar.gz; Characterize first runs without it (the
-  failure banner), then with it copied into the installed app.
+  FASTag-taxonomy-k7.tar.gz; Characterize is first blocked without it (the
+  "no taxonomy index" check before the run), then runs with it copied into
+  the installed app.
 
   tauri-driver must be on PATH; msedgedriver.exe is fetched for the
   WebView2 runtime this machine has (the versions must match). The app's

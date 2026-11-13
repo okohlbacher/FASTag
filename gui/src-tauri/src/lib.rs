@@ -77,6 +77,11 @@ pub fn run() {
             // was killed) is recorded as interrupted before the window asks
             // for the last run and the leftovers (sweep.rs).
             if let Some(d) = history::dir(app.handle()) {
+                // 1.13.3 and earlier kept the run data in app_data_dir
+                // (Roaming on Windows): moved once (sweep::migrate).
+                if let Some(old) = history::old_dir(app.handle()) {
+                    sweep::migrate(&old, &d);
+                }
                 sweep::recover(&d);
             }
             // The main window, from its tauri.conf.json entry ("create":
@@ -140,6 +145,7 @@ pub fn run() {
             denovo::denovo_export,
             drop::folder_spectra_list,
             species::taxdb_info,
+            species::taxonomy_status,
             spectrum::spectrum_support,
             spectrum::spectrum_peaks,
             settings::load_settings,

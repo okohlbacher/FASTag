@@ -14,6 +14,7 @@ import { value, type Report } from '../digestReport'
 import { INSTRUMENTS, presetText } from '../setup/presets'
 import { familyOf, instrumentFromReports, instrumentText, presetFor, type Family } from './instrument'
 import { PROBE_FORMAT, type ProbeReport } from './probe'
+import type { TaxonomyStatus } from '../types'
 
 export type Level = 'block' | 'flag' | 'warn' | 'info'
 
@@ -21,6 +22,8 @@ export interface CheckFix {
   label: string
   // An instrument preset to choose (setup/presets.ts id).
   instrument?: string
+  // Parameters to set instead (the form's values).
+  params?: Record<string, ParamValue>
   // Run again once the fix is applied (after a run).
   rerun?: boolean
 }
@@ -81,19 +84,53 @@ export const diaspextract = (input: string): string[] => ['DIAspeXtract', '-in',
 export const NOT_CHECKED_NO_PROBE =
   'Not checked before the run: this FASTag has no metadata probe (-probe_input). The instrument and the checks come from the reports after the run.'
 
+/// The release asset with the taxonomy k-mer index.
+export const TAXONOMY_ASSET = 'FASTag-taxonomy-k7.tar.gz'
+
+/// The species report without its index (a fresh install: the index is a
+/// separate release asset): FASTag would stop with exit 6, "-species: no
+/// taxdb". Null when the index is there or not known yet.
+export function noTaxdbCheck(values: Record<string, ParamValue>, taxonomy: TaxonomyStatus | null | undefined): Check | null {
+  if (values['species'] !== true || !taxonomy || taxonomy.index) return null
+  const explicit = String(values['taxdb'] ?? '').trim() !== ''
+  const where = taxonomy.expected ? `at ${taxonomy.expected}` : 'beside FASTag (there is no taxonomy folder)'
+  const how = explicit
+    ? 'Point the taxonomy index field at an existing tax_k7.taxdb, or clear it to use the one beside FASTag.'
+    : `Download ${TAXONOMY_ASSET} from the FASTag release page, unpack it, and copy tax_k7.taxdb from its share-FASTag-taxonomy folder into ${
+        taxonomy.dir ?? 'a folder of your choice'
+      }${taxonomy.fromEnv ? ' (the folder FASTAG_TAXONOMY_DIR names)' : ''}${
+        /^[A-Za-z]:\\Program Files/i.test(taxonomy.dir ?? '') ? ' (writing there needs an administrator)' : ''
+      } and press Check again. Or keep it in a folder of your own, set the environment variable FASTAG_TAXONOMY_DIR to that folder and start FASTag again.`
+  return {
+    id: 'no-taxdb',
+    level: 'block',
+    title: 'The species report needs the taxonomy index',
+    detail: `The species report needs the taxonomy k-mer index (tax_k7.taxdb, about 1.1 GB), and it is not found ${where}. FASTag would stop with "-species: no taxdb". ${how} Or run without the species report.`,
+    faq: 'faq-species-reference',
+    source: 'the settings and the installed files',
+    fix: { label: 'Run without the species report', params: { species: false } }
+  }
+}
+
 /// The checks before a run of @p input with @p values. @p probe: the probe's
 /// output, null when there is none (no -probe_input, or not run yet);
-/// @p probeError: why the probe failed.
+/// @p probeError: why the probe failed; @p taxonomy: where the taxonomy index
+/// is (species.rs taxonomy_status), undefined while unknown.
 export function preStartChecks(o: {
   input: string
   values: Record<string, ParamValue>
   supported: boolean
   probe: ProbeReport | null
   probeError?: string | null
+  taxonomy?: TaxonomyStatus | null
 }): PreStart {
   const { values, probe } = o
   const checks: Check[] = []
   const unit = unitOf(values)
+
+  // From the settings and the install: needs no probe.
+  const taxdb = noTaxdbCheck(values, o.taxonomy)
+  if (taxdb) checks.push(taxdb)
 
   // From the settings alone: needs no probe.
   if (values['species'] === true && unit === 'Da') {

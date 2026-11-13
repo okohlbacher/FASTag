@@ -198,20 +198,26 @@ test('characterize: species, digest, label reports and the Overview', { timeout:
     await chooseInput(s, input)
     await shot(s, '04-characterize-setup')
     // A fresh install has the taxonomy dumps but not the k-mer index (a
-    // separate release asset): the species survey stops with exit 6 and the
-    // failure banner must quote FASTag's reason. Then the index goes where
-    // that reason says, as a user would put it, and the run is repeated.
+    // separate release asset), and the species survey would stop with exit 6
+    // ("-species: no taxdb"). The checks before the run block it instead and
+    // say where the index goes (the folder the CLI looks in) and how to get
+    // it. Then the index goes there, as a user would put it; the window
+    // getting the focus back re-checks, and the run goes.
     const taxDir = join(dirname(APP), 'resources', 'fastag', 'share', 'FASTag', 'taxonomy')
     const taxdb = process.env.E2E_TAXDB
     if (taxdb && !existsSync(join(taxDir, basename(taxdb)))) {
-      await s.click(await s.button('Run on char.mzML', 120000))
-      const banner = await until('the failure banner', () => s.exec("const b = document.querySelector('.failure[role=alert]'); return b ? b.innerText : ''"), 300000, 300)
+      const check = await until('the "no taxonomy index" check', () => s.exec("const c = document.querySelector('li.check[data-check=no-taxdb]'); return c ? c.innerText : ''"), 120000, 300)
       await shot(s, '05-characterize-no-taxdb')
-      record.steps.characterizeNoTaxdb = banner.slice(0, 1500)
-      assert.match(banner, /FASTag.s reason/, banner)
-      assert.match(banner, /no taxdb/, banner)
+      record.steps.characterizeNoTaxdb = check.slice(0, 1500)
+      assert.match(check, /Blocks the run: The species report needs the taxonomy index/, check)
+      assert.match(check, /FASTag-taxonomy-k7\.tar\.gz/, check)
+      const want = join(taxDir, 'tax_k7.taxdb').toLowerCase()
+      assert.ok(check.toLowerCase().includes(want), `the check does not name ${want}: ${check}`)
+      const runBlocked = await s.exec("const b = [...document.querySelectorAll('button[data-run]')].find((b) => b.textContent.includes('char.mzML')); return !b || b.disabled")
+      assert.equal(runBlocked, true, 'Run is not blocked without the taxonomy index')
       copyFileSync(taxdb, join(taxDir, basename(taxdb)))
-      await view(s, 'setup')
+      await s.exec("window.dispatchEvent(new Event('focus'))")
+      await until('the check to clear', () => s.exec("return !document.querySelector('li.check[data-check=no-taxdb]')"), 60000, 300)
     }
     await s.click(await s.button('Run on char.mzML', 120000))
     await until('the Overview', () => s.exec(`const t = [...document.querySelectorAll('[role=tab]')].find((t) => t.textContent.trim() === 'Overview');

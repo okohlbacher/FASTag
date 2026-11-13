@@ -32,6 +32,7 @@ import type {
   SpectrumDump,
   SpectrumSupport,
   TaxdbInfo,
+  TaxonomyStatus,
   TaxonomyDump
 } from '../types'
 import runStartedFixture from './fixtures/run-started.json'
@@ -105,6 +106,10 @@ export interface MockBridge extends FastagApi {
   spectrumMissing: string[]
   spectrumCalls: { input: string; nativeId: string; params: Record<string, unknown> | null }[]
   taxdbInfoResult: TaxdbInfo | null
+  // Where a -species run finds the index (default: found, as an install
+  // with the taxonomy asset unpacked); taxonomyStatusCalls: the -taxdb asked.
+  taxonomyStatusResult: TaxonomyStatus
+  taxonomyStatusCalls: (string | undefined)[]
   // The CLI's --helphelp options. The default is a CLI without
   // -probe_input, as every released FASTag is.
   cliOptions: CliOptions
@@ -346,6 +351,8 @@ export function installMockBridge(): MockBridge {
     spectrumMissing: [],
     spectrumCalls: [],
     taxdbInfoResult: null,
+    taxonomyStatusResult: { index: '/app/taxonomy/tax_k7.taxdb', dir: '/app/taxonomy', expected: '/app/taxonomy/tax_k7.taxdb', fromEnv: false },
+    taxonomyStatusCalls: [],
     cliOptions: { options: ['in', 'out', 'fasta', 'fragment_tolerance', 'fragment_tolerance_unit'], ok: true, detail: '5 options' },
     probeOutputs: {},
     probeCalls: [],
@@ -453,6 +460,10 @@ export function installMockBridge(): MockBridge {
       return Promise.resolve(true)
     },
     taxdbInfo: () => Promise.resolve(mock.taxdbInfoResult),
+    taxonomyStatus: (explicit) => {
+      mock.taxonomyStatusCalls.push(explicit)
+      return Promise.resolve(mock.taxonomyStatusResult)
+    },
     cliCapabilities: () => Promise.resolve(mock.cliOptions),
     probeInput: (input, fasta) => {
       mock.probeCalls.push({ input, fasta })

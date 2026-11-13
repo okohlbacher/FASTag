@@ -271,8 +271,20 @@ fn newest_of(text: &str, path: &Path) -> Option<RunRecord> {
         .find(|r| r.output_paths().iter().any(|p| p == path || canon(p) == want))
 }
 
-/// The app's data folder, where the record lives.
+/// The app's data folder, where the record, the run markers, the failure log
+/// and the kept leftovers live: app_local_data_dir. On Windows that is
+/// %LOCALAPPDATA%\de.openms.fastag, which is never roamed or redirected to a
+/// share: the paths in the record and the runs the markers stand for are
+/// this machine's. On macOS and Linux it is the same folder as app_data_dir
+/// (~/Library/Application Support/de.openms.fastag, ~/.local/share/...).
+/// Settings stay in app_config_dir (settings.rs).
 pub fn dir(app: &AppHandle) -> Option<PathBuf> {
+    app.path().app_local_data_dir().ok()
+}
+
+/// Where 1.13.3 and earlier kept them (app_data_dir: Roaming on Windows);
+/// sweep::migrate moves them from there once.
+pub fn old_dir(app: &AppHandle) -> Option<PathBuf> {
     app.path().app_data_dir().ok()
 }
 

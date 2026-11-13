@@ -4,7 +4,7 @@
 import { describe, expect, it } from 'vitest'
 import { parseReport } from '../digestReport'
 import { parseProbe } from './probe'
-import { NOT_CHECKED_NO_PROBE, NOTE_LINE, postRunChecks, preStartChecks, pseudoPath, refusalOf } from './checks'
+import { NOT_CHECKED_NO_PROBE, NOTE_LINE, noTaxdbCheck, postRunChecks, preStartChecks, pseudoPath, refusalOf, TAXONOMY_ASSET } from './checks'
 import iontrapProbe from '../fixtures/probe/iontrap.probe.jsonl?raw'
 import orbitrapProbe from '../fixtures/probe/orbitrap.probe.jsonl?raw'
 import diaRawProbe from '../fixtures/probe/dia_raw.probe.jsonl?raw'
@@ -117,6 +117,48 @@ describe('preStartChecks (from the probe)', () => {
     expect(ids(pre(orbitrapProbe, values).checks)).toEqual(['flag:da-species', 'warn:stale-index'])
     const none = preStartChecks({ input: '/d/a.mzML', values, supported: false, probe: null })
     expect(ids(none.checks)).toEqual(['flag:da-species'])
+  })
+
+  // A fresh install has the taxonomy dumps but not the k-mer index (a
+  // separate release asset): a run with the species report would stop with
+  // exit 6, "-species: no taxdb". Blocked before the run, with the how-to.
+  it('the species report without its taxonomy index blocks the run and says where the index goes', () => {
+    const dir = 'C:\\Program Files\\FASTag\\resources\\fastag\\share\\FASTag\\taxonomy'
+    const missing = { index: null, dir, expected: `${dir}\\tax_k7.taxdb`, fromEnv: false }
+    const values = { ...ppm, species: true }
+    const r = preStartChecks({ input: '/d/a.mzML', values, supported: false, probe: null, taxonomy: missing })
+    expect(ids(r.checks)).toEqual(['block:no-taxdb'])
+    const c = r.checks[0]
+    expect(c.title).toBe('The species report needs the taxonomy index')
+    expect(c.detail).toContain(`not found at ${dir}\\tax_k7.taxdb`)
+    expect(c.detail).toContain(TAXONOMY_ASSET)
+    expect(c.detail).toContain(`copy tax_k7.taxdb from its share-FASTag-taxonomy folder into ${dir} (writing there needs an administrator) and press Check again`)
+    expect(c.detail).toContain('FASTAG_TAXONOMY_DIR')
+    expect(c.detail).toContain('"-species: no taxdb"')
+    expect(c.fix).toEqual({ label: 'Run without the species report', params: { species: false } })
+    expect(c.faq).toBe('faq-species-reference')
+    // Found, unknown yet, or the species report off: nothing.
+    const found = { ...missing, index: missing.expected }
+    expect(noTaxdbCheck(values, found)).toBeNull()
+    expect(noTaxdbCheck(values, undefined)).toBeNull()
+    expect(noTaxdbCheck({ ...values, species: false }, missing)).toBeNull()
+    // Before the probe and with a probe: the same block.
+    expect(ids(pre(orbitrapProbe, values).checks)).not.toContain('block:no-taxdb')
+    const probed = preStartChecks({ input: '/d/a.mzML', values, supported: true, probe: parseProbe(orbitrapProbe), taxonomy: missing })
+    expect(ids(probed.checks)[0]).toBe('block:no-taxdb')
+  })
+
+  it('a -taxdb of its own that does not exist, and no taxonomy folder at all, are named as such', () => {
+    const values = { ...ppm, species: true, taxdb: '/refs/my.taxdb' }
+    const c = noTaxdbCheck(values, { index: null, dir: '/refs', expected: '/refs/my.taxdb', fromEnv: false })!
+    expect(c.detail).toContain('not found at /refs/my.taxdb')
+    expect(c.detail).toContain('Point the taxonomy index field at an existing tax_k7.taxdb')
+    expect(c.detail).not.toContain(TAXONOMY_ASSET)
+    const none = noTaxdbCheck({ ...ppm, species: true }, { index: null, dir: null, expected: null, fromEnv: false })!
+    expect(none.detail).toContain('not found beside FASTag (there is no taxonomy folder)')
+    expect(none.detail).toContain('into a folder of your choice')
+    const env = noTaxdbCheck({ ...ppm, species: true }, { index: null, dir: 'D:\\tax', expected: 'D:\\tax\\tax_k7.taxdb', fromEnv: true })!
+    expect(env.detail).toContain('into D:\\tax (the folder FASTAG_TAXONOMY_DIR names) and press Check again')
   })
 
   it('without -probe_input nothing is checked from the file and nothing is guessed', () => {

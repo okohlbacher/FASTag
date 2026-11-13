@@ -1094,7 +1094,7 @@ jobs:
         run: |
           $i = Get-ChildItem fastag/gui/src-tauri/target/release/bundle/nsis/*.exe | Select-Object -First 1
           if (-not $i) { Write-Host "::error::no NSIS installer was built"; exit 1 }
-          ./fastag/tools/windows_installed_check.ps1 -Installer $i.FullName -Dest "$env:RUNNER_TEMP\FASTag-app" -Out "$env:RUNNER_TEMP\installed-check"
+          ./fastag/tools/windows_installed_check.ps1 -Installer $i.FullName -Scope AllUsers -Out "$env:RUNNER_TEMP\installed-check"
           if ($LASTEXITCODE) { exit $LASTEXITCODE }
 
       # The release zip, packed here so that job installed-app checks the
@@ -1176,9 +1176,13 @@ jobs:
   # The installer as users get it, on x64 and on Windows on ARM64 (where the
   # x64 app and CLI run emulated; 1.13.0-1.13.2 shipped a CLI that died there
   # before main() with 0xC0000142, invisible on x64 runners):
-  #   - tools/windows_installed_check.ps1: silent install, the app's own
-  #     start-up probe, the bundled FASTag.exe --help, -write_ini and a tagging
-  #     run from the installed layout;
+  #   - tools/windows_install_scopes.ps1: the v1.13.3 installer (per user),
+  #     then this one (all users: the per-user copy must go), per user over
+  #     all users, and uninstalls that must leave no file, folder, Apps entry
+  #     or shortcut;
+  #   - tools/windows_installed_check.ps1, per user and for all users: silent
+  #     install, the app's own start-up probe, the bundled FASTag.exe --help,
+  #     -write_ini and a tagging run from the installed layout;
   #   - the release zip's FASTag.bat against that CLI;
   #   - gui/e2e-tauri/windows.test.mjs through tauri-driver: Export tags on
   #     the mzML and MGF fixtures (tags TSV identical to the CLI's own run),
@@ -1207,12 +1211,33 @@ jobs:
         with:
           name: FASTag-gui-windows-x64-installer-check
           path: installer
-      - name: Installed-app check
+      # The previous release's installer (per user only), for the upgrade.
+      - name: Previous release installer
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PREV_GUI_TAG: v1.13.3
+        run: gh release download "$PREV_GUI_TAG" -p 'FASTag-gui-windows-x64-setup.exe' -D "$RUNNER_TEMP/prev" --repo "${{ github.repository }}"
+      - name: Install scopes, upgrade and uninstall
         shell: pwsh
         run: |
           $i = Get-ChildItem installer -Recurse -Filter *-setup.exe | Select-Object -First 1
-          ./tools/windows_installed_check.ps1 -Installer $i.FullName -Dest "$env:RUNNER_TEMP\FASTag-app" -Out "$env:RUNNER_TEMP\installed-check" -Keep
+          ./tools/windows_install_scopes.ps1 -Installer $i.FullName -Previous "$env:RUNNER_TEMP\prev\FASTag-gui-windows-x64-setup.exe"
           if ($LASTEXITCODE) { exit $LASTEXITCODE }
+      - name: Installed-app check (per user)
+        shell: pwsh
+        run: |
+          $i = Get-ChildItem installer -Recurse -Filter *-setup.exe | Select-Object -First 1
+          ./tools/windows_installed_check.ps1 -Installer $i.FullName -Scope CurrentUser -Out "$env:RUNNER_TEMP\installed-check\per-user"
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+      # Kept installed for the end-to-end specs.
+      - name: Installed-app check (all users)
+        shell: pwsh
+        run: |
+          $i = Get-ChildItem installer -Recurse -Filter *-setup.exe | Select-Object -First 1
+          ./tools/windows_installed_check.ps1 -Installer $i.FullName -Scope AllUsers -Out "$env:RUNNER_TEMP\installed-check\all-users" -Keep -DirOut "$env:RUNNER_TEMP\fastag-app-dir.txt"
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          "FASTAG_APP_DIR=$((Get-Content "$env:RUNNER_TEMP\fastag-app-dir.txt" -Raw).Trim())" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
       # The release zip as a zip user runs it: unpacked, FASTag.bat --help
       # and a tagging run on the bundled fixture.
       - name: The release zip
@@ -1264,7 +1289,7 @@ jobs:
       - name: GUI end-to-end (installed app, real CLI)
         shell: pwsh
         run: |
-          ./gui/e2e-tauri/run-windows.ps1 -App "$env:RUNNER_TEMP\FASTag-app\fastag.exe" -Out "$env:RUNNER_TEMP\e2e" -TaxDb "$env:RUNNER_TEMP\taxdb\share-FASTag-taxonomy\tax_k7.taxdb"
+          ./gui/e2e-tauri/run-windows.ps1 -App "$env:FASTAG_APP_DIR\fastag.exe" -Out "$env:RUNNER_TEMP\e2e" -TaxDb "$env:RUNNER_TEMP\taxdb\share-FASTag-taxonomy\tax_k7.taxdb"
           if ($LASTEXITCODE) { exit $LASTEXITCODE }
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         if: always()
@@ -1276,10 +1301,16 @@ jobs:
             ${{ runner.temp }}/e2e/tauri-driver.log*
             ${{ runner.temp }}/installed-check
           if-no-files-found: warn
+      # After the specs: the only file left is the taxonomy index they copied
+      # into the install, as a user would (the uninstaller keeps what it did
+      # not install).
       - name: Uninstall
-        if: always()
         shell: pwsh
-        run: if (Test-Path "$env:RUNNER_TEMP\FASTag-app\uninstall.exe") { Start-Process "$env:RUNNER_TEMP\FASTag-app\uninstall.exe" -ArgumentList '/S' -Wait }
+        run: |
+          . ./tools/windows_install_lib.ps1
+          $all = Get-FastagInstalls
+          if ($all.Count -ne 1) { Fail "$($all.Count) FASTag installs before the uninstall" }
+          Uninstall-Fastag $all[0] @('resources\fastag\share\FASTag\taxonomy\tax_k7.taxdb')
 
   # ------------------------------------------------------- release assets
   # Attaches the installer and the zip only when job installed-app passed on

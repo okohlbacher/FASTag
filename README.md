@@ -156,6 +156,46 @@ app). From the release after 1.13.2 the desktop app and `FASTag.bat` set it them
 you start `FASTag.core.exe` (or the app's bundled `FASTag.exe`) directly, set it
 once with `setx MIMALLOC_DISABLE_REDIRECT 1` and open a new prompt.
 
+**Windows desktop app: where it installs.** Windows 10 or 11, x64 or ARM64
+(emulated, see above), with the Microsoft Edge WebView2 runtime, which current
+Windows 10 and 11 already have (the installer downloads it otherwise, so a
+machine without it needs a network connection). Started by an administrator,
+the installer asks for whom to install: all users (preselected) or only the
+current user. A standard user installs for themselves, with no administrator
+prompt. The installed app takes about 365 MB, and about 1.5 GB with the
+taxonomy index of the species report, which is a separate download
+(`FASTag-taxonomy-k7.tar.gz` on the release page; the app checks for it before
+a run with the species report and says where to put it).
+
+| What | Where | Removed by uninstall? |
+|---|---|---|
+| App, bundled CLI (`resources\fastag\bin\FASTag.exe` and its DLLs), OpenMS data, taxonomy dumps, digest models | all users: `C:\Program Files\FASTag`; per user: `%LOCALAPPDATA%\Programs\FASTag` (a per-user install of 1.13.3 or earlier stays in `%LOCALAPPDATA%\FASTag`) | yes |
+| Taxonomy index `tax_k7.taxdb` (1.14 GB) | where you put it: `<install>\resources\fastag\share\FASTag\taxonomy\`, or the folder `FASTAG_TAXONOMY_DIR` names | no: the uninstaller removes only what it installed |
+| Settings (`settings.json`) | `%APPDATA%\de.openms.fastag` (Roaming: follows the user) | only with "Delete app data" |
+| History, run markers, `last-failure.log`, `leftovers-kept.json` | `%LOCALAPPDATA%\de.openms.fastag` (moved there once from `%APPDATA%` by the first start after 1.13.3) | only with "Delete app data" |
+| WebView2 profile | `%LOCALAPPDATA%\de.openms.fastag\EBWebView` | only with "Delete app data" |
+| Run outputs | beside the input, or where you chose | never |
+
+To install the index, unpack the asset with Windows' own `tar`
+(`tar -xzf FASTag-taxonomy-k7.tar.gz`) and copy
+`share-FASTag-taxonomy\tax_k7.taxdb` into
+`<install>\resources\fastag\share\FASTag\taxonomy\`. In `C:\Program Files`
+that needs an administrator; otherwise keep it in a folder of your own and set
+`FASTAG_TAXONOMY_DIR` to that folder (`setx FASTAG_TAXONOMY_DIR <folder>`, then
+start FASTag again).
+
+Silent install and uninstall, for IT deployment:
+`FASTag-gui-windows-x64-setup.exe /S` installs for all users when run elevated
+and for the current user otherwise; `/S /AllUsers` (elevated) and
+`/S /CurrentUser` choose. The install folder follows the scope (`/D=` is not
+honoured). `<install>\uninstall.exe /S` uninstalls; a silent uninstall never
+deletes the app data. Installing in one scope removes an install of FASTag in
+the other scope first, so an upgrade of a 1.13.x per-user install to all users
+leaves one copy and one Apps entry (a standard user cannot remove an
+all-users install and is told so). Uninstall also keeps the install folder's
+registry entry (`Software\openms\FASTag`), which the next install reuses. For
+AppLocker or WDAC rules, the all-users install is the one under `%ProgramFiles%`.
+
 **macOS 13.4 or later.** macOS ships as a disk image only, signed with a
 Developer ID certificate, notarized and **stapled**, so it opens with no network
 connection — a plain tarball cannot carry a notarization ticket.
