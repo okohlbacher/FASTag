@@ -1,5 +1,33 @@
 # Changelog
 
+## 1.13.4 (2026-11-13)
+
+Windows installation, GUI fixes and code cleanup; tag output is unchanged.
+
+- **Windows: install for all users or per user.** An administrator is asked
+  and gets `C:\Program Files\FASTag` preselected; a standard user installs per
+  user without a prompt. Silent switches `/S`, `/S /AllUsers`,
+  `/S /CurrentUser`. Changing the scope removes the install in the other scope,
+  so an upgrade leaves one copy and one Apps entry.
+- **Windows: uninstall retries files still in use** for up to 30 s and only then
+  marks them for deletion at the next restart (seen on Windows on ARM64).
+- **GUI: run markers, history and the failure log** are kept in local app data
+  (`%LOCALAPPDATA%\de.openms.fastag` on Windows, moved once; settings stay
+  roaming), and a marker records host and process, so a second PC no longer
+  marks another machine's live run as interrupted.
+- **GUI: pre-run check for the taxonomy index.** A run with the species report
+  is blocked when the index is missing, with the path, how to install it and
+  "Run without the species report", instead of failing with exit code 6.
+- **GUI: the failure banner quotes FASTag's reason** from stderr; it could show
+  an informational stdout line when the two streams arrived out of order.
+- **Code:** local string helpers replaced by OpenMS `StringUtils`; exceptions
+  contained in the complement probe and before the writer join; `buildtaxdb`
+  reports filesystem errors and refuses a malformed `k` (such as "7x", read as
+  7 before); OpenMS preambles in every source file.
+- **Docs:** where the Windows app, its data and settings go, its size (about
+  365 MB, about 1.5 GB with the separate taxonomy index), silent switches,
+  WebView2 and what uninstall leaves.
+
 ## 1.13.3 (2026-11-12)
 
 Fixes for the Windows desktop app and one new experimental option; tag output
