@@ -31,7 +31,9 @@ $old = Install-Fastag $Previous @() 'CurrentUser'
 Write-Host "previous: $($old.Version) in $($old.Dir)"
 $new = Install-Fastag $Installer @() 'AllUsers'
 # The version this tree builds: a pre-release dry run may carry the previous release's number.
-$want = (Get-Content -Raw (Join-Path $PSScriptRoot '..\gui\src-tauri\tauri.conf.json') | ConvertFrom-Json).version
+# CMakeLists.txt carries the version every package uses (the job's sparse checkout has no gui/src-tauri).
+$want = [regex]::Match((Get-Content -Raw (Join-Path $PSScriptRoot '..\CMakeLists.txt')), 'project\(FASTag VERSION ([0-9.]+)').Groups[1].Value
+if (-not $want) { Fail 'no project(FASTag VERSION ...) in CMakeLists.txt' }
 if ($new.Version -ne $want) { Fail "the new installer registered $($new.Version), expected $want" }
 $left = Get-Leftovers $old.Dir
 if ($left.Count -or (Test-Path $old.Dir)) { Fail "the upgrade left the per-user copy in $($old.Dir) ($($left.Count) files)" }
