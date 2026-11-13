@@ -1336,7 +1336,7 @@ protected:
   /// Default report path: @p out with its extension replaced by @p suffix --
   /// only if the dot is in the FILE NAME. `-out /tmp/run.v1/tags` has its
   /// last dot in the directory, and cutting there would write elsewhere.
-  static std::string defaultReportPath(const std::string& out, const char* suffix)
+  static std::string defaultReportPath_(const std::string& out, const char* suffix)
   {
     const size_t slash = out.find_last_of("/\\");
     const size_t dot = out.rfind('.');
@@ -1346,17 +1346,17 @@ protected:
 
   /// Append free text as one TSV field: a tab, CR or LF (an mzML id may
   /// carry them as &#9; / &#10;) would shift columns or split the row.
-  static void appendField(std::string& buf, const std::string& text)
+  static void appendField_(std::string& buf, const std::string& text)
   {
     if (text.find_first_of("\t\r\n") == std::string::npos) { buf += text; return; }
     for (char c : text) buf += (c == '\t' || c == '\r' || c == '\n') ? ' ' : c;
   }
 
-  /// The tag TSV header line, matching appendTagRow's columns.
+  /// The tag TSV header line, matching appendTagRow_'s columns.
   /// @p hyp (1.12 #6, non-default -unknown_charge or -isotope_error only)
   /// adds the hypothesis columns after the other optional ones; @p
   /// ion_series (1.12 #15 phase B) the ion_series column after those.
-  static std::string tagHeader(bool proforma, bool res_conf, bool usi, bool hyp = false, bool ion_series = false)
+  static std::string tagHeader_(bool proforma, bool res_conf, bool usi, bool hyp = false, bool ion_series = false)
   {
     std::string h = "spectrum\ttag\tlength\tcharge\tnterm_mass\tcterm_mass\textended"
                     "\tgapped\tevalue\tmin_conf\tmean_conf\tfasta_hit";
@@ -1369,7 +1369,7 @@ protected:
   }
 
   /// One TSV row for one tag, appended to buf. File mode and -stream both call
-  /// this, so the two formats cannot drift. readSpeciesFields() reads columns
+  /// this, so the two formats cannot drift. readSpeciesFields_() reads columns
   /// back out of these rows and must change with them.
   //
   // Appended field by field, so a very long native ID needs no fixed-buffer
@@ -1378,7 +1378,7 @@ protected:
   // are what a downstream search constrains on. Numbers go through appendNum,
   // not snprintf: the same text as "%.4f" / "%g" / "%.3f", without the locale
   // lock every worker queues on in macOS's printf (NumFormat.h).
-  static void appendTagRow(std::string& buf, const FASTag::Tag& t,
+  static void appendTagRow_(std::string& buf, const FASTag::Tag& t,
                            const std::string& native_id, const char* hit,
                            bool want_proforma, const std::string& proforma_fixed,
                            bool want_res_conf, const std::string& usi = std::string(),
@@ -1387,7 +1387,7 @@ protected:
   {
     using FASTag::appendNum;
     constexpr auto fixed = std::chars_format::fixed;
-    appendField(buf, native_id); buf += '\t';
+    appendField_(buf, native_id); buf += '\t';
     buf += t.seq;              buf += '\t';
     appendNum(buf, t.n_res);   buf += '\t';
     appendNum(buf, t.charge);  buf += '\t';
@@ -1432,14 +1432,14 @@ protected:
     buf += '\n';
   }
 
-  /// Reads back, from one appendTagRow line [start, nl) of @p r, the columns
+  /// Reads back, from one appendTagRow_ line [start, nl) of @p r, the columns
   /// species detection needs: 0 (spectrum id), 1 (tag), 7 (gapped) and 8
-  /// (E-value). Must change whenever appendTagRow's column order does. The
+  /// (E-value). Must change whenever appendTagRow_'s column order does. The
   /// printed E-value is parsed on purpose, not the tag's double, so ties are
   /// those of the TSV. @p gapped and @p evalue stay false and NaN when the
   /// line lacks those columns.
   /// @return false when the line has no tag column.
-  static bool readSpeciesFields(const std::string& r, size_t start, size_t nl, std::string& id,
+  static bool readSpeciesFields_(const std::string& r, size_t start, size_t nl, std::string& id,
                                 std::string& tag, bool& gapped, double& evalue)
   {
     const size_t t1 = r.find('\t', start);
@@ -1469,7 +1469,7 @@ protected:
   /// carbamidomethyl-C; the prefix declares that for the whole proteoform.
   /// Built from the resolved modifications, so terminal ones (absorbed into
   /// the flanking masses, see resolveMods_) are left out.
-  static std::string buildProformaPrefix(const std::vector<FASTag::ModSpec>& mods)
+  static std::string buildProformaPrefix_(const std::vector<FASTag::ModSpec>& mods)
   {
     std::string out;
     for (const FASTag::ModSpec& m : mods)
@@ -3072,8 +3072,8 @@ protected:
       const std::vector<FASTag::Tables> stream_tables = build_tables();
       const bool stream_proforma = getFlag_("proforma");
       const std::string stream_proforma_prefix =
-          stream_proforma ? buildProformaPrefix(p.mods) : std::string();
-      std::fputs(tagHeader(stream_proforma, p.per_residue_conf, false).c_str(), dataf);
+          stream_proforma ? buildProformaPrefix_(p.mods) : std::string();
+      std::fputs(tagHeader_(stream_proforma, p.per_residue_conf, false).c_str(), dataf);
       std::fflush(dataf);
 
       std::string line, id;
@@ -3099,7 +3099,7 @@ protected:
             const auto tags = tag_all(spec, prec_mz, charge, stream_tables);
             n = tags.size();
             for (const auto& t : tags)
-              appendTagRow(buf, t, id, "-", stream_proforma, stream_proforma_prefix, p.per_residue_conf);
+              appendTagRow_(buf, t, id, "-", stream_proforma, stream_proforma_prefix, p.per_residue_conf);
           }
           if (std::fprintf(dataf, "%s#end %s %zu\n", buf.c_str(), id.c_str(), n) < 0
               || std::fflush(dataf) != 0)
@@ -3933,12 +3933,12 @@ protected:
       if (getFlag_("glyco"))
       {
         const std::string g = getStringOption_("glyco_out");
-        guard.output("glyco_out", g.empty() ? defaultReportPath(out, ".glyco.tsv") : g);
+        guard.output("glyco_out", g.empty() ? defaultReportPath_(out, ".glyco.tsv") : g);
       }
       if (want_species)
       {
         const std::string sp = getStringOption_("species_out");
-        guard.output("species_out", sp.empty() ? defaultReportPath(out, ".species.tsv") : sp);
+        guard.output("species_out", sp.empty() ? defaultReportPath_(out, ".species.tsv") : sp);
       }
       // Outputs are checked in this order. Each 1.12 cluster adds its rows
       // at its own anchor.
@@ -3958,9 +3958,9 @@ protected:
         // -census_ids joins the finished <census_out>.part into a .part of
         // that .part (a PartFile on the temporary path), so that path is
         // checked too.
-        guard.output("census_out", c.empty() ? defaultReportPath(out, ".census.tsv") : c, /*via_part=*/true,
+        guard.output("census_out", c.empty() ? defaultReportPath_(out, ".census.tsv") : c, /*via_part=*/true,
                      /*part_of_part=*/!getStringOption_("census_ids").empty());
-        guard.output("census_summary_out", cs.empty() ? defaultReportPath(out, ".census_summary.tsv") : cs,
+        guard.output("census_summary_out", cs.empty() ? defaultReportPath_(out, ".census_summary.tsv") : cs,
                      /*via_part=*/true);
       }
       const std::string collision = guard.check();
@@ -4006,7 +4006,7 @@ protected:
       return CANNOT_WRITE_OUTPUT_FILE;
     }
     const bool want_proforma = getFlag_("proforma");
-    tsv << tagHeader(want_proforma, p.per_residue_conf, !usi_prefix.empty(), hyp_on, ion_column);
+    tsv << tagHeader_(want_proforma, p.per_residue_conf, !usi_prefix.empty(), hyp_on, ion_column);
 
     std::ofstream rtsv;
     if (recon_on)
@@ -4029,7 +4029,7 @@ protected:
     std::ofstream gtsv;
     if (glyco_on)
     {
-      if (glyco_out.empty()) glyco_out = defaultReportPath(out, ".glyco.tsv");
+      if (glyco_out.empty()) glyco_out = defaultReportPath_(out, ".glyco.tsv");
       gtsv.open(glyco_out.c_str());
       if (!gtsv)
       {
@@ -4044,8 +4044,8 @@ protected:
     const bool census_on = getFlag_("census");
     std::string census_out = getStringOption_("census_out");
     std::string census_summary_out = getStringOption_("census_summary_out");
-    if (census_out.empty()) census_out = defaultReportPath(out, ".census.tsv");
-    if (census_summary_out.empty()) census_summary_out = defaultReportPath(out, ".census_summary.tsv");
+    if (census_out.empty()) census_out = defaultReportPath_(out, ".census.tsv");
+    if (census_summary_out.empty()) census_summary_out = defaultReportPath_(out, ".census_summary.tsv");
     FASTag::PartFile census_part(census_out);
     std::ofstream ctsv;
     if (census_on)
@@ -4065,7 +4065,7 @@ protected:
     }
 
     const std::string proforma_fixed =
-        want_proforma ? buildProformaPrefix(p.mods) : std::string();
+        want_proforma ? buildProformaPrefix_(p.mods) : std::string();
 
     PeakMap kept;
     if (mzs) kept.getExperimentalSettings() = mzs->settings();
@@ -4574,7 +4574,7 @@ protected:
           ctags.push_back(v);
         }
 
-        appendTagRow(buf, t, spec.getNativeID(), hit, want_proforma, proforma_fixed,
+        appendTagRow_(buf, t, spec.getNativeID(), hit, want_proforma, proforma_fixed,
                      p.per_residue_conf, usi, hyp_on ? &hy : nullptr, ion_column);
         if (species_sel_on) res.row_species.push_back(sel ? 1 : 0);
         // 1.13 item 10: a two-pass hybrid spectrum's rows differ in series.
@@ -4616,7 +4616,7 @@ protected:
             {
               std::string prot = pl.protein;
               for (char& ch : prot) if (ch == '\t' || ch == '\n' || ch == '\r') ch = ' ';
-              appendField(res.rbuf, spec.getNativeID()); res.rbuf += '\t';
+              appendField_(res.rbuf, spec.getNativeID()); res.rbuf += '\t';
               res.rbuf += t.seq;             res.rbuf += '\t';
               res.rbuf += prot;              res.rbuf += '\t';
               res.rbuf += pl.peptide;        res.rbuf += '\t';
@@ -4781,7 +4781,7 @@ protected:
         const auto g = FASTag::scanOxonium(*sp, p.frag_tol, p.tol_ppm, glyco_min_fraction);
         std::string& gr = b.glyco_rows[idx];
         gr.clear();
-        appendField(gr, spec.getNativeID());
+        appendField_(gr, spec.getNativeID());
         gr += '\t';
         FASTag::appendNum(gr, g.n_matched); gr += '\t';
         FASTag::appendNum(gr, g.frac, std::chars_format::fixed, 3); gr += '\t';
@@ -4924,7 +4924,7 @@ protected:
             // #15 phase B: a c/z row (Block::row_cz, one flag per spectrum,
             // every row of it alike) is left out and counted.
             if (b.row_cz[i] || row_is_cz) ++species_cz_excluded;
-            else if (readSpeciesFields(r, start, nl, id, tag, gapped, evalue))
+            else if (readSpeciesFields_(r, start, nl, id, tag, gapped, evalue))
             {
               // Skip GAPPED tags unless asked for. A gap spells two residues
               // from one summed mass -- an inference, not a read -- and an
@@ -6310,7 +6310,7 @@ protected:
         nodes = tdir + "/nodes.dmp";
         names = tdir + "/names.dmp";
       }
-      if (species_out.empty()) species_out = defaultReportPath(out, ".species.tsv");
+      if (species_out.empty()) species_out = defaultReportPath_(out, ".species.tsv");
 
       // Say which file is missing and where it was looked for. "Failed to load"
       // on an empty path is useless when the whole point of the defaults is that
