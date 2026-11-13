@@ -1005,6 +1005,68 @@ int main(int argc, char** argv)
       if (mid_stale.ok()) same_spectra(mid_stale, reader, "index stale from the middle on");
     }
   }
+  // ThermoRawFileParser 2.0.0 writes every offset, and indexListOffset, 3
+  // bytes short: into the indentation before the tag (checked byte by byte
+  // on 123 TRFP 2.0.0 files). Such an index is used, at the tags, not
+  // rebuilt; one whose offsets are short only in part still is rebuilt.
+  {
+    const std::string bytes = slurp(indexed);
+    const std::size_t ilo_b = bytes.rfind("<indexListOffset>") + std::string("<indexListOffset>").size();
+    const std::size_t ilo_e = bytes.find("</indexListOffset>", ilo_b);
+    const std::size_t idx = std::stoull(bytes.substr(ilo_b, ilo_e - ilo_b));
+    // The file with spectrum offset i moved by @p by(i) bytes and
+    // indexListOffset by @p list_by.
+    auto moved = [&](auto by, long long list_by) {
+      std::string index = bytes.substr(idx, ilo_b - idx);
+      const std::size_t sb = index.find("<index name=\"spectrum\"");
+      const std::size_t se = index.find("</index>", sb);
+      const std::string spec = index.substr(sb, se - sb);
+      std::string rebuilt;
+      std::size_t k = 0;
+      Size i = 0;
+      for (std::size_t o = spec.find("<offset"); o != std::string::npos; o = spec.find("<offset", k))
+      {
+        const std::size_t gt = spec.find('>', o) + 1;
+        const std::size_t lt = spec.find('<', gt);
+        rebuilt += spec.substr(k, gt - k);
+        rebuilt += std::to_string(static_cast<long long>(std::stoull(spec.substr(gt, lt - gt))) + by(i++));
+        k = lt;
+      }
+      rebuilt += spec.substr(k);
+      return bytes.substr(0, idx) + index.substr(0, sb) + rebuilt + index.substr(se) +
+             std::to_string(static_cast<long long>(idx) + list_by) + bytes.substr(ilo_e);
+    };
+    // The fixture needs TRFP's room: 3 whitespace bytes before every
+    // <spectrum and before <indexList.
+    const auto ws_before = [&](std::size_t p) { return bytes.find_last_not_of(" \t\r\n", p - 1) < p - 3; };
+    bool room = ws_before(idx);
+    for (std::size_t p = bytes.find("<spectrum "); room && p != std::string::npos; p = bytes.find("<spectrum ", p + 1))
+    {
+      room = ws_before(p);
+    }
+    check(room, "TRFP-style fixture: 3 whitespace bytes before every spectrum and the index list");
+    if (room)
+    {
+      spit(tmp + "/fastag_trfp_index.mzML", moved([](Size) { return -3LL; }, -3));
+      FASTag::IndexedMzMLReader trfp(tmp + "/fastag_trfp_index.mzML");
+      check(trfp.ok() && !trfp.indexRebuilt(), "a TRFP-style index, 3 bytes short throughout, is used");
+      if (trfp.ok())
+      {
+        same_spectra(trfp, reader, "TRFP-style index");
+        bool same_ranges = trfp.getNrSpectra() == reader.getNrSpectra();
+        for (Size i = 0; same_ranges && i < reader.getNrSpectra(); ++i)
+        {
+          same_ranges = trfp.spectrumByteRange(i) == reader.spectrumByteRange(i);
+        }
+        check(same_ranges, "a TRFP-style index gives the byte ranges of the exact one");
+      }
+      const Size n = reader.getNrSpectra();
+      spit(tmp + "/fastag_trfp_part.mzML", moved([n](Size i) { return i < n / 2 ? -3LL : 0LL; }, 0));
+      FASTag::IndexedMzMLReader part(tmp + "/fastag_trfp_part.mzML");
+      check(part.ok() && part.indexRebuilt(), "an index short in its first half only is rebuilt");
+      if (part.ok()) same_spectra(part, reader, "index short in its first half only");
+    }
+  }
   // Per-peak ion mobility: -digest_out's timsTOF rule reads containsIMData(),
   // so the fast reader must see the array as OpenMS's own reader does, in
   // its place after another extra float array.

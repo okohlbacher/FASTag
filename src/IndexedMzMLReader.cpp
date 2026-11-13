@@ -602,6 +602,26 @@ namespace FASTag
         k = lt;
       }
       if (offsets->empty()) return nullptr;
+
+      // ThermoRawFileParser (2.0.0 at least) writes every offset a few bytes
+      // short: into the indentation before the tag, not at it (it adds a
+      // fixed guess of that whitespace to the stream position). When the
+      // first offset lands in whitespace that runs straight into its
+      // <spectrum tag, every offset is moved by that run; the exact check
+      // below then holds the whole index to the corrected offsets, so an
+      // index shifted in any other way is still refused.
+      {
+        std::string head(64, '\0');
+        f.seekg(static_cast<std::streamoff>(offsets->front()));
+        f.read(head.data(), static_cast<std::streamsize>(head.size()));
+        if (!f) return nullptr;
+        std::size_t ws = 0;
+        while (ws < head.size() && (head[ws] == ' ' || head[ws] == '\t' || head[ws] == '\n' || head[ws] == '\r')) ++ws;
+        if (ws > 0 && ws + 10 <= head.size() && head.compare(ws, 9, "<spectrum") == 0 && is_name_end(head[ws + 9]))
+        {
+          for (auto& o : *offsets) o += ws;
+        }
+      }
       if (offsets->back() >= index_offset) return nullptr;
 
       // The terminator: the last spectrum ends where the list does.
