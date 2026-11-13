@@ -1,0 +1,356 @@
+catalogue_skipped 0 /Users/kohlbach/Claude/OpenMS/New Tools/FASTag/work/FASTag/.worktrees/post1131-glibc-note/bench/results/tmt-ga-2026-11-11/detector-challenge/pride-metadata.json (search page)
+catalogue_skipped 19555 /Users/kohlbach/Claude/OpenMS/New Tools/FASTag/work/FASTag/.worktrees/acc113r-alknodb/acceptance/1.12/inputs/h2r_pride_candidates.tsv
+catalogue_skipped 12288 /Users/kohlbach/Claude/OpenMS/New Tools/FASTag/work/FASTag/.worktrees/acc113r-alknodb/acceptance/1.13/alknodb/inputs/prescreen.tsv
+catalogue_skipped 12288 /Users/kohlbach/Claude/OpenMS/New Tools/FASTag/work/FASTag/.worktrees/acc113r-alknodb/acceptance/1.13/alknodb/inputs/draw_order.tsv
+catalogue_skipped 19555 /Users/kohlbach/Claude/OpenMS/New Tools/FASTag/work/FASTag/.worktrees/b113-chimeric-acc/acceptance/1.12/inputs/h2r_pride_candidates.tsv
+catalogue_skipped 0 /Users/kohlbach/Claude/OpenMS/New Tools/FASTag/work/FASTag/.worktrees/post1131-labeldisc/bench/results/tmt-ga-2026-11-11/detector-challenge/pride-metadata.json (search page)
+catalogue_skipped 0 /Users/kohlbach/Claude/OpenMS/New Tools/FASTag/work/FASTag/.worktrees/fix-trfp-index/bench/results/tmt-ga-2026-11-11/detector-challenge/pride-metadata.json (search page)
+catalogue_skipped 14247 /Users/kohlbach/Claude/OpenMS/New Tools/FASTag/work/FASTag/.worktrees/acc113r-labeldisc-nocall/acceptance/1.13/labeldisc-nocall/manifests/pool.tsv
+catalogue_skipped 14555 /Users/kohlbach/Claude/OpenMS/New Tools/FASTag/work/FASTag/.worktrees/acc113r-labeldisc-nocall/acceptance/1.13/labeldisc-nocall/manifests/excluded_pxd.txt
+catalogue_skipped 19555 /Users/kohlbach/Claude/OpenMS/New Tools/FASTag/work/FASTag/.worktrees/acc113-e703/acceptance/1.12/inputs/h2r_pride_candidates.tsv
+catalogue_skipped 0 /Users/kohlbach/Claude/OpenMS/New Tools/FASTag/work/FASTag/.worktrees/post1131-labeldisc-silac-it/bench/results/tmt-ga-2026-11-11/detector-challenge/pride-metadata.json (search page)
+catalogue_skipped 0 /Users/kohlbach/Claude/OpenMS/New Tools/FASTag/work/FASTag/.worktrees/fix-settings-migration/bench/results/tmt-ga-2026-11-11/detector-challenge/pride-metadata.json (search page)
+catalogue_skipped 0 /Users/kohlbach/Claude/OpenMS/New Tools/FASTag/work/FASTag/.worktrees/post1133-win-install/bench/results/tmt-ga-2026-11-11/detector-challenge/pride-metadata.json (search page)
+catalogue_skipped 0 /Users/kohlbach/Claude/OpenMS/New Tools/FASTag/work/FASTag/.worktrees/post1131-shifts/bench/results/tmt-ga-2026-11-11/detector-challenge/pride-metadata.json (search page)
+catalogue_skipped 15201 /Users/kohlbach/Claude/OpenMS/New Tools/FASTag/work/FASTag/.worktrees/post1131-labeldisc-heldout4/acceptance/1.13.1/labeldisc4/manifests/pool.tsv
+catalogue_skipped 14784 /Users/kohlbach/Claude/OpenMS/New Tools/FASTag/work/FASTag/.worktrees/post1131-labeldisc-heldout4/acceptance/1.13.1/labeldisc4/manifests/excluded_pxd.txt
+catalogue_skipped 0 /Users/kohlbach/Claude/OpenMS/New Tools/FASTag/work/FASTag/.worktrees/post1131-msfragger/bench/results/tmt-ga-2026-11-11/detector-challenge/pride-metadata.json (search page)
+catalogue_skipped 0 /Users/kohlbach/Claude/OpenMS/New Tools/FASTag/work/FASTag/.worktrees/post1131-guicli/bench/results/tmt-ga-2026-11-11/detector-challenge/pride-metadata.json (search page)
+catalogue_skipped 17380 /Users/kohlbach/Claude/OpenMS/New Tools/FASTag/work/FASTag/.worktrees/post1131-labeldisc-heldout5/acceptance/1.13.1/labeldisc5/manifests/pool.tsv
+catalogue_skipped 15397 /Users/kohlbach/Claude/OpenMS/New Tools/FASTag/work/FASTag/.worktrees/post1131-labeldisc-heldout5/acceptance/1.13.1/labeldisc5/manifests/excluded_pxd.txt
+catalogue_skipped 15201 /Users/kohlbach/Claude/OpenMS/New Tools/FASTag/work/FASTag/.worktrees/post1131-labeldisc-heldout5/acceptance/1.13.1/labeldisc4/manifests/pool.tsv
+catalogue_skipped 14784 /Users/kohlbach/Claude/OpenMS/New Tools/FASTag/work/FASTag/.worktrees/post1131-labeldisc-heldout5/acceptance/1.13.1/labeldisc4/manifests/excluded_pxd.txt
+catalogue_skipped 0 /Users/kohlbach/Claude/OpenMS/New Tools/FASTag/work/FASTag/.worktrees/post1131-aspn/bench/results/tmt-ga-2026-11-11/detector-challenge/pride-metadata.json (search page)
+catalogue_skipped 0 /Users/kohlbach/Claude/OpenMS/New Tools/FASTag/work/FASTag/.worktrees/post1131-revert-format5/bench/results/tmt-ga-2026-11-11/detector-challenge/pride-metadata.json (search page)
+catalogue_skipped 0 /Users/kohlbach/Claude/OpenMS/New Tools/FASTag/work/FASTag/.worktrees/release-1.13.3/bench/results/tmt-ga-2026-11-11/detector-challenge/pride-metadata.json (search page)
+catalogue_skipped 0 /Users/kohlbach/Claude/OpenMS/New Tools/FASTag/work/FASTag/.worktrees/release-1.13.4/bench/results/tmt-ga-2026-11-11/detector-challenge/pride-metadata.json (search page)
+catalogue_skipped 0 /Users/kohlbach/Claude/OpenMS/New Tools/FASTag/work/FASTag/.worktrees/post1131-gapped-off/bench/results/tmt-ga-2026-11-11/detector-challenge/pride-metadata.json (search page)
+catalogue_skipped 19555 /Users/kohlbach/Claude/OpenMS/New Tools/FASTag/work/FASTag/.worktrees/post1131-msfragger-heldout2/acceptance/1.13/msfragger2/inputs/h2r_pride_candidates.tsv
+catalogue_skipped 23944 /Users/kohlbach/Claude/OpenMS/New Tools/FASTag/work/FASTag/.worktrees/post1131-msfragger-heldout2/acceptance/1.13/msfragger2/inputs/excl_pxd.tsv
+catalogue_skipped 19555 /Users/kohlbach/Claude/OpenMS/New Tools/FASTag/work/FASTag/.worktrees/acc113r-acqcheck/acceptance/1.12/inputs/h2r_pride_candidates.tsv
+catalogue_skipped 14350 /Users/kohlbach/Claude/OpenMS/New Tools/FASTag/work/FASTag/.worktrees/acc113r-acqcheck/acceptance/1.13/acqcheck2/inputs/exclude.txt
+catalogue_skipped 0 /Users/kohlbach/Claude/OpenMS/New Tools/FASTag/work/FASTag/.worktrees/release-1.13.2/bench/results/tmt-ga-2026-11-11/detector-challenge/pride-metadata.json (search page)
+catalogue_skipped 0 /Users/kohlbach/Claude/OpenMS/New Tools/FASTag/work/FASTag/.worktrees/acc114-exactonly/bench/results/tmt-ga-2026-11-11/detector-challenge/pride-metadata.json (search page)
+catalogue_skipped 19555 /Users/kohlbach/Claude/OpenMS/New Tools/FASTag/work/FASTag/.worktrees/acc114-exactonly/acceptance/1.14/exactonly/inputs/h2r_pride_candidates.tsv
+catalogue_skipped 23993 /Users/kohlbach/Claude/OpenMS/New Tools/FASTag/work/FASTag/.worktrees/acc114-exactonly/acceptance/1.14/exactonly/inputs/excl_pxd.tsv
+catalogue_skipped 0 /Users/kohlbach/Claude/OpenMS/New Tools/FASTag/work/FASTag/.worktrees/dev-optrm/bench/results/tmt-ga-2026-11-11/detector-challenge/pride-metadata.json (search page)
+catalogue_skipped 19555 /Users/kohlbach/Claude/OpenMS/New Tools/FASTag/work/FASTag/.worktrees/b113-ax-acc/acceptance/1.12/inputs/h2r_pride_candidates.tsv
+catalogue_skipped 19555 /Users/kohlbach/Claude/OpenMS/New Tools/FASTag/work/FASTag/.worktrees/acceptance-1.12/acceptance/1.12/inputs/h2r_pride_candidates.tsv
+catalogue_skipped 19555 /Users/kohlbach/Claude/OpenMS/New Tools/FASTag/work/FASTag/.worktrees/acc113r-hdrcharge/acceptance/1.12/inputs/h2r_pride_candidates.tsv
+catalogue_skipped 19555 /Users/kohlbach/Claude/OpenMS/New Tools/FASTag/work/FASTag/.worktrees/acceptance-1.13/acceptance/1.12/inputs/h2r_pride_candidates.tsv
+catalogue_skipped 19555 /Users/kohlbach/Claude/OpenMS/New Tools/FASTag/work/FASTag/.worktrees/acc113r-species/acceptance/1.12/inputs/h2r_pride_candidates.tsv
+catalogue_skipped 14247 /Users/kohlbach/Claude/OpenMS/New Tools/FASTag/work/FASTag/.worktrees/acc113r-labeldisc3/acceptance/1.13/labeldisc3/manifests/pool.tsv
+catalogue_skipped 2251 /Users/kohlbach/Claude/OpenMS/New Tools/FASTag/work/FASTag/.worktrees/acc113r-labeldisc3/acceptance/1.13/labeldisc3/manifests/excluded_pxd.txt
+catalogue_skipped 19555 /Users/kohlbach/Claude/OpenMS/New Tools/FASTag/work/FASTag/.worktrees/acc113r-census/acceptance/1.12/inputs/h2r_pride_candidates.tsv
+catalogue_skipped 0 /Users/kohlbach/Claude/OpenMS/New Tools/FASTag/work/FASTag/.worktrees/fix-windows-1.13.2/bench/results/tmt-ga-2026-11-11/detector-challenge/pride-metadata.json (search page)
+catalogue_skipped 0 /Users/kohlbach/Claude/OpenMS/New Tools/FASTag/work/FASTag/.worktrees/post1131-species/bench/results/tmt-ga-2026-11-11/detector-challenge/pride-metadata.json (search page)
+catalogue_skipped 19555 /Users/kohlbach/Claude/OpenMS/New Tools/FASTag/work/FASTag/.worktrees/acc113r-hybrid/acceptance/1.12/inputs/h2r_pride_candidates.tsv
+catalogue_skipped 14290 /Users/kohlbach/Claude/OpenMS/New Tools/FASTag/work/FASTag/.worktrees/acc113r-hybrid/acceptance/1.13/hybrid/inputs/excl_pxd.txt
+catalogue_skipped 0 /Users/kohlbach/Claude/OpenMS/New Tools/FASTag/work/FASTag/.worktrees/fix-gui-cancel-race/bench/results/tmt-ga-2026-11-11/detector-challenge/pride-metadata.json (search page)
+catalogue_skipped 0 /Users/kohlbach/Claude/OpenMS/New Tools/FASTag/work/FASTag/.worktrees/fix-help-format5/bench/results/tmt-ga-2026-11-11/detector-challenge/pride-metadata.json (search page)
+catalogue_skipped 0 /Users/kohlbach/Claude/OpenMS/New Tools/FASTag/work/FASTag/.worktrees/dev-1.14/bench/results/tmt-ga-2026-11-11/detector-challenge/pride-metadata.json (search page)
+catalogue_skipped 19555 /Users/kohlbach/Claude/OpenMS/New Tools/FASTag/work/FASTag/.worktrees/acc113-compltol/acceptance/1.12/inputs/h2r_pride_candidates.tsv
+catalogue_skipped 19555 /Users/kohlbach/Claude/OpenMS/New Tools/FASTag/work/FASTag/.worktrees/b113-hdrcharge-acc/acceptance/1.12/inputs/h2r_pride_candidates.tsv
+catalogue_skipped 0 /Users/kohlbach/Claude/OpenMS/New Tools/FASTag/work/FASTag/.worktrees/post1133-banner-race/bench/results/tmt-ga-2026-11-11/detector-challenge/pride-metadata.json (search page)
+catalogue_skipped 0 /Users/kohlbach/Claude/OpenMS/New Tools/FASTag/work/FASTag/.worktrees/post1131-rss-pxd028735/bench/results/tmt-ga-2026-11-11/detector-challenge/pride-metadata.json (search page)
+catalogue_skipped 19555 /Users/kohlbach/Claude/OpenMS/New Tools/FASTag/work/FASTag/.worktrees/acc113r-nontryptic/acceptance/1.12/inputs/h2r_pride_candidates.tsv
+catalogue_skipped 2420 /Users/kohlbach/Claude/OpenMS/New Tools/FASTag/work/FASTag/.worktrees/acc113r-nontryptic/acceptance/1.13/nontryptic/inputs/excl_pxd.txt
+catalogue_skipped 19555 /Users/kohlbach/Claude/OpenMS/New Tools/FASTag/work/FASTag/.worktrees/acc113r-shifts/acceptance/1.12/inputs/h2r_pride_candidates.tsv
+catalogue_skipped 19555 /Users/kohlbach/Claude/OpenMS/New Tools/FASTag/work/FASTag/.worktrees/acc113-labelcall/acceptance/1.12/inputs/h2r_pride_candidates.tsv
+catalogue_skipped 19555 /Users/kohlbach/Claude/OpenMS/New Tools/FASTag/work/FASTag/.worktrees/acc113r-compltol/acceptance/1.12/inputs/h2r_pride_candidates.tsv
+catalogue_skipped 2302 /Users/kohlbach/Claude/OpenMS/New Tools/FASTag/work/FASTag/.worktrees/acc113r-compltol/acceptance/1.13/compltol/heldout2/select/excl_pxd.txt
+catalogue_skipped 19555 /Users/kohlbach/Claude/OpenMS/New Tools/FASTag/work/FASTag/.worktrees/b113-shifts-acc/acceptance/1.12/inputs/h2r_pride_candidates.tsv
+catalogue_skipped 0 /Users/kohlbach/Claude/OpenMS/New Tools/FASTag/work/FASTag/.worktrees/post1131-mz0/bench/results/tmt-ga-2026-11-11/detector-challenge/pride-metadata.json (search page)
+catalogue_skipped 19555 /Users/kohlbach/Claude/OpenMS/New Tools/FASTag/work/FASTag/.worktrees/acc114-acqcheck3/acceptance/1.12/inputs/h2r_pride_candidates.tsv
+catalogue_skipped 14350 /Users/kohlbach/Claude/OpenMS/New Tools/FASTag/work/FASTag/.worktrees/acc114-acqcheck3/acceptance/1.13/acqcheck2/inputs/exclude.txt
+catalogue_skipped 0 /Users/kohlbach/Claude/OpenMS/New Tools/FASTag/work/FASTag/.worktrees/post1131-rss-perthread/bench/results/tmt-ga-2026-11-11/detector-challenge/pride-metadata.json (search page)
+catalogue_skipped 19555 /Users/kohlbach/Claude/OpenMS/New Tools/FASTag/work/FASTag/.worktrees/b113-census-acc/acceptance/1.12/inputs/h2r_pride_candidates.tsv
+catalogue_skipped 19555 /Users/kohlbach/Claude/OpenMS/New Tools/FASTag/work/FASTag/.worktrees/b113-digqual-acc/acceptance/1.12/inputs/h2r_pride_candidates.tsv
+catalogue_skipped 19555 /Users/kohlbach/Claude/OpenMS/New Tools/FASTag/work/FASTag/.worktrees/acc114-compltol3/acceptance/1.12/inputs/h2r_pride_candidates.tsv
+catalogue_skipped 2302 /Users/kohlbach/Claude/OpenMS/New Tools/FASTag/work/FASTag/.worktrees/acc114-compltol3/acceptance/1.13/compltol/heldout2/select/excl_pxd.txt
+catalogue_skipped 19555 /Users/kohlbach/Claude/OpenMS/New Tools/FASTag/work/FASTag/.worktrees/acc113r-msfragger/acceptance/1.12/inputs/h2r_pride_candidates.tsv
+catalogue_skipped 13910 /Users/kohlbach/Claude/OpenMS/New Tools/FASTag/work/FASTag/.worktrees/acc113r-msfragger/acceptance/1.13/msfragger/inputs/excl_pxd.tsv
+catalogue_skipped 0 /Users/kohlbach/Claude/OpenMS/New Tools/FASTag/work/FASTag/.worktrees/post1131-win-crash/bench/results/tmt-ga-2026-11-11/detector-challenge/pride-metadata.json (search page)
+catalogue_skipped 14290 b113/hybrid/acc/acceptance/1.13/hybrid/inputs/excl_pxd.txt
+catalogue_skipped 19555 b113/hybrid/acc/acceptance/1.12/inputs/h2r_pride_candidates.tsv
+catalogue_skipped 19555 b113/ax/acc-run/acceptance/1.12/inputs/h2r_pride_candidates.tsv
+catalogue_skipped 19555 b113/ax/acc-43ac368/acceptance/1.12/inputs/h2r_pride_candidates.tsv
+catalogue_skipped 2420 b113/nontryptic/heldout/excl_local.txt
+catalogue_skipped 27064 b113/nontryptic/heldout/sweep_b113.txt
+catalogue_skipped 13746 b113/nontryptic/heldout/sdrf_enzymes.tsv
+catalogue_skipped 2420 b113/nontryptic/heldout/sel/excl_pxd.txt
+catalogue_skipped 0 b113/nontryptic/heldout/sel/search/AspN.0.json (search page)
+catalogue_skipped 0 b113/nontryptic/heldout/sel/search/GluC.0.json (search page)
+catalogue_skipped 0 b113/nontryptic/heldout/sel/search/Arg-C.1.json (search page)
+catalogue_skipped 0 b113/nontryptic/heldout/sel/search/Asp-N.0.json (search page)
+catalogue_skipped 0 b113/nontryptic/heldout/sel/search/chymotrypsin.2.json (search page)
+catalogue_skipped 0 b113/nontryptic/heldout/sel/search/Arg-C.0.json (search page)
+catalogue_skipped 0 b113/nontryptic/heldout/sel/search/Lys-N.0.json (search page)
+catalogue_skipped 0 b113/nontryptic/heldout/sel/search/LysN.0.json (search page)
+catalogue_skipped 0 b113/nontryptic/heldout/sel/search/Asp-N.1.json (search page)
+catalogue_skipped 0 b113/nontryptic/heldout/sel/search/chymotrypsin.3.json (search page)
+catalogue_skipped 0 b113/nontryptic/heldout/sel/search/AspN.1.json (search page)
+catalogue_skipped 0 b113/nontryptic/heldout/sel/search/Glu-C.0.json (search page)
+catalogue_skipped 0 b113/nontryptic/heldout/sel/search/chymotrypsin.5.json (search page)
+catalogue_skipped 0 b113/nontryptic/heldout/sel/search/ArgC.1.json (search page)
+catalogue_skipped 0 b113/nontryptic/heldout/sel/search/chymotrypsin.1.json (search page)
+catalogue_skipped 0 b113/nontryptic/heldout/sel/search/Glu-C.1.json (search page)
+catalogue_skipped 0 b113/nontryptic/heldout/sel/search/chymotrypsin.4.json (search page)
+catalogue_skipped 0 b113/nontryptic/heldout/sel/search/ArgC.0.json (search page)
+catalogue_skipped 0 b113/nontryptic/heldout/sel/search/chymotrypsin.0.json (search page)
+catalogue_skipped 2420 b113/nontryptic/heldout/frozen/nontryptic/inputs/excl_pxd.txt
+catalogue_skipped 14555 b113/labeldisc-nocall/heldout/scripts/excluded_pxd.txt
+catalogue_skipped 14247 b113/labeldisc-nocall/heldout/sel/pool.tsv
+catalogue_skipped 13910 b113/msfragger/heldout/inputs/excl_pxd.tsv
+catalogue_skipped 12288 b113/alknodb/heldout/inputs/prescreen.tsv
+catalogue_skipped 12288 b113/alknodb/heldout/inputs/draw_order.tsv
+catalogue_skipped 12288 b113/alknodb/heldout/meta/ (directory)
+catalogue_skipped 14350 b113/acqcheck2/heldout/x_local.txt
+catalogue_skipped 14350 b113/acqcheck2/heldout/exclude.txt
+catalogue_skipped 19555 b113/compltol/heldout2/freeze/acceptance/1.12/inputs/h2r_pride_candidates.tsv
+catalogue_skipped 2302 b113/compltol/heldout2/freeze/acceptance/1.13/compltol/heldout2/select/excl_pxd.txt
+catalogue_skipped 2302 b113/compltol/heldout2/pre/acceptance/1.13/compltol/heldout2/select/excl_pxd.txt
+catalogue_skipped 2302 b113/compltol/heldout2/pre2/acceptance/1.13/compltol/heldout2/select/excl_pxd.txt
+catalogue_skipped 19555 b113/census/acc/1.12/inputs/h2r_pride_candidates.tsv
+catalogue_skipped 19555 b113/chimeric/posthoc/reuse/acc112/acceptance/1.12/inputs/h2r_pride_candidates.tsv
+catalogue_skipped 0 b114/lean/d4-4d4c46c/src/bench/results/tmt-ga-2026-11-11/detector-challenge/pride-metadata.json (search page)
+catalogue_skipped 0 b114/lean/d1-28da969/src/bench/results/tmt-ga-2026-11-11/detector-challenge/pride-metadata.json (search page)
+catalogue_skipped 0 b114/lean/d2-ddae317/src/bench/results/tmt-ga-2026-11-11/detector-challenge/pride-metadata.json (search page)
+catalogue_skipped 0 b114/lean/d3-903ca6a/src/bench/results/tmt-ga-2026-11-11/detector-challenge/pride-metadata.json (search page)
+catalogue_skipped 0 b114/lean/base/src/bench/results/tmt-ga-2026-11-11/detector-challenge/pride-metadata.json (search page)
+catalogue_skipped 0 b114/acqcheck3/src/bench/results/tmt-ga-2026-11-11/detector-challenge/pride-metadata.json (search page)
+catalogue_skipped 33761 b114/acqcheck3/heldout/exclude.txt
+catalogue_skipped 0 b114/optrm/c3-17ae08f/src/bench/results/tmt-ga-2026-11-11/detector-challenge/pride-metadata.json (search page)
+catalogue_skipped 0 b114/optrm/c1-2f1974d/src/bench/results/tmt-ga-2026-11-11/detector-challenge/pride-metadata.json (search page)
+catalogue_skipped 0 b114/optrm/c2-bc605cb/src/bench/results/tmt-ga-2026-11-11/detector-challenge/pride-metadata.json (search page)
+catalogue_skipped 0 b114/optrm/base/src/bench/results/tmt-ga-2026-11-11/detector-challenge/pride-metadata.json (search page)
+catalogue_skipped 0 b114/optrm/dev/src/bench/results/tmt-ga-2026-11-11/detector-challenge/pride-metadata.json (search page)
+catalogue_skipped 0 b114/optrm/c5-3ec1c07/src/bench/results/tmt-ga-2026-11-11/detector-challenge/pride-metadata.json (search page)
+catalogue_skipped 0 b114/optrm/c4-dd5f7ad/src/bench/results/tmt-ga-2026-11-11/detector-challenge/pride-metadata.json (search page)
+catalogue_skipped 0 b114/optrm/c6-a08489f/src/bench/results/tmt-ga-2026-11-11/detector-challenge/pride-metadata.json (search page)
+catalogue_skipped 0 post1131/mz0/fix/src/bench/results/tmt-ga-2026-11-11/detector-challenge/pride-metadata.json (search page)
+catalogue_skipped 0 post1131/mz0/main/src/bench/results/tmt-ga-2026-11-11/detector-challenge/pride-metadata.json (search page)
+catalogue_skipped 0 post1131/gapped-off/src/bench/results/tmt-ga-2026-11-11/detector-challenge/pride-metadata.json (search page)
+catalogue_skipped 0 post1131/gapped-off/base/src/bench/results/tmt-ga-2026-11-11/detector-challenge/pride-metadata.json (search page)
+catalogue_skipped 0 post1131/msfragger/main/src/bench/results/tmt-ga-2026-11-11/detector-challenge/pride-metadata.json (search page)
+catalogue_skipped 23310 post1131/msfragger/prereg/excl_pxd.tsv
+catalogue_skipped 19555 post1131/msfragger/prereg/h2r_pride_candidates.tsv
+catalogue_skipped 19555 post1131/msfragger/heldout2/draw/h2r_pride_candidates.tsv
+catalogue_skipped 23944 post1131/msfragger/heldout2/draw/excl_pxd.tsv
+catalogue_skipped 23944 post1131/msfragger/heldout2/frozen/acceptance/1.13/msfragger2/inputs/excl_pxd.tsv
+catalogue_skipped 19555 post1131/msfragger/heldout2/frozen/acceptance/1.13/msfragger2/inputs/h2r_pride_candidates.tsv
+catalogue_skipped 0 post1131/msfragger/src/bench/results/tmt-ga-2026-11-11/detector-challenge/pride-metadata.json (search page)
+catalogue_skipped 0 post1131/trfp-index/src-base/bench/results/tmt-ga-2026-11-11/detector-challenge/pride-metadata.json (search page)
+catalogue_skipped 0 post1131/trfp-index/src-neg/bench/results/tmt-ga-2026-11-11/detector-challenge/pride-metadata.json (search page)
+catalogue_skipped 0 post1131/trfp-index/src-fix/bench/results/tmt-ga-2026-11-11/detector-challenge/pride-metadata.json (search page)
+catalogue_skipped 0 post1131/labeldisc/src-t2/bench/results/tmt-ga-2026-11-11/detector-challenge/pride-metadata.json (search page)
+catalogue_skipped 0 post1131/labeldisc/full-t2f/src/bench/results/tmt-ga-2026-11-11/detector-challenge/pride-metadata.json (search page)
+catalogue_skipped 0 post1131/labeldisc/src-s1/bench/results/tmt-ga-2026-11-11/detector-challenge/pride-metadata.json (search page)
+catalogue_skipped 15397 post1131/labeldisc/heldout5/excluded_pxd.txt
+catalogue_skipped 0 post1131/labeldisc/heldout5/pride/pool_dimethyl_kw.json (search page)
+catalogue_skipped 0 post1131/labeldisc/heldout5/pride/pool_probe_kw.json (search page)
+catalogue_skipped 17380 post1131/labeldisc/heldout5/sel/pool.tsv
+catalogue_skipped 3582 post1131/labeldisc/heldout5/excl/excl-data.txt
+catalogue_skipped 3223 post1131/labeldisc/heldout5/excl/excl-mac.txt
+catalogue_skipped 17359 post1131/labeldisc/heldout5/excl/v3/excl-data.txt
+catalogue_skipped 5229 post1131/labeldisc/heldout5/excl/v4/excl-data.txt
+catalogue_skipped 26009 post1131/labeldisc/heldout5/excl/v1/excl-data.txt
+catalogue_skipped 17502 post1131/labeldisc/heldout5/excl/v1/excl-b113.txt
+catalogue_skipped 26767 post1131/labeldisc/heldout5/excl/v2/excl-data.txt
+catalogue_skipped 0 post1131/labeldisc/src-h1/bench/results/tmt-ga-2026-11-11/detector-challenge/pride-metadata.json (search page)
+catalogue_skipped 14784 post1131/labeldisc/heldout4/excluded_pxd.txt
+catalogue_skipped 14753 post1131/labeldisc/heldout4/excl-mac.txt
+catalogue_skipped 15201 post1131/labeldisc/heldout4/sel/pool.tsv
+catalogue_skipped 0 post1131/labeldisc/heldout4/pride/pool_dimethyl_kw.json (search page)
+catalogue_skipped 0 post1131/labeldisc/heldout4/pride/search/kw3_0012.json (search page)
+catalogue_skipped 0 post1131/labeldisc/heldout4/pride/search/kw4_0002.json (search page)
+catalogue_skipped 0 post1131/labeldisc/heldout4/pride/search/kw3_0002.json (search page)
+catalogue_skipped 0 post1131/labeldisc/heldout4/pride/search/kw0_0002.json (search page)
+catalogue_skipped 0 post1131/labeldisc/heldout4/pride/search/kw3_0006.json (search page)
+catalogue_skipped 0 post1131/labeldisc/heldout4/pride/search/kw3_0003.json (search page)
+catalogue_skipped 0 post1131/labeldisc/heldout4/pride/search/kw0_0003.json (search page)
+catalogue_skipped 0 post1131/labeldisc/heldout4/pride/search/kw3_0007.json (search page)
+catalogue_skipped 0 post1131/labeldisc/heldout4/pride/search/kw3_0013.json (search page)
+catalogue_skipped 0 post1131/labeldisc/heldout4/pride/search/kw4_0003.json (search page)
+catalogue_skipped 0 post1131/labeldisc/heldout4/pride/search/kw3_0001.json (search page)
+catalogue_skipped 0 post1131/labeldisc/heldout4/pride/search/kw0_0001.json (search page)
+catalogue_skipped 0 post1131/labeldisc/heldout4/pride/search/kw3_0005.json (search page)
+catalogue_skipped 0 post1131/labeldisc/heldout4/pride/search/kw3_0009.json (search page)
+catalogue_skipped 0 post1131/labeldisc/heldout4/pride/search/kw3_0011.json (search page)
+catalogue_skipped 0 post1131/labeldisc/heldout4/pride/search/kw4_0001.json (search page)
+catalogue_skipped 0 post1131/labeldisc/heldout4/pride/search/kw3_0015.json (search page)
+catalogue_skipped 0 post1131/labeldisc/heldout4/pride/search/kw3_0008.json (search page)
+catalogue_skipped 0 post1131/labeldisc/heldout4/pride/search/kw3_0010.json (search page)
+catalogue_skipped 0 post1131/labeldisc/heldout4/pride/search/kw4_0000.json (search page)
+catalogue_skipped 0 post1131/labeldisc/heldout4/pride/search/kw3_0014.json (search page)
+catalogue_skipped 0 post1131/labeldisc/heldout4/pride/search/kw2_0000.json (search page)
+catalogue_skipped 0 post1131/labeldisc/heldout4/pride/search/kw3_0000.json (search page)
+catalogue_skipped 0 post1131/labeldisc/heldout4/pride/search/kw0_0000.json (search page)
+catalogue_skipped 0 post1131/labeldisc/heldout4/pride/search/kw1_0000.json (search page)
+catalogue_skipped 0 post1131/labeldisc/heldout4/pride/search/kw3_0004.json (search page)
+catalogue_skipped 0 post1131/labeldisc/src-t0/bench/results/tmt-ga-2026-11-11/detector-challenge/pride-metadata.json (search page)
+catalogue_skipped 0 post1131/labeldisc/src-s0/bench/results/tmt-ga-2026-11-11/detector-challenge/pride-metadata.json (search page)
+catalogue_skipped 0 post1131/labeldisc/full-h1f/src/bench/results/tmt-ga-2026-11-11/detector-challenge/pride-metadata.json (search page)
+catalogue_skipped 0 post1131/rss-pxd028735/src-pr/bench/results/tmt-ga-2026-11-11/detector-challenge/pride-metadata.json (search page)
+catalogue_skipped 0 post1131/rss-pxd028735/src-pr2/bench/results/tmt-ga-2026-11-11/detector-challenge/pride-metadata.json (search page)
+catalogue_skipped 19555 fastag-15b-dev/repo/acceptance/1.12/inputs/h2r_pride_candidates.tsv
+catalogue_skipped 19555 fastag-15b-dev/repo-freeze/acceptance/1.12/inputs/h2r_pride_candidates.tsv
+catalogue_skipped 19555 fastag-heldout-1.12/item15B/h1/src-da60823/acceptance/1.12/inputs/h2r_pride_candidates.tsv
+catalogue_skipped 2251 fastag-labeldisc/heldout3/scripts/excluded_pxd.txt
+catalogue_skipped 14247 fastag-labeldisc/heldout3/sel/pool.tsv
+catalogue_skipped 0 fastag-labeldisc/heldout3/pride/search/4_0012.json (search page)
+catalogue_skipped 0 fastag-labeldisc/heldout3/pride/search/2_0006.json (search page)
+catalogue_skipped 0 fastag-labeldisc/heldout3/pride/search/0_0033.json (search page)
+catalogue_skipped 0 fastag-labeldisc/heldout3/pride/search/0_0002.json (search page)
+catalogue_skipped 0 fastag-labeldisc/heldout3/pride/search/4_0023.json (search page)
+catalogue_skipped 0 fastag-labeldisc/heldout3/pride/search/5_0012.json (search page)
+catalogue_skipped 0 fastag-labeldisc/heldout3/pride/search/1_0002.json (search page)
+catalogue_skipped 0 fastag-labeldisc/heldout3/pride/search/5_0023.json (search page)
+catalogue_skipped 0 fastag-labeldisc/heldout3/pride/search/0_0006.json (search page)
+catalogue_skipped 0 fastag-labeldisc/heldout3/pride/search/4_0027.json (search page)
+catalogue_skipped 0 fastag-labeldisc/heldout3/pride/search/4_0016.json (search page)
+catalogue_skipped 0 fastag-labeldisc/heldout3/pride/search/2_0002.json (search page)
+catalogue_skipped 0 fastag-labeldisc/heldout3/pride/search/0_0037.json (search page)
+catalogue_skipped 0 fastag-labeldisc/heldout3/pride/search/1_0006.json (search page)
+catalogue_skipped 0 fastag-labeldisc/heldout3/pride/search/5_0027.json (search page)
+catalogue_skipped 0 fastag-labeldisc/heldout3/pride/search/5_0016.json (search page)
+catalogue_skipped 0 fastag-labeldisc/heldout3/pride/search/2_0016.json (search page)
+catalogue_skipped 0 fastag-labeldisc/heldout3/pride/search/0_0023.json (search page)
+catalogue_skipped 0 fastag-labeldisc/heldout3/pride/search/4_0002.json (search page)
+catalogue_skipped 0 fastag-labeldisc/heldout3/pride/search/6_0006.json (search page)
+catalogue_skipped 0 fastag-labeldisc/heldout3/pride/search/0_0012.json (search page)
+catalogue_skipped 0 fastag-labeldisc/heldout3/pride/search/5_0002.json (search page)
+catalogue_skipped 0 fastag-labeldisc/heldout3/pride/search/0_0041.json (search page)
+catalogue_skipped 0 fastag-labeldisc/heldout3/pride/search/6_0002.json (search page)
+catalogue_skipped 0 fastag-labeldisc/heldout3/pride/search/0_0016.json (search page)
+catalogue_skipped 0 fastag-labeldisc/heldout3/pride/search/2_0012.json (search page)
+catalogue_skipped 0 fastag-labeldisc/heldout3/pride/search/0_0027.json (search page)
+catalogue_skipped 0 fastag-labeldisc/heldout3/pride/search/4_0006.json (search page)
+catalogue_skipped 0 fastag-labeldisc/heldout3/pride/search/0_0045.json (search page)
+catalogue_skipped 0 fastag-labeldisc/heldout3/pride/search/5_0006.json (search page)
+catalogue_skipped 0 fastag-labeldisc/heldout3/pride/search/0_0022.json (search page)
+catalogue_skipped 0 fastag-labeldisc/heldout3/pride/search/2_0017.json (search page)
+catalogue_skipped 0 fastag-labeldisc/heldout3/pride/search/4_0003.json (search page)
+catalogue_skipped 0 fastag-labeldisc/heldout3/pride/search/6_0007.json (search page)
+catalogue_skipped 0 fastag-labeldisc/heldout3/pride/search/0_0013.json (search page)
+catalogue_skipped 0 fastag-labeldisc/heldout3/pride/search/5_0003.json (search page)
+catalogue_skipped 0 fastag-labeldisc/heldout3/pride/search/0_0040.json (search page)
+catalogue_skipped 0 fastag-labeldisc/heldout3/pride/search/6_0003.json (search page)
+catalogue_skipped 0 fastag-labeldisc/heldout3/pride/search/0_0017.json (search page)
+catalogue_skipped 0 fastag-labeldisc/heldout3/pride/search/0_0026.json (search page)
+catalogue_skipped 0 fastag-labeldisc/heldout3/pride/search/2_0013.json (search page)
+catalogue_skipped 0 fastag-labeldisc/heldout3/pride/search/4_0007.json (search page)
+catalogue_skipped 0 fastag-labeldisc/heldout3/pride/search/0_0044.json (search page)
+catalogue_skipped 0 fastag-labeldisc/heldout3/pride/search/5_0007.json (search page)
+catalogue_skipped 0 fastag-labeldisc/heldout3/pride/search/4_0013.json (search page)
+catalogue_skipped 0 fastag-labeldisc/heldout3/pride/search/0_0032.json (search page)
+catalogue_skipped 0 fastag-labeldisc/heldout3/pride/search/2_0007.json (search page)
+catalogue_skipped 0 fastag-labeldisc/heldout3/pride/search/0_0003.json (search page)
+catalogue_skipped 0 fastag-labeldisc/heldout3/pride/search/4_0022.json (search page)
+catalogue_skipped 0 fastag-labeldisc/heldout3/pride/search/5_0013.json (search page)
+catalogue_skipped 0 fastag-labeldisc/heldout3/pride/search/1_0003.json (search page)
+catalogue_skipped 0 fastag-labeldisc/heldout3/pride/search/5_0022.json (search page)
+catalogue_skipped 0 fastag-labeldisc/heldout3/pride/search/0_0007.json (search page)
+catalogue_skipped 0 fastag-labeldisc/heldout3/pride/search/4_0026.json (search page)
+catalogue_skipped 0 fastag-labeldisc/heldout3/pride/search/4_0017.json (search page)
+catalogue_skipped 0 fastag-labeldisc/heldout3/pride/search/0_0036.json (search page)
+catalogue_skipped 0 fastag-labeldisc/heldout3/pride/search/2_0003.json (search page)
+catalogue_skipped 0 fastag-labeldisc/heldout3/pride/search/1_0007.json (search page)
+catalogue_skipped 0 fastag-labeldisc/heldout3/pride/search/5_0026.json (search page)
+catalogue_skipped 0 fastag-labeldisc/heldout3/pride/search/5_0017.json (search page)
+catalogue_skipped 0 fastag-labeldisc/heldout3/pride/search/4_0001.json (search page)
+catalogue_skipped 0 fastag-labeldisc/heldout3/pride/search/2_0015.json (search page)
+catalogue_skipped 0 fastag-labeldisc/heldout3/pride/search/5_0019.json (search page)
+catalogue_skipped 0 fastag-labeldisc/heldout3/pride/search/0_0020.json (search page)
+catalogue_skipped 0 fastag-labeldisc/heldout3/pride/search/0_0011.json (search page)
+catalogue_skipped 0 fastag-labeldisc/heldout3/pride/search/5_0028.json (search page)
+catalogue_skipped 0 fastag-labeldisc/heldout3/pride/search/6_0005.json (search page)
+catalogue_skipped 0 fastag-labeldisc/heldout3/pride/search/1_0009.json (search page)
+catalogue_skipped 0 fastag-labeldisc/heldout3/pride/search/4_0030.json (search page)
+catalogue_skipped 0 fastag-labeldisc/heldout3/pride/search/0_0038.json (search page)
+catalogue_skipped 0 fastag-labeldisc/heldout3/pride/search/5_0001.json (search page)
+catalogue_skipped 0 fastag-labeldisc/heldout3/pride/search/4_0019.json (search page)
+catalogue_skipped 0 fastag-labeldisc/heldout3/pride/search/4_0028.json (search page)
+catalogue_skipped 0 fastag-labeldisc/heldout3/pride/search/0_0042.json (search page)
+catalogue_skipped 0 fastag-labeldisc/heldout3/pride/search/5_0030.json (search page)
+catalogue_skipped 0 fastag-labeldisc/heldout3/pride/search/0_0009.json (search page)
+catalogue_skipped 0 fastag-labeldisc/heldout3/pride/search/0_0015.json (search page)
+catalogue_skipped 0 fastag-labeldisc/heldout3/pride/search/6_0001.json (search page)
+catalogue_skipped 0 fastag-labeldisc/heldout3/pride/search/4_0005.json (search page)
+catalogue_skipped 0 fastag-labeldisc/heldout3/pride/search/2_0011.json (search page)
+catalogue_skipped 0 fastag-labeldisc/heldout3/pride/search/0_0024.json (search page)
+catalogue_skipped 0 fastag-labeldisc/heldout3/pride/search/0_0046.json (search page)
+catalogue_skipped 0 fastag-labeldisc/heldout3/pride/search/7_0001.json (search page)
+catalogue_skipped 0 fastag-labeldisc/heldout3/pride/search/5_0005.json (search page)
+catalogue_skipped 0 fastag-labeldisc/heldout3/pride/search/2_0009.json (search page)
+catalogue_skipped 0 fastag-labeldisc/heldout3/pride/search/2_0005.json (search page)
+catalogue_skipped 0 fastag-labeldisc/heldout3/pride/search/0_0030.json (search page)
+catalogue_skipped 0 fastag-labeldisc/heldout3/pride/search/5_0009.json (search page)
+catalogue_skipped 0 fastag-labeldisc/heldout3/pride/search/4_0011.json (search page)
+catalogue_skipped 0 fastag-labeldisc/heldout3/pride/search/4_0020.json (search page)
+catalogue_skipped 0 fastag-labeldisc/heldout3/pride/search/0_0001.json (search page)
+catalogue_skipped 0 fastag-labeldisc/heldout3/pride/search/4_0009.json (search page)
+catalogue_skipped 0 fastag-labeldisc/heldout3/pride/search/5_0011.json (search page)
+catalogue_skipped 0 fastag-labeldisc/heldout3/pride/search/0_0028.json (search page)
+catalogue_skipped 0 fastag-labeldisc/heldout3/pride/search/0_0019.json (search page)
+catalogue_skipped 0 fastag-labeldisc/heldout3/pride/search/5_0020.json (search page)
+catalogue_skipped 0 fastag-labeldisc/heldout3/pride/search/1_0001.json (search page)
+catalogue_skipped 0 fastag-labeldisc/heldout3/pride/search/4_0024.json (search page)
+catalogue_skipped 0 fastag-labeldisc/heldout3/pride/search/0_0005.json (search page)
+catalogue_skipped 0 fastag-labeldisc/heldout3/pride/search/2_0001.json (search page)
+catalogue_skipped 0 fastag-labeldisc/heldout3/pride/search/0_0034.json (search page)
+catalogue_skipped 0 fastag-labeldisc/heldout3/pride/search/4_0015.json (search page)
+catalogue_skipped 0 fastag-labeldisc/heldout3/pride/search/5_0024.json (search page)
+catalogue_skipped 0 fastag-labeldisc/heldout3/pride/search/1_0005.json (search page)
+catalogue_skipped 0 fastag-labeldisc/heldout3/pride/search/3_0001.json (search page)
+catalogue_skipped 0 fastag-labeldisc/heldout3/pride/search/5_0015.json (search page)
+catalogue_skipped 0 fastag-labeldisc/heldout3/pride/search/0_0031.json (search page)
+catalogue_skipped 0 fastag-labeldisc/heldout3/pride/search/5_0008.json (search page)
+catalogue_skipped 0 fastag-labeldisc/heldout3/pride/search/2_0004.json (search page)
+catalogue_skipped 0 fastag-labeldisc/heldout3/pride/search/4_0010.json (search page)
+catalogue_skipped 0 fastag-labeldisc/heldout3/pride/search/4_0021.json (search page)
+catalogue_skipped 0 fastag-labeldisc/heldout3/pride/search/0_0000.json (search page)
+catalogue_skipped 0 fastag-labeldisc/heldout3/pride/search/4_0008.json (search page)
+catalogue_skipped 0 fastag-labeldisc/heldout3/pride/search/5_0010.json (search page)
+catalogue_skipped 0 fastag-labeldisc/heldout3/pride/search/0_0029.json (search page)
+catalogue_skipped 0 fastag-labeldisc/heldout3/pride/search/0_0018.json (search page)
+catalogue_skipped 0 fastag-labeldisc/heldout3/pride/search/5_0021.json (search page)
+catalogue_skipped 0 fastag-labeldisc/heldout3/pride/search/1_0000.json (search page)
+catalogue_skipped 0 fastag-labeldisc/heldout3/pride/search/4_0025.json (search page)
+catalogue_skipped 0 fastag-labeldisc/heldout3/pride/search/0_0004.json (search page)
+catalogue_skipped 0 fastag-labeldisc/heldout3/pride/search/0_0035.json (search page)
+catalogue_skipped 0 fastag-labeldisc/heldout3/pride/search/2_0000.json (search page)
+catalogue_skipped 0 fastag-labeldisc/heldout3/pride/search/4_0014.json (search page)
+catalogue_skipped 0 fastag-labeldisc/heldout3/pride/search/5_0025.json (search page)
+catalogue_skipped 0 fastag-labeldisc/heldout3/pride/search/6_0008.json (search page)
+catalogue_skipped 0 fastag-labeldisc/heldout3/pride/search/1_0004.json (search page)
+catalogue_skipped 0 fastag-labeldisc/heldout3/pride/search/3_0000.json (search page)
+catalogue_skipped 0 fastag-labeldisc/heldout3/pride/search/5_0014.json (search page)
+catalogue_skipped 0 fastag-labeldisc/heldout3/pride/search/4_0000.json (search page)
+catalogue_skipped 0 fastag-labeldisc/heldout3/pride/search/5_0018.json (search page)
+catalogue_skipped 0 fastag-labeldisc/heldout3/pride/search/0_0021.json (search page)
+catalogue_skipped 0 fastag-labeldisc/heldout3/pride/search/2_0014.json (search page)
+catalogue_skipped 0 fastag-labeldisc/heldout3/pride/search/0_0010.json (search page)
+catalogue_skipped 0 fastag-labeldisc/heldout3/pride/search/5_0029.json (search page)
+catalogue_skipped 0 fastag-labeldisc/heldout3/pride/search/1_0008.json (search page)
+catalogue_skipped 0 fastag-labeldisc/heldout3/pride/search/6_0004.json (search page)
+catalogue_skipped 0 fastag-labeldisc/heldout3/pride/search/0_0039.json (search page)
+catalogue_skipped 0 fastag-labeldisc/heldout3/pride/search/5_0000.json (search page)
+catalogue_skipped 0 fastag-labeldisc/heldout3/pride/search/4_0018.json (search page)
+catalogue_skipped 0 fastag-labeldisc/heldout3/pride/search/4_0029.json (search page)
+catalogue_skipped 0 fastag-labeldisc/heldout3/pride/search/0_0008.json (search page)
+catalogue_skipped 0 fastag-labeldisc/heldout3/pride/search/0_0043.json (search page)
+catalogue_skipped 0 fastag-labeldisc/heldout3/pride/search/0_0014.json (search page)
+catalogue_skipped 0 fastag-labeldisc/heldout3/pride/search/6_0000.json (search page)
+catalogue_skipped 0 fastag-labeldisc/heldout3/pride/search/4_0004.json (search page)
+catalogue_skipped 0 fastag-labeldisc/heldout3/pride/search/0_0025.json (search page)
+catalogue_skipped 0 fastag-labeldisc/heldout3/pride/search/2_0010.json (search page)
+catalogue_skipped 0 fastag-labeldisc/heldout3/pride/search/7_0000.json (search page)
+catalogue_skipped 0 fastag-labeldisc/heldout3/pride/search/0_0047.json (search page)
+catalogue_skipped 0 fastag-labeldisc/heldout3/pride/search/2_0008.json (search page)
+catalogue_skipped 0 fastag-labeldisc/heldout3/pride/search/5_0004.json (search page)
+catalogue_skipped 19555 fastag-labeldisc/heldout/acc/acceptance/1.12/inputs/h2r_pride_candidates.tsv
+catalogue_skipped 0 fastag-tmt-ga-review/detector-challenge/pride-metadata.json (search page)
+catalogue_skipped 14676 fastag112-heldout/bigbio/datasets/ (directory)
+catalogue_skipped 19555 fastag112-prereg/repo/acceptance/1.12/inputs/h2r_pride_candidates.tsv
+catalogue_skipped 19555 fastag112-prereg/repo-r3/acceptance/1.12/inputs/h2r_pride_candidates.tsv
