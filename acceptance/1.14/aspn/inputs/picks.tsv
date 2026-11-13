@@ -1,0 +1,14 @@
+pick	group	protease	accession	db	files	slots	files_per_slot
+A1	aspn	Asp-N	PXD001111	Homo_sapiens	token	3	3
+A2	aspn	Asp-N	PXD027242	Homo_sapiens	token	3	2
+A3	aspn	Asp-N	PXD050612	Mycobacterium_marinum	_CF	3	2
+A4	aspn	Asp-N	PXD059041	Trypanosoma_brucei	token	3	2
+K1	control	Glu-C	PXD027242	Homo_sapiens	HCD	1	3
+K2	control	Trypsin	PXD027242	Homo_sapiens	_Tr_HCD	1	3
+K3	control	Trypsin	PXD050612	Mycobacterium_marinum	_CF	1	3
+K4	control	Chymotrypsin	PXD059041	Trypanosoma_brucei	token	1	3
+K5	control	Trypsin	PXD067401	Homo_sapiens	sdrf	1	3
+K6	control	Trypsin	PXD022469	Homo_sapiens	sdrf	1	3
+K7	control	Trypsin	PXD044780	Homo_sapiens	sdrf	1	3
+K8	control	Trypsin	PXD049174	Homo_sapiens	sdrf	1	3
+K9	control	Trypsin	PXD017391	Homo_sapiens	sdrf	1	3

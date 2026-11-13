@@ -1,0 +1,87 @@
+accession	eligible	reason
+PXD000965	no	E1/E3: single protein, combined digests
+PXD001111	yes	Jurkat/HeLa lysate (FASP), Asp-N alone, SCX fractions named AspN; Q Exactive
+PXD001428	no	E2: phosphopeptide enrichment
+PXD001571	no	E2: glycopeptide SPE
+PXD002941	no	E1: gel bands of EF1A
+PXD004062	no	E2: biotinylated (surface-enriched) samples for Asp-N
+PXD004531	no	E2: phospho
+PXD006001	no	E2: S-acyl protein enrichment (LB-ABE)
+PXD006151	no	E2: SILAC
+PXD006767	no	E1: gel bands of purified targets
+PXD007284	no	E3: tandem digests (LysC+AspN, trypsin+AspN)
+PXD008003	no	E2: SUMO enrichment
+PXD008068	no	E3: no Asp-N digest in the protocol
+PXD010494	no (non-panel)	E1: purified spike proteins
+PXD011263	no (non-panel)	SRM (TSQ)
+PXD011361	no	E1: purified ERa-NTD
+PXD011995	no	E1: ribosome nascent chains
+PXD012713	no	E1: single protein
+PXD013112	no	E1: recombinant proteins
+PXD013187	no	E2: S-acyl protein enrichment (LB-ABE)
+PXD013676	no	E2: glycoproteomics
+PXD015396	no	E3: trypsin/AspN combined digest
+PXD015890	no	E2: proximity labeling enrichment
+PXD016924	no	E2: SILAC
+PXD017065	no	E1: tau
+PXD017644	no	E1: single protein (IGF-1R)
+PXD017697	no	E2: SUMO enrichment
+PXD018167	no (non-panel)	E1: purified flagellins
+PXD018976	no	E1: in-vitro protease assay
+PXD019016	no	E1: gel bands
+PXD019039	no	E1: Asp-N files are FLAG immunoprecipitates
+PXD019938	no	E1: purified viral/ACE2 protein
+PXD019949	no (non-panel)	E1: histone gel bands; Velos
+PXD020005	no	E1: microbial community (not one organism)
+PXD020517	no	E1/E3: insoluble tau fractions, GluC+AspN
+PXD021013	no	E1: synthetic peptides
+PXD021214	no	E1: gel bands of purified targets
+PXD021309	no	E1: single glycoprotein
+PXD021398	no	E1: immunopeptidome
+PXD021703	no	E3: no Asp-N file
+PXD022367	no	E2: SUMO/ubiquitin enrichment
+PXD022426	no	E2: chemical probe enrichment
+PXD022833	no	E1: single proteins
+PXD022973	no	E3: AspN then trypsin
+PXD023243	no	E1: microbial community
+PXD023419	no	E1: antibody
+PXD023986	no	E1: in-vitro ubiquitination
+PXD024144	no	E2: SUMO enrichment
+PXD024462	no	E2/E3: SWATH, purified complex
+PXD025785	no (non-panel)	E1: gel bands of viral proteins
+PXD026496	no (non-panel)	E1: low-complexity silica extracts of three diatom species, mixed instruments
+PXD027242	yes	human cell lysate split, Asp-N alone; DDA AspN HCD files (CID and digest mixtures excluded by name)
+PXD029242	no	E2: SILAC
+PXD030752	no	E3: trypsin then Asp-N
+PXD031032	no	E2: glycoproteomics reanalysis
+PXD031334	no	E1/E2: integrin glycosylation
+PXD031548	no	E2: SUMO enrichment
+PXD035496	no	E1: microbial community
+PXD037043	no	E2: phospho, single protein
+PXD037132	no	E1: single protein
+PXD040219	no (non-panel)	E1: venom
+PXD042599	no	E1: single protein methylation
+PXD042701	no	E2: O-glycopeptides
+PXD043031	no	E1: DNMT1
+PXD044150	no	E1: single protein
+PXD044747	no (non-panel)	no reference proteome (Robinia nodules)
+PXD044835	no	E1: purified filaments
+PXD045935	no	E1: gel bands of purified dynein
+PXD046445	no (non-panel)	E1: gel bands
+PXD048614	no	E1/E2: crosslinking, J-chain
+PXD050612	yes (non-panel organism)	M. marinum culture filtrate (secretome), Asp-N alone; AspN_CF files (GST and EspG5 purified-protein files excluded by name)
+PXD050930	no	E2: crosslinking
+PXD055085	no (non-panel)	E1: antibody
+PXD055793	no	E1: gel bands of axonemal dynein
+PXD056059	no	E1: gel bands
+PXD059041	yes (non-panel organism)	T. brucei purified flagella (subcellular fraction), Asp-N alone in its aliquot; Q Exactive Plus
+PXD061276	no	E2: SUMO enrichment
+PXD063489	no (non-panel)	E1/E2: viral spike glycoproteins
+PXD064525	no	E1: antibody sequencing
+PXD068489	no	no raw files in PRIDE
+PXD068589	no	E2: TMT; same lab as development project PXD068586
+PXD068593	no	E2: TMT; same lab as development project PXD068586
+PXD072665	no	E1: p53/Sirt1
+PXD079838	no	E1: tau IP, targeted
+PXD079878	no	E1: tau IP
+PXD079895	no	E1: IP-PRM

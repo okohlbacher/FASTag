@@ -1,0 +1,21 @@
+order	accession	eligible	reason
+1	PXD044180	no	E2: Fe-NTA phosphopeptide enrichment
+2	PXD049446	no	no PRIDE v3 record
+3	PXD000159	no	E1: affinity purification
+4	PXD022469	yes	depleted/fractionated human plasma (biofluid), label-free
+5	PXD003293	no	E2: iTRAQ
+6	PXD004613	no	E1: excised gel bands of pull-downs
+7	PXD044780	yes	whole cell lysates, label-free
+8	PXD007621	no	E2: SILAC
+9	PXD071741	no	E2: streptavidin enrichment
+10	PXD002332	no	no SDRF trypsin file of 50 MB to 4 GB
+11	PXD049174	yes	membrane extracts (subcellular fraction), label-free
+12	PXD003560	no	E1: anti-FLAG immunoprecipitation
+13	PXD017391	yes	macrophage cell lysates, label-free
+14	PXD020319	no	E1: synthetic octapeptides
+15	PXD020763	no	E1: HCC xenograft in mouse (mixed species)
+16	PXD017731	no	E1: recombinant protein standards
+17	PXD053405	no	E2: phosphotyrosine enrichment
+18	PXD041620	no	E1: RFP-trap immunoprecipitation, phospho enrichment
+19	PXD005677	no	E1: plasma peptide (glucagon) prefractionation, not a protein digest of a complex mixture
+20	PXD067401	yes	amnion/chorion tissue (fetal membranes)
