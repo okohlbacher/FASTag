@@ -78,11 +78,11 @@ namespace FASTag
   {
   public:
     /// @brief No block may be larger than this: a block's bytes are read whole.
-    static constexpr std::uint64_t kMaxBlockBytes = std::uint64_t{256} << 20;
+    static constexpr std::uint64_t MAX_BLOCK_BYTES = std::uint64_t{256} << 20;
     /// @brief At most this much of the text before the first block is looked at.
-    static constexpr std::size_t kHeaderScan = std::size_t{64} << 10;
+    static constexpr std::size_t HEADER_SCAN = std::size_t{64} << 10;
     /// @brief TITLEs in error messages are cut to this many bytes.
-    static constexpr std::size_t kTitleInMessages = 120;
+    static constexpr std::size_t TITLE_IN_MESSAGES = 120;
 
     /**
       @brief Where the blocks are.
@@ -101,7 +101,7 @@ namespace FASTag
       /// Stretches of text outside the blocks (the header, a gap between two
       /// blocks, the trailer) holding a line that looks like spectrum content:
       /// a peak line (starting with a digit) or PEPMASS=, TITLE=, RTINSECONDS=
-      /// or SCANS=. Only the first kHeaderScan bytes of each are looked at.
+      /// or SCANS=. Only the first HEADER_SCAN bytes of each are looked at.
       std::size_t loose_regions = 0;
       std::uint64_t first_loose = 0; ///< where the first such line starts
     };
@@ -127,7 +127,7 @@ namespace FASTag
       @throw OpenMS::Exception::FileNotReadable when it cannot be read
     */
     static Blocks scanBlocks(const std::string& path, std::size_t chunk_bytes = std::size_t{4} << 20,
-                             std::uint64_t max_block = kMaxBlockBytes);
+                             std::uint64_t max_block = MAX_BLOCK_BYTES);
 
     /**
       @brief What parsing came across, per reader copy (summed by the caller).
@@ -172,7 +172,7 @@ namespace FASTag
       @throw OpenMS::Exception::FileNotReadable as scanBlocks, or when the file cannot be opened
     */
     explicit MgfReader(const std::string& path, std::size_t chunk_bytes = std::size_t{4} << 20,
-                       std::uint64_t max_block = kMaxBlockBytes);
+                       std::uint64_t max_block = MAX_BLOCK_BYTES);
     /**
       @brief A per-thread reader over the same file.
 
@@ -222,7 +222,7 @@ namespace FASTag
       @brief Whether the text before the first block has a file-level CHARGE= line.
 
       Mascot applies it to blocks without one and this reader (like OpenMS)
-      does not. Only the first kHeaderScan bytes are looked at.
+      does not. Only the first HEADER_SCAN bytes are looked at.
 
       @return true when there is one
     */

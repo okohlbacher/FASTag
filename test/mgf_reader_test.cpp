@@ -151,7 +151,7 @@ namespace
     check(r.getNrSpectra() == 4, "4 blocks");
     check(r.hasBom(), "hasBom");
     check(r.headerCharge(), "the file-level CHARGE= is seen");
-    check(r.headerBytes() > MgfReader::kHeaderScan, "the header is longer than the scan");
+    check(r.headerBytes() > MgfReader::HEADER_SCAN, "the header is longer than the scan");
     const MSSpectrum s0 = r.getSpectrum(0);
     check(s0.size() == 2 && s0[1].getMZ() == 200.25 && s0.getPrecursors()[0].getCharge() == 2, "block 0 read");
     check(s0.getPrecursors()[0].getIntensity() == 1000.0f, "PEPMASS intensity");
@@ -216,10 +216,10 @@ namespace
       // Block 1 runs into block 2's BEGIN; block 3 runs into EOF.
       std::string s = good + pad + "\n" + "BEGIN IONS\nTITLE=bad1\nPEPMASS=1\n1 1\n" + pad + "\n" + good + pad +
                       "\nBEGIN IONS\nTITLE=bad3\n1 1\n";
-      cases.push_back({"END IONS missing mid-file", s, "MGF block 1 (byte " + std::to_string(good.size() + pad.size() + 1) + ", TITLE=bad1)", MgfReader::kMaxBlockBytes});
+      cases.push_back({"END IONS missing mid-file", s, "MGF block 1 (byte " + std::to_string(good.size() + pad.size() + 1) + ", TITLE=bad1)", MgfReader::MAX_BLOCK_BYTES});
     }
     cases.push_back({"END IONS missing at EOF", good + pad + "\n" + good + "BEGIN IONS\nTITLE=bad2\n1 1\n",
-                     "MGF block 2 ", MgfReader::kMaxBlockBytes});
+                     "MGF block 2 ", MgfReader::MAX_BLOCK_BYTES});
     {
       std::string big = "BEGIN IONS\nTITLE=big\n" + std::string(200, '#') + "\nEND IONS\n";
       cases.push_back({"block over the cap", good + pad + "\n" + big + pad + "\n" + big, "MGF block 1 ", 120});
@@ -379,7 +379,7 @@ namespace
       // A 64 KiB TITLE is kept whole, and cut in a message.
       const std::string big(64 * 1024, 'T');
       const std::string msg = parse_error([&] { parse("TITLE=" + big + "\nPEPMASS=x\n"); });
-      check(has(msg, "TITLE=" + std::string(MgfReader::kTitleInMessages, 'T') + "...)"), "long TITLE cut to 120 bytes in a message");
+      check(has(msg, "TITLE=" + std::string(MgfReader::TITLE_IN_MESSAGES, 'T') + "...)"), "long TITLE cut to 120 bytes in a message");
       check(StringUtils::toStr(parse("TITLE=" + big + "\n" + peaks).getMetaValue("TITLE")).size() == big.size(), "long TITLE kept");
     }
     check(parse("SCANS=17\n" + peaks).getMetaValue("Scan_ID") == "17", "SCANS -> Scan_ID");

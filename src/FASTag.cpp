@@ -3407,10 +3407,10 @@ protected:
                            "BEGIN IONS ... END IONS look like spectra (a peak line, PEPMASS=, "
                            "TITLE=, RTINSECONDS= or SCANS=; the first at byte " << mb.first_loose
                         << ") and were ignored." << std::endl;
-      if (mgf->headerBytes() > FASTag::MgfReader::kHeaderScan)
+      if (mgf->headerBytes() > FASTag::MgfReader::HEADER_SCAN)
         OPENMS_LOG_WARN << "'" << in << "': " << mgf->headerBytes() << " bytes before the first "
                            "BEGIN IONS were ignored (only the first "
-                        << FASTag::MgfReader::kHeaderScan << " were looked at for a CHARGE= default)."
+                        << FASTag::MgfReader::HEADER_SCAN << " were looked at for a CHARGE= default)."
                         << std::endl;
     }
     // The fast mzML path: our own index-driven reader, which fills the
