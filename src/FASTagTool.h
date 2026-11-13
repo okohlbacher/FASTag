@@ -196,6 +196,7 @@ class TOPPFASTag : public OpenMS::TOPPBase
       {"shift_site_min_share", FAILED_HELD_OUT},
       {"shift_site_min_count", FAILED_HELD_OUT},
       {"shift_site_min_ions", FAILED_HELD_OUT},
+      {"shortlist_exact_only", FAILED_HELD_OUT},
   };
   struct RemovedValue
   {

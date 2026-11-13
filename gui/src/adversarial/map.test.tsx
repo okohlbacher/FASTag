@@ -41,6 +41,7 @@ describe('map: param overlay vs CLI manifest', () => {
     // post-1.13.1 adds search_missed_cleavages and search_nterm_acetyl (by engine), hidden.
     // species_reagents (reagent calls of -species_call explain) adds one hidden experimental option.
     // post-1.13.1 adds shortlist_exact_only (msfragger gapped default off), hidden as experimental.
+    // 1.14 removes shortlist_exact_only (failed its held-out test): the name stays, hidden, advanced since.
     expect(HIDDEN_PARAMS.length).toBe(99)
     expect(HIDDEN_PARAMS).toContain('shortlist_exact_only')
     expect(HIDDEN_PARAMS).toContain('search_missed_cleavages')

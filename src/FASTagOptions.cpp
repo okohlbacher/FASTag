@@ -649,12 +649,9 @@ void TOPPFASTag::registerOptionsAndFlags_()
                 "by default only exact ones count (a gap equal to a fixed terminal label is exact). On by default "
                 "with -search_engine msfragger, -search_config_out and -shortlist_protease trypsin (the "
                 "held-out-tested MSFragger configuration)");
-  // post-1.13.1: -shortlist_gapped is a flag and cannot be given off, so the
-  // msfragger default needs its own switch to turn gapped placement off.
-  registerFlag_("shortlist_exact_only",
-                "Count only exact placements for the shortlist, also where -search_engine msfragger turns "
-                "-shortlist_gapped on by default (the other msfragger defaults stay). Without msfragger "
-                "this is the default already. Not with -shortlist_gapped. Experimental");
+  // 1.14: -shortlist_exact_only (added in 1.13.3) removed, failed its
+  // held-out test; the name stays without effect (REMOVED_OPTIONS).
+  registerFlag_("shortlist_exact_only", REMOVED_HELP, true);
   registerStringOption_("shortlist_parsimony", "<mode>", "none",
                         "'none' keeps every protein above -shortlist_min_spectra; 'subset' drops a "
                         "protein whose spectra a higher-ranked kept one has; 'greedy' keeps a greedy "
@@ -694,10 +691,11 @@ void TOPPFASTag::registerOptionsAndFlags_()
                         "Engine of -search_config_out; msfragger (MSFragger 4.4.1, experimental) needs decoys in "
                         "the database: -fasta_out then appends reversed ones. With msfragger and -shortlist_protease "
                         "trypsin, -shortlist_gapped is on, -shortlist_max_evalue 10, -recon_min_length 6 and "
-                        "-recon_missed_cleavages 2, each unless given on the command line or in an INI: the "
-                        "configuration that passed its second held-out test (kept share "
-                        "0.83-0.98 of a full MSFragger search, 9 runs; the first test, with the 1.13 shortlist, "
-                        "FAILED at 0.49-0.73)", false);
+                        "-recon_missed_cleavages 2, each unless given on the command line or in an INI. These "
+                        "defaults are not validated: they passed the second held-out test (kept share 0.83-0.98 of "
+                        "a full MSFragger search, 9 runs) and failed the third (8 new runs: kept share 0.53 in one "
+                        "run, entrapment FDP 2.12% in another); the first test, with the 1.13 shortlist, FAILED at "
+                        "0.49-0.73", false);
   setValidStrings_("search_engine", ListUtils::create<std::string>("sage,comet,msfragger"));
   registerInputFile_("search_config_template", "<file>", "",
                      "Comet only: a `comet -p` parameter file the managed keys are merged into", false);
