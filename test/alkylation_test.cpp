@@ -91,7 +91,7 @@ int main()
   const std::vector<A::Form> forms = A::forms();
   const double CAM = mod("Carbamidomethyl (C)"), PROP = mod("Propionamide (C)"), OX = mod("Oxidation (M)");
   const double TRIOX = mod("Trioxidation (C)");
-  check(forms.size() == static_cast<std::size_t>(A::kNumForms), "eleven Cys forms");
+  check(forms.size() == static_cast<std::size_t>(A::NUM_FORMS), "eleven Cys forms");
   check(forms[0].name == "Carbamidomethyl" && std::fabs(forms[0].mass - 57.021464) < 1e-5, "CAM from ModificationsDB");
   {
     int none = 0;

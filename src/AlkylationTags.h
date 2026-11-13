@@ -62,7 +62,7 @@
 namespace FASTag::AlkylationTags
 {
   /// @brief Version of the -alkylation_tags_out sections (alkt_run.format).
-  inline constexpr int kReportFormat = 1;
+  inline constexpr int REPORT_FORMAT = 1;
 
   /// @brief The 13C - 12C spacing (Da) the alias check uses for isotope-shifted edges.
   inline constexpr double kC13Spacing = 1.0033548378;

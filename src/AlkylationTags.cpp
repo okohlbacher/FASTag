@@ -266,8 +266,8 @@ namespace FASTag::AlkylationTags
     auto add = [&](const char* sec, const std::string& key, const std::string& value, const std::string& n,
                    const std::string& d) { r.push_back(Digest::Row{sec, key, value, n, d}); };
     // ---- alkt_run
-    add("alkt_run", "format", std::to_string(kReportFormat), "-",
-        "The database-free alkylation report follows format " + std::to_string(kReportFormat) +
+    add("alkt_run", "format", std::to_string(REPORT_FORMAT), "-",
+        "The database-free alkylation report follows format " + std::to_string(REPORT_FORMAT) +
             " (doc/ALKYLATION-REPORT.md, -alkylation_tags_out).");
     add("alkt_run", "method", "shadow_tags", "-",
         "Every MS2 spectrum is tagged a second time with unmodified C and one alternative C edge per reagent; "

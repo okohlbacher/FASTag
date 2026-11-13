@@ -31,7 +31,7 @@ namespace FASTag::Alkylation
 
   std::vector<Form> forms()
   {
-    static const struct { const char* name; const char* site; int cls; } defs[kNumForms] = {
+    static const struct { const char* name; const char* site; int cls; } defs[NUM_FORMS] = {
         {"Carbamidomethyl", "Carbamidomethyl (C)", CARBAMIDOMETHYL},
         {"Propionamide", "Propionamide (C)", PROPIONAMIDE},
         {"Nethylmaleimide", "Nethylmaleimide (C)", NETHYLMALEIMIDE},
@@ -239,7 +239,7 @@ namespace FASTag::Alkylation
     else
     {
       ++cls[static_cast<std::size_t>(v.cls)];
-      if (v.form >= 0 && v.form < kNumForms) ++form[static_cast<std::size_t>(v.form)];
+      if (v.form >= 0 && v.form < NUM_FORMS) ++form[static_cast<std::size_t>(v.form)];
     }
   }
 
@@ -301,8 +301,8 @@ namespace FASTag::Alkylation
     auto add = [&](const char* sec, const std::string& key, const std::string& value, const std::string& n,
                    const std::string& d) { r.push_back(Digest::Row{sec, key, value, n, d}); };
     // ---- alk_run: settings and what was counted
-    add("alk_run", "format", std::to_string(kReportFormat), "-",
-        "The alkylation report follows format " + std::to_string(kReportFormat) + " (doc/ALKYLATION-REPORT.md).");
+    add("alk_run", "format", std::to_string(REPORT_FORMAT), "-",
+        "The alkylation report follows format " + std::to_string(REPORT_FORMAT) + " (doc/ALKYLATION-REPORT.md).");
     add("alk_run", "database", info.database, "-", "The placements are on the database " + info.database + ".");
     add("alk_run", "database_source", info.database_source, "-",
         info.database_source == "recon_fasta" ? "The database is -recon_fasta."
@@ -483,7 +483,7 @@ namespace FASTag::Alkylation
 
   bool findShippedProteome(const std::string& manifest_text, const std::string& name, ShippedProteome& out)
   {
-    static const char* const kCols[] = {"name", "proteome", "taxon", "release", "release_date",
+    static const char* const COLS[] = {"name", "proteome", "taxon", "release", "release_date",
                                         "entries", "sha256", "fasta_sha256", "file"};
     std::vector<int> col(9, -1);
     bool header = false, found = false;
@@ -502,7 +502,7 @@ namespace FASTag::Alkylation
       {
         for (std::size_t i = 0; i < f.size(); ++i)
           for (int c = 0; c < 9; ++c)
-            if (f[i] == kCols[c]) col[c] = static_cast<int>(i);
+            if (f[i] == COLS[c]) col[c] = static_cast<int>(i);
         for (int c : col)
           if (c < 0) return false;
         header = true;

@@ -64,7 +64,7 @@
 namespace FASTag::Alkylation
 {
   /// Version of the -alkylation_out sections (alk_run.format).
-  inline constexpr int kReportFormat = 1;
+  inline constexpr int REPORT_FORMAT = 1;
 
   /**
     @brief The call classes of the alkylation call.
@@ -90,7 +90,7 @@ namespace FASTag::Alkylation
   const char* className(int cls);
 
   /// The number of Cys forms (forms()).
-  inline constexpr int kNumForms = 11;
+  inline constexpr int NUM_FORMS = 11;
 
   /**
     @brief One state a cysteine can be found in.
@@ -248,7 +248,7 @@ namespace FASTag::Alkylation
     std::uint64_t spectra = 0;   ///< spectra with a vote
     std::uint64_t conflict = 0, unexplained = 0;  ///< votes without a class
     std::array<std::uint64_t, NUM_CLASSES> cls{};  ///< votes per call class
-    std::array<std::uint64_t, kNumForms> form{};   ///< votes per form (forms() order; agreed form only)
+    std::array<std::uint64_t, NUM_FORMS> form{};   ///< votes per form (forms() order; agreed form only)
     std::array<std::uint64_t, static_cast<int>(Outcome::COUNT)> outcomes{};  ///< placements per outcome
     /// Tags left out because they are not b/y tags (c/z, PLAN-INTEGRATION
     /// 2.3 contract 2; excludeNonBy()). Always 0 before c/z tagging (#15
