@@ -90,7 +90,7 @@ namespace FASTag::CensusIds
   /**
     @brief The identified value of one spectrum. Append-only.
   */
-  enum class Ident : std::uint8_t { No = 0, Yes = 1, Unknown = 2 };
+  enum class Ident : std::uint8_t { NO = 0, YES = 1, UNKNOWN = 2 };
   /// Number of Ident values.
   inline constexpr std::size_t kIdentCount = 3;
   /**

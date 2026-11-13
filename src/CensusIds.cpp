@@ -28,8 +28,8 @@ namespace FASTag::CensusIds
   {
     switch (i)
     {
-      case Ident::Yes: return "1";
-      case Ident::No: return "0";
+      case Ident::YES: return "1";
+      case Ident::NO: return "0";
       default: return "";
     }
   }
@@ -38,8 +38,8 @@ namespace FASTag::CensusIds
   {
     switch (i)
     {
-      case Ident::Yes: return "1";
-      case Ident::No: return "0";
+      case Ident::YES: return "1";
+      case Ident::NO: return "0";
       default: return "unknown";
     }
   }
@@ -179,23 +179,23 @@ namespace FASTag::CensusIds
   Ident Index::lookup(const std::string& native_id)
   {
     const auto it = refs_.find(native_id);
-    if (it != refs_.end()) return it->second.accepted ? Ident::Yes : Ident::No;
+    if (it != refs_.end()) return it->second.accepted ? Ident::YES : Ident::NO;
     const long long s = scanOf(native_id);
-    if (s < 0) return Ident::No;
+    if (s < 0) return Ident::NO;
     const auto bs = by_scan_.find(s);
-    if (bs == by_scan_.end()) return Ident::No;
+    if (bs == by_scan_.end()) return Ident::NO;
     std::vector<Ref*> cand;
     for (Ref* r : bs->second)
       if (!r->exact) cand.push_back(r);
-    if (cand.empty()) return Ident::No;
+    if (cand.empty()) return Ident::NO;
     const auto ic = input_scans_.find(s);
     if (cand.size() > 1 || ic == input_scans_.end() || ic->second != 1)
     {
       for (Ref* r : cand) r->ambiguous = true;
-      return Ident::Unknown;
+      return Ident::UNKNOWN;
     }
     cand[0]->by_scan = true;
-    return cand[0]->accepted ? Ident::Yes : Ident::No;
+    return cand[0]->accepted ? Ident::YES : Ident::NO;
   }
 
   Index::Counts Index::counts() const
@@ -362,12 +362,12 @@ namespace FASTag::CensusIds
       ++tally.by_ident[ix];
       ++tally.by_status[st][ix];
       const char* triage = "";
-      if (ident != Ident::Unknown)
+      if (ident != Ident::UNKNOWN)
       {
         triage = "0";
         const bool reported = st == static_cast<std::size_t>(Census::Status::TAGGED)
                               || st == static_cast<std::size_t>(Census::Status::PLACED);
-        if (ident == Ident::No && reported)
+        if (ident == Ident::NO && reported)
         {
           ++tally.triage_eligible;
           char* end = nullptr;

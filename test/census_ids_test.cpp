@@ -48,7 +48,7 @@ static int failures = 0;
 
 namespace
 {
-  enum class TD { None, Target, Decoy, Both };
+  enum class TD { NONE, TARGET, DECOY, BOTH };
 
   PeptideHit hit(double score, TD td, const char* q_meta = nullptr, double q = 0)
   {
@@ -56,9 +56,9 @@ namespace
     h.setScore(score);
     h.setSequence(AASequence::fromString("PEPTIDEK"));
     h.setCharge(2);  // mzid stores the hit's m/z
-    if (td == TD::Target) h.setMetaValue("target_decoy", "target");
-    if (td == TD::Decoy) h.setMetaValue("target_decoy", "decoy");
-    if (td == TD::Both) h.setMetaValue("target_decoy", "target+decoy");
+    if (td == TD::TARGET) h.setMetaValue("target_decoy", "target");
+    if (td == TD::DECOY) h.setMetaValue("target_decoy", "decoy");
+    if (td == TD::BOTH) h.setMetaValue("target_decoy", "target+decoy");
     if (q_meta) h.setMetaValue(q_meta, q);
     return h;
   }
@@ -160,14 +160,14 @@ static int writeIds(int argc, char** argv)
     const std::string st = meta || noq ? "hyperscore" : "q-value";
     const bool hb = meta || noq;
     auto h = [&](double q, TD td) {
-      if (noq) return hit(10, TD::None);
+      if (noq) return hit(10, TD::NONE);
       if (mzid)
       {
         PeptideHit x = hit(10 + q, td, (k % 2) ? "MS:1002354" : "q-value", q);
         // The writer keeps one evidence set per peptide sequence, so decoy
         // hits carry a sequence of their own.
-        if (td == TD::Decoy) x.setSequence(AASequence::fromString("KEDITPEP"));
-        x.setPeptideEvidences({PeptideEvidence(td == TD::Decoy ? "DECOY_PROT_T" : "PROT_T", 0, 7, '-', '-')});
+        if (td == TD::DECOY) x.setSequence(AASequence::fromString("KEDITPEP"));
+        x.setPeptideEvidences({PeptideEvidence(td == TD::DECOY ? "DECOY_PROT_T" : "PROT_T", 0, 7, '-', '-')});
         return x;
       }
       if (meta) return hit(10 + q, td, (k % 2) ? "MS:1002354" : "q-value", q);
@@ -176,15 +176,15 @@ static int writeIds(int argc, char** argv)
     std::string want = "0";
     switch (k % 6)
     {
-      case 0: peps.push_back(pid(ref, st, hb, {h(0.001, TD::Target)})); want = "1"; break;
-      case 1: peps.push_back(pid(ref, st, hb, {h(0.02, TD::Target)})); break;
-      case 2: peps.push_back(pid(ref, st, hb, {h(0.001, TD::Decoy)})); break;
+      case 0: peps.push_back(pid(ref, st, hb, {h(0.001, TD::TARGET)})); want = "1"; break;
+      case 1: peps.push_back(pid(ref, st, hb, {h(0.02, TD::TARGET)})); break;
+      case 2: peps.push_back(pid(ref, st, hb, {h(0.001, TD::DECOY)})); break;
       case 3: peps.push_back(pid(ref, st, hb, {})); break;
       case 4: break;
       case 5:
         // mzIdentML writes isDecoy for a target+decoy hit as decoy (one flag
         // per hit), so the mzid variant pairs the decoy with a plain target.
-        peps.push_back(pid(ref, st, hb, {h(0.005, TD::Decoy), h(0.005, mzid ? TD::Target : TD::Both)}));
+        peps.push_back(pid(ref, st, hb, {h(0.005, TD::DECOY), h(0.005, mzid ? TD::TARGET : TD::BOTH)}));
         want = "1";
         break;
     }
@@ -192,7 +192,7 @@ static int writeIds(int argc, char** argv)
     {
       // a second reference naming the same scan: the spectrum is unknown
       first_yes_scan = I::scanOf(nid);
-      peps.push_back(pid(std::to_string(first_yes_scan), st, hb, {h(0.001, TD::Target)}));
+      peps.push_back(pid(std::to_string(first_yes_scan), st, hb, {h(0.001, TD::TARGET)}));
       want = "";
     }
     ex << nid << '\t' << want << '\n';
@@ -202,7 +202,7 @@ static int writeIds(int argc, char** argv)
   const std::size_t foreign = variant == "foreign" ? 2 * k : variant == "fewforeign" ? k / 10 : 0;
   for (std::size_t i = 0; i < foreign; ++i)
     peps.push_back(pid("controllerType=0 controllerNumber=1 scan=" + std::to_string(900000 + i), "q-value", false,
-                       {hit(0.001, TD::Target)}));
+                       {hit(0.001, TD::TARGET)}));
   if (variant == "mzid") MzIdentMLFile().store(out, prots, peps);
   else IdXMLFile().store(out, prots, peps);
   return 0;
@@ -240,16 +240,16 @@ int main(int argc, char** argv)
           "q-value score types");
     CHECK(!I::isQValueScoreType("hyperscore") && !I::isQValueScoreType("Posterior Error Probability"),
           "non-q score types");
-    PeptideIdentification a = pid("x", "q-value", false, {hit(0.003, TD::Target)});
+    PeptideIdentification a = pid("x", "q-value", false, {hit(0.003, TD::TARGET)});
     CHECK(I::qValue(a, a.getHits()[0]) == 0.003, "q from the score");
     // A q-value score type that claims higher-is-better is not a q-value.
-    PeptideIdentification b = pid("x", "q-value", true, {hit(0.003, TD::Target)});
+    PeptideIdentification b = pid("x", "q-value", true, {hit(0.003, TD::TARGET)});
     CHECK(std::isnan(I::qValue(b, b.getHits()[0])), "higher-better q-value score accepted");
-    PeptideIdentification c = pid("x", "hyperscore", true, {hit(30, TD::Target, "q-value", 0.004)});
+    PeptideIdentification c = pid("x", "hyperscore", true, {hit(30, TD::TARGET, "q-value", 0.004)});
     CHECK(I::qValue(c, c.getHits()[0]) == 0.004, "q from meta q-value");
-    PeptideIdentification d = pid("x", "hyperscore", true, {hit(30, TD::Target, "MS:1002354", 0.005)});
+    PeptideIdentification d = pid("x", "hyperscore", true, {hit(30, TD::TARGET, "MS:1002354", 0.005)});
     CHECK(I::qValue(d, d.getHits()[0]) == 0.005, "q from meta MS:1002354");
-    PeptideIdentification e = pid("x", "hyperscore", true, {hit(30, TD::Target)});
+    PeptideIdentification e = pid("x", "hyperscore", true, {hit(30, TD::TARGET)});
     CHECK(std::isnan(I::qValue(e, e.getHits()[0])), "no q");
     (void)nan;
     std::printf("2. q-values\n");
@@ -258,14 +258,14 @@ int main(int argc, char** argv)
   // 3. interpret: acceptance, refusals, runs.
   {
     PeptideIdentificationList peps;
-    peps.push_back(pid(NID + "1", "q-value", false, {hit(0.001, TD::Target)}));         // yes
-    peps.push_back(pid(NID + "2", "q-value", false, {hit(0.02, TD::Target)}));          // q above fdr
-    peps.push_back(pid(NID + "3", "q-value", false, {hit(0.001, TD::Decoy)}));          // decoy only
+    peps.push_back(pid(NID + "1", "q-value", false, {hit(0.001, TD::TARGET)}));         // yes
+    peps.push_back(pid(NID + "2", "q-value", false, {hit(0.02, TD::TARGET)}));          // q above fdr
+    peps.push_back(pid(NID + "3", "q-value", false, {hit(0.001, TD::DECOY)}));          // decoy only
     peps.push_back(pid(NID + "4", "q-value", false, {}));                               // empty
-    peps.push_back(pid(NID + "5", "q-value", false, {hit(0.001, TD::Both)}));           // target+decoy: yes
-    peps.push_back(pid(NID + "6", "hyperscore", true, {hit(30, TD::Target, "q-value", 0.009)}));  // mixed: yes
-    peps.push_back(pid(NID + "7", "hyperscore", true, {hit(30, TD::Target)}));          // no q: no
-    peps.push_back(pid(NID + "8", "q-value", false, {hit(0.01, TD::Target)}));          // q == fdr: yes
+    peps.push_back(pid(NID + "5", "q-value", false, {hit(0.001, TD::BOTH)}));           // target+decoy: yes
+    peps.push_back(pid(NID + "6", "hyperscore", true, {hit(30, TD::TARGET, "q-value", 0.009)}));  // mixed: yes
+    peps.push_back(pid(NID + "7", "hyperscore", true, {hit(30, TD::TARGET)}));          // no q: no
+    peps.push_back(pid(NID + "8", "q-value", false, {hit(0.01, TD::TARGET)}));          // q == fdr: yes
     I::Index idx;
     const I::Loaded L = I::interpret({prot("run0", {"/x/run.mzML"})}, peps, 0.01, idx);
     CHECK(L.refusal.empty(), "refused: %s", L.refusal.c_str());
@@ -277,7 +277,7 @@ int main(int argc, char** argv)
     for (int i = 1; i <= 8; ++i)
     {
       const I::Ident got = idx.lookup(NID + std::to_string(i));
-      CHECK(got == (want[i - 1] == '1' ? I::Ident::Yes : I::Ident::No), "spectrum %d identified %s", i, I::text(got));
+      CHECK(got == (want[i - 1] == '1' ? I::Ident::YES : I::Ident::NO), "spectrum %d identified %s", i, I::text(got));
     }
     // A stricter threshold drops q = 0.009 and q = 0.01.
     I::Index strict;
@@ -286,8 +286,8 @@ int main(int argc, char** argv)
 
     // No q-value anywhere: refused, IDFilter named.
     PeptideIdentificationList raw;
-    raw.push_back(pid(NID + "1", "hyperscore", true, {hit(30, TD::Target)}));
-    raw.push_back(pid(NID + "2", "hyperscore", true, {hit(20, TD::Decoy)}));
+    raw.push_back(pid(NID + "1", "hyperscore", true, {hit(30, TD::TARGET)}));
+    raw.push_back(pid(NID + "2", "hyperscore", true, {hit(20, TD::DECOY)}));
     I::Index r;
     const I::Loaded R = I::interpret({prot("run0", {"run.mzML"})}, raw, 0.01, r);
     CHECK(!R.refusal.empty() && R.refusal.find("IDFilter") != std::string::npos, "unfiltered not refused: '%s'",
@@ -360,8 +360,8 @@ int main(int argc, char** argv)
     for (const auto& s : spectra) idx.see(s);
     std::vector<I::Ident> got;
     for (const auto& s : spectra) got.push_back(idx.lookup(s));
-    const std::vector<I::Ident> want = {I::Ident::Yes, I::Ident::Yes, I::Ident::Unknown, I::Ident::Unknown,
-                                        I::Ident::Unknown, I::Ident::Yes, I::Ident::No, I::Ident::No, I::Ident::No};
+    const std::vector<I::Ident> want = {I::Ident::YES, I::Ident::YES, I::Ident::UNKNOWN, I::Ident::UNKNOWN,
+                                        I::Ident::UNKNOWN, I::Ident::YES, I::Ident::NO, I::Ident::NO, I::Ident::NO};
     for (std::size_t i = 0; i < spectra.size(); ++i)
       CHECK(got[i] == want[i], "%s: got '%s' want '%s'", spectra[i].c_str(), I::text(got[i]), I::text(want[i]));
     const I::Index::Counts c = idx.counts();
