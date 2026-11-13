@@ -18,30 +18,30 @@ Tag tag(std::string seq, double n, double c)
 int main()
 {
   FASTag::Param p;
-  const Tag pseudo_g = tag("GPEP", TP::kLabel - TP::kG, 300);
+  const Tag pseudo_g = tag("GPEP", TP::LABEL - TP::RESIDUE_G, 300);
   require(!TP::Filter(p).rejects(pseudo_g), "default must not filter");
   p.tmt_pseudo_filter = true;
   require(TP::Filter(p).rejects(pseudo_g), "G pseudo-prefix not filtered");
-  require(TP::Filter(p).rejects(tag("APEP", TP::kLabel - TP::kA, 300)), "A pseudo-prefix not filtered");
-  require(TP::Filter(p).rejects(tag("PEPG", 300, TP::kLabel - TP::WATER_MASS - TP::kG)), "G pseudo-suffix not filtered");
-  require(TP::Filter(p).rejects(tag("PEPA", 300, TP::kLabel - TP::WATER_MASS - TP::kA)), "A pseudo-suffix not filtered");
-  require(!TP::Filter(p).rejects(tag("PEPK", 300, TP::kLabel)), "terminal K with TMT mass in its flank rejected");
+  require(TP::Filter(p).rejects(tag("APEP", TP::LABEL - TP::RESIDUE_A, 300)), "A pseudo-prefix not filtered");
+  require(TP::Filter(p).rejects(tag("PEPG", 300, TP::LABEL - TP::WATER_MASS - TP::RESIDUE_G)), "G pseudo-suffix not filtered");
+  require(TP::Filter(p).rejects(tag("PEPA", 300, TP::LABEL - TP::WATER_MASS - TP::RESIDUE_A)), "A pseudo-suffix not filtered");
+  require(!TP::Filter(p).rejects(tag("PEPK", 300, TP::LABEL)), "terminal K with TMT mass in its flank rejected");
   // PXD037999 scan 15823: a sequence-correct rank-1 tag from
   // [TMT]-HSEVETDSK[TMT], lost by the former bare-K rejection.
   require(!TP::Filter(p).rejects(tag("TDSK", 810.4038, 229.1644)), "real terminal K regression rejected");
-  require(!TP::Filter(p).rejects(tag("KPEP", TP::kLabel, 300)), "N-terminal K rejected");
-  require(!TP::Filter(p).rejects(tag("GPEP", TP::kLabel, 300)), "real G prefix filtered without flank match");
-  require(!TP::Filter(p).rejects(tag("FPEP", TP::kLabel - TP::kG, 300)), "flank alone caused rejection");
-  require(!TP::Filter(p).rejects(tag("G[Label]PEP", TP::kLabel - TP::kG, 300)), "modified G rejected as bare G");
-  require(!TP::Filter(p).rejects(tag("PEPK[Label]", 300, TP::kLabel)), "inline-modified terminal K rejected");
-  p.mods.push_back({'K', TP::kLabel, "TMT6plex", false});
-  require(!TP::Filter(p).rejects(tag("PEPK", 300, TP::kLabel)), "fixed TMT terminal K rejected");
+  require(!TP::Filter(p).rejects(tag("KPEP", TP::LABEL, 300)), "N-terminal K rejected");
+  require(!TP::Filter(p).rejects(tag("GPEP", TP::LABEL, 300)), "real G prefix filtered without flank match");
+  require(!TP::Filter(p).rejects(tag("FPEP", TP::LABEL - TP::RESIDUE_G, 300)), "flank alone caused rejection");
+  require(!TP::Filter(p).rejects(tag("G[Label]PEP", TP::LABEL - TP::RESIDUE_G, 300)), "modified G rejected as bare G");
+  require(!TP::Filter(p).rejects(tag("PEPK[Label]", 300, TP::LABEL)), "inline-modified terminal K rejected");
+  p.mods.push_back({'K', TP::LABEL, "TMT6plex", false});
+  require(!TP::Filter(p).rejects(tag("PEPK", 300, TP::LABEL)), "fixed TMT terminal K rejected");
   p.mods.push_back({'G', 1., "test", false});
   require(!TP::Filter(p).rejects(pseudo_g), "fixed modified G rejected as bare G");
   p.mods.clear();
   Tag cz = pseudo_g; cz.ion_series = FASTag::IonSeries::Series::CZ;
   require(!TP::Filter(p).rejects(cz), "c/z tag filtered using b/y formula");
-  Tag reporter = tag("PEPF", 300, TP::kReporters[0] - TP::WATER_MASS - TP::PROTON_MASS);
+  Tag reporter = tag("PEPF", 300, TP::REPORTERS[0] - TP::WATER_MASS - TP::PROTON_MASS);
   require(!TP::Filter(p).rejects(reporter), "reporter filter ran without flag");
   p.tmt_reporter_filter = true;
   require(TP::Filter(p).rejects(reporter), "reporter endpoint not filtered");
@@ -49,8 +49,8 @@ int main()
   require(!TP::Filter(p).rejects(reporter), "reporter formula applied at wrong charge");
 
   const auto ordinary = tag("PEPF", 500, 600);
-  const auto tmt = tag("PEPF", TP::kLabel, TP::kK + TP::kLabel);
-  const auto pro = tag("PEPF", TP::kProLabel, TP::kK + TP::kProLabel);
+  const auto tmt = tag("PEPF", TP::LABEL, TP::RESIDUE_K + TP::LABEL);
+  const auto pro = tag("PEPF", TP::PRO_LABEL, TP::RESIDUE_K + TP::PRO_LABEL);
   TP::ProbeCounts counts;
   for (int i = 0; i < 99; ++i) counts.add({tmt, tmt});
   require(counts.eligible == 99 && counts.tmt_n == 99, "counted tags instead of spectra");
@@ -95,9 +95,9 @@ int main()
   constexpr double massP = 97.052763875, massE = 129.042593135, massQ = 128.05857754;
   double mz = 300.0 - massQ + TP::WATER_MASS + TP::PROTON_MASS;
   spectrum.emplace_back(mz, 1.0f);
-  for (double mass : {massQ, massP, massE, massP, TP::kG})
+  for (double mass : {massQ, massP, massE, massP, TP::RESIDUE_G})
   { mz += mass; spectrum.emplace_back(mz, 100.0f); }
-  const double precursor = (TP::kLabel + 2 * massP + massE + 300.0 + TP::WATER_MASS + 2 * TP::PROTON_MASS) / 2;
+  const double precursor = (TP::LABEL + 2 * massP + massE + 300.0 + TP::WATER_MASS + 2 * TP::PROTON_MASS) / 2;
   p = FASTag::Param(); p.tag_length = 4; p.max_tag_count = 0; p.max_evalue = 0;
   const FASTag::Tables tables(p);
   const auto all = FASTag::tagSpectrum(spectrum, precursor, 2, p, tables);

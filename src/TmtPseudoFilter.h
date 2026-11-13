@@ -18,17 +18,17 @@
 namespace FASTag::TmtPseudo
 {
   /// TMT6/10 label mass and TMTpro label mass (Da).
-  inline constexpr double kLabel = 229.162932, kProLabel = 304.207146;
+  inline constexpr double LABEL = 229.162932, PRO_LABEL = 304.207146;
   /// Water and proton masses (Da).
   inline constexpr double WATER_MASS = 18.010564684, PROTON_MASS = 1.007276466621;
   /// Residue masses of G, A and K (Da).
-  inline constexpr double kG = 57.021463735, kA = 71.037113805, kK = 128.094963015;
+  inline constexpr double RESIDUE_G = 57.021463735, RESIDUE_A = 71.037113805, RESIDUE_K = 128.094963015;
   /// Mass windows for the N-terminal and C-terminal tag flanks (Da).
-  inline constexpr double kWindowN = 0.020, kWindowC = 0.006;
+  inline constexpr double WINDOW_N = 0.020, WINDOW_C = 0.006;
   /// Number of spectra probed, and minimum eligible spectra for a label call.
-  inline constexpr std::size_t kProbeCount = 1024, kMinEligible = 100;
+  inline constexpr std::size_t PROBE_COUNT = 1024, MIN_ELIGIBLE = 100;
   /// TMT10 reporter ion m/z values (Th).
-  inline constexpr std::array<double, 10> kReporters = {
+  inline constexpr std::array<double, 10> REPORTERS = {
     126.127726, 127.124761, 127.131081, 128.128116, 128.134436,
     129.131471, 129.137790, 130.134825, 130.141145, 131.138180};
 
@@ -112,15 +112,15 @@ namespace FASTag::TmtPseudo
       {
         if (std::fabs(fixed_[i]) > 1e-8) continue;
         const char residue = i == 0 ? 'G' : 'A';
-        const double mass = i == 0 ? kG : kA;
-        if (first == residue && near(tag.nterm_mass, kLabel - mass, kWindowN)) return true;
-        if (last == residue && near(tag.cterm_mass, kLabel - WATER_MASS - mass, kWindowC)) return true;
+        const double mass = i == 0 ? RESIDUE_G : RESIDUE_A;
+        if (first == residue && near(tag.nterm_mass, LABEL - mass, WINDOW_N)) return true;
+        if (last == residue && near(tag.cterm_mass, LABEL - WATER_MASS - mass, WINDOW_C)) return true;
       }
       // A terminal K can carry its TMT mass in the C flank while preserving
       // the correct sequence. That mass allocation is not a pseudo-residue.
       if (reporters_ && tag.charge == 1)
-        for (const double reporter : kReporters)
-          if (near(tag.cterm_mass + WATER_MASS + PROTON_MASS, reporter, kWindowC)) return true;
+        for (const double reporter : REPORTERS)
+          if (near(tag.cterm_mass + WATER_MASS + PROTON_MASS, reporter, WINDOW_C)) return true;
       return false;
     }
   private:
@@ -140,10 +140,10 @@ namespace FASTag::TmtPseudo
   */
   inline std::array<bool, 4> anchors(const Tag& tag, double label)
   {
-    return {near(tag.nterm_mass, label, kWindowN),
-            near(tag.cterm_mass, label - WATER_MASS, kWindowC),
-            near(tag.cterm_mass, kK + label, kWindowC),
-            near(tag.nterm_mass, kK + label + WATER_MASS, kWindowN)};
+    return {near(tag.nterm_mass, label, WINDOW_N),
+            near(tag.cterm_mass, label - WATER_MASS, WINDOW_C),
+            near(tag.cterm_mass, RESIDUE_K + label, WINDOW_C),
+            near(tag.nterm_mass, RESIDUE_K + label + WATER_MASS, WINDOW_N)};
   }
 
   /**
@@ -170,7 +170,7 @@ namespace FASTag::TmtPseudo
       {
         if (tag.ion_series != IonSeries::Series::BY || tag.gapped || !(tag.evalue <= 1.0)) continue;
         any = true;
-        const auto ta = anchors(tag, kLabel), tb = anchors(tag, kProLabel);
+        const auto ta = anchors(tag, LABEL), tb = anchors(tag, PRO_LABEL);
         for (std::size_t i = 0; i < 4; ++i) { a[i] = a[i] || ta[i]; b[i] = b[i] || tb[i]; }
       }
       if (!any) return;
@@ -195,7 +195,7 @@ namespace FASTag::TmtPseudo
     std::string reason(bool high_resolution) const
     {
       if (!high_resolution) return "Da_tolerance";
-      if (eligible < kMinEligible) return "few_eligible_spectra";
+      if (eligible < MIN_ELIGIBLE) return "few_eligible_spectra";
       const auto limit = threshold();
       // TMTpro and iTRAQ8 fit these windows; this veto does not identify either.
       if (pro_n >= vetoThreshold() && pro_k >= vetoThreshold()) return "conflicting_304Da_label_evidence";

@@ -3783,7 +3783,7 @@ protected:
       std::size_t probed = 0;
       if (p.tol_ppm)
       {
-        const auto mask = FASTag::sampleByCount(n_total, std::min<std::size_t>(n_total, 4 * TP::kProbeCount), 0x544D5431u);
+        const auto mask = FASTag::sampleByCount(n_total, std::min<std::size_t>(n_total, 4 * TP::PROBE_COUNT), 0x544D5431u);
         std::vector<std::size_t> candidates;
         for (std::size_t i = 0; i < n_total; ++i)
         {
@@ -3804,7 +3804,7 @@ protected:
         probe.per_residue_conf = false;
         probe.ion_pair = FASTag::IonSeries::ionPair(FASTag::IonSeries::Series::BY);
         const FASTag::Tables probe_tables(probe);
-        for (const std::size_t i : FASTag::ComplTol::pickProbe(candidates, TP::kProbeCount, 0x544D5432u))
+        for (const std::size_t i : FASTag::ComplTol::pickProbe(candidates, TP::PROBE_COUNT, 0x544D5432u))
         {
           MSSpectrum s = read_spectrum(i);
           const auto series = FASTag::IonSeries::seriesInRun(ion_mode, FASTag::IonSeries::activationClass(s), ion_column);
