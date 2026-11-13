@@ -12,7 +12,7 @@
 //     counts #9, charge sources #6, activation counts #15, census counts #11,
 //     ...) adds FIELDS to its own anchored block in RunMeta below and rows to
 //     its own anchored block in runRows() -- never a section of its own.
-//   - The row format is frozen at kFormatVersion. Legacy output (Emit::LEGACY,
+//   - The row format is frozen at FORMAT_VERSION. Legacy output (Emit::LEGACY,
 //     the default and the only mode any caller uses today) is byte-identical
 //     to FASTag 1.11: the 7 `run` rows, no version row, no cluster rows.
 //   - Emit::VERSIONED is the 1.12 format: the legacy rows, then a
@@ -20,7 +20,7 @@
 //     default; switching a report to it is a default change that needs new
 //     references (refs-1.12.0) and a user decision.
 //   - Any change to a row's key, order, value formatting or description, or a
-//     new row, bumps kFormatVersion and updates test/runmeta_test.cpp.
+//     new row, bumps FORMAT_VERSION and updates test/runmeta_test.cpp.
 //
 // Instrument metadata read for -digest_out (instrument, native ID format, ion
 // mobility, scan window) stays in FASTag::Digest::RunMeta (Digest.h) and its
@@ -49,14 +49,14 @@ namespace FASTag::RunReport
   /// 5 = format 4, then the E ion-series rows (#15 phase B, wave 2).
   /// 6 = format 5, then the 1.13 complement-tolerance rows (backlog item 15).
   ///     They are written only under -complement_tolerance_unit auto; a
-  ///     report without them is format 5 and says 5 (kFormatVersionNoAuto),
+  ///     report without them is format 5 and says 5 (FORMAT_VERSION_NO_AUTO),
   ///     so every report of a run without auto keeps its bytes.
   /// Bumped once per item in the PLAN-INTEGRATION merge order (E#7 adds
   /// fields only, E#9 = 2, E#15A = 3, E#6 = 4, E#15B = 5).
-  inline constexpr int kFormatVersion = 6;
+  inline constexpr int FORMAT_VERSION = 6;
   /// The version a Versioned report without the format-6 rows writes.
-  inline constexpr int kFormatVersionNoAuto = 5;
-  inline constexpr int kTmtFormatVersion = 7;  ///< adds opt-in TMT filtering decision
+  inline constexpr int FORMAT_VERSION_NO_AUTO = 5;
+  inline constexpr int TMT_FORMAT_VERSION = 7;  ///< adds opt-in TMT filtering decision
 
   /**
     @brief Run-level facts shared by every long-form report.
@@ -174,8 +174,8 @@ namespace FASTag::RunReport
     @brief The run rows every long-form report starts with.
 
     Legacy: the 7 FASTag 1.11 `run` rows. Versioned: those, then
-    `run_report_version` (kFormatVersion, kFormatVersionNoAuto or
-    kTmtFormatVersion), then the cluster rows.
+    `run_report_version` (FORMAT_VERSION, FORMAT_VERSION_NO_AUTO or
+    TMT_FORMAT_VERSION), then the cluster rows.
 
     @param[in] m the run's facts
     @param[in] emit which rows to write
@@ -199,8 +199,8 @@ namespace FASTag::RunReport
                  std::to_string(m.subsample_spectra) + " spectra were drawn for tagging (0 = all)."});
     if (emit == Emit::LEGACY) return r;
 
-    const std::string v = std::to_string(m.tmt_filter_mode != "off" ? kTmtFormatVersion :
-                                       m.complement_tol_auto ? kFormatVersion : kFormatVersionNoAuto);
+    const std::string v = std::to_string(m.tmt_filter_mode != "off" ? TMT_FORMAT_VERSION :
+                                       m.complement_tol_auto ? FORMAT_VERSION : FORMAT_VERSION_NO_AUTO);
     r.push_back({"run", "run_report_version", v, "-", "The run section follows FASTag run report format " + v + "."});
     // ---- 1.12 E ----
     {

@@ -3,7 +3,7 @@
 //
 // The Legacy bytes below are what FASTag 1.11.0 (78390cd) writes at the top
 // of -digest_out, -label_out and -massgap_out. Changing them, or the
-// Versioned rows, needs a kFormatVersion bump and new references. Format 6
+// Versioned rows, needs a FORMAT_VERSION bump and new references. Format 6
 // (1.13 item 15) adds rows only under -complement_tolerance_unit auto; the
 // section without them stays format 5, byte for byte.
 //
@@ -80,8 +80,8 @@ int main()
 
   // Versioned: the legacy rows are a byte prefix, then the version row.
   const std::string versioned = written(RR::runRows(m, RR::Emit::VERSIONED));
-  check(RR::kFormatVersion == 6, "format version 6");
-  check(RR::kFormatVersionNoAuto == 5, "without -complement_tolerance_unit auto the run section is format 5");
+  check(RR::FORMAT_VERSION == 6, "format version 6");
+  check(RR::FORMAT_VERSION_NO_AUTO == 5, "without -complement_tolerance_unit auto the run section is format 5");
   check(versioned.rfind(legacy, 0) == 0, "Versioned starts with the legacy bytes");
   check(versioned.substr(legacy.size()) ==
           "run\trun_report_version\t5\t-\tThe run section follows FASTag run report format 5.\n"
