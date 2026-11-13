@@ -74,9 +74,9 @@ namespace FASTag::Cleavage
   */
   enum class Specificity
   {
-    Full,  ///< both ends at a cleavage site (or a protein terminus)
-    Semi,  ///< at least one end
-    None   ///< any window
+    FULL,  ///< both ends at a cleavage site (or a protein terminus)
+    SEMI,  ///< at least one end
+    NONE   ///< any window
   };
   /**
     @brief Returns the option spelling of a specificity.
@@ -98,7 +98,7 @@ namespace FASTag::Cleavage
   struct Choice
   {
     const Rule* rule = nullptr;                    ///< the chosen rule
-    Specificity specificity = Specificity::Full;   ///< the chosen specificity
+    Specificity specificity = Specificity::FULL;   ///< the chosen specificity
     /// The run's confident protease call contradicts a named rule: the
     /// hand-off outputs are withheld unless -shortlist_force.
     bool refuse = false;
@@ -164,7 +164,7 @@ namespace FASTag::Cleavage
     @brief The engine's digestion for a rule.
 
     Its residues, semi = 1 terminus, and an unspecific rule or
-    Specificity::None as unspecific (Sage cleave_at "", Comet's Cut_everywhere
+    Specificity::NONE as unspecific (Sage cleave_at "", Comet's Cut_everywhere
     entry 0).
 
     @param[in] rule The cleavage rule.
@@ -178,7 +178,7 @@ namespace FASTag::Cleavage
 
     OpenMS ProteaseDigestion::isValidProduct with the rule's enzyme, the
     specificity and at most a given number of internal missed cleavage sites
-    (not counted for an unspecific rule or Specificity::None). A window at the
+    (not counted for an unspecific rule or Specificity::NONE). A window at the
     protein's start, or at position 1 after an initiator Met, counts as
     cleaved there (allow_nterm_protein_cleavage).
   */

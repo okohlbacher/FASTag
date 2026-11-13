@@ -2302,7 +2302,7 @@ protected:
     // 1.13 item 20: protease-aware placement for the hand-off outputs.
     const std::string sl_protease = getStringOption_("shortlist_protease");
     const bool sl_nontryptic = handoff_on && sl_protease != "trypsin";
-    FASTag::Cleavage::Specificity sl_spec = FASTag::Cleavage::Specificity::Full;
+    FASTag::Cleavage::Specificity sl_spec = FASTag::Cleavage::Specificity::FULL;
     FASTag::Cleavage::parseSpecificity(getStringOption_("shortlist_specificity"), sl_spec);
     if (sl_nontryptic && sl_settings.gapped)
     {
@@ -3025,7 +3025,7 @@ protected:
           std::string missing;
           for (const FASTag::Cleavage::Rule& r : FASTag::Cleavage::rules())
           {
-            const auto spec = r.unspecific() ? FASTag::Cleavage::Specificity::None : sl_spec;
+            const auto spec = r.unspecific() ? FASTag::Cleavage::Specificity::NONE : sl_spec;
             const auto enz = FASTag::Cleavage::engineEnzyme(r, spec);
             const bool has = sl_template.empty()
                                  ? enz.comet_default >= 0
@@ -5987,7 +5987,7 @@ protected:
                             "placement: " + sl_choice.rule->name + ", " +
                                 FASTag::Cleavage::specificityName(sl_choice.specificity) + " specificity, " +
                                 (sl_choice.rule->unspecific() || sl_choice.specificity ==
-                                                                     FASTag::Cleavage::Specificity::None
+                                                                     FASTag::Cleavage::Specificity::NONE
                                      ? std::string("no missed-cleavage limit")
                                      : "missed cleavages <= " + std::to_string(recon_mc)) +
                                 ", windows by flank mass (" + sl_choice.reason + ")" +

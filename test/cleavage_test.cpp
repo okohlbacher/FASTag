@@ -103,14 +103,14 @@ int main()
     check(FC::findRule("CHYMOTRYPSIN") == FC::findRule("Chymotrypsin"), "findRule is case-insensitive");
     check(FC::findRule("auto") == nullptr && FC::findRule("pepsin") == nullptr, "no rule for auto or pepsin");
     FC::Specificity s;
-    check(FC::parseSpecificity("semi", s) && s == FC::Specificity::Semi, "parse semi");
+    check(FC::parseSpecificity("semi", s) && s == FC::Specificity::SEMI, "parse semi");
     check(!FC::parseSpecificity("partial", s), "parse rejects partial");
     std::cout << "2. rule names\n";
   }
 
   // --- 3. the rule choice ---
   {
-    const auto full = FC::Specificity::Full;
+    const auto full = FC::Specificity::FULL;
     auto c = FC::choose("auto", full, verdict(Verdict::NonTryptic, "Chymotrypsin"));
     check(c.rule->name == "Chymotrypsin" && !c.refuse, "auto follows a non-tryptic call");
     c = FC::choose("auto", full, verdict(Verdict::Compatible, "Lys-C"));
@@ -118,7 +118,7 @@ int main()
     c = FC::choose("auto", full, verdict(Verdict::Inconclusive, "Chymotrypsin"));
     check(c.rule->name == "Trypsin" && !c.refuse, "auto: inconclusive is Trypsin, whatever the top model");
     c = FC::choose("auto", full, verdict(Verdict::NonTryptic, "unspecific"));
-    check(c.rule->unspecific() && c.specificity == FC::Specificity::None, "auto: an unspecific call");
+    check(c.rule->unspecific() && c.specificity == FC::Specificity::NONE, "auto: an unspecific call");
     check(c.auto_unspecific, "auto: an unspecific call is flagged for the export warning");
     check(!FC::choose("auto", full, verdict(Verdict::NonTryptic, "Asp-N")).auto_unspecific &&
               !FC::choose("unspecific", full, verdict(Verdict::NonTryptic, "unspecific")).auto_unspecific,
@@ -126,26 +126,26 @@ int main()
     // post-1.13.1 (aspn): an Asp-N call under auto is semi-specific unless
     // the user gave -shortlist_specificity; no other call and no named rule is.
     c = FC::choose("auto", full, verdict(Verdict::NonTryptic, "Asp-N"), false);
-    check(c.rule->name == "Asp-N" && c.specificity == FC::Specificity::Semi && c.auto_semi && !c.refuse,
+    check(c.rule->name == "Asp-N" && c.specificity == FC::Specificity::SEMI && c.auto_semi && !c.refuse,
           "auto: an Asp-N call is semi-specific when the specificity is not given");
     c = FC::choose("auto", full, verdict(Verdict::NonTryptic, "Asp-N"), true);
     check(c.specificity == full && !c.auto_semi, "auto: an Asp-N call keeps a given full specificity");
-    check(FC::choose("auto", FC::Specificity::None, verdict(Verdict::NonTryptic, "Asp-N"), true).specificity ==
-              FC::Specificity::None, "auto: an Asp-N call keeps a given none specificity");
+    check(FC::choose("auto", FC::Specificity::NONE, verdict(Verdict::NonTryptic, "Asp-N"), true).specificity ==
+              FC::Specificity::NONE, "auto: an Asp-N call keeps a given none specificity");
     check(FC::choose("asp-n", full, verdict(Verdict::NonTryptic, "Asp-N"), false).specificity == full,
           "a named asp-n stays full");
     check(FC::choose("auto", full, verdict(Verdict::NonTryptic, "Chymotrypsin"), false).specificity == full &&
               FC::choose("auto", full, verdict(Verdict::Compatible, "Lys-C"), false).specificity == full &&
               FC::choose("auto", full, verdict(Verdict::Inconclusive, "Asp-N"), false).specificity == full &&
               FC::choose("auto", full, verdict(Verdict::NonTryptic, "unspecific"), false).specificity ==
-                  FC::Specificity::None,
+                  FC::Specificity::NONE,
           "auto: only a confident Asp-N call becomes semi");
     c = FC::choose("chymotrypsin", full, verdict(Verdict::Compatible, "Trypsin"));
     check(c.rule->name == "Chymotrypsin" && c.refuse, "a named rule is refused on a contradicting trypsin call");
     c = FC::choose("chymotrypsin", full, verdict(Verdict::NonTryptic, "Chymotrypsin"));
     check(!c.refuse, "a named rule the call agrees with");
-    c = FC::choose("asp-n", FC::Specificity::Semi, verdict(Verdict::NonTryptic, "Chymotrypsin"));
-    check(c.refuse && c.specificity == FC::Specificity::Semi, "semi: refused on another non-tryptic call");
+    c = FC::choose("asp-n", FC::Specificity::SEMI, verdict(Verdict::NonTryptic, "Chymotrypsin"));
+    check(c.refuse && c.specificity == FC::Specificity::SEMI, "semi: refused on another non-tryptic call");
     c = FC::choose("lys-c", full, verdict(Verdict::Compatible, "Trypsin"));
     check(c.rule->name == "Lys-C" && !c.refuse && c.mismatch, "Lys-C on a trypsin call: nested, kept with a WARN");
     // Lys-C (after K) and Arg-C (after R) are disjoint: a confident call of
@@ -154,7 +154,7 @@ int main()
     check(c.rule->name == "Arg-C" && c.refuse, "Arg-C on a Lys-C call is refused (disjoint sites)");
     c = FC::choose("lys-c", full, verdict(Verdict::Compatible, "Arg-C"));
     check(c.rule->name == "Lys-C" && c.refuse, "Lys-C on an Arg-C call is refused (disjoint sites)");
-    c = FC::choose("lys-c", FC::Specificity::Semi, verdict(Verdict::Compatible, "Arg-C"));
+    c = FC::choose("lys-c", FC::Specificity::SEMI, verdict(Verdict::Compatible, "Arg-C"));
     check(c.refuse, "semi: Lys-C on an Arg-C call is refused");
     c = FC::choose("arg-c", full, verdict(Verdict::Compatible, "Trypsin"));
     check(!c.refuse && c.mismatch, "Arg-C on a trypsin call: nested, kept with a WARN");
@@ -171,7 +171,7 @@ int main()
               !FC::nested(*FC::findRule("Lys-C"), *FC::findRule("Lys-N")) &&
               !FC::nested(*FC::findRule("unspecific"), *FC::findRule("unspecific")),
           "nested: not Lys-C/Arg-C, Lys-C/Lys-N or unspecific");
-    c = FC::choose("chymotrypsin", FC::Specificity::None, verdict(Verdict::Compatible, "Trypsin"));
+    c = FC::choose("chymotrypsin", FC::Specificity::NONE, verdict(Verdict::Compatible, "Trypsin"));
     check(!c.refuse, "specificity none is never refused");
     c = FC::choose("chymotrypsin", full, verdict(Verdict::Inconclusive, "Trypsin"));
     check(!c.refuse, "an inconclusive call does not refuse");
@@ -179,7 +179,7 @@ int main()
     check(c.rule->name == "Chymotrypsin" && !c.refuse && c.specificity == full,
           "an unspecific call does not contradict a named rule");
     c = FC::choose("unspecific", full, verdict(Verdict::NonTryptic, "Chymotrypsin"));
-    check(c.rule->unspecific() && !c.refuse && c.specificity == FC::Specificity::None, "unspecific");
+    check(c.rule->unspecific() && !c.refuse && c.specificity == FC::Specificity::NONE, "unspecific");
     std::cout << "3. rule choice\n";
   }
 
@@ -188,8 +188,8 @@ int main()
     //                0123456789012345678901234
     const std::string p = "MAGFSTWKGYPAGLSTDAGEKGRSA";
     const FC::Rule& ch = *FC::findRule("Chymotrypsin");
-    const FC::WindowFilter f0(ch, FC::Specificity::Full, 0), f1(ch, FC::Specificity::Full, 1);
-    const FC::WindowFilter fs(ch, FC::Specificity::Semi, 0), fn(ch, FC::Specificity::None, 0);
+    const FC::WindowFilter f0(ch, FC::Specificity::FULL, 0), f1(ch, FC::Specificity::FULL, 1);
+    const FC::WindowFilter fs(ch, FC::Specificity::SEMI, 0), fn(ch, FC::Specificity::NONE, 0);
     check(f0.accepts(p, 4, 3), "STW: after F, ends at W");
     check(!f0.accepts(p, 4, 4), "STWK: does not end at a site");
     check(f0.accepts(p, 7, 7), "KGYPAGL: Y before P is no site, so no missed cleavage");
@@ -198,10 +198,10 @@ int main()
     check(!f0.accepts(p, 5, 2) && fs.accepts(p, 5, 2) && !fs.accepts(p, 5, 3), "semi: TW yes, TWK no");
     check(fn.accepts(p, 5, 3), "none: any window");
     check(!f0.accepts(p, 20, 10), "a window past the protein end");
-    const FC::WindowFilter fa(*FC::findRule("Asp-N"), FC::Specificity::Full, 0);
+    const FC::WindowFilter fa(*FC::findRule("Asp-N"), FC::Specificity::FULL, 0);
     check(fa.accepts(p, 16, 9) && fa.accepts(p, 0, 16) && !fa.accepts(p, 14, 11) && !fa.accepts(p, 16, 4),
           "Asp-N: cuts before D only");
-    const FC::WindowFilter fu(*FC::findRule("unspecific"), FC::Specificity::Full, 0);
+    const FC::WindowFilter fu(*FC::findRule("unspecific"), FC::Specificity::FULL, 0);
     check(fu.accepts(p, 3, 5), "an unspecific rule accepts any window");
     std::cout << "4. window filter\n";
   }
@@ -294,9 +294,9 @@ int main()
     for (const auto& x : bm)
       if (x.peptide == pep && x.start == 5 && x.nterm_match && x.cterm_match && x.pos == pos) found = true;
     check(found, "reconcileByMass places it exactly, at protein offset 5");
-    const FC::WindowFilter f(*FC::findRule("Chymotrypsin"), FC::Specificity::Full, 0);
+    const FC::WindowFilter f(*FC::findRule("Chymotrypsin"), FC::Specificity::FULL, 0);
     check(f.accepts(idx.proteinText(0), 5, static_cast<uint32_t>(pep.size())), "and the chymotrypsin rule keeps it");
-    const FC::WindowFilter ft(*FC::findRule("Trypsin"), FC::Specificity::Full, 1);
+    const FC::WindowFilter ft(*FC::findRule("Trypsin"), FC::Specificity::FULL, 1);
     check(!ft.accepts(idx.proteinText(0), 5, static_cast<uint32_t>(pep.size())), "the trypsin rule does not");
     // A fixed N-terminal label rides on the spectrum's N flank: label-exact.
     const double label = 229.162932;
@@ -329,12 +329,12 @@ int main()
     check(contains(tryp, "\"cleave_at\": \"KR\",\n      \"restrict\": \"P\",\n      \"c_terminal\": true\n    },"),
           "Sage: the default enzyme block is 1.12's");
     check(!contains(tryp, "semi_enzymatic"), "Sage: no semi key by default");
-    p.enzyme = FC::engineEnzyme(*FC::findRule("Chymotrypsin"), FC::Specificity::Semi);
+    p.enzyme = FC::engineEnzyme(*FC::findRule("Chymotrypsin"), FC::Specificity::SEMI);
     const std::string ch = SC::renderSage(p);
     check(contains(ch, "\"cleave_at\": \"FWYL\"") && contains(ch, "\"restrict\": \"P\"") &&
               contains(ch, "\"c_terminal\": true,\n      \"semi_enzymatic\": true\n    },"),
           "Sage: semi-specific chymotrypsin");
-    p.enzyme = FC::engineEnzyme(*FC::findRule("Asp-N"), FC::Specificity::Full);
+    p.enzyme = FC::engineEnzyme(*FC::findRule("Asp-N"), FC::Specificity::FULL);
     const std::string an = SC::renderSage(p);
     check(contains(an, "\"cleave_at\": \"D\"") && contains(an, "\"restrict\": null") &&
               contains(an, "\"c_terminal\": false\n"),
@@ -342,13 +342,13 @@ int main()
     std::string err;
     check(SC::renderComet(p, &err).empty() && contains(err, "-search_config_template"),
           "Comet without a template: Asp-N has no default entry");
-    p.enzyme = FC::engineEnzyme(*FC::findRule("Chymotrypsin"), FC::Specificity::Full);
-    check(FC::engineEnzyme(*FC::findRule("Chymotrypsin"), FC::Specificity::None).unspecific(),
+    p.enzyme = FC::engineEnzyme(*FC::findRule("Chymotrypsin"), FC::Specificity::FULL);
+    check(FC::engineEnzyme(*FC::findRule("Chymotrypsin"), FC::Specificity::NONE).unspecific(),
           "specificity none is an unspecific engine digestion");
     const std::string cf = SC::renderComet(p, &err);
     check(contains(cf, "search_enzyme_number = 10\n") && contains(cf, "num_enzyme_termini = 2\n"),
           "Comet fragment: chymotrypsin is 10 in comet -p's table");
-    p.enzyme = FC::engineEnzyme(*FC::findRule("unspecific"), FC::Specificity::Full);
+    p.enzyme = FC::engineEnzyme(*FC::findRule("unspecific"), FC::Specificity::FULL);
     check(contains(SC::renderSage(p), "\"cleave_at\": \"\",\n      \"restrict\": null,"), "Sage: unspecific");
     // Template merge: the fixture's comet -p table (10. Chymotrypsin 1 FWYL P).
     std::ifstream tf(std::string(FASTAG_FIXTURES) + "/comet_template.params", std::ios::binary);
@@ -357,17 +357,17 @@ int main()
     const std::string tmpl = ts.str();
     check(!tmpl.empty(), "the Comet template fixture");
     std::vector<std::pair<std::string, std::string>> keys;
-    p.enzyme = FC::engineEnzyme(*FC::findRule("Chymotrypsin"), FC::Specificity::Semi);
+    p.enzyme = FC::engineEnzyme(*FC::findRule("Chymotrypsin"), FC::Specificity::SEMI);
     check(SC::cometKeys(p, keys).empty(), "Comet keys for chymotrypsin");
     auto m = SC::mergeKeyValueTemplate(tmpl, keys, p.enzyme);
     check(m.error.empty() && contains(m.text, "\nsearch_enzyme_number = 10") &&
               contains(m.text, "\nsample_enzyme_number = 10") && contains(m.text, "\nnum_enzyme_termini = 1"),
           "Comet merge: chymotrypsin by its rule, semi = 1 terminus");
-    p.enzyme = FC::engineEnzyme(*FC::findRule("unspecific"), FC::Specificity::Full);
+    p.enzyme = FC::engineEnzyme(*FC::findRule("unspecific"), FC::Specificity::FULL);
     SC::cometKeys(p, keys);
     m = SC::mergeKeyValueTemplate(tmpl, keys, p.enzyme);
     check(m.error.empty() && contains(m.text, "\nsearch_enzyme_number = 0"), "Comet merge: unspecific is Cut_everywhere");
-    p.enzyme = FC::engineEnzyme(*FC::findRule("Asp-N"), FC::Specificity::Full);
+    p.enzyme = FC::engineEnzyme(*FC::findRule("Asp-N"), FC::Specificity::FULL);
     SC::cometKeys(p, keys);
     m = SC::mergeKeyValueTemplate(tmpl, keys, p.enzyme);
     check(!m.error.empty() && contains(m.error, "Asp-N"), "Comet merge: no D-only Asp-N entry is an error");
