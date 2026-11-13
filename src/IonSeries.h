@@ -373,11 +373,11 @@ namespace FASTag::IonSeries
     AUTO,  ///< electron-activated spectra as c/z-dot, all others as b/y
   };
   /// Default value of -ion_series.
-  inline constexpr const char* kModeDefault = "by";
+  inline constexpr const char* MODE_DEFAULT = "by";
   /// The valid strings: ax (1.13 item 11) was removed in 1.14 and stays
   /// valid so that 1.13 command lines and INI files load; FASTag reads it as
   /// the default (TOPPFASTag::kRemovedValues).
-  inline constexpr const char* kModeValues = "by,cz,auto,ax";
+  inline constexpr const char* MODE_VALUES = "by,cz,auto,ax";
 
   /**
     @brief Parses an -ion_series value.

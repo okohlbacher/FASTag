@@ -283,7 +283,7 @@ int main()
     check(!C::parseMode("auto", m), "(i) auto is no mode any more");
     check(C::parseMode("off", m) && m == M::OFF, "(i) parse off");
     check(!C::parseMode("Auto", m) && !C::parseMode("", m), "(i) unknown mode strings refused");
-    check(std::string(C::kModeDefault) == "legacy" && std::string(C::kModeValues) == "legacy,auto,off",
+    check(std::string(C::MODE_DEFAULT) == "legacy" && std::string(C::MODE_VALUES) == "legacy,auto,off",
           "(i) registered default and valid strings");
 
     // A policy that does not pick leaves even a profile spectrum alone.

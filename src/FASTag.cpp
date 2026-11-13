@@ -879,12 +879,12 @@ protected:
                        "judged on these", false, /*advanced=*/true);
     setMinInt_("acquisition_probe_spectra", 1);
     // #9: centroiding of profile MS2 (src/Centroid.h).
-    registerStringOption_("pick_profile", "<mode>", FASTag::Centroid::kModeDefault,
+    registerStringOption_("pick_profile", "<mode>", FASTag::Centroid::MODE_DEFAULT,
                           "Centroid profile MS2 (MS:1000128) with OpenMS PeakPickerHiRes before tagging: "
                           "'legacy' on mzPeak input only (as FASTag 1.11), 'off' never ('auto' was removed "
                           "in 1.14 and is read as legacy). Centroided MS2 are never re-picked; "
                           "-out_spectra writes the spectra as they were tagged", false);
-    setValidStrings_("pick_profile", ListUtils::create<std::string>(FASTag::Centroid::kModeValues));
+    setValidStrings_("pick_profile", ListUtils::create<std::string>(FASTag::Centroid::MODE_VALUES));
     registerFlag_("pick_unknown_type", kRemovedHelp, true);  // 1.14: removed with -pick_profile auto
     // E2: complement-ion rules across fragment charges, tolerance tied to the
     // run. Defaults are FASTag 1.11 (src/CliParam.h); validation decides any
@@ -930,7 +930,7 @@ protected:
     // #6: precursor charge and isotope hypotheses (src/PrecursorHypotheses.h).
     // Defaults are FASTag 1.11: uncharged precursors are tagged as 2+, no
     // isotope offset; validation decides any other default.
-    registerStringOption_("unknown_charge", "<mode>", FASTag::Hyp::kModeDefault,
+    registerStringOption_("unknown_charge", "<mode>", FASTag::Hyp::MODE_DEFAULT,
                           "How a precursor without a charge is tagged: assume2 (as 2+, as before "
                           "1.12), enumerate (at each listed possible charge, else at every charge "
                           "-charge_min..-charge_max) or infer (at the charge its complement pairs "
@@ -941,7 +941,7 @@ protected:
                           "by their number and the reports count the charge-evidence choice only. A "
                           "header charge is never replaced (-check_header_charge both tags a flagged "
                           "spectrum under the flagged charge as well)", false);
-    setValidStrings_("unknown_charge", ListUtils::create<std::string>(FASTag::Hyp::kModeValues));
+    setValidStrings_("unknown_charge", ListUtils::create<std::string>(FASTag::Hyp::MODE_VALUES));
     registerIntOption_("charge_min", "<n>", FASTag::Hyp::kChargeMinDefault,
                        "Lowest charge -unknown_charge enumerate or infer tries (1 enables infer's "
                        "1+ test)", false);
@@ -985,14 +985,14 @@ protected:
     setValidFormats_("check_header_out", ListUtils::create<std::string>("tsv"));
     // #15 phase B: c/z-dot ions for electron activation (src/IonSeries.h).
     // Default by is FASTag 1.11; validation decides any other default.
-    registerStringOption_("ion_series", "<mode>", FASTag::IonSeries::kModeDefault,
+    registerStringOption_("ion_series", "<mode>", FASTag::IonSeries::MODE_DEFAULT,
                           "Ion series the MS2 spectra are read as: by (b/y ions, as before 1.12), cz "
                           "(c/z-dot ions of electron transfer or capture dissociation, ETD/ECD), or auto "
                           "(c/z-dot for spectra whose activation is ETD or ECD, b/y for all others, hybrid "
                           "EThcD/ETciD included). Under cz and auto the tag TSV gains an ion_series column when some "
                           "spectrum can be read as c/z. ax was removed in 1.14 (failed its held-out test); it is "
                           "read as by", false);
-    setValidStrings_("ion_series", ListUtils::create<std::string>(FASTag::IonSeries::kModeValues));
+    setValidStrings_("ion_series", ListUtils::create<std::string>(FASTag::IonSeries::MODE_VALUES));
     // 1.14: -ion_series_photo removed (a/x failed its held-out test); the
     // name stays without effect (kRemovedOptions).
     registerStringOption_("ion_series_photo", "<series>", "by", kRemovedHelp, false, true);

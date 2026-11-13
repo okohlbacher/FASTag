@@ -56,11 +56,11 @@ namespace FASTag
       OFF      ///< no picking, mzPeak included
     };
     /// @brief The default -pick_profile value.
-    inline constexpr const char* kModeDefault = "legacy";
+    inline constexpr const char* MODE_DEFAULT = "legacy";
     /// @brief The valid -pick_profile values.
     ///
     /// auto stays valid (1.14: removed, read as legacy; FASTag.cpp kRemovedValues).
-    inline constexpr const char* kModeValues = "legacy,auto,off";
+    inline constexpr const char* MODE_VALUES = "legacy,auto,off";
 
     /**
       @brief The reader a spectrum comes from.

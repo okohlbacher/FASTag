@@ -499,7 +499,7 @@ int main(int argc, char** argv)
     check(IS::modeFromString("by") == IS::Mode::BY && IS::modeFromString("cz") == IS::Mode::CZ &&
             IS::modeFromString("auto") == IS::Mode::AUTO,
           "mode names");
-    check(std::string(IS::kModeDefault) == "by", "the default mode is by");
+    check(std::string(IS::MODE_DEFAULT) == "by", "the default mode is by");
     check(std::string(IS::modeName(IS::Mode::AUTO)) == "auto" && std::string(IS::seriesName(IS::Series::CZ)) == "cz" &&
             std::string(IS::seriesName(IS::Series::BY)) == "by",
           "names round-trip");

@@ -187,8 +187,8 @@ namespace FASTag::Hyp
   inline constexpr double kMs1SupportMin = 0.05;  ///< -1/z or +2/z peak, as a share of the precursor peak
 
   // Registered defaults and limits of the #6 options.
-  inline constexpr const char* kModeDefault = "assume2";
-  inline constexpr const char* kModeValues = "assume2,enumerate,infer";
+  inline constexpr const char* MODE_DEFAULT = "assume2";
+  inline constexpr const char* MODE_VALUES = "assume2,enumerate,infer";
   inline constexpr int kChargeMinDefault = 2;
   inline constexpr int kChargeMaxDefault = 4;
   inline constexpr int kChargeLimit = 8;          ///< FASTagger's fragment-charge cap
