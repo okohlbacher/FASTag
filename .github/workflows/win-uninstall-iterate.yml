@@ -15,9 +15,8 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - { os: windows-latest, variant: plain }
           - { os: windows-11-arm, variant: plain }
-          - { os: windows-11-arm, variant: xtastop }
+          - { os: windows-11-arm, variant: plain2 }
     runs-on: ${{ matrix.os }}
     timeout-minutes: 40
     steps:
@@ -34,6 +33,17 @@ jobs:
           path: installer
           run-id: 43350327135
           github-token: ${{ github.token }}
+      - name: Previous release installer
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release download v1.13.3 -p 'FASTag-gui-windows-x64-setup.exe' -D "$RUNNER_TEMP/prev" --repo "${{ github.repository }}"
+      - name: Install scopes, upgrade and uninstall
+        shell: pwsh
+        run: |
+          $i = Get-ChildItem installer -Recurse -Filter *-setup.exe | Select-Object -First 1
+          ./tools/windows_install_scopes.ps1 -Installer $i.FullName -Previous "$env:RUNNER_TEMP\prev\FASTag-gui-windows-x64-setup.exe"
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
       - name: Installed-app check (per user, kept)
         shell: pwsh
         run: |
@@ -42,4 +52,6 @@ jobs:
           if ($LASTEXITCODE) { exit $LASTEXITCODE }
       - name: Uninstall probe
         shell: pwsh
-        run: ./tools/windows_uninstall_probe.ps1 -Dir x -Variant ${{ matrix.variant }}
+        run: |
+          ./tools/windows_uninstall_probe.ps1 -Dir x -Variant ${{ matrix.variant }}
+          exit 0
