@@ -866,7 +866,7 @@ namespace FASTag
 
   MSSpectrum IndexedMzMLReader::getSpectrumAnyLevel(Size i)
   {
-    return read_(i, /*want_peaks=*/true, kAllFields, /*any_level=*/true);
+    return read_(i, /*want_peaks=*/true, ALL_FIELDS, /*any_level=*/true);
   }
 
   MSSpectrum IndexedMzMLReader::getSpectrumMetadata(Size i, unsigned fields)
@@ -890,7 +890,7 @@ namespace FASTag
     bool any_level = false;
     for (Size i = 0; i < probe; ++i)
     {
-      const MSSpectrum s = read_(i, /*want_peaks=*/false, kAllFields);
+      const MSSpectrum s = read_(i, /*want_peaks=*/false, ALL_FIELDS);
       if (s.getMSLevel() == 2) return !s.getPrecursors().empty();
       any_level = any_level || s.getMSLevel() > 0;
     }
@@ -1166,7 +1166,7 @@ namespace FASTag
     // Spectrum representation (step 0): MS:1000127/128 among the spectrum's
     // own cvParams, the later one winning as in OpenMS, else from a group it
     // references. Neither leaves the type UNKNOWN, as OpenMS does.
-    if (fields & kStep0Type)
+    if (fields & STEP0_TYPE)
     {
       const std::size_t se = spectrum_params_end(xml);
       // Bounded to se (1.12.2): only a hit before se counts below, and the
@@ -1187,7 +1187,7 @@ namespace FASTag
 
     // The filter string (step 0) of the first <scan>, as the meta value
     // "filter string" OpenMS gives the spectrum.
-    if ((fields & kStep0FilterString) && has_scans)
+    if ((fields & STEP0_FILTER_STRING) && has_scans)
     {
       std::size_t sc = find_before(xml, "<scan", slb + 9, sle);
       while (sc != std::string_view::npos && !(sc + 5 < n && (is_name_end(xml[sc + 5]) || xml[sc + 5] == '/')))
@@ -1261,7 +1261,7 @@ namespace FASTag
         to_number(cv_value(xml, kIsoTarget, iwb, iwe), target);
         to_number(cv_value(xml, kIsoLower, iwb, iwe), lower);
         to_number(cv_value(xml, kIsoUpper, iwb, iwe), upper);
-        if (fields & kStep0TargetMeta) has_meta_target = to_number(cvg(xml, kIsoTarget, iwb, iwe), meta_target);
+        if (fields & STEP0_TARGET_META) has_meta_target = to_number(cvg(xml, kIsoTarget, iwb, iwe), meta_target);
       }
 
       // The activation (step 0): dissociation methods and activation energy,
@@ -1269,14 +1269,14 @@ namespace FASTag
       std::set<Precursor::ActivationMethod> methods;
       double activation_energy = 0;
       bool has_activation_energy = false;
-      std::size_t acb = (fields & (kStep0Activation | kStep0ActivationEnergy)) ? find_before(xml, "<activation", p, p_end)
+      std::size_t acb = (fields & (STEP0_ACTIVATION | STEP0_ACTIVATION_ENERGY)) ? find_before(xml, "<activation", p, p_end)
                                                                        : std::string_view::npos;
       while (acb != std::string_view::npos && !element_at(acb, "<activation"))
         acb = find_before(xml, "<activation", acb + 11, p_end);
       if (acb != std::string_view::npos)
       {
         const std::size_t ace = find_or(xml, "</activation>", acb, p_end);
-        if (fields & kStep0Activation)
+        if (fields & STEP0_ACTIVATION)
         {
           auto add_method = [&methods](std::string_view acc) {
             for (const ActivationTerm& t : kActivationTerms)
@@ -1287,7 +1287,7 @@ namespace FASTag
                c = find_before(xml, "<cvParam", c + 8, ace))
             add_method(tag_attr(xml, c + 1, "accession"));
         }
-        if (fields & kStep0ActivationEnergy)
+        if (fields & STEP0_ACTIVATION_ENERGY)
           has_activation_energy = to_number(cvg(xml, kActivationEnergy, acb, ace), activation_energy);
       }
       auto set_activation = [&](Precursor& prec) {
@@ -1328,7 +1328,7 @@ namespace FASTag
           // ion moved the precursor m/z away from it -- 0 when the window
           // gave no target, as there.
           const double window_mz = has_meta_target ? meta_target : 0.0;
-          if ((fields & kStep0TargetMeta) && mz != window_mz)
+          if ((fields & STEP0_TARGET_META) && mz != window_mz)
           {
             static const UInt kTargetIdx =
                 MetaInfoInterface::metaRegistry().registerName("isolation window target m/z");
@@ -1341,7 +1341,7 @@ namespace FASTag
           prec.setIntensity(static_cast<float>(intensity));
         // Possible charge states (MS:1000633, step 0), every one listed, in
         // the order OpenMS reads them: referenced groups, then own cvParams.
-        if (fields & kStep0PossibleCharges)
+        if (fields & STEP0_POSSIBLE_CHARGES)
         {
           const std::string_view acc = needle_accession(kPossibleCharge);
           for_group_params(xml, s, s_end, [&](const GroupParam& gp) {

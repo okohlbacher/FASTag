@@ -3540,7 +3540,7 @@ protected:
       {
         MSSpectrum head;
         // Activation and filter string only (1.12.2): all activationClass() reads.
-        if (fastmz) head = fastmz->getSpectrumMetadata(i, FASTag::IndexedMzMLReader::kActivationFields);
+        if (fastmz) head = fastmz->getSpectrumMetadata(i, FASTag::IndexedMzMLReader::ACTIVATION_FIELDS);
         else if (od_meta) { if (i < od_meta->size()) head = (*od_meta)[i]; }
         else if (i < exp.size()) head = exp[i];
         if (head.getMSLevel() == 2) scan.add(FASTag::IonSeries::activationClass(head));
@@ -5143,10 +5143,10 @@ protected:
         bool loaded_here = false;
         if (mzs) { loaded = mzs->take(static_cast<size_t>(i), *picker); loaded_here = true; }
         if (!loaded_here && mreader) { loaded = mreader->getSpectrum(static_cast<Size>(i)); loaded_here = true; }
-        // The step-0 fields the loop reads, no more (1.12.2; IndexedMzMLReader::kTaggingFields).
+        // The step-0 fields the loop reads, no more (1.12.2; IndexedMzMLReader::TAGGING_FIELDS).
         if (!loaded_here && freader)
         {
-          loaded = freader->getSpectrum(static_cast<Size>(i), FASTag::IndexedMzMLReader::kTaggingFields);
+          loaded = freader->getSpectrum(static_cast<Size>(i), FASTag::IndexedMzMLReader::TAGGING_FIELDS);
           loaded_here = true;
         }
         if (!loaded_here && reader) { loaded = reader->getSpectrum(static_cast<Size>(i)); loaded_here = true; }

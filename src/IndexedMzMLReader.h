@@ -55,8 +55,8 @@
 // spectrum, +12% read time, in a tagging loop that reads only some of them.
 // A read now fills the step-0 fields its caller names (Field) and no others;
 // what it fills is the same as before. The tagging loop takes
-// kTaggingFields, the acquisition probe kProbeFields, -ion_series auto's
-// scan kActivationFields; every other caller (-probe_input, -dump_spectrum,
+// TAGGING_FIELDS, the acquisition probe PROBE_FIELDS, -ion_series auto's
+// scan ACTIVATION_FIELDS; every other caller (-probe_input, -dump_spectrum,
 // the serial probes, the tests) all of them. The element searches are also
 // bounded to the element they belong to, so a field that is absent no
 // longer costs a scan of the rest of the head.
@@ -174,28 +174,28 @@ namespace FASTag
 
       Everything else -- peaks, native id, MS level, RT, scan windows, ion
       mobility, the 1.11 precursor fields -- is read always. A field left out
-      is simply not set; every field that IS set is exactly what kAllFields
+      is simply not set; every field that IS set is exactly what ALL_FIELDS
       gives. Callers pass only what they consume, so the per-spectrum parse
       costs what 1.11's did where nothing more is needed (the tagging loop,
       the acquisition probe).
     */
     enum Field : unsigned
     {
-      kStep0Type = 1u << 0,              ///< centroid / profile (MS:1000127/128)
-      kStep0FilterString = 1u << 1,      ///< the "filter string" meta value
-      kStep0Activation = 1u << 2,        ///< each precursor's dissociation methods
-      kStep0ActivationEnergy = 1u << 3,  ///< each precursor's activation energy
-      kStep0PossibleCharges = 1u << 4,   ///< possible charge states (MS:1000633)
-      kStep0TargetMeta = 1u << 5,        ///< the "isolation window target m/z" meta value
-      kAllFields = (1u << 6) - 1,        ///< every step-0 field
+      STEP0_TYPE = 1u << 0,              ///< centroid / profile (MS:1000127/128)
+      STEP0_FILTER_STRING = 1u << 1,      ///< the "filter string" meta value
+      STEP0_ACTIVATION = 1u << 2,        ///< each precursor's dissociation methods
+      STEP0_ACTIVATION_ENERGY = 1u << 3,  ///< each precursor's activation energy
+      STEP0_POSSIBLE_CHARGES = 1u << 4,   ///< possible charge states (MS:1000633)
+      STEP0_TARGET_META = 1u << 5,        ///< the "isolation window target m/z" meta value
+      ALL_FIELDS = (1u << 6) - 1,        ///< every step-0 field
       /// What the tagging loop reads: the type (-pick_profile), activation
       /// and filter string (IonSeries::activationClass, -digest_out) and the
       /// possible charges (precursor hypotheses, the no-charge warning).
-      kTaggingFields = kStep0Type | kStep0FilterString | kStep0Activation | kStep0PossibleCharges,
+      TAGGING_FIELDS = STEP0_TYPE | STEP0_FILTER_STRING | STEP0_ACTIVATION | STEP0_POSSIBLE_CHARGES,
       /// What the acquisition probe reads (Acquisition::fromSpectrum).
-      kProbeFields = kStep0TargetMeta,
+      PROBE_FIELDS = STEP0_TARGET_META,
       /// What -ion_series auto's activation scan reads.
-      kActivationFields = kStep0FilterString | kStep0Activation,
+      ACTIVATION_FIELDS = STEP0_FILTER_STRING | STEP0_ACTIVATION,
     };
 
     /**
@@ -217,7 +217,7 @@ namespace FASTag
         the decoder rejects an MS2 spectrum (OpenMS's reader fails the same
         file; a silent empty spectrum would drop its tags).
     */
-    OpenMS::MSSpectrum getSpectrum(OpenMS::Size i, unsigned fields = kAllFields);
+    OpenMS::MSSpectrum getSpectrum(OpenMS::Size i, unsigned fields = ALL_FIELDS);
     /**
       @brief As getSpectrum() with every field, but with peaks at any MS level.
 
@@ -243,7 +243,7 @@ namespace FASTag
       @param[in] fields Step-0 fields to fill (Field bit mask).
       @return The spectrum without peaks, or an empty one.
     */
-    OpenMS::MSSpectrum getSpectrumMetadata(OpenMS::Size i, unsigned fields = kAllFields);
+    OpenMS::MSSpectrum getSpectrumMetadata(OpenMS::Size i, unsigned fields = ALL_FIELDS);
     /**
       @brief Byte range [first, second) of spectrum @p i in the file.
 
