@@ -164,9 +164,9 @@ namespace FASTag
       slots_.emplace(i, std::move(s));
       ++held_;
       produced_ = i + 1;
-      wake = waiting_[i % kStripes] > 0;
+      wake = waiting_[i % STRIPES] > 0;
     }
-    if (wake) data_cv_[i % kStripes].notify_all();
+    if (wake) data_cv_[i % STRIPES].notify_all();
   }
 
   MSSpectrum MzPeakStream::take(std::size_t i, PeakPickerHiRes& picker)
@@ -177,7 +177,7 @@ namespace FASTag
       std::unique_lock<std::mutex> lock(mutex_);
       if (produced_ <= i && !done_ && !aborted_)
       {
-        const std::size_t stripe = i % kStripes;
+        const std::size_t stripe = i % STRIPES;
         ++waiting_[stripe];
         data_cv_[stripe].wait(lock, [this, i] { return produced_ > i || done_ || aborted_; });
         --waiting_[stripe];
