@@ -78,21 +78,21 @@ namespace FASTag::CensusIds
   inline constexpr int TABLE_VERSION = 1;
 
   /// Default of -census_ids_fdr.
-  inline constexpr double kDefaultFdr = 0.01;
+  inline constexpr double DEFAULT_FDR = 0.01;
   /// Default of -census_triage_evalue.
-  inline constexpr double kDefaultTriageEvalue = 0.01;
+  inline constexpr double DEFAULT_TRIAGE_EVALUE = 0.01;
 
   /// Share of unmatched references that warns.
-  inline constexpr double kWarnUnmatched = 0.01;
+  inline constexpr double WARN_UNMATCHED = 0.01;
   /// Share of unmatched references that refuses.
-  inline constexpr double kRefuseUnmatched = 0.5;
+  inline constexpr double REFUSE_UNMATCHED = 0.5;
 
   /**
     @brief The identified value of one spectrum. Append-only.
   */
   enum class Ident : std::uint8_t { NO = 0, YES = 1, UNKNOWN = 2 };
   /// Number of Ident values.
-  inline constexpr std::size_t kIdentCount = 3;
+  inline constexpr std::size_t IDENT_COUNT = 3;
   /**
     @brief Table text of an identified value.
 
@@ -260,15 +260,15 @@ namespace FASTag::CensusIds
   */
   struct JoinTally
   {
-    std::array<std::array<std::uint64_t, kIdentCount>, Census::STATUS_COUNT> by_status{};  ///< rows per status and identified value
-    std::array<std::uint64_t, kIdentCount> by_ident{};  ///< rows per identified value
+    std::array<std::array<std::uint64_t, IDENT_COUNT>, Census::STATUS_COUNT> by_status{};  ///< rows per status and identified value
+    std::array<std::uint64_t, IDENT_COUNT> by_ident{};  ///< rows per identified value
     std::uint64_t rows = 0;             ///< rows joined
     std::uint64_t triage = 0;           ///< triage = 1
     std::uint64_t triage_eligible = 0;  ///< identified 0 and tagged or placed
   };
 
   /// The two columns' header suffix, appended to Census::header().
-  inline constexpr const char* kHeaderSuffix = "\tidentified\ttriage";
+  inline constexpr const char* HEADER_SUFFIX = "\tidentified\ttriage";
 
   /**
     @brief Joins the identifications into the census table.

@@ -345,7 +345,7 @@ namespace FASTag::CensusIds
     if (!f) { error = "cannot read " + in; return false; }
     if (!o) { error = "cannot write " + out; return false; }
     std::getline(f, line);
-    o << head << kHeaderSuffix << '\n';
+    o << head << HEADER_SUFFIX << '\n';
     std::string buf;
     while (std::getline(f, line))
     {
@@ -441,7 +441,7 @@ namespace FASTag::CensusIds
     r.push_back({sec, "refs_unmatched", unmatched_known ? u(c.unmatched) : std::string(), refs,
                  unmatched_known ? u(c.unmatched) + " references name no spectrum read."
                                  : "Not known: unread spectra cannot be told from foreign references when subsampling."});
-    for (std::size_t i = 0; i < kIdentCount; ++i)
+    for (std::size_t i = 0; i < IDENT_COUNT; ++i)
     {
       const Ident id = static_cast<Ident>(i);
       r.push_back({sec, std::string("identified_") + key(id), num(t.by_ident[i]), rows,
@@ -450,7 +450,7 @@ namespace FASTag::CensusIds
     for (std::size_t s = 0; s < Census::STATUS_COUNT; ++s)
     {
       const std::string nm = Census::name(static_cast<Census::Status>(s));
-      for (std::size_t i = 0; i < kIdentCount; ++i)
+      for (std::size_t i = 0; i < IDENT_COUNT; ++i)
       {
         const Ident id = static_cast<Ident>(i);
         r.push_back({sec, nm + "_identified_" + key(id), num(t.by_status[s][i]), rows,

@@ -1267,11 +1267,11 @@ protected:
                        "spectrum is identified by a target hit whose q-value passes -census_ids_fdr; a "
                        "file without q-values is refused (filter it with IDFilter first)", false);
     setValidFormats_("census_ids", ListUtils::create<std::string>("idXML,mzid"));
-    registerDoubleOption_("census_ids_fdr", "<f>", FASTag::CensusIds::kDefaultFdr,
+    registerDoubleOption_("census_ids_fdr", "<f>", FASTag::CensusIds::DEFAULT_FDR,
                           "q-value a target hit of -census_ids needs to identify its spectrum", false, true);
     setMinFloat_("census_ids_fdr", 0.0);
     setMaxFloat_("census_ids_fdr", 1.0);
-    registerDoubleOption_("census_triage_evalue", "<f>", FASTag::CensusIds::kDefaultTriageEvalue,
+    registerDoubleOption_("census_triage_evalue", "<f>", FASTag::CensusIds::DEFAULT_TRIAGE_EVALUE,
                           "best_evalue at or below which an unidentified tagged or placed spectrum is a "
                           "triage candidate (an E-value threshold, not a quality call)", false, true);
     setMinFloat_("census_triage_evalue", 0.0);
@@ -5639,17 +5639,17 @@ protected:
         const double share = ids_counts.refs ? static_cast<double>(ids_counts.unmatched) /
                                                    static_cast<double>(ids_counts.refs)
                                              : 0.0;
-        if (!subsampling && share > FASTag::CensusIds::kRefuseUnmatched)
+        if (!subsampling && share > FASTag::CensusIds::REFUSE_UNMATCHED)
         {
           OPENMS_LOG_ERROR << "-census_ids: " << ids_counts.unmatched << " of " << ids_counts.refs
                            << " spectrum references match no spectrum of -in (more than "
-                           << FASTag::CensusIds::kRefuseUnmatched * 100
+                           << FASTag::CensusIds::REFUSE_UNMATCHED * 100
                            << "%): the file belongs to another run, or names spectra by an id FASTag cannot "
                               "match. No census was written; the other outputs are complete." << std::endl;
           census_part.discard();
           census_ids_refused = true;
         }
-        else if (!subsampling && share > FASTag::CensusIds::kWarnUnmatched)
+        else if (!subsampling && share > FASTag::CensusIds::WARN_UNMATCHED)
           OPENMS_LOG_WARN << "Warning: -census_ids: " << ids_counts.unmatched << " of " << ids_counts.refs
                           << " spectrum references match no spectrum of -in." << std::endl;
       }
