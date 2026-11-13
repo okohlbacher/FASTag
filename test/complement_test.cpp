@@ -162,16 +162,16 @@ int main()
     p.frag_tol = 0.5;
     p.tol_ppm = false;
     FASTag::Param frag = p;
-    FASTag::Cli::setComplementTolerance(frag, FASTag::Cli::kComplementTolerance, 0.5, "fragment");
+    FASTag::Cli::setComplementTolerance(frag, FASTag::Cli::COMPLEMENT_TOLERANCE, 0.5, "fragment");
     FASTag::Param da = p;
-    FASTag::Cli::setComplementTolerance(da, 0.02, FASTag::Cli::kComplementTolFactor, "Da");
+    FASTag::Cli::setComplementTolerance(da, 0.02, FASTag::Cli::COMPLEMENT_TOL_FACTOR, "Da");
     CHECK(frag.complement_tol_mode == ComplementTolMode::FRAGMENT && frag.complement_tol_factor == 0.5
           && frag.complement_tol == base.complement_tol, "fragment unit: k in force, the Da value kept");
     // The fragment unit with both values at their CLI defaults runs at the
     // library's k (0.5), not at the Da default 0.02 read as k.
     FASTag::Param unit_only = p;
-    FASTag::Cli::setComplementTolerance(unit_only, FASTag::Cli::kComplementTolerance,
-                                        FASTag::Cli::kComplementTolFactor, "fragment");
+    FASTag::Cli::setComplementTolerance(unit_only, FASTag::Cli::COMPLEMENT_TOLERANCE,
+                                        FASTag::Cli::COMPLEMENT_TOL_FACTOR, "fragment");
     CHECK(unit_only.complement_tol_factor == FASTag::Param{}.complement_tol_factor
           && unit_only.complement_tol_factor == 0.5, "fragment unit alone: k %g, want 0.5",
           unit_only.complement_tol_factor);

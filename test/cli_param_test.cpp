@@ -28,7 +28,7 @@ int main(int argc, char** argv)
 {
   if (argc > 1 && std::strcmp(argv[1], "--print-legacy-out-spectra-parameters") == 0)
   {
-    for (std::string_view n : FASTag::Cli::kLegacyOutSpectraParameters) std::cout << n << "\n";
+    for (std::string_view n : FASTag::Cli::LEGACY_OUT_SPECTRA_PARAMETERS) std::cout << n << "\n";
     return 0;
   }
 
@@ -70,7 +70,7 @@ int main(int argc, char** argv)
 
   // The frozen list: 77 distinct names, the tool's own options first and
   // TOPPBase's six common ones last, as 1.11 writes them.
-  const auto& names = FASTag::Cli::kLegacyOutSpectraParameters;
+  const auto& names = FASTag::Cli::LEGACY_OUT_SPECTRA_PARAMETERS;
   std::set<std::string_view> distinct(names.begin(), names.end());
   check(names.size() == 77 && distinct.size() == 77, "77 distinct legacy -out_spectra parameters");
   check(names.front() == "in" && names[names.size() - 6] == "log" && names.back() == "test",

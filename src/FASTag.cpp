@@ -371,7 +371,7 @@ class TOPPFASTag : public TOPPBase
   // TOPPBase::getProcessingInfo_ lists EVERY registered parameter as a
   // "parameter: <name>" userParam of the exported mzML, so an option added
   // after 1.11 would change the exported bytes even at its default. Options
-  // outside the frozen 1.11 list (FASTag::Cli::kLegacyOutSpectraParameters)
+  // outside the frozen 1.11 list (FASTag::Cli::LEGACY_OUT_SPECTRA_PARAMETERS)
   // are dropped from it while they hold their registered default; a
   // non-default value is kept, so the provenance stays truthful whenever an
   // option actually acted. Removing entries keeps the order of the rest:
@@ -466,7 +466,7 @@ protected:
                         "spectrum, so unlike the default it needs memory "
                         "proportional to the FILE, not to the thread count", false);
 
-    registerIntOption_("tag_length", "<n>", FASTag::Cli::kTagLength, "Seed tag length in residues", false);
+    registerIntOption_("tag_length", "<n>", FASTag::Cli::TAG_LENGTH, "Seed tag length in residues", false);
     setMinInt_("tag_length", 1);
     // Several seed lengths over ONE read of the input. A separate list, not a
     // widened -tag_length, so that option and every INI that sets it are
@@ -478,13 +478,13 @@ protected:
                      "ascending length, except that a tag several lengths report "
                      "is kept only from the length with its lowest E-value", false);
     setMinInt_("tag_lengths", 1);
-    registerIntOption_("extension", "<n>", FASTag::Cli::kExtension,
+    registerIntOption_("extension", "<n>", FASTag::Cli::EXTENSION,
                        "Maximum residues appended per terminus; 0 disables extension", false);
     setMinInt_("extension", 0);
     // tag_length + 2*extension is computed as int and indexes the null tables.
     // Unbounded, --extension 1073741824 overflows and aborts with std::length_error.
     setMaxInt_("extension", (FASTag::MAX_FILTER_LEN - 1) / 2);
-    registerIntOption_("gaps", "<n>", FASTag::Cli::kGaps,
+    registerIntOption_("gaps", "<n>", FASTag::Cli::GAPS,
                        "Allow a tag to cross one missing peak, spelling the two "
                        "residues either side of it from their summed mass; "
                        "0 disables", false);
@@ -505,28 +505,28 @@ protected:
                   "do not move multiply-charged fragments onto the singly-charged "
                   "scale, before peak selection", false);
 
-    registerDoubleOption_("fragment_tolerance", "<value>", FASTag::Cli::kFragmentTolerance, "Fragment mass tolerance", false);
+    registerDoubleOption_("fragment_tolerance", "<value>", FASTag::Cli::FRAGMENT_TOLERANCE, "Fragment mass tolerance", false);
     // Without a floor a negative or zero tolerance matches nothing and the run
     // reports zero tags with no indication why. The floor stays in the INI/CTD
     // (restrictions="1.0e-09:") for KNIME/Galaxy validators; main_ also refuses
     // NaN, which TOPPBase's range check lets through.
     setMinFloat_("fragment_tolerance", 1e-9);
-    registerStringOption_("fragment_tolerance_unit", "<unit>", FASTag::Cli::kFragmentToleranceUnit, "Tolerance unit", false);
+    registerStringOption_("fragment_tolerance_unit", "<unit>", FASTag::Cli::FRAGMENT_TOLERANCE_UNIT, "Tolerance unit", false);
     setValidStrings_("fragment_tolerance_unit", ListUtils::create<std::string>("ppm,Da"));
 
-    registerIntOption_("max_peaks", "<n>", FASTag::Cli::kMaxPeaks,
+    registerIntOption_("max_peaks", "<n>", FASTag::Cli::MAX_PEAKS,
                        "Peaks kept per spectrum, at most 1024; 0 means 1024, not "
                        "unlimited. Higher values use more memory. Also caps "
                        "-peaks_per_window", false);
     setMinInt_("max_peaks", 0);
     setMaxInt_("max_peaks", 1024);
-    registerIntOption_("peaks_per_window", "<n>", FASTag::Cli::kPeaksPerWindow,
+    registerIntOption_("peaks_per_window", "<n>", FASTag::Cli::PEAKS_PER_WINDOW,
                        "Keep this many peaks per 100 Da window instead of the "
                        "strongest -max_peaks overall; 0 disables. Scales the "
                        "effective peak budget with the spectrum's m/z range, so "
                        "dense spectra are not starved and sparse ones not padded", false);
     setMinInt_("peaks_per_window", 0);
-    registerIntOption_("max_tags", "<n>", FASTag::Cli::kMaxTags, "Tags reported per spectrum; 0 = unlimited", false);
+    registerIntOption_("max_tags", "<n>", FASTag::Cli::MAX_TAGS, "Tags reported per spectrum; 0 = unlimited", false);
     setMinInt_("max_tags", 0);
 
     // Random subsampling of input spectra. For a taxon call (or a quick preview)
@@ -810,9 +810,9 @@ protected:
     setValidStrings_("species_evidence", ListUtils::create<std::string>("best,all"));
     registerStringOption_("species_rank", "<rank>", "genus",
                           "Report taxa at this NCBI rank (genus, family, ...)", false);
-    registerDoubleOption_("max_evalue", "<value>", FASTag::Cli::kMaxEvalue, "E-value cutoff; 0 disables", false);
+    registerDoubleOption_("max_evalue", "<value>", FASTag::Cli::MAX_EVALUE, "E-value cutoff; 0 disables", false);
     setMinFloat_("max_evalue", 0.0);
-    registerDoubleOption_("gap_penalty", "<value>", FASTag::Cli::kGapPenalty,
+    registerDoubleOption_("gap_penalty", "<value>", FASTag::Cli::GAP_PENALTY,
                           "Rank gapped tags as if their E-value were this many times "
                           "worse. Never removes a tag at the -max_evalue cutoff (applied "
                           "to the unpenalised value), but under -max_tags it decides which "
@@ -844,7 +844,7 @@ protected:
     // shifts the whole precursor and so is already carried in the flanking
     // masses, with nothing per-residue to annotate.
     registerStringList_("fixed_modifications", "<mods>",
-                        ListUtils::create<std::string>(FASTag::Cli::kFixedModifications),
+                        ListUtils::create<std::string>(FASTag::Cli::FIXED_MODIFICATIONS),
                         "Fixed modifications by OpenMS/UniMod name, e.g. "
                         "'Carbamidomethyl (C)' 'TMT6plex (K)'. Shift residue masses; "
                         "not annotated in the tag", false);
@@ -889,28 +889,28 @@ protected:
     // E2: complement-ion rules across fragment charges, tolerance tied to the
     // run. Defaults are FASTag 1.11 (src/CliParam.h); validation decides any
     // other default.
-    registerStringOption_("complement_rule", "<rule>", FASTag::Cli::kComplementRule,
+    registerStringOption_("complement_rule", "<rule>", FASTag::Cli::COMPLEMENT_RULE,
                           "Which fragment pairs count as complements in the complement "
                           "subscore: same_charge (both at the fragment charge z, partner "
                           "at M/z + 2p - m), precursor (the partner carries the precursor's "
                           "remaining c - z charges, at (M + c*p - z*m)/(c - z)), or both "
                           "(either rule)", false, true);
     setValidStrings_("complement_rule", ListUtils::create<std::string>("same_charge,precursor,both"));
-    registerDoubleOption_("complement_tolerance", "<value>", FASTag::Cli::kComplementTolerance,
+    registerDoubleOption_("complement_tolerance", "<value>", FASTag::Cli::COMPLEMENT_TOLERANCE,
                           "Window for a complement partner in Da (used with "
                           "-complement_tolerance_unit Da)", false, true);
     setMinFloat_("complement_tolerance", 1e-9);
     // Its own option, not -complement_tolerance read as k: one value with one
     // default would make "-complement_tolerance_unit fragment" alone run at
     // k = 0.02. The name keeps the --helphelp column at the 1.11 width.
-    registerDoubleOption_("complement_tol_factor", "<k>", FASTag::Cli::kComplementTolFactor,
+    registerDoubleOption_("complement_tol_factor", "<k>", FASTag::Cli::COMPLEMENT_TOL_FACTOR,
                           "Factor k of the complement window k*(fragment tolerance at the "
                           "peak + at the partner) (used with -complement_tolerance_unit "
                           "fragment)", false, true);
     setMinFloat_("complement_tol_factor", 1e-9);
     // "<u>", not "<unit>": the longest option-and-argument column of the
     // --helphelp listing must stay the 1.11 width, or every line reflows.
-    registerStringOption_("complement_tolerance_unit", "<u>", FASTag::Cli::kComplementToleranceUnit,
+    registerStringOption_("complement_tolerance_unit", "<u>", FASTag::Cli::COMPLEMENT_TOLERANCE_UNIT,
                           "Da: the window is -complement_tolerance. fragment: "
                           "-complement_tol_factor scales the run's -fragment_tolerance at "
                           "both partners. auto (experimental; its first held-out test failed, the second, with the revised estimator, was inconclusive with no criterion failed: +1.1 points of correct rank-1 tags on ion trap, same window as Da on the high-resolution files): the window is measured on the run, "
