@@ -1,3 +1,5 @@
+101e9d6f29a00b71707fedff0871c7acdc746bdb63870e6ade35307996b23890  audit.tsv
+99e0cc9df15013e24e9d33e7d93d9c94f5d9f04a7395a0d731b0b8e7ca3404e2  qualification.tsv
 687a744155aed8601de11a993ea8b5ebf9472727d2af4aa71a126c4f9b5358a4  scorers/verdict_heldout3.py
 c8e146ad2092ff1319f96a7d48962e205373285d7e8757129d2a8dc96f8e9d13  scripts/dev3plus.py
 f03b87b456f21e18c2d35622974ea5818eeaabdab23c10f2ce43d150f2a2a6b0  scripts/freeze2.py
@@ -13,3 +15,5 @@ dd84ed361e99656c8ca1a297561917bb5e0f1b25ccaa291f3a14e20275263eec  select/candida
 b60c79cd7be4d05a7c3bc580ccd955a54cb7c1ad80d540a342dafdaac051f5a9  truth/H3-ltq-ftms.tsv
 d2d32888c38e126910188f6d74f9c4e695249de3f9a597544ff34b10a0b0bf16  truth/H3-ltq-itms.tsv
 f58599fbe9ea014bd06b5be57cef30ffd0fd665a915fa5dbe081bf29dec8dd64  truth/H3-timstof.tsv
+09bb986fb28ee776870fc1acd1b7f87359e8fd92066da815e46002ccd17b681a  ../../manifests/compltol-H3.tsv
+8228024597a6eee97b33e1f600c8008ccf3103a103f4a32c324702ea2ff8cf7b  ../../disjointness/compltol-H3.tsv

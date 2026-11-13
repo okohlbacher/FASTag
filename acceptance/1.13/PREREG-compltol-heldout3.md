@@ -119,7 +119,19 @@ Freeze 2 = `freeze2.py`: `manifests/compltol-H3.tsv`, `compltol/heldout3/qualifi
 
 ## Runs (filled at freeze 2)
 
-@RUNS@
+| Set | PXD | Run | Draw rank | MS2 (filter) | Truth PSMs (2+, 3+, 4+) | mzML sha256 |
+|---|---|---|---|---|---|---|
+| ion_trap | PXD042441 | Lum_22aug0911 | 3 | ITMS:99380 | 3846 (z2:2469,z3:1256,z4+:121) | `f446c9a97086fcdfd78c416101790ae3dd0c00ac6362a03f3c823250620a5e06` |
+| ion_trap | PXD029710 | 3D_fraction | 4 | ITMS:22945 | 4549 (z2:1970,z3:1912,z4+:667) | `fba1a79e6aaa8cb91ee0c42dc5ecd03f73b5067af6d2b7573130b5579cefae72` |
+| ion_trap | PXD016535 | OVMMA161017_218 | 5 | ITMS:47124 | 22164 (z2:14070,z3:6896,z4+:1198) | `4ddd3ea0614b6941192c0f5bc53f132859ab46d30eb8e8cf69f8311f2737fa4f` |
+| ft_old | PXD041682 | 20210116_GrantC_CunninghamJ_3A4 | 11 | FTMS:23615 | 10065 (z2:6437,z3:3375,z4+:253) | `b1f699e3ecbd6d80c905d1fee46b41e137afedf3ec70f2186a875ff0e597ae9e` |
+| timstof | PXD066317 | YE012LQB1_HFDVAT_2_Slot2-29_1_364 | 1 | tof | 49326 (z1:276,z2:39858,z3:8615,z4+:577) | `b7987c5447a5eebba31ada22e0300df65c6a29a024e6f398e5b77a7e0774df11` |
+| timstof | PXD049281 | 15_S1-C6_1_7066 | 3 | tof | 19271 (z1:2,z2:12170,z3:5948,z4+:1151) | `ff70a6abad3dd550677872a01c392c402613c54bab0e0cb37f9befcea7a915ae` |
+| timstof | PXD027637 | KA510LQ_c_sp_2_Slot1-13_1_1398 | 4 | tof | 90056 (z1:306,z2:72582,z3:15788,z4+:1380) | `c9cde179a7f339544f61fa3958172c617b17424e25d1b5df57ae6c482f2c3b5d` |
+
+Not selected: PXD028118 (ltq rank 1, set ion_trap: fewer than 1000 PSMs); PXD042748 (ltq rank 2, set ion_trap: truth audit: (1) enrichment: clickable excB probe, CuAAC with biotin-azide, target pull-down (chemoproteomics)); PXD025434 (ltq rank 6, set ft_old: fewer than 1000 PSMs); PXD025463 (ltq rank 7, set ft_old: fewer than 1000 PSMs); PXD041856 (ltq rank 8, set ion_trap: fewer than 1000 PSMs); PXD015742 (ltq rank 9, set ion_trap: qualifies, beyond the first 3 projects of its set); PXD026091 (ltq rank 10, set ion_trap: fewer than 1000 PSMs); PXD019727 (ltq rank 12, set ion_trap: fewer than 1000 PSMs); PXD030951 (ltq rank 13, set ion_trap: qualifies, beyond the first 3 projects of its set); PXD010851 (ltq rank 14, set ion_trap: qualifies, beyond the first 3 projects of its set); PXD027136 (ltq rank 15, set ion_trap: qualifies, beyond the first 3 projects of its set); PXD026908 (ltq rank 16, set ion_trap: truth audit: (2) enzyme: Lys-C plus trypsin); PXD066100 (timstof rank 2, set timstof: no mzML); PXD037316 (timstof rank 5, set timstof: qualifies, beyond the first 3 projects of its set); PXD076286 (timstof rank 6, set timstof: fewer than 1000 PSMs); PXD034369 (timstof rank 7, set timstof: truth audit: (5) species of the drawn file not established: feline and human plasma EVs compared, PRIDE lists human only); PXD068839 (timstof rank 8, set timstof: qualifies, beyond the first 3 projects of its set).
+
+Selected per set: ion_trap 3, ft_old 1, timstof 3. Disjointness (`disjointness/compltol-H3.tsv`): 7/7 PASS.
 
 ## FASTag runs (cells), once
 

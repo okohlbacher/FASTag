@@ -1,0 +1,25 @@
+draw	draw_rank	pxd	file	set	download	ms2	ms2_filter	ms2_dropped_noprec	sage_rc	target_psms_q01	by_charge	audit	qualifies	selected
+ltq	1	PXD028118	P34B_02.raw	ion_trap	sha1_ok	0	ITMS:23864	0	0	850	z2:826,z3:24	ok	no: fewer than 1000 PSMs	no
+ltq	2	PXD042748	EB6.raw	ion_trap	sha1_ok	0	ITMS:9100	0	0	5107	z2:2598,z3:2309,z4+:200	no	no: truth audit: (1) enrichment: clickable excB probe, CuAAC with biotin-azide, target pull-down (chemoproteomics)	no
+ltq	3	PXD042441	Lum_22aug0911.raw	ion_trap	sha1_ok	0	ITMS:99380	0	0	3846	z2:2469,z3:1256,z4+:121	ok	yes	yes
+ltq	4	PXD029710	3D_fraction.raw	ion_trap	sha1_ok	0	ITMS:22945	0	0	4549	z2:1970,z3:1912,z4+:667	ok	yes	yes
+ltq	5	PXD016535	OVMMA161017_218.raw	ion_trap	sha1_ok	0	ITMS:47124	0	0	22164	z2:14070,z3:6896,z4+:1198	ok	yes	yes
+ltq	6	PXD025434	Gel-free_pSS-5.raw	ft_old	sha1_ok	0	FTMS:17289	0	0	351	z2:337,z3:14	ok	no: fewer than 1000 PSMs	no
+ltq	7	PXD025463	pSS-6_SLICE-1.raw	ft_old	sha1_ok	0	FTMS:1865	0	0	0	-	ok	no: fewer than 1000 PSMs	no
+ltq	8	PXD041856	22nov_Marisol_200min_cid_7.raw	ion_trap	sha1_ok	0	ITMS:49511	0	0	0	-	ok	no: fewer than 1000 PSMs	no
+ltq	9	PXD015742	2014_12_10_OT_ALH_64_VAS1401_3C_R3.raw	ion_trap	sha1_ok	0	ITMS:13300	0	0	3832	z2:2250,z3:1263,z4+:319	ok	yes	no
+ltq	10	PXD026091	SGH_NZ_S2_3_ELITE_180MIN_20201125.raw	ion_trap	sha1_ok	0	ITMS:50965	0	0	476	z2:379,z3:88,z4+:9	ok	no: fewer than 1000 PSMs	no
+ltq	11	PXD041682	20210116_GrantC_CunninghamJ_3A4.raw	ft_old	sha1_ok	0	FTMS:23615	0	0	10065	z2:6437,z3:3375,z4+:253	ok	yes	yes
+ltq	12	PXD019727	DS_SV_1in300_12.raw	ion_trap	sha1_ok	0	ITMS:3307	0	0	320	z2:137,z3:154,z4+:29	ok	no: fewer than 1000 PSMs	no
+ltq	13	PXD030951	CH1_190409.raw	ion_trap	sha1_ok	0	ITMS:42503	0	0	6010	z2:3699,z3:2058,z4+:253	ok	yes	no
+ltq	14	PXD010851	CF3_2.raw	ion_trap	sha1_ok	0	ITMS:23322	0	0	8527	z2:4581,z3:2857,z4+:1089	ok	yes	no
+ltq	15	PXD027136	11_MCF7-Hypoxia.raw	ion_trap	size_ok	0	ITMS:18759	0	0	9134	z2:4486,z3:3590,z4+:1058	ok	yes	no
+ltq	16	PXD026908	190719_INCA_CS_02rep03.raw	ion_trap	sha1_ok	0	ITMS:43572	0	0	17055	z2:10948,z3:5239,z4+:868	no	no: truth audit: (2) enzyme: Lys-C plus trypsin	no
+timstof	1	PXD066317	YE012LQB1_HFDVAT_2_Slot2-29_1_364.d.zip	timstof	size_ok	260649	tof	6851	0	49326	z1:276,z2:39858,z3:8615,z4+:577	ok	yes	yes
+timstof	2	PXD066100	YE012ELQB2_HFD_S_3.zip	timstof	size_ok	0	-	0	-	0	-	ok	no: no mzML	no
+timstof	3	PXD049281	15_S1-C6_1_7066.d.zip	timstof	size_ok	62824	tof	1412	0	19271	z1:2,z2:12170,z3:5948,z4+:1151	ok	yes	yes
+timstof	4	PXD027637	KA510LQ_c_sp_2_Slot1-13_1_1398.d.zip	timstof	sha1_ok	305860	tof	7320	0	90056	z1:306,z2:72582,z3:15788,z4+:1380	ok	yes	yes
+timstof	5	PXD037316	FD216LQ_NC2_Slot1-52_1_8269.d.zip	timstof	sha1_ok	311001	tof	8228	0	77541	z1:237,z2:56158,z3:18371,z4+:2775	ok	yes	no
+timstof	6	PXD076286	260120_DR_138_Sh_3_neu_Slot1-8_1_23438.zip	timstof	size_ok	4376	tof	155	0	0	-	no	no: fewer than 1000 PSMs	no
+timstof	7	PXD034369	210920kw_JHoward_EV1_Slot1-19_1_6085.d.zip	timstof	sha1_ok	68278	tof	0	0	4159	z2:2854,z3:1098,z4+:207	no	no: truth audit: (5) species of the drawn file not established: feline and human plasma EVs compared, PRIDE lists human only	no
+timstof	8	PXD068839	s25009-13-20250501_Slot1-03_1_5489.d.zip	timstof	size_ok	105841	tof	3307	0	4158	z2:4138,z3:20	ok	yes	no
