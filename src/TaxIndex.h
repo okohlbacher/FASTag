@@ -194,8 +194,8 @@ namespace FASTag
     static constexpr int MAX_K = 12;
 
   private:
-    void reset();
-    uint32_t postingAt(uint32_t p) const;  ///< taxon index of mapped posting p
+    void reset_();
+    uint32_t postingAt_(uint32_t p) const;  ///< taxon index of mapped posting p
 
     int k_ = 0;
 
