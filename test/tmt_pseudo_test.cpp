@@ -112,7 +112,7 @@ int main()
   require(filtered.size() == 1 && filtered.front().seq == "PEPQ", "filter did not refill cap with correct tag");
   require(filtered.front().evalue == correct->evalue, "filter altered surviving score or multiplicity");
   FASTag::RunReport::RunMeta meta; meta.tmt_filter_mode = "auto"; meta.tmt_filter_resolved = "on; test";
-  const auto report = FASTag::RunReport::runRows(meta, FASTag::RunReport::Emit::Versioned);
+  const auto report = FASTag::RunReport::runRows(meta, FASTag::RunReport::Emit::VERSIONED);
   require(std::any_of(report.begin(), report.end(), [](const auto& r) { return r.key == "tmt_pseudo_filter_resolved"; }), "resolved gate missing from provenance");
   std::cout << "tmt_pseudo_test: all checks passed\n";
 }

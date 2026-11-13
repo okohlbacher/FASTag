@@ -505,12 +505,12 @@ int main(int argc, char** argv)
         if (r.key == key) return &r;
       return nullptr;
     };
-    auto rows = RR::runRows(m, RR::Emit::Versioned);
+    auto rows = RR::runRows(m, RR::Emit::VERSIONED);
     check(find(rows, "ion_series_cz") && !find(rows, "ion_series_hybrid"), "no hybrid row by default (1.12 layout)");
     const size_t n112 = rows.size();
     m.ion_series_hybrid_row = true;
     m.ion_series_ms2_hybrid = 3;
-    rows = RR::runRows(m, RR::Emit::Versioned);
+    rows = RR::runRows(m, RR::Emit::VERSIONED);
     const auto* hr = find(rows, "ion_series_hybrid");
     check(hr && hr->value == "3" && hr->n == "9", "a two-pass run writes ion_series_hybrid (3 of 9)");
     const auto* br = find(rows, "ion_series_by");

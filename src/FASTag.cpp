@@ -5663,7 +5663,7 @@ protected:
         return CANNOT_WRITE_OUTPUT_FILE;
       }
       const FASTag::Census::Tally& tally = run_acc.f.census;
-      std::vector<FD::Row> rows = FASTag::RunReport::runRows(run_meta, FASTag::RunReport::Emit::Versioned);
+      std::vector<FD::Row> rows = FASTag::RunReport::runRows(run_meta, FASTag::RunReport::Emit::VERSIONED);
       for (FD::Row& r : FASTag::Census::summaryRows(tally, static_cast<std::uint64_t>(n_total), subsampling))
         rows.push_back(std::move(r));
       if (census_ids_on)
@@ -6238,7 +6238,7 @@ protected:
       }
       for (const auto& m : p.mods)
         if (!m.variable && m.residue == 'C') info.reagent_note += (info.reagent_note.empty() ? "" : "+") + m.name;
-      std::vector<FD::Row> rows = FASTag::RunReport::runRows(run_meta, FASTag::RunReport::Emit::Versioned);
+      std::vector<FD::Row> rows = FASTag::RunReport::runRows(run_meta, FASTag::RunReport::Emit::VERSIONED);
       for (FD::Row& r : FASTag::Alkylation::alkylationRows(at, call, alk_settings, alk_forms, info)) rows.push_back(std::move(r));
       FASTag::PartFile alk_part(alkylation_out);
       if (!alk_part.begin() || !FD::writeReport(alk_part.writePath(), rows) || !alk_part.commit())
@@ -6266,7 +6266,7 @@ protected:
       info.tol_da = tol_da;
       info.dropped = alkt_dropped;
       for (int L : lengths) info.lengths += (info.lengths.empty() ? "" : ",") + std::to_string(L);
-      std::vector<FD::Row> rows = FASTag::RunReport::runRows(run_meta, FASTag::RunReport::Emit::Versioned);
+      std::vector<FD::Row> rows = FASTag::RunReport::runRows(run_meta, FASTag::RunReport::Emit::VERSIONED);
       for (FD::Row& r : FASTag::AlkylationTags::rows(at, call, as, alkt_cands, info)) rows.push_back(std::move(r));
       FASTag::PartFile part(alkylation_tags_out);
       if (!part.begin() || !FD::writeReport(part.writePath(), rows) || !part.commit())

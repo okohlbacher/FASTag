@@ -12,10 +12,10 @@
 //     counts #9, charge sources #6, activation counts #15, census counts #11,
 //     ...) adds FIELDS to its own anchored block in RunMeta below and rows to
 //     its own anchored block in runRows() -- never a section of its own.
-//   - The row format is frozen at kFormatVersion. Legacy output (Emit::Legacy,
+//   - The row format is frozen at kFormatVersion. Legacy output (Emit::LEGACY,
 //     the default and the only mode any caller uses today) is byte-identical
 //     to FASTag 1.11: the 7 `run` rows, no version row, no cluster rows.
-//   - Emit::Versioned is the 1.12 format: the legacy rows, then a
+//   - Emit::VERSIONED is the 1.12 format: the legacy rows, then a
 //     `run_report_version` row, then the cluster rows. It is not emitted by
 //     default; switching a report to it is a default change that needs new
 //     references (refs-1.12.0) and a user decision.
@@ -41,7 +41,7 @@
 
 namespace FASTag::RunReport
 {
-  /// Version of the run section format written by Emit::Versioned.
+  /// Version of the run section format written by Emit::VERSIONED.
   /// 1 = the FASTag 1.11 `run` rows followed by `run_report_version`.
   /// 2 = format 1, then the E picking rows (#9).
   /// 3 = format 2, then the E activation rows (#15 phase A).
@@ -77,7 +77,7 @@ namespace FASTag::RunReport
     // ---- 1.12 E ----
     // #7: the acquisition class (Acquisition::modeName) and why; empty when
     // -acquisition_check off. A field only: no report writes a row for it
-    // yet (Emit::Versioned rows need a format bump and new references).
+    // yet (Emit::VERSIONED rows need a format bump and new references).
     std::string acquisition;              ///< acquisition class (Acquisition::modeName)
     std::string acquisition_why;          ///< why that class was called
     // #9: -pick_profile (as read: the removed auto reads as legacy) and its
@@ -153,8 +153,8 @@ namespace FASTag::RunReport
   */
   enum class Emit
   {
-    Legacy,     ///< the 7 FASTag 1.11 `run` rows; the default
-    Versioned,  ///< Legacy, then `run_report_version`, then the cluster rows
+    LEGACY,     ///< the 7 FASTag 1.11 `run` rows; the default
+    VERSIONED,  ///< Legacy, then `run_report_version`, then the cluster rows
   };
 
   /**
@@ -181,7 +181,7 @@ namespace FASTag::RunReport
     @param[in] emit which rows to write
     @return the rows, in report order
   */
-  inline std::vector<Digest::Row> runRows(const RunMeta& m, Emit emit = Emit::Legacy)
+  inline std::vector<Digest::Row> runRows(const RunMeta& m, Emit emit = Emit::LEGACY)
   {
     using Digest::num;
     std::vector<Digest::Row> r;
@@ -197,7 +197,7 @@ namespace FASTag::RunReport
                  "A fraction of " + num(m.subsample_fraction) + " of the spectra was tagged (0 = all)."});
     r.push_back({"run", "subsample_spectra", std::to_string(m.subsample_spectra), "-",
                  std::to_string(m.subsample_spectra) + " spectra were drawn for tagging (0 = all)."});
-    if (emit == Emit::Legacy) return r;
+    if (emit == Emit::LEGACY) return r;
 
     const std::string v = std::to_string(m.tmt_filter_mode != "off" ? kTmtFormatVersion :
                                        m.complement_tol_auto ? kFormatVersion : kFormatVersionNoAuto);
