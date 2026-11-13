@@ -1037,14 +1037,15 @@ int main(int argc, char** argv)
              std::to_string(static_cast<long long>(idx) + list_by) + bytes.substr(ilo_e);
     };
     // The fixture needs TRFP's room: 3 whitespace bytes before every
-    // <spectrum and before <indexList.
+    // <spectrum. (indexListOffset is moved by 3 as well; the reader finds
+    // the index in the bytes from there on, whatever precedes it.)
     const auto ws_before = [&](std::size_t p) { return bytes.find_last_not_of(" \t\r\n", p - 1) < p - 3; };
-    bool room = ws_before(idx);
+    bool room = true;
     for (std::size_t p = bytes.find("<spectrum "); room && p != std::string::npos; p = bytes.find("<spectrum ", p + 1))
     {
       room = ws_before(p);
     }
-    check(room, "TRFP-style fixture: 3 whitespace bytes before every spectrum and the index list");
+    check(room, "TRFP-style fixture: 3 whitespace bytes before every spectrum");
     if (room)
     {
       spit(tmp + "/fastag_trfp_index.mzML", moved([](Size) { return -3LL; }, -3));
