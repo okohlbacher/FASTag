@@ -146,7 +146,7 @@ namespace FASTag
     */
     double massBetween(uint32_t from, uint32_t to) const
     {
-      return prefixMass(to) - prefixMass(from);
+      return prefixMass_(to) - prefixMass_(from);
     }
 
     /**
@@ -270,7 +270,7 @@ namespace FASTag
     /// bit-identical to a full per-position array at 1/32 of its memory.
     static constexpr size_t PREFIX_STRIDE = 32;
     /// Residue mass of text_[0..i).
-    double prefixMass(size_t i) const
+    double prefixMass_(size_t i) const
     {
       double m = ckpt_[i / PREFIX_STRIDE];
       for (size_t k = i - i % PREFIX_STRIDE; k < i; ++k)
@@ -278,9 +278,9 @@ namespace FASTag
       return m;
     }
 
-    char charAt(size_t p) const { return p < text_.size() ? text_[p] : '\0'; }
-    Range refine(Range r, uint32_t depth, char c) const;
-    void descend(const std::string& tag, size_t i, Range r, uint32_t depth,
+    char charAt_(size_t p) const { return p < text_.size() ? text_[p] : '\0'; }
+    Range refine_(Range r, uint32_t depth, char c) const;
+    void descend_(const std::string& tag, size_t i, Range r, uint32_t depth,
                  bool reversed, size_t& budget, std::vector<TagOcc>& out) const;
 
     std::string text_;              ///< folded, '#'-separated, trailing '#'
