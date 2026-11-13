@@ -56,9 +56,9 @@ namespace FASTag::Shortlist
   */
   enum class Placement
   {
-    Exact,       ///< both flanks agree
-    LabelExact,  ///< one flank off by exactly the fixed terminal modification
-    Gapped       ///< any other one-flank mismatch
+    EXACT,       ///< both flanks agree
+    LABEL_EXACT,  ///< one flank off by exactly the fixed terminal modification
+    GAPPED       ///< any other one-flank mismatch
   };
 
   /**
@@ -83,9 +83,9 @@ namespace FASTag::Shortlist
   */
   enum class Parsimony
   {
-    None,    ///< keep every protein above the evidence floor
-    Subset,  ///< drop a protein whose spectra are a subset of a higher-ranked kept one's
-    Greedy   ///< greedy set cover of the spectra, in rank order
+    NONE,    ///< keep every protein above the evidence floor
+    SUBSET,  ///< drop a protein whose spectra are a subset of a higher-ranked kept one's
+    GREEDY   ///< greedy set cover of the spectra, in rank order
   };
 
   /**
@@ -96,7 +96,7 @@ namespace FASTag::Shortlist
     double max_evalue = 0.1;          ///< -shortlist_max_evalue
     std::uint64_t min_spectra = 2;    ///< -shortlist_min_spectra
     bool gapped = false;              ///< -shortlist_gapped
-    Parsimony parsimony = Parsimony::None;  ///< parsimony rule
+    Parsimony parsimony = Parsimony::NONE;  ///< parsimony rule
     std::size_t top = 0;              ///< -shortlist_top, 0 = no cap
   };
 
@@ -310,12 +310,12 @@ namespace FASTag::Shortlist
   struct ProteaseVerdict
   {
     /// @brief The verdict.
-    enum Kind
+    enum class Kind
     {
-      Compatible,    ///< Trypsin, Lys-C or Arg-C called: proceed
-      Inconclusive,  ///< no confident call: WARN and proceed
-      NonTryptic     ///< another protease called confidently: refuse unless forced
-    } kind = Inconclusive;
+      COMPATIBLE,    ///< Trypsin, Lys-C or Arg-C called: proceed
+      INCONCLUSIVE,  ///< no confident call: WARN and proceed
+      NON_TRYPTIC    ///< another protease called confidently: refuse unless forced
+    } kind = Kind::INCONCLUSIVE;
     std::string model;   ///< the called model ("" when not scored)
     std::string reason;  ///< why, one short phrase for the log and the TSV header
     double margin = 0.0; ///< log-likelihood per tag end over the best trypsin-compatible model

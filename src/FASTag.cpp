@@ -2290,9 +2290,9 @@ protected:
     sl_settings.min_spectra = static_cast<std::uint64_t>(getIntOption_("shortlist_min_spectra"));
     {
       const std::string pm = getStringOption_("shortlist_parsimony");
-      sl_settings.parsimony = pm == "subset" ? FASTag::Shortlist::Parsimony::Subset
-                            : pm == "greedy" ? FASTag::Shortlist::Parsimony::Greedy
-                                             : FASTag::Shortlist::Parsimony::None;
+      sl_settings.parsimony = pm == "subset" ? FASTag::Shortlist::Parsimony::SUBSET
+                            : pm == "greedy" ? FASTag::Shortlist::Parsimony::GREEDY
+                                             : FASTag::Shortlist::Parsimony::NONE;
     }
     sl_settings.top = static_cast<std::size_t>(getIntOption_("shortlist_top"));
     const StringList sl_affix_option = getStringList_("shortlist_decoy_affix");
@@ -4676,14 +4676,14 @@ protected:
                 const double tol_da = p.tol_ppm ? flank * p.frag_tol * 1e-6 : p.frag_tol;
                 const auto cls = FASTag::Shortlist::classifyPlacement(pl.nterm_match, pl.cterm_match, pl.delta_mass,
                                                                       fixed_term_n, fixed_term_c, tol_da);
-                if (cls == FASTag::Shortlist::Placement::Gapped && !sl_settings.gapped) continue;
+                if (cls == FASTag::Shortlist::Placement::GAPPED && !sl_settings.gapped) continue;
                 FASTag::Shortlist::Evidence ev;
                 ev.spectrum = static_cast<std::uint32_t>(index);
                 ev.protein = pl.protein_index;
                 ev.evalue = static_cast<float>(t.evalue);
                 ev.window_start = static_cast<std::uint32_t>(pl.start);
                 ev.window_len = static_cast<std::uint16_t>(std::min<std::size_t>(pl.peptide.size(), 65535));
-                ev.exact = cls != FASTag::Shortlist::Placement::Gapped;
+                ev.exact = cls != FASTag::Shortlist::Placement::GAPPED;
                 a.sl.push_back(ev);
               }
           }
@@ -5838,8 +5838,8 @@ protected:
         using Verdict = FASTag::Shortlist::ProteaseVerdict;
         const Verdict verdict = FASTag::Shortlist::proteaseVerdict(sl_cls, !p.tol_ppm, run_acc.a.protease_spectra);
         const bool force = getFlag_("shortlist_force");
-        const char* kind = verdict.kind == Verdict::Compatible ? "compatible"
-                         : verdict.kind == Verdict::NonTryptic ? "non_tryptic"
+        const char* kind = verdict.kind == Verdict::Kind::COMPATIBLE ? "compatible"
+                         : verdict.kind == Verdict::Kind::NON_TRYPTIC ? "non_tryptic"
                                                                : "inconclusive";
         // 1.13 item 20: the rule the placements are kept by.
         FASTag::Cleavage::Choice sl_choice;
@@ -5910,9 +5910,9 @@ protected:
                             << " placements by flank mass fit the rule." << std::endl;
           }
         }
-        else if (verdict.kind == Verdict::Compatible)
+        else if (verdict.kind == Verdict::Kind::COMPATIBLE)
           OPENMS_LOG_INFO << "Shortlist protease check: " << verdict.reason << "." << std::endl;
-        else if (verdict.kind == Verdict::Inconclusive)
+        else if (verdict.kind == Verdict::Kind::INCONCLUSIVE)
           OPENMS_LOG_WARN << "Shortlist protease check inconclusive: " << verdict.reason
                           << "; the placement assumes trypsin." << std::endl;
         else

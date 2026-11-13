@@ -111,58 +111,58 @@ int main()
   // --- 3. the rule choice ---
   {
     const auto full = FC::Specificity::FULL;
-    auto c = FC::choose("auto", full, verdict(Verdict::NonTryptic, "Chymotrypsin"));
+    auto c = FC::choose("auto", full, verdict(Verdict::Kind::NON_TRYPTIC, "Chymotrypsin"));
     check(c.rule->name == "Chymotrypsin" && !c.refuse, "auto follows a non-tryptic call");
-    c = FC::choose("auto", full, verdict(Verdict::Compatible, "Lys-C"));
+    c = FC::choose("auto", full, verdict(Verdict::Kind::COMPATIBLE, "Lys-C"));
     check(c.rule->name == "Lys-C" && !c.refuse, "auto follows a trypsin-compatible call");
-    c = FC::choose("auto", full, verdict(Verdict::Inconclusive, "Chymotrypsin"));
+    c = FC::choose("auto", full, verdict(Verdict::Kind::INCONCLUSIVE, "Chymotrypsin"));
     check(c.rule->name == "Trypsin" && !c.refuse, "auto: inconclusive is Trypsin, whatever the top model");
-    c = FC::choose("auto", full, verdict(Verdict::NonTryptic, "unspecific"));
+    c = FC::choose("auto", full, verdict(Verdict::Kind::NON_TRYPTIC, "unspecific"));
     check(c.rule->unspecific() && c.specificity == FC::Specificity::NONE, "auto: an unspecific call");
     check(c.auto_unspecific, "auto: an unspecific call is flagged for the export warning");
-    check(!FC::choose("auto", full, verdict(Verdict::NonTryptic, "Asp-N")).auto_unspecific &&
-              !FC::choose("unspecific", full, verdict(Verdict::NonTryptic, "unspecific")).auto_unspecific,
+    check(!FC::choose("auto", full, verdict(Verdict::Kind::NON_TRYPTIC, "Asp-N")).auto_unspecific &&
+              !FC::choose("unspecific", full, verdict(Verdict::Kind::NON_TRYPTIC, "unspecific")).auto_unspecific,
           "a called protease or a named unspecific rule is not flagged");
     // post-1.13.1 (aspn): an Asp-N call under auto is semi-specific unless
     // the user gave -shortlist_specificity; no other call and no named rule is.
-    c = FC::choose("auto", full, verdict(Verdict::NonTryptic, "Asp-N"), false);
+    c = FC::choose("auto", full, verdict(Verdict::Kind::NON_TRYPTIC, "Asp-N"), false);
     check(c.rule->name == "Asp-N" && c.specificity == FC::Specificity::SEMI && c.auto_semi && !c.refuse,
           "auto: an Asp-N call is semi-specific when the specificity is not given");
-    c = FC::choose("auto", full, verdict(Verdict::NonTryptic, "Asp-N"), true);
+    c = FC::choose("auto", full, verdict(Verdict::Kind::NON_TRYPTIC, "Asp-N"), true);
     check(c.specificity == full && !c.auto_semi, "auto: an Asp-N call keeps a given full specificity");
-    check(FC::choose("auto", FC::Specificity::NONE, verdict(Verdict::NonTryptic, "Asp-N"), true).specificity ==
+    check(FC::choose("auto", FC::Specificity::NONE, verdict(Verdict::Kind::NON_TRYPTIC, "Asp-N"), true).specificity ==
               FC::Specificity::NONE, "auto: an Asp-N call keeps a given none specificity");
-    check(FC::choose("asp-n", full, verdict(Verdict::NonTryptic, "Asp-N"), false).specificity == full,
+    check(FC::choose("asp-n", full, verdict(Verdict::Kind::NON_TRYPTIC, "Asp-N"), false).specificity == full,
           "a named asp-n stays full");
-    check(FC::choose("auto", full, verdict(Verdict::NonTryptic, "Chymotrypsin"), false).specificity == full &&
-              FC::choose("auto", full, verdict(Verdict::Compatible, "Lys-C"), false).specificity == full &&
-              FC::choose("auto", full, verdict(Verdict::Inconclusive, "Asp-N"), false).specificity == full &&
-              FC::choose("auto", full, verdict(Verdict::NonTryptic, "unspecific"), false).specificity ==
+    check(FC::choose("auto", full, verdict(Verdict::Kind::NON_TRYPTIC, "Chymotrypsin"), false).specificity == full &&
+              FC::choose("auto", full, verdict(Verdict::Kind::COMPATIBLE, "Lys-C"), false).specificity == full &&
+              FC::choose("auto", full, verdict(Verdict::Kind::INCONCLUSIVE, "Asp-N"), false).specificity == full &&
+              FC::choose("auto", full, verdict(Verdict::Kind::NON_TRYPTIC, "unspecific"), false).specificity ==
                   FC::Specificity::NONE,
           "auto: only a confident Asp-N call becomes semi");
-    c = FC::choose("chymotrypsin", full, verdict(Verdict::Compatible, "Trypsin"));
+    c = FC::choose("chymotrypsin", full, verdict(Verdict::Kind::COMPATIBLE, "Trypsin"));
     check(c.rule->name == "Chymotrypsin" && c.refuse, "a named rule is refused on a contradicting trypsin call");
-    c = FC::choose("chymotrypsin", full, verdict(Verdict::NonTryptic, "Chymotrypsin"));
+    c = FC::choose("chymotrypsin", full, verdict(Verdict::Kind::NON_TRYPTIC, "Chymotrypsin"));
     check(!c.refuse, "a named rule the call agrees with");
-    c = FC::choose("asp-n", FC::Specificity::SEMI, verdict(Verdict::NonTryptic, "Chymotrypsin"));
+    c = FC::choose("asp-n", FC::Specificity::SEMI, verdict(Verdict::Kind::NON_TRYPTIC, "Chymotrypsin"));
     check(c.refuse && c.specificity == FC::Specificity::SEMI, "semi: refused on another non-tryptic call");
-    c = FC::choose("lys-c", full, verdict(Verdict::Compatible, "Trypsin"));
+    c = FC::choose("lys-c", full, verdict(Verdict::Kind::COMPATIBLE, "Trypsin"));
     check(c.rule->name == "Lys-C" && !c.refuse && c.mismatch, "Lys-C on a trypsin call: nested, kept with a WARN");
     // Lys-C (after K) and Arg-C (after R) are disjoint: a confident call of
     // one contradicts a rule of the other, although both are trypsin-compatible.
-    c = FC::choose("arg-c", full, verdict(Verdict::Compatible, "Lys-C"));
+    c = FC::choose("arg-c", full, verdict(Verdict::Kind::COMPATIBLE, "Lys-C"));
     check(c.rule->name == "Arg-C" && c.refuse, "Arg-C on a Lys-C call is refused (disjoint sites)");
-    c = FC::choose("lys-c", full, verdict(Verdict::Compatible, "Arg-C"));
+    c = FC::choose("lys-c", full, verdict(Verdict::Kind::COMPATIBLE, "Arg-C"));
     check(c.rule->name == "Lys-C" && c.refuse, "Lys-C on an Arg-C call is refused (disjoint sites)");
-    c = FC::choose("lys-c", FC::Specificity::SEMI, verdict(Verdict::Compatible, "Arg-C"));
+    c = FC::choose("lys-c", FC::Specificity::SEMI, verdict(Verdict::Kind::COMPATIBLE, "Arg-C"));
     check(c.refuse, "semi: Lys-C on an Arg-C call is refused");
-    c = FC::choose("arg-c", full, verdict(Verdict::Compatible, "Trypsin"));
+    c = FC::choose("arg-c", full, verdict(Verdict::Kind::COMPATIBLE, "Trypsin"));
     check(!c.refuse && c.mismatch, "Arg-C on a trypsin call: nested, kept with a WARN");
-    c = FC::choose("lys-c", full, verdict(Verdict::Compatible, "Lys-C"));
+    c = FC::choose("lys-c", full, verdict(Verdict::Kind::COMPATIBLE, "Lys-C"));
     check(!c.refuse && !c.mismatch, "Lys-C on a Lys-C call: no WARN");
-    c = FC::choose("lys-n", full, verdict(Verdict::Compatible, "Lys-C"));
+    c = FC::choose("lys-n", full, verdict(Verdict::Kind::COMPATIBLE, "Lys-C"));
     check(c.refuse, "Lys-N (before K) on a Lys-C call (after K) is refused");
-    c = FC::choose("glu-c", full, verdict(Verdict::NonTryptic, "Asp-N"));
+    c = FC::choose("glu-c", full, verdict(Verdict::Kind::NON_TRYPTIC, "Asp-N"));
     check(c.refuse, "Glu-C on an Asp-N call is refused");
     check(FC::nested(*FC::findRule("Trypsin"), *FC::findRule("Lys-C")) &&
               FC::nested(*FC::findRule("Arg-C"), *FC::findRule("Trypsin")),
@@ -171,14 +171,14 @@ int main()
               !FC::nested(*FC::findRule("Lys-C"), *FC::findRule("Lys-N")) &&
               !FC::nested(*FC::findRule("unspecific"), *FC::findRule("unspecific")),
           "nested: not Lys-C/Arg-C, Lys-C/Lys-N or unspecific");
-    c = FC::choose("chymotrypsin", FC::Specificity::NONE, verdict(Verdict::Compatible, "Trypsin"));
+    c = FC::choose("chymotrypsin", FC::Specificity::NONE, verdict(Verdict::Kind::COMPATIBLE, "Trypsin"));
     check(!c.refuse, "specificity none is never refused");
-    c = FC::choose("chymotrypsin", full, verdict(Verdict::Inconclusive, "Trypsin"));
+    c = FC::choose("chymotrypsin", full, verdict(Verdict::Kind::INCONCLUSIVE, "Trypsin"));
     check(!c.refuse, "an inconclusive call does not refuse");
-    c = FC::choose("chymotrypsin", full, verdict(Verdict::NonTryptic, "unspecific"));
+    c = FC::choose("chymotrypsin", full, verdict(Verdict::Kind::NON_TRYPTIC, "unspecific"));
     check(c.rule->name == "Chymotrypsin" && !c.refuse && c.specificity == full,
           "an unspecific call does not contradict a named rule");
-    c = FC::choose("unspecific", full, verdict(Verdict::NonTryptic, "Chymotrypsin"));
+    c = FC::choose("unspecific", full, verdict(Verdict::Kind::NON_TRYPTIC, "Chymotrypsin"));
     check(c.rule->unspecific() && !c.refuse && c.specificity == FC::Specificity::NONE, "unspecific");
     std::cout << "3. rule choice\n";
   }
@@ -305,7 +305,7 @@ int main()
     for (const auto& x : r.reconcileByMass(tag, nflank + label, cflank))
       if (x.peptide == pep && !x.nterm_match && x.cterm_match &&
           FASTag::Shortlist::classifyPlacement(x.nterm_match, x.cterm_match, x.delta_mass, label, 0.0, 0.01) ==
-              FASTag::Shortlist::Placement::LabelExact)
+              FASTag::Shortlist::Placement::LABEL_EXACT)
         labelled = true;
     check(labelled, "a labelled peptide's window is found and counts as label-exact");
     r.setFixedTermMods(0.0, 0.0);

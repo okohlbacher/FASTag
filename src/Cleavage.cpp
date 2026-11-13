@@ -94,7 +94,7 @@ namespace FASTag::Cleavage
     using Verdict = FASTag::Shortlist::ProteaseVerdict;
     Choice c;
     c.specificity = spec;
-    const bool confident = v.kind != Verdict::Inconclusive;
+    const bool confident = v.kind != Verdict::Kind::INCONCLUSIVE;
     if (OpenMS::StringUtils::toLowered(option) == "auto")
     {
       const Rule* called = confident ? findRule(v.model) : nullptr;
@@ -154,7 +154,7 @@ namespace FASTag::Cleavage
       return c;
     }
     const bool rule_tc = trypsinCompatible(c.rule->name);
-    if (v.kind == Verdict::NonTryptic || (v.kind == Verdict::Compatible && !rule_tc))
+    if (v.kind == Verdict::Kind::NON_TRYPTIC || (v.kind == Verdict::Kind::COMPATIBLE && !rule_tc))
     {
       c.refuse = true;
       c.reason += ", but the tag ends call " + v.model;

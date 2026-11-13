@@ -43,15 +43,15 @@ namespace FASTag::Shortlist
   Placement classifyPlacement(bool nterm_match, bool cterm_match, double delta, double fixed_n,
                               double fixed_c, double tol_da)
   {
-    if (nterm_match && cterm_match) return Placement::Exact;
+    if (nterm_match && cterm_match) return Placement::EXACT;
     // A labelled peptide's gap on the labelled side is the label itself: the
     // spectrum flank carries it, the database prefix does not (TagRecon.h,
     // setFixedTermMods).
     if (!nterm_match && cterm_match && fixed_n != 0.0 && std::fabs(delta - fixed_n) <= tol_da)
-      return Placement::LabelExact;
+      return Placement::LABEL_EXACT;
     if (nterm_match && !cterm_match && fixed_c != 0.0 && std::fabs(delta - fixed_c) <= tol_da)
-      return Placement::LabelExact;
-    return Placement::Gapped;
+      return Placement::LABEL_EXACT;
+    return Placement::GAPPED;
   }
 
   std::vector<std::string> defaultDecoyAffixes()
@@ -253,7 +253,7 @@ namespace FASTag::Shortlist
     }
     // (2) parsimony, in rank order
     std::vector<std::size_t> kept;
-    if (s.parsimony == Parsimony::Subset)
+    if (s.parsimony == Parsimony::SUBSET)
     {
       for (std::size_t i : cand)
       {
@@ -272,7 +272,7 @@ namespace FASTag::Shortlist
         if (!sub) kept.push_back(i);
       }
     }
-    else if (s.parsimony == Parsimony::Greedy)
+    else if (s.parsimony == Parsimony::GREEDY)
     {
       std::vector<std::uint32_t> uncovered;
       for (std::size_t i : cand)
@@ -557,7 +557,7 @@ namespace FASTag::Shortlist
     const FASTag::Digest::ModelScore& top = c.scores[static_cast<std::size_t>(c.top)];
     if (trypsinCompatible(top.cls))
     {
-      v.kind = ProteaseVerdict::Compatible;
+      v.kind = ProteaseVerdict::Kind::COMPATIBLE;
       v.reason = v.model + " fits the tag ends best";
       return v;
     }
@@ -571,7 +571,7 @@ namespace FASTag::Shortlist
     appendNum(m, v.margin, std::chars_format::general, 3);
     if (v.margin >= min_margin)
     {
-      v.kind = ProteaseVerdict::NonTryptic;
+      v.kind = ProteaseVerdict::Kind::NON_TRYPTIC;
       v.reason = v.model + " fits the tag ends best, not a trypsin-compatible protease (by " + m +
                  " log-likelihood per tag end)";
     }
