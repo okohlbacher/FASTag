@@ -1,0 +1,7 @@
+criterion	verdict	detail
+evaluable	8	EX01,EX02,EX03,EX04,EX05,EX08,EX09,EX10
+C1	PASS	8 of 8 runs
+C2	FAIL	min 0.5304 median 0.9371 pooled 0.9072 (n 8)
+G1	PASS	median 2.572 min 2.119 max 3.205 (n 8)
+G2	FAIL	pooled 0.0102 max run 0.0212 (n 8)
+OVERALL	FAIL	
