@@ -323,7 +323,7 @@ namespace FASTag::Shortlist
 
   /// Margin (log-likelihood per tag end) a non-trypsin-compatible call needs
   /// over the best trypsin-compatible model to count as confident.
-  inline constexpr double kNonTrypticMargin = 0.05;
+  inline constexpr double NON_TRYPTIC_MARGIN = 0.05;
 
   /**
     @brief Decides whether the run's protease allows a tryptic shortlist.
@@ -338,5 +338,5 @@ namespace FASTag::Shortlist
   */
   ProteaseVerdict proteaseVerdict(const FASTag::Digest::Classification& c, bool low_resolution,
                                   std::uint64_t spectra, std::uint64_t min_spectra = 100,
-                                  double min_margin = kNonTrypticMargin);
+                                  double min_margin = NON_TRYPTIC_MARGIN);
 }
