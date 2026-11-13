@@ -172,3 +172,18 @@ points of kept share at each step. The development run is among the easier ones 
 0.934, minimum 0.833), so C2 is expected to fail in at least one run: a run near 0.83 with gapped would fall to about
 0.73 if the PXD003531 difference (10 points) holds. G1 is expected to pass (smaller shortlist), G2 to be close to the
 gapped values.
+
+## Staging and truth audit result (added with freeze 2, before any run)
+
+Staged 2026-11-13; `manifests/exactonly-heldout.tsv` carries sha256 of every raw and mzML file
+(`exactonly/inputs/staged_chosen.tsv`). All 10 chosen files passed download and check (9 with the PRIDE SHA-1;
+PXD045654 without one: size and identical second download); no backup file was downloaded.
+
+Truth audit (`exactonly/inputs/truth_audit.tsv`, PRIDE records): two runs are excluded by the frozen rule and are not
+run: **EX06 PXD018069** (tooth enamel etched with 5 % HCl, no protease: not digested with trypsin) and **EX07
+PXD037344** (ant pupal fluid, searched against the Ooceraea biroi proteome: not human, although the record names Homo
+sapiens). The manifest's `use` column (written by the unchanged builder) shows `run` for them; the audit overrides it.
+EX03 PXD045654 is affinity-purification eluates (allowed, noted). **The test runs on 8 runs from 8 projects**
+(`exactonly/inputs/list.tsv`); C1 is judged on these 8; the evaluable-run minimum stays 6.
+
+Deviations up to here: none. Nothing else in this document changed.

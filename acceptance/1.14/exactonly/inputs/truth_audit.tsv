@@ -1,0 +1,11 @@
+run	pxd	instrument	organism_record	digestion	labelling	enrichment	sample	audit	reason_and_source
+EX01	PXD007080	Q Exactive	Homo sapiens	trypsin	none stated	none	podocyte cell culture lysate	keep	PRIDE SPP "tryptic digestion"; MaxQuant
+EX02	PXD006553	Q Exactive HF	Homo sapiens	trypsin	none stated	none	endometriosis tissue lysate	keep	PRIDE SPP: RIPA lysate, trypsin overnight
+EX03	PXD045654	Q Exactive HF-X	Homo sapiens	Lys-C then trypsin (FASP)	none stated (APEX quant)	affinity-purification eluates (allowed, noted)	purified-sample eluates	keep	PRIDE SPP: eluates of purified samples, Lys-C 2 h + trypsin 16 h; DDA top15; MS2 in profile mode
+EX04	PXD003252	Q Exactive	Homo sapiens	trypsin/Lys-C mix	none (SAF)	none	ovarian cancer cell line lysate	keep	PRIDE SPP: trypsin/Lys-C overnight; PD1.4 full tryptic
+EX05	PXD024632	Q Exactive HF	Homo sapiens	trypsin and Lys-C (MED-FASP, sequential)	none stated	none	primary hepatocyte spheroid lysate	keep	PRIDE SPP: MED-FASP trypsin + LysC; TopN ddMS2
+EX06	PXD018069	Q Exactive	Homo sapiens	NONE: acid etch of tooth enamel (5 % HCl), no protease	none	none	ancient tooth enamel	EXCLUDE	PRIDE SPP: enamel etched with 5 % HCl, ZipTip, no enzymatic digestion step (Stewart et al. 2017 protocol); not digested with trypsin
+EX07	PXD037344	Q Exactive HF	Homo sapiens (record) but sample is ant	Lys-C then trypsin	none	none	ant pupal molting fluid and whole-body wash	EXCLUDE	PRIDE description and SPP: ant (Ooceraea biroi) pupal social fluid; DPP: searched against the Ooceraea biroi proteome; not human
+EX08	PXD008934	Q Exactive	Homo sapiens	trypsin	none (LFQ/iBAQ)	none	left ventricle tissue lysate	keep	PRIDE SPP: urea, trypsin 16 h; DDA top12
+EX09	PXD014823	Q Exactive	Homo sapiens	trypsin	none (spectral counting)	none (phospho in PTM list from search only)	meningioma tissue lysate	keep	PRIDE SPP: urea lysis, trypsin
+EX10	PXD032816	Q Exactive Plus	Homo sapiens	trypsin	none stated	none	cell pellet SDC lysate	keep	PRIDE SPP: SDC, tryptic peptides, DDA
