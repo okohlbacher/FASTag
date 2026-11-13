@@ -63,7 +63,7 @@ static int failures = 0;
 namespace
 {
   const double kP = Constants::PROTON_MASS_U;
-  const double kC13 = Constants::C13C12_MASSDIFF_U;
+  const double C13_MASS_DIFF = Constants::C13C12_MASSDIFF_U;
 
   Precursor precursor(double mz, int charge, std::vector<Int> possible = {})
   {
@@ -192,7 +192,7 @@ namespace
     // ---- (c) isotope shift on an uncharged 3+ ----
     {
       const auto s = ComplementSynth::make("SAMPLERKDLVEGFNTWQR", 3, false, 0, 0.0, 40, 12);
-      const double shifted = s.prec_mz + kC13 / 3.0;
+      const double shifted = s.prec_mz + C13_MASS_DIFF / 3.0;
       const auto h = H::precursorHypotheses(s.spec, precursor(shifted, 0), mode(H::ChargeMode::INFER, {0, 1}), cs);
       const H::Hypothesis* sel = selected(h);
       CHECK(sel && sel->charge == 3 && sel->iso == 1, "%s (c): iso 1 at charge 3 (got charge %d iso %d)", label,
@@ -231,7 +231,7 @@ namespace
     for (const H::ChargeMode m : {H::ChargeMode::ASSUME2, H::ChargeMode::INFER})
     {
       const auto s = ComplementSynth::make("LLEQTHGGLNAIPKDEFAR", 3, false, 0, 0.0, 25, 13);
-      const auto h = H::precursorHypotheses(s.spec, precursor(s.prec_mz + kC13 / 3.0, 3), mode(m, {0, 1}), cs);
+      const auto h = H::precursorHypotheses(s.spec, precursor(s.prec_mz + C13_MASS_DIFF / 3.0, 3), mode(m, {0, 1}), cs);
       const H::Hypothesis* sel = selected(h);
       CHECK(h.size() == 1 && sel && sel->charge == 3 && sel->iso == 1 && sel->src == H::ChargeSource::HEADER,
             "%s (c2): header 3+ with a +1 isotope gives iso 1 (got %d/%d)", label, sel ? sel->charge : -1,
@@ -259,7 +259,7 @@ namespace
         double best = -1e300;
         for (const auto& e : call.excess) best = std::max(best, e.second.first);
         if (h.size() == 1 && sel && sel->charge == 2 && sel->src == H::ChargeSource::ASSUMED) ++assumed;
-        else if (!(best < H::kInferMarginDefault)) ++confident;
+        else if (!(best < H::INFER_MARGIN_DEFAULT)) ++confident;
         else if (best > 0 && sel && sel->src != H::ChargeSource::ASSUMED) ++weak;
       }
       CHECK(confident == 0, "%s (d): %d of 20 random spectra reach the margin", label, confident);
@@ -303,8 +303,8 @@ namespace
       for (const H::ChargeMode m : {H::ChargeMode::ENUMERATE, H::ChargeMode::INFER})
       {
         H::ChargeCall c1, c2;
-        const auto a = H::precursorHypotheses(s.spec, precursor(s.prec_mz + kC13 / 3, 0), mode(m, {-1, 0, 1, 2}), cs, &c1);
-        const auto b = H::precursorHypotheses(shuffled, precursor(s.prec_mz + kC13 / 3, 0), mode(m, {-1, 0, 1, 2}), cs, &c2);
+        const auto a = H::precursorHypotheses(s.spec, precursor(s.prec_mz + C13_MASS_DIFF / 3, 0), mode(m, {-1, 0, 1, 2}), cs, &c1);
+        const auto b = H::precursorHypotheses(shuffled, precursor(s.prec_mz + C13_MASS_DIFF / 3, 0), mode(m, {-1, 0, 1, 2}), cs, &c2);
         bool same = a.size() == b.size() && c1.excess == c2.excess && c1.charge == c2.charge;
         for (size_t i = 0; same && i < a.size(); ++i)
           same = a[i].charge == b[i].charge && a[i].iso == b[i].iso && a[i].mz == b[i].mz && a[i].src == b[i].src
@@ -527,8 +527,8 @@ namespace
         MSSpectrum m3;
         m3.emplace_back(s3.prec_mz - 7.3, 500.0);
         m3.emplace_back(s3.prec_mz, 100.0);
-        m3.emplace_back(s3.prec_mz + kC13 / 3, 60.0);
-        m3.emplace_back(s3.prec_mz + 2 * kC13 / 3, 20.0);
+        m3.emplace_back(s3.prec_mz + C13_MASS_DIFF / 3, 60.0);
+        m3.emplace_back(s3.prec_mz + 2 * C13_MASS_DIFF / 3, 20.0);
         m3.emplace_back(s3.prec_mz + 5.1, 300.0);
         int n = 0;
         CHECK(H::ms1Charge(m3, s3.prec_mz, &n) == 3 && n == 2, "%s (k): MS1 3+ pattern gives 3 (%d peaks)", label, n);
@@ -537,8 +537,8 @@ namespace
         CHECK(H::ms1Charge(prof, s3.prec_mz) == 3, "%s (k): MS1 charge on a profile scan", label);
         MSSpectrum m2;
         m2.emplace_back(s3.prec_mz, 100.0);
-        m2.emplace_back(s3.prec_mz + kC13 / 2, 50.0);
-        m2.emplace_back(s3.prec_mz + kC13, 15.0);
+        m2.emplace_back(s3.prec_mz + C13_MASS_DIFF / 2, 50.0);
+        m2.emplace_back(s3.prec_mz + C13_MASS_DIFF, 15.0);
         CHECK(H::ms1Charge(m2, s3.prec_mz) == 2, "%s (k): MS1 2+ pattern gives 2", label);
         MSSpectrum lone;
         lone.emplace_back(s3.prec_mz, 100.0);
@@ -553,15 +553,15 @@ namespace
         // The MS1 charge agrees with header 4 on a spectrum whose pairs say 3: agree.
         MSSpectrum m4;
         m4.emplace_back(s3.prec_mz, 100.0);
-        m4.emplace_back(s3.prec_mz + kC13 / 4, 60.0);
-        m4.emplace_back(s3.prec_mz + 2 * kC13 / 4, 20.0);
+        m4.emplace_back(s3.prec_mz + C13_MASS_DIFF / 4, 60.0);
+        m4.emplace_back(s3.prec_mz + 2 * C13_MASS_DIFF / 4, 20.0);
         const auto q4 = H::checkHeaderCharge(s3.spec, precursor(s3.prec_mz, 4), warn, cs, &m4);
         CHECK(q4.verdict == V::AGREE && q4.flag_basis == H::CallBasis::MS1_ISOTOPE && q4.call.charge == 3,
               "%s (k): MS1 4+ keeps header 4 against the pairs (got %s)", label, H::verdictName(q4.verdict));
         // A doubled MS1 call (4 on a 2+ pattern with a peak at 1/4) leaves a
         // header 2 whose own +1/2 peak is there.
         MSSpectrum m24 = m2;
-        m24.emplace_back(s3.prec_mz + kC13 / 4, 30.0);
+        m24.emplace_back(s3.prec_mz + C13_MASS_DIFF / 4, 30.0);
         m24.sortByPosition();
         const auto qd = H::checkHeaderCharge(s3.spec, precursor(s3.prec_mz, 2), wide, cs, &m24);
         CHECK(H::ms1Charge(m24, s3.prec_mz) == 4 && qd.ms1_charge == 4 && qd.verdict == V::AGREE

@@ -19,20 +19,20 @@ namespace FASTag::Hyp
   namespace
   {
     const double PROTON_MASS = OpenMS::Constants::PROTON_MASS_U;
-    const double kC13 = OpenMS::Constants::C13C12_MASSDIFF_U;
+    const double C13_MASS_DIFF = OpenMS::Constants::C13C12_MASSDIFF_U;
     /// c/z range evidence: a charge-reduced species' window, as the tagger's
     /// ETD filter (FASTagger.cpp ETD_REDUCED_ABOVE): one H below (hydrogen
     /// transfer), its isotopes and H transfer up to 3 Da above, neutral.
-    constexpr double kHydrogen = 1.00782503207;
-    constexpr double kEtdReducedAbove = 3.0;
+    constexpr double HYDROGEN = 1.00782503207;
+    constexpr double ETD_REDUCED_ABOVE = 3.0;
     /// The infer rule for a best excess E_c* in (0, margin): false = the plan's
     /// rule (the call is c*, ambiguous when the runner-up lies within the
     /// margin; assumed only when E_c* <= 0), true = assumed 2+ (the first
     /// E6 build). Measured on the fixture, PXD003531 and PXD001819 (registry
     /// E6-05): the plan's rule calls more charges right on all three.
-    constexpr bool kAssumeBelowMargin = false;
+    constexpr bool ASSUME_BELOW_MARGIN = false;
 
-    /// m/z of the strongest kInferTopPeaks finite, positive peaks (intensity
+    /// m/z of the strongest INFER_TOP_PEAKS finite, positive peaks (intensity
     /// desc, m/z desc: a total order, so the input order does not matter),
     /// ascending.
     std::vector<double> topMz(const OpenMS::MSSpectrum& spec)
@@ -49,7 +49,7 @@ namespace FASTag::Hyp
         if (a.first != b.first) return a.first > b.first;
         return a.second > b.second;
       });
-      if (pk.size() > kInferTopPeaks) pk.resize(kInferTopPeaks);
+      if (pk.size() > INFER_TOP_PEAKS) pk.resize(INFER_TOP_PEAKS);
       std::vector<double> mz;
       mz.reserve(pk.size());
       for (const auto& p : pk) mz.push_back(p.second);
@@ -101,8 +101,8 @@ namespace FASTag::Hyp
         {
           const double target = M + z_aware * PROTON_MASS + pd;
           double off = 0;
-          for (const double d : kOffTargetShifts) off += pairCountW(mz, target + d, z_aware - 1, cs);
-          e += pairCountW(mz, target, z_aware - 1, cs) - off / static_cast<double>(std::size(kOffTargetShifts));
+          for (const double d : OFF_TARGET_SHIFTS) off += pairCountW(mz, target + d, z_aware - 1, cs);
+          e += pairCountW(mz, target, z_aware - 1, cs) - off / static_cast<double>(std::size(OFF_TARGET_SHIFTS));
         }
         return e;
       }
@@ -117,16 +117,16 @@ namespace FASTag::Hyp
         double target = base;
         if (!cs.pair_deltas.empty() && cs.pair_deltas.front() != 0.0) target += cs.pair_deltas.front();
         double off = 0;
-        for (const double d : kOffTargetShifts) off += pairCount(mz, target + d, cs);
-        return pairCount(mz, target, cs) - off / static_cast<double>(std::size(kOffTargetShifts));
+        for (const double d : OFF_TARGET_SHIFTS) off += pairCount(mz, target + d, cs);
+        return pairCount(mz, target, cs) - off / static_cast<double>(std::size(OFF_TARGET_SHIFTS));
       }
       double e = 0;
       for (const double pd : cs.pair_deltas)
       {
         const double target = pd == 0.0 ? base : base + pd;
         double off = 0;
-        for (const double d : kOffTargetShifts) off += pairCount(mz, target + d, cs);
-        e += pairCount(mz, target, cs) - off / static_cast<double>(std::size(kOffTargetShifts));
+        for (const double d : OFF_TARGET_SHIFTS) off += pairCount(mz, target + d, cs);
+        e += pairCount(mz, target, cs) - off / static_cast<double>(std::size(OFF_TARGET_SHIFTS));
       }
       return e;
     }
@@ -150,7 +150,7 @@ namespace FASTag::Hyp
       double best = -std::numeric_limits<double>::infinity();
       for (const int k : order)
       {
-        const double e = excessOf(mz, M - k * kC13, cs, charge_aware ? charge : 0);
+        const double e = excessOf(mz, M - k * C13_MASS_DIFF, cs, charge_aware ? charge : 0);
         if (e > best) { best = e; best_k = k; }
       }
       if (excess) *excess = order.empty() ? 0.0 : best;
@@ -168,7 +168,7 @@ namespace FASTag::Hyp
       {
         const double m = p.getMZ(), in = p.getIntensity();
         if (!std::isfinite(m) || !std::isfinite(in) || in <= 0) continue;
-        if (std::fabs(m - prec_mz) <= kOnePlusPrecursorWindow) continue;
+        if (std::fabs(m - prec_mz) <= ONE_PLUS_PRECURSOR_WINDOW) continue;
         tic += in;
         if (m > prec_mz) above += in;
       }
@@ -177,7 +177,7 @@ namespace FASTag::Hyp
       // candidate (a -charge_min above 1, or a possible list without 1, rules
       // it out).
       one_plus_test = one_plus_test && std::find(charges.begin(), charges.end(), 1) != charges.end();
-      if (one_plus_test && tic > 0 && call.above_share < kOnePlusMaxShare)
+      if (one_plus_test && tic > 0 && call.above_share < ONE_PLUS_MAX_SHARE)
       {
         call.charge = 1;
         call.src = ChargeSource::INFERRED;
@@ -205,7 +205,7 @@ namespace FASTag::Hyp
           {
             const double cr = c * prec_mz / zr;
             const double tol = cs.tol(cr, cr);
-            species = *it >= cr - kHydrogen / zr - tol && *it <= cr + kEtdReducedAbove / zr + tol;
+            species = *it >= cr - HYDROGEN / zr - tol && *it <= cr + ETD_REDUCED_ABOVE / zr + tol;
           }
           if (!species) return *it;
         }
@@ -213,7 +213,7 @@ namespace FASTag::Hyp
       };
       std::vector<int> left;
       for (const int c : charges)
-        if (c >= 1 && !(top_for(c) > c * prec_mz - (c - 1) * PROTON_MASS + kCeilingMargin)) left.push_back(c);
+        if (c >= 1 && !(top_for(c) > c * prec_mz - (c - 1) * PROTON_MASS + CEILING_MARGIN)) left.push_back(c);
       std::vector<int> all;
       for (const int c : charges)
         if (c >= 1) all.push_back(c);
@@ -233,9 +233,9 @@ namespace FASTag::Hyp
       // No complement evidence for any charge (the best excess is not above
       // 0): 2 (assumed) when 2 is a candidate left, else the lowest candidate
       // left (assumed) -- or, when the range evidence ruled out the lower
-      // charges, the lowest charge left (inferred). With kAssumeBelowMargin
+      // charges, the lowest charge left (inferred). With ASSUME_BELOW_MARGIN
       // a best excess below the margin counts as no evidence as well.
-      if (c1 == 0 || !(e1 > 0) || (kAssumeBelowMargin && e1 < hp.infer_margin))
+      if (c1 == 0 || !(e1 > 0) || (ASSUME_BELOW_MARGIN && e1 < hp.infer_margin))
       {
         if (call.range_min > 0)
         {
@@ -262,15 +262,15 @@ namespace FASTag::Hyp
     std::vector<int> range(int lo, int hi)
     {
       std::vector<int> v;
-      for (int c = std::max(1, lo); c <= std::min(hi, kChargeLimit); ++c) v.push_back(c);
+      for (int c = std::max(1, lo); c <= std::min(hi, CHARGE_LIMIT); ++c) v.push_back(c);
       return v;
     }
   }
 
   std::string validate(const HypParam& hp, double frag_tol, bool tol_ppm)
   {
-    if (hp.charge_min < 1 || hp.charge_max > kChargeLimit)
-      return "-charge_min and -charge_max must lie in 1.." + std::to_string(kChargeLimit) + ".";
+    if (hp.charge_min < 1 || hp.charge_max > CHARGE_LIMIT)
+      return "-charge_min and -charge_max must lie in 1.." + std::to_string(CHARGE_LIMIT) + ".";
     if (hp.charge_min > hp.charge_max)
       return "-charge_min (" + std::to_string(hp.charge_min) + ") is above -charge_max ("
            + std::to_string(hp.charge_max) + ").";
@@ -281,16 +281,16 @@ namespace FASTag::Hyp
     bool shifted = false;
     for (const int k : hp.isotope_errors)
     {
-      if (k < kIsotopeMin || k > kIsotopeMax)
-        return "-isotope_error " + std::to_string(k) + " is outside " + std::to_string(kIsotopeMin) + ".."
-             + std::to_string(kIsotopeMax) + ".";
+      if (k < ISOTOPE_MIN || k > ISOTOPE_MAX)
+        return "-isotope_error " + std::to_string(k) + " is outside " + std::to_string(ISOTOPE_MIN) + ".."
+             + std::to_string(ISOTOPE_MAX) + ".";
       if (!seen.insert(k).second) return "-isotope_error lists " + std::to_string(k) + " twice.";
       shifted = shifted || k != 0;
     }
     if (shifted)
     {
       const double eff = tol_ppm ? frag_tol * 1000.0 * 1e-6 : frag_tol;
-      if (!(eff < kIsotopeMaxFragmentTolDa))
+      if (!(eff < ISOTOPE_MAX_FRAGMENT_TOL_DA))
         return "-isotope_error other than 0 needs a high-resolution fragment tolerance (below 0.05 Da, "
                "or the ppm equivalent at 1000 m/z); this run's is " + std::to_string(eff) + " Da.";
     }
@@ -317,7 +317,7 @@ namespace FASTag::Hyp
   std::vector<int> headerCheckCandidates(int header, const HypParam& hp)
   {
     std::vector<int> c = range(hp.charge_min, hp.charge_max);
-    if (header >= 1 && header <= kChargeLimit && std::find(c.begin(), c.end(), header) == c.end())
+    if (header >= 1 && header <= CHARGE_LIMIT && std::find(c.begin(), c.end(), header) == c.end())
     {
       c.push_back(header);
       std::sort(c.begin(), c.end());
@@ -327,10 +327,10 @@ namespace FASTag::Hyp
 
   namespace
   {
-  /// Strongest MS1 peak within kMs1TolPpm of mz; 0 when there is none.
+  /// Strongest MS1 peak within MS1_TOL_PPM of mz; 0 when there is none.
   double ms1At(const OpenMS::MSSpectrum& ms1, double mz)
   {
-    const double tol = mz * kMs1TolPpm * 1e-6;
+    const double tol = mz * MS1_TOL_PPM * 1e-6;
     const auto i = ms1.findHighestInWindow(mz, tol, tol);
     return i < 0 ? 0.0 : static_cast<double>(ms1[static_cast<std::size_t>(i)].getIntensity());
   }
@@ -348,12 +348,12 @@ namespace FASTag::Hyp
     // pattern fakes the higher z (every lower-charge position k/z' is also a
     // position of z = n*z'). Upgrade: require a position k/z with
     // gcd(k, z) = 1 beyond the first, or score whole patterns (averagine).
-    for (int z = kChargeLimit; z >= 1; --z)
+    for (int z = CHARGE_LIMIT; z >= 1; --z)
     {
-      const double d = kC13 / z;
-      const bool first = at(prec_mz + d) >= kMs1FirstMin * anchor;
-      const bool below = at(prec_mz - d) >= kMs1SupportMin * anchor;
-      const bool second = at(prec_mz + 2 * d) >= kMs1SupportMin * anchor;
+      const double d = C13_MASS_DIFF / z;
+      const bool first = at(prec_mz + d) >= MS1_FIRST_MIN * anchor;
+      const bool below = at(prec_mz - d) >= MS1_SUPPORT_MIN * anchor;
+      const bool second = at(prec_mz + 2 * d) >= MS1_SUPPORT_MIN * anchor;
       if (first && (below || second))
       {
         if (peaks) *peaks = 1 + (below ? 1 : 0) + (second ? 1 : 0);
@@ -383,7 +383,7 @@ namespace FASTag::Hyp
     // above the 2+ ceiling never meant a higher charge (DIAGNOSIS.md).
     if (cs.charge_loss <= 0)
     {
-      const double ceil = header * prec.getMZ() - (header - 1) * PROTON_MASS + kCeilingMargin;
+      const double ceil = header * prec.getMZ() - (header - 1) * PROTON_MASS + CEILING_MARGIN;
       r.header_peaks_above = static_cast<int>(top.end() - std::upper_bound(top.begin(), top.end(), ceil));
     }
     const ChargeCall& c = r.call;
@@ -397,10 +397,10 @@ namespace FASTag::Hyp
     }
     // The header is ruled out when the range evidence left charges and the
     // header is not among them (the 1+ test returns before any is tested).
-    // A header above kChargeLimit is no candidate: it is never "ruled out".
+    // A header above CHARGE_LIMIT is no candidate: it is never "ruled out".
     const bool header_candidate = std::find(cands.begin(), cands.end(), header) != cands.end();
     r.header_ruled_out = header_candidate && c.basis != CallBasis::ONE_PLUS && !c.excess.empty() && !header_seen;
-    // A header the table lacks (ruled out by range, or above kChargeLimit)
+    // A header the table lacks (ruled out by range, or above CHARGE_LIMIT)
     // still has complement pairs of its own: the margin comparisons below
     // are against its real excess, never against 0.
     if (!header_seen && c.basis != CallBasis::ONE_PLUS && !c.excess.empty())
@@ -466,7 +466,7 @@ namespace FASTag::Hyp
       // ponytail: the same floor as the call's first peak, not fitted apart.
       const double mz = prec.getMZ();
       const bool header_spaced = r.ms1_charge != r.header
-                                 && ms1At(*ms1, mz + kC13 / r.header) >= kMs1FirstMin * ms1At(*ms1, mz);
+                                 && ms1At(*ms1, mz + C13_MASS_DIFF / r.header) >= MS1_FIRST_MIN * ms1At(*ms1, mz);
       r.flag_basis = CallBasis::MS1_ISOTOPE;
       r.flag_charge = header_spaced ? r.header : r.ms1_charge;
       r.verdict = r.flag_charge == r.header ? HeaderVerdict::AGREE : HeaderVerdict::DISAGREE;
@@ -494,7 +494,7 @@ namespace FASTag::Hyp
       h.charge = c;
       h.src = src;
       h.iso = order.size() == 1 ? order.front() : bestIso(top_mz(), prec_mz, c, order, cs, nullptr);
-      h.mz = h.iso == 0 ? prec_mz : prec_mz - h.iso * kC13 / c;
+      h.mz = h.iso == 0 ? prec_mz : prec_mz - h.iso * C13_MASS_DIFF / c;
       return h;
     };
     std::vector<Hypothesis> out;
@@ -511,7 +511,7 @@ namespace FASTag::Hyp
           && header_check->verdict == HeaderVerdict::DISAGREE)
       {
         const int z = header_check->replacement();
-        if (z >= 1 && z <= kChargeLimit && z != header)
+        if (z >= 1 && z <= CHARGE_LIMIT && z != header)
         {
           out.push_back(make(std::min(z, header), z < header ? ChargeSource::CHECK_CALL : ChargeSource::HEADER));
           out.push_back(make(std::max(z, header), z < header ? ChargeSource::HEADER : ChargeSource::CHECK_CALL));
@@ -530,7 +530,7 @@ namespace FASTag::Hyp
     // Listed possible charges: positive, distinct, ascending, within the cap.
     std::vector<int> possible;
     for (const int z : prec.getPossibleChargeStates())
-      if (z >= 1 && z <= kChargeLimit) possible.push_back(z);
+      if (z >= 1 && z <= CHARGE_LIMIT) possible.push_back(z);
     std::sort(possible.begin(), possible.end());
     possible.erase(std::unique(possible.begin(), possible.end()), possible.end());
     if (possible.size() == 1)

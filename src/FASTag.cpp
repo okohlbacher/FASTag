@@ -942,16 +942,16 @@ protected:
                           "header charge is never replaced (-check_header_charge both tags a flagged "
                           "spectrum under the flagged charge as well)", false);
     setValidStrings_("unknown_charge", ListUtils::create<std::string>(FASTag::Hyp::MODE_VALUES));
-    registerIntOption_("charge_min", "<n>", FASTag::Hyp::kChargeMinDefault,
+    registerIntOption_("charge_min", "<n>", FASTag::Hyp::CHARGE_MIN_DEFAULT,
                        "Lowest charge -unknown_charge enumerate or infer tries (1 enables infer's "
                        "1+ test)", false);
     setMinInt_("charge_min", 1);
-    setMaxInt_("charge_min", FASTag::Hyp::kChargeLimit);
-    registerIntOption_("charge_max", "<n>", FASTag::Hyp::kChargeMaxDefault,
+    setMaxInt_("charge_min", FASTag::Hyp::CHARGE_LIMIT);
+    registerIntOption_("charge_max", "<n>", FASTag::Hyp::CHARGE_MAX_DEFAULT,
                        "Highest charge -unknown_charge enumerate or infer tries", false);
     setMinInt_("charge_max", 1);
-    setMaxInt_("charge_max", FASTag::Hyp::kChargeLimit);
-    registerDoubleOption_("charge_infer_margin", "<value>", FASTag::Hyp::kInferMarginDefault,
+    setMaxInt_("charge_max", FASTag::Hyp::CHARGE_LIMIT);
+    registerDoubleOption_("charge_infer_margin", "<value>", FASTag::Hyp::INFER_MARGIN_DEFAULT,
                           "Complement-pair excess by which the inferred charge must beat the "
                           "runner-up to be tagged alone; closer, both are tagged (ambiguous). Any "
                           "excess above 0 is a call", false, true);
@@ -961,10 +961,10 @@ protected:
                      "lowered by k x 1.00336 Da, for every precursor; each charge is tagged at "
                      "the offset its complement pairs support best. Needs a fragment tolerance "
                      "below 0.05 Da", false, true);
-    setMinInt_("isotope_error", FASTag::Hyp::kIsotopeMin);
-    setMaxInt_("isotope_error", FASTag::Hyp::kIsotopeMax);
+    setMinInt_("isotope_error", FASTag::Hyp::ISOTOPE_MIN);
+    setMaxInt_("isotope_error", FASTag::Hyp::ISOTOPE_MAX);
     // 1.13 (backlog #14): re-check header charges against the infer call.
-    registerStringOption_("check_header_charge", "<mode>", FASTag::Hyp::kHeaderCheckDefault,
+    registerStringOption_("check_header_charge", "<mode>", FASTag::Hyp::HEADER_CHECK_DEFAULT,
                           "Check every precursor charge the file gives against the isotope spacing "
                           "of the precursor in the preceding MS1 scan and, where that gives no "
                           "charge, against the charge its complement pairs support (the "
@@ -974,8 +974,8 @@ protected:
                           "disagreeing spectrum under its header charge and under the charge the "
                           "check found, charge_src 'check_call'; the header charge stays the "
                           "selected one). Experimental", false, true);
-    setValidStrings_("check_header_charge", ListUtils::create<std::string>(FASTag::Hyp::kHeaderCheckValues));
-    registerDoubleOption_("check_header_margin", "<value>", FASTag::Hyp::kHeaderMarginDefault,
+    setValidStrings_("check_header_charge", ListUtils::create<std::string>(FASTag::Hyp::HEADER_CHECK_VALUES));
+    registerDoubleOption_("check_header_margin", "<value>", FASTag::Hyp::HEADER_MARGIN_DEFAULT,
                           "Complement-pair excess by which the supported charge must beat the header "
                           "charge's own for -check_header_charge to call a disagreement", false, true);
     setMinFloat_("check_header_margin", 0.0);
@@ -6882,8 +6882,8 @@ protected:
       const auto by = [&](CallBasis b) { return hdr_counts.disagree_by[static_cast<size_t>(b)]; };
       const bool both = hyp_param.header_check == FASTag::Hyp::HeaderCheck::BOTH;
       std::string moves;
-      for (int a = 1; a <= FASTag::Hyp::kChargeLimit; ++a)
-        for (int b = 1; b <= FASTag::Hyp::kChargeLimit; ++b)
+      for (int a = 1; a <= FASTag::Hyp::CHARGE_LIMIT; ++a)
+        for (int b = 1; b <= FASTag::Hyp::CHARGE_LIMIT; ++b)
           if (hdr_counts.moves[a][b] > 0)
             moves += (moves.empty() ? "" : ", ") + std::to_string(a) + "+ -> " + std::to_string(b) + "+: "
                    + std::to_string(hdr_counts.moves[a][b]);
@@ -6936,7 +6936,7 @@ protected:
           buf += FASTag::Hyp::verdictName(h.verdict); buf += '\t';
           // Under both, a flagged spectrum's two charges, ascending.
           const int z = both ? h.replacement() : h.header;
-          if (z >= 1 && z <= FASTag::Hyp::kChargeLimit && z != h.header)
+          if (z >= 1 && z <= FASTag::Hyp::CHARGE_LIMIT && z != h.header)
           {
             FASTag::appendNum(buf, std::min(z, h.header)); buf += ',';
             FASTag::appendNum(buf, std::max(z, h.header));

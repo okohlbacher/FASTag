@@ -111,7 +111,7 @@ namespace FASTag::Hyp
     ENUMERATED = 5,  ///< one of charge_min .. charge_max under enumerate
     CHECK_CALL = 6,   ///< 1.13: the check's charge of a disagreeing header (tagged beside the header charge)
   };
-  inline constexpr std::size_t kChargeSources = 7;  ///< number of ChargeSource values
+  inline constexpr std::size_t CHARGE_SOURCES = 7;  ///< number of ChargeSource values
 
   /**
     @brief The TSV name of a charge source (column charge_src).
@@ -174,44 +174,44 @@ namespace FASTag::Hyp
     if (s == "both") { out = HeaderCheck::BOTH; return true; }
     return false;
   }
-  inline constexpr const char* kHeaderCheckDefault = "off";
-  inline constexpr const char* kHeaderCheckValues = "off,warn,both";
+  inline constexpr const char* HEADER_CHECK_DEFAULT = "off";
+  inline constexpr const char* HEADER_CHECK_VALUES = "off,warn,both";
   /// -check_header_margin default: the complement-pair excess by which the
   /// call must beat the header charge's own. Chosen on DEV (PXD003531,
   /// PXD001819 against a Sage charge truth; output/backlog-1.13/hdrcharge):
   /// at 2 a third of the disagreements on real headers were false.
-  inline constexpr double kHeaderMarginDefault = 6.0;
+  inline constexpr double HEADER_MARGIN_DEFAULT = 6.0;
   // ms1Charge() constants (chosen on DEV; output/backlog-1.13/hdrcharge).
-  inline constexpr double kMs1TolPpm = 10.0;      ///< m/z window of the precursor and its isotope peaks
-  inline constexpr double kMs1FirstMin = 0.15;    ///< +1/z peak, as a share of the precursor peak
-  inline constexpr double kMs1SupportMin = 0.05;  ///< -1/z or +2/z peak, as a share of the precursor peak
+  inline constexpr double MS1_TOL_PPM = 10.0;      ///< m/z window of the precursor and its isotope peaks
+  inline constexpr double MS1_FIRST_MIN = 0.15;    ///< +1/z peak, as a share of the precursor peak
+  inline constexpr double MS1_SUPPORT_MIN = 0.05;  ///< -1/z or +2/z peak, as a share of the precursor peak
 
   // Registered defaults and limits of the #6 options.
   inline constexpr const char* MODE_DEFAULT = "assume2";
   inline constexpr const char* MODE_VALUES = "assume2,enumerate,infer";
-  inline constexpr int kChargeMinDefault = 2;
-  inline constexpr int kChargeMaxDefault = 4;
-  inline constexpr int kChargeLimit = 8;          ///< FASTagger's fragment-charge cap
-  inline constexpr double kInferMarginDefault = 2.0;
-  inline constexpr int kIsotopeMin = -1;
-  inline constexpr int kIsotopeMax = 3;
+  inline constexpr int CHARGE_MIN_DEFAULT = 2;
+  inline constexpr int CHARGE_MAX_DEFAULT = 4;
+  inline constexpr int CHARGE_LIMIT = 8;          ///< FASTagger's fragment-charge cap
+  inline constexpr double INFER_MARGIN_DEFAULT = 2.0;
+  inline constexpr int ISOTOPE_MIN = -1;
+  inline constexpr int ISOTOPE_MAX = 3;
   /// The isotope hypotheses need a high-resolution fragment tolerance: the
   /// effective fragment tolerance (Da, or ppm at 1000 m/z) must be below this.
-  inline constexpr double kIsotopeMaxFragmentTolDa = 0.05;
+  inline constexpr double ISOTOPE_MAX_FRAGMENT_TOL_DA = 0.05;
 
   // inferCharge() constants (PLAN-data-types item #6).
-  inline constexpr double kOnePlusMaxShare = 0.05;  ///< intensity share above the precursor
+  inline constexpr double ONE_PLUS_MAX_SHARE = 0.05;  ///< intensity share above the precursor
   /// Peaks within this many Da of the precursor m/z are left out of the 1+
   /// test: the unfragmented precursor and its isotopes are not fragments.
-  inline constexpr double kOnePlusPrecursorWindow = 3.5;
-  inline constexpr std::size_t kInferTopPeaks = 150;
+  inline constexpr double ONE_PLUS_PRECURSOR_WINDOW = 3.5;
+  inline constexpr std::size_t INFER_TOP_PEAKS = 150;
   /// Off-target pair sums whose mean count estimates chance pairs (Da).
-  inline constexpr double kOffTargetShifts[6] = {-11.5, -7.5, -4.5, 4.5, 7.5, 11.5};
-  /// Range evidence: a peak of the strongest kInferTopPeaks this far (Da)
+  inline constexpr double OFF_TARGET_SHIFTS[6] = {-11.5, -7.5, -4.5, 4.5, 7.5, 11.5};
+  /// Range evidence: a peak of the strongest INFER_TOP_PEAKS this far (Da)
   /// above a charge's fragment ceiling M_c + p rules the charge out. Covers
   /// the isotope offsets (k = -1 raises M by 1.003 Da) and a low-resolution
   /// m/z error.
-  inline constexpr double kCeilingMargin = 1.5;
+  inline constexpr double CEILING_MARGIN = 1.5;
 
   /**
     @brief The precursor-hypothesis options of a run (#6, and the 1.13 header check).
@@ -219,12 +219,12 @@ namespace FASTag::Hyp
   struct HypParam
   {
     ChargeMode mode = ChargeMode::ASSUME2;      ///< -unknown_charge
-    int charge_min = kChargeMinDefault;         ///< -charge_min
-    int charge_max = kChargeMaxDefault;         ///< -charge_max
-    double infer_margin = kInferMarginDefault;  ///< -charge_infer_margin
+    int charge_min = CHARGE_MIN_DEFAULT;         ///< -charge_min
+    int charge_max = CHARGE_MAX_DEFAULT;         ///< -charge_max
+    double infer_margin = INFER_MARGIN_DEFAULT;  ///< -charge_infer_margin
     std::vector<int> isotope_errors{0};         ///< -isotope_error: the isotope offsets k
     HeaderCheck header_check = HeaderCheck::OFF;  ///< 1.13 -check_header_charge
-    double header_margin = kHeaderMarginDefault;  ///< 1.13 -check_header_margin
+    double header_margin = HEADER_MARGIN_DEFAULT;  ///< 1.13 -check_header_margin
 
     /**
       @brief Whether these options give the 1.11 behaviour.
@@ -277,7 +277,7 @@ namespace FASTag::Hyp
     COMPLEMENT = 3,  ///< the complement-pair excess
     MS1_ISOTOPE = 4,  ///< header check only: the precursor's isotope spacing in the preceding MS1 scan
   };
-  inline constexpr std::size_t kCallBases = 5;  ///< number of CallBasis values
+  inline constexpr std::size_t CALL_BASES = 5;  ///< number of CallBasis values
 
   /**
     @brief What inferCharge() saw: the call and its evidence.
@@ -297,10 +297,10 @@ namespace FASTag::Hyp
   /**
     @brief Complement-pair excess of a spectrum for a precursor of neutral mass @p M.
 
-    Pairs of the strongest kInferTopPeaks peaks (intensity desc, m/z desc)
+    Pairs of the strongest INFER_TOP_PEAKS peaks (intensity desc, m/z desc)
     whose m/z sum to M + 2p (plus the series' pair delta, ComplementSpec::
     pair_deltas: c/z-dot M + H + 2p) within ComplementSpec::tol, minus the
-    mean count at the kOffTargetShifts sums. Independent of the input peak
+    mean count at the OFF_TARGET_SHIFTS sums. Independent of the input peak
     order.
 
     @param[in] spec fragment spectrum
@@ -353,7 +353,7 @@ namespace FASTag::Hyp
     AMBIGUOUS = 2,  ///< two close charges, neither the header, no evidence against it
     NO_CALL = 3,     ///< no evidence either way
   };
-  inline constexpr std::size_t kHeaderVerdicts = 4;  ///< number of HeaderVerdict values
+  inline constexpr std::size_t HEADER_VERDICTS = 4;  ///< number of HeaderVerdict values
 
   /**
     @brief The report name of a header verdict.
@@ -420,16 +420,16 @@ namespace FASTag::Hyp
     @param[in] header the header charge
     @param[in] hp the options (charge_min, charge_max)
     @return -charge_min .. -charge_max plus the header charge (when it is in
-            1 .. kChargeLimit), ascending
+            1 .. CHARGE_LIMIT), ascending
   */
   std::vector<int> headerCheckCandidates(int header, const HypParam& hp);
 
   /**
     @brief The precursor charge read from the isotope spacing in an MS1 scan.
 
-    The highest z in 1 .. kChargeLimit with a peak at prec_mz + C13/z of at
-    least kMs1FirstMin of the precursor peak and one at prec_mz - C13/z or
-    prec_mz + 2*C13/z of at least kMs1SupportMin (all within kMs1TolPpm).
+    The highest z in 1 .. CHARGE_LIMIT with a peak at prec_mz + C13/z of at
+    least MS1_FIRST_MIN of the precursor peak and one at prec_mz - C13/z or
+    prec_mz + 2*C13/z of at least MS1_SUPPORT_MIN (all within MS1_TOL_PPM).
 
     @param[in] ms1 the MS1 scan
     @param[in] prec_mz precursor m/z
@@ -444,7 +444,7 @@ namespace FASTag::Hyp
     @brief The verdict on a header-charged precursor (1.13 -check_header_charge).
 
     With an MS1 call (ms1Charge of @p ms1): Agree when it is the header or
-    the header's own peak at prec_mz + C13/header reaches kMs1FirstMin of
+    the header's own peak at prec_mz + C13/header reaches MS1_FIRST_MIN of
     the precursor peak, else Disagree at the MS1 charge. Without one, the infer call over
     headerCheckCandidates() (the 1+ test where 1 is one; complement pairs
     counted charge-aware) decides: Disagree when the call is not ambiguous,
@@ -496,11 +496,11 @@ namespace FASTag::Hyp
   struct HeaderCheckCounts
   {
     std::size_t checked = 0;                       ///< header-charged MS2 spectra checked
-    std::size_t verdict[kHeaderVerdicts] = {};     ///< by verdict
-    std::size_t disagree_by[kCallBases] = {};      ///< Disagree by flag_basis
+    std::size_t verdict[HEADER_VERDICTS] = {};     ///< by verdict
+    std::size_t disagree_by[CALL_BASES] = {};      ///< Disagree by flag_basis
     std::size_t both = 0;                          ///< tagged at both charges (both)
-    /// Disagree by (header, check's charge), both 1 .. kChargeLimit.
-    std::size_t moves[kChargeLimit + 1][kChargeLimit + 1] = {};
+    /// Disagree by (header, check's charge), both 1 .. CHARGE_LIMIT.
+    std::size_t moves[CHARGE_LIMIT + 1][CHARGE_LIMIT + 1] = {};
 
     /**
       @brief Count one check result; results without a header charge are ignored.
@@ -516,7 +516,7 @@ namespace FASTag::Hyp
       if (r.verdict == HeaderVerdict::DISAGREE)
       {
         ++disagree_by[static_cast<std::size_t>(r.flag_basis)];
-        if (r.header <= kChargeLimit && r.flag_charge >= 1 && r.flag_charge <= kChargeLimit)
+        if (r.header <= CHARGE_LIMIT && r.flag_charge >= 1 && r.flag_charge <= CHARGE_LIMIT)
           ++moves[r.header][r.flag_charge];
         if (both_on && r.flag_charge >= 1 && r.flag_charge != r.header) ++both;
       }
@@ -530,11 +530,11 @@ namespace FASTag::Hyp
     void merge(const HeaderCheckCounts& o)
     {
       checked += o.checked;
-      for (std::size_t i = 0; i < kHeaderVerdicts; ++i) verdict[i] += o.verdict[i];
-      for (std::size_t i = 0; i < kCallBases; ++i) disagree_by[i] += o.disagree_by[i];
+      for (std::size_t i = 0; i < HEADER_VERDICTS; ++i) verdict[i] += o.verdict[i];
+      for (std::size_t i = 0; i < CALL_BASES; ++i) disagree_by[i] += o.disagree_by[i];
       both += o.both;
-      for (int a = 0; a <= kChargeLimit; ++a)
-        for (int b = 0; b <= kChargeLimit; ++b) moves[a][b] += o.moves[a][b];
+      for (int a = 0; a <= CHARGE_LIMIT; ++a)
+        for (int b = 0; b <= CHARGE_LIMIT; ++b) moves[a][b] += o.moves[a][b];
     }
   };
 
@@ -557,8 +557,8 @@ namespace FASTag::Hyp
   */
   struct SourceCounts
   {
-    std::size_t tagged[kChargeSources] = {};    ///< hypotheses tagged
-    std::size_t selected[kChargeSources] = {};  ///< spectra whose selected hypothesis has this source
+    std::size_t tagged[CHARGE_SOURCES] = {};    ///< hypotheses tagged
+    std::size_t selected[CHARGE_SOURCES] = {};  ///< spectra whose selected hypothesis has this source
     std::size_t iso_shifted = 0;                ///< spectra whose selected hypothesis has k != 0
     std::size_t multi = 0;                      ///< spectra tagged under more than one hypothesis
 
@@ -588,7 +588,7 @@ namespace FASTag::Hyp
     */
     void merge(const SourceCounts& o)
     {
-      for (std::size_t i = 0; i < kChargeSources; ++i)
+      for (std::size_t i = 0; i < CHARGE_SOURCES; ++i)
       {
         tagged[i] += o.tagged[i];
         selected[i] += o.selected[i];
