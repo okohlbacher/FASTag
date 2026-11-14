@@ -1,0 +1,8 @@
+# FASTag 1.13.4 protein shortlist: a search-space reduction from tag placements, NOT an identification, NOT protein inference and NOT FDR-controlled.
+# input: AspN_CF_1_3ul.mzML; database: Mycobacterium_marinum.fasta
+# settings: max_evalue 0.1, min_spectra 2, gapped no, parsimony none, top 0
+# protease: non_tryptic unspecific (unspecific fits the tag ends best, not a trypsin-compatible protease (by 1.74 log-likelihood per tag end))
+# proteins: 2 with evidence, 0 kept; decoy entries in the database: 0
+rank	accession	spectra	peptides	exact_spectra	gapped_spectra	weighted	nsaf	best_evalue	length	kept	reason
+1	sp|B2HIB9|RS181_MYCMM	1	1	1	0	1.0000	0.0119048	5.09e-06	84	0	below_min_spectra
+2	tr|B2HHI3|B2HHI3_MYCMM	1	1	1	0	1.0000	0.00446429	0.00163	224	0	below_min_spectra
