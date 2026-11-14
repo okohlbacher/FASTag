@@ -212,8 +212,9 @@ grep -q 'Chymotrypsin fits the tag ends best' "$TMP/ch.log" || { cat "$TMP/ch.lo
   || fail "the refused run's shortlist is missing or does not carry the call"
 [ ! -e "$TMP/ch.fasta" ] && [ ! -e "$TMP/ch.json" ] || fail "a refused run wrote -fasta_out or -search_config_out"
 [ -s "$TMP/ch.tsv" ] || fail "a refused run lost its tag TSV"
+# (with a background: the forced tryptic shortlist of this run is empty, see i)
 ( cd "$TMP" && "$BIN" "${CH[@]}" -out chf.tsv -shortlist_out chf.sl.tsv -fasta_out chf.fasta -search_config_out chf.json \
-    -shortlist_force > chf.log 2>&1 ) || { cat "$TMP/chf.log" >&2; fail "-shortlist_force did not exit 0"; }
+    -shortlist_force -shortlist_background "$TMP/bg.fasta" > chf.log 2>&1 ) || { cat "$TMP/chf.log" >&2; fail "-shortlist_force did not exit 0"; }
 [ -e "$TMP/chf.fasta" ] && [ -s "$TMP/chf.json" ] || fail "-shortlist_force did not write the hand-off outputs"
 grep -q 'shortlist_force writes the hand-off outputs anyway' "$TMP/chf.log" || fail "no WARN under -shortlist_force"
 cmp -s "$TMP/ch.tsv" "$TMP/chf.tsv" || fail "the protease check changed the tag TSV"

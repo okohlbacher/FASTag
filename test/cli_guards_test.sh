@@ -377,7 +377,11 @@ if [ -f "$CHY" ]; then
   grep -q "ERROR.*Chymotrypsin fits the tag ends best\|Chymotrypsin fits the tag ends best.*Not writing" "$TMP/ch.log" \
     || fail "no protease ERROR for a chymotryptic run"
   [ ! -e "$TMP/ch.fasta" ] && [ ! -e "$TMP/ch.cfg" ] || fail "a refused run wrote -fasta_out or -search_config_out"
-  "$BIN" "${CHA[@]}" -shortlist_force >"$TMP/chf.log" 2>&1 || fail "-shortlist_force did not exit 0"
+  # The forced tryptic shortlist keeps no protein; a background keeps
+  # -fasta_out from being empty (1.14: an empty one is not written, exit 13).
+  printf '>BG1 host protein\nMKWVTFISLLLLFSSAYSRGVFRR\n' > "$TMP/chbg.fasta"
+  "$BIN" "${CHA[@]}" -shortlist_force -shortlist_background "$TMP/chbg.fasta" >"$TMP/chf.log" 2>&1 \
+    || fail "-shortlist_force did not exit 0"
   [ -e "$TMP/ch.fasta" ] && [ -s "$TMP/ch.cfg" ] && grep -q "shortlist_force writes" "$TMP/chf.log" \
     || fail "-shortlist_force did not write with a WARN"
 else
