@@ -1505,7 +1505,7 @@ TOPPFASTag::ExitCodes TOPPFASTag::main_(int, const char**)
       // development runs only, no held-out test yet. Elsewhere 0, as before.
       sl_plan.calibrate_mass = msf_shortlist ? FASTag::SearchConfig::MSFRAGGER_DEFAULT_CALIBRATION : 0;
       if (msf_shortlist)
-        OPENMS_LOG_INFO << "MSFragger defaults (development runs only, no held-out test): calibrate_mass "
+        OPENMS_LOG_INFO << "MSFragger export (development runs only, no held-out test): calibrate_mass "
                         << sl_plan.calibrate_mass << " in the exported fragger.params." << std::endl;
       std::string err;
       // 1.13 item 20: a named rule is known now and validated with the

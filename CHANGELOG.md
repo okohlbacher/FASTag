@@ -11,7 +11,7 @@
   share of the lowest run 0.530 -> 0.800 (EX09 0.840 -> 0.855; higher in 25 of
   27 runs, lower in one, MG04 0.976 -> 0.956), entrapment FDP 1.07% -> 1.10%
   pooled, speed-up over the full search median 2.59 -> 1.49 (lowest 1.03), all
-  MSFragger exits 0. The log line `MSFragger defaults (development runs only,
+  MSFragger exits 0. The log line `MSFragger export (development runs only,
   no held-out test): calibrate_mass 2` and the file's header say so; Sage,
   Comet and other proteases are unchanged. A held-out test is drafted
   (doc/SHORTLIST.md, "Mass calibration").

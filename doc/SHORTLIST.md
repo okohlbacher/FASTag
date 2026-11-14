@@ -428,19 +428,19 @@ first calibrates the masses on the shortlist, then optimizes the fragment
 tolerance, `use_topN_peaks`, `minimum_ratio`, `intensity_transform` and
 `remove_precursor_peak`, and searches with the result. Elsewhere (Sage, Comet,
 another `-shortlist_protease`) nothing changes; the log line `MSFragger
-defaults (development runs only, no held-out test): calibrate_mass 2` and the
+export (development runs only, no held-out test): calibrate_mass 2` and the
 file's header comment say so. Paired measurement on 27 development runs (all
 spent: PXD003531, PXD014764 and the runs of three earlier MSFragger held-out tests),
 MSFragger 4.4.1, 12 threads, decision rule fixed before the measurement:
 
 | | `calibrate_mass 0` (1.15) | `calibrate_mass 2` |
 |---|---|---|
-| kept share, lowest run (EX04) | 0.530 | 0.800 |
+| kept share, lowest run (EX04 = PXD003252 of the third test) | 0.530 | 0.800 |
 | kept share EX09 | 0.840 | 0.855 |
 | kept share, median of 26 evaluable runs | 0.934 | 0.946 |
 | runs with a lower kept share | – | 1 (MG04, 0.976 to 0.956) |
 | entrapment FDP pooled | 1.07% | 1.10% |
-| runs above 2.0% FDP | 1 (2.12%) | the same run (2.04%) |
+| runs above 2.0% FDP | 1 (PXD045654, 2.12%) | the same run (2.04%) |
 | speed-up over the full search, lowest / median | 2.02 / 2.59 | 1.03 / 1.49 |
 | MSFragger exit 0 | 27 of 27 | 27 of 27 |
 

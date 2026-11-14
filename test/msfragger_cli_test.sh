@@ -268,7 +268,7 @@ echo "j: -shortlist_exact_only has no effect and warns once (msfragger, with -sh
 #      options given), 0 with -shortlist_protease auto; the log and header say so
 for d in i1 i2; do
   [ "$(key "$TMP/$d/cfg" calibrate_mass)" = 2 ] || fail "k: $d: calibrate_mass is not 2 under the msfragger defaults"
-  grep -q 'MSFragger defaults (development runs only, no held-out test): calibrate_mass 2' "$TMP/$d/run.log" \
+  grep -q 'MSFragger export (development runs only, no held-out test): calibrate_mass 2' "$TMP/$d/run.log" \
     || fail "k: $d: no log line for calibrate_mass"
 done
 grep -q '^# calibrate_mass is not 0: MSFragger calibrates' "$TMP/i1/cfg" || fail "k: header comment"
