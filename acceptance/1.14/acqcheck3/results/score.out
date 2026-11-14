@@ -1,0 +1,12 @@
+OVERALL	INCONCLUSIVE
+PASS	K1 refused among NONDIA	n=75	min=50	0 of 75 refused (upper 95% bound 3.9%)
+PASS	K2 refused among DIA	n=60	min=40	60 of 60 refused (100.0%)
+PASS	K3 astral DIA	n=21	min=8	21 of 21 refused (100.0%)
+INCONCLUSIVE	K3 astral NONDIA	n=3	min=8	0 of 3 refused (upper 95% bound 63.2%)
+PASS	K3 timstof DIA	n=14	min=8	14 of 14 refused (100.0%)
+PASS	K3 timstof NONDIA	n=19	min=8	0 of 19 refused (upper 95% bound 14.6%)
+PASS	K3 sciex DIA	n=11	min=8	11 of 11 refused (100.0%)
+PASS	K3 sciex NONDIA	n=21	min=8	0 of 21 refused (upper 95% bound 13.3%)
+INCONCLUSIVE	K4 closed-window DIA	n=0	min=5	0 of 0
+PASS	K5 recurring/targeted NONDIA	n=57	min=10	0 of 57 refused (upper 95% bound 5.1%)
+#excluded	11 (not staged or truth UNCLEAR): AQ3.DIA_diapasef.03(no,NA) AQ3.DIA_diapasef.08(no,NA) AQ3.DIA_diapasef.10(no,NA) AQ3.DIA_swath.13(dropped_acc114,DIA) AQ3.WWA_DDA.01(no,NA) AQ3.PRM.01(yes,UNCLEAR) AQ3.PRM.05(no,NA) AQ3.PRM.07(no,NA) AQ3.PRM.08(yes,UNCLEAR) AQ3.SRM.02(no,NA) AQ3.SRM.03(yes,UNCLEAR)
