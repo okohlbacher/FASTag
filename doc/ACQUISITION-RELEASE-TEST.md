@@ -84,3 +84,28 @@ from scan-filter dependence and window coverage; `acceptance/1.13/PREREG-acqchec
 37). 3 files had no clear truth and were excluded. Misses: one DIA run with mixed charges (warned, not refused)
 and one non-dependent run with 5384 windows of 2 Th and no repeating scheme. The sample held no Astral, timsTOF or
 SCIEX file; for those the rule is unchanged and E7-03 is the only test.
+
+## Third held-out test on Astral, timsTOF and SCIEX files (acqcheck3, 1.14)
+
+Preregistered test of FASTag 1.13.4 at its defaults (`acceptance/1.14/PREREG-acqcheck3.md` on `acc114/acqcheck3`,
+freeze 2 b7387985; scored once on 2026-11-14): 135 files (Thermo Astral and Orbitrap, Bruker timsTOF, SCIEX),
+truth per file audited against the PRIDE record. Verdict **INCONCLUSIVE**, no criterion failed. All 60 DIA files
+were refused (exit code 11 with the `FASTAG_REFUSED reason=raw_dia` line), and none of the 75 non-DIA files.
+
+| Criterion | n (minimum) | Result | Verdict |
+|---|---|---|---|
+| Non-DIA refused = 0 | 75 (50) | 0 of 75 (upper 95% bound 3.9%) | PASS |
+| DIA refused >= 90% | 60 (40) | 60 of 60 | PASS |
+| Astral DIA >= 90% | 21 (8) | 21 of 21 | PASS |
+| Astral non-DIA = 0 | 3 (8) | 0 of 3 (upper bound 63.2%) | INCONCLUSIVE |
+| timsTOF DIA >= 90% | 14 (8) | 14 of 14 | PASS |
+| timsTOF non-DIA = 0 | 19 (8) | 0 of 19 (upper bound 14.6%) | PASS |
+| SCIEX DIA >= 90% | 11 (8) | 11 of 11 | PASS |
+| SCIEX non-DIA = 0 | 21 (8) | 0 of 21 (upper bound 13.3%) | PASS |
+| Closed-window DIA >= 90% | 0 (5) | no file (every DIA file had a single repeating cycle) | INCONCLUSIVE |
+| Recurring-window or targeted non-DIA = 0 | 57 (10) | 0 of 57 (upper bound 5.1%) | PASS |
+
+Refused were Astral DIA, diaPASEF, SWATH and Orbitrap window schemes (MSX, staggered, variable), including 7 Astral
+DIA runs that PRIDE lists as DDA. Not refused were Astral and Orbitrap DDA, ddaPASEF, SCIEX IDA, PRM and
+recurring-window DDA. The test is inconclusive because only 3 Astral DDA files were left (7 of the 14 drawn were DIA
+runs, 4 were other Orbitrap instruments) and because no DIA file without a single repeating cycle was drawn.
