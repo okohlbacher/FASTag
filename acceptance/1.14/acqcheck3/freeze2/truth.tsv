@@ -1,0 +1,140 @@
+id	route	truth	kind	n_ms2	dep	srm	W	cov	span	visits	per	recur	astral	fixed_share	varying_share	n_missing	note
+AQ3.DDA_astral.01	thermo	DIA	tiling_nondependent	104809	0.0000	0.0000	150	1.000	600.3	698.7	1.0000	1.0000	1.0000	NA	NA	0	
+AQ3.DDA_astral.02	thermo	DIA	tiling_nondependent	266810	0.0000	0.0000	300	1.000	600.3	889.4	1.0000	1.0000	1.0000	NA	NA	0	
+AQ3.DDA_astral.03	thermo	NONDIA	dependent	34767	1.0000	0.0000	5236	0.812	990.6	6.6	0.0000	0.6194	0.0000	NA	NA	0	
+AQ3.DDA_astral.04	thermo	DIA	tiling_nondependent	198138	0.0000	0.0000	150	1.000	600.3	1320.9	1.0000	1.0000	1.0000	NA	NA	0	
+AQ3.DDA_astral.05	thermo	DIA	tiling_nondependent	118078	0.0000	0.0000	150	1.000	600.3	787.2	1.0000	1.0000	1.0000	NA	NA	0	
+AQ3.DDA_astral.06	thermo	DIA	tiling_nondependent	135791	0.0000	0.0000	150	1.000	600.3	905.3	1.0000	1.0000	1.0000	NA	NA	0	
+AQ3.DDA_astral.07	thermo	DIA	tiling_nondependent	142431	0.0000	0.0000	300	1.000	600.2	474.8	1.0000	1.0000	1.0000	NA	NA	0	
+AQ3.DDA_astral.08	thermo	DIA	tiling_nondependent	107231	0.0000	0.0000	150	1.000	600.3	714.9	1.0000	1.0000	1.0000	NA	NA	0	
+AQ3.DDA_astral.09	thermo	NONDIA	dependent	75392	1.0000	0.0000	7989	0.992	1122.7	9.4	0.0000	0.7568	0.0000	NA	NA	0	
+AQ3.DDA_astral.10	thermo	NONDIA	dependent	90590	1.0000	0.0000	9778	1.000	1126.2	9.3	0.0000	0.7090	0.0000	NA	NA	0	
+AQ3.DDA_astral.11	thermo	NONDIA	dependent	111408	1.0000	0.0000	7402	0.956	1000.1	15.1	0.0000	0.8720	1.0000	NA	NA	0	
+AQ3.DDA_astral.12	thermo	NONDIA	dependent	123646	1.0000	0.0000	7859	0.994	996.8	15.7	0.0000	0.8785	1.0000	NA	NA	0	
+AQ3.DDA_astral.13	thermo	NONDIA	dependent	207926	1.0000	0.0000	10703	0.994	1250.1	19.4	0.0000	0.9087	1.0000	NA	NA	0	
+AQ3.DDA_astral.14	thermo	NONDIA	dependent	19222	1.0000	0.0000	5641	0.932	1046.8	3.4	0.0000	0.1801	0.0000	NA	NA	0	
+AQ3.DDA_ddapasef.01	bruker	NONDIA	dependent_pasef	4003	NA	NA	NA	NA	NA	NA	NA	0.6241	NA	NA	NA	0	instrument=timsTOF Pro;types=0:976,8:4003
+AQ3.DDA_ddapasef.02	bruker	NONDIA	dependent_pasef	25180	NA	NA	NA	NA	NA	NA	NA	0.9711	NA	NA	NA	0	instrument=timsTOF SCP;types=0:6066,8:25180
+AQ3.DDA_ddapasef.03	bruker	NONDIA	dependent_pasef	22543	NA	NA	NA	NA	NA	NA	NA	0.9547	NA	NA	NA	0	instrument=timsTOF Pro 2;types=0:2255,8:22543
+AQ3.DDA_ddapasef.04	bruker	NONDIA	dependent_pasef	17564	NA	NA	NA	NA	NA	NA	NA	0.8831	NA	NA	NA	0	instrument=timsTOF HT;types=0:4800,8:17564
+AQ3.DDA_ddapasef.05	bruker	NONDIA	dependent_pasef	43540	NA	NA	NA	NA	NA	NA	NA	0.9699	NA	NA	NA	0	instrument=timsTOF Pro;types=0:6918,8:43540
+AQ3.DDA_ddapasef.06	bruker	NONDIA	dependent_pasef	17622	NA	NA	NA	NA	NA	NA	NA	0.9508	NA	NA	NA	0	instrument=timsTOF Pro;types=0:5267,8:17622
+AQ3.DDA_ddapasef.07	bruker	NONDIA	dependent_pasef	42360	NA	NA	NA	NA	NA	NA	NA	0.9687	NA	NA	NA	0	instrument=timsTOF Pro;types=0:7047,8:42360
+AQ3.DDA_ddapasef.08	bruker	NONDIA	dependent_pasef	62859	NA	NA	NA	NA	NA	NA	NA	0.9562	NA	NA	NA	0	instrument=timsTOF Pro;types=0:14357,8:62859
+AQ3.DDA_ddapasef.09	bruker	NONDIA	dependent_pasef	31195	NA	NA	NA	NA	NA	NA	NA	0.9115	NA	NA	NA	0	instrument=timsTOF Pro 2;types=0:12039,8:31195
+AQ3.DDA_ddapasef.10	bruker	NONDIA	dependent_pasef	9238	NA	NA	NA	NA	NA	NA	NA	0.8493	NA	NA	NA	0	instrument=timsTOF pro 2;types=0:2547,8:9238
+AQ3.DDA_ddapasef.11	bruker	NONDIA	dependent_pasef	16181	NA	NA	NA	NA	NA	NA	NA	0.9207	NA	NA	NA	0	instrument=timsTOF HT;types=0:2208,8:16181
+AQ3.DDA_ddapasef.12	bruker	NONDIA	dependent_pasef	53628	NA	NA	NA	NA	NA	NA	NA	0.9734	NA	NA	NA	0	instrument=timsTOF Pro;types=0:12831,8:53628
+AQ3.DDA_ddapasef.13	bruker	NONDIA	dependent_pasef	11321	NA	NA	NA	NA	NA	NA	NA	0.8899	NA	NA	NA	0	instrument=timsTOF Pro;types=0:2395,8:11321
+AQ3.DDA_ddapasef.14	bruker	NONDIA	dependent_pasef	44786	NA	NA	NA	NA	NA	NA	NA	0.9737	NA	NA	NA	0	instrument=timsTOF Pro;types=0:5431,8:44786
+AQ3.DDA_ddapasef.15	bruker	NONDIA	dependent_pasef	20299	NA	NA	NA	NA	NA	NA	NA	0.8407	NA	NA	NA	0	instrument=timsTOF Pro;types=0:7790,8:20299
+AQ3.DDA_ddapasef.16	bruker	NONDIA	dependent_pasef	33276	NA	NA	NA	NA	NA	NA	NA	0.9489	NA	NA	NA	0	instrument=timsTOF Pro;types=0:9129,8:33276
+AQ3.DDA_ddapasef.17	bruker	NONDIA	dependent_pasef	4882	NA	NA	NA	NA	NA	NA	NA	0.3814	NA	NA	NA	0	instrument=timsTOF HT;types=0:1508,8:4882
+AQ3.DDA_ddapasef.18	bruker	NONDIA	dependent_pasef	27820	NA	NA	NA	NA	NA	NA	NA	0.9653	NA	NA	NA	0	instrument=timsTOF Pro;types=0:5545,8:27820
+AQ3.DDA_recurring.01	thermo	NONDIA	dependent	35957	1.0000	0.0000	6129	0.851	1113.7	5.9	0.0000	0.5344	0.0000	NA	NA	0	
+AQ3.DDA_recurring.02	thermo	NONDIA	dependent	61862	1.0000	0.0000	7363	0.998	946.4	8.4	0.0000	0.6972	0.0000	NA	NA	0	
+AQ3.DDA_recurring.03	thermo	NONDIA	dependent	15475	1.0000	0.0000	6360	0.997	1150.3	2.4	0.0000	0.0409	0.0000	NA	NA	0	
+AQ3.DDA_recurring.04	thermo	NONDIA	dependent	23372	1.0000	0.0000	4352	0.797	1234.7	5.4	0.0000	0.5352	0.0000	NA	NA	0	
+AQ3.DDA_recurring.05	thermo	NONDIA	dependent	23840	1.0000	0.0000	5582	0.897	1438.7	4.3	0.0000	0.5149	0.0000	NA	NA	0	
+AQ3.DDA_recurring.06	thermo	NONDIA	dependent	9576	1.0000	0.0000	3064	0.723	1637.7	3.1	0.0000	0.3598	0.0000	NA	NA	0	
+AQ3.DDA_recurring.07	thermo	NONDIA	dependent	3660	1.0000	0.0000	1938	0.560	1691.2	1.9	NA	0.0342	0.0000	NA	NA	0	
+AQ3.DDA_recurring.08	thermo	NONDIA	dependent	124499	1.0000	0.0000	22132	0.966	1118.3	5.6	0.0000	0.5160	0.0000	NA	NA	0	
+AQ3.DDA_recurring.09	thermo	NONDIA	dependent	69907	1.0000	0.0000	2439	0.439	1310.0	28.7	0.0000	0.9345	0.0000	NA	NA	0	
+AQ3.DDA_recurring.10	thermo	NONDIA	dependent	4282	1.0000	0.0000	2244	0.644	1549.5	1.9	NA	0.0173	0.0000	NA	NA	0	
+AQ3.DDA_sciex.01	sciex	NONDIA	dependent_ida	34309	NA	NA	5220	0.967	899.4	6.6	0.0000	0.6099	NA	0.0000	1.0000	0	
+AQ3.DDA_sciex.02	sciex	NONDIA	dependent_ida	54771	NA	NA	5817	1.000	899.7	9.4	0.0000	0.7709	NA	0.0000	1.0000	0	
+AQ3.DDA_sciex.03	sciex	NONDIA	dependent_ida	11507	NA	NA	1858	0.716	848.1	6.2	0.0000	0.6861	NA	0.0000	1.0000	0	
+AQ3.DDA_sciex.04	sciex	NONDIA	dependent_ida	53126	NA	NA	5532	0.988	899.0	9.6	0.0000	0.7598	NA	0.0000	1.0000	0	
+AQ3.DDA_sciex.05	sciex	NONDIA	dependent_ida	18224	NA	NA	4919	0.986	1049.0	3.7	0.0000	0.3624	NA	0.0000	1.0000	0	
+AQ3.DDA_sciex.06	sciex	NONDIA	dependent_ida	982	NA	NA	614	0.430	884.1	1.6	NA	0.0866	NA	0.0061	0.9919	0	
+AQ3.DDA_sciex.07	sciex	NONDIA	dependent_ida	58618	NA	NA	4995	0.732	1121.9	11.7	0.0000	0.8044	NA	0.0000	1.0000	0	
+AQ3.DDA_sciex.08	sciex	NONDIA	dependent_ida	34293	NA	NA	4219	0.922	884.4	8.1	0.0000	0.6854	NA	0.0000	0.9999	0	
+AQ3.DDA_sciex.09	sciex	NONDIA	dependent_ida	13208	NA	NA	2169	0.677	846.1	6.1	0.0000	0.5888	NA	0.0004	0.9995	0	
+AQ3.DDA_sciex.10	sciex	NONDIA	dependent_ida	9788	NA	NA	2393	0.516	1146.5	4.1	0.0000	0.4239	NA	0.0000	1.0000	0	
+AQ3.DDA_sciex.11	sciex	NONDIA	dependent_ida	32793	NA	NA	3225	0.842	896.5	10.2	0.0000	0.7872	NA	0.0000	1.0000	0	
+AQ3.DDA_sciex.12	sciex	NONDIA	dependent_ida	21157	NA	NA	3045	0.689	789.9	6.9	0.0000	0.6284	NA	0.0000	1.0000	0	
+AQ3.DDA_sciex.13	sciex	NONDIA	dependent_ida	5591	NA	NA	2273	0.851	898.6	2.5	0.0000	0.1467	NA	0.0004	0.9993	0	
+AQ3.DDA_sciex.14	sciex	NONDIA	dependent_ida	38305	NA	NA	5126	0.802	1040.1	7.5	0.0000	0.6576	NA	0.0000	0.9999	0	
+AQ3.DDA_sciex.15	sciex	NONDIA	dependent_ida	116911	NA	NA	9438	0.979	1449.1	12.4	0.0000	0.8336	NA	0.0000	1.0000	0	
+AQ3.DDA_sciex.16	sciex	NONDIA	dependent_ida	16435	NA	NA	4432	0.987	849.8	3.7	0.0000	0.3281	NA	0.0000	1.0000	0	
+AQ3.DDA_sciex.17	sciex	NONDIA	dependent_ida	2366	NA	NA	1058	0.539	975.3	2.2	0.0000	0.1796	NA	0.0000	1.0000	0	
+AQ3.DDA_sciex.18	sciex	NONDIA	dependent_ida	5057	NA	NA	2046	0.676	949.6	2.5	0.0000	0.0941	NA	0.0000	1.0000	0	
+AQ3.DIA_astral.01	thermo	DIA	tiling_nondependent	330483	0.0000	0.0000	300	1.000	600.3	1101.6	1.0000	1.0000	1.0000	NA	NA	0	
+AQ3.DIA_astral.02	thermo	DIA	tiling_nondependent	251409	0.0000	0.0000	300	1.000	600.3	838.0	1.0000	1.0000	1.0000	NA	NA	0	
+AQ3.DIA_astral.03	thermo	DIA	tiling_nondependent	251966	0.0000	0.0000	300	1.000	600.3	839.9	1.0000	1.0000	1.0000	NA	NA	0	
+AQ3.DIA_astral.04	thermo	DIA	tiling_nondependent	24222	0.0000	0.0000	250	1.000	250.1	96.9	1.0000	1.0000	1.0000	NA	NA	0	
+AQ3.DIA_astral.05	thermo	DIA	tiling_nondependent	39589	0.0000	0.0000	80	1.000	400.0	494.9	1.0000	1.0000	1.0000	NA	NA	0	
+AQ3.DIA_astral.06	thermo	DIA	tiling_nondependent	439241	0.0000	0.0000	300	1.000	600.0	1464.1	1.0000	1.0000	1.0000	NA	NA	0	
+AQ3.DIA_astral.07	thermo	DIA	tiling_nondependent	105408	0.0000	0.0000	150	1.000	600.3	702.7	1.0000	1.0000	1.0000	NA	NA	0	
+AQ3.DIA_astral.08	thermo	DIA	tiling_nondependent	24246	0.0000	0.0000	250	1.000	250.1	97.0	1.0000	1.0000	1.0000	NA	NA	0	
+AQ3.DIA_astral.09	thermo	DIA	tiling_nondependent	297090	0.0000	0.0000	300	1.000	600.3	990.3	1.0000	1.0000	1.0000	NA	NA	0	
+AQ3.DIA_astral.10	thermo	NONDIA	dependent	58655	1.0000	0.0000	6635	0.976	943.6	8.8	0.0000	0.7213	0.0000	NA	NA	0	
+AQ3.DIA_astral.11	thermo	DIA	tiling_nondependent	147011	0.0000	0.0000	200	1.000	600.3	735.1	1.0000	1.0000	1.0000	NA	NA	0	
+AQ3.DIA_astral.12	thermo	DIA	tiling_nondependent	216296	0.0000	0.0000	300	1.000	600.3	721.0	1.0000	1.0000	1.0000	NA	NA	0	
+AQ3.DIA_astral.13	thermo	DIA	tiling_nondependent	153416	0.0000	0.0000	300	1.000	600.3	511.4	1.0000	1.0000	1.0000	NA	NA	0	
+AQ3.DIA_astral.14	thermo	DIA	tiling_nondependent	28355	0.0000	0.0000	20	1.000	400.2	1417.8	1.0000	1.0000	1.0000	NA	NA	0	
+AQ3.DIA_astral.15	thermo	DIA	tiling_nondependent	96330	0.0000	0.0000	300	1.000	600.3	321.1	1.0000	1.0000	1.0000	NA	NA	0	
+AQ3.DIA_diapasef.01	bruker	DIA	diapasef	16073	NA	NA	NA	NA	NA	NA	NA	NA	NA	NA	NA	0	instrument=timsTOF Pro 2;types=0:1005,9:16073
+AQ3.DIA_diapasef.02	bruker	DIA	diapasef	20597	NA	NA	NA	NA	NA	NA	NA	NA	NA	NA	NA	0	instrument=timsTOF Pro;types=0:1288,9:20597
+AQ3.DIA_diapasef.04	bruker	DIA	diapasef	41022	NA	NA	NA	NA	NA	NA	NA	NA	NA	NA	NA	0	instrument=timsTOF Pro;types=0:2564,9:41022
+AQ3.DIA_diapasef.05	bruker	DIA	diapasef	14186	NA	NA	NA	NA	NA	NA	NA	NA	NA	NA	NA	0	instrument=timsTOF pro;types=0:710,9:14186
+AQ3.DIA_diapasef.06	bruker	DIA	diapasef	20735	NA	NA	NA	NA	NA	NA	NA	NA	NA	NA	NA	0	instrument=timsTOF Pro;types=0:1728,9:20735
+AQ3.DIA_diapasef.07	bruker	DIA	diapasef	22518	NA	NA	NA	NA	NA	NA	NA	NA	NA	NA	NA	0	instrument=timsTOF HT;types=0:2252,9:22518
+AQ3.DIA_diapasef.09	bruker	DIA	diapasef	31248	NA	NA	NA	NA	NA	NA	NA	NA	NA	NA	NA	0	instrument=timsTOF Pro 2;types=0:2604,9:31248
+AQ3.DIA_diapasef.11	bruker	DIA	diapasef	14507	NA	NA	NA	NA	NA	NA	NA	NA	NA	NA	NA	0	instrument=timsTOF flex MALDI 2;types=0:1814,9:14507
+AQ3.DIA_diapasef.12	bruker	DIA	diapasef	13711	NA	NA	NA	NA	NA	NA	NA	NA	NA	NA	NA	0	instrument=timsTOF HT;types=0:1714,9:13711
+AQ3.DIA_diapasef.13	bruker	NONDIA	dependent_pasef	7123	NA	NA	NA	NA	NA	NA	NA	0.8526	NA	NA	NA	0	instrument=timsTOF Pro;types=0:5067,8:7123
+AQ3.DIA_diapasef.14	bruker	DIA	diapasef	14880	NA	NA	NA	NA	NA	NA	NA	NA	NA	NA	NA	0	instrument=timsTOF SCP;types=0:1860,9:14880
+AQ3.DIA_diapasef.15	bruker	DIA	diapasef	47916	NA	NA	NA	NA	NA	NA	NA	NA	NA	NA	NA	0	instrument=timsTOF Pro;types=0:2995,9:47916
+AQ3.DIA_diapasef.16	bruker	DIA	diapasef	64388	NA	NA	NA	NA	NA	NA	NA	NA	NA	NA	NA	0	instrument=timsTOF Pro;types=0:4025,9:64388
+AQ3.DIA_diapasef.17	bruker	DIA	diapasef	40025	NA	NA	NA	NA	NA	NA	NA	NA	NA	NA	NA	0	instrument=timsTOF Pro;types=0:2502,9:40025
+AQ3.DIA_diapasef.18	bruker	DIA	diapasef	21151	NA	NA	NA	NA	NA	NA	NA	NA	NA	NA	NA	0	instrument=timsTOF Pro 2;types=0:1411,9:21151
+AQ3.DIA_orbitrap_scheme.01	thermo	DIA	tiling_nondependent	57624	0.0000	0.0000	24	1.000	1300.0	2401.0	1.0000	1.0000	0.0000	NA	NA	0	
+AQ3.DIA_orbitrap_scheme.02	thermo	DIA	tiling_nondependent	64878	0.0000	0.0000	33	1.000	1299.9	1966.0	1.0000	1.0000	0.0000	NA	NA	0	
+AQ3.DIA_orbitrap_scheme.03	thermo	DIA	tiling_nondependent	56900	0.0000	0.0000	25	1.000	100.0	2276.0	1.0000	1.0000	0.0000	NA	NA	0	
+AQ3.DIA_orbitrap_scheme.04	thermo	DIA	tiling_nondependent	120933	0.0000	0.0000	78	1.000	625.3	1550.4	1.0000	1.0000	0.0000	NA	NA	0	
+AQ3.DIA_orbitrap_scheme.05	thermo	DIA	tiling_nondependent	55004	0.0000	0.0000	54	1.000	1080.0	1018.6	1.0000	1.0000	0.0000	NA	NA	0	
+AQ3.DIA_orbitrap_scheme.06	thermo	DIA	tiling_nondependent	138495	0.0000	0.0000	201	1.000	808.4	689.0	1.0000	1.0000	0.0000	NA	NA	0	
+AQ3.DIA_orbitrap_scheme.07	thermo	DIA	tiling_nondependent	45450	0.0000	0.0000	50	1.000	800.4	909.0	1.0000	1.0000	0.0000	NA	NA	0	
+AQ3.DIA_orbitrap_scheme.08	thermo	DIA	tiling_nondependent	73965	0.0000	0.0000	26	1.000	720.5	2844.8	1.0000	1.0000	0.0000	NA	NA	0	
+AQ3.DIA_orbitrap_scheme.09	thermo	DIA	tiling_nondependent	109440	0.0000	0.0000	30	1.000	851.0	3648.0	1.0000	1.0000	0.0000	NA	NA	0	
+AQ3.DIA_orbitrap_scheme.10	thermo	DIA	tiling_nondependent	54000	0.0000	0.0000	50	1.000	612.0	1080.0	1.0000	1.0000	0.0000	NA	NA	0	
+AQ3.DIA_orbitrap_scheme.11	thermo	DIA	tiling_nondependent	79275	0.0000	0.0000	151	1.000	608.3	525.0	1.0000	1.0000	0.0000	NA	NA	0	
+AQ3.DIA_orbitrap_scheme.12	thermo	DIA	tiling_nondependent	87078	0.0000	0.0000	42	1.000	430.2	2073.3	1.0000	1.0000	0.0000	NA	NA	0	
+AQ3.DIA_orbitrap_scheme.13	thermo	DIA	tiling_nondependent	43840	0.0000	0.0000	40	1.000	801.0	1096.0	1.0000	1.0000	0.0000	NA	NA	0	
+AQ3.DIA_orbitrap_scheme.14	thermo	DIA	tiling_nondependent	68757	0.0000	0.0000	51	1.000	104.0	1348.2	1.0000	1.0000	0.0000	NA	NA	0	
+AQ3.DIA_orbitrap_scheme.15	thermo	NONDIA	dependent	54501	1.0000	0.0000	9105	1.000	1125.4	6.0	0.0000	0.5162	0.0000	NA	NA	0	
+AQ3.DIA_swath.01	sciex	DIA	fixed_tiling	143700	NA	NA	100	1.000	850.0	1437.0	1.0000	1.0000	NA	1.0000	0.0000	0	
+AQ3.DIA_swath.02	sciex	DIA	fixed_tiling	85050	NA	NA	54	1.000	850.5	1575.0	1.0000	1.0000	NA	1.0000	0.0000	0	
+AQ3.DIA_swath.03	sciex	DIA	fixed_tiling	13872	NA	NA	34	1.000	848.0	408.0	1.0000	1.0000	NA	1.0000	0.0000	0	
+AQ3.DIA_swath.04	sciex	DIA	fixed_tiling	87120	NA	NA	40	1.000	320.0	2178.0	1.0000	1.0000	NA	1.0000	0.0000	0	
+AQ3.DIA_swath.05	sciex	DIA	fixed_tiling	76416	NA	NA	32	1.000	800.0	2388.0	1.0000	1.0000	NA	1.0000	0.0000	0	
+AQ3.DIA_swath.06	sciex	DIA	fixed_tiling	24100	NA	NA	100	1.000	850.2	241.0	1.0000	1.0000	NA	1.0000	0.0000	0	
+AQ3.DIA_swath.07	sciex	NONDIA	dependent_ida	6023	NA	NA	2417	0.784	931.8	2.5	0.0000	0.0412	NA	0.0000	1.0000	0	
+AQ3.DIA_swath.08	sciex	DIA	fixed_tiling	41072	NA	NA	34	1.000	850.0	1208.0	1.0000	1.0000	NA	1.0000	0.0000	0	
+AQ3.DIA_swath.09	sciex	DIA	fixed_tiling	240399	NA	NA	100	1.000	850.0	2404.0	0.9996	1.0000	NA	1.0000	0.0000	0	
+AQ3.DIA_swath.10	sciex	DIA	fixed_tiling	91031	NA	NA	43	1.000	600.0	2117.0	1.0000	1.0000	NA	1.0000	0.0000	0	
+AQ3.DIA_swath.11	sciex	DIA	fixed_tiling	228000	NA	NA	100	1.000	600.2	2280.0	1.0000	1.0000	NA	1.0000	0.0000	0	
+AQ3.DIA_swath.12	sciex	DIA	fixed_tiling	167600	NA	NA	100	1.000	800.2	1676.0	1.0000	1.0000	NA	1.0000	0.0000	0	
+AQ3.DIA_swath.13	sciex	DIA	fixed_tiling	146740	NA	NA	58	1.000	720.0	2530.0	1.0000	1.0000	NA	1.0000	0.0000	0	
+AQ3.DIA_swath.14	sciex	NONDIA	dependent_ida	24359	NA	NA	4739	0.914	1049.6	5.1	0.0000	0.5609	NA	0.0001	0.9991	0	
+AQ3.DIA_swath.15	sciex	NONDIA	dependent_ida	1093	NA	NA	547	0.579	734.8	2.0	NA	0.0091	NA	0.0018	0.9963	0	
+AQ3.PRM.01	thermo	UNCLEAR	mixed_dependence	66650	0.3725	0.0000	5827	1.000	901.8	11.4	0.0000	0.7765	0.0000	NA	NA	0	
+AQ3.PRM.02	thermo	NONDIA	targeted	9157	0.0000	0.0000	24	0.070	556.8	381.5	0.0000	1.0000	0.0000	NA	NA	0	
+AQ3.PRM.03	thermo	NONDIA	dependent	40234	1.0000	0.0000	7192	0.997	1099.8	5.6	0.0000	0.5139	0.0000	NA	NA	0	
+AQ3.PRM.04	thermo	NONDIA	dependent	27904	1.0000	0.0000	6078	0.855	1339.2	4.6	0.0000	0.4437	0.0000	NA	NA	0	
+AQ3.PRM.06	thermo	NONDIA	targeted	16609	0.0000	0.0000	10	0.027	522.2	1660.9	1.0000	1.0000	0.0000	NA	NA	0	
+AQ3.PRM.08	thermo	UNCLEAR	mixed_dependence	91640	0.2314	0.0000	4686	0.999	901.0	19.6	0.0000	0.8645	0.0000	NA	NA	0	
+AQ3.PRM.09	thermo	NONDIA	targeted	16056	0.0000	0.0000	8	0.085	311.6	2007.0	1.0000	1.0000	0.0000	NA	NA	0	
+AQ3.PRM.10	thermo	NONDIA	targeted	18663	0.0000	0.0000	7	0.013	421.0	2666.1	1.0000	1.0000	0.0000	NA	NA	0	
+AQ3.PRM.11	thermo	NONDIA	targeted	90639	0.0000	0.0000	47	0.092	962.0	1928.5	0.0000	1.0000	0.0000	NA	NA	0	
+AQ3.PRM.12	thermo	NONDIA	targeted	35262	0.0000	0.0000	91	0.181	543.2	387.5	0.0000	1.0000	0.0000	NA	NA	0	
+AQ3.PRM.13	thermo	NONDIA	targeted	28118	0.0000	0.0000	45	0.039	786.6	624.8	0.0000	1.0000	0.0000	NA	NA	0	
+AQ3.PRM.14	thermo	NONDIA	targeted	6966	0.0000	0.0000	15	0.024	442.7	464.4	0.0000	1.0000	0.0000	NA	NA	0	
+AQ3.SRM.01	thermo	NONDIA	dependent	97126	1.0000	0.0000	9429	0.913	1633.3	10.3	0.0000	0.7684	0.0000	NA	NA	0	
+AQ3.SRM.03	sciex	UNCLEAR	no_ms2	0	NA	NA	0	NA	NA	NA	NA	NA	NA	NA	NA	NA	
+AQ3.SRM.04	thermo	NONDIA	dependent	13606	1.0000	0.0000	4551	0.647	1648.8	3.0	0.0000	0.1888	0.0000	NA	NA	0	
+AQ3.SRM.05	thermo	NONDIA	dependent	31059	1.0000	0.0000	6344	0.963	1195.1	4.9	0.0000	0.4302	0.0000	NA	NA	0	
+AQ3.SRM.06	thermo	NONDIA	dependent	24311	1.0000	0.0000	4703	0.849	1239.1	5.2	0.0000	0.5327	0.0000	NA	NA	0	
+AQ3.SRM.07	thermo	NONDIA	dependent	42860	1.0000	0.0000	6962	0.916	1225.2	6.2	0.0000	0.5420	0.0000	NA	NA	0	
+AQ3.WWA_DDA.02	thermo	NONDIA	dependent	45038	1.0000	0.0000	5629	0.840	1329.4	8.0	0.0000	0.6945	0.0000	NA	NA	0	
