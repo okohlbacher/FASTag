@@ -1,7 +1,43 @@
 # Changelog
 
-## Unreleased
+## 1.14.0 (2026-11-14)
 
+Options that failed their held-out tests are removed, an empty reduced FASTA
+is no longer written, and the held-out results of four 1.13 features are in
+the docs. Tag output is unchanged.
+
+- **Empty reduced FASTA: exit code 13.** When the shortlist keeps no protein
+  and there is no `-shortlist_background`, `-fasta_out` would hold no
+  protein. FASTag now writes neither it nor `-search_config_out`, removes files
+  an earlier run left at those paths, writes every other output and exits
+  with 13 (`UNEXPECTED_RESULT`) after the ERROR "... the reduced database
+  would be empty. Not writing -fasta_out ...". Before, it wrote an empty file
+  and exited 0 (seen in the Asp-N held-out test with `-shortlist_force`). The
+  GUI shows a help entry for it.
+- **`-complement_tolerance_unit auto` is validated:** its third held-out test
+  passed (7 new runs; ion trap +3.31 points of correct rank-1 tags, 95%
+  interval 2.98 to 3.65; timsTOF 18 of 18 cells not worse; 50 of 54 cells
+  pass, 0 fail; run time ratio 1.028). The default stays `Da`.
+- **Asp-N call of `-shortlist_protease auto` and its semi-specific export:
+  not validated.** The held-out test failed on one criterion only: an empty
+  trypsin comparison export (`-shortlist_force`) counted as an abort. Every
+  other criterion passed: Asp-N called in 11 of 12 Asp-N runs and 0 of 9
+  controls, shortlist recall +0.369 over the trypsin shortlist and +0.047
+  over the full-specificity export, median Sage time 0.98 of the full search.
+  The behaviour is kept.
+- **Raw-DIA check (`-acquisition_check refuse`), third held-out test:
+  inconclusive, no criterion failed.** On Astral, Orbitrap, timsTOF and SCIEX
+  files it refused 60 of 60 DIA files and 0 of 75 non-DIA files. Inconclusive
+  because only 3 Astral DDA files were left (minimum 8) and no closed-window
+  DIA file was drawn.
+- **mzML reader:** indexes written by ThermoRawFileParser 2.0, whose offsets
+  point 3 bytes early, are used instead of rebuilt (the "no index, or one
+  that no longer matches" warning is gone for these files; results were
+  already the same).
+- **Code:** Doxygen for every public class and function, OpenMS naming
+  (private methods end in `_`, constants in UPPER_CASE), and `FASTag.cpp`
+  split into option, report, mode and species units; no behaviour change.
+  The macOS CI no longer fails on the size of the dmg.
 - **GUI settings, 1.12.0 to 1.13.2 (fixed in 1.13.3; this note corrects the
   1.13.3 entry, which understated it):** these versions could neither read
   nor save settings: presets from 1.11 did not appear, new presets could not
@@ -17,8 +53,9 @@ removed name stays registered (advanced, not in the GUI) with no effect, so
 that saved command lines and INI files of 1.12 and 1.13 keep loading: given
 on the command line or with a non-default INI value, it prints one warning
 "-<option> was removed in 1.14 (...); it has no effect". A removed value is
-accepted with the same warning and the option's default is used. Every
-remaining configuration writes the same output as 1.13.4.
+accepted with the same warning and the option's default is used. Apart from
+the empty reduced FASTA above, every remaining configuration writes the same
+output as 1.13.4.
 
 - **Label discovery** (`-label_discovery_out` and its seven knobs
   `-label_discovery_max_flank`, `_depth`, `_min_spectra`, `_min_share`,
