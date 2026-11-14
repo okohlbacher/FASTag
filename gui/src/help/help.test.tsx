@@ -184,6 +184,7 @@ describe('help: troubleshooting', () => {
       ['No spectrum carried a reported tag; not writing hits.mzML', 'faq-out-spectra-none'],
       ['No reportable tag can reach the minimum filter length. This database of 300 residues needs tags of at least 4', 'faq-min-filter'],
       ['The entrapment database shares its entire key space', 'faq-entrapment'],
+      ['Reduced FASTA: no protein has 2 qualifying spectra and there is no -shortlist_background, so the reduced database would be empty. Not writing -fasta_out', 'faq-empty-database'],
       ['FASTag could not start: no such file', 'faq-will-not-start'],
       ['FASTAG_REFUSED reason=raw_dia windows=33 median_width=25', 'faq-raw-dia'],
       ["'/d/run.mzML' is raw DIA: 33 isolation windows. Each MS2 mixes several peptides", 'faq-raw-dia'],

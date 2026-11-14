@@ -137,8 +137,11 @@ for f in t.tsv red.fasta f.params; do cmp -s "$TMP/e0/$f" "$TMP/e1/$f" || fail "
 { cat "$DB"; for i in $(seq 1 40); do printf '>rev_W%d\n%s\n>DECOY_W%d\n%s\n' $i "$(printf 'W%.0s' $(seq 1 300))" $i "$(printf 'W%.0s' $(seq 1 300))"; done; } > "$TMP/skew.fasta"
 # The in-silico chymotryptic MGF at 20 ppm, so the protease check is scored
 # against the database background (a Da run is never scored).
+# The forced tryptic shortlist keeps no protein; a background keeps -fasta_out
+# from being empty (1.14: an empty one is not written, exit 13).
+printf '>BG1 host protein\nMKWVTFISLLLLFSSAYSRGVFRR\n' > "$TMP/bg.fasta"
 SK=(-in "$FIX/chymo_insilico.mgf" -recon_fasta "$TMP/skew.fasta" -fragment_tolerance 20 -fragment_tolerance_unit ppm
-    -shortlist_force -threads 2 -shortlist_gapped -shortlist_max_evalue 0.1 -recon_min_length 0 -recon_missed_cleavages 1)
+    -shortlist_background "$TMP/bg.fasta" -shortlist_force -threads 2 -shortlist_gapped -shortlist_max_evalue 0.1 -recon_min_length 0 -recon_missed_cleavages 1)
 runf() { local d=$1 bin=$2; shift 2; mkdir -p "$d"; ( cd "$d" && "$bin" "${SK[@]}" -out t.tsv -shortlist_out sl.tsv "$@" > run.log 2>&1 ) || { cat "$d/run.log" >&2; fail "f: $(basename "$d") exit non-zero"; }; }
 runf "$TMP/fs" "$BIN" -fasta_out red.fasta -search_config_out sage.json
 runf "$TMP/fm" "$BIN" -fasta_out red.fasta -search_config_out f.params -search_engine msfragger
@@ -235,7 +238,8 @@ grep -q 'min tag length [0-9]* (derived)' "$TMP/i5/run.log" || fail "i: explicit
 ( cd "$TMP/i5" && "$BIN" -write_ini x.ini > /dev/null 2>&1 ) || fail "i: -write_ini"
 sed 's/name="recon_min_length" value="0"/name="recon_min_length" value="7"/' "$TMP/i5/x.ini" > "$TMP/i5/y.ini"
 grep -q 'name="recon_min_length" value="7"' "$TMP/i5/y.ini" || fail "i: INI edit"
-runh "$TMP/i6" "${I[@]}" -search_engine msfragger -ini "$TMP/i5/y.ini"
+# (min length 7 places nothing here; the background keeps -fasta_out from being empty)
+runh "$TMP/i6" "${I[@]}" -search_engine msfragger -ini "$TMP/i5/y.ini" -shortlist_background "$TMP/bg.fasta"
 grep -q 'min tag length 7 (set)' "$TMP/i6/run.log" || fail "i: the INI -recon_min_length 7 lost"
 grep -q -- '-recon_min_length' <(grep '^# msfragger defaults' "$TMP/i6/sl.tsv") && fail "i: header lists the INI value as a default"
 # a shortlist protease other than trypsin keeps 1.13.1's values (tested held-out with trypsin only)

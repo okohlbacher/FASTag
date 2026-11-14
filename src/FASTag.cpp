@@ -1440,6 +1440,8 @@ TOPPFASTag::ExitCodes TOPPFASTag::main_(int, const char**)
   FASTag::SearchConfig::SearchPlan sl_plan;
   std::string sl_template;
   bool handoff_refused = false;
+  // 1.14: the reduced FASTA would hold no protein; it is not written.
+  bool empty_database = false;
   if (handoff_on)
   {
     if (digest_on) sl_models = protease_models;
@@ -4494,7 +4496,9 @@ TOPPFASTag::ExitCodes TOPPFASTag::main_(int, const char**)
                           << " database entries not selected are kept as background." << std::endl;
         if (n_kept == 0)
           OPENMS_LOG_WARN << "Shortlist: no protein has " << sl_settings.min_spectra << " qualifying spectra"
-                          << (fasta_out.empty() || handoff_refused ? "" : "; -fasta_out holds the background only")
+                          << (fasta_out.empty() || handoff_refused || sl_background.empty()
+                                  ? ""
+                                  : "; -fasta_out holds the background only")
                           << "." << std::endl;
         if (!shortlist_out.empty())
         {
@@ -4542,11 +4546,38 @@ TOPPFASTag::ExitCodes TOPPFASTag::main_(int, const char**)
                           << " proteins with evidence kept, not FDR-controlled -> " << shortlist_out << std::endl;
         }
       }
+      // 1.14: a reduced database without a protein (the shortlist kept none
+      // and there is no background) lets the engine search nothing. Neither
+      // it nor the configuration naming it is written, files an earlier run
+      // left at those paths are removed, the other outputs are written and
+      // the run ends with UNEXPECTED_RESULT.
+      if (!handoff_refused && !fasta_out.empty() &&
+          static_cast<std::size_t>(std::count(keep.begin(), keep.end(), true)) + sl_background.size() == 0)
+      {
+        empty_database = true;
+        std::vector<std::string> stale;
+        for (const std::string& f : {fasta_out, search_config_out})
+        {
+          std::error_code ec;
+          if (!f.empty() && std::filesystem::is_regular_file(f, ec) && std::filesystem::remove(f, ec))
+            stale.push_back(f);
+        }
+        std::string removed;
+        for (const std::string& f : stale) removed += (removed.empty() ? "" : ", ") + f;
+        OPENMS_LOG_ERROR << "Reduced FASTA: no protein has " << sl_settings.min_spectra
+                         << " qualifying spectra and there is no -shortlist_background, so the reduced database "
+                            "would be empty. Not writing -fasta_out"
+                         << (search_config_out.empty() ? "" : " and -search_config_out")
+                         << (removed.empty() ? std::string() : " (removed " + removed + ", left by an earlier run)")
+                         << ". Search the full database; if the protease is not trypsin, name it with "
+                            "-shortlist_protease."
+                         << std::endl;
+      }
       // The engine configuration's text is made before -fasta_out is
       // written: a rule the engine cannot express (1.13 item 20: 'auto'
       // calling a protease without a Comet enzyme entry) writes neither.
       std::string sc_text;
-      if (!handoff_refused && !search_config_out.empty())
+      if (!handoff_refused && !empty_database && !search_config_out.empty())
       {
         std::string err;
         if (search_engine == "sage") sc_text = FASTag::SearchConfig::renderSage(sl_plan);
@@ -4574,7 +4605,7 @@ TOPPFASTag::ExitCodes TOPPFASTag::main_(int, const char**)
           return ILLEGAL_PARAMETERS;
         }
       }
-      if (!handoff_refused && !fasta_out.empty())
+      if (!handoff_refused && !empty_database && !fasta_out.empty())
       {
         // 1.13 #18: MSFragger generates no decoys; its -fasta_out gets reversed ones.
         const auto res = FASTag::Shortlist::writeReducedFasta(recon_db, keep, sl_background, fasta_out,
@@ -4592,7 +4623,7 @@ TOPPFASTag::ExitCodes TOPPFASTag::main_(int, const char**)
         else
           OPENMS_LOG_INFO << "Reduced FASTA: " << res.entries << " entries (no decoys) -> " << fasta_out << std::endl;
       }
-      if (!handoff_refused && !search_config_out.empty())
+      if (!handoff_refused && !empty_database && !search_config_out.empty())
       {
         std::string err;
         FASTag::PartFile pf(search_config_out);
@@ -5133,6 +5164,8 @@ TOPPFASTag::ExitCodes TOPPFASTag::main_(int, const char**)
   // #5: a confidently non-tryptic run withheld the FASTA or the
   // configuration it was asked for (a shortlist-only run is not refused).
   if (handoff_refused) return ILLEGAL_PARAMETERS;
+  // 1.14: the reduced FASTA would have held no protein and was not written.
+  if (empty_database) return UNEXPECTED_RESULT;
   // #11B: -census_ids named mostly foreign spectra; the census was withheld.
   if (census_ids_refused) return INCOMPATIBLE_INPUT_DATA;
   return EXECUTION_OK;

@@ -481,8 +481,10 @@ void TOPPFASTag::registerOptionsAndFlags_()
                         "(refuse), tagged anyway with a warning as before 1.12 (warn), or not "
                         "checked (off). Tag DIA through pseudo-DDA spectra instead: run DIAspeXtract "
                         "(or diaTracer for .d) first. The revised 1.13 check passed its second held-out "
-                        "test on Thermo files: 0 of 58 non-DIA and 35 of 37 DIA files refused "
-                        "(no Astral, timsTOF or SCIEX files tested). If a known DDA file is refused, "
+                        "test on Thermo files: 0 of 58 non-DIA and 35 of 37 DIA files refused. A third "
+                        "test on Astral, timsTOF and SCIEX files refused 0 of 75 non-DIA and 60 of 60 DIA "
+                        "files; it is inconclusive because it had only 3 Astral DDA files and no "
+                        "closed-window DIA file. If a known DDA file is refused, "
                         "inspect the acquisition metadata before choosing warn or off", false);
   setValidStrings_("acquisition_check", ListUtils::create<std::string>("refuse,warn,off"));
   registerIntOption_("acquisition_probe_spectra", "<n>", 4000,
@@ -525,7 +527,7 @@ void TOPPFASTag::registerOptionsAndFlags_()
   registerStringOption_("complement_tolerance_unit", "<u>", FASTag::Cli::COMPLEMENT_TOLERANCE_UNIT,
                         "Da: the window is -complement_tolerance. fragment: "
                         "-complement_tol_factor scales the run's -fragment_tolerance at "
-                        "both partners. auto (experimental; its first held-out test failed, the second, with the revised estimator, was inconclusive with no criterion failed: +1.1 points of correct rank-1 tags on ion trap, same window as Da on the high-resolution files): the window is measured on the run, "
+                        "both partners. auto (validated: its third held-out test passed, +3.3 points of correct rank-1 tags on ion trap, not worse on timsTOF; the first, with an earlier estimator, failed, the second was inconclusive): the window is measured on the run, "
                         "from the complement pairs of high-confidence tags in a probe of "
                         "-complement_probe MS2 spectra; -complement_tolerance when too few pairs",
                         false, true);
@@ -629,7 +631,9 @@ void TOPPFASTag::registerOptionsAndFlags_()
   setValidFormats_("shortlist_out", ListUtils::create<std::string>("tsv"));
   registerOutputFile_("fasta_out", "<file>", "",
                       "Reduced FASTA: the shortlisted proteins of the database (no decoys; let the "
-                      "search engine generate them), then -shortlist_background", false);
+                      "search engine generate them), then -shortlist_background. When it would hold no "
+                      "protein, neither it nor -search_config_out is written and FASTag exits with code 13",
+                      false);
   setValidFormats_("fasta_out", ListUtils::create<std::string>("fasta"));
   registerInputFile_("shortlist_background", "<file>", "",
                      "Proteins always appended to -fasta_out (host proteome, contaminants); decoys "
@@ -674,14 +678,15 @@ void TOPPFASTag::registerOptionsAndFlags_()
                         "protease the tag ends call (trypsin when inconclusive). A protease name, or "
                         "'unspecific': that rule. Except for 'trypsin', windows are found by flank mass and "
                         "kept by the rule and -shortlist_specificity; only exact placements count. "
-                        "Experimental; auto passed its held-out test (9 runs, 5 proteases: median protein recall 0.25 against the full search, +0.12 over the trypsin shortlist); a named rule and unspecific have no held-out test. After 1.13.1 an Asp-N call of 'auto' is exported semi-specific unless -shortlist_specificity is given (development runs only, no held-out test)", false, true);
+                        "Experimental; auto passed its held-out test (9 runs, 5 proteases: median protein recall 0.25 against the full search, +0.12 over the trypsin shortlist); a named rule and unspecific have no held-out test. After 1.13.1 an Asp-N call of 'auto' is exported semi-specific unless -shortlist_specificity is given; not validated: its held-out test failed on one criterion only, an empty trypsin comparison export (+0.37 protein recall over the trypsin shortlist, Asp-N called in 11 of 12 Asp-N runs)", false, true);
   setValidStrings_("shortlist_protease",
                    ListUtils::create<std::string>("trypsin,auto,unspecific,lys-c,arg-c,asp-n,glu-c,chymotrypsin,lys-n"));
   registerStringOption_("shortlist_specificity", "<mode>", "full",
                         "With -shortlist_protease other than trypsin: 'full' both window ends at a cleavage "
                         "site (or a protein terminus), 'semi' at least one, 'none' any window. When it is "
-                        "not given and -shortlist_protease auto calls Asp-N, 'semi' is used (development "
-                        "runs only, no held-out test); a named asp-n stays 'full'", false, true);
+                        "not given and -shortlist_protease auto calls Asp-N, 'semi' is used (not validated: "
+                        "its held-out test failed, see -shortlist_protease); a named asp-n stays 'full'",
+                        false, true);
   setValidStrings_("shortlist_specificity", ListUtils::create<std::string>("full,semi,none"));
   registerOutputFile_("search_config_out", "<file>", "",
                       "Search-engine configuration for -fasta_out (or the input database): Sage JSON, "
