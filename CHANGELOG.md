@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- **Intel Macs again:** CI builds `macos-x64` natively on GitHub's
+  `macos-26-intel` runner, with the same OpenMS, libraries, 13.4 floor, tests
+  and signing as Apple silicon. Releases carry
+  `FASTag-<version>-macos-x64.dmg` (command line) and
+  `FASTag-<version>-gui-macos-x64.dmg` (desktop app); the Homebrew casks pick
+  the image for the Mac's architecture. 1.8.0 to 1.14.x were Apple silicon
+  only. GitHub ends Intel macOS runners in 2027, and with them these builds.
 - **Release files carry the version:** `FASTag-<version>-<variant>.<ext>`,
   e.g. `FASTag-1.15.0-linux-x64.tar.gz`, `FASTag-1.15.0-gui-macos-arm64.dmg`,
   `FASTag-1.15.0-gui-windows-x64-setup.exe`, `FASTag-1.15.0-windows-x64.zip`,

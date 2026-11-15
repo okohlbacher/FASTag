@@ -146,9 +146,12 @@ manual run.
 - **Notarization is iterate-to-green.** The first submissions usually fail on a
   missed nested binary; `xcrun notarytool log <id>` names the exact file. That
   is why the CLI step signs *every* dylib rather than a hand-listed set.
-- **One arch.** `macos-arm64` produces the `.dmg`s (Intel macOS is not built),
-  ~1.5 GB apiece because the taxonomy is inside, so the notarization upload is
-  slow — hence the 120-minute step timeout.
+- **Two archs.** `macos-arm64` (macos-15) and `macos-x64` (macos-26-intel)
+  each sign, notarize and staple their own CLI and app `.dmg`s: four
+  notarization submissions per release, ~1.5 GB apiece because the taxonomy
+  is inside, so the uploads are slow -- hence the 120-minute step timeout. The
+  same Developer ID identity signs both; nothing is universal (conda-forge
+  ships no universal2 dylibs).
 - **A brand-new bundle ID's first notarization can take 8–12 hours.** Prime it
   out of band before the first signed release; no job timeout here covers that.
 - Ad-hoc signatures from `bundle-macos.sh` (`codesign --sign -`) are placeholders
