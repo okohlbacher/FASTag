@@ -195,23 +195,23 @@ notarization ticket, so they open with no network connection.</p>
 <thead><tr><th>Platform</th><th>Desktop app</th><th>Command line</th></tr></thead>
 <tbody>
 <tr><td>macOS, Apple silicon</td>
-    <td><a href="https://github.com/okohlbacher/FASTag/releases/latest/download/FASTag-gui-macos-arm64.dmg">FASTag-gui-macos-arm64.dmg</a></td>
-    <td><a href="https://github.com/okohlbacher/FASTag/releases/latest/download/FASTag-macos-arm64.dmg">FASTag-macos-arm64.dmg</a></td></tr>
+    <td><a class="fname" data-asset="gui-macos-arm64.dmg" href="https://github.com/okohlbacher/FASTag/releases/latest">FASTag-&lt;version&gt;-gui-macos-arm64.dmg</a></td>
+    <td><a class="fname" data-asset="macos-arm64.dmg" href="https://github.com/okohlbacher/FASTag/releases/latest">FASTag-&lt;version&gt;-macos-arm64.dmg</a></td></tr>
 <tr><td>macOS, Intel</td>
     <td colspan="2">not built from 1.8.0 on; the last Intel release is <a href="https://github.com/okohlbacher/FASTag/releases/tag/v1.6.1">1.6.1</a></td></tr>
 <tr><td>Windows x64</td>
-    <td><a href="https://github.com/okohlbacher/FASTag/releases/latest/download/FASTag-gui-windows-x64-setup.exe">FASTag-gui-windows-x64-setup.exe</a></td>
-    <td><a href="https://github.com/okohlbacher/FASTag/releases/latest/download/FASTag-windows-x64.zip">FASTag-windows-x64.zip</a></td></tr>
+    <td><a class="fname" data-asset="gui-windows-x64-setup.exe" href="https://github.com/okohlbacher/FASTag/releases/latest">FASTag-&lt;version&gt;-gui-windows-x64-setup.exe</a></td>
+    <td><a class="fname" data-asset="windows-x64.zip" href="https://github.com/okohlbacher/FASTag/releases/latest">FASTag-&lt;version&gt;-windows-x64.zip</a></td></tr>
 <tr><td>Linux x86-64</td>
-    <td><a href="https://github.com/okohlbacher/FASTag/releases/latest/download/FASTag-gui-linux-x64.AppImage">AppImage</a>, <a href="https://github.com/okohlbacher/FASTag/releases/latest/download/FASTag-gui-linux-x64.tar.gz">tarball</a> or <a href="https://github.com/okohlbacher/FASTag/releases/latest">.deb</a></td>
-    <td><a href="https://github.com/okohlbacher/FASTag/releases/latest/download/FASTag-linux-x64.tar.gz">FASTag-linux-x64.tar.gz</a></td></tr>
+    <td><a data-asset="gui-linux-x64.AppImage" href="https://github.com/okohlbacher/FASTag/releases/latest">AppImage</a>, <a data-asset="gui-linux-x64.tar.gz" href="https://github.com/okohlbacher/FASTag/releases/latest">tarball</a> or <a data-asset="deb" href="https://github.com/okohlbacher/FASTag/releases/latest">.deb</a></td>
+    <td><a class="fname" data-asset="linux-x64.tar.gz" href="https://github.com/okohlbacher/FASTag/releases/latest">FASTag-&lt;version&gt;-linux-x64.tar.gz</a></td></tr>
 <tr><td>Linux arm64</td><td>—</td>
-    <td><a href="https://github.com/okohlbacher/FASTag/releases/latest/download/FASTag-linux-arm64.tar.gz">FASTag-linux-arm64.tar.gz</a></td></tr>
+    <td><a class="fname" data-asset="linux-arm64.tar.gz" href="https://github.com/okohlbacher/FASTag/releases/latest">FASTag-&lt;version&gt;-linux-arm64.tar.gz</a></td></tr>
 </tbody>
 </table>
 
 <p class="muted">Species detection additionally needs the taxonomy index,
-<a href="https://github.com/okohlbacher/FASTag/releases/latest/download/FASTag-taxonomy-k7.tar.gz">FASTag-taxonomy-k7.tar.gz</a>,
+<a class="fname" data-asset="taxonomy-k7.tar.gz" href="https://github.com/okohlbacher/FASTag/releases/latest">FASTag-&lt;version&gt;-taxonomy-k7.tar.gz</a>,
 which is already embedded in the release tarballs above. The Linux desktop app needs Ubuntu 22.04 or Debian 12 or newer (glibc 2.35, WebKitGTK 4.1): the .deb installs its dependencies, the AppImage needs FUSE 2 (<code>libfuse2</code>, <code>libfuse2t64</code> on Ubuntu 24.04); on RHEL, Rocky, Alma and Linux arm64 use the command line. Windows binaries are not yet
 Authenticode-signed, so SmartScreen will warn on first run. All releases:
 <a href="https://github.com/okohlbacher/FASTag/releases">github.com/okohlbacher/FASTag/releases</a>.</p>
@@ -312,8 +312,50 @@ large-scale mass spectrometry data. <em>Nat Methods</em> 2024.
 <script>
 // Offer the build that matches the visitor's OS. Progressive enhancement: the
 // panel starts hidden, so with JS off the full table below is still the answer.
+//
+// Release file names carry the version (FASTag-<version>-<variant>; up to
+// 1.14.0 FASTag-<variant>), so there is no fixed download URL. Every link
+// with data-asset="<variant>" points at the latest release page and is
+// pointed at the file itself once the GitHub API names the latest release's
+// assets. If the API fails (offline, rate limit), the page links stay.
 (function () {
-  var BASE = 'https://github.com/okohlbacher/FASTag/releases/latest/download/';
+  var PAGE = 'https://github.com/okohlbacher/FASTag/releases/latest';
+  var API = 'https://api.github.com/repos/okohlbacher/FASTag/releases/latest';
+  var urls = null; // variant -> {url, name}, once the API answered
+
+  function resolve(rel) {
+    var v = String(rel.tag_name || '').replace(/^v/, '');
+    var out = {};
+    (rel.assets || []).forEach(function (a) {
+      var n = a.name, m;
+      if (/^fastag-gui_.+_amd64\.deb$/.test(n)) { out.deb = { url: a.browser_download_url, name: n }; return; }
+      if (v && n.indexOf('FASTag-' + v + '-') === 0) m = n.slice(('FASTag-' + v + '-').length);
+      else if (n.indexOf('FASTag-') === 0) m = n.slice('FASTag-'.length);
+      // A versioned name wins over an old one of the same variant.
+      if (m && (!out[m] || n.indexOf('FASTag-' + v + '-') === 0)) out[m] = { url: a.browser_download_url, name: n };
+    });
+    return out;
+  }
+
+  function apply() {
+    if (!urls) return;
+    var links = document.querySelectorAll('a[data-asset]');
+    for (var i = 0; i < links.length; i++) {
+      var hit = urls[links[i].getAttribute('data-asset')];
+      if (!hit) continue;
+      links[i].href = hit.url;
+      links[i].title = hit.name;
+      if (links[i].classList.contains('fname')) links[i].textContent = hit.name;
+    }
+  }
+
+  if (window.fetch) {
+    fetch(API, { headers: { Accept: 'application/vnd.github+json' } })
+      .then(function (r) { if (!r.ok) throw new Error(r.status); return r.json(); })
+      .then(function (rel) { urls = resolve(rel); apply(); })
+      .catch(function () { /* keep the release-page links */ });
+  }
+
   var pick = document.getElementById('pick');
   if (!pick) return;
   var osEl = document.getElementById('pick-os');
@@ -323,15 +365,17 @@ large-scale mass spectrometry data. <em>Nat Methods</em> 2024.
 
   var uad = navigator.userAgentData;
   var hay = ((uad && uad.platform) || navigator.platform || '') + ' ' + (navigator.userAgent || '');
-  var link = function (f, t) { return '<a href="' + BASE + f + '">' + t + '</a>'; };
+  var link = function (variant, t) { return '<a data-asset="' + variant + '" href="' + PAGE + '">' + t + '</a>'; };
 
-  function show(os, label, file, altHtml, noteText) {
+  function show(os, label, variant, altHtml, noteText) {
     osEl.textContent = os;
     btn.textContent = label;
-    btn.href = BASE + file;
+    btn.href = PAGE;
+    if (variant) btn.setAttribute('data-asset', variant); else btn.removeAttribute('data-asset');
     alt.innerHTML = altHtml || '';
     note.textContent = noteText || '';
     pick.hidden = false;
+    apply();
   }
 
   if (/iPhone|iPad|iPod|Android/i.test(hay)) {
@@ -343,8 +387,8 @@ large-scale mass spectrometry data. <em>Nat Methods</em> 2024.
   }
 
   if (/Win/i.test(hay)) {
-    show('Windows', 'Download the installer', 'FASTag-gui-windows-x64-setup.exe',
-         'or the ' + link('FASTag-windows-x64.zip', 'command-line tool'),
+    show('Windows', 'Download the installer', 'gui-windows-x64-setup.exe',
+         'or the ' + link('windows-x64.zip', 'command-line tool'),
          'Not yet code-signed, so SmartScreen will warn on first run.');
     return;
   }
@@ -355,15 +399,15 @@ large-scale mass spectrometry data. <em>Nat Methods</em> 2024.
     // only Mac build from 1.8.0 on -- and SAYS so.
     var render = function (arm, sure) {
       if (!arm) {
-        show('macOS, Intel', 'Download 1.6.1 for Intel', 'FASTag-gui-macos-x64.dmg',
+        show('macOS, Intel', 'Download 1.6.1 for Intel', null,
              '<a href="https://github.com/okohlbacher/FASTag/releases/tag/v1.6.1">all 1.6.1 downloads</a>',
              'FASTag is built for Apple silicon only from 1.8.0 on; 1.6.1 is the last Intel release.');
         btn.href = 'https://github.com/okohlbacher/FASTag/releases/download/v1.6.1/FASTag-gui-macos-x64.dmg';
         return;
       }
       show('macOS, Apple silicon',
-           'Download the app', 'FASTag-gui-macos-arm64.dmg',
-           'or the ' + link('FASTag-macos-arm64.dmg', 'command-line tool'),
+           'Download the app', 'gui-macos-arm64.dmg',
+           'or the ' + link('macos-arm64.dmg', 'command-line tool'),
            'Signed, notarized and stapled — it opens with no network connection. Needs macOS 13.4 or later.' +
            (sure ? '' : ' Your browser does not report the processor; Intel Macs are not supported from 1.8.0 on.'));
     };
@@ -378,10 +422,10 @@ large-scale mass spectrometry data. <em>Nat Methods</em> 2024.
   }
 
   if (/Linux|X11/i.test(hay)) {
-    show('Linux', 'Download the app', 'FASTag-gui-linux-x64.AppImage',
-         'or the <a href="https://github.com/okohlbacher/FASTag/releases/latest">.deb package</a>, the ' +
-         link('FASTag-linux-x64.tar.gz', 'command-line tool') + ' (arm64: ' +
-         link('FASTag-linux-arm64.tar.gz', 'command line') + ')',
+    show('Linux', 'Download the app', 'gui-linux-x64.AppImage',
+         'or the ' + link('deb', '.deb package') + ', the ' +
+         link('linux-x64.tar.gz', 'command-line tool') + ' (arm64: ' +
+         link('linux-arm64.tar.gz', 'command line') + ')',
          'Desktop app for x86-64, Ubuntu 22.04 or Debian 12 and newer; the AppImage needs FUSE 2 (libfuse2). ' +
          'RHEL-family systems and arm64: command line only.');
     return;
