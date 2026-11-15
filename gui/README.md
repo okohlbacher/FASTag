@@ -737,3 +737,12 @@ an arbitrary prefix, run and probed there first) and the AppImage launched on
 both; a `gui_dry_run` dispatch runs the same
 jobs without a tag and leaves the bundles as the `FASTag-gui-linux-x64`
 artifact.
+
+Job `gui-linux-arm64` runs the same steps on ubuntu-22.04-arm with the
+portable linux-arm64 CLI: `fastag-gui_<version>_arm64.deb`,
+`FASTag-<version>-gui-linux-arm64.tar.gz` and a best-effort
+`FASTag-<version>-gui-linux-arm64.AppImage` (artifact
+`FASTag-gui-linux-arm64`), smoke-tested on ubuntu-22.04-arm and
+ubuntu-24.04-arm and attached by `gui-linux-arm64-release`. It is
+independent of the x64 jobs, and `release-complete` does not yet require
+the arm64 files.
