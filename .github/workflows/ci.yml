@@ -1608,7 +1608,7 @@ jobs:
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
         with:
           path: ~/.cargo/bin/tauri-driver
-          key: tauri-driver-2.1.0-ubuntu-22.04
+          key: tauri-driver-2.1.0-ubuntu-22.04-${{ runner.arch }}
       - name: Install tauri-driver
         if: steps.tauri-driver.outputs.cache-hit != 'true'
         run: |
@@ -1955,7 +1955,11 @@ jobs:
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
         with:
           path: ~/.cargo/bin/tauri-driver
-          key: tauri-driver-2.1.0-${{ matrix.os }}
+          # runner.arch last: actions/cache also restores a key that merely
+          # starts with this one, and tauri-driver-2.1.0-ubuntu-24.04 was a
+          # prefix of the arm64 leg's ...-ubuntu-24.04-arm (dry run
+          # 43741885636 restored the arm64 binary on x64).
+          key: tauri-driver-2.1.0-${{ matrix.os }}-${{ runner.arch }}
       - name: Install tauri-driver
         if: steps.tauri-driver.outputs.cache-hit != 'true'
         run: |
