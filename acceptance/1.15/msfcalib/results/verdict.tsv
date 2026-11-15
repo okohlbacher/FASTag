@@ -1,0 +1,13 @@
+criterion	verdict	detail
+evaluable	9	MC02,MC03,MC04,MC05,MC06,MC07,MC08,MC09,MC10
+C1	PASS	10 of 10 runs
+C2	PASS	min 0.9187 median 0.9696 pooled 0.9612 (n 9)
+G1	PASS	median 1.108 min 0.947 max 1.294 (n 9)
+G2	PASS	pooled 0.0110 max run 0.0128 (n 9)
+P1	PASS	median +0.0252 min +0.0145 max +0.0609 higher in 9 lower in 0 of 9
+P2	PASS	runs crossing 0.02: none (n 9; above under aE0 already: none)
+P3	FAIL	min 0.947 (n 9 of 9); at or below 1.0 or missing: MC02,MC10
+OVERALL	FAIL	
+arm0_C2	info	PASS: min 0.8830 median 0.9172 pooled 0.9301 (n 9)
+arm0_G1	info	PASS: median 1.899 min 1.601 max 2.343 (n 9)
+arm0_G2	info	PASS: pooled 0.0112 max run 0.0132 (n 9)
