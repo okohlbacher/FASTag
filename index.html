@@ -43,6 +43,7 @@ header{padding:64px 0 8px}
 .brand img{width:72px;height:72px;border-radius:16px;flex:none}
 .brand h1{margin:0;font-size:2.5rem}
 .tagline{font-size:1.15rem;color:var(--muted);margin:16px 0 0;max-width:46em}
+.lead{font-size:1rem;margin:12px 0 0;max-width:46em}
 .cta{display:flex;gap:10px;flex-wrap:wrap;margin:26px 0 0}
 .btn{display:inline-block;padding:10px 18px;border-radius:9px;font-weight:600;font-size:.95rem;
   border:1px solid var(--line);background:var(--panel);color:var(--ink)}
@@ -108,46 +109,54 @@ th{border-bottom:2px solid var(--line)}
     <img src="assets/fastag-icon.png" alt="">
     <h1>FASTag</h1>
   </div>
-  <p class="tagline">Partial sequence tags from peptide MS/MS spectra, and a filter that keeps
-  only the spectra whose tags occur in sequences you supply.</p>
+  <p class="tagline">Read short peptide sequences straight from MS/MS spectra, without a database
+  search, and keep only the spectra that match the proteins you care about.</p>
+  <p class="lead">FASTag is for proteomics researchers with DDA, PRM or pseudo-DDA data who want a
+  quick look at a run before, or instead of, a full search: pull out the spectra of a protein of
+  interest, see which organisms a run contains, or hand tags to de novo and open-modification
+  tools. It runs as a desktop app or as an OpenMS command-line tool on macOS, Windows and Linux,
+  and tags millions of spectra in seconds.</p>
   <div class="cta">
     <a class="btn primary" href="#download">Download</a>
     <a class="btn" href="https://github.com/okohlbacher/FASTag">GitHub</a>
     <a class="btn" href="https://github.com/okohlbacher/FASTag#readme">Documentation</a>
   </div>
 
-  <div class="stats">
-    <div><div class="n">48&times;</div><div class="l">faster than DirecTag on PXD047793 (3.09 M spectra)</div></div>
-    <div><div class="n">280 MB</div><div class="l">peak memory on a 23 GB run (DirecTag: 69.4 GB)</div></div>
-    <div><div class="n">98.6%</div><div class="l">of identified spectra get a valid tag</div></div>
-    <div><div class="n">5</div><div class="l">platforms, macOS signed &amp; notarized</div></div>
-  </div>
-
   <div class="openms">
     <a class="logo" href="https://www.openms.de"><img src="assets/openms-logo.png" alt="OpenMS"></a>
-    <p>An <a href="https://www.openms.de">OpenMS</a> TOPP tool — reads mzML and
-    <a href="https://github.com/OpenMS/mzpeak">mzPeak</a>, writes tab-separated tags, and drops
-    into an OpenMS pipeline like any other.</p>
+    <p>An <a href="https://www.openms.de">OpenMS</a> command-line (TOPP) tool with a desktop app —
+    reads mzML, <a href="https://github.com/OpenMS/mzpeak">mzPeak</a> and MGF, writes
+    tab-separated tags, and drops into an OpenMS pipeline like any other.</p>
   </div>
 </header>
 
 <h2>What it does</h2>
 
-<p>A <em>sequence tag</em> is a short peptide read inferred directly from a fragment-ion ladder —
-no database search, no precursor digest. FASTag is a <strong>fast, sensitive prefilter</strong>: it
-tells you what is worth looking at before you commit to a slow method.</p>
+<p>A <em>sequence tag</em> is a run of three or more amino acids read from the mass differences
+between consecutive fragment ions of one spectrum — no database search and no enzyme assumption
+needed. FASTag is a <strong>fast, sensitive prefilter</strong>: it tells you what is worth looking
+at before you commit to a database search or de novo sequencing.</p>
 
 <ul>
   <li>Narrow a huge search space to the spectra carrying a tag from your protein(s) of interest,
       with <code>-fasta</code>.</li>
-  <li>Get a sense of what is in a run — species, contaminants, a specific protein — without a full
-      database search.</li>
+  <li>Get a sense of what is in a run — which organisms (at genus level), contaminants, a specific
+      protein — without a full database search.</li>
   <li>Feed tags into a downstream tool: open-modification search, spectral clustering, de novo seeding.</li>
 </ul>
 
+<p><strong>Input:</strong> mzML, mzPeak or uncompressed MGF with MS/MS spectra of one precursor
+each — DDA, PRM, or the pseudo-DDA spectra that DIA tools such as DIAspeXtract or diaTracer
+derive. Raw DIA files are refused with a message; convert them to pseudo-DDA first.
+<strong>Output:</strong> a tab-separated table of ranked tags per spectrum, optionally the matching
+spectra as mzML or mzPeak.</p>
+
 <div class="note">
-It is a prefilter, not a final identification method. It is tuned for <em>recall</em>, not
-specificity: a tag matching a sequence is a reason to look closer, not an identification.
+It is a prefilter, not a final identification method. It is tuned for <em>recall</em>: it would
+rather report a wrong candidate than miss a right one, so a tag matching a sequence is a reason to
+look closer, not an identification. Tags carry no FDR; I and L are not distinguished (reported as
+L); b/y ions are assumed by default (<code>-ion_series auto</code> for ETD/ECD); ion-trap MS2 is
+supported but not validated.
 </div>
 
 <p>The algorithm is a reimplementation of
@@ -155,6 +164,12 @@ specificity: a tag matching a sequence is a reason to look closer, not an identi
 2008, 7:3838). That paper is the citation — FASTag has no separate publication.</p>
 
 <h2>Why use it</h2>
+
+<div class="stats">
+  <div><div class="n">48&times;</div><div class="l">faster than DirecTag on PXD047793 (3.09 M spectra)</div></div>
+  <div><div class="n">280 MB</div><div class="l">peak memory on a 23 GB run (DirecTag: 69.4 GB)</div></div>
+  <div><div class="n">98.6%</div><div class="l">of Mascot-identified spectra get a valid tag among the top 50 (PXD000001)</div></div>
+</div>
 
 <p>Measured against DirecTag 1.4.21142 at 128 threads on public ProteomeXchange runs, with a
 September 2026 FASTag build and settings matched to DirecTag (tag length 3, 50 tags, 100 peaks, no
@@ -170,13 +185,19 @@ gaps, no deisotoping); wall clock and peak memory for the whole run, including w
 </tbody>
 </table>
 
-<p>Memory is flat in the file size rather than proportional to it, so a run is bounded by threads,
-not by input. Both tools reach the same accuracy ceiling on PXD000001 — 98.62% of the spectra
+<p>On the default path memory is flat in the file size rather than proportional to it, so a run
+is bounded by threads, not by input (<code>-out_spectra</code> and a few reports keep per-run
+state). Both tools reach the same accuracy ceiling on PXD000001 — 98.62% of the spectra
 identified by its Mascot search get a valid tag — and FASTag gets there sooner in the ranking.
 A benchmark of the current release on further public data, at several thread counts and against
 database-search identifications, is in preparation.</p>
 
 <h2 id="download">Download</h2>
+
+<p>Current release: <strong id="rel-version">see the release page</strong>
+(<a href="https://github.com/okohlbacher/FASTag/blob/main/CHANGELOG.md">what changed</a>).
+Every release has the command-line tool and a desktop app that runs it: pick files and options
+in a form, follow progress, and browse tags, spectra and reports.</p>
 
 <p>Binaries are self-contained — the tool, its libraries and the OpenMS data it needs. macOS builds
 are signed with a Developer ID certificate, notarized by Apple, and the disk images carry their
@@ -194,7 +215,7 @@ notarization ticket, so they open with no network connection.</p>
 <table>
 <thead><tr><th>Platform</th><th>Desktop app</th><th>Command line</th></tr></thead>
 <tbody>
-<tr><td>macOS, Apple silicon</td>
+<tr><td>macOS 13.4+, Apple silicon</td>
     <td><a class="fname" data-asset="gui-macos-arm64.dmg" href="https://github.com/okohlbacher/FASTag/releases/latest">FASTag-&lt;version&gt;-gui-macos-arm64.dmg</a></td>
     <td><a class="fname" data-asset="macos-arm64.dmg" href="https://github.com/okohlbacher/FASTag/releases/latest">FASTag-&lt;version&gt;-macos-arm64.dmg</a></td></tr>
 <tr><td>Windows x64</td>
@@ -208,13 +229,23 @@ notarization ticket, so they open with no network connection.</p>
 </tbody>
 </table>
 
-<p class="muted">Species detection additionally needs the taxonomy index,
+<p class="muted">On macOS both builds are also on Homebrew:
+<code>brew install --cask okohlbacher/fastag/fastag</code> (app) or
+<code>brew install --cask okohlbacher/fastag/fastag-cli</code>.
+Species detection uses a taxonomy index of about 1 GB. The command-line archives include it; the
+Windows desktop app needs it as a separate download,
 <a class="fname" data-asset="taxonomy-k7.tar.gz" href="https://github.com/okohlbacher/FASTag/releases/latest">FASTag-&lt;version&gt;-taxonomy-k7.tar.gz</a>,
-which is already embedded in the release tarballs above. The Linux desktop app needs Ubuntu 22.04 or Debian 12 or newer (glibc 2.35, WebKitGTK 4.1): the .deb installs its dependencies, the AppImage needs FUSE 2 (<code>libfuse2</code>, <code>libfuse2t64</code> on Ubuntu 24.04); on RHEL, Rocky, Alma and Linux arm64 use the command line. Windows binaries are not yet
-Authenticode-signed, so SmartScreen will warn on first run. All releases:
+and says where to put it. The Linux desktop app needs Ubuntu 22.04 or Debian 12 or newer (glibc 2.35, WebKitGTK 4.1): the .deb installs its dependencies, the AppImage needs FUSE 2 (<code>libfuse2</code>, <code>libfuse2t64</code> on Ubuntu 24.04); on RHEL, Rocky, Alma and Linux arm64 use the command line. Windows binaries are not yet
+code-signed, so SmartScreen will warn on first run. All releases:
 <a href="https://github.com/okohlbacher/FASTag/releases">github.com/okohlbacher/FASTag/releases</a>.</p>
 
 <h2>Quick start</h2>
+
+<p><strong>Desktop app:</strong> open it, choose a spectrum file and an output folder, check the
+fragment tolerance, and press Run; the tag table opens when the run is done.
+<strong>Command line:</strong> the default fragment tolerance is 20 ppm, right for Orbitrap,
+timsTOF and Astral MS2. On ion-trap MS2 set it to 0.3 Da: a tolerance that is too tight gives
+almost no tags rather than an error.</p>
 
 <pre><code># tags for every MS2 spectrum in a run
 FASTag -in run.mzML -out tags.tsv
@@ -225,30 +256,33 @@ FASTag -in run.mzML -out tags.tsv -tag_length 3 -extension 6
 # ion-trap MS2 — set the tolerance to match the analyser
 FASTag -in run.mzML -out tags.tsv -fragment_tolerance 0.3 -fragment_tolerance_unit Da
 
-# keep only tags occurring in a protein of interest, and the spectra carrying them
-FASTag -in run.mzML -out tags.tsv -fasta protein.fasta -out_spectra hits.mzML
+# keep only tags occurring in a protein of interest, and the spectra carrying them;
+# tags must reach about 4 residues for one protein (-extension 1), 7-8 for a proteome (-extension 3)
+FASTag -in run.mzML -out tags.tsv -fasta protein.fasta -extension 1 -out_spectra hits.mzML
 
 # mzPeak in, mzPeak out — any combination of mzML and mzpeak works
 FASTag -in run.mzpeak -out tags.tsv -out_spectra hits.mzpeak</code></pre>
 
-<p>Isotope collapsing and one gap per tag are on by default. For the fastest possible run, or to
+<p><code>-threads 0</code> (the default) uses half the logical cores. Isotope collapsing and one gap
+per tag are on by default. For the fastest possible run, or to
 match a tool with no equivalent of either, add <code>-no_deisotope -gaps 0</code>.</p>
 
 <h2>mzPeak</h2>
 
 <p>FASTag reads <em>and</em> writes <a href="https://github.com/OpenMS/mzpeak">mzPeak</a>, the
-Parquet-backed mass-spectrometry container. Tagging is unaffected by which you use: reading a run
-as mzPeak gives the same spectra as reading it as mzML, and a run written to mzPeak and tagged
-again reproduces the original tag set exactly.</p>
+open, Parquet-based file format for mass-spectrometry data. On centroided MS2 tagging is
+unaffected by which you use: reading a run as mzPeak gives the same spectra as reading it as mzML,
+and a run written to mzPeak and tagged again reproduces the original tag set exactly.</p>
 
 <ul>
   <li>The same tags from mzML and from both mzPeak layouts (PXD003531, 27,345 MS2 spectra).</li>
-  <li>Profile MS2 is centroided on read, which recovers tags a raw profile read loses.</li>
+  <li>Profile MS2 in mzPeak is centroided on read, which recovers tags a raw profile mzML read
+      loses; profile runs can therefore give different tags from the two formats.</li>
+  <li><code>-out_spectra</code> to mzPeak refuses spectra with per-peak ion mobility (timsTOF
+      frames); write mzML for those.</li>
 </ul>
 
-<p>Support comes from
-<a href="https://github.com/okohlbacher/mzpeak-openms">mzpeak-openms</a>, bundled with every
-released binary.</p>
+<p>FASTag reads and writes mzPeak through OpenMS, built into every released binary.</p>
 
 <h2>Documentation</h2>
 
@@ -259,6 +293,10 @@ released binary.</p>
       — accuracy and throughput against the reference implementation on identified spectra</li>
   <li><a href="https://github.com/okohlbacher/FASTag/blob/main/doc/TEST-DATA.md">TEST-DATA.md</a>
       — what each benchmark file is and where it came from</li>
+  <li><a href="https://github.com/okohlbacher/FASTag/blob/main/gui/README.md">Desktop app</a>
+      — what the app does and how to use it</li>
+  <li><a href="https://github.com/okohlbacher/FASTag/blob/main/CHANGELOG.md">CHANGELOG</a>
+      — what changed in each release</li>
   <li><a href="https://github.com/okohlbacher/FASTag/issues">Issues</a> — bugs and questions</li>
 </ul>
 
@@ -350,7 +388,11 @@ large-scale mass spectrometry data. <em>Nat Methods</em> 2024.
   if (window.fetch) {
     fetch(API, { headers: { Accept: 'application/vnd.github+json' } })
       .then(function (r) { if (!r.ok) throw new Error(r.status); return r.json(); })
-      .then(function (rel) { urls = resolve(rel); apply(); })
+      .then(function (rel) {
+        urls = resolve(rel); apply();
+        var ve = document.getElementById('rel-version');
+        if (ve && rel.tag_name) ve.textContent = String(rel.tag_name).replace(/^v/, '');
+      })
       .catch(function () { /* keep the release-page links */ });
   }
 
