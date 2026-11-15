@@ -1,5 +1,17 @@
 # Changelog
 
+## Unreleased (feat/protease-call-sitefit, held-out test pending)
+
+- **`-shortlist_protease` other than trypsin: the Asp-N site share is fitted
+  per run.** The protease check fits the share of N-terminal tag ends at the
+  Asp-N site (maximum likelihood) and uses it when it is at least 0.10 and
+  significant against `unspecific` (likelihood ratio >= 10.83); otherwise
+  the fixed 0.5 of 1.14 stays. The log line and the shortlist header name
+  the lead over the best other non-tryptic model and the site share; a lead
+  below 0.05 log-likelihood per tag end is a WARN "close call". Development
+  runs only: two Asp-N runs called `unspecific` by 1.14 are called Asp-N, no
+  other call changes. The default `trypsin` check is unchanged.
+
 ## 1.14.0 (2026-11-14)
 
 Options that failed their held-out tests are removed, an empty reduced FASTA

@@ -107,6 +107,22 @@ byte) chooses the cleavage rule of the shortlist's placements and of
   `unspecific`, at most 10 % in 124 runs of other digests with 100 or more
   N-terminal tag ends). `-digest_out` and the default `trypsin` check are
   unchanged.
+  Unreleased, development only (branch feat/protease-call-sitefit, held-out
+  test pending): the Asp-N site share is fitted to each run's N-terminal tag
+  ends by maximum likelihood instead of being fixed at one half. The fit is
+  used when it is at least 0.10 and its likelihood ratio against
+  `unspecific` is at least 10.83 (chi-square, 1 df, p = 0.001); otherwise
+  the fixed half stays (which then cannot beat `unspecific`). The fitted
+  Asp-N model never scores below `unspecific`, so a supported Asp-N digest is
+  no longer lost to a near-tie (PXD050612 AspN_CF_3, 22 % D among 562 N
+  ends: fit 0.19, likelihood ratio 171). Development runs: fit 0.117 to 0.807
+  in Asp-N digests, at most 0.058 elsewhere. Lys-N is not fitted (no Lys-N
+  data; HLA ligands and a chymotryptic run have 17 to 30 % K among their N
+  ends and would be called Lys-N). The log line and the shortlist's protease
+  header also name the lead over the best other non-tryptic model (e.g.
+  "ahead of unspecific by 0.0388 log-likelihood per tag end") and the Asp-N
+  site share used; a lead below 0.05 per tag end adds "(close call)" and a
+  WARN.
   An Asp-N call is placed and exported at `semi` specificity unless
   `-shortlist_specificity` is given on the command line (or is `semi` or
   `none` in an INI; an INI's `full` is the default and does not count); the
