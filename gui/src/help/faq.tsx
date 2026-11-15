@@ -10,6 +10,7 @@
 // that a tag, a match or a call is an identification.
 import type { JSX, ReactNode } from 'react'
 import { HelpLink as L } from './HelpLink'
+import { TAXONOMY_ASSET, WINDOWS_SETUP_ASSET } from '../releaseAssets'
 
 export interface FaqEntry {
   id: string
@@ -315,7 +316,7 @@ export const FAQ: FaqEntry[] = [
     fixes: [
       <>Clear all three reference fields to use the bundled reference, or give all three.</>,
       <>
-        The Windows desktop app ships without the index (tax_k7.taxdb, 1.14 GB): download FASTag-taxonomy-k7.tar.gz from the release page, unpack it (tar -xzf FASTag-taxonomy-k7.tar.gz) and copy share-FASTag-taxonomy\tax_k7.taxdb into the folder the check before the run names, or set FASTAG_TAXONOMY_DIR to a folder that holds it. Or turn the species report off. See{' '}
+        The Windows desktop app ships without the index (tax_k7.taxdb, 1.14 GB): download {TAXONOMY_ASSET} from the release page, unpack it (tar -xzf {TAXONOMY_ASSET}) and copy share-FASTag-taxonomy\tax_k7.taxdb into the folder the check before the run names, or set FASTAG_TAXONOMY_DIR to a folder that holds it. Or turn the species report off. See{' '}
         <L to="faq-windows-install">Where FASTag installs on Windows</L>.
       </>,
       <>If the taxonomy files that come with the app are missing, install the app again.</>
@@ -424,7 +425,7 @@ export const FAQ: FaqEntry[] = [
       <>The app needs the Microsoft Edge WebView2 runtime, which current Windows 10 and 11 have. It also runs on Windows on ARM64 (emulated).</>
     ],
     fixes: [
-      <>Silent install: FASTag-gui-windows-x64-setup.exe /S (for all users when run as administrator), /S /AllUsers or /S /CurrentUser. Silent uninstall: uninstall.exe /S in the install folder.</>,
+      <>Silent install: {WINDOWS_SETUP_ASSET} /S (for all users when run as administrator), /S /AllUsers or /S /CurrentUser. Silent uninstall: uninstall.exe /S in the install folder.</>,
       <>Installing for all users removes a per-user install of FASTag first (and the other way round, for an administrator), so an upgrade leaves one copy.</>,
       <>
         Uninstall removes the installed files and the Start-menu entry. It keeps your settings and history unless you tick Delete app data, keeps a taxonomy index you

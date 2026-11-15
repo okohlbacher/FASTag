@@ -7,6 +7,7 @@
 import { act, fireEvent, screen, within } from '@testing-library/react'
 import { describe, expect, it } from 'vitest'
 import { installMockBridge, type MockBridge } from '../testing/mockBridge'
+import { TAXONOMY_ASSET } from '../releaseAssets'
 import { click, flush, goTo, key, pickSingle, renderApp, renderCharacterizeApp, runButton, showView } from '../testing/render'
 import diaPseudoProbe from '../fixtures/probe/dia_pseudo.probe.jsonl?raw'
 import { applyLastUsed, formValue } from '../testing/lastUsed'
@@ -72,7 +73,7 @@ describe('inspector before a run', () => {
     await flush()
     const block = checkItem(/^Blocks the run: The species report needs the taxonomy index/)
     expect(block.textContent).toContain(`not found at ${dir}\\tax_k7.taxdb`)
-    expect(block.textContent).toContain('FASTag-taxonomy-k7.tar.gz')
+    expect(block.textContent).toContain(TAXONOMY_ASSET)
     expect(runDisabled()).toBe(true)
     expect(summary()).toMatch(/1 block/)
     expect(mock.taxonomyStatusCalls.length).toBeGreaterThan(0)

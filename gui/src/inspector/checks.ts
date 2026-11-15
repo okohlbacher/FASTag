@@ -15,6 +15,7 @@ import { INSTRUMENTS, presetText } from '../setup/presets'
 import { familyOf, instrumentFromReports, instrumentText, presetFor, type Family } from './instrument'
 import { PROBE_FORMAT, type ProbeReport } from './probe'
 import type { TaxonomyStatus } from '../types'
+import { TAXONOMY_ASSET } from '../releaseAssets'
 
 export type Level = 'block' | 'flag' | 'warn' | 'info'
 
@@ -84,8 +85,8 @@ export const diaspextract = (input: string): string[] => ['DIAspeXtract', '-in',
 export const NOT_CHECKED_NO_PROBE =
   'Not checked before the run: this FASTag has no metadata probe (-probe_input). The instrument and the checks come from the reports after the run.'
 
-/// The release asset with the taxonomy k-mer index.
-export const TAXONOMY_ASSET = 'FASTag-taxonomy-k7.tar.gz'
+/// The release asset with the taxonomy k-mer index (versioned, see releaseAssets.ts).
+export { TAXONOMY_ASSET }
 
 /// The species report without its index (a fresh install: the index is a
 /// separate release asset): FASTag would stop with exit 6, "-species: no

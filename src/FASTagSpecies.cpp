@@ -56,10 +56,11 @@ std::optional<TOPPFASTag::ExitCodes> TOPPFASTag::detectSpecies_(bool want_specie
         else if (need.second == taxdb)
         {
           // The dumps ship in every release; the ~1 GB index does not (it is a
-          // separate asset). Missing index is the common case, so name it.
+          // separate asset). Missing index is the common case, so name it:
+          // the release asset of this version, FASTag-<version>-taxonomy-k7.tar.gz.
           OPENMS_LOG_ERROR << "The taxonomy dumps are present in '" << tdir
                            << "' but the k-mer index (tax_k7.taxdb) is not. Download "
-                           << "FASTag-taxonomy-k7.tar.gz from the release and extract it "
+                           << "FASTag-" FASTAG_VERSION "-taxonomy-k7.tar.gz from the release and extract it "
                            << "there, or set FASTAG_TAXONOMY_DIR / pass -taxdb." << std::endl;
         }
         else

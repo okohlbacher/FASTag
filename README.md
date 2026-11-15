@@ -125,14 +125,16 @@ count is never mistaken for signal:
 
 **[okohlbacher.github.io/FASTag](https://okohlbacher.github.io/FASTag/)** offers
 the right build for whatever you are reading this on. Everything is also on the
-[latest release](https://github.com/okohlbacher/FASTag/releases/latest):
+[latest release](https://github.com/okohlbacher/FASTag/releases/latest); each file name carries the release version
+(`<version>` below, e.g. `1.15.0`; releases up to 1.14.0 named the files
+without it):
 
 | platform | desktop app | command line |
 |---|---|---|
-| macOS, Apple silicon | [.dmg](https://github.com/okohlbacher/FASTag/releases/latest/download/FASTag-gui-macos-arm64.dmg) | [.dmg](https://github.com/okohlbacher/FASTag/releases/latest/download/FASTag-macos-arm64.dmg) |
-| Windows x64 | [installer](https://github.com/okohlbacher/FASTag/releases/latest/download/FASTag-gui-windows-x64-setup.exe) | [.zip](https://github.com/okohlbacher/FASTag/releases/latest/download/FASTag-windows-x64.zip) |
-| Linux x64 | [.deb](https://github.com/okohlbacher/FASTag/releases/latest) (`fastag-gui_<version>_amd64.deb`) · [.tar.gz](https://github.com/okohlbacher/FASTag/releases/latest/download/FASTag-gui-linux-x64.tar.gz) (from 1.12.0) | [.tar.gz](https://github.com/okohlbacher/FASTag/releases/latest/download/FASTag-linux-x64.tar.gz) |
-| Linux arm64 | — | [.tar.gz](https://github.com/okohlbacher/FASTag/releases/latest/download/FASTag-linux-arm64.tar.gz) |
+| macOS, Apple silicon | [`FASTag-<version>-gui-macos-arm64.dmg`](https://github.com/okohlbacher/FASTag/releases/latest) | [`FASTag-<version>-macos-arm64.dmg`](https://github.com/okohlbacher/FASTag/releases/latest) |
+| Windows x64 | [`FASTag-<version>-gui-windows-x64-setup.exe`](https://github.com/okohlbacher/FASTag/releases/latest) | [`FASTag-<version>-windows-x64.zip`](https://github.com/okohlbacher/FASTag/releases/latest) |
+| Linux x64 | [`fastag-gui_<version>_amd64.deb`](https://github.com/okohlbacher/FASTag/releases/latest) · [`FASTag-<version>-gui-linux-x64.tar.gz`](https://github.com/okohlbacher/FASTag/releases/latest) | [`FASTag-<version>-linux-x64.tar.gz`](https://github.com/okohlbacher/FASTag/releases/latest) |
+| Linux arm64 | — | [`FASTag-<version>-linux-arm64.tar.gz`](https://github.com/okohlbacher/FASTag/releases/latest) |
 
 Intel Macs are not built from 1.8.0 on; [1.6.1](https://github.com/okohlbacher/FASTag/releases/tag/v1.6.1) is the last release for them.
 On macOS both are also on [Homebrew](https://github.com/okohlbacher/homebrew-fastag):
@@ -164,7 +166,7 @@ the installer asks for whom to install: all users (preselected) or only the
 current user. A standard user installs for themselves, with no administrator
 prompt. The installed app takes about 365 MB, and about 1.5 GB with the
 taxonomy index of the species report, which is a separate download
-(`FASTag-taxonomy-k7.tar.gz` on the release page; the app checks for it before
+(`FASTag-<version>-taxonomy-k7.tar.gz` on the release page; the app checks for it before
 a run with the species report and says where to put it).
 
 | What | Where | Removed by uninstall? |
@@ -177,7 +179,7 @@ a run with the species report and says where to put it).
 | Run outputs | beside the input, or where you chose | never |
 
 To install the index, unpack the asset with Windows' own `tar`
-(`tar -xzf FASTag-taxonomy-k7.tar.gz`) and copy
+(`tar -xzf FASTag-<version>-taxonomy-k7.tar.gz`) and copy
 `share-FASTag-taxonomy\tax_k7.taxdb` into
 `<install>\resources\fastag\share\FASTag\taxonomy\`. In `C:\Program Files`
 that needs an administrator; otherwise keep it in a folder of your own and set
@@ -185,7 +187,7 @@ that needs an administrator; otherwise keep it in a folder of your own and set
 start FASTag again).
 
 Silent install and uninstall, for IT deployment:
-`FASTag-gui-windows-x64-setup.exe /S` installs for all users when run elevated
+`FASTag-<version>-gui-windows-x64-setup.exe /S` installs for all users when run elevated
 and for the current user otherwise; `/S /AllUsers` (elevated) and
 `/S /CurrentUser` choose. The install folder follows the scope (`/D=` is not
 honoured). `<install>\uninstall.exe /S` uninstalls; a silent uninstall never
@@ -205,7 +207,7 @@ and WebKitGTK 4.1). The `.deb`, `fastag-gui_<version>_amd64.deb` on the release
 page (Debian package `fastag-gui`), pulls in `libwebkit2gtk-4.1-0` and
 `libgtk-3-0` (`sudo apt install ./fastag-gui_<version>_amd64.deb`); the tarball needs them
 installed and runs as `FASTag-gui/bin/fastag`. A best-effort
-`FASTag-gui-linux-x64.AppImage` carries its own WebKitGTK 4.1, takes GTK 3,
+`FASTag-<version>-gui-linux-x64.AppImage` carries its own WebKitGTK 4.1, takes GTK 3,
 EGL and GL from the desktop, and needs FUSE 2 (`libfuse2`, or `libfuse2t64`
 on Ubuntu 24.04) or `APPIMAGE_EXTRACT_AND_RUN=1`. RHEL-family systems (RHEL,
 Rocky, Alma) are not supported by the desktop app: RHEL 9 has glibc 2.34 and
@@ -1379,11 +1381,12 @@ run.
 **Get the index.** Release archives from v1.0 on carry the full k-mer index
 inside (`share-FASTag-taxonomy/`), so `-species` works out of the box. For an
 index-only download (older archives, source builds, upgrades), every release
-also carries the platform-independent `FASTag-taxonomy-k7.tar.gz` (+`.sha256`);
-extract it into the FASTag directory:
+also carries the platform-independent `FASTag-<version>-taxonomy-k7.tar.gz`
+(+`.sha256`; `FASTag-taxonomy-k7.tar.gz` up to 1.14.0); extract it into the
+FASTag directory:
 
 ```bash
-tar xzf FASTag-taxonomy-k7.tar.gz -C /path/to/FASTag/   # -> share-FASTag-taxonomy/
+tar xzf FASTag-<version>-taxonomy-k7.tar.gz -C /path/to/FASTag/   # -> share-FASTag-taxonomy/
 ```
 
 FASTag looks for the taxonomy in `FASTAG_TAXONOMY_DIR` if that is set to a
@@ -1396,8 +1399,8 @@ larger reference set, or to run a binary outside its install tree; see
 `-taxonomy_nodes` and `-taxonomy_names` override the lookup.
 
 Index rebuilds ship as their own `taxonomy-k7-YYYYMMDD` **pre-release** — a
-normal release would take GitHub's "Latest" slot and 404 every
-`/releases/latest/download/` binary link above.
+normal release would take GitHub's "Latest" slot, and every `releases/latest`
+link above would show the index instead of the binaries.
 
 The index is a bit-packed, memory-mapped format (`FTX2`): a 50-taxon index is
 ~1 GB on disk and **under 1 GB resident**, and loads instantly. Rebuild it from

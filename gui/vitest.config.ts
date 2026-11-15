@@ -1,9 +1,11 @@
 import { defineConfig } from 'vitest/config'
 import react from '@vitejs/plugin-react'
+// As in vite.config.ts: the app version for src/releaseAssets.ts.
+import tauriConf from './src-tauri/tauri.conf.json'
 
 export default defineConfig({
   plugins: [react()],
-  define: { __E2E__: 'false' },
+  define: { __E2E__: 'false', __APP_VERSION__: JSON.stringify(tauriConf.version) },
   test: {
     environment: 'jsdom',
     // Tests import from 'vitest' explicitly; globals exist only so RTL's

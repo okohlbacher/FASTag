@@ -18,7 +18,7 @@ producing an empty report.
 |---|---|---|
 | `nodes.dmp` | ~10 KB | yes |
 | `names.dmp` | ~19 KB | yes |
-| `tax_k7.taxdb` | ~1.06 GB | **no — separate release asset `FASTag-taxonomy-k7.tar.gz`** |
+| `tax_k7.taxdb` | ~1.06 GB | **no — separate release asset `FASTag-<version>-taxonomy-k7.tar.gz`** |
 
 The two `.dmp` files are an NCBI taxdump **pruned to the lineages the index can
 reach** (a few hundred taxa instead of ~2.5M). Produced by
@@ -31,11 +31,12 @@ pathogens, gut microbiome, archaea). It is not in the per-platform tarballs
 because it is large and platform-independent. Get it once:
 
 ```
-# download FASTag-taxonomy-k7.tar.gz from the release, then extract it into the
-# FASTag directory (next to the executable). Its top-level dir is
-# share-FASTag-taxonomy, exactly where -species looks:
-tar xzf FASTag-taxonomy-k7.tar.gz -C /path/to/FASTag/
-# verify: shasum -a256 -c FASTag-taxonomy-k7.tar.gz.sha256
+# download FASTag-<version>-taxonomy-k7.tar.gz from the release (up to 1.14.0:
+# FASTag-taxonomy-k7.tar.gz), then extract it into the FASTag directory (next
+# to the executable). Its top-level dir is share-FASTag-taxonomy, exactly
+# where -species looks:
+tar xzf FASTag-<version>-taxonomy-k7.tar.gz -C /path/to/FASTag/
+# verify: shasum -a256 -c FASTag-<version>-taxonomy-k7.tar.gz.sha256
 ```
 
 Without it, `-species` fails with a message naming the directory it searched and

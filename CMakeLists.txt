@@ -226,7 +226,7 @@ install(TARGETS FASTag RUNTIME DESTINATION bin)
 # SOURCE build, where downloading 430 MB behind cmake --install would be rude.
 # Release tarballs are different: CI embeds the full pinned index into every
 # one at tag time (see the "Embed taxonomy index" steps in the workflows), and
-# the same tarball ships standalone as FASTag-taxonomy-k7.tar.gz for source
+# the same tarball ships standalone as FASTag-<version>-taxonomy-k7.tar.gz for source
 # builders. FASTag names the directory it searched when the
 # index is absent, so that is a clear error, never a silent empty report.
 # reference-set.tsv is the manifest; it is installed too so a user can rebuild.

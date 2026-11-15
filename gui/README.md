@@ -702,7 +702,7 @@ other scope (same identifier `de.openms.fastag`), so an upgrade leaves one copy
 and one Apps entry. The app needs the WebView2 runtime (part of current
 Windows 10 and 11; the installer's bootstrapper downloads it otherwise) and
 runs on Windows on ARM64 emulated. It takes about 365 MB installed; the
-taxonomy k-mer index (1.14 GB, the separate `FASTag-taxonomy-k7.tar.gz`
+taxonomy k-mer index (1.14 GB, the separate `FASTag-<version>-taxonomy-k7.tar.gz`
 asset) is not in the installer, and the check before a run with `-species`
 (`inspector/checks.ts`, `no-taxdb`) says where it goes:
 `<install>\resources\fastag\share\FASTag\taxonomy\` or
@@ -721,8 +721,8 @@ On Linux (from 1.12.0) the `gui-linux` job in `.github/workflows/ci.yml`
 builds the app outside conda on ubuntu-22.04 against apt's WebKitGTK 4.1,
 with the portable linux-x64 CLI staged into `src-tauri/resources/fastag`:
 `fastag-gui_<version>_amd64.deb` (Debian package `fastag-gui`; Tauri would
-name it `fas-tag`, so the job repacks it), `FASTag-gui-linux-x64.tar.gz` (the `.deb`'s
-`/usr` tree, relocatable) and a best-effort `FASTag-gui-linux-x64.AppImage`.
+name it `fas-tag`, so the job repacks it), `FASTag-<version>-gui-linux-x64.tar.gz` (the `.deb`'s
+`/usr` tree, relocatable) and a best-effort `FASTag-<version>-gui-linux-x64.AppImage`.
 A `gui_dry_run` dispatch with `gui_full_payload` embeds the taxonomy index as
 a tag does, so the release-sized bundles are built and smoke-tested first.
 A tag attaches them only once P1 PR b's process lifetime

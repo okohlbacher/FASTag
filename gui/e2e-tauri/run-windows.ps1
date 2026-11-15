@@ -5,7 +5,7 @@
     run-windows.ps1 -App <install dir>\fastag.exe -Out <dir> [-TaxDb <tax_k7.taxdb>]
 
   -TaxDb: the taxonomy k-mer index of the release asset
-  FASTag-taxonomy-k7.tar.gz; Characterize is first blocked without it (the
+  FASTag-<version>-taxonomy-k7.tar.gz; Characterize is first blocked without it (the
   "no taxonomy index" check before the run), then runs with it copied into
   the installed app.
 

@@ -40,12 +40,13 @@ species detection standalone with no `KMP_DUPLICATE_LIB_OK`.
    already Developer ID-signed by the CLI step, which is what notarization
    requires.
 3. `xcrun stapler validate` the `.dmg` before upload, then attach it as
-   `FASTag-gui-<platform>.dmg`.
+   `FASTag-<version>-gui-<platform>.dmg` (the version from ci.yml's job
+   `version`: the tag without its `v`).
 
 `windows.yml`, after the CLI is SignPath-signed and `dist/` assembled: the same
 restage (but **flat** — Windows has no RPATH, so every DLL must sit beside the
 `.exe`), `npm run tauri build`, then a **second** SignPath request for the NSIS
-installer, attached as `FASTag-gui-windows-x64-setup.exe`.
+installer, attached as `FASTag-<version>-gui-windows-x64-setup.exe`.
 
 That second request means **a signed release needs the Approve click in
 SignPath twice**: once for the CLI, about ten minutes into the `windows-x64`
