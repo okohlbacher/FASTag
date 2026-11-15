@@ -147,7 +147,15 @@ runf "$TMP/fs" "$BIN" -fasta_out red.fasta -search_config_out sage.json
 runf "$TMP/fm" "$BIN" -fasta_out red.fasta -search_config_out f.params -search_engine msfragger
 for f in t.tsv sl.tsv; do cmp -s "$TMP/fs/$f" "$TMP/fm/$f" || fail "f: $f differs between sage and msfragger on the decoy-heavy database"; done
 grep -q '^# protease: non_tryptic Chymotrypsin' "$TMP/fs/sl.tsv" || fail "f: the protease check was not scored"
-diff <(grep -i 'protease\|chymotrypsin\|fits' "$TMP/fs/run.log") <(grep -i 'protease\|chymotrypsin\|fits' "$TMP/fm/run.log") > /dev/null \
+# Lines of a run log matching a pattern, with every path the test passes in
+# masked: a checkout or work path that contains "protease" (e.g. a tree under
+# /scratch/.../protease-dev) must not turn a path-bearing line, such as the
+# decoy count of the fixture FASTA, into a protease line.
+loglines() { local pat=$1 l; while IFS= read -r l; do
+    l=${l//"$TMP"/<tmp>}; l=${l//"$FIX"/<fix>}; l=${l//"$DATA"/<data>}; l=${l//"$BIN"/<bin>}
+    printf '%s\n' "$l"; done < "$2" | grep -i "$pat"; }
+diff <(loglines 'protease\|chymotrypsin\|fits' "$TMP/fs/run.log" | sed 's#<tmp>/f[sm]#<run>#g') \
+     <(loglines 'protease\|chymotrypsin\|fits' "$TMP/fm/run.log" | sed 's#<tmp>/f[sm]#<run>#g') > /dev/null \
   || fail "f: the protease call differs between sage and msfragger"
 # The same targets without the decoys: the background, and so the call, is equal.
 SKT=()
@@ -158,7 +166,7 @@ mkdir -p "$TMP/ft"
 grep -q -- "-recon_fasta $DB" <(echo "${SKT[*]}") || fail "f: the target-only run does not use $DB"
 diff <(grep '^# protease' "$TMP/fs/sl.tsv") <(grep '^# protease' "$TMP/ft/sl.tsv") > /dev/null \
   || fail "f: the sl.tsv protease call moves when decoys are added (decoys in the background)"
-diff <(grep -i 'protease' "$TMP/fs/run.log") <(grep -i 'protease' "$TMP/ft/run.log") > /dev/null \
+diff <(loglines 'protease' "$TMP/fs/run.log") <(loglines 'protease' "$TMP/ft/run.log") > /dev/null \
   || fail "f: the logged protease check moves when decoys are added (decoys in the background)"
 if [ -z "${FASTAG_PREV_BIN:-}" ] && [ "${FASTAG_IDENTITY_REQUIRED:-0}" = 1 ]; then
   fail "f: FASTAG_IDENTITY_REQUIRED=1 but FASTAG_PREV_BIN is unset"
