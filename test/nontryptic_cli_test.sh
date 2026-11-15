@@ -6,7 +6,8 @@
 # own peptides (CHYMO_A..C, 40 peptides each, concatenated: every peptide ends
 # at a chymotrypsin site, none starts with P):
 #   a. the default (trypsin) refuses -fasta_out as in 1.12, and with
-#      -shortlist_force keeps none of CHYMO_A..C (their windows are not tryptic);
+#      -shortlist_force keeps none of CHYMO_A..C (their windows are not tryptic):
+#      the reduced FASTA would be empty, so it is not written (exit 13, 1.14);
 #   b. auto: exit 0, the call and the rule in the TSV header and the log,
 #      CHYMO_A..C ranks 1-3 and kept with >= 30 spectra each, nothing else
 #      kept, -fasta_out exactly the kept proteins, Sage cuts after FWYL not
@@ -71,12 +72,19 @@ go() {
   ( cd "$d" && "$BIN" "$@" > run.log 2>&1 ); echo $?
 }
 NEW=(-out t.tsv -recon_out r.tsv -shortlist_out sl.tsv -fasta_out red.fasta -search_config_out sage.json)
+# A forced rule that keeps no protein would leave -fasta_out empty, which is
+# not written (exit 13, 1.14); the forced runs below that check the exports
+# add this background.
+BG=(-shortlist_background "$TMP/bg.fasta")
+printf '>BG1 host protein\nMKWVTFISLLLLFSSAYSRGVFRR\n' > "$TMP/bg.fasta"
 
 # ---- a: the default refuses; forced, the tryptic windows keep no CHYMO protein
 [ "$(go def "${CH[@]}" "${NEW[@]}")" != 0 ] || fail "default: a chymotryptic run was not refused"
 grep -q 'Chymotrypsin fits the tag ends best' "$TMP/def/run.log" || fail "default: no chymotrypsin call in the log"
 [ ! -e "$TMP/def/red.fasta" ] || fail "default: -fasta_out written although refused"
-[ "$(go deff "${CH[@]}" "${NEW[@]}" -shortlist_force)" = 0 ] || fail "default -shortlist_force: exit non-zero"
+[ "$(go deff "${CH[@]}" "${NEW[@]}" -shortlist_force)" = 13 ] || { cat "$TMP/deff/run.log" >&2; fail "default -shortlist_force: not exit 13"; }
+[ ! -e "$TMP/deff/red.fasta" ] && [ ! -e "$TMP/deff/sage.json" ] || fail "default -shortlist_force: an empty -fasta_out or its configuration written"
+grep -q 'the reduced database would be empty' "$TMP/deff/run.log" || fail "default -shortlist_force: no ERROR for the empty reduced database"
 n=$(rows "$TMP/deff/sl.tsv" | awk -F'\t' '$2 ~ /^CHYMO_/ && $11 == 1' | wc -l | tr -d ' ')
 [ "$n" = 0 ] || fail "default -shortlist_force: $n CHYMO proteins kept on tryptic windows"
 grep -q '^# placement:' "$TMP/deff/sl.tsv" && fail "default: a placement header line (the 1.12 header changed)"
@@ -135,7 +143,7 @@ grep -q '^# placement: Asp-N, full specificity.*; -fasta_out or -search_config_o
 [ "$(go anq "${CH[@]}" -out t.tsv -shortlist_out sl.tsv -fasta_out red.fasta -shortlist_protease asp-n)" != 0 ] \
   || fail "asp-n with -fasta_out alone was not refused"
 grep -q '; -fasta_out withheld$' "$TMP/anq/sl.tsv" || fail "asp-n: the header does not name exactly -fasta_out"
-[ "$(go anf "${CH[@]}" "${NEW[@]}" -shortlist_protease asp-n -shortlist_force)" = 0 ] || fail "asp-n -shortlist_force: exit non-zero"
+[ "$(go anf "${CH[@]}" "${NEW[@]}" -shortlist_protease asp-n -shortlist_force "${BG[@]}")" = 0 ] || fail "asp-n -shortlist_force: exit non-zero"
 grep -q '"cleave_at": "D"' "$TMP/anf/sage.json" && grep -q '"c_terminal": false' "$TMP/anf/sage.json" \
   || fail "asp-n forced: Sage is not Asp-N"
 # the rule filters: few chymotryptic windows start and end before a D
@@ -258,7 +266,7 @@ grep -q '^# placement: Arg-C' "$TMP/arc/sl.tsv" \
   || fail "lys-c on an Arg-C call was not refused"
 grep -q 'but the tag ends call Arg-C' "$TMP/arl/run.log" || fail "lys-c on Arg-C: the ERROR does not name the call"
 [ ! -e "$TMP/arl/red.fasta" ] || fail "lys-c on Arg-C: -fasta_out written although refused"
-[ "$(go arlf "${AR[@]}" -out t.tsv -fasta_out red.fasta -shortlist_protease lys-c -shortlist_force)" = 0 ] \
+[ "$(go arlf "${AR[@]}" -out t.tsv -fasta_out red.fasta -shortlist_protease lys-c -shortlist_force "${BG[@]}")" = 0 ] \
   || fail "lys-c on Arg-C -shortlist_force: exit non-zero"
 
 # ---- l: auto on the Asp-N MGF exports Asp-N semi-specific (post-1.13.1);
@@ -285,7 +293,7 @@ for kv in 'search_enzyme_name_1 = chymotrypsin' 'search_enzyme_cut_1 = FWYL' 'se
 done
 grep -q '^>rev_CHYMO_A ' "$TMP/mf/red.fasta" || fail "auto/MSFragger: -fasta_out lacks the reversed decoys"
 [ "$(go mfn "${CH[@]}" -out t.tsv -fasta_out red.fasta -search_config_out fragger.params -search_engine msfragger \
-       -shortlist_protease asp-n -shortlist_force -shortlist_specificity semi)" = 0 ] || fail "asp-n semi/MSFragger: exit non-zero"
+       -shortlist_protease asp-n -shortlist_force -shortlist_specificity semi "${BG[@]}")" = 0 ] || fail "asp-n semi/MSFragger: exit non-zero"
 for kv in 'search_enzyme_name_1 = asp-n' 'search_enzyme_cut_1 = D' 'search_enzyme_nocut_1 =' \
           'search_enzyme_sense_1 = N' 'num_enzyme_termini = 1'; do
   grep -Eqx "$kv ?" "$TMP/mfn/fragger.params" || fail "asp-n semi/MSFragger: no '$kv'"

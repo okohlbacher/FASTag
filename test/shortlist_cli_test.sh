@@ -19,6 +19,11 @@
 #      the configuration (shortlist written, non-zero exit) unless
 #      -shortlist_force; with -shortlist_out alone nothing is withheld (WARN,
 #      exit 0); a Da run is inconclusive and proceeds.
+#   i. 1.14: a reduced database without a protein (no protein reaches
+#      -shortlist_min_spectra, no background) is not written, nor the
+#      configuration naming it; a stale file is removed, the shortlist and the
+#      tag TSV are written, the run exits 13 with an ERROR; with a background
+#      the FASTA holds it and the run exits 0.
 # Exits 77 (ctest SKIP) when the binary cannot start.
 set -u
 BIN="$1"
@@ -207,8 +212,9 @@ grep -q 'Chymotrypsin fits the tag ends best' "$TMP/ch.log" || { cat "$TMP/ch.lo
   || fail "the refused run's shortlist is missing or does not carry the call"
 [ ! -e "$TMP/ch.fasta" ] && [ ! -e "$TMP/ch.json" ] || fail "a refused run wrote -fasta_out or -search_config_out"
 [ -s "$TMP/ch.tsv" ] || fail "a refused run lost its tag TSV"
+# (with a background: the forced tryptic shortlist of this run is empty, see i)
 ( cd "$TMP" && "$BIN" "${CH[@]}" -out chf.tsv -shortlist_out chf.sl.tsv -fasta_out chf.fasta -search_config_out chf.json \
-    -shortlist_force > chf.log 2>&1 ) || { cat "$TMP/chf.log" >&2; fail "-shortlist_force did not exit 0"; }
+    -shortlist_force -shortlist_background "$TMP/bg.fasta" > chf.log 2>&1 ) || { cat "$TMP/chf.log" >&2; fail "-shortlist_force did not exit 0"; }
 [ -e "$TMP/chf.fasta" ] && [ -s "$TMP/chf.json" ] || fail "-shortlist_force did not write the hand-off outputs"
 grep -q 'shortlist_force writes the hand-off outputs anyway' "$TMP/chf.log" || fail "no WARN under -shortlist_force"
 cmp -s "$TMP/ch.tsv" "$TMP/chf.tsv" || fail "the protease check changed the tag TSV"
@@ -222,5 +228,22 @@ grep -q 'Not writing' "$TMP/cho.log" && fail "a shortlist-only run names outputs
 ( cd "$TMP" && "$BIN" "${CH[@]}" -out chq.tsv -shortlist_out chq.sl.tsv -fasta_out chq.fasta > chq.log 2>&1 ); rc=$?
 [ $rc != 0 ] && [ ! -e "$TMP/chq.fasta" ] || fail "a non-tryptic run with -fasta_out was not refused"
 grep -q 'Not writing -fasta_out (' "$TMP/chq.log" || { cat "$TMP/chq.log" >&2; fail "the ERROR does not name exactly -fasta_out"; }
+
+# ---- i: an empty reduced database is not written (exit 13)
+mkdir -p "$TMP/e"
+echo stale > "$TMP/e/red.fasta"; echo stale > "$TMP/e/sage.json"
+( cd "$TMP/e" && "$BIN" "${ARGS[@]}" -out t.tsv "${NEW[@]}" -shortlist_min_spectra 100000 -threads 2 > run.log 2>&1 ); rc=$?
+[ $rc = 13 ] || { cat "$TMP/e/run.log" >&2; fail "an empty reduced database: exit $rc, not 13"; }
+grep -q 'the reduced database would be empty. Not writing -fasta_out and -search_config_out' "$TMP/e/run.log" \
+  || { cat "$TMP/e/run.log" >&2; fail "no ERROR for the empty reduced database"; }
+grep -q 'removed red.fasta, sage.json, left by an earlier run' "$TMP/e/run.log" || fail "the ERROR does not name the removed files"
+[ ! -e "$TMP/e/red.fasta" ] && [ ! -e "$TMP/e/sage.json" ] || fail "an empty reduced database or its configuration is on disk"
+[ -s "$TMP/e/sl.tsv" ] && [ -s "$TMP/e/t.tsv" ] || fail "the empty-database run lost its shortlist or tag TSV"
+grep -q 'proteins: [0-9]* with evidence, 0 kept' "$TMP/e/sl.tsv" || fail "the shortlist header does not say 0 kept"
+grep -q 'holds the background only' "$TMP/e/run.log" && fail "the WARN claims a background the run does not have"
+( cd "$TMP/e" && "$BIN" "${ARGS[@]}" -out tb.tsv -shortlist_out slb.tsv -fasta_out redb.fasta -shortlist_min_spectra 100000 \
+    -shortlist_background "$TMP/bg.fasta" -threads 2 > runb.log 2>&1 ) || { cat "$TMP/e/runb.log" >&2; fail "a background-only reduced database did not exit 0"; }
+grep -q '^>BG1 host protein$' "$TMP/e/redb.fasta" || fail "the background-only reduced database lacks the background"
+grep -q 'holds the background only' "$TMP/e/runb.log" || fail "no WARN for a background-only reduced database"
 
 echo "shortlist_cli_test: all checks passed"

@@ -384,6 +384,19 @@ export const FAQ: FaqEntry[] = [
     causes: [<>Every tag that could match the <L to="gloss-entrapment">entrapment database</L> could also match the sequence database, so no chance rate can be estimated. The CLI can leave partial outputs at this point, but the desktop app treats exit code 13 as a failed run and removes that run&apos;s output files.</>],
     fixes: [<>Choose a more distant organism for the entrapment database, for example archaea for a human sample.</>]
   },
+  {
+    id: 'faq-empty-database',
+    group: 'Files',
+    question: 'The reduced FASTA was not written (exit code 13)',
+    symptoms: <>The reason says the reduced database would be empty.</>,
+    causes: [
+      <>No protein of the shortlist reached -shortlist_min_spectra and there is no -shortlist_background, so the reduced FASTA (-fasta_out) would hold no protein. Neither it nor the search configuration (-search_config_out) is written.</>,
+      <>Often the run was not digested with trypsin: with -shortlist_protease trypsin and -shortlist_force, the tryptic placement finds almost nothing in, for example, an Asp-N digest.</>
+    ],
+    fixes: [
+      <>Search the full database instead. If the protease is not trypsin, set -shortlist_protease to it or to auto. The desktop app treats exit code 13 as a failed run and removes that run&apos;s output files.</>
+    ]
+  },
 
   // Batch runs
   {
@@ -432,6 +445,7 @@ export const CLASSES: [RegExp, string][] = [
   [/reach the minimum filter length/, 'faq-min-filter'],
   [/No spectrum carried a reported tag/, 'faq-out-spectra-none'],
   [/entrapment database shares/i, 'faq-entrapment'],
+  [/reduced database would be empty/, 'faq-empty-database'],
   [/Cannot open output file|Failed writing|Cannot write|disk full|name the same file|is the input file/i, 'faq-cannot-write'],
   [/could not start|cannot start|cannot (run|execute)/i, 'faq-will-not-start'],
   [/^Input '|is neither|BEGIN IONS|File not found|not readable|does not exist|compressed|mzPeak support|cannot be (read|opened|decoded)/i, 'faq-input']

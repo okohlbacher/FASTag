@@ -102,7 +102,7 @@ byte) chooses the cleavage rule of the shortlist's placements and of
   With any value but `trypsin` the check's Asp-N model expects aspartate at
   half of the N-terminal tag ends instead of all (the rest follows the
   background), so Asp-N beats `unspecific` from about 21 % D instead of 50 %
-  (post-1.13.1, development runs only, no held-out test yet: 33 to 78 % D in
+  (post-1.13.1; 33 to 78 % D in
   four Asp-N digests that are now called, 15 % in a fifth that still calls
   `unspecific`, at most 10 % in 124 runs of other digests with 100 or more
   N-terminal tag ends). `-digest_out` and the default `trypsin` check are
@@ -112,8 +112,8 @@ byte) chooses the cleavage rule of the shortlist's placements and of
   `none` in an INI; an INI's `full` is the default and does not count); the
   placement line says "semi-specific unless -shortlist_specificity is
   given". Every other call keeps `-shortlist_specificity` (default `full`).
-  Post-1.13.1, development runs only, no held-out test (numbers under
-  Held-out result).
+  Post-1.13.1; not validated: its held-out test failed on one criterion
+  (see Held-out result of the Asp-N call).
 - `chymotrypsin`, `lys-c`, `arg-c`, `asp-n`, `glu-c`, `lys-n`: that rule.
   When the check confidently calls another protease whose cleavage sites do
   not nest with the rule's (one site set within the other, same side, same
@@ -216,7 +216,7 @@ called trypsin); on the run called unspecific the export makes Sage four times s
 had no threshold). Asp-N is represented by one run. A named rule, `unspecific` given by the user and
 `-shortlist_specificity semi` or `none` were not tested. The option stays experimental.
 
-After 1.13.1 (development runs only, no held-out test): with the Asp-N call from 21 % D, three Asp-N runs
+After 1.13.1 (development runs): with the Asp-N call from 21 % D, three Asp-N runs
 (PXD064794, PXD068586, PXD051338) are called Asp-N instead of `unspecific`; one (PXD010154, 15 % D) stays
 `unspecific`. The Asp-N export makes Sage about twice as fast as the full search on the two larger runs
 (13 s against 31 s, 12 s against 30 s; the unspecific export took 162 s and 181 s), and the shortlist keeps fewer
@@ -227,7 +227,7 @@ the exported search is unspecific and can be slower than a full search; capping 
 there is no cap.
 
 For that reason `auto` exports an Asp-N call semi-specific (`-shortlist_specificity` not given; a named `asp-n`
-stays `full`). Development runs only, no held-out test. The three development runs called Asp-N, Sage 0.14.7 with
+stays `full`). Its held-out test failed (next section). The three development runs called Asp-N, Sage 0.14.7 with
 8 threads on a loaded node (compare within a run); kept = share of the proteins of the full search (Asp-N, at least
 2 PSMs at q <= 0.01) in the reduced FASTA:
 
@@ -246,6 +246,31 @@ stays `full`). Development runs only, no held-out test. The three development ru
 | | Asp-N, semi (`auto` now) | 46 | 0.64 | 4.6 | 0.2 |
 | | full search, no shortlist | proteome | 1 | 6.0 | 0.4 |
 
+### Held-out result of the Asp-N call (1.14)
+
+The Asp-N call of `auto` and its semi-specific export were tested on held-out data (`acc114/aspn`,
+PREREG-aspn.md; FASTag 1.13.4, Sage, scored once on 2026-11-14): 12 Asp-N runs from 4 PRIDE projects and 9
+control runs from 8 projects. Verdict **FAIL**, so the Asp-N call and its export are **not validated**. The
+only failing criterion is G1 (no aborted run): in one run (PXD050612, `AspN_CF_1_3ul`) the trypsin comparison
+arm (`-shortlist_force`, trypsin forced on the Asp-N digest) kept 0 of 2 proteins and wrote an empty reduced
+FASTA with exit code 0, which the frozen scorer counts as an abort. The `auto` arms ran completely in all 21
+runs. Since 1.14 an empty reduced FASTA is not written and the run exits with code 13 (see Reduced FASTA).
+Every other criterion passed:
+
+| Criterion | Result |
+|---|---|
+| E0 evaluable runs | 11 of 12 Asp-N runs (4 projects), 9 of 9 control runs (8 projects) |
+| C1 Asp-N called | 11 of 12 Asp-N runs (0.917; threshold 0.50); one called `unspecific` |
+| C2 no Asp-N call on controls | 0 of 9 |
+| R1 recall over the trypsin shortlist | +0.369 (95% CI +0.318 to +0.445; 10 runs) |
+| R2 recall over the Asp-N full-specificity export | +0.047 (95% CI +0.023 to +0.083) |
+| T1 Sage time, export / full search | median 0.983 (threshold 1.25; range 0.448 to 1.598) |
+| S1 specificity | every `auto` Asp-N call semi-specific |
+| G1 no aborted run | **FAIL**: 1 of 21 (the empty trypsin comparison export above) |
+
+Recall is the share of the proteins of a Sage search of the full database that the shortlist keeps; per run
+0.29 to 0.56 for `auto`, 0.00 to 0.04 for the trypsin shortlist.
+
 ## Reduced FASTA
 
 The database is streamed again and the kept entries are written in database
@@ -254,6 +279,14 @@ the background. Identifier, description and sequence round-trip through
 `FASTAFile::load`; the original line wrapping is not kept. The file is written
 to `<path>.part` and renamed when every write succeeded; on a failure nothing
 is left under the name, and no configuration is written.
+
+A reduced FASTA without a protein (no protein reaches `-shortlist_min_spectra`
+and there is no `-shortlist_background`) is not written (1.14). Neither is the
+`-search_config_out` that names it; files an earlier run left at those paths
+are removed, every other output is written, and FASTag exits with code 13
+(`UNEXPECTED_RESULT`) after an ERROR ("the reduced database would be empty").
+Before 1.14 it wrote an empty file and exited 0. A FASTA that holds only the
+background is written, with a warning.
 
 ## Engine configuration
 

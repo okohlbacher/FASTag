@@ -1,9 +1,10 @@
 # Run-measured complement tolerance (`-complement_tolerance_unit auto`)
 
-Experimental, opt-in (1.13, backlog item 15); `auto` **failed** its held-out
-test with the first estimator; the second test, with the revised estimator,
-was **inconclusive** with no criterion failed (see Validation). With the option off, nothing in this
-file runs and every output is unchanged.
+Opt-in (1.13, backlog item 15); `auto` is **validated**: its third held-out
+test **passed** (FASTag 1.13.4). The first test, with an earlier estimator,
+failed; the second was inconclusive with no criterion failed (see
+Validation). The default stays `Da`. With the option off, nothing in this file
+runs and every output is unchanged.
 
 ## What it does
 
@@ -181,7 +182,25 @@ two fell back with too few pairs), so `auto` equals the default there. The three
 identification rates; no timsTOF; the scorer was started twice (the first start stopped at an import, before it
 read data).
 
-The option stays experimental; the default stays `Da`.
+Third held-out test (`acceptance/1.13/PREREG-compltol-heldout3.md`, branch `acc114/compltol3`: freeze 2 59313b9a,
+results f4547e9e; FASTag 1.13.4): 7 new runs (ion trap 3, older Orbitrap 1, timsTOF 3), 54 cells plus a widening arm
+of 18 cells; all 84 runs exited 0. Verdict **PASS**:
+- (i) 50 cells pass, 0 fail, 4 are uninformative (ion trap 4+, baselines 0.50 to 1.06%, below the 1.8% floor);
+  every 2+ and 3+ cell passes.
+- (ii) passes: ion trap, length 3, 2+ and higher pooled, 18.46% to 21.77%, +3.31 points (95% interval 2.98 to 3.65;
+  15,512 clusters).
+- (iii) timsTOF: 18 of 18 cells pass (smallest difference +0.03 points, smallest Holm bound -0.26).
+- (iv) time passes (ratio 1.028, limit 1.03; the base repeats spread by 1.024 on a shared node).
+- (v) one window per file in all six cells, never below 0.02 Da (7 of 7 files).
+- (vi) widening arm passes: one high-resolution file widened (timsTOF PXD049281, 0.0563 Da; 18 of 18 cells pass,
+  gains up to +3.21 points at 2+).
+
+Windows in force: the ion-trap files 0.210 and 0.265 Da (the third had too few pairs and kept 0.02 Da); the older
+Orbitrap and two timsTOF files 0.02 Da (measured 0.0040 to 0.0153 Da); timsTOF PXD049281 0.0563 Da, the first
+high-resolution file in these tests whose window widened (its median complement error is -0.023 Da, which suggests
+a systematic fragment mass offset; not tested). The ion-trap gain comes from two files.
+
+`auto` is validated by this test; the default stays `Da`.
 
 ## Code
 

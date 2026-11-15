@@ -118,7 +118,7 @@ export const PARAM_UI: Record<string, ParamUi> = {
     section: 'Spectra',
     label: 'Raw DIA check',
     help: {
-      text: 'Before tagging, FASTag checks whether the file is raw DIA data, whose MS2 spectra each mix several peptides. By default (refuse) a file classified as raw DIA is not tagged: the run stops with exit code 11 before any file is written. warn tags it anyway, with a warning in the log; off skips the check. The revised 1.13 check passed its second held-out test on Thermo files: 0 of 58 non-DIA files and 35 of 37 DIA files were refused. That test included no Astral, timsTOF or SCIEX files. If a known DDA file is refused, inspect the acquisition metadata before choosing warn or off.',
+      text: 'Before tagging, FASTag checks whether the file is raw DIA data, whose MS2 spectra each mix several peptides. By default (refuse) a file classified as raw DIA is not tagged: the run stops with exit code 11 before any file is written. warn tags it anyway, with a warning in the log; off skips the check. The revised 1.13 check passed its second held-out test on Thermo files: 0 of 58 non-DIA files and 35 of 37 DIA files were refused. A third test on Astral, timsTOF and SCIEX files refused 0 of 75 non-DIA and 60 of 60 DIA files; it is inconclusive because it had only 3 Astral DDA files and no closed-window DIA file. If a known DDA file is refused, inspect the acquisition metadata before choosing warn or off.',
       tip: 'Better than warn: make pseudo-DDA spectra with DIAspeXtract (or diaTracer for timsTOF .d) first, and tag those. Tags of raw DIA spectra get wrong flanking masses and complement statistics.'
     }
   },
@@ -942,7 +942,7 @@ export const PARAM_UI: Record<string, ParamUi> = {
   complement_tolerance_unit: {
     hidden: OPT_IN_1_12,
     help: {
-      text: 'Whether the complement window is a fixed value in Da, follows the fragment tolerance, or (auto, experimental; its first held-out test failed, the second, with the revised estimator, was inconclusive with no criterion failed: +1.1 points of correct rank-1 tags on ion trap, same window as Da on the high-resolution files) is measured on the run from the complement pairs of confident tags.'
+      text: 'Whether the complement window is a fixed value in Da, follows the fragment tolerance, or (auto, validated: its third held-out test passed, +3.3 points of correct rank-1 tags on ion trap, not worse on timsTOF; the first, with an earlier estimator, failed, the second was inconclusive) is measured on the run from the complement pairs of confident tags.'
     }
   },
   digest_calibration: {
@@ -990,7 +990,7 @@ export const PARAM_UI: Record<string, ParamUi> = {
   fasta_out: {
     hidden: OPT_IN_1_12,
     help: {
-      text: 'Write a smaller FASTA with the proteins of the shortlist, for a database search. No decoys are added; let the search engine make them.'
+      text: 'Write a smaller FASTA with the proteins of the shortlist, for a database search. No decoys are added; let the search engine make them. When it would hold no protein, it is not written and the run fails with exit code 13.'
     }
   },
   ion_series: {
@@ -1112,13 +1112,13 @@ export const PARAM_UI: Record<string, ParamUi> = {
   shortlist_protease: {
     hidden: EXPERIMENTAL_1_13,
     help: {
-      text: 'The cleavage rule the shortlist places tags with: trypsin (as in 1.12), the protease the run calls (auto), a named protease, or none (unspecific). Experimental; auto passed its held-out test (9 runs, 5 proteases: median protein recall 0.25 against the full search, +0.12 over the trypsin shortlist); a named rule and unspecific have no held-out test.'
+      text: 'The cleavage rule the shortlist places tags with: trypsin (as in 1.12), the protease the run calls (auto), a named protease, or none (unspecific). Experimental; auto passed its held-out test (9 runs, 5 proteases: median protein recall 0.25 against the full search, +0.12 over the trypsin shortlist); a named rule and unspecific have no held-out test. The Asp-N call of auto and its semi-specific export are not validated: their held-out test failed on one criterion only, an empty trypsin comparison export (+0.37 protein recall over the trypsin shortlist, Asp-N called in 11 of 12 Asp-N runs).'
     }
   },
   shortlist_specificity: {
     hidden: EXPERIMENTAL_1_13,
     help: {
-      text: 'How many window ends must be cleavage sites of the -shortlist_protease rule: both (full), one (semi) or none. Left at full with auto, a run called Asp-N is still placed and exported semi-specific (development runs only, no held-out test); a named asp-n stays full.'
+      text: 'How many window ends must be cleavage sites of the -shortlist_protease rule: both (full), one (semi) or none. Left at full with auto, a run called Asp-N is still placed and exported semi-specific (not validated: its held-out test failed, see -shortlist_protease); a named asp-n stays full.'
     }
   },
   shortlist_gapped: {
