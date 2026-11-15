@@ -1,0 +1,8 @@
+OVERALL	INCONCLUSIVE
+PASS	K1 refused among NONDIA	n=86	min=50	0 of 86 refused (upper 95% bound 3.4%)
+PASS	K2 refused among DIA	n=71	min=40	70 of 71 refused (98.6%)
+PASS	K3 Astral DDA	n=12	min=8	0 of 12 refused (upper 95% bound 22.1%)
+INCONCLUSIVE	K4 closed-window DIA	n=1	min=5	1 of 1 refused (100.0%)
+#(report) Astral DIA	n=28	28 of 28 refused (100.0%)
+#(report) recurring/targeted NONDIA	n=58	0 of 58 refused (upper 95% bound 5.0%)
+#selected_not_unit	5 (not staged or truth UNCLEAR): AQ4.DDA_astral.02(yes,UNCLEAR) AQ4.DDA_astral.27(yes,UNCLEAR) AQ4.DDA_astral.51(yes,UNCLEAR) AQ4.PRM.08(yes,UNCLEAR) AQ4.DDA_orbitrap.24(yes,UNCLEAR)
