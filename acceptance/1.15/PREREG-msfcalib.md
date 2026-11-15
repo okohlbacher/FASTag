@@ -168,3 +168,13 @@ same time.
 On the 27 development runs arm 2 meets C2 in every run (lowest 0.800, EX04, at the threshold), G2 except the one run
 above 2.0 % already under arm 0, P1 (median +0.012), and P3 only narrowly (three runs at 1.03 to 1.10 at 12 threads).
 At 32 threads both sides of the speed-up change; P3 is the criterion most likely to fail.
+
+## Staging result (added with the staged manifest, before any run)
+
+Staged 2026-11-15; `manifests/msfcalib-heldout.tsv` now carries sha256 of every raw and mzML file
+(`msfcalib/inputs/staged_chosen.tsv`). All 10 chosen files passed download (size and PRIDE MD5) and check; no backup
+file was downloaded. **The test runs on 10 runs from 10 projects** (`msfcalib/inputs/list.tsv`). MC01 (PXD051187) has
+5,068 MS2, all with a charge (the check needs 5,000); MC02 (PXD056281) and MC09 (PXD027143) carry a charge on 32,331 of
+90,606 and 50,245 of 75,997 MS2. Re-check before this commit: `origin/acc115/acqcheck4` (freeze 1 c6abe7e0, after this
+test's) names the 10 projects only in its exclusion lists; `disjointness/msfcalib-heldout.tsv` is refreshed with that
+branch and this test's own files. Deviations up to here: none.
