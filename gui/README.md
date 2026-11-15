@@ -737,3 +737,21 @@ an arbitrary prefix, run and probed there first) and the AppImage launched on
 both; a `gui_dry_run` dispatch runs the same
 jobs without a tag and leaves the bundles as the `FASTag-gui-linux-x64`
 artifact.
+
+Job `gui-linux-arm64` runs the same steps on ubuntu-22.04-arm with the
+portable linux-arm64 CLI: `fastag-gui_<version>_arm64.deb`,
+`FASTag-<version>-gui-linux-arm64.tar.gz` and a best-effort
+`FASTag-<version>-gui-linux-arm64.AppImage` (artifact
+`FASTag-gui-linux-arm64`), smoke-tested on ubuntu-22.04-arm and
+ubuntu-24.04-arm and attached by `gui-linux-arm64-release`. It is
+independent of the x64 jobs; `release-complete` requires the arm64 `.deb`
+and tarball as it does the x64 ones (from 1.15.0).
+
+Known limits of the AppImage (Tauri's linuxdeploy bundle, checked on GNOME
+43 and 46): it sets `GDK_BACKEND=x11` and a light GTK theme
+(tauri-apps/tauri#8541), so on Wayland it runs through XWayland and its
+title bar and file dialogs stay light in dark mode; its FUSE mount shows up
+as a volume named "usr" in the file chooser, and gvfs locations (network
+shares) are not offered there. Neither the AppImage nor the tarball installs
+a launcher entry; only the `.deb` does (`FASTag.desktop`, with the icon). The
+`.deb` and the tarball run natively on Wayland and follow dark mode.

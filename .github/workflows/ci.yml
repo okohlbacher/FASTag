@@ -1052,12 +1052,13 @@ jobs:
       # particular taxon ranking (139 spectra cannot rank stably).
       #
       # A gui_dry_run dispatch with gui_full_payload also runs it, on the
-      # macos-arm64 and linux-x64 legs (the two that feed a desktop app), so
+      # macOS legs, linux-x64 and linux-arm64 (the ones that feed a
+      # desktop app), so
       # the release-sized dmg and Linux bundles can be built and checked
       # before the tag (see the input's comment). linux-x64 embeds it before
       # the portable-CLI pack below, which gui-linux stages.
       - name: Embed taxonomy index (tag builds)
-        if: startsWith(github.ref, 'refs/tags/v') || (inputs.gui_dry_run && inputs.gui_full_payload && (runner.os == 'macOS' || matrix.name == 'linux-x64'))
+        if: startsWith(github.ref, 'refs/tags/v') || (inputs.gui_dry_run && inputs.gui_full_payload && (runner.os == 'macOS' || matrix.name == 'linux-x64' || matrix.name == 'linux-arm64'))
         shell: bash -el {0}
         env:
           GH_TOKEN: ${{ github.token }}
@@ -1101,18 +1102,20 @@ jobs:
       # embedded by the step above. As a tar archive because upload-artifact
       # drops exec bits and symlinks (lib/ holds soname links). Pull requests
       # consume it too, in the real-CLI GUI consistency check below.
-      - name: Pack the portable CLI for the Linux GUI (linux-x64)
-        if: matrix.name == 'linux-x64'
+      # Both Linux legs: gui-linux stages linux-x64, gui-linux-arm64 stages
+      # linux-arm64.
+      - name: Pack the portable CLI for the Linux GUI (${{ matrix.name }})
+        if: matrix.name == 'linux-x64' || matrix.name == 'linux-arm64'
         shell: bash
         run: |
           set -euo pipefail
-          tar -C dist -czf FASTag-linux-x64-portable.tar.gz FASTag
-          ls -l FASTag-linux-x64-portable.tar.gz
+          tar -C dist -czf FASTag-${{ matrix.name }}-portable.tar.gz FASTag
+          ls -l FASTag-${{ matrix.name }}-portable.tar.gz
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
-        if: matrix.name == 'linux-x64'
+        if: matrix.name == 'linux-x64' || matrix.name == 'linux-arm64'
         with:
-          name: FASTag-linux-x64-portable
-          path: FASTag-linux-x64-portable.tar.gz
+          name: FASTag-${{ matrix.name }}-portable
+          path: FASTag-${{ matrix.name }}-portable.tar.gz
           # Already gzip: a second compression pass only costs time.
           compression-level: 0
           retention-days: 14
@@ -1651,7 +1654,7 @@ jobs:
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
         with:
           path: ~/.cargo/bin/tauri-driver
-          key: tauri-driver-2.1.0-ubuntu-22.04
+          key: tauri-driver-2.1.0-ubuntu-22.04-${{ runner.arch }}
       - name: Install tauri-driver
         if: steps.tauri-driver.outputs.cache-hit != 'true'
         run: |
@@ -1705,18 +1708,24 @@ jobs:
     needs: [version, build]
     runs-on: ubuntu-22.04
     timeout-minutes: 120
+    # GUI_ARCH names the FASTag files (linux-<GUI_ARCH>), DEB_ARCH the
+    # Debian architecture. gui-linux-arm64 below runs these same steps (a
+    # YAML alias of the anchor) with arm64/arm64 on ubuntu-22.04-arm.
+    env:
+      GUI_ARCH: x64
+      DEB_ARCH: amd64
     outputs:
       appimage: ${{ steps.appimage.outputs.built }}
       deb: ${{ steps.assets.outputs.deb }}
       tarball: ${{ steps.assets.outputs.tarball }}
       appimage_file: ${{ steps.assets.outputs.appimage_file }}
-    steps:
+    steps: &gui-linux-steps
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           persist-credentials: false
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
         with:
-          name: FASTag-linux-x64-portable
+          name: FASTag-linux-${{ env.GUI_ARCH }}-portable
           path: ${{ runner.temp }}/cli
       # See gui-linux-release: a tag without P1 PR b's process lifetime gets
       # no Linux assets. A dry run only says so.
@@ -1731,7 +1740,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          tar -xzf "$RUNNER_TEMP/cli/FASTag-linux-x64-portable.tar.gz" -C "$RUNNER_TEMP/cli"
+          tar -xzf "$RUNNER_TEMP/cli/FASTag-linux-$GUI_ARCH-portable.tar.gz" -C "$RUNNER_TEMP/cli"
           D="$RUNNER_TEMP/cli/FASTag"
           R=gui/src-tauri/resources/fastag
           rm -rf "$R"; mkdir -p "$R/bin" "$R/share/FASTag"
@@ -1824,9 +1833,9 @@ jobs:
         run: |
           set -euo pipefail
           [ -n "$VER" ] || { echo "::error::job version gave no version"; exit 1; }
-          DEB="${DEB_PACKAGE}_${VER}_amd64.deb"
-          TGZ="FASTag-${VER}-gui-linux-x64.tar.gz"
-          APPIMAGE="FASTag-${VER}-gui-linux-x64.AppImage"
+          DEB="${DEB_PACKAGE}_${VER}_${DEB_ARCH}.deb"
+          TGZ="FASTag-${VER}-gui-linux-${GUI_ARCH}.tar.gz"
+          APPIMAGE="FASTag-${VER}-gui-linux-${GUI_ARCH}.AppImage"
           B=gui/src-tauri/target/release/bundle
           shopt -s nullglob
           debs=("$B"/deb/*.deb)
@@ -1842,8 +1851,8 @@ jobs:
             || { echo "::error::the .deb is not named $DEB_PACKAGE"; exit 1; }
           [ "$(dpkg-deb -f "$DEB" Version)" = "$VER" ] \
             || { echo "::error::the .deb's Version is $(dpkg-deb -f "$DEB" Version), not $VER"; exit 1; }
-          [ "$(dpkg-deb -f "$DEB" Architecture)" = amd64 ] \
-            || { echo "::error::the .deb is for $(dpkg-deb -f "$DEB" Architecture), not amd64"; exit 1; }
+          [ "$(dpkg-deb -f "$DEB" Architecture)" = "$DEB_ARCH" ] \
+            || { echo "::error::the .deb is for $(dpkg-deb -f "$DEB" Architecture), not $DEB_ARCH"; exit 1; }
           echo "deb=$DEB" >> "$GITHUB_OUTPUT"
           dep=$(dpkg-deb -f "$DEB" Depends)
           for want in libwebkit2gtk-4.1-0 libgtk-3-0; do
@@ -1852,6 +1861,12 @@ jobs:
           cli=$(find "$X" -path '*/resources/fastag/bin/FASTag' -type f -perm -u+x | head -1)
           [ -n "$cli" ] || { echo "::error::the .deb carries no executable resources/fastag/bin/FASTag"; exit 1; }
           echo "CLI in the .deb: ${cli#"$X"}"
+          # bundle.category in tauri.conf.json sets the menu category;
+          # without it Categories= is empty and menus file FASTag under
+          # "Other".
+          desk="$X/usr/share/applications/FASTag.desktop"
+          grep -qx 'Categories=Education;' "$desk" \
+            || { echo "::error::the .deb's FASTag.desktop has $(grep '^Categories=' "$desk" || echo 'no Categories='), not Categories=Education;"; exit 1; }
           # The tarball is the .deb's /usr tree, renamed; moved, not copied,
           # as the repacked .deb already holds it.
           T="$RUNNER_TEMP/guitar"; rm -rf "$T"; mkdir -p "$T"
@@ -1868,7 +1883,7 @@ jobs:
           tools/release_assets.sh check "$VER" "${names[@]}"
           # GitHub refuses a release asset of 2 GiB or more.
           mb() { awk -v b="$1" 'BEGIN { printf "%.1f", b / 1000000 }'; }
-          echo "### Linux desktop app (ubuntu-22.04, glibc $(ldd --version | head -1 | awk '{print $NF}'), WebKitGTK $(pkg-config --modversion webkit2gtk-4.1))" >> "$GITHUB_STEP_SUMMARY"
+          echo "### Linux desktop app, $GUI_ARCH (ubuntu $(. /etc/os-release && echo "$VERSION_ID"), glibc $(ldd --version | head -1 | awk '{print $NF}'), WebKitGTK $(pkg-config --modversion webkit2gtk-4.1))" >> "$GITHUB_STEP_SUMMARY"
           for f in "${names[@]}"; do
             size=$(stat -c %s "$f")
             echo "- $f: $(mb "$size") MB" >> "$GITHUB_STEP_SUMMARY"
@@ -1880,13 +1895,35 @@ jobs:
             echo '- disk with every asset written:'; echo '```'; df -h / "$RUNNER_TEMP"; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
-          name: FASTag-gui-linux-x64
+          name: FASTag-gui-linux-${{ env.GUI_ARCH }}
           path: |
-            fastag-gui_*_amd64.deb
-            FASTag-*-gui-linux-x64.*
+            fastag-gui_*_${{ env.DEB_ARCH }}.deb
+            FASTag-*-gui-linux-${{ env.GUI_ARCH }}.*
           compression-level: 0
           retention-days: 14
           if-no-files-found: error
+
+  # The same app for Linux on arm64 (aarch64): gui-linux's steps (the YAML
+  # alias below) on GitHub's ubuntu-22.04-arm runner, so the floor is the
+  # same glibc 2.35 / WebKitGTK 4.1, with the linux-arm64 leg's portable CLI.
+  # Assets: fastag-gui_<version>_arm64.deb, FASTag-<version>-gui-linux-arm64
+  # .tar.gz and a best-effort .AppImage, artifact FASTag-gui-linux-arm64.
+  # Independent of the x64 jobs: a failure here holds back only arm64.
+  gui-linux-arm64:
+    name: gui-linux-arm64
+    if: ${{ !cancelled() && (startsWith(github.ref, 'refs/tags/v') || inputs.gui_dry_run) }}
+    needs: [version, build]
+    runs-on: ubuntu-22.04-arm
+    timeout-minutes: 120
+    env:
+      GUI_ARCH: arm64
+      DEB_ARCH: arm64
+    outputs:
+      appimage: ${{ steps.appimage.outputs.built }}
+      deb: ${{ steps.assets.outputs.deb }}
+      tarball: ${{ steps.assets.outputs.tarball }}
+      appimage_file: ${{ steps.assets.outputs.appimage_file }}
+    steps: *gui-linux-steps
 
   # The tarball, then the .deb, on the oldest and the newest supported Ubuntu
   # LTS (P1 acceptance).
@@ -1914,15 +1951,16 @@ jobs:
     runs-on: ${{ matrix.os }}
     timeout-minutes: 60
     env:
+      GUI_ARCH: x64
       DEB: ${{ needs.gui-linux.outputs.deb }}
       TGZ: ${{ needs.gui-linux.outputs.tarball }}
-    steps:
+    steps: &gui-linux-smoke-deb-steps
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           persist-credentials: false
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
         with:
-          name: FASTag-gui-linux-x64
+          name: FASTag-gui-linux-${{ env.GUI_ARCH }}
           path: ${{ runner.temp }}/gui
       - name: The tarball runs from an arbitrary prefix
         run: |
@@ -1969,7 +2007,11 @@ jobs:
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
         with:
           path: ~/.cargo/bin/tauri-driver
-          key: tauri-driver-2.1.0-${{ matrix.os }}
+          # runner.arch last: actions/cache also restores a key that merely
+          # starts with this one, and tauri-driver-2.1.0-ubuntu-24.04 was a
+          # prefix of the arm64 leg's ...-ubuntu-24.04-arm (dry run
+          # 43741885636 restored the arm64 binary on x64).
+          key: tauri-driver-2.1.0-${{ matrix.os }}-${{ runner.arch }}
       - name: Install tauri-driver
         if: steps.tauri-driver.outputs.cache-hit != 'true'
         run: |
@@ -2050,6 +2092,24 @@ jobs:
           if-no-files-found: ignore
           retention-days: 14
 
+  # gui-linux-smoke-deb's steps for the arm64 bundles, on the arm64 runners
+  # of the same two Ubuntu LTS releases.
+  gui-linux-arm64-smoke-deb:
+    name: gui-linux-arm64 .deb on ${{ matrix.os }}
+    if: ${{ !cancelled() && needs.gui-linux-arm64.result == 'success' }}
+    needs: [gui-linux-arm64]
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-22.04-arm, ubuntu-24.04-arm]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 60
+    env:
+      GUI_ARCH: arm64
+      DEB: ${{ needs.gui-linux-arm64.outputs.deb }}
+      TGZ: ${{ needs.gui-linux-arm64.outputs.tarball }}
+    steps: *gui-linux-smoke-deb-steps
+
   # The AppImage launches on 22.04 and 24.04 with FUSE 2 (libfuse2 /
   # libfuse2t64, absent on a fresh 24.04).
   gui-linux-smoke-appimage:
@@ -2066,10 +2126,13 @@ jobs:
             fuse: libfuse2t64
     runs-on: ${{ matrix.os }}
     timeout-minutes: 30
-    steps:
+    env:
+      GUI_ARCH: x64
+      APPIMAGE_FILE: ${{ needs.gui-linux.outputs.appimage_file }}
+    steps: &gui-linux-smoke-appimage-steps
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
         with:
-          name: FASTag-gui-linux-x64
+          name: FASTag-gui-linux-${{ env.GUI_ARCH }}
           path: ${{ runner.temp }}/gui
       - name: The AppImage launches
         run: |
@@ -2081,7 +2144,7 @@ jobs:
           # host, as every desktop has them; a bare runner does not (dry runs
           # 42314786620 and 42317242897: libEGL.so.1, then libGLESv2.so.2).
           sudo apt-get install -y -q ${{ matrix.fuse }} libegl1 libgles2 libgl1 xvfb dbus dbus-x11
-          A="$RUNNER_TEMP/gui/${{ needs.gui-linux.outputs.appimage_file }}"
+          A="$RUNNER_TEMP/gui/$APPIMAGE_FILE"
           chmod +x "$A"
           dbus-run-session -- xvfb-run -a timeout 30 "$A" > "$RUNNER_TEMP/app.log" 2>&1
           rc=$?
@@ -2090,7 +2153,26 @@ jobs:
           if grep -qiE 'error while loading shared libraries|cannot open shared object|panicked|Gdk-ERROR|bwrap:' "$RUNNER_TEMP/app.log"; then
             echo "::error::the AppImage logged a fatal start-up error"; exit 1
           fi
-          echo "### AppImage on ${{ matrix.os }}: launches and stays up" >> "$GITHUB_STEP_SUMMARY"
+          echo "### AppImage ($GUI_ARCH) on ${{ matrix.os }}: launches and stays up" >> "$GITHUB_STEP_SUMMARY"
+
+  gui-linux-arm64-smoke-appimage:
+    name: gui-linux-arm64 AppImage on ${{ matrix.os }}
+    if: ${{ !cancelled() && needs.gui-linux-arm64.outputs.appimage == 'true' }}
+    needs: [gui-linux-arm64]
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-22.04-arm
+            fuse: libfuse2
+          - os: ubuntu-24.04-arm
+            fuse: libfuse2t64
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    env:
+      GUI_ARCH: arm64
+      APPIMAGE_FILE: ${{ needs.gui-linux-arm64.outputs.appimage_file }}
+    steps: *gui-linux-smoke-appimage-steps
 
   # Attaches the Linux desktop app to the release, mirroring the macOS and
   # Windows attach steps, but only after the .deb smoke passed on both
@@ -2155,6 +2237,57 @@ jobs:
             gh release upload "${{ github.ref_name }}" "gui-linux/$APPIMAGE" --clobber
           else
             echo "::warning::no AppImage on this release (not built, or it did not launch on ubuntu-22.04 and 24.04)"
+          fi
+
+  # Attaches the arm64 bundles as gui-linux-release attaches x64: only on a
+  # tag, only after the arm64 .deb smoke passed on both Ubuntu releases, the
+  # AppImage only when it launched on both. release-complete requires the
+  # arm64 .deb and tarball from 1.15.0 on, as it does the x64 ones.
+  gui-linux-arm64-release:
+    if: ${{ !cancelled() && startsWith(github.ref, 'refs/tags/v') && needs.gui-linux-arm64-smoke-deb.result == 'success' }}
+    needs: [gui-linux-arm64, gui-linux-arm64-smoke-deb, gui-linux-arm64-smoke-appimage]
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+          sparse-checkout: gui/src-tauri/src
+      - name: The process lifetime of P1 PR b is in this build
+        run: |
+          grep -rqs 'libc::PR_SET_PDEATHSIG' gui/src-tauri/src || {
+            echo "::error::no libc::PR_SET_PDEATHSIG call in gui/src-tauri/src; not attaching the Linux arm64 desktop app"
+            exit 1
+          }
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
+        with:
+          name: FASTag-gui-linux-arm64
+          path: gui-linux
+      - name: Attach the Linux arm64 desktop app to the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          APPIMAGE_OK: ${{ needs.gui-linux-arm64-smoke-appimage.result == 'success' }}
+          DEB: ${{ needs.gui-linux-arm64.outputs.deb }}
+          TGZ: ${{ needs.gui-linux-arm64.outputs.tarball }}
+          APPIMAGE: ${{ needs.gui-linux-arm64.outputs.appimage_file }}
+        run: |
+          set -euo pipefail
+          gh release create "${{ github.ref_name }}" \
+            --title "${{ github.ref_name }}" \
+            --notes "Automated binary upload; release notes pending." \
+            2>/dev/null || true
+          [ "$DEB" = "fastag-gui_${GITHUB_REF_NAME#v}_arm64.deb" ] && [ -f "gui-linux/$DEB" ] \
+            || { echo "::error::the artifact's .deb is '$DEB', not fastag-gui_${GITHUB_REF_NAME#v}_arm64.deb"; exit 1; }
+          [ "$TGZ" = "FASTag-${GITHUB_REF_NAME#v}-gui-linux-arm64.tar.gz" ] && [ -f "gui-linux/$TGZ" ] \
+            || { echo "::error::the artifact's tarball is '$TGZ', not FASTag-${GITHUB_REF_NAME#v}-gui-linux-arm64.tar.gz"; exit 1; }
+          gh release upload "${{ github.ref_name }}" \
+            "gui-linux/$DEB" "gui-linux/$TGZ" --clobber
+          if [ "$APPIMAGE_OK" = "true" ] && [ -f "gui-linux/$APPIMAGE" ]; then
+            gh release upload "${{ github.ref_name }}" "gui-linux/$APPIMAGE" --clobber
+          else
+            echo "::warning::no arm64 AppImage on this release (not built, or it did not launch on ubuntu-22.04-arm and 24.04-arm)"
           fi
 
   # ----------------------------------------- GUI argv against the real CLI
@@ -2300,7 +2433,7 @@ jobs:
     # would otherwise turn the cancelled run's completeness check red for
     # uploads the NEW run will finish.
     if: ${{ !cancelled() && startsWith(github.ref, 'refs/tags/v') }}
-    needs: [version, build, taxonomy-asset, gui-linux-release, gui-cli-consistency]
+    needs: [version, build, taxonomy-asset, gui-linux-release, gui-linux-arm64-release, gui-cli-consistency]
     runs-on: ubuntu-24.04
     env:
       V: ${{ needs.version.outputs.version }}
@@ -2329,12 +2462,13 @@ jobs:
           # gate working: it compares what shipped against what we SAID ships,
           # so it fires on a stale expectation as loudly as on a missing file.
           # The Linux desktop app from 1.13.0 (P1): the .deb
-          # (fastag-gui_<version>_amd64.deb) and the tarball; the AppImage is
-          # best-effort and not asserted.
+          # (fastag-gui_<version>_amd64.deb) and the tarball, for arm64 too
+          # from 1.15.0; the AppImages are best-effort and not asserted.
           want="FASTag-$V-linux-x64.tar.gz FASTag-$V-linux-arm64.tar.gz \
                 FASTag-$V-macos-arm64.dmg FASTag-$V-gui-macos-arm64.dmg \
                 FASTag-$V-macos-x64.dmg FASTag-$V-gui-macos-x64.dmg \
                 fastag-gui_${V}_amd64.deb FASTag-$V-gui-linux-x64.tar.gz \
+                fastag-gui_${V}_arm64.deb FASTag-$V-gui-linux-arm64.tar.gz \
                 FASTag-$V-taxonomy-k7.tar.gz FASTag-$V-taxonomy-k7.tar.gz.sha256 \
                 FASTag-$V-taxonomy-k7.tar.xz FASTag-$V-taxonomy-k7.tar.xz.sha256"
           have=$(gh release view "${{ github.ref_name }}" --json assets --jq '.assets[].name')
