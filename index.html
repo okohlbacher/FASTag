@@ -115,7 +115,7 @@ th{border-bottom:2px solid var(--line)}
   quick look at a run before, or instead of, a full search: pull out the spectra of a protein of
   interest, see which organisms a run contains, or hand tags to de novo and open-modification
   tools. It runs as a desktop app or as an OpenMS command-line tool on macOS, Windows and Linux,
-  and tags millions of spectra in seconds.</p>
+  and tags three million spectra in about seven seconds.</p>
   <div class="cta">
     <a class="btn primary" href="#download">Download</a>
     <a class="btn" href="https://github.com/okohlbacher/FASTag">GitHub</a>
@@ -166,20 +166,21 @@ supported but not validated.
 <h2>Why use it</h2>
 
 <div class="stats">
-  <div><div class="n">48&times;</div><div class="l">faster than DirecTag on PXD047793 (3.09 M spectra)</div></div>
-  <div><div class="n">280 MB</div><div class="l">peak memory on a 23 GB run (DirecTag: 69.4 GB)</div></div>
+  <div><div class="n">103&times;</div><div class="l">faster than DirecTag on PXD047793 (3.09 M spectra)</div></div>
+  <div><div class="n">548 MB</div><div class="l">peak memory on a 23 GB run (DirecTag: 70.3 GB)</div></div>
   <div><div class="n">98.6%</div><div class="l">of Mascot-identified spectra get a valid tag among the top 50 (PXD000001)</div></div>
 </div>
 
-<p>Measured against DirecTag 1.4.21142 at 128 threads on public ProteomeXchange runs, with a
-September 2026 FASTag build and settings matched to DirecTag (tag length 3, 50 tags, 100 peaks, no
-gaps, no deisotoping); wall clock and peak memory for the whole run, including writing the tags:</p>
+<p>Measured against DirecTag 1.4.21142 at 128 threads on public ProteomeXchange runs, with
+FASTag 1.14.0 and settings matched to DirecTag (tag length 3, 50 tags, 100 peaks, no gaps, no
+deisotoping); same node (AMD EPYC 7763, idle), median of 3 runs, wall clock and peak memory for the
+whole run, including writing the tags:</p>
 
 <table>
 <thead><tr><th></th><th>FASTag</th><th>DirecTag</th></tr></thead>
 <tbody>
-<tr><td>PXD047793, timsTOF diaTracer pseudo-MS2, 3.09 M spectra, 23 GB</td><td class="num"><strong class="win">15.65 s, 280 MB</strong></td><td class="num">746.61 s, 69.4 GB</td></tr>
-<tr><td>PXD028735, timsTOF diaPASEF, 151,648 spectra</td><td class="num"><strong class="win">5.79 s, 864,815 tags</strong></td><td class="num">541.5 s, 0 spectra read</td></tr>
+<tr><td>PXD047793, timsTOF diaTracer pseudo-MS2, 3.09 M spectra, 23 GB</td><td class="num"><strong class="win">7.09 s, 548 MB</strong></td><td class="num">732.69 s, 70.3 GB</td></tr>
+<tr><td>PXD028735, raw timsTOF diaPASEF, 151,648 spectra (check set to warn; not a recommended use)</td><td class="num"><strong class="win">7.67 s, 864,815 tags</strong></td><td class="num">479.9 s, 0 spectra read</td></tr>
 <tr><td>Valid tag ranked first (PXD000001)</td><td class="num"><strong class="win">90.91%</strong></td><td class="num">88.69%</td></tr>
 <tr><td>Valid tag within top 50 (PXD000001)</td><td class="num">98.62%</td><td class="num">98.62%</td></tr>
 </tbody>
@@ -189,8 +190,7 @@ gaps, no deisotoping); wall clock and peak memory for the whole run, including w
 is bounded by threads, not by input (<code>-out_spectra</code> and a few reports keep per-run
 state). Both tools reach the same accuracy ceiling on PXD000001 — 98.62% of the spectra
 identified by its Mascot search get a valid tag — and FASTag gets there sooner in the ranking.
-A benchmark of the current release on further public data, at several thread counts and against
-database-search identifications, is in preparation.</p>
+By default FASTag refuses raw DIA such as PXD028735; tag it through pseudo-DDA spectra instead.</p>
 
 <h2 id="download">Download</h2>
 
