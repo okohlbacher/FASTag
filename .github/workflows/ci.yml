@@ -1815,6 +1815,12 @@ jobs:
           cli=$(find "$X" -path '*/resources/fastag/bin/FASTag' -type f -perm -u+x | head -1)
           [ -n "$cli" ] || { echo "::error::the .deb carries no executable resources/fastag/bin/FASTag"; exit 1; }
           echo "CLI in the .deb: ${cli#"$X"}"
+          # bundle.category in tauri.conf.json sets the menu category;
+          # without it Categories= is empty and menus file FASTag under
+          # "Other".
+          desk="$X/usr/share/applications/FASTag.desktop"
+          grep -qx 'Categories=Education;' "$desk" \
+            || { echo "::error::the .deb's FASTag.desktop has $(grep '^Categories=' "$desk" || echo 'no Categories='), not Categories=Education;"; exit 1; }
           # The tarball is the .deb's /usr tree, renamed; moved, not copied,
           # as the repacked .deb already holds it.
           T="$RUNNER_TEMP/guitar"; rm -rf "$T"; mkdir -p "$T"

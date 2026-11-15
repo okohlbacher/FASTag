@@ -746,3 +746,12 @@ portable linux-arm64 CLI: `fastag-gui_<version>_arm64.deb`,
 ubuntu-24.04-arm and attached by `gui-linux-arm64-release`. It is
 independent of the x64 jobs, and `release-complete` does not yet require
 the arm64 files.
+
+Known limits of the AppImage (Tauri's linuxdeploy bundle, checked on GNOME
+43 and 46): it sets `GDK_BACKEND=x11` and a light GTK theme
+(tauri-apps/tauri#8541), so on Wayland it runs through XWayland and its
+title bar and file dialogs stay light in dark mode; its FUSE mount shows up
+as a volume named "usr" in the file chooser, and gvfs locations (network
+shares) are not offered there. Neither the AppImage nor the tarball installs
+a launcher entry; only the `.deb` does (`FASTag.desktop`, with the icon). The
+`.deb` and the tarball run natively on Wayland and follow dark mode.
