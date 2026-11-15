@@ -1,12 +1,13 @@
 #!/usr/bin/env python3
 """acqcheck4: PXDs named on every origin/* branch (after git fetch), with collect_pxd.py's catalogue rule per file:
 a file naming more than 2,000 distinct PXDs is a PRIDE catalogue and skipped (listed); PXDs in paths always count.
-usage: branch_pxd.py <repo> <out.txt> <catalogues.txt>"""
+usage: branch_pxd.py <repo> <out.txt> <catalogues.txt> [<ref to skip> ...]"""
 import re, subprocess, sys, collections
 repo, out, cat = sys.argv[1:4]
+skip = set(sys.argv[4:])
 R = re.compile(r"PXD\d{6}")
 refs = [r for r in subprocess.run(["git", "-C", repo, "for-each-ref", "--format=%(refname:short)", "refs/remotes/origin"],
-        capture_output=True, text=True, check=True).stdout.split() if r != "origin/HEAD" and r != "origin"]
+        capture_output=True, text=True, check=True).stdout.split() if r != "origin/HEAD" and r != "origin" and r not in skip]
 found, skipped = set(), []
 for ref in refs:
     paths = subprocess.run(["git", "-C", repo, "ls-tree", "-r", "--name-only", ref], capture_output=True, text=True).stdout
