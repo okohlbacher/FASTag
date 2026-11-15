@@ -151,6 +151,16 @@ derive. Raw DIA files are refused with a message; convert them to pseudo-DDA fir
 <strong>Output:</strong> a tab-separated table of ranked tags per spectrum, optionally the matching
 spectra as mzML or mzPeak.</p>
 
+<p>A few rows of the tag table (selected columns, PXD000001, FASTag 1.14.0). Each row is one tag:
+the residues read, the mass left unexplained on its N- and C-terminal side, and an E-value
+(smaller is better):</p>
+
+<pre><code>spectrum   tag  charge  nterm_mass  cterm_mass  evalue     mean_conf
+scan=5019  LWV  1       1070.5592    326.1778   1.27e-09   0.946
+scan=6476  VLL  1       1483.8360    211.1521   1.46e-09   0.958
+scan=1262  ASA  1        872.4080    598.2782   2.38e-09   0.893
+scan=5345  VEE  2        889.5219   1314.7490   5.49e-09   0.907</code></pre>
+
 <div class="note">
 It is a prefilter, not a final identification method. It is tuned for <em>recall</em>: it would
 rather report a wrong candidate than miss a right one, so a tag matching a sequence is a reason to
