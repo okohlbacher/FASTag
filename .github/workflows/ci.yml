@@ -2195,8 +2195,8 @@ jobs:
 
   # Attaches the arm64 bundles as gui-linux-release attaches x64: only on a
   # tag, only after the arm64 .deb smoke passed on both Ubuntu releases, the
-  # AppImage only when it launched on both. release-complete does not require
-  # these files (yet): a red arm64 leg holds back only the arm64 assets.
+  # AppImage only when it launched on both. release-complete requires the
+  # arm64 .deb and tarball from 1.15.0 on, as it does the x64 ones.
   gui-linux-arm64-release:
     if: ${{ !cancelled() && startsWith(github.ref, 'refs/tags/v') && needs.gui-linux-arm64-smoke-deb.result == 'success' }}
     needs: [gui-linux-arm64, gui-linux-arm64-smoke-deb, gui-linux-arm64-smoke-appimage]
@@ -2387,7 +2387,7 @@ jobs:
     # would otherwise turn the cancelled run's completeness check red for
     # uploads the NEW run will finish.
     if: ${{ !cancelled() && startsWith(github.ref, 'refs/tags/v') }}
-    needs: [version, build, taxonomy-asset, gui-linux-release, gui-cli-consistency]
+    needs: [version, build, taxonomy-asset, gui-linux-release, gui-linux-arm64-release, gui-cli-consistency]
     runs-on: ubuntu-24.04
     env:
       V: ${{ needs.version.outputs.version }}
@@ -2416,11 +2416,12 @@ jobs:
           # gate working: it compares what shipped against what we SAID ships,
           # so it fires on a stale expectation as loudly as on a missing file.
           # The Linux desktop app from 1.13.0 (P1): the .deb
-          # (fastag-gui_<version>_amd64.deb) and the tarball; the AppImage is
-          # best-effort and not asserted.
+          # (fastag-gui_<version>_amd64.deb) and the tarball, for arm64 too
+          # from 1.15.0; the AppImages are best-effort and not asserted.
           want="FASTag-$V-linux-x64.tar.gz FASTag-$V-linux-arm64.tar.gz \
                 FASTag-$V-macos-arm64.dmg FASTag-$V-gui-macos-arm64.dmg \
                 fastag-gui_${V}_amd64.deb FASTag-$V-gui-linux-x64.tar.gz \
+                fastag-gui_${V}_arm64.deb FASTag-$V-gui-linux-arm64.tar.gz \
                 FASTag-$V-taxonomy-k7.tar.gz FASTag-$V-taxonomy-k7.tar.gz.sha256 \
                 FASTag-$V-taxonomy-k7.tar.xz FASTag-$V-taxonomy-k7.tar.xz.sha256"
           have=$(gh release view "${{ github.ref_name }}" --json assets --jq '.assets[].name')

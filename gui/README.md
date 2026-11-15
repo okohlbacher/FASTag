@@ -744,8 +744,8 @@ portable linux-arm64 CLI: `fastag-gui_<version>_arm64.deb`,
 `FASTag-<version>-gui-linux-arm64.AppImage` (artifact
 `FASTag-gui-linux-arm64`), smoke-tested on ubuntu-22.04-arm and
 ubuntu-24.04-arm and attached by `gui-linux-arm64-release`. It is
-independent of the x64 jobs, and `release-complete` does not yet require
-the arm64 files.
+independent of the x64 jobs; `release-complete` requires the arm64 `.deb`
+and tarball as it does the x64 ones (from 1.15.0).
 
 Known limits of the AppImage (Tauri's linuxdeploy bundle, checked on GNOME
 43 and 46): it sets `GDK_BACKEND=x11` and a light GTK theme

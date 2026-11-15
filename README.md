@@ -134,7 +134,7 @@ without it):
 | macOS, Apple silicon | [`FASTag-<version>-gui-macos-arm64.dmg`](https://github.com/okohlbacher/FASTag/releases/latest) | [`FASTag-<version>-macos-arm64.dmg`](https://github.com/okohlbacher/FASTag/releases/latest) |
 | Windows x64 | [`FASTag-<version>-gui-windows-x64-setup.exe`](https://github.com/okohlbacher/FASTag/releases/latest) | [`FASTag-<version>-windows-x64.zip`](https://github.com/okohlbacher/FASTag/releases/latest) |
 | Linux x64 | [`fastag-gui_<version>_amd64.deb`](https://github.com/okohlbacher/FASTag/releases/latest) · [`FASTag-<version>-gui-linux-x64.tar.gz`](https://github.com/okohlbacher/FASTag/releases/latest) | [`FASTag-<version>-linux-x64.tar.gz`](https://github.com/okohlbacher/FASTag/releases/latest) |
-| Linux arm64 | — | [`FASTag-<version>-linux-arm64.tar.gz`](https://github.com/okohlbacher/FASTag/releases/latest) |
+| Linux arm64 | [`fastag-gui_<version>_arm64.deb`](https://github.com/okohlbacher/FASTag/releases/latest) · [`FASTag-<version>-gui-linux-arm64.tar.gz`](https://github.com/okohlbacher/FASTag/releases/latest) | [`FASTag-<version>-linux-arm64.tar.gz`](https://github.com/okohlbacher/FASTag/releases/latest) |
 
 Intel Macs are not built from 1.8.0 on; [1.6.1](https://github.com/okohlbacher/FASTag/releases/tag/v1.6.1) is the last release for them.
 On macOS both are also on [Homebrew](https://github.com/okohlbacher/homebrew-fastag):
@@ -204,7 +204,7 @@ connection — a plain tarball cannot carry a notarization ticket.
 
 **Linux desktop app: Ubuntu 22.04 or newer, Debian 12 or newer** (glibc 2.35
 and WebKitGTK 4.1). The `.deb`, `fastag-gui_<version>_amd64.deb` on the release
-page (Debian package `fastag-gui`), pulls in `libwebkit2gtk-4.1-0` and
+page (`_arm64.deb` on arm64; Debian package `fastag-gui`), pulls in `libwebkit2gtk-4.1-0` and
 `libgtk-3-0` (`sudo apt install ./fastag-gui_<version>_amd64.deb`); the tarball needs them
 installed and runs as `FASTag-gui/bin/fastag`. A best-effort
 `FASTag-<version>-gui-linux-x64.AppImage` carries its own WebKitGTK 4.1, takes GTK 3,
@@ -287,7 +287,7 @@ cd gui && npm install && npm run tauri dev     # or: npm run tauri build
 Installable bundles ship with every release: signed, notarized and stapled disk
 images for macOS (also on Homebrew, above), an installer for Windows, which
 is not yet code-signed (see above), and from 1.12.0 a `.deb` and a tarball for
-Linux x64 (glibc ≥ 2.35, WebKitGTK 4.1: Ubuntu 22.04, Debian 12) — see the install table at the top. Details in [gui/README.md](gui/README.md).
+Linux x64 (from 1.15.0 also Linux arm64; glibc ≥ 2.35, WebKitGTK 4.1: Ubuntu 22.04, Debian 12) — see the install table at the top. Details in [gui/README.md](gui/README.md).
 
 For a first run, keep **Export tags**, choose spectra, confirm the
 MS2 analyser's tolerance, then run and inspect **Results → Tags**. For a
