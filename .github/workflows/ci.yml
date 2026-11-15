@@ -133,6 +133,7 @@ jobs:
       contents: read
     outputs:
       version: ${{ steps.v.outputs.version }}
+      legs: ${{ steps.legs.outputs.legs }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
@@ -149,6 +150,55 @@ jobs:
           v=$(tools/release_assets.sh version "$TAG")
           echo "version=$v" >> "$GITHUB_OUTPUT"
           echo "### Release files carry version $v (FASTag-$v-<variant>.<ext>)" >> "$GITHUB_STEP_SUMMARY"
+
+      # The build matrix (job `build`). JSON here rather than YAML there,
+      # because a YAML matrix cannot drop an `include` entry by event.
+      - id: legs
+        env:
+          WITH_X64: ${{ startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch' }}
+        run: |
+          set -euo pipefail
+          # linux-x64 / linux-arm64: gcc 14 against a glibc 2.28 sysroot.
+          #
+          # macos-arm64: dylibbundler (the macOS equivalent of patchelf) is a
+          # Homebrew package, not a conda-forge one, and is installed by brew
+          # in its own step. macos-15, not macos-14: GitHub retired every
+          # macOS 14 image on 2026-11-02, and the label then failed at once
+          # ("The configuration 'macos-14-arm64-us-default' is not supported";
+          # PR #11 run 42170681139 was cancelled within a second). The image
+          # only supplies the SDK and the host; the floor is MACOS_MIN_VERSION
+          # (13.4), set explicitly, and the "Assert the macOS deployment
+          # target" step checks every Mach-O against it, so a newer image
+          # cannot raise it silently. The OpenMS cache key carries the floor
+          # and the conda toolchain, not the image, so it stays warm.
+          legs='[
+            {"name":"linux-x64","runner":"ubuntu-24.04","compilers":"gxx_linux-64=14.* sysroot_linux-64=2.28.*","toolchain":"gcc14-glibc2.28","extra":"patchelf"},
+            {"name":"linux-arm64","runner":"ubuntu-24.04-arm","compilers":"gxx_linux-aarch64=14.* sysroot_linux-aarch64=2.28.*","toolchain":"gcc14-glibc2.28","extra":"patchelf"},
+            {"name":"macos-arm64","runner":"macos-15","arch":"arm64","compilers":"clangxx_osx-arm64=19.* llvm-openmp=19.*","toolchain":"clang19","extra":""}
+          ]'
+          # macos-x64: Intel macOS, back from 1.15.0 (dropped in 1.8.0 with
+          # the move to an OpenMS built from source). Native, not a
+          # cross-build: every pin in .github/env/openms.yml has an osx-64
+          # build on conda-forge, and only a native leg runs the same tests,
+          # smoke runs and mounted-dmg check as arm64. ON v* TAGS AND MANUAL
+          # DISPATCHES ONLY (gui_dry_run included): about 28 Intel-runner
+          # minutes and 11 minutes of wall time a run that pull requests and
+          # pushes do not pay; an Intel-only break shows up in the release
+          # candidate's dry run, so dispatch one before tagging.
+          #
+          # macos-26-intel, GitHub's newest x64 image (GA 2026-02-26). GitHub
+          # ends x86_64 macOS with the macOS 15 image in Fall 2027
+          # (runner-images: August 2027) and has announced no end for this
+          # one. REMOVE THIS LEG BEFORE AUGUST 2027 (and the two macos-x64
+          # names in release-complete): a label no runner serves wedges the
+          # queue (see concurrency above).
+          if [ "$WITH_X64" = true ]; then
+            legs=$(jq -c '. + [{"name":"macos-x64","runner":"macos-26-intel","arch":"x86_64","compilers":"clangxx_osx-64=19.* llvm-openmp=19.*","toolchain":"clang19","extra":""}]' <<<"$legs")
+          else
+            legs=$(jq -c . <<<"$legs")
+          fi
+          echo "legs=$legs" >> "$GITHUB_OUTPUT"
+          echo "build legs: $(jq -r 'map(.name) | join(", ")' <<<"$legs")" | tee -a "$GITHUB_STEP_SUMMARY"
 
   build:
     name: ${{ matrix.name }}
@@ -177,55 +227,14 @@ jobs:
     # -- that has to be primed manually, out of band,
     # before the first real signed release.
     timeout-minutes: 330
+    # The legs come from job `version` (outputs.legs), where the list and the
+    # reasons for each runner are written down: macos-x64 is in it only on a
+    # v* tag and on a manual dispatch, so a pull request or a push to main
+    # never waits for an Intel runner and never shows a skipped Intel job.
     strategy:
       fail-fast: false
       matrix:
-        include:
-          - name: linux-x64
-            runner: ubuntu-24.04
-            compilers: "gxx_linux-64=14.* sysroot_linux-64=2.28.*"
-            toolchain: gcc14-glibc2.28
-            extra: patchelf
-          - name: linux-arm64
-            runner: ubuntu-24.04-arm
-            compilers: "gxx_linux-aarch64=14.* sysroot_linux-aarch64=2.28.*"
-            toolchain: gcc14-glibc2.28
-            extra: patchelf
-          # dylibbundler (the macOS equivalent of patchelf) is a Homebrew
-          # package, not a conda-forge one, and is installed by brew in its
-          # own step further down.
-          # macos-15, not macos-14: GitHub retired every macOS 14 image on
-          # 2026-11-02, and the label then failed at once ("The configuration
-          # 'macos-14-arm64-us-default' is not supported"; PR #11 run
-          # 42170681139 was cancelled within a second). The image only
-          # supplies the SDK and the host; the floor is MACOS_MIN_VERSION
-          # (13.4) above, set explicitly, and the "Assert the macOS
-          # deployment target" step checks every Mach-O against it, so a
-          # newer image cannot raise it silently. The OpenMS cache key carries
-          # the floor and the conda toolchain, not the image, so it stays warm.
-          - name: macos-arm64
-            runner: macos-15
-            arch: arm64
-            compilers: "clangxx_osx-arm64=19.* llvm-openmp=19.*"
-            toolchain: clang19
-            extra: ""
-          # Intel macOS, back from 1.15 (dropped in 1.8.0 with the move to an
-          # OpenMS built from source). A native leg, not a cross-build: every
-          # pinned library in .github/env/openms.yml has an osx-64 build on
-          # conda-forge, and only a native leg runs the same tests, smoke runs
-          # and the mounted-dmg check as arm64 does. macos-26-intel, GitHub's
-          # newest x64 image (GA 2026-02-26); GitHub said x86_64 macOS ends
-          # with the macOS 15 image in Fall 2027 and has announced no end for
-          # this one -- when the label goes, this entry goes, and a label that
-          # no runner serves wedges the queue (see concurrency above), so
-          # remove it BEFORE the retirement date, not after. The floor stays
-          # MACOS_MIN_VERSION; the image only supplies SDK and host.
-          - name: macos-x64
-            runner: macos-26-intel
-            arch: x86_64
-            compilers: "clangxx_osx-64=19.* llvm-openmp=19.*"
-            toolchain: clang19
-            extra: ""
+        include: ${{ fromJSON(needs.version.outputs.legs) }}
 
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7

@@ -140,7 +140,8 @@ without it):
 Intel Macs are built again from 1.15.0 on (1.8.0 to 1.14.x were Apple silicon
 only; [1.6.1](https://github.com/okohlbacher/FASTag/releases/tag/v1.6.1) is the
 last earlier Intel release). They depend on GitHub's Intel macOS runners, which
-GitHub retires in 2027.
+GitHub retires in 2027: the last Intel build will be a release before August
+2027.
 On macOS both are also on [Homebrew](https://github.com/okohlbacher/homebrew-fastag):
 `brew install --cask okohlbacher/fastag/fastag` (desktop app) or
 `brew install --cask okohlbacher/fastag/fastag-cli` (command line, `FASTag` on your PATH).
