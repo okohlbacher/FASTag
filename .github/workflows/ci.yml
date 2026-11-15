@@ -1,6 +1,6 @@
 name: build
 
-# Linux x64/arm64 and macOS arm64, tests included.
+# Linux x64/arm64 and macOS arm64/x64, tests included.
 #
 # FASTag 1.7 builds against OpenMS develop at a pinned commit (OPENMS_REF), the
 # first OpenMS with MzPeakFile and the OpenMS_CLI library. There is no package
@@ -205,7 +205,25 @@ jobs:
           # the floor and the conda toolchain, not the image, so it stays warm.
           - name: macos-arm64
             runner: macos-15
+            arch: arm64
             compilers: "clangxx_osx-arm64=19.* llvm-openmp=19.*"
+            toolchain: clang19
+            extra: ""
+          # Intel macOS, back from 1.15 (dropped in 1.8.0 with the move to an
+          # OpenMS built from source). A native leg, not a cross-build: every
+          # pinned library in .github/env/openms.yml has an osx-64 build on
+          # conda-forge, and only a native leg runs the same tests, smoke runs
+          # and the mounted-dmg check as arm64 does. macos-26-intel, GitHub's
+          # newest x64 image (GA 2026-02-26); GitHub said x86_64 macOS ends
+          # with the macOS 15 image in Fall 2027 and has announced no end for
+          # this one -- when the label goes, this entry goes, and a label that
+          # no runner serves wedges the queue (see concurrency above), so
+          # remove it BEFORE the retirement date, not after. The floor stays
+          # MACOS_MIN_VERSION; the image only supplies SDK and host.
+          - name: macos-x64
+            runner: macos-26-intel
+            arch: x86_64
+            compilers: "clangxx_osx-64=19.* llvm-openmp=19.*"
             toolchain: clang19
             extra: ""
 
@@ -713,6 +731,18 @@ jobs:
               fail=1
             }
           done
+          # And the architecture: every Mach-O in the bundle is exactly this
+          # leg's, with no other slice. An x86_64 binary also runs on an arm64
+          # runner (Rosetta), so no run-time check tells the two bundles apart.
+          for f in dist/FASTag/FASTag.bin dist/FASTag/lib/*.dylib; do
+            [ -L "$f" ] && continue
+            archs=$(lipo -archs "$f" 2>/dev/null) || true
+            [ "$archs" = "${{ matrix.arch }}" ] || {
+              echo "::error::$f is '${archs:-unreadable}', expected ${{ matrix.arch }}"
+              fail=1
+            }
+          done
+          echo "every Mach-O in dist/FASTag is ${{ matrix.arch }}"
           exit $fail
 
       # The macOS bundle as a workflow artifact, so a release candidate's macOS
@@ -921,7 +951,7 @@ jobs:
       # Without them a tag build takes the "not configured" branch and ships
       # unsigned. doc/SIGNING-macos-gui.md names the secrets.
       - name: Detect macOS signing readiness
-        if: matrix.name == 'macos-arm64' && (startsWith(github.ref, 'refs/tags/v') || inputs.gui_dry_run)
+        if: runner.os == 'macOS' && (startsWith(github.ref, 'refs/tags/v') || inputs.gui_dry_run)
         id: mac-signing
         shell: bash
         env:
@@ -1018,7 +1048,7 @@ jobs:
       # before the tag (see the input's comment). linux-x64 embeds it before
       # the portable-CLI pack below, which gui-linux stages.
       - name: Embed taxonomy index (tag builds)
-        if: startsWith(github.ref, 'refs/tags/v') || (inputs.gui_dry_run && inputs.gui_full_payload && (matrix.name == 'macos-arm64' || matrix.name == 'linux-x64'))
+        if: startsWith(github.ref, 'refs/tags/v') || (inputs.gui_dry_run && inputs.gui_full_payload && (runner.os == 'macOS' || matrix.name == 'linux-x64'))
         shell: bash -el {0}
         env:
           GH_TOKEN: ${{ github.token }}
@@ -1093,12 +1123,12 @@ jobs:
       # Runs on a v* tag, or on a workflow_dispatch with gui_dry_run set: see
       # the comment on that input for why an untested tag-only path is a trap.
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
-        if: steps.mac-signing.outputs.enabled == 'true' || (inputs.gui_dry_run && matrix.name == 'macos-arm64')
+        if: steps.mac-signing.outputs.enabled == 'true' || (inputs.gui_dry_run && runner.os == 'macOS')
         with:
           node-version: 24
 
       - name: Stage the signed CLI as the app's bundled resources (macOS)
-        if: steps.mac-signing.outputs.enabled == 'true' || (inputs.gui_dry_run && matrix.name == 'macos-arm64')
+        if: steps.mac-signing.outputs.enabled == 'true' || (inputs.gui_dry_run && runner.os == 'macOS')
         shell: bash
         run: |
           set -e
@@ -1172,12 +1202,12 @@ jobs:
       # Developer ID certificate or the notary password in its environment.
       # --ignore-scripts: the lockfile's only install script is fsevents'.
       - name: Install the desktop app's npm dependencies (macOS)
-        if: steps.mac-signing.outputs.enabled == 'true' || (inputs.gui_dry_run && matrix.name == 'macos-arm64')
+        if: steps.mac-signing.outputs.enabled == 'true' || (inputs.gui_dry_run && runner.os == 'macOS')
         working-directory: gui
         run: npm ci --ignore-scripts
 
       - name: Build, sign and notarize the desktop app (macOS)
-        if: steps.mac-signing.outputs.enabled == 'true' || (inputs.gui_dry_run && matrix.name == 'macos-arm64')
+        if: steps.mac-signing.outputs.enabled == 'true' || (inputs.gui_dry_run && runner.os == 'macOS')
         timeout-minutes: 120
         working-directory: gui
         # Tauri reads these directly; APPLE_PASSWORD is the app-specific
@@ -1235,11 +1265,12 @@ jobs:
       # taxonomy index; dispatch with gui_full_payload as well to see the
       # real release payload's size before the tag.
       - name: Recompress the desktop app's dmg as ULMO, sign, notarize, staple (macOS)
-        if: steps.mac-signing.outputs.enabled == 'true' || (inputs.gui_dry_run && matrix.name == 'macos-arm64')
+        if: steps.mac-signing.outputs.enabled == 'true' || (inputs.gui_dry_run && runner.os == 'macOS')
         timeout-minutes: 75
         shell: bash
         env:
           SIGNED: ${{ steps.mac-signing.outputs.enabled }}
+          ARCH: ${{ matrix.arch }}
           MACOS_SIGNING_IDENTITY: ${{ secrets.MACOS_SIGNING_IDENTITY }}
           MACOS_APPLE_ID: ${{ secrets.MACOS_APPLE_ID }}
           MACOS_TEAM_ID: ${{ secrets.MACOS_TEAM_ID }}
@@ -1290,6 +1321,12 @@ jobs:
           want=$(sed -n 's/^project(FASTag VERSION \([0-9.]*\).*/\1/p' CMakeLists.txt)
           grep -q "^Version: $want" "$RUNNER_TEMP/dmg-help.txt" \
             || { echo "::error::the CLI inside the dmg does not report version $want"; grep '^Version: ' "$RUNNER_TEMP/dmg-help.txt" || true; exit 1; }
+          # The app's own executable and its bundled CLI are this leg's arch.
+          for m in "${apps[0]}"/Contents/MacOS/* "$CLI"; do
+            a=$(lipo -archs "$m" 2>/dev/null) || true
+            [ "$a" = "$ARCH" ] || { echo "::error::$m is '${a:-unreadable}', expected $ARCH"; exit 1; }
+            echo "$m: $a"
+          done
           if [ "$SIGNED" = "true" ]; then
             codesign --verify --deep --strict --verbose=2 "${apps[0]}"
             # The .app inside the dmg carries no stapled ticket of its own (only the dmg is
@@ -1317,7 +1354,7 @@ jobs:
       # The release file name, given on a tag and on a dry run alike, so the
       # dry run's artifact holds the very name a release would attach.
       - name: Name the desktop app's disk image (macOS)
-        if: matrix.name == 'macos-arm64' && ((steps.mac-signing.outputs.enabled == 'true' && startsWith(github.ref, 'refs/tags/v')) || inputs.gui_dry_run)
+        if: runner.os == 'macOS' && ((steps.mac-signing.outputs.enabled == 'true' && startsWith(github.ref, 'refs/tags/v')) || inputs.gui_dry_run)
         shell: bash
         run: |
           set -euo pipefail
@@ -1344,7 +1381,7 @@ jobs:
       # A dry run has no release to attach to, so the .dmg comes back as a
       # workflow artifact to be opened and checked by hand.
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
-        if: inputs.gui_dry_run && matrix.name == 'macos-arm64'
+        if: inputs.gui_dry_run && runner.os == 'macOS'
         with:
           name: FASTag-gui-${{ matrix.name }}-dryrun
           path: FASTag-${{ env.ASSET_VERSION }}-gui-${{ matrix.name }}.dmg
@@ -2287,6 +2324,7 @@ jobs:
           # best-effort and not asserted.
           want="FASTag-$V-linux-x64.tar.gz FASTag-$V-linux-arm64.tar.gz \
                 FASTag-$V-macos-arm64.dmg FASTag-$V-gui-macos-arm64.dmg \
+                FASTag-$V-macos-x64.dmg FASTag-$V-gui-macos-x64.dmg \
                 fastag-gui_${V}_amd64.deb FASTag-$V-gui-linux-x64.tar.gz \
                 FASTag-$V-taxonomy-k7.tar.gz FASTag-$V-taxonomy-k7.tar.gz.sha256 \
                 FASTag-$V-taxonomy-k7.tar.xz FASTag-$V-taxonomy-k7.tar.xz.sha256"
@@ -2312,7 +2350,8 @@ jobs:
   # ------------------------------------------------- Homebrew tap (macOS)
   # okohlbacher/homebrew-fastag carries two casks (fastag = the desktop app,
   # fastag-cli = the command line) that download this release's two macOS
-  # disk images (Apple silicon only since 1.8.0). Its own workflow rewrites
+  # disk images per architecture (Apple silicon only in 1.8.0-1.14.x; Intel
+  # again from 1.15, which needs the tap's arch-dependent url). Its own workflow rewrites
   # version + sha256, audits, installs and commits when this job dispatches
   # it. Dispatching needs a fine-grained PAT (secret HOMEBREW_TAP_TOKEN:
   # repository access ONLY okohlbacher/homebrew-fastag, permission
