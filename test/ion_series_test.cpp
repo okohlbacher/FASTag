@@ -80,10 +80,13 @@ namespace
 #else
   constexpr std::int64_t PC_ULPS = 4;
 #endif
-  /// (d): ulps of the E-value allowed. Exact on glibc and Apple's libm; MSVC's
-  /// C runtime puts one row 1 ulp away (windows.yml run 42455067821: case 1
-  /// rank 2, LVE/1, dE/E 2.2e-16, tag, charge and p_complement equal).
-#if defined(_MSC_VER)
+  /// (d): ulps of the E-value allowed. Exact on glibc and Apple's arm64 libm;
+  /// MSVC's C runtime puts one row 1 ulp away (windows.yml run 42455067821:
+  /// case 1 rank 2, LVE/1, dE/E 2.2e-16, tag, charge and p_complement equal),
+  /// and so does macOS x86_64 (ci.yml run 43742223145, macos-x64 leg: case 1
+  /// rank 2, GFN/2, dE/E 1.5e-16, tag, charge and p_complement equal; the
+  /// same source is exact on macOS arm64 and on glibc x86-64 and aarch64).
+#if defined(_MSC_VER) || (defined(__APPLE__) && defined(__x86_64__))
   constexpr std::int64_t E_ULPS = 4;
 #else
   constexpr std::int64_t E_ULPS = 0;
@@ -927,7 +930,7 @@ int main(int argc, char** argv)
                         std::fabs(t.evalue - r.evalue) / std::max(1e-300, std::fabs(r.evalue)),
                         std::fabs(t.p_complement - r.p_complement));
           // The tag and its charge equal 1.11 bit for bit everywhere, the E-value
-          // too except under MSVC (E_ULPS).
+          // too except under MSVC and on macOS x86_64 (E_ULPS).
           // p_complement is Boost's hypergeometric tail, whose result follows the
           // C library's math functions: glibc (where the .inc was made, x86-64 and
           // aarch64 alike) gives it bit for bit, Apple's libm 1-2 ulps away (CI
@@ -936,7 +939,7 @@ int main(int argc, char** argv)
           check(t.seq == r.seq && t.charge == r.charge && pcUlps(t.evalue, r.evalue) <= E_ULPS && pcUlps(t.p_complement, r.p_complement) <= PC_ULPS,
                 "(d) case " + std::to_string(ci) + " rank " + std::to_string(r.rank) + " equals 1.11 bit for bit" +
                     (PC_ULPS ? " (p_complement within " + std::to_string(PC_ULPS) + " ulps)" : std::string()) +
-                    (E_ULPS ? " (E-value within " + std::to_string(E_ULPS) + " ulps, MSVC)" : std::string()) + got);
+                    (E_ULPS ? " (E-value within " + std::to_string(E_ULPS) + " ulps, MSVC/macOS x86_64)" : std::string()) + got);
           if (t.p_complement != r.p_complement) ++pc_off;
           check(t.ion_series == IS::Series::BY, "(d) b/y tags");
         }
