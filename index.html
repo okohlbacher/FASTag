@@ -198,7 +198,8 @@ notarization ticket, so they open with no network connection.</p>
     <td><a class="fname" data-asset="gui-macos-arm64.dmg" href="https://github.com/okohlbacher/FASTag/releases/latest">FASTag-&lt;version&gt;-gui-macos-arm64.dmg</a></td>
     <td><a class="fname" data-asset="macos-arm64.dmg" href="https://github.com/okohlbacher/FASTag/releases/latest">FASTag-&lt;version&gt;-macos-arm64.dmg</a></td></tr>
 <tr><td>macOS, Intel</td>
-    <td colspan="2">not built from 1.8.0 on; the last Intel release is <a href="https://github.com/okohlbacher/FASTag/releases/tag/v1.6.1">1.6.1</a></td></tr>
+    <td><a class="fname" data-asset="gui-macos-x64.dmg" href="https://github.com/okohlbacher/FASTag/releases/latest">FASTag-&lt;version&gt;-gui-macos-x64.dmg</a></td>
+    <td><a class="fname" data-asset="macos-x64.dmg" href="https://github.com/okohlbacher/FASTag/releases/latest">FASTag-&lt;version&gt;-macos-x64.dmg</a></td></tr>
 <tr><td>Windows x64</td>
     <td><a class="fname" data-asset="gui-windows-x64-setup.exe" href="https://github.com/okohlbacher/FASTag/releases/latest">FASTag-&lt;version&gt;-gui-windows-x64-setup.exe</a></td>
     <td><a class="fname" data-asset="windows-x64.zip" href="https://github.com/okohlbacher/FASTag/releases/latest">FASTag-&lt;version&gt;-windows-x64.zip</a></td></tr>
@@ -395,21 +396,18 @@ large-scale mass spectrometry data. <em>Nat Methods</em> 2024.
 
   if (/Mac/i.test(hay)) {
     // Architecture is only exposed by Chromium's high-entropy hints. Safari
-    // reports nothing, so an unknown arch defaults to Apple silicon -- the
-    // only Mac build from 1.8.0 on -- and SAYS so.
+    // reports nothing, so an unknown arch defaults to Apple silicon and
+    // offers the Intel build beside it.
     var render = function (arm, sure) {
-      if (!arm) {
-        show('macOS, Intel', 'Download 1.6.1 for Intel', null,
-             '<a href="https://github.com/okohlbacher/FASTag/releases/tag/v1.6.1">all 1.6.1 downloads</a>',
-             'FASTag is built for Apple silicon only from 1.8.0 on; 1.6.1 is the last Intel release.');
-        btn.href = 'https://github.com/okohlbacher/FASTag/releases/download/v1.6.1/FASTag-gui-macos-x64.dmg';
-        return;
-      }
-      show('macOS, Apple silicon',
-           'Download the app', 'gui-macos-arm64.dmg',
-           'or the ' + link('macos-arm64.dmg', 'command-line tool'),
+      var v = arm ? 'arm64' : 'x64';
+      var other = arm ? 'x64' : 'arm64';
+      show(arm ? 'macOS, Apple silicon' : 'macOS, Intel',
+           'Download the app', 'gui-macos-' + v + '.dmg',
+           'or the ' + link('macos-' + v + '.dmg', 'command-line tool') +
+           (sure ? '' : ' · for an Intel Mac: ' + link('gui-macos-' + other + '.dmg', 'app') +
+                         ', ' + link('macos-' + other + '.dmg', 'command line')),
            'Signed, notarized and stapled — it opens with no network connection. Needs macOS 13.4 or later.' +
-           (sure ? '' : ' Your browser does not report the processor; Intel Macs are not supported from 1.8.0 on.'));
+           (sure ? '' : ' Your browser does not report the processor.'));
     };
     if (uad && uad.getHighEntropyValues) {
       uad.getHighEntropyValues(['architecture'])
