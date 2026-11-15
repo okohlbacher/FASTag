@@ -202,7 +202,8 @@ notarization ticket, so they open with no network connection.</p>
 <tr><td>Windows x64</td>
     <td><a href="https://github.com/okohlbacher/FASTag/releases/latest/download/FASTag-gui-windows-x64-setup.exe">FASTag-gui-windows-x64-setup.exe</a></td>
     <td><a href="https://github.com/okohlbacher/FASTag/releases/latest/download/FASTag-windows-x64.zip">FASTag-windows-x64.zip</a></td></tr>
-<tr><td>Linux x86-64</td><td>—</td>
+<tr><td>Linux x86-64</td>
+    <td><a href="https://github.com/okohlbacher/FASTag/releases/latest/download/FASTag-gui-linux-x64.AppImage">FASTag-gui-linux-x64.AppImage</a>, <a href="https://github.com/okohlbacher/FASTag/releases/latest/download/FASTag-gui-linux-x64.tar.gz">FASTag-gui-linux-x64.tar.gz</a> or the <a href="https://github.com/okohlbacher/FASTag/releases/latest">.deb package</a></td>
     <td><a href="https://github.com/okohlbacher/FASTag/releases/latest/download/FASTag-linux-x64.tar.gz">FASTag-linux-x64.tar.gz</a></td></tr>
 <tr><td>Linux arm64</td><td>—</td>
     <td><a href="https://github.com/okohlbacher/FASTag/releases/latest/download/FASTag-linux-arm64.tar.gz">FASTag-linux-arm64.tar.gz</a></td></tr>
@@ -211,7 +212,7 @@ notarization ticket, so they open with no network connection.</p>
 
 <p class="muted">Species detection additionally needs the taxonomy index,
 <a href="https://github.com/okohlbacher/FASTag/releases/latest/download/FASTag-taxonomy-k7.tar.gz">FASTag-taxonomy-k7.tar.gz</a>,
-which is already embedded in the release tarballs above. Windows binaries are not yet
+which is already embedded in the release tarballs above. The Linux desktop app needs Ubuntu 22.04 or Debian 12 or newer (glibc 2.35, WebKitGTK 4.1): the .deb installs its dependencies, the AppImage needs FUSE 2 (<code>libfuse2</code>, <code>libfuse2t64</code> on Ubuntu 24.04); on RHEL, Rocky, Alma and Linux arm64 use the command line. Windows binaries are not yet
 Authenticode-signed, so SmartScreen will warn on first run. All releases:
 <a href="https://github.com/okohlbacher/FASTag/releases">github.com/okohlbacher/FASTag/releases</a>.</p>
 
@@ -377,9 +378,12 @@ large-scale mass spectrometry data. <em>Nat Methods</em> 2024.
   }
 
   if (/Linux|X11/i.test(hay)) {
-    show('Linux', 'Download for Linux', 'FASTag-linux-x64.tar.gz',
-         'on arm64? ' + link('FASTag-linux-arm64.tar.gz', 'take this one'),
-         'Command-line only — there is no Linux desktop build.');
+    show('Linux', 'Download the app', 'FASTag-gui-linux-x64.AppImage',
+         'or the <a href="https://github.com/okohlbacher/FASTag/releases/latest">.deb package</a>, the ' +
+         link('FASTag-linux-x64.tar.gz', 'command-line tool') + ' (arm64: ' +
+         link('FASTag-linux-arm64.tar.gz', 'command line') + ')',
+         'Desktop app for x86-64, Ubuntu 22.04 or Debian 12 and newer; the AppImage needs FUSE 2 (libfuse2). ' +
+         'RHEL-family systems and arm64: command line only.');
     return;
   }
   // Anything else: say nothing and let the table do the work.
