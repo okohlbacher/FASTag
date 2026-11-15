@@ -567,6 +567,17 @@ namespace FASTag::Shortlist
     const std::uint64_t n_used = c.n_c + (c.uses_nterm ? c.n_n : 0);
     v.margin = n_used ? (top.loglik - best_compatible) / static_cast<double>(n_used)
                       : std::numeric_limits<double>::infinity();
+    // post-1.14: the lead over the best other non-tryptic model (an Asp-N
+    // call against `unspecific`, say), which the margin above does not see.
+    const FASTag::Digest::ModelScore* second = nullptr;
+    for (const auto& s : c.scores)
+      if (!trypsinCompatible(s.cls) && s.cls != top.cls && (!second || s.loglik > second->loglik)) second = &s;
+    if (second)
+    {
+      v.nontryptic_runner_up = second->name;
+      v.nontryptic_margin = n_used ? (top.loglik - second->loglik) / static_cast<double>(n_used)
+                                   : std::numeric_limits<double>::infinity();
+    }
     std::string m;
     appendNum(m, v.margin, std::chars_format::general, 3);
     if (v.margin >= min_margin)

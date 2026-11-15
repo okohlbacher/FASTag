@@ -319,7 +319,17 @@ namespace FASTag::Shortlist
     std::string model;   ///< the called model ("" when not scored)
     std::string reason;  ///< why, one short phrase for the log and the TSV header
     double margin = 0.0; ///< log-likelihood per tag end over the best trypsin-compatible model
+    /// post-1.14: for a non-trypsin-compatible call, the best model that is
+    /// neither trypsin-compatible nor of the call's class ("" when none), and
+    /// the call's lead over it (log-likelihood per tag end).
+    std::string nontryptic_runner_up;
+    double nontryptic_margin = 0.0;
   };
+
+  /// post-1.14: a non-trypsin-compatible call that leads its non-tryptic
+  /// runner-up by less than this (log-likelihood per tag end) is reported as
+  /// a close call.
+  inline constexpr double NON_TRYPTIC_CLOSE = 0.05;
 
   /// Margin (log-likelihood per tag end) a non-trypsin-compatible call needs
   /// over the best trypsin-compatible model to count as confident.

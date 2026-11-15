@@ -360,6 +360,76 @@ int main()
           "soften: a tryptic C end still wins");
   }
 
+  // ---- post-1.14 (protease-call-sitefit): fitNtermSite. N ends shaped as the
+  // background plus extra D: the maximum-likelihood site share and its
+  // likelihood ratio have a closed form (the background D share is
+  // b = 0.10 / 1.90 in the synthetic table).
+  {
+    std::map<char, std::uint64_t> bgc;
+    for (int i = 0; i < D::NUM_AA; ++i) bgc[D::AAS[static_cast<std::size_t>(i)]] = 4 * static_cast<std::uint64_t>(i + 1);
+    const double b = 0.10 / 1.90, s = 0.05;
+    const auto expect = [&](std::uint64_t n_d, std::uint64_t n, double& w, double& lr) {
+      const double f = static_cast<double>(n_d) / static_cast<double>(n);
+      w = (f - b) / ((1 - b) * (1 - s));
+      lr = 2 * (static_cast<double>(n_d) * std::log(f / b) +
+                static_cast<double>(n - n_d) * std::log((1 - f) / (1 - b)));
+    };
+    const auto top = [](const D::Classification& c) { return c.scores[static_cast<std::size_t>(c.top)].name; };
+    // 140 of 860 N ends at D (16 %): the fixed share 0.5 calls unspecific, the fit Asp-N.
+    auto sixth = bgc;
+    sixth['D'] += 100;
+    const D::NtermSiteFit f = D::fitNtermSite(counts(sixth), table(), "Asp-N", s, 100);
+    double w = 0, lr = 0;
+    expect(140, 860, w, lr);
+    check(f.fitted && f.n_n == 860 && std::abs(f.observed - 140.0 / 860.0) < 1e-12, "site fit: counts");
+    check(std::abs(f.share - w) < 1e-9, "site fit: share " + std::to_string(f.share) + " vs " + std::to_string(w));
+    check(std::abs(f.lr - lr) < 1e-6, "site fit: likelihood ratio " + std::to_string(f.lr) + " vs " + std::to_string(lr));
+    check(f.supported && f.applied == f.share, "site fit: 16 % D is supported");
+    D::ModelTable fixed = table(), fitted = table();
+    D::softenNterm(fixed, "Asp-N", D::NTERM_SITE_SHARE);
+    D::softenNterm(fitted, "Asp-N", f.applied);
+    const D::Classification cf = D::classify(counts(bgc), counts(sixth), fixed, s, 100);
+    const D::Classification cw = D::classify(counts(bgc), counts(sixth), fitted, s, 100);
+    check(top(cf) == "unspecific", "site fit: 16 % D is unspecific at the fixed share");
+    check(top(cw) == "Asp-N", "site fit: 16 % D is Asp-N at the fitted share");
+    // Asp-N's C end is the background: its lead over unspecific is lr / 2.
+    double ll_asp = 0, ll_uns = 0;
+    for (const auto& m : cw.scores)
+    {
+      if (m.name == "Asp-N") ll_asp = m.loglik;
+      if (m.name == "unspecific") ll_uns = m.loglik;
+    }
+    check(std::abs((ll_asp - ll_uns) - f.lr / 2) < 1e-6, "site fit: Asp-N leads unspecific by lr / 2");
+
+    // Ten times the run with a small excess: significant, but the share is
+    // below NTERM_SITE_MIN, so the fixed share is kept.
+    std::map<char, std::uint64_t> big;
+    for (const auto& [c, v] : bgc) big[c] = 10 * v;
+    big['D'] += 200;  // 600 of 7800
+    const D::NtermSiteFit g = D::fitNtermSite(counts(big), table(), "Asp-N", s, 100);
+    expect(600, 7800, w, lr);
+    check(std::abs(g.share - w) < 1e-9 && g.share < D::NTERM_SITE_MIN && g.lr >= D::NTERM_SITE_LR,
+          "site fit: significant but small share");
+    check(!g.supported && g.applied == D::NTERM_SITE_SHARE, "site fit: a small share keeps the fixed share");
+    // A small run with the same excess share is not significant.
+    auto small = bgc;
+    small['D'] += 20;  // 60 of 780
+    const D::NtermSiteFit h = D::fitNtermSite(counts(small), table(), "Asp-N", s, 100);
+    check(h.lr < D::NTERM_SITE_LR && !h.supported, "site fit: 8 % D over 780 ends is not significant");
+    // Bounds: D below the background fits 0, D only fits 1.
+    auto noD = bgc;
+    noD['D'] = 0;
+    const D::NtermSiteFit z = D::fitNtermSite(counts(noD), table(), "Asp-N", s, 100);
+    check(z.fitted && z.share == 0.0 && z.lr == 0.0 && !z.supported, "site fit: no D fits 0");
+    const D::NtermSiteFit one = D::fitNtermSite(counts({{'D', 300}}), table(), "Asp-N", s, 100);
+    check(one.share == 1.0 && one.supported, "site fit: D only fits 1");
+    // Not fitted: too few N ends, an N end that is the background, an unknown model.
+    check(!D::fitNtermSite(counts({{'D', 50}}), table(), "Asp-N", s, 100).fitted, "site fit: 50 N ends are too few");
+    check(!D::fitNtermSite(counts(sixth), table(), "Trypsin", s, 100).fitted, "site fit: background N end");
+    const D::NtermSiteFit u = D::fitNtermSite(counts(sixth), table(), "Lys-N", s, 100);
+    check(!u.fitted && u.applied == D::NTERM_SITE_SHARE, "site fit: unknown model");
+  }
+
   // ---- a residue at probability 0 is no call, not a margin of inf or nan
   {
     std::string t = "model\tclass\tend\tresidue\tfreq\n";

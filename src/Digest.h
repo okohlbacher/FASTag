@@ -427,6 +427,53 @@ namespace FASTag::Digest
   */
   void softenNterm(ModelTable& table, std::string_view name, double site_share);
 
+  /// post-1.14 (protease-call-sitefit): the smallest fitted N-terminal site
+  /// share fitNtermSite() accepts. Development runs (176 + 3, spent sets):
+  /// Asp-N digests 0.117-0.807, every other digest <= 0.058.
+  inline constexpr double NTERM_SITE_MIN = 0.10;
+  /// post-1.14 (protease-call-sitefit): the likelihood ratio statistic
+  /// (2 * log-likelihood gain over the background N end) a fitted site share
+  /// needs; 10.83 is the chi-square (1 df) quantile at p = 0.001.
+  inline constexpr double NTERM_SITE_LR = 10.83;
+
+  /**
+    @brief The per-run fit of a model's N-terminal site share (fitNtermSite()).
+  */
+  struct NtermSiteFit
+  {
+    bool fitted = false;     ///< the model exists, its N end is not the background and there are >= tag_min N ends
+    double share = 0.0;      ///< the fitted site share in [0, 1] (the softenNterm() site_share)
+    double lr = 0.0;         ///< 2 * (log-likelihood at share - log-likelihood at 0) over the N ends
+    double observed = 0.0;   ///< the share of the N ends at a residue of the model's N end
+    std::uint64_t n_n = 0;   ///< the N ends counted
+    /// fitted, share >= NTERM_SITE_MIN and lr >= NTERM_SITE_LR
+    bool supported = false;
+    /// The site share to score the model with: the fit when supported, else
+    /// NTERM_SITE_SHARE (the 1.14 rule, which then cannot beat `unspecific`).
+    double applied = NTERM_SITE_SHARE;
+  };
+
+  /**
+    @brief Fits the N-terminal site share of one model to a run's N ends.
+
+    Maximum likelihood of w in [0, 1] for the N end
+    (1 - share) * (w * model + (1 - w) * background) + share * background,
+    the end classify() scores after softenNterm(table, name, w). w = 0 is the
+    background, which is the `unspecific` model's N end, so lr is the
+    likelihood ratio of the fitted model against `unspecific` at the N end
+    (for an N-terminal rule whose C end is the background, against
+    `unspecific` overall).
+
+    @param[in] nterm Merged N-terminal (P1') counts in AAS order.
+    @param[in] table Model table with background (the model's N end unsoftened).
+    @param[in] name Name of the model.
+    @param[in] share Background share mixed into each model.
+    @param[in] tag_min Minimum number of N ends to fit.
+    @return The fit (fitted false and applied NTERM_SITE_SHARE when not fitted).
+  */
+  NtermSiteFit fitNtermSite(const std::array<std::uint64_t, NUM_AA>& nterm, const ModelTable& table,
+                            std::string_view name, double share, int tag_min);
+
   // ---- 1.12 D: detection, specificity, flank2 (#3c-#3e), all opt-in ----
 
   /**

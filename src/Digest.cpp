@@ -505,6 +505,83 @@ namespace FASTag::Digest
       if (m.name == name && !m.n_bg) m.n = mix(m.n, table.bg_n, 1.0 - site_share);
   }
 
+  NtermSiteFit fitNtermSite(const std::array<std::uint64_t, NUM_AA>& nterm, const ModelTable& table,
+                            std::string_view name, double share, int tag_min)
+  {
+    NtermSiteFit f;
+    const Model* model = nullptr;
+    for (const Model& m : table.models)
+      if (m.name == name && !m.n_bg)
+      {
+        model = &m;
+        break;
+      }
+    for (int a = 0; a < NUM_AA; ++a) f.n_n += nterm[a];
+    if (!model || f.n_n == 0 || f.n_n < static_cast<std::uint64_t>(std::max(0, tag_min))) return f;
+    // Both ends normalised, so u * site + (1 - u) * bg is a distribution.
+    PySum zs, zb;
+    for (int a = 0; a < NUM_AA; ++a)
+    {
+      zs.add(model->n[a]);
+      zb.add(table.bg_n[a]);
+    }
+    const double ss = zs.value(), sb = zb.value();
+    if (!(ss > 0) || !(sb > 0)) return f;
+    Dist site{}, bg{};
+    std::uint64_t at_site = 0;
+    for (int a = 0; a < NUM_AA; ++a)
+    {
+      site[a] = model->n[a] / ss;
+      bg[a] = table.bg_n[a] / sb;
+      if (site[a] > 0) at_site += nterm[a];
+    }
+    f.fitted = true;
+    f.observed = static_cast<double>(at_site) / static_cast<double>(f.n_n);
+    // u = (1 - share) * w is the site's weight in the scored end; the
+    // log-likelihood is concave in u, so its maximum on [0, 1 - share] is
+    // where the derivative changes sign (bisection), or a bound.
+    const double hi = 1.0 - share;
+    const auto slope = [&](double u) {
+      PySum d;
+      for (int a = 0; a < NUM_AA; ++a)
+      {
+        if (!nterm[a] || site[a] == bg[a]) continue;
+        const double p = u * site[a] + (1.0 - u) * bg[a];
+        const double num = static_cast<double>(nterm[a]) * (site[a] - bg[a]);
+        // A count at a residue of probability 0 pulls without bound towards
+        // the end that gives it a probability.
+        if (!(p > 0)) return num > 0 ? 1.0 : -1.0;
+        d.add(num / p);
+      }
+      return d.value();
+    };
+    const auto ll = [&](double u) {
+      PySum s;
+      for (int a = 0; a < NUM_AA; ++a)
+        if (nterm[a]) s.add(static_cast<double>(nterm[a]) * std::log(u * site[a] + (1.0 - u) * bg[a]));
+      return s.value();
+    };
+    double u = 0.0;
+    if (!(hi > 0) || !(slope(0.0) > 0)) u = 0.0;
+    else if (slope(hi) >= 0) u = hi;
+    else
+    {
+      double lo = 0.0, up = hi;
+      for (int i = 0; i < 100; ++i)
+      {
+        const double mid = 0.5 * (lo + up);
+        (slope(mid) > 0 ? lo : up) = mid;
+      }
+      u = 0.5 * (lo + up);
+    }
+    f.share = hi > 0 ? std::min(1.0, u / hi) : 0.0;
+    const double gain = u > 0 ? ll(u) - ll(0.0) : 0.0;
+    f.lr = std::isnan(gain) ? 0.0 : std::max(0.0, 2.0 * gain);
+    f.supported = f.share >= NTERM_SITE_MIN && f.lr >= NTERM_SITE_LR;
+    f.applied = f.supported ? f.share : NTERM_SITE_SHARE;
+    return f;
+  }
+
   void rankScores(Classification& r)
   {
     std::vector<int> rk(r.scores.size());

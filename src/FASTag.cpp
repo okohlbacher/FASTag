@@ -1465,10 +1465,9 @@ TOPPFASTag::ExitCodes TOPPFASTag::main_(int, const char**)
       sl_models.bg_c = sl_models.bg_n = FD::composition(sl_db_residues, true);
       sl_models.has_bg = true;
     }
-    // post-1.13.1 (aspn): an Asp-N digest has D at a third of its counted
-    // N-terminal tag ends, not at all of them; without this it is called
-    // `unspecific`. Only the experimental non-trypsin placement path.
-    if (sl_nontryptic) FD::softenNterm(sl_models, "Asp-N", FD::NTERM_SITE_SHARE);
+    // post-1.13.1 (aspn): an Asp-N digest has D at only part of its counted
+    // N-terminal tag ends; without softening it is called `unspecific`.
+    // post-1.14: the share is fitted per run at the protease check (below).
     if (!search_config_out.empty())
     {
       sl_plan.database = fasta_out.empty() ? recon_db : fasta_out;
@@ -4371,10 +4370,47 @@ TOPPFASTag::ExitCodes TOPPFASTag::main_(int, const char**)
     {
       FD::TerminusCounter sl_tc(digest_settings.window);
       for (const PerThread& pt : per_thread) sl_tc.merge(pt.digest);
-      const FD::Classification sl_cls = FD::classify(sl_tc.cterm(), sl_tc.nterm(), sl_models,
+      // post-1.14 (protease-call-sitefit): with a -shortlist_protease other
+      // than trypsin, the Asp-N model's N-terminal site share is fitted to
+      // this run's N ends; a fit that is too small or not significant
+      // against `unspecific` keeps the fixed NTERM_SITE_SHARE of 1.14.
+      FD::NtermSiteFit sl_aspn;
+      FD::ModelTable sl_fitted;
+      if (sl_nontryptic)
+      {
+        sl_aspn = FD::fitNtermSite(sl_tc.nterm(), sl_models, "Asp-N", sl_digest.background_share,
+                                   sl_digest.tag_min);
+        sl_fitted = sl_models;
+        FD::softenNterm(sl_fitted, "Asp-N", sl_aspn.applied);
+      }
+      const FD::Classification sl_cls = FD::classify(sl_tc.cterm(), sl_tc.nterm(), sl_nontryptic ? sl_fitted : sl_models,
                                                      sl_digest.background_share, sl_digest.tag_min);
       using Verdict = FASTag::Shortlist::ProteaseVerdict;
       const Verdict verdict = FASTag::Shortlist::proteaseVerdict(sl_cls, !p.tol_ppm, run_acc.a.protease_spectra);
+      // The reason in the log and the TSV header; with a non-trypsin
+      // -shortlist_protease it also names the site fit and the lead over the
+      // non-tryptic runner-up.
+      std::string sl_reason = verdict.reason;
+      bool sl_close = false;
+      if (sl_nontryptic)
+      {
+        const auto num = [](double v, int digits) {
+          std::string t;
+          FASTag::appendNum(t, v, std::chars_format::general, digits);
+          return t;
+        };
+        if (!verdict.nontryptic_runner_up.empty())
+        {
+          sl_close = verdict.nontryptic_margin < FASTag::Shortlist::NON_TRYPTIC_CLOSE;
+          sl_reason += "; ahead of " + verdict.nontryptic_runner_up + " by " + num(verdict.nontryptic_margin, 3) +
+                       " log-likelihood per tag end" + (sl_close ? " (close call)" : "");
+        }
+        if (sl_aspn.fitted)
+          sl_reason += "; Asp-N site share " + num(sl_aspn.applied, 3) +
+                       (sl_aspn.supported ? " (fitted, likelihood ratio " + num(sl_aspn.lr, 4) + ")"
+                                          : " (fixed; fit " + num(sl_aspn.share, 3) + ", likelihood ratio " +
+                                                num(sl_aspn.lr, 4) + ")");
+      }
       const bool force = getFlag_("shortlist_force");
       const char* kind = verdict.kind == Verdict::Kind::COMPATIBLE ? "compatible"
                        : verdict.kind == Verdict::Kind::NON_TRYPTIC ? "non_tryptic"
@@ -4392,7 +4428,14 @@ TOPPFASTag::ExitCodes TOPPFASTag::main_(int, const char**)
         std::string withheld;
         if (!fasta_out.empty()) withheld = "-fasta_out";
         if (!search_config_out.empty()) withheld += (withheld.empty() ? "" : " or ") + std::string("-search_config_out");
-        OPENMS_LOG_INFO << "Shortlist protease check: " << kind << " (" << verdict.reason << ")." << std::endl;
+        OPENMS_LOG_INFO << "Shortlist protease check: " << kind << " (" << sl_reason << ")." << std::endl;
+        if (sl_close)
+          OPENMS_LOG_WARN << "Shortlist protease check: close call, " << verdict.model << " is ahead of "
+                          << verdict.nontryptic_runner_up
+                          << " by less than " << FASTag::Shortlist::NON_TRYPTIC_CLOSE
+                          << " log-likelihood per tag end; if the protease is known, name it with "
+                             "-shortlist_protease."
+                          << std::endl;
         if (!sl_choice.refuse && sl_choice.mismatch)
           OPENMS_LOG_WARN << "Shortlist placement: " << sl_choice.rule->name << ", "
                           << FASTag::Cleavage::specificityName(sl_choice.specificity) << " specificity ("
@@ -4517,7 +4560,7 @@ TOPPFASTag::ExitCodes TOPPFASTag::main_(int, const char**)
                   ", parsimony " + pars[static_cast<int>(sl_settings.parsimony)] + ", top " +
                   std::to_string(sl_settings.top),
               std::string("protease: ") + kind + (verdict.model.empty() ? "" : " " + verdict.model) + " (" +
-                  verdict.reason + ")",
+                  sl_reason + ")",
               "proteins: " + std::to_string(n_target) + " with evidence, " + std::to_string(n_kept) +
                   " kept" + (n_bg_db ? ", " + std::to_string(n_bg_db) + " database entries kept as background"
                                      : std::string()) +

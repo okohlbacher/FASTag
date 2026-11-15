@@ -508,6 +508,35 @@ int main()
     check(SL::proteaseVerdict(c, false, 500).kind == SL::ProteaseVerdict::Kind::INCONCLUSIVE, "a tie is inconclusive");
   }
 
+  // ---- post-1.14: the lead of a non-tryptic call over its non-tryptic runner-up
+  {
+    FASTag::Digest::Classification c;
+    c.scored = true;
+    c.uses_nterm = true;
+    c.n_c = 500;
+    c.n_n = 100;
+    c.scores = {{"Trypsin", "Trypsin", -1500.0},          {"Lys-C", "Lys-C", -1600.0},
+                {"Chymotrypsin", "Chymotrypsin", -1200.0}, {"Asp-N", "Asp-N", -1000.0},
+                {"unspecific", "unspecific cleavage", -1003.0}};
+    c.top = 3;
+    c.runner_up = 4;
+    auto v = SL::proteaseVerdict(c, false, 500);
+    check(v.kind == SL::ProteaseVerdict::Kind::NON_TRYPTIC && std::abs(v.margin - 500.0 / 600.0) < 1e-12,
+          "Asp-N call: margin over Trypsin");
+    check(v.nontryptic_runner_up == "unspecific" && std::abs(v.nontryptic_margin - 3.0 / 600.0) < 1e-12 &&
+              v.nontryptic_margin < SL::NON_TRYPTIC_CLOSE,
+          "Asp-N call: a close lead over unspecific");
+    c.scores[4].loglik = -1300.0;
+    v = SL::proteaseVerdict(c, false, 500);
+    check(v.nontryptic_runner_up == "Chymotrypsin" && std::abs(v.nontryptic_margin - 200.0 / 600.0) < 1e-12,
+          "Asp-N call: the runner-up is the best other non-tryptic class");
+    c.scores[0].loglik = -900.0;
+    c.top = 0;
+    v = SL::proteaseVerdict(c, false, 500);
+    check(v.kind == SL::ProteaseVerdict::Kind::COMPATIBLE && v.nontryptic_runner_up.empty(),
+          "a trypsin call has no non-tryptic runner-up");
+  }
+
   std::error_code ec;
   fs::remove_all(root, ec);
   if (failures)

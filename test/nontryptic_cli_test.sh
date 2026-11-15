@@ -34,7 +34,8 @@
 #      echoes the rules it read;
 #   l. auto on the in-silico Asp-N MGF (post-1.13.1): the placement and the
 #      Sage export are Asp-N semi-specific; -shortlist_specificity full given,
-#      or asp-n named, keeps full specificity.
+#      or asp-n named, keeps full specificity; the protease line names the
+#      lead over the non-tryptic runner-up and the fitted Asp-N site share.
 # Exits 77 (ctest SKIP) when the binary cannot start.
 set -u
 BIN="$1"
@@ -277,6 +278,12 @@ grep -q '^# placement: Asp-N, semi specificity, .*(auto: the tag ends call Asp-N
   || { grep '^#' "$TMP/ans/sl.tsv" >&2; fail "auto on Asp-N: the placement is not Asp-N, semi specificity"; }
 grep -q '"cleave_at": *"D"' "$TMP/ans/sage.json" && grep -q '"semi_enzymatic": *true' "$TMP/ans/sage.json" \
   || { cat "$TMP/ans/sage.json" >&2; fail "auto on Asp-N: the Sage export is not Asp-N semi_enzymatic"; }
+# post-1.14: the protease line names the lead over the non-tryptic runner-up
+# and the Asp-N site share fitted to the run (in-silico, so the fit is supported).
+grep -q '^# protease: non_tryptic Asp-N (.*; ahead of [^ ]* by [0-9.e+-]* log-likelihood per tag end[^;]*; Asp-N site share [0-9.]* (fitted, likelihood ratio [0-9.e+]*))$' "$TMP/ans/sl.tsv" \
+  || { grep '^#' "$TMP/ans/sl.tsv" >&2; fail "auto on Asp-N: the protease line lacks the runner-up or the fitted site share"; }
+grep -q 'Shortlist protease check: non_tryptic (Asp-N fits .*Asp-N site share [0-9.]* (fitted' "$TMP/ans/run.log" \
+  || fail "auto on Asp-N: the log lacks the fitted site share"
 [ "$(go anfu "${AN[@]}" "${ANS[@]}" -shortlist_protease auto -shortlist_specificity full)" = 0 ] || fail "auto full on Asp-N: exit non-zero"
 grep -q '^# placement: Asp-N, full specificity' "$TMP/anfu/sl.tsv" || fail "auto on Asp-N: a given -shortlist_specificity full was not kept"
 grep -q 'semi_enzymatic' "$TMP/anfu/sage.json" && fail "auto full on Asp-N: wrote semi_enzymatic"
