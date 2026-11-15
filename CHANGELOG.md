@@ -1,6 +1,9 @@
 # Changelog
 
-## Unreleased
+## 1.15.0 (2026-11-16)
+
+Release files carry the version, Intel Macs are built again, and the
+Linux desktop app is also built for arm64. Tag output is unchanged.
 
 - **Intel Macs again:** CI builds `macos-x64` natively on GitHub's
   `macos-26-intel` runner, with the same OpenMS, libraries, 13.4 floor, tests
@@ -12,6 +15,19 @@
   `gui_dry_run`), not on pull requests or pushes. GitHub ends its Intel macOS
   runners in 2027 (August 2027 per actions/runner-images), so the leg is to be
   removed before August 2027, and with it the Intel builds.
+- **Tests:** `msfragger_cli_test` masks the paths it is given before it
+  reads the run logs, so a checkout path containing "protease" no longer
+  fails it. `ion_series_test` allows the 1-ulp E-value difference on macOS
+  x86_64 that MSVC already had.
+- **Held-out results:** MSFragger mass calibration (`calibrate_mass 2` in
+  the export) **failed** on one criterion (not faster than the full search
+  in 2 of 9 runs, lowest speed-up 0.947; kept share higher in 9 of 9, median
+  +0.025); the export keeps `calibrate_mass 0`. The raw-DIA check's fourth
+  test is **inconclusive** with no criterion failed: 0 of 86 non-DIA, 70 of
+  71 DIA and 0 of 12 Astral DDA files refused, but only 1 closed-window DIA
+  file (minimum 5). The Asp-N call of `-shortlist_protease auto` has no
+  retest (no unused eligible Asp-N project in PRIDE) and stays not
+  validated.
 - **Release files carry the version:** `FASTag-<version>-<variant>.<ext>`,
   e.g. `FASTag-1.15.0-linux-x64.tar.gz`, `FASTag-1.15.0-gui-macos-arm64.dmg`,
   `FASTag-1.15.0-gui-windows-x64-setup.exe`, `FASTag-1.15.0-windows-x64.zip`,
