@@ -2,3 +2,6 @@
 
 /// True only in the Playwright e2e build (vite.config.ts, `--mode e2e`).
 declare const __E2E__: boolean
+
+/// The app version in src-tauri/tauri.conf.json (vite.config.ts, vitest.config.ts).
+declare const __APP_VERSION__: string

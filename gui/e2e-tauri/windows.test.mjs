@@ -210,7 +210,7 @@ test('characterize: species, digest, label reports and the Overview', { timeout:
       await shot(s, '05-characterize-no-taxdb')
       record.steps.characterizeNoTaxdb = check.slice(0, 1500)
       assert.match(check, /Blocks the run: The species report needs the taxonomy index/, check)
-      assert.match(check, /FASTag-taxonomy-k7\.tar\.gz/, check)
+      assert.match(check, /FASTag-\d+\.\d+\.\d+-taxonomy-k7\.tar\.gz/, check)
       const want = join(taxDir, 'tax_k7.taxdb').toLowerCase()
       assert.ok(check.toLowerCase().includes(want), `the check does not name ${want}: ${check}`)
       const runBlocked = await s.exec("const b = [...document.querySelectorAll('button[data-run]')].find((b) => b.textContent.includes('char.mzML')); return !b || b.disabled")

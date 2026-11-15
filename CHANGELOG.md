@@ -1,5 +1,18 @@
 # Changelog
 
+## Unreleased
+
+- **Release files carry the version:** `FASTag-<version>-<variant>.<ext>`,
+  e.g. `FASTag-1.15.0-linux-x64.tar.gz`, `FASTag-1.15.0-gui-macos-arm64.dmg`,
+  `FASTag-1.15.0-gui-windows-x64-setup.exe`, `FASTag-1.15.0-windows-x64.zip`,
+  `FASTag-1.15.0-taxonomy-k7.tar.gz` (+ `.tar.xz`, + `.sha256`). The `.deb`
+  keeps Debian's `fastag-gui_<version>_amd64.deb`. CI takes the version from
+  the tag (or `CMakeLists.txt` on a dry run) in one job per workflow, and a
+  release whose files lack it goes red. `releases/latest/download/<name>`
+  links no longer resolve: the README links the latest release page, and the
+  project page finds the newest files through the GitHub API. The CLI's and
+  the GUI's "taxonomy index missing" messages name the versioned asset.
+
 ## 1.14.0 (2026-11-14)
 
 Options that failed their held-out tests are removed, an empty reduced FASTA

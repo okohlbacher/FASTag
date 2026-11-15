@@ -87,10 +87,11 @@ env:
   #
   # THE DATA RELEASE MUST BE A PRE-RELEASE (`gh release create --prerelease`,
   # or `gh release edit <tag> --prerelease` after the fact). GitHub hands the
-  # "Latest" slot to the newest NON-prerelease, and every binary link in the
-  # README is a /releases/latest/download/ URL -- publishing this data tag as
-  # a normal release silently 404s every platform download until it is
-  # demoted. That happened once, on 2026-09-01, and this is the fix.
+  # "Latest" slot to the newest NON-prerelease, and the README and the
+  # project page send every download to /releases/latest (the page through
+  # the API's releases/latest) -- publishing this data tag as a normal
+  # release hides every platform download until it is demoted. That
+  # happened once, on 2026-09-01, and this is the fix.
   # windows.yml carries the same two pins and must stay in lockstep.
   TAXDB_TAG: taxonomy-k7-20260901
   TAXDB_SHA256: 520d93229df807e45b0e6fdf4d8d20c7aad95b73952749cb041c3e54de474a4b
@@ -118,9 +119,43 @@ env:
   MACOS_MIN_VERSION: "13.4"
 
 jobs:
+  # ------------------------------------------------------ release version
+  # The ONE place this workflow decides the version the release files carry
+  # in their names (FASTag-<version>-<variant>.<ext>): the tag without its v
+  # on a v* tag, project(FASTag VERSION ...) in CMakeLists.txt otherwise (a
+  # dry run, a branch). A tag that disagrees with CMakeLists.txt fails here,
+  # before anything is built. Every job that names a release file reads
+  # needs.version.outputs.version; tools/release_assets.sh holds the rule.
+  version:
+    name: release version
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+    outputs:
+      version: ${{ steps.v.outputs.version }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+          sparse-checkout: |
+            CMakeLists.txt
+            tools/release_assets.sh
+          sparse-checkout-cone-mode: false
+      - id: v
+        env:
+          TAG: ${{ startsWith(github.ref, 'refs/tags/v') && github.ref_name || '' }}
+        run: |
+          set -euo pipefail
+          v=$(tools/release_assets.sh version "$TAG")
+          echo "version=$v" >> "$GITHUB_OUTPUT"
+          echo "### Release files carry version $v (FASTag-$v-<variant>.<ext>)" >> "$GITHUB_STEP_SUMMARY"
+
   build:
     name: ${{ matrix.name }}
     runs-on: ${{ matrix.runner }}
+    needs: [version]
+    env:
+      ASSET_VERSION: ${{ needs.version.outputs.version }}
     # write, not the default: needed only for the tag-triggered release-asset
     # upload below. Scoped to this job rather than the workflow, since nothing
     # else here needs it. GitHub already forces a read-only token for
@@ -1279,6 +1314,19 @@ jobs:
           echo "ULMO dmg: $size bytes ($(mb "$size") MB), was $before bytes"
           echo "### Desktop dmg: $(mb "$size") MB (ULMO), from $(mb "$before") MB (UDZO)" >> "$GITHUB_STEP_SUMMARY"
 
+      # The release file name, given on a tag and on a dry run alike, so the
+      # dry run's artifact holds the very name a release would attach.
+      - name: Name the desktop app's disk image (macOS)
+        if: matrix.name == 'macos-arm64' && ((steps.mac-signing.outputs.enabled == 'true' && startsWith(github.ref, 'refs/tags/v')) || inputs.gui_dry_run)
+        shell: bash
+        run: |
+          set -euo pipefail
+          shopt -s nullglob
+          dmgs=(gui/src-tauri/target/release/bundle/dmg/*.dmg)
+          [ ${#dmgs[@]} -gt 0 ] || { echo "::error::tauri produced no .dmg"; exit 1; }
+          cp "${dmgs[0]}" "FASTag-${ASSET_VERSION}-gui-${{ matrix.name }}.dmg"
+          tools/release_assets.sh check "$ASSET_VERSION" "FASTag-${ASSET_VERSION}-gui-${{ matrix.name }}.dmg"
+
       - name: Attach the signed desktop app to the release (macOS)
         if: steps.mac-signing.outputs.enabled == 'true' && startsWith(github.ref, 'refs/tags/v')
         shell: bash
@@ -1287,16 +1335,11 @@ jobs:
           GH_REPO: ${{ github.repository }}
         run: |
           set -euo pipefail
-          shopt -s nullglob
-          dmgs=(gui/src-tauri/target/release/bundle/dmg/*.dmg)
-          [ ${#dmgs[@]} -gt 0 ] || { echo "::error::tauri produced no .dmg"; exit 1; }
-          DMG="${dmgs[0]}"
-          cp "$DMG" "FASTag-gui-${{ matrix.name }}.dmg"
           gh release create "${{ github.ref_name }}" \
             --title "${{ github.ref_name }}" \
             --notes "Automated binary upload; release notes pending." \
             2>/dev/null || true
-          gh release upload "${{ github.ref_name }}" "FASTag-gui-${{ matrix.name }}.dmg" --clobber
+          gh release upload "${{ github.ref_name }}" "FASTag-${ASSET_VERSION}-gui-${{ matrix.name }}.dmg" --clobber
 
       # A dry run has no release to attach to, so the .dmg comes back as a
       # workflow artifact to be opened and checked by hand.
@@ -1304,15 +1347,14 @@ jobs:
         if: inputs.gui_dry_run && matrix.name == 'macos-arm64'
         with:
           name: FASTag-gui-${{ matrix.name }}-dryrun
-          path: gui/src-tauri/target/release/bundle/dmg/*.dmg
+          path: FASTag-${{ env.ASSET_VERSION }}-gui-${{ matrix.name }}.dmg
           if-no-files-found: error
 
-      # Filenames deliberately carry no version: the README links
-      # /releases/latest/download/FASTag-<platform>.tar.gz, a GitHub URL form
-      # that always resolves to whatever the newest release's file of that
-      # name is. Each new tag's build overwrites the same name inside its OWN
-      # release, so nothing else needs to change when this table gets a new
-      # row.
+      # Filenames carry the version (FASTag-<version>-<platform>.<ext>, from
+      # job version), so a downloaded file says which release it is. Up to
+      # 1.14.0 they carried none, for /releases/latest/download/<name> links;
+      # the README and the project page now link the releases/latest page
+      # instead, and the page resolves the newest files through the API.
       #
       # `gh release create ... || true`: this job runs once per matrix entry,
       # so whichever platform's build finishes first creates the release (a
@@ -1349,7 +1391,7 @@ jobs:
           MACOS_NOTARY_PASSWORD: ${{ secrets.MACOS_NOTARY_PASSWORD }}
         run: |
           set -euo pipefail
-          DMG="FASTag-${{ matrix.name }}.dmg"
+          DMG="FASTag-${ASSET_VERSION}-${{ matrix.name }}.dmg"
           STAGE="${RUNNER_TEMP}/dmgroot"
           rm -rf "$STAGE"; mkdir -p "$STAGE"
           cp -R dist/FASTag "$STAGE/FASTag"
@@ -1405,11 +1447,11 @@ jobs:
           # The tarball is still built and uploaded when signing is NOT
           # configured, because an unsigned .dmg cannot be produced at all and
           # shipping nothing for macOS would be worse than shipping a tarball.
-          if [ -f "FASTag-${{ matrix.name }}.dmg" ]; then
-            gh release upload "${{ github.ref_name }}" "FASTag-${{ matrix.name }}.dmg" --clobber
+          if [ -f "FASTag-${ASSET_VERSION}-${{ matrix.name }}.dmg" ]; then
+            gh release upload "${{ github.ref_name }}" "FASTag-${ASSET_VERSION}-${{ matrix.name }}.dmg" --clobber
           else
-            tar -C dist -czf "FASTag-${{ matrix.name }}.tar.gz" FASTag
-            gh release upload "${{ github.ref_name }}" "FASTag-${{ matrix.name }}.tar.gz" --clobber
+            tar -C dist -czf "FASTag-${ASSET_VERSION}-${{ matrix.name }}.tar.gz" FASTag
+            gh release upload "${{ github.ref_name }}" "FASTag-${ASSET_VERSION}-${{ matrix.name }}.tar.gz" --clobber
           fi
 
   # ----------------------------------------------------------- GUI checks
@@ -1614,12 +1656,14 @@ jobs:
   gui-linux:
     name: gui-linux-x64
     if: ${{ !cancelled() && (startsWith(github.ref, 'refs/tags/v') || inputs.gui_dry_run) }}
-    needs: [build]
+    needs: [version, build]
     runs-on: ubuntu-22.04
     timeout-minutes: 120
     outputs:
       appimage: ${{ steps.appimage.outputs.built }}
       deb: ${{ steps.assets.outputs.deb }}
+      tarball: ${{ steps.assets.outputs.tarball }}
+      appimage_file: ${{ steps.assets.outputs.appimage_file }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
@@ -1723,20 +1767,20 @@ jobs:
       # renamed package as a different one, so a later rename breaks
       # upgrades. The download is fastag-gui_<version>_amd64.deb (GUI-DESIGN
       # section 8, decision of 2026-11-07), Debian's own file name; the
-      # tarball and the AppImage keep their versionless names.
+      # tarball and the AppImage are FASTag-<version>-gui-linux-x64.tar.gz
+      # and .AppImage, the version from job version.
       - name: Name the assets, make the tarball, check the .deb
         id: assets
         shell: bash
         env:
           DEB_PACKAGE: fastag-gui
+          VER: ${{ needs.version.outputs.version }}
         run: |
           set -euo pipefail
-          VER=$(sed -n 's/^project(FASTag VERSION \([0-9.]*\).*/\1/p' CMakeLists.txt)
-          [ -n "$VER" ] || { echo "::error::no project(FASTag VERSION ...) in CMakeLists.txt"; exit 1; }
-          if [[ "$GITHUB_REF" == refs/tags/v* ]] && [ "${GITHUB_REF_NAME#v}" != "$VER" ]; then
-            echo "::error::tag $GITHUB_REF_NAME does not match CMakeLists.txt version $VER"; exit 1
-          fi
+          [ -n "$VER" ] || { echo "::error::job version gave no version"; exit 1; }
           DEB="${DEB_PACKAGE}_${VER}_amd64.deb"
+          TGZ="FASTag-${VER}-gui-linux-x64.tar.gz"
+          APPIMAGE="FASTag-${VER}-gui-linux-x64.AppImage"
           B=gui/src-tauri/target/release/bundle
           shopt -s nullglob
           debs=("$B"/deb/*.deb)
@@ -1767,14 +1811,19 @@ jobs:
           T="$RUNNER_TEMP/guitar"; rm -rf "$T"; mkdir -p "$T"
           mv "$X/usr" "$T/FASTag-gui"
           rm -rf "$X"
-          tar -C "$T" -czf FASTag-gui-linux-x64.tar.gz FASTag-gui
+          tar -C "$T" -czf "$TGZ" FASTag-gui
           rm -rf "$T"
+          echo "tarball=$TGZ" >> "$GITHUB_OUTPUT"
+          echo "appimage_file=$APPIMAGE" >> "$GITHUB_OUTPUT"
           apps=("$B"/appimage/*.AppImage)
-          if [ ${#apps[@]} -eq 1 ]; then cp "${apps[0]}" FASTag-gui-linux-x64.AppImage; fi
+          if [ ${#apps[@]} -eq 1 ]; then cp "${apps[0]}" "$APPIMAGE"; fi
+          # The names the release would attach, checked on a dry run too.
+          names=("$DEB" "$TGZ"); [ -f "$APPIMAGE" ] && names+=("$APPIMAGE")
+          tools/release_assets.sh check "$VER" "${names[@]}"
           # GitHub refuses a release asset of 2 GiB or more.
           mb() { awk -v b="$1" 'BEGIN { printf "%.1f", b / 1000000 }'; }
           echo "### Linux desktop app (ubuntu-22.04, glibc $(ldd --version | head -1 | awk '{print $NF}'), WebKitGTK $(pkg-config --modversion webkit2gtk-4.1))" >> "$GITHUB_STEP_SUMMARY"
-          for f in "$DEB" FASTag-gui-linux-x64.*; do
+          for f in "${names[@]}"; do
             size=$(stat -c %s "$f")
             echo "- $f: $(mb "$size") MB" >> "$GITHUB_STEP_SUMMARY"
             [ "$size" -lt 2147483648 ] || { echo "::error::$f is $(mb "$size") MB, at or above GitHub's 2 GiB asset limit"; exit 1; }
@@ -1788,7 +1837,7 @@ jobs:
           name: FASTag-gui-linux-x64
           path: |
             fastag-gui_*_amd64.deb
-            FASTag-gui-linux-x64.*
+            FASTag-*-gui-linux-x64.*
           compression-level: 0
           retention-days: 14
           if-no-files-found: error
@@ -1820,6 +1869,7 @@ jobs:
     timeout-minutes: 60
     env:
       DEB: ${{ needs.gui-linux.outputs.deb }}
+      TGZ: ${{ needs.gui-linux.outputs.tarball }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
@@ -1836,7 +1886,7 @@ jobs:
           # display and the session bus of the check itself.
           sudo apt-get install -y -q libwebkit2gtk-4.1-0 libgtk-3-0 xvfb dbus dbus-x11
           P="$RUNNER_TEMP/some where/prefix"; mkdir -p "$P"
-          tar -xzf "$RUNNER_TEMP/gui/FASTag-gui-linux-x64.tar.gz" -C "$P"
+          tar -xzf "$RUNNER_TEMP/gui/$TGZ" -C "$P"
           T="$P/FASTag-gui"
           [ -x "$T/bin/fastag" ] || { echo "::error::the tarball has no FASTag-gui/bin/fastag"; ls -la "$T" "$T/bin" || true; exit 1; }
           [ ! -e /usr/lib/FASTag ] || { echo "::error::/usr/lib/FASTag exists before the .deb is installed"; exit 1; }
@@ -1985,7 +2035,7 @@ jobs:
           # host, as every desktop has them; a bare runner does not (dry runs
           # 42314786620 and 42317242897: libEGL.so.1, then libGLESv2.so.2).
           sudo apt-get install -y -q ${{ matrix.fuse }} libegl1 libgles2 libgl1 xvfb dbus dbus-x11
-          A="$RUNNER_TEMP/gui/FASTag-gui-linux-x64.AppImage"
+          A="$RUNNER_TEMP/gui/${{ needs.gui-linux.outputs.appimage_file }}"
           chmod +x "$A"
           dbus-run-session -- xvfb-run -a timeout 30 "$A" > "$RUNNER_TEMP/app.log" 2>&1
           rc=$?
@@ -1999,8 +2049,8 @@ jobs:
   # Attaches the Linux desktop app to the release, mirroring the macOS and
   # Windows attach steps, but only after the .deb smoke passed on both
   # Ubuntu releases. The .deb is fastag-gui_<version>_amd64.deb; the tarball
-  # and the AppImage keep versionless names, so their /releases/latest/
-  # download/ links resolve. The AppImage goes up only when it launched on
+  # and the AppImage are FASTag-<version>-gui-linux-x64.tar.gz and
+  # .AppImage (named in job gui-linux). The AppImage goes up only when it launched on
   # both Ubuntu releases. Rocky/RHEL 9 is not supported by the desktop app
   # (decision of 2026-11-07: glibc 2.34 and WebKitGTK API 4.0 only; the CLI
   # covers RHEL-family systems), so no job tests it. Never on a dry run: that
@@ -2041,6 +2091,8 @@ jobs:
           GH_REPO: ${{ github.repository }}
           APPIMAGE_OK: ${{ needs.gui-linux-smoke-appimage.result == 'success' }}
           DEB: ${{ needs.gui-linux.outputs.deb }}
+          TGZ: ${{ needs.gui-linux.outputs.tarball }}
+          APPIMAGE: ${{ needs.gui-linux.outputs.appimage_file }}
         run: |
           set -euo pipefail
           gh release create "${{ github.ref_name }}" \
@@ -2049,10 +2101,12 @@ jobs:
             2>/dev/null || true
           [ "$DEB" = "fastag-gui_${GITHUB_REF_NAME#v}_amd64.deb" ] && [ -f "gui-linux/$DEB" ] \
             || { echo "::error::the artifact's .deb is '$DEB', not fastag-gui_${GITHUB_REF_NAME#v}_amd64.deb"; exit 1; }
+          [ "$TGZ" = "FASTag-${GITHUB_REF_NAME#v}-gui-linux-x64.tar.gz" ] && [ -f "gui-linux/$TGZ" ] \
+            || { echo "::error::the artifact's tarball is '$TGZ', not FASTag-${GITHUB_REF_NAME#v}-gui-linux-x64.tar.gz"; exit 1; }
           gh release upload "${{ github.ref_name }}" \
-            "gui-linux/$DEB" gui-linux/FASTag-gui-linux-x64.tar.gz --clobber
-          if [ "$APPIMAGE_OK" = "true" ] && [ -f gui-linux/FASTag-gui-linux-x64.AppImage ]; then
-            gh release upload "${{ github.ref_name }}" gui-linux/FASTag-gui-linux-x64.AppImage --clobber
+            "gui-linux/$DEB" "gui-linux/$TGZ" --clobber
+          if [ "$APPIMAGE_OK" = "true" ] && [ -f "gui-linux/$APPIMAGE" ]; then
+            gh release upload "${{ github.ref_name }}" "gui-linux/$APPIMAGE" --clobber
           else
             echo "::warning::no AppImage on this release (not built, or it did not launch on ubuntu-22.04 and 24.04)"
           fi
@@ -2142,14 +2196,19 @@ jobs:
   # (same harmless-race pattern as the attach steps).
   taxonomy-asset:
     if: startsWith(github.ref, 'refs/tags/v')
+    needs: [version]
     runs-on: ubuntu-24.04
     permissions:
       contents: write
     steps:
+      # The data tag's asset keeps its fixed name (FASTag-taxonomy-k7.tar.gz:
+      # assets under a data tag are never mutated); the copy on this release
+      # is FASTag-<version>-taxonomy-k7.tar.gz (+ .tar.xz, + .sha256 each).
       - name: Copy the pinned taxonomy asset onto this release
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
+          V: ${{ needs.version.outputs.version }}
         run: |
           set -euo pipefail
           gh release create "${{ github.ref_name }}" \
@@ -2170,11 +2229,18 @@ jobs:
           a=$(gzip -dc FASTag-taxonomy-k7.tar.gz | sha256sum | cut -d' ' -f1)
           b=$(xz -dc FASTag-taxonomy-k7.tar.xz | sha256sum | cut -d' ' -f1)
           [ "$a" = "$b" ] || { echo "::error::the .tar.xz does not hold the pinned tar stream"; exit 1; }
-          sha256sum FASTag-taxonomy-k7.tar.xz > FASTag-taxonomy-k7.tar.xz.sha256
-          ls -l FASTag-taxonomy-k7.tar.gz FASTag-taxonomy-k7.tar.xz
+          # Versioned names; each .sha256 names the file beside it, so
+          # `sha256sum -c` works on the downloaded pair.
+          N="FASTag-${V}-taxonomy-k7"
+          mv FASTag-taxonomy-k7.tar.gz "$N.tar.gz"
+          mv FASTag-taxonomy-k7.tar.xz "$N.tar.xz"
+          rm -f FASTag-taxonomy-k7.tar.gz.sha256
+          sha256sum "$N.tar.gz" > "$N.tar.gz.sha256"
+          sha256sum "$N.tar.xz" > "$N.tar.xz.sha256"
+          ls -l "$N".tar.*
           gh release upload "${{ github.ref_name }}" \
-            FASTag-taxonomy-k7.tar.gz FASTag-taxonomy-k7.tar.gz.sha256 \
-            FASTag-taxonomy-k7.tar.xz FASTag-taxonomy-k7.tar.xz.sha256 --clobber
+            "$N.tar.gz" "$N.tar.gz.sha256" \
+            "$N.tar.xz" "$N.tar.xz.sha256" --clobber
 
   # ------------------------------------------------- release completeness
   # No more silently partial releases: v0.19.1 went out with no linux-x64
@@ -2188,9 +2254,18 @@ jobs:
     # would otherwise turn the cancelled run's completeness check red for
     # uploads the NEW run will finish.
     if: ${{ !cancelled() && startsWith(github.ref, 'refs/tags/v') }}
-    needs: [build, taxonomy-asset, gui-linux-release, gui-cli-consistency]
+    needs: [version, build, taxonomy-asset, gui-linux-release, gui-cli-consistency]
     runs-on: ubuntu-24.04
+    env:
+      V: ${{ needs.version.outputs.version }}
     steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+          sparse-checkout: |
+            CMakeLists.txt
+            tools/release_assets.sh
+          sparse-checkout-cone-mode: false
       - name: The GUI's argv passed against the release CLI
         if: needs.gui-cli-consistency.result != 'success'
         run: |
@@ -2210,17 +2285,29 @@ jobs:
           # The Linux desktop app from 1.13.0 (P1): the .deb
           # (fastag-gui_<version>_amd64.deb) and the tarball; the AppImage is
           # best-effort and not asserted.
-          want="FASTag-linux-x64.tar.gz FASTag-linux-arm64.tar.gz \
-                FASTag-macos-arm64.dmg FASTag-gui-macos-arm64.dmg \
-                fastag-gui_${GITHUB_REF_NAME#v}_amd64.deb FASTag-gui-linux-x64.tar.gz \
-                FASTag-taxonomy-k7.tar.gz FASTag-taxonomy-k7.tar.gz.sha256 \
-                FASTag-taxonomy-k7.tar.xz FASTag-taxonomy-k7.tar.xz.sha256"
+          want="FASTag-$V-linux-x64.tar.gz FASTag-$V-linux-arm64.tar.gz \
+                FASTag-$V-macos-arm64.dmg FASTag-$V-gui-macos-arm64.dmg \
+                fastag-gui_${V}_amd64.deb FASTag-$V-gui-linux-x64.tar.gz \
+                FASTag-$V-taxonomy-k7.tar.gz FASTag-$V-taxonomy-k7.tar.gz.sha256 \
+                FASTag-$V-taxonomy-k7.tar.xz FASTag-$V-taxonomy-k7.tar.xz.sha256"
           have=$(gh release view "${{ github.ref_name }}" --json assets --jq '.assets[].name')
           missing=0
           for a in $want; do
             echo "$have" | grep -qx "$a" || { echo "MISSING: $a"; missing=1; }
           done
           exit $missing
+      # Every file on the release, whichever workflow attached it, carries
+      # the version: FASTag-<version>-<variant>.<ext>, or the .deb's
+      # fastag-gui_<version>_amd64.deb. windows.yml's mirror job runs the
+      # same check, so the last workflow to finish sees every asset.
+      - name: Every asset name carries the version
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          gh release view "${{ github.ref_name }}" --json assets --jq '.assets[].name' \
+            | tools/release_assets.sh check "$V"
 
   # ------------------------------------------------- Homebrew tap (macOS)
   # okohlbacher/homebrew-fastag carries two casks (fastag = the desktop app,
