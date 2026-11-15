@@ -537,16 +537,21 @@ namespace FASTag::Digest
     }
     f.fitted = true;
     f.observed = static_cast<double>(at_site) / static_cast<double>(f.n_n);
-    // u = (1 - share) * w is the site's weight in the scored end; the
-    // log-likelihood is concave in u, so its maximum on [0, 1 - share] is
-    // where the derivative changes sign (bisection), or a bound.
+    // classify() scores (1 - share) * (w * model + (1 - w) * bg) + share * bg
+    // normalised by its sum. With the ends' raw sums ss and sb that is the
+    // mixture v * site + (1 - v) * bg of the normalised ends, with
+    // v = u * ss / (u * ss + (1 - u) * sb) and u = (1 - share) * w, monotone
+    // in u. The log-likelihood is concave in v, so its maximum on
+    // [0, v(1 - share)] is where the derivative changes sign (bisection), or
+    // a bound; v is then mapped back to w.
     const double hi = 1.0 - share;
-    const auto slope = [&](double u) {
+    const double v_hi = hi > 0 ? hi * ss / (hi * ss + (1.0 - hi) * sb) : 0.0;
+    const auto slope = [&](double x) {
       PySum d;
       for (int a = 0; a < NUM_AA; ++a)
       {
         if (!nterm[a] || site[a] == bg[a]) continue;
-        const double p = u * site[a] + (1.0 - u) * bg[a];
+        const double p = x * site[a] + (1.0 - x) * bg[a];
         const double num = static_cast<double>(nterm[a]) * (site[a] - bg[a]);
         // A count at a residue of probability 0 pulls without bound towards
         // the end that gives it a probability.
@@ -555,27 +560,28 @@ namespace FASTag::Digest
       }
       return d.value();
     };
-    const auto ll = [&](double u) {
+    const auto ll = [&](double x) {
       PySum s;
       for (int a = 0; a < NUM_AA; ++a)
-        if (nterm[a]) s.add(static_cast<double>(nterm[a]) * std::log(u * site[a] + (1.0 - u) * bg[a]));
+        if (nterm[a]) s.add(static_cast<double>(nterm[a]) * std::log(x * site[a] + (1.0 - x) * bg[a]));
       return s.value();
     };
-    double u = 0.0;
-    if (!(hi > 0) || !(slope(0.0) > 0)) u = 0.0;
-    else if (slope(hi) >= 0) u = hi;
+    double v = 0.0;
+    if (!(v_hi > 0) || !(slope(0.0) > 0)) v = 0.0;
+    else if (slope(v_hi) >= 0) v = v_hi;
     else
     {
-      double lo = 0.0, up = hi;
+      double lo = 0.0, up = v_hi;
       for (int i = 0; i < 100; ++i)
       {
         const double mid = 0.5 * (lo + up);
         (slope(mid) > 0 ? lo : up) = mid;
       }
-      u = 0.5 * (lo + up);
+      v = 0.5 * (lo + up);
     }
+    const double u = v >= v_hi ? hi : v * sb / (ss * (1.0 - v) + v * sb);
     f.share = hi > 0 ? std::min(1.0, u / hi) : 0.0;
-    const double gain = u > 0 ? ll(u) - ll(0.0) : 0.0;
+    const double gain = v > 0 ? ll(v) - ll(0.0) : 0.0;
     f.lr = std::isnan(gain) ? 0.0 : std::max(0.0, 2.0 * gain);
     f.supported = f.share >= NTERM_SITE_MIN && f.lr >= NTERM_SITE_LR;
     f.applied = f.supported ? f.share : NTERM_SITE_SHARE;

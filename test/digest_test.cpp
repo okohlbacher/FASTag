@@ -362,15 +362,18 @@ int main()
 
   // ---- post-1.14 (protease-call-sitefit): fitNtermSite. N ends shaped as the
   // background plus extra D: the maximum-likelihood site share and its
-  // likelihood ratio have a closed form (the background D share is
-  // b = 0.10 / 1.90 in the synthetic table).
+  // likelihood ratio have a closed form. The synthetic background sums to
+  // 1.90 (D share b = 0.10 / 1.90) and classify() normalises each end, so the
+  // fitted mixture weight v of the normalised ends maps to the site share w by
+  // u = v * 1.90 / ((1 - v) + v * 1.90), w = u / (1 - share).
   {
     std::map<char, std::uint64_t> bgc;
     for (int i = 0; i < D::NUM_AA; ++i) bgc[D::AAS[static_cast<std::size_t>(i)]] = 4 * static_cast<std::uint64_t>(i + 1);
     const double b = 0.10 / 1.90, s = 0.05;
     const auto expect = [&](std::uint64_t n_d, std::uint64_t n, double& w, double& lr) {
       const double f = static_cast<double>(n_d) / static_cast<double>(n);
-      w = (f - b) / ((1 - b) * (1 - s));
+      const double v = (f - b) / (1 - b);
+      w = v * 1.90 / ((1 - v) + v * 1.90) / (1 - s);
       lr = 2 * (static_cast<double>(n_d) * std::log(f / b) +
                 static_cast<double>(n - n_d) * std::log((1 - f) / (1 - b)));
     };
