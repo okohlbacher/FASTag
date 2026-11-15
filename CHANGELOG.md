@@ -22,6 +22,16 @@
   links no longer resolve: the README links the latest release page, and the
   project page finds the newest files through the GitHub API. The CLI's and
   the GUI's "taxonomy index missing" messages name the versioned asset.
+- **Linux desktop app for arm64:** `fastag-gui_<version>_arm64.deb`,
+  `FASTag-<version>-gui-linux-arm64.tar.gz` and a best-effort
+  `FASTag-<version>-gui-linux-arm64.AppImage`, built on ubuntu-22.04-arm
+  (same floor as x64: glibc 2.35, WebKitGTK 4.1) and smoke-tested on
+  ubuntu-22.04-arm and 24.04-arm. Checked on GNOME desktops (Ubuntu 24.04,
+  Debian 12; Wayland and X11) together with the x64 bundles.
+- **Linux menu category:** the desktop entry now says
+  `Categories=Education;` (it was empty, so menus listed FASTag under
+  "Other"). The macOS app's `LSApplicationCategoryType` becomes
+  `public.app-category.education` from the same setting.
 
 ## 1.14.0 (2026-11-14)
 
