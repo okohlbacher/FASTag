@@ -228,13 +228,17 @@ notarization ticket, so they open with no network connection.</p>
 <tr><td>macOS 13.4+, Apple silicon</td>
     <td><a class="fname" data-asset="gui-macos-arm64.dmg" href="https://github.com/okohlbacher/FASTag/releases/latest">FASTag-&lt;version&gt;-gui-macos-arm64.dmg</a></td>
     <td><a class="fname" data-asset="macos-arm64.dmg" href="https://github.com/okohlbacher/FASTag/releases/latest">FASTag-&lt;version&gt;-macos-arm64.dmg</a></td></tr>
+<tr><td>macOS 13.4+, Intel</td>
+    <td><a class="fname" data-asset="gui-macos-x64.dmg" href="https://github.com/okohlbacher/FASTag/releases/latest">FASTag-&lt;version&gt;-gui-macos-x64.dmg</a></td>
+    <td><a class="fname" data-asset="macos-x64.dmg" href="https://github.com/okohlbacher/FASTag/releases/latest">FASTag-&lt;version&gt;-macos-x64.dmg</a></td></tr>
 <tr><td>Windows x64</td>
     <td><a class="fname" data-asset="gui-windows-x64-setup.exe" href="https://github.com/okohlbacher/FASTag/releases/latest">FASTag-&lt;version&gt;-gui-windows-x64-setup.exe</a></td>
     <td><a class="fname" data-asset="windows-x64.zip" href="https://github.com/okohlbacher/FASTag/releases/latest">FASTag-&lt;version&gt;-windows-x64.zip</a></td></tr>
 <tr><td>Linux x86-64</td>
     <td><a data-asset="gui-linux-x64.AppImage" href="https://github.com/okohlbacher/FASTag/releases/latest">AppImage</a>, <a data-asset="gui-linux-x64.tar.gz" href="https://github.com/okohlbacher/FASTag/releases/latest">tarball</a> or <a data-asset="deb" href="https://github.com/okohlbacher/FASTag/releases/latest">.deb</a></td>
     <td><a class="fname" data-asset="linux-x64.tar.gz" href="https://github.com/okohlbacher/FASTag/releases/latest">FASTag-&lt;version&gt;-linux-x64.tar.gz</a></td></tr>
-<tr><td>Linux arm64</td><td>—</td>
+<tr><td>Linux arm64</td>
+    <td><a data-asset="gui-linux-arm64.AppImage" href="https://github.com/okohlbacher/FASTag/releases/latest">AppImage</a>, <a data-asset="gui-linux-arm64.tar.gz" href="https://github.com/okohlbacher/FASTag/releases/latest">tarball</a> or <a data-asset="deb-arm64" href="https://github.com/okohlbacher/FASTag/releases/latest">.deb</a></td>
     <td><a class="fname" data-asset="linux-arm64.tar.gz" href="https://github.com/okohlbacher/FASTag/releases/latest">FASTag-&lt;version&gt;-linux-arm64.tar.gz</a></td></tr>
 </tbody>
 </table>
@@ -245,7 +249,7 @@ notarization ticket, so they open with no network connection.</p>
 Species detection uses a taxonomy index of about 1 GB. The command-line archives include it; the
 Windows desktop app needs it as a separate download,
 <a class="fname" data-asset="taxonomy-k7.tar.gz" href="https://github.com/okohlbacher/FASTag/releases/latest">FASTag-&lt;version&gt;-taxonomy-k7.tar.gz</a>,
-and says where to put it. The Linux desktop app needs Ubuntu 22.04 or Debian 12 or newer (glibc 2.35, WebKitGTK 4.1): the .deb installs its dependencies, the AppImage needs FUSE 2 (<code>libfuse2</code>, <code>libfuse2t64</code> on Ubuntu 24.04); on RHEL, Rocky, Alma and Linux arm64 use the command line. Windows binaries are not yet
+and says where to put it. The Linux desktop app needs Ubuntu 22.04 or Debian 12 or newer (glibc 2.35, WebKitGTK 4.1): the .deb installs its dependencies, the AppImage needs FUSE 2 (<code>libfuse2</code>, <code>libfuse2t64</code> on Ubuntu 24.04); on RHEL, Rocky and Alma use the command line. Windows binaries are not yet
 code-signed, so SmartScreen will warn on first run. All releases:
 <a href="https://github.com/okohlbacher/FASTag/releases">github.com/okohlbacher/FASTag/releases</a>.</p>
 
@@ -375,6 +379,7 @@ large-scale mass spectrometry data. <em>Nat Methods</em> 2024.
     (rel.assets || []).forEach(function (a) {
       var n = a.name, m;
       if (/^fastag-gui_.+_amd64\.deb$/.test(n)) { out.deb = { url: a.browser_download_url, name: n }; return; }
+      if (/^fastag-gui_.+_arm64\.deb$/.test(n)) { out['deb-arm64'] = { url: a.browser_download_url, name: n }; return; }
       if (v && n.indexOf('FASTag-' + v + '-') === 0) m = n.slice(('FASTag-' + v + '-').length);
       else if (n.indexOf('FASTag-') === 0) m = n.slice('FASTag-'.length);
       // A versioned name wins over an old one of the same variant.
@@ -444,10 +449,26 @@ large-scale mass spectrometry data. <em>Nat Methods</em> 2024.
   }
 
   if (/Mac/i.test(hay)) {
-    show('macOS, Apple silicon',
-         'Download the app', 'gui-macos-arm64.dmg',
-         'or the ' + link('macos-arm64.dmg', 'command-line tool'),
-         'Signed, notarized and stapled — it opens with no network connection. Needs macOS 13.4 or later on Apple silicon.');
+    // Architecture is only exposed by Chromium's high-entropy hints. Safari
+    // reports nothing, so an unknown arch defaults to Apple silicon and
+    // offers the Intel build beside it.
+    var render = function (arm, sure) {
+      var v = arm ? 'arm64' : 'x64';
+      show(arm ? 'macOS, Apple silicon' : 'macOS, Intel',
+           'Download the app', 'gui-macos-' + v + '.dmg',
+           'or the ' + link('macos-' + v + '.dmg', 'command-line tool') +
+           (sure ? '' : ' · for an Intel Mac: ' + link('gui-macos-x64.dmg', 'app') +
+                         ', ' + link('macos-x64.dmg', 'command line')),
+           'Signed, notarized and stapled — it opens with no network connection. Needs macOS 13.4 or later.' +
+           (sure ? '' : ' Your browser does not report the processor.'));
+    };
+    if (uad && uad.getHighEntropyValues) {
+      uad.getHighEntropyValues(['architecture'])
+         .then(function (v) { render(!v || v.architecture !== 'x86', !!(v && v.architecture)); })
+         .catch(function () { render(true, false); });
+    } else {
+      render(true, false);
+    }
     return;
   }
 
@@ -455,9 +476,10 @@ large-scale mass spectrometry data. <em>Nat Methods</em> 2024.
     show('Linux', 'Download the app', 'gui-linux-x64.AppImage',
          'or the ' + link('deb', '.deb package') + ', the ' +
          link('linux-x64.tar.gz', 'command-line tool') + ' (arm64: ' +
+         link('gui-linux-arm64.AppImage', 'app') + ', ' + link('deb-arm64', '.deb') + ', ' +
          link('linux-arm64.tar.gz', 'command line') + ')',
-         'Desktop app for x86-64, Ubuntu 22.04 or Debian 12 and newer; the AppImage needs FUSE 2 (libfuse2). ' +
-         'RHEL-family systems and arm64: command line only.');
+         'Desktop app for Ubuntu 22.04 or Debian 12 and newer (x86-64 and arm64); the AppImage needs FUSE 2 (libfuse2). ' +
+         'RHEL-family systems: command line only.');
     return;
   }
   // Anything else: say nothing and let the table do the work.
