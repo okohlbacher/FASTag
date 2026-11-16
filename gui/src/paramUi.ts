@@ -118,7 +118,7 @@ export const PARAM_UI: Record<string, ParamUi> = {
     section: 'Spectra',
     label: 'Raw DIA check',
     help: {
-      text: 'Before tagging, FASTag checks whether the file is raw DIA data, whose MS2 spectra each mix several peptides. By default (refuse) a file classified as raw DIA is not tagged: the run stops with exit code 11 before any file is written. warn tags it anyway, with a warning in the log; off skips the check. The revised 1.13 check passed its second held-out test on Thermo files: 0 of 58 non-DIA files and 35 of 37 DIA files were refused. A third test on Astral, timsTOF and SCIEX files refused 0 of 75 non-DIA and 60 of 60 DIA files; it is inconclusive because it had only 3 Astral DDA files and no closed-window DIA file. If a known DDA file is refused, inspect the acquisition metadata before choosing warn or off.',
+      text: 'Before tagging, FASTag checks whether the file is raw DIA data, whose MS2 spectra each mix several peptides. By default (refuse) a file classified as raw DIA is not tagged: the run stops with exit code 11 before any file is written. warn tags it anyway, with a warning in the log; off skips the check. The revised 1.13 check passed its second held-out test on Thermo files: 0 of 58 non-DIA files and 35 of 37 DIA files were refused. A third test on Astral, timsTOF and SCIEX files refused 0 of 75 non-DIA and 60 of 60 DIA files; it is inconclusive because it had only 3 Astral DDA files and no closed-window DIA file. A fourth test refused 0 of 86 non-DIA files (12 Astral DDA) and 70 of 71 DIA files; it is also inconclusive, with only 1 closed-window DIA file. If a known DDA file is refused, inspect the acquisition metadata before choosing warn or off.',
       tip: 'Better than warn: make pseudo-DDA spectra with DIAspeXtract (or diaTracer for timsTOF .d) first, and tag those. Tags of raw DIA spectra get wrong flanking masses and complement statistics.'
     }
   },
@@ -1050,7 +1050,7 @@ export const PARAM_UI: Record<string, ParamUi> = {
   search_engine: {
     hidden: OPT_IN_1_12,
     help: {
-      text: 'The search engine the settings are written for: Sage, Comet or MSFragger (experimental; needs decoys in the database). With MSFragger the shortlist uses the configuration that passed its second held-out test (gapped placements, E-value 10, minimum tag length 6, 2 missed cleavages; each unless set); the first held-out test, with the 1.13 shortlist, failed.'
+      text: 'The search engine the settings are written for: Sage, Comet or MSFragger (experimental; needs decoys in the database). With MSFragger the shortlist uses the configuration that passed its second held-out test (gapped placements, E-value 10, minimum tag length 6, 2 missed cleavages; each unless set); the first held-out test, with the 1.13 shortlist, failed. MSFragger mass calibration (calibrate_mass 2) failed its held-out test and is not exported.'
     }
   },
   search_isotope_errors: {
@@ -1112,7 +1112,7 @@ export const PARAM_UI: Record<string, ParamUi> = {
   shortlist_protease: {
     hidden: EXPERIMENTAL_1_13,
     help: {
-      text: 'The cleavage rule the shortlist places tags with: trypsin (as in 1.12), the protease the run calls (auto), a named protease, or none (unspecific). Experimental; auto passed its held-out test (9 runs, 5 proteases: median protein recall 0.25 against the full search, +0.12 over the trypsin shortlist); a named rule and unspecific have no held-out test. The Asp-N call of auto and its semi-specific export are not validated: their held-out test failed on one criterion only, an empty trypsin comparison export (+0.37 protein recall over the trypsin shortlist, Asp-N called in 11 of 12 Asp-N runs).'
+      text: 'The cleavage rule the shortlist places tags with: trypsin (as in 1.12), the protease the run calls (auto), a named protease, or none (unspecific). Experimental; auto passed its held-out test (9 runs, 5 proteases: median protein recall 0.25 against the full search, +0.12 over the trypsin shortlist); a named rule and unspecific have no held-out test. The Asp-N call of auto and its semi-specific export are not validated: their held-out test failed on one criterion only, an empty trypsin comparison export (+0.37 protein recall over the trypsin shortlist, Asp-N called in 11 of 12 Asp-N runs). It has no second test: PRIDE has no unused eligible Asp-N project.'
     }
   },
   shortlist_specificity: {

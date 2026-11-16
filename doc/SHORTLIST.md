@@ -388,7 +388,8 @@ defaults under `-search_engine msfragger` with `-search_config_out` and the
 tryptic shortlist
 (`-recon_min_length` and `-recon_missed_cleavages` then also change
 `-recon_out`); Sage and Comet keep 1.13.1's values. MSFragger's mass calibration (`calibrate_mass 2`) and `stricttrypsin`
-added nothing on the two first runs and are not exported. All of this was
+added nothing on the two first runs and are not exported; `calibrate_mass 2` later failed a held-out test
+(`acc115/msfcalib`: kept share +0.025, but not faster than the full search in 2 of 9 runs). All of this was
 set on development runs; the entrapment
 differences between the rows are within the noise of 8 to 290 entrapment hits
 per run.

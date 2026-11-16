@@ -1,17 +1,10 @@
 # Changelog
 
-## Unreleased
+## 1.15.0 (2026-11-16)
 
-- **Intel Macs again:** CI builds `macos-x64` natively on GitHub's
-  `macos-26-intel` runner, with the same OpenMS, libraries, 13.4 floor, tests
-  and signing as Apple silicon. Releases carry
-  `FASTag-<version>-macos-x64.dmg` (command line) and
-  `FASTag-<version>-gui-macos-x64.dmg` (desktop app); the Homebrew casks pick
-  the image for the Mac's architecture. 1.8.0 to 1.14.x were Apple silicon
-  only. The Intel leg runs on release tags and manual dispatches (including
-  `gui_dry_run`), not on pull requests or pushes. GitHub ends its Intel macOS
-  runners in 2027 (August 2027 per actions/runner-images), so the leg is to be
-  removed before August 2027, and with it the Intel builds.
+Release files carry the version, Intel Macs are built again, and the
+Linux desktop app is also built for arm64. Tag output is unchanged.
+
 - **Release files carry the version:** `FASTag-<version>-<variant>.<ext>`,
   e.g. `FASTag-1.15.0-linux-x64.tar.gz`, `FASTag-1.15.0-gui-macos-arm64.dmg`,
   `FASTag-1.15.0-gui-windows-x64-setup.exe`, `FASTag-1.15.0-windows-x64.zip`,
@@ -22,16 +15,41 @@
   links no longer resolve: the README links the latest release page, and the
   project page finds the newest files through the GitHub API. The CLI's and
   the GUI's "taxonomy index missing" messages name the versioned asset.
+- **Intel Macs again:** CI builds `macos-x64` natively on GitHub's
+  `macos-26-intel` runner, with the same OpenMS, libraries, 13.4 floor, tests
+  and signing as Apple silicon. Releases carry
+  `FASTag-<version>-macos-x64.dmg` (command line) and
+  `FASTag-<version>-gui-macos-x64.dmg` (desktop app); the Homebrew casks pick
+  the image for the Mac's architecture. 1.8.0 to 1.14.x were Apple silicon
+  only. The Intel leg runs on release tags and manual dispatches (including
+  `gui_dry_run`), not on pull requests or pushes. GitHub ends its Intel macOS
+  runners in 2027 (August 2027 per actions/runner-images), so the leg is to be
+  removed before August 2027, and with it the Intel builds.
 - **Linux desktop app for arm64:** `fastag-gui_<version>_arm64.deb`,
   `FASTag-<version>-gui-linux-arm64.tar.gz` and a best-effort
   `FASTag-<version>-gui-linux-arm64.AppImage`, built on ubuntu-22.04-arm
   (same floor as x64: glibc 2.35, WebKitGTK 4.1) and smoke-tested on
   ubuntu-22.04-arm and 24.04-arm. Checked on GNOME desktops (Ubuntu 24.04,
-  Debian 12; Wayland and X11) together with the x64 bundles.
+  Debian 12; Wayland and X11) together with the x64 bundles. The arm64 `.deb`
+  and tarball are required release files, as the x64 ones are; the AppImage
+  is attached only when it launched on both runners.
 - **Linux menu category:** the desktop entry now says
   `Categories=Education;` (it was empty, so menus listed FASTag under
   "Other"). The macOS app's `LSApplicationCategoryType` becomes
   `public.app-category.education` from the same setting.
+- **Tests:** `msfragger_cli_test` masks the paths it is given before it
+  reads the run logs, so a checkout path containing "protease" no longer
+  fails it. `ion_series_test` allows the 1-ulp E-value difference on macOS
+  x86_64 that MSVC already had.
+- **Held-out results:** MSFragger mass calibration (`calibrate_mass 2` in
+  the export) **failed** on one criterion (not faster than the full search
+  in 2 of 9 runs, lowest speed-up 0.947; kept share higher in 9 of 9, median
+  +0.025); the export keeps `calibrate_mass 0`. The raw-DIA check's fourth
+  test is **inconclusive** with no criterion failed: 0 of 86 non-DIA, 70 of
+  71 DIA and 0 of 12 Astral DDA files refused, but only 1 closed-window DIA
+  file (minimum 5). The Asp-N call of `-shortlist_protease auto` has no
+  retest (no unused eligible Asp-N project in PRIDE) and stays not
+  validated.
 
 ## 1.14.0 (2026-11-14)
 

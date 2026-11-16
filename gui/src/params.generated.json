@@ -4,7 +4,7 @@
       "name": "acquisition_check",
       "type": "string",
       "default": "refuse",
-      "description": "Check the acquisition before tagging. Raw DIA, whose MS2 'precursors' are isolation windows holding several peptides, is refused with exit code 11 (refuse), tagged anyway with a warning as before 1.12 (warn), or not checked (off). Tag DIA through pseudo-DDA spectra instead: run DIAspeXtract (or diaTracer for .d) first. The revised 1.13 check passed its second held-out test on Thermo files: 0 of 58 non-DIA and 35 of 37 DIA files refused. A third test on Astral, timsTOF and SCIEX files refused 0 of 75 non-DIA and 60 of 60 DIA files; it is inconclusive because it had only 3 Astral DDA files and no closed-window DIA file. If a known DDA file is refused, inspect the acquisition metadata before choosing warn or off",
+      "description": "Check the acquisition before tagging. Raw DIA, whose MS2 'precursors' are isolation windows holding several peptides, is refused with exit code 11 (refuse), tagged anyway with a warning as before 1.12 (warn), or not checked (off). Tag DIA through pseudo-DDA spectra instead: run DIAspeXtract (or diaTracer for .d) first. The revised 1.13 check passed its second held-out test on Thermo files: 0 of 58 non-DIA and 35 of 37 DIA files refused. A third test on Astral, timsTOF and SCIEX files refused 0 of 75 non-DIA and 60 of 60 DIA files; it is inconclusive because it had only 3 Astral DDA files and no closed-window DIA file. A fourth test refused 0 of 86 non-DIA files (12 Astral DDA) and 70 of 71 DIA files; it is also inconclusive, with only 1 closed-window DIA file. If a known DDA file is refused, inspect the acquisition metadata before choosing warn or off",
       "required": false,
       "toppAdvanced": false,
       "choices": [
@@ -1622,7 +1622,7 @@
     {
       "name": "version",
       "type": "string",
-      "default": "1.14.0",
+      "default": "1.15.0",
       "description": "Version of the tool that generated this parameters file.",
       "required": false,
       "toppAdvanced": true

@@ -109,3 +109,21 @@ Refused were Astral DIA, diaPASEF, SWATH and Orbitrap window schemes (MSX, stagg
 DIA runs that PRIDE lists as DDA. Not refused were Astral and Orbitrap DDA, ddaPASEF, SCIEX IDA, PRM and
 recurring-window DDA. The test is inconclusive because only 3 Astral DDA files were left (7 of the 14 drawn were DIA
 runs, 4 were other Orbitrap instruments) and because no DIA file without a single repeating cycle was drawn.
+
+## Fourth held-out test on Astral DDA and closed-window DIA (acqcheck4, 1.15)
+
+Preregistered test of FASTag 1.14.0 at its defaults (`acceptance/1.15/PREREG-acqcheck4.md` on `acc115/acqcheck4`,
+freeze 2 73920eb9; scored once on 2026-11-15): 157 public Thermo files, truth per file audited. Verdict
+**INCONCLUSIVE**, no criterion failed.
+
+| Criterion | n (minimum) | Result | Verdict |
+|---|---|---|---|
+| K1 non-DIA refused = 0 | 86 (50) | 0 of 86 (upper 95% bound 3.4%) | PASS |
+| K2 DIA refused >= 90% | 71 (40) | 70 of 71 (98.6%) | PASS |
+| K3 Astral DDA refused = 0 | 12 (8) | 0 of 12 (upper bound 22.1%) | PASS |
+| K4 closed-window DIA refused >= 90% | 1 (5) | 1 of 1 | INCONCLUSIVE |
+
+All 28 Astral DIA files were refused. The one DIA file not refused is an Orbitrap Eclipse run (42 windows of
+13 Th, one cycle) with real, mixed precursor charges; it was warned and tagged, as documented for DIA-like files.
+K3 closes the Astral DDA gap of acqcheck3; closed-window DIA (no single repeating cycle) is still tested on one file
+only (an MSX run), because such public Thermo DIA is rare in PRIDE.

@@ -484,7 +484,9 @@ void TOPPFASTag::registerOptionsAndFlags_()
                         "test on Thermo files: 0 of 58 non-DIA and 35 of 37 DIA files refused. A third "
                         "test on Astral, timsTOF and SCIEX files refused 0 of 75 non-DIA and 60 of 60 DIA "
                         "files; it is inconclusive because it had only 3 Astral DDA files and no "
-                        "closed-window DIA file. If a known DDA file is refused, "
+                        "closed-window DIA file. A fourth test refused 0 of 86 non-DIA files (12 Astral DDA) "
+                        "and 70 of 71 DIA files; it is also inconclusive, with only 1 closed-window DIA "
+                        "file. If a known DDA file is refused, "
                         "inspect the acquisition metadata before choosing warn or off", false);
   setValidStrings_("acquisition_check", ListUtils::create<std::string>("refuse,warn,off"));
   registerIntOption_("acquisition_probe_spectra", "<n>", 4000,
