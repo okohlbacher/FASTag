@@ -256,6 +256,11 @@ def assets_section(gui: Path, texts: Texts, missing: list[str]) -> list[str]:
 # --------------------------------------------------------------- platforms
 # The bzip2 licence as NSIS ships it (section "BZIP2 LICENSE" of NSIS's COPYING,
 # https://github.com/kichik/nsis/blob/master/COPYING).
+NSIS_LZMA_EXCEPTION = """\
+SPECIAL EXCEPTION FOR LZMA COMPRESSION MODULE
+
+Igor Pavlov and Amir Szekely, the authors of the LZMA compression module for NSIS, expressly permit you to statically or dynamically link your code (or bind by name) to the files from the LZMA compression module for NSIS without subjecting your linked code to the terms of the Common Public license version 1.0. Any modifications or additions to files from the LZMA compression module for NSIS, however, are subject to the terms of the Common Public License version 1.0."""
+
 NSIS_BZIP2 = """\
 This program, "bzip2" and associated library "libbzip2", are copyright (C) 1996-2000 Julian R Seward. All rights reserved.
 
@@ -291,14 +296,21 @@ def platform_section(platform: str, texts: Texts, missing: list[str]) -> list[st
             "",
             "The installer is built with NSIS (Nullsoft Scriptable Install System,",
             "https://nsis.sourceforge.io), whose installer stub is under the zlib/libpng",
-            "licence; its LZMA decompressor is from the LZMA SDK (public domain) and its",
-            "bzip2 code is under the bzip2 licence. Licence texts below.",
+            "licence; its LZMA compression module is under the Common Public License 1.0",
+            "with the authors' linking exception (source: https://github.com/kichik/nsis)",
+            "and its bzip2 code is under the bzip2 licence. Licence texts below.",
         ]
         t = spdx_text("Zlib")
         if t is None:
             missing.append("NSIS: no SPDX text for Zlib")
         else:
             texts.add("NSIS installer stub", "Zlib (zlib/libpng licence)", t.rstrip())
+        t = spdx_text("CPL-1.0")
+        if t is None:
+            missing.append("NSIS: no SPDX text for CPL-1.0")
+        else:
+            texts.add("NSIS LZMA compression module", "CPL-1.0 with linking exception (as in NSIS's COPYING)",
+                      t.rstrip() + "\n\n" + NSIS_LZMA_EXCEPTION)
         texts.add("NSIS bzip2 compression module", "bzip2 licence (bzip2 1.0, as in NSIS's COPYING)", NSIS_BZIP2)
         return lines
     if platform == "linux":
