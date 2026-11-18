@@ -1,0 +1,7 @@
+dataset	file	bytes	sha256	note
+PXD047793	4223_TIMS2_006_2_Slot2-6_1_2877_diatracer.mzML	24709377005	8f199c90f09f327ed981fa354c16b4988999dcbd60d6a1915975db1088513e77	diaTracer pseudo-DDA mzML of PXD047793; hashed 2026-11-18 by the harness (inputs.sha256)
+PXD028735	PXD028735_Gamma_01.mzML	32282532787	72045ead6b47f654ccba0105f935e33773f262ede711bd0b19c4935ddd7f8ee1	raw diaPASEF mzML; hashed 2026-11-18 by the harness (inputs.sha256)
+PXD000001	TMT_Erwinia_1uLSike_Top10HCD_isol2_45stepped_60min_01-20141210.mzML	450032788	038dd84702b01463b1aadfae09cecc4176f319376ff85e9dba883cdc3208fa67	PRIDE PXD000001; hashed 2026-11-18 on ibminode05
+PXD000001	F063721.dat	21185462	286c1677e40f0084469603b7fc0b2b13d7653373047f8982cb6d806de476bab6	deposited Mascot search (accuracy truth); hashed 2026-11-18
+output	pxd000001_fastag-1.15.0_matched.tsv	18059621	fcdd18222ca6e42ea8ea38a259f476fe02976fe6872e5ee9b6fefed9521bfc32	FASTag 1.15.0 tags at the matched settings (181,963 rows); not committed (18 MB); identical to the 1.14.0 file
+binary	FASTag-1.15.0-linux-x64.tar.gz (v1.15.0 release)	555233420	804d516813043bd4ad263e933d6fffdcecea55855043257fc01f387a9393872c	matches the GitHub release digest; FASTag.bin a0680653713fbce20c8594f7c60c2c9781899469413ff461b2e839d4a4e1dff3

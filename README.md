@@ -1527,27 +1527,37 @@ walks through it and through PXD000001 with the expected results.
 
 ## Performance
 
-**These figures were measured with FASTag 1.6.1** and have not been
-re-measured for 1.8. The mzPeak columns used 1.6's own reader; 1.8 reads mzPeak
-through OpenMS and is slower (see [mzPeak](#mzpeak)).
+**FASTag 1.15.0 against DirecTag 1.4.21142**, measured on 2026-11-18 on one
+AMD EPYC 7763 (128 hardware threads, node-local NVMe, load per core below
+0.25 before every run), 128 threads, DirecTag's settings (tag length 3, 50
+tags, 100 peaks, no gaps, no deisotoping, 0.02 Da), warm page cache, one
+uncounted warm-up, median of 3 runs, wall time and peak RSS from
+`/usr/bin/time -v`, end to end including reading the input and writing the
+tags:
 
-The table below reports wall-clock time and peak resident memory against
-`-threads` for a public data set, so you can judge how a run scales on your own
-machine. Every point is the faster of two runs at **default parameters**, with a
-warm page cache, timed end to end including reading the input and writing the
-tag file. Hardware: two AMD EPYC 9654 (192 cores / 384 hardware threads),
-node-local NVMe, otherwise idle.
+| data set | FASTag 1.15.0 | DirecTag 1.4.21142 |
+|---|---|---|
+| [PXD047793](https://www.ebi.ac.uk/pride/archive/projects/PXD047793) timsTOF, diaTracer pseudo-DDA mzML, 24.7 GB | **7.13 s, 544 MB**, 62,347,705 tags | 732.69 s, 70.3 GB |
+| [PXD028735](https://www.ebi.ac.uk/pride/archive/projects/PXD028735) raw diaPASEF mzML, 32.3 GB (`-acquisition_check warn`) | **7.70 s, 1.3 GB**, 864,815 tags | 479.90 s, reads 0 spectra |
 
-| data set | MS2 | mzML s / GB, 16 → 128 threads | mzPeak s / GB, 16 → 128 threads |
-|---|---|---|---|
-| [PXD000865](https://www.ebi.ac.uk/pride/archive/projects/PXD000865) Q Exactive TMT8 | 47,470 | 12.4 / 0.46 → 7.61 / 0.88 | 4.19 / 1.15 → 1.28 / 2.66 |
+That is 103 times faster with 129 times less memory on PXD047793. DirecTag's
+numbers come from the 1.14.0 run of 2026-11-15 on the same node, inputs and
+settings; FASTag 1.15.0 writes byte-identical tags to 1.14.0 on both files.
+Harnesses, per-run rows, input sha256 and the release digest:
+[bench/results/site-why-1.15.0](bench/results/site-why-1.15.0/RESULT.md) and
+[bench/results/site-why-1.14.0](bench/results/site-why-1.14.0/RESULT.md).
+Accuracy at these settings and at the defaults: see [Validation](#validation).
 
-A thread ladder for the current release on larger public runs (PXD047793,
-PXD054073, PXD028735, PXD076528, PXD003531), with mzML and both mzPeak layouts,
-is in preparation and will replace this section.
+History: thread scaling at default parameters was last measured with FASTag
+1.6.1 (2026-09-30, two AMD EPYC 9654) on
+[PXD000865](https://www.ebi.ac.uk/pride/archive/projects/PXD000865) (Q
+Exactive TMT8, 47,470 profile MS2): mzML 12.4 s / 0.46 GB at 16 threads and
+7.61 s / 0.88 GB at 128; mzPeak 4.19 s / 1.15 GB and 1.28 s / 2.66 GB with
+1.6's own mzPeak reader (since 1.8 mzPeak is read through OpenMS and is
+slower, see [mzPeak](#mzpeak)). Not re-measured since.
 
 The two containers return the same tags on centroided input. On **profile**
-MS2, as in this run, they do not, and the times are not comparable either: the
+MS2, as in that PXD000865 run, they do not, and the times are not comparable either: the
 mzML path tags profile samples as they are, while the archive was centroided
 when written, so FASTag reads peaks and finds more tags (2,032,961 against
 1,376,019). Centroid before tagging profile mzML, or read the archive.
@@ -1597,30 +1607,45 @@ match a tool with no equivalent of these, turn them off:
 
 ## Validation
 
-Against the Mascot identifications shipped with
-[PXD000001](https://www.ebi.ac.uk/pride/archive/projects/PXD000001) (2,254 PSMs
-at 1% FDR, LTQ Orbitrap Velos HCD, TMT6), at DirecTag's published settings
-(tag length 3, 100 peaks, 50 tags, no gaps, no deisotoping), 98.62% of the
-identified spectra carry a valid tag among the 50 kept, the same ceiling as
-DirecTag 1.4.21142, and a valid tag ranks first on 90.91% of them (DirecTag:
-88.69%). A tag is valid when its sequence occurs in the identified peptide and
-one flanking mass agrees within 0.05 Da. On the same run with `-gaps 1` at tag
-length 4, raising `-gap_penalty` from 1 to 100 raises rank-1 accuracy from
-69.0% to 86.4%, while the share of identified spectra with any valid tag stays
-at 98.05%. These numbers were measured with FASTag releases before 1.4; see
-[doc/BENCHMARK-DirecTag.md](doc/BENCHMARK-DirecTag.md) for the side-by-side
-comparison with the reference implementation and `tools/pxd000001_truth.py`
-for the scorer.
+**Tag accuracy of FASTag 1.15.0** (2026-11-18), at DirecTag's published
+settings (`matched`: tag length 3, 100 peaks, 50 tags, no gaps, no
+deisotoping, 0.02 Da) and at FASTag's defaults (`default`: no options; tag
+length 3, one gap with `-gap_penalty 100`, deisotoping, 400 peaks with 10 per
+100 Da, 20 ppm). A tag is valid when its sequence (or its reverse) occurs in
+the identified peptide (I = L) and a flanking mass agrees within 0.05 Da.
+Rank-1 / top 5 / top 50: share of the identified spectra with tags whose first
+/ first five / all tags include a valid one; any valid tag: share of all
+identified spectra.
 
-The numbers in this section were measured before the scoring and
-preprocessing fixes of November 2026 (m/z fidelity normalised per peak, no gap
-edge across a present peak, scale-invariant deisotoping that merges 1+/2+
-copies), which change E-values and the reported sets; they are being
-re-measured with the benchmarks below.
+| data set (truth) | setting | rank-1 | top 5 | top 50 | any valid tag |
+|---|---|---|---|---|---|
+| [PXD000001](https://www.ebi.ac.uk/pride/archive/projects/PXD000001) LTQ Orbitrap Velos HCD, TMT6 (deposited Mascot search, 2,254 PSMs at 1% FDR) | matched | 90.91% | 97.91% | 98.62% | 98.62% |
+| | default | **93.12%** | 97.96% | 98.71% | 98.71% |
+| [PXD054073](https://www.ebi.ac.uk/pride/archive/projects/PXD054073) timsTOF Pro ddaPASEF, HeLa (Sage 0.14.7, 72,067 PSMs at 1% FDR) | matched | 64.70% | 80.68% | 85.89% | 84.95% |
+| | default | **67.34%** | 83.07% | 90.13% | 90.09% |
+| [PXD076528](https://www.ebi.ac.uk/pride/archive/projects/PXD076528) Orbitrap Astral DDA, human (Sage 0.14.7, 44,015 PSMs at 1% FDR) | matched | 47.97% | 60.87% | 67.09% | 66.50% |
+| | default | **53.84%** | 67.39% | 79.65% | 79.63% |
 
-The effect of the defaults (deisotoping and one gap) on how many identified
-spectra gain a correctly placed tag is being measured for the current release
-against database-search identifications on several public PXD runs.
+The defaults rank a valid tag first more often on all three runs (+2.2, +2.6
+and +5.9 points) and give more identified spectra a valid tag (+0.1, +5.1 and
++13.1 points). At the matched settings PXD000001 reaches the same 98.62%
+ceiling as DirecTag 1.4.21142, with a valid tag first on 90.91% against
+DirecTag's 88.69% ([doc/BENCHMARK-DirecTag.md](doc/BENCHMARK-DirecTag.md)).
+PXD000001 is scored with `tools/pxd000001_truth.py`, the two Sage runs with
+the `bench/fastag-bench` accuracy harness, whose flank rule is slightly more
+lenient (either flank, modifications decoded). Commands, truth settings,
+input sha256 and the full tables:
+[bench/results/accuracy-1.15.0](bench/results/accuracy-1.15.0/RESULT.md).
+
+Measured with FASTag releases before 1.4 (not re-measured): on PXD000001 with
+`-gaps 1` at tag length 4, raising `-gap_penalty` from 1 to 100 raises rank-1
+accuracy from 69.0% to 86.4%, while the share of identified spectra with any
+valid tag stays at 98.05%.
+
+The preregistrations, freezes and results of the held-out tests below are
+archived in [acceptance/archive](acceptance/archive/): one folder per test
+branch, named as in the table (for example `acceptance/archive/acc113r/species/`),
+and `MANIFEST.tsv` maps every file to its branch and commit.
 
 `ctest` covers the rank-sum DP against exhaustive enumeration (small k and n),
 end-to-end tag recovery from synthetic spectra, flanking-mass placement,
@@ -1634,7 +1659,7 @@ the digest, label and mass-gap reports (`digest_test` against prose-auto
 ### Held-out acceptance of the 1.12 options
 
 Each item below was preregistered and run on held-out public data
-(`acceptance/1.12` branch), scored against Sage 0.14.7 truths at 1% FDR (for
+([acceptance/archive/acceptance/1.12](acceptance/archive/acceptance/1.12/)), scored against Sage 0.14.7 truths at 1% FDR (for
 #4, the pool's peptide labels). #2, #4 and #9 were scored once. #6 was scored
 twice: once on item06-H1-r2 (INCONCLUSIVE, PXD001473 without truth), then, by
 a user decision recorded before the run, once on the unused high-resolution

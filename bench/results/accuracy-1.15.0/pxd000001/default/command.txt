@@ -1,0 +1,1 @@
+/scratch/kohlbach/rsw-bench/opt/FASTag/FASTag -in /scratch/kohlbach/jpr-acc/data/PXD000001/TMT_Erwinia_1uLSike_Top10HCD_isol2_45stepped_60min_01-20141210.mzML -out /scratch/kohlbach/rsw-bench/acc/pxd000001/default/tags.tsv -threads 32 

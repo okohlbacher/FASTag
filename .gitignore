@@ -36,3 +36,11 @@ __pycache__/
 !bench/results/tmt-ga-2026-11-11/iteration1/summary.tsv
 !bench/results/tmt-ga-2026-11-11/iteration1/paired_changes.tsv
 !bench/results/tmt-ga-2026-11-11/audit/*.tsv
+# Benchmark records behind README Performance and Validation (small text only; tag files stay external).
+!bench/results/site-why-1.14.0/*.tsv
+!bench/results/site-why-1.15.0/*.tsv
+!bench/results/accuracy-1.15.0/*.tsv
+!bench/results/accuracy-1.15.0/*/*.tsv
+!bench/results/accuracy-1.15.0/*/*/*.tsv
+# Archived held-out test preregistrations and results (from the acceptance branches).
+!acceptance/archive/MANIFEST.tsv
