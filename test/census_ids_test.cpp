@@ -177,7 +177,7 @@ static int writeIds(int argc, char** argv)
     switch (k % 6)
     {
       case 0: peps.push_back(pid(ref, st, hb, {h(0.001, TD::TARGET)})); want = "1"; break;
-      case 1: peps.push_back(pid(ref, st, hb, {h(0.02, TD::TARGET)})); break;
+      case 1: peps.push_back(pid(ref, st, hb, {h(0.02, variant == "notd" ? TD::NONE : TD::TARGET)})); break;
       case 2: peps.push_back(pid(ref, st, hb, {h(0.001, TD::DECOY)})); break;
       case 3: peps.push_back(pid(ref, st, hb, {})); break;
       case 4: break;
@@ -543,6 +543,88 @@ int main(int argc, char** argv)
     for (const auto& r : sum) CHECK(r.description.find('\t') == std::string::npos, "tab in %s", r.key.c_str());
     std::filesystem::remove_all(dir);
     std::printf("5. join and 6. summary\n");
+  }
+
+  // 7. Exact mode (-census_ids_exact, 1.16 item 4): one-to-one label join.
+  {
+    const std::string dir = (std::filesystem::temp_directory_path() / "census_ids_exact_test").string();
+    std::filesystem::create_directories(dir);
+    // Native ids: scan=1..3 read; the file names scan=1 (accepted), scan=2 (searched, not accepted) and a
+    // reference with a different native-id prefix but scan=3 (would match by the scan fallback).
+    I::Index lax, ex;
+    ex.setExact(true);
+    for (I::Index* x : {&lax, &ex})
+    {
+      x->add(NID + "1", true);
+      x->add(NID + "2", false);
+      x->add("scan=3", true);
+    }
+    const std::string head = C::header().substr(0, C::header().size() - 1);
+    std::string rows;
+    for (int sc = 1; sc <= 4; ++sc)
+    {
+      C::Row r;
+      r.index = static_cast<std::size_t>(sc);
+      r.has_precursor = true;
+      r.precursor_mz = 500;
+      r.n_peaks = 10;
+      r.status = C::Status::NO_TAGS;
+      C::appendRow(rows, r, NID + std::to_string(sc));
+    }
+    { std::ofstream f(dir + "/c.tsv", std::ios::binary); f << head << '\n' << rows; }
+    I::JoinTally tl, te;
+    std::string err;
+    CHECK(I::joinTableAs(head, dir + "/c.tsv", dir + "/lax.tsv", lax, 0.01, tl, err), "lax join: %s", err.c_str());
+    CHECK(I::joinTableAs(head, dir + "/c.tsv", dir + "/ex.tsv", ex, 0.01, te, err), "exact join: %s", err.c_str());
+    CHECK(tl.by_ident[1] == 2 && lax.counts().by_scan == 1, "lax: the scan fallback identifies scan 3");
+    CHECK(te.by_ident[1] == 1 && te.by_ident[0] == 3 && ex.counts().by_scan == 0, "exact: no scan fallback");
+    CHECK(ex.counts().unmatched == 1, "exact: the scan=3 reference is unmatched (%zu)", ex.counts().unmatched);
+    CHECK(te.unnamed == 2, "exact: scans 3 and 4 have no reference (%llu)", (unsigned long long)te.unnamed);
+    CHECK(ex.named(NID + "2") && !ex.named(NID + "4"), "named()");
+    I::Loaded L;
+    L.runs = {"run"};
+    L.n_hits = 3;
+    CHECK(!I::exactRefusal(L, ex, ex.counts(), "match").empty(), "exact: an unmatched reference is refused");
+    I::Index ok;
+    ok.setExact(true);
+    ok.add(NID + "1", true);
+    ok.add(NID + "2", false);
+    I::JoinTally to;
+    CHECK(I::joinTableAs(head, dir + "/c.tsv", dir + "/ok.tsv", ok, 0.01, to, err), "ok join: %s", err.c_str());
+    CHECK(I::exactRefusal(L, ok, ok.counts(), "match").empty(), "exact: a clean one-to-one join passes");
+    CHECK(I::exactRefusal(L, ok, ok.counts(), "mismatch").find("names the run 'run'") != std::string::npos,
+          "exact: a wrong-run file is refused");
+    I::Loaded U = L;
+    U.runs.clear();
+    CHECK(I::exactRefusal(U, ok, ok.counts(), "unnamed").find("names no run") != std::string::npos,
+          "exact: a file that names no run is refused");
+    I::Loaded T = L;
+    T.n_hits_no_td = 1;
+    CHECK(I::exactRefusal(T, ok, ok.counts(), "match").find("target/decoy") != std::string::npos,
+          "exact: a hit without target/decoy annotation is refused");
+    ok.add(NID + "1", false);
+    CHECK(ok.duplicates() == 1 && I::exactRefusal(L, ok, ok.counts(), "match").find("more than one") != std::string::npos,
+          "exact: a spectrum named twice is refused");
+    // interpret() counts hits without a target/decoy annotation.
+    PeptideIdentificationList pl;
+    pl.push_back(pid(NID + "1", "q-value", false, {hit(0.001, TD::TARGET), hit(0.5, TD::NONE)}));
+    I::Index ii;
+    const I::Loaded li = I::interpret({prot("run0", {"/x/run.mzML"})}, pl, 0.01, ii);
+    CHECK(li.n_hits_no_td == 1 && li.refusal.empty(), "n_hits_no_td %zu", li.n_hits_no_td);
+    // Summary: ids_exact and the split of identified 0 only in exact mode.
+    const auto sx = I::summaryRows(L, ok.counts(), te, "ids.idXML", "match", 0.01, 0.01, true, true);
+    const auto s0 = I::summaryRows(L, ok.counts(), te, "ids.idXML", "match", 0.01, 0.01, true);
+    auto has = [](const std::vector<FASTag::Digest::Row>& v, const std::string& k) -> const FASTag::Digest::Row* {
+      for (const auto& r : v) if (r.key == k) return &r;
+      return nullptr;
+    };
+    CHECK(has(sx, "ids_exact") && has(sx, "unidentified_no_psm") && has(sx, "unidentified_no_psm")->value == "2"
+              && has(sx, "unidentified_with_psm")->value == "1",
+          "exact summary rows");
+    CHECK(!has(s0, "ids_exact") && !has(s0, "unidentified_no_psm") && s0.size() + 3 == sx.size(),
+          "default summary unchanged");
+    std::filesystem::remove_all(dir);
+    std::printf("7. exact mode\n");
   }
 
   std::printf(failures ? "\n%d FAILURES\n" : "\nall checks passed\n", failures);

@@ -47,6 +47,7 @@
 #include "ComplementTol.h"
 #include "Census.h"
 #include "CensusIds.h"
+#include "CensusScore.h"
 #include "ClusterAcc.h"
 #include "Digest.h"
 #include "FASTagger.h"

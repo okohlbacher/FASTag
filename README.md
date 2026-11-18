@@ -699,6 +699,9 @@ MGF→mzML direction is exact.
 | `-census_ids <file>` | none | With `-census`: identifications of `-in` (idXML or mzid with q-values); adds the columns `identified` and `triage` and a `census_ids` summary section (see Census) |
 | `-census_ids_fdr <f>` | 0.01 | With `-census_ids`: the q-value a target hit needs to identify its spectrum (advanced) |
 | `-census_triage_evalue <f>` | 0.01 | With `-census_ids`: the best E-value at or below which an unidentified tagged or placed spectrum is a triage candidate (advanced) |
+| `-census_ids_exact` | off | 1.16, with `-census_ids`: a one-to-one join (native ids only, no scan fallback; refused when any reference names no MS2 spectrum of `-in`, a spectrum has two identifications, a hit has no target/decoy annotation, or the file names no run or another run). Adds `ids_exact`, `unidentified_with_psm`, `unidentified_no_psm` to the summary (advanced; see Census) |
+| `-census_score` | off | 1.16, with `-census`: the columns `pre_best_evalue`, `pre_best_len`, `pre_best_mean_conf`, `pre_tag_cover` (the best tag before any database filter) and `ident_score`, a frozen ranking of how likely a standard database search identifies each MS2 spectrum; every status is scored (see Census, doc/CENSUS-IDENT.md). Experimental, not validated on held-out data |
+| `-census_sorted_out <file>` | none | With `-census_score`: the census rows ordered by `ident_score`, highest first (ties in input order), with a leading `ident_rank` column |
 | `-stream` | off | Resident single-spectrum mode: spectrum blocks on stdin, TSV rows + `#end` sentinels on stdout (see Streaming) |
 | `-progress` | off | Emit `FASTAG_PROGRESS done=<n> total=<n>` on stderr for a progress bar |
 | `-species` | off | Infer taxa from the tags (see Species detection) |
@@ -1488,6 +1491,21 @@ E-value threshold, not a quality call. Whether the candidates are the
 unidentified spectra a second (semi-specific or open) search identifies was
 tested on held-out runs (second test PASS for a semi-enzymatic search; not shown for an open search): [doc/CENSUS-TRIAGE-EVAL.md](doc/CENSUS-TRIAGE-EVAL.md),
 which also describes `tools/census_triage_eval.py`, the scorer.
+
+`-census_score` (1.16, experimental) adds four columns before any database filter
+(`pre_best_evalue`, `pre_best_len`, `pre_best_mean_conf`, `pre_tag_cover`: the
+best of all tags of the selected precursor hypothesis, so they do not change
+with `-fasta`) and, after the run, `ident_score` (before `identified` and
+`triage`, which stay last). The score is a frozen logistic model on the
+per-run mid-ranks of twelve census features, fitted once on development runs
+of PXD000561 against a pinned Sage search; it is defined for every status and
+orders spectra for review, it is not a probability or a quality call, and with
+per-run ranks it depends on the whole run (and on subsampling). The summary
+gains section `census_score` (model, features, rows). `-census_sorted_out`
+writes the rows ordered by it. `-census_ids_exact` makes the ids join
+one-to-one for label joins (see the options table). Method, label join and the
+development result: [doc/CENSUS-IDENT.md](doc/CENSUS-IDENT.md),
+`tools/census_ident.py`.
 
 For front ends that list a run's outputs by option name (the GUI's resolved
 outputs): the census files are `census_out` and `census_summary_out`. With

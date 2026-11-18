@@ -91,7 +91,7 @@ set(FASTAG_CORE_SOURCES_A src/Shortlist.cpp src/SearchConfig.cpp)
 # ---- 1.12 D: core sources ----
 set(FASTAG_CORE_SOURCES_D src/SpeciesLookup.cpp src/SpeciesCall.cpp src/AlkylationCall.cpp src/AlkylationTags.cpp src/Sha256.cpp)
 # ---- 1.12 F: core sources ----
-set(FASTAG_CORE_SOURCES_F src/OutputGuard.cpp src/CensusIds.cpp)
+set(FASTAG_CORE_SOURCES_F src/OutputGuard.cpp src/CensusIds.cpp src/CensusScore.cpp)
 # ---- 1.13: core sources ----
 set(FASTAG_CORE_SOURCES_113 src/Cleavage.cpp)
 add_library(fastag_core STATIC ${FASTAG_CORE_SOURCES}
@@ -293,7 +293,7 @@ if(FASTAG_BUILD_TESTS)
   # ---- 1.12 D: unit tests ----
   set(FASTAG_UNIT_TESTS_D species_call_test digest_v2_test alkylation_test alkylation_tags_test)
   # ---- 1.12 F: unit tests ----
-  set(FASTAG_UNIT_TESTS_F output_guard_test census_test census_ids_test)
+  set(FASTAG_UNIT_TESTS_F output_guard_test census_test census_ids_test census_score_test)
   # ---- 1.13 digqual: unit tests ----
   set(FASTAG_UNIT_TESTS_DIGQUAL digest_quality_test)
   # ---- 1.13 #18: unit tests ----
@@ -675,6 +675,21 @@ if(FASTAG_BUILD_TESTS)
                    ${CMAKE_CURRENT_SOURCE_DIR}/test/fixtures/Ecoli_MS2_small.mzML
                    ${CMAKE_CURRENT_SOURCE_DIR}/tools/census_triage_eval.py)
   set_tests_properties(census_triage_eval_cli_test PROPERTIES SKIP_RETURN_CODE 77)
+  # 1.16 item 4: -census_score / -census_sorted_out / -census_ids_exact on the
+  # fixture (columns, pre-filter features, order, exact-join refusals), and the
+  # Python side of the score (tools/census_ident.py: label join, ranks, AUC).
+  add_test(NAME census_score_cli_test
+           COMMAND bash ${CMAKE_CURRENT_SOURCE_DIR}/test/census_score_cli_test.sh $<TARGET_FILE:FASTag>
+                   $<TARGET_FILE:census_ids_test>
+                   ${CMAKE_CURRENT_SOURCE_DIR}/test/fixtures/Ecoli_MS2_small.mzML
+                   ${CMAKE_CURRENT_SOURCE_DIR}/test/fixtures/Ecoli_MS2_small.fasta
+                   ${CMAKE_CURRENT_SOURCE_DIR})
+  set_tests_properties(census_score_cli_test PROPERTIES SKIP_RETURN_CODE 77)
+  add_test(NAME census_ident_tool_test
+           COMMAND bash -c "PY=\${FASTAG_PYTHON:-python3}; command -v \"\$PY\" >/dev/null || exit 77; exec \"\$PY\" \"\$0\" \"\$1\""
+                   ${CMAKE_CURRENT_SOURCE_DIR}/test/census_ident_tool_test.py
+                   ${CMAKE_CURRENT_SOURCE_DIR}/tools/census_ident.py)
+  set_tests_properties(census_ident_tool_test PROPERTIES SKIP_RETURN_CODE 77)
   # ---- 1.12 G: CLI tests ----
   # G1: the JSON writers, the mzML header parse and the spectrum record
   # against the tagger's preprocessing; probeInput()/dumpSpectrum() on the

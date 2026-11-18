@@ -1,0 +1,6 @@
+{
+ "id": "unfitted",
+ "intercept": 0.0,
+ "coef": [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+ "features": ["pre_best_evalue", "pre_best_len", "pre_best_mean_conf", "pre_tag_cover", "n_found", "n_peaks", "n_compl", "n_edges", "n_peaks_kept", "int_gini", "charge_used", "precursor_mz"]
+}

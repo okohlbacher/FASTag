@@ -426,6 +426,9 @@ TOPPFASTag::ExitCodes TOPPFASTag::main_(int, const char**)
         {"census_ids", nullptr},
         {"census_ids_fdr", nullptr},
         {"census_triage_evalue", nullptr},
+        {"census_ids_exact", nullptr},     // 1.16 item 4
+        {"census_score", nullptr},
+        {"census_sorted_out", nullptr},
         // ---- 1.12 G: -stream refusals ----
         {"probe_input", nullptr},
         {"dump_spectrum", nullptr},
@@ -1328,6 +1331,9 @@ TOPPFASTag::ExitCodes TOPPFASTag::main_(int, const char**)
         {"census_ids", "-census", getFlag_("census")},
         {"census_ids_fdr", "-census_ids", getFlag_("census") && !getStringOption_("census_ids").empty()},
         {"census_triage_evalue", "-census_ids", getFlag_("census") && !getStringOption_("census_ids").empty()},
+        {"census_ids_exact", "-census_ids", getFlag_("census") && !getStringOption_("census_ids").empty()},
+        {"census_score", "-census", getFlag_("census")},
+        {"census_sorted_out", "-census_score", getFlag_("census") && getFlag_("census_score")},
     };
     for (const IgnoredOption& r : ignored)
     {
@@ -2142,6 +2148,10 @@ TOPPFASTag::ExitCodes TOPPFASTag::main_(int, const char**)
   // The census layout of this run (Census::header() reads it; so does
   // -census_ids, which takes that header as the table's layout).
   FASTag::Census::runColumns().ion_series = ion_column;
+  // 1.16 item 4: -census_score adds the pre-filter columns (and, after the
+  // run, ident_score).
+  const bool census_score_on = getFlag_("census") && getFlag_("census_score");
+  FASTag::Census::runColumns().score = census_score_on;
 
   // Subsampling selection. The mask is exact for every input -- it is built
   // over the spectrum indices up front. The count over ALL input spectra,
@@ -2553,7 +2563,8 @@ TOPPFASTag::ExitCodes TOPPFASTag::main_(int, const char**)
       // that .part (a PartFile on the temporary path), so that path is
       // checked too.
       guard.output("census_out", c.empty() ? defaultReportPath_(out, ".census.tsv") : c, /*via_part=*/true,
-                   /*part_of_part=*/!getStringOption_("census_ids").empty());
+                   /*part_of_part=*/!getStringOption_("census_ids").empty() || getFlag_("census_score"));
+      if (getFlag_("census_score")) guard.output("census_sorted_out", getStringOption_("census_sorted_out"), true);
       guard.output("census_summary_out", cs.empty() ? defaultReportPath_(out, ".census_summary.tsv") : cs,
                    /*via_part=*/true);
     }
@@ -2575,6 +2586,14 @@ TOPPFASTag::ExitCodes TOPPFASTag::main_(int, const char**)
   FASTag::CensusIds::Loaded census_ids_loaded;
   std::string census_ids_run_check;
   bool census_ids_refused = false;  ///< the census was withheld after the run (foreign references)
+  const bool census_ids_exact = census_ids_on && getFlag_("census_ids_exact");  // 1.16 item 4
+  if (census_ids_exact && subsampling)
+  {
+    OPENMS_LOG_ERROR << "-census_ids_exact needs every spectrum read: it cannot be combined with subsampling."
+                     << std::endl;
+    return ILLEGAL_PARAMETERS;
+  }
+  census_ids_index.setExact(census_ids_exact);
   if (census_ids_on)
   {
     census_ids_loaded = FASTag::CensusIds::load(census_ids, census_ids_fdr, census_ids_index);
@@ -2584,6 +2603,18 @@ TOPPFASTag::ExitCodes TOPPFASTag::main_(int, const char**)
       return INCOMPATIBLE_INPUT_DATA;
     }
     census_ids_run_check = FASTag::CensusIds::runCheck(census_ids_loaded, in);
+    if (census_ids_exact)
+    {
+      // The checks that need no spectrum: before any output is opened.
+      const std::string why = FASTag::CensusIds::exactRefusal(census_ids_loaded, census_ids_index,
+                                                              FASTag::CensusIds::Index::Counts{},
+                                                              census_ids_run_check);
+      if (!why.empty())
+      {
+        OPENMS_LOG_ERROR << why << std::endl;
+        return INCOMPATIBLE_INPUT_DATA;
+      }
+    }
     if (census_ids_run_check == "mismatch")
       OPENMS_LOG_WARN << "Warning: -census_ids names the run '" << census_ids_loaded.runs.front() << "', -in is '"
                       << FASTag::CensusIds::runStem(in) << "'; the spectrum references are matched anyway."
@@ -3117,6 +3148,26 @@ TOPPFASTag::ExitCodes TOPPFASTag::main_(int, const char**)
     static thread_local std::vector<FASTag::Census::TagView> ctags;
     ctags.clear();
     size_t cplaced = 0;
+    const auto census_view = [](const FASTag::Tag& t) {
+      FASTag::Census::TagView v;
+      v.evalue = t.evalue;
+      v.low_mz = t.low_mz;
+      v.high_mz = t.high_mz;
+      v.n_res = t.n_res;
+      v.min_conf = t.min_conf;
+      v.mean_conf = t.mean_conf;
+      v.peak_tic = t.peak_tic;
+      v.cz = t.ion_series == FASTag::IonSeries::Series::CZ;
+      return v;
+    };
+    // -census_score (1.16 item 4): every tag of the selected hypothesis
+    // BEFORE any database filter, so the score's features do not depend on
+    // -fasta (the rows above are the reported ones, after it).
+    static thread_local std::vector<FASTag::Census::TagView> cpre;
+    cpre.clear();
+    if (res.census && census_score_on)
+      for (size_t ti = 0; ti < tags.size(); ++ti)
+        if (hyp_of(ti).selected) cpre.push_back(census_view(tags[ti]));
 
     // Reserve once so the per-field appends below do not repeatedly realloc.
     // ~80 bytes/row covers the fixed columns and a typical native ID; the
@@ -3199,19 +3250,7 @@ TOPPFASTag::ExitCodes TOPPFASTag::main_(int, const char**)
       if (!row_entrap) res.any_target = true;
       if (entrap_on) res.meta.emplace_back(t.evalue, row_entrap);
       ++pt.reported;
-      if (res.census && sel)
-      {
-        FASTag::Census::TagView v;
-        v.evalue = t.evalue;
-        v.low_mz = t.low_mz;
-        v.high_mz = t.high_mz;
-        v.n_res = t.n_res;
-        v.min_conf = t.min_conf;
-        v.mean_conf = t.mean_conf;
-        v.peak_tic = t.peak_tic;
-        v.cz = t.ion_series == FASTag::IonSeries::Series::CZ;
-        ctags.push_back(v);
-      }
+      if (res.census && sel) ctags.push_back(census_view(t));
 
       appendTagRow_(buf, t, spec.getNativeID(), hit, want_proforma, proforma_fixed,
                    p.per_residue_conf, usi, hyp_on ? &hy : nullptr, ion_column);
@@ -3594,6 +3633,13 @@ TOPPFASTag::ExitCodes TOPPFASTag::main_(int, const char**)
         crow.best = ctags[best];
         crow.tag_cover = FASTag::Census::tagCoverOf(ctags);
       }
+      const size_t pre = FASTag::Census::bestTag(cpre);
+      if (census_score_on && pre != FASTag::Census::NO_INDEX)
+      {
+        crow.has_pre = true;
+        crow.pre_best = cpre[pre];
+        crow.pre_tag_cover = FASTag::Census::tagCoverOf(cpre);
+      }
       pt.acc.f.census.add(crow);
     }
     return res;
@@ -3643,7 +3689,7 @@ TOPPFASTag::ExitCodes TOPPFASTag::main_(int, const char**)
     {
       std::string& cr = b.acc.f.census_rows[idx];
       cr.clear();
-      FASTag::Census::appendRow(cr, r.census_row, spec.getNativeID(), ion_column);
+      FASTag::Census::appendRow(cr, r.census_row, spec.getNativeID(), ion_column, census_score_on);
     }
     if (r.buf.empty()) return;  // rbuf is only ever non-empty alongside buf
     b.rows[idx].swap(r.buf);
@@ -4464,9 +4510,31 @@ TOPPFASTag::ExitCodes TOPPFASTag::main_(int, const char**)
   // rows (format Versioned: a new 1.12 report) and adds section `census`.
   FASTag::CensusIds::JoinTally ids_tally;
   FASTag::CensusIds::Index::Counts ids_counts;
+  FASTag::CensusScore::Tally score_tally;
   if (census_on)
   {
     ctsv.close();
+    std::string census_head = FASTag::Census::header();
+    census_head.pop_back();  // the newline
+    // -census_score (1.16 item 4): ident_score from the finished table, to
+    // a second .part file that replaces it; before the join, so identified
+    // and triage stay the last two columns.
+    if (census_score_on && !ctsv.fail())
+    {
+      FASTag::PartFile scored(census_part.writePath());
+      std::string err;
+      if (!scored.begin()
+          || !FASTag::CensusScore::scoreTableAs(census_head, census_part.writePath(), scored.writePath(),
+                                                FASTag::CensusScore::model(), score_tally, err)
+          || !scored.commit())
+      {
+        OPENMS_LOG_ERROR << "Failed scoring " << census_out << ": " << (err.empty() ? scored.error() : err)
+                         << std::endl;
+        census_part.discard();
+        return CANNOT_WRITE_OUTPUT_FILE;
+      }
+      census_head += FASTag::CensusScore::SCORE_COLUMN;
+    }
     // -census_ids: the join, from the finished table to a second .part
     // file that replaces it before the commit.
     if (census_ids_on && !ctsv.fail())
@@ -4474,8 +4542,8 @@ TOPPFASTag::ExitCodes TOPPFASTag::main_(int, const char**)
       FASTag::PartFile joined(census_part.writePath());
       std::string err;
       if (!joined.begin()
-          || !FASTag::CensusIds::joinTable(census_part.writePath(), joined.writePath(), census_ids_index,
-                                           census_triage_evalue, ids_tally, err)
+          || !FASTag::CensusIds::joinTableAs(census_head, census_part.writePath(), joined.writePath(),
+                                             census_ids_index, census_triage_evalue, ids_tally, err)
           || !joined.commit())
       {
         OPENMS_LOG_ERROR << "Failed joining -census_ids to " << census_out << ": "
@@ -4484,11 +4552,20 @@ TOPPFASTag::ExitCodes TOPPFASTag::main_(int, const char**)
         return CANNOT_WRITE_OUTPUT_FILE;
       }
       ids_counts = census_ids_index.counts();
+      const std::string exact_why = census_ids_exact
+          ? FASTag::CensusIds::exactRefusal(census_ids_loaded, census_ids_index, ids_counts, census_ids_run_check)
+          : std::string();
       // Foreign references: only known when every spectrum was read.
       const double share = ids_counts.refs ? static_cast<double>(ids_counts.unmatched) /
                                                  static_cast<double>(ids_counts.refs)
                                            : 0.0;
-      if (!subsampling && share > FASTag::CensusIds::REFUSE_UNMATCHED)
+      if (!exact_why.empty())
+      {
+        OPENMS_LOG_ERROR << exact_why << " No census was written; the other outputs are complete." << std::endl;
+        census_part.discard();
+        census_ids_refused = true;
+      }
+      else if (!subsampling && share > FASTag::CensusIds::REFUSE_UNMATCHED)
       {
         OPENMS_LOG_ERROR << "-census_ids: " << ids_counts.unmatched << " of " << ids_counts.refs
                          << " spectrum references match no spectrum of -in (more than "
@@ -4518,7 +4595,10 @@ TOPPFASTag::ExitCodes TOPPFASTag::main_(int, const char**)
     if (census_ids_on)
       for (FD::Row& r : FASTag::CensusIds::summaryRows(census_ids_loaded, ids_counts, ids_tally, census_ids,
                                                        census_ids_run_check, census_ids_fdr,
-                                                       census_triage_evalue, !subsampling))
+                                                       census_triage_evalue, !subsampling, census_ids_exact))
+        rows.push_back(std::move(r));
+    if (census_score_on)
+      for (FD::Row& r : FASTag::CensusScore::summaryRows(FASTag::CensusScore::model(), score_tally))
         rows.push_back(std::move(r));
     FASTag::PartFile summary_part(census_summary_out);
     if (!summary_part.begin() || !FD::writeReport(summary_part.writePath(), rows) || !summary_part.commit())
@@ -4526,6 +4606,20 @@ TOPPFASTag::ExitCodes TOPPFASTag::main_(int, const char**)
       OPENMS_LOG_ERROR << "Failed writing " << census_summary_out
                        << (summary_part.error().empty() ? std::string() : ": " + summary_part.error()) << std::endl;
       return CANNOT_WRITE_OUTPUT_FILE;
+    }
+    // -census_sorted_out: the committed table, ordered by ident_score.
+    const std::string census_sorted_out = census_score_on ? getStringOption_("census_sorted_out") : std::string();
+    if (!census_sorted_out.empty())
+    {
+      FASTag::PartFile sorted_part(census_sorted_out);
+      std::string err;
+      if (!sorted_part.begin() || !FASTag::CensusScore::writeSorted(census_out, sorted_part.writePath(), err)
+          || !sorted_part.commit())
+      {
+        OPENMS_LOG_ERROR << "Failed writing " << census_sorted_out << ": "
+                         << (err.empty() ? sorted_part.error() : err) << std::endl;
+        return CANNOT_WRITE_OUTPUT_FILE;
+      }
     }
     const auto count = [&](FASTag::Census::Status st) { return tally.by_status[static_cast<size_t>(st)]; };
     OPENMS_LOG_INFO << "Census: " << tally.ms2_seen << " MS2 spectra read, "
