@@ -53,6 +53,13 @@ TOPPFASTag::ExitCodes TOPPFASTag::probeInputMode_()
                         "directly with -in, or convert it to mzML first." << std::endl;
     return ILLEGAL_PARAMETERS;
   }
+  // The GUI modes read mzML, mzPeak and MGF; a Thermo .raw is tagged directly.
+  if (FASTag::Thermo::isThermoPath(file))
+  {
+    OPENMS_LOG_ERROR << "-probe_input does not read Thermo .raw files yet; tag the run directly with "
+                        "-in, or convert it to mzML first." << std::endl;
+    return ILLEGAL_PARAMETERS;
+  }
   const P::ProbeOutput r = P::probeInput(file, opt);
   if (r.status != P::Status::OK)
   {
@@ -74,6 +81,12 @@ TOPPFASTag::ExitCodes TOPPFASTag::dumpSpectrumMode_(const std::string& in, const
   {
     OPENMS_LOG_ERROR << "-dump_spectrum does not read Bruker timsTOF runs (.d, .d.zip) yet; convert the "
                         "run to mzML first." << std::endl;
+    return ILLEGAL_PARAMETERS;
+  }
+  if (FASTag::Thermo::isThermoPath(in))
+  {
+    OPENMS_LOG_ERROR << "-dump_spectrum does not read Thermo .raw files yet; convert the run to mzML "
+                        "first." << std::endl;
     return ILLEGAL_PARAMETERS;
   }
   if (!getStringOption_("out").empty())

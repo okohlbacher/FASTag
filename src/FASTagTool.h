@@ -78,6 +78,7 @@
 #include "TaxDeconv.h"
 #include "TaxIndex.h"
 #include "TaxStats.h"
+#include "ThermoInput.h"
 #include "Usi.h"
 #include "MzPeakStream.h"
 
