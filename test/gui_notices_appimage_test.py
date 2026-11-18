@@ -27,7 +27,7 @@ lrwxrwxrwx root/root 1 2026-11-18 09:00 squashfs-root/usr/lib/libwebkit2gtk-4.1.
 with tempfile.TemporaryDirectory() as d:
     p = Path(d) / "l.lls"
     p.write_text(LISTING)
-    got = [str(f) for f in m.bundled_files(m.read_listing(p))]
+    got = [f.as_posix() for f in m.bundled_files(m.read_listing(p))]
 
 # The CLI's payload and linuxdeploy's copies of the CLI's own libraries belong to THIRD-PARTY-NOTICES.txt.
 want = ["usr/lib/libwebkit2gtk-4.1.so.0", "usr/lib/webkit2gtk-4.1/WebKitNetworkProcess"]
