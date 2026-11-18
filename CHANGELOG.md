@@ -24,7 +24,8 @@ software. Tag output is unchanged.
   and three proteins); the desktop app opens it with File > Open Example Data.
 - **Licence notices:** the desktop-app bundles carry
   `GUI-THIRD-PARTY-NOTICES.txt` (Rust crates, npm packages, fonts, and the
-  libraries the AppImage bundles, with an LGPL written offer); the CLI notices
+  libraries the AppImage bundles, with links to the Ubuntu source packages of
+  the (L)GPL ones); the CLI notices
   now include every licence text, and packaging fails when one is missing.
 - **Taxonomy provenance:** UniProt (CC BY 4.0) and NCBI Taxonomy attribution;
   the index tarball carries `MANIFEST.json` (sources, checksums, commands).

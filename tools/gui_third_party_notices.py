@@ -20,7 +20,7 @@ THIRD-PARTY-NOTICES.txt (tools/third_party_notices.py) covers:
      into the AppImage (WebKitGTK, GTK, GStreamer, ...): each mapped to the
      Debian/Ubuntu package that installed it on the build machine, with that
      package's copyright file, the licence texts it refers to, and for every
-     (L)GPL package the source pointer and written offer the licence asks for.
+     (L)GPL package a pointer to its Ubuntu source package and version.
 
 Every component is listed with its licence AND its licence text. A crate or
 npm package that ships no licence file gets the canonical SPDX text of its
@@ -427,12 +427,9 @@ def appimage_section(listing: list[tuple[Path, bool]], texts: Texts, missing: li
             lines.append(f"  {src} {srcver}" + (f"   (https://launchpad.net/ubuntu/+source/{src}/{srcver})" if src else ""))
         lines += [
             "",
-            "Written offer: for at least three years after the last release of this",
-            "AppImage, the FASTag maintainers will provide anyone who asks with the",
-            "complete corresponding source code of these libraries, on a medium",
-            "customarily used for software interchange, for no more than the cost of",
-            "physically performing the distribution. Ask through",
-            "https://github.com/okohlbacher/FASTag/issues.",
+            "The source packages are kept in the Ubuntu archive for every published",
+            "version (Launchpad, links above). The FASTag project makes no separate",
+            "offer of these sources.",
             "",
             "You may replace any of these libraries in the AppImage with a modified",
             "version (extract it with --appimage-extract, replace the file, and run",

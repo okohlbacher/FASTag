@@ -1861,7 +1861,7 @@ jobs:
           # The notices of what linuxdeploy bundled: listed from the
           # AppImage's squashfs (nothing extracted), each library mapped to
           # its Ubuntu package with the copyright file, the licence texts and
-          # the (L)GPL source offer; then built once more with that notice in
+          # the (L)GPL source links; then built once more with that notice in
           # the resources (linuxdeploy bundles the same libraries again), and
           # the second AppImage checked to carry it and to list every library.
           app=$(ls src-tauri/target/release/bundle/appimage/*.AppImage | head -1)

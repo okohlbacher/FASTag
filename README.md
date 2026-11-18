@@ -241,6 +241,8 @@ steps: environment, OpenMS, FASTag, tests and the desktop app.
 
 ## Desktop GUI
 
+User manual with screenshots: [doc/MANUAL.md](doc/MANUAL.md). **File > Open Example Data** loads the example run that ships with the app.
+
 A cross-platform desktop app ([`gui/`](gui/)) wraps the CLI: pick spectra, set
 parameters from a form generated out of the tool's own `-write_ini`, watch a
 progress bar with the phase of the run and the time left, and browse the tags and the ranked species report (with a
@@ -1818,7 +1820,7 @@ Every binary bundle carries `LICENSE` and `THIRD-PARTY-NOTICES.txt` (the
 command-line program's libraries, with their licence texts); every desktop app
 also carries `GUI-THIRD-PARTY-NOTICES.txt` (the Rust crates and npm packages
 built into the app, its fonts, and in the AppImage the system libraries it
-bundles, with the source offer the LGPL asks for), next to the other two in
+bundles, with links to the Ubuntu source packages of the (L)GPL ones), next to the other two in
 the app's `resources/fastag/`. The example data in `examples/` (in every
 bundle) are OpenMS example files, BSD-3-Clause.
 
