@@ -171,30 +171,38 @@ supported but not validated.
 
 <p>The algorithm is a reimplementation of
 <a href="https://doi.org/10.1021/pr800154p">DirecTag</a> (Tabb et al., <em>J. Proteome Res.</em>
-2008, 7:3838). That paper is the citation — FASTag has no separate publication.</p>
+2008, 7:3838). How to cite FASTag itself: see <a href="#citation">Citation</a>.</p>
 
 <h2>Why use it</h2>
 
 <div class="stats">
   <div><div class="n">103&times;</div><div class="l">faster than DirecTag on PXD047793 (3.09 M spectra)</div></div>
-  <div><div class="n">548 MB</div><div class="l">peak memory on a 23 GB run (DirecTag: 70.3 GB)</div></div>
-  <div><div class="n">98.6%</div><div class="l">of Mascot-identified spectra get a valid tag among the top 50 (PXD000001)</div></div>
+  <div><div class="n">544 MB</div><div class="l">peak memory on a 24.7 GB run (DirecTag: 70.3 GB)</div></div>
+  <div><div class="n">93.1%</div><div class="l">of Mascot-identified spectra get a valid tag ranked first at the defaults (PXD000001)</div></div>
 </div>
 
 <p>Measured against DirecTag 1.4.21142 at 128 threads on public ProteomeXchange runs, with
-FASTag 1.14.0 and settings matched to DirecTag (tag length 3, 50 tags, 100 peaks, no gaps, no
+FASTag 1.15.0 and settings matched to DirecTag (tag length 3, 50 tags, 100 peaks, no gaps, no
 deisotoping); same node (AMD EPYC 7763, idle), median of 3 runs, wall clock and peak memory for the
 whole run, including writing the tags:</p>
 
 <table>
 <thead><tr><th></th><th>FASTag</th><th>DirecTag</th></tr></thead>
 <tbody>
-<tr><td>PXD047793, timsTOF diaTracer pseudo-MS2, 3.09 M spectra, 23 GB</td><td class="num"><strong class="win">7.09 s, 548 MB</strong></td><td class="num">732.69 s, 70.3 GB</td></tr>
-<tr><td>PXD028735, raw timsTOF diaPASEF, 151,648 spectra (check set to warn; not a recommended use)</td><td class="num"><strong class="win">7.67 s, 864,815 tags</strong></td><td class="num">479.9 s, 0 spectra read</td></tr>
+<tr><td>PXD047793, timsTOF diaTracer pseudo-MS2, 3.09 M spectra, 24.7 GB</td><td class="num"><strong class="win">7.13 s, 544 MB</strong></td><td class="num">732.69 s, 70.3 GB</td></tr>
+<tr><td>PXD028735, raw timsTOF diaPASEF, 151,648 spectra (check set to warn; not a recommended use)</td><td class="num"><strong class="win">7.70 s, 864,815 tags</strong></td><td class="num">479.9 s, 0 spectra read</td></tr>
 <tr><td>Valid tag ranked first (PXD000001)</td><td class="num"><strong class="win">90.91%</strong></td><td class="num">88.69%</td></tr>
 <tr><td>Valid tag within top 50 (PXD000001)</td><td class="num">98.62%</td><td class="num">98.62%</td></tr>
 </tbody>
 </table>
+
+<p>FASTag's own defaults (gaps, deisotoping) rank a valid tag first more often than the
+DirecTag-matched settings: 93.1% vs 90.9% on PXD000001 (Orbitrap, Mascot truth), 67.3% vs 64.7% on
+PXD054073 (timsTOF ddaPASEF) and 53.8% vs 48.0% on PXD076528 (Astral DDA; both against Sage at 1% FDR).
+DirecTag's numbers are from the same node with the same inputs (2026-11-15). Every number here, with
+the scripts, input checksums and per-run rows:
+<a href="https://github.com/okohlbacher/FASTag/tree/main/bench/results/site-why-1.15.0">speed</a> and
+<a href="https://github.com/okohlbacher/FASTag/tree/main/bench/results/accuracy-1.15.0">accuracy</a>.</p>
 
 <p>On the default path memory is flat in the file size rather than proportional to it, so a run
 is bounded by threads, not by input (<code>-out_spectra</code> and a few reports keep per-run
@@ -314,7 +322,15 @@ and a run written to mzPeak and tagged again reproduces the original tag set exa
   <li><a href="https://github.com/okohlbacher/FASTag/issues">Issues</a> — bugs and questions</li>
 </ul>
 
-<h2>Citation</h2>
+<h2 id="citation">Citation</h2>
+
+<p>For FASTag, cite the release you used (version and date; GitHub's "Cite this repository" gives it
+from <a href="https://github.com/okohlbacher/FASTag/blob/main/CITATION.cff">CITATION.cff</a>; every
+release is archived by
+<a href="https://archive.softwareheritage.org/browse/origin/?origin_url=https://github.com/okohlbacher/FASTag">Software Heritage</a>).
+A FASTag article is in preparation.</p>
+<p class="muted">Kohlbacher O. FASTag: a fast parallel sequence tagger and tag-based filter for peptide
+MS/MS spectra. Version 1.15.0, 2026. https://github.com/okohlbacher/FASTag</p>
 
 <p>For the algorithm:</p>
 <p class="muted">Tabb DL, Ma ZQ, Martin DB, Ham AJ, Chambers MC. DirecTag: accurate sequence tags
