@@ -65,6 +65,8 @@ export default function App({ start = LANDING }: { start?: Origin } = {}): JSX.E
   const [theme, setTheme] = useTheme()
   const [aboutOpen, setAboutOpen] = useState(false)
   const [toast, setToast] = useState<Toast | null>(null)
+  // Why File > Open Example Data found nothing, shown as a drop note is.
+  const [exampleNote, setExampleNote] = useState<string | null>(null)
   // What Add folder… found: a folder without spectra, or one that could not
   // be read; shown where it was asked from (Setup's Batch QC card or the
   // Batch view), in a live region always in the page there.
@@ -206,6 +208,17 @@ export default function App({ start = LANDING }: { start?: Origin } = {}): JSX.E
     session.setInput(p)
     session.setOut(defaultOut(p))
     session.setValues((v) => ({ ...v, ...rebaseOutputs(v, defaultOut(p)) }))
+  }
+
+  // File > Open Example Data: the shipped example run as the input.
+  async function openExample(): Promise<void> {
+    if (running || batchRunning) return
+    setExampleNote(null)
+    try {
+      setInputPath(await window.fastag.exampleInput())
+    } catch (e) {
+      setExampleNote(`No example data: ${e instanceof Error ? e.message : String(e)}`)
+    }
   }
 
   async function pickInput(): Promise<void> {
@@ -370,6 +383,12 @@ export default function App({ start = LANDING }: { start?: Origin } = {}): JSX.E
         break
       case 'open-results':
         if (!busy) void openResults()
+        break
+      case 'open-example':
+        if (!busy && jobs.length === 0) {
+          setView('setup')
+          void openExample()
+        }
         break
       case 'run':
         if (jobs.length > 0) {
@@ -771,9 +790,12 @@ export default function App({ start = LANDING }: { start?: Origin } = {}): JSX.E
 
       <Notices
         dragOver={dragOver}
-        dropNote={dropNote}
+        dropNote={dropNote ?? exampleNote}
         toast={toast}
-        onDismissNote={dismissNote}
+        onDismissNote={() => {
+          dismissNote()
+          setExampleNote(null)
+        }}
         onDismissToast={() => setToast(null)}
         onOpen={(to) => {
           setView(to)

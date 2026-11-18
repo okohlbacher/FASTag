@@ -317,6 +317,9 @@ export interface FastagApi {
   probeInput: (input: string, fasta?: string | null) => Promise<ProbeRun>
   pickInput: () => Promise<string | null>
   pickInputs: () => Promise<string[]>
+  // File > Open Example Data: the example run shipped with the app, copied to
+  // a writable folder (examples.rs); rejects when the install has none.
+  exampleInput: () => Promise<string>
   pickOutput: (defaultPath?: string) => Promise<string | null>
   // A parameter's file: filtered by the extensions its manifest entry
   // declares (none = no filter), so a FASTA or an idXML can be picked.

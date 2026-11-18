@@ -63,6 +63,8 @@ export interface MockBridge extends FastagApi {
   settingsWritable: boolean
   nextPickInput: string | null
   nextPickInputs: string[]
+  // exampleInput's answer; null: the install has no example data.
+  nextExampleInput: string | null
   nextPickOutput: string | null
   pickFileCalls: { kind: 'open' | 'save'; formats?: string[] }[]
   nextPickResults: string | null
@@ -317,6 +319,7 @@ export function installMockBridge(): MockBridge {
     settingsWritable: true,
     nextPickInput: null,
     nextPickInputs: [],
+    nextExampleInput: '/local/examples/Ecoli_MS2_small.mzML',
     nextPickOutput: null,
     pickFileCalls: [],
     nextPickResults: null,
@@ -480,6 +483,10 @@ export function installMockBridge(): MockBridge {
     openTaxon: () => Promise.resolve(true),
     pickInput: () => Promise.resolve(mock.nextPickInput),
     pickInputs: () => Promise.resolve(mock.nextPickInputs),
+    exampleInput: () =>
+      mock.nextExampleInput
+        ? Promise.resolve(mock.nextExampleInput)
+        : Promise.reject(new Error('this installation has no example data (resources/fastag/examples)')),
     pickOutput: () => Promise.resolve(mock.nextPickOutput),
     pickFile: (formats) => {
       mock.pickFileCalls.push({ kind: 'open', formats })

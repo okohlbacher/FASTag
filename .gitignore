@@ -36,3 +36,5 @@ __pycache__/
 !bench/results/tmt-ga-2026-11-11/iteration1/summary.tsv
 !bench/results/tmt-ga-2026-11-11/iteration1/paired_changes.tsv
 !bench/results/tmt-ga-2026-11-11/audit/*.tsv
+# The example data shipped in every bundle (examples/README.md).
+!examples/*.mzML

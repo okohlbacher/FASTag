@@ -210,6 +210,17 @@ describe('App wiring', () => {
     await screen.findByRole('button', { name: /^Run on k\.mzML$/ })
   })
 
+  it('File > Open Example Data opens the shipped example as the input', async () => {
+    const mock = installMockBridge()
+    await renderApp(mock)
+    await act(async () => mock.emitMenu('open-example'))
+    await screen.findByRole('button', { name: /^Run on Ecoli_MS2_small\.mzML$/ })
+    // Without example data the reason is shown, and the input stays empty.
+    mock.nextExampleInput = null
+    await act(async () => mock.emitMenu('open-example'))
+    await screen.findByText(/No example data: this installation has no example data/)
+  })
+
   it('Reveal and Open folder ask the backend for the finished run\'s -out only', async () => {
     const mock = installMockBridge()
     await renderApp(mock)
