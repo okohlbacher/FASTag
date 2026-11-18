@@ -12,7 +12,7 @@
 // no call is never overridden. The acquisition and tolerance checks repeat
 // what the CLI wrote or was given. Pure, for vitest.
 
-import { fmt, pct, type Report } from '../digestReport'
+import { fmt, fmtQ, pct, type Report } from '../digestReport'
 import type { ParamValue } from '../ParamField'
 import type { SpeciesReport } from '../types'
 import {
@@ -188,9 +188,10 @@ export function buildOverview(i: OverviewInputs): Overview {
     if (t.id === 'alkylation') continue
     // Only a call the CLI made is held back; its no call stands, with its
     // reason (a run-level rule such as low_resolution is not a count).
-    if (lowEvidence && t.tone === 'call') Object.assign(t, { value: 'too little evidence', tone: 'low', note: `${fewer}; CLI: ${t.value} (${t.note})` })
-    else if (lowEvidence && t.tone === 'nocall') t.note = `${t.note}; also ${fewer}`
-    else if (!cutoffApplied && (t.tone === 'call' || t.tone === 'nocall')) t.note = `${t.note}; ${NOT_APPLIED}`
+    if (lowEvidence && t.tone === 'call')
+      Object.assign(t, { value: 'too little evidence', tone: 'low', note: `${fewer}; CLI: ${t.value} (${t.note.replace(/\.$/, '')})` })
+    else if (lowEvidence && t.tone === 'nocall') t.note = addNote(t.note, `also ${fewer}`)
+    else if (!cutoffApplied && (t.tone === 'call' || t.tone === 'nocall')) t.note = addNote(t.note, NOT_APPLIED)
   }
 
   // ---- checks
@@ -306,6 +307,13 @@ export function buildOverview(i: OverviewInputs): Overview {
   return { figures, calls, checks, suggestions, caveats, lowEvidence, cutoffApplied, copyText }
 }
 
+/// @p note with @p more after it: "a; more", or, when the note ends a
+/// sentence, "a. More." (never "a.; more").
+export function addNote(note: string, more: string): string {
+  if (!/[.!?]$/.test(note)) return `${note}; ${more}`
+  return `${note} ${more.charAt(0).toUpperCase()}${more.slice(1)}${/[.!?]$/.test(more) ? '' : '.'}`
+}
+
 function paramTolerance(p: Record<string, unknown>): { value: number; unit: 'ppm' | 'Da' } | null {
   const v = Number(p['fragment_tolerance'])
   const u = p['fragment_tolerance_unit']
@@ -349,7 +357,7 @@ function genusTile(c: SpeciesCall, da: boolean): Tile {
       ...base,
       value: c.top.name,
       tone: 'call',
-      note: `q = ${c.top.q === null ? 'NA (uncalibrated under -species_orientation both)' : fmt(c.top.q)}; ranked first of ${c.genera} genera by adjusted count, not a presence call.${caveat}`
+      note: `q = ${c.top.q === null ? 'NA (uncalibrated under -species_orientation both)' : fmtQ(c.top.q)}; ranked first of ${c.genera} genera by adjusted count, not a presence call.${caveat}`
     }
   if (c.state === 'none') return { ...base, value: 'no genus', tone: 'nocall', note: `the species report lists no genus.${caveat}` }
   return { ...base, value: 'not assessed', tone: 'off', note: 'species detection was off', action: enable({ species: true, extension: '2' }) }
@@ -358,7 +366,7 @@ function genusTile(c: SpeciesCall, da: boolean): Tile {
 function labelTile(c: LabelCall): Tile {
   const base = { id: 'label', label: 'Label' }
   if (c.state === 'call')
-    return { ...base, value: c.label === 'label-free' ? 'none (label-free)' : c.label, tone: 'call', note: `CLI label call over ${fmt(c.ends)} C-terminal tag ends*: ${c.why}` }
+    return { ...base, value: c.label === 'label-free' ? 'none (label-free)' : c.label, tone: 'call', note: `CLI label call over ${fmt(c.ends)} C-terminal tag ends: ${c.why}` }
   if (c.state === 'no_call') return { ...base, value: 'no call', tone: 'nocall', note: c.why || `no label call (${c.reason})` }
   if (c.state === 'not_called')
     return { ...base, value: 'not called', tone: 'off', note: 'this FASTag writes the label counts but no label call (FASTag 1.12 does); the counts are in the Digest tab' }

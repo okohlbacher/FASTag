@@ -403,8 +403,21 @@ const format = (o: Intl.NumberFormatOptions): Intl.NumberFormat => {
 /// and decimals in one table read alike.
 export function fmt(v: number | null, digits = 3): string {
   if (v == null) return '–'
+  // Far below the decimals (a q-value of 3e-119): scientific notation, never
+  // a fixed-point string of a hundred zeros.
+  if (v !== 0 && Number.isFinite(v) && Math.abs(v) < 1e-6) return v.toExponential(2)
   if (v !== 0 && Math.abs(v) < 0.5 * 10 ** -digits) return format({ maximumSignificantDigits: 3 }).format(v)
   return format({ maximumFractionDigits: digits }).format(v)
+}
+
+/// A q-value as the Species tab and the Overview show it: 3.2e-119 below
+/// 0.001, three decimals above; "<1e-300" for 0 (beyond a double); null (the
+/// CLI wrote NA under -species_orientation both): "uncalibrated".
+export function fmtQ(q: number | null): string {
+  if (q === null) return 'uncalibrated'
+  if (q === 0) return '<1e-300'
+  if (q < 0.001) return q.toExponential(1)
+  return q.toFixed(3)
 }
 
 /// A share (0..1) as a percentage, up to two decimals (12.43%); a non-zero

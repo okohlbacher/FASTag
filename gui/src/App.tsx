@@ -308,7 +308,7 @@ export default function App({ start = LANDING }: { start?: Origin } = {}): JSX.E
   const canRun = session.task !== 'open-results' && !!bin?.ok && !!input && !!out && !running && !batchRunning && jobs.length === 0 && !blocked && !inspector.held
 
   // The checks after a run, from its reports and FASTag's log lines.
-  const after = postRunChecks({ reports: run.reports.list, notes: run.shownNotes })
+  const after = postRunChecks({ reports: run.reports.list, notes: run.shownNotes, species: values['species'] === true })
   const afterInput = run.results?.input ?? ''
   // A finished run names its red flags after the run too (the panel over
   // the result tabs shows them).
@@ -579,9 +579,10 @@ export default function App({ start = LANDING }: { start?: Origin } = {}): JSX.E
                 input={afterInput}
                 onRerun={
                   canRerun
-                    ? (id) => {
-                        session.chooseInstrument(id)
-                        setRerunWith(id)
+                    ? (fix) => {
+                        if (fix.params) session.setValues((v) => ({ ...v, ...fix.params }))
+                        session.chooseInstrument(fix.instrument!)
+                        setRerunWith(fix.instrument!)
                       }
                     : null
                 }

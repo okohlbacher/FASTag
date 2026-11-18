@@ -9,7 +9,7 @@ import { HelpLink } from '../help/HelpLink'
 import { shellLine } from '../app/format'
 import { focusLater } from '../app/focus'
 import { INSTRUMENTS, presetText } from '../setup/presets'
-import type { Check, Detected, Level } from './checks'
+import type { Check, CheckFix, Detected, Level } from './checks'
 import type { ParamValue } from '../ParamField'
 
 const LEVEL_WORD: Record<Level, string> = { block: 'Blocks the run', flag: 'Red flag', warn: 'Warning', info: 'Note' }
@@ -241,8 +241,9 @@ export interface AfterRunPanelProps {
   detected: Detected | null
   // The input of the run the checks are about.
   input: string
-  // Re-run that input with this instrument preset; null: not possible now.
-  onRerun: ((instrument: string) => void) | null
+  // Re-run that input with this fix (its instrument preset, and its
+  // parameters when it has any); null: not possible now.
+  onRerun: ((fix: CheckFix) => void) | null
 }
 
 /// The checks after a run (over the result tabs): from its reports and log.
@@ -257,7 +258,7 @@ export function AfterRunPanel(p: AfterRunPanelProps): JSX.Element | null {
           <CheckItem
             key={c.id}
             check={c}
-            onFix={c.fix?.instrument && c.fix.rerun ? () => p.onRerun?.(c.fix!.instrument!) : undefined}
+            onFix={c.fix?.instrument && c.fix.rerun ? () => p.onRerun?.(c.fix!) : undefined}
             fixDisabled={!p.onRerun}
           />
         ))}

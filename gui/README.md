@@ -441,7 +441,13 @@ superseded CLI child in the backend. The instrument family is the CLI's
 `ms2_analyzer` where it names one; by name only an instrument without a
 second analyser (LTQ XL, LTQ Velos) is an ion trap, while the hybrids (LTQ
 Orbitrap, Orbitrap Elite, the Tribrids, LTQ FT, LTQ FT Ultra) need the
-analyser or FASTag's low-resolution warning.
+analyser or FASTag's low-resolution warning. A hybrid's analyser counts only
+when the MS2 reference its configuration (`ms2_analyzer_from` `spectra`):
+from the run's default configuration (`run_default`) it is whatever single
+analyser the converter listed, so the hybrid stays undecided, and at a ppm
+tolerance the checks warn that its MS2 may be ion trap
+(test/fixtures/Ecoli_MS2_small.mzML: LTQ Orbitrap XL, ITMS CID MS2, one
+configuration naming the orbitrap).
 
 The instrument the probe or the digest report names proposes a preset,
 marked "(detected)" in the instrument list; nothing is applied until it is
@@ -473,7 +479,7 @@ fixtures are `src/fixtures/probe/`):
 | record | fields |
 |---|---|
 | `probe` | `format`, `version`, `input`, `file_format` (`mzML`, `mzPeak`, `MGF`) |
-| `instrument` | `name`, `model` (CV names or null), `ms2_analyzer` (CV name of the analyzer of the instrument configuration most MS2 reference, or null), `ion_mobility` (`1/K0`, `drift`, `FAIMS` or null) |
+| `instrument` | `name`, `model` (CV names or null), `ms2_analyzer` (CV name of the analyzer of the instrument configuration most MS2 reference, or null), `ms2_analyzer_from` (`spectra`, `run_default` or null), `ion_mobility` (`1/K0`, `drift`, `FAIMS` or null) |
 | `spectra` | `ms1`, `ms2` (whole file), `ms2_probed`, `ms2_centroid`, `ms2_profile`, `ms2_type_unknown` (of the probed MS2) |
 | `activation` | `of`, `collisional`, `electron`, `hybrid`, `unknown` (the RunMeta activation classes, of the probed MS2) |
 | `index` | `state`: `ok`, `stale`, `absent` or `not_applicable` |

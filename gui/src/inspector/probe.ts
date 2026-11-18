@@ -23,6 +23,10 @@
 //       instrument   name, model (CV names or null), ms2_analyzer (the CV
 //                    name of the mass analyzer of the instrument
 //                    configuration most MS2 spectra reference, or null),
+//                    ms2_analyzer_from ("spectra": the MS2 reference their
+//                    configuration; "run_default": the run's default
+//                    configuration, which says nothing of where each MS2
+//                    was read; null),
 //                    ion_mobility ("1/K0" | "drift" | "FAIMS" | null)
 //       spectra      ms1, ms2 (whole file), ms2_probed, ms2_centroid,
 //                    ms2_profile, ms2_type_unknown (of the probed MS2)
@@ -46,6 +50,8 @@ export interface ProbeInstrument {
   name: string | null
   model: string | null
   ms2Analyzer: string | null
+  // 'spectra' | 'run_default' | null (older probes write no such field).
+  ms2AnalyzerFrom: string | null
   ionMobility: string | null
 }
 
@@ -131,7 +137,13 @@ export function parseProbe(stdout: string): ProbeReport {
         r.fileFormat = str(o, 'file_format')
         break
       case 'instrument':
-        r.instrument = { name: str(o, 'name'), model: str(o, 'model'), ms2Analyzer: str(o, 'ms2_analyzer'), ionMobility: str(o, 'ion_mobility') }
+        r.instrument = {
+          name: str(o, 'name'),
+          model: str(o, 'model'),
+          ms2Analyzer: str(o, 'ms2_analyzer'),
+          ms2AnalyzerFrom: str(o, 'ms2_analyzer_from'),
+          ionMobility: str(o, 'ion_mobility')
+        }
         break
       case 'spectra':
         r.spectra = {

@@ -13,7 +13,7 @@ import { PARAM_BY_NAME } from '../paramLayout'
 import { value, type Report } from '../digestReport'
 import { INSTRUMENTS, presetText } from '../setup/presets'
 import { familyOf, instrumentFromReports, instrumentText, presetFor, type Family } from './instrument'
-import { PROBE_FORMAT, type ProbeReport } from './probe'
+import { PROBE_FORMAT, type ProbeInstrument, type ProbeReport } from './probe'
 import type { TaxonomyStatus } from '../types'
 import { TAXONOMY_ASSET } from '../releaseAssets'
 
@@ -186,7 +186,7 @@ export function preStartChecks(o: {
     })
   }
 
-  const facts = probe.instrument ?? {}
+  const facts: Partial<ProbeInstrument> = probe.instrument ?? {}
   const family = familyOf(facts)
   const preset = presetFor(family)
   const detected: Detected = { family, text: instrumentText(facts), preset, source: 'the probe' }
@@ -196,6 +196,23 @@ export function preStartChecks(o: {
       level: 'flag',
       title: `Ion-trap MS2 with a ${tolOf(values)} ppm tolerance`,
       detail: `The probe says the MS2 of ${instrumentText(facts) ?? 'this instrument'} are read in the ion trap. A ppm tolerance finds almost no tags on ion-trap spectra; ${presetText(IONTRAP)} is the preset for them.`,
+      faq: 'faq-tolerance-warning',
+      source: 'the probe',
+      fix: { label: `Use ${presetText(IONTRAP)}`, instrument: IONTRAP.id }
+    })
+  } else if (family === 'hybrid-ion-trap' && unit === 'ppm') {
+    // A hybrid whose metadata do not say where the MS2 were read (no
+    // configuration per MS2, or none at all): nothing is "detected", and the
+    // ppm tolerance is only questioned. FASTag's run checks the peak spacing
+    // and says after the run whether the MS2 look like ion trap.
+    const runDefault = facts.ms2AnalyzerFrom === 'run_default' && !!facts.ms2Analyzer
+    checks.push({
+      id: 'hybrid-ppm',
+      level: 'warn',
+      title: 'The MS2 may be read in the ion trap',
+      detail: `${instrumentText(facts) ?? 'This instrument'} can read its MS2 in the ion trap or in the high-resolution analyser, and the file's metadata do not say which${
+        runDefault ? ` (the run's only instrument configuration names the ${facts.ms2Analyzer}, but no MS2 spectrum references it)` : ''
+      }. If they are ion-trap MS2, a ${tolOf(values)} ppm tolerance finds almost no tags; ${presetText(IONTRAP)} is the preset for them. The run checks the peak spacing and says so after it.`,
       faq: 'faq-tolerance-warning',
       source: 'the probe',
       fix: { label: `Use ${presetText(IONTRAP)}`, instrument: IONTRAP.id }
@@ -263,8 +280,11 @@ export const NOTE_LINE = /^(Acquisition check: |FASTAG_REFUSED |No two peaks any
 const LOWRES = /^No two peaks anywhere in this file are closer than ([\d.]+) Th/
 
 /// The checks after a run, from its reports (the digest report's meta and
-/// run rows) and the CLI lines it kept (NOTE_LINE).
-export function postRunChecks(o: { reports: Report[]; notes: string[] }): { checks: Check[]; detected: Detected | null } {
+/// run rows) and the CLI lines it kept (NOTE_LINE). @p species: the form
+/// asks for the species report; a re-run in Da then leaves it out, as
+/// species calls are not validated with a tolerance in Da (the da-species
+/// check would hold that re-run otherwise).
+export function postRunChecks(o: { reports: Report[]; notes: string[]; species?: boolean }): { checks: Check[]; detected: Detected | null } {
   const checks: Check[] = []
   const inst = instrumentFromReports(o.reports)
   const runReport = o.reports.find((r) => value(r, 'run', 'fragment_tolerance_unit'))
@@ -289,10 +309,19 @@ export function postRunChecks(o: { reports: Report[]; notes: string[] }): { chec
       id: 'iontrap-ppm',
       level: 'flag',
       title: `This run used ${tol ?? ''} ppm; the MS2 look like ion trap`,
-      detail: `${why.join(' ')} A ppm tolerance finds almost no tags on ion-trap spectra; ${presetText(IONTRAP)} is the preset for them.`,
+      detail: `${why.join(' ')} A ppm tolerance finds almost no tags on ion-trap spectra; ${presetText(IONTRAP)} is the preset for them.${
+        o.species ? ' Species calls are not validated with a tolerance in Da, so the re-run leaves the species report out.' : ''
+      }`,
       faq: 'faq-tolerance-warning',
       source: [inst ? 'the digest report' : null, lowres ? "FASTag's log" : null].filter(Boolean).join(' and '),
-      fix: { label: `Re-run with ${IONTRAP.tolerance} ${IONTRAP.unit}`, instrument: IONTRAP.id, rerun: true }
+      fix: o.species
+        ? {
+            label: `Re-run with ${IONTRAP.tolerance} ${IONTRAP.unit}, without species`,
+            instrument: IONTRAP.id,
+            params: { species: false },
+            rerun: true
+          }
+        : { label: `Re-run with ${IONTRAP.tolerance} ${IONTRAP.unit}`, instrument: IONTRAP.id, rerun: true }
     })
     if (detected && !detected.preset && lowres) detected.preset = IONTRAP.id
   }

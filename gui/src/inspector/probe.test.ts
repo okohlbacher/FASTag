@@ -19,7 +19,7 @@ describe('parseProbe', () => {
     expect(p.status).toBe('ok')
     expect(p.format).toBe(PROBE_FORMAT)
     expect(p.fileFormat).toBe('mzML')
-    expect(p.instrument).toEqual({ name: 'LTQ Orbitrap XL', model: null, ms2Analyzer: 'ion trap', ionMobility: null })
+    expect(p.instrument).toEqual({ name: 'LTQ Orbitrap XL', model: null, ms2Analyzer: 'ion trap', ms2AnalyzerFrom: null, ionMobility: null })
     expect(p.spectra).toEqual({ ms1: 2668, ms2: 7626, probed: 4000, centroid: 4000, profile: 0, typeUnknown: 0 })
     expect(p.activation).toEqual({ of: 4000, collisional: 2000, electron: 2000, hybrid: 0, unknown: 0 })
     expect(p.index).toEqual({ state: 'stale' })

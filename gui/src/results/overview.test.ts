@@ -6,7 +6,7 @@ import { describe, expect, it } from 'vitest'
 import { parseReport } from '../digestReport'
 import { CLI_CASES, logLines, type CliCase } from '../testing/cliFixtures'
 import { speciesFromTsv } from '../testing/speciesTsv'
-import { buildOverview, MIN_TAGGED, type Overview, type Tile } from './overview'
+import { addNote, buildOverview, MIN_TAGGED, type Overview, type Tile } from './overview'
 
 function overviewOf(c: CliCase, extra: { instrument?: string | null } = {}): Overview {
   const reports = [parseReport(c.digest, `/d/${c.name}.digest.tsv`), parseReport(c.label, `/d/${c.name}.label.tsv`)]
@@ -71,7 +71,7 @@ describe('Overview model: calls', () => {
   it('top genus from the ranking, labelled as a ranking, not a presence call', () => {
     const o = overviewOf(CLI_CASES.v112)
     expect(tile(o, 'genus').value).toBe('Homo')
-    expect(tile(o, 'genus').note).toMatch(/q = 0.*ranked first of 50 genera.*not a presence call/)
+    expect(tile(o, 'genus').note).toMatch(/q = <1e-300; ranked first of 50 genera.*not a presence call/)
   })
 
   it('top genus from -species_call when present, with the other present genera', () => {
@@ -186,7 +186,7 @@ describe('Overview model: calls', () => {
     expect(o.lowEvidence).toBe(true)
     for (const id of ['protease', 'label']) {
       expect(tile(o, id).value, id).toBe('no call')
-      expect(tile(o, id).note, id).toMatch(/the fragment tolerance is in Da.*; also 600 tagged spectra, fewer than 1,000$/)
+      expect(tile(o, id).note, id).toMatch(/the fragment tolerance is in Da.*[.;] [Aa]lso 600 tagged spectra, fewer than 1,000\.?$/)
     }
     // The genus is a ranking the CLI made: held back.
     expect(tile(o, 'genus').value).toBe('too little evidence')
@@ -199,7 +199,7 @@ describe('Overview model: calls', () => {
       expect(o.lowEvidence, c.name).toBe(false)
       expect(o.cutoffApplied, c.name).toBe(false)
       expect(o.checks, c.name).toContainEqual({ tone: 'muted', text: expect.stringMatching(/^Evidence cutoff not applied: this run did not count tagged spectra/) })
-      for (const id of ['protease', 'genus', 'label']) expect(tile(o, id).note, `${c.name} ${id}`).toMatch(/evidence cutoff \(1,000 tagged spectra\) not applied/)
+      for (const id of ['protease', 'genus', 'label']) expect(tile(o, id).note, `${c.name} ${id}`).toMatch(/[Ee]vidence cutoff \(1,000 tagged spectra\) not applied/)
     }
     // 686 MS2 spectra: the Da run's calls are what the CLI wrote.
     const da = overviewOf(CLI_CASES.v112Da)
@@ -296,5 +296,51 @@ describe('Overview model: suggested settings', () => {
   it('copies as plain text, one line per setting with its evidence', () => {
     const o = overviewOf(CLI_CASES.v112)
     expect(o.copyText.split('\n')).toContain('fixed C+57.021: Carbamidomethyl (C) (default, alkylation not assessed (no FASTA))')
+  })
+})
+
+// FASTag 1.15.0 on PXD001 (TMT_Erwinia_..._01-20141210.mzML): a q-value of
+// 3.16e-119 printed as a 120-digit decimal that ran over the cards, and the
+// label card read "tag ends*: The run is labelled TMT.; evidence cutoff".
+describe('Overview card text: tiny numbers and punctuation', () => {
+  it('a tiny q-value reads as the Species tab writes it', async () => {
+    const { fmt, fmtQ } = await import('../digestReport')
+    expect(fmtQ(3.16e-119)).toBe('3.2e-119')
+    expect(fmtQ(0.0123)).toBe('0.012')
+    expect(fmtQ(0)).toBe('<1e-300')
+    expect(fmtQ(null)).toBe('uncalibrated')
+    // fmt never spells a tiny value as a long fixed-point decimal either.
+    expect(fmt(3.16e-119)).toBe('3.16e-119')
+    expect(fmt(0.000123)).toBe('0.000123')
+    expect(fmt(3.16e-119).length).toBeLessThan(12)
+  })
+
+  it('the Top genus card of a ranking with q = 3.16e-119', () => {
+    const c = CLI_CASES.v112
+    const species = speciesFromTsv(c.species, `/d/${c.name}.species.tsv`)!
+    const top = species.taxa.find((t) => t.rank === 'genus')!
+    top.q = 3.16e-119
+    const reports = [parseReport(c.digest, '/d/a.digest.tsv'), parseReport(c.label, '/d/a.label.tsv')]
+    const o = buildOverview({ log: logLines(c), reports, species, census: null, params: c.params, instrument: null })
+    const note = tile(o, 'genus').note
+    expect(note).toMatch(/^q = 3\.2e-119; ranked first of 50 genera by adjusted count, not a presence call\. Evidence cutoff/)
+    expect(note).not.toMatch(/0\.0{6,}/)
+  })
+
+  it('a note that ends a sentence takes the next one as a sentence', () => {
+    expect(addNote('The run is labelled TMT.', 'evidence cutoff (1,000 tagged spectra) not applied: tagged spectra not counted')).toBe(
+      'The run is labelled TMT. Evidence cutoff (1,000 tagged spectra) not applied: tagged spectra not counted.'
+    )
+    expect(addNote('digest call over 793 C-terminal tag ends', 'more')).toBe('digest call over 793 C-terminal tag ends; more')
+  })
+
+  it('no tile note has a stray "*" or ".;", and the genus q-value is short', () => {
+    for (const c of Object.values(CLI_CASES)) {
+      const o = overviewOf(c)
+      for (const t of o.calls) {
+        expect(t.note, `${c.name} ${t.id}`).not.toMatch(/\*|\.;/)
+        expect(t.note, `${c.name} ${t.id}`).not.toMatch(/0\.0{6,}/)
+      }
+    }
   })
 })
