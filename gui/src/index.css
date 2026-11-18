@@ -279,16 +279,30 @@ table.sdrf-table td.st-setting_differs, table.sdrf-table td.st-present_not_calle
 /* History */
 .history { flex: 1; padding: var(--space-5); display: flex; flex-direction: column; gap: var(--space-4); min-width: 0; }
 .history h2 { font-size: var(--text-xl); font-weight: 600; }
-table.history-table { width: 100%; border-collapse: collapse; background: var(--card); border: 1px solid var(--border); border-radius: var(--radius-md); }
-table.history-table th, table.history-table td { text-align: left; padding: 6px var(--space-3); border-bottom: 1px solid var(--row-rule); white-space: nowrap; }
-table.history-table td:nth-child(2), table.history-table td:nth-child(5) { white-space: normal; overflow-wrap: anywhere; }
+/* Fixed layout: the table never grows past the window. A long file name is
+   cut with an ellipsis (its full path in the title), one output per line;
+   the actions wrap in what is left. */
+table.history-table { width: 100%; table-layout: fixed; border-collapse: collapse; background: var(--card); border: 1px solid var(--border); border-radius: var(--radius-md); }
+table.history-table th, table.history-table td { text-align: left; vertical-align: top; padding: 6px var(--space-3); border-bottom: 1px solid var(--row-rule); white-space: nowrap; overflow: hidden; }
+table.history-table th:nth-child(1) { width: 9.5rem; }
+table.history-table th:nth-child(3) { width: 7.5rem; }
+table.history-table th:nth-child(4) { width: 5rem; }
+table.history-table th:nth-child(5) { width: 5rem; }
+table.history-table th:nth-child(7) { width: 9.5rem; }
+table.history-table td:nth-child(1), table.history-table td:nth-child(3) { white-space: normal; }
+/* Input and Outputs share the rest; the stem is cut, its extension kept. */
+table.history-table .hist-name { display: flex; min-width: 0; white-space: nowrap; }
+table.history-table .hist-stem { overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+table.history-table .hist-ext { flex: none; }
+table.history-table td.hist-outputs ul { list-style: none; margin: 0; padding: 0; }
 table.history-table th { font-size: var(--text-xs); color: var(--muted-foreground); font-weight: 600; }
 .hist-status { display: inline-flex; align-items: center; gap: var(--space-1); }
 .hist-status.failed { color: var(--destructive-text); }
 .hist-status.cancelled { color: var(--flag-text); }
 .hist-incomplete { margin-left: var(--space-2); font-size: var(--text-xs); color: var(--flag-text); border: 1px solid currentColor; border-radius: 999px; padding: 0 6px; }
 table.history-table td.num { text-align: right; font-variant-numeric: tabular-nums; }
-td.hist-actions { display: flex; flex-wrap: wrap; gap: var(--space-1); align-items: center; }
+table.history-table td.hist-actions { white-space: normal; overflow: visible; }
+.hist-actions-row { display: flex; flex-wrap: wrap; gap: var(--space-1); align-items: center; }
 .hist-confirm { display: inline-flex; flex-wrap: wrap; gap: var(--space-1); align-items: center; }
 .history-note:empty { display: none; }
 

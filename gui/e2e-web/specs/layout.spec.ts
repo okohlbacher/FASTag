@@ -121,3 +121,66 @@ test('a fling sends at most one page request per animation frame', async ({ page
   expect(result.frames).toBe(result.requests)
   expect(result.most).toBe(1)
 })
+
+// FASTag 1.15.0 screenshots: a long input name wrapped one character per
+// line in History and the Outputs ran off the right edge; the recon empty
+// state cut its primary button to "Choose a ...".
+for (const w of [1000, 1400]) {
+  test(`${w} px: History keeps a long input name and its outputs inside the window`, async ({ page }) => {
+    await page.setViewportSize({ width: w, height: 800 })
+    await openApp(page, 'long-names')
+    await goTo(page, 'History')
+    const table = page.getByRole('table', { name: 'Run history' })
+    await expect(table).toBeVisible()
+    const name = 'TMT_Erwinia_1uLSike_Top10HCD_isol2_45stepped_60min_01-20141210'
+    const input = table.locator('td.hist-input .hist-name')
+    await expect(input).toHaveAttribute('title', `/data/PXD001/${name}.mzML`)
+    await expect(table.getByRole('list', { name: 'Outputs' }).getByRole('listitem')).toHaveCount(7)
+    const m = await page.evaluate(() => {
+      const t = document.querySelector('table.history-table')!
+      const view = document.querySelector('.view-history')!
+      const cell = document.querySelector('td.hist-input .hist-name') as HTMLElement
+      const stem = cell.querySelector('.hist-stem') as HTMLElement
+      const lh = parseFloat(getComputedStyle(cell).lineHeight) || 20
+      const items = [...document.querySelectorAll('td.hist-outputs li')] as HTMLElement[]
+      return {
+        right: t.getBoundingClientRect().right,
+        viewRight: view.getBoundingClientRect().right,
+        viewScroll: view.scrollWidth - view.clientWidth,
+        pageScroll: document.scrollingElement!.scrollWidth - window.innerWidth,
+        inputH: cell.getBoundingClientRect().height,
+        lh,
+        inputCut: stem.scrollWidth > stem.clientWidth,
+        exts: items.map((li) => li.querySelector('.hist-ext')?.textContent),
+        itemsOneLine: items.every((li) => li.getBoundingClientRect().height < 2 * lh),
+        itemsInside: items.every((li) => li.getBoundingClientRect().right <= t.getBoundingClientRect().right)
+      }
+    })
+    expect(m.right).toBeLessThanOrEqual(m.viewRight)
+    expect(m.viewScroll).toBeLessThanOrEqual(0)
+    expect(m.pageScroll).toBeLessThanOrEqual(0)
+    expect(m.inputH).toBeLessThan(2 * m.lh) // one line, cut with an ellipsis
+    expect(m.inputCut).toBe(true)
+    expect(m.itemsOneLine).toBe(true)
+    // Each output keeps its extensions visible, so they stay apart.
+    expect(m.exts).toEqual(['.tags.tsv', '.digest.tsv', '.label.tsv', '.species.tsv', '.massgap.tsv', '.recon.tsv', '.glyco.tsv'])
+    const actions = await page.evaluate(() =>
+      [...document.querySelectorAll('td.hist-actions button')].every((b) => b.getBoundingClientRect().right <= b.closest('td')!.getBoundingClientRect().right + 0.5)
+    )
+    expect(actions).toBe(true)
+    expect(m.itemsInside).toBe(true)
+  })
+
+  test(`${w} px: the recon empty state shows its whole primary button label`, async ({ page }) => {
+    await page.setViewportSize({ width: w, height: 800 })
+    await openApp(page, 'gate')
+    await page.getByRole('radio', { name: /^Characterize a run/ }).check()
+    await page.getByRole('button', { name: 'Choose file…' }).click()
+    await page.getByRole('button', { name: 'Run on run01.mzML' }).click()
+    await page.getByRole('tab', { name: 'Mass gaps & recon' }).click()
+    const btn = page.getByRole('button', { name: 'Choose a FASTA and run again' })
+    await expect(btn).toBeVisible()
+    const fits = await btn.evaluate((b) => b.scrollWidth <= b.clientWidth && b.getBoundingClientRect().right <= window.innerWidth)
+    expect(fits).toBe(true)
+  })
+}
