@@ -13,11 +13,18 @@ the spectra whose tags occur in sequences you supply.
 A reimplementation of the [DirecTag](https://doi.org/10.1021/pr800154p)
 algorithm as an [OpenMS](https://www.openms.de) TOPP tool, parallelised and
 with memory bounded independently of file size on the default path (see
-Performance for the bound and the options that keep per-run state). The citation — Tabb et al.,
-*J. Proteome Res.* 2008, 7:3838 — is for that original DirecTag paper; FASTag
-has no separate publication of its own.
+Performance for the bound and the options that keep per-run state).
 
 What changed in each release: [CHANGELOG.md](CHANGELOG.md).
+
+**How to cite.** Cite the FASTag release you used (GitHub shows the entry from
+[CITATION.cff](CITATION.cff) under "Cite this repository"; the source of every
+release is archived by [Software Heritage](https://archive.softwareheritage.org/browse/origin/?origin_url=https://github.com/okohlbacher/FASTag)),
+together with the DirecTag algorithm (Tabb DL et al., *J. Proteome Res.* 2008,
+7:3838, [doi:10.1021/pr800154p](https://doi.org/10.1021/pr800154p)) and OpenMS
+(Pfeuffer J et al., *Nat. Methods* 2024,
+[doi:10.1038/s41592-024-02197-7](https://doi.org/10.1038/s41592-024-02197-7)).
+A FASTag article is in preparation; this section will name it once it is published.
 
 ## What it does
 
