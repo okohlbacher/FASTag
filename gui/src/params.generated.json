@@ -1622,7 +1622,7 @@
     {
       "name": "version",
       "type": "string",
-      "default": "1.15.0",
+      "default": "1.15.1",
       "description": "Version of the tool that generated this parameters file.",
       "required": false,
       "toppAdvanced": true

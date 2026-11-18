@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 1.15.1 (2026-11-18)
 
 Documentation, packaging and desktop-app fixes for publication as research
 software. Tag output is unchanged.
