@@ -74,6 +74,7 @@ const api: FastagApi = {
   // Native dialogs live in the frontend via the dialog plugin; the backend only
   // ever receives already-chosen paths.
   pickInput: () => openOne(SPECTRA),
+  exampleInput: () => invoke<string>('example_input'),
   pickInputs: async () => {
     const r = await open({ multiple: true, filters: SPECTRA })
     return Array.isArray(r) ? r : []

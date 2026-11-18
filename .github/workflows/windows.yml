@@ -773,6 +773,9 @@ jobs:
           # 1.13 (#24): the -alkylation_proteome proteomes (UniProt, CC BY 4.0).
           cp -r fastag/data/alkylation dist/FASTag/share-FASTag-alkylation
           test -s dist/FASTag/share-FASTag-alkylation/proteomes.tsv
+          # The example run (examples/README.md), next to the executable.
+          cp -r fastag/examples dist/FASTag/examples
+          test -s dist/FASTag/examples/Ecoli_MS2_small.mzML && test -s dist/FASTag/examples/README.md
           # FASTag's licence and the redistributed DLLs' notices (see ci.yml).
           cp fastag/LICENSE dist/FASTag/LICENSE
           PY=$(command -v python3 || command -v python)
@@ -964,6 +967,8 @@ jobs:
           # parameters back beside the index, or -species_call decoy refuses.
           cp fastag/data/taxonomy/species_call.tsv dist/FASTag/share-FASTag-taxonomy/
           test -s dist/FASTag/share-FASTag-taxonomy/species_call.tsv
+          # Its provenance, checked (see ci.yml's identical step).
+          python fastag/tools/check_taxonomy_manifest.py dist/FASTag/share-FASTag-taxonomy "fastag/data/taxonomy/manifests/$TAXDB_TAG.json"
           MZ=dist/FASTag/share-OpenMS/examples/ID/Ecoli_MS2_small.mzML
           test -s "$MZ" || { echo "smoke fixture missing from bundle"; exit 1; }
           CLEAN_PATH=$(echo "$PATH" | tr ':' '\n' | grep -viE "openms-install|conda|micromamba" | tr '\n' ':')
@@ -1029,6 +1034,9 @@ jobs:
           cp -r dist/FASTag/share-FASTag-digest "$R/share/FASTag/digest"
           cp -r dist/FASTag/share-FASTag-alkylation "$R/share/FASTag/alkylation"
           cp dist/FASTag/LICENSE dist/FASTag/THIRD-PARTY-NOTICES.txt "$R/"
+          # File > Open Example Data (gui/src-tauri/src/examples.rs).
+          cp -r dist/FASTag/examples "$R/examples"
+          test -s "$R/examples/Ecoli_MS2_small.mzML"
           test -s "$R/bin/FASTag.exe"
           test -s "$R/share/OpenMS/examples/ID/Ecoli_MS2_small.mzML"
           # The CLI the app runs redirects its heap to mimalloc as the zip's
@@ -1066,6 +1074,13 @@ jobs:
           if ($link -like '*\Git\usr\bin\*') { throw "coreutils link.exe shadows MSVC's: $link" }
           Write-Host "linker: $link"
           npm ci;              if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          # GUI-THIRD-PARTY-NOTICES.txt beside the CLI's notices in the app's
+          # resources: the Rust crates of this target, the npm production
+          # packages, the fonts and the NSIS stub, each with its licence text
+          # (tools/gui_third_party_notices.py fails on a missing text).
+          $target = ((rustc -vV) | Select-String '^host: ').ToString().Substring(6).Trim()
+          python ../tools/gui_third_party_notices.py --gui . --target $target --platform windows --out src-tauri/resources/fastag/GUI-THIRD-PARTY-NOTICES.txt
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
           npm run tauri build; if ($LASTEXITCODE) { exit $LASTEXITCODE }
           Get-ChildItem src-tauri/target/release/bundle/nsis/ -ErrorAction SilentlyContinue
 
@@ -1402,7 +1417,7 @@ jobs:
           setup="FASTag-$V-gui-windows-x64-setup.exe"
           cp "$exe" "$setup"
           tools/release_assets.sh check "$V" "$setup" "$(basename "$zip")"
-          gh release create "$TAG" --title "$TAG" --notes "Automated binary upload; release notes pending." 2>/dev/null || true
+          gh release create "$TAG" --title "$TAG" --notes "Automated binary upload; the release notes follow from CHANGELOG.md (ci.yml job release-notes)." 2>/dev/null || true
           gh release upload "$TAG" "$setup" "$zip" --clobber
 
   # ------------------------------------------------- release completeness

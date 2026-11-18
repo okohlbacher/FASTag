@@ -6,6 +6,7 @@
 export type Action =
   | 'open-spectra'
   | 'open-results'
+  | 'open-example'
   | 'export'
   | 'reveal'
   | 'run'
@@ -25,6 +26,7 @@ export type Action =
 export const ACTIONS: readonly Action[] = [
   'open-spectra',
   'open-results',
+  'open-example',
   'export',
   'reveal',
   'run',

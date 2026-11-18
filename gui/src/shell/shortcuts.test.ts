@@ -38,6 +38,7 @@ describe('P2a shortcuts', () => {
     const menu = [
       'open-spectra',
       'open-results',
+      'open-example',
       'export',
       'reveal',
       'run',
