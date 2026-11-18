@@ -449,6 +449,9 @@ def appimage_section(listing: list[tuple[Path, bool]], texts: Texts, missing: li
         texts.add(f"{pkg} {ver}", f"/usr/share/doc/{base}/copyright", text)
         for lic in sorted(set(re.findall(r"/usr/share/common-licenses/([A-Za-z0-9.+_-]+)", text))):
             lp = Path("/usr/share/common-licenses") / lic.rstrip(".")
+            if not lp.is_file() and lp.name.endswith(".0"):
+                # Some copyright files cite GPL-2.0 / GPL-3.0; Debian ships GPL-2 / GPL-3.
+                lp = lp.with_name(lp.name[:-2])
             if lp.is_file():
                 texts.add(f"{pkg} {ver}", f"/usr/share/common-licenses/{lp.name}", read(lp))
             else:
