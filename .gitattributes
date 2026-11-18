@@ -2,6 +2,8 @@
 # indexed mzML fixtures (byte offsets), compare outputs with stored sha256s
 # and check byte lengths; the shipped tables are read as LF text.
 test/fixtures/** -text
+# The shipped example run is an indexed mzML (byte offsets); bundles check its sha256.
+examples/** -text
 data/** -text
 
 # Frozen benchmark bytes participate in the provenance hashes. Empty final TSV
