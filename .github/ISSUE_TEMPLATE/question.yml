@@ -1,0 +1,24 @@
+name: Question
+description: Ask how to use FASTag or how to read its output.
+labels: [question]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        The README, doc/TUTORIAL.md and the desktop app's Help panel (F1) answer many questions.
+  - type: textarea
+    id: question
+    attributes:
+      label: Question
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: FASTag version and platform
+      placeholder: "1.15.0, macOS 15, desktop app"
+  - type: textarea
+    id: context
+    attributes:
+      label: Command line, input and output (if relevant)
+      render: text
