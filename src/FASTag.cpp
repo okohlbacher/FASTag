@@ -1174,8 +1174,12 @@ TOPPFASTag::ExitCodes TOPPFASTag::main_(int, const char**)
   const bool survey_ppm = getStringOption_("delta_name_tolerance_unit") == "ppm";
   if (delta_sites)
   {
-    survey_unimod = FASTag::ShiftSurvey::unimodEntries();
     std::string err;
+    survey_unimod = FASTag::ShiftSurvey::unimodEntries("CHEMISTRY/unimod.xml", &err);
+    if (!err.empty())
+      OPENMS_LOG_WARN << "-delta_out: Unimod not read (" << err << "); the unimod column stays empty."
+                      << std::endl;
+    err.clear();
     survey_psimod = FASTag::ShiftSurvey::psimodEntries("CHEMISTRY/PSI-MOD.obo", &err);
     if (!err.empty())
       OPENMS_LOG_WARN << "-delta_out: PSI-MOD not read (" << err << "); the psimod column stays empty."

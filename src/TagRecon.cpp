@@ -136,12 +136,15 @@ namespace FASTag
       const std::string region =
           idx_->foldedText(w.start + static_cast<uint32_t>(r.region_lo),
                            w.start + static_cast<uint32_t>(r.region_hi) + 1);
-      // Judged at the tolerance of the flank the gap is on, the one that
-      // flank failed: the gap's error is that flank's (on the peptide's
-      // mass scale for the precursor-derived flank), not a share of the gap
-      // itself. 1.15 took ppm of the gap, 0.3 mDa for +15.995 at 20 ppm, so
-      // Oxidation (M) a variable mod came out "?".
-      r.delta_interp = interpretDelta_(r.delta_mass, region, n_ok ? c_tol : n_tol);
+      // Judged in ppm of the flank the gap was measured on (the database
+      // and spectrum flank of the mismatched side, 200 Da at least), not of
+      // the gap: 1.15 took ppm of the gap itself, 0.3 mDa for +15.995 at
+      // 20 ppm, so a variable Oxidation (M) gap came out "?". Not the
+      // peptide-scale tolerance the precursor-derived flank's match uses:
+      // that one bounds a placement, and at 40 mDa it let substitutions
+      // explain isotope and oxidation gaps they are far from.
+      const double gap_flank = n_ok ? std::max(db_c, want_c) : std::max(db_n, want_n);
+      r.delta_interp = interpretDelta_(r.delta_mass, region, tolAt_(std::max(gap_flank, 200.0)));
       if (spec) localize_(r, w, *spec, frag_charges, occ, tag_shift, series);
     }
     out.push_back(std::move(r));

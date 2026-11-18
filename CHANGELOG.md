@@ -13,7 +13,8 @@ software, and the mass-shift survey. Tag output is unchanged; `-recon_out`'s
   and zero evidence are unlocalized); `residues` lists the localized sites,
   with `N-term|X` / `C-term|X` (and `Protein` ...) where b/y ions cannot tell the
   terminal residue from the terminus; `unimod` and `psimod` name the row from
-  Unimod (ModificationsDB) and PSI-MOD (read from `PSI-MOD.obo` with each
+  Unimod (`unimod.xml`, without `custom_mods.xml`'s CUSTOM entries) and
+  PSI-MOD (read from `PSI-MOD.obo` with each
   term's own residue and terminus, including terms ModificationsDB keeps only
   as Unimod aliases), site-compatible with the localized sites, terminal
   entries only on terminal sites, fixed modifications accounted for
@@ -24,15 +25,12 @@ software, and the mass-shift survey. Tag output is unchanged; `-recon_out`'s
   app reads the wider table.
 - **Fix: gap interpretation in ppm.** `delta_interp` judged a gap at ppm of
   the gap's own mass (20 ppm of 15.995 Da = 0.3 mDa; gaps under 1 Da at
-  200 Da), while the gap carries the error of the flank it is measured on. A
+  200 Da), while the gap's error is that of the flank it is measured on. A
   variable Oxidation (M) gap 2 mDa off was therefore `?` (PXD045734: the
   +15.995 rows of `-delta_out`), while Deamidated (+0.984, judged at 200 Da)
-  was named. The gap is now judged at the tolerance of its flank (the
-  peptide's mass for the precursor-derived flank, the flank's own otherwise),
-  as the flank match is. Substitutions are judged the same way, so ppm runs
-  now also read more gaps as `sub:X->Y` (e.g. a +15.995 gap on a region
-  holding S and no searched Oxidation is `sub:S->C`, 18 mDa off); both stay
-  hypotheses. Da runs are unchanged.
+  was named. The gap is now judged in ppm of the mismatched flank's mass
+  (200 Da at least). Substitutions are judged the same way, so ppm runs read
+  more gaps as `sub:X->Y`; both stay hypotheses. Da runs are unchanged.
 
 - **Citation:** `CITATION.cff` and `codemeta.json`; a "How to cite" section in
   the README and on the project page. The repository is archived by Software

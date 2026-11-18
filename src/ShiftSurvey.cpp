@@ -5,7 +5,7 @@
 
 #include "ShiftSurvey.h"
 
-#include <OpenMS/CHEMISTRY/ModificationsDB.h>
+#include <OpenMS/CHEMISTRY/UnimodXMLDataProvider.h>
 #include <OpenMS/CHEMISTRY/ResidueModification.h>
 #include <OpenMS/SYSTEM/File.h>
 
@@ -15,6 +15,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <fstream>
+#include <memory>
 #include <tuple>
 
 using namespace OpenMS;
@@ -66,14 +67,24 @@ namespace FASTag
       return true;
     }
 
-    std::vector<Entry> unimodEntries()
+    std::vector<Entry> unimodEntries(const std::string& path, std::string* error)
     {
+      // Read from the file, not ModificationsDB: the database also holds
+      // custom_mods.xml's CUSTOM0..n (record ids 99900+) and every
+      // modification registered at run time.
       std::vector<Entry> out;
-      const ModificationsDB* db = ModificationsDB::getInstance();
-      const Size n = db->getNumberOfModifications();
-      for (Size i = 0; i < n; ++i)
+      std::vector<std::unique_ptr<ResidueModification>> mods;
+      try
       {
-        const ResidueModification* m = db->getModification(i);
+        mods = UnimodXMLDataProvider(path).loadModifications();
+      }
+      catch (const std::exception& e)
+      {
+        if (error) *error = "cannot read '" + path + "': " + e.what();
+        return out;
+      }
+      for (const auto& m : mods)
+      {
         if (!m || m->getUniModRecordId() <= 0) continue;
         const double mass = m->getDiffMonoMass();
         if (!std::isfinite(mass) || std::fabs(mass) < 1e-9) continue;

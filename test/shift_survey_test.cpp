@@ -191,7 +191,14 @@ int main(int argc, char** argv)
 
   // ---------------------------------------------------------------- Unimod
   const std::vector<SS::Entry> um = SS::unimodEntries();
-  check(um.size() > 500, "Unimod entries enumerated from ModificationsDB");
+  check(um.size() > 500, "Unimod entries read from unimod.xml");
+  {
+    bool custom = false;
+    for (const auto& e : um) custom = custom || e.name.rfind("CUSTOM", 0) == 0;
+    check(!custom, "custom_mods.xml's CUSTOM entries are no Unimod names");
+    std::string err;
+    check(SS::unimodEntries(fixtures + "/no-such.xml", &err).empty() && !err.empty(), "a missing unimod.xml says so");
+  }
   const double tol = 0.005;
   {
     const auto m = SS::match(um, ox + 0.0004, tol, {site("M")}, {}, 50);

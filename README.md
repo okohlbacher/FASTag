@@ -1036,8 +1036,9 @@ precursor's less one) it explains carrying the gap.
   last residue `C-term|X`, with `Protein` in front when the peptide starts
   (position 0, or 1 after an initiator Met) or ends its protein. A one-residue
   region has no rival and is always terminal-ambiguous.
-- **Names.** Unimod entries come from OpenMS's ModificationsDB (`unimod.xml`),
-  one per site specificity; PSI-MOD terms are read from `PSI-MOD.obo` itself
+- **Names.** Unimod entries come from OpenMS's `unimod.xml` (read as
+  ModificationsDB reads it, without `custom_mods.xml`'s CUSTOM entries), one
+  per site specificity; PSI-MOD terms are read from `PSI-MOD.obo` itself
   with their own residue and terminus, since ModificationsDB keeps a PSI-MOD
   term that cross-references Unimod only as an alias of the Unimod entry.
   Cross-link terms (two origins), obsolete terms and terms on any residue (`X`)

@@ -71,9 +71,20 @@ namespace FASTag
     /// The inverse of siteKey; false for anything else.
     bool parseSiteKey(const std::string& key, Site& out);
 
-    /// Every Unimod entry OpenMS's ModificationsDB holds (record id > 0, a
-    /// non-zero mass), one per site specificity.
-    std::vector<Entry> unimodEntries();
+    /**
+      @brief The Unimod entries of a unimod.xml, one per site specificity.
+
+      Read with OpenMS's UnimodXMLDataProvider, as ModificationsDB reads it,
+      but from the file alone: ModificationsDB also holds custom_mods.xml's
+      CUSTOM entries and modifications registered at run time. Kept: a record
+      id, a non-zero mass, a residue or a terminus.
+
+      @param[in] path the file (absolute, or resolved as OpenMS::File::find does)
+      @param[out] error why nothing was read, when the file cannot be read
+      @return the entries
+    */
+    std::vector<Entry> unimodEntries(const std::string& path = "CHEMISTRY/unimod.xml",
+                                     std::string* error = nullptr);
 
     /**
       @brief The PSI-MOD terms of an OBO file, read with their own specificity.
