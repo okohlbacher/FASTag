@@ -70,6 +70,17 @@ software, and the mass-shift survey. Tag output is unchanged; `-recon_out`'s
   shows small E-values as in the Tags table (they were cut off); the Overview prints small q-values in scientific notation; the History
   table keeps long file names on one line; the Mass gaps empty-state button
   shows its full label.
+- **Run QC report (`-qc_out`):** new opt-in key/value report (section `qc`
+  after the `run` rows): spectra per MS level and analyser class
+  (ITMS/FTMS/TOF, from the filter string or the instrument configuration;
+  MS1 counted from metadata), resolution as stated by the file and measured
+  as m/z / FWHM on sampled profile spectra by m/z band (`n/a` for centroids),
+  the precursor charge histogram, isobaric reporter kits from OpenMS's TMT
+  6/10/11/16/18 and iTRAQ 4/8 tables (present, absent or not assessable, with
+  the compatible kits), tag yield at E <= 0.01 and the share of redundant MS2
+  (complete-linkage clusters by precursor, charge, 60 s, mobility and
+  fragment cosine; and by best tag). Thread-independent; other outputs
+  unchanged. See README, Run QC report.
 
 ## 1.15.0 (2026-11-16)
 
