@@ -36,6 +36,9 @@ namespace FASTag
       Term term = Term::ANYWHERE;
       double mass = 0.0; ///< monoisotopic shift relative to the unmodified residue (Da)
       int unimod = 0;    ///< PSI-MOD only: the Unimod record it cross-references, 0 = none
+      /// Unimod only: classification "Isotopic label" (Label:15N(1), Label:13C(1)...);
+      /// such an entry never outranks the isotope-error reading (isotopeError()).
+      bool label = false;
     };
 
     /// The site class of one localized gap.
@@ -141,8 +144,11 @@ namespace FASTag
       on carbamidomethyl-Cys.
 
       One match per (accession, fixed), its sites merged (a Unimod accession
-      has one entry per site). Sorted by |error|, then support (the localized
-      spectra on its sites, from @p support), then accession; at most @p cap.
+      has one entry per site). Sorted by support (the localized spectra on
+      its sites, from @p support; most first), then |error|, then accession;
+      at most @p cap. Unimod and PSI-MOD are ranked alike: within the
+      tolerance the entry that explains more of the row's localized
+      spectra comes first, and mass error breaks ties.
 
       @param[in] entries the catalogue
       @param[in] delta the gap (Da)
@@ -166,6 +172,57 @@ namespace FASTag
       @return the cell
     */
     std::string format(const std::vector<Match>& matches, bool psimod, double ppm_of);
+
+    /// The 13C - 12C mass difference (Da), the step of a precursor or flank isotope error.
+    constexpr double C13_STEP = 1.0033548378;
+
+    /**
+      @brief The isotope-error reading of a row, "13C+1(+0.4ppm)", or "-".
+
+      A row whose delta is within @p tol_da of k * C13_STEP (k = 1 or 2,
+      the nearer) reads as an isotope error, unless a residue-specific
+      catalogue name explains it better: a match in @p names (as match()
+      returns them, uncapped) that is not an isotopic label, sits on a
+      residue (not an origin-X terminal entry), has a smaller |error| than
+      the isotope step and carries at least half of the row's @p localized
+      spectra. Deamidation (+0.984, 19 mDa below +1.003) on N/Q-localized
+      rows therefore keeps its name and no isotope reading.
+
+      @param[in] delta the row's delta (Da)
+      @param[in] tol_da the name tolerance (Da)
+      @param[in] names the row's Unimod matches
+      @param[in] localized the row's localized spectra
+      @param[in] ppm_of the mass a ppm error is relative to; <= 0 writes mDa
+      @return the cell
+    */
+    std::string isotopeError(double delta, double tol_da, const std::vector<Match>& names,
+                             std::uint64_t localized, double ppm_of);
+
+    /// One -delta_out row: its centre bin and the bins it takes.
+    struct BinGroup
+    {
+      std::int64_t center = 0;
+      std::vector<std::int64_t> bins;  ///< ascending, center included
+    };
+
+    /**
+      @brief Group histogram bins into -delta_out rows.
+
+      @p width > 0 (bins): seeds in order of count (most first, then lower
+      key) each take every bin not yet taken within @p width bins of
+      themselves; no chaining, so a row spans at most 2 * width + 1 bins and
+      every bin (and spectrum) goes to exactly one row. Deterministic.
+
+      @p width == 0: the 1.15 rule, reproduced exactly: a bin no neighbour
+      exceeds is a row and takes its strictly smaller neighbours (a valley
+      between two rows goes to the lower one); a bin that is neither is left
+      out.
+
+      @param[in] counts spectra per bin key
+      @param[in] width the half-width in bins, 0 for the 1.15 rule
+      @return the rows, by center
+    */
+    std::vector<BinGroup> groupBins(const std::map<std::int64_t, std::uint64_t>& counts, std::int64_t width);
 
     /// "K:41,S:3,N-term|K:12": counts by site key, by count (descending) then key; "-" when empty.
     std::string formatSites(const std::map<std::string, std::uint64_t>& counts);

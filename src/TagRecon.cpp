@@ -143,8 +143,11 @@ namespace FASTag
       // peptide-scale tolerance the precursor-derived flank's match uses:
       // that one bounds a placement, and at 40 mDa it let substitutions
       // explain isotope and oxidation gaps they are far from.
-      const double gap_flank = n_ok ? std::max(db_c, want_c) : std::max(db_n, want_n);
-      r.delta_interp = interpretDelta_(r.delta_mass, region, tolAt_(std::max(gap_flank, 200.0)));
+      const double gap_flank = std::max(n_ok ? std::max(db_c, want_c) : std::max(db_n, want_n), 200.0);
+      const double tol = tolAt_(gap_flank);
+      const double sub_tol =
+          sub_tol_ > 0 ? std::min(tol, sub_ppm_ ? gap_flank * sub_tol_ * 1e-6 : sub_tol_) : tol;
+      r.delta_interp = interpretDelta_(r.delta_mass, region, tol, sub_tol);
       if (spec) localize_(r, w, *spec, frag_charges, occ, tag_shift, series);
     }
     out.push_back(std::move(r));
@@ -272,7 +275,8 @@ namespace FASTag
     localize_(r, w, spec, frag_charges, occ, tag_shift, series);
   }
 
-  std::string TagReconciler::interpretDelta_(double delta, const std::string& region, double tol) const
+  std::string TagReconciler::interpretDelta_(double delta, const std::string& region, double tol,
+                                             double sub_tol) const
   {
     // Two hypotheses, both localized to `region`:
     //   modification -- delta ~= a candidate mod's shift, and the region carries a
@@ -313,7 +317,7 @@ namespace FASTag
         const double my = residue_masses_[static_cast<unsigned char>(*y)];
         if (my <= 0) continue;
         const double err = std::fabs(delta - (my - mx));
-        if (err < best_err)  // strict: mods win ties
+        if (err <= sub_tol && err < best_err)  // strict: mods win ties
         {
           best_err = err; best_is_mod = false;
           best = std::string("sub:") + x + "->" + *y;

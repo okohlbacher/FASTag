@@ -227,6 +227,21 @@ namespace FASTag
     */
     void setFixedTermMods(double nterm, double cterm) { fixed_n_ = nterm; fixed_c_ = cterm; }
 
+    /**
+      @brief Sets the tolerance of a "sub:X->Y" gap interpretation (1.16).
+
+      Residue mass differences are dense at the mDa scale (190 of them), so
+      at the fragment tolerance a ppm run read most unexplained gaps as some
+      substitution (+2.004 as sub:P->V, 11.7 mDa off). A substitution is
+      judged at this tolerance, in ppm of the same flank the gap is on (as
+      the modification reading) or in Da, and never looser than the fragment
+      tolerance. 0 judges substitutions at the fragment tolerance (1.15).
+
+      @param[in] tol the tolerance, 0 = the fragment tolerance
+      @param[in] ppm whether @p tol is in ppm of the flank (else Da)
+    */
+    void setSubstitutionTolerance(double tol, bool ppm) { sub_tol_ = tol; sub_ppm_ = ppm; }
+
   private:
     double tolAt_(double m) const { return tol_ppm_ ? m * frag_tol_ * 1e-6 : frag_tol_; }
     /// The database flank masses tryPlace compares an occurrence with (the
@@ -249,8 +264,9 @@ namespace FASTag
     /// "?" if neither fits within tolerance. Prefers whichever fits with the
     /// smaller mass error; on a near-tie a modification wins (it is the more
     /// common explanation).
-    /// @p tol is the tolerance of the flank the gap is on (see tryPlace_).
-    std::string interpretDelta_(double delta, const std::string& region, double tol) const;
+    /// @p tol is the tolerance of the flank the gap is on (see tryPlace_);
+    /// @p sub_tol the (tighter) one of a substitution (setSubstitutionTolerance).
+    std::string interpretDelta_(double delta, const std::string& region, double tol, double sub_tol) const;
 
     double frag_tol_;
     bool   tol_ppm_;
@@ -260,6 +276,8 @@ namespace FASTag
     double residue_masses_[128] = {0};  ///< by ASCII code, unmodified
     std::vector<ModCandidate> mods_;    ///< candidate variable mods for gap interpretation
     double fixed_n_ = 0, fixed_c_ = 0;  ///< fixed peptide N-/C-terminal mod masses
+    double sub_tol_ = 0;     ///< substitution tolerance, 0 = the fragment tolerance
+    bool   sub_ppm_ = true;  ///< sub_tol_ in ppm of the flank (else Da)
     const ProteomeIndex* idx_ = nullptr;    ///< the index queries run against
   };
 }

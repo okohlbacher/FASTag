@@ -4,10 +4,11 @@
 
 Documentation, packaging and desktop-app fixes for publication as research
 software, and the mass-shift survey. Tag output is unchanged; `-recon_out`'s
-`delta_interp` changes in ppm runs (fix below).
+`delta_interp` changes (the ppm fix and the substitution tolerance below), and
+so do `-delta_out`'s rows (`-delta_group`).
 
-- **Mass-shift survey (`-delta_out`):** five columns appended, the first three
-  unchanged. `localized` and `unlocalized` count the spectra whose gap the
+- **Mass-shift survey (`-delta_out`):** five columns appended (six with
+  `isotope_error`, below). `localized` and `unlocalized` count the spectra whose gap the
   fragments do or do not place on one site, judged by site-determining
   evidence only (ions that distinguish the chosen site from the others; ties
   and zero evidence are unlocalized); `residues` lists the localized sites,
@@ -23,14 +24,39 @@ software, and the mass-shift survey. Tag output is unchanged; `-recon_out`'s
   median peptide mass, or Da). The selected placement is localized whether or
   not `-recon_localize` is given. Candidates, not FDR-controlled. The desktop
   app reads the wider table.
+- **Mass-shift survey, second pass** (development runs PXD045734 donor 4068):
+  - PSI-MOD names ranked like Unimod: by the localized spectra on their sites,
+    then by mass error (both columns were mass error first). Generic and
+    abstract PSI-MOD terms are left out: children of MOD:00008 "common"
+    (MOD:00565 "glycosylated asparagine" named deamidation before MOD:00684
+    "deamidated L-asparagine") and origin-X classes other terms are `is_a` of
+    (MOD:00400 "deamidated residue").
+  - `-recon_sub_tolerance` (5) / `-recon_sub_tolerance_unit` (ppm of the
+    gap's flank, or Da): a `sub:X->Y` reading of a gap needs this tolerance,
+    never looser than the fragment tolerance; with the ppm fix below most
+    unexplained gaps of a 20 ppm run read as some substitution (+2.004 as
+    `sub:P->V`, 11.7 mDa off). `0` keeps 1.15's behaviour. Changes
+    `delta_interp` and `top_interps`.
+  - `-delta_group` (0.004 Da): `-delta_out` rows group the 0.5 mDa bins
+    around the most populated ones, without chaining, every sampled spectrum
+    in one row (the 1.15 rule could leave bins out); one shift, one row.
+    `-delta_group 0` writes the 1.15 rows. Changes the first three columns
+    at the default.
+  - `isotope_error` column (appended): `13C+1` / `13C+2` for rows at 1 or 2 x
+    1.00336 Da that no better residue-specific, non-label Unimod name explains;
+    deamidation rows keep their name.
+  - `-delta_spectra_out`: each spectrum's sample (native ID, gap, row,
+    interpretation, peptide, site), for spectrum-level comparison with a
+    search engine.
 - **Fix: gap interpretation in ppm.** `delta_interp` judged a gap at ppm of
   the gap's own mass (20 ppm of 15.995 Da = 0.3 mDa; gaps under 1 Da at
   200 Da), while the gap's error is that of the flank it is measured on. A
   variable Oxidation (M) gap 2 mDa off was therefore `?` (PXD045734: the
   +15.995 rows of `-delta_out`), while Deamidated (+0.984, judged at 200 Da)
   was named. The gap is now judged in ppm of the mismatched flank's mass
-  (200 Da at least). Substitutions are judged the same way, so ppm runs read
-  more gaps as `sub:X->Y`; both stay hypotheses. Da runs are unchanged.
+  (200 Da at least). Substitutions were judged the same way, which read many
+  gaps as `sub:X->Y`; they now have their own tolerance
+  (`-recon_sub_tolerance`, above). Both stay hypotheses.
 
 - **Citation:** `CITATION.cff` and `codemeta.json`; a "How to cite" section in
   the README and on the project page. The repository is archived by Software

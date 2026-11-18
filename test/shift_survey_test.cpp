@@ -21,7 +21,10 @@
 #include <algorithm>
 #include <cmath>
 #include <cstdint>
+#include <cstddef>
 #include <iostream>
+#include <map>
+#include <set>
 #include <string>
 #include <vector>
 
@@ -255,7 +258,7 @@ int main(int argc, char** argv)
     std::string err;
     const auto pm = SS::psimodEntries(fixtures + "/psimod_mini.obo", &err);
     check(err.empty(), "fixture read: " + err);
-    check(pm.size() == 5, "5 of 8 fixture terms kept (obsolete, origin X anywhere, cross-link left out)");
+    check(pm.size() == 6, "6 of 11 fixture terms kept (obsolete, origin X anywhere, cross-link, common, class left out)");
     const SS::Entry* metO = nullptr;
     const SS::Entry* dha = nullptr;
     const SS::Entry* pyro = nullptr;
@@ -281,6 +284,12 @@ int main(int argc, char** argv)
     const auto x = SS::match(pm, ox, tol, {site("M")}, {}, 5);
     check(SS::format(x, true, 1000.0) == "MOD:00719 oxidation to L-methionine sulfoxide@M(+0.0ppm)", "PSI-MOD format");
     check(SS::psimodEntries(fixtures + "/no-such.obo", &err).empty() && !err.empty(), "a missing file says so");
+    // 1.16: deamidation is named MOD:00684, not the "common" placeholder
+    // MOD:00565 ("glycosylated asparagine", Unimod 7's N-glycosylation
+    // site) nor the residue-generic class MOD:00400.
+    const auto dm = SS::match(pm, 0.984016, tol, {site("N"), site("N-term|N")}, {}, 5);
+    check(!dm.empty() && dm.front().entry->acc == "MOD:00684", "deamidation on N: MOD:00684 first");
+    check(!hasAcc(dm, "MOD:00565") && !hasAcc(dm, "MOD:00400"), "MOD:00565 and MOD:00400 never name a row");
   }
   {  // the shipped PSI-MOD.obo: Unimod-linked terms are entries here, not just aliases
     std::string err;
@@ -290,6 +299,96 @@ int main(int argc, char** argv)
     for (const auto& e : pm)
       if (e.acc == "MOD:00189" && e.unimod == 23) linked = true;
     check(linked, "shipped PSI-MOD: MOD:00189 with its Unimod:23 link");
+    bool common = false, generic = false, specific = false;
+    for (const auto& e : pm)
+    {
+      common = common || e.acc == "MOD:00565";
+      generic = generic || e.acc == "MOD:00400";
+      specific = specific || e.acc == "MOD:00684";
+    }
+    check(!common && !generic && specific, "shipped PSI-MOD: MOD:00565 and MOD:00400 left out, MOD:00684 kept");
+    const std::vector<std::uint64_t> nq = {28, 23};
+    const auto dm = SS::match(pm, 0.9860, 0.01, {site("N"), site("Q")}, {}, 5, &nq);
+    check(dm.size() >= 2 && dm[0].entry->acc == "MOD:00684" && dm[1].entry->acc == "MOD:00685",
+          "shipped PSI-MOD at +0.986 on N 28 / Q 23: MOD:00684, then MOD:00685");
+  }
+
+  // ------------------------------------------------- ranking (1.16)
+  {
+    // Support first, then mass error: on 9 M and 1 W localized spectra at
+    // +15.995, Oxidation (M/W) ranks before an entry 0.1 mDa nearer that
+    // fits W alone.
+    SS::Entry near{"TEST:1", "NearW", 'W', SS::Term::ANYWHERE, ox + 0.0001};
+    SS::Entry oxm{"TEST:2", "OxM", 'M', SS::Term::ANYWHERE, ox};
+    SS::Entry oxw{"TEST:2", "OxM", 'W', SS::Term::ANYWHERE, ox};
+    const std::vector<SS::Entry> cat = {near, oxm, oxw};
+    const std::vector<std::uint64_t> sup = {9, 1};
+    const auto r = SS::match(cat, ox + 0.0001, tol, {site("M"), site("W")}, {}, 5, &sup);
+    check(r.size() == 2 && r[0].entry->acc == "TEST:2" && r[0].support == 10 && r[1].entry->acc == "TEST:1",
+          "matches by support (10 vs 1) before mass error");
+    const std::vector<std::uint64_t> eq = {1, 1};
+    const std::vector<SS::Entry> cat2 = {oxm, SS::Entry{"TEST:3", "OxM2", 'M', SS::Term::ANYWHERE, ox + 0.002}};
+    const auto r2 = SS::match(cat2, ox, tol, {site("M"), site("W")}, {}, 5, &eq);
+    check(r2.size() == 2 && r2[0].entry->acc == "TEST:2", "equal support: the smaller mass error first");
+  }
+
+  // ------------------------------------------------- isotope error (1.16)
+  {
+    const double c13 = SS::C13_STEP;
+    // +1.003 on L/S sites: only a 15N label fits better, and labels never
+    // outrank the isotope reading.
+    const auto l = SS::match(um, c13 + 0.0005, 0.02, {site("L"), site("S")}, {}, SIZE_MAX);
+    check(SS::isotopeError(c13 + 0.0005, 0.02, l, 2, 1000.0) == "13C+1(+0.5ppm)", "+1.0039 on L/S: 13C+1");
+    check(SS::isotopeError(2 * c13 - 0.001, 0.02, {}, 0, 0.0) == "13C+2(-1.0mDa)", "+2.0057: 13C+2 in mDa");
+    check(SS::isotopeError(1.5, 0.02, {}, 0, 0.0) == "-", "+1.5: no isotope reading");
+    // Deamidation (+0.984) on N/Q-localized spectra keeps its name: 19 mDa
+    // below +1.003, it is the better-fitting residue-specific name.
+    const std::vector<std::uint64_t> nq = {30, 20};
+    const auto d = SS::match(um, 0.9850, 0.02, {site("N"), site("Q")}, {}, SIZE_MAX, &nq);
+    check(SS::isotopeError(0.9850, 0.02, d, 50, 2000.0) == "-", "+0.985 on N/Q: deamidation, no isotope reading");
+    // ... but a +0.995 row localized mostly to L has no such name.
+    const std::vector<std::uint64_t> mostlyL = {2, 18};
+    const auto mix = SS::match(um, 0.9950, 0.02, {site("N"), site("L")}, {}, SIZE_MAX, &mostlyL);
+    check(SS::isotopeError(0.9950, 0.02, mix, 20, 2000.0).rfind("13C+1(", 0) == 0,
+          "+0.995 on 18 L / 2 N: the isotope reading (Deamidated holds 2 of 20)");
+    // At ppm the two stay apart: 0.984 is 19 mDa from 13C+1, outside 5 ppm of 2000 Da.
+    check(SS::isotopeError(0.9840, 0.010, {}, 0, 2000.0) == "-", "+0.984 is no isotope error at 10 mDa");
+  }
+
+  // ------------------------------------------------- row grouping (1.16)
+  {
+    // bins (0.5 mDa): a deamidation-like spread 1960..1980 and an isotope
+    // peak at 2006..2008.
+    std::map<std::int64_t, std::uint64_t> c = {{1960, 2}, {1964, 10}, {1965, 3}, {1966, 1}, {1970, 40},
+                                                {1971, 30}, {1972, 5}, {1975, 2}, {1980, 1},
+                                                {2006, 4}, {2007, 9}, {2008, 3}};
+    std::uint64_t total = 0;
+    for (const auto& kv : c) total += kv.second;
+    const auto g = SS::groupBins(c, 8);
+    std::uint64_t sum = 0;
+    std::set<std::int64_t> seen;
+    bool once = true;
+    for (const auto& r : g)
+      for (std::int64_t b : r.bins) { sum += c.at(b); once = once && seen.insert(b).second; }
+    check(sum == total && once && seen.size() == c.size(), "grouping: every bin in exactly one row");
+    check(g.size() == 4 && g[0].center == 1960 && g[1].center == 1970 && g[2].center == 1980 && g[3].center == 2007,
+          "grouping 4 mDa: rows at 1960, 1970, 1980 and 2007");
+    check(g[1].bins == std::vector<std::int64_t>({1964, 1965, 1966, 1970, 1971, 1972, 1975}),
+          "the 1970 seed takes the bins within 8 of it; 1980 (10 away) is not chained in");
+    check(SS::groupBins(c, 8).size() == g.size(), "grouping is deterministic");
+    // 1.15 rule at width 0: local maxima and their smaller neighbours only.
+    const auto old = SS::groupBins(c, 0);
+    std::vector<std::int64_t> centers;
+    for (const auto& r : old) centers.push_back(r.center);
+    check(centers == std::vector<std::int64_t>({1960, 1964, 1970, 1975, 1980, 2007}),
+          "width 0: the 1.15 local maxima");
+    check(old[1].bins == std::vector<std::int64_t>({1964, 1965}) && old[2].bins == std::vector<std::int64_t>({1970, 1971}) &&
+              old[5].bins == std::vector<std::int64_t>({2006, 2007, 2008}),
+          "width 0: a peak takes its strictly smaller neighbours");
+    std::uint64_t kept = 0;
+    for (const auto& r : old)
+      for (std::int64_t b : r.bins) kept += c.at(b);
+    check(kept == total - 1 - 5, "width 0 drops 1966 and 1972 (neither a peak nor next to one), as 1.15 did");
   }
 
   if (failures == 0) std::cout << "shift_survey_test: all checks passed\n";

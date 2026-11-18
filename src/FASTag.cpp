@@ -387,6 +387,7 @@ TOPPFASTag::ExitCodes TOPPFASTag::main_(int, const char**)
         {"taxdb", nullptr},
         {"out_spectra", nullptr},
         {"delta_out", nullptr},
+        {"delta_spectra_out", nullptr},
         {"recon_id_out", nullptr},
         {"usi_collection", nullptr},
         {"digest_out", nullptr},
@@ -735,6 +736,7 @@ TOPPFASTag::ExitCodes TOPPFASTag::main_(int, const char**)
 
   const std::string recon_out = getStringOption_("recon_out");
   const std::string delta_out = getStringOption_("delta_out");
+  const std::string delta_spectra_out = getStringOption_("delta_spectra_out");
   // recon_on: -recon_out is written. place_on: tags are placed on the
   // database (the index is built, every tag reconciled, the delta sample
   // taken), whether or not -recon_out is written. Every reader of the
@@ -770,6 +772,11 @@ TOPPFASTag::ExitCodes TOPPFASTag::main_(int, const char**)
   {
     OPENMS_LOG_ERROR << "-delta_out requires -recon_out (the histogram is "
                         "aggregated over reconciliations)." << std::endl;
+    return ILLEGAL_PARAMETERS;
+  }
+  if (!delta_spectra_out.empty() && delta_out.empty())
+  {
+    OPENMS_LOG_ERROR << "-delta_spectra_out requires -delta_out (it lists that table's samples)." << std::endl;
     return ILLEGAL_PARAMETERS;
   }
   const bool recon_loc = getFlag_("recon_localize");
@@ -1104,6 +1111,8 @@ TOPPFASTag::ExitCodes TOPPFASTag::main_(int, const char**)
       if (m.variable) cands.push_back({m.name, m.delta, std::string(1, m.residue)});
     recon.setModCandidates(std::move(cands));
     recon.setFixedTermMods(fixed_term_n, fixed_term_c);
+    recon.setSubstitutionTolerance(getDoubleOption_("recon_sub_tolerance"),
+                                   getStringOption_("recon_sub_tolerance_unit") == "ppm");
     if (recon_ids_on)
     {
       // The modifications the index was built with: residue ones only. A
@@ -1168,6 +1177,8 @@ TOPPFASTag::ExitCodes TOPPFASTag::main_(int, const char**)
   // classed; each row is named from Unimod (ModificationsDB) and PSI-MOD
   // (the OBO file read with its own specificity, ShiftSurvey.h).
   const bool delta_sites = !delta_out.empty();
+  const bool delta_per_spectrum = !delta_spectra_out.empty();
+  const int64_t delta_group_bins = static_cast<int64_t>(std::llround(getDoubleOption_("delta_group") / 0.0005));
   std::vector<FASTag::ShiftSurvey::Entry> survey_unimod, survey_psimod;
   std::vector<FASTag::ShiftSurvey::FixedMod> survey_fixed;
   const double survey_tol = getDoubleOption_("delta_name_tolerance");
@@ -2485,6 +2496,7 @@ TOPPFASTag::ExitCodes TOPPFASTag::main_(int, const char**)
     guard.output("out_spectra", out_spectra);
     guard.output("recon_out", recon_out);
     guard.output("delta_out", delta_out);
+    guard.output("delta_spectra_out", delta_spectra_out);
     guard.output("recon_id_out", recon_id_out);
     guard.output("digest_out", digest_out);
     guard.output("label_out", label_out);
@@ -2702,6 +2714,12 @@ TOPPFASTag::ExitCodes TOPPFASTag::main_(int, const char**)
     bool gap = false;
     std::string site;
     double pep_mass = 0.0;
+    // -delta_spectra_out only: the spectrum, the placement and the site.
+    size_t index = 0;
+    std::string native_id, peptide;
+    int site_pos = -1;  ///< 0-based in peptide, -1 = none
+    int loc_evidence = 0;
+    double evalue = 0.0;
   };
   // Per-thread accumulators, summed after the loop. One cache-line-aligned
   // struct per thread, so neighbouring threads' counters never share a line.
@@ -3289,6 +3307,15 @@ TOPPFASTag::ExitCodes TOPPFASTag::main_(int, const char**)
                                     ? FASTag::ShiftSurvey::siteKey(site)
                                     : std::string();
             delta_sample.pep_mass = chosen.pep_mass;
+            if (delta_per_spectrum)
+            {
+              delta_sample.index = index;
+              delta_sample.native_id = spec.getNativeID();
+              delta_sample.peptide = chosen.peptide;
+              delta_sample.site_pos = delta_sample.gap ? chosen.loc_pos : -1;
+              delta_sample.loc_evidence = chosen.loc_evidence;
+              delta_sample.evalue = t.evalue;
+            }
           }
           delta_e = t.evalue;
           delta_have = true;
@@ -4350,39 +4377,35 @@ TOPPFASTag::ExitCodes TOPPFASTag::main_(int, const char**)
           OPENMS_LOG_ERROR << "Cannot open output file " << delta_out << " for writing." << std::endl;
           return CANNOT_WRITE_OUTPUT_FILE;
         }
-        dtsv << "delta\tspectra\ttop_interps\tlocalized\tresidues\tunlocalized\tunimod\tpsimod\n";
+        dtsv << "delta\tspectra\ttop_interps\tlocalized\tresidues\tunlocalized\tunimod\tpsimod\tisotope_error\n";
       }
-      std::set<int64_t> absorbed;
-      for (const auto& kv : bins)
+      // Rows (ShiftSurvey::groupBins): -delta_group > 0 groups the bins
+      // around the most populated ones, every bin in one row; 0 keeps the
+      // 1.15 local-maximum rows.
+      namespace SS = FASTag::ShiftSurvey;
+      std::map<int64_t, uint64_t> bin_counts;
+      for (const auto& kv : bins) bin_counts[kv.first] = kv.second.first;
+      const std::vector<SS::BinGroup> groups = SS::groupBins(bin_counts, delta_group_bins);
+      std::map<int64_t, int64_t> row_of;  // bin -> its row's center (-delta_spectra_out)
+      for (const SS::BinGroup& g : groups)
       {
-        if (absorbed.count(kv.first)) continue;
-        auto lo = bins.find(kv.first - 1), hi = bins.find(kv.first + 1);
-        const uint64_t nl = lo != bins.end() ? lo->second.first : 0;
-        const uint64_t nh = hi != bins.end() ? hi->second.first : 0;
-        if (kv.second.first < nl || kv.second.first < nh) continue;  // not the local max
-        uint64_t count = kv.second.first;
-        std::map<std::string, uint64_t> interps = kv.second.second;
+        const auto& kv = *bins.find(g.center);
+        uint64_t count = 0;
+        std::map<std::string, uint64_t> interps;
         SiteBin row_sites;
-        auto addSites = [&](int64_t key) {
-          if (!delta_sites) return;
+        for (int64_t key : g.bins)
+        {
+          const auto& b = bins.at(key);
+          count += b.first;
+          for (const auto& ip : b.second) interps[ip.first] += ip.second;
+          if (delta_per_spectrum) row_of[key] = g.center;
+          if (!delta_sites) continue;
           const auto it = site_bins.find(key);
-          if (it == site_bins.end()) return;
+          if (it == site_bins.end()) continue;
           for (const auto& sc : it->second.sites) row_sites.sites[sc.first] += sc.second;
           row_sites.unloc += it->second.unloc;
           row_sites.masses.insert(row_sites.masses.end(), it->second.masses.begin(), it->second.masses.end());
-        };
-        addSites(kv.first);
-        for (auto* nb : {lo != bins.end() ? &*lo : nullptr, hi != bins.end() ? &*hi : nullptr})
-          // A valley bin between two peaks goes to the first (lower-delta)
-          // one only: counted twice, the rows summed to more spectra than
-          // were sampled.
-          if (nb && nb->second.first < kv.second.first && !absorbed.count(nb->first))
-          {
-            count += nb->second.first;
-            for (const auto& ip : nb->second.second) interps[ip.first] += ip.second;
-            absorbed.insert(nb->first);
-            addSites(nb->first);
-          }
+        }
         // top 3 interpretations by count, deterministic tie-break on name
         std::vector<std::pair<uint64_t, std::string>> ranked;
         for (const auto& ip : interps) ranked.emplace_back(ip.second, ip.first);
@@ -4409,7 +4432,6 @@ TOPPFASTag::ExitCodes TOPPFASTag::main_(int, const char**)
         {
           // 1.16 survey columns. Names only for a localized site; the
           // tolerance in ppm is of the row's median peptide mass.
-          namespace SS = FASTag::ShiftSurvey;
           uint64_t nloc = 0;
           std::vector<SS::Site> sites;
           std::vector<uint64_t> support;
@@ -4429,13 +4451,60 @@ TOPPFASTag::ExitCodes TOPPFASTag::main_(int, const char**)
           const double tol_da = survey_ppm ? survey_tol * ref * 1e-6 : survey_tol;
           const double row_delta = kv.first * 0.0005;
           constexpr size_t NAME_CAP = 5;
-          const auto um = SS::match(survey_unimod, row_delta, tol_da, sites, survey_fixed, NAME_CAP, &support);
+          // Uncapped for the isotope reading (a better-supported name past the cap counts too).
+          auto um = SS::match(survey_unimod, row_delta, tol_da, sites, survey_fixed, SIZE_MAX, &support);
+          const std::string iso = SS::isotopeError(row_delta, tol_da, um, nloc, survey_ppm ? ref : 0.0);
+          if (um.size() > NAME_CAP) um.resize(NAME_CAP);
           const auto pm = SS::match(survey_psimod, row_delta, tol_da, sites, survey_fixed, NAME_CAP, &support);
           dtsv << '\t' << nloc << '\t' << SS::formatSites(row_sites.sites) << '\t' << row_sites.unloc << '\t'
                << SS::format(um, false, survey_ppm ? ref : 0.0) << '\t'
-               << SS::format(pm, true, survey_ppm ? ref : 0.0);
+               << SS::format(pm, true, survey_ppm ? ref : 0.0) << '\t' << iso;
         }
         dtsv << '\n';
+      }
+      if (delta_per_spectrum)
+      {
+        // One line per sampled spectrum, in input order; a spectrum in a
+        // bin no 1.15 row took (-delta_group 0) has row "-".
+        std::vector<const DeltaSample*> all;
+        all.reserve(samples);
+        for (const PerThread& pt : per_thread)
+          for (const auto& d : pt.delta) all.push_back(&d);
+        std::sort(all.begin(), all.end(), [](const DeltaSample* a, const DeltaSample* b) { return a->index < b->index; });
+        std::ofstream stsv(delta_spectra_out.c_str());
+        if (!stsv)
+        {
+          OPENMS_LOG_ERROR << "Cannot open output file " << delta_spectra_out << " for writing." << std::endl;
+          return CANNOT_WRITE_OUTPUT_FILE;
+        }
+        stsv << "spectrum\tdelta\trow\tinterp\tpeptide\tsite\tsite_pos\tlocalized\tloc_evidence\tevalue\n";
+        char num[64];
+        for (const DeltaSample* d : all)
+        {
+          const int64_t key = static_cast<int64_t>(std::llround(d->delta / 0.0005));
+          const auto r = row_of.find(key);
+          stsv << d->native_id << '\t';
+          std::snprintf(num, sizeof num, "%.6f\t", d->delta);
+          stsv << num;
+          if (r != row_of.end())
+          {
+            std::snprintf(num, sizeof num, "%.4f", r->second * 0.0005);
+            stsv << num;
+          }
+          else stsv << '-';
+          stsv << '\t' << (d->interp.empty() ? "-" : d->interp) << '\t' << d->peptide << '\t';
+          if (d->site_pos >= 0 && d->site_pos < static_cast<int>(d->peptide.size()))
+            stsv << d->peptide[static_cast<size_t>(d->site_pos)] << '\t' << d->site_pos + 1;
+          else stsv << "-\t-";
+          std::snprintf(num, sizeof num, "%.3g", d->evalue);
+          stsv << '\t' << (d->site.empty() ? "-" : d->site) << '\t' << d->loc_evidence << '\t' << num << '\n';
+        }
+        stsv.close();
+        if (stsv.fail())
+        {
+          OPENMS_LOG_ERROR << "Failed writing " << delta_spectra_out << "." << std::endl;
+          return CANNOT_WRITE_OUTPUT_FILE;
+        }
       }
       if (write_delta)
       {

@@ -923,6 +923,30 @@ void TOPPFASTag::registerOptionsAndFlags_()
                         "(a gap carries the error of a flank, on the peptide's mass scale), or Da",
                         false, true);
   setValidStrings_("delta_name_tolerance_unit", ListUtils::create<std::string>("ppm,Da"));
+  registerDoubleOption_("delta_group", "<Da>", 0.004,
+                        "Group -delta_out's 0.5 mDa bins into rows: the most populated bin takes every bin "
+                        "within this many Da, then the next, without chaining, so one shift is one row and "
+                        "every sampled spectrum is counted in exactly one row. 0 = the 1.15 rows (a local "
+                        "maximum and its two smaller neighbours)",
+                        false, true);
+  setMinFloat_("delta_group", 0.0);
+  registerOutputFile_("delta_spectra_out", "<file>", "",
+                      "The -delta_out sample of every spectrum (requires -delta_out): native ID, its gap, "
+                      "the row it is counted in, the interpretation, the placement's peptide, the site "
+                      "and whether it is localized. Candidates, NOT identifications",
+                      false, true);
+  setValidFormats_("delta_spectra_out", ListUtils::create<std::string>("tsv"));
+  registerDoubleOption_("recon_sub_tolerance", "<tol>", 5.0,
+                        "Tolerance of a substitution reading (sub:X->Y) of a reconciled gap, never looser "
+                        "than -fragment_tolerance: residue mass differences are dense at the mDa scale. "
+                        "In -recon_sub_tolerance_unit; 0 = -fragment_tolerance (1.15)",
+                        false, true);
+  setMinFloat_("recon_sub_tolerance", 0.0);
+  registerStringOption_("recon_sub_tolerance_unit", "<unit>", "ppm",
+                        "Unit of -recon_sub_tolerance: ppm of the flank the gap is on (as the "
+                        "modification reading), or Da",
+                        false, true);
+  setValidStrings_("recon_sub_tolerance_unit", ListUtils::create<std::string>("ppm,Da"));
 }
 
 bool TOPPFASTag::optionNonDefault_(const std::string& name) const

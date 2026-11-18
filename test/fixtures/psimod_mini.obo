@@ -4,6 +4,9 @@ remark: Test fixture for test/shift_survey_test.cpp: five terms copied from
 remark: OpenMS's share/OpenMS/CHEMISTRY/PSI-MOD.obo (pinned 70cebcd144), cut
 remark: to the fields FASTag reads, plus three synthetic terms that must be
 remark: left out (obsolete, origin X without a terminus, a cross-link).
+remark: 1.16: MOD:00565 (a child of MOD:00008 "common", left out), MOD:00684
+remark: (kept) and MOD:00400 (a residue-generic class: origin X, the parent
+remark: of MOD:00684, left out), cut the same way.
 
 [Term]
 id: MOD:00719
@@ -72,6 +75,32 @@ def: "A protein modification that effectively cross-links an L-cysteine residue 
 property_value: DiffMono: "-18.010565"
 property_value: Origin: "C, S"
 property_value: TermSpec: "none"
+
+[Term]
+id: MOD:00565
+name: glycosylated asparagine
+def: "modification from UniMod N-linked glycosylation" [UniMod:7 "site"]
+property_value: DiffMono: "0.984016"
+property_value: Origin: "N"
+property_value: TermSpec: "none"
+is_a: MOD:00008 ! common
+
+[Term]
+id: MOD:00684
+name: deamidated L-asparagine
+def: "A protein modification that effectively converts an L-asparagine residue to L-aspartic acid." [RESID:AA0004 "resulting", UniMod:7 "site"]
+property_value: DiffMono: "0.984016"
+property_value: Origin: "N"
+property_value: TermSpec: "none"
+is_a: MOD:00400 ! deamidated residue
+
+[Term]
+id: MOD:00400
+name: deamidated residue
+def: "A protein modification that effectively replaces a carboxamido group with a carboxyl group." [DeltaMass:32, UniMod:7]
+property_value: DiffMono: "0.984016"
+property_value: Origin: "X"
+property_value: TermSpec: "N-term"
 
 [Typedef]
 id: contains

@@ -16,6 +16,7 @@
 #include <cstdlib>
 #include <fstream>
 #include <memory>
+#include <set>
 #include <tuple>
 
 using namespace OpenMS;
@@ -93,6 +94,7 @@ namespace FASTag
         e.name = m->getId();
         e.origin = m->getOrigin();
         e.mass = mass;
+        e.label = m->getSourceClassification() == ResidueModification::ISOTOPIC_LABEL;
         switch (m->getTermSpecificity())
         {
           case ResidueModification::N_TERM: e.term = Term::N_TERM; break;
@@ -139,10 +141,15 @@ namespace FASTag
         double mass = 0.0;
         bool has_mass = false, obsolete = false;
         int unimod = 0;
+        std::vector<std::string> is_a;
       };
-      void keep(const Term_& t, std::vector<Entry>& out)
+      /// MOD:00008 "common": Unimod-derived placeholders standing for RESID entries.
+      const char* const COMMON = "MOD:00008";
+      void keep(const Term_& t, const std::set<std::string>& parents, std::vector<Entry>& out)
       {
         if (t.id.rfind("MOD:", 0) != 0 || t.obsolete || !t.has_mass) return;
+        if (std::find(t.is_a.begin(), t.is_a.end(), COMMON) != t.is_a.end()) return;  // abstract
+        if (t.origin == "X" && parents.count(t.id)) return;  // a residue-generic class
         if (!std::isfinite(t.mass) || std::fabs(t.mass) < 1e-9) return;
         if (t.origin.size() != 1 || !std::isalpha(static_cast<unsigned char>(t.origin[0]))) return;
         Entry e;
@@ -178,6 +185,10 @@ namespace FASTag
         if (error) *error = "cannot read '" + resolved + "'";
         return out;
       }
+      // Two passes: the terms, then those kept (a class is known only once
+      // every is_a naming it has been read).
+      std::vector<Term_> terms;
+      std::set<std::string> parents;
       Term_ t;
       bool in_term = false;
       std::string line;
@@ -186,7 +197,7 @@ namespace FASTag
         if (!line.empty() && line.back() == '\r') line.pop_back();
         if (!line.empty() && line[0] == '[')
         {
-          if (in_term) keep(t, out);
+          if (in_term) terms.push_back(std::move(t));
           t = Term_();
           in_term = line == "[Term]";
           continue;
@@ -199,6 +210,12 @@ namespace FASTag
         if (key == "id") t.id = rest;
         else if (key == "name") t.name = rest;
         else if (key == "is_obsolete") t.obsolete = rest == "true";
+        else if (key == "is_a")
+        {
+          const std::string parent = trim(rest.substr(0, rest.find('!')));
+          t.is_a.push_back(parent);
+          parents.insert(parent);
+        }
         else if (key == "def")
         {
           // The Unimod cross-reference sits in the def's source list,
@@ -223,7 +240,8 @@ namespace FASTag
           else if ((pk == "Unimod" || pk == "UniMod") && !t.unimod) t.unimod = std::atoi(pv.c_str());
         }
       }
-      if (in_term) keep(t, out);
+      if (in_term) terms.push_back(std::move(t));
+      for (const Term_& x : terms) keep(x, parents, out);
       return out;
     }
 
@@ -304,9 +322,9 @@ namespace FASTag
         all.push_back(std::move(m));
       }
       std::sort(all.begin(), all.end(), [](const Match& a, const Match& b) {
+        if (a.support != b.support) return a.support > b.support;
         const double ea = std::fabs(a.error), eb = std::fabs(b.error);
         if (ea != eb) return ea < eb;
-        if (a.support != b.support) return a.support > b.support;
         return std::tie(a.entry->acc, a.fixed) < std::tie(b.entry->acc, b.fixed);
       });
       if (all.size() > cap) all.resize(cap);
@@ -346,6 +364,78 @@ namespace FASTag
         o += num;
       }
       return o;
+    }
+
+    std::string isotopeError(double delta, double tol_da, const std::vector<Match>& names,
+                             std::uint64_t localized, double ppm_of)
+    {
+      int k = 0;
+      double err = 0.0;
+      for (int i = 1; i <= 2; ++i)
+      {
+        const double e = delta - i * C13_STEP;
+        if (std::fabs(e) <= tol_da && (!k || std::fabs(e) < std::fabs(err))) { k = i; err = e; }
+      }
+      if (!k) return "-";
+      for (const Match& m : names)
+      {
+        if (!m.entry || m.entry->label || m.entry->origin == 'X') continue;
+        if (std::fabs(m.error) >= std::fabs(err)) continue;
+        if (2 * m.support >= localized && m.support > 0) return "-";  // a better residue-specific name
+      }
+      char num[48];
+      if (ppm_of > 0) std::snprintf(num, sizeof num, "13C+%d(%+.1fppm)", k, err / ppm_of * 1e6);
+      else std::snprintf(num, sizeof num, "13C+%d(%+.1fmDa)", k, err * 1e3);
+      return num;
+    }
+
+    std::vector<BinGroup> groupBins(const std::map<std::int64_t, std::uint64_t>& counts, std::int64_t width)
+    {
+      std::vector<BinGroup> out;
+      if (width <= 0)
+      {
+        // 1.15: local maxima take their strictly smaller neighbours.
+        std::set<std::int64_t> absorbed;
+        for (const auto& kv : counts)
+        {
+          if (absorbed.count(kv.first)) continue;
+          const auto lo = counts.find(kv.first - 1), hi = counts.find(kv.first + 1);
+          const std::uint64_t nl = lo != counts.end() ? lo->second : 0;
+          const std::uint64_t nh = hi != counts.end() ? hi->second : 0;
+          if (kv.second < nl || kv.second < nh) continue;
+          BinGroup g;
+          g.center = kv.first;
+          for (const auto& nb : {lo, hi})
+            if (nb != counts.end() && nb->second < kv.second && !absorbed.count(nb->first))
+            {
+              g.bins.push_back(nb->first);
+              absorbed.insert(nb->first);
+            }
+          g.bins.push_back(kv.first);
+          std::sort(g.bins.begin(), g.bins.end());
+          out.push_back(std::move(g));
+        }
+        return out;
+      }
+      std::vector<std::pair<std::uint64_t, std::int64_t>> order;
+      order.reserve(counts.size());
+      for (const auto& kv : counts) order.emplace_back(kv.second, kv.first);
+      std::sort(order.begin(), order.end(), [](const auto& a, const auto& b) {
+        return a.first != b.first ? a.first > b.first : a.second < b.second;
+      });
+      std::set<std::int64_t> taken;
+      for (const auto& seed : order)
+      {
+        if (taken.count(seed.second)) continue;
+        BinGroup g;
+        g.center = seed.second;
+        for (auto it = counts.lower_bound(seed.second - width);
+             it != counts.end() && it->first <= seed.second + width; ++it)
+          if (taken.insert(it->first).second) g.bins.push_back(it->first);
+        out.push_back(std::move(g));
+      }
+      std::sort(out.begin(), out.end(), [](const BinGroup& a, const BinGroup& b) { return a.center < b.center; });
+      return out;
     }
 
     std::string formatSites(const std::map<std::string, std::uint64_t>& counts)
