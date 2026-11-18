@@ -101,13 +101,16 @@ namespace FASTag
       std::string name;
     };
 
-    /// One catalogue entry that fits a gap on one site.
+    /// One catalogue entry that fits a gap, with the sites it fits on.
     struct Match
     {
       const Entry* entry = nullptr;
-      std::string site;   ///< "M", "N-term", "N-term Q", "Protein N-term", "C-term G"
+      /// Site labels, most-supported first: "M", "N-term", "N-term Q",
+      /// "Protein N-term", "C-term G".
+      std::vector<std::string> sites;
       std::string fixed;  ///< the fixed mod the entry replaces ("" = on top of it / none)
       double error = 0.0; ///< gap - (entry mass - fixed mass), Da
+      std::uint64_t support = 0;  ///< localized spectra on those sites
     };
 
     /**
@@ -126,8 +129,9 @@ namespace FASTag
       with @c fixed set), e.g. Cys->Dha (-33.988 vs Cys) is a gap of -91.009
       on carbamidomethyl-Cys.
 
-      Sorted by |error|, then accession, then site; one match per (accession,
-      site, fixed); at most @p cap.
+      One match per (accession, fixed), its sites merged (a Unimod accession
+      has one entry per site). Sorted by |error|, then support (the localized
+      spectra on its sites, from @p support), then accession; at most @p cap.
 
       @param[in] entries the catalogue
       @param[in] delta the gap (Da)
@@ -135,14 +139,15 @@ namespace FASTag
       @param[in] sites the localized sites
       @param[in] fixed the fixed residue modifications
       @param[in] cap the most matches returned
+      @param[in] support localized spectra per site (parallel to @p sites), or nullptr for 1 each
       @return the matches
     */
     std::vector<Match> match(const std::vector<Entry>& entries, double delta, double tol_da,
                              const std::vector<Site>& sites, const std::vector<FixedMod>& fixed,
-                             std::size_t cap);
+                             std::size_t cap, const std::vector<std::uint64_t>* support = nullptr);
 
     /**
-      @brief "Oxidation@M(+0.4ppm);Cys->Dha@C[-Carbamidomethyl](-1.2ppm)", or "-" when empty.
+      @brief "Oxidation@M/W(+0.4ppm);Cys->Dha@C[-Carbamidomethyl](-1.2ppm)", or "-" when empty.
 
       @param[in] matches the matches, as match() returns them
       @param[in] psimod write PSI-MOD form ("MOD:00719 name@M(...)") instead of the Unimod name

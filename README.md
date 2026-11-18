@@ -960,7 +960,7 @@ reported tag on the database.
 | `localized` | spectra whose gap the fragments place on one site class (the sum of `residues`) |
 | `residues` | `site:count` pairs separated by `,`, most frequent first (ties by name), localized spectra only: a residue (`K`), or a terminal-ambiguous site (`N-term\|K`, `C-term\|R`, `Protein N-term\|M`, `Protein C-term\|L`); `-` when none |
 | `unlocalized` | spectra with a gap and no site-determining evidence (no fragment tells the chosen site from another, or a tie); exact placements count in neither column |
-| `unimod` | Unimod entries within `-delta_name_tolerance` of `delta` on a site of `residues`, best first, at most 5: `Name@Site(error)`, e.g. `Oxidation@M(+0.4ppm)`, `Acetyl@N-term(-1.2ppm)`, `Gln->pyro-Glu@N-term Q(…)`; `[-Fixed]` marks an entry that replaces the residue's fixed modification (below); `-` when none |
+| `unimod` | Unimod entries within `-delta_name_tolerance` of `delta` on a site of `residues`, at most 5, by mass error, then by the localized spectra on their sites: `Name@Site/Site(error)`, sites most-supported first, e.g. `Oxidation@M/W(+0.4ppm)`, `Acetyl@Protein N-term/K(-1.2ppm)`, `Gln->pyro-Glu@N-term Q(…)`; `[-Fixed]` marks an entry that replaces the residue's fixed modification (below); `-` when none |
 | `psimod` | the same for PSI-MOD terms: `MOD:accession name@Site(error)` |
 
 These columns are candidates, not identifications: nothing in them is
@@ -1044,7 +1044,9 @@ precursor's less one) it explains carrying the gap.
   without a terminus are left out. A residue site takes the entries on that
   residue; a terminal-ambiguous site also takes the entries of its terminus
   (`N-term`/`C-term`, the `Protein` ones only at the protein's terminus), never
-  an entry on another residue. Sorted by mass error, at most five per column.
+  an entry on another residue. One entry per accession with the sites it fits
+  (most localized spectra first); sorted by mass error, then by those spectra,
+  at most five per column.
   The tolerance is `-delta_name_tolerance` (default 10 ppm of the row's median
   peptide mass); the error is written in ppm of that mass (mDa with `Da`).
 - **Fixed modifications.** Database residues carry the fixed modifications,

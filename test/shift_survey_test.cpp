@@ -18,7 +18,9 @@
 #include <OpenMS/CONCEPT/Constants.h>
 #include <OpenMS/KERNEL/MSSpectrum.h>
 
+#include <algorithm>
 #include <cmath>
+#include <cstdint>
 #include <iostream>
 #include <string>
 #include <vector>
@@ -71,7 +73,9 @@ namespace
               const std::string& fixed = "-")
   {
     for (const auto& m : ms)
-      if (m.entry->acc == acc && (site.empty() || m.site == site) && (fixed == "-" || m.fixed == fixed)) return true;
+      if (m.entry->acc == acc && (site.empty() || std::find(m.sites.begin(), m.sites.end(), site) != m.sites.end()) &&
+          (fixed == "-" || m.fixed == fixed))
+        return true;
     return false;
   }
   SS::Site site(const std::string& key)
@@ -193,11 +197,21 @@ int main(int argc, char** argv)
     const auto m = SS::match(um, ox + 0.0004, tol, {site("M")}, {}, 50);
     const SS::Match* oxm = nullptr;
     for (const auto& x : m)
-      if (x.entry->acc == "UNIMOD:35" && x.site == "M") oxm = &x;
+      if (x.entry->acc == "UNIMOD:35" && x.sites == std::vector<std::string>{"M"}) oxm = &x;
     check(oxm != nullptr, "Oxidation@M names +15.995 on M");
     check(oxm && SS::format({*oxm}, false, 1000.0) == "Oxidation@M(+0.4ppm)", "format: name@site(ppm)");
     check(oxm && SS::format({*oxm}, false, 0.0) == "Oxidation@M(+0.4mDa)", "format: mDa without a ppm scale");
     check(SS::match(um, ox + 0.0004, tol, {site("M")}, {}, 1).size() == 1, "the cap holds");
+    // One match per accession, its sites by support.
+    const std::vector<std::uint64_t> support = {1, 5, 2};
+    const auto g = SS::match(um, ox, tol, {site("W"), site("M"), site("N-term|M")}, {}, 50, &support);
+    const SS::Match* gm = nullptr;
+    size_t n35 = 0;
+    for (const auto& x : g)
+      if (x.entry->acc == "UNIMOD:35") { gm = &x; ++n35; }
+    check(n35 == 1 && gm && gm->sites == std::vector<std::string>({"M", "W"}) && gm->support == 8,
+          "Oxidation once, on M (5 + 2 from N-term|M) before W (1)");
+    check(gm && SS::format({*gm}, false, 0.0) == "Oxidation@M/W(+0.0mDa)", "format: sites joined by /");
   }
   {  // wrong residue: Unimod has Oxidation on no A, and on G only at the C-term
     check(!hasAcc(SS::match(um, ox, tol, {site("A")}, {}, 50), "UNIMOD:35"), "Oxidation@A rejected");

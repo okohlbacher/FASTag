@@ -15,7 +15,6 @@
 #include <cstdio>
 #include <cstdlib>
 #include <fstream>
-#include <set>
 #include <tuple>
 
 using namespace OpenMS;
@@ -219,16 +218,37 @@ namespace FASTag
 
     std::vector<Match> match(const std::vector<Entry>& entries, double delta, double tol_da,
                              const std::vector<Site>& sites, const std::vector<FixedMod>& fixed,
-                             std::size_t cap)
+                             std::size_t cap, const std::vector<std::uint64_t>* support)
     {
-      std::vector<Match> all;
       auto fixedOn = [&](char res) -> const FixedMod* {
         const char r = res == 'I' ? 'L' : res;  // the alphabet folds I to L (resolveMods_)
         for (const FixedMod& f : fixed)
           if (f.residue == r || f.residue == res) return &f;
         return nullptr;
       };
-      for (const Site& s : sites)
+      // (accession, fixed) -> the match and its support per site label.
+      struct Acc
+      {
+        Match m;
+        std::map<std::string, std::uint64_t> by_site;
+      };
+      std::map<std::pair<std::string, std::string>, Acc> found;
+      auto add = [&](const Entry& e, const std::string& label, const std::string& fixed_name, double err,
+                     std::uint64_t n) {
+        Acc& a = found[std::make_pair(e.acc, fixed_name)];
+        if (!a.m.entry || std::fabs(err) < std::fabs(a.m.error) ||
+            (std::fabs(err) == std::fabs(a.m.error) && e.name < a.m.entry->name))
+        {
+          a.m.entry = &e;
+          a.m.error = err;
+          a.m.fixed = fixed_name;
+        }
+        a.by_site[label] += n;
+      };
+      for (std::size_t si = 0; si < sites.size(); ++si)
+      {
+        const Site& s = sites[si];
+        const std::uint64_t n = support && si < support->size() ? (*support)[si] : 1;
         for (const Entry& e : entries)
         {
           std::string label;
@@ -241,39 +261,45 @@ namespace FASTag
           }
           else
           {
-            const bool n = e.term == Term::N_TERM || e.term == Term::PROTEIN_N_TERM;
+            const bool nt = e.term == Term::N_TERM || e.term == Term::PROTEIN_N_TERM;
             const bool prot = e.term == Term::PROTEIN_N_TERM || e.term == Term::PROTEIN_C_TERM;
-            if (s.kind != (n ? 'N' : 'C')) continue;
+            if (s.kind != (nt ? 'N' : 'C')) continue;
             if (prot && !s.protein_term) continue;
             if (e.origin != 'X' && e.origin != s.residue) continue;
-            label = std::string(prot ? "Protein " : "") + (n ? "N-term" : "C-term");
+            label = std::string(prot ? "Protein " : "") + (nt ? "N-term" : "C-term");
             if (e.origin != 'X') { label += ' '; label += e.origin; }
             on_residue = e.origin != 'X';
           }
           const double err = delta - e.mass;
-          if (std::fabs(err) <= tol_da) all.push_back({&e, label, std::string(), err});
+          if (std::fabs(err) <= tol_da) add(e, label, std::string(), err, n);
           const FixedMod* f = on_residue ? fixedOn(s.residue) : nullptr;
           if (f)
           {
             const double err2 = delta - (e.mass - f->mass);
-            if (std::fabs(err2) <= tol_da) all.push_back({&e, label, f->name, err2});
+            if (std::fabs(err2) <= tol_da) add(e, label, f->name, err2, n);
           }
         }
+      }
+      std::vector<Match> all;
+      for (auto& kv : found)
+      {
+        Match m = kv.second.m;
+        std::vector<std::pair<std::uint64_t, std::string>> v;
+        for (const auto& sc : kv.second.by_site) { v.emplace_back(sc.second, sc.first); m.support += sc.second; }
+        std::sort(v.begin(), v.end(), [](const auto& a, const auto& b) {
+          return a.first != b.first ? a.first > b.first : a.second < b.second;
+        });
+        for (const auto& x : v) m.sites.push_back(x.second);
+        all.push_back(std::move(m));
+      }
       std::sort(all.begin(), all.end(), [](const Match& a, const Match& b) {
         const double ea = std::fabs(a.error), eb = std::fabs(b.error);
         if (ea != eb) return ea < eb;
-        return std::tie(a.entry->acc, a.site, a.fixed, a.entry->name) <
-               std::tie(b.entry->acc, b.site, b.fixed, b.entry->name);
+        if (a.support != b.support) return a.support > b.support;
+        return std::tie(a.entry->acc, a.fixed) < std::tie(b.entry->acc, b.fixed);
       });
-      std::vector<Match> out;
-      std::set<std::tuple<std::string, std::string, std::string>> seen;
-      for (const Match& m : all)
-      {
-        if (out.size() >= cap) break;
-        if (!seen.insert(std::make_tuple(m.entry->acc, m.site, m.fixed)).second) continue;
-        out.push_back(m);
-      }
-      return out;
+      if (all.size() > cap) all.resize(cap);
+      return all;
     }
 
     namespace
@@ -298,7 +324,11 @@ namespace FASTag
         if (psimod) o += m.entry->acc + ' ';
         o += clean(m.entry->name);
         o += '@';
-        o += m.site;
+        for (std::size_t i = 0; i < m.sites.size(); ++i)
+        {
+          if (i) o += '/';
+          o += m.sites[i];
+        }
         if (!m.fixed.empty()) o += "[-" + clean(m.fixed) + "]";
         if (ppm_of > 0) std::snprintf(num, sizeof num, "(%+.1fppm)", m.error / ppm_of * 1e6);
         else std::snprintf(num, sizeof num, "(%+.1fmDa)", m.error * 1e3);

@@ -4408,11 +4408,12 @@ TOPPFASTag::ExitCodes TOPPFASTag::main_(int, const char**)
           namespace SS = FASTag::ShiftSurvey;
           uint64_t nloc = 0;
           std::vector<SS::Site> sites;
+          std::vector<uint64_t> support;
           for (const auto& sc : row_sites.sites)
           {
             nloc += sc.second;
             SS::Site st;
-            if (SS::parseSiteKey(sc.first, st)) sites.push_back(st);
+            if (SS::parseSiteKey(sc.first, st)) { sites.push_back(st); support.push_back(sc.second); }
           }
           double ref = 0.0;
           if (!row_sites.masses.empty())
@@ -4424,8 +4425,8 @@ TOPPFASTag::ExitCodes TOPPFASTag::main_(int, const char**)
           const double tol_da = survey_ppm ? survey_tol * ref * 1e-6 : survey_tol;
           const double row_delta = kv.first * 0.0005;
           constexpr size_t NAME_CAP = 5;
-          const auto um = SS::match(survey_unimod, row_delta, tol_da, sites, survey_fixed, NAME_CAP);
-          const auto pm = SS::match(survey_psimod, row_delta, tol_da, sites, survey_fixed, NAME_CAP);
+          const auto um = SS::match(survey_unimod, row_delta, tol_da, sites, survey_fixed, NAME_CAP, &support);
+          const auto pm = SS::match(survey_psimod, row_delta, tol_da, sites, survey_fixed, NAME_CAP, &support);
           dtsv << '\t' << nloc << '\t' << SS::formatSites(row_sites.sites) << '\t' << row_sites.unloc << '\t'
                << SS::format(um, false, survey_ppm ? ref : 0.0) << '\t'
                << SS::format(pm, true, survey_ppm ? ref : 0.0);
