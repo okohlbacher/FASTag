@@ -278,5 +278,6 @@ reduction, not protein identification (README, Protein shortlist and search hand
 
 ## Desktop app
 
-<!-- TODO(coordinator): screenshots of the same Part 1 run in the desktop app
-     (Setup with 0.3 Da, Results -> Tags, the tolerance warning and "Re-run with 0.3 Da"). -->
+The same Part 1 run in the desktop app, with screenshots: [MANUAL.md](MANUAL.md). In the app,
+**File > Open Example Data** selects `Ecoli_MS2_small.mzML`; choose the **Ion trap CID 0.3 Da**
+preset and run.
