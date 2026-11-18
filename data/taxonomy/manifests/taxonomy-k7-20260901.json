@@ -1,0 +1,628 @@
+{
+ "manifest_version": 1,
+ "status": "RECONSTRUCTED on 2026-11-18, after the fact: this index was built before tools/fetch_reference_set.py recorded a manifest. Every value below was measured on the shipped files or recovered from kept build inputs; values that could not be recovered are null and listed under not_recovered.",
+ "data_release": "taxonomy-k7-20260901",
+ "tarball": {
+  "name": "FASTag-taxonomy-k7.tar.gz",
+  "sha256": "520d93229df807e45b0e6fdf4d8d20c7aad95b73952749cb041c3e54de474a4b",
+  "bytes": 449530421,
+  "release_created": "2026-09-01T08:51:46Z"
+ },
+ "index": {
+  "file": "tax_k7.taxdb",
+  "sha256": "34427bba2c3ba3240805d4e5266443fcdc4708e0131eb96ea4dfbb4dda771a4f",
+  "bytes": 1138145846,
+  "format": "FTX2",
+  "format_version": 2,
+  "k": 7,
+  "taxa": 50,
+  "kmers": 112925595,
+  "postings": 234740438,
+  "key_bytes": 4,
+  "taxon_bytes": 1,
+  "measured_on": "the copy unpacked from the release tarball at /ceph/ibmi/abi/oliver/opt/fastag-1.11.0/FASTag/share-FASTag-taxonomy (data); CI checks the sha256 against the downloaded tarball on every embed"
+ },
+ "files": {
+  "tax_k7.taxdb": {
+   "sha256": "34427bba2c3ba3240805d4e5266443fcdc4708e0131eb96ea4dfbb4dda771a4f",
+   "bytes": 1138145846
+  },
+  "nodes.dmp": {
+   "sha256": "d20f4f5b38e195c1ad77beef1f82296b96bab18588808c9c7527730928cdcecf",
+   "bytes": 10316
+  },
+  "names.dmp": {
+   "sha256": "397b70d74a91a8e0b46eb68e46f8669296d90396d01a472a71f0c8585df7cb2b",
+   "bytes": 18912
+  }
+ },
+ "uniprot": {
+  "uniprot_release": null,
+  "uniprot_release_date": null,
+  "fetch_window": "2026-07-24 (reference set and fetcher committed, 5bc76484; the commit message says the index ships as a release asset) to 2026-09-01 (data release created)",
+  "source": "UniProt reference proteomes, canonical one-protein-per-gene FASTA, current_release at fetch time (knowledgebase/reference_proteomes/<superkingdom>/<UP>/<UP>_<taxid>.fasta.gz)",
+  "licence": "CC BY 4.0 (https://creativecommons.org/licenses/by/4.0/); The UniProt Consortium",
+  "reference_set": "data/taxonomy/reference-set.tsv",
+  "reference_set_sha256_at_5bc76484": "98899e9056e20a04f99687a04b26f6de3f6a33c0d1ba5bc02677add0b57f0510",
+  "reference_set_sha256_now": "85c689e4f48d2d112c57f170d2336afcf51f14facba5ca8c4707e1af3b7c6f03",
+  "reference_set_note": "changed since only by the project rename (57a7a7b8); same 50 taxa"
+ },
+ "proteomes": [
+  {
+   "taxid": 9606,
+   "label": "Homo_sapiens",
+   "category": "model",
+   "fetched_taxid": 9606,
+   "proteome_resolved_2026_11_18": "UP000005640",
+   "postings_in_index": 9716900,
+   "url": null,
+   "fasta_sha256": null,
+   "entries": null
+  },
+  {
+   "taxid": 10090,
+   "label": "Mus_musculus",
+   "category": "model",
+   "fetched_taxid": 10090,
+   "proteome_resolved_2026_11_18": "UP000000589",
+   "postings_in_index": 9855271,
+   "url": null,
+   "fasta_sha256": null,
+   "entries": null
+  },
+  {
+   "taxid": 10116,
+   "label": "Rattus_norvegicus",
+   "category": "model",
+   "fetched_taxid": 10116,
+   "proteome_resolved_2026_11_18": "UP000002494",
+   "postings_in_index": 9859530,
+   "url": null,
+   "fasta_sha256": null,
+   "entries": null
+  },
+  {
+   "taxid": 7955,
+   "label": "Danio_rerio",
+   "category": "model",
+   "fetched_taxid": 7955,
+   "proteome_resolved_2026_11_18": "UP000000437",
+   "postings_in_index": 12204224,
+   "url": null,
+   "fasta_sha256": null,
+   "entries": null
+  },
+  {
+   "taxid": 7227,
+   "label": "Drosophila_melanogaster",
+   "category": "model",
+   "fetched_taxid": 7227,
+   "proteome_resolved_2026_11_18": "UP000000803",
+   "postings_in_index": 6772755,
+   "url": null,
+   "fasta_sha256": null,
+   "entries": null
+  },
+  {
+   "taxid": 6239,
+   "label": "Caenorhabditis_elegans",
+   "category": "model",
+   "fetched_taxid": 6239,
+   "proteome_resolved_2026_11_18": "UP000001940",
+   "postings_in_index": 7285573,
+   "url": null,
+   "fasta_sha256": null,
+   "entries": null
+  },
+  {
+   "taxid": 559292,
+   "label": "Saccharomyces_cerevisiae_S288C",
+   "category": "model",
+   "fetched_taxid": 559292,
+   "proteome_resolved_2026_11_18": "UP000002311",
+   "postings_in_index": 2631391,
+   "url": null,
+   "fasta_sha256": null,
+   "entries": null
+  },
+  {
+   "taxid": 284812,
+   "label": "Schizosaccharomyces_pombe",
+   "category": "model",
+   "fetched_taxid": 284812,
+   "proteome_resolved_2026_11_18": "UP000002485",
+   "postings_in_index": 2247667,
+   "url": null,
+   "fasta_sha256": null,
+   "entries": null
+  },
+  {
+   "taxid": 3702,
+   "label": "Arabidopsis_thaliana",
+   "category": "model",
+   "fetched_taxid": 3702,
+   "proteome_resolved_2026_11_18": "UP000006548",
+   "postings_in_index": 9123129,
+   "url": null,
+   "fasta_sha256": null,
+   "entries": null
+  },
+  {
+   "taxid": 8364,
+   "label": "Xenopus_tropicalis",
+   "category": "model",
+   "fetched_taxid": 8364,
+   "proteome_resolved_2026_11_18": "UP000008143",
+   "postings_in_index": 10200986,
+   "url": null,
+   "fasta_sha256": null,
+   "entries": null
+  },
+  {
+   "taxid": 9031,
+   "label": "Gallus_gallus",
+   "category": "model",
+   "fetched_taxid": 9031,
+   "proteome_resolved_2026_11_18": "UP000000539",
+   "postings_in_index": 8658394,
+   "url": null,
+   "fasta_sha256": null,
+   "entries": null
+  },
+  {
+   "taxid": 44689,
+   "label": "Dictyostelium_discoideum",
+   "category": "model",
+   "fetched_taxid": 44689,
+   "proteome_resolved_2026_11_18": "UP000002195",
+   "postings_in_index": 5373126,
+   "url": null,
+   "fasta_sha256": null,
+   "entries": null
+  },
+  {
+   "taxid": 3055,
+   "label": "Chlamydomonas_reinhardtii",
+   "category": "model",
+   "fetched_taxid": 3055,
+   "proteome_resolved_2026_11_18": "UP000006906",
+   "postings_in_index": 9304779,
+   "url": null,
+   "fasta_sha256": null,
+   "entries": null
+  },
+  {
+   "taxid": 367110,
+   "label": "Neurospora_crassa",
+   "category": "model",
+   "fetched_taxid": 367110,
+   "proteome_resolved_2026_11_18": "UP000001805",
+   "postings_in_index": 4713419,
+   "url": null,
+   "fasta_sha256": null,
+   "entries": null
+  },
+  {
+   "taxid": 237561,
+   "label": "Candida_albicans",
+   "category": "model",
+   "fetched_taxid": 237561,
+   "proteome_resolved_2026_11_18": "UP000000559",
+   "postings_in_index": 2785387,
+   "url": null,
+   "fasta_sha256": null,
+   "entries": null
+  },
+  {
+   "taxid": 227321,
+   "label": "Aspergillus_nidulans",
+   "category": "model",
+   "fetched_taxid": 227321,
+   "proteome_resolved_2026_11_18": "UP000000560",
+   "postings_in_index": 4803606,
+   "url": null,
+   "fasta_sha256": null,
+   "entries": null
+  },
+  {
+   "taxid": 36329,
+   "label": "Plasmodium_falciparum_3D7",
+   "category": "model",
+   "fetched_taxid": 36329,
+   "proteome_resolved_2026_11_18": "UP000001450",
+   "postings_in_index": 3421159,
+   "url": null,
+   "fasta_sha256": null,
+   "entries": null
+  },
+  {
+   "taxid": 185431,
+   "label": "Trypanosoma_brucei",
+   "category": "model",
+   "fetched_taxid": 185431,
+   "proteome_resolved_2026_11_18": "UP000008524",
+   "postings_in_index": 3920244,
+   "url": null,
+   "fasta_sha256": null,
+   "entries": null
+  },
+  {
+   "taxid": 4577,
+   "label": "Zea_mays",
+   "category": "model",
+   "fetched_taxid": 4577,
+   "proteome_resolved_2026_11_18": "UP000007305",
+   "postings_in_index": 10259929,
+   "url": null,
+   "fasta_sha256": null,
+   "entries": null
+  },
+  {
+   "taxid": 39947,
+   "label": "Oryza_sativa_japonica",
+   "category": "model",
+   "fetched_taxid": 39947,
+   "proteome_resolved_2026_11_18": "UP000059680",
+   "postings_in_index": 10680827,
+   "url": null,
+   "fasta_sha256": null,
+   "entries": null
+  },
+  {
+   "taxid": 83333,
+   "label": "Escherichia_coli_K12",
+   "category": "model",
+   "fetched_taxid": 83333,
+   "proteome_resolved_2026_11_18": "UP000000625",
+   "postings_in_index": 1280821,
+   "url": null,
+   "fasta_sha256": null,
+   "entries": null
+  },
+  {
+   "taxid": 224308,
+   "label": "Bacillus_subtilis_168",
+   "category": "model",
+   "fetched_taxid": 224308,
+   "proteome_resolved_2026_11_18": "UP000001570",
+   "postings_in_index": 1177047,
+   "url": null,
+   "fasta_sha256": null,
+   "entries": null
+  },
+  {
+   "taxid": 10029,
+   "label": "Cricetulus_griseus",
+   "category": "model",
+   "fetched_taxid": 10029,
+   "proteome_resolved_2026_11_18": "UP001108280",
+   "postings_in_index": 9997842,
+   "url": null,
+   "fasta_sha256": null,
+   "entries": null
+  },
+  {
+   "taxid": 9544,
+   "label": "Macaca_mulatta",
+   "category": "model",
+   "fetched_taxid": 9544,
+   "proteome_resolved_2026_11_18": "UP000006718",
+   "postings_in_index": 9673592,
+   "url": null,
+   "fasta_sha256": null,
+   "entries": null
+  },
+  {
+   "taxid": 9913,
+   "label": "Bos_taurus",
+   "category": "contaminant",
+   "fetched_taxid": 9913,
+   "proteome_resolved_2026_11_18": "UP000009136",
+   "postings_in_index": 9621761,
+   "url": null,
+   "fasta_sha256": null,
+   "entries": null
+  },
+  {
+   "taxid": 9823,
+   "label": "Sus_scrofa",
+   "category": "contaminant",
+   "fetched_taxid": 9823,
+   "proteome_resolved_2026_11_18": "UP000008227",
+   "postings_in_index": 9516501,
+   "url": null,
+   "fasta_sha256": null,
+   "entries": null
+  },
+  {
+   "taxid": 9986,
+   "label": "Oryctolagus_cuniculus",
+   "category": "contaminant",
+   "fetched_taxid": 9986,
+   "proteome_resolved_2026_11_18": "UP000001811",
+   "postings_in_index": 8835545,
+   "url": null,
+   "fasta_sha256": null,
+   "entries": null
+  },
+  {
+   "taxid": 9940,
+   "label": "Ovis_aries",
+   "category": "contaminant",
+   "fetched_taxid": 9940,
+   "proteome_resolved_2026_11_18": "UP000809102",
+   "postings_in_index": 9718204,
+   "url": null,
+   "fasta_sha256": null,
+   "entries": null
+  },
+  {
+   "taxid": 9796,
+   "label": "Equus_caballus",
+   "category": "contaminant",
+   "fetched_taxid": 9796,
+   "proteome_resolved_2026_11_18": "UP000002281",
+   "postings_in_index": 9745413,
+   "url": null,
+   "fasta_sha256": null,
+   "entries": null
+  },
+  {
+   "taxid": 1280,
+   "label": "Staphylococcus_aureus",
+   "category": "pathogen",
+   "fetched_taxid": 367830,
+   "proteome_resolved_2026_11_18": "UP000001939",
+   "postings_in_index": 758560,
+   "url": null,
+   "fasta_sha256": null,
+   "entries": null
+  },
+  {
+   "taxid": 1313,
+   "label": "Streptococcus_pneumoniae",
+   "category": "pathogen",
+   "fetched_taxid": 1313,
+   "proteome_resolved_2026_11_18": "UP000237910",
+   "postings_in_index": 538154,
+   "url": null,
+   "fasta_sha256": null,
+   "entries": null
+  },
+  {
+   "taxid": 287,
+   "label": "Pseudomonas_aeruginosa",
+   "category": "pathogen",
+   "fetched_taxid": 208963,
+   "proteome_resolved_2026_11_18": "UP000000653",
+   "postings_in_index": 1820463,
+   "url": null,
+   "fasta_sha256": null,
+   "entries": null
+  },
+  {
+   "taxid": 83332,
+   "label": "Mycobacterium_tuberculosis_H37Rv",
+   "category": "pathogen",
+   "fetched_taxid": 83332,
+   "proteome_resolved_2026_11_18": "UP000001584",
+   "postings_in_index": 1233151,
+   "url": null,
+   "fasta_sha256": null,
+   "entries": null
+  },
+  {
+   "taxid": 99287,
+   "label": "Salmonella_Typhimurium_LT2",
+   "category": "pathogen",
+   "fetched_taxid": 99287,
+   "proteome_resolved_2026_11_18": "UP000001014",
+   "postings_in_index": 1355056,
+   "url": null,
+   "fasta_sha256": null,
+   "entries": null
+  },
+  {
+   "taxid": 573,
+   "label": "Klebsiella_pneumoniae",
+   "category": "pathogen",
+   "fetched_taxid": 272620,
+   "proteome_resolved_2026_11_18": "UP000000265",
+   "postings_in_index": 1507752,
+   "url": null,
+   "fasta_sha256": null,
+   "entries": null
+  },
+  {
+   "taxid": 615,
+   "label": "Serratia_marcescens",
+   "category": "pathogen",
+   "fetched_taxid": 615,
+   "proteome_resolved_2026_11_18": "UP000247823",
+   "postings_in_index": 1518919,
+   "url": null,
+   "fasta_sha256": null,
+   "entries": null
+  },
+  {
+   "taxid": 632,
+   "label": "Yersinia_pestis",
+   "category": "pathogen",
+   "fetched_taxid": 632,
+   "proteome_resolved_2026_11_18": "UP000000815",
+   "postings_in_index": 1186882,
+   "url": null,
+   "fasta_sha256": null,
+   "entries": null
+  },
+  {
+   "taxid": 727,
+   "label": "Haemophilus_influenzae",
+   "category": "pathogen",
+   "fetched_taxid": 71421,
+   "proteome_resolved_2026_11_18": "UP000000579",
+   "postings_in_index": 510077,
+   "url": null,
+   "fasta_sha256": null,
+   "entries": null
+  },
+  {
+   "taxid": 210,
+   "label": "Helicobacter_pylori",
+   "category": "pathogen",
+   "fetched_taxid": 85962,
+   "proteome_resolved_2026_11_18": "UP000000429",
+   "postings_in_index": 472131,
+   "url": null,
+   "fasta_sha256": null,
+   "entries": null
+  },
+  {
+   "taxid": 1639,
+   "label": "Listeria_monocytogenes",
+   "category": "pathogen",
+   "fetched_taxid": 169963,
+   "proteome_resolved_2026_11_18": "UP000000817",
+   "postings_in_index": 837630,
+   "url": null,
+   "fasta_sha256": null,
+   "entries": null
+  },
+  {
+   "taxid": 1496,
+   "label": "Clostridioides_difficile",
+   "category": "pathogen",
+   "fetched_taxid": 272563,
+   "proteome_resolved_2026_11_18": "UP000001978",
+   "postings_in_index": 1087225,
+   "url": null,
+   "fasta_sha256": null,
+   "entries": null
+  },
+  {
+   "taxid": 1351,
+   "label": "Enterococcus_faecalis",
+   "category": "pathogen",
+   "fetched_taxid": 226185,
+   "proteome_resolved_2026_11_18": "UP000001415",
+   "postings_in_index": 899406,
+   "url": null,
+   "fasta_sha256": null,
+   "entries": null
+  },
+  {
+   "taxid": 218491,
+   "label": "Pectobacterium_atrosepticum",
+   "category": "plant_pathogen",
+   "fetched_taxid": 218491,
+   "proteome_resolved_2026_11_18": "UP000007966",
+   "postings_in_index": 1366807,
+   "url": null,
+   "fasta_sha256": null,
+   "entries": null
+  },
+  {
+   "taxid": 198628,
+   "label": "Dickeya_dadantii",
+   "category": "plant_pathogen",
+   "fetched_taxid": 198628,
+   "proteome_resolved_2026_11_18": "UP000006859",
+   "postings_in_index": 1339386,
+   "url": null,
+   "fasta_sha256": null,
+   "entries": null
+  },
+  {
+   "taxid": 818,
+   "label": "Bacteroides_thetaiotaomicron",
+   "category": "microbiome",
+   "fetched_taxid": 226186,
+   "proteome_resolved_2026_11_18": "UP000001414",
+   "postings_in_index": 1766362,
+   "url": null,
+   "fasta_sha256": null,
+   "entries": null
+  },
+  {
+   "taxid": 1681,
+   "label": "Bifidobacterium_bifidum",
+   "category": "microbiome",
+   "fetched_taxid": 500634,
+   "proteome_resolved_2026_11_18": "UP000035063",
+   "postings_in_index": 606431,
+   "url": null,
+   "fasta_sha256": null,
+   "entries": null
+  },
+  {
+   "taxid": 853,
+   "label": "Faecalibacterium_prausnitzii",
+   "category": "microbiome",
+   "fetched_taxid": 853,
+   "proteome_resolved_2026_11_18": "UP000406184",
+   "postings_in_index": 816244,
+   "url": null,
+   "fasta_sha256": null,
+   "entries": null
+  },
+  {
+   "taxid": 1613,
+   "label": "Limosilactobacillus_fermentum",
+   "category": "microbiome",
+   "fetched_taxid": 334390,
+   "proteome_resolved_2026_11_18": "UP000001697",
+   "postings_in_index": 519504,
+   "url": null,
+   "fasta_sha256": null,
+   "entries": null
+  },
+  {
+   "taxid": 243232,
+   "label": "Methanocaldococcus_jannaschii_DSM2661",
+   "category": "archaea",
+   "fetched_taxid": 243232,
+   "proteome_resolved_2026_11_18": "UP000000805",
+   "postings_in_index": 480740,
+   "url": null,
+   "fasta_sha256": null,
+   "entries": null
+  },
+  {
+   "taxid": 273057,
+   "label": "Saccharolobus_solfataricus_P2",
+   "category": "archaea",
+   "fetched_taxid": 273057,
+   "proteome_resolved_2026_11_18": "UP000001974",
+   "postings_in_index": 734536,
+   "url": null,
+   "fasta_sha256": null,
+   "entries": null
+  }
+ ],
+ "proteomes_note": "proteome_resolved_2026_11_18: the reference proteome tools/fetch_reference_set.py --resolve-only finds for the taxon today (UniProt 2026_04); it resolves the 50 taxa to exactly the 50 taxids in the index, but the proteome used at build time was not recorded. postings_in_index: the index's own per-taxon count (k-mers carrying the taxon).",
+ "ncbi_taxonomy": {
+  "url": "https://ftp.ncbi.nih.gov/pub/taxonomy/taxdmp.zip",
+  "file": "taxdmp.zip",
+  "sha256": "984e3da736d09d3d803ee225adcdad355febc6f387b2589f43818ff9c45fb21d",
+  "bytes": 75957260,
+  "downloaded": "2026-07-24 (file entries dated 2026-07-24 by NCBI)",
+  "evidence": "tools/prune_taxdump.py over this dump's nodes.dmp and names.dmp with the 50 taxa of the index reproduces the shipped nodes.dmp and names.dmp byte for byte (checked 2026-11-18). The dump was kept on the maintainer's machine (~/Claude/FasTag-speciesdb/taxdmp.zip).",
+  "licence": "NCBI Taxonomy, public domain (US government work); https://www.ncbi.nlm.nih.gov/home/about/policies/"
+ },
+ "build": {
+  "commands": [
+   "python3 tools/fetch_reference_set.py data/taxonomy/reference-set.tsv proteomes",
+   "buildtaxdb proteomes tax_k7.taxdb 7",
+   "python3 tools/prune_taxdump.py nodes.dmp names.dmp out/ --from-proteomes proteomes"
+  ],
+  "fastag_commit": null,
+  "fastag_commit_note": "buildtaxdb of 2026-07-24..2026-09-01 (5bc76484 or a later commit before 2026-09-01); the binary was not kept"
+ },
+ "rebuild_check": "Not reproducible from UniProt today: a rebuild from the same 50 taxa fetched on 2026-11-06 (UniProt 2026_04; data:/scratch/kohlbach/fastag-taxred/setB/idx/S50) gives tax_k7.taxdb sha256 8d9a85f8b6332cbae31a0806e101b9c46ad340b59e53e4fd818dbfec6dbf9ad2, 1,137,688,537 bytes. The proteomes changed between the releases.",
+ "not_recovered": [
+  "UniProt release and release date of the fetch",
+  "the proteome FASTA files themselves, their URLs as fetched, sha256 and entry counts (not kept anywhere searched: the maintainer's Mac, data:/scratch/kohlbach, /ceph/ibmi/abi/oliver)",
+  "the proteome (UP) accession used per taxon at build time (today's resolution is given instead)",
+  "the exact FASTag commit and buildtaxdb binary that built the index"
+ ]
+}
