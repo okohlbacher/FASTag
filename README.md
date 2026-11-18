@@ -1465,7 +1465,11 @@ adds little to a run. With `-subsample_*` every count covers the spectra read
   reporters in MS3, which FASTag does not read).
 - **Tag yield.** `tag_yield`: the share of the MS2 spectra read whose best
   reported tag has E <= 0.01 (the census's best tag: after `-fasta` when it is
-  given).
+  given). It is the yield of the run as tagged: profile MS2 in an mzML are
+  tagged as read and give far fewer tags (PXD000561/PXD000865 profile vs
+  centroided conversions: 0.7-10% vs 25-78%), so give centroided input or
+  `-pick_profile` for this number and profile input for the measured
+  resolution.
 - **Redundancy.** `redundancy_share`: the share of the MS2 spectra with peaks
   and a precursor that fall into clusters of size > 1. Two spectra may share
   a cluster when they have the same precursor charge (0 matches 0 only),
@@ -1483,8 +1487,8 @@ adds little to a run. With `-subsample_*` every count covers the spectra read
 
 None of these is a quality call, and none has been validated as one: the
 resolution measurement was tested on synthetic profiles of known width, the
-counts against an independent reader, and redundancy purity on identified
-spectra is still open.
+counts against ThermoRawFileParser's metadata on 8 Orbitrap runs, and
+redundancy purity on identified spectra is still open.
 
 ## Tag diversity
 
