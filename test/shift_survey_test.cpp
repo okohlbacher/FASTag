@@ -67,6 +67,11 @@ namespace
     s.sortByPosition();
     return s;
   }
+  const MSSpectrum& empty_spectrum_()
+  {
+    static const MSSpectrum e;
+    return e;
+  }
   MSSpectrum ladder(const std::string& pep, size_t site, double mod)
   {
     return ladder(pep, site, mod, [](char, size_t) { return true; });
@@ -190,6 +195,127 @@ int main(int argc, char** argv)
     check(SS::formatSites({{"S", 3}, {"K", 41}, {"N-term|K", 12}, {"A", 3}}) == "K:41,N-term|K:12,A:3,S:3",
           "sites by count, then key");
     check(SS::formatSites({}) == "-", "no sites: -");
+  }
+
+  // ------------------------------------------------- 1.16b evidence classes
+  {  // a one-residue region with no fragment evidence is sequence-constrained, never fragment-localized
+    const std::string t1 = pep.substr(1, 4);  // AMPL: N-side region is S1 alone
+    Reconciliation got;
+    bool found = false;
+    const MSSpectrum empty;
+    for (const auto& x : r.reconcile(t1, sumMass(pep.substr(0, 1)) + ac, sumMass(pep.substr(5)), &empty, 2))
+      if (x.peptide == pep && x.pos == 1 && !x.nterm_match && x.cterm_match) { got = x; found = true; }
+    check(found, "placed AMPL with a one-residue N-side gap");
+    SS::Site st;
+    check(got.loc_alternatives == 0 && got.loc_evidence == 0, "one-residue region: no rival, no evidence");
+    check(SS::locClass(got, 1) == SS::LocClass::SEQUENCE_CONSTRAINED &&
+              SS::locClass(got, 3) == SS::LocClass::SEQUENCE_CONSTRAINED,
+          "a one-residue region is sequence-constrained at any threshold");
+    check(SS::siteOf(got, st, 2) && SS::siteKey(st) == "N-term|S", "and keeps its site for naming");
+  }
+  {  // one site-determining ion: fragment-localized at 1, ambiguous at 2
+    const MSSpectrum s = ladder(pep, 2, ox, [](char k, size_t i) { return k == 'b' && (i == 2 || i == 3); });
+    const Reconciliation x = nside(pep, ox, &s);
+    SS::Site st;
+    check(x.loc_pos == 2 && x.loc_evidence == 1, "plain b2 + shifted b3: M3 by one ion");
+    check(SS::locClass(x, 1) == SS::LocClass::FRAGMENT_LOCALIZED, "evidence 1 is fragment-localized at threshold 1");
+    check(SS::locClass(x, 2) == SS::LocClass::AMBIGUOUS && !SS::siteOf(x, st, 2), "and ambiguous at threshold 2");
+    check(SS::siteOf(x, st, 1) == SS::siteOf(x, st), "siteOf(r, out, 1) is siteOf(r, out)");
+    const MSSpectrum full = ladder(pep, 2, ox);
+    const Reconciliation y = nside(pep, ox, &full);
+    check(SS::locClass(y, 2) == SS::LocClass::FRAGMENT_LOCALIZED, "a full ladder is fragment-localized at 2");
+    const Reconciliation z = nside(pep, ox, &empty_spectrum_());
+    check(SS::locClass(z, 1) == SS::LocClass::UNLOCALIZED, "no peaks: unlocalized");
+  }
+  {  // UNIQUE: a peak supports one ion of a site's hypothesis at most
+    TagReconciler wide(300.0, /*ppm=*/false, /*both=*/false);
+    wide.attach(&idx, 0, 4);
+    MSSpectrum one;
+    one.push_back(Peak1D(600.0, 100.0f));
+    Reconciliation a = nside(pep, ox, nullptr), b = a;
+    wide.localize(a, one, 2, nullptr, nullptr, LocModel::COUNT);
+    wide.localize(b, one, 2, nullptr, nullptr, LocModel::UNIQUE);
+    check(a.loc_score > 1, "COUNT: one wide peak counts for many ions");
+    check(b.loc_score == 1 && b.loc_evidence == 0, "UNIQUE: one peak counts once, no site is preferred");
+  }
+  {  // STRICT: H2O-loss satellites of observed unshifted b ions are no evidence for a -18.011 shift
+    const double dh = -18.010565;
+    MSSpectrum s = ladder(pep, 3, dh, [](char k, size_t) { return k == 'b'; });  // Dha-like loss on P4
+    for (size_t i = 1; i <= 3; ++i)  // the loss satellites of the plain b1..b3
+      s.push_back(Peak1D(sumMass(pep.substr(0, i)) - WATER + Constants::PROTON_MASS_U, 50.0f));
+    s.sortByPosition();
+    Reconciliation c = nside(pep, dh, nullptr), u = c, t = c;
+    r.localize(c, s, 2, nullptr, nullptr, LocModel::COUNT);
+    r.localize(u, s, 2, nullptr, nullptr, LocModel::UNIQUE);
+    r.localize(t, s, 2, nullptr, nullptr, LocModel::STRICT);
+    check(c.loc_evidence == 0 && u.loc_evidence == 0, "COUNT/UNIQUE: the satellites tie every site");
+    check(t.loc_pos == 3 && t.loc_evidence >= 1 && t.loc_excluded > 0, "STRICT: satellites excluded, P4 determined");
+    check(u.loc_excluded == 0, "only STRICT excludes");
+  }
+
+  // ------------------------------------------------ 1.16b observation classes
+  {
+    const std::vector<SS::Entry> umc = SS::unimodEntries();
+    const std::vector<SS::FixedMod> cam = {{'C', 57.021464, "Carbamidomethyl"}};
+    auto cls = [&](double d, const std::string& region, const std::vector<std::string>& sites, bool prec,
+                   std::vector<double> beyond = {}, std::vector<double> inside = {}, const std::string& interp = "?") {
+      SS::Observation o;
+      o.delta = d; o.tol_da = 0.01; o.precursor_flank = prec; o.region = region; o.interp = interp;
+      o.beyond = beyond; o.inside = inside;
+      for (const auto& k : sites) o.sites.push_back(site(k));
+      std::string det;
+      return std::make_pair(SS::observationClass(o, umc, cam, &det), det);
+    };
+    check(cls(156.1011, "SK", {"N-term|S"}, true, {156.10111}).first == SS::ObsClass::EXTENSION,
+          "+156.101 with Arg before the peptide: extension");
+    check(cls(-131.0405, "MSK", {"N-term|M"}, true, {}, {131.04048}).first == SS::ObsClass::TRUNCATION,
+          "-131.040 = the first region residue M: truncation");
+    check(cls(21.9819, "DE", {"D"}, true).first == SS::ObsClass::ADDUCT, "+21.982: Na adduct");
+    check(cls(37.9470, "DE", {"D"}, true).second == "Ca[II]", "+37.947: the nearest cation, Ca (not K, 9 mDa off)");
+    check(cls(52.9115, "W", {"W"}, true).second == "Fe[III]", "+52.912: Fe(III)");
+    {
+      SS::Observation o;  // -57.021 next to a terminal Gly: truncation, unless localized on the Cys
+      o.delta = -57.0215; o.tol_da = 0.01; o.region = "GC"; o.inside = {57.02146};
+      o.sites = {site("N-term|G"), site("C")};
+      check(SS::observationClass(o, umc, cam) == SS::ObsClass::TRUNCATION, "-57.021, unlocalized, G first: truncation");
+      o.sites = {site("C")}; o.localized = true;
+      check(SS::observationClass(o, umc, cam) == SS::ObsClass::FIXED_LOSS, "-57.021 localized on C: fixed-mod loss");
+    }
+    const auto i1 = cls(1.0034, "LS", {"L"}, true);
+    check(i1.first == SS::ObsClass::ISOTOPE && i1.second == "13C+1", "+1.003 on a precursor flank: 13C+1");
+    check(cls(1.0034, "LS", {"L"}, false).first != SS::ObsClass::ISOTOPE, "+1.003 on a fragment flank: no isotope");
+    check(cls(0.9842, "NG", {"N"}, true).first == SS::ObsClass::RESIDUE, "+0.984 on N (precursor flank): deamidation, not 13C");
+    check(cls(-18.0106, "SA", {"S"}, true).first == SS::ObsClass::LOSS, "-18.011: H2O loss class before any name");
+    const auto fl = cls(-57.0215, "AC", {"C"}, false);
+    check(fl.first == SS::ObsClass::FIXED_LOSS && fl.second == "-Carbamidomethyl@C", "-57.021 on CAM-Cys: fixed-mod loss");
+    check(cls(-91.0092, "AC", {"C"}, false).first == SS::ObsClass::FIXED_REPLACEMENT, "-91.009 on CAM-Cys: Cys->Dha instead of CAM");
+    check(cls(42.0106, "LL", {"N-term|L"}, true).first == SS::ObsClass::TERMINAL, "+42.011 on N-term|L: terminal");
+    check(cls(63.123, "W", {"W"}, true).first == SS::ObsClass::UNKNOWN, "+63.123: unknown");
+    check(cls(14.0157, "GK", {}, false, {}, {}, "sub:G->A").first == SS::ObsClass::SUBSTITUTION,
+          "no site, a sub: reading: substitution");
+    check(std::string(SS::obsClassName(SS::ObsClass::FIXED_LOSS)) == "fixed_loss", "class names");
+
+    // Exact isobars: one class, not one winner.
+    auto iso = [&](double d, const std::vector<std::string>& keys) {
+      std::vector<SS::Site> st;
+      for (const auto& k : keys) st.push_back(site(k));
+      const auto ms = SS::match(umc, d, 0.005, st, cam, SIZE_MAX);
+      return SS::isobarClass(d, ms, st, cam, 0.001);
+    };
+    const std::string ox_c = iso(15.9949, {"M", "A", "F"});
+    check(ox_c.find("Oxidation") != std::string::npos && ox_c.find("Ala->Ser") != std::string::npos &&
+              ox_c.find("Phe->Tyr") != std::string::npos,
+          "oxidation = A->S = F->Y: " + ox_c);
+    const std::string diox = iso(31.9898, {"W", "P"});
+    check(diox.find("Pro->Glu") != std::string::npos && diox.find("Oxidation+Oxidation") != std::string::npos,
+          "dioxidation = P->E = 2 x oxidation: " + diox);
+    check(iso(42.0106, {"K", "S"}).find("Ser->Glu") != std::string::npos, "acetyl = S->E");
+    check(iso(0.9840, {"N"}).find("Asn->Asp") != std::string::npos, "deamidation = N->D");
+    check(iso(0.9840, {"Q"}).find("Gln->Glu") != std::string::npos, "deamidation = Q->E");
+    check(iso(57.0215, {"N-term|G"}).find("Gly->Asn") != std::string::npos, "carbamidomethyl = G->N");
+    const std::string cmx = iso(58.0055, {"Protein N-term|M"});
+    check(cmx.find("Oxidation+Acetyl") != std::string::npos, "carboxymethyl = acetyl + oxidation: " + cmx);
+    check(iso(52.912, {"W"}) == "-", "no name: no class");
   }
 
   // ---------------------------------------------------------------- Unimod

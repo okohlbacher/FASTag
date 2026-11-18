@@ -14,6 +14,7 @@
 
 #include <OpenMS/KERNEL/MSSpectrum.h>
 
+#include <cstdint>
 #include <string>
 #include <vector>
 
@@ -67,6 +68,10 @@ namespace FASTag
     int         loc_evidence = 0;
     /// Other residues of the region the gap could sit on (region size - 1).
     int         loc_alternatives = 0;
+    /// LocModel::STRICT only (1.16b): matches of a shifted ion that were not
+    /// counted because the peak is an H2O or NH3 loss satellite of an
+    /// observed unshifted ion. 0 under the other models.
+    int         loc_excluded = 0;
     /// Text positions of the placement's window [win_start, win_end), for a
     /// localization after the fact (TagReconciler::localize).
     uint32_t    win_start = 0, win_end = 0;
@@ -76,6 +81,19 @@ namespace FASTag
     /// Met) / ends it: the gap's terminus may be the protein's.
     bool        protein_nterm = false, protein_cterm = false;
   };
+
+  /**
+    @brief How a gap's site is scored on the spectrum's fragments (1.16b).
+
+    COUNT is 1.11-1.16a: every b/y ion and charge with a peak within the
+    tolerance counts, so one peak can count for several ions. UNIQUE counts
+    a site's distinct matched peaks: a peak supports at most one ion of a
+    site's hypothesis. STRICT is UNIQUE, and a shifted ion's peak does not
+    count when it is an H2O or NH3 loss satellite of an observed unshifted
+    ion (at the same charge), the HCD loss peaks that otherwise read as a
+    -18.011 / -17.027 shift on any residue.
+  */
+  enum class LocModel : std::uint8_t { COUNT = 0, UNIQUE = 1, STRICT = 2 };
 
   /**
     @brief A candidate variable modification for interpreting a mass gap.
@@ -195,10 +213,12 @@ namespace FASTag
       @param[in] precursor_charge the precursor charge (<= 0 counts as 2)
       @param[in] tag_shift per-residue variable modification shifts of the tag, or nullptr
       @param[in] series the ion pair the tag was read as, or nullptr for b/y
+      @param[in] model how sites are scored (reconcile() always uses COUNT)
     */
     void localize(Reconciliation& r, const OpenMS::MSSpectrum& spec, int precursor_charge = 2,
                   const std::vector<double>* tag_shift = nullptr,
-                  const IonSeries::IonPair* series = nullptr) const;
+                  const IonSeries::IonPair* series = nullptr,
+                  LocModel model = LocModel::COUNT) const;
 
     std::vector<Reconciliation> reconcileByMass(const std::string& tag, double nterm_mass, double cterm_mass,
                                                 const IonSeries::IonPair* series = nullptr) const;
@@ -258,7 +278,7 @@ namespace FASTag
                    const OpenMS::MSSpectrum& spec, int frag_charges,
                    const ProteomeIndex::TagOcc& occ,
                    const std::vector<double>* tag_shift,
-                   const IonSeries::IonPair* series) const;
+                   const IonSeries::IonPair* series, LocModel model = LocModel::COUNT) const;
     /// Best explanation of @p delta over the residues in @p region: a candidate
     /// mod on a present residue, a single substitution of a present residue, or
     /// "?" if neither fits within tolerance. Prefers whichever fits with the

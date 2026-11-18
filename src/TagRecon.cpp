@@ -157,7 +157,7 @@ namespace FASTag
                                 const MSSpectrum& spec, int frag_charges,
                                 const ProteomeIndex::TagOcc& occ,
                                 const std::vector<double>* tag_shift,
-                                const IonSeries::IonPair* series) const
+                                const IonSeries::IonPair* series, LocModel model) const
   {
     // Shifted-fragment scoring. With the gap on residue j of an L-residue
     // peptide, b_i (residues [0,i)) carries it iff j < i and y_i (residues
@@ -256,14 +256,114 @@ namespace FASTag
         r.loc_evidence = r.loc_alternatives > 0 ? best - second : 0;
       }
     };
-    if (label != 0.0 && !alone) place(label);  // labelled: the label rides along
-    place(0.0);  // unlabelled, or the gap is the label alone: scored whole
+    // 1.16b (UNIQUE, STRICT): the same ions and states, but a site scores
+    // its DISTINCT matched peaks (a peak supports one ion of a site's
+    // hypothesis at most), and under STRICT a shifted ion's peak that is an
+    // H2O / NH3 loss satellite of an observed unshifted ion at the same
+    // charge is not counted: an HCD loss peak sits exactly where a -18.011
+    // or -17.027 shift puts the ion, on every candidate site.
+    const int Z = frag_charges;
+    static const double NH3 = EmpiricalFormula("NH3").getMonoWeight();
+    // [i * Z + z - 1] = the matched peak's index, -1 none.
+    std::vector<int> pb0, pb1, py0, py1;
+    auto peak = [&](double neutral, int z) {
+      const double mz = (neutral + z * Constants::PROTON_MASS_U) / z;
+      return static_cast<int>(spec.findNearest(mz, tolAt_(mz)));
+    };
+    auto placeUnique = [&](double lab) {
+      const double tn = r.nterm_match ? 0.0 : lab, tc = r.nterm_match ? lab : 0.0;
+      const double d = r.delta_mass - lab;
+      const size_t n = static_cast<size_t>(L) * static_cast<size_t>(Z);
+      pb0.assign(n, -1); pb1.assign(n, -1); py0.assign(n, -1); py1.assign(n, -1);
+      std::vector<double> bt(static_cast<size_t>(L), 0.0), yt(static_cast<size_t>(L), 0.0);
+      for (int i = 1; i < L; ++i)
+      {
+        bt[i] = (by ? idx_->massBetween(w.start, w.start + i) + shift_pre[i]
+                    : idx_->massBetween(w.start, w.start + i) + shift_pre[i] + series->offN) + tn;
+        yt[i] = idx_->massBetween(w.end - i, w.end) + (by ? WATER : series->offC)
+                + (shift_pre[L] - shift_pre[L - i]) + tc;
+        for (int z = 1; z <= Z; ++z)
+        {
+          const size_t k = static_cast<size_t>(i) * Z + z - 1;
+          pb0[k] = peak(bt[i], z); pb1[k] = peak(bt[i] + d, z);
+          py0[k] = peak(yt[i], z); py1[k] = peak(yt[i] + d, z);
+        }
+      }
+      int excluded = 0;
+      if (model == LocModel::STRICT)
+      {
+        // Loss satellites (neutral) of the observed unshifted ions, per charge.
+        std::vector<std::vector<double>> sat(static_cast<size_t>(Z));
+        for (int i = 1; i < L; ++i)
+          for (int z = 1; z <= Z; ++z)
+          {
+            const size_t k = static_cast<size_t>(i) * Z + z - 1;
+            for (const double m : {pb0[k] >= 0 ? bt[i] : -1.0, py0[k] >= 0 ? yt[i] : -1.0})
+              if (m > 0)
+              {
+                sat[z - 1].push_back(m - WATER);
+                sat[z - 1].push_back(m - NH3);
+              }
+          }
+        for (auto& v : sat) std::sort(v.begin(), v.end());
+        auto isSat = [&](double neutral, int z) {
+          const auto& v = sat[z - 1];
+          const double mz = (neutral + z * Constants::PROTON_MASS_U) / z;
+          const double tol_n = tolAt_(mz) * z;  // the m/z tolerance on the neutral scale
+          const auto it = std::lower_bound(v.begin(), v.end(), neutral - tol_n);
+          return it != v.end() && *it <= neutral + tol_n;
+        };
+        for (int i = 1; i < L; ++i)
+          for (int z = 1; z <= Z; ++z)
+          {
+            const size_t k = static_cast<size_t>(i) * Z + z - 1;
+            if (pb1[k] >= 0 && isSat(bt[i] + d, z)) { pb1[k] = -1; ++excluded; }
+            if (py1[k] >= 0 && isSat(yt[i] + d, z)) { py1[k] = -1; ++excluded; }
+          }
+      }
+      int best = -1, pos = -1, ties = 0, second = -1;
+      std::vector<int> peaks;
+      for (int j = r.region_lo; j <= r.region_hi; ++j)
+      {
+        peaks.clear();
+        for (int i = 1; i < L; ++i)
+          for (int z = 1; z <= Z; ++z)
+          {
+            const size_t k = static_cast<size_t>(i) * Z + z - 1;
+            const int pbk = j < i ? pb1[k] : pb0[k];
+            const int pyk = j >= L - i ? py1[k] : py0[k];
+            if (pbk >= 0) peaks.push_back(pbk);
+            if (pyk >= 0) peaks.push_back(pyk);
+          }
+        std::sort(peaks.begin(), peaks.end());
+        const int score = static_cast<int>(std::unique(peaks.begin(), peaks.end()) - peaks.begin());
+        if (score > best) { second = best; best = score; pos = j; ties = 1; }
+        else { if (score == best) ++ties; second = std::max(second, score); }
+      }
+      if (r.loc_pos < 0 || best > r.loc_score)
+      {
+        r.loc_pos = pos; r.loc_score = best; r.loc_ties = ties;
+        r.loc_alternatives = r.region_hi - r.region_lo;
+        r.loc_evidence = r.loc_alternatives > 0 ? best - second : 0;
+        r.loc_excluded = excluded;
+      }
+    };
+    if (model == LocModel::COUNT)
+    {
+      if (label != 0.0 && !alone) place(label);  // labelled: the label rides along
+      place(0.0);  // unlabelled, or the gap is the label alone: scored whole
+    }
+    else
+    {
+      if (label != 0.0 && !alone) placeUnique(label);
+      placeUnique(0.0);
+    }
     r.loc_site = idx_->proteinOffset(w.start + static_cast<uint32_t>(r.loc_pos)) + 1;
   }
 
   void TagReconciler::localize(Reconciliation& r, const MSSpectrum& spec, int precursor_charge,
                                const std::vector<double>* tag_shift,
-                               const IonSeries::IonPair* series) const
+                               const IonSeries::IonPair* series, LocModel model) const
   {
     if (!idx_ || r.loc_pos >= 0 || r.region_hi < r.region_lo || std::fabs(r.delta_mass) <= 1e-6 ||
         r.win_end <= r.win_start)
@@ -272,7 +372,7 @@ namespace FASTag
     const ProteomeIndex::TagOcc occ{static_cast<uint32_t>(r.win_start + r.pos),
                                     static_cast<uint16_t>(r.tag_len), r.reversed};
     const int frag_charges = std::max(1, (precursor_charge > 0 ? precursor_charge : 2) - 1);
-    localize_(r, w, spec, frag_charges, occ, tag_shift, series);
+    localize_(r, w, spec, frag_charges, occ, tag_shift, series, model);
   }
 
   std::string TagReconciler::interpretDelta_(double delta, const std::string& region, double tol,

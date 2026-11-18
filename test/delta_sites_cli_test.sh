@@ -16,6 +16,13 @@
 # spectrum in exactly one row, the rows the -delta_spectra_out lines name;
 # 0: the 1.15 local-maximum rows, recomputed here from the per-spectrum
 # deltas) and -delta_spectra_out (one line per sample, thread-independent).
+# 1.16b: the appended columns (fragment_localized + sequence_constrained =
+# localized, ambiguous within unlocalized, precursor_flank, charge_assumed,
+# class, isobars), the provenance columns of -delta_spectra_out,
+# -delta_counts_out (every sum check ok, thread-independent), the observation
+# classes of the synthetic rows, -delta_select consensus and the 1.16a
+# options (-delta_loc_model count -delta_loc_min_evidence 1
+# -delta_isotope_flank any) leaving the sample columns unchanged.
 # Exits 77 (ctest SKIP) when the binary cannot start.
 set -u
 BIN="$1"
@@ -39,11 +46,16 @@ run() { "$BIN" "$@" > "$TMP/log" 2>&1 || { cat "$TMP/log" >&2; fail "FASTag $*";
 # row FILE LO HI: the first row with LO <= delta <= HI
 row() { tr -d '\r' < "$1" | awk -F'\t' -v lo="$2" -v hi="$3" 'NR > 1 && $1 + 0 >= lo && $1 + 0 <= hi { print; exit }'; }
 invariants() {
-  head -1 "$1" | tr -d '\r' | grep -qx $'delta\tspectra\ttop_interps\tlocalized\tresidues\tunlocalized\tunimod\tpsimod\tisotope_error' \
+  head -1 "$1" | tr -d '\r' | grep -qx $'delta\tspectra\ttop_interps\tlocalized\tresidues\tunlocalized\tunimod\tpsimod\tisotope_error\tfragment_localized\tsequence_constrained\tambiguous\tprecursor_flank\tcharge_assumed\tclass\tisobars' \
     || fail "$2: header $(head -1 "$1")"
   tr -d '\r' < "$1" | awk -F'\t' '
     NR == 1 { next }
-    NF != 9 { print "row " NR ": " NF " fields"; bad = 1; next }
+    NF != 16 { print "row " NR ": " NF " fields"; bad = 1; next }
+    $10 + $11 != $4 { print "row " NR ": fragment_localized + sequence_constrained != localized"; bad = 1 }
+    $12 > $6 { print "row " NR ": ambiguous > unlocalized"; bad = 1 }
+    $13 > $2 || $14 > $2 { print "row " NR ": precursor_flank or charge_assumed > spectra"; bad = 1 }
+    $15 != "-" && $15 !~ /^[a-z_]+:[0-9]+(,[a-z_]+:[0-9]+)*$/ { print "row " NR ": class " $15; bad = 1 }
+    $16 != "-" && $16 !~ /=/ { print "row " NR ": isobars " $16; bad = 1 }
     {
       sum = 0
       if ($5 != "-") { n = split($5, parts, ","); for (i = 1; i <= n; ++i) { c = parts[i]; sub(/.*:/, "", c); sum += c } }
@@ -61,8 +73,19 @@ invariants() {
 # spectra_rows TABLE SPECTRA N NAME: the rows hold N spectra, each once; the
 # spectra file has N lines, each naming a row whose count it is part of.
 spectra_rows() {
-  head -1 "$2" | tr -d '\r' | grep -qx $'spectrum\tdelta\trow\tinterp\tpeptide\tsite\tsite_pos\tlocalized\tloc_evidence\tevalue' \
+  head -1 "$2" | tr -d '\r' | grep -qx $'spectrum\tdelta\trow\tinterp\tpeptide\tsite\tsite_pos\tlocalized\tloc_evidence\tevalue\tdelta_full\ttag\tprotein\tpos\torientation\tgap_side\tflank\tregion\tcharge\tcharge_source\tprecursor_isotope\tloc_class\tloc_score\tloc_ties\tloc_excluded\tnull_class\tnull_evidence\tobs_class\tobs_detail\tn_placements\tn_exact\tn_gapped\tn_peptides\ttag_support\ttags_placed\tplacements' \
     || fail "$4: -delta_spectra_out header"
+  tr -d '\r' < "$2" | awk -F'\t' '
+    NR == 1 { next }
+    NF != 36 { print "line " NR ": " NF " fields"; bad = 1; next }
+    ($2 + 0 == 0) != ($16 == "-") { print "line " NR ": gap_side " $16 " for delta " $2; bad = 1 }
+    $16 != "-" && $17 != "precursor" && $17 != "fragment" { print "line " NR ": flank " $17; bad = 1 }
+    $20 != "given" && $20 != "assumed" && $20 != "inferred" { print "line " NR ": charge_source " $20; bad = 1 }
+    $22 !~ /^(-|unlocalized|ambiguous|sequence|fragment)$/ { print "line " NR ": loc_class " $22; bad = 1 }
+    ($8 != "-") != ($22 == "sequence" || $22 == "fragment") { print "line " NR ": localized " $8 " vs class " $22; bad = 1 }
+    $30 != $31 + $32 || $30 < 1 { print "line " NR ": placements " $30 " != exact + gapped"; bad = 1 }
+    $36 != "-" && split($36, pl, ";") != $30 { print "line " NR ": placements list"; bad = 1 }
+    END { exit bad }' || fail "$4: -delta_spectra_out provenance columns"
   [ "$(($(wc -l < "$2") - 1))" = "$3" ] || fail "$4: -delta_spectra_out has not $3 lines"
   tr -d '\r' < "$1" | awk -F'\t' -v n="$3" 'NR > 1 { s += $2 } END { exit s != n }' \
     || fail "$4: the rows do not sum to the $3 sampled spectra"
@@ -96,12 +119,28 @@ check_run() {
   local name="$1"; shift
   run "$@" -threads 2 -out "$TMP/$name.a.tsv" -recon_out "$TMP/$name.r0.tsv"
   run "$@" -threads 2 -out "$TMP/$name.b.tsv" -recon_out "$TMP/$name.r1.tsv" -delta_out "$TMP/$name.d.tsv" \
-    -delta_spectra_out "$TMP/$name.s.tsv"
+    -delta_spectra_out "$TMP/$name.s.tsv" -delta_counts_out "$TMP/$name.cnt.tsv"
   grep -q '^Delta sites: ' "$TMP/log" || fail "$name: no 'Delta sites:' log line"
   local n
   n=$(sed -n 's/^Delta histogram: \([0-9]*\) spectra sampled.*/\1/p' "$TMP/log")
   [ -n "$n" ] && [ "$n" -gt 0 ] || fail "$name: no samples"
   spectra_rows "$TMP/$name.d.tsv" "$TMP/$name.s.tsv" "$n" "$name"
+  # -delta_counts_out: every sum check holds, and the samples are the log's.
+  tr -d '\r' < "$TMP/$name.cnt.tsv" | awk -F'\t' -v n="$n" '
+    $1 ~ /^check_/ { ++checks; if ($2 != "ok") { print $1 " " $2; bad = 1 } }
+    $1 == "samples" && $2 != n { print "samples " $2 " != " n; bad = 1 }
+    END { exit bad || checks < 6 }' || fail "$name: -delta_counts_out"
+  # The 1.16a survey options change the site columns only, never the samples.
+  run "$@" -threads 2 -out "$TMP/$name.o.tsv" -recon_out "$TMP/$name.ro.tsv" -delta_out "$TMP/$name.do.tsv" \
+    -delta_loc_model count -delta_loc_min_evidence 1 -delta_isotope_flank any
+  invariants "$TMP/$name.do.tsv" "$name 1.16a"
+  tr -d '\r' < "$TMP/$name.d.tsv" | cut -f1-3 > "$TMP/$name.d.c3"
+  tr -d '\r' < "$TMP/$name.do.tsv" | cut -f1-3 > "$TMP/$name.do.c3"
+  same "$TMP/$name.d.c3" "$TMP/$name.do.c3" "$name: the 1.16a localization options changed the samples"
+  # -delta_select consensus: still one sample per placed spectrum, every one in a row.
+  run "$@" -threads 2 -out "$TMP/$name.k.tsv" -recon_out "$TMP/$name.rk.tsv" -delta_out "$TMP/$name.dk.tsv" \
+    -delta_spectra_out "$TMP/$name.sk.tsv" -delta_select consensus
+  spectra_rows "$TMP/$name.dk.tsv" "$TMP/$name.sk.tsv" "$n" "$name consensus"
   run "$@" -threads 2 -out "$TMP/$name.g.tsv" -recon_out "$TMP/$name.rg.tsv" -delta_out "$TMP/$name.d0.tsv" -delta_group 0 \
     -delta_spectra_out "$TMP/$name.s0.tsv"
   invariants "$TMP/$name.d0.tsv" "$name -delta_group 0"
@@ -115,9 +154,10 @@ check_run() {
   same "$TMP/$name.d.tsv" "$TMP/$name.d2.tsv" "$name: -recon_localize changed -delta_out"
   for t in 1 4; do
     run "$@" -threads $t -out "$TMP/$name.t$t.tsv" -recon_out "$TMP/$name.rt$t.tsv" -delta_out "$TMP/$name.dt$t.tsv" \
-      -delta_spectra_out "$TMP/$name.st$t.tsv"
+      -delta_spectra_out "$TMP/$name.st$t.tsv" -delta_counts_out "$TMP/$name.ct$t.tsv"
     same "$TMP/$name.d.tsv" "$TMP/$name.dt$t.tsv" "$name: -delta_out differs between 2 and $t threads"
     same "$TMP/$name.s.tsv" "$TMP/$name.st$t.tsv" "$name: -delta_spectra_out differs between 2 and $t threads"
+    same "$TMP/$name.cnt.tsv" "$TMP/$name.ct$t.tsv" "$name: -delta_counts_out differs between 2 and $t threads"
   done
 }
 
@@ -139,6 +179,19 @@ echo "$r" | cut -f7 | grep -q '^Acetyl@N-term(' || fail "+42.011 row: unimod"
 echo "$r" | cut -f7 | grep -q 'Protein N-term' && fail "+42.011 row: a Protein N-term entry on an internal peptide"
 tr -d '\r' < "$D" | awk -F'\t' '$1 + 0 > 15.99 && $1 + 0 < 16.0 { n += $4; if ($5 !~ /^M:/ || $7 !~ /^Oxidation@M\(/) bad = 1 } END { exit bad || n != 3 }' \
   || fail "+15.995 rows: not Oxidation@M on 3 spectra"
+# 1.16b observation classes (assigned before the names) and the evidence classes.
+for c in "-91.02 -91.00 fixed_replacement:3" "-18.02 -18.00 loss:3" "42.00 42.02 terminal:3"; do
+  read -r lo hi want <<< "$c"
+  r=$(row "$D" "$lo" "$hi"); echo "$r" | cut -f15 | grep -qx "$want" || fail "row $lo..$hi: class $(echo "$r" | cut -f15), not $want"
+  echo "$r" | awk -F'\t' '$10 == 3 && $11 == 0' | grep -q . || fail "row $lo..$hi: not 3 fragment-localized"
+done
+tr -d '\r' < "$D" | awk -F'\t' '$1 + 0 > 15.99 && $1 + 0 < 16.0 && $15 !~ /^residue:/ { bad = 1 } END { exit bad }' \
+  || fail "+15.995 rows: class not residue"
+# The null on moved peaks: written for every gapped sample, and never fragment-localized here.
+run "${SYNARGS[@]}" -threads 2 -out "$TMP/syn.n.tsv" -recon_out "$TMP/syn.rn.tsv" -delta_out "$TMP/syn.dn.tsv" \
+  -delta_spectra_out "$TMP/syn.sn.tsv" -delta_loc_null 7.3
+tr -d '\r' < "$TMP/syn.sn.tsv" | awk -F'\t' 'NR > 1 && ($26 == "-" || $26 == "fragment") { bad = 1 } END { exit bad }' \
+  || fail "-delta_loc_null: a gapped sample without a null class, or a fragment-localized null"
 run "${SYNARGS[@]}" -threads 2 -out "$TMP/syn.e.tsv" -recon_out "$TMP/syn.r5.tsv" -delta_out "$TMP/syn.d5.tsv" \
   -delta_name_tolerance 0.02 -delta_name_tolerance_unit Da
 tr -d '\r' < "$D" | cut -f1-6 > "$TMP/d.cut"
@@ -153,4 +206,6 @@ check_run ecoli -in "$IN" -tag_length 4 -fragment_tolerance 0.5 -fragment_tolera
 # -delta_spectra_out needs -delta_out
 "$BIN" -in "$SYN" -recon_fasta "$DB" -extension 3 -out "$TMP/x.tsv" -recon_out "$TMP/x.r.tsv" \
   -delta_spectra_out "$TMP/x.s.tsv" > "$TMP/log" 2>&1 && fail "-delta_spectra_out without -delta_out was accepted"
+"$BIN" -in "$SYN" -recon_fasta "$DB" -extension 3 -out "$TMP/x.tsv" -recon_out "$TMP/x.r.tsv" \
+  -delta_counts_out "$TMP/x.c.tsv" > "$TMP/log" 2>&1 && fail "-delta_counts_out without -delta_out was accepted"
 echo "delta_sites_cli_test: passed"

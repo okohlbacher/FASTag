@@ -48,6 +48,32 @@ so do `-delta_out`'s rows (`-delta_group`).
   - `-delta_spectra_out`: each spectrum's sample (native ID, gap, row,
     interpretation, peptide, site), for spectrum-level comparison with a
     search engine.
+- **Mass-shift survey, hardening (1.16b)** (development runs PXD045734 donor
+  4068 against an MSFragger open search; see the item1-dev HARDENING notes):
+  - Changed defaults: `-delta_loc_model strict` (was `count`: a site now scores
+    its distinct matched peaks, and H2O/NH3 loss satellites of observed
+    unshifted ions are no evidence for a shifted one), `-delta_loc_min_evidence
+    2` (was 1), `-delta_isotope_flank precursor` (was any row). `-delta_loc_model
+    count -delta_loc_min_evidence 1 -delta_isotope_flank any` reproduces the
+    1.16a columns 1-9 of `-delta_out` and 1-10 of `-delta_spectra_out` exactly
+    (all six development runs). Changes `localized`, `residues`,
+    `unlocalized`, `unimod`, `psimod` and `isotope_error`; never the samples.
+  - Evidence classes: fragment-localized, sequence-constrained (a one-residue
+    region, no fragment chose it; was counted as localized by fragments),
+    ambiguous, unlocalized. Seven `-delta_out` columns appended:
+    `fragment_localized`, `sequence_constrained`, `ambiguous`,
+    `precursor_flank`, `charge_assumed`, `class` (observation classes, before
+    names: extension, truncation, adduct, isotope, loss, fixed-mod loss and
+    replacement, terminal, residue, substitution, unknown) and `isobars`
+    (exact isobars of the best name: oxidation = A->S = F->Y and the like).
+  - `-delta_spectra_out`: 26 provenance columns appended (tag, protein,
+    orientation, gap side, precursor- or fragment-derived flank, charge and
+    its source, unrounded delta, evidence and observation class, the selected
+    tag's competing placements).
+  - New: `-delta_counts_out` (reconciliation from MS2 to rows with sum
+    checks), `-delta_select` (`min_delta`, the default, or `consensus`; not
+    adopted: no measurable gain), `-delta_loc_null` (localization on
+    m/z-moved peaks, the false-localization null), `-delta_isobar_tolerance`.
 - **Fix: gap interpretation in ppm.** `delta_interp` judged a gap at ppm of
   the gap's own mass (20 ppm of 15.995 Da = 0.3 mDa; gaps under 1 Da at
   200 Da), while the gap's error is that of the flank it is measured on. A

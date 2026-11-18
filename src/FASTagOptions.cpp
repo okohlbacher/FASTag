@@ -947,6 +947,47 @@ void TOPPFASTag::registerOptionsAndFlags_()
                         "modification reading), or Da",
                         false, true);
   setValidStrings_("recon_sub_tolerance_unit", ListUtils::create<std::string>("ppm,Da"));
+  // 1.16b survey rules (README "Mass-shift survey").
+  registerStringOption_("delta_select", "<rule>", "min_delta",
+                        "How a spectrum's -delta_out sample is chosen: min_delta (the lowest-E-value placed tag's "
+                        "smallest-|delta| placement, 1.15) or consensus (the placement the most placed tags agree "
+                        "with: same peptide, gap within 0.05 Da)",
+                        false, true);
+  setValidStrings_("delta_select", ListUtils::create<std::string>("min_delta,consensus"));
+  registerStringOption_("delta_loc_model", "<model>", "strict",
+                        "How -delta_out localizes a sample's gap: count (every matched ion and charge, 1.16a), "
+                        "unique (a site's distinct matched peaks) or strict (unique, and a shifted ion's peak "
+                        "that is an H2O/NH3 loss satellite of an observed unshifted ion does not count)",
+                        false, true);
+  setValidStrings_("delta_loc_model", ListUtils::create<std::string>("count,unique,strict"));
+  registerIntOption_("delta_loc_min_evidence", "<n>", 2,
+                     "Site-determining evidence (the lead over the best rival site, in ions or, under unique "
+                     "and strict, peaks) a -delta_out gap needs to be fragment-localized; below it, ambiguous. "
+                     "1 = 1.16a",
+                     false, true);
+  setMinInt_("delta_loc_min_evidence", 1);
+  registerDoubleOption_("delta_loc_null", "<Th>", 0.0,
+                        "-delta_spectra_out null_class / null_evidence: also localize each sample's gap on the "
+                        "spectrum's peaks moved by this many Th (the false-localization null); 0 = off",
+                        false, true);
+  setMinFloat_("delta_loc_null", 0.0);
+  registerStringOption_("delta_isotope_flank", "<flank>", "precursor",
+                        "-delta_out's isotope_error reading: precursor (only on rows with at least half of their "
+                        "gaps on the precursor-derived flank, where a precursor isotope error lands) or any "
+                        "(1.16a)",
+                        false, true);
+  setValidStrings_("delta_isotope_flank", ListUtils::create<std::string>("precursor,any"));
+  registerDoubleOption_("delta_isobar_tolerance", "<Da>", 0.001,
+                        "-delta_out's isobars column: the members (catalogue names, substitutions on the row's "
+                        "sites, sums of two common modifications) within this many Da of the row's best name",
+                        false, true);
+  setMinFloat_("delta_isobar_tolerance", 0.0);
+  registerOutputFile_("delta_counts_out", "<file>", "",
+                      "The run's survey reconciliation (requires -delta_out): MS2 read, tagged, placed, "
+                      "clamped, samples exact / gapped / terminal, localization and observation classes, rows "
+                      "and the sums that must hold, as key/value TSV",
+                      false, true);
+  setValidFormats_("delta_counts_out", ListUtils::create<std::string>("tsv"));
 }
 
 bool TOPPFASTag::optionNonDefault_(const std::string& name) const

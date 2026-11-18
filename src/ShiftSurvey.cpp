@@ -45,6 +45,35 @@ namespace FASTag
       return true;
     }
 
+    LocClass locClass(const Reconciliation& r, int min_evidence)
+    {
+      if (r.region_hi < r.region_lo || std::fabs(r.delta_mass) <= 1e-6) return LocClass::NONE;
+      if (r.loc_pos < 0 || r.loc_pos >= static_cast<int>(r.peptide.size())) return LocClass::UNLOCALIZED;
+      if (r.loc_alternatives == 0) return LocClass::SEQUENCE_CONSTRAINED;
+      if (r.loc_evidence >= std::max(1, min_evidence)) return LocClass::FRAGMENT_LOCALIZED;
+      if (r.loc_evidence >= 1) return LocClass::AMBIGUOUS;
+      return LocClass::UNLOCALIZED;
+    }
+
+    const char* locClassName(LocClass c)
+    {
+      switch (c)
+      {
+        case LocClass::UNLOCALIZED: return "unlocalized";
+        case LocClass::AMBIGUOUS: return "ambiguous";
+        case LocClass::SEQUENCE_CONSTRAINED: return "sequence";
+        case LocClass::FRAGMENT_LOCALIZED: return "fragment";
+        default: return "-";
+      }
+    }
+
+    bool siteOf(const Reconciliation& r, Site& out, int min_evidence)
+    {
+      if (r.loc_pos < 0 || r.loc_pos >= static_cast<int>(r.peptide.size())) return false;
+      if (r.loc_alternatives > 0 && r.loc_evidence < std::max(1, min_evidence)) return false;
+      return siteOf(r, out);
+    }
+
     std::string siteKey(const Site& s)
     {
       if (s.kind == 'R') return std::string(1, s.residue);
@@ -387,6 +416,152 @@ namespace FASTag
       if (ppm_of > 0) std::snprintf(num, sizeof num, "13C+%d(%+.1fppm)", k, err / ppm_of * 1e6);
       else std::snprintf(num, sizeof num, "13C+%d(%+.1fmDa)", k, err * 1e3);
       return num;
+    }
+
+    const char* obsClassName(ObsClass c)
+    {
+      static const char* const N[OBS_CLASSES] = {"-", "extension", "truncation", "adduct", "isotope", "loss",
+                                                 "fixed_loss", "fixed_replacement", "terminal", "residue",
+                                                 "substitution", "unknown"};
+      const std::size_t i = static_cast<std::size_t>(c);
+      return i < OBS_CLASSES ? N[i] : "-";
+    }
+
+    ObsClass observationClass(const Observation& o, const std::vector<Entry>& unimod,
+                              const std::vector<FixedMod>& fixed, std::string* detail)
+    {
+      std::string dummy;
+      std::string& det = detail ? *detail : dummy;
+      det.clear();
+      const double d = o.delta, tol = o.tol_da;
+      if (std::fabs(d) <= 1e-6) return ObsClass::NONE;
+      auto near = [&](double m) { return std::fabs(d - m) <= tol; };
+      // Minus a fixed modification on a region residue that carries it.
+      auto fixedLoss = [&]() -> const FixedMod* {
+        for (const FixedMod& f : fixed)
+        {
+          const char fr = f.residue == 'I' ? 'L' : f.residue;
+          bool on = false;
+          for (char c : o.region) on = on || c == f.residue || (c == 'I' ? 'L' : c) == fr;
+          if (o.localized && !o.sites.empty() && o.sites.front().residue != f.residue) on = false;
+          if (on && near(-f.mass)) return &f;
+        }
+        return nullptr;
+      };
+      // A gap the fragments put on a residue with a fixed modification reads
+      // as that modification's loss before a terminal residue's mass (-57.021
+      // is unalkylated Cys and a lost Gly alike).
+      if (o.localized)
+        if (const FixedMod* f = fixedLoss())
+        {
+          det = "-" + f->name + "@" + std::string(1, f->residue);
+          return ObsClass::FIXED_LOSS;
+        }
+      for (std::size_t k = 0; k < o.beyond.size(); ++k)
+        if (near(o.beyond[k])) { det = "+" + std::to_string(k + 1) + " residue(s)"; return ObsClass::EXTENSION; }
+      for (std::size_t k = 0; k < o.inside.size(); ++k)
+        if (near(-o.inside[k])) { det = "-" + std::to_string(k + 1) + " residue(s)"; return ObsClass::TRUNCATION; }
+      // Cations for protons (Unimod Cation:*), and NH3; the nearest within the tolerance.
+      static const std::pair<const char*, double> ADDUCTS[] = {
+          {"Na", 21.981943}, {"Mg[II]", 21.969392}, {"K", 37.955882}, {"Ca[II]", 37.946941},
+          {"Fe[III]", 52.911464}, {"Fe[II]", 53.919289}, {"NH3", 17.026549}};
+      {
+        const std::pair<const char*, double>* best = nullptr;
+        for (const auto& a : ADDUCTS)
+          if (near(a.second) && (!best || std::fabs(d - a.second) < std::fabs(d - best->second))) best = &a;
+        if (best) { det = best->first; return ObsClass::ADDUCT; }
+      }
+      constexpr double DEAMIDATION = 0.984016;
+      if (o.precursor_flank)
+        for (int k = 1; k <= 2; ++k)
+          if (near(k * C13_STEP) && (k > 1 || std::fabs(d - C13_STEP) < std::fabs(d - DEAMIDATION)))
+          {
+            det = "13C+" + std::to_string(k);
+            return ObsClass::ISOTOPE;
+          }
+      static const std::pair<const char*, double> LOSSES[] = {
+          {"H2O", -18.010565}, {"NH3", -17.026549}, {"CH4SO", -63.998285}, {"H3PO4", -97.976896}};
+      for (const auto& l : LOSSES)
+        if (near(l.second)) { det = l.first; return ObsClass::LOSS; }
+      if (const FixedMod* f = fixedLoss())
+      {
+        det = "-" + f->name + "@" + std::string(1, f->residue);
+        return ObsClass::FIXED_LOSS;
+      }
+      if (!o.sites.empty())
+      {
+        const auto ms = match(unimod, d, tol, o.sites, fixed, SIZE_MAX);
+        for (const Match& m : ms)
+        {
+          if (!m.entry || m.entry->label) continue;
+          det = m.entry->name;
+          if (!m.fixed.empty()) return ObsClass::FIXED_REPLACEMENT;
+          return m.entry->term == Term::ANYWHERE ? ObsClass::RESIDUE : ObsClass::TERMINAL;
+        }
+      }
+      if (o.interp.rfind("sub:", 0) == 0) { det = o.interp.substr(4); return ObsClass::SUBSTITUTION; }
+      return ObsClass::UNKNOWN;
+    }
+
+    std::string isobarClass(double delta, const std::vector<Match>& names, const std::vector<Site>& sites,
+                            const std::vector<FixedMod>& fixed, double iso_tol)
+    {
+      const Match* best = nullptr;
+      for (const Match& m : names)
+        if (m.entry && !m.entry->label) { best = &m; break; }
+      if (!best) return "-";
+      const double mass = delta - best->error;  // the best name's mass
+      std::vector<std::string> members;
+      auto add = [&](const std::string& m) {
+        if (std::find(members.begin(), members.end(), m) == members.end()) members.push_back(m);
+      };
+      for (const Match& m : names)
+      {
+        if (!m.entry || m.entry->label) continue;
+        // Every name is matched to the same row delta, so two names' masses
+        // differ by the difference of their errors.
+        if (std::fabs(m.error - best->error) <= iso_tol) add(clean(m.entry->name) + (m.fixed.empty() ? "" : "[-" + clean(m.fixed) + "]"));
+      }
+      static const std::map<char, std::string> THREE = {
+          {'G', "Gly"}, {'A', "Ala"}, {'S', "Ser"}, {'P', "Pro"}, {'V', "Val"}, {'T', "Thr"}, {'C', "Cys"},
+          {'L', "Leu"}, {'I', "Ile"}, {'N', "Asn"}, {'D', "Asp"}, {'Q', "Gln"}, {'K', "Lys"}, {'E', "Glu"},
+          {'M', "Met"}, {'H', "His"}, {'F', "Phe"}, {'R', "Arg"}, {'Y', "Tyr"}, {'W', "Trp"}};
+      static const std::map<char, double> MONO = {
+          {'G', 57.02146372}, {'A', 71.03711379}, {'S', 87.03202841}, {'P', 97.05276385}, {'V', 99.06841391},
+          {'T', 101.04767847}, {'C', 103.00918478}, {'L', 113.08406398}, {'I', 113.08406398},
+          {'N', 114.04292744}, {'D', 115.02694303}, {'Q', 128.05857751}, {'K', 128.09496302},
+          {'E', 129.04259309}, {'M', 131.04048491}, {'H', 137.05891186}, {'F', 147.06841391},
+          {'R', 156.10111103}, {'Y', 163.06332853}, {'W', 186.07931295}};
+      std::set<char> origins;
+      for (const Site& s : sites) origins.insert(s.residue == 'I' ? 'L' : s.residue);
+      for (char x : origins)
+      {
+        const auto mx = MONO.find(x);
+        if (mx == MONO.end()) continue;
+        double fx = 0.0;
+        for (const FixedMod& f : fixed)
+          if (f.residue == x) fx = f.mass;
+        for (const auto& y : MONO)
+        {
+          if (y.first == x || y.first == 'I') continue;
+          if (std::fabs(y.second - (mx->second + fx) - mass) <= iso_tol)
+            add(THREE.at(x) + "->" + THREE.at(y.first));
+        }
+      }
+      static const std::pair<const char*, double> COMMON_MODS[] = {
+          {"Oxidation", 15.994915}, {"Deamidated", 0.984016}, {"Acetyl", 42.010565}, {"Methyl", 14.01565},
+          {"Carbamidomethyl", 57.021464}, {"Carbamyl", 43.005814}, {"Formyl", 27.994915},
+          {"Phospho", 79.966331}, {"Dehydrated", -18.010565}, {"Amidated", -0.984016},
+          {"Cation:Na", 21.981943}};
+      const std::size_t nc = sizeof(COMMON_MODS) / sizeof(COMMON_MODS[0]);
+      for (std::size_t i = 0; i < nc; ++i)
+        for (std::size_t j = i; j < nc; ++j)
+          if (std::fabs(COMMON_MODS[i].second + COMMON_MODS[j].second - mass) <= iso_tol)
+            add(std::string(COMMON_MODS[i].first) + "+" + COMMON_MODS[j].first);
+      if (members.size() < 2) return "-";
+      std::string o;
+      for (const std::string& m : members) { if (!o.empty()) o += '='; o += m; }
+      return o;
     }
 
     std::vector<BinGroup> groupBins(const std::map<std::int64_t, std::uint64_t>& counts, std::int64_t width)

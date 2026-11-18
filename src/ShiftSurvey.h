@@ -69,6 +69,45 @@ namespace FASTag
     */
     bool siteOf(const Reconciliation& r, Site& out);
 
+    /**
+      @brief The evidence class of a placement's gap (1.16b).
+
+      NONE: no gap to place (exact, or a gap with no residue between the tag
+      and the terminus). SEQUENCE_CONSTRAINED: the gap's region is one
+      residue, so the placement alone puts it there; no fragment chose it.
+      FRAGMENT_LOCALIZED: rival sites, and the chosen one leads the best
+      rival by at least @p min_evidence site-determining ions (peaks, under
+      LocModel UNIQUE / STRICT). AMBIGUOUS: rival sites and a lead of 1 to
+      @p min_evidence - 1. UNLOCALIZED: rival sites and no lead (a tie), or
+      no localization.
+    */
+    enum class LocClass : std::uint8_t { NONE = 0, UNLOCALIZED, AMBIGUOUS, SEQUENCE_CONSTRAINED, FRAGMENT_LOCALIZED };
+
+    /// "-", "unlocalized", "ambiguous", "sequence", "fragment".
+    const char* locClassName(LocClass c);
+
+    /**
+      @brief The evidence class of @p r's gap (see LocClass).
+
+      @param[in] r the placement, localized
+      @param[in] min_evidence the lead a FRAGMENT_LOCALIZED site needs (>= 1)
+      @return the class
+    */
+    LocClass locClass(const Reconciliation& r, int min_evidence);
+
+    /**
+      @brief siteOf() at a site-determining evidence threshold (1.16b).
+
+      Localized: SEQUENCE_CONSTRAINED or FRAGMENT_LOCALIZED at @p min_evidence.
+      siteOf(r, out) is siteOf(r, out, 1).
+
+      @param[in] r the placement
+      @param[out] out its site class
+      @param[in] min_evidence the lead a fragment-localized site needs
+      @return whether the gap is localized
+    */
+    bool siteOf(const Reconciliation& r, Site& out, int min_evidence);
+
     /// "K", "N-term|K", "Protein N-term|M", "C-term|R", "Protein C-term|L".
     std::string siteKey(const Site& s);
     /// The inverse of siteKey; false for anything else.
@@ -197,6 +236,92 @@ namespace FASTag
     */
     std::string isotopeError(double delta, double tol_da, const std::vector<Match>& names,
                              std::uint64_t localized, double ppm_of);
+
+    /**
+      @brief The observation class of one sampled gap (1.16b), assigned before any catalogue name.
+
+      Tried in this order, the first that fits within the tolerance wins
+      (FIXED_LOSS first when the gap is localized on a residue that carries
+      the fixed modification: -57.021 is a lost carbamidomethyl and a lost
+      Gly alike, and the site tells them apart): EXTENSION (the gap is the mass of the 1-3 protein residues beyond the
+      peptide on the gap's side: a missed cleavage or a longer peptide),
+      TRUNCATION (minus the mass of the 1-3 region residues next to that
+      terminus: a shorter, semi-specific peptide), ADDUCT (the nearest of
+      Na+, Mg2+, K+, Ca2+, Fe3+, Fe2+ for protons, or NH3), ISOTOPE (k x 13C, k = 1, 2, on a precursor-derived
+      flank only, and for k = 1 nearer +1.00336 than deamidation's
+      +0.98402), LOSS (H2O, NH3, CH4SO, H3PO4 lost), FIXED_LOSS (minus a
+      fixed modification on a region residue that carries it: -57.021 on
+      Cys searched as carbamidomethyl is an unalkylated Cys),
+      FIXED_REPLACEMENT / TERMINAL / RESIDUE (a non-label catalogue entry
+      fits: instead of a fixed modification, on a terminus, on a residue),
+      SUBSTITUTION (the placement's own sub:X->Y reading), else UNKNOWN.
+    */
+    enum class ObsClass : std::uint8_t
+    {
+      NONE = 0, EXTENSION, TRUNCATION, ADDUCT, ISOTOPE, LOSS, FIXED_LOSS, FIXED_REPLACEMENT, TERMINAL,
+      RESIDUE, SUBSTITUTION, UNKNOWN
+    };
+    inline constexpr std::size_t OBS_CLASSES = 12;  ///< number of ObsClass values
+
+    /// "-", "extension", "truncation", "adduct", "isotope", "loss", "fixed_loss",
+    /// "fixed_replacement", "terminal", "residue", "substitution", "unknown".
+    const char* obsClassName(ObsClass c);
+
+    /// What observationClass() reads about one sampled gap.
+    struct Observation
+    {
+      double delta = 0.0;           ///< the gap (Da)
+      double tol_da = 0.0;          ///< the tolerance (Da)
+      bool precursor_flank = false; ///< the gap is on the flank derived from the precursor mass
+      /// Masses of the 1, 2, 3 protein residues beyond the peptide on the gap's side (fixed mods included).
+      std::vector<double> beyond;
+      /// Masses of the 1, 2, 3 region residues next to the gap's terminus.
+      std::vector<double> inside;
+      /// The region's residues (I/L as in the database) and the sites a name may sit on.
+      std::string region;
+      std::vector<Site> sites;
+      std::string interp;  ///< the placement's gap reading ("sub:X->Y", "mod:...", "?")
+      bool localized = false;  ///< @p sites is the one site the evidence chose (else every region site)
+    };
+
+    /**
+      @brief The observation class of @p o (see ObsClass).
+
+      @param[in] o the gap
+      @param[in] unimod the catalogue (isotopic labels are not used)
+      @param[in] fixed the fixed residue modifications
+      @param[out] detail what fits: residues, "Na", "13C+1", "H2O", the entry's name, or empty
+      @return the class
+    */
+    ObsClass observationClass(const Observation& o, const std::vector<Entry>& unimod,
+                              const std::vector<FixedMod>& fixed, std::string* detail = nullptr);
+
+    /**
+      @brief The exact isobars of a named row: "Oxidation=Ala->Ser=Phe->Tyr", or "-".
+
+      The members whose mass is within @p iso_tol of the row's best name
+      (the first non-label entry of @p names, its mass @p delta less its
+      error): that name, the other catalogue names in @p names (as match() returns them,
+      uncapped; isotopic labels left out), single substitutions X->Y of a
+      residue X among @p sites (unmodified Y against X with its fixed
+      modification, if any), and sums of two common modifications
+      (Oxidation, Deamidated, Acetyl, Methyl, Carbamidomethyl, Carbamyl,
+      Formyl, Phospho, Dehydrated, Amidated, Cation:Na). Exact isobars
+      (oxidation = A->S = F->Y, dioxidation = P->E = 2 x oxidation, acetyl =
+      S->E, deamidation = N->D = Q->E, carbamidomethyl = G->N, carboxymethyl =
+      acetyl + oxidation) have one elemental composition; mass cannot tell
+      them apart, so a row reports the class, not one winner. "-" when the
+      class has one member.
+
+      @param[in] delta the row's delta (Da)
+      @param[in] names the row's catalogue matches, best first
+      @param[in] sites the row's localized sites
+      @param[in] fixed the fixed residue modifications
+      @param[in] iso_tol the isobar tolerance (Da)
+      @return the cell
+    */
+    std::string isobarClass(double delta, const std::vector<Match>& names, const std::vector<Site>& sites,
+                            const std::vector<FixedMod>& fixed, double iso_tol);
 
     /// One -delta_out row: its centre bin and the bins it takes.
     struct BinGroup
