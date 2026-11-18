@@ -366,6 +366,32 @@ int main()
     check(consistent, "protein_index names the placement's protein");
   }
 
+  // --- 1.16: in ppm the gap is interpreted at its flank's tolerance ---
+  {
+    // 1.15 took ppm of the gap itself: 20 ppm of 15.995 Da is 0.3 mDa, so
+    // an Oxidation (M) gap 2 mDa off -- 1.4 ppm of this peptide -- was "?".
+    // Its own peptide: SAMP holds A and S, and sub:A->S is Oxidation's
+    // mass to the last digit (mods win only an exact tie).
+    const std::string pep = "GMWPLEVGATSDGK";
+    std::vector<FASTAFile::FASTAEntry> e4;
+    e4.emplace_back("PROT1", "test protein", "MSTVWYAAR" + pep + "GTANLEFDSK");
+    ProteomeIndex idx4;
+    idx4.build(e4, {}, 0);
+    TagReconciler r4(20.0, /*ppm=*/true, /*both=*/false);
+    r4.attach(&idx4, 0, 4);
+    r4.setModCandidates({{"Oxidation", 15.994915, "M"}});
+    const size_t pos = 4;
+    const std::string tag = pep.substr(pos, 4);
+    bool named = false, mismatch = false;
+    for (const auto& x : r4.reconcile(tag, sumMass(pep.substr(0, pos)) + 15.994915 + 0.002, sumMass(pep.substr(pos + 4))))
+      if (x.peptide == pep && x.pos == pos && !x.nterm_match) named = x.delta_interp == "mod:Oxidation@M";
+    // ... and a gap outside every flank tolerance still is no Oxidation.
+    for (const auto& x : r4.reconcile(tag, sumMass(pep.substr(0, pos)) + 15.994915 + 0.2, sumMass(pep.substr(pos + 4))))
+      if (x.peptide == pep && x.pos == pos && !x.nterm_match) mismatch = x.delta_interp != "mod:Oxidation@M";
+    check(named, "ppm: a +15.997 N-side gap on GMWP is mod:Oxidation@M (flank-scale tolerance)");
+    check(mismatch, "ppm: a +16.195 gap is not Oxidation");
+  }
+
   if (failures == 0) std::cout << "tagrecon_test: all checks passed\n";
   return failures == 0 ? 0 : 1;
 }

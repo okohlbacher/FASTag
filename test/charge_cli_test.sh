@@ -93,9 +93,12 @@ want() {
 # is put back to the 1.11.0 one before hashing, so a version bump alone does
 # not fail the identity (every other byte is still compared).
 as111() { awk -F'\t' -v OFS='\t' '$1 == "run" && $2 == "version" { $3 = "1.11.0"; $5 = "FASTag 1.11.0 wrote this report." } { print }' "$1"; }
+# -delta_out gained the survey columns of 1.16 (appended); its 1.11 columns
+# are compared.
 for x in "${OUTS[@]}"; do
   f="$TMP/absent/t.$x"
   as111 "$f" > "$TMP/as111.$x"; f="$TMP/as111.$x"
+  if [ "$x" = delta.tsv ]; then cut -f1-3 "$f" > "$TMP/delta3"; f="$TMP/delta3"; fi
   if [ "$x" = label.tsv ]; then head -n 26 "$f" > "$TMP/label26"; f="$TMP/label26"; fi
   [ "$(sha "$f")" = "$(want "$x")" ] || fail "t.$x at defaults differs from the stored FASTag 1.11.0 digest"
 done
@@ -107,9 +110,12 @@ if [ -n "${FASTAG_BASELINE_BIN:-}" ]; then
     -delta_out "$TMP/base/t.delta.tsv" -digest_out "$TMP/base/t.digest.tsv" -label_out "$TMP/base/t.label.tsv" \
     -massgap_out "$TMP/base/t.massgap.tsv" -threads 2 > "$TMP/base/log" 2>&1 \
     || { cat "$TMP/base/log" >&2; fail "the baseline binary failed"; }
-  for x in tsv recon.tsv delta.tsv digest.tsv massgap.tsv; do
+  for x in tsv recon.tsv digest.tsv massgap.tsv; do
     as111 "$TMP/base/t.$x" | cmp -s "$TMP/as111.$x" - || fail "t.$x at defaults differs from $FASTAG_BASELINE_BIN"
   done
+  cut -f1-3 "$TMP/base/t.delta.tsv" | cmp -s "$TMP/delta3" - \
+    || fail "t.delta.tsv's first three columns at defaults differ from $FASTAG_BASELINE_BIN"
+
   n=$(wc -l < "$TMP/base/t.label.tsv")
   head -n "$n" "$TMP/as111.label.tsv" | cmp -s - <(as111 "$TMP/base/t.label.tsv") \
     || fail "the 1.11 label rows are not a prefix of t.label.tsv"

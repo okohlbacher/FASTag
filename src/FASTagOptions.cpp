@@ -910,6 +910,19 @@ void TOPPFASTag::registerOptionsAndFlags_()
                         "options given) as JSON lines and exit; needs no -out. Prepares the "
                         "given precursor at its charge (or 2+) only",
                         false, true);
+  // ---- 1.16: options ----
+  // Mass-shift survey: -delta_out's site and name columns.
+  registerDoubleOption_("delta_name_tolerance", "<tol>", 10.0,
+                        "Tolerance of the -delta_out unimod and psimod columns: a catalogue entry names a row "
+                        "when its mass is within this of the row's delta (on a residue the row's spectra "
+                        "localized); in -delta_name_tolerance_unit",
+                        false, true);
+  setMinFloat_("delta_name_tolerance", 0.0);
+  registerStringOption_("delta_name_tolerance_unit", "<unit>", "ppm",
+                        "Unit of -delta_name_tolerance: ppm of the median peptide mass of the row's spectra "
+                        "(a gap carries the error of a flank, on the peptide's mass scale), or Da",
+                        false, true);
+  setValidStrings_("delta_name_tolerance_unit", ListUtils::create<std::string>("ppm,Da"));
 }
 
 bool TOPPFASTag::optionNonDefault_(const std::string& name) const

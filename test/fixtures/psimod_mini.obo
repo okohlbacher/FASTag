@@ -1,0 +1,78 @@
+format-version: 1.2
+default-namespace: PSI-MOD
+remark: Test fixture for test/shift_survey_test.cpp: five terms copied from
+remark: OpenMS's share/OpenMS/CHEMISTRY/PSI-MOD.obo (pinned 70cebcd144), cut
+remark: to the fields FASTag reads, plus three synthetic terms that must be
+remark: left out (obsolete, origin X without a terminus, a cross-link).
+
+[Term]
+id: MOD:00719
+name: oxidation to L-methionine sulfoxide
+def: "a protein modification that oxygenates an L-methionine residue to L-methionine sulfoxide" [DeltaMass:177]
+property_value: DiffMono: "15.994915"
+property_value: Origin: "M"
+property_value: TermSpec: "none"
+is_a: MOD:00709 ! sulfur oxygenated L-methionine
+
+[Term]
+id: MOD:00189
+name: dehydroalanine (Ser)
+def: "A protein modification that effectively converts an L-serine residue to dehydroalanine." [DeltaMass:0, PubMed:10220322, RESID:AA0181 "resulting", UniMod:23 "site"]
+property_value: DiffMono: "-18.010565"
+property_value: Origin: "S"
+property_value: TermSpec: "none"
+is_a: MOD:01168 ! dehydroalanine
+
+[Term]
+id: MOD:00040
+name: 2-pyrrolidone-5-carboxylic acid (Gln)
+def: "A protein modification that effectively converts an L-glutamine residue to 2-pyrrolidone-5-carboxylic acid." [ChEBI:30652, RESID:AA0031, UniMod:28]
+property_value: DiffMono: "-17.026549"
+property_value: Origin: "Q"
+property_value: TermSpec: "N-term"
+is_a: MOD:01160 ! loss of ammonia
+
+[Term]
+id: MOD:00793
+name: dehydroalanine (Cys)
+def: "A protein modification that effectively converts an L-cysteine residue to dehydroalanine." [PubMed:18688235, UniMod:368]
+property_value: DiffMono: "-33.987721"
+property_value: Origin: "C"
+property_value: TermSpec: "none"
+
+[Term]
+id: MOD:00425
+name: monohydroxylated residue
+def: "a protein modification that effectively replaces one hydrogen atom with a hydroxyl group" [UniMod:35]
+property_value: DiffMono: "15.994915"
+property_value: Origin: "X"
+property_value: TermSpec: "C-term"
+
+[Term]
+id: MOD:99901
+name: synthetic obsolete term
+def: "left out: obsolete" []
+property_value: DiffMono: "15.994915"
+property_value: Origin: "M"
+property_value: TermSpec: "none"
+is_obsolete: true
+
+[Term]
+id: MOD:99902
+name: synthetic unspecific term
+def: "left out: origin X anywhere" []
+property_value: DiffMono: "15.994915"
+property_value: Origin: "X"
+property_value: TermSpec: "none"
+
+[Term]
+id: MOD:00119
+name: L-lanthionine
+def: "A protein modification that effectively cross-links an L-cysteine residue and an L-serine residue by a thioether bond to form L-lanthionine." [ChEBI:21347, RESID:AA0110]
+property_value: DiffMono: "-18.010565"
+property_value: Origin: "C, S"
+property_value: TermSpec: "none"
+
+[Typedef]
+id: contains
+name: contains

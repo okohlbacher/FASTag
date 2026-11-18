@@ -3,7 +3,36 @@
 ## Unreleased
 
 Documentation, packaging and desktop-app fixes for publication as research
-software. Tag output is unchanged.
+software, and the mass-shift survey. Tag output is unchanged; `-recon_out`'s
+`delta_interp` changes in ppm runs (fix below).
+
+- **Mass-shift survey (`-delta_out`):** five columns appended, the first three
+  unchanged. `localized` and `unlocalized` count the spectra whose gap the
+  fragments do or do not place on one site, judged by site-determining
+  evidence only (ions that distinguish the chosen site from the others; ties
+  and zero evidence are unlocalized); `residues` lists the localized sites,
+  with `N-term|X` / `C-term|X` (and `Protein` ...) where b/y ions cannot tell the
+  terminal residue from the terminus; `unimod` and `psimod` name the row from
+  Unimod (ModificationsDB) and PSI-MOD (read from `PSI-MOD.obo` with each
+  term's own residue and terminus, including terms ModificationsDB keeps only
+  as Unimod aliases), site-compatible with the localized sites, terminal
+  entries only on terminal sites, fixed modifications accounted for
+  (`Cys->Dha@C[-Carbamidomethyl]` at −91.009). New options
+  `-delta_name_tolerance` (10) and `-delta_name_tolerance_unit` (ppm of the
+  median peptide mass, or Da). The selected placement is localized whether or
+  not `-recon_localize` is given. Candidates, not FDR-controlled. The desktop
+  app reads the wider table.
+- **Fix: gap interpretation in ppm.** `delta_interp` judged a gap at ppm of
+  the gap's own mass (20 ppm of 15.995 Da = 0.3 mDa; gaps under 1 Da at
+  200 Da), while the gap carries the error of the flank it is measured on. A
+  variable Oxidation (M) gap 2 mDa off was therefore `?` (PXD045734: the
+  +15.995 rows of `-delta_out`), while Deamidated (+0.984, judged at 200 Da)
+  was named. The gap is now judged at the tolerance of its flank (the
+  peptide's mass for the precursor-derived flank, the flank's own otherwise),
+  as the flank match is. Substitutions are judged the same way, so ppm runs
+  now also read more gaps as `sub:X->Y` (e.g. a +15.995 gap on a region
+  holding S and no searched Oxidation is `sub:S->C`, 18 mDa off); both stay
+  hypotheses. Da runs are unchanged.
 
 - **Citation:** `CITATION.cff` and `codemeta.json`; a "How to cite" section in
   the README and on the project page. The repository is archived by Software

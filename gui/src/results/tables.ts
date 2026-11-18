@@ -92,6 +92,7 @@ export type AnyTable = ReconTable | DeltaTable | GlycoTable | ReconIdTable
 const RECON = ['spectrum', 'tag', 'protein', 'peptide', 'pos', 'reversed', 'nterm_match', 'cterm_match', 'delta_mass', 'region', 'delta_interp'] as const
 const LOC = ['loc_site', 'loc_score', 'loc_ties'] as const
 const DELTA = ['delta', 'spectra', 'top_interps'] as const
+const DELTA_SURVEY = ['localized', 'residues', 'unlocalized', 'unimod', 'psimod'] as const
 const GLYCO = ['spectrum', 'n_oxonium', 'oxonium_frac', 'glyco', 'ions'] as const
 
 const lines = (text: string): string[] => text.split(/\r?\n/).filter((l) => l !== '')
@@ -116,7 +117,9 @@ export function sniffTable(text: string): TableKind | null {
   if (MZTAB_LINE.test(firstLine(text))) return 'reconIds'
   const head = header(text)
   if (has(head, RECON)) return 'recon'
-  if (has(head, DELTA) && head.length === 3) return 'delta'
+  // 1.16 appends the survey columns (localized ... psimod); this viewer
+  // reads the first three by name either way.
+  if (has(head, DELTA) && (head.length === 3 || has(head, DELTA_SURVEY))) return 'delta'
   if (has(head, GLYCO)) return 'glyco'
   return null
 }

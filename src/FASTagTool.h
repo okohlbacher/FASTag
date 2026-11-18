@@ -64,6 +64,7 @@
 #include "RunMeta.h"
 #include "Cleavage.h"
 #include "SearchConfig.h"
+#include "ShiftSurvey.h"
 #include "Sha256.h"
 #include "Shortlist.h"
 #include "SpeciesCall.h"

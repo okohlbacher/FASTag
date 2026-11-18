@@ -58,6 +58,23 @@ namespace FASTag
     size_t      loc_site = 0;   ///< 1-based position of that residue in the protein
     int         loc_score = 0;  ///< b/y ion/charge matches with the gap on loc_pos
     int         loc_ties = 0;   ///< region positions sharing loc_score; 1 = unique
+    /// Site-determining evidence for loc_pos (1.16): its score less the best
+    /// score of any OTHER region site. Ions that every candidate site puts
+    /// in the same state add the same to all scores and cancel, so this is
+    /// the net count of the ions that tell the chosen site from its nearest
+    /// rival. 0 on a tie or with no evidence; 0 as well when the region is a
+    /// single residue (loc_alternatives == 0), where nothing competes.
+    int         loc_evidence = 0;
+    /// Other residues of the region the gap could sit on (region size - 1).
+    int         loc_alternatives = 0;
+    /// Text positions of the placement's window [win_start, win_end), for a
+    /// localization after the fact (TagReconciler::localize).
+    uint32_t    win_start = 0, win_end = 0;
+    /// Neutral monoisotopic mass of the database peptide, fixed mods included.
+    double      pep_mass = 0.0;
+    /// The peptide starts its protein (position 0, or 1 after an initiator
+    /// Met) / ends it: the gap's terminus may be the protein's.
+    bool        protein_nterm = false, protein_cterm = false;
   };
 
   /**
@@ -166,6 +183,23 @@ namespace FASTag
       @param[in] series the ion pair the tag was read as, or nullptr for b/y
       @return the placements
     */
+    /**
+      @brief Localize one placement after the fact, as reconcile() does with a spectrum.
+
+      For a placement made without a spectrum (no -recon_localize) whose gap
+      a report still needs placed. Does nothing for an exact placement or one
+      already localized (loc_pos >= 0).
+
+      @param[in,out] r a placement this reconciler returned
+      @param[in] spec m/z-sorted fragment peaks
+      @param[in] precursor_charge the precursor charge (<= 0 counts as 2)
+      @param[in] tag_shift per-residue variable modification shifts of the tag, or nullptr
+      @param[in] series the ion pair the tag was read as, or nullptr for b/y
+    */
+    void localize(Reconciliation& r, const OpenMS::MSSpectrum& spec, int precursor_charge = 2,
+                  const std::vector<double>* tag_shift = nullptr,
+                  const IonSeries::IonPair* series = nullptr) const;
+
     std::vector<Reconciliation> reconcileByMass(const std::string& tag, double nterm_mass, double cterm_mass,
                                                 const IonSeries::IonPair* series = nullptr) const;
 
@@ -215,7 +249,8 @@ namespace FASTag
     /// "?" if neither fits within tolerance. Prefers whichever fits with the
     /// smaller mass error; on a near-tie a modification wins (it is the more
     /// common explanation).
-    std::string interpretDelta_(double delta, const std::string& region) const;
+    /// @p tol is the tolerance of the flank the gap is on (see tryPlace_).
+    std::string interpretDelta_(double delta, const std::string& region, double tol) const;
 
     double frag_tol_;
     bool   tol_ppm_;

@@ -83,10 +83,10 @@ namespace FASTag
     // (In Da mode both tolerances are the same constant.)
     const double pep_tol = tolAt_(idx_->massBetween(w.start, w.end) + WATER);
     const bool n_from_prec = !occ.reversed;
-    const bool n_ok = std::fabs(db_n - want_n) <=
-                      (n_from_prec ? pep_tol : tolAt_(std::max(db_n, want_n)));
-    const bool c_ok = std::fabs(db_c - want_c) <=
-                      (n_from_prec ? tolAt_(std::max(db_c, want_c)) : pep_tol);
+    const double n_tol = n_from_prec ? pep_tol : tolAt_(std::max(db_n, want_n));
+    const double c_tol = n_from_prec ? tolAt_(std::max(db_c, want_c)) : pep_tol;
+    const bool n_ok = std::fabs(db_n - want_n) <= n_tol;
+    const bool c_ok = std::fabs(db_c - want_c) <= c_tol;
 
     // Only ONE flank may carry a mass gap: a peptide with mismatches on both
     // sides of the tag is under-constrained and, in TagRecon's own words, hurts
@@ -107,6 +107,15 @@ namespace FASTag
     r.reversed = occ.reversed;
     r.nterm_match = n_ok;
     r.cterm_match = c_ok;
+    r.win_start = w.start;
+    r.win_end = w.end;
+    r.pep_mass = idx_->massBetween(w.start, w.end) + WATER;
+    {
+      const uint32_t plen = idx_->proteinLength(r.protein_index);
+      const uint32_t pstart = w.start - static_cast<uint32_t>(r.start);  // the protein's first residue
+      r.protein_nterm = r.start == 0 || (r.start == 1 && idx_->originalText(pstart, pstart + 1) == "M");
+      r.protein_cterm = r.start + L == plen;
+    }
     if (n_ok && c_ok) { r.delta_mass = 0.0; r.region_lo = 0; r.region_hi = -1; }
     else if (!n_ok)   // gap is on the N-side residues [0, pos)
     {
@@ -127,7 +136,12 @@ namespace FASTag
       const std::string region =
           idx_->foldedText(w.start + static_cast<uint32_t>(r.region_lo),
                            w.start + static_cast<uint32_t>(r.region_hi) + 1);
-      r.delta_interp = interpretDelta_(r.delta_mass, region);
+      // Judged at the tolerance of the flank the gap is on, the one that
+      // flank failed: the gap's error is that flank's (on the peptide's
+      // mass scale for the precursor-derived flank), not a share of the gap
+      // itself. 1.15 took ppm of the gap, 0.3 mDa for +15.995 at 20 ppm, so
+      // Oxidation (M) a variable mod came out "?".
+      r.delta_interp = interpretDelta_(r.delta_mass, region, n_ok ? c_tol : n_tol);
       if (spec) localize_(r, w, *spec, frag_charges, occ, tag_shift, series);
     }
     out.push_back(std::move(r));
@@ -218,23 +232,44 @@ namespace FASTag
         b0[i] = hits(b + tn); b1[i] = hits(b + tn + d);
         y0[i] = hits(y + tc); y1[i] = hits(y + tc + d);
       }
-      int best = -1, pos = -1, ties = 0;
+      int best = -1, pos = -1, ties = 0, second = -1;
       for (int j = r.region_lo; j <= r.region_hi; ++j)
       {
         int score = 0;
         for (int i = 1; i < L; ++i)
           score += (j < i ? b1[i] : b0[i]) + (j >= L - i ? y1[i] : y0[i]);
-        if (score > best) { best = score; pos = j; ties = 1; }
-        else if (score == best) ++ties;
+        if (score > best) { second = best; best = score; pos = j; ties = 1; }
+        else { if (score == best) ++ties; second = std::max(second, score); }
       }
-      if (r.loc_pos < 0 || best > r.loc_score) { r.loc_pos = pos; r.loc_score = best; r.loc_ties = ties; }
+      if (r.loc_pos < 0 || best > r.loc_score)
+      {
+        r.loc_pos = pos; r.loc_score = best; r.loc_ties = ties;
+        // Site-determining evidence: the best less the best rival (shared
+        // ions cancel); a single-site region has no rival and no evidence.
+        r.loc_alternatives = r.region_hi - r.region_lo;
+        r.loc_evidence = r.loc_alternatives > 0 ? best - second : 0;
+      }
     };
     if (label != 0.0 && !alone) place(label);  // labelled: the label rides along
     place(0.0);  // unlabelled, or the gap is the label alone: scored whole
     r.loc_site = idx_->proteinOffset(w.start + static_cast<uint32_t>(r.loc_pos)) + 1;
   }
 
-  std::string TagReconciler::interpretDelta_(double delta, const std::string& region) const
+  void TagReconciler::localize(Reconciliation& r, const MSSpectrum& spec, int precursor_charge,
+                               const std::vector<double>* tag_shift,
+                               const IonSeries::IonPair* series) const
+  {
+    if (!idx_ || r.loc_pos >= 0 || r.region_hi < r.region_lo || std::fabs(r.delta_mass) <= 1e-6 ||
+        r.win_end <= r.win_start)
+      return;
+    const ProteomeIndex::Window w{r.win_start, r.win_end};
+    const ProteomeIndex::TagOcc occ{static_cast<uint32_t>(r.win_start + r.pos),
+                                    static_cast<uint16_t>(r.tag_len), r.reversed};
+    const int frag_charges = std::max(1, (precursor_charge > 0 ? precursor_charge : 2) - 1);
+    localize_(r, w, spec, frag_charges, occ, tag_shift, series);
+  }
+
+  std::string TagReconciler::interpretDelta_(double delta, const std::string& region, double tol) const
   {
     // Two hypotheses, both localized to `region`:
     //   modification -- delta ~= a candidate mod's shift, and the region carries a
@@ -243,7 +278,6 @@ namespace FASTag
     //                   replaced by any residue Y (unmodified masses; see attach()).
     // The best fit (smallest mass error) wins; a modification breaks a near-tie
     // because it is the more common explanation of a given mass shift.
-    const double tol = tolAt_(std::fabs(delta) > 1.0 ? std::fabs(delta) : 200.0);
     std::string best;
     double best_err = tol;
     bool best_is_mod = false;

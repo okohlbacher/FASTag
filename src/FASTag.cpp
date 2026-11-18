@@ -1163,6 +1163,26 @@ TOPPFASTag::ExitCodes TOPPFASTag::main_(int, const char**)
       ;
   // delta_on: one delta sample per spectrum is taken and binned.
   const bool delta_on = !delta_out.empty() || gap_needed;
+  // 1.16 mass-shift survey: -delta_out's site and name columns. The
+  // selected sample's gap is localized (if -recon_localize did not) and
+  // classed; each row is named from Unimod (ModificationsDB) and PSI-MOD
+  // (the OBO file read with its own specificity, ShiftSurvey.h).
+  const bool delta_sites = !delta_out.empty();
+  std::vector<FASTag::ShiftSurvey::Entry> survey_unimod, survey_psimod;
+  std::vector<FASTag::ShiftSurvey::FixedMod> survey_fixed;
+  const double survey_tol = getDoubleOption_("delta_name_tolerance");
+  const bool survey_ppm = getStringOption_("delta_name_tolerance_unit") == "ppm";
+  if (delta_sites)
+  {
+    survey_unimod = FASTag::ShiftSurvey::unimodEntries();
+    std::string err;
+    survey_psimod = FASTag::ShiftSurvey::psimodEntries("CHEMISTRY/PSI-MOD.obo", &err);
+    if (!err.empty())
+      OPENMS_LOG_WARN << "-delta_out: PSI-MOD not read (" << err << "); the psimod column stays empty."
+                      << std::endl;
+    for (const auto& m : p.mods)
+      if (!m.variable) survey_fixed.push_back({m.residue, m.delta, m.name});
+  }
   if (massgap_on && !place_reports)
   {
     OPENMS_LOG_ERROR << "-massgap_out requires -recon_out (the gaps are those of the "
@@ -2672,6 +2692,12 @@ TOPPFASTag::ExitCodes TOPPFASTag::main_(int, const char**)
   {
     double delta = 0.0;
     std::string interp;
+    // 1.16 (-delta_out only): whether the placement has a gap to localize,
+    // its site class (ShiftSurvey::siteKey; empty = unlocalized) and the
+    // peptide's mass (the ppm scale of the name tolerance).
+    bool gap = false;
+    std::string site;
+    double pep_mass = 0.0;
   };
   // Per-thread accumulators, summed after the loop. One cache-line-aligned
   // struct per thread, so neighbouring threads' counters never share a line.
@@ -3055,7 +3081,7 @@ TOPPFASTag::ExitCodes TOPPFASTag::main_(int, const char**)
     // -recon_localize matches against the spectrum's own peaks: every
     // positive one, m/z sorted (the tagger's peak selection is its own).
     MSSpectrum loc_peaks;
-    if (recon_loc && !tags.empty())
+    if ((recon_loc || delta_sites) && !tags.empty())
     {
       for (const auto& pk : spec)
         if (pk.getIntensity() > 0 && std::isfinite(pk.getMZ())) loc_peaks.push_back(pk);
@@ -3245,6 +3271,21 @@ TOPPFASTag::ExitCodes TOPPFASTag::main_(int, const char**)
           delta_clamped = std::fabs(best->delta_mass) > 1e-6 && side_flank == 0.0;
           delta_sample.delta = best->delta_mass;
           delta_sample.interp = best->delta_interp;
+          if (delta_sites)
+          {
+            // The exact placement selected, localized on this spectrum's
+            // peaks as -recon_localize would (already done when it is on).
+            FASTag::Reconciliation chosen = *best;
+            if (!recon_loc)
+              recon.localize(chosen, loc_peaks, hy.charge, tag_modded ? &tag_shift : nullptr,
+                             tag_cz ? &cz_pair : nullptr);
+            delta_sample.gap = chosen.region_hi >= chosen.region_lo && std::fabs(chosen.delta_mass) > 1e-6;
+            FASTag::ShiftSurvey::Site site;
+            delta_sample.site = delta_sample.gap && FASTag::ShiftSurvey::siteOf(chosen, site)
+                                    ? FASTag::ShiftSurvey::siteKey(site)
+                                    : std::string();
+            delta_sample.pep_mass = chosen.pep_mass;
+          }
           delta_e = t.evalue;
           delta_have = true;
         }
@@ -4261,7 +4302,16 @@ TOPPFASTag::ExitCodes TOPPFASTag::main_(int, const char**)
     if (delta_on)
     {
       std::map<int64_t, std::pair<uint64_t, std::map<std::string, uint64_t>>> bins;
-      size_t clamped = 0, samples = 0;
+      // 1.16 survey columns, per bin: sites of the localized gaps, the
+      // unlocalized gaps, and the peptide masses (the ppm scale).
+      struct SiteBin
+      {
+        std::map<std::string, uint64_t> sites;
+        uint64_t unloc = 0;
+        std::vector<double> masses;
+      };
+      std::map<int64_t, SiteBin> site_bins;
+      size_t clamped = 0, samples = 0, survey_loc = 0, survey_unloc = 0;
       for (const PerThread& pt : per_thread)
       {
         clamped += pt.delta_clamped;
@@ -4272,6 +4322,14 @@ TOPPFASTag::ExitCodes TOPPFASTag::main_(int, const char**)
           auto& b = bins[bin_key];
           ++b.first;
           if (!d.interp.empty()) ++b.second[d.interp];
+          if (delta_sites)
+          {
+            SiteBin& sb = site_bins[bin_key];
+            sb.masses.push_back(d.pep_mass);
+            if (!d.gap) continue;
+            if (d.site.empty()) { ++sb.unloc; ++survey_unloc; }
+            else { ++sb.sites[d.site]; ++survey_loc; }
+          }
         }
       }
       // Local-max grouping: a bin whose count is not exceeded by either
@@ -4288,7 +4346,7 @@ TOPPFASTag::ExitCodes TOPPFASTag::main_(int, const char**)
           OPENMS_LOG_ERROR << "Cannot open output file " << delta_out << " for writing." << std::endl;
           return CANNOT_WRITE_OUTPUT_FILE;
         }
-        dtsv << "delta\tspectra\ttop_interps\n";
+        dtsv << "delta\tspectra\ttop_interps\tlocalized\tresidues\tunlocalized\tunimod\tpsimod\n";
       }
       std::set<int64_t> absorbed;
       for (const auto& kv : bins)
@@ -4300,6 +4358,16 @@ TOPPFASTag::ExitCodes TOPPFASTag::main_(int, const char**)
         if (kv.second.first < nl || kv.second.first < nh) continue;  // not the local max
         uint64_t count = kv.second.first;
         std::map<std::string, uint64_t> interps = kv.second.second;
+        SiteBin row_sites;
+        auto addSites = [&](int64_t key) {
+          if (!delta_sites) return;
+          const auto it = site_bins.find(key);
+          if (it == site_bins.end()) return;
+          for (const auto& sc : it->second.sites) row_sites.sites[sc.first] += sc.second;
+          row_sites.unloc += it->second.unloc;
+          row_sites.masses.insert(row_sites.masses.end(), it->second.masses.begin(), it->second.masses.end());
+        };
+        addSites(kv.first);
         for (auto* nb : {lo != bins.end() ? &*lo : nullptr, hi != bins.end() ? &*hi : nullptr})
           // A valley bin between two peaks goes to the first (lower-delta)
           // one only: counted twice, the rows summed to more spectra than
@@ -4309,6 +4377,7 @@ TOPPFASTag::ExitCodes TOPPFASTag::main_(int, const char**)
             count += nb->second.first;
             for (const auto& ip : nb->second.second) interps[ip.first] += ip.second;
             absorbed.insert(nb->first);
+            addSites(nb->first);
           }
         // top 3 interpretations by count, deterministic tie-break on name
         std::vector<std::pair<uint64_t, std::string>> ranked;
@@ -4333,6 +4402,34 @@ TOPPFASTag::ExitCodes TOPPFASTag::main_(int, const char**)
           dtsv << ranked[r].second << ':' << ranked[r].first;
         }
         if (ranked.empty()) dtsv << '-';
+        {
+          // 1.16 survey columns. Names only for a localized site; the
+          // tolerance in ppm is of the row's median peptide mass.
+          namespace SS = FASTag::ShiftSurvey;
+          uint64_t nloc = 0;
+          std::vector<SS::Site> sites;
+          for (const auto& sc : row_sites.sites)
+          {
+            nloc += sc.second;
+            SS::Site st;
+            if (SS::parseSiteKey(sc.first, st)) sites.push_back(st);
+          }
+          double ref = 0.0;
+          if (!row_sites.masses.empty())
+          {
+            std::vector<double>& m = row_sites.masses;
+            std::sort(m.begin(), m.end());
+            ref = m.size() % 2 ? m[m.size() / 2] : 0.5 * (m[m.size() / 2 - 1] + m[m.size() / 2]);
+          }
+          const double tol_da = survey_ppm ? survey_tol * ref * 1e-6 : survey_tol;
+          const double row_delta = kv.first * 0.0005;
+          constexpr size_t NAME_CAP = 5;
+          const auto um = SS::match(survey_unimod, row_delta, tol_da, sites, survey_fixed, NAME_CAP);
+          const auto pm = SS::match(survey_psimod, row_delta, tol_da, sites, survey_fixed, NAME_CAP);
+          dtsv << '\t' << nloc << '\t' << SS::formatSites(row_sites.sites) << '\t' << row_sites.unloc << '\t'
+               << SS::format(um, false, survey_ppm ? ref : 0.0) << '\t'
+               << SS::format(pm, true, survey_ppm ? ref : 0.0);
+        }
         dtsv << '\n';
       }
       if (write_delta)
@@ -4346,6 +4443,9 @@ TOPPFASTag::ExitCodes TOPPFASTag::main_(int, const char**)
         OPENMS_LOG_INFO << "Delta histogram: " << samples << " spectra sampled"
                         << (clamped ? ", " + std::to_string(clamped) + " excluded (clamped flank)" : std::string())
                         << " -> " << delta_out << std::endl;
+        OPENMS_LOG_INFO << "Delta sites: " << survey_loc << " gaps localized, " << survey_unloc
+                        << " unlocalized; names from " << survey_unimod.size() << " Unimod and "
+                        << survey_psimod.size() << " PSI-MOD entries" << std::endl;
       }
       // One gap result for every gap reader (FD::gapResult): -massgap_out
       // and the 1.12 readers see the same peaks on the same rows.
