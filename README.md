@@ -1383,16 +1383,33 @@ after extension are looked up (or `-species_min_len` residues, if that is
 larger). Pair `-species` with `-subsample_fraction 0.1` for a fast call on a large
 run.
 
-**Get the index.** Release archives from v1.0 on carry the full k-mer index
-inside (`share-FASTag-taxonomy/`), so `-species` works out of the box. For an
-index-only download (older archives, source builds, upgrades), every release
-also carries the platform-independent `FASTag-<version>-taxonomy-k7.tar.gz`
-(+`.sha256`; `FASTag-taxonomy-k7.tar.gz` up to 1.14.0); extract it into the
-FASTag directory:
+**Get the index.** Every release bundle carries the full k-mer index, so
+`-species` works out of the box; only a source build needs the download:
+
+| bundle | NCBI dumps (`nodes.dmp`, `names.dmp`) | k-mer index `tax_k7.taxdb` (~1.06 GB) | `MANIFEST.json` |
+|---|---|---|---|
+| CLI: Linux x64/arm64 `.tar.gz`, macOS arm64/x64 `.dmg`, Windows x64 `.zip` (`share-FASTag-taxonomy/`) | yes | **yes** | yes |
+| Desktop app: macOS `.dmg`, Linux `.deb`, `.tar.gz` and `.AppImage` (x64, arm64), Windows installer (`resources/fastag/share/FASTag/taxonomy/`) | yes | **yes** | yes |
+| Homebrew casks `fastag`, `fastag-cli` (the two macOS `.dmg`) | yes | **yes** | yes |
+| Index-only asset `FASTag-<version>-taxonomy-k7.tar.gz` / `.tar.xz` (+ `.sha256`) on every release | yes | **yes** | yes |
+| Source tree / source archive (`data/taxonomy/`) | yes | no: download the index-only asset | `manifests/<data tag>.json` |
+| CI artifacts of pull requests and pushes to main | yes | no | no |
+
+For a source build, an upgrade of an older install or a
+`FASTAG_TAXONOMY_DIR` setup, extract the index-only asset
+(`FASTag-taxonomy-k7.tar.gz` up to 1.14.0) into the FASTag directory:
 
 ```bash
 tar xzf FASTag-<version>-taxonomy-k7.tar.gz -C /path/to/FASTag/   # -> share-FASTag-taxonomy/
 ```
+
+`MANIFEST.json` names what the index was built from: the UniProt reference
+proteomes, the NCBI taxdump, the build commands and the sha256 of every file.
+For the index shipped since 2026-09-01 it was reconstructed afterwards and
+lacks the UniProt release and the proteome checksums; see
+[data/taxonomy/README.md](data/taxonomy/README.md). The index is derived from
+UniProt (CC BY 4.0) and the dumps from NCBI Taxonomy (public domain); see
+"Licence and provenance".
 
 FASTag looks for the taxonomy in `FASTAG_TAXONOMY_DIR` if that is set to a
 directory. Otherwise it looks beside the executable, in
@@ -1669,6 +1686,24 @@ MIT — see [LICENSE](LICENSE). Dependencies and licences are in [BOM.md](BOM.md
 The shipped `-digest_out` background is the residue composition of the UniProt
 human reference proteome UP000005640 (CC BY 4.0); see
 [data/digest/README.md](data/digest/README.md).
+
+The species index (`tax_k7.taxdb`) is derived from the UniProt reference
+proteomes in `data/taxonomy/reference-set.tsv` and the `-alkylation_proteome`
+FASTA files are UniProt reference proteomes; UniProt data are licensed under
+CC BY 4.0 (<https://creativecommons.org/licenses/by/4.0/>; The UniProt
+Consortium, *Nucleic Acids Res.* 2025, 53(D1):D609-D617). The taxonomy dumps
+are cut from NCBI Taxonomy (public domain). Sources, changes and checksums:
+[data/taxonomy/README.md](data/taxonomy/README.md),
+[data/alkylation/README.md](data/alkylation/README.md). None of these data
+files is covered by FASTag's MIT licence.
+
+Every binary bundle carries `LICENSE` and `THIRD-PARTY-NOTICES.txt` (the
+command-line program's libraries, with their licence texts); every desktop app
+also carries `GUI-THIRD-PARTY-NOTICES.txt` (the Rust crates and npm packages
+built into the app, its fonts, and in the AppImage the system libraries it
+bundles, with the source offer the LGPL asks for), next to the other two in
+the app's `resources/fastag/`. The example data in `examples/` (in every
+bundle) are OpenMS example files, BSD-3-Clause.
 
 The DirecTag algorithm is reimplemented from its publication. The reference
 implementation (Apache-2.0) was read to resolve semantics the paper leaves

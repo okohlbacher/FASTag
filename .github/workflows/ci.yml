@@ -579,6 +579,9 @@ jobs:
           # data/alkylation/README.md), beside the digest data (share-FASTag-alkylation).
           cp -r data/alkylation dist/FASTag/share-FASTag-alkylation
           test -s dist/FASTag/share-FASTag-alkylation/proteomes.tsv
+          # The example run (examples/README.md), next to the executable.
+          cp -r examples dist/FASTag/examples
+          test -s dist/FASTag/examples/Ecoli_MS2_small.mzML && test -s dist/FASTag/examples/README.md
           # FASTag's own licence and the notices of every redistributed
           # library, which BSD/MIT/Apache-2.0 require in a binary
           # distribution (tools/third_party_notices.py maps each bundled
@@ -690,6 +693,9 @@ jobs:
           # data/alkylation/README.md), beside the digest data (share-FASTag-alkylation).
           cp -r data/alkylation dist/FASTag/share-FASTag-alkylation
           test -s dist/FASTag/share-FASTag-alkylation/proteomes.tsv
+          # The example run (examples/README.md), next to the executable.
+          cp -r examples dist/FASTag/examples
+          test -s dist/FASTag/examples/Ecoli_MS2_small.mzML && test -s dist/FASTag/examples/README.md
           # FASTag's own licence and the notices of every redistributed
           # library, which BSD/MIT/Apache-2.0 require in a binary
           # distribution (tools/third_party_notices.py maps each bundled
@@ -1076,6 +1082,10 @@ jobs:
           # parameters back beside the index, or -species_call decoy refuses.
           cp data/taxonomy/species_call.tsv dist/FASTag/share-FASTag-taxonomy/
           test -s dist/FASTag/share-FASTag-taxonomy/species_call.tsv
+          # Its provenance: the tarball's own MANIFEST.json, or for an index
+          # that predates it the reconstructed one (data/taxonomy/manifests/),
+          # and every file checked against it.
+          python3 tools/check_taxonomy_manifest.py dist/FASTag/share-FASTag-taxonomy "data/taxonomy/manifests/$TAXDB_TAG.json"
           MZ=dist/FASTag/share-OpenMS/examples/ID/Ecoli_MS2_small.mzML
           test -s "$MZ" || { echo "smoke fixture missing from bundle"; exit 1; }
           dist/FASTag/FASTag -in "$MZ" -out /tmp/smoke.tsv \
@@ -1161,6 +1171,9 @@ jobs:
           cp -RL dist/FASTag/share-FASTag-digest "$R/share/FASTag/digest"
           cp -RL dist/FASTag/share-FASTag-alkylation "$R/share/FASTag/alkylation"
           cp dist/FASTag/LICENSE dist/FASTag/THIRD-PARTY-NOTICES.txt "$R/"
+          # File > Open Example Data (gui/src-tauri/src/examples.rs).
+          cp -R dist/FASTag/examples "$R/examples"
+          test -s "$R/examples/Ecoli_MS2_small.mzML"
           # -L throughout: Tauri's resource bundler silently SKIPS symlinked
           # directories, so a symlink here becomes a missing file in the .app
           # with no error at build time.
@@ -1217,6 +1230,19 @@ jobs:
         if: steps.mac-signing.outputs.enabled == 'true' || (inputs.gui_dry_run && runner.os == 'macOS')
         working-directory: gui
         run: npm ci --ignore-scripts
+
+      # GUI-THIRD-PARTY-NOTICES.txt beside the CLI's notices in the app's
+      # resources: the Rust crates of this target, the npm production
+      # packages and the fonts, each with its licence text
+      # (tools/gui_third_party_notices.py fails on a missing text).
+      - name: Third-party notices of the desktop app (macOS)
+        if: steps.mac-signing.outputs.enabled == 'true' || (inputs.gui_dry_run && runner.os == 'macOS')
+        shell: bash
+        run: |
+          set -euo pipefail
+          target=$(rustc -vV | sed -n 's/^host: //p')
+          python3 tools/gui_third_party_notices.py --gui gui --target "$target" --platform macos \
+            --out gui/src-tauri/resources/fastag/GUI-THIRD-PARTY-NOTICES.txt
 
       - name: Build, sign and notarize the desktop app (macOS)
         if: steps.mac-signing.outputs.enabled == 'true' || (inputs.gui_dry_run && runner.os == 'macOS')
@@ -1328,6 +1354,9 @@ jobs:
           CLI="${apps[0]}/Contents/Resources/resources/fastag/bin/FASTag"
           [ -x "$CLI" ] || CLI=$(find "${apps[0]}/Contents/Resources" -path '*/fastag/bin/FASTag' -type f -perm -u+x | head -1)
           [ -n "$CLI" ] && [ -x "$CLI" ] || { echo "::error::no bundled CLI in the mounted app"; exit 1; }
+          # The notices (non-trivial, naming the app's own stack) and the
+          # example data travel in the app's resources.
+          bash tools/check_bundle_notices.sh "$(dirname "$(dirname "$CLI")")"
           env -i HOME="$HOME" "$CLI" --help > "$RUNNER_TEMP/dmg-help.txt" 2>&1 \
             || { echo "::error::the CLI inside the mounted dmg does not run"; cat "$RUNNER_TEMP/dmg-help.txt"; exit 1; }
           want=$(sed -n 's/^project(FASTag VERSION \([0-9.]*\).*/\1/p' CMakeLists.txt)
@@ -1386,7 +1415,7 @@ jobs:
           set -euo pipefail
           gh release create "${{ github.ref_name }}" \
             --title "${{ github.ref_name }}" \
-            --notes "Automated binary upload; release notes pending." \
+            --notes "Automated binary upload; the release notes follow from CHANGELOG.md (job release-notes)." \
             2>/dev/null || true
           gh release upload "${{ github.ref_name }}" "FASTag-${ASSET_VERSION}-gui-${{ matrix.name }}.dmg" --clobber
 
@@ -1485,7 +1514,7 @@ jobs:
         run: |
           gh release create "${{ github.ref_name }}" \
             --title "${{ github.ref_name }}" \
-            --notes "Automated binary upload; release notes pending." \
+            --notes "Automated binary upload; the release notes follow from CHANGELOG.md (job release-notes)." \
             2>/dev/null || true
           # macOS ships the DISK IMAGE ONLY. The tarball cannot carry a
           # notarization ticket -- Apple staples one to disk images, installers
@@ -1755,6 +1784,9 @@ jobs:
           cp -RL "$D/share-FASTag-digest" "$R/share/FASTag/digest"
           cp -RL "$D/share-FASTag-alkylation" "$R/share/FASTag/alkylation"
           cp "$D/LICENSE" "$D/THIRD-PARTY-NOTICES.txt" "$R/"
+          # File > Open Example Data (gui/src-tauri/src/examples.rs).
+          cp -RL "$D/examples" "$R/examples"
+          test -s "$R/examples/Ecoli_MS2_small.mzML"
           test -x "$R/bin/FASTag"
           test -s "$R/share/OpenMS/examples/ID/Ecoli_MS2_small.mzML"
           # A tag build, and a gui_full_payload dry run, carry the k-mer index
@@ -1788,13 +1820,25 @@ jobs:
       - name: Tauri build deps (apt, no conda)
         run: |
           sudo apt-get update -q
-          sudo apt-get install -y -q libwebkit2gtk-4.1-dev librsvg2-dev libgtk-3-dev file xdg-utils
+          sudo apt-get install -y -q libwebkit2gtk-4.1-dev librsvg2-dev libgtk-3-dev file xdg-utils squashfs-tools
           ldd --version | head -1
           pkg-config --modversion webkit2gtk-4.1
+      # GUI-THIRD-PARTY-NOTICES.txt beside the CLI's notices in the app's
+      # resources: the Rust crates of this target, the npm production
+      # packages and the fonts, each with its licence text. The .deb and the
+      # tarball bundle no system library; the AppImage step below adds the
+      # libraries linuxdeploy bundles to the AppImage's copy.
+      - name: Install the npm dependencies, write the desktop app's notices
+        working-directory: gui
+        run: |
+          set -euo pipefail
+          npm ci
+          target=$(rustc -vV | sed -n 's/^host: //p')
+          python3 ../tools/gui_third_party_notices.py --gui . --target "$target" --platform linux \
+            --out src-tauri/resources/fastag/GUI-THIRD-PARTY-NOTICES.txt
       - name: Build the .deb
         working-directory: gui
         run: |
-          npm ci
           npx tauri build --bundles deb
           ls -la src-tauri/target/release/bundle/deb/
           df -h / | tail -1
@@ -1814,6 +1858,32 @@ jobs:
           ls -la src-tauri/target/release/bundle/appimage/
           df -h / | tail -1
           compgen -G 'src-tauri/target/release/bundle/appimage/*.AppImage' > /dev/null
+          # The notices of what linuxdeploy bundled: listed from the
+          # AppImage's squashfs (nothing extracted), each library mapped to
+          # its Ubuntu package with the copyright file, the licence texts and
+          # the (L)GPL source offer; then built once more with that notice in
+          # the resources (linuxdeploy bundles the same libraries again), and
+          # the second AppImage checked to carry it and to list every library.
+          app=$(ls src-tauri/target/release/bundle/appimage/*.AppImage | head -1)
+          chmod +x "$app"
+          L="$RUNNER_TEMP/appimage.lls"
+          unsquashfs -o "$("$app" --appimage-offset)" -lls "$app" > "$L"
+          target=$(rustc -vV | sed -n 's/^host: //p')
+          python3 ../tools/gui_third_party_notices.py --gui . --target "$target" --platform linux \
+            --appimage-listing "$L" --out src-tauri/resources/fastag/GUI-THIRD-PARTY-NOTICES.txt
+          npx tauri build --bundles appimage
+          app=$(ls src-tauri/target/release/bundle/appimage/*.AppImage | head -1)
+          chmod +x "$app"
+          unsquashfs -o "$("$app" --appimage-offset)" -lls "$app" > "$L"
+          inside=$(awk '{print $NF}' "$L" | grep '/resources/fastag/GUI-THIRD-PARTY-NOTICES.txt$' | head -1)
+          [ -n "$inside" ] || { echo "::error::the AppImage carries no resources/fastag/GUI-THIRD-PARTY-NOTICES.txt"; exit 1; }
+          X="$RUNNER_TEMP/appimage-notice"; rm -rf "$X"
+          unsquashfs -o "$("$app" --appimage-offset)" -d "$X" "$app" "${inside#squashfs-root/}" \
+            "$(dirname "${inside#squashfs-root/}")/THIRD-PARTY-NOTICES.txt" \
+            "$(dirname "${inside#squashfs-root/}")/examples" > /dev/null
+          python3 ../tools/gui_third_party_notices.py --appimage-listing "$L" --check-appimage "$X/${inside#squashfs-root/}"
+          bash ../tools/check_bundle_notices.sh "$X/$(dirname "${inside#squashfs-root/}")" appimage
+          rm -rf "$X"
           echo "built=true" >> "$GITHUB_OUTPUT"
       # The Debian package is named fastag-gui, not the `fas-tag` Tauri
       # derives from productName: tauri.conf.json has no option for it, so
@@ -1861,6 +1931,7 @@ jobs:
           cli=$(find "$X" -path '*/resources/fastag/bin/FASTag' -type f -perm -u+x | head -1)
           [ -n "$cli" ] || { echo "::error::the .deb carries no executable resources/fastag/bin/FASTag"; exit 1; }
           echo "CLI in the .deb: ${cli#"$X"}"
+          bash tools/check_bundle_notices.sh "$(dirname "$(dirname "$cli")")"
           # bundle.category in tauri.conf.json sets the menu category;
           # without it Categories= is empty and menus file FASTag under
           # "Other".
@@ -2225,7 +2296,7 @@ jobs:
           set -euo pipefail
           gh release create "${{ github.ref_name }}" \
             --title "${{ github.ref_name }}" \
-            --notes "Automated binary upload; release notes pending." \
+            --notes "Automated binary upload; the release notes follow from CHANGELOG.md (job release-notes)." \
             2>/dev/null || true
           [ "$DEB" = "fastag-gui_${GITHUB_REF_NAME#v}_amd64.deb" ] && [ -f "gui-linux/$DEB" ] \
             || { echo "::error::the artifact's .deb is '$DEB', not fastag-gui_${GITHUB_REF_NAME#v}_amd64.deb"; exit 1; }
@@ -2276,7 +2347,7 @@ jobs:
           set -euo pipefail
           gh release create "${{ github.ref_name }}" \
             --title "${{ github.ref_name }}" \
-            --notes "Automated binary upload; release notes pending." \
+            --notes "Automated binary upload; the release notes follow from CHANGELOG.md (job release-notes)." \
             2>/dev/null || true
           [ "$DEB" = "fastag-gui_${GITHUB_REF_NAME#v}_arm64.deb" ] && [ -f "gui-linux/$DEB" ] \
             || { echo "::error::the artifact's .deb is '$DEB', not fastag-gui_${GITHUB_REF_NAME#v}_arm64.deb"; exit 1; }
@@ -2380,9 +2451,25 @@ jobs:
     permissions:
       contents: write
     steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+          sparse-checkout: |
+            tools/taxonomy_release_asset.sh
+            tools/check_taxonomy_manifest.py
+            data/taxonomy/manifests
+          sparse-checkout-cone-mode: false
       # The data tag's asset keeps its fixed name (FASTag-taxonomy-k7.tar.gz:
       # assets under a data tag are never mutated); the copy on this release
-      # is FASTag-<version>-taxonomy-k7.tar.gz (+ .tar.xz, + .sha256 each).
+      # is FASTag-<version>-taxonomy-k7.tar.gz (+ .tar.xz, + .sha256 each),
+      # with share-FASTag-taxonomy/MANIFEST.json inside: the tarball's own,
+      # or for the index of 2026-09-01, which predates it, the reconstructed
+      # data/taxonomy/manifests/<TAXDB_TAG>.json. Every pinned file comes out
+      # of both archives byte for byte (tools/taxonomy_release_asset.sh). The
+      # .tar.xz (xz -9, about 240 MB against 450) is made here rather than on
+      # the data tag, whose assets are never mutated. The .tar.gz stays: the
+      # CLI's own "index missing" message, the README and installs scripted
+      # against 1.11.0 name it.
       - name: Copy the pinned taxonomy asset onto this release
         env:
           GH_TOKEN: ${{ github.token }}
@@ -2392,34 +2479,57 @@ jobs:
           set -euo pipefail
           gh release create "${{ github.ref_name }}" \
             --title "${{ github.ref_name }}" \
-            --notes "Automated binary upload; release notes pending." \
+            --notes "Automated binary upload; the release notes follow from CHANGELOG.md (job release-notes)." \
             2>/dev/null || true
-          gh release download "$TAXDB_TAG" -p 'FASTag-taxonomy-k7.tar.gz*' -D .
-          got=$(python3 -c "import hashlib,sys;print(hashlib.sha256(open(sys.argv[1],'rb').read()).hexdigest())" FASTag-taxonomy-k7.tar.gz)
+          gh release download "$TAXDB_TAG" -p 'FASTag-taxonomy-k7.tar.gz' -D "$RUNNER_TEMP/pinned"
+          got=$(sha256sum "$RUNNER_TEMP/pinned/FASTag-taxonomy-k7.tar.gz" | cut -d' ' -f1)
           [ "$got" = "$TAXDB_SHA256" ] || { echo "taxonomy sha256 mismatch: $got"; exit 1; }
-          # The same tarball recompressed with xz -9 (449.5 MB -> about 240
-          # MB). Made here rather than on the data tag, whose assets are never
-          # mutated. The tar stream inside is byte-identical to the pinned
-          # one, which is checked before anything is uploaded. The .tar.gz
-          # stays for now: the CLI's own "index missing" message, the README
-          # and installs scripted against 1.11.0 name it. Drop it once those
-          # point at the .tar.xz.
-          gzip -dc FASTag-taxonomy-k7.tar.gz | xz -9 -T0 -c > FASTag-taxonomy-k7.tar.xz
-          a=$(gzip -dc FASTag-taxonomy-k7.tar.gz | sha256sum | cut -d' ' -f1)
-          b=$(xz -dc FASTag-taxonomy-k7.tar.xz | sha256sum | cut -d' ' -f1)
-          [ "$a" = "$b" ] || { echo "::error::the .tar.xz does not hold the pinned tar stream"; exit 1; }
-          # Versioned names; each .sha256 names the file beside it, so
-          # `sha256sum -c` works on the downloaded pair.
+          bash tools/taxonomy_release_asset.sh "$RUNNER_TEMP/pinned/FASTag-taxonomy-k7.tar.gz" \
+            "data/taxonomy/manifests/$TAXDB_TAG.json" "$V"
+          rm -rf "$RUNNER_TEMP/pinned"
           N="FASTag-${V}-taxonomy-k7"
-          mv FASTag-taxonomy-k7.tar.gz "$N.tar.gz"
-          mv FASTag-taxonomy-k7.tar.xz "$N.tar.xz"
-          rm -f FASTag-taxonomy-k7.tar.gz.sha256
-          sha256sum "$N.tar.gz" > "$N.tar.gz.sha256"
-          sha256sum "$N.tar.xz" > "$N.tar.xz.sha256"
-          ls -l "$N".tar.*
           gh release upload "${{ github.ref_name }}" \
             "$N.tar.gz" "$N.tar.gz.sha256" \
             "$N.tar.xz" "$N.tar.xz.sha256" --clobber
+
+  # ---------------------------------------------------------- release notes
+  # The release body is the CHANGELOG.md section of the tag's version
+  # (tools/release_notes.py), not "release notes pending" (1.15.0 went out
+  # with that placeholder). Whichever job creates the release first uses a
+  # placeholder; this job then sets the body, creating the release itself if
+  # it is first. A tag whose version has no CHANGELOG section is red here. A
+  # manual dispatch only renders the notes into the job summary.
+  release-notes:
+    if: startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch'
+    needs: [version]
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+          sparse-checkout: |
+            CHANGELOG.md
+            tools/release_notes.py
+          sparse-checkout-cone-mode: false
+      - name: Release notes from CHANGELOG.md
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          V: ${{ needs.version.outputs.version }}
+          TAG: ${{ startsWith(github.ref, 'refs/tags/v') && github.ref_name || '' }}
+        run: |
+          set -euo pipefail
+          python3 tools/release_notes.py "$V" CHANGELOG.md > "$RUNNER_TEMP/notes.md"
+          { echo "### Release notes for $V (from CHANGELOG.md)"; echo; cat "$RUNNER_TEMP/notes.md"; } >> "$GITHUB_STEP_SUMMARY"
+          if [ -z "$TAG" ]; then
+            echo "not a tag: notes rendered into the job summary only"
+            exit 0
+          fi
+          gh release create "$TAG" --title "$TAG" --notes-file "$RUNNER_TEMP/notes.md" 2>/dev/null \
+            || gh release edit "$TAG" --notes-file "$RUNNER_TEMP/notes.md"
+          gh release view "$TAG" --json body --jq .body | head -3
 
   # ------------------------------------------------- release completeness
   # No more silently partial releases: v0.19.1 went out with no linux-x64
@@ -2433,7 +2543,7 @@ jobs:
     # would otherwise turn the cancelled run's completeness check red for
     # uploads the NEW run will finish.
     if: ${{ !cancelled() && startsWith(github.ref, 'refs/tags/v') }}
-    needs: [version, build, taxonomy-asset, gui-linux-release, gui-linux-arm64-release, gui-cli-consistency]
+    needs: [version, build, taxonomy-asset, release-notes, gui-linux-release, gui-linux-arm64-release, gui-cli-consistency]
     runs-on: ubuntu-24.04
     env:
       V: ${{ needs.version.outputs.version }}
@@ -2445,6 +2555,11 @@ jobs:
             CMakeLists.txt
             tools/release_assets.sh
           sparse-checkout-cone-mode: false
+      - name: The release notes were set from CHANGELOG.md
+        if: needs.release-notes.result != 'success'
+        run: |
+          echo "::error::release-notes was ${{ needs.release-notes.result }}: the release body is not the CHANGELOG section"
+          exit 1
       - name: The GUI's argv passed against the release CLI
         if: needs.gui-cli-consistency.result != 'success'
         run: |
