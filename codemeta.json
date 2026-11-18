@@ -46,6 +46,7 @@
   "author": [
     {
       "@type": "Person",
+      "@id": "https://orcid.org/0000-0003-1739-4598",
       "givenName": "Oliver",
       "familyName": "Kohlbacher"
     }
