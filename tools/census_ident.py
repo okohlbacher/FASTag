@@ -19,7 +19,8 @@ eval     Per-run AUC (cluster-weighted) of a score column for the first-search l
          n_peaks; mean over runs, ΔAUC with run-cluster and sample-cluster bootstrap intervals; precision of the
          top 10% per run. Second-search recovery at a fixed review budget: among the first search's unidentified
          spectra, the hit rate (semi search, subset FDR, as tools/census_triage_eval.py) of the top-k by each
-         ranker, with k = the run's triage candidates and k = 10% of the unidentified.
+         ranker, with k = the run's triage candidates and k = 10% of the unidentified. The unidentified are the
+         label-0 rows of the exact join; the triage set is their rows with triage = 1.
 check    Recomputes the score from a census table's features with a model JSON and compares it to its
          ident_score column (the C++ and Python implementations must agree to the printed precision).
 
@@ -368,8 +369,10 @@ def boot_ci(values, groups, B, seed):
 def recovery(run, rankers, q=0.01):
     """Second-search hits among the first search's unidentified spectra (identified = 0), at two budgets."""
     psms = cte.second_psms(run.meta["second"], run.meta.get("mzml") or None)
-    cs, cid, ctr = run.c["spectrum"], run.c["identified"], run.c["triage"]
-    u = [i for i, r in enumerate(run.rows) if r[cid] == "0"]
+    cs, ctr = run.c["spectrum"], run.c["triage"]
+    # U from the exact label join (the Sage TSV), not from the idXML column `identified`: SageAdapter
+    # (OpenMS 70cebcd144) writes no charge-1 PSM to its idXML, so a few identified spectra read identified = 0.
+    u = [i for i in range(len(run.rows)) if run.y[i] == 0]
     truth = cte.subset_truth(psms, {run.rows[i][cs] for i in u}, q)
     hit = {i: run.rows[i][cs] in truth for i in u}
     k_tri = sum(1 for i in u if run.rows[i][ctr] == "1")
@@ -383,7 +386,7 @@ def recovery(run, rankers, q=0.01):
     return out
 
 
-def evaluate(runs, score_of, B, seed, with_recovery):
+def evaluate(runs, score_of, B, seed, with_recovery, min_class=100):
     """score_of(run) -> list of scores. Returns (per-run rows, pooled dict)."""
     per = []
     for r in runs:
@@ -398,7 +401,9 @@ def evaluate(runs, score_of, B, seed, with_recovery):
         if with_recovery and r.meta.get("second"):
             row.update(recovery(r, rankers))
         per.append(row)
-    ok = [i for i, p in enumerate(per) if all(p[f"auc_{k}"] is not None for k in ("ident", "best_e", "n_peaks"))]
+    # evaluable: at least min_class accepted and min_class label-0 rows
+    ok = [i for i, p in enumerate(per) if p["pos"] >= min_class and p["n"] - p["pos"] >= min_class
+          and all(p[f"auc_{k}"] is not None for k in ("ident", "best_e", "n_peaks"))]
     pooled = {"runs": len(per), "evaluable": len(ok)}
     by_run = {i: [i] for i in ok}
     by_sample = {}
@@ -425,6 +430,7 @@ def evaluate(runs, score_of, B, seed, with_recovery):
             for budget in ("k_triage", "k_10"):
                 pooled[f"rate_{name}_{budget}"] = pooled[f"hits_{name}_{budget}"] / pooled[budget]
         pooled["rate_triage_set"] = pooled["hits_triage_set"] / pooled["k_triage"]
+        pooled["recovery_evaluable"] = sum(1 for p in per if p["t_u"] > 0)
         idx = list(range(len(per)))
         rng = random.Random(seed)
         diffs = []
@@ -482,6 +488,7 @@ def main(argv=None):
     e.add_argument("runs")
     e.add_argument("--score", default="ident_score", help="census column (default ident_score)")
     e.add_argument("--recovery", action="store_true")
+    e.add_argument("--min-class", type=int, default=100, help="accepted and label-0 rows a run needs (AUC endpoints)")
     e.add_argument("--boot", type=int, default=10000)
     e.add_argument("--seed", type=int, default=20261118)
     e.add_argument("--out", required=True)
@@ -525,7 +532,8 @@ def main(argv=None):
             print(json.dumps(model))
         elif args.cmd == "eval":
             runs = [Run(m) for m in read_runs(args.runs)]
-            per, pooled = evaluate(runs, lambda r: r.column(args.score), args.boot, args.seed, args.recovery)
+            per, pooled = evaluate(runs, lambda r: r.column(args.score), args.boot, args.seed, args.recovery,
+                                   args.min_class)
             write_eval(per, pooled, args.out)
             print(json.dumps({k: v for k, v in pooled.items()}, default=list))
         elif args.cmd == "check":

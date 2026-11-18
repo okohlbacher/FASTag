@@ -7,6 +7,19 @@ software, and the mass-shift survey. Tag output is unchanged; `-recon_out`'s
 `delta_interp` changes (the ppm fix and the substitution tolerance below), and
 so do `-delta_out`'s rows (`-delta_group`).
 
+- **Census identifiability score (`-census_score`, experimental; 1.16 item 4):**
+  four census columns taken before any database filter (`pre_best_evalue`,
+  `pre_best_len`, `pre_best_mean_conf`, `pre_tag_cover`) and `ident_score`, a
+  frozen logistic model on per-run mid-ranks of twelve census features that
+  orders every MS2 spectrum (every status) by how likely a standard database
+  search identifies it; `-census_sorted_out` writes the census in that order.
+  Fitted on PXD000561 development samples only; not validated on held-out
+  data (see doc/CENSUS-IDENT.md for the development result and its verdict
+  against census triage). Without `-census_score` the census is unchanged.
+- **`-census_ids_exact`:** a one-to-one ids join for label joins (exact native
+  ids, no scan fallback; refuses foreign references, a spectrum with two
+  identifications, hits without target/decoy annotation, and files that name
+  no run or another run). The default join is unchanged.
 - **Mass-shift survey (`-delta_out`):** five columns appended (six with
   `isotope_error`, below). `localized` and `unlocalized` count the spectra whose gap the
   fragments do or do not place on one site, judged by site-determining
