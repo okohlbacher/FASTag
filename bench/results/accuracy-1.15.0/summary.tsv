@@ -1,0 +1,12 @@
+dataset	truth	setting	scorer	truth_spectra	tagged	rank1_pct	top5_pct	top50_pct	any_valid_pct
+PXD000001	Mascot (deposited, 1% FDR)	matched	tools/pxd000001_truth.py	2254	2254	90.91	97.91	98.62	98.62
+PXD000001	Mascot (deposited, 1% FDR)	default	tools/pxd000001_truth.py	2254	2254	93.12	97.96	98.71	98.71
+PXD000001	Mascot (deposited, 1% FDR)	default_samplemods	tools/pxd000001_truth.py	2254	2254	93.35	97.96	98.71	98.71
+PXD000001	Mascot (deposited, 1% FDR)	default	fastag-bench accuracy	2254	2254	94.76	99.29	99.78	99.78
+PXD000001	Mascot (deposited, 1% FDR)	matched	fastag-bench accuracy	2254	2254	92.37	99.07	99.73	99.73
+PXD000001	Sage 0.14.7 (1% PSM FDR)	default	fastag-bench accuracy	2642	2641	88.15	95.23	97.50	97.46
+PXD000001	Sage 0.14.7 (1% PSM FDR)	matched	fastag-bench accuracy	2642	2633	85.57	95.06	97.27	96.93
+PXD054073	Sage 0.14.7 (1% PSM FDR)	default	fastag-bench accuracy	72067	72034	67.34	83.07	90.13	90.09
+PXD054073	Sage 0.14.7 (1% PSM FDR)	matched	fastag-bench accuracy	72067	71278	64.70	80.68	85.89	84.95
+PXD076528	Sage 0.14.7 (1% PSM FDR)	default	fastag-bench accuracy	44015	44003	53.84	67.39	79.65	79.63
+PXD076528	Sage 0.14.7 (1% PSM FDR)	matched	fastag-bench accuracy	44015	43623	47.97	60.87	67.09	66.50

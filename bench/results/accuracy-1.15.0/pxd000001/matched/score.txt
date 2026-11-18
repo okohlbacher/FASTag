@@ -1,0 +1,9 @@
+queries 6103; target top hits 3085; decoy top hits 942
+FDR<=1%: score >= 16.85  ->  2254 accepted target PSMs
+accepted-PSM spectra 2254, with >=1 tag 2254
+rank-1:  2049  (90.91%)
+top-5 :  2207  (97.91%)
+total :  2223  (98.62%)
+any valid tag, all accepted-PSM spectra: 2223/2254 (98.62%)
+no gapped rank-1 rows
+documented (gap_penalty 100): 86.4/96.1/98.05; deviation +4.51/+1.81/+0.57 pp

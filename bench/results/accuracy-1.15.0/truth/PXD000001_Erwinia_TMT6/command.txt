@@ -1,0 +1,1 @@
+/ceph/ibmi/abi/oliver/jpr-bench/envs/sage-0.14.7/sage-v0.14.7-x86_64-unknown-linux-gnu/sage --disable-telemetry-i-dont-want-to-improve-sage -o /scratch/kohlbach/jpr-acc/work/runs/PXD000001_Erwinia_TMT6/sage/default /scratch/kohlbach/jpr-acc/work/runs/PXD000001_Erwinia_TMT6/sage/default/sage.json

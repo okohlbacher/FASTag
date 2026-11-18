@@ -1,0 +1,44 @@
+PXD000001_Erwinia_TMT6 fastag_default: 0.211 s, 106 MB, load 27.69->27.69, rc 0
+PXD000001_Erwinia_TMT6 fastag_matched: 0.138 s, 94 MB, load 27.69->27.69, rc 0
+PXD000001_Erwinia_TMT6: sage: 2642 target PSMs at q <= 0.01
+  fastag_default: rank-1 2328/2641 tagged (0.8815), recall any 0.9746, per-tag 0.2193
+  fastag_matched: rank-1 2253/2633 tagged (0.8557), recall any 0.9693, per-tag 0.2328
+PXD000001_Erwinia_TMT6: mascot: 2254 target PSMs at q <= 0.01
+  fastag_default: rank-1 2136/2254 tagged (0.9476), recall any 0.9978, per-tag 0.2326
+  fastag_matched: rank-1 2082/2254 tagged (0.9237), recall any 0.9973, per-tag 0.2431
+/scratch/kohlbach/rsw-bench/acc/results/accuracy/PXD000001_Erwinia_TMT6/sage_summary.tsv
+/scratch/kohlbach/rsw-bench/acc/results/accuracy/PXD000001_Erwinia_TMT6/sage_topk.tsv
+/scratch/kohlbach/rsw-bench/acc/results/accuracy/PXD000001_Erwinia_TMT6/sage_by_length.tsv
+/scratch/kohlbach/rsw-bench/acc/results/accuracy/PXD000001_Erwinia_TMT6/sage_by_evalue.tsv
+/scratch/kohlbach/rsw-bench/acc/results/accuracy/PXD000001_Erwinia_TMT6/sage_evalue_density.tsv
+/scratch/kohlbach/rsw-bench/acc/results/accuracy/PXD000001_Erwinia_TMT6/mascot_summary.tsv
+/scratch/kohlbach/rsw-bench/acc/results/accuracy/PXD000001_Erwinia_TMT6/mascot_topk.tsv
+/scratch/kohlbach/rsw-bench/acc/results/accuracy/PXD000001_Erwinia_TMT6/mascot_by_length.tsv
+/scratch/kohlbach/rsw-bench/acc/results/accuracy/PXD000001_Erwinia_TMT6/mascot_by_evalue.tsv
+/scratch/kohlbach/rsw-bench/acc/results/accuracy/PXD000001_Erwinia_TMT6/mascot_evalue_density.tsv
+PXD054073_HeLa_ddaPASEF_R02 fastag_default: 2.013 s, 468 MB, load 20.34->20.34, rc 0
+PXD054073_HeLa_ddaPASEF_R02 fastag_matched: 0.685 s, 359 MB, load 20.34->20.34, rc 0
+PXD054073_HeLa_ddaPASEF_R02: sage: 72067 target PSMs at q <= 0.01
+  fastag_default: rank-1 48509/72034 tagged (0.6734), recall any 0.9009, per-tag 0.1130
+  fastag_matched: rank-1 46118/71278 tagged (0.6470), recall any 0.8495, per-tag 0.1162
+/scratch/kohlbach/rsw-bench/acc/results/accuracy/PXD054073_HeLa_ddaPASEF_R02/sage_summary.tsv
+/scratch/kohlbach/rsw-bench/acc/results/accuracy/PXD054073_HeLa_ddaPASEF_R02/sage_topk.tsv
+/scratch/kohlbach/rsw-bench/acc/results/accuracy/PXD054073_HeLa_ddaPASEF_R02/sage_by_length.tsv
+/scratch/kohlbach/rsw-bench/acc/results/accuracy/PXD054073_HeLa_ddaPASEF_R02/sage_by_evalue.tsv
+/scratch/kohlbach/rsw-bench/acc/results/accuracy/PXD054073_HeLa_ddaPASEF_R02/sage_evalue_density.tsv
+PXD076528_Astral_7673 fastag_default: 3.272 s, 736 MB, load 2.37->2.37, rc 0
+PXD076528_Astral_7673 fastag_matched: 1.123 s, 503 MB, load 2.37->4.75, rc 0
+PXD076528_Astral_7673: sage: 44015 target PSMs at q <= 0.01
+  fastag_default: rank-1 23689/44003 tagged (0.5383), recall any 0.7963, per-tag 0.0936
+  fastag_matched: rank-1 20925/43623 tagged (0.4797), recall any 0.6650, per-tag 0.0950
+/scratch/kohlbach/rsw-bench/acc/results/accuracy/PXD076528_Astral_7673/sage_summary.tsv
+/scratch/kohlbach/rsw-bench/acc/results/accuracy/PXD076528_Astral_7673/sage_topk.tsv
+/scratch/kohlbach/rsw-bench/acc/results/accuracy/PXD076528_Astral_7673/sage_by_length.tsv
+/scratch/kohlbach/rsw-bench/acc/results/accuracy/PXD076528_Astral_7673/sage_by_evalue.tsv
+/scratch/kohlbach/rsw-bench/acc/results/accuracy/PXD076528_Astral_7673/sage_evalue_density.tsv
+/scratch/kohlbach/rsw-bench/acc/results/tag_accuracy_by_evalue_v1150.tsv
+/scratch/kohlbach/rsw-bench/acc/results/tag_accuracy_by_length_v1150.tsv
+/scratch/kohlbach/rsw-bench/acc/results/tag_accuracy_evalue_density_v1150.tsv
+/scratch/kohlbach/rsw-bench/acc/results/tag_accuracy_summary_v1150.tsv
+/scratch/kohlbach/rsw-bench/acc/results/tag_accuracy_topk_v1150.tsv
+/scratch/kohlbach/rsw-bench/acc/results/tag_accuracy_runs_v1150.tsv
