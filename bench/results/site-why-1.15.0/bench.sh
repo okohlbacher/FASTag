@@ -2,14 +2,21 @@
 # site-why-1.15.0: FASTag 1.15.0 (release FASTag-1.15.0-linux-x64.tar.gz) at 128 threads on ibminode05,
 # protocol of site-why-1.14.0/bench.sh (load gate < 0.25 per core, warm page cache, one uncounted warm-up,
 # 3 reps, /usr/bin/time -v). FASTag side only; DirecTag's numbers are those of the 1.14.0 run (same node).
+#
+# Paths and settings come from the environment; the defaults are the values of the recorded run:
+#   W      output folder (raw.tsv, runs/, acc/)     FT   the FASTag wrapper of the unpacked release
+#   D47    PXD047793 diaTracer mzML                 D28  PXD028735 mzML
+#   D01    PXD000001 mzML                           T    threads (128)
+#   GATE   load per core below which a run starts   OPENMS_TMPDIR  OpenMS's temporary folder
+# Inputs: INPUTS.tsv (sha256; D47 and D28 are derived files, see RESULT.md).
 set -u
-W=/scratch/kohlbach/rsw-bench/site-why-1.15.0; RAW=$W/raw.tsv; GATE=0.25
-FT=/scratch/kohlbach/rsw-bench/opt/FASTag/FASTag
-D47=/scratch/kohlbach/rt047793/in/4223_TIMS2_006_2_Slot2-6_1_2877_diatracer.mzML
-D28=/scratch/kohlbach/fastag-carryover-1.12/timing/in/PXD028735_Gamma_01.mzML
-D01=/scratch/kohlbach/jpr-acc/data/PXD000001/TMT_Erwinia_1uLSike_Top10HCD_isol2_45stepped_60min_01-20141210.mzML
-T=128
-export OPENMS_TMPDIR=/dev/shm/kohlbach-tmp OPENBLAS_NUM_THREADS=1 OPENMS_DISABLE_UPDATE_CHECK=ON
+W=${W:-/scratch/kohlbach/rsw-bench/site-why-1.15.0}; RAW=$W/raw.tsv; GATE=${GATE:-0.25}
+FT=${FT:-/scratch/kohlbach/rsw-bench/opt/FASTag/FASTag}
+D47=${D47:-/scratch/kohlbach/rt047793/in/4223_TIMS2_006_2_Slot2-6_1_2877_diatracer.mzML}
+D28=${D28:-/scratch/kohlbach/fastag-carryover-1.12/timing/in/PXD028735_Gamma_01.mzML}
+D01=${D01:-/scratch/kohlbach/jpr-acc/data/PXD000001/TMT_Erwinia_1uLSike_Top10HCD_isol2_45stepped_60min_01-20141210.mzML}
+T=${T:-128}
+export OPENMS_TMPDIR=${OPENMS_TMPDIR:-/dev/shm/kohlbach-tmp} OPENBLAS_NUM_THREADS=1 OPENMS_DISABLE_UPDATE_CHECK=ON
 mkdir -p $OPENMS_TMPDIR $W/runs $W/acc
 N=$(nproc)
 [ -s $RAW ] || echo -e "tool\tdataset\trep\tstart_utc\tload1_before\tload_per_core_before\tgate_wait_s\tload1_after\tload_per_core_after\texit\twall_s\tmaxrss_kb\ttags_sha256\ttags_rows\trundir" > $RAW

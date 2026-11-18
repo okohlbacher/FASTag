@@ -44,5 +44,6 @@ __pycache__/
 !bench/results/accuracy-1.15.0/*/*/*.tsv
 # Archived held-out test preregistrations and results (from the acceptance branches).
 !acceptance/archive/MANIFEST.tsv
+!acceptance/archive/**/*.tsv
 # The example data shipped in every bundle (examples/README.md).
 !examples/*.mzML

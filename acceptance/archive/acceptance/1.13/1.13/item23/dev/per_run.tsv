@@ -1,0 +1,2 @@
+run_id	pxd	status	fastag_ends	fastag_nonspecific_share	fastag_nonspecific_mle	fastag_mc_positions	fastag_mc_sites	fastag_mc_site_share	fastag_mc_background_share	fastag_mc_retention	sage_psms	sage_kr_psms	sage_positions	sage_sites	sage_mc_mean	sage_mc_share	sage_site_share	sage_retention
+PXD003531_QE_NO_03	PXD003531	measured	3934	0.10574478901881035	0.11933549040933	10554	146	0.01383361758574948	0.11362902350109758	0.10942380809875506	5782	5320	15960	236	0.24904877205119336	0.22708405396056727	0.014786967418546366	0.11707797989081992

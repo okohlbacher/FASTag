@@ -1,7 +1,7 @@
 # accuracy-1.15.0: tag accuracy of FASTag 1.15.0 at its defaults and at DirecTag's settings
 
 Measured on 2026-11-18 on ibminode05 with the release `FASTag-1.15.0-linux-x64.tar.gz` (sha256 `804d5168…872c`,
-matches the GitHub release digest), 32 threads. Script: `run.sh`; table: `summarize.py` → `summary.tsv`.
+matches the GitHub release digest), 32 threads. Script: `run.sh`; table: `summarize.py` → `summary.tsv` (`python3 summarize.py . > summary.tsv` in this folder regenerates it).
 
 ## Settings
 
@@ -50,5 +50,5 @@ At the defaults gapped tags take 3 of 2,254 rank-1 slots on PXD000001 (0.13%; `p
 `summary.tsv` also lists PXD000001 scored by the harness against Mascot and against Sage 0.14.7 (2,642 PSMs);
 there both settings carry the sample's fixed modifications (`harness/tag_accuracy_runs_v1150.tsv`). The harness
 rule is more lenient than `tools/pxd000001_truth.py` (either flank, modifications decoded), so its Mascot numbers
-are 1.4 to 1.5 points higher at rank-1 and 1.1 points higher at top 50. Under both scorers and both truths the
+are 1.5 to 1.6 points higher at rank-1 and 1.1 points higher at top 50. Under both scorers and both truths the
 defaults rank a valid tag first more often than the matched settings.

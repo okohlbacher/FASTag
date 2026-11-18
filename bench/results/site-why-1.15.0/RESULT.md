@@ -6,7 +6,22 @@ DirecTag's numbers are those of the 1.14.0 record: same node, same inputs, same 
 
 - FASTag 1.15.0: release asset `FASTag-1.15.0-linux-x64.tar.gz`, sha256 `804d5168…872c`, which matches the
   GitHub release digest; `FASTag.bin` sha256 `a0680653…dff3` (`binary.sha256`, `release.sha256`).
-- Inputs and their sha256: `INPUTS.tsv`. Harness: `bench.sh`; one row per run in `raw.tsv`.
+- Inputs and their sha256: `INPUTS.tsv`. Harness: `bench.sh` (paths overridable by environment variables,
+  see its header); one row per run in `raw.tsv`.
+- The two timed inputs are derived files that are **not publicly deposited**; only their raw `.d` sources are
+  on PRIDE (URLs in [datasets.yaml](../../fastag-bench/datasets.yaml)):
+  - PXD047793: `4223_TIMS2_006_2_Slot2-6_1_2877_diatracer.mzML`, sha256
+    `8f199c90f09f327ed981fa354c16b4988999dcbd60d6a1915975db1088513e77`, pseudo-MS2 extracted from
+    `4223_TIMS2_006_2_Slot2-6_1_2877.d.zip` with diaTracer 2.2.1 (version from the mzML's softwareList; the
+    extraction settings are not recorded).
+  - PXD028735: `PXD028735_Gamma_01.mzML` (in `datasets.yaml` under the name
+    `LFQ_timsTOFPro_diaPASEF_Condition_A_Sample_Gamma_01.mzML`), sha256
+    `72045ead6b47f654ccba0105f935e33773f262ede711bd0b19c4935ddd7f8ee1`, converted from
+    `LFQ_timsTOFPro_diaPASEF_Condition_A_Sample_Gamma_01.d.zip` by an unknown converter (OpenMS-written;
+    converter, version and options not recorded).
+
+  A new conversion of the raw files will not reproduce these sha256 values. PXD000001 (accuracy) uses the
+  deposited PRIDE files.
 - Protocol: 128 threads; each run waits until the 1-minute load per core is below 0.25 (recorded before
   each run: 0.0045 to 0.2403); the input is read once (sha256) to warm the page cache; one uncounted warm-up;
   3 reps; `/usr/bin/time -v` (wall time, ru_maxrss in kB, MB = kB/1024). Tag files are hashed, then deleted.

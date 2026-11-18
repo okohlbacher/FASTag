@@ -1596,13 +1596,18 @@ or TOF run was scored.
 
 **Peak memory on spectra with many peaks (Linux).** Each thread keeps buffers
 sized by the largest spectra it has read, so on large un-centroided MS2 peak memory
-grows with the thread count: on PXD028735 (diaPASEF frames, median 24,000 peaks per
-MS2) about 13 MB per thread, 2.1 GB at 128 threads; on centroided data with at most a
-few hundred peaks per spectrum (PXD047793) about 1 MB per thread. About a third of the
-growth is glibc allocator overhead. Where memory is the limit, these glibc settings
-return freed memory sooner and lowered PXD028735 peak memory by 18 / 14 / 9 % at
-128 / 64 / 16 threads, at 10 / 7 / 6 % more run time (BinAC2, AMD EPYC 7543; no
-change on PXD047793; tags identical):
+grows with the thread count. Measured at the default settings with a build of commit
+7c08642 (released in 1.13.2) on BinAC2 (AMD EPYC 7543): on PXD028735 (diaPASEF frames,
+median 24,000 peaks per MS2) about 13 MB per thread, 2.1 GB at 128 threads; on
+centroided data with at most a few hundred peaks per spectrum (PXD047793) about 1 MB
+per thread. About a third of the growth is glibc allocator overhead. (The 1.3 GB in the
+table above is FASTag 1.15.0 at DirecTag-matched settings, 100 peaks per spectrum, on
+another node.) Where memory is the limit, these glibc settings return freed memory
+sooner and lowered PXD028735 peak memory by 18 / 14 / 9 % at 128 / 64 / 16 threads, at
+10 / 7 / 6 % more run time (same build and node; no change on PXD047793; tags
+identical). Record:
+[bench/results/rss-pxd028735-1.13](bench/results/rss-pxd028735-1.13/RESULT-perthread.md)
+(the per-run rows stayed on the cluster):
 
 ```bash
 MALLOC_MMAP_THRESHOLD_=33554432 MALLOC_TRIM_THRESHOLD_=131072 MALLOC_TOP_PAD_=0 FASTag -in run.mzML -out tags.tsv -threads 64
@@ -1660,8 +1665,8 @@ Measured with FASTag releases before 1.4 (not re-measured): on PXD000001 with
 accuracy from 69.0% to 86.4%, while the share of identified spectra with any
 valid tag stays at 98.05%.
 
-The preregistrations, freezes and results of the held-out tests below are
-archived in [acceptance/archive](acceptance/archive/): one folder per test
+The preregistrations, freezes, results and verdict files of the held-out tests
+below are archived in [acceptance/archive](acceptance/archive/): one folder per test
 branch, named as in the table (for example `acceptance/archive/acc113r/species/`),
 and `MANIFEST.tsv` maps every file to its branch and commit.
 

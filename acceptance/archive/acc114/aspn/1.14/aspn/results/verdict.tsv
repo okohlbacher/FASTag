@@ -1,0 +1,9 @@
+E0	PASS	evaluable Asp-N runs 11 of 12 from 4 projects (need >= 6 from >= 3); control runs 9 of 9 from 8 projects (need >= 6 from >= 3)
+C1	PASS	auto placement Asp-N in 11 of 12 Asp-N runs (0.917; threshold 0.5)
+C2	PASS	auto placement Asp-N in 0 of 9 control runs (threshold 0)
+R1	PASS	mean paired difference recall(auto, semi export) - recall(trypsin shortlist) +0.3686, 95 % CI [+0.3175, +0.4454] (project bootstrap, 4 projects, 10 runs)
+R2	PASS	mean paired difference recall(auto, semi export) - recall(Asp-N full export) +0.0465, 95 % CI [+0.0230, +0.0831] (project bootstrap, 4 projects, 10 runs)
+T1	PASS	median Sage time(auto export) / time(full search) 0.983 over 10 runs (threshold <= 1.25); range 0.448-1.598
+G1	FAIL	aborted runs (FASTag arm rc != 0, export missing, or Sage on the auto export rc != 0): 1 of 21 (A3.3)
+S1	PASS	Asp-N calls not exported semi-specific under auto: 0; autofull not full: 0
+OVERALL	FAIL	PASS only if E0 and C1, C2, R1, R2, T1, G1, S1 pass; any FAIL gives FAIL; otherwise INCONCLUSIVE

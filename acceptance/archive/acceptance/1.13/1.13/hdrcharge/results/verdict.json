@@ -1,0 +1,20 @@
+{
+ "E1_false_alarm": "0.0034",
+ "E1_hi95": "0.0041",
+ "E1": "PASS",
+ "E2_net_per_1000": "-2.2335",
+ "E2_lo95": "-2.9470",
+ "E2": "FAIL",
+ "E3_precision": "0.9509",
+ "E3_sensitivity": "0.2810",
+ "E3": "PASS",
+ "E4_rc_ok": true,
+ "E4_runs_below_500": [
+  "PXD070049:astral",
+  "PXD074582:astral",
+  "PXD070049:astral",
+  "PXD074582:astral"
+ ],
+ "E4": "NOT MET",
+ "verdict": "INCONCLUSIVE"
+}
