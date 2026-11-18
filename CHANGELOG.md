@@ -1,5 +1,42 @@
 # Changelog
 
+## Unreleased
+
+Documentation, packaging and desktop-app fixes for publication as research
+software. Tag output is unchanged.
+
+- **Citation:** `CITATION.cff` and `codemeta.json`; a "How to cite" section in
+  the README and on the project page; source archived by Software Heritage.
+- **Documentation:** `BUILDING.md` (source build, tests, GUI build),
+  `doc/TUTORIAL.md` (CLI walkthrough on the shipped example and on PXD000001),
+  `doc/MANUAL.md` (the desktop app, with screenshots), the complete
+  command-line table (a ctest checks every registered option has a row),
+  report schemas for `-recon_out`, `-delta_out`, `-glyco_out` and
+  `-check_header_out`, and the `-census_ids` paths of exit code 11.
+  `CONTRIBUTING.md`, `CODE_OF_CONDUCT.md`, `SECURITY.md`, issue and PR
+  templates. CMake 3.28 or later (was documented as 3.24).
+- **Evidence:** speed against DirecTag and tag accuracy at FASTag's defaults
+  and at DirecTag-matched settings (PXD000001, PXD054073, PXD076528) are
+  measured with 1.15.0 and committed with scripts and input checksums under
+  `bench/results/`; the held-out preregistrations and results are archived in
+  `acceptance/archive/`.
+- **Example data in every bundle:** `examples/` (139-spectrum *E. coli* run
+  and three proteins); the desktop app opens it with File > Open Example Data.
+- **Licence notices:** the desktop-app bundles carry
+  `GUI-THIRD-PARTY-NOTICES.txt` (Rust crates, npm packages, fonts, and the
+  libraries the AppImage bundles, with an LGPL written offer); the CLI notices
+  now include every licence text, and packaging fails when one is missing.
+- **Taxonomy provenance:** UniProt (CC BY 4.0) and NCBI Taxonomy attribution;
+  the index tarball carries `MANIFEST.json` (sources, checksums, commands).
+- **Release notes** come from this file's section for the tag.
+- **Desktop app fixes:** the pre-run check no longer recommends a ppm
+  tolerance for a hybrid (e.g. LTQ Orbitrap) whose MS2 analyser the file does
+  not state, and warns that the MS2 may be ion-trap; the post-run "Re-run with
+  0.3 Da" leaves species detection out instead of stopping on its own red
+  flag; the Overview prints small q-values in scientific notation; the History
+  table keeps long file names on one line; the Mass gaps empty-state button
+  shows its full label.
+
 ## 1.15.0 (2026-11-16)
 
 Release files carry the version, Intel Macs are built again, and the

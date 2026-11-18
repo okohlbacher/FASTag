@@ -24,4 +24,5 @@ Check a copy with `sha256sum -c` (or `shasum -a 256 -c` on macOS):
 8f4fac71178db2a0d968ea5a05e5334faf75e22af3392861f9b6526e8446de9e  Ecoli_MS2_small.fasta
 ```
 
-<!-- The tutorial (commands, expected output, runtime) is written separately. -->
+A 10-minute walkthrough with commands, expected counts and output: [doc/TUTORIAL.md](../doc/TUTORIAL.md).
+The desktop app, with screenshots: [doc/MANUAL.md](../doc/MANUAL.md).
