@@ -44,3 +44,7 @@ Completes AMENDMENT-1 §4 under the author's approval of 2026-11-18; numbers fro
 - The reconciliation table, the loss funnel and the charge-assumed stratum.
 
 **6. Unchanged.** The 171-run held-out split, MSFragger 4.4.1, scoring once.
+
+## Author confirmation
+
+2026-11-18: the author confirmed the blind arm as the gating arm and released scoring as frozen in AMENDMENT-1/-2.
