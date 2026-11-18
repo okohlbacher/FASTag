@@ -145,6 +145,8 @@ GitHub retires in 2027: the last Intel build will be a release before August
 On macOS both are also on [Homebrew](https://github.com/okohlbacher/homebrew-fastag):
 `brew install --cask okohlbacher/fastag/fastag` (desktop app) or
 `brew install --cask okohlbacher/fastag/fastag-cli` (command line, `FASTag` on your PATH).
+The casks need macOS 14 (Sonoma) or later; on macOS 13.4 to 13.x install the disk images
+from the release page instead.
 
 A disk image or archive holds a `FASTag/` folder — run `FASTag/FASTag`
 (Linux/macOS) or `FASTag/FASTag.bat` (Windows); everything else inside is a
@@ -223,11 +225,12 @@ systems.
 **Windows builds are not yet code-signed** — the signing path is wired up but
 the SignPath project is not live — so SmartScreen will warn on first run.
 
-Building from source needs OpenMS 3.7 (develop), a C++23 compiler and CMake ≥
-3.24. Releases are built against OpenMS develop at commit
+**Building from source** needs OpenMS 3.7 (develop), a C++23 compiler with OpenMP and
+CMake ≥ 3.28. Releases are built against OpenMS develop at commit
 [`70cebcd144`](https://github.com/OpenMS/OpenMS/commit/70cebcd14442cecd6bcd9794fb6786d3342cacc6),
 compiled from source with the libraries listed in
-[`.github/env/openms.yml`](.github/env/openms.yml).
+[`.github/env/openms.yml`](.github/env/openms.yml). [BUILDING.md](BUILDING.md) gives the
+steps: environment, OpenMS, FASTag, tests and the desktop app.
 
 ## Desktop GUI
 
@@ -304,6 +307,10 @@ and **Subsample spectra** to `0`. The
 outputs, checks and result views.
 
 ## Usage
+
+New to FASTag? [doc/TUTORIAL.md](doc/TUTORIAL.md) is a ten-minute walkthrough on the
+small *E. coli* example shipped in `examples/` (commands, expected counts and output),
+followed by a PXD000001 walkthrough.
 
 ```bash
 # tags for every spectrum
@@ -591,6 +598,8 @@ MGF→mzML direction is exact.
 | `-tag_lengths <n> ...` | none | Several seed lengths in one pass over the input, replacing `-tag_length`, e.g. `-tag_lengths 3 4 5`. Each length is tagged, scored and capped by `-max_tags` exactly as on its own, and a spectrum's rows are those runs' rows in ascending length. A tag several lengths report (same tag, charge, flanking masses and gapped flag, typically after extension) is kept only from the length that scores it best (lowest E-value; ties go to the shorter length), in every output. Masses are compared at full precision, so two different readings that merely print alike are both kept. The caps apply per length before this, so a spectrum can end up with fewer rows than they allow. `-delta_out` samples the lowest-E-value placed tag across lengths, and `-species` pools a spectrum's tags across lengths. Not combined with `-entrapment_fasta` |
 | `-extension <n>` | 0 | Max residues appended per terminus; 0 disables extension (max 12) |
 | `-gaps <n>` | 1 | Allow a tag to cross one missing peak (0 or 1) |
+| `-tmt_pseudo_filter <off\|auto\|on>` | off | Experimental (1.13.2, no held-out test): reject b/y tags whose bare G or A at a tag end is a TMT6/10 label artifact (pseudo-residue), after scoring and before the `-max_tags` cap; `auto` probes the run for TMT6/10 labelling first (not with `-stream` or mzPeak input), `on` asserts TMT6/10 and skips the probe (see Output, TMT6/10 artifact filtering) |
+| `-tmt_reporter_filter` | off | Experimental (1.13.2, no held-out test): also reject b/y tags anchored on a singly charged TMT6/10 reporter ion; needs `-tmt_pseudo_filter auto` (with TMT detected) or `on` |
 | `-no_deisotope` | off | Do not collapse isotope clusters to their monoisotopic peak, and do not move multiply-charged fragments onto the singly-charged scale, before peak selection |
 | `-fragment_tolerance <value>` | 20 | Fragment mass tolerance |
 | `-fragment_tolerance_unit <ppm\|Da>` | ppm | Tolerance unit |
@@ -699,6 +708,10 @@ MGF→mzML direction is exact.
 | `-ion_series_hybrid <by\|both>` | by | 1.13, under `-ion_series auto` only: how hybrid EThcD/ETciD spectra are read. `by` is `auto` as in 1.12 (b/y ions, with the `Hybrid activation:` warning); `both` tags each hybrid mzML spectrum twice, as b/y and as c/z• ions, multiplies every E-value by 2 and merges the two passes' rows by E-value under one `-max_tags` cap; each row keeps its `ion_series` and every per-row consumer reads its offsets from it; `-species` and `-alkylation_out` count b/y rows only. The precursor hypotheses, `-check_header_charge`, the `-complement_tolerance_unit auto` probe, `-dump_spectrum` and the census diagnostics (`n_kept`, `n_edges`, `n_compl`) still read a hybrid spectrum as b/y (doc/HYBRID-IONS.md). Ignored with a warning under other modes; not with `-stream`. Experimental; **passed** its held-out test (see Held-out acceptance) |
 | `-ion_series_photo <series>` | by | Removed in 1.14 (the a/x reading failed its held-out test, see Held-out acceptance): accepted with a warning, no effect |
 | `-complement_tolerance_unit <Da\|fragment\|auto>` | Da | How the complement window is set: `Da` is `-complement_tolerance` (0.02 Da, as 1.11); `fragment` is `-complement_tol_factor` x (the fragment tolerance at the peak + at its partner); `auto` measures it on the run from the complement pairs of high-confidence tags (see doc/COMPLEMENT-TOLERANCE.md) and never sets a window narrower than `-complement_tolerance`, which is also the fallback when the probe finds too few pairs. The window in force is logged and recorded in `-out_spectra` (mzML) and the `-census`/`-alkylation_out` run rows. `auto` is **validated**: its third held-out test passed (+3.31 points of correct rank-1 tags on ion trap, timsTOF not worse; see Validation); the first, with an earlier estimator, failed and the second was inconclusive. The default stays `Da`. Not with `-stream` or mzPeak input |
+| `-complement_rule <same_charge\|precursor\|both>` | same_charge | Experimental (1.12; held-out test of `both` inconclusive, see Validation): which fragment pairs count as complements in the complement subscore: `same_charge` (both at the fragment charge z), `precursor` (the partner carries the precursor's remaining c - z charges) or `both` (advanced) |
+| `-complement_tolerance <Da>` | 0.02 | Window for a complement partner in Da, used with `-complement_tolerance_unit Da` and as the floor and fallback of `auto` (advanced) |
+| `-complement_tol_factor <k>` | 0.5 | Factor k of the complement window k x (fragment tolerance at the peak + at its partner), used with `-complement_tolerance_unit fragment` (advanced) |
+| `-complement_midp` | off | Experimental (1.12, not validated): score complements of tags with 0 or 1 complemented peaks with DirecTag's hypergeometric mid-p P(X>c) + P(X=c)/2; 2 or more keep P(X>=c) (advanced) |
 | `-complement_probe <n>` | 500 | With `-complement_tolerance_unit auto`: MS2 spectra the probe tags, drawn uniformly over the run with a fixed seed (advanced) |
 | `-unknown_charge <assume2\|enumerate\|infer>` | assume2 | How a precursor without a charge is tagged: `assume2` as 2+ (as 1.11); `enumerate` at each listed possible charge (MS:1000633, MGF `2+ and 3+`), else at every charge `-charge_min`..`-charge_max`; `infer` at the charge its complement pairs support (1+ when `-charge_min` is 1, or 1 is listed, and almost no intensity lies above the precursor; both charges of a close call, `ambiguous`; without evidence 2+, or the lowest candidate when 2 is none, `assumed`). Every charge tagged is a listed possible charge, else one of `-charge_min`..`-charge_max`. A header charge is never replaced (`-check_header_charge both`, 1.13, can add a second charge). A spectrum tagged under H hypotheses has every E-value multiplied by H before `-max_evalue` and `-max_tags`; its rows are merged by E-value. The reports that aggregate over spectra (digest, label, massgap, delta, species, shortlist, census) read the rows of one selected hypothesis, chosen from the charge evidence, never from the E-values. Experimental: `infer` failed its held-out test (see Validation); not with `-stream` |
 | `-charge_min <n>` / `-charge_max <n>` | 2 / 4 | The charges `enumerate` and `infer` try (1-8); `-charge_min 1` enables infer's 1+ test |
@@ -736,12 +749,19 @@ half.
 | 4 | INPUT_FILE_EMPTY | The `-fasta` or `-entrapment_fasta` file has no usable sequence, or an MGF input has no `BEGIN IONS` block |
 | 5 | CANNOT_WRITE_OUTPUT_FILE | An output cannot be written, for example because the disk is full |
 | 6 | ILLEGAL_PARAMETERS | Options conflict, a value is out of range, or the input is not mzML, mzPeak or MGF (or is a compressed mzML or MGF) |
-| 11 | INCOMPATIBLE_INPUT_DATA | The input is raw DIA (see Raw DIA input is refused; stderr carries a `FASTAG_REFUSED` line), or `-out_spectra` is `.mzpeak` but the MS2 spectra carry ion mobility per peak; write `.mzML` instead |
+| 11 | INCOMPATIBLE_INPUT_DATA | The input is raw DIA (see Raw DIA input is refused; stderr carries a `FASTAG_REFUSED` line); `-out_spectra` is `.mzpeak` but the MS2 spectra carry ion mobility per peak (write `.mzML` instead); or the `-census_ids` file cannot be joined to the run (see below) |
 | 13 | UNEXPECTED_RESULT | See below |
 
 The OpenMS framework returns its own codes before FASTag starts, for example 1
-for an input file that does not exist. Code 13 covers three runs that fail
-although files were written:
+for an input file that does not exist.
+
+Code 11 from `-census_ids` (see Census) has two paths. Before any output, when the
+file cannot be read, when no hit in the identification file carries a q-value, when identifications with hits
+have no `spectrum_reference`, or when the file names more than one run. After the
+run, when more than 50 % of the file's spectrum references match no spectrum
+read: every other output is complete, and neither census file is written.
+
+Code 13 covers three runs that fail although files were written:
 
 - `-fasta_out` when the reduced FASTA would hold no protein (no protein
   reaches `-shortlist_min_spectra` and there is no `-shortlist_background`).
@@ -896,6 +916,55 @@ the raw run). `<id>` is one of the identifiers USI permits
 Thermo and scan-number IDs, `nativeId:<a,b,…>` for the other vendor formats,
 and otherwise `index:<n>`, its 0-based position in the input. An MGF block is
 `scan:<n>` when its `SCANS=` is one number, and otherwise `index:<k>`.
+
+### Report schemas
+
+Tab-separated, one header line. The reports not listed here document their format
+where they are described (Census, Species detection, Digest, label and mass-gap
+reports, doc/SHORTLIST.md, doc/ALKYLATION-REPORT.md).
+
+**`-recon_out`** (see Reconciliation and mass shifts): one row per placement of a
+reported tag on the database.
+
+| Column | Meaning |
+|---|---|
+| `spectrum` | native ID, as in the tag TSV |
+| `tag` | the tag, as in the tag TSV |
+| `protein` | accession line of the database entry (tabs and line breaks replaced by spaces) |
+| `peptide` | the tryptic window the tag lies in, in the database's spelling |
+| `pos` | 0-based index in `peptide` where the tag starts |
+| `reversed` | 1 when the tag matched read C to N (a b-ion reading), else 0 |
+| `nterm_match` / `cterm_match` | 1 when that flanking mass agrees with the window; both 1 = exact placement |
+| `delta_mass` | spectrum flank minus database flank on the side that disagrees, Da, 4 decimals; `0.0000` when exact |
+| `region` | `lo-hi`, the 0-based inclusive residue range of `peptide` the gap lies in; empty when exact |
+| `delta_interp` | `mod:Name@X`, `sub:X->Y` or `?`; empty when exact |
+| `loc_site`, `loc_score`, `loc_ties` | only with `-recon_localize`: best site (residue + 1-based protein position), its b/y ion matches, sites sharing that score; empty when not localized |
+
+**`-delta_out`**: one row per mass-gap peak, in increasing `delta`.
+
+| Column | Meaning |
+|---|---|
+| `delta` | peak centre in Da (0.0005 Da bins; a bin no neighbour exceeds absorbs its smaller neighbours), 4 decimals |
+| `spectra` | spectra in the peak (each spectrum counts once, by its best tag's smallest-\|delta\| placement) |
+| `top_interps` | up to three `interpretation:count` pairs separated by `;`, most frequent first; `-` when none |
+
+**`-glyco_out`** (see Glyco flag): one row per processed MS2 spectrum.
+
+| Column | Meaning |
+|---|---|
+| `spectrum` | native ID |
+| `n_oxonium` | distinct oxonium ions matched |
+| `oxonium_frac` | their summed intensity over the base peak, 3 decimals |
+| `glyco` | 1 when `n_oxonium` >= 2 and `oxonium_frac` >= `-glyco_min_fraction`, else 0 |
+| `ions` | names of the matched ions, separated by `;` (e.g. `HexNAc;NeuAc-H2O`) |
+
+**`-check_header_out`**: one row per MS2 spectrum with a header charge, in input
+order; the 18 columns are described in
+[doc/HEADER-CHARGE-CHECK.md](doc/HEADER-CHARGE-CHECK.md): `index`, `native_id`,
+`precursor_mz`, `header_charge`, `call_charge`, `call_src`, `basis`, `runner_up`,
+`header_excess`, `call_excess`, `header_ruled_out`, `header_peaks_above`,
+`ms1_charge`, `ms1_peaks`, `flag_basis`, `flag_charge`, `verdict` (`agree`,
+`disagree`, `ambiguous`, `nocall`) and `tagged_charge`.
 
 ## Reconciliation and mass shifts
 
@@ -1444,6 +1513,11 @@ repository catalogue can label a deposit by its main instrument while single
 files come from another. See [doc/TEST-DATA.md](doc/TEST-DATA.md) for the
 provenance and what each dataset is useful for comparing.
 
+A small example that runs in a second, `examples/Ecoli_MS2_small.mzML` (139 ion-trap MS2
+spectra) with `examples/Ecoli_MS2_small.fasta` (three proteins), ships in the release
+bundles and is in the source tree under `test/fixtures/`; [doc/TUTORIAL.md](doc/TUTORIAL.md)
+walks through it and through PXD000001 with the expected results.
+
 ## Performance
 
 **These figures were measured with FASTag 1.6.1** and have not been
@@ -1662,6 +1736,17 @@ tags fill the slots (hence the small change in total recall):
 - **A tag is not an identification.** No per-tag q-value or FDR is emitted, and
   a `-fasta` match, a species call, a `delta_out` bin and a glyco flag are all
   candidates to follow up, not results to report.
+
+## Support and contributing
+
+- **Questions and bug reports:** [GitHub issues](https://github.com/okohlbacher/FASTag/issues/new/choose).
+  For a bug, give the FASTag version (`FASTag --help | grep Version`), the platform,
+  the command line, the input format and the log; the issue form asks for them.
+- **Security problems:** do not open a public issue; see [SECURITY.md](SECURITY.md).
+- **Contributing:** [CONTRIBUTING.md](CONTRIBUTING.md) (setup, tests, pull requests,
+  the held-out-test rule for behaviour changes); building from source:
+  [BUILDING.md](BUILDING.md).
+- **Conduct:** [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md) (Contributor Covenant 2.1).
 
 ## Licence and provenance
 

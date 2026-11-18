@@ -136,6 +136,6 @@ FASTag; both produce the mzML that FASTag consumes.
 
 ## Build-time only
 
-CMake ≥ 3.24, a C++23 compiler (OpenMS 3.7 requires it). `cmake/eigen3-range-shim/` contains two CMake
+CMake ≥ 3.28, a C++23 compiler (OpenMS 3.7 requires it). `cmake/eigen3-range-shim/` contains two CMake
 files that work around Eigen 3.4's config-version file rejecting the version
 range `OpenMSConfig.cmake` requests; they contain no Eigen code.
