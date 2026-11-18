@@ -707,6 +707,12 @@ if(FASTAG_BUILD_TESTS)
                    ${PROJECT_VERSION})
   set_tests_properties(citation_metadata_test PROPERTIES SKIP_RETURN_CODE 77)
 
+  add_test(NAME gui_notices_appimage_test
+           COMMAND bash -c "PY=\${FASTAG_PYTHON:-python3}; command -v \"\$PY\" >/dev/null || exit 77; exec \"\$PY\" \"\$0\" \"\$1\""
+                   ${CMAKE_CURRENT_SOURCE_DIR}/test/gui_notices_appimage_test.py
+                   ${CMAKE_CURRENT_SOURCE_DIR}/tools/gui_third_party_notices.py)
+  set_tests_properties(gui_notices_appimage_test PROPERTIES SKIP_RETURN_CODE 77)
+
   # mzPeak reader vs its own mzML twin. Needs a matched pair of real files, so
   # it SKIPs unless FASTAG_E2E_MZML and FASTAG_E2E_MZPEAK point at one.
   add_test(NAME mzpeak_e2e

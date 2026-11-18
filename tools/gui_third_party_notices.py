@@ -349,7 +349,9 @@ def find_origin(rel: Path) -> tuple[str | None, str | None]:
                 pkg = dpkg_owner(p)
                 if pkg:
                     return pkg, p
-    r = subprocess.run(["dpkg", "-S", "/" + name], capture_output=True, text=True)
+    # dpkg treats a pattern containing '/' as a whole-path glob, so the
+    # basename needs the leading '*/' to match any directory.
+    r = subprocess.run(["dpkg", "-S", "*/" + name], capture_output=True, text=True)
     hits = []
     for line in r.stdout.splitlines():
         pkg, _, p = line.partition(": ")
@@ -386,10 +388,16 @@ def bundled_files(listing: list[tuple[Path, bool]]) -> list[Path]:
     executables under usr/lib and usr/libexec (WebKitGTK's helper processes),
     except the app's own payload under resources/fastag (the CLI and its
     closure, covered by THIRD-PARTY-NOTICES.txt)."""
+    # linuxdeploy also copies the CLI's own libraries (resources/fastag/lib)
+    # into usr/lib; those are the CLI's closure too.
+    cli_libs = {rel.name for rel, _ in listing
+                if "resources" in rel.parts and "fastag" in rel.parts and "lib" in rel.parts}
     files = []
     for rel, exe in listing:
         parts = rel.parts
         if "resources" in parts and "fastag" in parts:
+            continue
+        if rel.name in cli_libs:
             continue
         if ".so" in rel.name or (exe and len(parts) > 2 and parts[0] == "usr" and parts[1] in ("lib", "libexec")):
             files.append(rel)
