@@ -34,7 +34,8 @@ software. Tag output is unchanged.
   tolerance for a hybrid (e.g. LTQ Orbitrap) whose MS2 analyser the file does
   not state, and warns that the MS2 may be ion-trap; the post-run "Re-run with
   0.3 Da" leaves species detection out instead of stopping on its own red
-  flag; the Overview prints small q-values in scientific notation; the History
+  flag; a tags-only run (no reports) now raises the ion-trap red flag from
+  FASTag's log, which it previously dropped; the Overview prints small q-values in scientific notation; the History
   table keeps long file names on one line; the Mass gaps empty-state button
   shows its full label.
 

@@ -228,6 +228,13 @@ describe('postRunChecks (from the reports and the log of a real 1.12 run)', () =
   it('no reports: nothing detected', () => {
     expect(postRunChecks({ reports: [], notes: [] })).toEqual({ checks: [], detected: null })
   })
+
+  it('no reports, but the log names low-resolution MS2: red flag with the re-run', () => {
+    const r = postRunChecks({ reports: [], notes: notes(it20Err) })
+    expect(ids(r.checks)).toContain('flag:iontrap-ppm')
+    expect(r.checks[0].title).toBe('The fragment tolerance is too narrow; the MS2 look like ion trap')
+    expect(r.checks[0].fix).toMatchObject({ instrument: 'iontrap-cid', rerun: true })
+  })
 })
 
 describe('refusalOf (FASTag 1.12 exit 11)', () => {

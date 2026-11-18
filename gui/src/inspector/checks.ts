@@ -295,7 +295,10 @@ export function postRunChecks(o: { reports: Report[]; notes: string[]; species?:
     ? { family: inst.family, text: inst.text, preset: presetFor(inst.family), source: 'the digest report' }
     : null
   const iontrapish = inst?.family === 'ion-trap' || (!!lowres && (inst == null || inst.family === 'hybrid-ion-trap' || inst.family === 'unknown'))
-  if (unit === 'ppm' && iontrapish) {
+  // Without a report (a plain tags run) the log note alone counts: FASTag
+  // writes it only when the tolerance is far narrower than the tightest
+  // peak spacing in the file.
+  if ((unit === 'ppm' && iontrapish) || (!runReport && !!lowres)) {
     const why: string[] = []
     if (inst) {
       why.push(
@@ -308,7 +311,7 @@ export function postRunChecks(o: { reports: Report[]; notes: string[]; species?:
     checks.push({
       id: 'iontrap-ppm',
       level: 'flag',
-      title: `This run used ${tol ?? ''} ppm; the MS2 look like ion trap`,
+      title: unit === 'ppm' ? `This run used ${tol ?? ''} ppm; the MS2 look like ion trap` : 'The fragment tolerance is too narrow; the MS2 look like ion trap',
       detail: `${why.join(' ')} A ppm tolerance finds almost no tags on ion-trap spectra; ${presetText(IONTRAP)} is the preset for them.${
         o.species ? ' Species calls are not validated with a tolerance in Da, so the re-run leaves the species report out.' : ''
       }`,
