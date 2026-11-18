@@ -424,6 +424,8 @@ TOPPFASTag::ExitCodes TOPPFASTag::main_(int, const char**)
         {"census_ids", nullptr},
         {"census_ids_fdr", nullptr},
         {"census_triage_evalue", nullptr},
+        // ---- 1.16 QC: -stream refusals ----
+        {"qc_out", nullptr},
         // ---- 1.12 G: -stream refusals ----
         {"probe_input", nullptr},
         {"dump_spectrum", nullptr},
@@ -2525,6 +2527,8 @@ TOPPFASTag::ExitCodes TOPPFASTag::main_(int, const char**)
       guard.output("census_summary_out", cs.empty() ? defaultReportPath_(out, ".census_summary.tsv") : cs,
                    /*via_part=*/true);
     }
+    // ---- 1.16 QC: output paths ----
+    guard.output("qc_out", getStringOption_("qc_out"), /*via_part=*/true);
     const std::string collision = guard.check();
     if (!collision.empty())
     {
@@ -2624,6 +2628,40 @@ TOPPFASTag::ExitCodes TOPPFASTag::main_(int, const char**)
       return ILLEGAL_PARAMETERS;
     }
     ctsv << FASTag::Census::header();
+  }
+
+  // -qc_out (1.16, src/RunQC.h): collected in the tagging loop from every
+  // spectrum read; resolution from a sample of profile spectra afterwards.
+  const std::string qc_out = getStringOption_("qc_out");
+  const bool qc_on = !qc_out.empty();
+  const unsigned qc_fields = qc_on ? FASTag::IndexedMzMLReader::STEP0_SCAN_EXTRAS : 0u;
+  std::unique_ptr<FASTag::RunQC::Collector> qc;
+  if (qc_on)
+  {
+    namespace QC = FASTag::RunQC;
+    QC::InstrumentMap imap;
+    // The class of an instrument's last analyser (the one MS2 is read out in).
+    const auto last_analyzer = [](const Instrument& ins) {
+      QC::Analyzer a = QC::Analyzer::UNKNOWN;
+      Int order = std::numeric_limits<Int>::min();
+      for (const MassAnalyzer& m : ins.getMassAnalyzers())
+        if (m.getOrder() >= order)
+        {
+          order = m.getOrder();
+          a = QC::analyzerFromType(m.getType());
+        }
+      return a;
+    };
+    if (mzs) imap.run_default = last_analyzer(mzs->settings().getInstrument());
+    else if (!mgf_in)
+    {
+      const FASTag::Probe::MzmlHeader h = FASTag::Probe::readMzmlHeader(in);
+      for (const auto& [id, name] : h.analyzer_of) imap.by_config[id] = QC::analyzerFromName(name);
+      imap.default_config = h.default_config;
+      if (!fastmz && !streaming) imap.run_default = last_analyzer(exp.getInstrument());
+    }
+    qc = std::make_unique<QC::Collector>(n_total, std::move(imap), static_cast<size_t>(read_threads), p.frag_tol,
+                                         p.tol_ppm);
   }
 
   const std::string proforma_fixed =
@@ -2814,6 +2852,10 @@ TOPPFASTag::ExitCodes TOPPFASTag::main_(int, const char**)
     /// 1.13 item 10: per written row of a two-pass hybrid spectrum, 1 for a
     /// c/z-dot row (Block::row_series); empty for every other spectrum.
     std::vector<char> row_series;
+    /// -qc_out (1.16): the best reported tag of the selected hypothesis, as
+    /// the census takes it (Census::bestTag); infinity when none.
+    double qc_best_e = std::numeric_limits<double>::infinity();
+    std::string qc_best_tag;
   };
 
   // 1.13 -check_header_charge: the MS1 scan before spectrum @p index, at
@@ -3127,6 +3169,11 @@ TOPPFASTag::ExitCodes TOPPFASTag::main_(int, const char**)
       }
       if (!row_entrap) res.any_target = true;
       if (entrap_on) res.meta.emplace_back(t.evalue, row_entrap);
+      if (qc_on && sel && t.evalue < res.qc_best_e)  // -qc_out tag yield (1.16)
+      {
+        res.qc_best_e = t.evalue;
+        res.qc_best_tag = t.seq;
+      }
       ++pt.reported;
       if (res.census && sel)
       {
@@ -3729,7 +3776,7 @@ TOPPFASTag::ExitCodes TOPPFASTag::main_(int, const char**)
       // The step-0 fields the loop reads, no more (1.12.2; IndexedMzMLReader::TAGGING_FIELDS).
       if (!loaded_here && freader)
       {
-        loaded = freader->getSpectrum(static_cast<Size>(i), FASTag::IndexedMzMLReader::TAGGING_FIELDS);
+        loaded = freader->getSpectrum(static_cast<Size>(i), FASTag::IndexedMzMLReader::TAGGING_FIELDS | qc_fields);
         loaded_here = true;
       }
       if (!loaded_here && reader) { loaded = reader->getSpectrum(static_cast<Size>(i)); loaded_here = true; }
@@ -3745,7 +3792,13 @@ TOPPFASTag::ExitCodes TOPPFASTag::main_(int, const char**)
       const MSSpectrum& spec = loaded_here ? loaded : exp[static_cast<Size>(i)];
       if (mzpeak_out && spec.getMSLevel() == 2 && spec.containsIMData()) throw IonMobilityRefused{};
       const Clock::time_point tb = timing ? Clock::now() : ta;
-      record(blk, idx, tag_one(spec, tid, static_cast<size_t>(i)), spec);
+      SpecResult result = tag_one(spec, tid, static_cast<size_t>(i));
+      if (qc)  // -qc_out (1.16): metadata of every spectrum read, the MS2 as read
+      {
+        qc->scan(tid, static_cast<size_t>(i), spec);
+        if (spec.getMSLevel() == 2) qc->ms2(tid, static_cast<size_t>(i), spec, result.qc_best_e, result.qc_best_tag);
+      }
+      record(blk, idx, std::move(result), spec);
       tick();
       if (timing)
       {
@@ -4275,6 +4328,46 @@ TOPPFASTag::ExitCodes TOPPFASTag::main_(int, const char**)
     if (tally.n_processed() != n_ms2)
       OPENMS_LOG_WARN << "Census: " << tally.n_processed() << " processed spectra, but " << n_ms2
                       << " MS2 spectra were tagged; please report this." << std::endl;
+  }
+
+  // -qc_out (1.16): merge, measure resolution on the sampled profile
+  // spectra (read with their peaks, before any centroiding), write.
+  if (qc)
+  {
+    const auto qa = std::chrono::steady_clock::now();
+    qc->finish();
+    if (mzs) qc->setProfileUnavailable("mzpeak_input");
+    else
+    {
+      const std::vector<size_t> samples = qc->profileSamples();
+      for (const size_t i : samples)
+      {
+        try
+        {
+          if (fastmz) qc->profile(i, fastmz->getSpectrumAnyLevel(i));
+          else if (mgf) qc->profile(i, mgf->getSpectrum(i));
+          else if (streaming) qc->profile(i, ondisc->getSpectrum(i));
+          else if (i < exp.size()) qc->profile(i, exp[i]);
+        }
+        catch (const Exception::BaseException& e)
+        {
+          OPENMS_LOG_WARN << "-qc_out: spectrum " << i << " could not be read for the resolution ("
+                          << e.what() << "); it is skipped." << std::endl;
+        }
+      }
+    }
+    std::vector<FD::Row> rows = FASTag::RunReport::runRows(run_meta, FASTag::RunReport::Emit::VERSIONED);
+    for (FD::Row& r : qc->rows(subsampling)) rows.push_back(std::move(r));
+    FASTag::PartFile qc_part(qc_out);
+    if (!qc_part.begin() || !FD::writeReport(qc_part.writePath(), rows) || !qc_part.commit())
+    {
+      OPENMS_LOG_ERROR << "Failed writing " << qc_out
+                       << (qc_part.error().empty() ? std::string() : ": " + qc_part.error()) << std::endl;
+      return CANNOT_WRITE_OUTPUT_FILE;
+    }
+    OPENMS_LOG_INFO << "QC report -> " << qc_out << " ("
+                    << std::round(std::chrono::duration<double>(std::chrono::steady_clock::now() - qa).count() * 100.0) / 100.0
+                    << " s after the tagging loop)" << std::endl;
   }
 
   // Report close, then placement processing, then the exports that read

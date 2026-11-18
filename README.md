@@ -688,6 +688,7 @@ MGF→mzML direction is exact.
 | `-census_ids <file>` | none | With `-census`: identifications of `-in` (idXML or mzid with q-values); adds the columns `identified` and `triage` and a `census_ids` summary section (see Census) |
 | `-census_ids_fdr <f>` | 0.01 | With `-census_ids`: the q-value a target hit needs to identify its spectrum (advanced) |
 | `-census_triage_evalue <f>` | 0.01 | With `-census_ids`: the best E-value at or below which an unidentified tagged or placed spectrum is a triage candidate (advanced) |
+| `-qc_out <file>` | none | Run QC report: spectra per MS level and analyser class, stated and measured resolution, precursor charges, isobaric reporter kits, tag yield and MS2 redundancy (see Run QC report) |
 | `-stream` | off | Resident single-spectrum mode: spectrum blocks on stdin, TSV rows + `#end` sentinels on stdout (see Streaming) |
 | `-progress` | off | Emit `FASTAG_PROGRESS done=<n> total=<n>` on stderr for a progress bar |
 | `-species` | off | Infer taxa from the tags (see Species detection) |

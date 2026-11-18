@@ -9,6 +9,7 @@
 #include <OpenMS/CONCEPT/Exception.h>
 #include <OpenMS/FORMAT/HANDLERS/MzMLSpectrumDecoder.h>
 #include <OpenMS/IONMOBILITY/IMTypes.h>
+#include <OpenMS/METADATA/Acquisition.h>
 #include <OpenMS/METADATA/MetaInfoInterface.h>
 #include <OpenMS/METADATA/MetaInfoRegistry.h>
 #include <OpenMS/METADATA/Precursor.h>
@@ -107,6 +108,8 @@ namespace FASTag
     constexpr std::string_view CV_PROFILE = "accession=\"MS:1000128\"";
     constexpr std::string_view POSSIBLE_CHARGE = "accession=\"MS:1000633\"";
     constexpr std::string_view FILTER_STRING = "accession=\"MS:1000512\"";
+    constexpr std::string_view RESOLVING_POWER = "accession=\"MS:1000800\"";
+    constexpr std::string_view MASS_RESOLUTION = "accession=\"MS:1000011\"";
     constexpr std::string_view ACTIVATION_ENERGY = "accession=\"MS:1000509\"";
     constexpr std::string_view ARRAYS = "<binaryDataArrayList";
     constexpr std::string_view VALUE = "value";
@@ -1228,6 +1231,40 @@ namespace FASTag
           static const UInt FILTER_IDX = MetaInfoInterface::metaRegistry().registerName("filter string");
           spec.setMetaValue(FILTER_IDX, DataValue(xml_unescape(gp ? std::string_view(gp->value) : tag_attr(xml, k, VALUE))));
         }
+      }
+    }
+
+    // -qc_out (1.16): the first scan's instrumentConfigurationRef, as the
+    // acquisition meta value OpenMS's MzMLHandler gives it, and a stated
+    // mass resolving power (MS:1000800) or mass resolution (MS:1000011)
+    // among the scan's or the spectrum's own cvParams, as the meta values
+    // "mass resolving power" / "mass resolution" OpenMS sets. Unlike
+    // MzMLHandler the reference is kept when it names the run default.
+    if (fields & STEP0_SCAN_EXTRAS)
+    {
+      std::size_t sc = has_scans ? find_before(xml, "<scan", slb + 9, sle) : std::string_view::npos;
+      while (sc != std::string_view::npos && !(sc + 5 < n && (is_name_end(xml[sc + 5]) || xml[sc + 5] == '/')))
+        sc = find_before(xml, "<scan", sc + 5, sle);
+      std::size_t sce = sle;
+      if (sc != std::string_view::npos)
+      {
+        const std::string_view ref = tag_attr(xml, sc + 1, "instrumentConfigurationRef");
+        if (!ref.empty())
+        {
+          Acquisition acq;
+          acq.setMetaValue("instrument_configuration_ref", std::string(ref));
+          spec.getAcquisitionInfo().push_back(acq);
+        }
+        sce = std::min(find_or(xml, "<scanWindowList", sc, sle), find_or(xml, "</scan>", sc, sle));
+      }
+      const std::size_t se = spectrum_params_end(xml);
+      for (const auto& [needle, name] : {std::pair{RESOLVING_POWER, "mass resolving power"},
+                                         std::pair{MASS_RESOLUTION, "mass resolution"}})
+      {
+        double v = 0;
+        if ((sc != std::string_view::npos && to_number(cv_value(xml, needle, sc, sce), v))
+            || to_number(cv_value(xml, needle, 0, se), v))
+          if (std::isfinite(v) && v > 0) spec.setMetaValue(name, v);
       }
     }
 
