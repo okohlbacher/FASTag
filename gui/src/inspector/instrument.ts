@@ -10,6 +10,13 @@
 // Elite, the Tribrids, and the FT-ICR hybrids LTQ FT and LTQ FT Ultra) stays
 // undecided unless the run's log says more (checks.ts). Only an instrument
 // that has no other analyser (LTQ XL, LTQ Velos) is an ion trap by its name.
+//
+// The probe's analyser decides a hybrid only when the MS2 themselves
+// reference the configuration it comes from (ms2_analyzer_from "spectra").
+// From the run's default configuration ("run_default") it is the one
+// analyser a converter happened to list (often the Orbitrap of an LTQ
+// Orbitrap whose MS2 were read in the ion trap: test/fixtures/
+// Ecoli_MS2_small.mzML), so a hybrid stays undecided then.
 
 import { value, type Report } from '../digestReport'
 
@@ -19,22 +26,17 @@ export interface InstrumentFacts {
   name?: string | null
   model?: string | null
   ms2Analyzer?: string | null
+  // Where the probe took the analyser from: 'spectra' | 'run_default' | null
+  // (null: a probe that does not say, read as before).
+  ms2AnalyzerFrom?: string | null
   ionMobility?: string | null
 }
 
 // The CLI writes '-' for a row whose metadata are absent.
 const named = (s: string | null | undefined): string => (s && s !== '-' ? s : '')
 
-/// The family of an instrument, for its preset.
-export function familyOf(f: InstrumentFacts): Family {
-  const text = `${named(f.name)} ${named(f.model)}`
-  const a = named(f.ms2Analyzer).toLowerCase()
-  if (a) {
-    if (/ion trap/.test(a)) return 'ion-trap'
-    if (/astral/.test(a) || (/orbitrap/.test(a) && /astral/i.test(text))) return 'astral'
-    if (/orbitrap|fourier transform/.test(a)) return 'orbitrap'
-    if (/time-of-flight|\btof\b/.test(a)) return f.ionMobility === '1/K0' || /timstof/i.test(text) ? 'timstof' : 'tof'
-  }
+/// The family of an instrument by its name alone (no analyser).
+function familyByName(text: string): Family {
   if (!text.trim()) return 'unknown'
   if (/astral/i.test(text)) return 'astral'
   if (/tims\s*tof/i.test(text)) return 'timstof'
@@ -47,6 +49,21 @@ export function familyOf(f: InstrumentFacts): Family {
   if (/\b(LTQ|LCQ|Velos Pro|amaZon|HCT|esquire)\b|ion trap/i.test(text)) return 'ion-trap'
   if (/TOF|Synapt|impact|maXis|Xevo/i.test(text)) return 'tof'
   return 'unknown'
+}
+
+/// The family of an instrument, for its preset.
+export function familyOf(f: InstrumentFacts): Family {
+  const text = `${named(f.name)} ${named(f.model)}`
+  const byName = familyByName(text)
+  // A hybrid's run-default analyser does not say where its MS2 were read.
+  const a = byName === 'hybrid-ion-trap' && f.ms2AnalyzerFrom === 'run_default' ? '' : named(f.ms2Analyzer).toLowerCase()
+  if (a) {
+    if (/ion trap/.test(a)) return 'ion-trap'
+    if (/astral/.test(a) || (/orbitrap/.test(a) && /astral/i.test(text))) return 'astral'
+    if (/orbitrap|fourier transform/.test(a)) return 'orbitrap'
+    if (/time-of-flight|\btof\b/.test(a)) return f.ionMobility === '1/K0' || /timstof/i.test(text) ? 'timstof' : 'tof'
+  }
+  return byName
 }
 
 /// The preset a family proposes (setup/presets.ts ids), or null: a hybrid

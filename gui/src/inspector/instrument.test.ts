@@ -8,6 +8,8 @@ import ionTrapDigest from '../fixtures/cli-1.12/iontrap_20ppm.digest.tsv?raw'
 import orbitrapDigest from '../fixtures/cli-1.12/orbitrap_hcd.digest.tsv?raw'
 import lumosDigest from '../fixtures/digest.tsv?raw'
 import labelReport from '../fixtures/cli-1.12/iontrap_20ppm.label.tsv?raw'
+import ecoliProbe from '../fixtures/probe/ecoli_ms2_small.probe.jsonl?raw'
+import { parseProbe } from './probe'
 
 describe('familyOf', () => {
   it('the MS2 analyser decides where the probe names it', () => {
@@ -19,6 +21,25 @@ describe('familyOf', () => {
     expect(familyOf({ name: 'TripleTOF 6600', ms2Analyzer: 'time-of-flight' })).toBe('tof')
     expect(familyOf({ name: 'LTQ FT Ultra', ms2Analyzer: 'radial ejection linear ion trap' })).toBe('ion-trap')
     expect(familyOf({ name: 'LTQ FT Ultra', ms2Analyzer: 'fourier transform ion cyclotron resonance mass spectrometer' })).toBe('orbitrap')
+  })
+
+  it("a hybrid's analyser decides only when the MS2 reference it, not from the run's default", () => {
+    // Ecoli_MS2_small.mzML as the FASTag 1.15.0 probe reads it.
+    expect(familyOf({ name: 'LTQ Orbitrap XL', ms2Analyzer: 'orbitrap', ms2AnalyzerFrom: 'run_default' })).toBe('hybrid-ion-trap')
+    expect(familyOf({ name: 'LTQ Orbitrap XL', ms2Analyzer: 'ion trap', ms2AnalyzerFrom: 'run_default' })).toBe('hybrid-ion-trap')
+    expect(familyOf({ name: 'Orbitrap Fusion Lumos', ms2Analyzer: 'orbitrap', ms2AnalyzerFrom: 'run_default' })).toBe('hybrid-ion-trap')
+    expect(familyOf({ name: 'LTQ Orbitrap XL', ms2Analyzer: 'orbitrap', ms2AnalyzerFrom: 'spectra' })).toBe('orbitrap')
+    expect(familyOf({ name: 'LTQ Orbitrap XL', ms2Analyzer: 'ion trap', ms2AnalyzerFrom: 'spectra' })).toBe('ion-trap')
+    // No other analyser: the run's default is the MS2's.
+    expect(familyOf({ name: 'Q Exactive', ms2Analyzer: 'orbitrap', ms2AnalyzerFrom: 'run_default' })).toBe('orbitrap')
+    expect(familyOf({ name: 'Orbitrap Astral', ms2Analyzer: 'orbitrap', ms2AnalyzerFrom: 'run_default' })).toBe('astral')
+    expect(familyOf({ name: 'timsTOF Pro', ms2Analyzer: 'time-of-flight', ms2AnalyzerFrom: 'run_default', ionMobility: '1/K0' })).toBe('timstof')
+  })
+
+  it('the probe of Ecoli_MS2_small.mzML maps to no preset', () => {
+    const p = parseProbe(ecoliProbe)
+    expect(p.instrument).toEqual({ name: 'LTQ Orbitrap XL', model: null, ms2Analyzer: 'orbitrap', ms2AnalyzerFrom: 'run_default', ionMobility: null })
+    expect(presetFor(familyOf(p.instrument!))).toBeNull()
   })
 
   it('without the analyser, a hybrid with an ion trap stays undecided', () => {

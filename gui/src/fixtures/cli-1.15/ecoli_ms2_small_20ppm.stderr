@@ -1,0 +1,2 @@
+Acquisition check: DDA (no repeating window scheme (periodicity 0.12 over 26 repeat gaps, cycle 51, 113 distinct precursor m/z, 0% uncharged, 139 MS2 probed))
+No two peaks anywhere in this file are closer than 0.600342 Th, yet the fragment tolerance is 0.00722706 Th near m/z 361.353. That is what low-resolution (ion trap) MS2 read with a high-resolution tolerance looks like, and it yields almost no tags for a reason the output cannot show. If the MS2 is ion trap, try -fragment_tolerance 0.3 -fragment_tolerance_unit Da.
