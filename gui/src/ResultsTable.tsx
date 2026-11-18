@@ -191,7 +191,7 @@ function numericColumns(columns: string[], rows: string[][]): Set<string> {
 
 // An E-value below 10^-3 as a × 10^n: `4.2e-08` is read wrong at a glance.
 // The exponent is drawn with <sup>; the raw value stays the cell's name.
-function EValue({ text }: { text: string }): JSX.Element {
+export function EValue({ text }: { text: string }): JSX.Element {
   const v = Number(text)
   if (text.trim() === '' || !Number.isFinite(v) || v === 0 || Math.abs(v) >= 1e-3) return <>{text}</>
   const [m, e] = v.toExponential(1).split('e')

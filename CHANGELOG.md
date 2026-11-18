@@ -35,7 +35,8 @@ software. Tag output is unchanged.
   not state, and warns that the MS2 may be ion-trap; the post-run "Re-run with
   0.3 Da" leaves species detection out instead of stopping on its own red
   flag; a tags-only run (no reports) now raises the ion-trap red flag from
-  FASTag's log, which it previously dropped; the Overview prints small q-values in scientific notation; the History
+  FASTag's log, which it previously dropped; the Spectrum tab's tag table
+  shows small E-values as in the Tags table (they were cut off); the Overview prints small q-values in scientific notation; the History
   table keeps long file names on one line; the Mass gaps empty-state button
   shows its full label.
 
