@@ -42,6 +42,7 @@
 #include "AcquisitionProbe.h"
 #include "AlkylationCall.h"
 #include "AlkylationTags.h"
+#include "BrukerInput.h"
 #include "Centroid.h"
 #include "CliParam.h"
 #include "ComplementTol.h"

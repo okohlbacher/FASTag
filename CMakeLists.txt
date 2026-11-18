@@ -94,9 +94,12 @@ set(FASTAG_CORE_SOURCES_D src/SpeciesLookup.cpp src/SpeciesCall.cpp src/Alkylati
 set(FASTAG_CORE_SOURCES_F src/OutputGuard.cpp src/CensusIds.cpp)
 # ---- 1.13: core sources ----
 set(FASTAG_CORE_SOURCES_113 src/Cleavage.cpp)
+# ---- 1.16: core sources ----
+# Bruker timsTOF input through OpenMS's BrukerTimsFile (WITH_OPENTIMS).
+set(FASTAG_CORE_SOURCES_116 src/BrukerInput.cpp)
 add_library(fastag_core STATIC ${FASTAG_CORE_SOURCES}
             ${FASTAG_CORE_SOURCES_E} ${FASTAG_CORE_SOURCES_A} ${FASTAG_CORE_SOURCES_D} ${FASTAG_CORE_SOURCES_F}
-            ${FASTAG_CORE_SOURCES_113})
+            ${FASTAG_CORE_SOURCES_113} ${FASTAG_CORE_SOURCES_116})
 target_include_directories(fastag_core PUBLIC
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/src>)
@@ -321,6 +324,13 @@ if(FASTAG_BUILD_TESTS)
                    ${CMAKE_CURRENT_SOURCE_DIR}/test/fixtures/Ecoli_MS2_small.fasta
                    ${CMAKE_CURRENT_SOURCE_DIR}/test/fixtures/delta_sites.mgf)
   set_tests_properties(delta_sites_cli_test PROPERTIES SKIP_RETURN_CODE 77)
+
+  # 1.16: Bruker timsTOF input (.d, .d.zip, dia-PASEF refusal) on a trimmed
+  # real run; a build without WITH_OPENTIMS checks its refusal instead.
+  add_test(NAME bruker_cli_test
+           COMMAND bash ${CMAKE_CURRENT_SOURCE_DIR}/test/bruker_cli_test.sh $<TARGET_FILE:FASTag>
+                   ${CMAKE_CURRENT_SOURCE_DIR}/test/fixtures)
+  set_tests_properties(bruker_cli_test PROPERTIES SKIP_RETURN_CODE 77)
 
   # 1.12 P4: the shared run report section (src/RunMeta.h) is frozen here.
   add_executable(runmeta_test test/runmeta_test.cpp)

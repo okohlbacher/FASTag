@@ -352,8 +352,9 @@ it cannot know the analyser, so the setting is yours.
 
 ## File formats
 
-`-in` accepts mzML, [mzPeak](https://github.com/OpenMS/mzpeak) or MGF;
-`-out` is TSV; `-out_spectra` writes mzML or mzPeak, chosen by extension. All
+`-in` accepts mzML, [mzPeak](https://github.com/OpenMS/mzpeak) or MGF, and,
+in a build with timsTOF support, a Bruker timsTOF run as a `.d` directory or a
+zipped `.d.zip` (see [Bruker timsTOF](#bruker-timstof-d-dzip)); `-out` is TSV; `-out_spectra` writes mzML or mzPeak, chosen by extension. All
 six in/out combinations work, and on centroided input the container does not
 change the tags: a run read as mzPeak gives the same spectra as the same run
 read as mzML, and a run written to mzPeak and tagged again reproduces the
@@ -594,11 +595,68 @@ mzML→MGF is lossy** (m/z to 15 and intensities to 6 significant digits, so pea
 ranks can tie or swap), and tags from its MGFs can differ slightly. Its
 MGF→mzML direction is exact.
 
+### Bruker timsTOF (.d, .d.zip)
+
+A timsTOF DDA-PASEF run is read directly, as a `.d` directory or as a zipped
+`.d.zip` (the form PRIDE often serves), through OpenMS's `BrukerTimsFile`
+(opentims, MIT licensed; Bruker's own SDK is neither needed nor used). This
+needs a FASTag built against an OpenMS with `WITH_OPENTIMS=ON` (see
+BUILDING.md); a build without it refuses `.d` input with a message saying so.
+
+```bash
+FASTag -in run.d     -out tags.tsv -fragment_tolerance 20 -fragment_tolerance_unit ppm
+FASTag -in run.d.zip -out tags.tsv -fragment_tolerance 20 -fragment_tolerance_unit ppm
+```
+
+- **Spectra.** One MS2 spectrum per precursor: OpenMS merges the PASEF
+  windows of a precursor (over all frames it was fragmented in) and centroids
+  them. The MS1 frames are not decoded. Precursor m/z is the monoisotopic m/z
+  from `analysis.tdf`; m/z and 1/K0 come from the run's own calibration tables
+  (`MzCalibration`, `TimsCalibration`).
+- **Unknown charge.** A precursor whose monoisotopic peak the acquisition
+  software did not find has no charge in `analysis.tdf` (2-3 % of the
+  precursors in the PXD040281 runs measured); its m/z is that of its most
+  intense isotope peak. FASTag keeps the charge as unknown: `-unknown_charge`
+  decides how such a spectrum is tagged (`assume2`, the default, tags it as 2+
+  and records the charge source `assumed`; `infer` calls the charge from the
+  fragments), and the stderr log, the run summary and the `charge_source`
+  columns count them.
+- **Counts without decoding.** Before anything is decoded FASTag reads the
+  run's frame and precursor counts from `analysis.tdf` by SQL and logs them
+  (`Bruker timsTOF input (analysis.tdf): ... frames, ... MS1, ... DDA-PASEF
+  MS/MS, ... dia-PASEF MS/MS; ... precursors, ... without a charge`). For a
+  `.d.zip` only `analysis.tdf` is extracted for this.
+- **dia-PASEF is refused** from those same tables (a `DiaFrameMsMsWindows`
+  table with rows, or dia-PASEF MS/MS frames), with exit code 11 and the
+  `FASTAG_REFUSED reason=raw_dia` line, as for other raw DIA; nothing is
+  unpacked or decoded first. `-acquisition_check warn` or `off` hands the run
+  to the reader anyway.
+- **Temporary space for `.d.zip`.** The archive is unpacked in full for the
+  read, into OpenMS's temporary directory (`OPENMS_TMPDIR`, else `TMPDIR`), and
+  removed afterwards: about the archive's size again (8.06 GB for a 7.73 GB
+  PXD040281 run). FASTag refuses up front when that directory has less than
+  1.5x the archive's size free and names it; point `OPENMS_TMPDIR` at a local
+  disk or `/dev/shm`, or unzip once and give the `.d` directory.
+- **Memory.** The MS2 spectra are held in memory (not the MS1 frames): 4.6-4.9
+  GB peak RSS for a 120-min run of 200,000 precursors, tagging with 32 threads.
+- **Native IDs and USI.** Spectra keep OpenMS's native IDs,
+  `frame=<F> scan=<S> precursor=<P>`: the first PASEF window of precursor
+  `P` (Bruker's `Precursors.Id`). Converters that do not merge per precursor
+  (mzdata, timsrust, msconvert) write one spectrum per PASEF window instead
+  (`merged=<n> frame=<F> startScan=<S> endScan=<E>`); the two meet on frame
+  and scan of the first window. With `-usi_collection` the USI run is the name
+  without `.d` / `.d.zip`, and the index is `index:<i>`, the spectrum's
+  position among the run's MS2 spectra as FASTag reads them, since a spectrum
+  merged from several windows has no PSI native ID of its own.
+- **Not yet:** the desktop app's input probe and `-dump_spectrum` do not read
+  `.d` (they say so); timsTOF data without ion mobility (`analysis.tsf`) and
+  QTOF `.baf` data are refused.
+
 ## Command-line reference
 
 | Option | Default | Meaning |
 |---|---|---|
-| `-in <file>` | — | Input spectra: mzML, mzpeak or MGF (uncompressed) |
+| `-in <file>` | — | Input spectra: mzML, mzpeak or MGF (uncompressed), or a Bruker timsTOF `.d` directory or `.d.zip` (DDA-PASEF; builds with timsTOF support, see File formats) |
 | `-out <file>` | — | Tag list, tab-separated |
 | `-fasta <file>` | none | Report only tags occurring in these sequences |
 | `-out_spectra <file>` | none | Write spectra carrying a reported tag here, as mzML or mzpeak (by extension). Needs memory proportional to the *file*, not the thread count, unlike every other path |

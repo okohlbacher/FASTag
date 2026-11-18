@@ -72,6 +72,27 @@ cmake --install openms-build
 FASTag needs only `libOpenMS` and `OpenMS_CLI`, so the TOPP tools, GUI, pyOpenMS, docs and tests
 stay off. mzPeak support (`OPENMS_ENABLE_MZPEAK=ON`) is required for mzPeak input and output.
 
+**Bruker timsTOF input (`.d`, `.d.zip`)** needs OpenMS's opentims reader: configure OpenMS with
+`-DWITH_OPENTIMS=ON` instead of `OFF` (keep `WITH_THERMO_RAW=OFF`). Nothing else changes, and
+FASTag needs no option of its own: it reads the setting from the OpenMS it is built against
+(OpenMS exports `WITH_OPENTIMS` as a compile definition) and refuses `.d` input with a message
+when it is off. With no opentims installed, OpenMS's configure step fetches opentims `v1.2.0b4`
+from GitHub (MIT; its SQLite and zstd come from OpenMS and the environment), so that step needs
+network access; the Bruker SDK is not used. The cluster build used for the 1.16 timsTOF work:
+
+```bash
+cmake -S openms-src -B openms-build-tims -G Ninja \
+  -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX="$PWD/openms-install-tims" \
+  -DCMAKE_PREFIX_PATH="$CONDA_PREFIX" -DOPENMS_ENABLE_MZPEAK=ON -DARROW_USE_STATIC=OFF \
+  -DWITH_GUI=OFF -DPYOPENMS=OFF -DENABLE_DOCS=OFF -DHAS_XSERVER=OFF \
+  -DWITH_OPENTIMS=ON -DWITH_THERMO_RAW=OFF \
+  -DMT_ENABLE_OPENMP=ON -DMT_REQUIRE_OPENMP=ON -DINSTALL_OPENMS_EXAMPLES=OFF -DBUILD_TESTING=OFF
+```
+
+`ctest`'s `bruker_cli_test` runs the timsTOF checks on a trimmed real run
+(`test/fixtures/bruker/`) when the build reads `.d`, and checks the refusal otherwise. The release
+bundles are still built with `WITH_OPENTIMS=OFF`.
+
 - **macOS:** CI builds OpenMS and FASTag for macOS 13.4: `export MACOSX_DEPLOYMENT_TARGET=13.4`
   and add `-DCMAKE_OSX_DEPLOYMENT_TARGET=13.4` to both configure steps. Below 13.4 the build
   fails (`'to_chars' is unavailable`). A build for your own Mac can leave both out.

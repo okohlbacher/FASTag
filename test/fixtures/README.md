@@ -255,3 +255,25 @@ told about (Oxidation on M, Cys->Dha on a Cys without the fixed
 Carbamidomethyl, Acetyl on the peptide N-terminus, Dehydrated on S). For
 `delta_sites_cli_test`. Derived from the OpenMS example FASTA, so
 BSD-3-Clause.
+
+## Bruker timsTOF fixture (1.16)
+
+`bruker/PXD040281_SA_02_trim.d/` — 44 consecutive frames (source frames
+30005-30048, about 4.6 s at 52.8 min) of the DDA-PASEF run
+`20220224_TIMS02_ThNo_SA_02_N756_DDA_120min_Glycerol_DVP_C2_1_8962.d` of
+PRIDE PXD040281 (Bulk.zip member, licence CC0; the `.d.zip` fetched by byte
+range has CRC32 `8018e2a6` as Bulk.zip's central directory states and sha256
+`d5560ddc2c9fe5dc008f67afb35cbeab8d9ab7c0e85a5d84597e9f1d896ea526`), made by
+`make_bruker_fixture.py <run.d> <out.d> 30005 44`. Frames are renumbered from
+1; the 40 DDA-PASEF frames keep their frame data byte for byte, the 4 MS1
+frames keep their rows but not their data (FASTag reads MS2 only); 164
+precursors are kept (those whose PASEF windows all lie in the range), 3 of
+them without a charge; calibration and metadata tables are unchanged.
+`analysis.tdf` sha256
+`b9cfbcd63404798c2ddf0c0745a17358c58e651996e6887607d81d94eb507549`,
+`analysis.tdf_bin` sha256
+`c9ccd0ec752e0449ec492d917bfa92dbf7c931beaff894cbe23ed0c255c2e44e`.
+OpenMS's `BrukerTimsFile` reads it (164 MS2 spectra); readers built on
+mzdata/timsrust (mzpeak-convert, BRFP) write no spectra from it, presumably
+because of the emptied MS1 frames. `bruker_cli_test.sh` zips it and adds a
+`DiaFrameMsMsWindows` table at test time for the `.d.zip` and dia-PASEF cases.

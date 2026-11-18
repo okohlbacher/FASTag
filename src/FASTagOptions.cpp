@@ -66,7 +66,7 @@ void TOPPFASTag::registerOptionsAndFlags_()
 {
   // No setValidFormats_ on the two spectrum files: main_ decides by type
   // and refuses an unsupported one with its own message.
-  registerInputFile_("in", "<file>", "", "Input spectra (mzML, mzpeak or MGF)", /*required=*/false);
+  registerInputFile_("in", "<file>", "", "Input spectra (mzML, mzpeak, MGF, or a Bruker timsTOF .d directory or .d.zip in a build with timsTOF support)", /*required=*/false);
   registerOutputFile_("out", "<file>", "", "Tag list (tab-separated)", /*required=*/false);
   setValidFormats_("out", ListUtils::create<std::string>("tsv"));
 

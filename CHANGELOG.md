@@ -7,6 +7,20 @@ software, and the mass-shift survey. Tag output is unchanged; `-recon_out`'s
 `delta_interp` changes (the ppm fix and the substitution tolerance below), and
 so do `-delta_out`'s rows (`-delta_group`).
 
+- **Bruker timsTOF input (`-in run.d`, `-in run.d.zip`):** DDA-PASEF runs are
+  read directly through OpenMS's `BrukerTimsFile` (opentims; no Bruker SDK) in
+  a build against an OpenMS with `WITH_OPENTIMS=ON` (BUILDING.md); other builds
+  refuse `.d` with a message. One centroided MS2 spectrum per precursor, MS1
+  frames not decoded; a `.d.zip` is unpacked into `OPENMS_TMPDIR` for the read
+  (refused up front when less than 1.5x the archive is free there). Frame and
+  precursor counts come from `analysis.tdf` by SQL before anything is decoded,
+  and dia-PASEF is refused from them (exit 11, `FASTAG_REFUSED reason=raw_dia`).
+  Precursors without a charge keep charge 0 (unknown) and are tagged per
+  `-unknown_charge`, with their charge source reported. `-probe_input` and
+  `-dump_spectrum` do not read `.d` yet. New ctest `bruker_cli_test` on a
+  trimmed PXD040281 run (`test/fixtures/bruker/`). The input-type error now
+  reads "is neither .mzML, .mzpeak, .mgf nor a Bruker timsTOF .d directory or
+  .d.zip archive". Tag output for mzML, mzPeak and MGF is unchanged.
 - **Mass-shift survey (`-delta_out`):** five columns appended (six with
   `isotope_error`, below). `localized` and `unlocalized` count the spectra whose gap the
   fragments do or do not place on one site, judged by site-determining

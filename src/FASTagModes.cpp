@@ -46,6 +46,13 @@ TOPPFASTag::ExitCodes TOPPFASTag::probeInputMode_()
     if (!a.empty()) opt.decoy_affixes.push_back(a);
   opt.version = FASTAG_VERSION;
   const std::string file = getStringOption_("probe_input");
+  // The GUI modes read mzML, mzPeak and MGF; a Bruker run is tagged directly.
+  if (FASTag::Bruker::isBrukerPath(file))
+  {
+    OPENMS_LOG_ERROR << "-probe_input does not read Bruker timsTOF runs (.d, .d.zip) yet; tag the run "
+                        "directly with -in, or convert it to mzML first." << std::endl;
+    return ILLEGAL_PARAMETERS;
+  }
   const P::ProbeOutput r = P::probeInput(file, opt);
   if (r.status != P::Status::OK)
   {
@@ -63,6 +70,12 @@ TOPPFASTag::ExitCodes TOPPFASTag::probeInputMode_()
 TOPPFASTag::ExitCodes TOPPFASTag::dumpSpectrumMode_(const std::string& in, const FASTag::Param& p)
 {
   namespace P = FASTag::Probe;
+  if (FASTag::Bruker::isBrukerPath(in))
+  {
+    OPENMS_LOG_ERROR << "-dump_spectrum does not read Bruker timsTOF runs (.d, .d.zip) yet; convert the "
+                        "run to mzML first." << std::endl;
+    return ILLEGAL_PARAMETERS;
+  }
   if (!getStringOption_("out").empty())
     OPENMS_LOG_WARN << "-dump_spectrum writes no file; -out and every other output are ignored." << std::endl;
   // The dump prepares the peaks at the 1.11 precursor rule: the header m/z,

@@ -887,14 +887,17 @@ TOPPFASTag::ExitCodes TOPPFASTag::main_(int, const char**)
                           "has none." << std::endl;
       return ILLEGAL_PARAMETERS;
     }
-    // The input is .mzML, .mzpeak or .mgf (refused otherwise below), so the
-    // last dot starts the extension. Except for MGF, whose run keeps it:
-    // USI 1.0 lets the msRun carry the extension, and an MGF index points
-    // into the peak list, not into the raw run it came from.
+    // The input is .mzML, .mzpeak, .mgf or a Bruker .d / .d.zip (refused
+    // otherwise below), so the last dot starts the extension, and a Bruker
+    // run is named without ".d" or ".d.zip" (as its conversions are). Except
+    // for MGF, whose run keeps it: USI 1.0 lets the msRun carry the
+    // extension, and an MGF index points into the peak list, not into the
+    // raw run it came from.
     const std::string file = File::basename(in);
     const bool mgf_run = FileHandler::getTypeByFileName(in) == FileTypes::MGF
                          && !FileNameUtils::hasCompressionSuffix(in);
-    const std::string run = mgf_run ? file : file.substr(0, file.rfind('.'));
+    const std::string run = FASTag::Bruker::isBrukerPath(in) ? FASTag::Bruker::runName(in)
+                            : mgf_run ? file : file.substr(0, file.rfind('.'));
     // USI 1.0 3.6.1: a run starting with '[' reads as a [subFolder] prefix.
     if (run.empty() || run[0] == '[')
     {
@@ -1832,7 +1835,13 @@ TOPPFASTag::ExitCodes TOPPFASTag::main_(int, const char**)
   //            in file order, and the workers take the spectra from it.
   //   .mgf     MgfReader: one parallel scan finds every block, then each
   //            worker reads blocks at random, like the mzML index.
-  // Compressed input (.gz, .bz2, .zip) is refused: none of these seek.
+  //   .d       Bruker timsTOF (DDA-PASEF) through OpenMS's BrukerTimsFile
+  //   .d.zip   (src/BrukerInput.h): the MS2 spectra, one per precursor,
+  //            loaded into memory (MS1 frames are not decoded); a .d.zip is
+  //            unpacked into OPENMS_TMPDIR for the read. dia-PASEF is
+  //            refused from analysis.tdf before anything is decoded.
+  // Compressed input (.gz, .bz2, .zip) is refused: none of these seek. A
+  // zipped Bruker run (.d.zip) is the exception: the reader unpacks it.
   // -out_spectra's writer follows ITS extension, so mzML->mzpeak and
   // mzpeak->mzML both work as a side effect of tagging.
   const auto has_ext = [](const std::string& p, const char* ext) {
@@ -1847,7 +1856,16 @@ TOPPFASTag::ExitCodes TOPPFASTag::main_(int, const char**)
   const auto is_mgf = [](const std::string& p) {
     return FileHandler::getTypeByFileName(p) == FileTypes::MGF;
   };
-  if (!is_mzpeak(in) && FileNameUtils::hasCompressionSuffix(in))
+  const bool bruker_in = FASTag::Bruker::isBrukerPath(in);
+  if (bruker_in && !FASTag::Bruker::supported())
+  {
+    OPENMS_LOG_ERROR << "Input '" << in << "' is a Bruker timsTOF run, which this build cannot read: "
+                        "the OpenMS it uses was built without WITH_OPENTIMS. Convert the run to mzML "
+                        "or mzPeak, or use a FASTag built against OpenMS with WITH_OPENTIMS=ON."
+                     << std::endl;
+    return ILLEGAL_PARAMETERS;
+  }
+  if (!bruker_in && !is_mzpeak(in) && FileNameUtils::hasCompressionSuffix(in))
   {
     const FileTypes::Type c = FileNameUtils::compressionType(in);
     OPENMS_LOG_ERROR << "Input '" << in << "' is "
@@ -1856,13 +1874,14 @@ TOPPFASTag::ExitCodes TOPPFASTag::main_(int, const char**)
                      << std::endl;
     return ILLEGAL_PARAMETERS;
   }
-  if (!is_mzpeak(in) && !is_mzml(in) && !is_mgf(in))
+  if (!bruker_in && !is_mzpeak(in) && !is_mzml(in) && !is_mgf(in))
   {
-    OPENMS_LOG_ERROR << "Input '" << in << "' is neither .mzML, .mzpeak nor .mgf." << std::endl;
+    OPENMS_LOG_ERROR << "Input '" << in << "' is neither .mzML, .mzpeak, .mgf nor a Bruker timsTOF "
+                        ".d directory or .d.zip archive." << std::endl;
     return ILLEGAL_PARAMETERS;
   }
-  const bool mzpeak_in = is_mzpeak(in);
-  const bool mgf_in = !mzpeak_in && is_mgf(in);
+  const bool mzpeak_in = !bruker_in && is_mzpeak(in);
+  const bool mgf_in = !bruker_in && !mzpeak_in && is_mgf(in);
   // 1.13 item 15: the auto probe reads spectra by index before the tagging
   // pass; mzPeak input is read once, in file order.
   const bool compl_auto = getStringOption_("complement_tolerance_unit") == "auto";
@@ -2018,8 +2037,74 @@ TOPPFASTag::ExitCodes TOPPFASTag::main_(int, const char**)
   // back instead of producing a confident nothing. The fallback,
   // OnDiscMSExperiment, loads all spectrum metadata up front: a serial pass
   // that is slow on a large file, but correct.
+  // Bruker timsTOF: the facts of analysis.tdf first (SQL only; for a .d.zip
+  // that member alone is extracted), so dia-PASEF is refused before the run
+  // is unpacked or decoded, then the MS2 spectra into memory. The refusal
+  // follows -acquisition_check as the probe below does for other input.
+  PeakMap exp;
+  if (bruker_in)
+  {
+    namespace BR = FASTag::Bruker;
+    const BR::TdfFacts tdf = BR::facts(in);
+    if (!tdf.ok)
+    {
+      OPENMS_LOG_ERROR << tdf.error << std::endl;
+      return tdf.tsf ? INCOMPATIBLE_INPUT_DATA : INPUT_FILE_CORRUPT;
+    }
+    // stderr, as the acquisition check's own line: stdout's summary is digested.
+    std::cerr << "Bruker timsTOF input (analysis.tdf): " << tdf.frames << " frames, " << tdf.ms1_frames
+              << " MS1, " << tdf.pasef_frames << " DDA-PASEF MS/MS, " << tdf.dia_frames
+              << " dia-PASEF MS/MS; " << tdf.precursors << " precursors, " << tdf.precursors_no_charge
+              << " without a charge" << std::endl;
+    const std::string acq_check = getStringOption_("acquisition_check");
+    if (tdf.dia() && acq_check != "off")
+    {
+      if (acq_check == "refuse")
+      {
+        OPENMS_LOG_ERROR << BR::diaRefusalMessage(tdf, in) << std::endl;
+        std::cerr << BR::diaRefusalSentinel(tdf) << std::endl;
+        return INCOMPATIBLE_INPUT_DATA;
+      }
+      OPENMS_LOG_WARN << "'" << in << "' is dia-PASEF (" << tdf.dia_windows << " isolation windows); "
+                         "tagged anyway as -acquisition_check warn asks: flanks and complements "
+                         "will be wrong." << std::endl;
+    }
+    std::string tmp_dir;
+    std::uintmax_t tmp_free = 0;
+    if (const std::string err = BR::checkTempSpace(in, tmp_dir, tmp_free); !err.empty())
+    {
+      OPENMS_LOG_ERROR << err << std::endl;
+      return CANNOT_WRITE_OUTPUT_FILE;
+    }
+    try
+    {
+      const BR::LoadStats ls = BR::loadMs2(in, exp);
+      g_t_open = ls.seconds;
+      std::cerr << "Bruker timsTOF input: " << ls.spectra << " MS2 spectra (one per precursor, "
+                << "centroided by OpenMS BrukerTimsFile; MS1 frames not decoded) in "
+                << std::round(ls.seconds * 10.0) / 10.0 << " s";
+      if (!File::isDirectory(BR::normalizePath(in)))
+        std::cerr << ", unpacked under " << tmp_dir << " (" << std::round(tmp_free / 1e8) / 10.0
+                  << " GB free before)";
+      std::cerr << std::endl;
+      // Charge 0 stays unknown: -unknown_charge decides how such a spectrum
+      // is tagged, and the charge source is reported per spectrum (and the
+      // count after the loop, as for any input).
+      if (ls.charge_unknown > 0)
+        std::cerr << "Bruker timsTOF input: " << ls.charge_unknown << " of " << ls.spectra
+                  << " MS2 spectra have no precursor charge (no monoisotopic peak found; their m/z is "
+                     "that of the most intense isotope peak); tagged per -unknown_charge "
+                  << getStringOption_("unknown_charge") << std::endl;
+    }
+    catch (const Exception::BaseException& e)
+    {
+      OPENMS_LOG_ERROR << "Cannot read '" << in << "': " << e.what() << std::endl;
+      return INPUT_FILE_CORRUPT;
+    }
+  }
+
   std::unique_ptr<FASTag::IndexedMzMLReader> fastmz;
-  if (!mzpeak_in && !mgf_in && out_spectra.empty())
+  if (!mzpeak_in && !mgf_in && !bruker_in && out_spectra.empty())
   {
     const auto opened = std::chrono::steady_clock::now();
     auto candidate = std::make_unique<FASTag::IndexedMzMLReader>(in);
@@ -2038,8 +2123,7 @@ TOPPFASTag::ExitCodes TOPPFASTag::main_(int, const char**)
   }
 
   auto ondisc = std::make_unique<OnDiscMSExperiment>();
-  PeakMap exp;
-  const bool streaming = !mzpeak_in && !mgf_in && !fastmz && ondisc->openFile(in);
+  const bool streaming = !mzpeak_in && !mgf_in && !bruker_in && !fastmz && ondisc->openFile(in);
   // Spectrum i of an mzML input: the per-spectrum reader or the fully
   // loaded map. For the SERIAL callers only; the tagging loop gives each
   // thread its own reader. (mzPeak is read in one pass, by MzPeakStream.)
@@ -2048,7 +2132,7 @@ TOPPFASTag::ExitCodes TOPPFASTag::main_(int, const char**)
     if (fastmz) return fastmz->getSpectrum(i);
     return streaming ? ondisc->getSpectrum(i) : exp[i];
   };
-  if (!streaming && !mzpeak_in && !mgf_in && !fastmz)
+  if (!streaming && !mzpeak_in && !mgf_in && !bruker_in && !fastmz)
   {
     OPENMS_LOG_WARN << "'" << in << "' has no usable index; reading it entirely "
                        "into memory. Run FileConverter to write an indexed mzML "
