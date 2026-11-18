@@ -86,7 +86,7 @@ plus `GUI-THIRD-PARTY-NOTICES.txt`, written at bundle time by
 | npm packages | the production dependencies of `gui/package-lock.json` built into the frontend: react, react-dom, scheduler, @tauri-apps/api, @tauri-apps/plugin-dialog, @tauri-apps/plugin-opener | MIT, Apache-2.0 |
 | Fonts and images | see "Bundled assets" above | OFL-1.1 |
 | AppImage only: system libraries | what linuxdeploy copies from the build machine (Ubuntu 22.04): WebKitGTK 4.1, JavaScriptCore, GTK 3, GLib, GStreamer and its plugins, Cairo, Pango, HarfBuzz, libsoup, ICU and their dependencies; each mapped to its Ubuntu package with the package's copyright file and the licence texts it refers to, and for the (L)GPL ones the source package, version and its Ubuntu (Launchpad) source link | LGPL-2.0/2.1+, GPL with exceptions, MIT, BSD, MPL |
-| Windows installer | the NSIS installer stub (zlib/libpng licence); WebView2 is part of Windows and not bundled (the installer downloads Microsoft's bootstrapper only where it is missing) | Zlib |
+| Windows installer | the NSIS installer stub (zlib/libpng licence; its bzip2 module under the bzip2 licence); WebView2 is part of Windows and not bundled (the installer downloads Microsoft's bootstrapper only where it is missing) | Zlib; bzip2 licence |
 
 macOS uses the system WebKit, and the `.deb` and the Linux tarball depend on
 the distribution's WebKitGTK and GTK instead of bundling them. A crate or npm

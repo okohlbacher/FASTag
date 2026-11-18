@@ -180,27 +180,25 @@ Windows 10 and 11 already have (the installer downloads it otherwise, so a
 machine without it needs a network connection). Started by an administrator,
 the installer asks for whom to install: all users (preselected) or only the
 current user. A standard user installs for themselves, with no administrator
-prompt. The installed app takes about 365 MB, and about 1.5 GB with the
-taxonomy index of the species report, which is a separate download
-(`FASTag-<version>-taxonomy-k7.tar.gz` on the release page; the app checks for it before
-a run with the species report and says where to put it).
+prompt. The installer (about 305 MB) includes the taxonomy index of the
+species report (`tax_k7.taxdb`, 1.14 GB); the installed app takes about 1.5 GB.
 
 | What | Where | Removed by uninstall? |
 |---|---|---|
-| App, bundled CLI (`resources\fastag\bin\FASTag.exe` and its DLLs), OpenMS data, taxonomy dumps, digest models | all users: `C:\Program Files\FASTag`; per user: `%LOCALAPPDATA%\Programs\FASTag` (a per-user install of 1.13.3 or earlier stays in `%LOCALAPPDATA%\FASTag`) | yes |
-| Taxonomy index `tax_k7.taxdb` (1.14 GB) | where you put it: `<install>\resources\fastag\share\FASTag\taxonomy\`, or the folder `FASTAG_TAXONOMY_DIR` names | no: the uninstaller removes only what it installed |
+| App, bundled CLI (`resources\fastag\bin\FASTag.exe` and its DLLs), OpenMS data, taxonomy dumps and index (`resources\fastag\share\FASTag\taxonomy\tax_k7.taxdb`), digest models | all users: `C:\Program Files\FASTag`; per user: `%LOCALAPPDATA%\Programs\FASTag` (a per-user install of 1.13.3 or earlier stays in `%LOCALAPPDATA%\FASTag`) | yes |
+| A taxonomy index you installed yourself (source build or custom install) | the folder `FASTAG_TAXONOMY_DIR` names, or a file you copied into the install | no: the uninstaller removes only what it installed |
 | Settings (`settings.json`) | `%APPDATA%\de.openms.fastag` (Roaming: follows the user) | only with "Delete app data" |
 | History, run markers, `last-failure.log`, `leftovers-kept.json` | `%LOCALAPPDATA%\de.openms.fastag` (moved there once from `%APPDATA%` by the first start after 1.13.3) | only with "Delete app data" |
 | WebView2 profile | `%LOCALAPPDATA%\de.openms.fastag\EBWebView` | only with "Delete app data" |
 | Run outputs | beside the input, or where you chose | never |
 
-To install the index, unpack the asset with Windows' own `tar`
-(`tar -xzf FASTag-<version>-taxonomy-k7.tar.gz`) and copy
-`share-FASTag-taxonomy\tax_k7.taxdb` into
-`<install>\resources\fastag\share\FASTag\taxonomy\`. In `C:\Program Files`
-that needs an administrator; otherwise keep it in a folder of your own and set
+The index-only asset `FASTag-<version>-taxonomy-k7.tar.gz` is needed only for
+a source build or a custom install: unpack it with Windows' own `tar`
+(`tar -xzf FASTag-<version>-taxonomy-k7.tar.gz`), keep
+`share-FASTag-taxonomy\tax_k7.taxdb` in a folder of your own and set
 `FASTAG_TAXONOMY_DIR` to that folder (`setx FASTAG_TAXONOMY_DIR <folder>`, then
-start FASTag again).
+start FASTag again). The app checks for the index before a run with the species
+report and says where it looks.
 
 Silent install and uninstall, for IT deployment:
 `FASTag-<version>-gui-windows-x64-setup.exe /S` installs for all users when run elevated
@@ -299,9 +297,8 @@ every tab, setting and error message. Light, dark and system themes. It is built
 [Tauri 2](https://tauri.app) — a Rust backend and the OS's native webview, not a
 bundled browser. The CLI remains the source of truth; the GUI shells out to it.
 
-```bash
-cd gui && npm install && npm run tauri dev     # or: npm run tauri build
-```
+To build or run the app from source, follow [BUILDING.md](BUILDING.md#5-desktop-app-optional):
+`tauri dev` and `tauri build` need a staged CLI in `gui/src-tauri/resources/fastag/`.
 
 Installable bundles ship with every release: signed, notarized and stapled disk
 images for macOS (also on Homebrew, above), an installer for Windows, which

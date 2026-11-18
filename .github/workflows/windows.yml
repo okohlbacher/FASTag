@@ -1191,7 +1191,8 @@ jobs:
           wait-for-completion: true
           wait-for-completion-timeout-in-seconds: 1800
           # The default 300 s bounds the WHOLE download, not idle time, and the
-          # signed installer is ~365 MB: 1200 s still fits the job timeout.
+          # signed installer of a tag build (taxonomy index included) is
+          # ~305 MB: 1200 s still fits the job timeout.
           download-signed-artifact-timeout-in-seconds: 1200
           output-artifact-directory: 'signed-gui'
 
@@ -1327,7 +1328,8 @@ jobs:
             $env:PATH = "$env:USERPROFILE\.cargo\bin;$env:PATH"
           }
           cargo install tauri-driver --version 2.1.0 --locked
-      # The taxonomy index (a separate release asset) for Characterize.
+      # The taxonomy index for Characterize, used only when the installer
+      # has none (dry runs; tag builds embed it).
       - name: Taxonomy index
         shell: bash
         env:
@@ -1357,9 +1359,11 @@ jobs:
             ${{ runner.temp }}/e2e/tauri-driver.log*
             ${{ runner.temp }}/installed-check
           if-no-files-found: warn
-      # After the specs: the only file left is the taxonomy index they copied
-      # into the install, as a user would (the uninstaller keeps what it did
-      # not install).
+      # After the specs. A tag build's installer includes the taxonomy index
+      # and the uninstaller removes it with the rest; a dry-run installer has
+      # none, so the specs copied it into the install as a user would, and
+      # that copy is the only file allowed to stay (the uninstaller keeps
+      # what it did not install). Any other leftover fails.
       - name: Uninstall
         shell: pwsh
         run: |

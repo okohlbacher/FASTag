@@ -180,9 +180,14 @@ cp -RL "$D/share-FASTag-taxonomy" "$R/share/FASTag/taxonomy"
 cp -RL "$D/share-FASTag-digest" "$R/share/FASTag/digest"
 cp -RL "$D/share-FASTag-alkylation" "$R/share/FASTag/alkylation"
 cp "$D/LICENSE" "$D/THIRD-PARTY-NOTICES.txt" "$R/"
+cp -RL "$D/examples" "$R/examples"                 # File > Open Example Data
 env -i HOME="$HOME" "$R/bin/FASTag" --help | grep Version   # must print FASTag's version
 
 cd gui && npm ci
+# the desktop app's own notices (Rust crates, npm packages, fonts); --platform linux or macos
+python3 ../tools/gui_third_party_notices.py --gui . --target "$(rustc -vV | sed -n 's/^host: //p')" \
+  --platform linux --out src-tauri/resources/fastag/GUI-THIRD-PARTY-NOTICES.txt
+bash ../tools/check_bundle_notices.sh src-tauri/resources/fastag   # notices and example data
 npm run tauri build -- --debug        # unsigned; drop --debug for a release build
 ```
 

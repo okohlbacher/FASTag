@@ -197,8 +197,8 @@ test('characterize: species, digest, label reports and the Overview', { timeout:
     const input = copyIn(process.env.E2E_MZML, 'char.mzML')
     await chooseInput(s, input)
     await shot(s, '04-characterize-setup')
-    // A fresh install has the taxonomy dumps but not the k-mer index (a
-    // separate release asset), and the species survey would stop with exit 6
+    // A dry-run install has the taxonomy dumps but not the k-mer index (tag
+    // builds include it), and the species survey would stop with exit 6
     // ("-species: no taxdb"). The checks before the run block it instead and
     // say where the index goes (the folder the CLI looks in) and how to get
     // it. Then the index goes there, as a user would put it; the window

@@ -1879,6 +1879,7 @@ jobs:
           [ -n "$inside" ] || { echo "::error::the AppImage carries no resources/fastag/GUI-THIRD-PARTY-NOTICES.txt"; exit 1; }
           X="$RUNNER_TEMP/appimage-notice"; rm -rf "$X"
           unsquashfs -o "$("$app" --appimage-offset)" -d "$X" "$app" "${inside#squashfs-root/}" \
+            "$(dirname "${inside#squashfs-root/}")/LICENSE" \
             "$(dirname "${inside#squashfs-root/}")/THIRD-PARTY-NOTICES.txt" \
             "$(dirname "${inside#squashfs-root/}")/examples" > /dev/null
           python3 ../tools/gui_third_party_notices.py --appimage-listing "$L" --check-appimage "$X/${inside#squashfs-root/}"

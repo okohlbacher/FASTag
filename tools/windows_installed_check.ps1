@@ -49,7 +49,7 @@ foreach ($f in @('LICENSE', 'THIRD-PARTY-NOTICES.txt', 'GUI-THIRD-PARTY-NOTICES.
 $guiNotices = Join-Path $R 'GUI-THIRD-PARTY-NOTICES.txt'
 $n = (Get-Item $guiNotices).Length
 if ($n -lt 200000) { Fail "GUI-THIRD-PARTY-NOTICES.txt is only $n bytes" }
-foreach ($want in @('^tauri ', '^wry ', '^react ', 'IBM Plex', 'NSIS', '^\[T1\] used by')) {
+foreach ($want in @('^tauri ', '^wry ', '^react ', 'IBM Plex', 'NSIS', '^\[T1\] used by', 'used by: .*NSIS bzip2 compression module', 'associated library "libbzip2", are copyright')) {
   if (-not (Select-String -Path $guiNotices -Pattern $want -Quiet)) { Fail "GUI-THIRD-PARTY-NOTICES.txt has no line matching '$want'" }
 }
 if (Select-String -Path (Join-Path $R 'THIRD-PARTY-NOTICES.txt') -Pattern 'licence text not found' -Quiet) { Fail 'THIRD-PARTY-NOTICES.txt lists a licence without its text' }

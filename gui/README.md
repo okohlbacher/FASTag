@@ -707,19 +707,20 @@ honoured in this mode; `uninstall.exe /S`. The pre-install hook
 other scope (same identifier `de.openms.fastag`), so an upgrade leaves one copy
 and one Apps entry. The app needs the WebView2 runtime (part of current
 Windows 10 and 11; the installer's bootstrapper downloads it otherwise) and
-runs on Windows on ARM64 emulated. It takes about 365 MB installed; the
-taxonomy k-mer index (1.14 GB, the separate `FASTag-<version>-taxonomy-k7.tar.gz`
-asset) is not in the installer, and the check before a run with `-species`
-(`inspector/checks.ts`, `no-taxdb`) says where it goes:
-`<install>\resources\fastag\share\FASTag\taxonomy\` or
-`FASTAG_TAXONOMY_DIR`. Settings stay in `%APPDATA%\de.openms.fastag`
+runs on Windows on ARM64 emulated. Release installers (tag builds; the
+`Embed taxonomy index` step of `.github/workflows/windows.yml`) include the
+taxonomy k-mer index (1.14 GB) in
+`<install>\resources\fastag\share\FASTag\taxonomy\`; the app takes about
+1.5 GB installed. Dry-run installers carry no index; for them, and for custom
+installs, the check before a run with `-species` (`inspector/checks.ts`,
+`no-taxdb`) says where it goes: that folder or `FASTAG_TAXONOMY_DIR`. Settings stay in `%APPDATA%\de.openms.fastag`
 (Roaming, `app_config_dir`); history, run markers, `last-failure.log` and
 `leftovers-kept.json` live in `%LOCALAPPDATA%\de.openms.fastag`
 (`app_local_data_dir`, moved from Roaming once at the first start after 1.13.3;
 on macOS and Linux both are the same folder), next to the WebView2 profile.
 Uninstall removes the installed files only: app data stays unless "Delete app
-data" is ticked, an index unpacked into the install stays, and outputs are
-never touched. Job `installed-app` in `.github/workflows/windows.yml` checks
+data" is ticked, an index the user copied into the install stays, and outputs
+are never touched. Job `installed-app` in `.github/workflows/windows.yml` checks
 per-user and all-users installs, the upgrade from the v1.13.3 installer, and
 that uninstall leaves nothing, on windows-latest and windows-11-arm.
 
