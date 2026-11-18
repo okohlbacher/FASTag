@@ -132,7 +132,7 @@ class Texts:
 def rust_crates(src_tauri: Path, target: str) -> list[dict]:
     meta = json.loads(subprocess.run(
         ["cargo", "metadata", "--locked", "--format-version", "1", "--filter-platform", target],
-        cwd=src_tauri, check=True, capture_output=True, text=True).stdout)
+        cwd=src_tauri, check=True, capture_output=True, encoding="utf-8").stdout)
     pkgs = {p["id"]: p for p in meta["packages"]}
     nodes = {n["id"]: n for n in meta["resolve"]["nodes"]}
     root = meta["resolve"]["root"]
