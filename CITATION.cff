@@ -12,6 +12,10 @@ date-released: 2026-11-16
 license: MIT
 repository-code: "https://github.com/okohlbacher/FASTag"
 url: "https://okohlbacher.github.io/FASTag/"
+identifiers:
+  - type: url
+    value: "https://archive.softwareheritage.org/browse/origin/?origin_url=https://github.com/okohlbacher/FASTag"
+    description: "Software Heritage archive of the repository, origin SWHID swh:1:ori:6ec7356bbacb9bf3110bf84321f3b4b1c65394fd"
 authors:
   - family-names: Kohlbacher
     given-names: Oliver

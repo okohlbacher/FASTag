@@ -9,6 +9,7 @@
   "datePublished": "2026-11-16",
   "license": "https://spdx.org/licenses/MIT",
   "codeRepository": "https://github.com/okohlbacher/FASTag",
+  "identifier": "swh:1:ori:6ec7356bbacb9bf3110bf84321f3b4b1c65394fd",
   "url": "https://okohlbacher.github.io/FASTag/",
   "issueTracker": "https://github.com/okohlbacher/FASTag/issues",
   "downloadUrl": "https://github.com/okohlbacher/FASTag/releases/tag/v1.15.0",
@@ -49,11 +50,18 @@
       "familyName": "Kohlbacher"
     }
   ],
-  "referencePublication": [
+  "citation": [
     {
       "@type": "ScholarlyArticle",
+      "@id": "https://doi.org/10.1021/pr800154p",
       "name": "DirecTag: accurate sequence tags from peptide MS/MS through statistical scoring",
-      "identifier": "https://doi.org/10.1021/pr800154p"
+      "datePublished": "2008"
+    },
+    {
+      "@type": "ScholarlyArticle",
+      "@id": "https://doi.org/10.1038/s41592-024-02197-7",
+      "name": "OpenMS 3 enables reproducible analysis of large-scale mass spectrometry data",
+      "datePublished": "2024"
     }
   ],
   "developmentStatus": "active",

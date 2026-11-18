@@ -2497,7 +2497,8 @@ jobs:
   # (tools/release_notes.py), not "release notes pending" (1.15.0 went out
   # with that placeholder). Whichever job creates the release first uses a
   # placeholder; this job then sets the body, creating the release itself if
-  # it is first. A tag whose version has no CHANGELOG section is red here. A
+  # it is first. A tag whose version has no CHANGELOG section, or whose
+  # CITATION.cff / codemeta.json name another release, is red here. A
   # manual dispatch only renders the notes into the job summary.
   release-notes:
     if: startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch'
@@ -2511,8 +2512,21 @@ jobs:
           persist-credentials: false
           sparse-checkout: |
             CHANGELOG.md
+            CITATION.cff
+            codemeta.json
             tools/release_notes.py
+            tools/check_citation_metadata.py
           sparse-checkout-cone-mode: false
+      # CITATION.cff and codemeta.json must name the tag's version, its
+      # CHANGELOG date and its release URLs, or "Cite this repository" cites
+      # the previous release.
+      - name: Citation metadata names this release
+        env:
+          V: ${{ needs.version.outputs.version }}
+        run: |
+          set -euo pipefail
+          python3 -c 'import yaml' 2>/dev/null || python3 -m pip install --user --break-system-packages pyyaml
+          python3 tools/check_citation_metadata.py "$V" .
       - name: Release notes from CHANGELOG.md
         env:
           GH_TOKEN: ${{ github.token }}
@@ -2530,6 +2544,17 @@ jobs:
           gh release create "$TAG" --title "$TAG" --notes-file "$RUNNER_TEMP/notes.md" 2>/dev/null \
             || gh release edit "$TAG" --notes-file "$RUNNER_TEMP/notes.md"
           gh release view "$TAG" --json body --jq .body | head -3
+      # Ask Software Heritage to archive the repository with this tag. Not
+      # blocking: the archive's queue or rate limit must not fail a release.
+      - name: Request a Software Heritage save
+        if: startsWith(github.ref, 'refs/tags/v')
+        continue-on-error: true
+        run: |
+          set -euo pipefail
+          curl -fsS --max-time 60 -X POST \
+            "https://archive.softwareheritage.org/api/1/origin/save/git/url/https://github.com/okohlbacher/FASTag/" \
+            | tee "$RUNNER_TEMP/swh-save.json"
+          echo "- Software Heritage save requested: $(python3 -c 'import json,sys; d=json.load(open(sys.argv[1])); print(d.get("save_request_status"), d.get("save_task_status"))' "$RUNNER_TEMP/swh-save.json")" >> "$GITHUB_STEP_SUMMARY"
 
   # ------------------------------------------------- release completeness
   # No more silently partial releases: v0.19.1 went out with no linux-x64

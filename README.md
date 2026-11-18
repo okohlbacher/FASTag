@@ -18,8 +18,10 @@ Performance for the bound and the options that keep per-run state).
 What changed in each release: [CHANGELOG.md](CHANGELOG.md).
 
 **How to cite.** Cite the FASTag release you used (GitHub shows the entry from
-[CITATION.cff](CITATION.cff) under "Cite this repository"; the source of every
-release is archived by [Software Heritage](https://archive.softwareheritage.org/browse/origin/?origin_url=https://github.com/okohlbacher/FASTag)),
+[CITATION.cff](CITATION.cff) under "Cite this repository"; the repository is
+archived by [Software Heritage](https://archive.softwareheritage.org/browse/origin/?origin_url=https://github.com/okohlbacher/FASTag),
+origin `swh:1:ori:6ec7356bbacb9bf3110bf84321f3b4b1c65394fd`, and each release
+requests a new save),
 together with the DirecTag algorithm (Tabb DL et al., *J. Proteome Res.* 2008,
 7:3838, [doi:10.1021/pr800154p](https://doi.org/10.1021/pr800154p)) and OpenMS
 (Pfeuffer J et al., *Nat. Methods* 2024,

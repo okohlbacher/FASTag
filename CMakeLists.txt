@@ -695,6 +695,17 @@ if(FASTAG_BUILD_TESTS)
                    ${CMAKE_CURRENT_SOURCE_DIR}/src/FASTagOptions.cpp
                    ${CMAKE_CURRENT_SOURCE_DIR}/README.md)
   set_tests_properties(readme_options_test PROPERTIES SKIP_RETURN_CODE 77)
+  # CITATION.cff and codemeta.json parse, carry their required keys and name
+  # this version and its CHANGELOG date (tools/check_citation_metadata.py,
+  # which the release-notes job also runs on tags). Skips (77) without
+  # python3 or PyYAML.
+  add_test(NAME citation_metadata_test
+           COMMAND bash -c "PY=\${FASTAG_PYTHON:-python3}; command -v \"\$PY\" >/dev/null || exit 77; exec \"\$PY\" \"\$0\" \"\$1\" \"\$2\" \"\$3\""
+                   ${CMAKE_CURRENT_SOURCE_DIR}/test/citation_metadata_test.py
+                   ${CMAKE_CURRENT_SOURCE_DIR}/tools/check_citation_metadata.py
+                   ${CMAKE_CURRENT_SOURCE_DIR}
+                   ${PROJECT_VERSION})
+  set_tests_properties(citation_metadata_test PROPERTIES SKIP_RETURN_CODE 77)
 
   # mzPeak reader vs its own mzML twin. Needs a matched pair of real files, so
   # it SKIPs unless FASTAG_E2E_MZML and FASTAG_E2E_MZPEAK point at one.

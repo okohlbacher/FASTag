@@ -6,7 +6,11 @@ Documentation, packaging and desktop-app fixes for publication as research
 software. Tag output is unchanged.
 
 - **Citation:** `CITATION.cff` and `codemeta.json`; a "How to cite" section in
-  the README and on the project page; source archived by Software Heritage.
+  the README and on the project page. The repository is archived by Software
+  Heritage (SWHID in both files), and each release tag requests a new save
+  (non-blocking step of the release-notes job). Tag builds check that both
+  files name the tag's version, date and release URLs
+  (`tools/check_citation_metadata.py`).
 - **Documentation:** `BUILDING.md` (source build, tests, GUI build),
   `doc/TUTORIAL.md` (CLI walkthrough on the shipped example and on PXD000001),
   `doc/MANUAL.md` (the desktop app, with screenshots), the complete
