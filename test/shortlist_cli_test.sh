@@ -151,7 +151,8 @@ run "$TMP/dflt" "$BIN" "${SHARED[@]}" -threads 2 -shortlist_max_evalue 0.1 -shor
 for f in t.tsv r.tsv d.tsv m.tsv; do
   cmp -s "$TMP/a/$f" "$TMP/dflt/$f" || fail "$f: #5 options at their defaults differ from none"
 done
-grep -qi 'ignored' "$TMP/dflt/run.log" && fail "options at their defaults draw an ignored-option warning"
+# (ARGS pins -shortlist_defaults plain, a non-default value that is rightly warned about without a shortlist output)
+grep -i 'ignored' "$TMP/dflt/run.log" | grep -qv -- '-shortlist_defaults' && fail "options at their defaults draw an ignored-option warning"
 # ... and a non-default one without its output is warned about
 run "$TMP/ign" "$BIN" -out t.tsv -shortlist_top 5 -search_engine comet -threads 2
 grep -q -- '-shortlist_top is only read for' "$TMP/ign/run.log" || fail "no warning for an ignored -shortlist_top"

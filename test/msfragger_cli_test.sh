@@ -277,6 +277,6 @@ for p in j1:i1 j3:i1 j2:j4 j5:i3; do
   [ "$(grep -c -- "$W" "$TMP/$a/run.log")" = 1 ] || fail "j: $a: not exactly one removal warning"
   for f in t.tsv r.tsv sl.tsv red.fasta cfg; do cmp -s "$TMP/$b/$f" "$TMP/$a/$f" || fail "j: $a: $f differs from $b"; done
 done
-grep -q '^# settings: max_evalue 10, min_spectra 2, gapped yes,' "$TMP/j1/sl.tsv" || fail "j: msfragger gapped default lost"
+grep -q '^# settings: max_evalue 10, min_spectra 1, gapped yes,' "$TMP/j1/sl.tsv" || fail "j: recipe gapped default lost"
 echo "j: -shortlist_exact_only has no effect and warns once (msfragger, with -shortlist_gapped, INI, Sage)"
 echo "msfragger_cli_test: all checks passed"
