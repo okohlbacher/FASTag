@@ -261,7 +261,10 @@ grep -q 'min tag length 6 (shortlist recipe default)' "$TMP/r1/run.log" || fail 
 # without a shortlist output nothing changes; -shortlist_defaults plain leaves the tags alone
 rgo "$TMP/r2" -out t.tsv
 grep -q -i 'recipe defaults' "$TMP/r2/run.log" && fail "r: recipe applied without a shortlist output"
-rgo "$TMP/r3" -out t.tsv "${NEW[@]}" -shortlist_defaults plain
+# (at the plain defaults, -tag_length 3 without extension, no tag reaches the derived length 5 of this
+# database: the shortlist is empty and FASTag exits 13; this is the 1.15.3 behaviour the recipe fixes)
+mkdir -p "$TMP/r3"; ( cd "$TMP/r3" && "$BIN" "${RIN[@]}" -out t.tsv "${NEW[@]}" -shortlist_defaults plain > run.log 2>&1 ); rc=$?
+[ $rc = 13 ] || { cat "$TMP/r3/run.log" >&2; fail "r: plain on this fixture: exit $rc, not 13 (empty shortlist)"; }
 grep -q -i 'recipe defaults' "$TMP/r3/run.log" "$TMP/r3/sl.tsv" && fail "r: plain still applied the recipe"
 cmp -s "$TMP/r2/t.tsv" "$TMP/r3/t.tsv" || fail "r: plain shortlist outputs changed the tag TSV"
 # tagging options given on the command line win: the tags equal a run without a shortlist
