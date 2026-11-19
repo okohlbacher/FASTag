@@ -1,0 +1,32 @@
+{
+ "id": "pxd000561-dev-v1",
+ "intercept": -1.648331,
+ "coef": [
+  0.995422,
+  -0.613517,
+  0.333596,
+  1.54932,
+  0.588419,
+  -0.290168,
+  0.440959,
+  1.457329,
+  -0.71173,
+  -0.206347,
+  -0.452941,
+  -1.046685
+ ],
+ "features": [
+  "pre_best_evalue",
+  "pre_best_len",
+  "pre_best_mean_conf",
+  "pre_tag_cover",
+  "n_found",
+  "n_peaks",
+  "n_compl",
+  "n_edges",
+  "n_peaks_kept",
+  "int_gini",
+  "charge_used",
+  "precursor_mz"
+ ]
+}

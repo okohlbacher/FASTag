@@ -867,6 +867,24 @@ export const PARAM_UI: Record<string, ParamUi> = {
       text: 'Where the census run summary goes. By default next to the tags file, ending in .census_summary.tsv.'
     }
   },
+  census_ids_exact: {
+    hidden: '1.16 command-line option for label joins, not in the form (CLI default applies)',
+    help: {
+      text: 'Join the identifications one to one: exact spectrum ids only, and refuse a file that does not belong to this run.'
+    }
+  },
+  census_score: {
+    hidden: '1.16 experimental command-line option, not in the form (CLI default applies)',
+    help: {
+      text: 'Add an identifiability score to the census: a ranking of the MS2 spectra by how likely a standard database search identifies them. Not a quality call.'
+    }
+  },
+  census_sorted_out: {
+    hidden: '1.16 experimental command-line option, not in the form (CLI default applies)',
+    help: {
+      text: 'The census rows ordered by the identifiability score, highest first.'
+    }
+  },
   census_triage_evalue: {
     hidden: OPT_IN_1_12,
     help: {

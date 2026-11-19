@@ -340,6 +340,11 @@ namespace FASTag::Census
     bool has_best = false;      ///< best and tag_cover are valid
     TagView best;               ///< the best reported tag
     double tag_cover = 0;       ///< tag_cover of the reported rows
+    /// -census_score (1.16 item 4): the best of ALL tags of the selected
+    /// hypothesis, before any database filter (-fasta), and their tag_cover.
+    bool has_pre = false;       ///< pre_best and pre_tag_cover are valid
+    TagView pre_best;           ///< best tag before database filters
+    double pre_tag_cover = 0;   ///< tag_cover of all tags before database filters
   };
 
   /**
@@ -349,12 +354,13 @@ namespace FASTag::Census
       read c/z, IonSeries::seriesColumn).
     @return The header line, ending in a newline.
   */
-  inline std::string header(bool ion_series)
+  inline std::string header(bool ion_series, bool score = false)
   {
     return std::string("index\tspectrum\trt\tprecursor_mz\tcharge_given\tcharge_used\tn_peaks\tn_peaks_kept"
                        "\tn_edges\tn_compl\tint_gini\tstatus\tn_found\tn_reported\tbest_evalue\tbest_len"
                        "\tbest_min_conf\tbest_mean_conf\tbest_tic\ttag_cover")
-         + (ion_series ? "\tbest_ion_series\n" : "\n");
+         + (ion_series ? "\tbest_ion_series" : "")
+         + (score ? "\tpre_best_evalue\tpre_best_len\tpre_best_mean_conf\tpre_tag_cover" : "") + "\n";
   }
 
   /**
@@ -370,6 +376,7 @@ namespace FASTag::Census
   struct RunColumns
   {
     bool ion_series = false;  ///< best_ion_series (#15 phase B)
+    bool score = false;       ///< the pre_* columns of -census_score (1.16 item 4)
   };
   /**
     @brief The process-wide RunColumns setting.
@@ -387,7 +394,7 @@ namespace FASTag::Census
 
     @return The header line, ending in a newline.
   */
-  inline std::string header() { return header(runColumns().ion_series); }
+  inline std::string header() { return header(runColumns().ion_series, runColumns().score); }
 
   /**
     @brief Appends free text as one TSV field.
@@ -406,14 +413,16 @@ namespace FASTag::Census
   /**
     @brief Appends one census row.
 
-    20 fields, 21 with @p ion_series, and a newline.
+    20 fields, one more with @p ion_series, four more with @p score, and a newline.
 
     @param[in,out] buf Buffer appended to.
     @param[in] r The row.
     @param[in] native_id Native ID of the spectrum (the spectrum column).
     @param[in] ion_series Whether to write the best_ion_series column.
+    @param[in] score Whether to write the four pre_* columns (-census_score).
   */
-  inline void appendRow(std::string& buf, const Row& r, const std::string& native_id, bool ion_series = false)
+  inline void appendRow(std::string& buf, const Row& r, const std::string& native_id, bool ion_series = false,
+                        bool score = false)
   {
     constexpr auto fixed = std::chars_format::fixed;
     constexpr auto general = std::chars_format::general;
@@ -459,6 +468,17 @@ namespace FASTag::Census
     {
       buf += '\t';
       if (r.has_best) buf += r.best.cz ? "cz" : "by";
+    }
+    if (score)
+    {
+      if (r.has_pre)
+      {
+        buf += '\t'; appendNum(buf, r.pre_best.evalue, general, 6);
+        buf += '\t'; appendNum(buf, r.pre_best.n_res);
+        buf += '\t'; appendNum(buf, r.pre_best.mean_conf, fixed, 3);
+        buf += '\t'; appendNum(buf, r.pre_tag_cover, fixed, 4);
+      }
+      else buf += "\t\t\t\t";
     }
     buf += '\n';
   }

@@ -39,6 +39,16 @@
 // rule can be recomputed from the table). It is an E-value threshold, not a
 // quality call.
 //
+// Exact mode (-census_ids_exact, 1.16 item 4: a label join for model
+// fitting and evaluation must be one-to-one). On top of the rules above:
+// no scan-number fallback (only an exact native id matches); the file is
+// refused when any reference matches no spectrum read, when one spectrum
+// is named by two identifications, when a hit carries no target/decoy
+// annotation, or when the file names no run or a run other than -in (a
+// wrong-run file would otherwise match a Thermo run's scan= ids exactly).
+// The summary then tells unidentified spectra a reference names (searched,
+// no accepted hit) from those no reference names (no PSM exported).
+//
 // The join runs after the tagging loop on the finished census table (two
 // streaming passes), so the tagging loop, its outputs and the census rows of
 // phase A are untouched.
@@ -170,6 +180,22 @@ namespace FASTag::CensusIds
     */
     bool add(const std::string& ref, bool accepted);
     /**
+      @brief Exact mode: no scan-number fallback in lookup().
+
+      @param[in] on Whether only exact native ids match.
+    */
+    void setExact(bool on) { exact_ = on; }
+    /**
+      @brief Whether a reference names @p native_id exactly.
+
+      @param[in] native_id A census native id, escaped.
+      @return true when a reference equals it.
+    */
+    bool named(const std::string& native_id) const { return refs_.count(native_id) > 0; }
+    /// @brief References added more than once (one spectrum, several identifications).
+    /// @return The number of repeated add() calls for an existing reference.
+    std::size_t duplicates() const { return dups_; }
+    /**
       @brief Pass 1: registers a spectrum read.
 
       @param[in] native_id Its census native id, escaped.
@@ -209,6 +235,8 @@ namespace FASTag::CensusIds
     std::unordered_map<long long, std::vector<Ref*>> by_scan_;   ///< built on the first see()
     std::unordered_map<long long, std::uint32_t> input_scans_;   ///< scans of the spectra read
     bool scans_built_ = false;
+    bool exact_ = false;      ///< setExact()
+    std::size_t dups_ = 0;    ///< duplicates()
   };
 
   /**
@@ -226,6 +254,7 @@ namespace FASTag::CensusIds
     std::size_t n_no_ref_hits = 0;  ///< ... of them with at least one hit (refused when > 0)
     std::vector<std::string> runs;  ///< distinct primary MS run stems (runStem)
     std::string refusal;            ///< non-empty: the file is refused (the message)
+    std::size_t n_hits_no_td = 0;   ///< hits without a target/decoy annotation (refused in exact mode)
   };
 
   /**
@@ -265,6 +294,7 @@ namespace FASTag::CensusIds
     std::uint64_t rows = 0;             ///< rows joined
     std::uint64_t triage = 0;           ///< triage = 1
     std::uint64_t triage_eligible = 0;  ///< identified 0 and tagged or placed
+    std::uint64_t unnamed = 0;          ///< identified 0 and no reference names the spectrum (no PSM)
   };
 
   /// The two columns' header suffix, appended to Census::header().
@@ -347,9 +377,23 @@ namespace FASTag::CensusIds
     @param[in] triage_evalue -census_triage_evalue.
     @param[in] unmatched_known false under subsampling (refs_unmatched is
       then written empty).
+    @param[in] exact -census_ids_exact: adds ids_exact and the split of
+      the unidentified rows into with and without a PSM.
     @return The summary rows.
   */
   std::vector<Digest::Row> summaryRows(const Loaded& loaded, const Index::Counts& counts, const JoinTally& tally,
                                        const std::string& ids_path, const std::string& run_check, double fdr,
-                                       double triage_evalue, bool unmatched_known);
+                                       double triage_evalue, bool unmatched_known, bool exact = false);
+
+  /**
+    @brief The exact-mode refusal, if any (see the file comment).
+
+    @param[in] loaded What the identification file held.
+    @param[in] index The references after the join (duplicates).
+    @param[in] counts How the references matched.
+    @param[in] run_check Verdict of runCheck().
+    @return The refusal message; empty when the join is one-to-one.
+  */
+  std::string exactRefusal(const Loaded& loaded, const Index& index, const Index::Counts& counts,
+                           const std::string& run_check);
 }

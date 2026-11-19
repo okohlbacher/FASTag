@@ -906,6 +906,22 @@ void TOPPFASTag::registerOptionsAndFlags_()
                       "profile spectra, precursor charge histogram, isobaric reporter kits (TMT, iTRAQ: present, "
                       "absent, not assessable), tag yield (E <= 0.01) and MS2 redundancy", false);
   setValidFormats_("qc_out", ListUtils::create<std::string>("tsv"));
+  // 1.16 item 4: a one-to-one label join (src/CensusIds.h, exact mode).
+  registerFlag_("census_ids_exact",
+                "Join -census_ids one-to-one: native ids only (no scan-number fallback); refuse the file when "
+                "any reference names no MS2 spectrum of -in, a spectrum has two identifications, a hit has no "
+                "target/decoy annotation, or the file names no run or another run than -in", true);
+  // 1.16 item 4: the identifiability score (src/CensusScore.h).
+  registerFlag_("census_score",
+                "Add an identifiability score to the census: the columns pre_best_evalue, pre_best_len, "
+                "pre_best_mean_conf and pre_tag_cover (the best tag before any database filter) and "
+                "ident_score, a frozen logistic model on per-run ranks of census features that orders the "
+                "MS2 spectra by how likely a standard database search identifies them (a ranking, not a "
+                "probability or a quality call). Defined for every census status");
+  registerOutputFile_("census_sorted_out", "<file>", "",
+                      "With -census_score: the census rows ordered by ident_score, highest first, with a "
+                      "leading ident_rank column", false);
+  setValidFormats_("census_sorted_out", ListUtils::create<std::string>("tsv"));
   // ---- 1.12 G: options ----
   // G1: the two machine interfaces of the desktop GUI (src/InputProbe.h).
   // Each prints JSON lines to stdout, writes no file and exits without
