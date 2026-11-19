@@ -889,6 +889,13 @@ void TOPPFASTag::registerOptionsAndFlags_()
                      "spectrum is identified by a target hit whose q-value passes -census_ids_fdr; a "
                      "file without q-values is refused (filter it with IDFilter first)", false);
   setValidFormats_("census_ids", ListUtils::create<std::string>("idXML,mzid"));
+  // 1.16: files without q-values (Mascot mzid: homology threshold, no decoys).
+  registerStringOption_("census_ids_accept", "<rule>", "qvalue",
+                        "Which hits of -census_ids identify their spectrum: qvalue (a target hit with a q-value "
+                        "<= -census_ids_fdr), threshold (a target hit the file marks as passing its own "
+                        "threshold, mzid passThreshold; no FDR is estimated) or all (every target hit in the file)",
+                        false, true);
+  setValidStrings_("census_ids_accept", ListUtils::create<std::string>("qvalue,threshold,all"));
   registerDoubleOption_("census_ids_fdr", "<f>", FASTag::CensusIds::DEFAULT_FDR,
                         "q-value a target hit of -census_ids needs to identify its spectrum", false, true);
   setMinFloat_("census_ids_fdr", 0.0);

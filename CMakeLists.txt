@@ -829,7 +829,7 @@ if(FASTAG_BUILD_TESTS)
   # spectrum between the direct decoder and OpenMS's.
   set(_fastag_direct_fixtures ${CMAKE_CURRENT_SOURCE_DIR}/test/fixtures/Ecoli_MS2_small.mzML)
   foreach(_f diatracer_like.mzML ddapasef_empty.mzML profile_ms2_small.mzML profile_ms2_untyped.mzML
-             profile_ms2_paramgroup.mzML profile_ms2_lowres.mzML)
+             profile_ms2_paramgroup.mzML profile_ms2_lowres.mzML sciex_paramgroup.mzML)
     if(EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/test/fixtures/${_f})
       list(APPEND _fastag_direct_fixtures ${CMAKE_CURRENT_SOURCE_DIR}/test/fixtures/${_f})
     endif()
@@ -862,6 +862,16 @@ if(FASTAG_BUILD_TESTS)
                    ${CMAKE_CURRENT_SOURCE_DIR}/test/fixtures/Ecoli_MS2_small.fasta
                    ${CMAKE_CURRENT_SOURCE_DIR}/data/digest)
   set_tests_properties(mgf_cli_test PROPERTIES SKIP_RETURN_CODE 77)
+
+  # SCIEX MS Data Converter mzML: MS levels in param groups, the converter's
+  # index, the exit when no MS2 can be read, and -census_ids_accept on the
+  # run's Mascot mzid (test/sciex_cli_test.sh).
+  add_test(NAME sciex_cli_test
+           COMMAND bash ${CMAKE_CURRENT_SOURCE_DIR}/test/sciex_cli_test.sh $<TARGET_FILE:FASTag>
+                   ${CMAKE_CURRENT_SOURCE_DIR}/test/fixtures/sciex_paramgroup.mzML
+                   ${CMAKE_CURRENT_SOURCE_DIR}/data/digest
+                   ${CMAKE_CURRENT_SOURCE_DIR}/test/fixtures/sciex_mascot.mzid)
+  set_tests_properties(sciex_cli_test PROPERTIES SKIP_RETURN_CODE 77)
 
   # tools/mzml_to_mgf.py on the fixture mzML and on diaTracer- and
   # ddaPASEF-shaped fixtures (empty MS2), and FASTag on what it writes: the

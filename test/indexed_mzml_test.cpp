@@ -554,10 +554,9 @@ namespace
   /// The step-0 fixture: an mzML whose spectra take their type, filter
   /// string, isolation target, possible charges and activation from
   /// referenceableParamGroups, mixed with spectra that carry their own
-  /// cvParams (one overriding a group). The fields 1.11 already read (MS
-  /// level, selected ion, isolation offsets) are given as own cvParams here,
-  /// since the fast reader does not resolve them from groups (see
-  /// write_pinned_fixture).
+  /// cvParams (one overriding a group). The tagger's fields (MS level,
+  /// selected ion, isolation offsets) are given as own cvParams here; see
+  /// write_pinned_fixture for those only in a group.
   bool write_paramgroup_fixture(const std::string& header_src, const std::string& path)
   {
     const std::string groups =
@@ -627,16 +626,14 @@ namespace
     return write_group_mzml(header_src, path, groups, sp);
   }
 
-  /// The pinned fixture: the fields 1.11 already read, each ONLY in a
-  /// referenced group, which OpenMS resolves and the fast reader (1.11 and
-  /// step 0 alike) does not. Resolving them changes tags, so it is a separate
-  /// declared item; until then these must read exactly as 1.11 reads them.
+  /// The tagger-field fixture: the fields the tagger reads, each ONLY in a
+  /// referenced group, which OpenMS resolves and, since 1.16, the fast
+  /// reader too (before, none of them was read).
   ///  0: MS1, own MS level;
-  ///  1: MS level only in a group (1.11: not read, so not an MS2, not tagged);
-  ///  2: charge only in a group (1.11: no charge, tagged as 2+);
-  ///  3: isolation target and offsets only in a group (1.11: no offsets);
-  ///  4: selected-ion m/z and intensity only in a group, own isolation target
-  ///     (1.11: the target as precursor m/z, no intensity).
+  ///  1: MS level only in a group;
+  ///  2: charge only in a group;
+  ///  3: isolation target and offsets only in a group;
+  ///  4: selected-ion m/z and intensity only in a group, own isolation target.
   bool write_pinned_fixture(const std::string& header_src, const std::string& path)
   {
     const std::string groups =
@@ -898,49 +895,76 @@ int main(int argc, char** argv)
     metadata_vs_openms(pgf, "etd_paramgroup");
   }
 
-  // The fields 1.11 already read stay as 1.11 reads them when they are only
-  // in a param group (byte-identical tags; resolving them is a separate,
-  // declared output change). OpenMS must resolve each, or the fixture
-  // proves nothing.
+  // The fields the tagger reads, each only in a param group, are resolved
+  // as OpenMS resolves them (1.16; SCIEX MS Data Converter keeps the MS
+  // level only in a group). OpenMS must resolve each, or the fixture proves
+  // nothing.
   {
     const std::string pin = tmp + "/fastag_paramgroups_pinned.mzML";
-    check(write_pinned_fixture(indexed, pin), "write the pinned param-group fixture");
+    check(write_pinned_fixture(indexed, pin), "write the tagger-field param-group fixture");
     PeakMap want;
     try { MzMLFile().load(pin, want); }
-    catch (const Exception::BaseException& e) { check(false, std::string("pinned: OpenMS loads the file (") + e.what() + ")"); }
+    catch (const Exception::BaseException& e) { check(false, std::string("groups: OpenMS loads the file (") + e.what() + ")"); }
     FASTag::IndexedMzMLReader r(pin);
-    check(r.ok() && r.getNrSpectra() == 5 && want.size() == 5, "pinned: 5 spectra on both sides");
+    check(r.ok() && r.getNrSpectra() == 5 && want.size() == 5, "groups: 5 spectra on both sides");
     if (r.ok() && r.getNrSpectra() == 5 && want.size() == 5)
     {
       const MSSpectrum g1 = r.getSpectrum(1), g2 = r.getSpectrum(2), g3 = r.getSpectrum(3), g4 = r.getSpectrum(4);
-      check(want[1].getMSLevel() == 2, "pinned: OpenMS takes the MS level from a group");
-      // Not read, the spectrum keeps MSSpectrum's default level 1: not an
-      // MS2, not decoded, not tagged.
-      check(g1.getMSLevel() == 1 && g1.empty(), "pinned: an MS level only in a group is not read (1.11)");
-      check(r.getSpectrumMetadata(1).getMSLevel() == 1, "pinned: nor by getSpectrumMetadata (1.11)");
-      check(!want[2].getPrecursors().empty() && want[2].getPrecursors()[0].getCharge() == 3,
-            "pinned: OpenMS takes the charge from a group");
-      check(g2.getPrecursors().size() == 1 && g2.getPrecursors()[0].getCharge() == 0 &&
+      check(want[1].getMSLevel() == 2 && g1.getMSLevel() == 2 && g1.size() == want[1].size() && !g1.empty(),
+            "groups: an MS level only in a group makes an MS2, decoded");
+      check(r.getSpectrumMetadata(1).getMSLevel() == 2, "groups: getSpectrumMetadata reads it too");
+      check(!want[2].getPrecursors().empty() && want[2].getPrecursors()[0].getCharge() == 3 &&
+                g2.getPrecursors().size() == 1 && g2.getPrecursors()[0].getCharge() == 3 &&
                 g2.getPrecursors()[0].getMZ() == 512.25,
-            "pinned: a charge only in a group is not read (1.11)");
+            "groups: a charge only in a group is read");
       check(!want[3].getPrecursors().empty() && want[3].getPrecursors()[0].getIsolationWindowLowerOffset() == 1.0 &&
-                want[3].getPrecursors()[0].getIsolationWindowUpperOffset() == 1.5,
-            "pinned: OpenMS takes the isolation offsets from a group");
-      check(g3.getPrecursors().size() == 1 && g3.getPrecursors()[0].getIsolationWindowLowerOffset() == 0 &&
-                g3.getPrecursors()[0].getIsolationWindowUpperOffset() == 0 && g3.getPrecursors()[0].getMZ() == 612.3,
-            "pinned: isolation offsets only in a group are not read (1.11)");
-      // The step-0 target meta value does take the group's target.
+                want[3].getPrecursors()[0].getIsolationWindowUpperOffset() == 1.5 &&
+                g3.getPrecursors().size() == 1 && g3.getPrecursors()[0].getIsolationWindowLowerOffset() == 1.0 &&
+                g3.getPrecursors()[0].getIsolationWindowUpperOffset() == 1.5 && g3.getPrecursors()[0].getMZ() == 612.3,
+            "groups: isolation offsets only in a group are read");
       check(g3.getPrecursors().size() == 1 &&
                 g3.getPrecursors()[0].metaValueExists("isolation window target m/z") &&
                 double(g3.getPrecursors()[0].getMetaValue("isolation window target m/z")) == 612.0,
-            "pinned: the isolation-target meta value is resolved from a group (step 0)");
+            "groups: the isolation-target meta value is resolved from a group");
       check(!want[4].getPrecursors().empty() && std::fabs(want[4].getPrecursors()[0].getMZ() - 700.75) < 1e-9 &&
-                want[4].getPrecursors()[0].getIntensity() == 1234.0f,
-            "pinned: OpenMS takes the selected-ion m/z and intensity from a group");
-      check(g4.getPrecursors().size() == 1 && g4.getPrecursors()[0].getMZ() == 700.5 &&
-                g4.getPrecursors()[0].getIntensity() == 0.0f && g4.getPrecursors()[0].getCharge() == 2,
-            "pinned: a selected-ion m/z and intensity only in a group are not read; the target is the m/z (1.11)");
+                want[4].getPrecursors()[0].getIntensity() == 1234.0f && g4.getPrecursors().size() == 1 &&
+                g4.getPrecursors()[0].getMZ() == want[4].getPrecursors()[0].getMZ() &&
+                g4.getPrecursors()[0].getIntensity() == 1234.0f && g4.getPrecursors()[0].getCharge() == 2,
+            "groups: a selected-ion m/z and intensity only in a group are read");
     }
+    metadata_vs_openms(pin, "groups");
+  }
+  // SCIEX MS Data Converter (sciex_paramgroup.mzML, cut from PXD079630):
+  // the MS level and the scan windows only in param groups, CRLF line ends,
+  // and index offsets 9 or 10 bytes early, in the whitespace before each
+  // <spectrum. The index is used, and every spectrum reads as OpenMS reads it.
+  {
+    const std::string sciex = std::string(FASTAG_TEST_DATA) + "/sciex_paramgroup.mzML";
+    PeakMap want;
+    try { MzMLFile().load(sciex, want); }
+    catch (const Exception::BaseException& e) { check(false, std::string("sciex: OpenMS loads the file (") + e.what() + ")"); }
+    FASTag::IndexedMzMLReader r(sciex);
+    check(r.ok() && !r.indexRebuilt() && r.getNrSpectra() == 14 && want.size() == 14,
+          "sciex: the converter's index is used, 14 spectra on both sides");
+    Size ms2 = 0, same = 0;
+    for (Size i = 0; r.ok() && i < std::min<Size>(r.getNrSpectra(), want.size()); ++i)
+    {
+      const MSSpectrum g = r.getSpectrum(i);
+      const MSSpectrum& w = want[i];
+      if (g.getMSLevel() != 2) continue;
+      ++ms2;
+      bool eq = w.getMSLevel() == 2 && g.size() == w.size() && !g.empty() && g.getNativeID() == w.getNativeID() &&
+                std::fabs(g.getRT() - w.getRT()) < 1e-9 && g.getPrecursors().size() == 1 && w.getPrecursors().size() == 1 &&
+                g.getPrecursors()[0].getMZ() == w.getPrecursors()[0].getMZ() &&
+                g.getPrecursors()[0].getCharge() == w.getPrecursors()[0].getCharge() &&
+                g.getInstrumentSettings().getScanWindows().size() == 1 &&
+                g.getInstrumentSettings().getScanWindows() == w.getInstrumentSettings().getScanWindows();
+      for (Size k = 0; eq && k < g.size(); ++k)
+        eq = g[k].getMZ() == w[k].getMZ() && g[k].getIntensity() == w[k].getIntensity();
+      same += eq;
+    }
+    check(ms2 == 12 && same == 12, "sciex: 12 MS2 with the MS level and scan window from groups, as OpenMS reads them (" +
+                                       std::to_string(same) + " of " + std::to_string(ms2) + ")");
   }
   for (int a = 2; a < argc; ++a) metadata_vs_openms(argv[a], std::string("step 0: ") + argv[a]);
 
@@ -1008,7 +1032,10 @@ int main(int argc, char** argv)
   // ThermoRawFileParser 2.0.0 writes every offset, and indexListOffset, 3
   // bytes short: into the indentation before the tag (checked byte by byte
   // on 123 TRFP 2.0.0 files). Such an index is used, at the tags, not
-  // rebuilt; one whose offsets are short only in part still is rebuilt.
+  // rebuilt. One whose offsets are short only in part (SCIEX MS Data
+  // Converter's are 10 bytes short for the first spectrum, 9 for the rest)
+  // is used as well, each offset's whitespace skipped; one whose offsets
+  // point past a tag's start is rebuilt.
   {
     const std::string bytes = slurp(indexed);
     const std::size_t ilo_b = bytes.rfind("<indexListOffset>") + std::string("<indexListOffset>").size();
@@ -1064,8 +1091,12 @@ int main(int argc, char** argv)
       const Size n = reader.getNrSpectra();
       spit(tmp + "/fastag_trfp_part.mzML", moved([n](Size i) { return i < n / 2 ? -3LL : 0LL; }, 0));
       FASTag::IndexedMzMLReader part(tmp + "/fastag_trfp_part.mzML");
-      check(part.ok() && part.indexRebuilt(), "an index short in its first half only is rebuilt");
+      check(part.ok() && !part.indexRebuilt(), "an index short in its first half only is used");
       if (part.ok()) same_spectra(part, reader, "index short in its first half only");
+      spit(tmp + "/fastag_index_long.mzML", moved([n](Size i) { return i < n / 2 ? 0LL : 1LL; }, 0));
+      FASTag::IndexedMzMLReader long_(tmp + "/fastag_index_long.mzML");
+      check(long_.ok() && long_.indexRebuilt(), "an index 1 byte long in its second half is rebuilt");
+      if (long_.ok()) same_spectra(long_, reader, "index long in its second half");
     }
   }
   // Per-peak ion mobility: -digest_out's timsTOF rule reads containsIMData(),

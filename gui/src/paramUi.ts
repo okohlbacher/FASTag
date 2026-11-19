@@ -951,6 +951,12 @@ export const PARAM_UI: Record<string, ParamUi> = {
       text: 'The unit of the substitution tolerance: ppm of the flanking mass, or Da.'
     }
   },
+  census_ids_accept: {
+    hidden: '1.16 command-line option for identification files without q-values, not in the form (CLI default applies)',
+    help: {
+      text: 'Which hits of the identification file mark a spectrum identified: those passing a q-value, those the file marks as passing its own threshold (Mascot), or every target hit.'
+    }
+  },
   census_ids_exact: {
     hidden: '1.16 command-line option for label joins, not in the form (CLI default applies)',
     help: {

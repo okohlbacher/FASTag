@@ -425,6 +425,7 @@ TOPPFASTag::ExitCodes TOPPFASTag::main_(int, const char**)
         {"census_summary_out", nullptr},
         {"census_ids", nullptr},
         {"census_ids_fdr", nullptr},
+        {"census_ids_accept", nullptr},    // 1.16
         {"census_triage_evalue", nullptr},
         // ---- 1.16 QC: -stream refusals ----
         {"qc_out", nullptr},
@@ -1334,7 +1335,9 @@ TOPPFASTag::ExitCodes TOPPFASTag::main_(int, const char**)
         {"census_out", "-census", getFlag_("census")},
         {"census_summary_out", "-census", getFlag_("census")},
         {"census_ids", "-census", getFlag_("census")},
-        {"census_ids_fdr", "-census_ids", getFlag_("census") && !getStringOption_("census_ids").empty()},
+        {"census_ids_fdr", "-census_ids",
+         getFlag_("census") && !getStringOption_("census_ids").empty() && getStringOption_("census_ids_accept") == "qvalue"},
+        {"census_ids_accept", "-census_ids", getFlag_("census") && !getStringOption_("census_ids").empty()},
         {"census_triage_evalue", "-census_ids", getFlag_("census") && !getStringOption_("census_ids").empty()},
         {"census_ids_exact", "-census_ids", getFlag_("census") && !getStringOption_("census_ids").empty()},
         {"census_score", "-census", getFlag_("census")},
@@ -2739,7 +2742,8 @@ TOPPFASTag::ExitCodes TOPPFASTag::main_(int, const char**)
   census_ids_index.setExact(census_ids_exact);
   if (census_ids_on)
   {
-    census_ids_loaded = FASTag::CensusIds::load(census_ids, census_ids_fdr, census_ids_index);
+    census_ids_loaded = FASTag::CensusIds::load(census_ids, census_ids_fdr, census_ids_index,
+                                                FASTag::CensusIds::acceptOf(getStringOption_("census_ids_accept")));
     if (!census_ids_loaded.refusal.empty())
     {
       OPENMS_LOG_ERROR << census_ids_loaded.refusal << std::endl;
@@ -2762,9 +2766,17 @@ TOPPFASTag::ExitCodes TOPPFASTag::main_(int, const char**)
       OPENMS_LOG_WARN << "Warning: -census_ids names the run '" << census_ids_loaded.runs.front() << "', -in is '"
                       << FASTag::CensusIds::runStem(in) << "'; the spectrum references are matched anyway."
                       << std::endl;
+    using FASTag::CensusIds::Accept;
     OPENMS_LOG_INFO << "Census ids: " << census_ids_loaded.n_accepted << " of " << census_ids_loaded.n_ids
-                    << " spectrum identifications pass q <= " << census_ids_fdr << " (" << census_ids << ")"
-                    << std::endl;
+                    << " spectrum identifications ";
+    if (census_ids_loaded.accept == Accept::QVALUE) OPENMS_LOG_INFO << "pass q <= " << census_ids_fdr;
+    else if (census_ids_loaded.accept == Accept::THRESHOLD)
+      OPENMS_LOG_INFO << "hold a target hit that passes the file's own threshold (-census_ids_accept threshold, no FDR)";
+    else OPENMS_LOG_INFO << "hold a target hit (-census_ids_accept all, no FDR)";
+    OPENMS_LOG_INFO << " (" << census_ids << ")" << std::endl;
+    if (census_ids_loaded.n_ref_title > 0)
+      OPENMS_LOG_INFO << "Census ids: " << census_ids_loaded.n_ref_title
+                      << " of them name their spectrum by the NativeID in the spectrum title." << std::endl;
   }
 
   std::ofstream tsv(out.c_str());
@@ -2916,6 +2928,7 @@ TOPPFASTag::ExitCodes TOPPFASTag::main_(int, const char**)
   // ---- phase 6: the tagging loop -----------------------------------------
 
   size_t n_ms2 = 0, n_tags = 0, n_reported = 0;
+  size_t n_untaggable_msn = 0;  // 1.16: MS2 without peaks or a precursor, and non-MS2 with a precursor
   size_t n_glyco = 0, n_glyco_scanned = 0;
   std::map<int, std::pair<size_t, size_t>> by_len;   // length -> (seen, matched)
 
@@ -3005,6 +3018,7 @@ TOPPFASTag::ExitCodes TOPPFASTag::main_(int, const char**)
   {
     std::map<int, std::pair<size_t, size_t>> len;  ///< length -> (seen, matched)
     size_t ms2 = 0, tags = 0, reported = 0;
+    size_t untaggable_msn = 0;  ///< spectra not tagged although MS2 or with a precursor
     size_t no_charge = 0;  ///< MS2 whose precursor carries no charge (tagged as 2+)
     size_t multi_charge = 0;  ///< ... of them, those listing several possible charges
     size_t mz0_target = 0;  ///< OpenMS-read spectra whose selected-ion m/z 0 became the isolation target
@@ -3178,6 +3192,7 @@ TOPPFASTag::ExitCodes TOPPFASTag::main_(int, const char**)
     }
     if (spec.getMSLevel() != 2 || spec.empty() || spec.getPrecursors().empty())
     {
+      if (spec.getMSLevel() == 2 || !spec.getPrecursors().empty()) ++per_thread[tid].untaggable_msn;
       if (res.census)
       {
         crow.status = FASTag::Census::classify(cfacts);
@@ -4529,6 +4544,7 @@ TOPPFASTag::ExitCodes TOPPFASTag::main_(int, const char**)
     n_mz0 += pt.mz0_target;
     n_mz0_target += pt.mz0_target;
     n_ms2 += pt.ms2;
+    n_untaggable_msn += pt.untaggable_msn;
     n_tags += pt.tags;
     n_reported += pt.reported;
     for (const auto& kv : pt.len)
@@ -5809,6 +5825,23 @@ TOPPFASTag::ExitCodes TOPPFASTag::main_(int, const char**)
   OPENMS_LOG_INFO << n_ms2 << " MS2 spectra, " << n_tags << " tags";
   if (filtering) OPENMS_LOG_INFO << " -> " << n_reported << " after filtering";
   OPENMS_LOG_INFO << std::endl;
+  // 1.16: a run with spectra but nothing to tag must not pass for a run
+  // without tags. Spectra that are MS2, or carry a precursor, yet none could
+  // be tagged mean the MS/MS was not read (SCIEX MS Data Converter mzML read
+  // as all MS1 before 1.16): refused after the outputs are written. With no
+  // sign of MS/MS at all the run is MS1-only and FASTag only warns.
+  const bool no_ms2_read = n_total > 0 && n_ms2 == 0 && n_untaggable_msn > 0;
+  if (no_ms2_read)
+    OPENMS_LOG_ERROR << "None of the " << n_total << " spectra of '" << in
+                     << "' is an MS2 spectrum with peaks and a precursor, although " << n_untaggable_msn
+                     << " of them are MS2 or carry a precursor: FASTag did not read the run's MS/MS spectra "
+                        "(for example, MS levels it cannot find in the mzML). The outputs are written but "
+                        "hold no tags. Rewriting the file with OpenMS FileConverter may help; please report it."
+                     << std::endl;
+  else if (n_total > 0 && n_ms2 == 0)
+    OPENMS_LOG_WARN << "Warning: none of the " << n_total << " spectra of '" << in
+                    << "' is an MS2 spectrum (no precursor either): an MS1-only run has nothing to tag, "
+                       "and the outputs hold no tags." << std::endl;
   if (n_no_charge > 0 && hyp_on)
   {
     // 1.12 #6: the uncharged precursors were tagged under -unknown_charge.
@@ -6119,6 +6152,8 @@ TOPPFASTag::ExitCodes TOPPFASTag::main_(int, const char**)
   if (empty_database) return UNEXPECTED_RESULT;
   // #11B: -census_ids named mostly foreign spectra; the census was withheld.
   if (census_ids_refused) return INCOMPATIBLE_INPUT_DATA;
+  // 1.16: spectra with MS/MS signs, but no MS2 could be tagged.
+  if (no_ms2_read) return UNEXPECTED_RESULT;
   return EXECUTION_OK;
 }
 

@@ -627,6 +627,92 @@ int main(int argc, char** argv)
     std::printf("7. exact mode\n");
   }
 
+  // 8. -census_ids_accept (1.16): threshold and all, for files without
+  //    q-values (Mascot mzid), and references from spectrum titles.
+  {
+    auto flagged = [](PeptideHit h, const DataValue& pass) { h.setMetaValue("pass_threshold", pass); return h; };
+    PeptideIdentificationList peps;
+    // As OpenMS reads a Mascot mzid: score type Mascot:score, pass_threshold int, no q-value.
+    peps.push_back(pid(NID + "1", "Mascot:score", true, {flagged(hit(40, TD::TARGET), 1), flagged(hit(20, TD::TARGET), 0)}));
+    peps.push_back(pid(NID + "2", "Mascot:score", true, {flagged(hit(25, TD::TARGET), 0)}));       // below threshold
+    peps.push_back(pid(NID + "3", "Mascot:score", true, {flagged(hit(45, TD::DECOY), 1)}));        // decoy: never
+    peps.push_back(pid(NID + "4", "Mascot:score", true, {flagged(hit(41, TD::NONE), DataValue("true"))}));  // text flag
+    peps.push_back(pid(NID + "5", "Mascot:score", true, {hit(30, TD::TARGET)}));                   // no flag
+    const char* want_threshold = "10010";
+    const char* want_all = "11011";
+    for (const auto& [rule, want] : {std::pair{I::Accept::THRESHOLD, want_threshold}, std::pair{I::Accept::ALL, want_all}})
+    {
+      I::Index idx;
+      const I::Loaded L = I::interpret({prot("run0", {"/x/run.mzML"})}, peps, 0.01, idx, rule);
+      CHECK(L.refusal.empty() && L.accept == rule && L.n_hits_flag == 5, "%s: refused '%s', flags %zu", I::acceptName(rule),
+            L.refusal.c_str(), L.n_hits_flag);
+      for (int i = 1; i <= 5; ++i) idx.see(NID + std::to_string(i));
+      for (int i = 1; i <= 5; ++i)
+      {
+        const I::Ident got = idx.lookup(NID + std::to_string(i));
+        CHECK(got == (want[i - 1] == '1' ? I::Ident::YES : I::Ident::NO), "%s: spectrum %d identified %s",
+              I::acceptName(rule), i, I::text(got));
+      }
+      const auto rows = I::summaryRows(L, idx.counts(), I::JoinTally{}, "ids.mzid", "match", 0.01, 0.01, true);
+      bool named = false, fdr_unused = false;
+      for (const auto& r : rows)
+      {
+        named = named || (r.key == "ids_accept" && r.value == I::acceptName(rule));
+        fdr_unused = fdr_unused || (r.key == "ids_fdr" && r.description.rfind("Not used", 0) == 0);
+      }
+      CHECK(named && fdr_unused, "%s: the summary names the rule", I::acceptName(rule));
+    }
+    // The default rule refuses this file (no q-value) and points to the option.
+    I::Index q;
+    const I::Loaded Q = I::interpret({prot("run0", {"/x/run.mzML"})}, peps, 0.01, q);
+    CHECK(Q.refusal.find("-census_ids_accept") != std::string::npos, "qvalue: refusal '%s'", Q.refusal.c_str());
+    // ... and its summary has no ids_accept row.
+    {
+      I::Index g;
+      PeptideIdentificationList qp;
+      qp.push_back(pid(NID + "1", "q-value", false, {hit(0.001, TD::TARGET)}));
+      const I::Loaded G = I::interpret({prot("run0", {"/x/run.mzML"})}, qp, 0.01, g);
+      bool row = false;
+      for (const auto& r : I::summaryRows(G, g.counts(), I::JoinTally{}, "ids.idXML", "match", 0.01, 0.01, true))
+        row = row || r.key == "ids_accept" || r.key == "id_ref_title";
+      CHECK(!row && G.accept == I::Accept::QVALUE, "qvalue: no ids_accept or id_ref_title row");
+    }
+    // threshold on a file without pass_threshold flags: refused.
+    PeptideIdentificationList noflag;
+    noflag.push_back(pid(NID + "1", "Mascot:score", true, {hit(40, TD::TARGET)}));
+    I::Index nf;
+    const I::Loaded NF = I::interpret({prot("run0", {"/x/run.mzML"})}, noflag, 0.01, nf, I::Accept::THRESHOLD);
+    CHECK(NF.refusal.find("pass-threshold") != std::string::npos, "threshold without flags: '%s'", NF.refusal.c_str());
+    CHECK(I::acceptOf("threshold") == I::Accept::THRESHOLD && I::acceptOf("all") == I::Accept::ALL &&
+              I::acceptOf("qvalue") == I::Accept::QVALUE,
+          "acceptOf");
+
+    // References from the spectrum title: only for an empty or index=<n> reference.
+    auto titled = [&](const std::string& ref, const std::string& title) {
+      PeptideIdentification p = pid(ref, "Mascot:score", true, {flagged(hit(40, TD::TARGET), 1)});
+      p.setMetaValue("MS:1000796", title);
+      return p;
+    };
+    const std::string t = "run.1609.1609. File:\"run.wiff\", NativeID:\"sample=1 period=1 cycle=1610 experiment=3\"";
+    bool ft = false;
+    CHECK(I::spectrumReference(titled("index=810", t), ft) == "sample=1 period=1 cycle=1610 experiment=3" && ft,
+          "title: index=<n> takes the NativeID");
+    CHECK(I::spectrumReference(titled("", t), ft) == "sample=1 period=1 cycle=1610 experiment=3" && ft,
+          "title: an empty reference takes the NativeID");
+    CHECK(I::spectrumReference(titled(NID + "7", t), ft) == NID + "7" && !ft, "title: a native-id reference is kept");
+    CHECK(I::spectrumReference(titled("index=810", "run.1609.1609."), ft) == "index=810" && !ft,
+          "title: a title without NativeID leaves the reference");
+    CHECK(I::spectrumReference(titled("index=8x", t), ft) == "index=8x" && !ft, "title: index= needs digits");
+    PeptideIdentificationList tp;
+    tp.push_back(titled("index=810", t));
+    I::Index ti;
+    const I::Loaded TL = I::interpret({prot("run0", {"/x/F1.mgf"})}, tp, 0.01, ti, I::Accept::THRESHOLD);
+    ti.see("sample=1 period=1 cycle=1610 experiment=3");
+    CHECK(TL.n_ref_title == 1 && ti.lookup("sample=1 period=1 cycle=1610 experiment=3") == I::Ident::YES,
+          "title: interpret matches the native id");
+    std::printf("8. acceptance rules and title references\n");
+  }
+
   std::printf(failures ? "\n%d FAILURES\n" : "\nall checks passed\n", failures);
   return failures ? 1 : 0;
 }

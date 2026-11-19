@@ -16,6 +16,23 @@
 // q-value is refused (INCOMPATIBLE_INPUT_DATA): presence alone never counts as
 // identified, and the user is pointed to IDFilter.
 //
+// Other acceptance rules (-census_ids_accept, 1.16), for files without
+// q-values such as Mascot mzid exports (no decoys, homology threshold):
+// `threshold` accepts a target hit the file itself marks as passing its
+// threshold -- mzid passThreshold="true", which OpenMS keeps as the hit's
+// `pass_threshold` meta value (also in an idXML converted from it); a file
+// in which no hit carries that flag is refused. `all` accepts every target
+// hit the file contains. Decoys are ignored under every rule, unannotated
+// hits count as targets as above, and -census_ids_exact still refuses hits
+// without a target/decoy annotation. The summary names the rule.
+//
+// References from spectrum titles (1.16). A search on an MGF exported by
+// msconvert or SCIEX/Mascot tools names its spectra `index=<n>` (the MGF's
+// order, no native id), and the native id only in the spectrum title
+// (MS:1000796, `... NativeID:"<id>"`). When the reference is empty or
+// `index=<n>` and the title holds a NativeID, that native id is the
+// reference.
+//
 // Matching. The spectrum reference is matched to the census row's native id
 // exactly first. A scan-number fallback is used only when the scan number is
 // unique among the references and among the spectra read, and the reference
@@ -89,6 +106,44 @@ namespace FASTag::CensusIds
 
   /// Default of -census_ids_fdr.
   inline constexpr double DEFAULT_FDR = 0.01;
+  /**
+    @brief The rule that accepts a hit (-census_ids_accept). Append-only.
+  */
+  enum class Accept : std::uint8_t { QVALUE = 0, THRESHOLD = 1, ALL = 2 };
+  /**
+    @brief Option text of an acceptance rule.
+
+    @param[in] a The rule.
+    @return "qvalue", "threshold" or "all".
+  */
+  const char* acceptName(Accept a);
+  /**
+    @brief The acceptance rule named @p name.
+
+    @param[in] name "qvalue", "threshold" or "all".
+    @return The rule; QVALUE for anything else.
+  */
+  Accept acceptOf(const std::string& name);
+  /**
+    @brief Whether the file marks @p hit as passing its own threshold.
+
+    @param[in] hit The hit.
+    @return 1 or 0 from its `pass_threshold` meta value; -1 when it has none.
+  */
+  int passThreshold(const OpenMS::PeptideHit& hit);
+  /**
+    @brief The spectrum reference of @p id, from its spectrum title when needed.
+
+    The NativeID of the spectrum title (MS:1000796 meta value) when the
+    reference is empty or `index=<n>` (see the file comment); otherwise the
+    reference itself.
+
+    @param[in] id The identification.
+    @param[out] from_title Whether the title gave it.
+    @return The reference.
+  */
+  std::string spectrumReference(const OpenMS::PeptideIdentification& id, bool& from_title);
+
   /// Default of -census_triage_evalue.
   inline constexpr double DEFAULT_TRIAGE_EVALUE = 0.01;
 
@@ -255,22 +310,28 @@ namespace FASTag::CensusIds
     std::vector<std::string> runs;  ///< distinct primary MS run stems (runStem)
     std::string refusal;            ///< non-empty: the file is refused (the message)
     std::size_t n_hits_no_td = 0;   ///< hits without a target/decoy annotation (refused in exact mode)
+    std::size_t n_hits_flag = 0;    ///< hits with a pass_threshold flag
+    std::size_t n_ref_title = 0;    ///< references taken from the spectrum title
+    Accept accept = Accept::QVALUE; ///< the rule used
   };
 
   /**
     @brief Interprets loaded identifications into @p index (see the file comment).
 
-    Sets Loaded::refusal for a file without q-values, with several runs or
-    with identifications (with hits) that carry no spectrum_reference.
+    Sets Loaded::refusal for a file without q-values (under `threshold`:
+    without pass_threshold flags), with several runs or with identifications
+    (with hits) that carry no spectrum_reference.
 
     @param[in] proteins Protein identifications (primary MS run paths).
     @param[in] peptides Peptide identifications.
-    @param[in] fdr q-value threshold for an accepted hit.
+    @param[in] fdr q-value threshold for an accepted hit (rule QVALUE).
     @param[in,out] index Receives each identification's reference (add()).
+    @param[in] accept The acceptance rule.
     @return Counts, run stems and the refusal message.
   */
   Loaded interpret(const std::vector<OpenMS::ProteinIdentification>& proteins,
-                   const OpenMS::PeptideIdentificationList& peptides, double fdr, Index& index);
+                   const OpenMS::PeptideIdentificationList& peptides, double fdr, Index& index,
+                   Accept accept = Accept::QVALUE);
 
   /**
     @brief Loads @p path (idXML or mzid) and interprets it.
@@ -278,11 +339,12 @@ namespace FASTag::CensusIds
     A load error is a refusal (Loaded::refusal), not an exception.
 
     @param[in] path Identification file.
-    @param[in] fdr q-value threshold for an accepted hit.
+    @param[in] fdr q-value threshold for an accepted hit (rule QVALUE).
     @param[in,out] index Receives each identification's reference (add()).
+    @param[in] accept The acceptance rule.
     @return As interpret().
   */
-  Loaded load(const std::string& path, double fdr, Index& index);
+  Loaded load(const std::string& path, double fdr, Index& index, Accept accept = Accept::QVALUE);
 
   /**
     @brief Counts of the joined table.
@@ -379,6 +441,8 @@ namespace FASTag::CensusIds
       then written empty).
     @param[in] exact -census_ids_exact: adds ids_exact and the split of
       the unidentified rows into with and without a PSM.
+    The rule (Loaded::accept) other than QVALUE adds the row ids_accept,
+    and references taken from spectrum titles the row id_ref_title.
     @return The summary rows.
   */
   std::vector<Digest::Row> summaryRows(const Loaded& loaded, const Index::Counts& counts, const JoinTally& tally,

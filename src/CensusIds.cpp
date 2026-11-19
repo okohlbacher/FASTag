@@ -151,6 +151,56 @@ namespace FASTag::CensusIds
     return std::numeric_limits<double>::quiet_NaN();
   }
 
+  const char* acceptName(Accept a)
+  {
+    switch (a)
+    {
+      case Accept::THRESHOLD: return "threshold";
+      case Accept::ALL: return "all";
+      default: return "qvalue";
+    }
+  }
+
+  Accept acceptOf(const std::string& name)
+  {
+    if (name == "threshold") return Accept::THRESHOLD;
+    if (name == "all") return Accept::ALL;
+    return Accept::QVALUE;
+  }
+
+  int passThreshold(const OpenMS::PeptideHit& hit)
+  {
+    if (!hit.metaValueExists("pass_threshold")) return -1;
+    const OpenMS::DataValue& v = hit.getMetaValue("pass_threshold");
+    // OpenMS's mzid reader stores the flag as an int; an idXML may carry it as text.
+    if (v.valueType() == OpenMS::DataValue::INT_VALUE) return static_cast<int>(v) != 0 ? 1 : 0;
+    if (v.valueType() == OpenMS::DataValue::STRING_VALUE)
+    {
+      const std::string t = OpenMS::StringUtils::toLowered(OpenMS::StringUtils::trimmed(v.toString()));
+      if (t == "true" || t == "1") return 1;
+      if (t == "false" || t == "0") return 0;
+    }
+    return -1;
+  }
+
+  std::string spectrumReference(const OpenMS::PeptideIdentification& id, bool& from_title)
+  {
+    from_title = false;
+    const std::string ref = id.getSpectrumReference();
+    const std::string r = OpenMS::StringUtils::trimmed(ref);
+    if (!(r.empty() || (r.rfind("index=", 0) == 0 && allDigits(r, 6, r.size()))) || !id.metaValueExists("MS:1000796"))
+      return ref;
+    const std::string title = id.getMetaValue("MS:1000796").toString();
+    constexpr const char* KEY = "NativeID:\"";
+    const std::size_t k = title.find(KEY);
+    if (k == std::string::npos) return ref;
+    const std::size_t b = k + std::char_traits<char>::length(KEY);
+    const std::size_t e = title.find('"', b);
+    if (e == std::string::npos || e == b) return ref;
+    from_title = true;
+    return title.substr(b, e - b);
+  }
+
   // ---- Index -------------------------------------------------------------------
 
   bool Index::add(const std::string& ref, bool accepted)
@@ -217,9 +267,10 @@ namespace FASTag::CensusIds
   // ---- loading ------------------------------------------------------------------
 
   Loaded interpret(const std::vector<OpenMS::ProteinIdentification>& proteins,
-                   const OpenMS::PeptideIdentificationList& peptides, double fdr, Index& index)
+                   const OpenMS::PeptideIdentificationList& peptides, double fdr, Index& index, Accept accept)
   {
     Loaded L;
+    L.accept = accept;
     std::set<std::string> runs;
     for (const OpenMS::ProteinIdentification& p : proteins)
     {
@@ -240,15 +291,25 @@ namespace FASTag::CensusIds
         ++L.n_hits;
         const double q = qValue(id, h);
         if (std::isfinite(q)) ++L.n_hits_q;
+        const int pass = passThreshold(h);
+        if (pass >= 0) ++L.n_hits_flag;
         if (h.getTargetDecoyType() == OpenMS::PeptideHit::TargetDecoyType::UNKNOWN) ++L.n_hits_no_td;
         // target+decoy counts as a target (OpenMS FDR); unannotated as well.
         if (h.getTargetDecoyType() == OpenMS::PeptideHit::TargetDecoyType::DECOY) continue;
         any_target = true;
-        if (std::isfinite(q) && q <= fdr) accepted = true;
+        switch (accept)
+        {
+          case Accept::QVALUE: accepted = accepted || (std::isfinite(q) && q <= fdr); break;
+          case Accept::THRESHOLD: accepted = accepted || pass == 1; break;
+          case Accept::ALL: accepted = true; break;
+        }
       }
       if (!hits.empty() && !any_target) ++L.n_decoy_only;
       if (accepted) ++L.n_accepted;
-      if (!index.add(id.getSpectrumReference(), accepted))
+      bool from_title = false;
+      const std::string ref = spectrumReference(id, from_title);
+      if (from_title) ++L.n_ref_title;
+      if (!index.add(ref, accepted))
       {
         ++L.n_no_ref;
         if (!hits.empty()) ++L.n_no_ref_hits;
@@ -259,11 +320,16 @@ namespace FASTag::CensusIds
                   " spectrum identifications with hits carry no spectrum_reference, so FASTag cannot tell which "
                   "spectrum they identify. Add the references from the mzML of -in, e.g. by converting the "
                   "search engine output with IDFileConverter -mz_file.";
-    else if (L.n_hits_q == 0)
+    else if (accept == Accept::THRESHOLD && L.n_hits_flag == 0)
+      L.refusal = "-census_ids: no hit carries a pass-threshold flag (mzid passThreshold, kept by OpenMS as the "
+                  "'pass_threshold' meta value), so -census_ids_accept threshold cannot tell which hits pass. "
+                  "Use -census_ids_accept all to count every target hit, or q-values (the default).";
+    else if (accept == Accept::QVALUE && L.n_hits_q == 0)
       L.refusal = "-census_ids: no hit carries a q-value (as the score, or as a 'q-value' or MS:1002354 meta "
                   "value), so FASTag cannot tell which identifications pass an FDR. Estimate and filter it "
                   "first, e.g. with FalseDiscoveryRate and IDFilter (-score:psm " +
-                  std::to_string(fdr) + "), or use the search engine's own q-values.";
+                  std::to_string(fdr) + "), or use the search engine's own q-values. For a file without "
+                  "q-values, -census_ids_accept threshold or all accepts its hits by another rule.";
     else if (L.runs.size() > 1)
       L.refusal = "-census_ids references more than one run (" + std::to_string(L.runs.size()) +
                   "; a merged file): split it per run (e.g. IDFilter -mz / IDSplitter) so that every "
@@ -271,7 +337,7 @@ namespace FASTag::CensusIds
     return L;
   }
 
-  Loaded load(const std::string& path, double fdr, Index& index)
+  Loaded load(const std::string& path, double fdr, Index& index, Accept accept)
   {
     std::vector<OpenMS::ProteinIdentification> proteins;
     OpenMS::PeptideIdentificationList peptides;
@@ -286,7 +352,7 @@ namespace FASTag::CensusIds
       L.refusal = "-census_ids: cannot read " + path + ": " + e.what();
       return L;
     }
-    return interpret(proteins, peptides, fdr, index);
+    return interpret(proteins, peptides, fdr, index, accept);
   }
 
   // ---- the join -------------------------------------------------------------------
@@ -421,8 +487,19 @@ namespace FASTag::CensusIds
                  "The ids join follows format " + std::to_string(TABLE_VERSION) +
                      ": identified is 1, 0 or empty (unknown); triage is an E-value threshold, not a quality call."});
     r.push_back({sec, "ids_file", file, "-", "Identifications were read from " + file + "."});
-    r.push_back({sec, "ids_fdr", num(fdr), "-",
-                 "A target hit with a q-value <= " + num(fdr) + " identifies its spectrum; decoys are ignored."});
+    if (L.accept == Accept::QVALUE)
+      r.push_back({sec, "ids_fdr", num(fdr), "-",
+                   "A target hit with a q-value <= " + num(fdr) + " identifies its spectrum; decoys are ignored."});
+    else
+    {
+      r.push_back({sec, "ids_fdr", num(fdr), "-", "Not used: -census_ids_accept " + std::string(acceptName(L.accept)) + "."});
+      r.push_back({sec, "ids_accept", acceptName(L.accept), "-",
+                   L.accept == Accept::THRESHOLD
+                       ? "A target hit the file marks as passing its own threshold (mzid passThreshold) identifies "
+                         "its spectrum; decoys are ignored. No FDR is estimated."
+                       : "Every target hit in the file identifies its spectrum; decoys are ignored. No FDR is "
+                         "estimated."});
+    }
     r.push_back({sec, "triage_evalue", num(triage_evalue), "-",
                  "Triage candidates are unidentified tagged or placed spectra with best_evalue <= " +
                      num(triage_evalue) + "."});
@@ -432,7 +509,13 @@ namespace FASTag::CensusIds
                                            : "The file names no run."});
     r.push_back({sec, "id_spectra", u(L.n_ids), "-", u(L.n_ids) + " spectrum identifications in the file."});
     r.push_back({sec, "id_accepted", u(L.n_accepted), u(L.n_ids),
-                 u(L.n_accepted) + " of them hold a target hit that passes the FDR."});
+                 u(L.n_accepted) + " of them hold a target hit" +
+                     (L.accept == Accept::QVALUE       ? " that passes the FDR."
+                      : L.accept == Accept::THRESHOLD ? " that passes the file's threshold."
+                                                      : " (every target hit counts).")});
+    if (L.n_ref_title > 0)
+      r.push_back({sec, "id_ref_title", u(L.n_ref_title), u(L.n_ids),
+                   u(L.n_ref_title) + " of them name their spectrum by the NativeID of the spectrum title."});
     r.push_back({sec, "id_no_ref", u(L.n_no_ref), u(L.n_ids),
                  u(L.n_no_ref) + " of them carry no spectrum_reference (and no hit; with hits the file is refused)."});
     r.push_back({sec, "id_decoy_only", u(L.n_decoy_only), u(L.n_ids), u(L.n_decoy_only) + " of them hold only decoy hits."});

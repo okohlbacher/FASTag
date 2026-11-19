@@ -21,8 +21,8 @@
 //
 // STEP 0 (1.12) adds, as OpenMS's MzMLHandler (70cebcd144) fills them:
 //  - referenceableParamGroups, read once at open from the run header and
-//    applied, where they are referenced, to the step-0 fields below only;
-//    an element's own cvParam wins;
+//    applied where they are referenced (to every field since 1.16, see
+//    below); an element's own cvParam wins;
 //  - the spectrum type, MS:1000127 centroid / MS:1000128 profile (UNKNOWN
 //    when neither is given);
 //  - the possible charge states of a selected ion, MS:1000633;
@@ -37,19 +37,18 @@
 // lists. OpenMS keeps the FIRST selected ion of a precursor only; this reader
 // keeps one Precursor per selected ion, as before.
 //
-// The fields 1.11 already read -- MS level, selected-ion m/z, charge and
-// intensity, the isolation window target and offsets -- are still read from
-// the element's OWN cvParams only, as in 1.11, NOT from param groups, which
-// OpenMS does resolve for them. Tags are therefore unchanged on every input.
-// Resolving those fields from groups would change tags on mzMLs that keep
-// them in a group (1.11: an MS level only in a group makes the spectrum no
-// MS2; a charge only in a group leaves it tagged as 2+); that is a separate,
-// declared output-changing item. Of the step-0 fields only the possible
-// charge states reach any output: the count in the "carry no precursor
-// charge" log warning (as on the OnDiscMSExperiment path already). The
-// spectrum type, activation, filter string and target meta value are read
-// by no 1.11 consumer. indexed_mzml_test compares the step-0 fields against
-// OpenMS and pins the 1.11 reading of the others.
+// Since 1.16 the fields 1.11 already read -- MS level, retention time, scan
+// windows and ion mobility, selected-ion m/z, charge and intensity, the
+// isolation window target and offsets -- are resolved through
+// referenceableParamGroups as well, as OpenMS's MzMLHandler resolves them:
+// SCIEX MS Data Converter keeps the MS level only in a group, and before
+// 1.16 every spectrum of such a file read as MS1. An element's own cvParam
+// still wins, so a file that keeps these fields in its elements reads as in
+// 1.11. Of the step-0 fields only the possible charge states reach any
+// output: the count in the "carry no precursor charge" log warning (as on
+// the OnDiscMSExperiment path already). The spectrum type, activation,
+// filter string and target meta value are read by no 1.11 consumer.
+// indexed_mzml_test compares the fields against OpenMS.
 //
 // FIELD MASKS (1.12.2): parsing every step-0 field cost about 6 us per
 // spectrum, +12% read time, in a tagging loop that reads only some of them.
@@ -70,6 +69,11 @@
 // m/z; read as 0, such a spectrum yields no tags. getSpectrum() counts these
 // spectra (invalidSelectedMz()); useSelectedIonTarget() does the same for a
 // spectrum OpenMS read, so every input path tags them alike.
+//
+// INDEX OFFSETS IN WHITESPACE: an offset that points into the whitespace
+// just before its <spectrum tag (ThermoRawFileParser, by a fixed run; SCIEX
+// MS Data Converter, by 9 or 10 bytes) is accepted and the whitespace
+// skipped, as such whitespace lies between two spectra.
 //
 // NO INDEX, OR A STALE ONE: the spectrum offsets are rebuilt by scanning the
 // file for <spectrum> start tags, in parallel, and the file is then read the
