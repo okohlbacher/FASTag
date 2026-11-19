@@ -34,6 +34,13 @@
   title holds `NativeID:"<id>"` (msconvert, Mascot), the native id is used;
   counted in the summary row `id_ref_title`. Such files matched no spectrum
   before.
+- **Run QC report (`-qc_out`): instrument and acquisition rows.** Three new
+  rows after `qc_version`: `instrument_model`, `instrument_serial_number` and
+  `start_timestamp`, read from the input's run metadata through OpenMS
+  (mzML header, Thermo `.raw`, Bruker `.d`, mzPeak); `n/a` with the reason
+  when the input does not state a field (MGF states none). Requested for
+  large-scale QC across runs. `qc_version` is now 2. The tag output is
+  unchanged.
 
 ## 1.15.2 (2026-11-19)
 

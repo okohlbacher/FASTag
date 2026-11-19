@@ -27,6 +27,7 @@
 #include <OpenMS/CHEMISTRY/AASequence.h>
 #include <OpenMS/CHEMISTRY/Residue.h>
 #include <OpenMS/CONCEPT/Constants.h>
+#include <OpenMS/DATASTRUCTURES/DateTime.h>
 #include <OpenMS/FORMAT/MzMLFile.h>
 #include <OpenMS/KERNEL/MSExperiment.h>
 #include <OpenMS/KERNEL/MSSpectrum.h>
@@ -585,7 +586,66 @@ namespace
     CHECK(one.find("resolution_source_FTMS_ms1\tmeasured") != std::string::npos, "MS1 resolution measured");
     CHECK(one.find("resolution_measured_FTMS_ms2\tn/a") != std::string::npos, "MS2 centroids: n/a");
     CHECK(one.find("ms2_tagged_e001\t24\t30") != std::string::npos, "tag yield count");
+    CHECK(one.find("qc_version\t2\t-\ninstrument_model\tn/a\t-\ninstrument_serial_number\tn/a\t-\n"
+                   "start_timestamp\tn/a\t-\nspectra_input\t") != std::string::npos,
+          "run metadata rows follow qc_version, n/a when not set");
     if (failures) std::printf("%s", one.c_str());
+  }
+}
+
+// Run metadata: what OpenMS's readers put into ExperimentalSettings.
+void runInfo()
+{
+  {
+    // mzML: the PSI-MS name, MS:1000529, a startTimeStamp of 19 characters
+    // (MzMLHandler keeps no "mzml_start_time_stamp" then).
+    ExperimentalSettings es;
+    es.getInstrument().setName("Q Exactive");
+    es.getInstrument().setMetaValue("instrument serial number", " Exactive Series slot #1 ");
+    es.setDateTime(DateTime::fromString("2016-03-01T09:08:07", "yyyy-MM-ddThh:mm:ss"));
+    const Q::RunInfo r = Q::runInfoOf(es);
+    CHECK(r.model == "Q Exactive", "model from the PSI-MS name");
+    CHECK(r.serial == "Exactive Series slot #1", "serial trimmed");
+    CHECK(r.start_time == "2016-03-01T09:08:07", "start from DateTime");
+  }
+  {
+    // Thermo / Bruker: the stamp as written wins; an unnamed model falls back to the vendor string.
+    ExperimentalSettings es;
+    es.getInstrument().setName("instrument model");
+    es.getInstrument().setModel("Orbitrap Exploris 480");
+    es.setDateTime(DateTime::fromString("2023-09-19T13:29:04", "yyyy-MM-ddThh:mm:ss"));
+    es.setMetaValue("mzml_start_time_stamp", "2023-09-19T13:29:04.090-04:00");
+    const Q::RunInfo r = Q::runInfoOf(es);
+    CHECK(r.model == "Orbitrap Exploris 480", "model from the vendor string");
+    CHECK(r.serial.empty(), "no serial");
+    CHECK(r.start_time == "2023-09-19T13:29:04.090-04:00", "start as written");
+  }
+  {
+    // A vendor parent term: the vendor string wins when there is one, else the term stays.
+    ExperimentalSettings es;
+    es.getInstrument().setName("Thermo Fisher Scientific instrument model");
+    es.getInstrument().setModel("Q Exactive Plus");
+    CHECK(Q::runInfoOf(es).model == "Q Exactive Plus", "vendor string over a parent term");
+    es.getInstrument().setModel("");
+    CHECK(Q::runInfoOf(es).model == "Thermo Fisher Scientific instrument model", "parent term kept without a vendor string");
+    es.getInstrument().setName("instrument model");
+    CHECK(Q::runInfoOf(es).model.empty(), "the bare root term is no model");
+  }
+  {
+    const Q::RunInfo r = Q::runInfoOf(ExperimentalSettings());
+    CHECK(r.model.empty() && r.serial.empty() && r.start_time.empty(), "nothing stated");
+  }
+  {
+    Q::Collector c(0, Q::InstrumentMap{}, 1, 0.02, false);
+    c.setRunInfo({"LTQ Orbitrap Velos", "", "2012-02-06T19:52:53Z"}, "MGF carries no run metadata");
+    c.finish();
+    std::map<std::string, std::pair<std::string, std::string>> got;
+    for (const auto& r : c.rows(false)) got[r.key] = {r.value, r.description};
+    CHECK(got["instrument_model"].first == "LTQ Orbitrap Velos", "model row");
+    CHECK(got["instrument_serial_number"].first == "n/a", "serial row n/a");
+    CHECK(got["instrument_serial_number"].second.find("MGF carries no run metadata") != std::string::npos,
+          "n/a row says why");
+    CHECK(got["start_timestamp"].first == "2012-02-06T19:52:53Z", "start row");
   }
 }
 
@@ -606,6 +666,7 @@ int main(int argc, char** argv)
   reporters();
   redundancy();
   collector();
+  runInfo();
   if (failures)
   {
     std::printf("%d check(s) failed\n", failures);

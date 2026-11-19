@@ -3,6 +3,9 @@
 // A key/value report on one run, in the section/key/value/n/description
 // format of -census_summary_out, after the shared `run` rows:
 //
+//   instrument  the instrument model, its serial number and the start of the
+//               acquisition, as the input's run metadata states them (n/a
+//               when it does not; MGF has none).
 //   counts      spectra per MS level and analyser class (ITMS, FTMS, TOF,
 //               other, unknown), from the Thermo filter string, else the
 //               instrument configuration the scan references, else the run's
@@ -44,6 +47,7 @@
 #include "Digest.h"
 
 #include <OpenMS/KERNEL/MSSpectrum.h>
+#include <OpenMS/METADATA/ExperimentalSettings.h>
 #include <OpenMS/METADATA/MassAnalyzer.h>
 
 #include <array>
@@ -54,12 +58,39 @@
 #include <map>
 #include <string>
 #include <string_view>
+#include <utility>
 #include <vector>
 
 namespace FASTag::RunQC
 {
   /// Version of the qc section; bumped when a key, its meaning or its order changes.
-  inline constexpr int QC_VERSION = 1;
+  /// 2: instrument_model, instrument_serial_number, start_timestamp.
+  inline constexpr int QC_VERSION = 2;
+
+  // ---- run metadata ---------------------------------------------------------
+
+  /// What the input states about its instrument and acquisition ("" = not stated).
+  struct RunInfo
+  {
+    std::string model;       ///< the instrument model
+    std::string serial;      ///< the instrument serial number
+    std::string start_time;  ///< the acquisition start, ISO 8601
+  };
+  /**
+    @brief The run metadata of @p es, as OpenMS's readers fill it.
+
+    Model: Instrument::getName() (the PSI-MS model name, which the mzML,
+    Thermo .raw and Bruker readers set); Instrument::getModel() (the vendor's
+    string) when the name is empty or only a parent term such as "Thermo
+    Fisher Scientific instrument model" and the vendor string is not empty. Serial number: the instrument's meta value
+    "instrument serial number". Start: the meta value
+    "mzml_start_time_stamp" (the stamp as written, with fractions and time
+    zone), else getDateTime() when valid.
+
+    @param[in] es The run's settings.
+    @return The fields; "" for each one not stated.
+  */
+  RunInfo runInfoOf(const OpenMS::ExperimentalSettings& es);
 
   // ---- analyser classes ----------------------------------------------------
 
@@ -456,6 +487,17 @@ namespace FASTag::RunQC
       @param[in] s The spectrum.
     */
     void profile(std::size_t index, const OpenMS::MSSpectrum& s);
+    /**
+      @brief The run metadata (see runInfoOf()).
+      @param[in] info The fields.
+      @param[in] absent_why Why a field the input does not state is absent
+                 (e.g. "MGF carries no run metadata"); "" = the input does not state it.
+    */
+    void setRunInfo(RunInfo info, std::string absent_why = {})
+    {
+      run_info_ = std::move(info);
+      run_info_absent_ = std::move(absent_why);
+    }
     /// @brief The reason resolution was not measured for every class (e.g. mzPeak input); "" = measured.
     void setProfileUnavailable(const std::string& why) { profile_unavailable_ = why; }
     /**
@@ -492,5 +534,7 @@ namespace FASTag::RunQC
     std::map<std::pair<int, int>, std::array<std::vector<double>, BAND_LOW.size()>> measured_;
     std::map<std::pair<int, int>, std::uint64_t> measured_spectra_, sampled_centroid_;
     std::string profile_unavailable_;
+    RunInfo run_info_;
+    std::string run_info_absent_;
   };
 }
