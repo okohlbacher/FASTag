@@ -824,6 +824,7 @@ vendored.
 | `-census_ids <file>` | none | With `-census`: identifications of `-in` (idXML or mzid with q-values); adds the columns `identified` and `triage` and a `census_ids` summary section (see Census) |
 | `-census_ids_fdr <f>` | 0.01 | With `-census_ids`: the q-value a target hit needs to identify its spectrum (advanced) |
 | `-census_triage_evalue <f>` | 0.01 | With `-census_ids`: the best E-value at or below which an unidentified tagged or placed spectrum is a triage candidate (advanced) |
+| `-qc_out <file>` | none | Run QC report: spectra per MS level and analyser class, stated and measured resolution, precursor charges, isobaric reporter kits, tag yield and MS2 redundancy (see Run QC report) |
 | `-stream` | off | Resident single-spectrum mode: spectrum blocks on stdin, TSV rows + `#end` sentinels on stdout (see Streaming) |
 | `-progress` | off | Emit `FASTAG_PROGRESS done=<n> total=<n>` on stderr for a progress bar |
 | `-species` | off | Infer taxa from the tags (see Species detection) |
@@ -1622,6 +1623,90 @@ replaced by `.census.tsv` and `.census_summary.tsv` (the rule of
 `-census_ids` run refused for foreign references writes neither. The log
 names both paths (`Census: ... -> <census_out>, summary ->
 <census_summary_out>`).
+
+## Run QC report
+
+`-qc_out <file>` writes a key/value report on the run in the five-column
+format of the census summary (section, key, value, n, description): the `run`
+rows, then section `qc`. Every other output is the same with or without it.
+It reads the spectra the tagging pass reads anyway, plus at most 32 profile
+spectra per analyser class and MS level for the measured resolution, so it
+adds little to a run. With `-subsample_*` every count covers the spectra read
+(`spectra_read`, `subsampled`). It cannot be combined with `-stream`.
+
+- **Counts.** `count_ms<L>` and `count_ms<L>_<class>` per MS level and
+  analyser class `ITMS`, `FTMS`, `TOF` (Astral included), `other` or
+  `unknown`. The class comes from the Thermo filter string, else from the
+  instrument configuration the scan references, else from the run's default
+  configuration (`analyzer_source_filter/config/run/none` count which). Only
+  metadata is read: MS1 scans are counted although the fast mzML reader never
+  decodes their peaks. `sps_ms3` counts MS3 scans with several precursors.
+  MGF carries no analyser (class `unknown`).
+- **Resolution**, per class and MS level. `resolution_stated_<class>_ms<L>`
+  is the median value the file states (mass resolving power MS:1000800 or
+  mass resolution MS:1000011, as OpenMS's readers give them; vendors usually
+  state it at a reference m/z). `resolution_measured_<class>_ms<L>_mz<lo>-<hi>`
+  is the median m/z / FWHM measured on profile spectra before any
+  centroiding (OpenMS PeakPickerHiRes, `report_FWHM`), by m/z band (0-400,
+  400-800, 800-1200, 1200-2000, 2000+), with n = peaks. A peak counts only if
+  its apex is at least 10x the median positive intensity, at least 3 raw
+  points with signal lie inside its FWHM, and no other peak of 10% of its
+  height or more lies within 3 FWHM; the 20 most intense per spectrum are
+  kept. Up to 32 spectra per class are sampled evenly over the run. A class
+  with centroided spectra only is `n/a` (`centroid_only`); so is every class
+  of an mzPeak input (`mzpeak_input`: its MS1 peaks are not kept and its
+  profile MS2 are centroided as they are read). A Thermo `.raw` input is
+  tagged on vendor-centroided scans, which state their resolving power; for
+  the measured value the sampled scans are read again as acquired (the
+  reader's profile representation), so profile scans are measured
+  (`thermo_profile_unavailable` when that reread fails). A Bruker `.d` input
+  is read centroided, so its classes are `n/a`. `resolution_<class>_ms<L>` is
+  the stated value, else the measured median over all bands
+  (`resolution_source_*` says which).
+- **Precursor charge.** `precursor_charge_<z>` and its `_share` over the MS2
+  spectra; 0 = no charge given (Bruker writes 0 when it found none).
+- **Isobaric reporters**, from OpenMS's channel tables of TMT 6/10/11/16/18
+  and iTRAQ 4/8. A channel is seen in an MS2 spectrum when a peak lies within
+  20 ppm of it (the closest TMT channels are 6.3 mDa apart) at 3x the
+  spectrum's median peak intensity or more, and observed in the run when seen
+  in 20% of the assessable MS2. An MS2 spectrum is not assessable for a
+  family when its scan window (without one: its lowest peak) starts above the
+  family's lowest channel (`low_mass_cutoff`, e.g. ion-trap CID), when it was
+  read out in an ion trap (`ion_trap_ms2`), or when it is empty. A family
+  with 3 or more observed channels is present; then each kit is `present`
+  when every observed channel is one of its channels and `absent` otherwise,
+  and `reporter_compatible_kits` lists the present kits, smallest first (TMT6
+  channels alone fit all five TMT kits; TMTpro shares TMT's masses). With
+  fewer than 20 assessable MS2 a kit is `not_assessable` with the most
+  frequent reason, and when the run has MS3 scans and no reporters in MS2 it
+  is `not_assessable` (`sps_ms3_not_read`: an SPS-MS3 design puts the
+  reporters in MS3, which FASTag does not read).
+- **Tag yield.** `tag_yield`: the share of the MS2 spectra read whose best
+  reported tag has E <= 0.01 (the census's best tag: after `-fasta` when it is
+  given). It is the yield of the run as tagged: profile MS2 in an mzML are
+  tagged as read and give far fewer tags (PXD000561/PXD000865 profile vs
+  centroided conversions: 0.7-10% vs 25-78%), so give centroided input or
+  `-pick_profile` for this number and profile input for the measured
+  resolution.
+- **Redundancy.** `redundancy_share`: the share of the MS2 spectra with peaks
+  and a precursor that fall into clusters of size > 1. Two spectra may share
+  a cluster when they have the same precursor charge (0 matches 0 only),
+  precursor m/z within 10 ppm, 1/K0 within 0.02 when both have one, and a
+  binned cosine >= 0.8 over at least 6 shared bins (1.0005 Th bins, square
+  root intensities, the 50 most intense peaks after the reporter channels,
+  immonium ions and the precursor with its water/ammonia losses and charge
+  states are removed). Clusters are complete linkage (every pair linked, the
+  most similar merged first) with an RT span of at most 60 s, so a chain of
+  spectra cannot stretch a cluster. `redundancy_tag_*` is the same with "the
+  same best tag at E <= 0.01" instead of the cosine. The result does not
+  depend on `-threads` or on input order; linked groups larger than 300
+  spectra are clustered in RT chunks of 300 (`redundancy_components_split`),
+  which bounds time (O(300^3) per chunk) and memory (about 0.5 KB per MS2).
+
+None of these is a quality call, and none has been validated as one: the
+resolution measurement was tested on synthetic profiles of known width, the
+counts against ThermoRawFileParser's metadata on 8 Orbitrap runs, and
+redundancy purity on identified spectra is still open.
 
 ## Tag diversity
 

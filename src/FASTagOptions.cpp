@@ -897,6 +897,15 @@ void TOPPFASTag::registerOptionsAndFlags_()
                         "best_evalue at or below which an unidentified tagged or placed spectrum is a "
                         "triage candidate (an E-value threshold, not a quality call)", false, true);
   setMinFloat_("census_triage_evalue", 0.0);
+  // ---- 1.16 QC: options ----
+  // Item 2: the run QC report (src/RunQC.h). Opt-in; every other output is
+  // the same with or without it.
+  registerOutputFile_("qc_out", "<file>", "",
+                      "Write a run QC report (section, key, value, n, description): spectra per MS level and "
+                      "analyzer class (ITMS/FTMS/TOF), resolution stated by the file or measured as m/z / FWHM on "
+                      "profile spectra, precursor charge histogram, isobaric reporter kits (TMT, iTRAQ: present, "
+                      "absent, not assessable), tag yield (E <= 0.01) and MS2 redundancy", false);
+  setValidFormats_("qc_out", ListUtils::create<std::string>("tsv"));
   // ---- 1.12 G: options ----
   // G1: the two machine interfaces of the desktop GUI (src/InputProbe.h).
   // Each prints JSON lines to stdout, writes no file and exits without

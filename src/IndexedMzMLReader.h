@@ -188,6 +188,12 @@ namespace FASTag
       STEP0_POSSIBLE_CHARGES = 1u << 4,   ///< possible charge states (MS:1000633)
       STEP0_TARGET_META = 1u << 5,        ///< the "isolation window target m/z" meta value
       ALL_FIELDS = (1u << 6) - 1,        ///< every step-0 field
+      /// -qc_out (1.16), not part of ALL_FIELDS: the first scan's
+      /// instrumentConfigurationRef as the acquisition meta value
+      /// "instrument_configuration_ref", and a stated resolving power
+      /// (MS:1000800) or mass resolution (MS:1000011) of the scan or the
+      /// spectrum as the meta values "mass resolving power" / "mass resolution".
+      STEP0_SCAN_EXTRAS = 1u << 6,
       /// What the tagging loop reads: the type (-pick_profile), activation
       /// and filter string (IonSeries::activationClass, -digest_out) and the
       /// possible charges (precursor hypotheses, the no-charge warning).

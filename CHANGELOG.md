@@ -111,6 +111,19 @@ so do `-delta_out`'s rows (`-delta_group`).
   (200 Da at least). Substitutions were judged the same way, which read many
   gaps as `sub:X->Y`; they now have their own tolerance
   (`-recon_sub_tolerance`, above). Both stay hypotheses.
+- **Run QC report (`-qc_out`):** new opt-in key/value report (section `qc`
+  after the `run` rows): spectra per MS level and analyser class
+  (ITMS/FTMS/TOF, from the filter string or the instrument configuration;
+  MS1 counted from metadata), resolution as stated by the file and measured
+  as m/z / FWHM on sampled profile spectra by m/z band (`n/a` for centroids),
+  the precursor charge histogram, isobaric reporter kits from OpenMS's TMT
+  6/10/11/16/18 and iTRAQ 4/8 tables (present, absent or not assessable, with
+  the compatible kits), tag yield at E <= 0.01 and the share of redundant MS2
+  (complete-linkage clusters by precursor, charge, 60 s, mobility and
+  fragment cosine; and by best tag). Thread-independent; other outputs
+  unchanged. For Thermo `.raw` input the resolution is measured on the
+  sampled scans reread as acquired (profile); Bruker `.d` input is centroided
+  only. See README, Run QC report.
 
 ## 1.15.1 (2026-11-18)
 

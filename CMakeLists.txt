@@ -98,9 +98,11 @@ set(FASTAG_CORE_SOURCES_113 src/Cleavage.cpp)
 # ---- 1.16: core sources ----
 # Bruker timsTOF input through OpenMS's BrukerTimsFile (WITH_OPENTIMS).
 set(FASTAG_CORE_SOURCES_116 src/BrukerInput.cpp)
+# ---- 1.16 QC: core sources ----
+set(FASTAG_CORE_SOURCES_QC src/RunQC.cpp)
 add_library(fastag_core STATIC ${FASTAG_CORE_SOURCES}
             ${FASTAG_CORE_SOURCES_E} ${FASTAG_CORE_SOURCES_A} ${FASTAG_CORE_SOURCES_D} ${FASTAG_CORE_SOURCES_F}
-            ${FASTAG_CORE_SOURCES_113} ${FASTAG_CORE_SOURCES_116})
+            ${FASTAG_CORE_SOURCES_113} ${FASTAG_CORE_SOURCES_116} ${FASTAG_CORE_SOURCES_QC})
 target_include_directories(fastag_core PUBLIC
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/src>)
@@ -332,6 +334,21 @@ if(FASTAG_BUILD_TESTS)
            COMMAND bash ${CMAKE_CURRENT_SOURCE_DIR}/test/bruker_cli_test.sh $<TARGET_FILE:FASTag>
                    ${CMAKE_CURRENT_SOURCE_DIR}/test/fixtures)
   set_tests_properties(bruker_cli_test PROPERTIES SKIP_RETURN_CODE 77)
+
+  # ---- 1.16 QC: tests ----
+  # -qc_out (src/RunQC.h): every metric on synthetic data with a known answer;
+  # the CLI test runs the binary on a synthetic run run_qc_test writes and on
+  # the vendored fixture (counts, resolution, charges, reporters, redundancy,
+  # tag yield against the census, thread independence, other outputs unchanged).
+  add_executable(run_qc_test test/run_qc_test.cpp)
+  target_link_libraries(run_qc_test PRIVATE fastag_core)
+  add_test(NAME run_qc_test COMMAND run_qc_test)
+  add_test(NAME run_qc_cli_test
+           COMMAND bash ${CMAKE_CURRENT_SOURCE_DIR}/test/run_qc_cli_test.sh $<TARGET_FILE:FASTag>
+                   $<TARGET_FILE:run_qc_test>
+                   ${CMAKE_CURRENT_SOURCE_DIR}/test/fixtures/Ecoli_MS2_small.mzML
+                   ${CMAKE_CURRENT_SOURCE_DIR}/test/fixtures/Ecoli_MS2_small.mgf)
+  set_tests_properties(run_qc_cli_test PROPERTIES SKIP_RETURN_CODE 77)
 
   # 1.12 P4: the shared run report section (src/RunMeta.h) is frozen here.
   add_executable(runmeta_test test/runmeta_test.cpp)

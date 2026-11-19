@@ -63,6 +63,7 @@
 #include "Proforma.h"
 #include "ReconIds.h"
 #include "RunMeta.h"
+#include "RunQC.h"
 #include "Cleavage.h"
 #include "SearchConfig.h"
 #include "ShiftSurvey.h"
