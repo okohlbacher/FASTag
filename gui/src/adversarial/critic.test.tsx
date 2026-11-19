@@ -128,7 +128,7 @@ describe('critic: CLI up-front refusals the form never anticipates', () => {
     expect(inertBecause('recon_out', { recon_out: '/d/a.recon.tsv' })).toBeNull()
     expect(conflicts({ recon_out: '/d/a.recon.tsv' })).not.toHaveLength(0)
     expect((runBtn() as HTMLButtonElement).disabled).toBe(true)
-    expect(screen.getByText('recon_out needs a database: set recon_fasta (or fasta).')).toBeDefined()
+    expect(screen.getByText('The placements need a protein database: choose one under Protein database.')).toBeDefined()
     await act(async () => {
       fireEvent.click(runBtn())
     })

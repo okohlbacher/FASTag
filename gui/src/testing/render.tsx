@@ -80,9 +80,36 @@ export async function pickSingle(mock: MockBridge, path: string): Promise<void> 
 export async function addBatch(mock: MockBridge, files: string[]): Promise<void> {
   // The form's "Add files for a batch…" until there is a queue, then the
   // queue's own "Add…" on the Batch view.
-  showView(document.querySelector('.view[data-view="batch"] li.job') ? 'batch' : 'setup')
+  const queued = !!document.querySelector('.view[data-view="batch"] li.job')
+  showView(queued ? 'batch' : 'setup')
+  // Setup's Input card in Batch mode.
+  if (!queued) {
+    const batch = screen.getByRole('radio', { name: 'Batch' }) as HTMLInputElement
+    if (!batch.checked) await click(batch)
+  }
   mock.nextPickInputs = files
-  await click(screen.getByRole('button', { name: /^(Add files for a batch|Add)…$/ }))
+  await click(screen.getByRole('button', { name: /^(Add files|Add)…$/ }))
+}
+
+/// The button that adds files to the batch: Setup's Input card in Batch
+/// mode (switched to, synchronously) until there is a queue, then the
+/// queue's own "Add…" on the Batch view.
+export function batchAddButton(): HTMLElement {
+  const queued = !!document.querySelector('.view[data-view="batch"] li.job')
+  showView(queued ? 'batch' : 'setup')
+  if (!queued) {
+    const batch = screen.getByRole('radio', { name: 'Batch' }) as HTMLInputElement
+    if (!batch.checked) act(() => void fireEvent.click(batch))
+  }
+  return screen.getByRole('button', { name: /^(Add files|Add)…$/ })
+}
+
+/// Open the Advanced group @p title of Setup (its body is built only while
+/// open); a no-op when it is open or shown elsewhere.
+export async function openGroup(title: string): Promise<void> {
+  showView('setup')
+  const sum = [...document.querySelectorAll<HTMLElement>('summary.disclosure')].find((e) => e.querySelector('.sec-title')?.textContent === title)
+  if (sum && sum.getAttribute('aria-expanded') !== 'true') await click(sum)
 }
 
 /// Start the queued batch.

@@ -43,7 +43,7 @@ async function characterize(page: Page, fixture: string): Promise<void> {
   await openApp(page, fixture)
   await page.getByRole('radio', { name: /^Characterize a run/ }).check()
   await page.getByRole('button', { name: 'Choose file…' }).click()
-  await page.getByRole('button', { name: 'Run on run01.mzML' }).click()
+  await page.getByRole('button', { name: 'Run', exact: true }).click()
 }
 
 test('choosing Characterize, adding a file and running reaches Overview through its finished toast', async ({ page }) => {
@@ -82,7 +82,7 @@ test('Overview figures and calls equal the oracles of the 1.12 gate output', asy
   await expect(page.getByRole('list', { name: 'Checks', exact: true })).toContainText('Acquisition check: DDA')
 })
 
-test('no FASTA, no alkylation call: "not assessed (needs a FASTA)", and C+57.021 a default', async ({ page }) => {
+test('no FASTA, no alkylation call: "not assessed", and C+57.021 a default', async ({ page }) => {
   for (const fixture of ['gate', 'gate-1.11']) {
     await characterize(page, fixture)
     await expect(page.getByRole('tab', { name: 'Overview' })).toHaveAttribute('aria-selected', 'true')
@@ -91,7 +91,7 @@ test('no FASTA, no alkylation call: "not assessed (needs a FASTA)", and C+57.021
     expect(calls[0].params.fasta ?? '').toBe('')
     expect(calls[0].params.recon_fasta ?? '').toBe('')
     expect(oracle(fixture === 'gate' ? 'v112-pxd003531' : 'v111-pxd003531').massgap).toBe(false)
-    await expect(value(page, 'Alkylation')).toHaveText('not assessed (needs a FASTA)')
+    await expect(value(page, 'Alkylation')).toHaveText('not assessed')
     await expect(tile(page, 'Alkylation').getByRole('button', { name: 'Add FASTA and run again' })).toBeEnabled()
     const row = page.getByRole('table', { name: 'Suggested search settings' }).getByRole('row', { name: /fixed C\+57\.021/ })
     await expect(row.locator('.evidence')).toHaveText('default')
@@ -142,7 +142,7 @@ test('focus does not fall to the page body when the run ends or is cancelled', a
 
   await openApp(page, 'slow')
   await page.getByRole('button', { name: 'Choose file…' }).click()
-  await page.getByRole('button', { name: 'Run on run01.mzML' }).click()
+  await page.getByRole('button', { name: 'Run', exact: true }).click()
   const cancel = page.getByRole('region', { name: 'Running' }).getByRole('button', { name: 'Cancel' })
   await cancel.focus()
   await page.keyboard.press('Enter')

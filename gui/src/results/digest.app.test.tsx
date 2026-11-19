@@ -22,14 +22,14 @@ describe('digest tab', () => {
     recon_out: '/r/a.recon.tsv'
   }
 
-  it('is always offered, and selected only when a run writes a report', async () => {
+  it('is offered only when a run writes a report', async () => {
     const mock = installMockBridge()
     await renderApp(mock)
     await pickSingle(mock, '/d/a.mzML')
     await click(runButton())
     await emitDone(mock, 1, true)
     await screen.findByText('Showing 3 of 3')
-    expect(screen.getByRole('tab', { name: /Digest/ }).getAttribute('aria-selected')).toBe('false')
+    expect(screen.queryByRole('tab', { name: /Digest/ })).toBeNull()
   })
 
   it('shows the call, the logos, the labels and the gaps after a run', async () => {

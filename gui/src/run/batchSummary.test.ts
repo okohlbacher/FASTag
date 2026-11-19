@@ -72,7 +72,7 @@ describe('a job row, from the reports the CLI wrote', () => {
     // -species_call decoy: the first present genus.
     expect(c.cells.genus).toMatchObject({ text: 'Homo', call: 'Homo' })
     // 1.12 writes no alkylation call; without a FASTA it is not assessed.
-    expect(c.cells.alkylation).toMatchObject({ text: 'not assessed (needs a FASTA)', call: null })
+    expect(c.cells.alkylation).toMatchObject({ text: 'not assessed', call: null })
     for (const k of SUMMARY_COLUMNS) expect(c.cells[k].note.trim()).not.toBe('')
   })
 

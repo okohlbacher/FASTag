@@ -40,32 +40,36 @@ describe('parameter search ranking', () => {
 })
 
 describe('instrument presets', () => {
-  it('are the four of Q5, two marked unvalidated', () => {
+  it('are the four of Q5 plus ETD, two marked unvalidated', () => {
     expect(INSTRUMENTS.map(presetText)).toEqual([
-      'Orbitrap HCD 20 ppm',
+      'Orbitrap/TOF HCD 20 ppm',
+      'Orbitrap ETD or EThcD 20 ppm',
       'Ion trap CID 0.3 Da',
       'timsTOF 30 ppm (unvalidated)',
       'Astral 20 ppm (unvalidated)'
     ])
   })
 
-  it('set fragment_tolerance and its unit and nothing else', () => {
+  it('set fragment_tolerance, its unit and the ion series, nothing else', () => {
     const before = { tag_length: '5', fragment_tolerance: '20', fragment_tolerance_unit: 'ppm', species: true }
     const it = INSTRUMENTS.find((p) => p.id === 'iontrap-cid')!
     const after = applyInstrument(before, it)
     const changed = Object.keys(after).filter((k) => JSON.stringify(after[k]) !== JSON.stringify((before as Record<string, unknown>)[k]))
-    expect(changed.sort()).toEqual(['fragment_tolerance', 'fragment_tolerance_unit'])
+    expect(changed.sort()).toEqual(['fragment_tolerance', 'fragment_tolerance_unit', 'ion_series'])
     expect(after).toMatchObject({ fragment_tolerance: '0.3', fragment_tolerance_unit: 'Da' })
     expect(matchesInstrument(after, it)).toBe(true)
     // An empty field is the CLI default (20 ppm): the Orbitrap preset.
     expect(matchesInstrument({ fragment_tolerance: '', fragment_tolerance_unit: '' }, INSTRUMENTS[0])).toBe(true)
     expect(matchesInstrument({ fragment_tolerance: '20.0', fragment_tolerance_unit: 'Da' }, INSTRUMENTS[0])).toBe(false)
+    // ETD is told apart by its ion series.
+    expect(matchesInstrument({ fragment_tolerance: '20', fragment_tolerance_unit: 'ppm', ion_series: 'auto' }, INSTRUMENTS[1])).toBe(true)
+    expect(matchesInstrument({ fragment_tolerance: '20', fragment_tolerance_unit: 'ppm', ion_series: 'auto' }, INSTRUMENTS[0])).toBe(false)
   })
 
   it('species fixes offer extension 2 first, then the seed length with its cost', () => {
     expect(speciesFixes(null)).toEqual([])
     const f = speciesFixes({ reach: 3, k: 7, option: 'tag_length', seed: 3, ext: 0 })
-    expect(f.map((x) => x.label)).toEqual(['Use extension 2', 'Set tag_length to 7'])
+    expect(f.map((x) => x.label)).toEqual(['Use extension 2', 'Set seed length to 7'])
     expect(f[0].values).toEqual({ extension: '2' })
     expect(f[1].note).toBe('changes every tag')
     // Extension 2 cannot reach k from a seed of 2: the smallest that can.
@@ -139,19 +143,19 @@ describe('App wiring', () => {
       fireEvent.keyDown(box, { key: 'Escape' })
     })
     expect(screen.queryByRole('combobox', { name: /Search parameters/ })).toBeNull()
-    expect(screen.getByRole('button', { name: /Search…/ }).getAttribute('aria-keyshortcuts')).toContain('K')
+    expect(screen.getByRole('button', { name: /Search settings…/ }).getAttribute('aria-keyshortcuts')).toContain('K')
   })
 
   it('choosing "Ion trap CID" sets 0.3 Da and nothing else in the run', async () => {
     const mock = installMockBridge()
     await renderApp(mock)
     await pickSingle(mock, '/d/a.mzML')
-    const sel = screen.getByLabelText('Fragment tolerance preset') as HTMLSelectElement
+    const sel = document.getElementById('instrument') as HTMLSelectElement
     await act(async () => {
       fireEvent.change(sel, { target: { value: 'iontrap-cid' } })
     })
     expect(sel.value).toBe('iontrap-cid')
-    await click(screen.getByRole('button', { name: /^Run on a\.mzML$/ }))
+    await click(screen.getByRole('button', { name: 'Run' }))
     await waitFor(() => expect(mock.runCalls).toHaveLength(1))
     const p = mock.runCalls[0].params as Record<string, unknown>
     expect(p).toMatchObject({ fragment_tolerance: '0.3', fragment_tolerance_unit: 'Da' })
@@ -164,9 +168,9 @@ describe('App wiring', () => {
     const mock = installMockBridge()
     await renderApp(mock)
     await act(async () => {
-      fireEvent.change(screen.getByLabelText('Fragment tolerance preset'), { target: { value: 'timstof' } })
+      fireEvent.change(document.getElementById('instrument')!, { target: { value: 'timstof' } })
     })
-    expect(screen.getByRole('note').textContent).toMatch(/timsTOF: not validated/)
+    expect(document.getElementById('instrument-h')!.textContent).toMatch(/timsTOF is not validated/)
   })
 
   it('the species preflight offers "Use extension 2", which lifts the block', async () => {
@@ -177,11 +181,11 @@ describe('App wiring', () => {
     await click(screen.getByRole('button', { name: /Apply last-used/ }))
     await pickSingle(mock, '/d/a.mzML')
     const fix = await screen.findByRole('button', { name: 'Use extension 2' })
-    expect((screen.getByRole('button', { name: /^Run on a\.mzML$/ }) as HTMLButtonElement).disabled).toBe(true)
-    expect(screen.getByRole('button', { name: /Set tag_length to 7 \(changes every tag\)/ })).toBeDefined()
+    expect((screen.getByRole('button', { name: 'Run' }) as HTMLButtonElement).disabled).toBe(true)
+    expect(screen.getByRole('button', { name: /Set seed length to 7 \(changes every tag\)/ })).toBeDefined()
     await click(fix)
     expect(screen.queryByRole('button', { name: 'Use extension 2' })).toBeNull()
-    expect((screen.getByRole('button', { name: /^Run on a\.mzML$/ }) as HTMLButtonElement).disabled).toBe(false)
+    expect((screen.getByRole('button', { name: 'Run' }) as HTMLButtonElement).disabled).toBe(false)
   })
 
   it('native menu actions run, cancel and open help; Ctrl+Enter runs once', async () => {
@@ -207,14 +211,14 @@ describe('App wiring', () => {
     await renderApp(mock)
     mock.nextPickInput = '/d/k.mzML'
     await key({ key: 'o', ctrlKey: true })
-    await screen.findByRole('button', { name: /^Run on k\.mzML$/ })
+    await screen.findByRole('button', { name: 'Run' })
   })
 
   it('File > Open Example Data opens the shipped example as the input', async () => {
     const mock = installMockBridge()
     await renderApp(mock)
     await act(async () => mock.emitMenu('open-example'))
-    await screen.findByRole('button', { name: /^Run on Ecoli_MS2_small\.mzML$/ })
+    await screen.findByRole('button', { name: 'Run' })
     // Without example data the reason is shown, and the input stays empty.
     mock.nextExampleInput = null
     await act(async () => mock.emitMenu('open-example'))
@@ -226,7 +230,7 @@ describe('App wiring', () => {
     await renderApp(mock)
     expect(screen.queryByRole('button', { name: /Open folder/ })).toBeNull()
     await pickSingle(mock, '/d/a.mzML')
-    await click(screen.getByRole('button', { name: /^Run on a\.mzML$/ }))
+    await click(screen.getByRole('button', { name: 'Run' }))
     await waitFor(() => expect(mock.runCalls).toHaveLength(1))
     await act(async () => mock.emitDone({ ok: true, code: 0, runId: mock.lastRunId }))
     // The Last run block is on Setup (P2a: a run moves to Results).

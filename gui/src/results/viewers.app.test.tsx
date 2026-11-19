@@ -17,14 +17,14 @@ const emitDone = (mock: MockBridge, runId: number | undefined, ok: boolean): Pro
   act(async () => mock.emitDone({ ok, code: ok ? 0 : 1, runId }))
 
 describe('P4c viewers in the app', () => {
-  it('opens a recon table in Mass gaps & recon, and a glyco report in Glyco', async () => {
+  it('opens a recon table in Mass shifts, and a glyco report in Glyco', async () => {
     const mock = installMockBridge()
     mock.reportFiles = { '/r/run.recon.tsv': humanRecon, '/r/run.tags.glyco.tsv': humanGlyco }
     mock.nextPickReport = '/r/run.recon.tsv'
     await renderApp(mock)
     await goTo('results')
     await click(screen.getByRole('button', { name: 'Open a digest, label or mass-gap report…' }))
-    const recon = await screen.findByRole('tab', { name: 'Mass gaps & recon' })
+    const recon = await screen.findByRole('tab', { name: 'Mass shifts' })
     expect(recon.getAttribute('aria-selected')).toBe('true')
     expect((await screen.findByRole('grid', { name: 'Placements' })).getAttribute('aria-rowcount')).toBe('4707')
     mock.nextPickReport = '/r/run.tags.glyco.tsv'
@@ -32,7 +32,7 @@ describe('P4c viewers in the app', () => {
     expect((await screen.findByRole('tab', { name: 'Glyco' })).getAttribute('aria-selected')).toBe('true')
     expect((await screen.findByRole('grid', { name: 'Glyco spectra' })).getAttribute('aria-rowcount')).toBe('45')
     // The recon table stays open beside it.
-    expect(screen.getByRole('tab', { name: 'Mass gaps & recon' })).toBeTruthy()
+    expect(screen.getByRole('tab', { name: 'Mass shifts' })).toBeTruthy()
   })
 
   it('names an idXML -recon_id_out it cannot show', async () => {
@@ -60,7 +60,7 @@ describe('P4c viewers in the app', () => {
     await pickSingle(mock, '/r/a.mzML')
     await click(runButton())
     await emitDone(mock, 1, true)
-    const tab = await screen.findByRole('tab', { name: 'Mass gaps & recon' })
+    const tab = await screen.findByRole('tab', { name: 'Mass shifts' })
     // Read only when shown: the run read its long-form report alone.
     expect(mock.reportCalls).toEqual([paths.massgap_out])
     await click(tab)
@@ -79,12 +79,12 @@ describe('P4c viewers in the app', () => {
     await renderApp(mock)
     await goTo('results')
     await click(screen.getByRole('button', { name: 'Open a digest, label or mass-gap report…' }))
-    await click(await screen.findByRole('tab', { name: 'Mass gaps & recon' }))
+    await click(await screen.findByRole('tab', { name: 'Mass shifts' }))
     expect(await screen.findByText('run.massgap.tsv', { selector: 'code' })).toBeTruthy()
     mock.nextPickReport = '/b/run.delta.tsv'
     await click(screen.getByRole('button', { name: 'Open report…' }))
     await flush()
-    expect(screen.getByRole('tab', { name: 'Mass gaps & recon' }).getAttribute('aria-selected')).toBe('true')
+    expect(screen.getByRole('tab', { name: 'Mass shifts' }).getAttribute('aria-selected')).toBe('true')
     const view = document.querySelector('.recon-view') as HTMLElement
     // Only B's file is named as a source; A's massgap (and its Placed spectra) is gone.
     expect(within(view).getAllByText(/\.tsv$/, { selector: 'code.src' }).map((c) => c.getAttribute('title'))).toEqual(['/b/run.delta.tsv'])
@@ -128,12 +128,12 @@ describe('P4c viewers in the app', () => {
     await renderApp(mock)
     await act(async () => mock.emitDrop({ reports: [{ kind: 'massgap', path: '/a/run.massgap.tsv' }, { kind: 'delta', path: '/a/run.delta.tsv' }] }))
     await flush()
-    await click(await screen.findByRole('tab', { name: 'Mass gaps & recon' }))
+    await click(await screen.findByRole('tab', { name: 'Mass shifts' }))
     const srcs = (): (string | null)[] => Array.from(document.querySelectorAll('.recon-view code.src')).map((c) => c.getAttribute('title'))
     expect(srcs()).toEqual(['/a/run.massgap.tsv', '/a/run.delta.tsv'])
     await act(async () => mock.emitDrop({ reports: [{ kind: 'recon', path: '/b/run.recon.tsv' }, { kind: 'massgap', path: '/b/run.massgap.tsv' }] }))
     await flush()
-    await click(screen.getByRole('tab', { name: 'Mass gaps & recon' }))
+    await click(screen.getByRole('tab', { name: 'Mass shifts' }))
     expect(srcs()).toEqual(['/b/run.massgap.tsv', '/b/run.recon.tsv'])
     expect((await screen.findByRole('grid', { name: 'Placements' })).getAttribute('aria-rowcount')).toBe('4707')
   })
@@ -172,7 +172,7 @@ describe('P4c viewers in the app', () => {
     await pickSingle(mock, '/r/a.mzML')
     await click(runButton())
     await emitDone(mock, 1, true)
-    await click(await screen.findByRole('tab', { name: 'Mass gaps & recon' }))
+    await click(await screen.findByRole('tab', { name: 'Mass shifts' }))
     await flush()
     expect(mock.reportCalls).toContain(paths.recon_id_out)
     expect(screen.queryByRole('alert')).toBeNull()
@@ -204,8 +204,8 @@ describe('P4c viewers in the app', () => {
     const count = document.querySelector('.dt-count')?.textContent
     const firstRow = within(grid).getAllByRole('row')[1].textContent
     expect(count).toMatch(/ of 4,706 rows/)
-    await click(screen.getByRole('tab', { name: 'Digest' }))
-    await click(screen.getByRole('tab', { name: 'Mass gaps & recon' }))
+    await click(screen.getByRole('tab', { name: 'Tags' }))
+    await click(screen.getByRole('tab', { name: 'Mass shifts' }))
     const again = screen.getByRole('grid', { name: 'Placements' })
     expect(mock.reportCalls).toEqual(['/r/run.recon.tsv'])
     expect((screen.getByRole('checkbox', { name: /One flank off/ }) as HTMLInputElement).checked).toBe(true)

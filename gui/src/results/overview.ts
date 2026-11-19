@@ -154,9 +154,9 @@ export function buildOverview(i: OverviewInputs): Overview {
           label: 'With tags',
           value: `${fmt(tagged)}${census?.taggedShare != null ? ` (${pct(census.taggedShare)})` : ''}`,
           tone: 'figure',
-          note: 'spectra with a reported tag (census)'
+          note: 'spectra with a reported tag (identifiability table)'
         }
-      : { id: 'tagged', label: 'With tags', value: 'not counted', tone: 'off', note: 'counted by the census (-census, FASTag 1.12)' },
+      : { id: 'tagged', label: 'With tags', value: 'not counted', tone: 'off', note: 'counted by the identifiability table (Identifiability triage)' },
     { id: 'tags', label: 'Tags', value: count(log.tags), tone: 'figure', note: 'every reported tag, gapped ones included' },
     (() => {
       const f = digest ? digest.rows.find((r) => r.section === 'count' && r.key === 'tags_filtered') : undefined
@@ -199,7 +199,7 @@ export function buildOverview(i: OverviewInputs): Overview {
   if (!cutoffApplied)
     checks.push({
       tone: 'muted',
-      text: `Evidence cutoff not applied: this run did not count tagged spectra (the census, -census), so calls over fewer than ${fmt(MIN_TAGGED)} tagged spectra are not held back`
+      text: `Evidence cutoff not applied: this run did not count tagged spectra (the identifiability table of Identifiability triage), so calls over fewer than ${fmt(MIN_TAGGED)} tagged spectra are not held back`
     })
   if (log.acquisition)
     checks.push({
@@ -411,7 +411,7 @@ function alkylationTile(c: AlkylationCall, fasta: boolean, params: Record<string
       ...base,
       value: 'no call (counts only)',
       tone: 'nocall',
-      note: `${hits.length ? hits.map((s) => `${s.name} ${fmt(s.spectra)} of ${placed} placed spectra`).join(', ') : `no Cys alkylation gap among ${placed} placed spectra`}; this mass-gap report contains counts, not an alkylation call. The separate CLI-only -alkylation_out report makes that call`
+      note: `${hits.length ? hits.map((s) => `${s.name} ${fmt(s.spectra)} of ${placed} placed spectra`).join(', ') : `no Cys alkylation gap among ${placed} placed spectra`}; this mass-gap report contains counts, not an alkylation call. The alkylation report (Characterize a run) makes that call`
     }
   }
   if (fasta)
@@ -425,9 +425,9 @@ function alkylationTile(c: AlkylationCall, fasta: boolean, params: Record<string
   const raise = ext < FASTA_EXTENSION
   return {
     ...base,
-    value: 'not assessed (needs a FASTA)',
+    value: 'not assessed',
     tone: 'off',
-    note: `the Cys gaps come from placing the tags in a FASTA (the mass-gap report)${
+    note: `the alkylation report of Characterize a run calls it from a shipped proteome; the Cys gaps here come from placing the tags in a FASTA (the mass-gap report)${
       raise ? `; adding one also sets the extension from ${ext} to ${FASTA_EXTENSION}, so tags reach the length a proteome database needs` : ''
     }`,
     action: { kind: 'add-fasta', label: 'Add FASTA and run again', ...(raise ? { values: { extension: String(FASTA_EXTENSION) } } : {}) }

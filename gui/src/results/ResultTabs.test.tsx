@@ -37,24 +37,28 @@ function Harness(p: Partial<ResultTabsProps>): JSX.Element {
   return <ResultTabs {...props} />
 }
 
+const SPECIES = { path: '/d/a.species.tsv', taxa: [{ rank: 'genus', taxid: 561, name: 'Escherichia', observed: 7, adjusted: 7, q: 1e-13 }] }
+// A report that could not be read: the Digest tab shows it.
+const REPORTS = { list: [], errors: ['Cannot read /d/a.digest.tsv'] }
+
 const selected = (): string | undefined =>
   screen.getAllByRole('tab').find((t) => t.getAttribute('aria-selected') === 'true')?.textContent ?? undefined
 
 describe('result tabs', () => {
   it('moves between the tabs with the arrow keys', async () => {
     installMockBridge()
-    render(<Harness />)
+    render(<Harness species={SPECIES} />)
     const tags = screen.getByRole('tab', { name: 'Tags' })
     await act(async () => {
       fireEvent.keyDown(tags, { key: 'ArrowRight' })
     })
-    expect(screen.getByRole('tab', { name: 'Species' }).getAttribute('aria-selected')).toBe('true')
+    expect(screen.getByRole('tab', { name: /^Species/ }).getAttribute('aria-selected')).toBe('true')
     expect(screen.getByRole('tabpanel').getAttribute('aria-labelledby')).toBe('tab-species')
   })
 
   it('wraps with the arrows; Home and End go to the first and last tab, and focus follows', async () => {
     installMockBridge()
-    render(<Harness />)
+    render(<Harness species={SPECIES} reports={REPORTS} />)
     const list = screen.getByRole('tablist')
     await act(async () => void fireEvent.keyDown(list, { key: 'ArrowLeft' }))
     expect(selected()).toBe('Digest')
@@ -65,6 +69,14 @@ describe('result tabs', () => {
     expect(selected()).toBe('Digest')
     await act(async () => void fireEvent.keyDown(list, { key: 'x' }))
     expect(selected()).toBe('Digest')
+  })
+
+  it('shows only the tabs whose report exists, in the order of the workflows', () => {
+    installMockBridge()
+    const { rerender } = render(<Harness />)
+    expect(screen.getAllByRole('tab').map((t) => t.textContent)).toEqual(['Tags'])
+    rerender(<Harness species={SPECIES} reports={REPORTS} workflowReports={{ qc: '/d/a.qc.tsv', shortlist: '/d/a.shortlist.tsv', triage: '/d/a.census_sorted.tsv' }} />)
+    expect(screen.getAllByRole('tab').map((t) => t.textContent)).toEqual(['Tags', 'QC', 'Species1', 'Shortlist', 'Triage', 'Digest'])
   })
 
   it('the empty pane offers both opens, locked while busy', async () => {
@@ -96,14 +108,10 @@ describe('result tabs', () => {
     expect(setFailure).toHaveBeenCalledWith(null)
   })
 
-  it('counts the species and the reports on their tabs', () => {
+  it('counts the species on its tab; no Digest tab without a report', () => {
     installMockBridge()
-    render(
-      <Harness
-        species={{ path: '/d/a.species.tsv', taxa: [{ rank: 'genus', taxid: 561, name: 'Escherichia', observed: 7, adjusted: 7, q: 1e-13 }] }}
-      />
-    )
+    render(<Harness species={SPECIES} />)
     expect(screen.getByRole('tab', { name: /Species/ }).textContent).toBe('Species1')
-    expect(screen.getByRole('tab', { name: /Digest/ }).textContent).toBe('Digest')
+    expect(screen.queryByRole('tab', { name: /Digest/ })).toBeNull()
   })
 })

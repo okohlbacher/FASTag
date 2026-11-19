@@ -5,6 +5,7 @@ import { describe, expect, it } from 'vitest'
 import manifest from './params.generated.json'
 import { PARAM_UI } from './paramUi'
 import { HIDDEN_PARAMS, RENDERED, SECTIONS, masters, unknownParams, unplacedParams } from './paramLayout'
+import { TASKS } from './setup/tasks'
 
 const NAMES = (manifest.params as { name: string }[]).map((p) => p.name)
 const MANIFEST = new Set(NAMES)
@@ -46,6 +47,14 @@ describe('PARAM_UI', () => {
     }
     for (const s of SECTIONS) if (s.master) expect(PARAM_UI[s.master]?.section, s.master).toBe(s.title)
     expect(unknownParams()).toEqual([])
+  })
+
+  it('shows no hidden option as a basic field or a product of a workflow, and names no released-later CLI', () => {
+    for (const t of TASKS) {
+      for (const n of [...t.basic, ...t.outputs.filter((o) => o !== 'out')]) expect(HIDDEN_PARAMS, `${t.id} ${n}`).not.toContain(n)
+    }
+    // The manifest is 1.15.3: no help text of the form promises a later version.
+    for (const [n, u] of Object.entries(PARAM_UI)) expect(`${u.help?.text ?? ''} ${u.help?.tip ?? ''}`, n).not.toMatch(/\b1\.1[6-9]\b/)
   })
 
   it('gives every section at least one parameter', () => {

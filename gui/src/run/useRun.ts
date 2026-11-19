@@ -13,7 +13,7 @@ import type { ParamValue } from '../ParamField'
 import { baseName, value, type Report } from '../digestReport'
 import { perJobOutputs, REPORT_PARAMS } from '../app/paths'
 import { cleanupLines, failText } from '../app/format'
-import type { ViewStore } from '../app/viewStore'
+import type { Tab, ViewStore } from '../app/viewStore'
 import { loadReports, sameRun, sameRunFiles, sniffPath } from '../results/reports'
 import { tablePaths, type TableGen, type TableKind, type TablePaths } from '../results/tables'
 import type { BatchJob } from './batch'
@@ -93,12 +93,12 @@ function closedNote(path: string, closed: string[]): string {
 // is about to start (after the overwrite question), so the app can show
 // Results, where its state and a refused start's reason are.
 //
-// overviewLanding: a run's results land on the Overview tab (GUI-DESIGN 3
-// S3, D8) rather than on the Species or Digest tab: the tasks that
-// characterize a run say yes.
+// landing: the tab a run's results land on (doc/GUI-WORKFLOWS.md 3): the
+// workflow's own view (QC, Mass shifts, Shortlist, Triage, the Overview of
+// Characterize); null keeps the Species/Digest/Tags rule.
 export interface RunHooks {
   onStart?(): void
-  overviewLanding?(): boolean
+  landing?(): Tab | null
 }
 
 export function useRun(s: RunInputs, view: ViewStore, hooks: RunHooks = {}) {
@@ -385,8 +385,9 @@ export function useRun(s: RunInputs, view: ViewStore, hooks: RunHooks = {}) {
     if (ran) {
       const sentParams = (ran.params['params'] ?? {}) as Record<string, unknown>
       dispatch({ type: 'SHOWN', shown: { input: inFile, params: sentParams, log: ran.log.get(), reports: rep.reports, species } })
-      if (hooks.overviewLanding?.()) {
-        setTab('overview')
+      const landing = hooks.landing?.()
+      if (landing) {
+        setTab(landing)
         return
       }
     }

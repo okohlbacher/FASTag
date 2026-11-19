@@ -1,5 +1,5 @@
 // The P4c viewers in a real browser (GUI-DESIGN S7, S8, 9 layer 3, 10 P4):
-// Mass gaps & recon and Glyco on the real CLI output of the PXD014764 recon
+// Mass shifts and Glyco on the real CLI output of the PXD014764 recon
 // run and the E. coli recon run (src/fixtures/cli), checked against oracles
 // recomputed here from the files with no GUI code; the keyboard in the
 // chart and the tables; the table view; dark mode; the empty state's run.
@@ -37,17 +37,17 @@ async function runOn(page: Page, fixture: string): Promise<void> {
   await openApp(page, fixture)
   await page.getByRole('radio', { name: /^Characterize a run/ }).check()
   await page.getByRole('button', { name: 'Choose file…' }).click()
-  await page.getByRole('button', { name: 'Run on run01.mzML' }).click()
+  await page.getByRole('button', { name: 'Run', exact: true }).click()
   await expect(page.getByRole('tab', { name: 'Overview' })).toHaveAttribute('aria-selected', 'true')
 }
 
 const stat = (page: Page, label: string) => page.locator('.recon-view .stat', { has: page.locator('dt', { hasText: new RegExp(`^${label}$`) }) }).locator('dd')
 
-test('Mass gaps & recon: figures equal the oracles of the PXD014764 recon run', async ({ page }) => {
+test('Mass shifts: figures equal the oracles of the PXD014764 recon run', async ({ page }) => {
   const o = oracle('v112-pxd014764-delta-ext3')
   expect(o.deltaSum).toBe(o.placed) // the histogram counts each placed spectrum once
   await runOn(page, 'gate-recon')
-  await page.getByRole('tab', { name: 'Mass gaps & recon' }).click()
+  await page.getByRole('tab', { name: 'Mass shifts' }).click()
   await expect(stat(page, 'Placed spectra')).toHaveText(en(o.placed))
   await expect(stat(page, 'Placements')).toHaveText(en(o.placements))
   await expect(stat(page, 'Spectra with a placement')).toHaveText(en(o.spectra))
@@ -65,7 +65,7 @@ test('Mass gaps & recon: figures equal the oracles of the PXD014764 recon run', 
 
 test('the mass-gap chart: thin sticks, Unimod marks, legend, hover and keyboard tooltips, and a table view', async ({ page }) => {
   await runOn(page, 'gate-recon')
-  await page.getByRole('tab', { name: 'Mass gaps & recon' }).click()
+  await page.getByRole('tab', { name: 'Mass shifts' }).click()
   const chart = page.locator('.mg-chart')
   await expect(chart.locator('.mg-stick')).not.toHaveCount(0)
   // Thin marks: 2 px sticks; hairline marks.
@@ -108,7 +108,7 @@ test('the mass-gap chart: thin sticks, Unimod marks, legend, hover and keyboard 
 test('the shared table by keyboard: arrows, Page Down, End and Home move the active row across pages', async ({ page }) => {
   const o = oracle('v112-pxd014764-delta-ext3')
   await runOn(page, 'gate-recon')
-  await page.getByRole('tab', { name: 'Mass gaps & recon' }).click()
+  await page.getByRole('tab', { name: 'Mass shifts' }).click()
   const grid = page.getByRole('grid', { name: 'Placements' })
   await grid.focus()
   const active = grid.locator('tr[aria-selected="true"]')
@@ -149,7 +149,7 @@ test('E. coli recon run: -recon_localize columns, the mzTab identifications, and
   const o = oracle('v1111-ecoli-recon-loc')
   const psm = read('v1111-ecoli-recon-loc', 'run.recon.mzTab').split('\n').filter((l) => l.startsWith('PSM\t')).length
   await runOn(page, 'gate-recon-loc')
-  await page.getByRole('tab', { name: 'Mass gaps & recon' }).click()
+  await page.getByRole('tab', { name: 'Mass shifts' }).click()
   await expect(page.locator('.recon-view .banner.warn')).toContainText(`Only ${o.placed} spectra are placed with a mass gap`)
   const grid = page.getByRole('grid', { name: 'Placements' })
   await expect(grid).toHaveAttribute('aria-rowcount', String(o.placements + 1))
@@ -159,30 +159,30 @@ test('E. coli recon run: -recon_localize columns, the mzTab identifications, and
   await expect(page.getByText(/NOT FDR-controlled/)).toBeVisible()
 })
 
-test('no FASTA: the empty state offers the FASTA and runs with extension 3 and the three reports', async ({ page }) => {
+test('no FASTA: no Mass shifts tab; the Overview offers the FASTA and runs with extension 3 and the placement reports', async ({ page }) => {
   await runOn(page, 'gate')
-  await page.getByRole('tab', { name: 'Mass gaps & recon' }).click()
-  await expect(page.getByRole('heading', { name: 'No mass gaps yet' })).toBeVisible()
+  await expect(page.getByRole('tab', { name: 'Mass shifts' })).toHaveCount(0)
   await page.evaluate(() => {
     ;(window as unknown as { __fastagE2E: { mock: { nextPickInput: string } } }).__fastagE2E.mock.nextPickInput = '/db/human.fasta'
   })
-  await page.getByRole('button', { name: 'Choose a FASTA and run again' }).click()
+  await page.getByRole('tab', { name: 'Overview' }).click()
+  await page.getByRole('button', { name: 'Add FASTA and run again' }).click()
   await expect.poll(async () => (await mockState<unknown[]>(page, 'runCalls')).length).toBe(2)
   const calls = await mockState<{ params: Record<string, unknown> }[]>(page, 'runCalls')
   const p = calls[1].params
   expect(p.recon_fasta).toBe('/db/human.fasta')
   expect(p.extension).toBe('3')
-  for (const k of ['recon_out', 'delta_out', 'massgap_out']) expect(String(p[k])).toMatch(new RegExp(`/data/.*${k.replace('_out', '')}\\.tsv$`))
+  for (const k of ['recon_out', 'massgap_out']) expect(String(p[k])).toMatch(new RegExp(`/data/.*${k.replace('_out', '')}\\.tsv$`))
 })
 
-test('Open report… opens a delta table in Mass gaps & recon', async ({ page }) => {
+test('Open report… opens a delta table in Mass shifts', async ({ page }) => {
   await openApp(page, 'gate-recon')
   await page.evaluate(() => {
     ;(window as unknown as { __fastagE2E: { mock: { nextPickReport: string } } }).__fastagE2E.mock.nextPickReport = '/data/run01.delta.tsv'
   })
   await goTo(page, 'Results')
   await page.getByRole('button', { name: 'Open a digest, label or mass-gap report…' }).click()
-  await expect(page.getByRole('tab', { name: 'Mass gaps & recon' })).toHaveAttribute('aria-selected', 'true')
+  await expect(page.getByRole('tab', { name: 'Mass shifts' })).toHaveAttribute('aria-selected', 'true')
   await expect(page.getByRole('grid', { name: 'Gap peaks' })).toHaveAttribute('aria-rowcount', '274')
   await expect(page.locator('.mg-stick')).not.toHaveCount(0)
 })
@@ -192,7 +192,7 @@ test('dark mode is its own: the chart and table take the dark tokens, the number
   for (const scheme of ['light', 'dark'] as const) {
     await page.emulateMedia({ colorScheme: scheme })
     await runOn(page, 'gate-recon')
-    await page.getByRole('tab', { name: 'Mass gaps & recon' }).click()
+    await page.getByRole('tab', { name: 'Mass shifts' }).click()
     const chart = page.locator('.mg-chart')
     await expect(chart.locator('.mg-stick')).not.toHaveCount(0)
     look[scheme] = {
@@ -224,14 +224,14 @@ test('a dropped recon table and glyco report open in their tabs', async ({ page 
   })
   await expect(page.getByRole('tab', { name: 'Glyco' })).toHaveAttribute('aria-selected', 'true')
   await expect(page.getByRole('grid', { name: 'Glyco spectra' })).toBeVisible()
-  await page.getByRole('tab', { name: 'Mass gaps & recon' }).click()
+  await page.getByRole('tab', { name: 'Mass shifts' }).click()
   await expect(page.getByRole('grid', { name: 'Placements' })).toHaveAttribute('aria-rowcount', '4707')
   // No "no tab shows" note for them.
   await expect(page.getByText(/No tab shows/)).toHaveCount(0)
 })
 
 // Review fix: a dropped mzTab -recon_id_out opens as the picker opens it.
-test('a dropped run.recon.mzTab opens in Mass gaps & recon', async ({ page }) => {
+test('a dropped run.recon.mzTab opens in Mass shifts', async ({ page }) => {
   const psm = read('v1111-ecoli-recon-loc', 'run.recon.mzTab').split('\n').filter((l) => l.startsWith('PSM\t')).length
   await openApp(page, 'gate-recon-loc')
   await page.evaluate(() => {
@@ -239,7 +239,7 @@ test('a dropped run.recon.mzTab opens in Mass gaps & recon', async ({ page }) =>
       reports: [{ kind: 'recon_ids', path: '/data/run01.recon.mzTab' }]
     })
   })
-  await expect(page.getByRole('tab', { name: 'Mass gaps & recon' })).toHaveAttribute('aria-selected', 'true')
+  await expect(page.getByRole('tab', { name: 'Mass shifts' })).toHaveAttribute('aria-selected', 'true')
   await expect(page.getByRole('grid', { name: 'Identifications' })).toHaveAttribute('aria-rowcount', String(psm + 1))
   await expect(page.getByText(/No tab shows|Not a file FASTag opens/)).toHaveCount(0)
 })
@@ -247,12 +247,12 @@ test('a dropped run.recon.mzTab opens in Mass gaps & recon', async ({ page }) =>
 // Review fix: the tables scroll only their own box, and only when the
 // keyboard moves the active row; opening a tab or filtering leaves the page
 // where it is (the heading, the low-placed warning and the chart in view).
-test('opening Mass gaps & recon or Glyco, or filtering, does not scroll the page; the keyboard scrolls only the table', async ({ page }) => {
+test('opening Mass shifts or Glyco, or filtering, does not scroll the page; the keyboard scrolls only the table', async ({ page }) => {
   await page.setViewportSize({ width: 1200, height: 760 })
   await runOn(page, 'gate-recon')
   const outer = page.locator('.tablewrap')
   const top = (l: ReturnType<Page['locator']>): Promise<number> => l.evaluate((e) => e.scrollTop)
-  await page.getByRole('tab', { name: 'Mass gaps & recon' }).click()
+  await page.getByRole('tab', { name: 'Mass shifts' }).click()
   const grid = page.getByRole('grid', { name: 'Placements' })
   await expect(grid).toBeVisible()
   // The view is taller than the window: a page scroll would be possible.

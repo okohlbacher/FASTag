@@ -168,6 +168,6 @@ describe('labels', () => {
       expect(RENDERED, name).toContain(name)
     }
     expect(new Set(Object.values(LABEL)).size).toBe(Object.keys(LABEL).length)
-    expect(humanName('tag_length')).toBe('Tag length')
+    expect(humanName('tag_length')).toBe('Seed length')
   })
 })

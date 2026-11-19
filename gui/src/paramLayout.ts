@@ -48,88 +48,85 @@ export const PARAMS: ParamSpec[] = (manifest.params as ParamSpec[]).map((p) => {
 })
 export const PARAM_BY_NAME = new Map(PARAMS.map((p) => [p.name, p]))
 
+import type { TaskId } from './setup/tasks'
+
+/// Where a group belongs (doc/GUI-WORKFLOWS.md section 4): a workflow, whose
+/// Advanced part shows it open; `common`, the block every workflow shows in
+/// Settings; or `global`, the same settings for every workflow.
+export type GroupHome = TaskId | 'common' | 'global'
+
 export interface Section {
   title: string
-  /// One line under the heading: what this stage of the run does. A user who
-  /// does not already know what "reconciliation" means needs it here, not in a
-  /// tooltip on the fourth field.
+  /// One line under the heading: what the group does, in plain words.
   blurb: string
-  /// Open on first launch. Only the knobs of a routine run are.
+  home: GroupHome
+  /// Open on first launch. Groups open by workflow instead (SetupForm).
   open: boolean
-  /// The switch that makes the rest of the section do anything, if there is
-  /// one. Rendered first, and the section header shows whether it is on.
+  /// Every option of the group is experimental in the CLI (README).
+  experimental?: true
+  /// Kept for older callers: no group has a switch of its own any more; a
+  /// report is turned on by its output checkbox (setup/products.ts).
   master?: string
-  /// Its parameters, in form order: the PARAM_UI entries naming this
-  /// section, in table order.
+  /// Its parameters, in form order.
   params: string[]
 }
 
-/// The form, in the order the run happens: what is read, what is tagged, what
-/// the tags are then compared against, and what comes out.
-///
-/// One flat list of sections, grouped by content. There is no core-vs-advanced
-/// split: nothing in the tool supports that judgement.
-const SECTION_DEFS: Omit<Section, 'params'>[] = [
-  {
-    title: 'Spectra',
-    blurb: 'Which spectra are read, and which peaks survive preprocessing.',
-    open: false
-  },
-  {
-    title: 'Tagging',
-    blurb: 'The tags themselves: how long, how tolerant, how many per spectrum.',
-    open: true
-  },
-  {
-    title: 'Sequence matching',
-    blurb: 'Keep only tags that occur in sequences you supply.',
-    open: false,
-    master: 'fasta'
-  },
-  {
-    title: 'Species detection',
-    blurb: 'Infer which taxa are present from the tags, using the species index bundled with FASTag (or one you supply).',
-    open: false,
-    master: 'species'
-  },
-  {
-    title: 'Glycopeptides',
-    blurb: 'Flag spectra carrying oxonium ions.',
-    open: false,
-    master: 'glyco'
-  },
-  {
-    title: 'Digest and labels',
-    blurb: 'Report the terminal residues of the tags, the protease they fit and the labels they carry. Both reports are shown in the Digest tab.',
-    open: false
-  },
-  {
-    title: 'Reconciliation',
-    blurb: 'Place tags in database peptides and report the mass left over. The mass-gap report (massgap_out) is shown in the Digest tab.',
-    open: false,
-    master: 'recon_out'
-  },
-  {
-    title: 'Modifications',
-    blurb: 'Residue masses used when spelling and matching tags.',
-    open: false
-  },
-  {
-    title: 'Output',
-    blurb: 'Extra columns and extra files beside the tag list.',
-    open: false
-  },
-  {
-    title: 'Performance',
-    blurb: 'How much of the computer a run may use.',
-    open: false
-  }
+/// The groups, in the order of the workflows (doc/GUI-WORKFLOWS.md section 4),
+/// then the global ones. Each parameter of the form is in exactly one group;
+/// its PARAM_UI `section` names it (paramUi.test.ts holds both to that).
+const SECTION_DEFS: Omit<Section, 'open'>[] = [
+  { title: 'Common', home: 'common', blurb: 'The fragment tolerance of your analyzer and the fixed modifications.', params: ['fragment_tolerance', 'fragment_tolerance_unit', 'fixed_modifications'] },
+  { title: 'Tagging', home: 'export-tags', blurb: 'How long the tags are, how good, and how many per spectrum.', params: ['tag_length', 'extension', 'max_evalue', 'max_tags', 'res_conf'] },
+  { title: 'Tag columns and files', home: 'export-tags', blurb: 'Extra columns in the tags table, and the spectra that carry tags.', params: ['proforma', 'usi_collection', 'out_spectra'] },
+  { title: 'Tagging, advanced', home: 'export-tags', blurb: 'Several seed lengths, gapped tags, and how near-copies of a tag are ranked.', params: ['tag_lengths', 'gaps', 'gap_penalty', 'diversity', 'orientation', 'isobaric_tolerance'] },
+  { title: 'Keep only tags found in a database', home: 'export-tags', blurb: 'Write only tags that occur in sequences you supply.', params: ['fasta', 'min_filter_length', 'entrapment_fasta'] },
+  { title: 'Run QC', home: 'run-qc', blurb: 'How much of the run is read, and the check for raw DIA data.', params: ['qc_out', 'subsample_fraction', 'acquisition_check'] },
+  { title: 'Sampling and checks', home: 'run-qc', blurb: 'A random subset of spectra, and checks of the acquisition and the precursor charges.', params: ['subsample_spectra', 'subsample_seed', 'acquisition_probe_spectra', 'check_header_charge', 'check_header_margin', 'check_header_out'] },
+  { title: 'Placement on the database', home: 'mass-shift', blurb: 'Place tags on the proteins of a FASTA and keep the mass left over at each end.', params: ['recon_fasta', 'recon_missed_cleavages', 'recon_out', 'recon_id_out'] },
+  { title: 'Placement, advanced', home: 'mass-shift', blurb: 'Site localization, the shortest tag placed, and single-residue substitutions.', params: ['recon_localize', 'recon_min_length', 'recon_sub_tolerance', 'recon_sub_tolerance_unit'] },
+  { title: 'Mass-shift survey', home: 'mass-shift', blurb: 'The mass shifts between tag flanks and the database: a frequency table with sites and UniMod names.', params: ['delta_out', 'delta_spectra_out', 'delta_counts_out', 'massgap_out'] },
+  { title: 'Mass-shift survey, advanced', home: 'mass-shift', experimental: true, blurb: 'How shifts are grouped, localized and named.', params: ['delta_select', 'delta_group', 'delta_isobar_tolerance', 'delta_isotope_flank', 'delta_loc_model', 'delta_loc_min_evidence', 'delta_loc_null', 'delta_name_tolerance', 'delta_name_tolerance_unit'] },
+  { title: 'Mass-gap report', home: 'mass-shift', blurb: 'Peaks of the mass-gap distribution, explained as UniMod combinations.', params: ['massgap_max_mods', 'massgap_min_bin', 'massgap_min_share', 'massgap_min_spectra', 'massgap_silac_min', 'massgap_silac_share', 'massgap_top', 'massgap_window', 'massgap_window_da'] },
+  { title: 'Species', home: 'species', blurb: 'Which taxa the tags point to, from the species index bundled with FASTag.', params: ['species', 'species_out', 'species_rank', 'species_call'] },
+  { title: 'Species, advanced', home: 'species', blurb: 'Which tags count as evidence, and how a taxon is called present.', params: ['species_evidence', 'species_min_len', 'species_use_gapped', 'species_deconvolve', 'species_max_kmer_share', 'species_min_margin', 'species_orientation', 'species_call_decoys', 'species_call_min_units', 'species_call_params', 'species_pi0'] },
+  { title: 'Taxonomy', home: 'species', blurb: 'Your own species index and taxonomy. Leave all three empty to use the bundled ones.', params: ['taxdb', 'taxonomy_nodes', 'taxonomy_names'] },
+  { title: 'Shortlist', home: 'db-reduction', blurb: 'A ranked protein shortlist, a reduced FASTA and a configuration for your search engine.', params: ['shortlist_out', 'fasta_out', 'search_config_out', 'shortlist_background', 'shortlist_protease', 'search_engine'] },
+  { title: 'Shortlist, advanced', home: 'db-reduction', blurb: 'Which placements count, and which proteins are kept.', params: ['shortlist_min_spectra', 'shortlist_top', 'shortlist_parsimony', 'shortlist_specificity', 'shortlist_gapped', 'shortlist_max_evalue', 'shortlist_force', 'shortlist_decoy_affix'] },
+  { title: 'Search configuration', home: 'db-reduction', blurb: 'Settings written into the search-engine configuration.', params: ['search_config_template', 'search_decoy_prefix', 'search_isotope_errors', 'search_missed_cleavages', 'search_nterm_acetyl', 'search_precursor_tolerance', 'search_precursor_unit'] },
+  { title: 'Identifiability', home: 'triage', blurb: 'One row per MS/MS spectrum, ranked by how identifiable it is, and marked when your search identified it.', params: ['census', 'census_score', 'census_out', 'census_summary_out', 'census_sorted_out', 'census_ids', 'census_ids_fdr', 'census_triage_evalue'] },
+  { title: 'Identifiability, advanced', home: 'triage', blurb: 'How the identification file is joined to the spectra.', params: ['census_ids_accept', 'census_ids_exact'] },
+  { title: 'Digest and labels', home: 'characterize', blurb: 'The protease the tags fit and the labels they carry.', params: ['digest_out', 'label_out', 'digest_models', 'digest_models_version', 'digest_calibration', 'digest_detection', 'digest_flank2', 'digest_min_confidence', 'digest_tag_min', 'digest_window', 'digest_background_share', 'digest_silac_min', 'digest_quality'] },
+  { title: 'Alkylation', home: 'characterize', blurb: 'Which reagent alkylated the cysteines, from placements on a shipped proteome.', params: ['alkylation_out', 'alkylation_tags_out', 'alkylation_proteome', 'alkylation_min_share', 'alkylation_min_spectra', 'alkylation_window'] },
+  { title: 'Glycopeptides', home: 'characterize', blurb: 'Flag spectra that carry oxonium ions.', params: ['glyco', 'glyco_out', 'glyco_min_fraction'] },
+  { title: 'Performance', home: 'global', blurb: 'How much of the computer a run may use.', params: ['threads'] },
+  { title: 'Peaks', home: 'global', blurb: 'Which peaks of a spectrum survive preprocessing.', params: ['no_deisotope', 'max_peaks', 'peaks_per_window', 'pick_profile'] },
+  { title: 'Charge and ions', home: 'global', blurb: 'The ion series spectra are read as, and the precursor charges tried.', params: ['ion_series', 'ion_series_hybrid', 'unknown_charge', 'charge_min', 'charge_max', 'charge_infer_margin', 'isotope_error'] },
+  { title: 'Complement pairs', home: 'global', blurb: 'How b/y complement pairs are found and scored.', params: ['complement_rule', 'complement_tolerance', 'complement_tolerance_unit', 'complement_tol_factor', 'complement_probe', 'complement_midp'] },
+  { title: 'Isobaric reporters', home: 'global', experimental: true, blurb: 'Filters for TMT-labelled runs.', params: ['tmt_pseudo_filter', 'tmt_reporter_filter'] },
+  { title: 'Modifications', home: 'global', blurb: 'Variable modifications, tagged as alternatives.', params: ['variable_modifications'] }
 ]
 
-export const SECTIONS: Section[] = SECTION_DEFS.map((s) => ({
-  ...s,
-  params: Object.keys(PARAM_UI).filter((n) => PARAM_UI[n].section === s.title)
-}))
+export const SECTIONS: Section[] = SECTION_DEFS.map((s) => ({ ...s, open: false }))
+
+/// The group of @p title.
+export const sectionByTitle = (title: string): Section | undefined => SECTIONS.find((s) => s.title === title)
+
+/// The options a GUI run sends even at their default: the ones the form
+/// offered before the workflows (FASTag 1.11 to 1.15.3). Every other option
+/// is sent only when it differs from the CLI default, so a command line
+/// stays as short as it was and an option the run does not use is not named.
+export const ALWAYS_SENT: ReadonlySet<string> = new Set([
+  'acquisition_check', 'no_deisotope', 'max_peaks', 'peaks_per_window', 'subsample_spectra', 'subsample_fraction', 'subsample_seed',
+  'tag_length', 'tag_lengths', 'fragment_tolerance', 'fragment_tolerance_unit', 'gaps', 'gap_penalty', 'extension', 'max_tags',
+  'max_evalue', 'diversity', 'fasta', 'entrapment_fasta', 'orientation', 'isobaric_tolerance', 'min_filter_length', 'species',
+  'species_rank', 'species_evidence', 'species_min_len', 'species_use_gapped', 'species_deconvolve', 'species_max_kmer_share',
+  'species_min_margin', 'species_out', 'taxdb', 'taxonomy_nodes', 'taxonomy_names', 'glyco', 'glyco_min_fraction', 'glyco_out',
+  'digest_out', 'label_out', 'digest_models', 'digest_tag_min', 'digest_window', 'digest_background_share', 'digest_silac_min',
+  'recon_out', 'recon_fasta', 'recon_missed_cleavages', 'recon_min_length', 'recon_localize', 'delta_out', 'recon_id_out',
+  'massgap_out', 'massgap_window', 'massgap_window_da', 'massgap_min_spectra', 'massgap_min_share', 'massgap_min_bin',
+  'massgap_max_mods', 'massgap_top', 'massgap_silac_share', 'massgap_silac_min', 'fixed_modifications', 'variable_modifications',
+  'proforma', 'res_conf', 'usi_collection', 'out_spectra', 'threads'
+])
 
 /// The dependencies of @p name (PARAM_UI `depends`), none for most.
 export const dependsOf = (name: string): Dependency[] => uiOf(name).depends ?? []
@@ -224,7 +221,7 @@ export const RENDERED: string[] = SECTIONS.flatMap((s) => s.params)
 /// silently never appearing in the GUI -- the whole point of generating the
 /// manifest from the tool.
 export function unplacedParams(): string[] {
-  const titles = new Set(SECTION_DEFS.map((s) => s.title))
+  const titles = new Set(SECTIONS.map((s) => s.title))
   return PARAMS.map((p) => p.name).filter((n) => {
     const ui = Object.prototype.hasOwnProperty.call(PARAM_UI, n) ? PARAM_UI[n] : undefined
     return !ui || (ui.hidden === undefined) === (ui.section === undefined) || (ui.section !== undefined && !titles.has(ui.section))
@@ -239,7 +236,7 @@ export function unknownParams(): string[] {
   return [
     ...Object.keys(PARAM_UI),
     ...Object.values(PARAM_UI).flatMap((u) => [...(u.depends ?? []).flatMap(masters), ...(u.unit ? [u.unit] : [])]),
-    ...SECTION_DEFS.flatMap((s) => (s.master ? [s.master] : []))
+    ...SECTIONS.flatMap((s) => s.params)
   ].filter((n, i, all) => !PARAM_BY_NAME.has(n) && all.indexOf(n) === i)
 }
 
@@ -393,7 +390,12 @@ export const CONFLICTS: ((values: Record<string, unknown>, ctx: PreflightContext
   // "-recon_out needs a database: give -recon_fasta (or -fasta)."
   (values) =>
     isActive('recon_out', values) && !isActive('recon_fasta', values) && !isActive('fasta', values)
-      ? { params: ['recon_out', 'recon_fasta', 'fasta'], note: 'recon_out needs a database: set recon_fasta (or fasta).' }
+      ? { params: ['recon_fasta', 'recon_out', 'fasta'], note: 'The placements need a protein database: choose one under Protein database.' }
+      : null,
+  // "-shortlist_out needs a database: give -recon_fasta (or -fasta)."
+  (values) =>
+    ['shortlist_out', 'fasta_out', 'search_config_out'].some((n) => isActive(n, values)) && !isActive('recon_fasta', values) && !isActive('fasta', values)
+      ? { params: ['recon_fasta', 'shortlist_out', 'fasta'], note: 'The shortlist needs a protein database: choose one under Protein database.' }
       : null,
   // "-taxdb, -taxonomy_nodes and -taxonomy_names are one set: give all three, or none (to use the bundled taxonomy)."
   (values) => {
@@ -413,29 +415,6 @@ export const CONFLICTS: ((values: Record<string, unknown>, ctx: PreflightContext
 /// should stay disabled, with these notes beside it, while this is non-empty.
 export function conflicts(values: Record<string, unknown>, ctx: PreflightContext = {}): Conflict[] {
   return CONFLICTS.map((c) => c(values, ctx)).filter((c): c is Conflict => c !== null)
-}
-
-// ---------------------------------------------------------------------------
-// Hidden dependent fields (GUI-DESIGN 3 S1, P2a): a field that waits for its
-// section's switch (species, glyco, fasta, recon_out) stays hidden until the
-// switch is on, and the switch says once what it turns on, in place of one
-// "Needs species" line per field. A field that waits for anything else
-// (gap_penalty for gaps, digest_models for digest_out) is still shown,
-// disabled, with what it needs.
-
-/// The parameters of @p sec that its master switch turns on: those with a
-/// dependency on it.
-export function dependents(sec: Section): string[] {
-  if (!sec.master) return []
-  return sec.params.filter((n) => n !== sec.master && dependsOf(n).some((d) => !d.replaced && masters(d).includes(sec.master!)))
-}
-
-/// @p name is hidden right now: its first unmet dependency names the master
-/// of @p sec.
-export function hiddenUntilMaster(name: string, sec: Section, values: Record<string, unknown>): boolean {
-  if (!sec.master || name === sec.master) return false
-  const d = inertDependency(name, values)
-  return !!d && !d.replaced && masters(d).includes(sec.master)
 }
 
 /// The section a parameter is in.

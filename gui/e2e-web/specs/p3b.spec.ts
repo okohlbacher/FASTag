@@ -151,7 +151,7 @@ test('Stitch and ALPS reads equal what tools/tags_to_denovo.py writes, and the b
   expect(new Set(best)).toEqual(SPECTRA)
   // The table export of the best tag per spectrum says the same.
   await format.selectOption('table')
-  await page.getByLabel('Per spectrum').selectOption({ label: 'Best tag' })
+  await page.getByLabel('Per spectrum', { exact: true }).selectOption({ label: 'Best tag' })
   await expect(page.getByText(`Showing ${SPECTRA.size.toLocaleString('en-US')} of ${TOTAL}`)).toBeVisible()
   await page.evaluate(() => {
     ;(window as unknown as { __fastagE2E: { mock: { nextPickOutput: string } } }).__fastagE2E.mock.nextPickOutput = '/data/run01.best.tsv'

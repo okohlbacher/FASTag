@@ -46,7 +46,7 @@ export const WORKFLOWS: HelpPage = {
       body: (
         <>
           <ol>
-            <li>Choose <strong>Batch QC vs SDRF</strong> for the Characterize survey of several files, or add files to a batch from Setup. An SDRF is optional.</li>
+            <li>In Setup, switch the Input card to <strong>Batch</strong> and add files or a folder. Every workflow runs on a batch; <strong>Characterize a run</strong> is the usual survey. An SDRF file is optional.</li>
             <li>Use <strong>Add…</strong> to select files or <strong>Add folder…</strong> for the spectra files directly inside a folder. Check the common settings in Setup; each file runs in turn with those settings.</li>
             <li>Use <strong>Choose output folder…</strong> if results should go elsewhere, for example when the inputs are read-only. <strong>Beside inputs</strong> restores the usual location. Changing the folder affects pending or retried jobs; completed jobs keep their existing output paths.</li>
             <li><strong>Run N remaining files</strong> continues the queue. <strong>Retry failed</strong> retries failed jobs. Cancel stops the active job and the queue; it does not remove results of completed jobs.</li>
@@ -132,13 +132,67 @@ export const WORKFLOWS: HelpPage = {
       )
     },
     {
+      id: 'workflow-run-qc',
+      title: 'Run QC: describe one run',
+      body: (
+        <>
+          <p>
+            <strong>Run QC</strong> writes a QC report of one run and opens it in the <strong>QC</strong> tab: MS/MS
+            counts and stated resolution by analyzer (ion trap, Orbitrap, TOF), precursor charges, the isobaric kit,
+            tag yield and redundancy, and the instrument model, serial number and start time the file records.
+          </p>
+          <p>
+            <strong>Spectra to read</strong> below 1 reads a random share of the spectra; the counts then describe
+            that share only. Raw DIA files are refused by default; choose <strong>warn</strong> under DIA input to
+            run them anyway. For many files, switch the Input card to Batch.
+          </p>
+        </>
+      )
+    },
+    {
+      id: 'workflow-db-reduction',
+      title: 'Database reduction: a shortlist for your search',
+      body: (
+        <>
+          <p>
+            <strong>Database reduction</strong> places the tags on a protein FASTA and writes a ranked protein
+            shortlist, a reduced FASTA (the shortlisted proteins plus your background proteins) and a configuration
+            for Sage, Comet or MSFragger. The shortlist is a search-space reduction, not an identification and not
+            FDR-controlled: search the reduced FASTA with your engine, which makes its own decoys.
+          </p>
+          <p>
+            The workflow uses the validated shortlist recipe of doc/SHORTLIST.md (gapped placements, E-value 10,
+            shortest placed tag 6 residues, 2 missed cleavages). Add the host proteome and contaminants as
+            <strong> Background proteins</strong>, so they are always searched.
+          </p>
+        </>
+      )
+    },
+    {
+      id: 'workflow-triage',
+      title: 'Identifiability triage: which spectra could be identified',
+      body: (
+        <>
+          <p>
+            <strong>Identifiability triage</strong> writes one row per MS/MS spectrum, tagged or not, ranks the
+            spectra by an identifiability score, and opens the ranking in the <strong>Triage</strong> tab. Give the
+            identifications of the same run (idXML or mzIdentML with q-values) to mark which spectra your search
+            identified; an unidentified spectrum with a good tag is a triage candidate.
+          </p>
+          <p>
+            The score ranks spectra; it is not a quality call and not an error rate.
+          </p>
+        </>
+      )
+    },
+    {
       id: 'workflow-reconciliation',
-      title: 'Mass gaps & recon: inspect database placements',
+      title: 'Mass shifts: inspect database placements',
       body: (
         <>
           <p>
             <L to="gloss-reconciliation">Reconciliation</L> places tags in database peptides and reports the mass
-            left over. In <strong>Mass gaps & recon</strong>, choose <strong>Choose a FASTA and run again</strong>,
+            left over. In <strong>Mass shifts</strong>, choose <strong>Choose a FASTA and run again</strong>,
             or enable the reports with <strong>Write these reports and run again</strong>. These actions enable
             the reconciliation table, mass-shift histogram and mass-gap report, and raise extension to 3 if it
             was lower. You can instead open a recon, delta or mass-gap report from an earlier run.

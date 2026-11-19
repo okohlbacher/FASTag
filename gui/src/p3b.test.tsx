@@ -481,7 +481,7 @@ describe('Re-run with per-residue confidence (S8)', () => {
     const mock = installMockBridge()
     await renderApp(mock)
     await pickSingle(mock, '/d/a.mzML')
-    await click(screen.getByRole('button', { name: /^Run on a\.mzML$/ }))
+    await click(screen.getByRole('button', { name: 'Run' }))
     await waitFor(() => expect(mock.runCalls).toHaveLength(1))
     expect((mock.runCalls[0].params as Record<string, unknown>).res_conf).not.toBe(true)
     await act(async () => mock.emitDone({ ok: true, code: 0, runId: mock.lastRunId }))

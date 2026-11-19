@@ -46,10 +46,10 @@ describe('Overview model: key figures', () => {
   it('spectra with tags come from the census; without one the tile says so', () => {
     const called = overviewOf(CLI_CASES.v112Call)
     expect(tile(called, 'tagged').value).toBe('2,723 (99.45%)')
-    expect(tile(called, 'tagged').note).toMatch(/census/)
+    expect(tile(called, 'tagged').note).toMatch(/identifiability/)
     const plain = overviewOf(CLI_CASES.v112)
     expect(tile(plain, 'tagged').value).toBe('not counted')
-    expect(tile(plain, 'tagged').note).toMatch(/census/)
+    expect(tile(plain, 'tagged').note).toMatch(/identifiability/)
   })
 
   it('every tile names its cutoff or caveat', () => {
@@ -111,10 +111,10 @@ describe('Overview model: calls', () => {
     expect(old.note).toMatch(/FASTag 1\.12/)
   })
 
-  it('no FASTA, no alkylation call: "not assessed (needs a FASTA)" with "Add FASTA and run again"', () => {
+  it('no FASTA, no alkylation call: "not assessed" with "Add FASTA and run again"', () => {
     const o = overviewOf(CLI_CASES.v112)
     const t = tile(o, 'alkylation')
-    expect(t.value).toBe('not assessed (needs a FASTA)')
+    expect(t.value).toBe('not assessed')
     expect(t.tone).toBe('off')
     // Characterize's extension 2 cannot place tags in a proteome: the action
     // raises it to 3, and the tile says so.
@@ -127,7 +127,7 @@ describe('Overview model: calls', () => {
 
   it('also for FASTag 1.11', () => {
     const o = overviewOf(CLI_CASES.v111)
-    expect(tile(o, 'alkylation').value).toBe('not assessed (needs a FASTA)')
+    expect(tile(o, 'alkylation').value).toBe('not assessed')
     expect(line(o, 'fixed C+57.021').evidence).toBe('default')
   })
 

@@ -437,15 +437,16 @@ function Harness(p: Partial<ResultTabsProps>): JSX.Element {
 }
 
 describe('result tabs: the P4c viewers', () => {
-  it('offers Mass gaps & recon with a mass-gap report and Glyco with a glyco table, last in the arrow order', async () => {
+  it('offers Mass shifts with a mass-gap report and Glyco with a glyco table, last in the arrow order', async () => {
     const mock = installMockBridge()
     mock.reportFiles = { [P.glyco]: humanGlyco }
     render(<Harness reports={{ list: [human()], errors: [], tables: { glyco: P.glyco } }} />)
-    expect(screen.getAllByRole('tab').map((t) => t.textContent)).toEqual(['Tags', 'Species', 'Digest1', 'Mass gaps & recon', 'Glyco'])
+    expect(screen.getAllByRole('tab').map((t) => t.textContent)).toEqual(['Tags', 'Mass shifts', 'Digest1', 'Glyco'])
     await act(async () => void fireEvent.keyDown(screen.getByRole('tablist'), { key: 'End' }))
     await flush()
     expect(screen.getByRole('tab', { name: 'Glyco' }).getAttribute('aria-selected')).toBe('true')
     expect(screen.getByRole('heading', { name: 'Glyco: oxonium ions per spectrum' })).toBeTruthy()
+    await act(async () => void fireEvent.keyDown(screen.getByRole('tablist'), { key: 'ArrowLeft' }))
     await act(async () => void fireEvent.keyDown(screen.getByRole('tablist'), { key: 'ArrowLeft' }))
     expect(screen.getByRole('heading', { name: 'Mass gaps and reconciliation' })).toBeTruthy()
   })
@@ -453,7 +454,7 @@ describe('result tabs: the P4c viewers', () => {
   it('no viewer tab without a run, a report or a table', () => {
     installMockBridge()
     render(<Harness />)
-    expect(screen.getAllByRole('tab').map((t) => t.textContent)).toEqual(['Tags', 'Species', 'Digest'])
+    expect(screen.getAllByRole('tab').map((t) => t.textContent)).toEqual(['Tags'])
   })
 
   it('a recon tab whose content went away shows the Tags', () => {

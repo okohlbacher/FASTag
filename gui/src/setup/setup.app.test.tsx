@@ -5,7 +5,7 @@
 import { act, fireEvent, screen, waitFor } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 import { installMockBridge, type MockBridge } from '../testing/mockBridge'
-import { addBatch, click, pickSingle, renderApp, runButton, startBatch } from '../testing/render'
+import { addBatch, click, openGroup, pickSingle, renderApp, runButton, startBatch } from '../testing/render'
 import { applyLastUsed, formValue } from '../testing/lastUsed'
 
 const emitDone = (mock: MockBridge, runId: number | undefined, ok: boolean): Promise<void> =>
@@ -19,7 +19,7 @@ describe('redesign: setup and run bar', () => {
     await applyLastUsed(1)
     expect(await formValue('tag_length')).toBe('7') // guard: the changed value is in the form
     await pickSingle(mock, '/d/a.mzML')
-    expect(runButton().textContent).toBe('Run on a.mzML')
+    expect(runButton().textContent).toBe('Run')
     await click(runButton())
     const controls = container.querySelector('.controls')!
     expect(controls.textContent).toContain('locked while FASTag runs')
@@ -31,32 +31,35 @@ describe('redesign: setup and run bar', () => {
     expect(controls.textContent).toMatch(/Last run.*a\.mzML.*Finished/)
   })
 
-  it('counts the changed values of a section in its header, and draws a value and its unit as one control', async () => {
+  it('counts the changed values of a group and of Advanced in their headers, and draws a value and its unit as one control', async () => {
     const mock = installMockBridge()
     const container = await renderApp(mock)
-    const tagging = screen.getByRole('button', { name: /^Tagging/ })
-    expect(tagging.textContent).toMatch(/defaults$/)
+    await openGroup('Tagging, advanced')
+    const group = [...container.querySelectorAll('summary.disclosure')].find((s) => s.querySelector('.sec-title')?.textContent === 'Tagging, advanced')!
+    const adv = container.querySelector('details.advanced > summary')!
+    expect(group.textContent).not.toMatch(/changed/)
+    expect(adv.textContent).toContain('Advanced (0 changed)')
     await act(async () => {
-      fireEvent.change(document.getElementById('p-tag_length')!, { target: { value: '5' } })
+      fireEvent.change(document.getElementById('p-gaps')!, { target: { value: '0' } })
     })
-    expect(tagging.textContent).toMatch(/1 changed/)
-    expect(document.getElementById('h-tag_length')!.textContent).toMatch(/Default 3 · changed$/)
+    expect(group.textContent).toMatch(/1 changed/)
+    expect(adv.textContent).toContain('Advanced (1 changed)')
+    expect(document.getElementById('h-gaps')!.textContent).toMatch(/Default 1 · changed$/)
+    // The tolerance is the Instrument's Custom: a value and its unit, one control.
+    await act(async () => {
+      fireEvent.change(document.getElementById('instrument')!, { target: { value: 'custom' } })
+    })
     const unit = document.getElementById('p-fragment_tolerance_unit')!
     expect(unit.closest('.with-unit')?.querySelector('#p-fragment_tolerance')).not.toBeNull()
     expect(container.querySelectorAll('label[for="p-fragment_tolerance_unit"]')).toHaveLength(0)
-    await act(async () => {
-      fireEvent.change(unit, { target: { value: 'Da' } })
-    })
-    expect(tagging.textContent).toMatch(/2 changed/)
   })
 
-  it('an inert field keeps its description and names what it needs', async () => {
+  it('an inert field names what it needs in words', async () => {
     const mock = installMockBridge()
     await renderApp(mock)
-    await click(screen.getByRole('button', { name: /^Sequence matching/ }))
+    await openGroup('Tagging, advanced')
     const help = document.getElementById('h-isobaric_tolerance')!
-    expect(help.textContent).toMatch(/^When matching against/)
-    expect(help.textContent).toMatch(/Needs -?fasta or -?recon_out/)
+    expect(help.textContent).toMatch(/Needs Filter database or Tag placements/)
     expect((document.getElementById('p-isobaric_tolerance') as HTMLInputElement).disabled).toBe(true)
   })
 
@@ -103,19 +106,17 @@ describe('redesign: setup and run bar', () => {
   // The App-level guard of the Reset wiring (App.tsx onReset={session.reset}):
   // RunBar.test checks the confirmation with a stub, useSession.test the
   // defaults reset restores; only this test sees the two joined.
-  it('Reset… asks first; Keep leaves the values, Reset restores the CLI defaults', async () => {
+  it('Reset in the Workflow card restores the values the form started from', async () => {
     const mock = installMockBridge()
     await renderApp(mock)
     const tl = (): HTMLInputElement => document.getElementById('p-tag_length') as HTMLInputElement
     await act(async () => {
       fireEvent.change(tl(), { target: { value: '6' } })
     })
-    await click(screen.getByRole('button', { name: 'Reset…' }))
-    await click(screen.getByRole('button', { name: 'Keep' }))
-    expect(tl().value).toBe('6')
-    await click(screen.getByRole('button', { name: 'Reset…' }))
-    await click(screen.getByRole('button', { name: 'Reset' }))
+    expect(screen.getByText('(modified)')).toBeDefined()
+    await click(screen.getByRole('button', { name: 'Reset to FASTag defaults' }))
     expect(tl().value).toBe('3')
+    expect(screen.queryByText('(modified)')).toBeNull()
   })
 
   // The App-level guard of the run bar wiring (phase={run.phase},

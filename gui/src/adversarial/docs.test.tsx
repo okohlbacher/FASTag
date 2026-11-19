@@ -14,7 +14,7 @@ import { parseReport } from '../digestReport'
 import { PARAM_BY_NAME, RENDERED, hiddenReason } from '../paramLayout'
 import manifest from '../params.generated.json'
 import { installMockBridge } from '../testing/mockBridge'
-import { click, goTo, pickSingle, renderApp, runButton } from '../testing/render'
+import { click, goTo, openGroup, pickSingle, renderApp, runButton } from '../testing/render'
 import { applyAndCheck } from '../testing/lastUsed'
 import type { SpeciesReport } from '../types'
 import digestTsv from '../fixtures/digest.tsv?raw'
@@ -67,10 +67,6 @@ describe('docs: species precondition (README "FASTag refuses the run up front")'
     await pickSingle(mock, '/d/a.mzML')
     expect((runButton() as HTMLButtonElement).disabled).toBe(true)
     expect(c.querySelector('.controls')!.textContent).toMatch(/cannot reach the species index k = 7/)
-    await goTo('results')
-    await click(screen.getByRole('tab', { name: /Species/ }))
-    expect(screen.getByText(/FASTag refuses the run/)).toBeDefined()
-    expect(screen.queryByText(/the report would be empty/)).toBeNull()
   })
 })
 
@@ -184,7 +180,7 @@ describe('docs: code comments that promise the CLI will not reject a GUI value',
   it('max_peaks 2000 is marked invalid and never sent', async () => {
     const mock = installMockBridge()
     await renderApp(mock)
-    await click(screen.getByRole('button', { name: /^Spectra/ }))
+    await openGroup('Peaks')
     const f = document.getElementById('p-max_peaks') as HTMLInputElement
     expect(f.type).toBe('text')
     await act(async () => {

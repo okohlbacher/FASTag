@@ -1,86 +1,206 @@
-// The built-in tasks of the Setup screen (GUI-DESIGN 3 S1, D1): read-only
-// presets a session starts from. Each is a diff over FASTag's own defaults;
-// a user preset is a diff over one of them or over the defaults
-// (presetDiff.ts). "Export tags" is the primary task and where the app lands.
+// The workflows of the Setup screen (doc/GUI-WORKFLOWS.md section 1): named,
+// read-only presets a session starts from. Each is a diff over FASTag's own
+// defaults; a user preset is a diff over one of them or over the defaults
+// (presetDiff.ts). "Export tags" is where the app lands.
+//
+// A workflow shows only the fields a typical user changes for its question
+// (`basic`, Settings) and its products (`outputs`, the Outputs checklist).
+// Every other option stays reachable under Advanced.
 
 import type { ParamValue } from '../ParamField'
 import { initialValues } from './useSession'
 import { rebaseOutputs } from '../app/paths'
 
-export type TaskId = 'export-tags' | 'open-results' | 'characterize' | 'batch-qc'
+export type TaskId = 'export-tags' | 'run-qc' | 'mass-shift' | 'species' | 'db-reduction' | 'triage' | 'characterize'
 
 export interface Task {
   id: TaskId
   label: string
-  /// One line under the chooser: what the task runs.
+  /// One line under the chooser: what the workflow answers.
   blurb: string
-  /// False for "Open results": no run, the cards collapse to Open….
-  runs: boolean
-  /// Batch QC: the input is a queue of files; Setup's input card offers
-  /// "Add files for a batch…" first (SetupForm).
-  batch: boolean
-  /// What the task changes from FASTag's defaults. A report is switched on
-  /// by its output name (digest.tsv), which goes beside the tags output once
+  /// The products, as the chooser card lists them.
+  products: string
+  /// What the workflow changes from FASTag's defaults. A report is switched
+  /// on by its output name (qc.tsv), which goes beside the tags output once
   /// there is one (rebaseOutputs).
   values: Record<string, ParamValue>
+  /// The fields Settings shows, in order: the workflow's own inputs first.
+  basic: string[]
+  /// Inputs of `basic` the run cannot do without.
+  required?: string[]
+  /// One gray line under each basic field, for this workflow.
+  help: Record<string, string>
+  /// Its products in the Outputs checklist (setup/products.ts), in order.
+  outputs: string[]
+  /// The Help section its "Learn more" link opens, and its name.
+  docs: { to: string; label: string }
 }
 
-// Species with extension 2 is the paper-validated setting (Q1): seed 3 plus
-// 2 x 2 reaches the bundled index's k = 7.
-const CHARACTERIZE: Record<string, ParamValue> = {
-  species: true,
-  extension: '2',
-  digest_out: 'digest.tsv',
-  label_out: 'label.tsv',
-  glyco: true,
-  subsample_fraction: '0.1'
-}
+/// What every run workflow sets: all cores (the CLI default is 1).
+const ALL: Record<string, ParamValue> = { threads: '0' }
 
 export const TASKS: readonly Task[] = [
   {
     id: 'export-tags',
     label: 'Export tags',
-    // The best-tag-per-spectrum thinning is the Export menu's, with the
-    // results browser rewrite (GUI-DESIGN S8, 10 P3); the run writes every tag.
-    blurb: 'Extract short peptide sequences from all spectra, with per-residue confidence for assembly and export.',
-    runs: true,
-    batch: false,
-    values: { res_conf: true }
+    blurb: 'Sequence tags from every spectrum, with per-residue confidence, for de novo assembly and export.',
+    products: 'tags table',
+    values: { ...ALL, res_conf: true },
+    basic: ['tag_length', 'extension', 'max_evalue', 'max_tags', 'res_conf'],
+    help: {
+      tag_length: 'Residues in a seed tag. 3 suits most runs.',
+      extension: 'Residues added per end. Set 3 or more to export long tags (8+ residues) for Stitch or ALPS.',
+      max_evalue: 'Keep tags at or below this E-value. 0 keeps all.',
+      max_tags: 'At most this many tags per spectrum. 0 = no limit.',
+      res_conf: 'Adds a 0 to 100 confidence per residue, used by assembly export.'
+    },
+    outputs: ['out', 'proforma', 'usi_collection', 'out_spectra'],
+    docs: { to: 'results-export', label: 'Assembly export' }
   },
   {
-    id: 'open-results',
-    label: 'Open results / inspect spectra',
-    blurb: 'Browse a tags table or report from an earlier FASTag run.',
-    runs: false,
-    batch: false,
-    values: {}
+    id: 'run-qc',
+    label: 'Run QC',
+    blurb: 'QC of one run: MS/MS counts and resolution by analyzer, charges, isobaric kit, tag yield and instrument.',
+    products: 'QC report',
+    values: { ...ALL, qc_out: 'qc.tsv' },
+    basic: ['subsample_fraction', 'acquisition_check'],
+    help: {
+      subsample_fraction: 'Fraction of spectra to read, 0 = all. Counts cover only the spectra read.',
+      acquisition_check: 'Raw DIA is refused by default. Choose "warn" to run anyway.'
+    },
+    outputs: ['out', 'qc_out'],
+    docs: { to: 'workflow-run-qc', label: 'Run QC report' }
+  },
+  {
+    id: 'mass-shift',
+    label: 'Mass-shift survey',
+    blurb: 'Blind modification search: mass shifts between tags and the database, with sites and UniMod names.',
+    products: 'placements, mass-shift table',
+    values: {
+      ...ALL,
+      recon_out: 'recon.tsv',
+      delta_out: 'delta.tsv',
+      delta_spectra_out: 'delta_spectra.tsv',
+      delta_counts_out: 'delta_counts.tsv',
+      extension: '3'
+    },
+    basic: ['recon_fasta', 'extension', 'recon_missed_cleavages'],
+    required: ['recon_fasta'],
+    help: {
+      recon_fasta: 'FASTA the tags are placed on. Mass shifts are measured against it.',
+      extension: 'Residues added per tag end. Longer tags place more uniquely.',
+      recon_missed_cleavages: 'Missed tryptic cleavages allowed in a placement window (0 to 10).'
+    },
+    outputs: ['out', 'recon_out', 'delta_out', 'delta_spectra_out', 'delta_counts_out', 'massgap_out', 'recon_id_out'],
+    docs: { to: 'workflow-reconciliation', label: 'Reconciliation and mass shifts' }
+  },
+  {
+    id: 'species',
+    label: 'Species',
+    blurb: 'Which taxa the sample contains, from the bundled taxonomy index. No FASTA needed.',
+    products: 'species report',
+    // Extension 2 is the paper-validated setting (Q1): seed 3 plus 2 x 2
+    // reaches the bundled index's k = 7.
+    values: { ...ALL, species: true, extension: '2' },
+    basic: ['species_rank', 'species_call', 'subsample_fraction'],
+    help: {
+      species_rank: 'Taxonomic level of the report: genus, family, …',
+      species_call: '"decoy" calls each taxon present or absent against decoy tags; "none" ranks only.',
+      subsample_fraction: 'Fraction of spectra to read, 0 = all. 0.1 is usually enough.'
+    },
+    outputs: ['out', 'species_out'],
+    docs: { to: 'species-howto', label: 'Species detection' }
+  },
+  {
+    id: 'db-reduction',
+    label: 'Database reduction',
+    blurb: 'A protein shortlist, a reduced FASTA and a Sage, Comet or MSFragger configuration for your search.',
+    products: 'shortlist, reduced FASTA, engine config',
+    // The shortlist recipe of doc/SHORTLIST.md, the CLI default from 1.15.4:
+    // set here, it gives the same result on 1.15.3.
+    values: {
+      ...ALL,
+      shortlist_out: 'shortlist.tsv',
+      fasta_out: 'reduced.fasta',
+      search_config_out: 'search.json',
+      extension: '3',
+      shortlist_gapped: true,
+      recon_min_length: '6',
+      shortlist_max_evalue: '10',
+      recon_missed_cleavages: '2'
+    },
+    basic: ['recon_fasta', 'shortlist_background', 'search_engine', 'shortlist_protease', 'variable_modifications'],
+    required: ['recon_fasta'],
+    help: {
+      recon_fasta: 'FASTA to shortlist from.',
+      shortlist_background: 'Host proteome and contaminants, always added to the reduced FASTA.',
+      search_engine: 'Engine to write a configuration for: Sage, Comet or MSFragger (experimental).',
+      shortlist_protease: 'Cleavage rule. Trypsin refuses clearly non-tryptic runs; "auto" uses the protease FASTag detects.',
+      variable_modifications: 'Written into the engine configuration, for example Oxidation (M).'
+    },
+    outputs: ['out', 'shortlist_out', 'fasta_out', 'search_config_out'],
+    docs: { to: 'workflow-db-reduction', label: 'Database reduction' }
+  },
+  {
+    id: 'triage',
+    label: 'Identifiability triage',
+    blurb: 'Rank MS/MS spectra by how identifiable they are, and mark those your search identified.',
+    products: 'identifiability tables',
+    values: { ...ALL, census: true, census_score: true, census_sorted_out: 'census_sorted.tsv' },
+    basic: ['census_ids', 'census_ids_fdr', 'census_triage_evalue'],
+    help: {
+      census_ids: 'idXML or mzIdentML of this run (optional). Marks which spectra your search identified.',
+      census_ids_fdr: 'q-value a target hit needs to count as identified.',
+      census_triage_evalue: 'An unidentified spectrum with a tag at or below this E-value is a triage candidate.'
+    },
+    outputs: ['out', 'census_out', 'census_summary_out', 'census_sorted_out'],
+    docs: { to: 'workflow-triage', label: 'Identifiability triage' }
   },
   {
     id: 'characterize',
     label: 'Characterize a run',
-    blurb: 'Survey species, digestion, labels and glycopeptides using 10% of the spectra.',
-    runs: true,
-    batch: false,
-    values: CHARACTERIZE
-  },
-  {
-    id: 'batch-qc',
-    label: 'Batch QC vs SDRF',
-    // Only the input differs from Characterize in P2a: Setup asks for the
-    // files of a batch first. The output folder and the cross-run summary
-    // are the Batch view's (GUI-DESIGN 10 P2b), the SDRF comparison P4's.
-    blurb: 'Survey several files and compare their results. Optionally check sample metadata from an SDRF file.',
-    runs: true,
-    batch: true,
-    values: CHARACTERIZE
+    blurb: 'Protease, labels, alkylation, glycopeptides and species, from 10% of the spectra.',
+    products: 'digest, label, alkylation, glyco, species',
+    values: {
+      ...ALL,
+      digest_out: 'digest.tsv',
+      label_out: 'label.tsv',
+      alkylation_out: 'alkylation.tsv',
+      glyco: true,
+      species: true,
+      extension: '2',
+      subsample_fraction: '0.1'
+    },
+    basic: ['subsample_fraction'],
+    help: {
+      subsample_fraction: 'Fraction of spectra to read. 0.1 gives stable calls in a tenth of the time.'
+    },
+    outputs: ['out', 'digest_out', 'label_out', 'alkylation_out', 'glyco_out', 'species_out'],
+    docs: { to: 'digest', label: 'Digest, label and mass-gap reports' }
   }
 ]
 
 export const LANDING_TASK: TaskId = 'export-tags'
 
-export const taskById = (id: string): Task | undefined => TASKS.find((t) => t.id === id)
+/// Workflow ids of earlier versions, as saved presets name them: Batch QC is
+/// Characterize in Batch mode, Open results is navigation now.
+const RENAMED: Record<string, { id: TaskId; batch?: true }> = {
+  'batch-qc': { id: 'characterize', batch: true },
+  'open-results': { id: 'export-tags' }
+}
 
-/// What a preset is a diff over: FASTag's defaults or a built-in task.
+/// The workflow @p id names, an old id read as its successor.
+export function migrateTaskId(id: string): { id: TaskId; batch?: true } | undefined {
+  if (TASKS.some((t) => t.id === id)) return { id: id as TaskId }
+  return Object.prototype.hasOwnProperty.call(RENAMED, id) ? RENAMED[id] : undefined
+}
+
+export const taskById = (id: string): Task | undefined => {
+  const m = migrateTaskId(id)
+  return m ? TASKS.find((t) => t.id === m.id) : undefined
+}
+
+/// What a preset is a diff over: FASTag's defaults or a built-in workflow.
 export type PresetBase = 'defaults' | `builtin:${TaskId}`
 
 /// Where the form's values came from (GUI-DESIGN 5 sessionStore.origin).
@@ -99,13 +219,13 @@ export function baseOf(o: Origin): PresetBase {
   return 'defaults'
 }
 
-/// The values of @p base: the defaults, or a task's values over them.
+/// The values of @p base: the defaults, or a workflow's values over them.
 export function baseValues(base: PresetBase): Record<string, ParamValue> {
   const task = base.startsWith('builtin:') ? taskById(base.slice('builtin:'.length)) : undefined
   return { ...initialValues(), ...(task?.values ?? {}) }
 }
 
-/// The task an origin belongs to (a preset: the task it was saved over).
+/// The workflow an origin belongs to (a preset: the one it was saved over).
 export function taskOf(o: Origin): Task | undefined {
   const b = baseOf(o)
   return b.startsWith('builtin:') ? taskById(b.slice('builtin:'.length)) : undefined

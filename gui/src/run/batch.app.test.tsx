@@ -9,7 +9,7 @@ import App from '../App'
 import { perJobOutputs } from '../app/paths'
 import { SPECTRA } from '../api'
 import { installMockBridge, type MockBridge } from '../testing/mockBridge'
-import { addBatch, click, goTo, logText, pickSingle, renderApp, runButton, startBatch } from '../testing/render'
+import { addBatch, click, goTo, logText, openGroup, pickSingle, renderApp, runButton, startBatch } from '../testing/render'
 import { applyLastUsed, formValue } from '../testing/lastUsed'
 
 // fireEvent wraps only the synchronous handler in act; the async continuations
@@ -17,7 +17,7 @@ import { applyLastUsed, formValue } from '../testing/lastUsed'
 
 const doneLines = (container: HTMLElement): number => logText(container).split('— done —').length - 1
 
-const outField = (): HTMLInputElement => screen.getByLabelText(/Tags TSV/) as HTMLInputElement
+const outField = (): HTMLInputElement => document.getElementById('out-name') as HTMLInputElement
 
 const emitDone = (mock: MockBridge, runId: number | undefined, ok: boolean): Promise<void> =>
   act(async () => mock.emitDone({ ok, code: ok ? 0 : 1, runId }))
@@ -190,7 +190,7 @@ describe('run/batch orchestration', () => {
     await renderApp(mock)
     expect(screen.getByText('Spectra as mzML, mzPeak or MGF')).toBeDefined()
     await pickSingle(mock, '/d/run.mgf')
-    expect(outField().value).toBe('/d/run.tags.tsv')
+    expect(outField().value).toBe('run')
     await click(runButton())
     await waitFor(() => expect(mock.runCalls).toHaveLength(1))
     expect(mock.runCalls[0].in).toBe('/d/run.mgf')
@@ -370,21 +370,21 @@ describe('run/batch orchestration', () => {
     expect(await formValue('recon_out')).toBe('/res/old.recon.tsv')
     await pickSingle(mock, '/d/b.mzML')
     expect((runButton() as HTMLButtonElement).disabled).toBe(true)
-    expect(screen.getByText('recon_out needs a database: set recon_fasta (or fasta).')).toBeDefined()
+    expect(screen.getByText('The placements need a protein database: choose one under Protein database.')).toBeDefined()
     expect(screen.getByText(/1 value to fix before running: Max peaks \(must be at most 1024\)/)).toBeDefined()
     await click(runButton())
     expect(mock.runCalls).toHaveLength(0)
   })
 
-  it('reads a relative Output where the backend resolved it, beside the input', async () => {
+  it('reads the tags where the backend resolved the output', async () => {
     const mock = installMockBridge()
     await renderApp(mock)
     await pickSingle(mock, '/d/b.mzML')
     await act(async () => {
-      fireEvent.change(screen.getByLabelText(/Tags TSV/), { target: { value: 'run.tags.tsv' } })
+      fireEvent.change(document.getElementById('out-name')!, { target: { value: 'run' } })
     })
     await click(runButton())
-    expect(mock.runCalls[mock.runCalls.length - 1].out).toBe('run.tags.tsv')
+    expect(mock.runCalls[mock.runCalls.length - 1].out).toBe('/d/run.tags.tsv')
     await emitDone(mock, 1, true)
     await screen.findByText('Showing 3 of 3')
     expect(mock.resultsQueryCalls[mock.resultsQueryCalls.length - 1].path).toBe('/d/run.tags.tsv')
@@ -393,24 +393,27 @@ describe('run/batch orchestration', () => {
   it('browses a parameter file with its own formats, not the spectra filter', async () => {
     const mock = installMockBridge()
     await renderApp(mock)
+    await pickSingle(mock, '/d/a.mzML')
     const browse = (name: string): Element => {
       const field = document.getElementById(`p-${name}`)
       const b = field?.parentElement?.querySelector('button')
       if (!b) throw new Error(`no Browse button for ${name}`)
       return b
     }
-    await click(screen.getByRole('button', { name: /Sequence matching/ }))
-    await click(screen.getByRole('button', { name: /Reconciliation/ }))
+    await openGroup('Keep only tags found in a database')
+    await openGroup('Placement on the database')
     mock.nextPickInput = '/db/human.fasta'
     await click(browse('fasta'))
     expect(mock.pickFileCalls[mock.pickFileCalls.length - 1]).toEqual({ kind: 'open', formats: ['fasta', 'fa', 'faa'] })
     expect((document.getElementById('p-fasta') as HTMLInputElement).value).toBe('/db/human.fasta')
+    // A report is a checkbox; its file is changed with its own formats.
+    await click(document.getElementById('out-recon_out')!)
     mock.nextPickOutput = '/r/a.recon.tsv'
-    await click(browse('recon_out'))
+    await click(screen.getByRole('button', { name: 'Change the file of Tag placements' }))
     expect(mock.pickFileCalls[mock.pickFileCalls.length - 1]).toEqual({ kind: 'save', formats: ['tsv'] })
-    // With -recon_out set, -recon_id_out is live and offers its own formats.
+    await click(document.getElementById('out-recon_id_out')!)
     mock.nextPickOutput = '/r/ids.idXML'
-    await click(browse('recon_id_out'))
+    await click(screen.getByRole('button', { name: 'Change the file of Placements as identifications' }))
     expect(mock.pickFileCalls[mock.pickFileCalls.length - 1]).toEqual({
       kind: 'save',
       formats: ['idXML', 'mzid', 'mzTab']

@@ -38,7 +38,7 @@ test('the top bar, the keyboard and the View menu switch between the four views'
 test('a run moves to Results with the pill; it finishes into History', async ({ page }) => {
   await openApp(page, 'default', 'defaults')
   await page.getByRole('button', { name: 'Choose file…' }).click()
-  await page.getByRole('button', { name: 'Run on run01.mzML' }).click()
+  await page.getByRole('button', { name: 'Run', exact: true }).click()
   await expect(page.getByText('Showing 2,028 of 2,028')).toBeVisible()
   expect(await shownViews(page)).toEqual(['results'])
   await expect(page.getByRole('group', { name: 'Run status' })).toHaveText('Idle')
@@ -100,8 +100,7 @@ test('Help finds whole pages and CLI options, announces results and closes from 
   await search.fill('decoy_expected')
   await search.press('Enter')
   await expect(panel.locator('#param-species_call')).toHaveJSProperty('open', true)
-  await expect(panel.locator('#param-species_call')).toContainText('Not in the settings form:')
-  await expect(panel.locator('#param-species_call')).toContainText('Choices:')
+  await expect(panel.locator('#param-species_call')).toContainText('Settings group: Species.')
   await search.fill('zzqxv-no-result')
   await expect(panel.getByRole('status')).toContainText('Nothing in Help matches')
   await search.press('Escape')
@@ -116,7 +115,7 @@ test('the theme button overrides the system theme with the D9 colours, and chang
   await page.emulateMedia({ colorScheme: 'light' })
   await openApp(page, 'default', 'defaults')
   await page.getByRole('button', { name: 'Choose file…' }).click()
-  await page.getByRole('button', { name: 'Run on run01.mzML' }).click()
+  await page.getByRole('button', { name: 'Run', exact: true }).click()
   await expect(page.getByText('Showing 2,028 of 2,028')).toBeVisible()
   const look = async (): Promise<{ bg: string; bar: string; status: string }> => ({
     bg: await page.evaluate(() => getComputedStyle(document.body).backgroundColor),
@@ -169,7 +168,7 @@ test('a view switch that hides the focused control moves focus into the view sho
     })
   await page.getByRole('button', { name: 'Choose file…' }).click()
   // By keyboard: WebKit does not focus a clicked button.
-  await page.getByRole('button', { name: 'Run on run01.mzML' }).focus()
+  await page.getByRole('button', { name: 'Run', exact: true }).focus()
   await page.keyboard.press('Enter')
   await expect(page.getByText('Showing 2,028 of 2,028')).toBeVisible()
   expect(await shownViews(page)).toEqual(['results'])
@@ -196,7 +195,7 @@ for (const [w, h] of [
       await page.emulateMedia({ colorScheme: scheme })
       await openApp(page, 'default', 'defaults')
       await page.getByRole('button', { name: 'Choose file…' }).click()
-      await page.getByRole('button', { name: 'Run on run01.mzML' }).click()
+      await page.getByRole('button', { name: 'Run', exact: true }).click()
       await expect(page.getByText('Showing 2,028 of 2,028')).toBeVisible()
       for (const v of ['Setup', 'Results', 'Batch', 'History'] as const) {
         await goTo(page, v)

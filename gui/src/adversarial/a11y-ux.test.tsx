@@ -11,7 +11,7 @@ import ParamField from '../ParamField'
 import { PARAM_BY_NAME } from '../paramLayout'
 import { parseReport } from '../digestReport'
 import { installMockBridge } from '../testing/mockBridge'
-import { click, flush, goTo, renderApp } from '../testing/render'
+import { batchAddButton, click, flush, goTo, openGroup, renderApp } from '../testing/render'
 import digestTsv from '../fixtures/digest.tsv?raw'
 import labelTsv from '../fixtures/label.tsv?raw'
 
@@ -105,7 +105,7 @@ describe('a11y: run feedback in App', () => {
     expect(log.getAttribute('tabindex')).toBe('0')
     expect(log.getAttribute('aria-label')).toBe('Run log')
     mock.nextPickInputs = ['/d/a.mzML']
-    await click(screen.getByRole('button', { name: /^(Add files for a batch|Add)…$/ }))
+    await click(batchAddButton())
     const jobs = container.querySelector('ul.jobs') as HTMLElement
     expect(jobs.getAttribute('tabindex')).toBe('0')
     expect(jobs.getAttribute('aria-labelledby')).toBe('batch-label')
@@ -119,14 +119,11 @@ describe('a11y: run feedback in App', () => {
     await renderApp(mock)
     const until = (el: () => Element | null): Promise<void> =>
       vi.waitFor(() => expect(document.activeElement).toBe(el()))
-    await click(screen.getByRole('button', { name: 'Reset…' }))
-    await click(screen.getByRole('button', { name: 'Keep' }))
-    await until(() => screen.getByRole('button', { name: 'Reset…' }))
-    await click(screen.getByRole('button', { name: 'Save…' }))
-    await act(async () => { fireEvent.keyDown(screen.getByLabelText('Preset name'), { key: 'Escape' }) })
-    await until(() => screen.getByLabelText('Preset'))
+    await act(async () => { fireEvent.change(document.getElementById('origin')!, { target: { value: '__save' } }) })
+    await act(async () => { fireEvent.keyDown(screen.getByRole('textbox', { name: 'Preset name' }), { key: 'Escape' }) })
+    await until(() => document.getElementById('origin'))
     mock.nextPickInputs = ['/d/a.mzML', '/d/b.mzML']
-    await click(screen.getByRole('button', { name: /^(Add files for a batch|Add)…$/ }))
+    await click(batchAddButton())
     await click(screen.getByRole('button', { name: 'Remove /d/a.mzML' }))
     await until(() => screen.getByRole('button', { name: 'Remove /d/b.mzML' }))
     await click(screen.getByRole('button', { name: 'Clear' }))
@@ -157,7 +154,7 @@ describe('a11y: run feedback in App', () => {
     const mock = installMockBridge()
     const container = await renderApp(mock)
     mock.nextPickInputs = ['/d/a.mzML', '/d/b.mzML']
-    await click(screen.getByRole('button', { name: /^(Add files for a batch|Add)…$/ }))
+    await click(batchAddButton())
     await click(screen.getByRole('button', { name: /^Run \d+ remaining file/ }))
     await act(async () => { mock.emitDone({ runId: mock.lastRunId, ok: false, code: 6, message: null }) })
     await flush()
@@ -171,17 +168,15 @@ describe('a11y: run feedback in App', () => {
     expect(screen.getByRole('alert').textContent).toMatch(/^1 of 2 batch jobs faileda\.mzML \(exit code 6\)/)
   })
 
-  it('an active section\'s dot is an image with a name, so the section button announces it', async () => {
+  it('a group with changed values says how many in its header, so the summary announces it', async () => {
     const mock = installMockBridge()
     await renderApp(mock)
-    // Species section is collapsed by default: open it first.
-    await click(screen.getByRole('button', { name: /Species detection/ }))
-    await click(screen.getByLabelText('Species species'))
-    const sec = screen.getAllByRole('button', { expanded: true }).find((b) => /Species/.test(b.textContent ?? ''))!
-    const dot = sec.querySelector('.on-dot')!
-    expect(dot.getAttribute('role')).toBe('img')
-    expect(dot.getAttribute('aria-label')).toBe('Species is on')
-    expect(screen.getByRole('button', { name: /Species detection.*Species is on/ })).toBe(sec)
+    await openGroup('Species')
+    await click(document.getElementById('p-species')!)
+    await openGroup('Species, advanced')
+    await act(async () => { fireEvent.change(document.getElementById('p-species_min_len')!, { target: { value: '9' } }) })
+    const sec = screen.getAllByRole('button', { expanded: true }).find((b) => b.querySelector('.sec-title')?.textContent === 'Species, advanced')!
+    expect(sec.textContent).toMatch(/1 changed/)
   })
 })
 
@@ -246,16 +241,20 @@ describe('a11y: parameter form', () => {
     const spec = PARAM_BY_NAME.get('max_peaks')!
     expect(spec.max).toBe(1024)
     render(<ParamField spec={spec} value="2000" onChange={() => {}} />)
-    const el = screen.getByLabelText(/max_peaks/) as HTMLInputElement
+    const el = document.getElementById('p-max_peaks') as HTMLInputElement
     expect(el.getAttribute('aria-invalid')).toBe('true')
     expect(screen.getByText('must be at most 1024')).toBeDefined()
   })
 
-  it('labels use the CLI names, as help text and panels do', () => {
-    const spec = PARAM_BY_NAME.get('species')!
-    expect(spec.description).toMatch(/-species_out/)
+  it('labels use words; the (?) popover names the CLI option, its default and its description', async () => {
     render(<ParamField spec={PARAM_BY_NAME.get('species_out')!} value="" onChange={() => {}} />)
-    expect(screen.getByText('species_out')).toBeTruthy()
+    expect(screen.queryByText('species_out')).toBeNull()
+    await click(screen.getByRole('button', { name: /^About / }))
+    const pop = screen.getByRole('dialog', { name: /^About / })
+    expect(pop.textContent).toContain('-species_out')
+    expect(pop.textContent).toContain('Default: not set')
+    await act(async () => { fireEvent.keyDown(pop, { key: 'Escape' }) })
+    expect(screen.queryByRole('dialog')).toBeNull()
   })
 })
 
@@ -298,14 +297,12 @@ describe('UX: a known-failing species run stays one click away', () => {
     const container = await renderApp(mock)
     mock.nextPickInput = '/data/a.mzML'
     await click(screen.getByRole('button', { name: /^(Choose file|Change)…$/ }))
-    await click(screen.getByRole('button', { name: /Species detection/ }))
-    await click(screen.getByLabelText('Species species'))
+    await openGroup('Species')
+    await click(document.getElementById('p-species')!)
     expect((screen.getByRole('button', { name: /^Run( on .+)?$/ }) as HTMLButtonElement).disabled).toBe(true)
     // Default tab is Tags: the reason is beside Run, not only in the Species tab.
     await goTo('results')
     expect(screen.getByRole('tab', { selected: true }).textContent).toBe('Tags')
     expect(container.querySelector('.controls')!.textContent).toMatch(/cannot reach the species index k = 7/)
-    await click(screen.getByRole('tab', { name: /Species/ }))
-    expect(container.textContent).toMatch(/Tags are too short for the species reference/)
   })
 })

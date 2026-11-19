@@ -1,7 +1,8 @@
 import { useLayoutEffect, useRef, useState, type JSX } from 'react'
-import { defaultText, humanName, invalidBecause, isChanged, masters, PARAM_BY_NAME, type Dependency, type ParamSpec } from './paramLayout'
+import { defaultText, humanName, invalidBecause, isChanged, masters, PARAM_BY_NAME, uiOf, type Dependency, type ParamSpec } from './paramLayout'
 import { IconError } from './icons'
-import { HelpButton } from './help/HelpLink'
+import HelpPopover from './help/HelpPopover'
+import { productLabel } from './setup/products'
 
 export type ParamValue = string | boolean | string[]
 
@@ -20,25 +21,41 @@ interface Props {
   turnsOn?: number
   /// The unit of a value, drawn as one control with it (fragment_tolerance).
   unit?: { spec: ParamSpec; value: ParamValue; onChange: (v: ParamValue) => void }
+  /// The one line under a basic field (the workflow's own help, tasks.ts);
+  /// without it the CLI description is shown, clamped to one line.
+  brief?: string
+  /// The label, when the workflow names the field its own way.
+  label?: string
+  /// The run cannot do without it (a workflow's protein database).
+  required?: boolean
 }
 
 // One widget per declared type. The tool's restrictions drive the control: a
 // string with `choices` becomes a select. A number is a text field checked by
 // invalidBecause() against the type, min and max the CLI declares; a value the
 // CLI would refuse is marked invalid and says why (App keeps Run disabled).
-export default function ParamField({ spec, value, onChange, onPickFile, needs, unit, turnsOn }: Props): JSX.Element {
+export default function ParamField({ spec, value, onChange, onPickFile, needs, unit, turnsOn, brief, label: name, required }: Props): JSX.Element {
   const off = !!needs
   // An inert field is not sent, so its value cannot fail the run.
   const invalid = off ? null : invalidBecause(spec, value)
   const changed = !off && (isChanged(spec.name, value) || (!!unit && isChanged(unit.spec.name, unit.value)))
-  // The name in words, then the CLI name, as the help texts, the docs and the
-  // CLI's messages spell it.
+  // The name in words; the CLI name is in the (?) popover only.
+  const title = name ?? humanName(spec.name)
+  const missing = !!required && !off && String(value ?? '').trim() === ''
   const label = (
     <span className="label-row">
-      <label htmlFor={`p-${spec.name}`} title={plainOptions(spec.description)}>
-        <span className="pname">{humanName(spec.name)}</span> <code className="cli">{spec.name}</code>
+      <label htmlFor={`p-${spec.name}`}>
+        <span className="pname">{title}</span>
       </label>
-      <HelpButton to={`param-${spec.name}`} what={humanName(spec.name)} />
+      {required && <span className={`badge${missing ? ' warn' : ''}`}>required</span>}
+      {uiOf(spec.name).experimental && <span className="badge">experimental</span>}
+      <HelpPopover
+        name={spec.name}
+        label={title}
+        description={sentence(plainOptions(spec.description))}
+        deflt={`${defaultText(spec)}${unit ? ` ${defaultText(unit.spec)}` : ''}`}
+        more={uiOf(spec.name).help?.text}
+      />
     </span>
   )
   const helpId = `h-${spec.name}`
@@ -73,30 +90,28 @@ export default function ParamField({ spec, value, onChange, onPickFile, needs, u
       <p
         id={helpId}
         ref={helpRef}
-        className={off ? 'help inert' : 'help'}
+        className={`${off ? 'help inert' : 'help'}${brief ? ' brief' : ''}`}
         style={expanded ? { maxHeight: 'none' } : undefined}
       >
-        {sentence(plainOptions(spec.description))}
-        {needs && (
-          <>
-            {' '}
-            <span className="needs">
-              <strong>
-                {needs.replaced ? 'Replaced by ' : 'Needs '}
-                {masters(needs).map((m, i) => (
-                  <Cli key={m} name={m} sep={i > 0} />
-                ))}
-              </strong>
-              {` (${needs.note}).`}
-            </span>
-          </>
+        {needs ? (
+          <span className="needs">
+            <strong>
+              {needs.replaced ? 'Replaced by ' : 'Needs '}
+              {masters(needs).map((m, i) => (
+                <Cli key={m} name={m} sep={i > 0} />
+              ))}
+            </strong>
+            {` (${needs.note}).`}
+          </span>
+        ) : (
+          brief ?? sentence(plainOptions(spec.description))
         )}
         {!!turnsOn && (
           <span className="turns-on">
             {' '}Turns on {turnsOn} {turnsOn === 1 ? 'setting' : 'settings'}.
           </span>
         )}
-        {changed && (
+        {changed && !brief && (
           <span className="changed">
             {' '}Default {deflt} · <span className="mark">changed</span>
           </span>
@@ -281,12 +296,13 @@ function sentence(text: string): string {
   return t === '' || /[.!?:)]$/.test(t) ? t : `${t}.`
 }
 
-/// A CLI option name, with " or " before all but the first.
+/// What a dependency names, in words: the report it is (Mass-shift table),
+/// or the option's name; " or " before all but the first.
 function Cli({ name, sep }: { name: string; sep: boolean }): JSX.Element {
   return (
     <>
       {sep && ' or '}
-      <code className="cli">{name}</code>
+      {productLabel(name) ?? humanName(name)}
     </>
   )
 }

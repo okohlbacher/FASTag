@@ -68,7 +68,7 @@ const domRows = (page: Page): Promise<string[][]> =>
 test('a tighter E-value cutoff never adds rows, with and without the best tag per spectrum', async ({ page }) => {
   await openTags(page)
   for (const best of [false, true]) {
-    if (best) await page.getByLabel('Per spectrum').selectOption({ label: 'Best tag' })
+    if (best) await page.getByLabel('Per spectrum', { exact: true }).selectOption({ label: 'Best tag' })
     let prev: Set<number> | null = null
     let prevCount = Infinity
     for (const cutoff of ['1000', '100', '1', '0.1', '0.01', '0.001', '1e-5']) {
@@ -95,7 +95,7 @@ test('filters commute: the order they are set in changes neither the view nor it
     (p) => setBox(p, 'Min. length', '3'),
     (p) => p.getByRole('button', { name: 'Not in database', exact: true }).click(),
     (p) => setBox(p, 'Spectrum contains', 'SCAN=11'),
-    (p) => p.getByLabel('Per spectrum').selectOption({ label: 'Best 2' }),
+    (p) => p.getByLabel('Per spectrum', { exact: true }).selectOption({ label: 'Best 2' }),
     (p) => setBox(p, 'Max. E-value', '50')
   ]
   const run = async (order: number[]): Promise<{ view: ResultsView; count: number; ids: number[]; dom: string[][] }> => {
@@ -124,7 +124,7 @@ test('filters commute: the order they are set in changes neither the view nor it
 test('an export equals the view: its rows, its order, the shown columns, as TSV and as CSV', async ({ page }) => {
   await openTags(page)
   await setBox(page, 'Spectrum contains', 'scan=115')
-  await page.getByLabel('Per spectrum').selectOption({ label: 'Best 3' })
+  await page.getByLabel('Per spectrum', { exact: true }).selectOption({ label: 'Best 3' })
   // Sorted by tag, descending (one click ascending, a second descending).
   const tagHeader = page.getByRole('button', { name: /^Tag/ })
   await tagHeader.click()
@@ -177,7 +177,7 @@ test('an export outlives a tab switch: its progress, its Cancel and its outcome 
   const bar = page.getByRole('progressbar', { name: 'Export progress' })
   await expect(bar).toHaveAttribute('aria-valuenow', '50')
   // Away to another tab (the table unmounts) and back.
-  await page.getByRole('tab', { name: 'Digest' }).click()
+  await page.getByRole('tab', { name: 'Spectrum' }).click()
   await expect(bar).toHaveCount(0)
   await page.getByRole('tab', { name: 'Tags' }).click()
   await expect(page.getByText('Showing 2,028 of 2,028')).toBeVisible()
@@ -193,7 +193,7 @@ test('an export outlives a tab switch: its progress, its Cancel and its outcome 
   // Once more, cancelled after a switch: Cancel reaches the job, focus stays on a control.
   await exportBtn.click()
   await expect(bar).toHaveAttribute('aria-valuenow', '50')
-  await page.getByRole('tab', { name: 'Species' }).click()
+  await page.getByRole('tab', { name: 'Spectrum' }).click()
   await page.getByRole('tab', { name: 'Tags' }).click()
   const cancel = page.getByRole('button', { name: 'Cancel export' })
   await cancel.focus()

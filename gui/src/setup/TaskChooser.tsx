@@ -1,19 +1,23 @@
-// The top of the Setup screen (GUI-DESIGN 3 S1): what the session is for
-// (a built-in task), what it starts from (the task, FASTag's defaults or a
-// saved preset), saving the form as a preset, the last-used offer (D6) and
-// Undo after a task or preset replaced the form.
+// The Workflow card of Setup (doc/GUI-WORKFLOWS.md 1 and 3): seven workflow
+// cards, the row that says whether the form still holds the workflow's
+// values (Reset), the presets menu (Save as…, load, Delete), the last-used
+// offer (D6), Undo after a workflow or preset replaced the form, and the
+// link to earlier results.
 
 import type { JSX } from 'react'
-import { TASKS } from './tasks'
+import { TASKS, taskById } from './tasks'
 import type { Session } from './useSession'
 import { cliText } from '../app/format'
+import { HelpLink } from '../help/HelpLink'
 
-export default function TaskChooser({ session }: { session: Session }): JSX.Element {
+export default function TaskChooser({ session, onOpenResults }: { session: Session; onOpenResults?(): void }): JSX.Element {
   const { lastUsed, lastUsedDiff } = session
+  const task = session.task ? taskById(session.task) : undefined
+  const modified = session.diff.length > 0
   return (
-    <section className="block task-chooser" aria-labelledby="task-h">
+    <div className="task-chooser">
       <fieldset className="tasks">
-        <legend id="task-h">What do you want to do?</legend>
+        <legend className="sr-only">Workflow</legend>
         {TASKS.map((t) => (
           <label key={t.id} className={`task${session.task === t.id ? ' on' : ''}`}>
             <input
@@ -25,37 +29,48 @@ export default function TaskChooser({ session }: { session: Session }): JSX.Elem
               aria-describedby={`task-${t.id}-d`}
             />
             <span className="task-label">{t.label}</span>
-            <span id={`task-${t.id}-d`} className="task-blurb">
-              {t.blurb}
+            <span id={`task-${t.id}-d`} className="task-products">
+              → {t.products}
             </span>
           </label>
         ))}
       </fieldset>
+      {task && <p className="task-blurb-line">{task.blurb}</p>}
       <div className="row tight starting">
         {session.savingName === null ? (
           <>
-            <label htmlFor="origin" className="sublabel">
-              Starting from
-            </label>
+            <span className="origin-name">
+              <strong>{session.originText}</strong>
+              {modified && (
+                <span className="muted" title={session.diff.join(', ')}>
+                  {' '}
+                  (modified)
+                </span>
+              )}
+            </span>
+            {modified && (
+              <button type="button" className="secondary small" aria-label={`Reset to ${session.originText}`} onClick={session.resetToOrigin}>
+                Reset
+              </button>
+            )}
             <select
               id="origin"
               className="small"
               ref={session.presetRef}
-              value={session.originKey}
-              onChange={(e) => void session.applyPreset(e.target.value)}
-              title="Start from FASTag's defaults, a built-in task or a saved preset"
-              aria-label="Preset"
+              value=""
+              aria-label="Presets"
+              onChange={(e) => {
+                const v = e.target.value
+                if (v === '__save') session.setSavingName(session.preset || '')
+                else if (v === '__delete') void session.removePreset()
+                else if (v === '__defaults') void session.applyPreset('')
+                else if (v) void session.applyPreset(v)
+              }}
             >
-              <option value="">FASTag defaults</option>
-              <optgroup label="Built-in">
-                {TASKS.filter((t) => t.runs).map((t) => (
-                  <option key={t.id} value={`builtin:${t.id}`}>
-                    {t.label}
-                  </option>
-                ))}
-              </optgroup>
+              <option value="">Presets…</option>
+              <option value="__save">Save as preset…</option>
               {session.presets.length > 0 && (
-                <optgroup label="Saved presets">
+                <optgroup label="Load">
                   {session.presets.map((n) => (
                     <option key={n} value={n}>
                       {n}
@@ -63,13 +78,9 @@ export default function TaskChooser({ session }: { session: Session }): JSX.Elem
                   ))}
                 </optgroup>
               )}
+              <option value="__defaults">Load FASTag defaults</option>
+              {session.preset && <option value="__delete">Delete preset {session.preset}</option>}
             </select>
-            <button type="button" className="secondary small" onClick={() => session.setSavingName(session.preset || '')}>
-              Save…
-            </button>
-            <button type="button" className="secondary small" onClick={session.removePreset} disabled={!session.preset}>
-              Delete
-            </button>
             {lastUsedDiff.length > 0 && (
               <button
                 type="button"
@@ -81,8 +92,15 @@ export default function TaskChooser({ session }: { session: Session }): JSX.Elem
               </button>
             )}
             {session.canUndo && (
-              <button type="button" className="secondary small" onClick={session.undo} title="Bring back the values the last task or preset replaced">
+              <button type="button" className="secondary small" onClick={session.undo} title="Bring back the values the last workflow or preset replaced">
                 Undo
+              </button>
+            )}
+            <span className="spacer" />
+            {task && <HelpLink to={task.docs.to}>Learn more</HelpLink>}
+            {onOpenResults && (
+              <button type="button" className="link" onClick={onOpenResults}>
+                Open earlier results…
               </button>
             )}
           </>
@@ -119,6 +137,6 @@ export default function TaskChooser({ session }: { session: Session }): JSX.Elem
           {session.presetError}
         </p>
       )}
-    </section>
+    </div>
   )
 }

@@ -17,7 +17,7 @@ import {
 import type { ParamValue } from '../ParamField'
 import { baseName } from '../digestReport'
 import { applyInstrument, INSTRUMENTS, speciesFixes } from './presets'
-import { defaultSpeciesOut, rebaseOutputs, stripExt } from '../app/paths'
+import { defaultSpeciesOut, dirName, rebaseOutputs, stripExt } from '../app/paths'
 import { cliText, sameValue } from '../app/format'
 import { focusLater } from '../app/focus'
 import { DEFAULTS, baseOf, baseValues, originText, taskById, taskOf, type Origin, type TaskId } from './tasks'
@@ -52,6 +52,10 @@ interface Snapshot {
 export function useSession(start: Origin = DEFAULTS) {
   const [input, setInput] = useState('')
   const [out, setOut] = useState('')
+  // The Input card: one file, or a batch of files run in turn (doc/GUI-WORKFLOWS.md 1).
+  const [mode, setMode] = useState<'one' | 'batch'>('one')
+  // The Advanced disclosure of Setup is open.
+  const [advancedOpen, setAdvancedOpen] = useState(false)
   // Where the form's values came from, and the values that origin gives
   // (before reports are moved beside the input): the footer's diff is the
   // form against these.
@@ -174,6 +178,8 @@ export function useSession(start: Origin = DEFAULTS) {
     const p = normalizePreset(st.presets[name])
     if (!p) return
     replaceForm({ kind: 'preset', name, base: p.base }, presetValues(p, ''))
+    // Saved over Batch QC: Characterize on a batch.
+    if (p.batch) setMode('batch')
   }
   async function refreshPresets(): Promise<string[]> {
     const st = await window.fastag.loadSettings()
@@ -225,6 +231,16 @@ export function useSession(start: Origin = DEFAULTS) {
     setOriginValues(baseValues(base))
     focusLater(() => presetRef.current)
   }
+
+  // The tags output moved (Outputs: folder or run name): every report goes
+  // beside it.
+  function moveOut(next: string): void {
+    setOut(next)
+    if (next) setValues((v) => ({ ...v, ...rebaseOutputs(v, next) }))
+  }
+  // Outputs' folder and run name, from the tags output.
+  const outDir = out ? dirName(out) : ''
+  const runName = out ? baseName(out).replace(/\.tags\.tsv$/, '').replace(/\.tsv$/, '') : ''
 
   // A built-in instrument preset sets the tolerance and its unit.
   function chooseInstrument(id: string): void {
@@ -293,6 +309,13 @@ export function useSession(start: Origin = DEFAULTS) {
     setInput,
     out,
     setOut,
+    moveOut,
+    outDir,
+    runName,
+    mode,
+    setMode,
+    advancedOpen,
+    setAdvancedOpen,
     values,
     setValues,
     setValue,

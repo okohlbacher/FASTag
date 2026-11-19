@@ -6,7 +6,7 @@ test('last-used is an offer: a fresh start runs with defaults until the chip is 
   await expect(chip).toBeVisible()
   await expect(page.locator('#p-tag_length')).toHaveValue('3')
   await page.getByRole('button', { name: 'Choose file…' }).click()
-  await page.getByRole('button', { name: 'Run on run01.mzML' }).click()
+  await page.getByRole('button', { name: 'Run', exact: true }).click()
   await expect(page.getByText('Showing 2,028 of 2,028')).toBeVisible()
   let calls = await mockState<{ params: Record<string, unknown> }[]>(page, 'runCalls')
   expect(calls[0].params['tag_length']).toBe('3')
@@ -15,7 +15,7 @@ test('last-used is an offer: a fresh start runs with defaults until the chip is 
   await chip.click()
   await expect(chip).toBeHidden()
   await expect(page.locator('#p-tag_length')).toHaveValue('7')
-  await page.getByRole('button', { name: 'Run on run01.mzML' }).click()
+  await page.getByRole('button', { name: 'Run', exact: true }).click()
   await expect(page.getByText('Showing 2,028 of 2,028')).toBeVisible()
   calls = await mockState(page, 'runCalls')
   expect(calls[1].params['tag_length']).toBe('7')
@@ -25,7 +25,7 @@ test('last-used is an offer: a fresh start runs with defaults until the chip is 
 test('while a run goes the open buttons are locked; the close guard asks, and Keep running keeps it', async ({ page }) => {
   await openApp(page, 'slow')
   await page.getByRole('button', { name: 'Choose file…' }).click()
-  await page.getByRole('button', { name: 'Run on run01.mzML' }).click()
+  await page.getByRole('button', { name: 'Run', exact: true }).click()
   // P2a: the run moved to Results. P2b: its Cancel is the running state's
   // there (GUI-DESIGN 3 S2; was the pill's), and the pill has none.
   await expect(page.getByRole('region', { name: 'Running' }).getByRole('button', { name: 'Cancel' })).toBeVisible()
@@ -50,7 +50,7 @@ test('while a run goes the open buttons are locked; the close guard asks, and Ke
 test('a cancelled run says its partial outputs were removed', async ({ page }) => {
   await openApp(page, 'slow')
   await page.getByRole('button', { name: 'Choose file…' }).click()
-  await page.getByRole('button', { name: 'Run on run01.mzML' }).click()
+  await page.getByRole('button', { name: 'Run', exact: true }).click()
   await page.getByRole('button', { name: 'Cancel' }).click()
   await expect(page.locator('.last-run')).toContainText('partial outputs removed')
   await page.getByRole('button', { name: /^Log/ }).first().click()
@@ -66,7 +66,7 @@ test('an existing output is confirmed before the run; a cancelled run of an earl
   await expect(page.locator('.tabpanel')).toContainText('The run that wrote /data/run01.tags.tsv was cancelled')
   await goTo(page, 'Setup')
   await page.getByRole('button', { name: 'Choose file…' }).click()
-  await page.getByRole('button', { name: 'Run on run01.mzML' }).click()
+  await page.getByRole('button', { name: 'Run', exact: true }).click()
   const dlg = page.getByRole('alertdialog')
   await expect(dlg).toContainText('An output already exists')
   await expect(dlg).toContainText('/data/run01.tags.tsv')

@@ -48,7 +48,7 @@ describe('the batch summary', () => {
     await waitFor(() => expect(within(bodyRows()[2]).getByText('none (label-free)')).toBeDefined())
     const [a, b, c] = bodyRows().map(cells)
     expect(a.slice(0, 1)).toEqual(['a.mzML'])
-    expect(a).toEqual(expect.arrayContaining(['128,821', 'Homo', 'Trypsin', 'none (label-free)', 'not assessed (needs a FASTA)']))
+    expect(a).toEqual(expect.arrayContaining(['128,821', 'Homo', 'Trypsin', 'none (label-free)', 'not assessed']))
     expect(b).toEqual(expect.arrayContaining(['172,237', 'Homo', 'Trypsin', 'TMT']))
     expect(c).toEqual(expect.arrayContaining(['none (label-free)']))
     // TMT differs from label-free (2 of 3 calls); its cell says so, in words too.
@@ -175,10 +175,10 @@ describe('folder input and the output folder', () => {
     await click(screen.getByRole('button', { name: 'Choose output folder…' }))
     expect(within(outdir()).getByText('/out')).toBeDefined()
     // The plan footer says so too.
-    expect(document.querySelector('.view[data-view="setup"]')!.textContent).toContain('out: /out')
+    expect(document.querySelector('.view[data-view="batch"] .runbar')!.textContent).toContain('out: /out')
     await click(screen.getByRole('button', { name: 'Beside inputs' }))
     expect(within(outdir()).getByText('beside each input')).toBeDefined()
-    expect(document.querySelector('.view[data-view="setup"]')!.textContent).toContain('out: beside each input')
+    expect(document.querySelector('.view[data-view="batch"] .runbar')!.textContent).toContain('out: beside each input')
     await click(screen.getByRole('button', { name: 'Choose output folder…' }))
     serve(mock, 'a', BATCH_CASES.pxd003531, '/out')
     serve(mock, 'b', BATCH_CASES.pxd004541, '/out')
@@ -272,20 +272,20 @@ describe('what a summary cell says when a read goes wrong, and where notes show'
     expect(within(label).getByText(/^CLI label call over/).closest('.cell-note')).not.toBeNull()
   })
 
-  it('an empty folder picked from the Batch QC card on Setup says so there', async () => {
+  it('an empty folder picked from the Batch input of Setup says so there', async () => {
     const mock = installMockBridge()
     await renderColdApp(mock)
-    await click(screen.getByRole('radio', { name: /^Batch QC/ }))
+    await click(screen.getByRole('radio', { name: 'Batch' }))
     mock.nextPickFolder = '/empty'
     mock.folderFiles['/empty'] = []
-    await click(screen.getByRole('button', { name: 'Or add a folder…' }))
+    await click(screen.getByRole('button', { name: 'Add folder…' }))
     const note = await screen.findByText('No spectra files (mzML, mzPeak, MGF) directly in /empty.')
     expect(note.closest('.view')!.getAttribute('data-view')).toBe('setup')
     expect(note.closest('.view')!.hasAttribute('hidden')).toBe(false)
     expect(note.getAttribute('role')).toBe('status')
     // A folder that cannot be listed, too.
     mock.nextPickFolder = '/nope'
-    await click(screen.getByRole('button', { name: 'Or add a folder…' }))
+    await click(screen.getByRole('button', { name: 'Add folder…' }))
     expect(await screen.findByText('Cannot read the folder: /nope is not a folder')).toBeDefined()
   })
 })

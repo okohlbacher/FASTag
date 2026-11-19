@@ -171,14 +171,14 @@ for (const w of [1000, 1400]) {
     expect(m.itemsInside).toBe(true)
   })
 
-  test(`${w} px: the recon empty state shows its whole primary button label`, async ({ page }) => {
+  test(`${w} px: the Overview's FASTA action shows its whole button label`, async ({ page }) => {
     await page.setViewportSize({ width: w, height: 800 })
     await openApp(page, 'gate')
     await page.getByRole('radio', { name: /^Characterize a run/ }).check()
     await page.getByRole('button', { name: 'Choose file…' }).click()
-    await page.getByRole('button', { name: 'Run on run01.mzML' }).click()
-    await page.getByRole('tab', { name: 'Mass gaps & recon' }).click()
-    const btn = page.getByRole('button', { name: 'Choose a FASTA and run again' })
+    await page.getByRole('button', { name: 'Run', exact: true }).click()
+    await page.getByRole('tab', { name: 'Overview' }).click()
+    const btn = page.getByRole('button', { name: 'Add FASTA and run again' })
     await expect(btn).toBeVisible()
     const fits = await btn.evaluate((b) => b.scrollWidth <= b.clientWidth && b.getBoundingClientRect().right <= window.innerWidth)
     expect(fits).toBe(true)

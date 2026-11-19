@@ -117,6 +117,11 @@ import it20Label from '../fixtures/cli-1.12/iontrap_20ppm.label.tsv?raw'
 import it20Err from '../fixtures/cli-1.12/iontrap_20ppm.stderr?raw'
 import it20Out from '../fixtures/cli-1.12/iontrap_20ppm.stdout?raw'
 import diaErr from '../fixtures/cli-1.12/dia_raw.stderr?raw'
+import qcTsv from '../fixtures/cli-1.15/ecoli_ms2_small_0.3da.qc.tsv?raw'
+import censusSortedTsv from '../fixtures/cli-1.15/ecoli_ms2_small_0.3da.census_sorted.tsv?raw'
+import shortlistTsv from '../fixtures/cli-1.15/ecoli_ms2_small_0.3da.shortlist.tsv?raw'
+import manifest from '../params.generated.json'
+import pkg from '../../package.json'
 import diaOut from '../fixtures/cli-1.12/dia_raw.stdout?raw'
 
 // The ?fixture= names of the P4c viewer scenarios.
@@ -306,7 +311,17 @@ export function installE2EBridge(): Origin | undefined {
   const fixture = query.get('fixture') ?? 'default'
   const mock = installMockBridge()
   mock.recordRuns = true
-  mock.binaryInfo = { bin: '/e2e/FASTag', source: 'env', ok: true, version: '1.11.0', detail: 'e2e fixture: no CLI' }
+  // The CLI of the manifest (params.generated.json, FASTag 1.15.3): its
+  // version and every option it lists, so no screen gates on an older CLI.
+  // -probe_input is left out: the probe fixtures add it with their output.
+  // gate-1.11 plays FASTag 1.11.0.
+  const old = fixture === 'gate-1.11'
+  mock.binaryInfo = { bin: '/e2e/FASTag', source: 'env', ok: true, version: old ? '1.11.0' : pkg.version, detail: 'e2e fixture: no CLI' }
+  if (!old) {
+    const options = (manifest.params as { name: string }[]).map((p) => p.name).filter((n) => n !== 'probe_input')
+    mock.cliOptions = { options, ok: true, detail: `${options.length} options` }
+    mock.spectrumSupportResult = { supported: true, probed: true, detail: 'the CLI has -dump_spectrum' }
+  }
   // Copy command line (Setup) answers the argv the run reply offers and
   // History records, as fastag.rs builds both with command_of.
   mock.commandOf = (call) => e2eCommand(mock.binaryInfo.bin, call as unknown as Record<string, unknown>, call.out)
@@ -314,10 +329,19 @@ export function installE2EBridge(): Origin | undefined {
   if (fixture === 'denovo') mock.tagsFiles['/data/run01.tags.tsv'] = ecoliResConf
   mock.resultsColumns = tags.columns
   mock.resultsRows = tags.rows
+  // The reports of the Run QC, Database reduction and Identifiability
+  // triage workflows (real FASTag 1.15.2 output, src/fixtures/cli-1.15),
+  // where a run of run01.mzML writes them.
+  const workflowFiles: Record<string, string> = {
+    '/data/run01.qc.tsv': qcTsv,
+    '/data/run01.shortlist.tsv': shortlistTsv,
+    '/data/run01.census_sorted.tsv': censusSortedTsv
+  }
   mock.reportFiles = {
     '/data/run01.digest.tsv': digestTsv,
     '/data/run01.label.tsv': labelTsv,
-    '/data/run01.massgap.tsv': massgapTsv
+    '/data/run01.massgap.tsv': massgapTsv,
+    ...workflowFiles
   }
   mock.nextPickInput = '/data/run01.mzML'
   mock.nextPickInputs = ['/data/run01.mzML', '/data/run02.mzML', '/data/run03.mzML']
@@ -326,7 +350,7 @@ export function installE2EBridge(): Origin | undefined {
 
   const gate = GATE[fixture]
   if (gate) {
-    mock.reportFiles = { '/data/run01.digest.tsv': gate.digest, '/data/run01.label.tsv': gate.label }
+    mock.reportFiles = { '/data/run01.digest.tsv': gate.digest, '/data/run01.label.tsv': gate.label, ...workflowFiles }
     mock.speciesResult = speciesFromTsv(gate.species, '/data/run01.tags.species.tsv')
   }
   const recon = RECON[fixture]
@@ -336,7 +360,8 @@ export function installE2EBridge(): Origin | undefined {
       '/data/run01.recon.tsv': recon.recon,
       '/data/run01.delta.tsv': recon.delta,
       '/data/run01.tags.glyco.tsv': recon.glyco,
-      ...(recon.mzTab ? { '/data/run01.recon.mzTab': recon.mzTab } : {})
+      ...(recon.mzTab ? { '/data/run01.recon.mzTab': recon.mzTab } : {}),
+      ...workflowFiles
     }
   }
   // gate-batch: the jobs by input, in the folder's (name) order.

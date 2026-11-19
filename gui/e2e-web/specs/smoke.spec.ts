@@ -16,7 +16,7 @@ test('first result in two clicks: choose the file, run it', async ({ page }) => 
   // covers the Export tags landing task, which adds per-residue confidence.
   await openApp(page, 'default', 'defaults')
   await page.getByRole('button', { name: 'Choose file…' }).click()
-  await page.getByRole('button', { name: 'Run on run01.mzML' }).click()
+  await page.getByRole('button', { name: 'Run', exact: true }).click()
   // The real FASTag 1.11.0 tags of the public E. coli fixture.
   await expect(page.getByText('Showing 2,028 of 2,028')).toBeVisible()
   await expect(page.getByRole('heading', { name: 'run01.tags.tsv' })).toBeVisible()

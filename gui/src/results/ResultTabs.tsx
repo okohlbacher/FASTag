@@ -20,6 +20,7 @@ import type { speciesReach } from '../paramLayout'
 import OverviewPanel from './OverviewPanel'
 import type { Overview, TileAction } from './overview'
 import ReconView from './ReconView'
+import ReportTable from './ReportTable'
 import GlycoTable from './GlycoTable'
 import SpectrumPanel, { type SpectrumSource, type SpectrumTarget } from '../spectrum/SpectrumPanel'
 
@@ -27,27 +28,31 @@ const TAB_LABEL: Record<Tab, string> = {
   overview: 'Overview',
   results: 'Tags',
   spectrum: 'Spectrum',
+  qc: 'QC',
+  recon: 'Mass shifts',
   species: 'Species',
+  shortlist: 'Shortlist',
+  triage: 'Triage',
   digest: 'Digest',
-  recon: 'Mass gaps & recon',
   glyco: 'Glyco'
 }
-// The tabs, in order. Digest is always there: its empty state is a way to
-// open a report. The Overview is there while a run's results are shown, the
-// Spectrum tab (P4) only with a CLI that has -dump_spectrum.
-// P4c: Mass gaps & recon while a run is shown (its empty state offers the
-// FASTA) or a mass-gap, recon, delta or mzTab file is open; Glyco while a
-// glyco report is.
-function tabsOf(overview: boolean, spectrum: boolean, recon: boolean, glyco: boolean): Tab[] {
-  return [
-    ...(overview ? (['overview'] as Tab[]) : []),
-    'results',
-    ...(spectrum ? (['spectrum'] as Tab[]) : []),
-    'species',
-    'digest',
-    ...(recon ? (['recon'] as Tab[]) : []),
-    ...(glyco ? (['glyco'] as Tab[]) : [])
-  ]
+/// The tabs, in the order of the workflows (doc/GUI-WORKFLOWS.md 3): only
+/// those whose report exists. The Overview while a run's results are shown,
+/// Tags always, the Spectrum tab (P4) only with a CLI that has
+/// -dump_spectrum.
+export function tabsOf(has: Partial<Record<Tab, boolean>>): Tab[] {
+  const order: Tab[] = ['overview', 'results', 'spectrum', 'qc', 'recon', 'species', 'shortlist', 'triage', 'digest', 'glyco']
+  return order.filter((t) => t === 'results' || has[t])
+}
+
+/// The reports of the run shown that have a view of their own: the QC
+/// report, the shortlist (with its reduced FASTA and engine configuration)
+/// and the identifiability ranking, at the paths the run was sent.
+export interface WorkflowReports {
+  qc?: string
+  shortlist?: string
+  triage?: string
+  files?: { label: string; path: string }[]
 }
 
 export interface ResultTabsProps {
@@ -97,15 +102,28 @@ export interface ResultTabsProps {
   // which the Spectrum tab dumps peaks under the run's own options.
   spectrumSupport?: SpectrumSupport | null
   spectrumRun?: { input: string; params: Record<string, unknown> } | null
+  // The QC, shortlist and triage reports of the run shown.
+  workflowReports?: WorkflowReports | null
 }
 
 export default function ResultTabs(p: ResultTabsProps): JSX.Element {
   const { setTab, species, speciesRun, reports, batchMiss, results, running, busy, failure, copied } = p
   const tables = reports.tables ?? {}
   const massgap = reports.list.find((r) => r.kind === 'massgap') ?? null
-  const hasRecon = !!(p.overview || massgap || tables.recon || tables.delta || tables.reconIds)
+  const hasRecon = !!(massgap || tables.recon || tables.delta || tables.reconIds)
   const spectrumOn = !!p.spectrumSupport?.supported
-  const tabs = tabsOf(!!p.overview, spectrumOn, hasRecon, !!tables.glyco)
+  const wr = p.workflowReports ?? {}
+  const tabs = tabsOf({
+    overview: !!p.overview,
+    spectrum: spectrumOn,
+    qc: !!wr.qc,
+    recon: hasRecon,
+    species: !!species || !!speciesRun?.enabled,
+    shortlist: !!wr.shortlist,
+    triage: !!wr.triage,
+    digest: reports.list.length > 0 || reports.errors.length > 0,
+    glyco: !!tables.glyco
+  })
   // A tab whose content is gone (a new run started, or the Spectrum tab with
   // a CLI that cannot dump spectra) shows the Tags.
   const tab: Tab = tabs.includes(p.tab) ? p.tab : 'results'
@@ -187,7 +205,7 @@ export default function ResultTabs(p: ResultTabsProps): JSX.Element {
         <button className="secondary" onClick={p.openResults} disabled={busy} title="Open an existing tags TSV">
           Open tags…
         </button>
-        <button className="secondary" onClick={p.openReport} disabled={busy} title="Open a digest, label or mass-gap report">
+        <button className="secondary" onClick={p.openReport} disabled={busy} title="Open a report of an earlier run">
           Open report…
         </button>
       </div>
@@ -214,6 +232,10 @@ export default function ResultTabs(p: ResultTabsProps): JSX.Element {
               busy={busy || p.overview.locked}
               onAction={(a) => p.onOverviewAction?.(a)}
             />
+          </div>
+        ) : (tab === 'qc' || tab === 'shortlist' || tab === 'triage') && wr[tab] ? (
+          <div className="tablewrap">
+            <ReportTable key={`${tab}:${wr[tab]}`} kind={tab} path={wr[tab]!} files={tab === 'shortlist' ? wr.files : undefined} />
           </div>
         ) : tab === 'recon' ? (
           <div className="tablewrap">

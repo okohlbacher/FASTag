@@ -61,7 +61,7 @@ describe('planDrop', () => {
       { busy: false }
     )
     expect(p.results).toBe('/d/r.tags.tsv')
-    // P4c: glyco, recon and delta have their tabs (Glyco, Mass gaps & recon).
+    // P4c: glyco, recon and delta have their tabs (Glyco, Mass shifts).
     expect(p.reports).toEqual(['/d/r.digest.tsv', '/d/r.label.tsv', '/d/r.glyco.tsv', '/d/r.recon.tsv', '/d/r.delta.tsv'])
     expect(p.species).toBe('/d/r.species.tsv')
     expect(p.view).toBe('results')
@@ -72,7 +72,7 @@ describe('planDrop', () => {
   })
 
   // P4c review: a dropped mzTab -recon_id_out opens as Open report… opens it
-  // (the opener sniffs it into Mass gaps & recon; idXML and mzid are named there).
+  // (the opener sniffs it into Mass shifts; idXML and mzid are named there).
   it('an mzTab -recon_id_out goes to the reports, like the picker', () => {
     const p = planDrop(route({ reports: [{ kind: 'recon_ids', path: '/d/run.recon.mzTab' }] }), { busy: false })
     expect(p.reports).toEqual(['/d/run.recon.mzTab'])

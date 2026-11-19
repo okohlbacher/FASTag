@@ -76,7 +76,7 @@ export const START: HelpPage = {
           <p>
             Start in <strong>Setup</strong> with <strong>Export tags</strong>, the default task. It generates sequence
             tags from all input spectra and includes per-residue confidence for downstream export. No FASTA file is
-            needed. To inspect an earlier analysis instead, choose <strong>Open results / inspect spectra</strong>.
+            needed. To inspect an earlier analysis instead, click <strong>Open earlier results…</strong> under the workflows.
           </p>
           <ol>
             <li>
@@ -84,18 +84,17 @@ export const START: HelpPage = {
               <L to="files-inputs">Input files</L>).
             </li>
             <li>
-              Under Output, the tags file is already named <code>&lt;name&gt;.tags.tsv</code>, next to the input.
+              Under Outputs, the run name is the input&apos;s name: the tags file is <code>&lt;name&gt;.tags.tsv</code>, next to the input.
             </li>
             <li>
-              Check the instrument suggestion and the checks below the input. Under Tagging, confirm the{' '}
-              <L to="param-fragment_tolerance">fragment tolerance</L>, or use <strong>Fragment tolerance preset</strong>
-              beside Run: 20 <G to="gloss-ppm">ppm</G> is a starting
+              Check the instrument suggestion and the checks below the input. Under Settings, choose the
+              <strong> Instrument</strong>, which sets the <L to="param-fragment_tolerance">fragment tolerance</L>: 20 <G to="gloss-ppm">ppm</G> is a starting
               point for high-resolution MS2; 0.3 Da is a starting point for ion-trap MS2. Use the analyser that
               measured the fragments, not just the instrument name. Apply a suggested preset only when it fits
               your acquisition.
             </li>
             <li>
-              Click <strong>Run on &lt;file&gt;</strong>. The bar shows how many spectra are done; the Log at the bottom
+              Click <strong>Run</strong>. The bar shows how many spectra are done; the Log at the bottom
               shows FASTag&apos;s messages.
             </li>
             <li>
@@ -105,8 +104,8 @@ export const START: HelpPage = {
             </li>
           </ol>
           <p>
-            For a separate QC survey, choose <strong>Characterize a run</strong> or <strong>Batch QC vs SDRF</strong>.
-            These tasks sample 10% of the spectra and enable species, digest, label and glyco reports, opening on{' '}
+            For a QC survey, choose <strong>Characterize a run</strong>; for many files, switch the Input card to
+            <strong> Batch</strong>. It samples 10% of the spectra and enables species, digest, label, alkylation and glyco reports, opening on{' '}
             <L to="workflow-overview">Overview</L>. A report that says “not assessed” or “no call” is not evidence
             that a feature is absent.
           </p>
@@ -168,7 +167,7 @@ export const START: HelpPage = {
       body: (
         <>
           <p>
-            Click <strong>Add files for a batch…</strong> under Input and pick several spectra files. The same
+            Switch the Input card to <strong>Batch</strong>, click <strong>Add files…</strong> and pick several spectra files. The same
             parameters are used for each file, one after the other.
           </p>
           <ul>

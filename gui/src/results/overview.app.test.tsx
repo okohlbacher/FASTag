@@ -65,7 +65,7 @@ describe('Overview in the app', () => {
     await finish(mock, CLI_CASES.v112)
     await waitFor(() => expect(selectedTab()).toBe('Overview'))
     expect(mock.runCalls[0].params.fasta ?? '').toBe('') // guard: the run had no FASTA
-    expect(within(tile('Alkylation')).getByText('not assessed (needs a FASTA)')).toBeDefined()
+    expect(within(tile('Alkylation')).getByText('not assessed')).toBeDefined()
     const row = within(screen.getByRole('table', { name: 'Suggested search settings' })).getByRole('row', { name: /fixed C\+57\.021/ })
     expect(within(row).getByText('default')).toBeDefined()
     expect(row.textContent).toMatch(/alkylation not assessed \(no FASTA\)/)

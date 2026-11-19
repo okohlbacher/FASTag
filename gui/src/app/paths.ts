@@ -55,6 +55,14 @@ export function perJobOutputs(values: Record<string, unknown>, tagsOut: string):
   return { ...rebaseOutputs(values, tagsOut), species_out: '' }
 }
 
+// The middle part of an output's file name: digest_out writes <stem>.digest.tsv,
+// out_spectra <stem>.spectra.mzML. Two names would read badly by that rule
+// (<stem>.fasta.fasta, <stem>.search_config.json) and are spelt out.
+const KIND: Record<string, string> = { fasta_out: 'reduced', search_config_out: 'search' }
+export function outputKind(name: string): string {
+  return KIND[name] ?? name.replace(/_out$/, '').replace(/^out_/, '')
+}
+
 // Each run writes its reports beside its own tags output. The configured
 // report paths persist across runs, sessions (lastUsed) and presets, so
 // without this step sample B would overwrite sample A's digest/recon/...
@@ -71,7 +79,7 @@ export function rebaseOutputs(values: Record<string, unknown>, tagsOut: string):
     const cfg = String(values[name] || '')
     if (!cfg) continue
     const ext = cfg.slice(stripExt(cfg).length) || (name === 'out_spectra' ? '.mzML' : '.tsv')
-    o[name] = `${stem}.${name.replace(/_out$/, '').replace(/^out_/, '')}${ext}`
+    o[name] = `${stem}.${outputKind(name)}${ext}`
   }
   return o
 }

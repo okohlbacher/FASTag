@@ -29,7 +29,7 @@ describe('Overview panel', () => {
     expect(within(tile('Protease')).getByText('Trypsin')).toBeDefined()
     expect(within(tile('Top genus')).getByText('Homo')).toBeDefined()
     expect(within(tile('Label')).getByText('none (label-free)')).toBeDefined()
-    expect(within(tile('Alkylation')).getByText('not assessed (needs a FASTA)')).toBeDefined()
+    expect(within(tile('Alkylation')).getByText('not assessed')).toBeDefined()
     for (const t of screen.getAllByRole('region').filter((r) => r.classList.contains('tile')))
       expect(t.querySelector('.tile-note')?.textContent?.trim(), t.getAttribute('aria-label') ?? '').not.toBe('')
   })

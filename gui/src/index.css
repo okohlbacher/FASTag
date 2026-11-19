@@ -228,7 +228,7 @@ header.topbar button.on { background: var(--primary-soft); border-color: var(--p
 /* Focused by a view switch (App.tsx), as a landmark: no ring round the view. */
 .view:focus { outline: none; }
 .view-setup { justify-content: center; background: var(--panel); }
-.view-setup aside.controls { width: min(860px, 100%); border-left: 1px solid var(--border); }
+.view-setup aside.controls { width: min(960px, 100%); border-left: 1px solid var(--border); }
 .view-results > .results { flex: 1; }
 .view-history { overflow: auto; }
 
@@ -1144,3 +1144,85 @@ kbd { font-family: var(--font-mono); font-size: var(--text-xs); color: var(--mut
 .sp-tags-table tbody tr { cursor: pointer; }
 .sp-tags-table tbody tr.on td { background: var(--primary-soft); }
 .sp-tags-table tbody tr:focus-visible { outline: 2px solid var(--ring); outline-offset: -2px; }
+
+/* ---- Workflow setup (doc/GUI-WORKFLOWS.md 3) ------------------------------ */
+.step-card { gap: var(--space-3); }
+.card-head .help-q, .card-head > button { flex: none; }
+/* Seven workflow cards, 4 + 3 at the default width. */
+fieldset.tasks { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+@media (max-width: 760px) { fieldset.tasks { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+label.task { align-content: start; }
+.task-products { grid-column: 2; font-size: var(--text-xs); color: var(--muted-foreground); }
+.task-blurb-line { margin: 0; font-size: var(--text-sm); }
+.task.on .task-products { color: var(--primary-text); }
+.origin-name { font-size: var(--text-sm); }
+.starting .spacer { flex: 1; }
+/* One file | Batch */
+.seg { display: inline-flex; align-self: flex-start; border: 1px solid var(--control); border-radius: var(--radius-sm); overflow: hidden; }
+.seg-opt { display: inline-flex; align-items: center; gap: 6px; padding: 4px 12px; font-size: var(--text-sm); cursor: pointer; }
+.seg .seg-opt + .seg-opt { border-left: 1px solid var(--control); }
+.seg .seg-opt.on { background: var(--primary-soft); color: var(--primary-text); font-weight: 500; }
+.seg-opt input { margin: 0; }
+.seg-opt.small { padding: 2px 8px; font-size: var(--text-xs); }
+.batch-input { display: flex; flex-direction: column; gap: var(--space-2); }
+.grow { flex: 1; min-width: 0; }
+/* Settings: one column of fields, each with one line of help. */
+.settings { display: flex; flex-direction: column; gap: 14px; }
+.help.brief { -webkit-line-clamp: 2; }
+.instrument-field select { min-width: 240px; }
+.custom-tol { padding-left: var(--space-3); border-left: 2px solid var(--border); }
+.label-row { display: flex; align-items: center; gap: var(--space-2); flex-wrap: wrap; }
+.badge { display: inline-block; padding: 0 6px; border-radius: 999px; border: 1px solid var(--border); font-size: 11px; line-height: 18px; color: var(--muted-foreground); font-weight: 400; }
+.badge.warn { border-color: var(--destructive-text); color: var(--destructive-text); }
+/* The (?) popover of a field. */
+.help-pop-wrap { position: relative; display: inline-flex; }
+.help-pop {
+  position: absolute; z-index: 30; top: calc(100% + 6px); left: 0;
+  width: min(380px, 70vw); display: flex; flex-direction: column; gap: var(--space-2);
+  padding: var(--space-3); background: var(--card); color: var(--foreground);
+  border: 1px solid var(--border); border-radius: var(--radius-md); box-shadow: var(--shadow);
+  font-size: var(--text-xs); font-weight: 400; line-height: 1.45; white-space: normal;
+}
+.help-pop-more { color: var(--muted-foreground); }
+.help-pop-facts { display: flex; flex-wrap: wrap; gap: var(--space-1) var(--space-3); }
+.help-pop .help-link { align-self: flex-start; font-size: var(--text-xs); }
+/* Advanced: descriptions on one line, the full text in (?). */
+.advanced .help:not(.brief):not(.invalid):not(.inert) { -webkit-line-clamp: 1; }
+details.advanced { padding: 0; }
+details.advanced > summary.card-head { padding: var(--space-3) var(--space-4); min-height: 0; }
+details.advanced > summary h2 { flex: 1; }
+.adv-body { display: flex; flex-direction: column; gap: var(--space-2); padding: 0 var(--space-4) var(--space-4); }
+.adv-h { margin: var(--space-2) 0 0; font-size: var(--text-xs); font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; color: var(--muted-foreground); }
+.sec.other > .sec-body { gap: var(--space-2); }
+/* Outputs: folder, run name and the product checklist. */
+.out-row { display: flex; align-items: center; gap: var(--space-2); flex-wrap: wrap; }
+.out-row .sublabel { min-width: 104px; }
+.out-row .mono { font-size: var(--text-sm); overflow-wrap: anywhere; }
+ul.products { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
+li.product { display: flex; align-items: center; gap: var(--space-2); flex-wrap: wrap; font-size: var(--text-sm); }
+li.product input[type='checkbox'] { margin: 0; }
+li.product.fixed label { color: var(--muted-foreground); }
+.product-file { color: var(--muted-foreground); font-size: var(--text-xs); }
+.product-note { font-size: var(--text-xs); color: var(--muted-foreground); }
+.product-note:empty { display: none; }
+.warn-text { color: var(--destructive-text); }
+.usi-acc { width: 130px; }
+/* The plan row at the top of the run bar. */
+.runbar .plan-footer { border: 0; padding: 0; background: none; flex-direction: row; align-items: center; flex-wrap: wrap; gap: var(--space-2); }
+.runbar .plan-line { flex: 1 1 260px; margin: 0; font-weight: 500; }
+.runbar .plan-footer > p:not(.plan-line) { flex-basis: 100%; }
+/* QC, Shortlist and Triage views. */
+.report-view { display: flex; flex-direction: column; gap: var(--space-3); padding: var(--space-4); }
+.report-sum { margin: 0; }
+.report-notes { margin: 0; padding-left: var(--space-4); font-size: var(--text-xs); }
+.qc-view { display: flex; flex-direction: column; gap: var(--space-4); max-width: 1100px; }
+.qc-section h3 { margin: 0 0 var(--space-2); font-size: var(--text-sm); }
+table.kv { border-collapse: collapse; width: 100%; font-size: var(--text-xs); }
+table.kv th { text-align: left; font-weight: 500; padding: 3px var(--space-2) 3px 0; white-space: nowrap; vertical-align: top; }
+table.kv td { padding: 3px var(--space-2) 3px 0; vertical-align: top; }
+table.kv td.mono { overflow-wrap: anywhere; }
+table.kv td.desc { width: 55%; }
+table.kv { table-layout: auto; }
+table.kv tr + tr { border-top: 1px solid var(--border); }
+.task-chooser { display: flex; flex-direction: column; gap: var(--space-2); }
+details.advanced:not([open]) { gap: 0; }
