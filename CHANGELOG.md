@@ -1,5 +1,182 @@
 # Changelog
 
+## 1.15.2 (2026-11-19)
+
+Four experimental, opt-in features: vendor input (Thermo `.raw`, Bruker
+timsTOF `.d`), the mass-shift survey's site, name and evidence columns, a run
+QC report (`-qc_out`) and a census identifiability score (`-census_score`).
+With default options the tag output is unchanged from 1.15.1 (byte-identical
+on the E. coli example and on a PXD045734 development run). `-recon_out`'s
+`delta_interp` changes (the ppm fix and the substitution tolerance below), and
+so do `-delta_out`'s rows (`-delta_group`).
+
+What was and was not validated:
+
+- **Mass-shift survey: the held-out test FAILED.** The preregistered blind
+  test on 171 held-out PXD045734 runs (`acceptance/1.16/RESULT-dha.md`,
+  shipped with this release) failed criterion G1 (shift precision against an
+  MSFragger open search, lower 95 % bound >= 0.80) for two of eight common
+  shifts, both cysteine reference-state shifts: Methyl@C -43.006 (0.737,
+  LB 0.725) and unalkylated Cys -57.021 (0.763, LB 0.743). The other six
+  shifts and G2, G3, G6 and G7 passed; the G4/G5 hand-check is pending and
+  cannot change the verdict. The survey's rows are candidates, not
+  identifications; read the two Cys shifts with particular caution.
+- **Identifiability score: development only.** `-census_score` was fitted
+  and assessed on PXD000561 development samples (doc/CENSUS-IDENT.md); its
+  held-out test has not been run, and census triage stays the recommended
+  list.
+- **Vendor input parity.** Thermo `.raw`: on three development runs every
+  spectrum and every FASTag output equals the ThermoRawFileParser 2.0
+  `-f=2 -x` conversion (tag Jaccard 1.000000); a default TRFP conversion
+  keeps reference and exception peaks the OpenMS reader drops (tag Jaccard
+  0.86-0.98). Bruker `.d` (PXD040281 SA_02): tags byte-identical to OpenMS
+  FileConverter's mzML of the same run; against an independent decoder
+  (mzdata) the precursors, m/z, charges and signal agree exactly but the tags
+  do not (Jaccard 0.12-0.27), because the two centroid differently.
+
+- **Bruker timsTOF input (`-in run.d`, `-in run.d.zip`):** DDA-PASEF runs are
+  read directly through OpenMS's `BrukerTimsFile` (opentims; no Bruker SDK) in
+  a build against an OpenMS with `WITH_OPENTIMS=ON` (BUILDING.md); other builds
+  refuse `.d` with a message. One centroided MS2 spectrum per precursor, MS1
+  frames not decoded; a `.d.zip` is unpacked into `OPENMS_TMPDIR` for the read
+  (refused up front when less than 1.5x the archive is free there). Frame and
+  precursor counts come from `analysis.tdf` by SQL before anything is decoded,
+  and dia-PASEF is refused from them (exit 11, `FASTAG_REFUSED reason=raw_dia`).
+  Precursors without a charge keep charge 0 (unknown) and are tagged per
+  `-unknown_charge`, with their charge source reported. `-probe_input` and
+  `-dump_spectrum` do not read `.d` yet. New ctest `bruker_cli_test` on a
+  trimmed PXD040281 run (`test/fixtures/bruker/`). The input-type error now
+  reads "is neither .mzML, .mzpeak, .mgf, a Thermo .raw nor a Bruker timsTOF .d
+  directory or .d.zip archive". Tag output for mzML, mzPeak and MGF is unchanged.
+- **Thermo `.raw` input** in a build against an OpenMS with
+  `WITH_THERMO_RAW=ON` (needs a .NET 8 runtime; BUILDING.md): read through
+  OpenMS's `OnDiscThermoRawExperiment`, random access with one handle per
+  tagging thread, Thermo's vendor centroiding set explicitly (the reader's
+  default is profile; `src/ThermoInput.h` keeps a profile path and the
+  instrument-stated resolving power for the run QC). Native IDs, USIs and
+  `-census_ids` joins match ThermoRawFileParser's mzML. On three development
+  runs every spectrum and every output equals the ThermoRawFileParser 2.0
+  `-f=2 -x` conversion; a default conversion differs by the reference and
+  exception peaks it keeps (tag Jaccard 0.86–0.98). Builds without Thermo
+  support refuse `.raw` with a message; `-probe_input`/`-dump_spectrum`
+  refuse it for now. RawFileReader's required notice is printed by the new
+  `--version` and in `--help`, and added to bundle notices. ctest
+  `thermo_cli_test` (data part with `FASTAG_THERMO_RAW`) and `thermo_parity`.
+- **Release bundles read `.raw` and `.d`.** OpenMS is built with
+  `WITH_OPENTIMS=ON` and `WITH_THERMO_RAW=ON` on every platform. Every bundle
+  reads Bruker `.d`; every bundle except the Linux AppImage also carries
+  Thermo's RawFileReader and a .NET 8 runtime (8.0.34, MIT, `dotnet/` beside
+  the executable, used unless `DOTNET_ROOT` names another), so `.raw` works
+  without installing anything. The AppImage ships without RawFileReader
+  (licence section 4.3; BOM.md, Vendor readers). RawFileReader is under
+  Thermo's own licence, not MIT: every bundle has it in `LICENSES/` and the
+  terms in `THIRD-PARTY-NOTICES.txt`; the Windows installer shows a licence
+  page and the macOS disk images a licence agreement before they open; the
+  desktop app's About shows Thermo's notice. README, Install, states the
+  terms (no redistribution of the RawFileReader assemblies).
+- **Census identifiability score (`-census_score`, experimental):**
+  four census columns taken before any database filter (`pre_best_evalue`,
+  `pre_best_len`, `pre_best_mean_conf`, `pre_tag_cover`) and `ident_score`, a
+  frozen logistic model on per-run mid-ranks of twelve census features that
+  orders every MS2 spectrum (every status) by how likely a standard database
+  search identifies it; `-census_sorted_out` writes the census in that order.
+  Fitted on PXD000561 development samples only; not validated on held-out
+  data (see doc/CENSUS-IDENT.md for the development result and its verdict
+  against census triage). Without `-census_score` the census is unchanged.
+- **`-census_ids_exact`:** a one-to-one ids join for label joins (exact native
+  ids, no scan fallback; refuses foreign references, a spectrum with two
+  identifications, hits without target/decoy annotation, and files that name
+  no run or another run). The default join is unchanged.
+- **Mass-shift survey (`-delta_out`):** five columns appended (six with
+  `isotope_error`, below). `localized` and `unlocalized` count the spectra whose gap the
+  fragments do or do not place on one site, judged by site-determining
+  evidence only (ions that distinguish the chosen site from the others; ties
+  and zero evidence are unlocalized); `residues` lists the localized sites,
+  with `N-term|X` / `C-term|X` (and `Protein` ...) where b/y ions cannot tell the
+  terminal residue from the terminus; `unimod` and `psimod` name the row from
+  Unimod (`unimod.xml`, without `custom_mods.xml`'s CUSTOM entries) and
+  PSI-MOD (read from `PSI-MOD.obo` with each
+  term's own residue and terminus, including terms ModificationsDB keeps only
+  as Unimod aliases), site-compatible with the localized sites, terminal
+  entries only on terminal sites, fixed modifications accounted for
+  (`Cys->Dha@C[-Carbamidomethyl]` at −91.009). New options
+  `-delta_name_tolerance` (10) and `-delta_name_tolerance_unit` (ppm of the
+  median peptide mass, or Da). The selected placement is localized whether or
+  not `-recon_localize` is given. Candidates, not FDR-controlled. The desktop
+  app reads the wider table.
+- **Mass-shift survey, second pass** (development runs PXD045734 donor 4068):
+  - PSI-MOD names ranked like Unimod: by the localized spectra on their sites,
+    then by mass error (both columns were mass error first). Generic and
+    abstract PSI-MOD terms are left out: children of MOD:00008 "common"
+    (MOD:00565 "glycosylated asparagine" named deamidation before MOD:00684
+    "deamidated L-asparagine") and origin-X classes other terms are `is_a` of
+    (MOD:00400 "deamidated residue").
+  - `-recon_sub_tolerance` (5) / `-recon_sub_tolerance_unit` (ppm of the
+    gap's flank, or Da): a `sub:X->Y` reading of a gap needs this tolerance,
+    never looser than the fragment tolerance; with the ppm fix below most
+    unexplained gaps of a 20 ppm run read as some substitution (+2.004 as
+    `sub:P->V`, 11.7 mDa off). `0` keeps 1.15's behaviour. Changes
+    `delta_interp` and `top_interps`.
+  - `-delta_group` (0.004 Da): `-delta_out` rows group the 0.5 mDa bins
+    around the most populated ones, without chaining, every sampled spectrum
+    in one row (the 1.15 rule could leave bins out); one shift, one row.
+    `-delta_group 0` writes the 1.15 rows. Changes the first three columns
+    at the default.
+  - `isotope_error` column (appended): `13C+1` / `13C+2` for rows at 1 or 2 x
+    1.00336 Da that no better residue-specific, non-label Unimod name explains;
+    deamidation rows keep their name.
+  - `-delta_spectra_out`: each spectrum's sample (native ID, gap, row,
+    interpretation, peptide, site), for spectrum-level comparison with a
+    search engine.
+- **Mass-shift survey, hardening (1.16b)** (development runs PXD045734 donor
+  4068 against an MSFragger open search; see the item1-dev HARDENING notes):
+  - Changed defaults: `-delta_loc_model strict` (was `count`: a site now scores
+    its distinct matched peaks, and H2O/NH3 loss satellites of observed
+    unshifted ions are no evidence for a shifted one), `-delta_loc_min_evidence
+    2` (was 1), `-delta_isotope_flank precursor` (was any row). `-delta_loc_model
+    count -delta_loc_min_evidence 1 -delta_isotope_flank any` reproduces the
+    1.16a columns 1-9 of `-delta_out` and 1-10 of `-delta_spectra_out` exactly
+    (all six development runs). Changes `localized`, `residues`,
+    `unlocalized`, `unimod`, `psimod` and `isotope_error`; never the samples.
+  - Evidence classes: fragment-localized, sequence-constrained (a one-residue
+    region, no fragment chose it; was counted as localized by fragments),
+    ambiguous, unlocalized. Seven `-delta_out` columns appended:
+    `fragment_localized`, `sequence_constrained`, `ambiguous`,
+    `precursor_flank`, `charge_assumed`, `class` (observation classes, before
+    names: extension, truncation, adduct, isotope, loss, fixed-mod loss and
+    replacement, terminal, residue, substitution, unknown) and `isobars`
+    (exact isobars of the best name: oxidation = A->S = F->Y and the like).
+  - `-delta_spectra_out`: 26 provenance columns appended (tag, protein,
+    orientation, gap side, precursor- or fragment-derived flank, charge and
+    its source, unrounded delta, evidence and observation class, the selected
+    tag's competing placements).
+  - New: `-delta_counts_out` (reconciliation from MS2 to rows with sum
+    checks), `-delta_select` (`min_delta`, the default, or `consensus`; not
+    adopted: no measurable gain), `-delta_loc_null` (localization on
+    m/z-moved peaks, the false-localization null), `-delta_isobar_tolerance`.
+- **Fix: gap interpretation in ppm.** `delta_interp` judged a gap at ppm of
+  the gap's own mass (20 ppm of 15.995 Da = 0.3 mDa; gaps under 1 Da at
+  200 Da), while the gap's error is that of the flank it is measured on. A
+  variable Oxidation (M) gap 2 mDa off was therefore `?` (PXD045734: the
+  +15.995 rows of `-delta_out`), while Deamidated (+0.984, judged at 200 Da)
+  was named. The gap is now judged in ppm of the mismatched flank's mass
+  (200 Da at least). Substitutions were judged the same way, which read many
+  gaps as `sub:X->Y`; they now have their own tolerance
+  (`-recon_sub_tolerance`, above). Both stay hypotheses.
+- **Run QC report (`-qc_out`):** new opt-in key/value report (section `qc`
+  after the `run` rows): spectra per MS level and analyser class
+  (ITMS/FTMS/TOF, from the filter string or the instrument configuration;
+  MS1 counted from metadata), resolution as stated by the file and measured
+  as m/z / FWHM on sampled profile spectra by m/z band (`n/a` for centroids),
+  the precursor charge histogram, isobaric reporter kits from OpenMS's TMT
+  6/10/11/16/18 and iTRAQ 4/8 tables (present, absent or not assessable, with
+  the compatible kits), tag yield at E <= 0.01 and the share of redundant MS2
+  (complete-linkage clusters by precursor, charge, 60 s, mobility and
+  fragment cosine; and by best tag). Thread-independent; other outputs
+  unchanged. For Thermo `.raw` input the resolution is measured on the
+  sampled scans reread as acquired (profile); Bruker `.d` input is centroided
+  only. See README, Run QC report.
+
 ## 1.15.1 (2026-11-18)
 
 Documentation, packaging and desktop-app fixes for publication as research

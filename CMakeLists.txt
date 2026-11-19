@@ -6,7 +6,7 @@
 # 3.28: the floor .github/env/openms.yml (and so every CI and release build)
 # guarantees; README, BUILDING.md and BOM.md state the same.
 cmake_minimum_required(VERSION 3.28 FATAL_ERROR)
-project(FASTag VERSION 1.15.1 LANGUAGES CXX)
+project(FASTag VERSION 1.15.2 LANGUAGES CXX)
 # Policy CMP0155 (NEW from 3.28) would scan every C++23 source for module
 # imports, which needs clang-scan-deps beside clang; FASTag uses no modules.
 set(CMAKE_CXX_SCAN_FOR_MODULES OFF)
@@ -83,7 +83,7 @@ endif()
 # anchored list, in the fixed order E, A, D, F (E data types and acquisition,
 # A identification and search hand-off, D organism and run chemistry, F quality
 # control).
-set(FASTAG_CORE_SOURCES src/FASTagger.cpp src/AveragineDeisotoper.cpp src/Digest.cpp src/DigestReport.cpp src/DigestQuality.cpp src/FastaFilter.cpp src/ProteomeIndex.cpp src/ReconIds.cpp src/TagRecon.cpp src/TaxDeconv.cpp src/TaxIndex.cpp src/TaxStats.cpp)
+set(FASTAG_CORE_SOURCES src/FASTagger.cpp src/AveragineDeisotoper.cpp src/Digest.cpp src/DigestReport.cpp src/DigestQuality.cpp src/FastaFilter.cpp src/ProteomeIndex.cpp src/ReconIds.cpp src/ShiftSurvey.cpp src/TagRecon.cpp src/TaxDeconv.cpp src/TaxIndex.cpp src/TaxStats.cpp)
 # ---- 1.12 E: core sources ----
 set(FASTAG_CORE_SOURCES_E src/Acquisition.cpp src/Centroid.cpp src/PrecursorHypotheses.cpp)
 # ---- 1.12 A: core sources ----
@@ -91,12 +91,18 @@ set(FASTAG_CORE_SOURCES_A src/Shortlist.cpp src/SearchConfig.cpp)
 # ---- 1.12 D: core sources ----
 set(FASTAG_CORE_SOURCES_D src/SpeciesLookup.cpp src/SpeciesCall.cpp src/AlkylationCall.cpp src/AlkylationTags.cpp src/Sha256.cpp)
 # ---- 1.12 F: core sources ----
-set(FASTAG_CORE_SOURCES_F src/OutputGuard.cpp src/CensusIds.cpp)
+set(FASTAG_CORE_SOURCES_F src/OutputGuard.cpp src/CensusIds.cpp src/CensusScore.cpp
+    src/ThermoInput.cpp)  # 1.16: Thermo .raw input (WITH_THERMO_RAW)
 # ---- 1.13: core sources ----
 set(FASTAG_CORE_SOURCES_113 src/Cleavage.cpp)
+# ---- 1.16: core sources ----
+# Bruker timsTOF input through OpenMS's BrukerTimsFile (WITH_OPENTIMS).
+set(FASTAG_CORE_SOURCES_116 src/BrukerInput.cpp)
+# ---- 1.16 QC: core sources ----
+set(FASTAG_CORE_SOURCES_QC src/RunQC.cpp)
 add_library(fastag_core STATIC ${FASTAG_CORE_SOURCES}
             ${FASTAG_CORE_SOURCES_E} ${FASTAG_CORE_SOURCES_A} ${FASTAG_CORE_SOURCES_D} ${FASTAG_CORE_SOURCES_F}
-            ${FASTAG_CORE_SOURCES_113})
+            ${FASTAG_CORE_SOURCES_113} ${FASTAG_CORE_SOURCES_116} ${FASTAG_CORE_SOURCES_QC})
 target_include_directories(fastag_core PUBLIC
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/src>)
@@ -293,7 +299,7 @@ if(FASTAG_BUILD_TESTS)
   # ---- 1.12 D: unit tests ----
   set(FASTAG_UNIT_TESTS_D species_call_test digest_v2_test alkylation_test alkylation_tags_test)
   # ---- 1.12 F: unit tests ----
-  set(FASTAG_UNIT_TESTS_F output_guard_test census_test census_ids_test)
+  set(FASTAG_UNIT_TESTS_F output_guard_test census_test census_ids_test census_score_test)
   # ---- 1.13 digqual: unit tests ----
   set(FASTAG_UNIT_TESTS_DIGQUAL digest_quality_test)
   # ---- 1.13 #18: unit tests ----
@@ -310,6 +316,39 @@ if(FASTAG_BUILD_TESTS)
   # links Boost::headers PRIVATE, and OpenMS's target carries no Boost include
   # path on Windows.
   target_link_libraries(complement_test PRIVATE Boost::headers)
+
+  # 1.16: the mass-shift survey (-delta_out site and name columns).
+  add_executable(shift_survey_test test/shift_survey_test.cpp)
+  target_link_libraries(shift_survey_test PRIVATE fastag_core)
+  add_test(NAME shift_survey_test COMMAND shift_survey_test ${CMAKE_CURRENT_SOURCE_DIR}/test/fixtures)
+  add_test(NAME delta_sites_cli_test
+           COMMAND bash ${CMAKE_CURRENT_SOURCE_DIR}/test/delta_sites_cli_test.sh $<TARGET_FILE:FASTag>
+                   ${CMAKE_CURRENT_SOURCE_DIR}/test/fixtures/Ecoli_MS2_small.mzML
+                   ${CMAKE_CURRENT_SOURCE_DIR}/test/fixtures/Ecoli_MS2_small.fasta
+                   ${CMAKE_CURRENT_SOURCE_DIR}/test/fixtures/delta_sites.mgf)
+  set_tests_properties(delta_sites_cli_test PROPERTIES SKIP_RETURN_CODE 77)
+
+  # 1.16: Bruker timsTOF input (.d, .d.zip, dia-PASEF refusal) on a trimmed
+  # real run; a build without WITH_OPENTIMS checks its refusal instead.
+  add_test(NAME bruker_cli_test
+           COMMAND bash ${CMAKE_CURRENT_SOURCE_DIR}/test/bruker_cli_test.sh $<TARGET_FILE:FASTag>
+                   ${CMAKE_CURRENT_SOURCE_DIR}/test/fixtures)
+  set_tests_properties(bruker_cli_test PROPERTIES SKIP_RETURN_CODE 77)
+
+  # ---- 1.16 QC: tests ----
+  # -qc_out (src/RunQC.h): every metric on synthetic data with a known answer;
+  # the CLI test runs the binary on a synthetic run run_qc_test writes and on
+  # the vendored fixture (counts, resolution, charges, reporters, redundancy,
+  # tag yield against the census, thread independence, other outputs unchanged).
+  add_executable(run_qc_test test/run_qc_test.cpp)
+  target_link_libraries(run_qc_test PRIVATE fastag_core)
+  add_test(NAME run_qc_test COMMAND run_qc_test)
+  add_test(NAME run_qc_cli_test
+           COMMAND bash ${CMAKE_CURRENT_SOURCE_DIR}/test/run_qc_cli_test.sh $<TARGET_FILE:FASTag>
+                   $<TARGET_FILE:run_qc_test>
+                   ${CMAKE_CURRENT_SOURCE_DIR}/test/fixtures/Ecoli_MS2_small.mzML
+                   ${CMAKE_CURRENT_SOURCE_DIR}/test/fixtures/Ecoli_MS2_small.mgf)
+  set_tests_properties(run_qc_cli_test PROPERTIES SKIP_RETURN_CODE 77)
 
   # 1.12 P4: the shared run report section (src/RunMeta.h) is frozen here.
   add_executable(runmeta_test test/runmeta_test.cpp)
@@ -664,6 +703,21 @@ if(FASTAG_BUILD_TESTS)
                    ${CMAKE_CURRENT_SOURCE_DIR}/test/fixtures/Ecoli_MS2_small.mzML
                    ${CMAKE_CURRENT_SOURCE_DIR}/tools/census_triage_eval.py)
   set_tests_properties(census_triage_eval_cli_test PROPERTIES SKIP_RETURN_CODE 77)
+  # 1.16 item 4: -census_score / -census_sorted_out / -census_ids_exact on the
+  # fixture (columns, pre-filter features, order, exact-join refusals), and the
+  # Python side of the score (tools/census_ident.py: label join, ranks, AUC).
+  add_test(NAME census_score_cli_test
+           COMMAND bash ${CMAKE_CURRENT_SOURCE_DIR}/test/census_score_cli_test.sh $<TARGET_FILE:FASTag>
+                   $<TARGET_FILE:census_ids_test>
+                   ${CMAKE_CURRENT_SOURCE_DIR}/test/fixtures/Ecoli_MS2_small.mzML
+                   ${CMAKE_CURRENT_SOURCE_DIR}/test/fixtures/Ecoli_MS2_small.fasta
+                   ${CMAKE_CURRENT_SOURCE_DIR})
+  set_tests_properties(census_score_cli_test PROPERTIES SKIP_RETURN_CODE 77)
+  add_test(NAME census_ident_tool_test
+           COMMAND bash -c "PY=\${FASTAG_PYTHON:-python3}; command -v \"\$PY\" >/dev/null || exit 77; exec \"\$PY\" \"\$0\" \"\$1\""
+                   ${CMAKE_CURRENT_SOURCE_DIR}/test/census_ident_tool_test.py
+                   ${CMAKE_CURRENT_SOURCE_DIR}/tools/census_ident.py)
+  set_tests_properties(census_ident_tool_test PROPERTIES SKIP_RETURN_CODE 77)
   # ---- 1.12 G: CLI tests ----
   # G1: the JSON writers, the mzML header parse and the spectrum record
   # against the tagger's preprocessing; probeInput()/dumpSpectrum() on the
@@ -830,6 +884,18 @@ if(FASTAG_BUILD_TESTS)
   target_compile_definitions(deisotoper_test PRIVATE
                              FASTAG_TEST_DATA="${CMAKE_CURRENT_SOURCE_DIR}/test/fixtures")
   add_test(NAME deisotoper_test COMMAND deisotoper_test)
+
+  # 1.16: Thermo .raw input. thermo_parity is the stage-1 check of a .raw
+  # against its reference conversion (tolerances in the source). The CLI test
+  # always checks the gate (refusal, or --version notice and bad files); with
+  # FASTAG_THERMO_RAW / FASTAG_THERMO_MZML set it also tags a real run and
+  # runs thermo_parity, else that part is skipped (77; no RAW is vendored).
+  add_executable(thermo_parity test/thermo_parity.cpp)
+  target_link_libraries(thermo_parity PRIVATE fastag_core)
+  add_test(NAME thermo_cli_test
+           COMMAND bash ${CMAKE_CURRENT_SOURCE_DIR}/test/thermo_cli_test.sh $<TARGET_FILE:FASTag>
+                   $<TARGET_FILE:thermo_parity>)
+  set_tests_properties(thermo_cli_test PROPERTIES SKIP_RETURN_CODE 77)
 
   # One short run per acquisition class, gaps and deisotoping ON.
   #

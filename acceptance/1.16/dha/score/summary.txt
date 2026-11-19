@@ -1,0 +1,18 @@
+runs: 171 gating runs (blind checks ok): 171 excluded: []
+msfragger PSMs q<=0.01 (all runs): 1129385
+G1/G2: ['Oxidation', '15.9949', '23762/28637 = 0.830 [0.825, 0.834]', 'PASS', '23762/25397 = 0.936 [0.933, 0.939]', 'PASS', 25397, '23762/49698 = 0.478 [0.474, 0.483]']
+G1/G2: ['Cation:Na', '21.9819', '11968/12772 = 0.937 [0.933, 0.941]', 'PASS', '11968/12791 = 0.936 [0.931, 0.940]', 'PASS', 12791, '11968/24647 = 0.486 [0.479, 0.492]']
+G1/G2: ['Dioxidation', '31.9898', '10384/10794 = 0.962 [0.958, 0.966]', 'PASS', '10384/11492 = 0.904 [0.898, 0.909]', 'PASS', 11492, '10384/23419 = 0.443 [0.437, 0.450]']
+G1/G2: ['Methyl@C (vs CAM)', '-43.0058', '4391/5961 = 0.737 [0.725, 0.748]', 'FAIL', '4391/4770 = 0.921 [0.913, 0.928]', 'PASS', 4770, '4391/8909 = 0.493 [0.482, 0.503]']
+G1/G2: ['Acetyl', '42.0106', '4672/5374 = 0.869 [0.860, 0.878]', 'PASS', '4672/7419 = 0.630 [0.619, 0.641]', 'PASS', 7419, '4672/13141 = 0.356 [0.347, 0.364]']
+G1/G2: ['Carbamyl', '43.0058', '4476/5367 = 0.834 [0.824, 0.844]', 'PASS', '4476/6118 = 0.732 [0.720, 0.743]', 'PASS', 6118, '4476/9993 = 0.448 [0.438, 0.458]']
+G1/G2: ['Carbamidomethyl extra', '57.0215', '8341/9815 = 0.850 [0.843, 0.857]', 'PASS', '8341/9365 = 0.891 [0.884, 0.897]', 'PASS', 9365, '8341/17832 = 0.468 [0.460, 0.475]']
+G1/G2: ['Unalkylated Cys', '-57.0215', '1486/1948 = 0.763 [0.743, 0.782]', 'FAIL', '1486/1612 = 0.922 [0.908, 0.934]', 'PASS', 1612, '1486/4179 = 0.356 [0.341, 0.370]']
+G3: 19194/22034 = 0.871 [0.867, 0.876] null 97 / 40511 = 0.0024 PASS
+G4 population 10317 allocation {'Oxidation': 28, 'Cation:Na': 9, 'Dioxidation': 8, 'Methyl@C (vs CAM)': 23, 'Acetyl': 8, 'Carbamyl': 8, 'Carbamidomethyl extra': 8, 'Unalkylated Cys': 8} sample 100
+G5 calls: {'Dehydrated S/T': 42, 'Cys->Dha (vs CAM)': 40} total 82
+G6: 85 calls, 42 on S/T, null mean 16.92, p 0.0001 PASS
+G7 blind: 17 of 20 PASS
+G7 informed (reported): 17 of 20
+entrapment gapped share: 1862/439935
+verdicts: {"G1": "FAIL", "G2": "PASS", "G3": "PASS", "G4": "PENDING (hand-check)", "G5": {"Cys->Dha (vs CAM)": "PENDING (hand-check)", "Cys->Dha (unalkylated)": "INCONCLUSIVE (0 < 20 calls)", "Dehydrated S/T": "PENDING (hand-check)"}, "G6": "PASS", "G7": "PASS", "overall": "FAIL", "call_list_sha256": {"G4_population.tsv": "40a6b881e0f6b889abff6373b6eb08b45561658ca080b1ae859b8d0e7ee10408", "G5_population.tsv": "abc5ef22fe8e4e8201772e061cd438351f437eb1598c7426f829eb2a2eddd457", "G4_sample.tsv": "71ce230acd93c9ec4d5614e62f2082e337192c890f6f99c89a9b9332cab4942b"}}

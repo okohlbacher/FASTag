@@ -2,7 +2,7 @@
 
 FASTag · MIT · <https://github.com/okohlbacher/FASTag>
 
-Input is mzML, mzPeak (read and written through OpenMS's `MzPeakFile`) or MGF (read by FASTag's own `MgfReader`, see below);
+Input is mzML, mzPeak (read and written through OpenMS's `MzPeakFile`) or MGF (read by FASTag's own `MgfReader`, see below), and Thermo `.raw` and Bruker timsTOF `.d` (see Vendor readers; every release bundle but the AppImage reads `.raw`);
 output is TSV plus optional mzML or mzPeak.
 The desktop GUI's own dependencies are pinned in `gui/package-lock.json`
 (frontend) and `gui/src-tauri/Cargo.lock` (Tauri backend); what the desktop
@@ -160,6 +160,73 @@ FASTag is not a derivative work of it: the scoring nulls, the tag enumerator and
 the data structures are independently written, and several deliberately differ
 (exact hypergeometric instead of a tabulated MVH; Fisher DOF from the number of
 active subscores rather than from a sum of weights).
+
+## Vendor readers: Thermo RawFileReader, .NET runtime, opentims (in the 1.15.2 bundles)
+
+From 1.15.2 the release bundles are built against an OpenMS with
+`WITH_THERMO_RAW=ON` and `WITH_OPENTIMS=ON` and read Thermo `.raw` and Bruker
+timsTOF `.d` (README, File formats). **Every bundle carries the Thermo reader
+except the Linux AppImage** (macOS dmgs and Homebrew casks, Linux CLI
+tarballs, `.deb` and desktop tarball, Windows installer and zip); the AppImage
+has opentims but neither RawFileReader nor the .NET runtime (section 4.3,
+below). The bundles carry, and the FASTag process loads:
+
+| Component | Version (as built for 1.15.2, OpenMS `70cebcd144`) | Licence | Loaded how |
+|---|---|---|---|
+| openms-thermo-bridge (`libopenms_thermo_bridge`, `ThermoWrapperManaged.dll`) | v1.0.0, commit `75849ecf6f600a3e52479823043842e571a774ae` | BSD-3-Clause | native library linked by libOpenMS; hosts .NET |
+| Thermo RawFileReader (`ThermoFisher.CommonCore.{RawFileReader,Data,BackgroundSubtraction,MassPrecisionEstimator,RandomAccessReaderPlugin}.dll`) | 8.0.37 (NuGet packages from `thermofisherlsms/RawFileReader` commit `80963674b5c10e58236da63023ad6fa0264bbb00`) | Thermo's RawFileReader licence (`share/OpenMS/LICENSES/ThermoRawFileReader-License.doc`, SHA-512 `6ecc1691…` as pinned by OpenMS's vcpkg port) | .NET assemblies loaded into the FASTag process |
+| .NET runtime (`Microsoft.NETCore.App`) | 8.0.34, from Microsoft's `dotnet-install` (CI pins `DOTNET_RUNTIME_VERSION`); the bridge's managed half is built with SDK 8.0.428 | MIT (`dotnet/LICENSE.txt`, `dotnet/ThirdPartyNotices.txt`) | bundled beside the executable (`dotnet/`, without the `dotnet` muxer); FASTag sets `DOTNET_ROOT` to it unless the user has (src/ThermoInput.h, `useBundledRuntime`); on Linux also `DOTNET_SYSTEM_GLOBALIZATION_INVARIANT=1`, so no libicu is needed |
+| opentims (Bruker timsTOF `.d`) | v1.2.0b4 (commit `c2a308143bb4311c4695a4c1fdfb29c47e75798d`), with its built-in sqlite3 (public domain), ZSTD (BSD) and mio (MIT) | MIT (`LICENSES/opentims-LICENCE.txt`) | static, inside libOpenMS; every bundle, the AppImage included |
+
+Where they are in a bundle: the managed assemblies in
+`share-OpenMS/openms_thermo_bridge/managed/` (desktop app:
+`resources/fastag/share/OpenMS/...`), the runtime in `dotnet/` beside the
+executable (desktop app: `resources/fastag/bin/dotnet/`), Thermo's licence as
+distributed (`LICENSES/ThermoRawFileReader-License.doc`) and as text
+(`LICENSES/ThermoRawFileReader-License.txt`), and the RawFileReader terms, the
+.NET and the opentims notices at the end of `THIRD-PARTY-NOTICES.txt`
+(`tools/vendor_bundle.py add`; `check` fails CI on a bundle without them, and
+`strip` removes the Thermo reader from the AppImage). The .NET runtime adds
+about 70 MB to an unpacked bundle; the release sizes are in the CI job
+summaries.
+
+SHA-256 of the assemblies as built (Linux x64): `ThermoFisher.CommonCore.RawFileReader.dll`
+`d485d24da85f504129aaab51d7e5e5c3872a39cbb816606770dc573c017b418a`, `.Data.dll`
+`6ddc94cfc47ace54c78f99901816552cfb9748fae620c9ed3a69563d7a8bbbdc`, `.BackgroundSubtraction.dll`
+`2d913e4c0a8b1bc6a5d65d2ee464219441b5aaf606675eae97a39d56e0bf3281`, `.MassPrecisionEstimator.dll`
+`c94d2a37f4e80ba914cf4c4e018bc85f719511cb8e59e23660a6961441f66643`, `.RandomAccessReaderPlugin.dll`
+`e472ff8c1307fd943e5a8346ee40e1faa1932f11d97afbf1dd0f19d6ba54b6db` (file version 8.0.37.0). The
+NuGet packages are pinned by repository commit only; neither OpenMS nor the bridge checks their
+hashes.
+
+The RawFileReader licence is not FASTag's MIT licence. Its terms for
+distributing the assemblies, and where FASTag stands:
+
+| Term (section) | Status |
+|---|---|
+| Distribute only together with software you provide (1.2) | met: only inside FASTag's bundles |
+| No decompiling, reverse engineering, reflection or modification (2.1) | FASTag only calls the bridge |
+| Indemnify Thermo against claims from distribution or use (3.1) | the distributor's (author's) undertaking |
+| The text "RawFileReader reading tool. Copyright © 2016 by Thermo Fisher Scientific, Inc. All rights reserved." in the About box (3.2) | **met**: `FASTag --version`, the `--help` Version line and its last lines, `THIRD-PARTY-NOTICES.txt`, the desktop app's Help > About and, on macOS, the app menu's About panel |
+| End users must agree to a licence that forbids redistributing it (3.3) | **met where there is an installer step**: the Windows installer's licence page and the licence agreement the macOS disk images (desktop app and CLI) show before they mount, both `gui/src-tauri/installer-license.txt` (FASTag's MIT licence, the RawFileReader terms the user accepts, Thermo's licence; `tools/vendor_bundle.py installer-license`, `tools/dmg_license.py`). The portable bundles (Linux tarballs and `.deb`, the Windows zip, Homebrew casks, which mount the dmg unattended) have no assent step: they carry the licence files and the terms in `THIRD-PARTY-NOTICES.txt`, the README's install section states them, and the casks' caveats should too (okohlbacher/homebrew-fastag) |
+| No use of Thermo's trademarks suggesting endorsement (4.1) | met |
+| No commercial exploitation without Thermo's written consent (4.2) | FASTag is free; note that MIT lets others redistribute FASTag commercially, which cannot extend to the Thermo assemblies |
+| No distribution under an "Excluded License", and none with GPL or similar software "in a manner that would create a combined work" (4.3) | the AppImage ships without the Thermo reader; for the other bundles see below |
+
+Section 4.3 and the bundles, as the licence text reads (no legal assessment
+beyond it): the process that loads RawFileReader is the command-line
+`FASTag`, and its own bundled closure contains LGPL-2.1 libraries loaded into
+that process (`libiconv` on Linux and macOS, `keyutils` on Linux; see
+`THIRD-PARTY-NOTICES.txt`) and, on Linux, the GCC runtime libraries (GPL-3.0
+with the GCC Runtime Library Exception). The licence text does not say whether
+dynamic loading into one process, or packaging next to each other, counts as
+"a combined work". The author's decision for 1.15.2 (2026-11-19): ship the
+Thermo reader in every bundle except the AppImage, which packs the LGPL
+WebKitGTK/GTK stack into the same image and so ships without it (as the
+earlier recommendation had it). The question about the CLI closure's own LGPL
+libraries is unchanged by that decision; a closure without `libiconv` and
+`keyutils`, or Thermo's written confirmation, would settle it.
+ThermoRawFileParser conversion stays the route for AppImage users.
 
 ## Optional, not linked
 

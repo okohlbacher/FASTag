@@ -77,6 +77,12 @@ env:
   # release contains -- and part of the cache key. Keep in lockstep with
   # ci.yml.
   OPENMS_REF: 70cebcd14442cecd6bcd9794fb6786d3342cacc6
+  # The .NET pins of ci.yml (vendor readers, 1.15.2): the SDK builds the Thermo
+  # bridge's managed half (part of the OpenMS cache key), the runtime ships in
+  # the bundle. Must move in lockstep with ci.yml.
+  DOTNET_SDK_VERSION: "8.0.428"
+  DOTNET_RUNTIME_VERSION: "8.0.34"
+  THERMO_SMOKE_RAW_SHA256: ad87e20816a6383fa38f4991b3df012d8a05e92c1e67d8e9e1ef0b6a979330f2
   # SignPath PROJECT slug. Empty because no project exists yet.
   #
   # 'OpenMS_Apps' briefly lived here and was wrong: that is the slug of a
@@ -153,7 +159,7 @@ jobs:
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
         with:
           path: openms-install
-          key: windows-x64-openms-${{ env.OPENMS_REF }}-msvc2022-${{ hashFiles('fastag/.github/env/openms.yml') }}-v1
+          key: windows-x64-openms-${{ env.OPENMS_REF }}-msvc2022-${{ hashFiles('fastag/.github/env/openms.yml') }}-vendor-dotnet${{ env.DOTNET_SDK_VERSION }}-v1
 
       - name: Install OpenMS's dependencies
         if: steps.cache-openms.outputs.cache-hit != 'true'
@@ -189,11 +195,23 @@ jobs:
           grep -q '"/we4100"' src/openms/CMakeLists.txt
           sed -i -e 's#"/we4100"#"/w14100"#' -e 's#"/we4189"#"/w14189"#' src/openms/CMakeLists.txt
 
+      # The .NET SDK the Thermo bridge's managed half is built with (ci.yml).
+      - name: Install the .NET SDK (OpenMS Thermo bridge)
+        if: steps.cache-openms.outputs.cache-hit != 'true'
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          Invoke-WebRequest -Uri https://dot.net/v1/dotnet-install.ps1 -OutFile "$env:RUNNER_TEMP\dotnet-install.ps1"
+          & "$env:RUNNER_TEMP\dotnet-install.ps1" -Version $env:DOTNET_SDK_VERSION -InstallDir "$env:RUNNER_TEMP\dotnet-sdk" -NoPath
+          & "$env:RUNNER_TEMP\dotnet-sdk\dotnet.exe" --info | Select-Object -First 20
+
       - name: Build and install OpenMS
         if: steps.cache-openms.outputs.cache-hit != 'true'
         shell: bash -el {0}
         run: |
           set -euo pipefail
+          DN="${RUNNER_TEMP//\\//}/dotnet-sdk"
+          export DOTNET_ROOT="$DN" DOTNET_CLI_TELEMETRY_OPTOUT=1 DOTNET_NOLOGO=1
           # conda's Windows packages live under Library/. Forward slashes:
           # CMake treats a backslash in a quoted path as an escape.
           # Not LIB: that is MSVC's library search path, and overwriting it
@@ -216,7 +234,8 @@ jobs:
             -DOPENMS_ENABLE_MZPEAK=ON \
             -DARROW_USE_STATIC=OFF \
             -DWITH_GUI=OFF -DPYOPENMS=OFF -DENABLE_DOCS=OFF -DHAS_XSERVER=OFF \
-            -DWITH_OPENTIMS=OFF -DWITH_THERMO_RAW=OFF \
+            -DWITH_OPENTIMS=ON -DWITH_THERMO_RAW=ON \
+            -DDOTNET_EXECUTABLE="$DN/dotnet.exe" \
             -DMT_ENABLE_OPENMP=ON -DMT_REQUIRE_OPENMP=ON \
             -DBUILD_TOPP_TOOLS=OFF \
             -DINSTALL_OPENMS_EXAMPLES=OFF \
@@ -238,6 +257,14 @@ jobs:
           grep -q "void store(" "$HDR"
           find openms-install -type d -path '*/share/OpenMS' | grep -q . \
             || { echo "::error::No share/OpenMS after install."; exit 1; }
+          # The vendor readers (1.15.2): the Thermo bridge's managed half and
+          # Thermo's licence in share/OpenMS, which the bundle copies.
+          find openms-install -path '*/share/OpenMS/openms_thermo_bridge/managed/ThermoWrapperManaged.dll' | grep -q . \
+            || { echo "::error::No Thermo bridge managed files in share/OpenMS."; exit 1; }
+          find openms-install -path '*/share/OpenMS/LICENSES/ThermoRawFileReader-License.doc' | grep -q . \
+            || { echo "::error::No ThermoRawFileReader-License.doc in share/OpenMS."; exit 1; }
+          find openms-install -name 'BrukerTimsFile.h' | grep -q . \
+            || { echo "::error::OpenMS installed without the timsTOF reader."; exit 1; }
 
   # ----------------------------------------------------------------- FASTag
   #
@@ -299,7 +326,7 @@ jobs:
         uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
         with:
           path: openms-install
-          key: windows-x64-openms-${{ env.OPENMS_REF }}-msvc2022-${{ hashFiles('fastag/.github/env/openms.yml') }}-v1
+          key: windows-x64-openms-${{ env.OPENMS_REF }}-msvc2022-${{ hashFiles('fastag/.github/env/openms.yml') }}-vendor-dotnet${{ env.DOTNET_SDK_VERSION }}-v1
           fail-on-cache-miss: true
 
       - name: Install the dependencies
@@ -324,6 +351,24 @@ jobs:
           curl -fsSL --retry 3 -o ci-data/small.mzpeak \
             "https://raw.githubusercontent.com/OpenMS/OpenMS/$OPENMS_REF/src/tests/class_tests/openms/data/MzPeakFile_small.mzpeak"
           echo "5af157f1744d13502dbc8f7103ad0d01c4ba5ecc528087756aa09ed75d4b4087  ci-data/small.mzpeak" | sha256sum -c -
+          # A Thermo .raw from OpenMS's test data (ci.yml's THERMO_SMOKE_RAW).
+          curl -fsSL --retry 3 -o ci-data/thermo-smoke.raw \
+            "https://raw.githubusercontent.com/OpenMS/OpenMS/$OPENMS_REF/src/tests/topp/THIRDPARTY/ginkgotoxin-ms-switching.raw"
+          echo "$THERMO_SMOKE_RAW_SHA256  ci-data/thermo-smoke.raw" | sha256sum -c -
+
+      # The .NET runtime the Thermo reader runs on, pinned, on every run
+      # (ci.yml): ctest uses it through DOTNET_ROOT, the bundle copies it.
+      - name: Install the .NET runtime
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          Invoke-WebRequest -Uri https://dot.net/v1/dotnet-install.ps1 -OutFile "$env:RUNNER_TEMP\dotnet-install.ps1"
+          & "$env:RUNNER_TEMP\dotnet-install.ps1" -Runtime dotnet -Version $env:DOTNET_RUNTIME_VERSION -InstallDir "$env:RUNNER_TEMP\dotnet-rt" -NoPath
+          Get-ChildItem "$env:RUNNER_TEMP\dotnet-rt\shared\Microsoft.NETCore.App"
+          $rt = "$env:RUNNER_TEMP\dotnet-rt" -replace '\\', '/'
+          "DOTNET_RT=$rt" | Out-File -Append -Encoding utf8 $env:GITHUB_ENV
+          "DOTNET_ROOT=$env:RUNNER_TEMP\dotnet-rt" | Out-File -Append -Encoding utf8 $env:GITHUB_ENV
+          "DOTNET_CLI_TELEMETRY_OPTOUT=1" | Out-File -Append -Encoding utf8 $env:GITHUB_ENV
 
       - name: Locate OpenMSConfig.cmake
         shell: bash
@@ -435,10 +480,20 @@ jobs:
           # for indexed_mzml_test, the mzML reader's and the direct peak
           # decoder's spectrum-by-spectrum check against OpenMS, and for
           # mimalloc_redirect_test.
-          for t in mzpeak_roundtrip mzpeak_validate mzpeak_stream_test indexed_mzml_test mimalloc_redirect_test; do
+          # bruker_cli_test and thermo_cli_test: the vendor readers (1.15.2).
+          for t in mzpeak_roundtrip mzpeak_validate mzpeak_stream_test indexed_mzml_test mimalloc_redirect_test bruker_cli_test thermo_cli_test; do
             grep -E "Test +#[0-9]+: $t " ctest.log | grep -q 'Passed' \
               || { echo "::error::$t did not pass (skipped, not run or missing)"; grep -E "$t" ctest.log || true; exit 1; }
           done
+          # ...and the binary reads both formats for real.
+          ./fastag/build/FASTag.exe -in fastag/test/fixtures/bruker/PXD040281_SA_02_trim.d -out /tmp/ci-bruker.tsv -threads 2 > /tmp/ci-bruker.log 2>&1 \
+            || { cat /tmp/ci-bruker.log; echo "::error::the build cannot read the Bruker fixture"; exit 1; }
+          grep -E "Bruker timsTOF input: [1-9][0-9]* MS2 spectra" /tmp/ci-bruker.log \
+            || { cat /tmp/ci-bruker.log; echo "::error::no MS2 spectra read from the Bruker fixture"; exit 1; }
+          ./fastag/build/FASTag.exe -in ci-data/thermo-smoke.raw -out /tmp/ci-thermo.tsv -threads 2 > /tmp/ci-thermo.log 2>&1 \
+            || { cat /tmp/ci-thermo.log; echo "::error::the build cannot read a Thermo .raw"; exit 1; }
+          grep -E "Thermo .raw input: [1-9][0-9]* scans indexed" /tmp/ci-thermo.log \
+            || { cat /tmp/ci-thermo.log; echo "::error::no scans read from the Thermo .raw"; exit 1; }
 
       - name: Smoke-test the binary
         shell: bash
@@ -756,6 +811,9 @@ jobs:
           mkdir -p dist/FASTag/share-OpenMS/examples/ID
           cp fastag/test/fixtures/Ecoli_MS2_small.mzML dist/FASTag/share-OpenMS/examples/ID/
           test -s dist/FASTag/share-OpenMS/examples/ID/Ecoli_MS2_small.mzML
+          # -delta_out names its rows from these two (1.16 mass-shift survey).
+          test -s dist/FASTag/share-OpenMS/CHEMISTRY/unimod.xml
+          test -s dist/FASTag/share-OpenMS/CHEMISTRY/PSI-MOD.obo
 
           # The taxonomy -species resolves by default. The pruned NCBI dumps
           # (12 KB) go here for every build; on TAG builds the "Embed taxonomy
@@ -793,6 +851,13 @@ jobs:
           } >> dist/FASTag/THIRD-PARTY-NOTICES.txt
           grep -q "Copyright (c) 2018-2025 Microsoft Corporation, Daan Leijen" dist/FASTag/THIRD-PARTY-NOTICES.txt \
             || { echo "::error::mimalloc's licence did not reach THIRD-PARTY-NOTICES.txt"; exit 1; }
+          # The vendor readers (1.15.2): the .NET runtime beside
+          # FASTag.core.exe, Thermo's licence (LICENSES/), the RawFileReader
+          # terms and the .NET and opentims notices; checked as a set.
+          "$PY" fastag/tools/vendor_bundle.py add --root dist/FASTag --exe-dir dist/FASTag \
+            --share dist/FASTag/share-OpenMS --runtime "$DOTNET_RT"
+          "$PY" fastag/tools/vendor_bundle.py check --root dist/FASTag --exe-dir dist/FASTag --share dist/FASTag/share-OpenMS
+          du -sh dist/FASTag dist/FASTag/dotnet
 
           # A .bat wrapper, not a shell script: this is Windows. The real
           # exe is named FASTag.core.exe (not FASTag.exe) specifically so
@@ -907,7 +972,19 @@ jobs:
             cat "$BW/mi.log"; echo "::error::the shipped bundle does not redirect the CRT heap to mimalloc"; exit 1
           fi
           cmp -s "$BW/ml.tsv" "$BW/mi.tsv" || { echo "::error::bundle tags differ between runs"; exit 1; }
-          echo "Portability check passed: runs standalone, no build-environment leakage, reads and writes mzPeak, mimalloc redirected."
+          # The vendor readers through the shipped bundle, without the job's
+          # DOTNET_ROOT: the bundle's own dotnet/ must serve.
+          (unset DOTNET_ROOT; PATH="$CLEAN_PATH" "$GITHUB_WORKSPACE/dist/FASTag/FASTag.bat" \
+            -in "$WS/ci-data/thermo-smoke.raw" -out "$BW/raw.tsv" -threads 2 > "$BW/raw.log" 2>&1) \
+            || { cat "$BW/raw.log"; echo "::error::the shipped bundle cannot read a Thermo .raw"; exit 1; }
+          grep -E "Thermo .raw input: [1-9][0-9]* scans indexed" "$BW/raw.log" \
+            || { cat "$BW/raw.log"; echo "::error::the shipped bundle read no scans from the .raw"; exit 1; }
+          PATH="$CLEAN_PATH" "$GITHUB_WORKSPACE/dist/FASTag/FASTag.bat" \
+            -in "$WS/fastag/test/fixtures/bruker/PXD040281_SA_02_trim.d" -out "$BW/bruker.tsv" -threads 2 > "$BW/bruker.log" 2>&1 \
+            || { cat "$BW/bruker.log"; echo "::error::the shipped bundle cannot read a Bruker .d"; exit 1; }
+          grep -E "Bruker timsTOF input: [1-9][0-9]* MS2 spectra" "$BW/bruker.log" \
+            || { cat "$BW/bruker.log"; echo "::error::the shipped bundle read no spectra from the .d"; exit 1; }
+          echo "Portability check passed: runs standalone, no build-environment leakage, reads and writes mzPeak, mimalloc redirected, reads .raw and .d."
 
       # Every mzPeak archive this job wrote, through mzPeakValidator in full
       # mode. ctest's mzpeak_validate already covered the round-trip archives
@@ -1034,6 +1111,13 @@ jobs:
           cp -r dist/FASTag/share-FASTag-digest "$R/share/FASTag/digest"
           cp -r dist/FASTag/share-FASTag-alkylation "$R/share/FASTag/alkylation"
           cp dist/FASTag/LICENSE dist/FASTag/THIRD-PARTY-NOTICES.txt "$R/"
+          # The vendor readers (1.15.2): the .NET runtime beside the CLI and
+          # the licences; the installer shows the licence page
+          # (tauri.conf.json bundle.licenseFile, installer-license.txt).
+          cp -r dist/FASTag/dotnet "$R/bin/dotnet"
+          cp -r dist/FASTag/LICENSES "$R/LICENSES"
+          PY=$(command -v python3 || command -v python)
+          "$PY" fastag/tools/vendor_bundle.py check --root "$R" --exe-dir "$R/bin" --share "$R/share/OpenMS"
           # File > Open Example Data (gui/src-tauri/src/examples.rs).
           cp -r dist/FASTag/examples "$R/examples"
           test -s "$R/examples/Ecoli_MS2_small.mzML"
@@ -1081,7 +1165,8 @@ jobs:
           $target = ((rustc -vV) | Select-String '^host: ').ToString().Substring(6).Trim()
           python ../tools/gui_third_party_notices.py --gui . --target $target --platform windows --out src-tauri/resources/fastag/GUI-THIRD-PARTY-NOTICES.txt
           if ($LASTEXITCODE) { exit $LASTEXITCODE }
-          npm run tauri build; if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          # --verbose: shows WiX light.exe's own messages when the MSI step fails.
+          npm run tauri build -- --verbose; if ($LASTEXITCODE) { exit $LASTEXITCODE }
           Get-ChildItem src-tauri/target/release/bundle/nsis/ -ErrorAction SilentlyContinue
 
       # bundle.windows.nsis.compression is "lzma" in tauri.conf.json, set
@@ -1141,7 +1226,7 @@ jobs:
         run: |
           $i = Get-ChildItem fastag/gui/src-tauri/target/release/bundle/nsis/*.exe | Select-Object -First 1
           if (-not $i) { Write-Host "::error::no NSIS installer was built"; exit 1 }
-          ./fastag/tools/windows_installed_check.ps1 -Installer $i.FullName -Scope AllUsers -Out "$env:RUNNER_TEMP\installed-check"
+          ./fastag/tools/windows_installed_check.ps1 -Installer $i.FullName -Scope AllUsers -Out "$env:RUNNER_TEMP\installed-check" -ThermoRaw "$env:GITHUB_WORKSPACE\ci-data\thermo-smoke.raw"
           if ($LASTEXITCODE) { exit $LASTEXITCODE }
 
       # The release zip, packed here so that job installed-app checks the
@@ -1261,6 +1346,16 @@ jobs:
         with:
           name: FASTag-gui-windows-x64-installer-check
           path: installer
+      # A Thermo .raw for the installed-app checks (ci.yml's THERMO_SMOKE_RAW):
+      # each installed CLI reads it through the app's own .NET runtime.
+      - name: Fetch a Thermo .raw
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl -fsSL --retry 3 -o "$RUNNER_TEMP/thermo-smoke.raw" \
+            "https://raw.githubusercontent.com/OpenMS/OpenMS/$OPENMS_REF/src/tests/topp/THIRDPARTY/ginkgotoxin-ms-switching.raw"
+          echo "$THERMO_SMOKE_RAW_SHA256  $RUNNER_TEMP/thermo-smoke.raw" | sha256sum -c -
+          echo "FASTAG_THERMO_SMOKE_RAW=$RUNNER_TEMP/thermo-smoke.raw" >> "$GITHUB_ENV"
       # The previous release's installer (per user only), for the upgrade.
       # The pattern takes both names: FASTag-gui-windows-x64-setup.exe up to
       # 1.14.0, FASTag-<version>-gui-windows-x64-setup.exe after.

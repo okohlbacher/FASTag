@@ -72,6 +72,53 @@ cmake --install openms-build
 FASTag needs only `libOpenMS` and `OpenMS_CLI`, so the TOPP tools, GUI, pyOpenMS, docs and tests
 stay off. mzPeak support (`OPENMS_ENABLE_MZPEAK=ON`) is required for mzPeak input and output.
 
+**Bruker timsTOF input (`.d`, `.d.zip`)** needs OpenMS's opentims reader: configure OpenMS with
+`-DWITH_OPENTIMS=ON` instead of `OFF` (keep `WITH_THERMO_RAW=OFF`). Nothing else changes, and
+FASTag needs no option of its own: it reads the setting from the OpenMS it is built against
+(OpenMS exports `WITH_OPENTIMS` as a compile definition) and refuses `.d` input with a message
+when it is off. With no opentims installed, OpenMS's configure step fetches opentims `v1.2.0b4`
+from GitHub (MIT; its SQLite and zstd come from OpenMS and the environment), so that step needs
+network access; the Bruker SDK is not used. The cluster build used for the 1.15.2 timsTOF work:
+
+```bash
+cmake -S openms-src -B openms-build-tims -G Ninja \
+  -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX="$PWD/openms-install-tims" \
+  -DCMAKE_PREFIX_PATH="$CONDA_PREFIX" -DOPENMS_ENABLE_MZPEAK=ON -DARROW_USE_STATIC=OFF \
+  -DWITH_GUI=OFF -DPYOPENMS=OFF -DENABLE_DOCS=OFF -DHAS_XSERVER=OFF \
+  -DWITH_OPENTIMS=ON -DWITH_THERMO_RAW=OFF \
+  -DMT_ENABLE_OPENMP=ON -DMT_REQUIRE_OPENMP=ON -DINSTALL_OPENMS_EXAMPLES=OFF -DBUILD_TESTING=OFF
+```
+
+`ctest`'s `bruker_cli_test` runs the timsTOF checks on a trimmed real run
+(`test/fixtures/bruker/`) when the build reads `.d`, and checks the refusal otherwise. The release
+bundles are still built with `WITH_OPENTIMS=OFF`.
+
+### Thermo .raw input (optional, `WITH_THERMO_RAW=ON`)
+
+FASTag reads `.raw` when the OpenMS it builds against has `WITH_THERMO_RAW=ON`; nothing changes
+in FASTag's own configure step (it follows OpenMS's `config.h`). That OpenMS build needs:
+
+- a **.NET 8 SDK** at build time (the bridge's managed half, `ThermoWrapperManaged.dll`, is
+  built with `dotnet publish`), and a **.NET 8 runtime** wherever FASTag later reads a `.raw`.
+  Without root, install both user-level with Microsoft's script and point `DOTNET_ROOT` at it:
+
+  ```bash
+  curl -sSL -o dotnet-install.sh https://dot.net/v1/dotnet-install.sh
+  bash dotnet-install.sh --channel 8.0 --install-dir "$HOME/opt/dotnet-8"
+  export DOTNET_ROOT="$HOME/opt/dotnet-8" PATH="$HOME/opt/dotnet-8:$PATH"
+  ```
+
+- **network access** at configure and build time: OpenMS fetches openms-thermo-bridge v1.0.0
+  (commit `75849ecf6f600a3e52479823043842e571a774ae`), the bridge downloads Thermo's
+  RawFileReader NuGet packages (`ThermoFisher.CommonCore.*` 8.0.37 from
+  `thermofisherlsms/RawFileReader` at commit `80963674b5c10e58236da63023ad6fa0264bbb00`), and
+  OpenMS downloads that commit's licence into `share/OpenMS/LICENSES/ThermoRawFileReader-License.doc`.
+
+Then, in the configure step above, replace `-DWITH_THERMO_RAW=OFF` by
+`-DWITH_THERMO_RAW=ON -DDOTNET_EXECUTABLE="$DOTNET_ROOT/dotnet"`. Thermo's licence (not MIT) and
+what shipping it would require are in BOM.md, "Thermo RawFileReader". Verified on Linux x64
+(GCC 14, .NET SDK 8.0.428, runtime 8.0.34), also together with `WITH_OPENTIMS=ON`; macOS and Windows builds with it are not yet checked.
+
 - **macOS:** CI builds OpenMS and FASTag for macOS 13.4: `export MACOSX_DEPLOYMENT_TARGET=13.4`
   and add `-DCMAKE_OSX_DEPLOYMENT_TARGET=13.4` to both configure steps. Below 13.4 the build
   fails (`'to_chars' is unavailable`). A build for your own Mac can leave both out.

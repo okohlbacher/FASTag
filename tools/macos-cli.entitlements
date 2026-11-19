@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <!-- The FASTag CLI (FASTag.bin), signed with the hardened runtime. It hosts
+       the .NET runtime for Thermo .raw input (OpenMS's Thermo bridge, the
+       bundle's dotnet/), and CoreCLR's JIT needs writable-executable memory:
+       allow-jit for MAP_JIT pages (arm64), allow-unsigned-executable-memory
+       for the x64 JIT. Every dylib it loads, the .NET runtime's included, is
+       re-signed with the same Developer ID, so library validation stays on. -->
+  <key>com.apple.security.cs.allow-jit</key>
+  <true/>
+  <key>com.apple.security.cs.allow-unsigned-executable-memory</key>
+  <true/>
+</dict>
+</plist>

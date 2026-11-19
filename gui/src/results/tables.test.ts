@@ -129,6 +129,17 @@ describe('tables.ts: -delta_out', () => {
     expect([...d.spectra]).toEqual([1, 7])
   })
 
+  it('reads a 1.16 table with the survey columns appended', () => {
+    const text =
+      'delta\tspectra\ttop_interps\tlocalized\tresidues\tunlocalized\tunimod\tpsimod\n' +
+      '15.9950\t9\tmod:Oxidation@M:7;?:2\t6\tM:6\t3\tOxidation@M(+0.4ppm)\tMOD:00719 oxidation to L-methionine sulfoxide@M(+0.4ppm)\n'
+    expect(sniffTable(text)).toBe('delta')
+    const d = parseDelta(text, '/d/x.tsv')
+    expect([...d.delta]).toEqual([15.995])
+    expect([...d.spectra]).toEqual([9])
+    expect(d.interps[0]).toEqual([{ name: 'mod:Oxidation@M', n: 7 }, { name: '?', n: 2 }])
+  })
+
   it('reads several interpretations in the order written', () => {
     const d = parseDelta('delta\tspectra\ttop_interps\n15.9949\t9\tmod:Oxidation@M:7;?:2\n', '/d/x.tsv')
     expect(d.interps[0]).toEqual([{ name: 'mod:Oxidation@M', n: 7 }, { name: '?', n: 2 }])

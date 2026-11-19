@@ -26,6 +26,7 @@
 namespace OpenMS
 {
   class OnDiscMSExperiment;
+  class IMSExperimentRandomAccess;
 }
 
 namespace FASTag
@@ -50,6 +51,7 @@ namespace FASTag::Acquisition
     FASTag::MgfReader* mgf = nullptr;              ///< MGF reader, or null
     FASTag::IndexedMzMLReader* fastmz = nullptr;   ///< FASTag's fast indexed mzML reader, or null
     OpenMS::OnDiscMSExperiment* ondisc = nullptr;  ///< indexed mzML opened by OnDiscMSExperiment, or null
+    OpenMS::IMSExperimentRandomAccess* ra = nullptr;  ///< a random-access vendor reader (Thermo .raw), or null
     const OpenMS::PeakMap* exp = nullptr;          ///< mzML loaded into memory, or null
     std::size_t n_total = 0;  ///< spectra in the run (not used for mzPeak)
   };

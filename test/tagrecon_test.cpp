@@ -366,6 +366,70 @@ int main()
     check(consistent, "protein_index names the placement's protein");
   }
 
+  // --- 1.16: in ppm the gap is interpreted at its flank's tolerance ---
+  {
+    // 1.15 took ppm of the gap itself: 20 ppm of 15.995 Da is 0.3 mDa, so
+    // an Oxidation (M) gap 2 mDa off -- 1.4 ppm of this peptide -- was "?".
+    // Its own peptide: SAMP holds A and S, and sub:A->S is Oxidation's
+    // mass to the last digit (mods win only an exact tie).
+    const std::string pep = "GMWPLEVGATSDGK";
+    std::vector<FASTAFile::FASTAEntry> e4;
+    e4.emplace_back("PROT1", "test protein", "MSTVWYAAR" + pep + "GTANLEFDSK");
+    ProteomeIndex idx4;
+    idx4.build(e4, {}, 0);
+    TagReconciler r4(20.0, /*ppm=*/true, /*both=*/false);
+    r4.attach(&idx4, 0, 4);
+    r4.setModCandidates({{"Oxidation", 15.994915, "M"}});
+    const size_t pos = 4;
+    const std::string tag = pep.substr(pos, 4);
+    bool named = false, mismatch = false;
+    for (const auto& x : r4.reconcile(tag, sumMass(pep.substr(0, pos)) + 15.994915 + 0.002, sumMass(pep.substr(pos + 4))))
+      if (x.peptide == pep && x.pos == pos && !x.nterm_match) named = x.delta_interp == "mod:Oxidation@M";
+    // ... and a gap outside every flank tolerance still is no Oxidation.
+    for (const auto& x : r4.reconcile(tag, sumMass(pep.substr(0, pos)) + 15.994915 + 0.2, sumMass(pep.substr(pos + 4))))
+      if (x.peptide == pep && x.pos == pos && !x.nterm_match) mismatch = x.delta_interp != "mod:Oxidation@M";
+    check(named, "ppm: a +15.997 N-side gap on GMWP is mod:Oxidation@M (flank-scale tolerance)");
+    check(mismatch, "ppm: a +16.195 gap is not Oxidation");
+  }
+
+  // --- 1.16: substitutions at their own, tighter tolerance ---
+  {
+    // GMWP holds P; sub:P->V is +2.01565. A gap 6 mDa off (13 ppm of the
+    // ~450 Da N flank) is a substitution at the 20 ppm fragment tolerance
+    // (1.15, setSubstitutionTolerance(0)) and "?" at 5 ppm; a gap 0.5 mDa
+    // off stays sub:P->V. Modifications keep the fragment tolerance.
+    const std::string pep = "GMWPLEVGATSDGK";
+    std::vector<FASTAFile::FASTAEntry> e5;
+    e5.emplace_back("PROT1", "test protein", "MSTVWYAAR" + pep + "GTANLEFDSK");
+    ProteomeIndex idx5;
+    idx5.build(e5, {}, 0);
+    const double pv = resMass('V') - resMass('P');
+    const size_t pos = 4;
+    const std::string tag = pep.substr(pos, 4);
+    auto interp = [&](const TagReconciler& rr, double gap) {
+      std::string out = "none";
+      for (const auto& x : rr.reconcile(tag, sumMass(pep.substr(0, pos)) + gap, sumMass(pep.substr(pos + 4))))
+        if (x.peptide == pep && x.pos == pos && !x.nterm_match) out = x.delta_interp;
+      return out;
+    };
+    TagReconciler loose(20.0, /*ppm=*/true, /*both=*/false);
+    loose.attach(&idx5, 0, 4);
+    loose.setModCandidates({{"Oxidation", 15.994915, "M"}});
+    loose.setSubstitutionTolerance(0.0, true);
+    TagReconciler tight(20.0, /*ppm=*/true, /*both=*/false);
+    tight.attach(&idx5, 0, 4);
+    tight.setModCandidates({{"Oxidation", 15.994915, "M"}});
+    tight.setSubstitutionTolerance(5.0, true);
+    check(interp(loose, pv - 0.006) == "sub:P->V", "sub tolerance 0: a 6 mDa-off gap is sub:P->V (1.15)");
+    check(interp(tight, pv - 0.006) == "?", "sub tolerance 5 ppm: a 6 mDa-off gap is '?'");
+    check(interp(tight, pv + 0.0005) == "sub:P->V", "sub tolerance 5 ppm: a 0.5 mDa-off gap is sub:P->V");
+    check(interp(tight, 15.994915 + 0.006) == "mod:Oxidation@M", "a modification keeps the fragment tolerance");
+    TagReconciler da(0.02, /*ppm=*/false, /*both=*/false);
+    da.attach(&idx5, 0, 4);
+    da.setSubstitutionTolerance(0.003, false);
+    check(interp(da, pv - 0.006) == "?" && interp(da, pv - 0.002) == "sub:P->V", "a Da substitution tolerance");
+  }
+
   if (failures == 0) std::cout << "tagrecon_test: all checks passed\n";
   return failures == 0 ? 0 : 1;
 }

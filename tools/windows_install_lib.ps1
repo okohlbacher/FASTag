@@ -175,9 +175,9 @@ function Uninstall-Fastag($Install, [string[]]$Allow = @()) {
     Write-Host "uninstall left $($held.Count) files; holders:"
     Show-FileHolders $Install.Dir
     $w = [Diagnostics.Stopwatch]::StartNew()
-    while (@(Get-Leftovers $Install.Dir | Where-Object { $Allow -notcontains $_ }).Count -and $w.Elapsed.TotalSeconds -lt 60) { Start-Sleep -Seconds 1 }
-    Write-Host ("after {0:N0} s more: {1} files left" -f $w.Elapsed.TotalSeconds, @(Get-Leftovers $Install.Dir | Where-Object { $Allow -notcontains $_ }).Count)
-    if (@(Get-Leftovers $Install.Dir | Where-Object { $Allow -notcontains $_ }).Count) { Show-FileHolders $Install.Dir }
+    while (@((Get-Leftovers $Install.Dir) | Where-Object { $Allow -notcontains $_ }).Count -and $w.Elapsed.TotalSeconds -lt 60) { Start-Sleep -Seconds 1 }
+    Write-Host ("after {0:N0} s more: {1} files left" -f $w.Elapsed.TotalSeconds, @((Get-Leftovers $Install.Dir) | Where-Object { $Allow -notcontains $_ }).Count)
+    if (@((Get-Leftovers $Install.Dir) | Where-Object { $Allow -notcontains $_ }).Count) { Show-FileHolders $Install.Dir }
   }
   $all = Get-Leftovers $Install.Dir
   $mine = @($all | Where-Object { $Allow -contains $_ })

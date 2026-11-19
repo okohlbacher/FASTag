@@ -101,6 +101,14 @@
       ]
     },
     {
+      "name": "census_ids_exact",
+      "type": "bool",
+      "default": "false",
+      "description": "Join -census_ids one-to-one: native ids only (no scan-number fallback); refuse the file when any reference names no MS2 spectrum of -in, a spectrum has two identifications, a hit has no target/decoy annotation, or the file names no run or another run than -in",
+      "required": false,
+      "toppAdvanced": true
+    },
+    {
       "name": "census_ids_fdr",
       "type": "double",
       "default": "0.01",
@@ -115,6 +123,25 @@
       "type": "output-file",
       "default": "",
       "description": "Per-spectrum census table. Default: <out> with its extension replaced by .census.tsv",
+      "required": false,
+      "toppAdvanced": false,
+      "formats": [
+        "tsv"
+      ]
+    },
+    {
+      "name": "census_score",
+      "type": "bool",
+      "default": "false",
+      "description": "Add an identifiability score to the census: the columns pre_best_evalue, pre_best_len, pre_best_mean_conf and pre_tag_cover (the best tag before any database filter) and ident_score, a frozen logistic model on per-run ranks of census features that orders the MS2 spectra by how likely a standard database search identifies them (a ranking, not a probability or a quality call). Defined for every census status",
+      "required": false,
+      "toppAdvanced": false
+    },
+    {
+      "name": "census_sorted_out",
+      "type": "output-file",
+      "default": "",
+      "description": "With -census_score: the census rows ordered by ident_score, highest first, with a leading ident_rank column",
       "required": false,
       "toppAdvanced": false,
       "formats": [
@@ -273,12 +300,128 @@
       "toppAdvanced": true
     },
     {
+      "name": "delta_counts_out",
+      "type": "output-file",
+      "default": "",
+      "description": "The run's survey reconciliation (requires -delta_out): MS2 read, tagged, placed, clamped, samples exact / gapped / terminal, localization and observation classes, rows and the sums that must hold, as key/value TSV",
+      "required": false,
+      "toppAdvanced": true,
+      "formats": [
+        "tsv"
+      ]
+    },
+    {
+      "name": "delta_group",
+      "type": "double",
+      "default": "0.004",
+      "description": "Group -delta_out's 0.5 mDa bins into rows: the most populated bin takes every bin within this many Da, then the next, without chaining, so one shift is one row and every sampled spectrum is counted in exactly one row. 0 = the 1.15 rows (a local maximum and its two smaller neighbours)",
+      "required": false,
+      "toppAdvanced": true,
+      "min": 0
+    },
+    {
+      "name": "delta_isobar_tolerance",
+      "type": "double",
+      "default": "0.001",
+      "description": "-delta_out's isobars column: the members (catalogue names, substitutions on the row's sites, sums of two common modifications) within this many Da of the row's best name",
+      "required": false,
+      "toppAdvanced": true,
+      "min": 0
+    },
+    {
+      "name": "delta_isotope_flank",
+      "type": "string",
+      "default": "precursor",
+      "description": "-delta_out's isotope_error reading: precursor (only on rows with at least half of their gaps on the precursor-derived flank, where a precursor isotope error lands) or any (1.16a)",
+      "required": false,
+      "toppAdvanced": true,
+      "choices": [
+        "precursor",
+        "any"
+      ]
+    },
+    {
+      "name": "delta_loc_min_evidence",
+      "type": "int",
+      "default": "2",
+      "description": "Site-determining evidence (the lead over the best rival site, in ions or, under unique and strict, peaks) a -delta_out gap needs to be fragment-localized; below it, ambiguous. 1 = 1.16a",
+      "required": false,
+      "toppAdvanced": true,
+      "min": 1
+    },
+    {
+      "name": "delta_loc_model",
+      "type": "string",
+      "default": "strict",
+      "description": "How -delta_out localizes a sample's gap: count (every matched ion and charge, 1.16a), unique (a site's distinct matched peaks) or strict (unique, and a shifted ion's peak that is an H2O/NH3 loss satellite of an observed unshifted ion does not count)",
+      "required": false,
+      "toppAdvanced": true,
+      "choices": [
+        "count",
+        "unique",
+        "strict"
+      ]
+    },
+    {
+      "name": "delta_loc_null",
+      "type": "double",
+      "default": "0.0",
+      "description": "-delta_spectra_out null_class / null_evidence: also localize each sample's gap on the spectrum's peaks moved by this many Th (the false-localization null); 0 = off",
+      "required": false,
+      "toppAdvanced": true,
+      "min": 0
+    },
+    {
+      "name": "delta_name_tolerance",
+      "type": "double",
+      "default": "10.0",
+      "description": "Tolerance of the -delta_out unimod and psimod columns: a catalogue entry names a row when its mass is within this of the row's delta (on a residue the row's spectra localized); in -delta_name_tolerance_unit",
+      "required": false,
+      "toppAdvanced": true,
+      "min": 0
+    },
+    {
+      "name": "delta_name_tolerance_unit",
+      "type": "string",
+      "default": "ppm",
+      "description": "Unit of -delta_name_tolerance: ppm of the median peptide mass of the row's spectra (a gap carries the error of a flank, on the peptide's mass scale), or Da",
+      "required": false,
+      "toppAdvanced": true,
+      "choices": [
+        "ppm",
+        "Da"
+      ]
+    },
+    {
       "name": "delta_out",
       "type": "output-file",
       "default": "",
       "description": "Aggregated mass-shift histogram over the reconciliations (requires -recon_out): delta, spectrum count, top interpretations. Region-level candidates, NOT localized identifications and NOT FDR-controlled",
       "required": false,
       "toppAdvanced": false,
+      "formats": [
+        "tsv"
+      ]
+    },
+    {
+      "name": "delta_select",
+      "type": "string",
+      "default": "min_delta",
+      "description": "How a spectrum's -delta_out sample is chosen: min_delta (the lowest-E-value placed tag's smallest-|delta| placement, 1.15) or consensus (the placement the most placed tags agree with: same peptide, gap within 0.05 Da)",
+      "required": false,
+      "toppAdvanced": true,
+      "choices": [
+        "min_delta",
+        "consensus"
+      ]
+    },
+    {
+      "name": "delta_spectra_out",
+      "type": "output-file",
+      "default": "",
+      "description": "The -delta_out sample of every spectrum (requires -delta_out): native ID, its gap, the row it is counted in, the interpretation, the placement's peptide, the site and whether it is localized. Candidates, NOT identifications",
+      "required": false,
+      "toppAdvanced": true,
       "formats": [
         "tsv"
       ]
@@ -560,7 +703,7 @@
       "name": "in",
       "type": "input-file",
       "default": "",
-      "description": "Input spectra (mzML, mzpeak or MGF)",
+      "description": "Input spectra (mzML, mzpeak, MGF; Thermo .raw or a Bruker timsTOF .d directory or .d.zip in a build with that vendor's support)",
       "required": false,
       "toppAdvanced": false
     },
@@ -952,6 +1095,17 @@
       "toppAdvanced": false
     },
     {
+      "name": "qc_out",
+      "type": "output-file",
+      "default": "",
+      "description": "Write a run QC report (section, key, value, n, description): spectra per MS level and analyzer class (ITMS/FTMS/TOF), resolution stated by the file or measured as m/z / FWHM on profile spectra, precursor charge histogram, isobaric reporter kits (TMT, iTRAQ: present, absent, not assessable), tag yield (E <= 0.01) and MS2 redundancy",
+      "required": false,
+      "toppAdvanced": false,
+      "formats": [
+        "tsv"
+      ]
+    },
+    {
       "name": "recon_fasta",
       "type": "input-file",
       "default": "",
@@ -1013,6 +1167,27 @@
       "toppAdvanced": false,
       "formats": [
         "tsv"
+      ]
+    },
+    {
+      "name": "recon_sub_tolerance",
+      "type": "double",
+      "default": "5.0",
+      "description": "Tolerance of a substitution reading (sub:X->Y) of a reconciled gap, never looser than -fragment_tolerance: residue mass differences are dense at the mDa scale. In -recon_sub_tolerance_unit; 0 = -fragment_tolerance (1.15)",
+      "required": false,
+      "toppAdvanced": true,
+      "min": 0
+    },
+    {
+      "name": "recon_sub_tolerance_unit",
+      "type": "string",
+      "default": "ppm",
+      "description": "Unit of -recon_sub_tolerance: ppm of the flank the gap is on (as the modification reading), or Da",
+      "required": false,
+      "toppAdvanced": true,
+      "choices": [
+        "ppm",
+        "Da"
       ]
     },
     {
@@ -1622,7 +1797,7 @@
     {
       "name": "version",
       "type": "string",
-      "default": "1.15.1",
+      "default": "1.15.2",
       "description": "Version of the tool that generated this parameters file.",
       "required": false,
       "toppAdvanced": true

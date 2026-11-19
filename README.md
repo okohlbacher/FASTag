@@ -157,6 +157,24 @@ On macOS both are also on [Homebrew](https://github.com/okohlbacher/homebrew-fas
 The casks need macOS 14 (Sonoma) or later; on macOS 13.4 to 13.x install the disk images
 from the release page instead.
 
+**Thermo .raw and the RawFileReader licence (from 1.15.2).** Every download
+above except the Linux AppImage reads Thermo `.raw` files directly, and so
+includes Thermo Fisher Scientific's RawFileReader and a .NET runtime (MIT).
+RawFileReader is not under FASTag's MIT licence but under Thermo's own
+(`LICENSES/ThermoRawFileReader-License.doc`, as text
+`LICENSES/ThermoRawFileReader-License.txt`, in every bundle). By installing or
+using FASTag you accept it; in particular **you may not redistribute the
+RawFileReader assemblies** (`ThermoFisher.CommonCore.*.dll`) to others, nor
+exploit them commercially without Thermo's written consent. The Windows
+installer and the macOS disk images ask you to agree before they install or
+open; the tarballs, the `.deb`, the Windows zip and the Homebrew casks carry the
+same licence files and the terms at the end of `THIRD-PARTY-NOTICES.txt`. To
+run FASTag without RawFileReader, delete the bundle's
+`openms_thermo_bridge/managed` folder: `.raw` is then refused and every other
+format is read as before. The AppImage ships without it (see BOM.md, Vendor
+readers); convert `.raw` with ThermoRawFileParser there. Bruker timsTOF `.d`
+input (opentims, MIT) is in every bundle, the AppImage included.
+
 A disk image or archive holds a `FASTag/` folder — run `FASTag/FASTag`
 (Linux/macOS) or `FASTag/FASTag.bat` (Windows); everything else inside is a
 bundled dependency the wrapper needs, not something to run directly. The
@@ -352,8 +370,10 @@ it cannot know the analyser, so the setting is yours.
 
 ## File formats
 
-`-in` accepts mzML, [mzPeak](https://github.com/OpenMS/mzpeak) or MGF;
-`-out` is TSV; `-out_spectra` writes mzML or mzPeak, chosen by extension. All
+`-in` accepts mzML, [mzPeak](https://github.com/OpenMS/mzpeak) or MGF, and,
+in a build with timsTOF support, a Bruker timsTOF run as a `.d` directory or a
+zipped `.d.zip` (see [Bruker timsTOF](#bruker-timstof-d-dzip)), and, in a build
+with Thermo support, a Thermo `.raw` (see [Thermo .raw](#thermo-raw)); `-out` is TSV; `-out_spectra` writes mzML or mzPeak, chosen by extension. All
 six in/out combinations work, and on centroided input the container does not
 change the tags: a run read as mzPeak gives the same spectra as the same run
 read as mzML, and a run written to mzPeak and tagged again reproduces the
@@ -594,11 +614,139 @@ mzML→MGF is lossy** (m/z to 15 and intensities to 6 significant digits, so pea
 ranks can tie or swap), and tags from its MGFs can differ slightly. Its
 MGF→mzML direction is exact.
 
+### Bruker timsTOF (.d, .d.zip)
+
+A timsTOF DDA-PASEF run is read directly, as a `.d` directory or as a zipped
+`.d.zip` (the form PRIDE often serves), through OpenMS's `BrukerTimsFile`
+(opentims, MIT licensed; Bruker's own SDK is neither needed nor used). The
+release bundles (from 1.15.2) read it; a source build needs an OpenMS with
+`WITH_OPENTIMS=ON` (see BUILDING.md), and a build without it refuses `.d`
+input with a message saying so.
+
+```bash
+FASTag -in run.d     -out tags.tsv -fragment_tolerance 20 -fragment_tolerance_unit ppm
+FASTag -in run.d.zip -out tags.tsv -fragment_tolerance 20 -fragment_tolerance_unit ppm
+```
+
+- **Spectra.** One MS2 spectrum per precursor: OpenMS merges the PASEF
+  windows of a precursor (over all frames it was fragmented in) and centroids
+  them. The MS1 frames are not decoded. Precursor m/z is the monoisotopic m/z
+  from `analysis.tdf`; m/z and 1/K0 come from the run's own calibration tables
+  (`MzCalibration`, `TimsCalibration`).
+- **Unknown charge.** A precursor whose monoisotopic peak the acquisition
+  software did not find has no charge in `analysis.tdf` (2-3 % of the
+  precursors in the PXD040281 runs measured); its m/z is that of its most
+  intense isotope peak. FASTag keeps the charge as unknown: `-unknown_charge`
+  decides how such a spectrum is tagged (`assume2`, the default, tags it as 2+
+  and records the charge source `assumed`; `infer` calls the charge from the
+  fragments), and the stderr log, the run summary and the `charge_source`
+  columns count them.
+- **Counts without decoding.** Before anything is decoded FASTag reads the
+  run's frame and precursor counts from `analysis.tdf` by SQL and logs them
+  (`Bruker timsTOF input (analysis.tdf): ... frames, ... MS1, ... DDA-PASEF
+  MS/MS, ... dia-PASEF MS/MS; ... precursors, ... without a charge`). For a
+  `.d.zip` only `analysis.tdf` is extracted for this.
+- **dia-PASEF is refused** from those same tables (a `DiaFrameMsMsWindows`
+  table with rows, or dia-PASEF MS/MS frames), with exit code 11 and the
+  `FASTAG_REFUSED reason=raw_dia` line, as for other raw DIA; nothing is
+  unpacked or decoded first. `-acquisition_check warn` or `off` hands the run
+  to the reader anyway.
+- **Temporary space for `.d.zip`.** The archive is unpacked in full for the
+  read, into OpenMS's temporary directory (`OPENMS_TMPDIR`, else `TMPDIR`), and
+  removed afterwards: about the archive's size again (8.06 GB for a 7.73 GB
+  PXD040281 run). FASTag refuses up front when that directory has less than
+  1.5x the archive's size free and names it; point `OPENMS_TMPDIR` at a local
+  disk or `/dev/shm`, or unzip once and give the `.d` directory.
+- **Memory.** The MS2 spectra are held in memory (not the MS1 frames): 4.6-4.9
+  GB peak RSS for a 120-min run of 200,000 precursors, tagging with 32 threads.
+- **Native IDs and USI.** Spectra keep OpenMS's native IDs,
+  `frame=<F> scan=<S> precursor=<P>`: the first PASEF window of precursor
+  `P` (Bruker's `Precursors.Id`). Converters that do not merge per precursor
+  (mzdata, timsrust, msconvert) write one spectrum per PASEF window instead
+  (`merged=<n> frame=<F> startScan=<S> endScan=<E>`); the two meet on frame
+  and scan of the first window. With `-usi_collection` the USI run is the name
+  without `.d` / `.d.zip`, and the index is `index:<i>`, the spectrum's
+  position among the run's MS2 spectra as FASTag reads them, since a spectrum
+  merged from several windows has no PSI native ID of its own.
+- **Not yet:** the desktop app's input probe and `-dump_spectrum` do not read
+  `.d` (they say so); timsTOF data without ion mobility (`analysis.tsf`) and
+  QTOF `.baf` data are refused.
+
+### Thermo .raw
+
+The release bundles from 1.15.2 (all but the AppImage; see Install for the
+licence) and any FASTag built against an OpenMS with `WITH_THERMO_RAW=ON`
+(BUILDING.md) read Thermo `.raw` files directly (`-in run.raw`), through
+OpenMS's `OnDiscThermoRawExperiment`: the openms-thermo-bridge around Thermo's
+RawFileReader, hosted in a .NET 8 runtime. Other builds refuse a `.raw` with a
+message; convert it with
+[ThermoRawFileParser](https://github.com/compomics/ThermoRawFileParser) then.
+
+- **Runtime.** The release bundles carry a .NET 8 runtime (`dotnet/` beside
+  the executable) and use it unless `DOTNET_ROOT` names another; a source
+  build needs a .NET 8 (or newer) runtime installed, with `DOTNET_ROOT` set if
+  it is not where .NET installs itself. The bridge's managed
+  files (`ThermoWrapperManaged.dll`, Thermo's CommonCore assemblies) are found
+  in OpenMS's `share/OpenMS/openms_thermo_bridge/managed`, or where
+  `OPENMS_THERMO_MANAGED_DIR` points. A missing runtime ends the run before any
+  output is opened, with a hint.
+- **Reading.** The scan headers are indexed once (about 1 s for 30,000 scans);
+  each tagging thread then decodes the scans it is given through its own
+  handle, like the indexed mzML path. Memory stays per thread, plus the .NET
+  runtime (peak RSS 1.5–2.3× that of the same run as mzML on the runs below).
+- **Centroids.** Tagging reads Thermo's own centroids (vendor peak picking,
+  set explicitly: the reader's default is the acquired profile). Profile
+  scans as acquired stay available to code that measures peak shapes
+  (`FASTag::Thermo::open(path, Representation::PROFILE)` in
+  `src/ThermoInput.h`), and so does the resolving power the instrument states
+  per scan ("mass resolving power", MS:1000800; `massResolvingPower()`), for
+  the run QC.
+- **Reference and exception peaks.** OpenMS's reader leaves out the peaks
+  Thermo flags as reference or exception peaks (the lock-mass calibrant at
+  m/z 445.12 and others). ThermoRawFileParser keeps them unless given `-x`
+  (`--excludeExceptionData`). A `.raw` therefore gives exactly the tags of its
+  `ThermoRawFileParser -f=2 -x` conversion, but not of a default conversion:
+  on three development runs the tag sets of `.raw` and default conversion
+  overlapped with Jaccard 0.86–0.98 (below).
+- **Identifiers.** Native IDs are Thermo's
+  `controllerType=0 controllerNumber=1 scan=N`, as in ThermoRawFileParser's
+  and msconvert's mzML, so the tag table's `spectrum` column, the USI
+  (`-usi_collection`: run = file name without `.raw`, `scan:N`) and
+  `-census_ids` joins are the same for a run read as `.raw` or as mzML.
+  `-out_spectra` writes the tagged spectra as mzML or mzPeak with the Thermo
+  native-ID format (MS:1000768).
+- **Precursors.** m/z is the selected ion m/z the reader gives (the
+  monoisotopic m/z of the scan trailer where the instrument found one, as in
+  ThermoRawFileParser); a precursor without a charge stays charge 0, tagged per
+  `-unknown_charge` and counted with its charge source like any other input.
+- **Not yet:** `-probe_input` and `-dump_spectrum` (the desktop app's modes)
+  refuse `.raw`; a zipped `.raw.zip` is refused as compressed.
+- **Licence.** RawFileReader is Thermo Fisher Scientific's, under its own
+  licence (`share/OpenMS/LICENSES/ThermoRawFileReader-License.doc` of the
+  OpenMS install), not FASTag's MIT licence. A build that reads `.raw` prints
+  the notice that licence requires with `--version` and in `--help`:
+  "RawFileReader reading tool. Copyright © 2016 by Thermo Fisher Scientific,
+  Inc. All rights reserved." The desktop app shows it in Help > About. The
+  release bundles include RawFileReader (all but the AppImage); its terms for
+  you are under Install, the distribution terms and how the bundles meet them
+  in BOM.md (Vendor readers).
+
+Checked on three development runs (two PXD000561 Orbitrap Velos/Elite runs,
+one PXD045734 Q Exactive run; FASTag 1.15.2): every spectrum, native ID,
+retention time, precursor m/z and charge, filter string and peak equal to the
+ThermoRawFileParser 2.0 `-f=2 -x` conversion, and every FASTag output (tags,
+census, `-recon_out`, the mass-shift survey tables) byte-identical once the
+input name is masked. Against the default conversion only the reference and
+exception peaks differ. ctest `thermo_cli_test` checks the build's gate
+always, and a real run when `FASTAG_THERMO_RAW` (and `FASTAG_THERMO_MZML` for
+the spectrum-level comparison, `thermo_parity`) name one; no `.raw` is
+vendored.
+
 ## Command-line reference
 
 | Option | Default | Meaning |
 |---|---|---|
-| `-in <file>` | — | Input spectra: mzML, mzpeak or MGF (uncompressed) |
+| `-in <file>` | — | Input spectra: mzML, mzpeak or MGF (uncompressed), or a Bruker timsTOF `.d` directory or `.d.zip` (DDA-PASEF; builds with timsTOF support, see File formats) |
 | `-out <file>` | — | Tag list, tab-separated |
 | `-fasta <file>` | none | Report only tags occurring in these sequences |
 | `-out_spectra <file>` | none | Write spectra carrying a reported tag here, as mzML or mzpeak (by extension). Needs memory proportional to the *file*, not the thread count, unlike every other path |
@@ -629,9 +777,22 @@ MGF→mzML direction is exact.
 | `-recon_fasta <file>` | `-fasta` | Database for `-recon_out`; independent of the membership filter, so a proteome-scale reconciliation never forces the filter's per-length index build |
 | `-recon_missed_cleavages <n>` | 1 | Missed tryptic cleavages in reconciliation windows; 2 under `-search_engine msfragger` with `-search_config_out` and a tryptic shortlist unless given (the held-out-tested MSFragger configuration) |
 | `-recon_min_length <n>` | 0 | Shortest tag worth reconciling; 0 derives the chance-match floor from database size; 6 under `-search_engine msfragger` with `-search_config_out` and a tryptic shortlist unless given |
+| `-recon_sub_tolerance <tol>` | 5 | Advanced: tolerance of a `sub:X->Y` reading in `delta_interp` (and so in `-delta_out`'s `top_interps`), never looser than `-fragment_tolerance`. Residue mass differences lie a few mDa apart, so at a 20 ppm fragment tolerance most unexplained gaps fitted some substitution (+2.004 read as `sub:P->V`, 11.7 mDa off). `0` = `-fragment_tolerance` (1.15) |
+| `-recon_sub_tolerance_unit <unit>` | ppm | Advanced: `ppm` (of the flank the gap is on, as the modification reading) or `Da` |
 | `-recon_localize` | off | Localize each reconciliation's mass gap to one residue of its region by the b/y fragments it shifts; appends `loc_site` (residue + 1-based protein position, the first on a tie), `loc_score` (b/y ion/charge matches) and `loc_ties` (sites sharing that score; 1 = unique) to `-recon_out`. Requires `-recon_out` |
 | `-recon_id_out <file>` | none | The `-recon_out` placements as identifications: idXML, mzid or mzTab by extension (see Reconciliation). NOT FDR-controlled. Requires `-recon_out` |
-| `-delta_out <file>` | none | Aggregated mass-shift histogram over reconciliations (one best placement per spectrum). Region-level candidates, NOT localized identifications, NOT FDR-controlled. Requires `-recon_out` |
+| `-delta_out <file>` | none | Aggregated mass-shift histogram over reconciliations (one best placement per spectrum), with the sites the spectra's fragments determine and the Unimod and PSI-MOD entries that fit them (see Mass-shift survey). Candidates, NOT identifications, NOT FDR-controlled. Requires `-recon_out` |
+| `-delta_name_tolerance <tol>` | 10 | Advanced: tolerance of the `-delta_out` `unimod` and `psimod` columns (an entry names a row when its mass is within this of the row's `delta`) |
+| `-delta_name_tolerance_unit <unit>` | ppm | Advanced: `ppm` (of the median peptide mass of the row's spectra: a gap carries a flank's error, which is on the peptide's mass scale) or `Da` |
+| `-delta_group <Da>` | 0.004 | Advanced: group `-delta_out`'s 0.5 mDa bins into rows. The most populated bin takes every bin within this many Da, then the next most populated one not yet taken, without chaining: one shift is one row (at most 2 x this wide) and every sampled spectrum counts in exactly one row. `0` = the 1.15 rows (a bin no neighbour exceeds and its two smaller neighbours; a bin that is neither is not written) |
+| `-delta_spectra_out <file>` | none | Advanced: the `-delta_out` sample of every spectrum, one line each in input order: `spectrum` (native ID), `delta` (Da, 6 decimals), `row` (the `-delta_out` row it counts in; `-` for a bin no 1.15 row took), `interp` (`delta_interp`), `peptide`, `site` (residue) and `site_pos` (1-based in `peptide`) of the best-scoring site, written also when the gap is unlocalized (`-` when exact), `localized` (the site class as in `residues`; `-` when not fragment-localized or sequence-constrained, or exact), `loc_evidence` (site-determining ions or peaks), `evalue` (the tag's); then (1.16b) the provenance: `delta_full` (unrounded), `tag`, `protein`, `pos` (1-based tag start in `peptide`), `orientation` (`forward` y-read / `reversed` b-read), `gap_side` (`N`, `C`, `-` exact), `flank` (`precursor`: the flank is the precursor less a fragment, where a precursor isotope or charge error lands; `fragment`), `region` (1-based residues the gap may sit on), `charge` and `charge_source` (`given`, `inferred`, or `assumed` 2+ when the precursor has none), `precursor_isotope` (k of the tagged hypothesis), `loc_class` (`fragment`, `sequence`, `ambiguous`, `unlocalized`, `-`), `loc_score`, `loc_ties`, `loc_excluded` (loss satellites not counted, `strict`), `null_class` / `null_evidence` (`-delta_loc_null`), `obs_class` / `obs_detail` (the observation class, see Mass-shift survey), and the selected tag's competing placements: `n_placements`, `n_exact`, `n_gapped`, `n_peptides` (distinct, I/L folded), `tag_support` (placed tags of the spectrum agreeing with the sample: same peptide, gap within 0.05 Da), `tags_placed`, `placements` (`protein\|peptide\|pos\|f/r\|delta;...`). Candidates, NOT identifications. Requires `-delta_out` |
+| `-delta_select <rule>` | min_delta | Advanced: how a spectrum's `-delta_out` sample is chosen: `min_delta` (the lowest-E-value placed tag, its smallest-\|delta\| placement; 1.15) or `consensus` (the placement the most placed tags agree with: same peptide, gap within 0.05 Da; then E-value, \|delta\|). Measured on PXD045734 development runs, `consensus` agreed no better with an open search, so it is not the default (see Mass-shift survey) |
+| `-delta_loc_model <model>` | strict | Advanced: how `-delta_out` localizes a sample's gap: `count` (every matched b/y ion and charge, as `-recon_localize`; 1.16a), `unique` (a site's distinct matched peaks: one peak supports one ion) or `strict` (`unique`, and a shifted ion's peak that is an H2O or NH3 loss satellite of an observed unshifted ion does not count). `-recon_out`'s `loc_*` columns always use `count` |
+| `-delta_loc_min_evidence <n>` | 2 | Advanced: the lead over the best rival site (ions, or peaks under `unique`/`strict`) a gap needs to be fragment-localized; below it and above 0 it is ambiguous. `1` = 1.16a |
+| `-delta_loc_null <Th>` | 0 | Advanced: `-delta_spectra_out`'s `null_class`/`null_evidence`: each gapped sample is also localized on its spectrum's peaks moved by this many Th (the same peak density, no ladder), the false-localization null. `0` = off |
+| `-delta_isotope_flank <flank>` | precursor | Advanced: `isotope_error` only on rows with at least half of their gaps on the precursor-derived flank (`precursor`), or on any row (`any`, 1.16a) |
+| `-delta_isobar_tolerance <Da>` | 0.001 | Advanced: `-delta_out`'s `isobars` column takes the members within this many Da of the row's best name |
+| `-delta_counts_out <file>` | none | Advanced: the run's survey reconciliation as `key value` TSV: MS2 read, tagged (a selected-hypothesis tag reached placement), placed, clamped, samples (exact, gapped, terminal gap), the gaps' evidence classes, precursor-flank and charge-assumed counts, observation classes, rows and their spectra, and `check_*` rows (`ok`/`FAIL`) for the sums that must hold. Requires `-delta_out` |
 | `-digest_out <file>` | none | Terminal residues of the tags (ungapped, E-value ≤ 1) at P4..P1 and P1'..P4', and the protease call they support with its margin, or `no_call` with the reason (see Digest, label and mass-gap reports) |
 | `-label_out <file>` | none | TMT, TMTpro and iTRAQ4 gaps at either tag end (N- and C-terminal counts pooled, each given in the description) and the heavy Lys8/Arg10 shares |
 | `-label_discovery_out <file>`, `-label_discovery_max_flank`, `-label_discovery_depth`, `-label_discovery_min_spectra`, `-label_discovery_min_share`, `-label_discovery_window_n`, `-label_discovery_window_c`, `-label_discovery_unimod_top` | none | Removed in 1.14 (failed its held-out tests, see Held-out acceptance): accepted with a warning, no effect |
@@ -686,6 +847,10 @@ MGF→mzML direction is exact.
 | `-census_ids <file>` | none | With `-census`: identifications of `-in` (idXML or mzid with q-values); adds the columns `identified` and `triage` and a `census_ids` summary section (see Census) |
 | `-census_ids_fdr <f>` | 0.01 | With `-census_ids`: the q-value a target hit needs to identify its spectrum (advanced) |
 | `-census_triage_evalue <f>` | 0.01 | With `-census_ids`: the best E-value at or below which an unidentified tagged or placed spectrum is a triage candidate (advanced) |
+| `-qc_out <file>` | none | Run QC report: spectra per MS level and analyser class, stated and measured resolution, precursor charges, isobaric reporter kits, tag yield and MS2 redundancy (see Run QC report) |
+| `-census_ids_exact` | off | 1.15.2, with `-census_ids`: a one-to-one join (native ids only, no scan fallback; refused when any reference names no MS2 spectrum of `-in`, a spectrum has two identifications, a hit has no target/decoy annotation, or the file names no run or another run). Adds `ids_exact`, `unidentified_with_psm`, `unidentified_no_psm` to the summary (advanced; see Census) |
+| `-census_score` | off | 1.15.2, with `-census`: the columns `pre_best_evalue`, `pre_best_len`, `pre_best_mean_conf`, `pre_tag_cover` (the best tag before any database filter) and `ident_score`, a frozen ranking of how likely a standard database search identifies each MS2 spectrum; every status is scored (see Census, doc/CENSUS-IDENT.md). Experimental, not validated on held-out data |
+| `-census_sorted_out <file>` | none | With `-census_score`: the census rows ordered by `ident_score`, highest first (ties in input order), with a leading `ident_rank` column |
 | `-stream` | off | Resident single-spectrum mode: spectrum blocks on stdin, TSV rows + `#end` sentinels on stdout (see Streaming) |
 | `-progress` | off | Emit `FASTAG_PROGRESS done=<n> total=<n>` on stderr for a progress bar |
 | `-species` | off | Infer taxa from the tags (see Species detection) |
@@ -753,10 +918,10 @@ half.
 |---|---|---|
 | 0 | EXECUTION_OK | Success |
 | 2 | INPUT_FILE_NOT_READABLE | The input cannot be opened or read |
-| 3 | INPUT_FILE_CORRUPT | The input cannot be decoded, the `-digest_models` table or a shipped digest table is invalid, or the species index or taxonomy cannot be loaded |
+| 3 | INPUT_FILE_CORRUPT | The input cannot be decoded (a `.raw` also when no .NET 8 runtime is found), the `-digest_models` table or a shipped digest table is invalid, or the species index or taxonomy cannot be loaded |
 | 4 | INPUT_FILE_EMPTY | The `-fasta` or `-entrapment_fasta` file has no usable sequence, or an MGF input has no `BEGIN IONS` block |
 | 5 | CANNOT_WRITE_OUTPUT_FILE | An output cannot be written, for example because the disk is full |
-| 6 | ILLEGAL_PARAMETERS | Options conflict, a value is out of range, or the input is not mzML, mzPeak or MGF (or is a compressed mzML or MGF) |
+| 6 | ILLEGAL_PARAMETERS | Options conflict, a value is out of range, or the input is not mzML, mzPeak or MGF (or is a compressed mzML or MGF), or is a `.raw` and the build has no Thermo support |
 | 11 | INCOMPATIBLE_INPUT_DATA | The input is raw DIA (see Raw DIA input is refused; stderr carries a `FASTAG_REFUSED` line); `-out_spectra` is `.mzpeak` but the MS2 spectra carry ion mobility per peak (write `.mzML` instead); or the `-census_ids` file cannot be joined to the run (see below) |
 | 13 | UNEXPECTED_RESULT | See below |
 
@@ -945,16 +1110,32 @@ reported tag on the database.
 | `nterm_match` / `cterm_match` | 1 when that flanking mass agrees with the window; both 1 = exact placement |
 | `delta_mass` | spectrum flank minus database flank on the side that disagrees, Da, 4 decimals; `0.0000` when exact |
 | `region` | `lo-hi`, the 0-based inclusive residue range of `peptide` the gap lies in; empty when exact |
-| `delta_interp` | `mod:Name@X`, `sub:X->Y` or `?`; empty when exact |
+| `delta_interp` | `mod:Name@X`, `sub:X->Y` or `?`; empty when exact. A modification is judged at the fragment tolerance in ppm of the flank the gap is on, a substitution at `-recon_sub_tolerance` (5 ppm of that flank by default) |
 | `loc_site`, `loc_score`, `loc_ties` | only with `-recon_localize`: best site (residue + 1-based protein position), its b/y ion matches, sites sharing that score; empty when not localized |
 
 **`-delta_out`**: one row per mass-gap peak, in increasing `delta`.
 
 | Column | Meaning |
 |---|---|
-| `delta` | peak centre in Da (0.0005 Da bins; a bin no neighbour exceeds absorbs its smaller neighbours), 4 decimals |
-| `spectra` | spectra in the peak (each spectrum counts once, by its best tag's smallest-\|delta\| placement) |
+| `delta` | the row's most populated 0.0005 Da bin, Da, 4 decimals; the row holds the bins within `-delta_group` (0.004 Da) of it not taken by a more populated row (`-delta_group 0`: a bin no neighbour exceeds and its smaller neighbours, as in 1.15) |
+| `spectra` | spectra in the row (each spectrum counts once, by its best tag's smallest-\|delta\| placement; the rows sum to the sampled spectra) |
 | `top_interps` | up to three `interpretation:count` pairs separated by `;`, most frequent first; `-` when none |
+| `localized` | spectra whose gap the fragments place on one site class (the sum of `residues`) |
+| `residues` | `site:count` pairs separated by `,`, most frequent first (ties by name), localized spectra only: a residue (`K`), or a terminal-ambiguous site (`N-term\|K`, `C-term\|R`, `Protein N-term\|M`, `Protein C-term\|L`); `-` when none |
+| `unlocalized` | spectra with a gap and no site-determining evidence (no fragment tells the chosen site from another, or a tie); exact placements count in neither column |
+| `unimod` | Unimod entries within `-delta_name_tolerance` of `delta` on a site of `residues`, at most 5, by the localized spectra on their sites (most first), then by mass error: `Name@Site/Site(error)`, sites most-supported first, e.g. `Oxidation@M/W(+0.4ppm)`, `Acetyl@Protein N-term/K(-1.2ppm)`, `Gln->pyro-Glu@N-term Q(…)`; `[-Fixed]` marks an entry that replaces the residue's fixed modification (below); `-` when none |
+| `psimod` | the same for PSI-MOD terms, ranked the same way: `MOD:accession name@Site(error)`; generic and abstract terms left out (see Mass-shift survey) |
+| `isotope_error` | `13C+1(error)` or `13C+2(error)` when `delta` is within `-delta_name_tolerance` of 1 or 2 x 1.00336 Da, at least half of the row's gaps are on the precursor-derived flank (`-delta_isotope_flank`) and no better residue-specific name fits (below); `-` otherwise |
+| `fragment_localized` | (1.16b) localized spectra whose site the fragments chose with at least `-delta_loc_min_evidence` site-determining evidence |
+| `sequence_constrained` | localized spectra whose gap region is one residue: the placement, not a fragment, puts the gap there (`fragment_localized` + `sequence_constrained` = `localized`) |
+| `ambiguous` | unlocalized spectra with some site-determining evidence, below `-delta_loc_min_evidence` |
+| `precursor_flank` | spectra whose gap is on the precursor-derived flank (where a precursor isotope or charge error lands) |
+| `charge_assumed` | spectra whose precursor had no charge and was tagged as 2+; report rows with and without them |
+| `class` | the observation classes of the row's gaps, `class:count`, most frequent first (three at most): `extension`, `truncation`, `adduct`, `isotope`, `loss`, `fixed_loss`, `fixed_replacement`, `terminal`, `residue`, `substitution`, `unknown` (see Mass-shift survey) |
+| `isobars` | the exact isobars of the row's best name, `=`-separated (`Oxidation=Ala->Ser=Phe->Tyr`); `-` when it has none. Mass cannot choose among them |
+
+These columns are candidates, not identifications: nothing in them is
+FDR-controlled. See Mass-shift survey.
 
 **`-glyco_out`** (see Glyco flag): one row per processed MS2 spectrum.
 
@@ -1006,6 +1187,131 @@ region-level, nothing here is FDR-controlled, and `delta_interp` names a
 hypothesis, not an identification. On a human Astral run the zero bin
 dominates, the +1.003 isotope-error peak and a +128.095 missed-K peak appear
 where chemistry predicts them.
+
+### Mass-shift survey
+
+`-delta_out` also says where each row's gaps sit and what they could be
+(1.15.2; experimental. "1.16a" and "1.16b" below and in the option help name
+the survey's two development passes, first pass and hardening, both released
+in 1.15.2; options marked "= 1.16a" reproduce the first pass). For every spectrum the placement selected for the histogram (above) is
+localized on the spectrum's own peaks, as `-recon_localize` does: each residue
+of the gap's region is scored by the b/y ions (at fragment charges up to the
+precursor's less one) it explains carrying the gap.
+
+- **Site-determining evidence only.** Ions that put every candidate site in the
+  same state add the same to every score; what tells the chosen site from the
+  others is its score less the best other site's. The `residues` column counts
+  localized spectra only.
+- **Evidence classes (1.16b).** A gap is **fragment-localized** when that lead
+  is at least `-delta_loc_min_evidence` (2), **ambiguous** when it is 1 to
+  that less one, **unlocalized** on a tie, and **sequence-constrained** when
+  its region is a single residue: then the placement puts it there and no
+  fragment chose it, however many ions match. Localized = fragment-localized
+  + sequence-constrained (both name rows). Under the default
+  `-delta_loc_model strict` a site scores its distinct matched peaks (a peak
+  supports one ion of a site's hypothesis at most), and a shifted ion's peak
+  that is an H2O or NH3 loss satellite of an observed unshifted ion does not
+  count: in HCD those peaks sit exactly where a -18.011 or -17.027 shift puts
+  every ion. On the six PXD045734 development runs, fragment-localized sites
+  at evidence 2 agreed with MSFragger's localized residues for 0.88 (95% CI
+  0.86-0.90) of 731 checkable spectra, against 0.73 (0.72-0.75) at 1; the same
+  placements on spectra moved by 7.3 Th localized 2 of 15,405 gaps at
+  evidence 2 (268 at 1). `-delta_loc_model count -delta_loc_min_evidence 1`
+  is the 1.16a rule. `-recon_out`'s localization is unchanged.
+- **Terminal-ambiguous sites.** No b/y ion tells the peptide's first residue
+  from its N-terminus (or the last from the C-terminus), so a gap on the
+  N-side placed on the first residue is `N-term|X`, on the C-side placed on the
+  last residue `C-term|X`, with `Protein` in front when the peptide starts
+  (position 0, or 1 after an initiator Met) or ends its protein. A one-residue
+  region has no rival and is always terminal-ambiguous.
+- **Names.** Unimod entries come from OpenMS's `unimod.xml` (read as
+  ModificationsDB reads it, without `custom_mods.xml`'s CUSTOM entries), one
+  per site specificity; PSI-MOD terms are read from `PSI-MOD.obo` itself
+  with their own residue and terminus, since ModificationsDB keeps a PSI-MOD
+  term that cross-references Unimod only as an alias of the Unimod entry.
+  Cross-link terms (two origins), obsolete terms and terms on any residue (`X`)
+  without a terminus are left out, and so are generic and abstract terms: the
+  children of MOD:00008 "common" (placeholders "from UniMod representing one
+  or more entries in RESID", named after a Unimod site classification:
+  MOD:00565 "glycosylated asparagine" is Unimod 7 Deamidated's
+  N-glycosylation site, +0.984) and residue-generic classes (an origin-`X`
+  term other terms are `is_a` of, e.g. MOD:00400 "deamidated residue").
+  Deamidation on N is therefore MOD:00684 "deamidated L-asparagine". A residue site takes the entries on that
+  residue; a terminal-ambiguous site also takes the entries of its terminus
+  (`N-term`/`C-term`, the `Protein` ones only at the protein's terminus), never
+  an entry on another residue. One entry per accession with the sites it fits
+  (most localized spectra first); Unimod and PSI-MOD alike sorted by those
+  spectra (the entry that explains more of the row comes first), then by mass
+  error, at most five per column.
+  The tolerance is `-delta_name_tolerance` (default 10 ppm of the row's median
+  peptide mass); the error is written in ppm of that mass (mDa with `Da`).
+- **Fixed modifications.** Database residues carry the fixed modifications,
+  so a gap on such a residue is measured against the modified residue, and
+  Unimod masses are relative to the unmodified one. Each entry on that residue
+  is tried both ways: on top of the fixed modification (gap = entry mass) and
+  instead of it (gap = entry mass − fixed mass, written `[-Carbamidomethyl]`).
+  Dehydroalanine from Cys (Unimod `Cys->Dha`, −33.988 Da against Cys) is
+  therefore a row at −91.009 with `Cys->Dha@C[-Carbamidomethyl]` when
+  Carbamidomethyl (C) is fixed, and a row at −33.988 with `Cys->Dha@C` when it
+  is not. Fixed terminal labels (TMT, iTRAQ) are not undone.
+- **Isotope errors.** A gap on the N-side of a forward (y-read) placement is
+  the precursor mass less the top fragment, so a wrongly picked monoisotopic
+  precursor peak enters it: a +1.003 row is a 13C error candidate, and a
+  +0.984 row (deamidation) should be read next to it. Gaps on the other side
+  come from fragments only. The `isotope_error` column marks a row within the
+  name tolerance of 13C+1 (+1.00336) or 13C+2 (+2.00671) unless a
+  residue-specific name explains it better: a Unimod entry that is not an
+  isotopic label (`Label:15N(1)` and the like are the same mass coincidence,
+  not a better reading), sits on a residue, fits with a smaller error and
+  covers at least half of the row's localized spectra. A deamidation row
+  (+0.984, 19 mDa below 13C+1, localized on N/Q) keeps its name and gets no
+  isotope reading; the 0.5 mDa bins and ppm name errors keep the two apart.
+- **Rows.** One shift spread over neighbouring bins (deamidation over
+  0.981-0.997 on a Q Exactive run, the gap's error being on the peptide's
+  mass scale) is one row by default: rows are grouped around the most
+  populated bins within `-delta_group` (0.004 Da), without chaining, so two
+  shifts more than twice that apart (0.984 and 1.003) never merge, and every
+  spectrum counts once. `-delta_group 0` writes the 1.15 rows.
+  `-delta_spectra_out` lists each spectrum's sample and row, for checking
+  rows against a search engine spectrum by spectrum.
+
+- **Provenance and counts (1.16b).** `-delta_spectra_out` gives each
+  sample's tag, placement, orientation, gap side and whether that flank comes
+  from the precursor, charge and its source, the unrounded gap and the
+  selected tag's competing placements; `-delta_counts_out` reconciles the run
+  from MS2 to rows with sum checks. Tagging, selection and rows are
+  thread-independent.
+- **Observation classes (1.16b).** Each gap is classed before any name, the
+  first that fits within the name tolerance: `extension` (the 1-3 protein
+  residues beyond the peptide on the gap's side: a missed cleavage, +156.101
+  for Arg), `truncation` (minus the 1-3 region residues at that terminus),
+  `adduct` (the nearest of Na+, Mg2+, K+, Ca2+, Fe3+, Fe2+ for protons, or
+  NH3), `isotope` (1 or 2 x 13C on a precursor-derived flank, nearer 13C than
+  deamidation), `loss` (H2O, NH3, CH4SO, H3PO4), `fixed_loss` (minus a fixed
+  modification on a residue carrying it: -57.021 on carbamidomethyl-Cys is an
+  unalkylated Cys; tried first when the gap is localized on that residue),
+  `fixed_replacement` / `terminal` / `residue` (a non-label Unimod entry fits
+  instead of a fixed modification, on a terminus, on a residue),
+  `substitution` (the placement's `sub:X->Y`), else `unknown`. A class says
+  what kind of observation the mass is, not that the chemistry is proven.
+- **Exact isobars (1.16b).** Oxidation = Ala->Ser = Phe->Tyr, dioxidation =
+  Pro->Glu = 2 x oxidation, acetyl = Ser->Glu, deamidation = Asn->Asp =
+  Gln->Glu, carbamidomethyl = Gly->Asn, carboxymethyl = acetyl + oxidation
+  share one elemental composition: the `isobars` column lists the class of
+  the row's best name (catalogue names, substitutions of the row's localized
+  residues, sums of two common modifications within
+  `-delta_isobar_tolerance`), so a row is not read as its first name alone.
+- **Charge.** A precursor without a charge is tagged and localized as 2+
+  (`charge_source` `assumed`); a 3+ precursor then gives a wrong
+  precursor-derived flank. `charge_assumed` counts them per row. On the
+  PXD045734 development runs they were 7.6% of the samples, and 10% of their
+  gaps agreed with an open search (73% of the others').
+
+What the columns are not: a placement is a peptide window chosen by tag
+E-value and the smallest gap, not a validated peptide; a localized site is the
+best-supported residue of that window; a name is a catalogue entry that fits
+the mass on that residue. Frequencies of modifications need validated
+placements and sites; these are candidates to check.
 
 ## Protein shortlist and search hand-off
 
@@ -1337,6 +1643,21 @@ unidentified spectra a second (semi-specific or open) search identifies was
 tested on held-out runs (second test PASS for a semi-enzymatic search; not shown for an open search): [doc/CENSUS-TRIAGE-EVAL.md](doc/CENSUS-TRIAGE-EVAL.md),
 which also describes `tools/census_triage_eval.py`, the scorer.
 
+`-census_score` (1.15.2, experimental) adds four columns before any database filter
+(`pre_best_evalue`, `pre_best_len`, `pre_best_mean_conf`, `pre_tag_cover`: the
+best of all tags of the selected precursor hypothesis, so they do not change
+with `-fasta`) and, after the run, `ident_score` (before `identified` and
+`triage`, which stay last). The score is a frozen logistic model on the
+per-run mid-ranks of twelve census features, fitted once on development runs
+of PXD000561 against a pinned Sage search; it is defined for every status and
+orders spectra for review, it is not a probability or a quality call, and with
+per-run ranks it depends on the whole run (and on subsampling). The summary
+gains section `census_score` (model, features, rows). `-census_sorted_out`
+writes the rows ordered by it. `-census_ids_exact` makes the ids join
+one-to-one for label joins (see the options table). Method, label join and the
+development result: [doc/CENSUS-IDENT.md](doc/CENSUS-IDENT.md),
+`tools/census_ident.py`.
+
 For front ends that list a run's outputs by option name (the GUI's resolved
 outputs): the census files are `census_out` and `census_summary_out`. With
 `-census` and no path of their own they are `<out>` with its extension
@@ -1345,6 +1666,90 @@ replaced by `.census.tsv` and `.census_summary.tsv` (the rule of
 `-census_ids` run refused for foreign references writes neither. The log
 names both paths (`Census: ... -> <census_out>, summary ->
 <census_summary_out>`).
+
+## Run QC report
+
+`-qc_out <file>` writes a key/value report on the run in the five-column
+format of the census summary (section, key, value, n, description): the `run`
+rows, then section `qc`. Every other output is the same with or without it.
+It reads the spectra the tagging pass reads anyway, plus at most 32 profile
+spectra per analyser class and MS level for the measured resolution, so it
+adds little to a run. With `-subsample_*` every count covers the spectra read
+(`spectra_read`, `subsampled`). It cannot be combined with `-stream`.
+
+- **Counts.** `count_ms<L>` and `count_ms<L>_<class>` per MS level and
+  analyser class `ITMS`, `FTMS`, `TOF` (Astral included), `other` or
+  `unknown`. The class comes from the Thermo filter string, else from the
+  instrument configuration the scan references, else from the run's default
+  configuration (`analyzer_source_filter/config/run/none` count which). Only
+  metadata is read: MS1 scans are counted although the fast mzML reader never
+  decodes their peaks. `sps_ms3` counts MS3 scans with several precursors.
+  MGF carries no analyser (class `unknown`).
+- **Resolution**, per class and MS level. `resolution_stated_<class>_ms<L>`
+  is the median value the file states (mass resolving power MS:1000800 or
+  mass resolution MS:1000011, as OpenMS's readers give them; vendors usually
+  state it at a reference m/z). `resolution_measured_<class>_ms<L>_mz<lo>-<hi>`
+  is the median m/z / FWHM measured on profile spectra before any
+  centroiding (OpenMS PeakPickerHiRes, `report_FWHM`), by m/z band (0-400,
+  400-800, 800-1200, 1200-2000, 2000+), with n = peaks. A peak counts only if
+  its apex is at least 10x the median positive intensity, at least 3 raw
+  points with signal lie inside its FWHM, and no other peak of 10% of its
+  height or more lies within 3 FWHM; the 20 most intense per spectrum are
+  kept. Up to 32 spectra per class are sampled evenly over the run. A class
+  with centroided spectra only is `n/a` (`centroid_only`); so is every class
+  of an mzPeak input (`mzpeak_input`: its MS1 peaks are not kept and its
+  profile MS2 are centroided as they are read). A Thermo `.raw` input is
+  tagged on vendor-centroided scans, which state their resolving power; for
+  the measured value the sampled scans are read again as acquired (the
+  reader's profile representation), so profile scans are measured
+  (`thermo_profile_unavailable` when that reread fails). A Bruker `.d` input
+  is read centroided, so its classes are `n/a`. `resolution_<class>_ms<L>` is
+  the stated value, else the measured median over all bands
+  (`resolution_source_*` says which).
+- **Precursor charge.** `precursor_charge_<z>` and its `_share` over the MS2
+  spectra; 0 = no charge given (Bruker writes 0 when it found none).
+- **Isobaric reporters**, from OpenMS's channel tables of TMT 6/10/11/16/18
+  and iTRAQ 4/8. A channel is seen in an MS2 spectrum when a peak lies within
+  20 ppm of it (the closest TMT channels are 6.3 mDa apart) at 3x the
+  spectrum's median peak intensity or more, and observed in the run when seen
+  in 20% of the assessable MS2. An MS2 spectrum is not assessable for a
+  family when its scan window (without one: its lowest peak) starts above the
+  family's lowest channel (`low_mass_cutoff`, e.g. ion-trap CID), when it was
+  read out in an ion trap (`ion_trap_ms2`), or when it is empty. A family
+  with 3 or more observed channels is present; then each kit is `present`
+  when every observed channel is one of its channels and `absent` otherwise,
+  and `reporter_compatible_kits` lists the present kits, smallest first (TMT6
+  channels alone fit all five TMT kits; TMTpro shares TMT's masses). With
+  fewer than 20 assessable MS2 a kit is `not_assessable` with the most
+  frequent reason, and when the run has MS3 scans and no reporters in MS2 it
+  is `not_assessable` (`sps_ms3_not_read`: an SPS-MS3 design puts the
+  reporters in MS3, which FASTag does not read).
+- **Tag yield.** `tag_yield`: the share of the MS2 spectra read whose best
+  reported tag has E <= 0.01 (the census's best tag: after `-fasta` when it is
+  given). It is the yield of the run as tagged: profile MS2 in an mzML are
+  tagged as read and give far fewer tags (PXD000561/PXD000865 profile vs
+  centroided conversions: 0.7-10% vs 25-78%), so give centroided input or
+  `-pick_profile` for this number and profile input for the measured
+  resolution.
+- **Redundancy.** `redundancy_share`: the share of the MS2 spectra with peaks
+  and a precursor that fall into clusters of size > 1. Two spectra may share
+  a cluster when they have the same precursor charge (0 matches 0 only),
+  precursor m/z within 10 ppm, 1/K0 within 0.02 when both have one, and a
+  binned cosine >= 0.8 over at least 6 shared bins (1.0005 Th bins, square
+  root intensities, the 50 most intense peaks after the reporter channels,
+  immonium ions and the precursor with its water/ammonia losses and charge
+  states are removed). Clusters are complete linkage (every pair linked, the
+  most similar merged first) with an RT span of at most 60 s, so a chain of
+  spectra cannot stretch a cluster. `redundancy_tag_*` is the same with "the
+  same best tag at E <= 0.01" instead of the cosine. The result does not
+  depend on `-threads` or on input order; linked groups larger than 300
+  spectra are clustered in RT chunks of 300 (`redundancy_components_split`),
+  which bounds time (O(300^3) per chunk) and memory (about 0.5 KB per MS2).
+
+None of these is a quality call, and none has been validated as one: the
+resolution measurement was tested on synthetic profiles of known width, the
+counts against ThermoRawFileParser's metadata on 8 Orbitrap runs, and
+redundancy purity on identified spectra is still open.
 
 ## Tag diversity
 

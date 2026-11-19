@@ -84,7 +84,8 @@ Var FastagTries
 ; or DLL can still be held for a moment (the image section of a process that
 ; is just ending, an on-access scan; seen as leftovers under x64 emulation on
 ; Windows on ARM64), and the uninstaller then leaves the CLI, its DLLs and
-; uninstall.exe behind. Retry those for up to 30 s, then schedule what is
+; uninstall.exe behind; the .NET runtime of the Thermo reader (bin\dotnet)
+; likewise. Retry those for up to 30 s, then schedule what is
 ; still held for deletion at the next restart (/REBOOTOK) and say so.
 ; uninstall.exe is retried only when this uninstaller runs from its %TEMP%
 ; copy; run in place (_?=, as the pre-install hook does) it is the running
@@ -93,6 +94,7 @@ Var FastagTries
   Delete ${FLAGS} "$INSTDIR\${MAINBINARYNAME}.exe"
   Delete ${FLAGS} "$INSTDIR\resources\fastag\bin\*.exe"
   Delete ${FLAGS} "$INSTDIR\resources\fastag\bin\*.dll"
+  RMDir /r ${FLAGS} "$INSTDIR\resources\fastag\bin\dotnet"
   ${If} $EXEDIR != $INSTDIR
     Delete ${FLAGS} "$INSTDIR\uninstall.exe"
   ${EndIf}
@@ -105,6 +107,7 @@ Var FastagTries
     ${If} ${FileExists} "$INSTDIR\${MAINBINARYNAME}.exe"
     ${OrIf} ${FileExists} "$INSTDIR\resources\fastag\bin\*.exe"
     ${OrIf} ${FileExists} "$INSTDIR\resources\fastag\bin\*.dll"
+    ${OrIf} ${FileExists} "$INSTDIR\resources\fastag\bin\dotnet\*.*"
       StrCpy $FastagOtherCode 1
     ${EndIf}
     ${If} $EXEDIR != $INSTDIR

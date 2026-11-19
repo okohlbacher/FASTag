@@ -9,6 +9,7 @@
 
     windows_installed_check.ps1 -Installer <setup.exe> [-Scope AllUsers|CurrentUser]
                                 [-Out <dir>] [-Keep] [-DirOut <file>]
+                                [-ThermoRaw <file.raw>]
 
   -DirOut: a file the install folder is written to (for the steps after).
 
@@ -19,7 +20,11 @@
       environment and spawn path -- and reports the CLI ran;
     - FASTag.exe --help exits 0 and prints "Version: X.Y.Z";
     - FASTag.exe -write_ini writes the INI the Setup page is built from;
-    - a tagging run on the bundled fixture exits 0 and writes tags.
+    - a tagging run on the bundled fixture exits 0 and writes tags;
+    - the Thermo reader (1.15.2): its licence, notices and the .NET runtime
+      are installed, --help carries RawFileReader's notice, and with
+      -ThermoRaw <file.raw> (or FASTAG_THERMO_SMOKE_RAW) the installed CLI
+      reads that .raw through the bundled runtime.
   Exactly one Apps entry must remain, in -Scope. Uninstalls afterwards unless
   -Keep, and checks that no file, folder, Apps entry or shortcut is left
   (windows_install_lib.ps1). Exits 1 on the first failure.
@@ -29,7 +34,8 @@ param(
   [ValidateSet('AllUsers', 'CurrentUser')][string]$Scope = 'AllUsers',
   [string]$Out = (Join-Path ([IO.Path]::GetTempPath()) 'fastag-installed-check'),
   [switch]$Keep,
-  [string]$DirOut = ''
+  [string]$DirOut = '',
+  [string]$ThermoRaw = $env:FASTAG_THERMO_SMOKE_RAW
 )
 $ErrorActionPreference = 'Stop'
 . (Join-Path $PSScriptRoot 'windows_install_lib.ps1')
@@ -43,7 +49,9 @@ $exe = Join-Path $R 'bin\FASTag.exe'
 if (-not (Test-Path $exe)) { Fail "no bundled CLI at $exe (installed: $((Get-ChildItem $Dest -Name) -join ', '))" }
 # The notices and the example data travel with the installed app
 # (tools/check_bundle_notices.sh checks the same on macOS and Linux).
-foreach ($f in @('LICENSE', 'THIRD-PARTY-NOTICES.txt', 'GUI-THIRD-PARTY-NOTICES.txt', 'examples\Ecoli_MS2_small.mzML')) {
+foreach ($f in @('LICENSE', 'THIRD-PARTY-NOTICES.txt', 'GUI-THIRD-PARTY-NOTICES.txt', 'examples\Ecoli_MS2_small.mzML',
+                 'LICENSES\ThermoRawFileReader-License.doc', 'LICENSES\ThermoRawFileReader-License.txt',
+                 'share\OpenMS\openms_thermo_bridge\managed\ThermoFisher.CommonCore.RawFileReader.dll')) {
   if (-not (Test-Path (Join-Path $R $f))) { Fail "the installed app has no resources\fastag\$f" }
 }
 $guiNotices = Join-Path $R 'GUI-THIRD-PARTY-NOTICES.txt'
@@ -53,6 +61,10 @@ foreach ($want in @('^tauri ', '^wry ', '^react ', 'IBM Plex', 'NSIS', '^\[T1\] 
   if (-not (Select-String -Path $guiNotices -Pattern $want -Quiet)) { Fail "GUI-THIRD-PARTY-NOTICES.txt has no line matching '$want'" }
 }
 if (Select-String -Path (Join-Path $R 'THIRD-PARTY-NOTICES.txt') -Pattern 'licence text not found' -Quiet) { Fail 'THIRD-PARTY-NOTICES.txt lists a licence without its text' }
+foreach ($want in @('Thermo RawFileReader -- licence terms for end users', 'may not redistribute the', '.NET runtime (dotnet/', 'opentims v1.2.0b4')) {
+  if (-not (Select-String -Path (Join-Path $R 'THIRD-PARTY-NOTICES.txt') -Pattern $want -SimpleMatch -Quiet)) { Fail "THIRD-PARTY-NOTICES.txt lacks '$want'" }
+}
+if (-not (Get-ChildItem (Join-Path $R 'bin\dotnet\host\fxr') -Recurse -Filter 'hostfxr.dll' -ErrorAction SilentlyContinue)) { Fail 'no .NET runtime (bin\dotnet\host\fxr\*\hostfxr.dll) in the installed app' }
 $exSha = (Get-FileHash (Join-Path $R 'examples\Ecoli_MS2_small.mzML') -Algorithm SHA256).Hash.ToLower()
 if ($exSha -ne '30717211f2a832e281604a4cdc12d13d74f484d9fb51a5d94a62f80713c16f6e') { Fail "examples\Ecoli_MS2_small.mzML has sha256 $exSha" }
 Write-Host "notices: GUI-THIRD-PARTY-NOTICES.txt $n bytes, THIRD-PARTY-NOTICES.txt $((Get-Item (Join-Path $R 'THIRD-PARTY-NOTICES.txt')).Length) bytes; example data present"
@@ -91,6 +103,8 @@ function Invoke-Cli([string]$label, [string[]]$argv) {
   $tax = Join-Path $R 'share\FASTag\taxonomy'
   if (Test-Path (Join-Path $tax 'tax_k7.taxdb')) { $psi.EnvironmentVariables['FASTAG_TAXONOMY_DIR'] = $tax }
   $psi.EnvironmentVariables['OPENBLAS_NUM_THREADS'] = '1'
+  # The installed app's own .NET runtime (bin\dotnet), never this runner's.
+  $psi.EnvironmentVariables.Remove('DOTNET_ROOT')
   if ($arm64) { $psi.EnvironmentVariables['MIMALLOC_DISABLE_REDIRECT'] = '1' }
   $proc = [System.Diagnostics.Process]::Start($psi)
   $so = $proc.StandardOutput.ReadToEndAsync(); $se = $proc.StandardError.ReadToEndAsync()
@@ -109,6 +123,7 @@ $help = Invoke-Cli 'FASTag.exe --help' @('--help')
 $ver = [regex]::Match($help, 'Version:\s*([0-9][^\s,]*)')
 if (-not $ver.Success) { Fail '--help printed no "Version:"' }
 Write-Host "version $($ver.Groups[1].Value)"
+if (-not $help.Contains('RawFileReader reading tool. Copyright')) { Fail '--help lacks the RawFileReader notice' }
 
 $ini = Join-Path $Out 'defaults.ini'
 Invoke-Cli 'FASTag.exe -write_ini' @('-write_ini', $ini) | Out-Null
@@ -120,6 +135,16 @@ Invoke-Cli 'FASTag.exe tagging run' @('-in', $mz, '-out', $tsv, '-threads', '2')
 $rows = (Get-Content $tsv | Measure-Object -Line).Lines
 if ($rows -lt 2) { Fail "the tagging run wrote $rows lines to $tsv" }
 Write-Host "tagging run: $rows lines in $tsv"
+
+if ($ThermoRaw) {
+  if (-not (Test-Path $ThermoRaw)) { Fail "-ThermoRaw $ThermoRaw does not exist" }
+  $rawLog = Invoke-Cli 'FASTag.exe on a Thermo .raw' @('-in', $ThermoRaw, '-out', (Join-Path $Out 'installed.raw.tsv'), '-threads', '2')
+  $m = [regex]::Match($rawLog, 'Thermo \.raw input: ([1-9][0-9]*) scans indexed')
+  if (-not $m.Success) { Write-Host $rawLog; Fail 'the installed CLI read no scans from the .raw' }
+  Write-Host "Thermo .raw through the installed app: $($m.Groups[1].Value) scans indexed"
+} else {
+  Write-Host '::warning::no -ThermoRaw given: the installed Thermo reader was not run'
+}
 
 if (-not $Keep) { Uninstall-Fastag $install }
 Write-Host "installed-app check passed ($Scope, $Dest)"

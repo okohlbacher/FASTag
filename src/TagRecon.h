@@ -14,6 +14,7 @@
 
 #include <OpenMS/KERNEL/MSSpectrum.h>
 
+#include <cstdint>
 #include <string>
 #include <vector>
 
@@ -58,7 +59,41 @@ namespace FASTag
     size_t      loc_site = 0;   ///< 1-based position of that residue in the protein
     int         loc_score = 0;  ///< b/y ion/charge matches with the gap on loc_pos
     int         loc_ties = 0;   ///< region positions sharing loc_score; 1 = unique
+    /// Site-determining evidence for loc_pos (1.16): its score less the best
+    /// score of any OTHER region site. Ions that every candidate site puts
+    /// in the same state add the same to all scores and cancel, so this is
+    /// the net count of the ions that tell the chosen site from its nearest
+    /// rival. 0 on a tie or with no evidence; 0 as well when the region is a
+    /// single residue (loc_alternatives == 0), where nothing competes.
+    int         loc_evidence = 0;
+    /// Other residues of the region the gap could sit on (region size - 1).
+    int         loc_alternatives = 0;
+    /// LocModel::STRICT only (1.16b): matches of a shifted ion that were not
+    /// counted because the peak is an H2O or NH3 loss satellite of an
+    /// observed unshifted ion. 0 under the other models.
+    int         loc_excluded = 0;
+    /// Text positions of the placement's window [win_start, win_end), for a
+    /// localization after the fact (TagReconciler::localize).
+    uint32_t    win_start = 0, win_end = 0;
+    /// Neutral monoisotopic mass of the database peptide, fixed mods included.
+    double      pep_mass = 0.0;
+    /// The peptide starts its protein (position 0, or 1 after an initiator
+    /// Met) / ends it: the gap's terminus may be the protein's.
+    bool        protein_nterm = false, protein_cterm = false;
   };
+
+  /**
+    @brief How a gap's site is scored on the spectrum's fragments (1.16b).
+
+    COUNT is 1.11-1.16a: every b/y ion and charge with a peak within the
+    tolerance counts, so one peak can count for several ions. UNIQUE counts
+    a site's distinct matched peaks: a peak supports at most one ion of a
+    site's hypothesis. STRICT is UNIQUE, and a shifted ion's peak does not
+    count when it is an H2O or NH3 loss satellite of an observed unshifted
+    ion (at the same charge), the HCD loss peaks that otherwise read as a
+    -18.011 / -17.027 shift on any residue.
+  */
+  enum class LocModel : std::uint8_t { COUNT = 0, UNIQUE = 1, STRICT = 2 };
 
   /**
     @brief A candidate variable modification for interpreting a mass gap.
@@ -166,6 +201,25 @@ namespace FASTag
       @param[in] series the ion pair the tag was read as, or nullptr for b/y
       @return the placements
     */
+    /**
+      @brief Localize one placement after the fact, as reconcile() does with a spectrum.
+
+      For a placement made without a spectrum (no -recon_localize) whose gap
+      a report still needs placed. Does nothing for an exact placement or one
+      already localized (loc_pos >= 0).
+
+      @param[in,out] r a placement this reconciler returned
+      @param[in] spec m/z-sorted fragment peaks
+      @param[in] precursor_charge the precursor charge (<= 0 counts as 2)
+      @param[in] tag_shift per-residue variable modification shifts of the tag, or nullptr
+      @param[in] series the ion pair the tag was read as, or nullptr for b/y
+      @param[in] model how sites are scored (reconcile() always uses COUNT)
+    */
+    void localize(Reconciliation& r, const OpenMS::MSSpectrum& spec, int precursor_charge = 2,
+                  const std::vector<double>* tag_shift = nullptr,
+                  const IonSeries::IonPair* series = nullptr,
+                  LocModel model = LocModel::COUNT) const;
+
     std::vector<Reconciliation> reconcileByMass(const std::string& tag, double nterm_mass, double cterm_mass,
                                                 const IonSeries::IonPair* series = nullptr) const;
 
@@ -193,6 +247,21 @@ namespace FASTag
     */
     void setFixedTermMods(double nterm, double cterm) { fixed_n_ = nterm; fixed_c_ = cterm; }
 
+    /**
+      @brief Sets the tolerance of a "sub:X->Y" gap interpretation (1.16).
+
+      Residue mass differences are dense at the mDa scale (190 of them), so
+      at the fragment tolerance a ppm run read most unexplained gaps as some
+      substitution (+2.004 as sub:P->V, 11.7 mDa off). A substitution is
+      judged at this tolerance, in ppm of the same flank the gap is on (as
+      the modification reading) or in Da, and never looser than the fragment
+      tolerance. 0 judges substitutions at the fragment tolerance (1.15).
+
+      @param[in] tol the tolerance, 0 = the fragment tolerance
+      @param[in] ppm whether @p tol is in ppm of the flank (else Da)
+    */
+    void setSubstitutionTolerance(double tol, bool ppm) { sub_tol_ = tol; sub_ppm_ = ppm; }
+
   private:
     double tolAt_(double m) const { return tol_ppm_ ? m * frag_tol_ * 1e-6 : frag_tol_; }
     /// The database flank masses tryPlace compares an occurrence with (the
@@ -209,13 +278,15 @@ namespace FASTag
                    const OpenMS::MSSpectrum& spec, int frag_charges,
                    const ProteomeIndex::TagOcc& occ,
                    const std::vector<double>* tag_shift,
-                   const IonSeries::IonPair* series) const;
+                   const IonSeries::IonPair* series, LocModel model = LocModel::COUNT) const;
     /// Best explanation of @p delta over the residues in @p region: a candidate
     /// mod on a present residue, a single substitution of a present residue, or
     /// "?" if neither fits within tolerance. Prefers whichever fits with the
     /// smaller mass error; on a near-tie a modification wins (it is the more
     /// common explanation).
-    std::string interpretDelta_(double delta, const std::string& region) const;
+    /// @p tol is the tolerance of the flank the gap is on (see tryPlace_);
+    /// @p sub_tol the (tighter) one of a substitution (setSubstitutionTolerance).
+    std::string interpretDelta_(double delta, const std::string& region, double tol, double sub_tol) const;
 
     double frag_tol_;
     bool   tol_ppm_;
@@ -225,6 +296,8 @@ namespace FASTag
     double residue_masses_[128] = {0};  ///< by ASCII code, unmodified
     std::vector<ModCandidate> mods_;    ///< candidate variable mods for gap interpretation
     double fixed_n_ = 0, fixed_c_ = 0;  ///< fixed peptide N-/C-terminal mod masses
+    double sub_tol_ = 0;     ///< substitution tolerance, 0 = the fragment tolerance
+    bool   sub_ppm_ = true;  ///< sub_tol_ in ppm of the flank (else Da)
     const ProteomeIndex* idx_ = nullptr;    ///< the index queries run against
   };
 }

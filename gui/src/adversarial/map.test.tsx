@@ -18,7 +18,7 @@ describe('map: param overlay vs CLI manifest', () => {
     expect(c).toContain('domain')
     expect(c).not.toContain('superkingdom')
   })
-  it('renders 68 parameters and hides 99, including the experimental TMT filters', () => {
+  it('renders 68 parameters and hides 116 (17 command-line-only options of 1.15.2), including the experimental TMT filters', () => {
     // 1.10.0 added species_evidence (rendered) to the 1.9.0 set; 1.12.0 adds
     // 64 options (8 of them #17 -search_shifts), hidden until each has its GUI design, except
     // acquisition_check: its default refuses raw DIA, so the form offers warn/off.
@@ -42,7 +42,8 @@ describe('map: param overlay vs CLI manifest', () => {
     // species_reagents (reagent calls of -species_call explain) adds one hidden experimental option.
     // post-1.13.1 adds shortlist_exact_only (msfragger gapped default off), hidden as experimental.
     // 1.14 removes shortlist_exact_only (failed its held-out test): the name stays, hidden, advanced since.
-    expect(HIDDEN_PARAMS.length).toBe(99)
+    expect(HIDDEN_PARAMS.length).toBe(116)
+    for (const n of ['qc_out', 'census_score', 'census_sorted_out', 'delta_spectra_out']) expect(HIDDEN_PARAMS).toContain(n)
     expect(HIDDEN_PARAMS).toContain('shortlist_exact_only')
     expect(HIDDEN_PARAMS).toContain('search_missed_cleavages')
     expect(HIDDEN_PARAMS).toContain('search_nterm_acetyl')
@@ -61,7 +62,7 @@ describe('map: param overlay vs CLI manifest', () => {
     for (const n of manifest.params.map((p) => p.name).filter((n) => n.startsWith('label_discovery_'))) expect(HIDDEN_PARAMS).toContain(n)
     expect(RENDERED).toContain('acquisition_check')
     expect(PARAM_BY_NAME.get('acquisition_check')?.choices).toEqual(['refuse', 'warn', 'off'])
-    expect(manifest.params.length).toBe(167)
+    expect(manifest.params.length).toBe(184)
   })
   it('renders or hides every parameter of the manifest once (mzpeak_read_memory hidden)', () => {
     // In addition to the pinned counts above: every manifest parameter is

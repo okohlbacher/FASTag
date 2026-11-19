@@ -158,6 +158,7 @@ namespace FASTag::CensusIds
     if (OpenMS::StringUtils::trimmed(ref).empty()) return false;
     auto [it, fresh] = refs_.try_emplace(escaped(ref));
     if (fresh) it->second.scan = scanOf(it->first);
+    else ++dups_;
     it->second.accepted = it->second.accepted || accepted;
     return true;
   }
@@ -180,6 +181,7 @@ namespace FASTag::CensusIds
   {
     const auto it = refs_.find(native_id);
     if (it != refs_.end()) return it->second.accepted ? Ident::YES : Ident::NO;
+    if (exact_) return Ident::NO;
     const long long s = scanOf(native_id);
     if (s < 0) return Ident::NO;
     const auto bs = by_scan_.find(s);
@@ -238,6 +240,7 @@ namespace FASTag::CensusIds
         ++L.n_hits;
         const double q = qValue(id, h);
         if (std::isfinite(q)) ++L.n_hits_q;
+        if (h.getTargetDecoyType() == OpenMS::PeptideHit::TargetDecoyType::UNKNOWN) ++L.n_hits_no_td;
         // target+decoy counts as a target (OpenMS FDR); unannotated as well.
         if (h.getTargetDecoyType() == OpenMS::PeptideHit::TargetDecoyType::DECOY) continue;
         any_target = true;
@@ -367,6 +370,7 @@ namespace FASTag::CensusIds
         triage = "0";
         const bool reported = st == static_cast<std::size_t>(Census::Status::TAGGED)
                               || st == static_cast<std::size_t>(Census::Status::PLACED);
+        if (ident == Ident::NO && !index.named(id)) ++tally.unnamed;
         if (ident == Ident::NO && reported)
         {
           ++tally.triage_eligible;
@@ -403,7 +407,7 @@ namespace FASTag::CensusIds
 
   std::vector<Digest::Row> summaryRows(const Loaded& L, const Index::Counts& c, const JoinTally& t,
                                        const std::string& ids_path, const std::string& run_check, double fdr,
-                                       double triage_evalue, bool unmatched_known)
+                                       double triage_evalue, bool unmatched_known, bool exact)
   {
     using Digest::num;
     const std::string sec = "census_ids";
@@ -460,6 +464,36 @@ namespace FASTag::CensusIds
     r.push_back({sec, "triage_candidates", num(t.triage), num(t.triage_eligible),
                  num(t.triage) + " of " + num(t.triage_eligible) +
                      " unidentified tagged or placed spectra have best_evalue <= " + num(triage_evalue) + "."});
+    if (exact)
+    {
+      const std::uint64_t no = t.by_ident[static_cast<std::size_t>(Ident::NO)];
+      r.push_back({sec, "ids_exact", "1", "-",
+                   "Exact join: native ids only, every reference matched one spectrum read, one identification "
+                   "per spectrum, every hit target or decoy, the file names -in."});
+      r.push_back({sec, "unidentified_with_psm", num(no - t.unnamed), num(no),
+                   num(no - t.unnamed) + " unidentified rows are named by a reference (searched, no accepted hit)."});
+      r.push_back({sec, "unidentified_no_psm", num(t.unnamed), num(no),
+                   num(t.unnamed) + " unidentified rows are named by no reference (no PSM exported)."});
+    }
     return r;
+  }
+
+  std::string exactRefusal(const Loaded& L, const Index& index, const Index::Counts& c, const std::string& run_check)
+  {
+    const std::string p = "-census_ids_exact: ";
+    if (run_check != "match")
+      return p + (run_check == "unnamed" ? std::string("the identification file names no run")
+                                         : "the identification file names the run '" + L.runs.front() + "'") +
+             ", so it cannot be shown to belong to -in (a file of another run matches native ids exactly).";
+    if (L.n_hits_no_td > 0)
+      return p + std::to_string(L.n_hits_no_td) + " of " + std::to_string(L.n_hits) +
+             " hits carry no target/decoy annotation (target_decoy meta value).";
+    if (index.duplicates() > 0)
+      return p + std::to_string(index.duplicates()) +
+             " spectrum references occur in more than one identification; the join must be one-to-one.";
+    if (c.unmatched > 0 || c.ambiguous > 0)
+      return p + std::to_string(c.unmatched + c.ambiguous) + " of " + std::to_string(c.refs) +
+             " spectrum references name no MS2 spectrum of -in by its native id.";
+    return std::string();
   }
 }

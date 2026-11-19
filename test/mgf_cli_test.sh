@@ -219,7 +219,7 @@ expect 4 "is empty" -in "$h/empty.mgf" -out "$h/x.tsv" "${ARGS[@]}"             
 printf 'this is not\nan MGF file\n' > "$h/text.mgf"
 expect 4 "contains no BEGIN IONS block" -in "$h/text.mgf" -out "$h/x.tsv" "${ARGS[@]}"
 cp "$MZML" "$h/run.txt"
-expect 6 "neither .mzML, .mzpeak nor .mgf" -in "$h/run.txt" -out "$h/x.tsv" "${ARGS[@]}"
+expect 6 "is neither .mzML, .mzpeak, .mgf, a Thermo .raw nor a Bruker timsTOF" -in "$h/run.txt" -out "$h/x.tsv" "${ARGS[@]}"
 # A truncated last block: refused before any output is opened.
 head -c $(( $(wc -c < "$MGF") - 20 )) "$MGF" > "$h/trunc.mgf"
 rm -f "$h/trunc.tsv"
