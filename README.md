@@ -709,7 +709,7 @@ message; convert it with
   include it yet.
 
 Checked on three development runs (two PXD000561 Orbitrap Velos/Elite runs,
-one PXD045734 Q Exactive run; FASTag 1.16 item 3): every spectrum, native ID,
+one PXD045734 Q Exactive run; FASTag 1.15.2): every spectrum, native ID,
 retention time, precursor m/z and charge, filter string and peak equal to the
 ThermoRawFileParser 2.0 `-f=2 -x` conversion, and every FASTag output (tags,
 census, `-recon_out`, the mass-shift survey tables) byte-identical once the
@@ -825,8 +825,8 @@ vendored.
 | `-census_ids_fdr <f>` | 0.01 | With `-census_ids`: the q-value a target hit needs to identify its spectrum (advanced) |
 | `-census_triage_evalue <f>` | 0.01 | With `-census_ids`: the best E-value at or below which an unidentified tagged or placed spectrum is a triage candidate (advanced) |
 | `-qc_out <file>` | none | Run QC report: spectra per MS level and analyser class, stated and measured resolution, precursor charges, isobaric reporter kits, tag yield and MS2 redundancy (see Run QC report) |
-| `-census_ids_exact` | off | 1.16, with `-census_ids`: a one-to-one join (native ids only, no scan fallback; refused when any reference names no MS2 spectrum of `-in`, a spectrum has two identifications, a hit has no target/decoy annotation, or the file names no run or another run). Adds `ids_exact`, `unidentified_with_psm`, `unidentified_no_psm` to the summary (advanced; see Census) |
-| `-census_score` | off | 1.16, with `-census`: the columns `pre_best_evalue`, `pre_best_len`, `pre_best_mean_conf`, `pre_tag_cover` (the best tag before any database filter) and `ident_score`, a frozen ranking of how likely a standard database search identifies each MS2 spectrum; every status is scored (see Census, doc/CENSUS-IDENT.md). Experimental, not validated on held-out data |
+| `-census_ids_exact` | off | 1.15.2, with `-census_ids`: a one-to-one join (native ids only, no scan fallback; refused when any reference names no MS2 spectrum of `-in`, a spectrum has two identifications, a hit has no target/decoy annotation, or the file names no run or another run). Adds `ids_exact`, `unidentified_with_psm`, `unidentified_no_psm` to the summary (advanced; see Census) |
+| `-census_score` | off | 1.15.2, with `-census`: the columns `pre_best_evalue`, `pre_best_len`, `pre_best_mean_conf`, `pre_tag_cover` (the best tag before any database filter) and `ident_score`, a frozen ranking of how likely a standard database search identifies each MS2 spectrum; every status is scored (see Census, doc/CENSUS-IDENT.md). Experimental, not validated on held-out data |
 | `-census_sorted_out <file>` | none | With `-census_score`: the census rows ordered by `ident_score`, highest first (ties in input order), with a leading `ident_rank` column |
 | `-stream` | off | Resident single-spectrum mode: spectrum blocks on stdin, TSV rows + `#end` sentinels on stdout (see Streaming) |
 | `-progress` | off | Emit `FASTAG_PROGRESS done=<n> total=<n>` on stderr for a progress bar |
@@ -1168,7 +1168,9 @@ where chemistry predicts them.
 ### Mass-shift survey
 
 `-delta_out` also says where each row's gaps sit and what they could be
-(1.16). For every spectrum the placement selected for the histogram (above) is
+(1.15.2; experimental. "1.16a" and "1.16b" below and in the option help name
+the survey's two development passes, first pass and hardening, both released
+in 1.15.2; options marked "= 1.16a" reproduce the first pass). For every spectrum the placement selected for the histogram (above) is
 localized on the spectrum's own peaks, as `-recon_localize` does: each residue
 of the gap's region is scored by the b/y ions (at fragment charges up to the
 precursor's less one) it explains carrying the gap.
@@ -1618,7 +1620,7 @@ unidentified spectra a second (semi-specific or open) search identifies was
 tested on held-out runs (second test PASS for a semi-enzymatic search; not shown for an open search): [doc/CENSUS-TRIAGE-EVAL.md](doc/CENSUS-TRIAGE-EVAL.md),
 which also describes `tools/census_triage_eval.py`, the scorer.
 
-`-census_score` (1.16, experimental) adds four columns before any database filter
+`-census_score` (1.15.2, experimental) adds four columns before any database filter
 (`pre_best_evalue`, `pre_best_len`, `pre_best_mean_conf`, `pre_tag_cover`: the
 best of all tags of the selected precursor hypothesis, so they do not change
 with `-fasta`) and, after the run, `ident_score` (before `identified` and

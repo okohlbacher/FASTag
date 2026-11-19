@@ -78,7 +78,7 @@ FASTag needs no option of its own: it reads the setting from the OpenMS it is bu
 (OpenMS exports `WITH_OPENTIMS` as a compile definition) and refuses `.d` input with a message
 when it is off. With no opentims installed, OpenMS's configure step fetches opentims `v1.2.0b4`
 from GitHub (MIT; its SQLite and zstd come from OpenMS and the environment), so that step needs
-network access; the Bruker SDK is not used. The cluster build used for the 1.16 timsTOF work:
+network access; the Bruker SDK is not used. The cluster build used for the 1.15.2 timsTOF work:
 
 ```bash
 cmake -S openms-src -B openms-build-tims -G Ninja \

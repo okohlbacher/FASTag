@@ -166,7 +166,7 @@ active subscores rather than from a sum of weights).
 A FASTag built against an OpenMS with `WITH_THERMO_RAW=ON` reads Thermo `.raw`
 (README, Thermo .raw). That OpenMS then carries, and the FASTag process loads:
 
-| Component | Version (as built for 1.16, OpenMS `70cebcd144`) | Licence | Loaded how |
+| Component | Version (as built for 1.15.2, OpenMS `70cebcd144`) | Licence | Loaded how |
 |---|---|---|---|
 | openms-thermo-bridge (`libopenms_thermo_bridge`, `ThermoWrapperManaged.dll`) | v1.0.0, commit `75849ecf6f600a3e52479823043842e571a774ae` | BSD-3-Clause | native library linked by libOpenMS; hosts .NET |
 | Thermo RawFileReader (`ThermoFisher.CommonCore.{RawFileReader,Data,BackgroundSubtraction,MassPrecisionEstimator,RandomAccessReaderPlugin}.dll`) | 8.0.37 (NuGet packages from `thermofisherlsms/RawFileReader` commit `80963674b5c10e58236da63023ad6fa0264bbb00`) | Thermo's RawFileReader licence (`share/OpenMS/LICENSES/ThermoRawFileReader-License.doc`, SHA-512 `6ecc1691…` as pinned by OpenMS's vcpkg port) | .NET assemblies loaded into the FASTag process |

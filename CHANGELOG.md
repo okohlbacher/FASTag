@@ -1,10 +1,38 @@
 # Changelog
 
-## 1.16.0 (unreleased)
+## 1.15.2 (2026-11-19)
 
-Mass-shift survey (`-delta_out`). Tag output is unchanged; `-recon_out`'s
+Four experimental, opt-in features: vendor input (Thermo `.raw`, Bruker
+timsTOF `.d`), the mass-shift survey's site, name and evidence columns, a run
+QC report (`-qc_out`) and a census identifiability score (`-census_score`).
+With default options the tag output is unchanged from 1.15.1 (byte-identical
+on the E. coli example and on a PXD045734 development run). `-recon_out`'s
 `delta_interp` changes (the ppm fix and the substitution tolerance below), and
 so do `-delta_out`'s rows (`-delta_group`).
+
+What was and was not validated:
+
+- **Mass-shift survey: the held-out test FAILED.** The preregistered blind
+  test on 171 held-out PXD045734 runs (`acceptance/1.16/RESULT-dha.md`,
+  shipped with this release) failed criterion G1 (shift precision against an
+  MSFragger open search, lower 95 % bound >= 0.80) for two of eight common
+  shifts, both cysteine reference-state shifts: Methyl@C -43.006 (0.737,
+  LB 0.725) and unalkylated Cys -57.021 (0.763, LB 0.743). The other six
+  shifts and G2, G3, G6 and G7 passed; the G4/G5 hand-check is pending and
+  cannot change the verdict. The survey's rows are candidates, not
+  identifications; read the two Cys shifts with particular caution.
+- **Identifiability score: development only.** `-census_score` was fitted
+  and assessed on PXD000561 development samples (doc/CENSUS-IDENT.md); its
+  held-out test has not been run, and census triage stays the recommended
+  list.
+- **Vendor input parity.** Thermo `.raw`: on three development runs every
+  spectrum and every FASTag output equals the ThermoRawFileParser 2.0
+  `-f=2 -x` conversion (tag Jaccard 1.000000); a default TRFP conversion
+  keeps reference and exception peaks the OpenMS reader drops (tag Jaccard
+  0.86-0.98). Bruker `.d` (PXD040281 SA_02): tags byte-identical to OpenMS
+  FileConverter's mzML of the same run; against an independent decoder
+  (mzdata) the precursors, m/z, charges and signal agree exactly but the tags
+  do not (Jaccard 0.12-0.27), because the two centroid differently.
 
 - **Bruker timsTOF input (`-in run.d`, `-in run.d.zip`):** DDA-PASEF runs are
   read directly through OpenMS's `BrukerTimsFile` (opentims; no Bruker SDK) in
@@ -35,7 +63,7 @@ so do `-delta_out`'s rows (`-delta_group`).
   `--version` and in `--help`, and added to bundle notices; release bundles
   do not include the reader yet (BOM.md, Thermo RawFileReader). ctest
   `thermo_cli_test` (data part with `FASTAG_THERMO_RAW`) and `thermo_parity`.
-- **Census identifiability score (`-census_score`, experimental; 1.16 item 4):**
+- **Census identifiability score (`-census_score`, experimental):**
   four census columns taken before any database filter (`pre_best_evalue`,
   `pre_best_len`, `pre_best_mean_conf`, `pre_tag_cover`) and `ident_score`, a
   frozen logistic model on per-run mid-ranks of twelve census features that
