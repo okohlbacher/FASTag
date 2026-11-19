@@ -11,6 +11,8 @@
 #   (e) the fixture's MS level counts equal its "ms level" cvParams
 #   (f) MGF input: written; every MS2 counted, analyser class unknown
 #   (g) five fields per line; the run rows first, then section qc
+#   (h) run metadata: the fixture's instrument model, serial number
+#       (MS:1000529) and run startTimeStamp; MGF: all three n/a
 # Exits 77 (ctest SKIP) when the binary cannot start.
 set -u
 BIN="$1"
@@ -44,7 +46,15 @@ tags.tsv" ] || fail "(a) a run without -qc_out wrote $(ls "$TMP/off" | tr '\n' '
 awk -F'\t' 'NF != 5 { bad = 1 } END { exit bad }' "$TMP/on/qc.tsv" || fail "(g) a line without five fields"
 first=$(awk -F'\t' 'NR == 2 { print $1 }' "$TMP/on/qc.tsv")
 [ "$first" = "run" ] || fail "(g) the first section is '$first', not run"
-[ "$(qcv "$TMP/on/qc.tsv" qc_version)" = "1" ] || fail "(g) qc_version"
+[ "$(qcv "$TMP/on/qc.tsv" qc_version)" = "2" ] || fail "(g) qc_version"
+
+# ---- (h) run metadata ---------------------------------------------------------------
+serial=$(grep -m1 -o 'accession="MS:1000529" name="instrument serial number" value="[^"]*"' "$IN" | sed 's/.*value="//; s/"$//')
+stamp=$(grep -m1 -o '<run [^>]*startTimeStamp="[^"]*"' "$IN" | sed 's/.*startTimeStamp="//; s/"$//')
+[ -n "$serial" ] && [ -n "$stamp" ] || fail "(h) the fixture has no serial number or startTimeStamp"
+[ "$(qcv "$TMP/on/qc.tsv" instrument_model)" = "LTQ Orbitrap XL" ] || fail "(h) instrument_model $(qcv "$TMP/on/qc.tsv" instrument_model)"
+[ "$(qcv "$TMP/on/qc.tsv" instrument_serial_number)" = "$serial" ] || fail "(h) instrument_serial_number $(qcv "$TMP/on/qc.tsv" instrument_serial_number) != $serial"
+[ "$(qcv "$TMP/on/qc.tsv" start_timestamp)" = "$stamp" ] || fail "(h) start_timestamp $(qcv "$TMP/on/qc.tsv" start_timestamp) != $stamp"
 
 # ---- (e) fixture counts against its own cvParams ----------------------------------
 ms1=$(grep -c 'name="ms level" value="1"' "$IN")
@@ -100,5 +110,8 @@ run "$TMP/m" -in "$MGF" -out "$TMP/m.tsv" "${LOOSE[@]}" -threads 2 -qc_out "$TMP
 n_mgf=$(grep -c '^BEGIN IONS' "$MGF")
 [ "$(qcv "$TMP/mqc.tsv" count_ms2)" = "$n_mgf" ] || fail "(f) MGF count_ms2 $(qcv "$TMP/mqc.tsv" count_ms2) != $n_mgf"
 [ "$(qcv "$TMP/mqc.tsv" count_ms2_unknown)" = "$n_mgf" ] || fail "(f) MGF MS2 not of unknown analyser"
+for k in instrument_model instrument_serial_number start_timestamp; do
+  [ "$(qcv "$TMP/mqc.tsv" $k)" = "n/a" ] || fail "(h) MGF $k is $(qcv "$TMP/mqc.tsv" $k), not n/a"
+done
 
 echo "run_qc_cli_test: all checks passed"

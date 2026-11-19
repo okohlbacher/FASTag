@@ -115,6 +115,18 @@ ck "dia-PASEF no output" "$([ -e "$W/dia.tsv" ] && echo written)" ""
 ck "dia-PASEF with -acquisition_check off not refused" \
    "$([ $? -ne 11 ] && ! grep -q FASTAG_REFUSED "$W/dia.err" && echo yes)" "yes"
 
+# -qc_out: the run metadata of analysis.tdf's GlobalMetadata.
+qcv() { awk -F'\t' -v k="$2" '{ sub(/\r$/, "") } $1 == "qc" && $2 == k { print $3; f = 1 } END { if (!f) print "MISSING" }' "$1"; }
+"$BIN" -in "$FIX" -out "$W/q.tsv" -qc_out "$W/q.qc.tsv" "${A[@]}" > /dev/null 2> "$W/q.err"
+ck ".d -qc_out exit code" "$?" "0"
+ck ".d -qc_out: tags unchanged" "$(cmp -s "$W/d.tsv" "$W/q.tsv" && echo same)" "same"
+ck ".d qc instrument_serial_number" "$(qcv "$W/q.qc.tsv" instrument_serial_number)" "1838271.00025"
+ck ".d qc start_timestamp" "$(qcv "$W/q.qc.tsv" start_timestamp)" "2022-02-25T16:48:55.043+01:00"
+# bash 3.2 (macOS) cannot parse a case statement inside $(...).
+m=$(qcv "$W/q.qc.tsv" instrument_model); stated=yes
+case "$m" in n/a|MISSING|"") stated=no;; esac
+ck ".d qc instrument_model stated" "$stated" "yes"
+
 # A .d without analysis.tdf is not a timsTOF run.
 mkdir -p "$W/empty.d"
 "$BIN" -in "$W/empty.d" -out "$W/e.tsv" "${A[@]}" > /dev/null 2> "$W/e.err"

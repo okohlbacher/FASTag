@@ -1676,7 +1676,21 @@ It reads the spectra the tagging pass reads anyway, plus at most 32 profile
 spectra per analyser class and MS level for the measured resolution, so it
 adds little to a run. With `-subsample_*` every count covers the spectra read
 (`spectra_read`, `subsampled`). It cannot be combined with `-stream`.
+`qc_version` (now 2) changes when a key, its meaning or its order changes.
 
+- **Instrument and acquisition**, from the input's run metadata, for
+  large-scale QC across runs. `instrument_model`: the PSI-MS model name
+  (e.g. `Q Exactive`, from the mzML instrumentConfiguration or its
+  referenceableParamGroup, or the model a Thermo `.raw` or Bruker `.d` names);
+  the vendor's model string instead when the name is only a vendor parent term
+  such as `Thermo Fisher Scientific instrument model` (an mzML with only such a
+  term reports the term, e.g. `Agilent instrument model`). `instrument_serial_number`: MS:1000529
+  (mzML) or the serial number the `.raw` or `.d` stores.
+  `start_timestamp`: the acquisition start in ISO 8601 as the file states it
+  (the mzML `<run startTimeStamp>`, the `.raw` creation date, the `.d`
+  AcquisitionDateTime), with fractions and time zone when given. A field the
+  input does not state is `n/a`, and its description says why; MGF has none
+  of them. The rows follow `qc_version`.
 - **Counts.** `count_ms<L>` and `count_ms<L>_<class>` per MS level and
   analyser class `ITMS`, `FTMS`, `TOF` (Astral included), `other` or
   `unknown`. The class comes from the Thermo filter string, else from the

@@ -14,6 +14,7 @@
 #include <OpenMS/ANALYSIS/QUANTITATION/TMTSixteenPlexQuantitationMethod.h>
 #include <OpenMS/ANALYSIS/QUANTITATION/TMTTenPlexQuantitationMethod.h>
 #include <OpenMS/CONCEPT/Constants.h>
+#include <OpenMS/DATASTRUCTURES/DateTime.h>
 #include <OpenMS/IONMOBILITY/IMTypes.h>
 #include <OpenMS/KERNEL/PeakTypeEstimator.h>
 #include <OpenMS/PROCESSING/CENTROIDING/PeakPickerHiRes.h>
@@ -720,6 +721,34 @@ namespace FASTag::RunQC
 
   // ---- the run --------------------------------------------------------------
 
+  RunInfo runInfoOf(const ExperimentalSettings& es)
+  {
+    const auto trimmed = [](std::string v) {
+      const auto sp = [](unsigned char c) { return std::isspace(c) != 0; };
+      while (!v.empty() && sp(static_cast<unsigned char>(v.back()))) v.pop_back();
+      std::size_t b = 0;
+      while (b < v.size() && sp(static_cast<unsigned char>(v[b]))) ++b;
+      return v.substr(b);
+    };
+    RunInfo r;
+    const Instrument& ins = es.getInstrument();
+    r.model = trimmed(ins.getName());
+    // A name ending in "instrument model" is a PSI-MS parent term ("instrument
+    // model", "Thermo Fisher Scientific instrument model", ...): the vendor's
+    // own model string, when there is one, says more.
+    const std::string vendor_model = trimmed(ins.getModel());
+    const std::string_view generic = "instrument model";
+    const bool parent_term = r.model.size() >= generic.size() &&
+                             r.model.compare(r.model.size() - generic.size(), generic.size(), generic) == 0;
+    if (r.model.empty() || (parent_term && !vendor_model.empty())) r.model = vendor_model;
+    if (r.model == generic) r.model.clear();
+    if (ins.metaValueExists("instrument serial number"))
+      r.serial = trimmed(ins.getMetaValue("instrument serial number").toString());
+    if (es.metaValueExists("mzml_start_time_stamp")) r.start_time = trimmed(es.getMetaValue("mzml_start_time_stamp").toString());
+    if (r.start_time.empty() && es.getDateTime().isValid()) r.start_time = es.getDateTime().toString("yyyy-MM-ddThh:mm:ss");
+    return r;
+  }
+
   Collector::Collector(std::size_t n_total, InstrumentMap map, std::size_t threads, double frag_tol, bool tol_ppm)
     : map_(std::move(map)), frag_tol_(frag_tol), tol_ppm_(tol_ppm), facts_(n_total), threads_(std::max<std::size_t>(1, threads))
   {
@@ -814,6 +843,20 @@ namespace FASTag::RunQC
     std::vector<Digest::Row> r;
     r.push_back({sec, "qc_version", std::to_string(QC_VERSION), "-",
                  "The qc section follows format " + std::to_string(QC_VERSION) + "."});
+
+    // ---- instrument (run metadata) ----
+    {
+      const std::string absent = run_info_absent_.empty() ? std::string("the input does not state it") : run_info_absent_;
+      const auto meta = [&](const char* key, const std::string& v, const std::string& what, const char* from) {
+        r.push_back({sec, key, v.empty() ? "n/a" : v, "-",
+                     v.empty() ? what + " is not known: " + absent + "."
+                               : what + " is " + v + " (" + from + ")."});
+      };
+      meta("instrument_model", run_info_.model, "The instrument model", "as the input's run metadata names it");
+      meta("instrument_serial_number", run_info_.serial, "The instrument serial number", "as the input's run metadata states it");
+      meta("start_timestamp", run_info_.start_time, "The acquisition start",
+           "ISO 8601, as the input's run metadata states it");
+    }
     std::uint64_t read = 0;
     std::map<int, std::uint64_t> by_level;
     std::map<std::pair<int, int>, std::uint64_t> by_class;  // (level, analyser)
