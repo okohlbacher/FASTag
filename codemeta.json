@@ -1,0 +1,70 @@
+{
+  "@context": "https://w3id.org/codemeta/3.0",
+  "@type": "SoftwareSourceCode",
+  "name": "FASTag",
+  "description": "Fast parallel sequence tagger and tag-based protein/species filter for peptide MS/MS spectra; a reimplementation of DirecTag as an OpenMS TOPP tool, with a desktop app.",
+  "version": "1.15.1",
+  "softwareVersion": "1.15.1",
+  "dateModified": "2026-11-16",
+  "datePublished": "2026-11-18",
+  "license": "https://spdx.org/licenses/MIT",
+  "codeRepository": "https://github.com/okohlbacher/FASTag",
+  "identifier": "swh:1:ori:6ec7356bbacb9bf3110bf84321f3b4b1c65394fd",
+  "url": "https://okohlbacher.github.io/FASTag/",
+  "issueTracker": "https://github.com/okohlbacher/FASTag/issues",
+  "downloadUrl": "https://github.com/okohlbacher/FASTag/releases/tag/v1.15.1",
+  "releaseNotes": "https://github.com/okohlbacher/FASTag/blob/v1.15.1/CHANGELOG.md",
+  "programmingLanguage": [
+    "C++",
+    "Rust",
+    "TypeScript"
+  ],
+  "runtimePlatform": [
+    "macOS 13.4+",
+    "Linux (glibc 2.35+)",
+    "Windows 10/11 x64"
+  ],
+  "operatingSystem": [
+    "macOS",
+    "Linux",
+    "Windows"
+  ],
+  "applicationCategory": "Proteomics, mass spectrometry",
+  "softwareRequirements": [
+    "OpenMS >= 3.7 (build only)",
+    "Boost >= 1.81 (build only)",
+    "zlib (build only)"
+  ],
+  "keywords": [
+    "proteomics",
+    "mass spectrometry",
+    "tandem mass spectrometry",
+    "sequence tags",
+    "de novo sequencing",
+    "OpenMS"
+  ],
+  "author": [
+    {
+      "@type": "Person",
+      "@id": "https://orcid.org/0000-0003-1739-4598",
+      "givenName": "Oliver",
+      "familyName": "Kohlbacher"
+    }
+  ],
+  "citation": [
+    {
+      "@type": "ScholarlyArticle",
+      "@id": "https://doi.org/10.1021/pr800154p",
+      "name": "DirecTag: accurate sequence tags from peptide MS/MS through statistical scoring",
+      "datePublished": "2008"
+    },
+    {
+      "@type": "ScholarlyArticle",
+      "@id": "https://doi.org/10.1038/s41592-024-02197-7",
+      "name": "OpenMS 3 enables reproducible analysis of large-scale mass spectrometry data",
+      "datePublished": "2024"
+    }
+  ],
+  "developmentStatus": "active",
+  "isAccessibleForFree": true
+}

@@ -15,6 +15,7 @@ import { useEffect, useMemo, useRef, useState, type JSX, type KeyboardEvent, typ
 import { parseDump, type SpectrumPeaks } from './dump'
 import { ladderFor, residueMasses, tagRowFrom, type Ladder } from './ladder'
 import { baseName } from '../digestReport'
+import { EValue } from '../ResultsTable'
 import { HelpLink } from '../help/HelpLink'
 import type { ResultsView } from '../types'
 
@@ -366,7 +367,7 @@ function TagsTable(p: {
               >
                 {show.map((c) => (
                   <td key={c} role="gridcell" className={c === 'tag' ? 'mono' : c === 'fasta_hit' ? undefined : 'num'}>
-                    {r[col(c)] ?? ''}
+                    {c === 'evalue' ? <EValue text={r[col(c)] ?? ''} /> : (r[col(c)] ?? '')}
                   </td>
                 ))}
                 <td role="gridcell">{!l ? '–' : l.complete ? `${l.series} on ${l.matched}/${l.positions.length} peaks` : `not on the peaks (${l.matched}/${l.positions.length})`}</td>

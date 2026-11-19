@@ -1,0 +1,6 @@
+E0	PASS	evaluable runs 9 of 9 (need >= 6), projects 6 (>= 5), proteases 5 (>= 3)
+P1	PASS	median recall(auto) 0.2525 (threshold 0.2); mean 0.2956; n 9
+P2	PASS	mean paired difference recall(auto) - recall(trypsin shortlist) +0.1162, 95 % CI [+0.0348, +0.1900] (project bootstrap, 6 projects, 9 runs)
+G1	PASS	auto rule equals the true protease in 7 of 9 runs (0.778; threshold 0.6)
+G2	PASS	aborted runs: 0 of 9
+OVERALL	PASS	PASS only if P1, P2, G1 and G2 pass; any FAIL gives FAIL; otherwise INCONCLUSIVE

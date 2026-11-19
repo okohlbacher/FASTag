@@ -7,8 +7,9 @@
 // key that reaches both still acts once). Quit and Close are the backend's:
 // both go through the close guard (lib.rs).
 //
-//   File: Open spectra… Cmd+O; Open results… Cmd+Shift+O; Export shown
-//         rows… Cmd+E; Reveal outputs; Close Cmd+W (and Quit off macOS)
+//   File: Open spectra… Cmd+O; Open results… Cmd+Shift+O; Open example
+//         data (examples.rs); Export shown rows… Cmd+E; Reveal outputs;
+//         Close Cmd+W (and Quit off macOS)
 //   Run:  Run Cmd+Enter; Cancel Cmd+. (Esc in the webview)
 //   View: Setup, Results, Batch, History Cmd+1..4; Search parameters Cmd+K;
 //         Theme: System, Light, Dark
@@ -39,6 +40,7 @@ pub struct Item {
 pub const FILE: &[Item] = &[
     Item { id: "open-spectra", label: "Open Spectra…", accel: Some("CmdOrCtrl+O") },
     Item { id: "open-results", label: "Open Results…", accel: Some("CmdOrCtrl+Shift+O") },
+    Item { id: "open-example", label: "Open Example Data", accel: None },
     Item { id: "export", label: "Export Shown Rows…", accel: Some("CmdOrCtrl+E") },
     Item { id: "reveal", label: "Reveal Outputs", accel: None },
 ];
@@ -271,7 +273,7 @@ mod tests {
     #[test]
     fn the_full_menus_of_the_design() {
         let ids = |l: &[Item]| l.iter().map(|i| i.id).collect::<Vec<_>>();
-        assert_eq!(ids(FILE), ["open-spectra", "open-results", "export", "reveal"]);
+        assert_eq!(ids(FILE), ["open-spectra", "open-results", "open-example", "export", "reveal"]);
         assert_eq!(ids(RUN), ["run", "cancel"]);
         assert_eq!(ids(VIEWS), ["view-setup", "view-results", "view-batch", "view-history"]);
         assert_eq!(ids(SEARCH), ["search-params"]);

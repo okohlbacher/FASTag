@@ -1,0 +1,29 @@
+# Tag accuracy of FASTag 1.15.0 against database-search truth on ibminode05 (AMD EPYC 7763, 128 threads).
+# Protocol of bench/fastag-bench/config/accuracy-ibminode05-v190.yaml; only tools.fastag, work_dir,
+# results_dir and accuracy.result_tag differ. The Sage runs (sage/default) are copied unchanged from
+# /scratch/kohlbach/jpr-acc-v190/work/runs/<dataset>/sage (Sage v0.14.7 release binary, 2026-11-03), not re-run.
+work_dir: /scratch/kohlbach/rsw-bench/acc/work
+data_dir: /scratch/kohlbach/jpr-acc/data
+results_dir: /scratch/kohlbach/rsw-bench/acc/results
+tools:
+  fastag: /scratch/kohlbach/rsw-bench/opt/FASTag/FASTag   # FASTag-1.15.0-linux-x64.tar.gz, sha256 804d5168...872c
+  sage: /ceph/ibmi/abi/oliver/jpr-bench/envs/sage-0.14.7/sage-v0.14.7-x86_64-unknown-linux-gnu/sage
+  comet: /ceph/ibmi/abi/oliver/jpr-bench/envs/comet-2026.03.0/comet.linux.exe
+  directag: /ceph/ibmi/abi/oliver/jpr-bench/envs/bumbershoot/bin/directag
+env:
+  OPENBLAS_NUM_THREADS: "1"
+  OPENMS_TMPDIR: /dev/shm/kohlbach-tmp
+sage:
+  fdr: 0.01
+  threads: 32
+  args: ["--disable-telemetry-i-dont-want-to-improve-sage"]
+  version_note: "GitHub release v0.14.7, commit 99407db; the binary reports 0.14.6 because the release did not bump Cargo.toml"
+comet:
+  threads: 32
+accuracy:
+  threads: 32
+  max_k: 50
+  profiles: [fastag_default, fastag_matched]
+  result_tag: v1150
+directag:
+  cache_dir: /scratch/kohlbach/rsw-bench/acc/work/directag_cache

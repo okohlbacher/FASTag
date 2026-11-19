@@ -1,6 +1,6 @@
 import type { JSX } from 'react'
 import type { SpeciesReport, Taxon } from './types'
-import { baseName } from './digestReport'
+import { baseName, fmtQ } from './digestReport'
 import { IconFlag } from './icons'
 import { HelpLink } from './help/HelpLink'
 
@@ -18,14 +18,9 @@ const CONTAMINANT: Record<string, string> = {
   Homo: 'keratin / handling (or the sample itself)'
 }
 
-// null: the CLI wrote NA (1.12 #10, -species_orientation both). The analytic
-// q-value is withheld there, so it is shown as uncalibrated, never as q = 1.
-function fmtQ(q: number | null): string {
-  if (q === null) return 'uncalibrated'
-  if (q === 0) return '<1e-300'
-  if (q < 0.001) return q.toExponential(1)
-  return q.toFixed(3)
-}
+// fmtQ (digestReport.ts): null is the CLI's NA (1.12 #10, -species_orientation
+// both). The analytic q-value is withheld there, so it is shown as
+// uncalibrated, never as q = 1.
 
 interface Props {
   report: SpeciesReport | null

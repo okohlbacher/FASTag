@@ -1,0 +1,7 @@
+{"record":"probe","format":1,"version":"1.15.0","input":"test/fixtures/Ecoli_MS2_small.mzML","file_format":"mzML"}
+{"record":"instrument","name":"LTQ Orbitrap XL","model":null,"ms2_analyzer":"orbitrap","ms2_analyzer_from":"run_default","ion_mobility":null}
+{"record":"spectra","ms1":0,"ms2":139,"ms2_probed":139,"ms2_centroid":139,"ms2_profile":0,"ms2_type_unknown":0,"verdict":"centroid","pick_profile":"legacy","will_pick":false,"may_pick_unknown":false}
+{"record":"activation","of":139,"collisional":139,"electron":0,"hybrid":0,"unknown":0}
+{"record":"index","state":"ok"}
+{"record":"acquisition","mode":"DDA","why":"no repeating window scheme (periodicity 0.12 over 26 repeat gaps, cycle 51, 113 distinct precursor m/z, 0% uncharged, 139 MS2 probed)","warn":false,"refuse":false,"check":"refuse","ms2_probed":139,"windows":113,"median_width":2}
+{"record":"end"}

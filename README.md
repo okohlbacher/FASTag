@@ -13,11 +13,20 @@ the spectra whose tags occur in sequences you supply.
 A reimplementation of the [DirecTag](https://doi.org/10.1021/pr800154p)
 algorithm as an [OpenMS](https://www.openms.de) TOPP tool, parallelised and
 with memory bounded independently of file size on the default path (see
-Performance for the bound and the options that keep per-run state). The citation — Tabb et al.,
-*J. Proteome Res.* 2008, 7:3838 — is for that original DirecTag paper; FASTag
-has no separate publication of its own.
+Performance for the bound and the options that keep per-run state).
 
 What changed in each release: [CHANGELOG.md](CHANGELOG.md).
+
+**How to cite.** Cite the FASTag release you used (GitHub shows the entry from
+[CITATION.cff](CITATION.cff) under "Cite this repository"; the repository is
+archived by [Software Heritage](https://archive.softwareheritage.org/browse/origin/?origin_url=https://github.com/okohlbacher/FASTag),
+origin `swh:1:ori:6ec7356bbacb9bf3110bf84321f3b4b1c65394fd`, and each release
+requests a new save),
+together with the DirecTag algorithm (Tabb DL et al., *J. Proteome Res.* 2008,
+7:3838, [doi:10.1021/pr800154p](https://doi.org/10.1021/pr800154p)) and OpenMS
+(Pfeuffer J et al., *Nat. Methods* 2024,
+[doi:10.1038/s41592-024-02197-7](https://doi.org/10.1038/s41592-024-02197-7)).
+A FASTag article is in preparation; this section will name it once it is published.
 
 ## What it does
 
@@ -145,6 +154,8 @@ GitHub retires in 2027: the last Intel build will be a release before August
 On macOS both are also on [Homebrew](https://github.com/okohlbacher/homebrew-fastag):
 `brew install --cask okohlbacher/fastag/fastag` (desktop app) or
 `brew install --cask okohlbacher/fastag/fastag-cli` (command line, `FASTag` on your PATH).
+The casks need macOS 14 (Sonoma) or later; on macOS 13.4 to 13.x install the disk images
+from the release page instead.
 
 A disk image or archive holds a `FASTag/` folder — run `FASTag/FASTag`
 (Linux/macOS) or `FASTag/FASTag.bat` (Windows); everything else inside is a
@@ -169,27 +180,25 @@ Windows 10 and 11 already have (the installer downloads it otherwise, so a
 machine without it needs a network connection). Started by an administrator,
 the installer asks for whom to install: all users (preselected) or only the
 current user. A standard user installs for themselves, with no administrator
-prompt. The installed app takes about 365 MB, and about 1.5 GB with the
-taxonomy index of the species report, which is a separate download
-(`FASTag-<version>-taxonomy-k7.tar.gz` on the release page; the app checks for it before
-a run with the species report and says where to put it).
+prompt. The installer (about 305 MB) includes the taxonomy index of the
+species report (`tax_k7.taxdb`, 1.14 GB); the installed app takes about 1.5 GB.
 
 | What | Where | Removed by uninstall? |
 |---|---|---|
-| App, bundled CLI (`resources\fastag\bin\FASTag.exe` and its DLLs), OpenMS data, taxonomy dumps, digest models | all users: `C:\Program Files\FASTag`; per user: `%LOCALAPPDATA%\Programs\FASTag` (a per-user install of 1.13.3 or earlier stays in `%LOCALAPPDATA%\FASTag`) | yes |
-| Taxonomy index `tax_k7.taxdb` (1.14 GB) | where you put it: `<install>\resources\fastag\share\FASTag\taxonomy\`, or the folder `FASTAG_TAXONOMY_DIR` names | no: the uninstaller removes only what it installed |
+| App, bundled CLI (`resources\fastag\bin\FASTag.exe` and its DLLs), OpenMS data, taxonomy dumps and index (`resources\fastag\share\FASTag\taxonomy\tax_k7.taxdb`), digest models | all users: `C:\Program Files\FASTag`; per user: `%LOCALAPPDATA%\Programs\FASTag` (a per-user install of 1.13.3 or earlier stays in `%LOCALAPPDATA%\FASTag`) | yes |
+| A taxonomy index you installed yourself (source build or custom install) | the folder `FASTAG_TAXONOMY_DIR` names, or a file you copied into the install | no: the uninstaller removes only what it installed |
 | Settings (`settings.json`) | `%APPDATA%\de.openms.fastag` (Roaming: follows the user) | only with "Delete app data" |
 | History, run markers, `last-failure.log`, `leftovers-kept.json` | `%LOCALAPPDATA%\de.openms.fastag` (moved there once from `%APPDATA%` by the first start after 1.13.3) | only with "Delete app data" |
 | WebView2 profile | `%LOCALAPPDATA%\de.openms.fastag\EBWebView` | only with "Delete app data" |
 | Run outputs | beside the input, or where you chose | never |
 
-To install the index, unpack the asset with Windows' own `tar`
-(`tar -xzf FASTag-<version>-taxonomy-k7.tar.gz`) and copy
-`share-FASTag-taxonomy\tax_k7.taxdb` into
-`<install>\resources\fastag\share\FASTag\taxonomy\`. In `C:\Program Files`
-that needs an administrator; otherwise keep it in a folder of your own and set
+The index-only asset `FASTag-<version>-taxonomy-k7.tar.gz` is needed only for
+a source build or a custom install: unpack it with Windows' own `tar`
+(`tar -xzf FASTag-<version>-taxonomy-k7.tar.gz`), keep
+`share-FASTag-taxonomy\tax_k7.taxdb` in a folder of your own and set
 `FASTAG_TAXONOMY_DIR` to that folder (`setx FASTAG_TAXONOMY_DIR <folder>`, then
-start FASTag again).
+start FASTag again). The app checks for the index before a run with the species
+report and says where it looks.
 
 Silent install and uninstall, for IT deployment:
 `FASTag-<version>-gui-windows-x64-setup.exe /S` installs for all users when run elevated
@@ -223,13 +232,16 @@ systems.
 **Windows builds are not yet code-signed** — the signing path is wired up but
 the SignPath project is not live — so SmartScreen will warn on first run.
 
-Building from source needs OpenMS 3.7 (develop), a C++23 compiler and CMake ≥
-3.24. Releases are built against OpenMS develop at commit
+**Building from source** needs OpenMS 3.7 (develop), a C++23 compiler with OpenMP and
+CMake ≥ 3.28. Releases are built against OpenMS develop at commit
 [`70cebcd144`](https://github.com/OpenMS/OpenMS/commit/70cebcd14442cecd6bcd9794fb6786d3342cacc6),
 compiled from source with the libraries listed in
-[`.github/env/openms.yml`](.github/env/openms.yml).
+[`.github/env/openms.yml`](.github/env/openms.yml). [BUILDING.md](BUILDING.md) gives the
+steps: environment, OpenMS, FASTag, tests and the desktop app.
 
 ## Desktop GUI
+
+User manual with screenshots: [doc/MANUAL.md](doc/MANUAL.md). **File > Open Example Data** loads the example run that ships with the app.
 
 A cross-platform desktop app ([`gui/`](gui/)) wraps the CLI: pick spectra, set
 parameters from a form generated out of the tool's own `-write_ini`, watch a
@@ -285,9 +297,8 @@ every tab, setting and error message. Light, dark and system themes. It is built
 [Tauri 2](https://tauri.app) — a Rust backend and the OS's native webview, not a
 bundled browser. The CLI remains the source of truth; the GUI shells out to it.
 
-```bash
-cd gui && npm install && npm run tauri dev     # or: npm run tauri build
-```
+To build or run the app from source, follow [BUILDING.md](BUILDING.md#5-desktop-app-optional):
+`tauri dev` and `tauri build` need a staged CLI in `gui/src-tauri/resources/fastag/`.
 
 Installable bundles ship with every release: signed, notarized and stapled disk
 images for macOS (also on Homebrew, above), an installer for Windows, which
@@ -304,6 +315,10 @@ and **Subsample spectra** to `0`. The
 outputs, checks and result views.
 
 ## Usage
+
+New to FASTag? [doc/TUTORIAL.md](doc/TUTORIAL.md) is a ten-minute walkthrough on the
+small *E. coli* example shipped in `examples/` (commands, expected counts and output),
+followed by a PXD000001 walkthrough.
 
 ```bash
 # tags for every spectrum
@@ -591,6 +606,8 @@ MGF→mzML direction is exact.
 | `-tag_lengths <n> ...` | none | Several seed lengths in one pass over the input, replacing `-tag_length`, e.g. `-tag_lengths 3 4 5`. Each length is tagged, scored and capped by `-max_tags` exactly as on its own, and a spectrum's rows are those runs' rows in ascending length. A tag several lengths report (same tag, charge, flanking masses and gapped flag, typically after extension) is kept only from the length that scores it best (lowest E-value; ties go to the shorter length), in every output. Masses are compared at full precision, so two different readings that merely print alike are both kept. The caps apply per length before this, so a spectrum can end up with fewer rows than they allow. `-delta_out` samples the lowest-E-value placed tag across lengths, and `-species` pools a spectrum's tags across lengths. Not combined with `-entrapment_fasta` |
 | `-extension <n>` | 0 | Max residues appended per terminus; 0 disables extension (max 12) |
 | `-gaps <n>` | 1 | Allow a tag to cross one missing peak (0 or 1) |
+| `-tmt_pseudo_filter <off\|auto\|on>` | off | Experimental (1.13.2, no held-out test): reject b/y tags whose bare G or A at a tag end is a TMT6/10 label artifact (pseudo-residue), after scoring and before the `-max_tags` cap; `auto` probes the run for TMT6/10 labelling first (not with `-stream` or mzPeak input), `on` asserts TMT6/10 and skips the probe (see Output, TMT6/10 artifact filtering) |
+| `-tmt_reporter_filter` | off | Experimental (1.13.2, no held-out test): also reject b/y tags anchored on a singly charged TMT6/10 reporter ion; needs `-tmt_pseudo_filter auto` (with TMT detected) or `on` |
 | `-no_deisotope` | off | Do not collapse isotope clusters to their monoisotopic peak, and do not move multiply-charged fragments onto the singly-charged scale, before peak selection |
 | `-fragment_tolerance <value>` | 20 | Fragment mass tolerance |
 | `-fragment_tolerance_unit <ppm\|Da>` | ppm | Tolerance unit |
@@ -699,6 +716,10 @@ MGF→mzML direction is exact.
 | `-ion_series_hybrid <by\|both>` | by | 1.13, under `-ion_series auto` only: how hybrid EThcD/ETciD spectra are read. `by` is `auto` as in 1.12 (b/y ions, with the `Hybrid activation:` warning); `both` tags each hybrid mzML spectrum twice, as b/y and as c/z• ions, multiplies every E-value by 2 and merges the two passes' rows by E-value under one `-max_tags` cap; each row keeps its `ion_series` and every per-row consumer reads its offsets from it; `-species` and `-alkylation_out` count b/y rows only. The precursor hypotheses, `-check_header_charge`, the `-complement_tolerance_unit auto` probe, `-dump_spectrum` and the census diagnostics (`n_kept`, `n_edges`, `n_compl`) still read a hybrid spectrum as b/y (doc/HYBRID-IONS.md). Ignored with a warning under other modes; not with `-stream`. Experimental; **passed** its held-out test (see Held-out acceptance) |
 | `-ion_series_photo <series>` | by | Removed in 1.14 (the a/x reading failed its held-out test, see Held-out acceptance): accepted with a warning, no effect |
 | `-complement_tolerance_unit <Da\|fragment\|auto>` | Da | How the complement window is set: `Da` is `-complement_tolerance` (0.02 Da, as 1.11); `fragment` is `-complement_tol_factor` x (the fragment tolerance at the peak + at its partner); `auto` measures it on the run from the complement pairs of high-confidence tags (see doc/COMPLEMENT-TOLERANCE.md) and never sets a window narrower than `-complement_tolerance`, which is also the fallback when the probe finds too few pairs. The window in force is logged and recorded in `-out_spectra` (mzML) and the `-census`/`-alkylation_out` run rows. `auto` is **validated**: its third held-out test passed (+3.31 points of correct rank-1 tags on ion trap, timsTOF not worse; see Validation); the first, with an earlier estimator, failed and the second was inconclusive. The default stays `Da`. Not with `-stream` or mzPeak input |
+| `-complement_rule <same_charge\|precursor\|both>` | same_charge | Experimental (1.12; held-out test of `both` inconclusive, see Validation): which fragment pairs count as complements in the complement subscore: `same_charge` (both at the fragment charge z), `precursor` (the partner carries the precursor's remaining c - z charges) or `both` (advanced) |
+| `-complement_tolerance <Da>` | 0.02 | Window for a complement partner in Da, used with `-complement_tolerance_unit Da` and as the floor and fallback of `auto` (advanced) |
+| `-complement_tol_factor <k>` | 0.5 | Factor k of the complement window k x (fragment tolerance at the peak + at its partner), used with `-complement_tolerance_unit fragment` (advanced) |
+| `-complement_midp` | off | Experimental (1.12, not validated): score complements of tags with 0 or 1 complemented peaks with DirecTag's hypergeometric mid-p P(X>c) + P(X=c)/2; 2 or more keep P(X>=c) (advanced) |
 | `-complement_probe <n>` | 500 | With `-complement_tolerance_unit auto`: MS2 spectra the probe tags, drawn uniformly over the run with a fixed seed (advanced) |
 | `-unknown_charge <assume2\|enumerate\|infer>` | assume2 | How a precursor without a charge is tagged: `assume2` as 2+ (as 1.11); `enumerate` at each listed possible charge (MS:1000633, MGF `2+ and 3+`), else at every charge `-charge_min`..`-charge_max`; `infer` at the charge its complement pairs support (1+ when `-charge_min` is 1, or 1 is listed, and almost no intensity lies above the precursor; both charges of a close call, `ambiguous`; without evidence 2+, or the lowest candidate when 2 is none, `assumed`). Every charge tagged is a listed possible charge, else one of `-charge_min`..`-charge_max`. A header charge is never replaced (`-check_header_charge both`, 1.13, can add a second charge). A spectrum tagged under H hypotheses has every E-value multiplied by H before `-max_evalue` and `-max_tags`; its rows are merged by E-value. The reports that aggregate over spectra (digest, label, massgap, delta, species, shortlist, census) read the rows of one selected hypothesis, chosen from the charge evidence, never from the E-values. Experimental: `infer` failed its held-out test (see Validation); not with `-stream` |
 | `-charge_min <n>` / `-charge_max <n>` | 2 / 4 | The charges `enumerate` and `infer` try (1-8); `-charge_min 1` enables infer's 1+ test |
@@ -736,12 +757,19 @@ half.
 | 4 | INPUT_FILE_EMPTY | The `-fasta` or `-entrapment_fasta` file has no usable sequence, or an MGF input has no `BEGIN IONS` block |
 | 5 | CANNOT_WRITE_OUTPUT_FILE | An output cannot be written, for example because the disk is full |
 | 6 | ILLEGAL_PARAMETERS | Options conflict, a value is out of range, or the input is not mzML, mzPeak or MGF (or is a compressed mzML or MGF) |
-| 11 | INCOMPATIBLE_INPUT_DATA | The input is raw DIA (see Raw DIA input is refused; stderr carries a `FASTAG_REFUSED` line), or `-out_spectra` is `.mzpeak` but the MS2 spectra carry ion mobility per peak; write `.mzML` instead |
+| 11 | INCOMPATIBLE_INPUT_DATA | The input is raw DIA (see Raw DIA input is refused; stderr carries a `FASTAG_REFUSED` line); `-out_spectra` is `.mzpeak` but the MS2 spectra carry ion mobility per peak (write `.mzML` instead); or the `-census_ids` file cannot be joined to the run (see below) |
 | 13 | UNEXPECTED_RESULT | See below |
 
 The OpenMS framework returns its own codes before FASTag starts, for example 1
-for an input file that does not exist. Code 13 covers three runs that fail
-although files were written:
+for an input file that does not exist.
+
+Code 11 from `-census_ids` (see Census) has two paths. Before any output, when the
+file cannot be read, when no hit in the identification file carries a q-value, when identifications with hits
+have no `spectrum_reference`, or when the file names more than one run. After the
+run, when more than 50 % of the file's spectrum references match no spectrum
+read: every other output is complete, and neither census file is written.
+
+Code 13 covers three runs that fail although files were written:
 
 - `-fasta_out` when the reduced FASTA would hold no protein (no protein
   reaches `-shortlist_min_spectra` and there is no `-shortlist_background`).
@@ -896,6 +924,55 @@ the raw run). `<id>` is one of the identifiers USI permits
 Thermo and scan-number IDs, `nativeId:<a,b,…>` for the other vendor formats,
 and otherwise `index:<n>`, its 0-based position in the input. An MGF block is
 `scan:<n>` when its `SCANS=` is one number, and otherwise `index:<k>`.
+
+### Report schemas
+
+Tab-separated, one header line. The reports not listed here document their format
+where they are described (Census, Species detection, Digest, label and mass-gap
+reports, doc/SHORTLIST.md, doc/ALKYLATION-REPORT.md).
+
+**`-recon_out`** (see Reconciliation and mass shifts): one row per placement of a
+reported tag on the database.
+
+| Column | Meaning |
+|---|---|
+| `spectrum` | native ID, as in the tag TSV |
+| `tag` | the tag, as in the tag TSV |
+| `protein` | accession line of the database entry (tabs and line breaks replaced by spaces) |
+| `peptide` | the tryptic window the tag lies in, in the database's spelling |
+| `pos` | 0-based index in `peptide` where the tag starts |
+| `reversed` | 1 when the tag matched read C to N (a b-ion reading), else 0 |
+| `nterm_match` / `cterm_match` | 1 when that flanking mass agrees with the window; both 1 = exact placement |
+| `delta_mass` | spectrum flank minus database flank on the side that disagrees, Da, 4 decimals; `0.0000` when exact |
+| `region` | `lo-hi`, the 0-based inclusive residue range of `peptide` the gap lies in; empty when exact |
+| `delta_interp` | `mod:Name@X`, `sub:X->Y` or `?`; empty when exact |
+| `loc_site`, `loc_score`, `loc_ties` | only with `-recon_localize`: best site (residue + 1-based protein position), its b/y ion matches, sites sharing that score; empty when not localized |
+
+**`-delta_out`**: one row per mass-gap peak, in increasing `delta`.
+
+| Column | Meaning |
+|---|---|
+| `delta` | peak centre in Da (0.0005 Da bins; a bin no neighbour exceeds absorbs its smaller neighbours), 4 decimals |
+| `spectra` | spectra in the peak (each spectrum counts once, by its best tag's smallest-\|delta\| placement) |
+| `top_interps` | up to three `interpretation:count` pairs separated by `;`, most frequent first; `-` when none |
+
+**`-glyco_out`** (see Glyco flag): one row per processed MS2 spectrum.
+
+| Column | Meaning |
+|---|---|
+| `spectrum` | native ID |
+| `n_oxonium` | distinct oxonium ions matched |
+| `oxonium_frac` | their summed intensity over the base peak, 3 decimals |
+| `glyco` | 1 when `n_oxonium` >= 2 and `oxonium_frac` >= `-glyco_min_fraction`, else 0 |
+| `ions` | names of the matched ions, separated by `;` (e.g. `HexNAc;NeuAc-H2O`) |
+
+**`-check_header_out`**: one row per MS2 spectrum with a header charge, in input
+order; the 18 columns are described in
+[doc/HEADER-CHARGE-CHECK.md](doc/HEADER-CHARGE-CHECK.md): `index`, `native_id`,
+`precursor_mz`, `header_charge`, `call_charge`, `call_src`, `basis`, `runner_up`,
+`header_excess`, `call_excess`, `header_ruled_out`, `header_peaks_above`,
+`ms1_charge`, `ms1_peaks`, `flag_basis`, `flag_charge`, `verdict` (`agree`,
+`disagree`, `ambiguous`, `nocall`) and `tagged_charge`.
 
 ## Reconciliation and mass shifts
 
@@ -1383,16 +1460,33 @@ after extension are looked up (or `-species_min_len` residues, if that is
 larger). Pair `-species` with `-subsample_fraction 0.1` for a fast call on a large
 run.
 
-**Get the index.** Release archives from v1.0 on carry the full k-mer index
-inside (`share-FASTag-taxonomy/`), so `-species` works out of the box. For an
-index-only download (older archives, source builds, upgrades), every release
-also carries the platform-independent `FASTag-<version>-taxonomy-k7.tar.gz`
-(+`.sha256`; `FASTag-taxonomy-k7.tar.gz` up to 1.14.0); extract it into the
-FASTag directory:
+**Get the index.** Every release bundle carries the full k-mer index, so
+`-species` works out of the box; only a source build needs the download:
+
+| bundle | NCBI dumps (`nodes.dmp`, `names.dmp`) | k-mer index `tax_k7.taxdb` (~1.06 GB) | `MANIFEST.json` |
+|---|---|---|---|
+| CLI: Linux x64/arm64 `.tar.gz`, macOS arm64/x64 `.dmg`, Windows x64 `.zip` (`share-FASTag-taxonomy/`) | yes | **yes** | yes |
+| Desktop app: macOS `.dmg`, Linux `.deb`, `.tar.gz` and `.AppImage` (x64, arm64), Windows installer (`resources/fastag/share/FASTag/taxonomy/`) | yes | **yes** | yes |
+| Homebrew casks `fastag`, `fastag-cli` (the two macOS `.dmg`) | yes | **yes** | yes |
+| Index-only asset `FASTag-<version>-taxonomy-k7.tar.gz` / `.tar.xz` (+ `.sha256`) on every release | yes | **yes** | yes |
+| Source tree / source archive (`data/taxonomy/`) | yes | no: download the index-only asset | `manifests/<data tag>.json` |
+| CI artifacts of pull requests and pushes to main | yes | no | no |
+
+For a source build, an upgrade of an older install or a
+`FASTAG_TAXONOMY_DIR` setup, extract the index-only asset
+(`FASTag-taxonomy-k7.tar.gz` up to 1.14.0) into the FASTag directory:
 
 ```bash
 tar xzf FASTag-<version>-taxonomy-k7.tar.gz -C /path/to/FASTag/   # -> share-FASTag-taxonomy/
 ```
+
+`MANIFEST.json` names what the index was built from: the UniProt reference
+proteomes, the NCBI taxdump, the build commands and the sha256 of every file.
+For the index shipped since 2026-09-01 it was reconstructed afterwards and
+lacks the UniProt release and the proteome checksums; see
+[data/taxonomy/README.md](data/taxonomy/README.md). The index is derived from
+UniProt (CC BY 4.0) and the dumps from NCBI Taxonomy (public domain); see
+"Licence and provenance".
 
 FASTag looks for the taxonomy in `FASTAG_TAXONOMY_DIR` if that is set to a
 directory. Otherwise it looks beside the executable, in
@@ -1444,29 +1538,44 @@ repository catalogue can label a deposit by its main instrument while single
 files come from another. See [doc/TEST-DATA.md](doc/TEST-DATA.md) for the
 provenance and what each dataset is useful for comparing.
 
+A small example that runs in a second, `examples/Ecoli_MS2_small.mzML` (139 ion-trap MS2
+spectra) with `examples/Ecoli_MS2_small.fasta` (three proteins), ships in the release
+bundles and is in the source tree under `test/fixtures/`; [doc/TUTORIAL.md](doc/TUTORIAL.md)
+walks through it and through PXD000001 with the expected results.
+
 ## Performance
 
-**These figures were measured with FASTag 1.6.1** and have not been
-re-measured for 1.8. The mzPeak columns used 1.6's own reader; 1.8 reads mzPeak
-through OpenMS and is slower (see [mzPeak](#mzpeak)).
+**FASTag 1.15.0 against DirecTag 1.4.21142**, measured on 2026-11-18 on one
+AMD EPYC 7763 (128 hardware threads, node-local NVMe, load per core below
+0.25 before every run), 128 threads, DirecTag's settings (tag length 3, 50
+tags, 100 peaks, no gaps, no deisotoping, 0.02 Da), warm page cache, one
+uncounted warm-up, median of 3 runs, wall time and peak RSS from
+`/usr/bin/time -v`, end to end including reading the input and writing the
+tags:
 
-The table below reports wall-clock time and peak resident memory against
-`-threads` for a public data set, so you can judge how a run scales on your own
-machine. Every point is the faster of two runs at **default parameters**, with a
-warm page cache, timed end to end including reading the input and writing the
-tag file. Hardware: two AMD EPYC 9654 (192 cores / 384 hardware threads),
-node-local NVMe, otherwise idle.
+| data set | FASTag 1.15.0 | DirecTag 1.4.21142 |
+|---|---|---|
+| [PXD047793](https://www.ebi.ac.uk/pride/archive/projects/PXD047793) timsTOF, diaTracer pseudo-DDA mzML, 24.7 GB | **7.13 s, 544 MB**, 62,347,705 tags | 732.69 s, 70.3 GB |
+| [PXD028735](https://www.ebi.ac.uk/pride/archive/projects/PXD028735) raw diaPASEF mzML, 32.3 GB (`-acquisition_check warn`) | **7.70 s, 1.3 GB**, 864,815 tags | 479.90 s, reads 0 spectra |
 
-| data set | MS2 | mzML s / GB, 16 → 128 threads | mzPeak s / GB, 16 → 128 threads |
-|---|---|---|---|
-| [PXD000865](https://www.ebi.ac.uk/pride/archive/projects/PXD000865) Q Exactive TMT8 | 47,470 | 12.4 / 0.46 → 7.61 / 0.88 | 4.19 / 1.15 → 1.28 / 2.66 |
+That is 103 times faster with 129 times less memory on PXD047793. DirecTag's
+numbers come from the 1.14.0 run of 2026-11-15 on the same node, inputs and
+settings; FASTag 1.15.0 writes byte-identical tags to 1.14.0 on both files.
+Harnesses, per-run rows, input sha256 and the release digest:
+[bench/results/site-why-1.15.0](bench/results/site-why-1.15.0/RESULT.md) and
+[bench/results/site-why-1.14.0](bench/results/site-why-1.14.0/RESULT.md).
+Accuracy at these settings and at the defaults: see [Validation](#validation).
 
-A thread ladder for the current release on larger public runs (PXD047793,
-PXD054073, PXD028735, PXD076528, PXD003531), with mzML and both mzPeak layouts,
-is in preparation and will replace this section.
+History: thread scaling at default parameters was last measured with FASTag
+1.6.1 (2026-09-30, two AMD EPYC 9654) on
+[PXD000865](https://www.ebi.ac.uk/pride/archive/projects/PXD000865) (Q
+Exactive TMT8, 47,470 profile MS2): mzML 12.4 s / 0.46 GB at 16 threads and
+7.61 s / 0.88 GB at 128; mzPeak 4.19 s / 1.15 GB and 1.28 s / 2.66 GB with
+1.6's own mzPeak reader (since 1.8 mzPeak is read through OpenMS and is
+slower, see [mzPeak](#mzpeak)). Not re-measured since.
 
 The two containers return the same tags on centroided input. On **profile**
-MS2, as in this run, they do not, and the times are not comparable either: the
+MS2, as in that PXD000865 run, they do not, and the times are not comparable either: the
 mzML path tags profile samples as they are, while the archive was centroided
 when written, so FASTag reads peaks and finds more tags (2,032,961 against
 1,376,019). Centroid before tagging profile mzML, or read the archive.
@@ -1487,13 +1596,18 @@ or TOF run was scored.
 
 **Peak memory on spectra with many peaks (Linux).** Each thread keeps buffers
 sized by the largest spectra it has read, so on large un-centroided MS2 peak memory
-grows with the thread count: on PXD028735 (diaPASEF frames, median 24,000 peaks per
-MS2) about 13 MB per thread, 2.1 GB at 128 threads; on centroided data with at most a
-few hundred peaks per spectrum (PXD047793) about 1 MB per thread. About a third of the
-growth is glibc allocator overhead. Where memory is the limit, these glibc settings
-return freed memory sooner and lowered PXD028735 peak memory by 18 / 14 / 9 % at
-128 / 64 / 16 threads, at 10 / 7 / 6 % more run time (BinAC2, AMD EPYC 7543; no
-change on PXD047793; tags identical):
+grows with the thread count. Measured at the default settings with a build of commit
+7c08642 (released in 1.13.2) on BinAC2 (AMD EPYC 7543): on PXD028735 (diaPASEF frames,
+median 24,000 peaks per MS2) about 13 MB per thread, 2.1 GB at 128 threads; on
+centroided data with at most a few hundred peaks per spectrum (PXD047793) about 1 MB
+per thread. About a third of the growth is glibc allocator overhead. (The 1.3 GB in the
+table above is FASTag 1.15.0 at DirecTag-matched settings, 100 peaks per spectrum, on
+another node.) Where memory is the limit, these glibc settings return freed memory
+sooner and lowered PXD028735 peak memory by 18 / 14 / 9 % at 128 / 64 / 16 threads, at
+10 / 7 / 6 % more run time (same build and node; no change on PXD047793; tags
+identical). Record:
+[bench/results/rss-pxd028735-1.13](bench/results/rss-pxd028735-1.13/RESULT-perthread.md)
+(the per-run rows stayed on the cluster):
 
 ```bash
 MALLOC_MMAP_THRESHOLD_=33554432 MALLOC_TRIM_THRESHOLD_=131072 MALLOC_TOP_PAD_=0 FASTag -in run.mzML -out tags.tsv -threads 64
@@ -1516,30 +1630,45 @@ match a tool with no equivalent of these, turn them off:
 
 ## Validation
 
-Against the Mascot identifications shipped with
-[PXD000001](https://www.ebi.ac.uk/pride/archive/projects/PXD000001) (2,254 PSMs
-at 1% FDR, LTQ Orbitrap Velos HCD, TMT6), at DirecTag's published settings
-(tag length 3, 100 peaks, 50 tags, no gaps, no deisotoping), 98.62% of the
-identified spectra carry a valid tag among the 50 kept, the same ceiling as
-DirecTag 1.4.21142, and a valid tag ranks first on 90.91% of them (DirecTag:
-88.69%). A tag is valid when its sequence occurs in the identified peptide and
-one flanking mass agrees within 0.05 Da. On the same run with `-gaps 1` at tag
-length 4, raising `-gap_penalty` from 1 to 100 raises rank-1 accuracy from
-69.0% to 86.4%, while the share of identified spectra with any valid tag stays
-at 98.05%. These numbers were measured with FASTag releases before 1.4; see
-[doc/BENCHMARK-DirecTag.md](doc/BENCHMARK-DirecTag.md) for the side-by-side
-comparison with the reference implementation and `tools/pxd000001_truth.py`
-for the scorer.
+**Tag accuracy of FASTag 1.15.0** (2026-11-18), at DirecTag's published
+settings (`matched`: tag length 3, 100 peaks, 50 tags, no gaps, no
+deisotoping, 0.02 Da) and at FASTag's defaults (`default`: no options; tag
+length 3, one gap with `-gap_penalty 100`, deisotoping, 400 peaks with 10 per
+100 Da, 20 ppm). A tag is valid when its sequence (or its reverse) occurs in
+the identified peptide (I = L) and a flanking mass agrees within 0.05 Da.
+Rank-1 / top 5 / top 50: share of the identified spectra with tags whose first
+/ first five / all tags include a valid one; any valid tag: share of all
+identified spectra.
 
-The numbers in this section were measured before the scoring and
-preprocessing fixes of November 2026 (m/z fidelity normalised per peak, no gap
-edge across a present peak, scale-invariant deisotoping that merges 1+/2+
-copies), which change E-values and the reported sets; they are being
-re-measured with the benchmarks below.
+| data set (truth) | setting | rank-1 | top 5 | top 50 | any valid tag |
+|---|---|---|---|---|---|
+| [PXD000001](https://www.ebi.ac.uk/pride/archive/projects/PXD000001) LTQ Orbitrap Velos HCD, TMT6 (deposited Mascot search, 2,254 PSMs at 1% FDR) | matched | 90.91% | 97.91% | 98.62% | 98.62% |
+| | default | **93.12%** | 97.96% | 98.71% | 98.71% |
+| [PXD054073](https://www.ebi.ac.uk/pride/archive/projects/PXD054073) timsTOF Pro ddaPASEF, HeLa (Sage 0.14.7, 72,067 PSMs at 1% FDR) | matched | 64.70% | 80.68% | 85.89% | 84.95% |
+| | default | **67.34%** | 83.07% | 90.13% | 90.09% |
+| [PXD076528](https://www.ebi.ac.uk/pride/archive/projects/PXD076528) Orbitrap Astral DDA, human (Sage 0.14.7, 44,015 PSMs at 1% FDR) | matched | 47.97% | 60.87% | 67.09% | 66.50% |
+| | default | **53.84%** | 67.39% | 79.65% | 79.63% |
 
-The effect of the defaults (deisotoping and one gap) on how many identified
-spectra gain a correctly placed tag is being measured for the current release
-against database-search identifications on several public PXD runs.
+The defaults rank a valid tag first more often on all three runs (+2.2, +2.6
+and +5.9 points) and give more identified spectra a valid tag (+0.1, +5.1 and
++13.1 points). At the matched settings PXD000001 reaches the same 98.62%
+ceiling as DirecTag 1.4.21142, with a valid tag first on 90.91% against
+DirecTag's 88.69% ([doc/BENCHMARK-DirecTag.md](doc/BENCHMARK-DirecTag.md)).
+PXD000001 is scored with `tools/pxd000001_truth.py`, the two Sage runs with
+the `bench/fastag-bench` accuracy harness, whose flank rule is slightly more
+lenient (either flank, modifications decoded). Commands, truth settings,
+input sha256 and the full tables:
+[bench/results/accuracy-1.15.0](bench/results/accuracy-1.15.0/RESULT.md).
+
+Measured with FASTag releases before 1.4 (not re-measured): on PXD000001 with
+`-gaps 1` at tag length 4, raising `-gap_penalty` from 1 to 100 raises rank-1
+accuracy from 69.0% to 86.4%, while the share of identified spectra with any
+valid tag stays at 98.05%.
+
+The preregistrations, freezes, results and verdict files of the held-out tests
+below are archived in [acceptance/archive](acceptance/archive/): one folder per test
+branch, named as in the table (for example `acceptance/archive/acc113r/species/`),
+and `MANIFEST.tsv` maps every file to its branch and commit.
 
 `ctest` covers the rank-sum DP against exhaustive enumeration (small k and n),
 end-to-end tag recovery from synthetic spectra, flanking-mass placement,
@@ -1553,7 +1682,7 @@ the digest, label and mass-gap reports (`digest_test` against prose-auto
 ### Held-out acceptance of the 1.12 options
 
 Each item below was preregistered and run on held-out public data
-(`acceptance/1.12` branch), scored against Sage 0.14.7 truths at 1% FDR (for
+([acceptance/archive/acceptance/1.12](acceptance/archive/acceptance/1.12/)), scored against Sage 0.14.7 truths at 1% FDR (for
 #4, the pool's peptide labels). #2, #4 and #9 were scored once. #6 was scored
 twice: once on item06-H1-r2 (INCONCLUSIVE, PXD001473 without truth), then, by
 a user decision recorded before the run, once on the unused high-resolution
@@ -1663,12 +1792,41 @@ tags fill the slots (hence the small change in total recall):
   a `-fasta` match, a species call, a `delta_out` bin and a glyco flag are all
   candidates to follow up, not results to report.
 
+## Support and contributing
+
+- **Questions and bug reports:** [GitHub issues](https://github.com/okohlbacher/FASTag/issues/new/choose).
+  For a bug, give the FASTag version (`FASTag --help | grep Version`), the platform,
+  the command line, the input format and the log; the issue form asks for them.
+- **Security problems:** do not open a public issue; see [SECURITY.md](SECURITY.md).
+- **Contributing:** [CONTRIBUTING.md](CONTRIBUTING.md) (setup, tests, pull requests,
+  the held-out-test rule for behaviour changes); building from source:
+  [BUILDING.md](BUILDING.md).
+- **Conduct:** [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md) (Contributor Covenant 2.1).
+
 ## Licence and provenance
 
 MIT — see [LICENSE](LICENSE). Dependencies and licences are in [BOM.md](BOM.md).
 The shipped `-digest_out` background is the residue composition of the UniProt
 human reference proteome UP000005640 (CC BY 4.0); see
 [data/digest/README.md](data/digest/README.md).
+
+The species index (`tax_k7.taxdb`) is derived from the UniProt reference
+proteomes in `data/taxonomy/reference-set.tsv` and the `-alkylation_proteome`
+FASTA files are UniProt reference proteomes; UniProt data are licensed under
+CC BY 4.0 (<https://creativecommons.org/licenses/by/4.0/>; The UniProt
+Consortium, *Nucleic Acids Res.* 2025, 53(D1):D609-D617). The taxonomy dumps
+are cut from NCBI Taxonomy (public domain). Sources, changes and checksums:
+[data/taxonomy/README.md](data/taxonomy/README.md),
+[data/alkylation/README.md](data/alkylation/README.md). None of these data
+files is covered by FASTag's MIT licence.
+
+Every binary bundle carries `LICENSE` and `THIRD-PARTY-NOTICES.txt` (the
+command-line program's libraries, with their licence texts); every desktop app
+also carries `GUI-THIRD-PARTY-NOTICES.txt` (the Rust crates and npm packages
+built into the app, its fonts, and in the AppImage the system libraries it
+bundles, with links to the Ubuntu source packages of the (L)GPL ones), next to the other two in
+the app's `resources/fastag/`. The example data in `examples/` (in every
+bundle) are OpenMS example files, BSD-3-Clause.
 
 The DirecTag algorithm is reimplemented from its publication. The reference
 implementation (Apache-2.0) was read to resolve semantics the paper leaves

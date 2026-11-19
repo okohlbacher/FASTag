@@ -441,7 +441,13 @@ superseded CLI child in the backend. The instrument family is the CLI's
 `ms2_analyzer` where it names one; by name only an instrument without a
 second analyser (LTQ XL, LTQ Velos) is an ion trap, while the hybrids (LTQ
 Orbitrap, Orbitrap Elite, the Tribrids, LTQ FT, LTQ FT Ultra) need the
-analyser or FASTag's low-resolution warning.
+analyser or FASTag's low-resolution warning. A hybrid's analyser counts only
+when the MS2 reference its configuration (`ms2_analyzer_from` `spectra`):
+from the run's default configuration (`run_default`) it is whatever single
+analyser the converter listed, so the hybrid stays undecided, and at a ppm
+tolerance the checks warn that its MS2 may be ion trap
+(test/fixtures/Ecoli_MS2_small.mzML: LTQ Orbitrap XL, ITMS CID MS2, one
+configuration naming the orbitrap).
 
 The instrument the probe or the digest report names proposes a preset,
 marked "(detected)" in the instrument list; nothing is applied until it is
@@ -473,7 +479,7 @@ fixtures are `src/fixtures/probe/`):
 | record | fields |
 |---|---|
 | `probe` | `format`, `version`, `input`, `file_format` (`mzML`, `mzPeak`, `MGF`) |
-| `instrument` | `name`, `model` (CV names or null), `ms2_analyzer` (CV name of the analyzer of the instrument configuration most MS2 reference, or null), `ion_mobility` (`1/K0`, `drift`, `FAIMS` or null) |
+| `instrument` | `name`, `model` (CV names or null), `ms2_analyzer` (CV name of the analyzer of the instrument configuration most MS2 reference, or null), `ms2_analyzer_from` (`spectra`, `run_default` or null), `ion_mobility` (`1/K0`, `drift`, `FAIMS` or null) |
 | `spectra` | `ms1`, `ms2` (whole file), `ms2_probed`, `ms2_centroid`, `ms2_profile`, `ms2_type_unknown` (of the probed MS2) |
 | `activation` | `of`, `collisional`, `electron`, `hybrid`, `unknown` (the RunMeta activation classes, of the probed MS2) |
 | `index` | `state`: `ok`, `stale`, `absent` or `not_applicable` |
@@ -701,19 +707,20 @@ honoured in this mode; `uninstall.exe /S`. The pre-install hook
 other scope (same identifier `de.openms.fastag`), so an upgrade leaves one copy
 and one Apps entry. The app needs the WebView2 runtime (part of current
 Windows 10 and 11; the installer's bootstrapper downloads it otherwise) and
-runs on Windows on ARM64 emulated. It takes about 365 MB installed; the
-taxonomy k-mer index (1.14 GB, the separate `FASTag-<version>-taxonomy-k7.tar.gz`
-asset) is not in the installer, and the check before a run with `-species`
-(`inspector/checks.ts`, `no-taxdb`) says where it goes:
-`<install>\resources\fastag\share\FASTag\taxonomy\` or
-`FASTAG_TAXONOMY_DIR`. Settings stay in `%APPDATA%\de.openms.fastag`
+runs on Windows on ARM64 emulated. Release installers (tag builds; the
+`Embed taxonomy index` step of `.github/workflows/windows.yml`) include the
+taxonomy k-mer index (1.14 GB) in
+`<install>\resources\fastag\share\FASTag\taxonomy\`; the app takes about
+1.5 GB installed. Dry-run installers carry no index; for them, and for custom
+installs, the check before a run with `-species` (`inspector/checks.ts`,
+`no-taxdb`) says where it goes: that folder or `FASTAG_TAXONOMY_DIR`. Settings stay in `%APPDATA%\de.openms.fastag`
 (Roaming, `app_config_dir`); history, run markers, `last-failure.log` and
 `leftovers-kept.json` live in `%LOCALAPPDATA%\de.openms.fastag`
 (`app_local_data_dir`, moved from Roaming once at the first start after 1.13.3;
 on macOS and Linux both are the same folder), next to the WebView2 profile.
 Uninstall removes the installed files only: app data stays unless "Delete app
-data" is ticked, an index unpacked into the install stays, and outputs are
-never touched. Job `installed-app` in `.github/workflows/windows.yml` checks
+data" is ticked, an index the user copied into the install stays, and outputs
+are never touched. Job `installed-app` in `.github/workflows/windows.yml` checks
 per-user and all-users installs, the upgrade from the v1.13.3 installer, and
 that uninstall leaves nothing, on windows-latest and windows-11-arm.
 

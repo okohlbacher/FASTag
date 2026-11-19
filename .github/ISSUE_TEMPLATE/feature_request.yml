@@ -1,0 +1,25 @@
+name: Feature request
+description: Suggest a new option, output or improvement.
+labels: [enhancement]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: What do you want to do that FASTag does not support?
+      description: The task or analysis, not only the proposed solution.
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed solution
+      description: Option names, output columns, or GUI behaviour you have in mind.
+  - type: textarea
+    id: data
+    attributes:
+      label: Data it should work on
+      description: "Instrument, acquisition type and, if possible, public PXD accessions to test it on. Changes that alter results are accepted only after a held-out test (CONTRIBUTING.md)."
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives you considered

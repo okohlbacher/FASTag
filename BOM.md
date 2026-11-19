@@ -4,8 +4,9 @@ FASTag · MIT · <https://github.com/okohlbacher/FASTag>
 
 Input is mzML, mzPeak (read and written through OpenMS's `MzPeakFile`) or MGF (read by FASTag's own `MgfReader`, see below);
 output is TSV plus optional mzML or mzPeak.
-The desktop GUI's own dependencies are tracked in `gui/package-lock.json`
-(frontend) and `gui/src-tauri/Cargo.lock` (Tauri backend), not here.
+The desktop GUI's own dependencies are pinned in `gui/package-lock.json`
+(frontend) and `gui/src-tauri/Cargo.lock` (Tauri backend); what the desktop
+bundles redistribute is under "Desktop app bundles" below.
 
 ## Direct dependencies
 
@@ -36,7 +37,13 @@ Every bundle carries `LICENSE` (FASTag's MIT notice) and
 `THIRD-PARTY-NOTICES.txt`, written at bundle time by
 `tools/third_party_notices.py`: each bundled library mapped to the conda
 package that installed it, with that package's version, licence and licence
-texts. OpenMS's own licence and notices are in `share-OpenMS/`.
+texts. The texts come from the package archive (`info/licenses/`, fetched from
+the package URL and checked against its conda-meta checksum when the CI
+environment came from a cache), from licence files the package installs, or
+from `tools/licenses/conda/<package>.txt` for the few packages that carry
+none; a package without a text fails the build. Up to 1.15.0 the file listed
+the licences without their texts. OpenMS's own licence and notices are in
+`share-OpenMS/`.
 
 The Windows zip and the Windows installer's bundled CLI also carry
 `mimalloc.dll` and `mimalloc-redirect.dll` (mimalloc 2.2.4, MIT, Microsoft
@@ -52,6 +59,9 @@ both; `MIMALLOC_DISABLE_REDIRECT=1` switches the redirection off at run time.
 |---|---|---|---|
 | Residue composition of the human reference proteome (`share/FASTag/digest/digest_models.tsv`, `background` rows) | UniProt UP000005640 (The UniProt Consortium, *Nucleic Acids Res.* 2025), written by `tools/digest_models.py` | CC BY 4.0 | `-digest_out` |
 | Reference proteomes for `-alkylation_proteome` (`share/FASTag/alkylation/{human,mouse,yeast,ecoli}.fasta.gz`, about 17 MB; release, sha256 and notice in `data/alkylation/README.md` and `proteomes.tsv`) | UniProt release 2026_04, reviewed entries of UP000005640, UP000000589, UP000002311, UP000000625 (The UniProt Consortium, *Nucleic Acids Res.* 2025), fetched by `tools/fetch_proteomes.sh` | CC BY 4.0 | `-alkylation_out` |
+| Species k-mer index (`share-FASTag-taxonomy/tax_k7.taxdb`, ~1.06 GB, in every release bundle and the index-only release asset; provenance in its `MANIFEST.json`, `data/taxonomy/README.md`) | Built by `buildtaxdb` from the UniProt reference proteomes of the 50 taxa in `data/taxonomy/reference-set.tsv` (The UniProt Consortium, *Nucleic Acids Res.* 2025), fetched by `tools/fetch_reference_set.py`; the pinned index `taxonomy-k7-20260901` from a fetch of 2026-07-24..2026-09-01 whose UniProt release was not recorded | CC BY 4.0 | `-species` |
+| Pruned NCBI taxonomy (`share-FASTag-taxonomy/nodes.dmp`, `names.dmp`, 406 taxa; `data/taxonomy/`) | NCBI Taxonomy `taxdmp.zip` of 2026-07-24 (sha256 `984e3da736d09d3d803ee225adcdad355febc6f387b2589f43818ff9c45fb21d`), pruned by `tools/prune_taxdump.py` | public domain (US government work) | `-species` |
+| Example data (`examples/Ecoli_MS2_small.mzML`, `Ecoli_MS2_small.fasta`; next to the executable in the CLI archives, `resources/fastag/examples/` in the desktop app) | OpenMS `release/3.5.0` example files (`share/OpenMS/examples/ID/`, three entries of `target_decoy_Ecoli_K12_TaxID_83333.proteomes.fasta`); sha256 in `examples/README.md` | BSD-3-Clause | the tutorial, the app's File > Open Example Data |
 | Mass-gap modification list and priors (`share/FASTag/digest/massgap_mods.tsv`) | prose-auto 0.1.3 `delta_combos.MODS`; masses from OpenMS's Unimod | BSD-3-Clause (prose-auto ships in the OpenMS tree); Unimod as distributed with OpenMS | `-massgap_out` |
 
 ## Bundled assets (desktop GUI)
@@ -61,6 +71,29 @@ both; `MIMALLOC_DISABLE_REDIRECT=1` switches the redirection off at run time.
 | IBM Plex Sans and IBM Plex Mono, latin and latin-ext subsets, WOFF2 (`gui/src/assets/fonts/*.woff2`) | IBM Corp., [IBM Plex](https://github.com/IBM/plex) | SIL Open Font License 1.1; texts in `gui/src/assets/fonts/OFL-IBMPlexSans.txt` and `OFL-IBMPlexMono.txt` | the GUI's typeface, built into the frontend bundle (no font is fetched at run time) |
 | OpenMS logo (`gui/src/assets/openms-logo.png`) | The OpenMS project ([openms.de](https://www.openms.de)) | The OpenMS project's logo, shown only to credit OpenMS; not covered by FASTag's MIT licence | the app bar's "Built on OpenMS" credit |
 | FASTag logo (`gui/src/assets/logo.svg`) | FASTag | MIT, as the rest of FASTag | the app bar |
+
+## Desktop app bundles
+
+Each desktop bundle (macOS `.dmg`; Linux `.deb`, `.tar.gz` and `.AppImage`,
+x64 and arm64; the Windows installer) carries in `resources/fastag/` the
+command-line closure above with its `LICENSE` and `THIRD-PARTY-NOTICES.txt`,
+plus `GUI-THIRD-PARTY-NOTICES.txt`, written at bundle time by
+`tools/gui_third_party_notices.py` for the bundle's target. It covers:
+
+| Component | What is redistributed | Licences (main ones) |
+|---|---|---|
+| Rust crates | the normal-dependency closure of `gui/src-tauri` for the bundle's target, from `Cargo.lock` (`cargo metadata --filter-platform`): 257 crates on macOS, 269 on Windows, 331 on Linux (1.15.0 lock) (Tauri 2, wry, tao, serde, the Tauri plugins dialog, opener, notification, store and single-instance, and their dependencies); build-only and dev-only crates are not linked and not listed | MIT, Apache-2.0, BSD, Zlib, Unicode, MPL-2.0 (`selectors`, `cssparser`), ISC, BSL-1.0 |
+| npm packages | the production dependencies of `gui/package-lock.json` built into the frontend: react, react-dom, scheduler, @tauri-apps/api, @tauri-apps/plugin-dialog, @tauri-apps/plugin-opener | MIT, Apache-2.0 |
+| Fonts and images | see "Bundled assets" above | OFL-1.1 |
+| AppImage only: system libraries | what linuxdeploy copies from the build machine (Ubuntu 22.04): WebKitGTK 4.1, JavaScriptCore, GTK 3, GLib, GStreamer and its plugins, Cairo, Pango, HarfBuzz, libsoup, ICU and their dependencies; each mapped to its Ubuntu package with the package's copyright file and the licence texts it refers to, and for the (L)GPL ones the source package, version and its Ubuntu (Launchpad) source link | LGPL-2.0/2.1+, GPL with exceptions, MIT, BSD, MPL |
+| Windows installer | the NSIS installer stub (zlib/libpng licence; its LZMA module under CPL 1.0 with a linking exception; its bzip2 module under the bzip2 licence); WebView2 is part of Windows and not bundled (the installer downloads Microsoft's bootstrapper only where it is missing) | Zlib; CPL-1.0 with exception; bzip2 licence |
+
+macOS uses the system WebKit, and the `.deb` and the Linux tarball depend on
+the distribution's WebKitGTK and GTK instead of bundling them. A crate or npm
+package that ships no licence file gets the canonical SPDX text of its licence
+(`tools/licenses/spdx/`) with its authors as copyright holders; a component
+without any licence text, or an AppImage library that no Ubuntu package owns,
+fails the build. CI checks the file in every bundle.
 
 ## What OpenMS provides, so FASTag does not implement it
 
@@ -136,6 +169,6 @@ FASTag; both produce the mzML that FASTag consumes.
 
 ## Build-time only
 
-CMake ≥ 3.24, a C++23 compiler (OpenMS 3.7 requires it). `cmake/eigen3-range-shim/` contains two CMake
+CMake ≥ 3.28, a C++23 compiler (OpenMS 3.7 requires it). `cmake/eigen3-range-shim/` contains two CMake
 files that work around Eigen 3.4's config-version file rejecting the version
 range `OpenMSConfig.cmake` requests; they contain no Eigen code.

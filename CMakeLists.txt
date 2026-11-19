@@ -3,8 +3,13 @@
 # $Maintainer: Oliver Kohlbacher $
 # $Authors: Oliver Kohlbacher $
 
-cmake_minimum_required(VERSION 3.24 FATAL_ERROR)
-project(FASTag VERSION 1.15.0 LANGUAGES CXX)
+# 3.28: the floor .github/env/openms.yml (and so every CI and release build)
+# guarantees; README, BUILDING.md and BOM.md state the same.
+cmake_minimum_required(VERSION 3.28 FATAL_ERROR)
+project(FASTag VERSION 1.15.1 LANGUAGES CXX)
+# Policy CMP0155 (NEW from 3.28) would scan every C++23 source for module
+# imports, which needs clang-scan-deps beside clang; FASTag uses no modules.
+set(CMAKE_CXX_SCAN_FOR_MODULES OFF)
 # The GUI carries that version in four more files; a bump that misses one
 # fails here rather than shipping (cmake/version-guard.cmake says why).
 include(cmake/version-guard.cmake)
@@ -164,17 +169,14 @@ if(FASTAG_MIMALLOC)
   set(MI_BUILD_TESTS OFF)
   set(MI_OVERRIDE ON)
   set(MI_WIN_REDIRECT ON)
-  set(_fastag_mi_extra)
-  if(CMAKE_VERSION VERSION_GREATER_EQUAL 3.28)
-    # Keeps mimalloc's headers, static targets and CMake package out of
-    # `cmake --install`; the two DLLs FASTag needs are installed below.
-    list(APPEND _fastag_mi_extra EXCLUDE_FROM_ALL)
-  endif()
+  # EXCLUDE_FROM_ALL keeps mimalloc's headers, static targets and CMake
+  # package out of `cmake --install`; the two DLLs FASTag needs are installed
+  # below.
   FetchContent_Declare(mimalloc
     URL https://github.com/microsoft/mimalloc/archive/refs/tags/v2.2.4.tar.gz
     URL_HASH SHA256=754a98de5e2912fddbeaf24830f982b4540992f1bab4a0a8796ee118e0752bda
     DOWNLOAD_EXTRACT_TIMESTAMP TRUE
-    ${_fastag_mi_extra})
+    EXCLUDE_FROM_ALL)
   FetchContent_MakeAvailable(mimalloc)
   if(CMAKE_CXX_COMPILER_ARCHITECTURE_ID MATCHES "ARM64")
     set(_fastag_mi_redirect "${mimalloc_SOURCE_DIR}/bin/mimalloc-redirect-arm64.dll")
@@ -684,6 +686,32 @@ if(FASTAG_BUILD_TESTS)
                    ${CMAKE_CURRENT_SOURCE_DIR}/data/digest
                    ${CMAKE_CURRENT_SOURCE_DIR}/CMakeLists.txt)
   set_tests_properties(gui_cli_test PROPERTIES SKIP_RETURN_CODE 77)
+  # Every option FASTagOptions.cpp registers has a row in README's
+  # command-line table, and no row names an unregistered one. Skips (77)
+  # without python3 (FASTAG_PYTHON names another).
+  add_test(NAME readme_options_test
+           COMMAND bash -c "PY=\${FASTAG_PYTHON:-python3}; command -v \"\$PY\" >/dev/null || exit 77; exec \"\$PY\" \"\$0\" \"\$1\" \"\$2\""
+                   ${CMAKE_CURRENT_SOURCE_DIR}/test/readme_options_test.py
+                   ${CMAKE_CURRENT_SOURCE_DIR}/src/FASTagOptions.cpp
+                   ${CMAKE_CURRENT_SOURCE_DIR}/README.md)
+  set_tests_properties(readme_options_test PROPERTIES SKIP_RETURN_CODE 77)
+  # CITATION.cff and codemeta.json parse, carry their required keys and name
+  # this version and its CHANGELOG date (tools/check_citation_metadata.py,
+  # which the release-notes job also runs on tags). Skips (77) without
+  # python3 or PyYAML.
+  add_test(NAME citation_metadata_test
+           COMMAND bash -c "PY=\${FASTAG_PYTHON:-python3}; command -v \"\$PY\" >/dev/null || exit 77; exec \"\$PY\" \"\$0\" \"\$1\" \"\$2\" \"\$3\""
+                   ${CMAKE_CURRENT_SOURCE_DIR}/test/citation_metadata_test.py
+                   ${CMAKE_CURRENT_SOURCE_DIR}/tools/check_citation_metadata.py
+                   ${CMAKE_CURRENT_SOURCE_DIR}
+                   ${PROJECT_VERSION})
+  set_tests_properties(citation_metadata_test PROPERTIES SKIP_RETURN_CODE 77)
+
+  add_test(NAME gui_notices_appimage_test
+           COMMAND bash -c "PY=\${FASTAG_PYTHON:-python3}; command -v \"\$PY\" >/dev/null || exit 77; exec \"\$PY\" \"\$0\" \"\$1\""
+                   ${CMAKE_CURRENT_SOURCE_DIR}/test/gui_notices_appimage_test.py
+                   ${CMAKE_CURRENT_SOURCE_DIR}/tools/gui_third_party_notices.py)
+  set_tests_properties(gui_notices_appimage_test PROPERTIES SKIP_RETURN_CODE 77)
 
   # mzPeak reader vs its own mzML twin. Needs a matched pair of real files, so
   # it SKIPs unless FASTAG_E2E_MZML and FASTAG_E2E_MZPEAK point at one.

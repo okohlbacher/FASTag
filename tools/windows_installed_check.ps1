@@ -41,6 +41,21 @@ if ($DirOut) { Set-Content -Path $DirOut -Value $Dest -Encoding utf8 }
 $R = Join-Path $Dest 'resources\fastag'
 $exe = Join-Path $R 'bin\FASTag.exe'
 if (-not (Test-Path $exe)) { Fail "no bundled CLI at $exe (installed: $((Get-ChildItem $Dest -Name) -join ', '))" }
+# The notices and the example data travel with the installed app
+# (tools/check_bundle_notices.sh checks the same on macOS and Linux).
+foreach ($f in @('LICENSE', 'THIRD-PARTY-NOTICES.txt', 'GUI-THIRD-PARTY-NOTICES.txt', 'examples\Ecoli_MS2_small.mzML')) {
+  if (-not (Test-Path (Join-Path $R $f))) { Fail "the installed app has no resources\fastag\$f" }
+}
+$guiNotices = Join-Path $R 'GUI-THIRD-PARTY-NOTICES.txt'
+$n = (Get-Item $guiNotices).Length
+if ($n -lt 200000) { Fail "GUI-THIRD-PARTY-NOTICES.txt is only $n bytes" }
+foreach ($want in @('^tauri ', '^wry ', '^react ', 'IBM Plex', 'NSIS', '^\[T1\] used by', 'used by: .*NSIS bzip2 compression module', 'associated library "libbzip2", are copyright')) {
+  if (-not (Select-String -Path $guiNotices -Pattern $want -Quiet)) { Fail "GUI-THIRD-PARTY-NOTICES.txt has no line matching '$want'" }
+}
+if (Select-String -Path (Join-Path $R 'THIRD-PARTY-NOTICES.txt') -Pattern 'licence text not found' -Quiet) { Fail 'THIRD-PARTY-NOTICES.txt lists a licence without its text' }
+$exSha = (Get-FileHash (Join-Path $R 'examples\Ecoli_MS2_small.mzML') -Algorithm SHA256).Hash.ToLower()
+if ($exSha -ne '30717211f2a832e281604a4cdc12d13d74f484d9fb51a5d94a62f80713c16f6e') { Fail "examples\Ecoli_MS2_small.mzML has sha256 $exSha" }
+Write-Host "notices: GUI-THIRD-PARTY-NOTICES.txt $n bytes, THIRD-PARTY-NOTICES.txt $((Get-Item (Join-Path $R 'THIRD-PARTY-NOTICES.txt')).Length) bytes; example data present"
 $dlls = (Get-ChildItem (Join-Path $R 'bin') -Filter *.dll).Count
 Write-Host "installed to $Dest; bundled CLI $exe with $dlls DLLs beside it"
 Write-Host ("host: {0}, process arch {1}, native {2}" -f [Environment]::OSVersion.VersionString, $env:PROCESSOR_ARCHITECTURE, (Get-CimInstance Win32_Processor | Select-Object -First 1).Name)

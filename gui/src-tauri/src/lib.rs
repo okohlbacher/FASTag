@@ -4,6 +4,7 @@ mod close_guard;
 pub mod denovo;
 mod drop;
 mod events;
+mod examples;
 mod fastag;
 mod history;
 mod ini;
@@ -117,6 +118,7 @@ pub fn run() {
         .manage(spectrum::SpectrumCache::default())
         .invoke_handler(tauri::generate_handler![
             fastag::probe,
+            examples::example_input,
             inspect::cli_capabilities,
             inspect::probe_input,
             fastag::run,

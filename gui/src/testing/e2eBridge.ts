@@ -395,6 +395,28 @@ export function installE2EBridge(): Origin | undefined {
       }
     ]
   }
+  // A finished run with a long input name and many outputs (the History
+  // table must keep them within the window: ellipsis, one output per line).
+  if (fixture === 'long-names') {
+    const stem = '/data/PXD001/TMT_Erwinia_1uLSike_Top10HCD_isol2_45stepped_60min_01-20141210'
+    const outputs = ['tags.tsv', 'digest.tsv', 'label.tsv', 'species.tsv', 'massgap.tsv', 'recon.tsv', 'glyco.tsv'].map((x) => `${stem}.${x}`)
+    mock.history = [
+      {
+        id: '1762419600000-long',
+        input: `${stem}.mzML`,
+        outputs,
+        cwd: '/data/PXD001',
+        argv: ['/e2e/FASTag', '-in', `${stem}.mzML`, '-out', outputs[0]],
+        status: 'ok',
+        exitCode: 0,
+        message: '',
+        start: 1762419600000,
+        end: 1762419690000,
+        tags: 22992,
+        cleanup: { removed: [], renamed: [], failed: [] }
+      }
+    ]
+  }
   // A run of an earlier session that the app did not see end (sweep.rs
   // recover): recorded as failed, its partial table and a .part offered.
   if (fixture === 'interrupted') {

@@ -59,6 +59,26 @@ export interface HistoryViewProps {
   onGoSetup(): void
 }
 
+/// A file name split for a narrow cell: the stem, cut with an ellipsis, and
+/// its extensions, kept (run01.digest.tsv: "run01" + ".digest.tsv"), so the
+/// outputs of one run stay apart when their stems are cut.
+export function splitName(name: string): { stem: string; ext: string } {
+  const m = /(\.[A-Za-z][\w-]{0,15}){1,2}$/.exec(name)
+  if (!m || m.index === 0) return { stem: name, ext: '' }
+  return { stem: name.slice(0, m.index), ext: m[0] }
+}
+
+/// The base name of @p path on one line, its full path on hover.
+function FileName({ path }: { path: string }): JSX.Element {
+  const { stem, ext } = splitName(baseName(path))
+  return (
+    <span className="hist-name" title={path}>
+      <span className="hist-stem">{stem}</span>
+      {ext && <span className="hist-ext">{ext}</span>}
+    </span>
+  )
+}
+
 export default function HistoryView(p: HistoryViewProps): JSX.Element {
   const { active, version, busy } = p
   const [records, setRecords] = useState<RunRecord[] | null>(null)
@@ -209,7 +229,9 @@ export default function HistoryView(p: HistoryViewProps): JSX.Element {
               return (
                 <tr key={r.id} data-id={r.id}>
                   <td>{new Date(r.start).toLocaleString()}</td>
-                  <td title={r.input}>{baseName(r.input)}</td>
+                  <td className="hist-input">
+                    <FileName path={r.input} />
+                  </td>
                   <td>
                     <span className={`hist-status ${r.status}`}>
                       <JobIcon status={st.icon} /> {st.text}
@@ -223,71 +245,79 @@ export default function HistoryView(p: HistoryViewProps): JSX.Element {
                   </td>
                   <td>{duration(r.end - r.start)}</td>
                   <td className="num">{finished && r.tags != null ? r.tags.toLocaleString('en-US') : '—'}</td>
-                  <td>
+                  <td className="hist-outputs">
                     {r.outputs.length === 0 ? (
                       <span className="muted">none</span>
                     ) : (
-                      <span title={r.outputs.join('\n')}>{r.outputs.map(baseName).join(', ')}</span>
+                      <ul aria-label="Outputs">
+                        {r.outputs.map((o) => (
+                          <li key={o}>
+                            <FileName path={o} />
+                          </li>
+                        ))}
+                      </ul>
                     )}
                   </td>
                   <td className="hist-actions">
-                    {finished && out && (
-                      <>
-                        <button type="button" className="secondary small" disabled={busy} onClick={() => p.onOpen(out)}>
-                          Open
+                    <div className="hist-actions-row">
+                      {finished && out && (
+                        <>
+                          <button type="button" className="secondary small" disabled={busy} onClick={() => p.onOpen(out)}>
+                            Open
+                          </button>
+                          <button
+                            type="button"
+                            className="secondary small"
+                            onClick={() => window.fastag.revealOutput(out, false).catch(fail)}
+                          >
+                            Reveal
+                          </button>
+                        </>
+                      )}
+                      <button type="button" className="secondary small" onClick={() => copy(r)} title={shellLine(r.argv)}>
+                        {copied?.id === r.id && copied.ok ? 'Copied' : 'Copy command'}
+                      </button>
+                      {r.params && out && (
+                        <button type="button" className="secondary small" disabled={busy} onClick={() => settings(r, out)}>
+                          Settings into form
                         </button>
+                      )}
+                      {r.params && out && (
                         <button
                           type="button"
                           className="secondary small"
-                          onClick={() => window.fastag.revealOutput(out, false).catch(fail)}
+                          disabled={busy}
+                          onClick={() => void p.onRerun(r.id).catch(fail)}
                         >
-                          Reveal
+                          Re-run
                         </button>
-                      </>
-                    )}
-                    <button type="button" className="secondary small" onClick={() => copy(r)} title={shellLine(r.argv)}>
-                      {copied?.id === r.id && copied.ok ? 'Copied' : 'Copy command'}
-                    </button>
-                    {r.params && out && (
-                      <button type="button" className="secondary small" disabled={busy} onClick={() => settings(r, out)}>
-                        Settings into form
-                      </button>
-                    )}
-                    {r.params && out && (
-                      <button
-                        type="button"
-                        className="secondary small"
-                        disabled={busy}
-                        onClick={() => void p.onRerun(r.id).catch(fail)}
-                      >
-                        Re-run
-                      </button>
-                    )}
-                    {confirming === r.id ? (
-                      <span
-                        className="hist-confirm"
-                        role="group"
-                        aria-label="Delete this record?"
-                        onKeyDown={(e) => {
-                          if (e.key !== 'Escape') return
-                          e.preventDefault()
-                          keep(r.id)
-                        }}
-                      >
-                        Delete this record? Its files stay.{' '}
-                        <button type="button" className="danger small" onClick={() => remove(r)}>
-                          Delete
-                        </button>{' '}
-                        <button type="button" className="secondary small" ref={keepRef} onClick={() => keep(r.id)}>
-                          Keep
+                      )}
+                      {confirming === r.id ? (
+                        <span
+                          className="hist-confirm"
+                          role="group"
+                          aria-label="Delete this record?"
+                          onKeyDown={(e) => {
+                            if (e.key !== 'Escape') return
+                            e.preventDefault()
+                            keep(r.id)
+                          }}
+                        >
+                          Delete this record? Its files stay.{' '}
+                          <button type="button" className="danger small" onClick={() => remove(r)}>
+                            Delete
+                          </button>{' '}
+                          <button type="button" className="secondary small" ref={keepRef} onClick={() => keep(r.id)}>
+                            Keep
+                          </button>
+                        </span>
+                      ) : (
+                        <button type="button" className="secondary small" data-action="delete" onClick={() => setConfirming(r.id)}>
+                          Delete record
                         </button>
-                      </span>
-                    ) : (
-                      <button type="button" className="secondary small" data-action="delete" onClick={() => setConfirming(r.id)}>
-                        Delete record
-                      </button>
-                    )}
-                    {copied?.id === r.id && !copied.ok && <span className="muted">The clipboard refused the command.</span>}
+                      )}
+                      {copied?.id === r.id && !copied.ok && <span className="muted">The clipboard refused the command.</span>}
+                    </div>
                   </td>
                 </tr>
               )

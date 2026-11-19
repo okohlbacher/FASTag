@@ -1,6 +1,15 @@
 # FASTag vs DirecTag: accuracy, tag counts, runtime, memory
 
-Measured 2026-09-07 against **DirecTag 1.4.21142**, the reference implementation
+**Current numbers (FASTag 1.15.0, native x86-64, 2026-11-18):** on one AMD EPYC 7763 at 128 threads and
+the settings below, FASTag 1.15.0 tags PXD047793 (24.7 GB timsTOF mzML) in 7.13 s with 544 MB peak RSS against
+DirecTag 1.4.21142's 732.69 s and 70.3 GB, and PXD028735 (32.3 GB raw diaPASEF) in 7.70 s, where DirecTag reads
+0 spectra (medians of 3; DirecTag measured 2026-11-15 on the same node). On PXD000001 FASTag 1.15.0 writes the
+same tags as the release measured below (rank-1 90.91%, top 50 98.62%). Records:
+[site-why-1.15.0](../bench/results/site-why-1.15.0/RESULT.md),
+[site-why-1.14.0](../bench/results/site-why-1.14.0/RESULT.md); accuracy at FASTag's defaults and on timsTOF and
+Astral runs: [accuracy-1.15.0](../bench/results/accuracy-1.15.0/RESULT.md).
+
+The sections below were measured 2026-09-07 against **DirecTag 1.4.21142**, the reference implementation
 from the group that published the algorithm, run from the
 `quay.io/biocontainers/bumbershoot:3_0_21142_0e4f4a4--h7d875b9_0` container.
 
@@ -241,9 +250,10 @@ PXD000001, above -- the two reach the same 98.62% ceiling.
 ## Native hardware
 
 Everything above ran in an emulated `linux/amd64` container on Apple Silicon,
-so the speed figures are ratios between two tools, not absolute speeds. A
-native x86-64 head-to-head at equal thread counts on public PXD data is in
-preparation and will be added here.
+so the speed figures are ratios between two tools, not absolute speeds. The
+native x86-64 head-to-head at equal thread counts (128) on public PXD data is
+the one at the top of this page
+([site-why-1.15.0](../bench/results/site-why-1.15.0/RESULT.md)).
 
 ## Summary
 

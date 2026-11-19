@@ -308,16 +308,17 @@ describe('inspector after a run (real 1.12 reports and log)', () => {
     // The finish announcement names the red flag after the run.
     expect(screen.getAllByRole('status').some((s) => /^Finished run01\.mzML.* 1 red flag after the run/.test(s.textContent ?? ''))).toBe(true)
 
-    // Re-run with 0.3 Da: species is on, so its Da red flag waits on Setup.
-    await click(within(flag).getByRole('button', { name: 'Re-run with 0.3 Da' }))
+    // Species is on: species calls are not validated in Da, so the re-run
+    // at 0.3 Da says so and leaves the species report out, and starts at
+    // once (no Da red flag holds it on Setup).
+    expect(flag.textContent).toContain('Species calls are not validated with a tolerance in Da')
+    await click(within(flag).getByRole('button', { name: 'Re-run with 0.3 Da, without species' }))
     await flush()
-    expect(mock.runCalls).toHaveLength(1)
-    showView('setup')
-    const da = checkItem(/^Red flag: Species detection with a tolerance in Da/)
-    await click(within(da).getByRole('button', { name: 'Run anyway' }))
-    await click(runButton())
     expect(mock.runCalls).toHaveLength(2)
     expect(mock.runCalls[1].params).toMatchObject({ fragment_tolerance: '0.3', fragment_tolerance_unit: 'Da' })
+    expect(mock.runCalls[1].params['species']).not.toBe(true)
+    showView('setup')
+    expect(screen.queryByText(/^Red flag: Species detection with a tolerance in Da/)).toBeNull()
   })
 
   it('without species the re-run starts at once', async () => {

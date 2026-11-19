@@ -1,0 +1,271 @@
+# source: fastag-bench 1.9.0 realchimera reuse (2026-11-09T21:50:45+01:00, host data)
+# config: reuse-HO.yaml; manifest: /scratch/kohlbach/b113/chimeric/acc/manifests/item12-realchimera.tsv; split: HO
+# scan ['acc112', 'acc113', 'backlog113']; exclude ['/scratch/kohlbach/b113/chimeric/acc/manifests/item12-realchimera.tsv', '*/item12/*', '*item12-*', '*PREREG-item12.md']; declared declared.tsv
+run_id	level	key	file	line	declared	status
+HO-PXD066944-OFF03	pxd	PXD066944	acc112/acceptance/1.12/ACCEPTANCE-1.12-round3.md	62		reported
+HO-PXD066944-OFF03	pxd	PXD066944	acc112/acceptance/1.12/PREREG-item02.md	149		reported
+HO-PXD066944-OFF03	pxd	PXD066944	acc112/acceptance/1.12/PREREG-item06.md	35		reported
+HO-PXD076528-7673	pxd	PXD076528	acc112/acceptance/1.12/dev/chem/alk_dev.tsv	58	1.12 DEV tables (#1 species call, chemistry/alkylation call): opt-in report callers, not tag generation	declared
+HO-PXD009612-MW3	raw_name	170928_MW_3	acc112/acceptance/1.12/dev/chem/alk_dev.tsv	149	1.12 DEV tables (#1 species call, chemistry/alkylation call): opt-in report callers, not tag generation	declared
+HO-PXD009612-MW3	pxd	PXD009612	acc112/acceptance/1.12/dev/chem/alk_dev.tsv	149	1.12 DEV tables (#1 species call, chemistry/alkylation call): opt-in report callers, not tag generation	declared
+HO-PXD040230-S2R1	raw_name	20210629_Sample2red_CTRworms_repl1	acc112/acceptance/1.12/dev/chem/alk_dev.tsv	168	1.12 DEV tables (#1 species call, chemistry/alkylation call): opt-in report callers, not tag generation	declared
+HO-PXD040230-S2R1	pxd	PXD040230	acc112/acceptance/1.12/dev/chem/alk_dev.tsv	168	1.12 DEV tables (#1 species call, chemistry/alkylation call): opt-in report callers, not tag generation	declared
+HO-PXD049370-185	raw_name	201111_13_Orbi1_KN_SER_G90_T115_Paternoga_ysgA_185	acc112/acceptance/1.12/dev/chem/alk_dev.tsv	171	1.12 DEV tables (#1 species call, chemistry/alkylation call): opt-in report callers, not tag generation	declared
+HO-PXD049370-185	pxd	PXD049370	acc112/acceptance/1.12/dev/chem/alk_dev.tsv	171	1.12 DEV tables (#1 species call, chemistry/alkylation call): opt-in report callers, not tag generation	declared
+HO-PXD076528-7673	pxd	PXD076528	acc112/acceptance/1.12/dev/chem/alk_dev_A.tsv	58	1.12 DEV tables (#1 species call, chemistry/alkylation call): opt-in report callers, not tag generation	declared
+HO-PXD009612-MW3	raw_name	170928_MW_3	acc112/acceptance/1.12/dev/chem/alk_dev_A.tsv	149	1.12 DEV tables (#1 species call, chemistry/alkylation call): opt-in report callers, not tag generation	declared
+HO-PXD009612-MW3	pxd	PXD009612	acc112/acceptance/1.12/dev/chem/alk_dev_A.tsv	149	1.12 DEV tables (#1 species call, chemistry/alkylation call): opt-in report callers, not tag generation	declared
+HO-PXD040230-S2R1	raw_name	20210629_Sample2red_CTRworms_repl1	acc112/acceptance/1.12/dev/chem/alk_dev_A.tsv	168	1.12 DEV tables (#1 species call, chemistry/alkylation call): opt-in report callers, not tag generation	declared
+HO-PXD040230-S2R1	pxd	PXD040230	acc112/acceptance/1.12/dev/chem/alk_dev_A.tsv	168	1.12 DEV tables (#1 species call, chemistry/alkylation call): opt-in report callers, not tag generation	declared
+HO-PXD049370-185	raw_name	201111_13_Orbi1_KN_SER_G90_T115_Paternoga_ysgA_185	acc112/acceptance/1.12/dev/chem/alk_dev_A.tsv	171	1.12 DEV tables (#1 species call, chemistry/alkylation call): opt-in report callers, not tag generation	declared
+HO-PXD049370-185	pxd	PXD049370	acc112/acceptance/1.12/dev/chem/alk_dev_A.tsv	171	1.12 DEV tables (#1 species call, chemistry/alkylation call): opt-in report callers, not tag generation	declared
+HO-PXD076528-7673	pxd	PXD076528	acc112/acceptance/1.12/dev/chem/eval_passes_runs.tsv	55	1.12 DEV tables (#1 species call, chemistry/alkylation call): opt-in report callers, not tag generation	declared
+HO-PXD009612-MW3	raw_name	170928_MW_3	acc112/acceptance/1.12/dev/chem/eval_passes_runs.tsv	131	1.12 DEV tables (#1 species call, chemistry/alkylation call): opt-in report callers, not tag generation	declared
+HO-PXD009612-MW3	pxd	PXD009612	acc112/acceptance/1.12/dev/chem/eval_passes_runs.tsv	131	1.12 DEV tables (#1 species call, chemistry/alkylation call): opt-in report callers, not tag generation	declared
+HO-PXD040230-S2R1	raw_name	20210629_Sample2red_CTRworms_repl1	acc112/acceptance/1.12/dev/chem/eval_passes_runs.tsv	150	1.12 DEV tables (#1 species call, chemistry/alkylation call): opt-in report callers, not tag generation	declared
+HO-PXD040230-S2R1	pxd	PXD040230	acc112/acceptance/1.12/dev/chem/eval_passes_runs.tsv	150	1.12 DEV tables (#1 species call, chemistry/alkylation call): opt-in report callers, not tag generation	declared
+HO-PXD049370-185	raw_name	201111_13_Orbi1_KN_SER_G90_T115_Paternoga_ysgA_185	acc112/acceptance/1.12/dev/chem/eval_passes_runs.tsv	153	1.12 DEV tables (#1 species call, chemistry/alkylation call): opt-in report callers, not tag generation	declared
+HO-PXD049370-185	pxd	PXD049370	acc112/acceptance/1.12/dev/chem/eval_passes_runs.tsv	153	1.12 DEV tables (#1 species call, chemistry/alkylation call): opt-in report callers, not tag generation	declared
+HO-PXD076528-7673	pxd	PXD076528	acc112/acceptance/1.12/dev/chem/fit_tables_runs.tsv	92	1.12 DEV tables (#1 species call, chemistry/alkylation call): opt-in report callers, not tag generation	declared
+HO-PXD009612-MW3	raw_name	170928_MW_3	acc112/acceptance/1.12/dev/chem/fit_tables_runs.tsv	9	1.12 DEV tables (#1 species call, chemistry/alkylation call): opt-in report callers, not tag generation	declared
+HO-PXD009612-MW3	pxd	PXD009612	acc112/acceptance/1.12/dev/chem/fit_tables_runs.tsv	9	1.12 DEV tables (#1 species call, chemistry/alkylation call): opt-in report callers, not tag generation	declared
+HO-PXD040230-S2R1	raw_name	20210629_Sample2red_CTRworms_repl1	acc112/acceptance/1.12/dev/chem/fit_tables_runs.tsv	28	1.12 DEV tables (#1 species call, chemistry/alkylation call): opt-in report callers, not tag generation	declared
+HO-PXD040230-S2R1	pxd	PXD040230	acc112/acceptance/1.12/dev/chem/fit_tables_runs.tsv	28	1.12 DEV tables (#1 species call, chemistry/alkylation call): opt-in report callers, not tag generation	declared
+HO-PXD049370-185	raw_name	201111_13_Orbi1_KN_SER_G90_T115_Paternoga_ysgA_185	acc112/acceptance/1.12/dev/chem/fit_tables_runs.tsv	31	1.12 DEV tables (#1 species call, chemistry/alkylation call): opt-in report callers, not tag generation	declared
+HO-PXD049370-185	pxd	PXD049370	acc112/acceptance/1.12/dev/chem/fit_tables_runs.tsv	31	1.12 DEV tables (#1 species call, chemistry/alkylation call): opt-in report callers, not tag generation	declared
+HO-PXD076528-7673	pxd	PXD076528	acc112/acceptance/1.12/dev/chem/iteration1/fit_tables_runs.tsv	152	1.12 DEV tables (#1 species call, chemistry/alkylation call): opt-in report callers, not tag generation	declared
+HO-PXD009612-MW3	raw_name	170928_MW_3	acc112/acceptance/1.12/dev/chem/iteration1/fit_tables_runs.tsv	39	1.12 DEV tables (#1 species call, chemistry/alkylation call): opt-in report callers, not tag generation	declared
+HO-PXD009612-MW3	pxd	PXD009612	acc112/acceptance/1.12/dev/chem/iteration1/fit_tables_runs.tsv	39	1.12 DEV tables (#1 species call, chemistry/alkylation call): opt-in report callers, not tag generation	declared
+HO-PXD040230-S2R1	raw_name	20210629_Sample2red_CTRworms_repl1	acc112/acceptance/1.12/dev/chem/iteration1/fit_tables_runs.tsv	102	1.12 DEV tables (#1 species call, chemistry/alkylation call): opt-in report callers, not tag generation	declared
+HO-PXD040230-S2R1	pxd	PXD040230	acc112/acceptance/1.12/dev/chem/iteration1/fit_tables_runs.tsv	102	1.12 DEV tables (#1 species call, chemistry/alkylation call): opt-in report callers, not tag generation	declared
+HO-PXD049370-185	raw_name	201111_13_Orbi1_KN_SER_G90_T115_Paternoga_ysgA_185	acc112/acceptance/1.12/dev/chem/iteration1/fit_tables_runs.tsv	123	1.12 DEV tables (#1 species call, chemistry/alkylation call): opt-in report callers, not tag generation	declared
+HO-PXD049370-185	pxd	PXD049370	acc112/acceptance/1.12/dev/chem/iteration1/fit_tables_runs.tsv	123	1.12 DEV tables (#1 species call, chemistry/alkylation call): opt-in report callers, not tag generation	declared
+HO-PXD076528-7673	pxd	PXD076528	acc112/acceptance/1.12/dev/chem/label_parity.tsv	58	1.12 DEV tables (#1 species call, chemistry/alkylation call): opt-in report callers, not tag generation	declared
+HO-PXD009612-MW3	raw_name	170928_MW_3	acc112/acceptance/1.12/dev/chem/label_parity.tsv	149	1.12 DEV tables (#1 species call, chemistry/alkylation call): opt-in report callers, not tag generation	declared
+HO-PXD009612-MW3	pxd	PXD009612	acc112/acceptance/1.12/dev/chem/label_parity.tsv	149	1.12 DEV tables (#1 species call, chemistry/alkylation call): opt-in report callers, not tag generation	declared
+HO-PXD040230-S2R1	raw_name	20210629_Sample2red_CTRworms_repl1	acc112/acceptance/1.12/dev/chem/label_parity.tsv	168	1.12 DEV tables (#1 species call, chemistry/alkylation call): opt-in report callers, not tag generation	declared
+HO-PXD040230-S2R1	pxd	PXD040230	acc112/acceptance/1.12/dev/chem/label_parity.tsv	168	1.12 DEV tables (#1 species call, chemistry/alkylation call): opt-in report callers, not tag generation	declared
+HO-PXD049370-185	raw_name	201111_13_Orbi1_KN_SER_G90_T115_Paternoga_ysgA_185	acc112/acceptance/1.12/dev/chem/label_parity.tsv	171	1.12 DEV tables (#1 species call, chemistry/alkylation call): opt-in report callers, not tag generation	declared
+HO-PXD049370-185	pxd	PXD049370	acc112/acceptance/1.12/dev/chem/label_parity.tsv	171	1.12 DEV tables (#1 species call, chemistry/alkylation call): opt-in report callers, not tag generation	declared
+HO-PXD076528-7673	pxd	PXD076528	acc112/acceptance/1.12/dev/chem/port_check.tsv	114	1.12 DEV tables (#1 species call, chemistry/alkylation call): opt-in report callers, not tag generation	declared
+HO-PXD009612-MW3	raw_name	170928_MW_3	acc112/acceptance/1.12/dev/chem/port_check.tsv	296	1.12 DEV tables (#1 species call, chemistry/alkylation call): opt-in report callers, not tag generation	declared
+HO-PXD009612-MW3	pxd	PXD009612	acc112/acceptance/1.12/dev/chem/port_check.tsv	296	1.12 DEV tables (#1 species call, chemistry/alkylation call): opt-in report callers, not tag generation	declared
+HO-PXD040230-S2R1	raw_name	20210629_Sample2red_CTRworms_repl1	acc112/acceptance/1.12/dev/chem/port_check.tsv	334	1.12 DEV tables (#1 species call, chemistry/alkylation call): opt-in report callers, not tag generation	declared
+HO-PXD040230-S2R1	pxd	PXD040230	acc112/acceptance/1.12/dev/chem/port_check.tsv	334	1.12 DEV tables (#1 species call, chemistry/alkylation call): opt-in report callers, not tag generation	declared
+HO-PXD049370-185	raw_name	201111_13_Orbi1_KN_SER_G90_T115_Paternoga_ysgA_185	acc112/acceptance/1.12/dev/chem/port_check.tsv	340	1.12 DEV tables (#1 species call, chemistry/alkylation call): opt-in report callers, not tag generation	declared
+HO-PXD049370-185	pxd	PXD049370	acc112/acceptance/1.12/dev/chem/port_check.tsv	340	1.12 DEV tables (#1 species call, chemistry/alkylation call): opt-in report callers, not tag generation	declared
+HO-PXD076528-7673	pxd	PXD076528	acc112/acceptance/1.12/dev/chem/training_runs.tsv	95	1.12 DEV tables (#1 species call, chemistry/alkylation call): opt-in report callers, not tag generation	declared
+HO-PXD009612-MW3	raw_name	170928_MW_3	acc112/acceptance/1.12/dev/chem/training_runs.tsv	9	1.12 DEV tables (#1 species call, chemistry/alkylation call): opt-in report callers, not tag generation	declared
+HO-PXD009612-MW3	pxd	PXD009612	acc112/acceptance/1.12/dev/chem/training_runs.tsv	9	1.12 DEV tables (#1 species call, chemistry/alkylation call): opt-in report callers, not tag generation	declared
+HO-PXD040230-S2R1	raw_name	20210629_Sample2red_CTRworms_repl1	acc112/acceptance/1.12/dev/chem/training_runs.tsv	28	1.12 DEV tables (#1 species call, chemistry/alkylation call): opt-in report callers, not tag generation	declared
+HO-PXD040230-S2R1	pxd	PXD040230	acc112/acceptance/1.12/dev/chem/training_runs.tsv	28	1.12 DEV tables (#1 species call, chemistry/alkylation call): opt-in report callers, not tag generation	declared
+HO-PXD049370-185	raw_name	201111_13_Orbi1_KN_SER_G90_T115_Paternoga_ysgA_185	acc112/acceptance/1.12/dev/chem/training_runs.tsv	31	1.12 DEV tables (#1 species call, chemistry/alkylation call): opt-in report callers, not tag generation	declared
+HO-PXD049370-185	pxd	PXD049370	acc112/acceptance/1.12/dev/chem/training_runs.tsv	31	1.12 DEV tables (#1 species call, chemistry/alkylation call): opt-in report callers, not tag generation	declared
+HO-PXD066944-OFF03	raw_name	TEMP_20250307_AST0_NEO5_JVO_MV50_DR_100SPD_10ng_HEK_Ref_DDA_2Th_1p5ms_10ms_v1Ref_cycle_OFF-03	acc112/acceptance/1.12/dev/lists/chem_dev_all.tsv	155	1.12 DEV tables (#1 species call, chemistry/alkylation call): opt-in report callers, not tag generation	declared
+HO-PXD066944-OFF03	pxd	PXD066944	acc112/acceptance/1.12/dev/lists/chem_dev_all.tsv	155	1.12 DEV tables (#1 species call, chemistry/alkylation call): opt-in report callers, not tag generation	declared
+HO-PXD076528-7673	pxd	PXD076528	acc112/acceptance/1.12/dev/lists/chem_dev_all.tsv	164	1.12 DEV tables (#1 species call, chemistry/alkylation call): opt-in report callers, not tag generation	declared
+HO-PXD009612-MW3	raw_name	170928_MW_3	acc112/acceptance/1.12/dev/lists/chem_dev_all.tsv	18	1.12 DEV tables (#1 species call, chemistry/alkylation call): opt-in report callers, not tag generation	declared
+HO-PXD009612-MW3	pxd	PXD009612	acc112/acceptance/1.12/dev/lists/chem_dev_all.tsv	18	1.12 DEV tables (#1 species call, chemistry/alkylation call): opt-in report callers, not tag generation	declared
+HO-PXD040230-S2R1	raw_name	20210629_Sample2red_CTRworms_repl1	acc112/acceptance/1.12/dev/lists/chem_dev_all.tsv	40	1.12 DEV tables (#1 species call, chemistry/alkylation call): opt-in report callers, not tag generation	declared
+HO-PXD040230-S2R1	pxd	PXD040230	acc112/acceptance/1.12/dev/lists/chem_dev_all.tsv	40	1.12 DEV tables (#1 species call, chemistry/alkylation call): opt-in report callers, not tag generation	declared
+HO-PXD049370-185	raw_name	201111_13_Orbi1_KN_SER_G90_T115_Paternoga_ysgA_185	acc112/acceptance/1.12/dev/lists/chem_dev_all.tsv	45	1.12 DEV tables (#1 species call, chemistry/alkylation call): opt-in report callers, not tag generation	declared
+HO-PXD049370-185	pxd	PXD049370	acc112/acceptance/1.12/dev/lists/chem_dev_all.tsv	45	1.12 DEV tables (#1 species call, chemistry/alkylation call): opt-in report callers, not tag generation	declared
+HO-PXD066944-OFF03	raw_name	TEMP_20250307_AST0_NEO5_JVO_MV50_DR_100SPD_10ng_HEK_Ref_DDA_2Th_1p5ms_10ms_v1Ref_cycle_OFF-03	acc112/acceptance/1.12/dev/lists/chem_dev_check.tsv	155	1.12 DEV tables (#1 species call, chemistry/alkylation call): opt-in report callers, not tag generation	declared
+HO-PXD066944-OFF03	pxd	PXD066944	acc112/acceptance/1.12/dev/lists/chem_dev_check.tsv	155	1.12 DEV tables (#1 species call, chemistry/alkylation call): opt-in report callers, not tag generation	declared
+HO-PXD076528-7673	pxd	PXD076528	acc112/acceptance/1.12/dev/lists/chem_dev_check.tsv	164	1.12 DEV tables (#1 species call, chemistry/alkylation call): opt-in report callers, not tag generation	declared
+HO-PXD009612-MW3	raw_name	170928_MW_3	acc112/acceptance/1.12/dev/lists/chem_dev_check.tsv	18	1.12 DEV tables (#1 species call, chemistry/alkylation call): opt-in report callers, not tag generation	declared
+HO-PXD009612-MW3	pxd	PXD009612	acc112/acceptance/1.12/dev/lists/chem_dev_check.tsv	18	1.12 DEV tables (#1 species call, chemistry/alkylation call): opt-in report callers, not tag generation	declared
+HO-PXD040230-S2R1	raw_name	20210629_Sample2red_CTRworms_repl1	acc112/acceptance/1.12/dev/lists/chem_dev_check.tsv	40	1.12 DEV tables (#1 species call, chemistry/alkylation call): opt-in report callers, not tag generation	declared
+HO-PXD040230-S2R1	pxd	PXD040230	acc112/acceptance/1.12/dev/lists/chem_dev_check.tsv	40	1.12 DEV tables (#1 species call, chemistry/alkylation call): opt-in report callers, not tag generation	declared
+HO-PXD049370-185	raw_name	201111_13_Orbi1_KN_SER_G90_T115_Paternoga_ysgA_185	acc112/acceptance/1.12/dev/lists/chem_dev_check.tsv	45	1.12 DEV tables (#1 species call, chemistry/alkylation call): opt-in report callers, not tag generation	declared
+HO-PXD049370-185	pxd	PXD049370	acc112/acceptance/1.12/dev/lists/chem_dev_check.tsv	45	1.12 DEV tables (#1 species call, chemistry/alkylation call): opt-in report callers, not tag generation	declared
+HO-PXD076528-7673	raw_name	7673_YD12_P116861_S00_R1	acc112/acceptance/1.12/dev/lists/species_dev_all.tsv	33	1.12 DEV tables (#1 species call, chemistry/alkylation call): opt-in report callers, not tag generation	declared
+HO-PXD076528-7673	pxd	PXD076528	acc112/acceptance/1.12/dev/lists/species_dev_all.tsv	33	1.12 DEV tables (#1 species call, chemistry/alkylation call): opt-in report callers, not tag generation	declared
+HO-PXD076528-7673	raw_name	7673_YD12_P116861_S00_R1	acc112/acceptance/1.12/dev/lists/species_dev_check.tsv	33	1.12 DEV tables (#1 species call, chemistry/alkylation call): opt-in report callers, not tag generation	declared
+HO-PXD076528-7673	pxd	PXD076528	acc112/acceptance/1.12/dev/lists/species_dev_check.tsv	33	1.12 DEV tables (#1 species call, chemistry/alkylation call): opt-in report callers, not tag generation	declared
+HO-PXD076528-7673	pxd	PXD076528	acc112/acceptance/1.12/dev/species/alldecoy/alldecoy_runs.tsv	45	1.12 DEV tables (#1 species call, chemistry/alkylation call): opt-in report callers, not tag generation	declared
+HO-PXD076528-7673	pxd	PXD076528	acc112/acceptance/1.12/dev/species/lopo_cv.tsv	26	1.12 DEV tables (#1 species call, chemistry/alkylation call): opt-in report callers, not tag generation	declared
+HO-PXD076528-7673	raw_name	7673_YD12_P116861_S00_R1	acc112/acceptance/1.12/dev/species/training_runs.tsv	32	1.12 DEV tables (#1 species call, chemistry/alkylation call): opt-in report callers, not tag generation	declared
+HO-PXD076528-7673	pxd	PXD076528	acc112/acceptance/1.12/dev/species/training_runs.tsv	32	1.12 DEV tables (#1 species call, chemistry/alkylation call): opt-in report callers, not tag generation	declared
+HO-PXD066944-OFF03	raw_name	TEMP_20250307_AST0_NEO5_JVO_MV50_DR_100SPD_10ng_HEK_Ref_DDA_2Th_1p5ms_10ms_v1Ref_cycle_OFF-03	acc112/acceptance/1.12/disjointness/item02-H1-r2.tsv	2	1.12 #2/#6 H1 disjointness record of the same held-out run	declared
+HO-PXD066944-OFF03	pxd	PXD066944	acc112/acceptance/1.12/disjointness/item02-H1-r2.tsv	2	1.12 #2/#6 H1 disjointness record of the same held-out run	declared
+HO-PXD066944-OFF03	raw_name	TEMP_20250307_AST0_NEO5_JVO_MV50_DR_100SPD_10ng_HEK_Ref_DDA_2Th_1p5ms_10ms_v1Ref_cycle_OFF-03	acc112/acceptance/1.12/disjointness/item02-H1.tsv	2	1.12 #2/#6 H1 disjointness record of the same held-out run	declared
+HO-PXD066944-OFF03	pxd	PXD066944	acc112/acceptance/1.12/disjointness/item02-H1.tsv	2	1.12 #2/#6 H1 disjointness record of the same held-out run	declared
+HO-PXD076528-7673	pxd	PXD076528	acc112/acceptance/1.12/disjointness/item05-heldout.tsv	3		reported
+HO-PXD066944-OFF03	raw_name	TEMP_20250307_AST0_NEO5_JVO_MV50_DR_100SPD_10ng_HEK_Ref_DDA_2Th_1p5ms_10ms_v1Ref_cycle_OFF-03	acc112/acceptance/1.12/disjointness/item06-H1-r2.tsv	2	1.12 #2/#6 H1 disjointness record of the same held-out run	declared
+HO-PXD066944-OFF03	pxd	PXD066944	acc112/acceptance/1.12/disjointness/item06-H1-r2.tsv	2	1.12 #2/#6 H1 disjointness record of the same held-out run	declared
+HO-PXD066944-OFF03	raw_name	TEMP_20250307_AST0_NEO5_JVO_MV50_DR_100SPD_10ng_HEK_Ref_DDA_2Th_1p5ms_10ms_v1Ref_cycle_OFF-03	acc112/acceptance/1.12/disjointness/item06-H1.tsv	2	1.12 #2/#6 H1 disjointness record of the same held-out run	declared
+HO-PXD066944-OFF03	pxd	PXD066944	acc112/acceptance/1.12/disjointness/item06-H1.tsv	2	1.12 #2/#6 H1 disjointness record of the same held-out run	declared
+HO-PXD066944-OFF03	raw_name	TEMP_20250307_AST0_NEO5_JVO_MV50_DR_100SPD_10ng_HEK_Ref_DDA_2Th_1p5ms_10ms_v1Ref_cycle_OFF-03	acc112/acceptance/1.12/inputs/e7-02-sweep.tsv	105	1.12 #7 DIA-refusal development sweep: thresholds act on DIA input only; these DDA runs pass unchanged	declared
+HO-PXD066944-OFF03	mzml_sha256	bb58b7234572b83de114a01a20b358de36e214fa7c4562763986c82ab21ef540	acc112/acceptance/1.12/inputs/e7-02-sweep.tsv	105	1.12 #7 DIA-refusal development sweep: thresholds act on DIA input only; these DDA runs pass unchanged	declared
+HO-PXD066944-OFF03	pxd	PXD066944	acc112/acceptance/1.12/inputs/e7-02-sweep.tsv	105	1.12 #7 DIA-refusal development sweep: thresholds act on DIA input only; these DDA runs pass unchanged	declared
+HO-PXD076528-7673	pxd	PXD076528	acc112/acceptance/1.12/inputs/e7-02-sweep.tsv	114	1.12 #7 DIA-refusal development sweep: thresholds act on DIA input only; these DDA runs pass unchanged	declared
+HO-PXD009612-MW3	raw_name	170928_MW_3	acc112/acceptance/1.12/inputs/e7-02-sweep.tsv	134	1.12 #7 DIA-refusal development sweep: thresholds act on DIA input only; these DDA runs pass unchanged	declared
+HO-PXD009612-MW3	mzml_sha256	ee880f18ce8ad1e4b0543e09841a12cd7cde2eb7c68dce5a96f9deb48201ae84	acc112/acceptance/1.12/inputs/e7-02-sweep.tsv	134	1.12 #7 DIA-refusal development sweep: thresholds act on DIA input only; these DDA runs pass unchanged	declared
+HO-PXD009612-MW3	pxd	PXD009612	acc112/acceptance/1.12/inputs/e7-02-sweep.tsv	134	1.12 #7 DIA-refusal development sweep: thresholds act on DIA input only; these DDA runs pass unchanged	declared
+HO-PXD040230-S2R1	raw_name	20210629_Sample2red_CTRworms_repl1	acc112/acceptance/1.12/inputs/e7-02-sweep.tsv	157	1.12 #7 DIA-refusal development sweep: thresholds act on DIA input only; these DDA runs pass unchanged	declared
+HO-PXD040230-S2R1	mzml_sha256	0ee5fb42743fd48d6077bf07740db74fc473492cba39ef39df846340e8f7dacb	acc112/acceptance/1.12/inputs/e7-02-sweep.tsv	157	1.12 #7 DIA-refusal development sweep: thresholds act on DIA input only; these DDA runs pass unchanged	declared
+HO-PXD040230-S2R1	pxd	PXD040230	acc112/acceptance/1.12/inputs/e7-02-sweep.tsv	157	1.12 #7 DIA-refusal development sweep: thresholds act on DIA input only; these DDA runs pass unchanged	declared
+HO-PXD049370-185	raw_name	201111_13_Orbi1_KN_SER_G90_T115_Paternoga_ysgA_185	acc112/acceptance/1.12/inputs/e7-02-sweep.tsv	162	1.12 #7 DIA-refusal development sweep: thresholds act on DIA input only; these DDA runs pass unchanged	declared
+HO-PXD049370-185	mzml_sha256	135ffb4b567eaa4d643f73be9ea0950b80f0304cf4930b66bf2d881df9eaa69a	acc112/acceptance/1.12/inputs/e7-02-sweep.tsv	162	1.12 #7 DIA-refusal development sweep: thresholds act on DIA input only; these DDA runs pass unchanged	declared
+HO-PXD049370-185	pxd	PXD049370	acc112/acceptance/1.12/inputs/e7-02-sweep.tsv	162	1.12 #7 DIA-refusal development sweep: thresholds act on DIA input only; these DDA runs pass unchanged	declared
+HO-PXD066944-OFF03	pxd	PXD066944	acc112/acceptance/1.12/inputs/e703_exclude.txt	363		reported
+HO-PXD076528-7673	pxd	PXD076528	acc112/acceptance/1.12/inputs/e703_exclude.txt	398		reported
+HO-PXD009612-MW3	pxd	PXD009612	acc112/acceptance/1.12/inputs/e703_exclude.txt	88		reported
+HO-PXD040230-S2R1	pxd	PXD040230	acc112/acceptance/1.12/inputs/e703_exclude.txt	238		reported
+HO-PXD049370-185	pxd	PXD049370	acc112/acceptance/1.12/inputs/e703_exclude.txt	286		reported
+HO-PXD066944-OFF03	pxd	PXD066944	acc112/acceptance/1.12/inputs/h2r_exclude_pxd.txt	1208		reported
+HO-PXD076528-7673	pxd	PXD076528	acc112/acceptance/1.12/inputs/h2r_exclude_pxd.txt	1335		reported
+HO-PXD009612-MW3	pxd	PXD009612	acc112/acceptance/1.12/inputs/h2r_exclude_pxd.txt	241		reported
+HO-PXD040230-S2R1	pxd	PXD040230	acc112/acceptance/1.12/inputs/h2r_exclude_pxd.txt	761		reported
+HO-PXD049370-185	pxd	PXD049370	acc112/acceptance/1.12/inputs/h2r_exclude_pxd.txt	915		reported
+HO-PXD066944-OFF03	pxd	PXD066944	acc112/acceptance/1.12/inputs/h2r_pride_candidates.tsv	269		reported
+HO-PXD076528-7673	pxd	PXD076528	acc112/acceptance/1.12/inputs/h2r_pride_candidates.tsv	454		reported
+HO-PXD009612-MW3	pxd	PXD009612	acc112/acceptance/1.12/inputs/h2r_pride_candidates.tsv	5685		reported
+HO-PXD040230-S2R1	pxd	PXD040230	acc112/acceptance/1.12/inputs/h2r_pride_candidates.tsv	14414		reported
+HO-PXD049370-185	pxd	PXD049370	acc112/acceptance/1.12/inputs/h2r_pride_candidates.tsv	16256		reported
+HO-PXD076528-7673	pxd	PXD076528	acc112/acceptance/1.12/inputs/named_spec_5_17.tsv	3		reported
+HO-PXD066944-OFF03	raw_name	TEMP_20250307_AST0_NEO5_JVO_MV50_DR_100SPD_10ng_HEK_Ref_DDA_2Th_1p5ms_10ms_v1Ref_cycle_OFF-03	acc112/acceptance/1.12/inputs/prose_bench2_raw.tsv	119	1.12 corpus listings (prose-auto bench2/valset inventories), no fit	declared
+HO-PXD066944-OFF03	pxd	PXD066944	acc112/acceptance/1.12/inputs/prose_bench2_raw.tsv	119	1.12 corpus listings (prose-auto bench2/valset inventories), no fit	declared
+HO-PXD076528-7673	pxd	PXD076528	acc112/acceptance/1.12/inputs/prose_bench2_raw.tsv	130	1.12 corpus listings (prose-auto bench2/valset inventories), no fit	declared
+HO-PXD066944-OFF03	raw_name	TEMP_20250307_AST0_NEO5_JVO_MV50_DR_100SPD_10ng_HEK_Ref_DDA_2Th_1p5ms_10ms_v1Ref_cycle_OFF-03	acc112/acceptance/1.12/inputs/prose_corpus_ms2scan.tsv	105	1.12 corpus listings (prose-auto bench2/valset inventories), no fit	declared
+HO-PXD066944-OFF03	pxd	PXD066944	acc112/acceptance/1.12/inputs/prose_corpus_ms2scan.tsv	105	1.12 corpus listings (prose-auto bench2/valset inventories), no fit	declared
+HO-PXD076528-7673	pxd	PXD076528	acc112/acceptance/1.12/inputs/prose_corpus_ms2scan.tsv	114	1.12 corpus listings (prose-auto bench2/valset inventories), no fit	declared
+HO-PXD009612-MW3	raw_name	170928_MW_3	acc112/acceptance/1.12/inputs/prose_corpus_ms2scan.tsv	134	1.12 corpus listings (prose-auto bench2/valset inventories), no fit	declared
+HO-PXD009612-MW3	pxd	PXD009612	acc112/acceptance/1.12/inputs/prose_corpus_ms2scan.tsv	134	1.12 corpus listings (prose-auto bench2/valset inventories), no fit	declared
+HO-PXD040230-S2R1	raw_name	20210629_Sample2red_CTRworms_repl1	acc112/acceptance/1.12/inputs/prose_corpus_ms2scan.tsv	157	1.12 corpus listings (prose-auto bench2/valset inventories), no fit	declared
+HO-PXD040230-S2R1	pxd	PXD040230	acc112/acceptance/1.12/inputs/prose_corpus_ms2scan.tsv	157	1.12 corpus listings (prose-auto bench2/valset inventories), no fit	declared
+HO-PXD049370-185	raw_name	201111_13_Orbi1_KN_SER_G90_T115_Paternoga_ysgA_185	acc112/acceptance/1.12/inputs/prose_corpus_ms2scan.tsv	162	1.12 corpus listings (prose-auto bench2/valset inventories), no fit	declared
+HO-PXD049370-185	pxd	PXD049370	acc112/acceptance/1.12/inputs/prose_corpus_ms2scan.tsv	162	1.12 corpus listings (prose-auto bench2/valset inventories), no fit	declared
+HO-PXD066944-OFF03	raw_name	TEMP_20250307_AST0_NEO5_JVO_MV50_DR_100SPD_10ng_HEK_Ref_DDA_2Th_1p5ms_10ms_v1Ref_cycle_OFF-03	acc112/acceptance/1.12/inputs/prose_corpus_settings.tsv	644	1.12 corpus listings (prose-auto bench2/valset inventories), no fit	declared
+HO-PXD066944-OFF03	pxd	PXD066944	acc112/acceptance/1.12/inputs/prose_corpus_settings.tsv	644	1.12 corpus listings (prose-auto bench2/valset inventories), no fit	declared
+HO-PXD076528-7673	pxd	PXD076528	acc112/acceptance/1.12/inputs/prose_corpus_settings.tsv	704	1.12 corpus listings (prose-auto bench2/valset inventories), no fit	declared
+HO-PXD009612-MW3	raw_name	170928_MW_3	acc112/acceptance/1.12/inputs/prose_corpus_settings.tsv	830	1.12 corpus listings (prose-auto bench2/valset inventories), no fit	declared
+HO-PXD009612-MW3	pxd	PXD009612	acc112/acceptance/1.12/inputs/prose_corpus_settings.tsv	830	1.12 corpus listings (prose-auto bench2/valset inventories), no fit	declared
+HO-PXD040230-S2R1	raw_name	20210629_Sample2red_CTRworms_repl1	acc112/acceptance/1.12/inputs/prose_corpus_settings.tsv	974	1.12 corpus listings (prose-auto bench2/valset inventories), no fit	declared
+HO-PXD040230-S2R1	pxd	PXD040230	acc112/acceptance/1.12/inputs/prose_corpus_settings.tsv	974	1.12 corpus listings (prose-auto bench2/valset inventories), no fit	declared
+HO-PXD049370-185	raw_name	201111_13_Orbi1_KN_SER_G90_T115_Paternoga_ysgA_185	acc112/acceptance/1.12/inputs/prose_corpus_settings.tsv	1004	1.12 corpus listings (prose-auto bench2/valset inventories), no fit	declared
+HO-PXD049370-185	pxd	PXD049370	acc112/acceptance/1.12/inputs/prose_corpus_settings.tsv	1004	1.12 corpus listings (prose-auto bench2/valset inventories), no fit	declared
+HO-PXD066944-OFF03	pxd	PXD066944	acc112/acceptance/1.12/inputs/raw_excl_chem.txt	363		reported
+HO-PXD076528-7673	pxd	PXD076528	acc112/acceptance/1.12/inputs/raw_excl_chem.txt	398		reported
+HO-PXD009612-MW3	pxd	PXD009612	acc112/acceptance/1.12/inputs/raw_excl_chem.txt	88		reported
+HO-PXD040230-S2R1	pxd	PXD040230	acc112/acceptance/1.12/inputs/raw_excl_chem.txt	238		reported
+HO-PXD049370-185	pxd	PXD049370	acc112/acceptance/1.12/inputs/raw_excl_chem.txt	286		reported
+HO-PXD076528-7673	pxd	PXD076528	acc112/acceptance/1.12/inputs/raw_named_5_17.tsv	3		reported
+HO-PXD066944-OFF03	raw_name	TEMP_20250307_AST0_NEO5_JVO_MV50_DR_100SPD_10ng_HEK_Ref_DDA_2Th_1p5ms_10ms_v1Ref_cycle_OFF-03	acc112/acceptance/1.12/inputs/sdrf_truth_runs.tsv	159	1.12 SDRF truth listing (#1/chemistry DEV inputs), no tag default	declared
+HO-PXD066944-OFF03	pxd	PXD066944	acc112/acceptance/1.12/inputs/sdrf_truth_runs.tsv	159	1.12 SDRF truth listing (#1/chemistry DEV inputs), no tag default	declared
+HO-PXD076528-7673	pxd	PXD076528	acc112/acceptance/1.12/inputs/sdrf_truth_runs.tsv	168	1.12 SDRF truth listing (#1/chemistry DEV inputs), no tag default	declared
+HO-PXD009612-MW3	raw_name	170928_MW_3	acc112/acceptance/1.12/inputs/sdrf_truth_runs.tsv	22	1.12 SDRF truth listing (#1/chemistry DEV inputs), no tag default	declared
+HO-PXD009612-MW3	pxd	PXD009612	acc112/acceptance/1.12/inputs/sdrf_truth_runs.tsv	22	1.12 SDRF truth listing (#1/chemistry DEV inputs), no tag default	declared
+HO-PXD040230-S2R1	raw_name	20210629_Sample2red_CTRworms_repl1	acc112/acceptance/1.12/inputs/sdrf_truth_runs.tsv	44	1.12 SDRF truth listing (#1/chemistry DEV inputs), no tag default	declared
+HO-PXD040230-S2R1	pxd	PXD040230	acc112/acceptance/1.12/inputs/sdrf_truth_runs.tsv	44	1.12 SDRF truth listing (#1/chemistry DEV inputs), no tag default	declared
+HO-PXD049370-185	raw_name	201111_13_Orbi1_KN_SER_G90_T115_Paternoga_ysgA_185	acc112/acceptance/1.12/inputs/sdrf_truth_runs.tsv	49	1.12 SDRF truth listing (#1/chemistry DEV inputs), no tag default	declared
+HO-PXD049370-185	pxd	PXD049370	acc112/acceptance/1.12/inputs/sdrf_truth_runs.tsv	49	1.12 SDRF truth listing (#1/chemistry DEV inputs), no tag default	declared
+HO-PXD066944-OFF03	raw_name	TEMP_20250307_AST0_NEO5_JVO_MV50_DR_100SPD_10ng_HEK_Ref_DDA_2Th_1p5ms_10ms_v1Ref_cycle_OFF-03	acc112/acceptance/1.12/inputs/staged/h2r_verify_all.tsv	3	1.12 #2/#6 staging records of the same held-out run	declared
+HO-PXD066944-OFF03	pxd	PXD066944	acc112/acceptance/1.12/inputs/staged/h2r_verify_all.tsv	3	1.12 #2/#6 staging records of the same held-out run	declared
+HO-PXD076528-7673	pxd	PXD076528	acc112/acceptance/1.12/inputs/staged/scan_1.tsv	82		reported
+HO-PXD076528-7673	pxd	PXD076528	acc112/acceptance/1.12/inputs/staged/staged_5_17.tsv	1		reported
+HO-PXD066944-OFF03	raw_name	TEMP_20250307_AST0_NEO5_JVO_MV50_DR_100SPD_10ng_HEK_Ref_DDA_2Th_1p5ms_10ms_v1Ref_cycle_OFF-03	acc112/acceptance/1.12/inputs/staged/staged_corpus.tsv	8	1.12 #2/#6 staging records of the same held-out run	declared
+HO-PXD066944-OFF03	mzml_sha256	bb58b7234572b83de114a01a20b358de36e214fa7c4562763986c82ab21ef540	acc112/acceptance/1.12/inputs/staged/staged_corpus.tsv	8	1.12 #2/#6 staging records of the same held-out run	declared
+HO-PXD066944-OFF03	pxd	PXD066944	acc112/acceptance/1.12/inputs/staged/staged_corpus.tsv	8	1.12 #2/#6 staging records of the same held-out run	declared
+HO-PXD076528-7673	pxd	PXD076528	acc112/acceptance/1.12/inputs/staged/staged_redo_a.tsv	1		reported
+HO-PXD066944-OFF03	raw_name	TEMP_20250307_AST0_NEO5_JVO_MV50_DR_100SPD_10ng_HEK_Ref_DDA_2Th_1p5ms_10ms_v1Ref_cycle_OFF-03	acc112/acceptance/1.12/manifests/item02-H1-r2.tsv	3	1.12 #2/#6 H1 held-out run; #2 INCONCLUSIVE, #6 not passed; no default changed (ACCEPTANCE-1.12-round3)	declared
+HO-PXD066944-OFF03	mzml_sha256	bb58b7234572b83de114a01a20b358de36e214fa7c4562763986c82ab21ef540	acc112/acceptance/1.12/manifests/item02-H1-r2.tsv	3	1.12 #2/#6 H1 held-out run; #2 INCONCLUSIVE, #6 not passed; no default changed (ACCEPTANCE-1.12-round3)	declared
+HO-PXD066944-OFF03	pxd	PXD066944	acc112/acceptance/1.12/manifests/item02-H1-r2.tsv	3	1.12 #2/#6 H1 held-out run; #2 INCONCLUSIVE, #6 not passed; no default changed (ACCEPTANCE-1.12-round3)	declared
+HO-PXD066944-OFF03	raw_name	TEMP_20250307_AST0_NEO5_JVO_MV50_DR_100SPD_10ng_HEK_Ref_DDA_2Th_1p5ms_10ms_v1Ref_cycle_OFF-03	acc112/acceptance/1.12/manifests/item02-H1.tsv	3	1.12 #2/#6 H1 held-out run; #2 INCONCLUSIVE, #6 not passed; no default changed (ACCEPTANCE-1.12-round3)	declared
+HO-PXD066944-OFF03	mzml_sha256	bb58b7234572b83de114a01a20b358de36e214fa7c4562763986c82ab21ef540	acc112/acceptance/1.12/manifests/item02-H1.tsv	3	1.12 #2/#6 H1 held-out run; #2 INCONCLUSIVE, #6 not passed; no default changed (ACCEPTANCE-1.12-round3)	declared
+HO-PXD066944-OFF03	pxd	PXD066944	acc112/acceptance/1.12/manifests/item02-H1.tsv	3	1.12 #2/#6 H1 held-out run; #2 INCONCLUSIVE, #6 not passed; no default changed (ACCEPTANCE-1.12-round3)	declared
+HO-PXD076528-7673	pxd	PXD076528	acc112/acceptance/1.12/manifests/item05-heldout.tsv	4		reported
+HO-PXD066944-OFF03	raw_name	TEMP_20250307_AST0_NEO5_JVO_MV50_DR_100SPD_10ng_HEK_Ref_DDA_2Th_1p5ms_10ms_v1Ref_cycle_OFF-03	acc112/acceptance/1.12/manifests/item06-H1-r2.tsv	3	1.12 #2/#6 H1 held-out run; #2 INCONCLUSIVE, #6 not passed; no default changed (ACCEPTANCE-1.12-round3)	declared
+HO-PXD066944-OFF03	mzml_sha256	bb58b7234572b83de114a01a20b358de36e214fa7c4562763986c82ab21ef540	acc112/acceptance/1.12/manifests/item06-H1-r2.tsv	3	1.12 #2/#6 H1 held-out run; #2 INCONCLUSIVE, #6 not passed; no default changed (ACCEPTANCE-1.12-round3)	declared
+HO-PXD066944-OFF03	pxd	PXD066944	acc112/acceptance/1.12/manifests/item06-H1-r2.tsv	3	1.12 #2/#6 H1 held-out run; #2 INCONCLUSIVE, #6 not passed; no default changed (ACCEPTANCE-1.12-round3)	declared
+HO-PXD066944-OFF03	raw_name	TEMP_20250307_AST0_NEO5_JVO_MV50_DR_100SPD_10ng_HEK_Ref_DDA_2Th_1p5ms_10ms_v1Ref_cycle_OFF-03	acc112/acceptance/1.12/manifests/item06-H1.tsv	3	1.12 #2/#6 H1 held-out run; #2 INCONCLUSIVE, #6 not passed; no default changed (ACCEPTANCE-1.12-round3)	declared
+HO-PXD066944-OFF03	mzml_sha256	bb58b7234572b83de114a01a20b358de36e214fa7c4562763986c82ab21ef540	acc112/acceptance/1.12/manifests/item06-H1.tsv	3	1.12 #2/#6 H1 held-out run; #2 INCONCLUSIVE, #6 not passed; no default changed (ACCEPTANCE-1.12-round3)	declared
+HO-PXD066944-OFF03	pxd	PXD066944	acc112/acceptance/1.12/manifests/item06-H1.tsv	3	1.12 #2/#6 H1 held-out run; #2 INCONCLUSIVE, #6 not passed; no default changed (ACCEPTANCE-1.12-round3)	declared
+HO-PXD066944-OFF03	raw_name	TEMP_20250307_AST0_NEO5_JVO_MV50_DR_100SPD_10ng_HEK_Ref_DDA_2Th_1p5ms_10ms_v1Ref_cycle_OFF-03	acc112/acceptance/1.12/results/item02/item02-H1-r2-hr/runs.tsv	2	1.12 #2/#6 H1 run tables of the same held-out run (scored; no default changed)	declared
+HO-PXD066944-OFF03	pxd	PXD066944	acc112/acceptance/1.12/results/item02/item02-H1-r2-hr/runs.tsv	2	1.12 #2/#6 H1 run tables of the same held-out run (scored; no default changed)	declared
+HO-PXD066944-OFF03	raw_name	TEMP_20250307_AST0_NEO5_JVO_MV50_DR_100SPD_10ng_HEK_Ref_DDA_2Th_1p5ms_10ms_v1Ref_cycle_OFF-03	acc112/acceptance/1.12/results/item02/item02-H1-r2-hr/truth-links.txt	11	1.12 #2/#6 H1 run tables of the same held-out run (scored; no default changed)	declared
+HO-PXD066944-OFF03	pxd	PXD066944	acc112/acceptance/1.12/results/item02/item02-H1-r2-hr/truth-links.txt	9	1.12 #2/#6 H1 run tables of the same held-out run (scored; no default changed)	declared
+HO-PXD066944-OFF03	raw_name	TEMP_20250307_AST0_NEO5_JVO_MV50_DR_100SPD_10ng_HEK_Ref_DDA_2Th_1p5ms_10ms_v1Ref_cycle_OFF-03	acc112/acceptance/1.12/results/item06/item06-H1-r2/runs.tsv	2	1.12 #2/#6 H1 run tables of the same held-out run (scored; no default changed)	declared
+HO-PXD066944-OFF03	pxd	PXD066944	acc112/acceptance/1.12/results/item06/item06-H1-r2/runs.tsv	2	1.12 #2/#6 H1 run tables of the same held-out run (scored; no default changed)	declared
+HO-PXD076528-7673	pxd	PXD076528	acc112/acceptance/1.12/scorers/tests/dev_results/item01/runs.tsv	32	1.12 scorer test fixtures (copies of DEV tables and of the #7 sweep list)	declared
+HO-PXD076528-7673	pxd	PXD076528	acc112/acceptance/1.12/scorers/tests/dev_results/item03/runs.tsv	95	1.12 scorer test fixtures (copies of DEV tables and of the #7 sweep list)	declared
+HO-PXD009612-MW3	raw_name	170928_MW_3	acc112/acceptance/1.12/scorers/tests/dev_results/item03/runs.tsv	9	1.12 scorer test fixtures (copies of DEV tables and of the #7 sweep list)	declared
+HO-PXD009612-MW3	pxd	PXD009612	acc112/acceptance/1.12/scorers/tests/dev_results/item03/runs.tsv	9	1.12 scorer test fixtures (copies of DEV tables and of the #7 sweep list)	declared
+HO-PXD040230-S2R1	raw_name	20210629_Sample2red_CTRworms_repl1	acc112/acceptance/1.12/scorers/tests/dev_results/item03/runs.tsv	28	1.12 scorer test fixtures (copies of DEV tables and of the #7 sweep list)	declared
+HO-PXD040230-S2R1	pxd	PXD040230	acc112/acceptance/1.12/scorers/tests/dev_results/item03/runs.tsv	28	1.12 scorer test fixtures (copies of DEV tables and of the #7 sweep list)	declared
+HO-PXD049370-185	raw_name	201111_13_Orbi1_KN_SER_G90_T115_Paternoga_ysgA_185	acc112/acceptance/1.12/scorers/tests/dev_results/item03/runs.tsv	31	1.12 scorer test fixtures (copies of DEV tables and of the #7 sweep list)	declared
+HO-PXD049370-185	pxd	PXD049370	acc112/acceptance/1.12/scorers/tests/dev_results/item03/runs.tsv	31	1.12 scorer test fixtures (copies of DEV tables and of the #7 sweep list)	declared
+HO-PXD066944-OFF03	pxd	PXD066944	acc112/acceptance/1.12/scorers/tests/dev_results/item07/units.tsv	105	1.12 scorer test fixtures (copies of DEV tables and of the #7 sweep list)	declared
+HO-PXD076528-7673	pxd	PXD076528	acc112/acceptance/1.12/scorers/tests/dev_results/item07/units.tsv	114	1.12 scorer test fixtures (copies of DEV tables and of the #7 sweep list)	declared
+HO-PXD009612-MW3	pxd	PXD009612	acc112/acceptance/1.12/scorers/tests/dev_results/item07/units.tsv	134	1.12 scorer test fixtures (copies of DEV tables and of the #7 sweep list)	declared
+HO-PXD040230-S2R1	pxd	PXD040230	acc112/acceptance/1.12/scorers/tests/dev_results/item07/units.tsv	157	1.12 scorer test fixtures (copies of DEV tables and of the #7 sweep list)	declared
+HO-PXD049370-185	pxd	PXD049370	acc112/acceptance/1.12/scorers/tests/dev_results/item07/units.tsv	162	1.12 scorer test fixtures (copies of DEV tables and of the #7 sweep list)	declared
+HO-PXD066944-OFF03	raw_name	TEMP_20250307_AST0_NEO5_JVO_MV50_DR_100SPD_10ng_HEK_Ref_DDA_2Th_1p5ms_10ms_v1Ref_cycle_OFF-03	acc112/acceptance/1.12/scorers/tests/e7-02-sweep.tsv	105	1.12 scorer test fixtures (copies of DEV tables and of the #7 sweep list)	declared
+HO-PXD066944-OFF03	mzml_sha256	bb58b7234572b83de114a01a20b358de36e214fa7c4562763986c82ab21ef540	acc112/acceptance/1.12/scorers/tests/e7-02-sweep.tsv	105	1.12 scorer test fixtures (copies of DEV tables and of the #7 sweep list)	declared
+HO-PXD066944-OFF03	pxd	PXD066944	acc112/acceptance/1.12/scorers/tests/e7-02-sweep.tsv	105	1.12 scorer test fixtures (copies of DEV tables and of the #7 sweep list)	declared
+HO-PXD076528-7673	pxd	PXD076528	acc112/acceptance/1.12/scorers/tests/e7-02-sweep.tsv	114	1.12 scorer test fixtures (copies of DEV tables and of the #7 sweep list)	declared
+HO-PXD009612-MW3	raw_name	170928_MW_3	acc112/acceptance/1.12/scorers/tests/e7-02-sweep.tsv	134	1.12 scorer test fixtures (copies of DEV tables and of the #7 sweep list)	declared
+HO-PXD009612-MW3	mzml_sha256	ee880f18ce8ad1e4b0543e09841a12cd7cde2eb7c68dce5a96f9deb48201ae84	acc112/acceptance/1.12/scorers/tests/e7-02-sweep.tsv	134	1.12 scorer test fixtures (copies of DEV tables and of the #7 sweep list)	declared
+HO-PXD009612-MW3	pxd	PXD009612	acc112/acceptance/1.12/scorers/tests/e7-02-sweep.tsv	134	1.12 scorer test fixtures (copies of DEV tables and of the #7 sweep list)	declared
+HO-PXD040230-S2R1	raw_name	20210629_Sample2red_CTRworms_repl1	acc112/acceptance/1.12/scorers/tests/e7-02-sweep.tsv	157	1.12 scorer test fixtures (copies of DEV tables and of the #7 sweep list)	declared
+HO-PXD040230-S2R1	mzml_sha256	0ee5fb42743fd48d6077bf07740db74fc473492cba39ef39df846340e8f7dacb	acc112/acceptance/1.12/scorers/tests/e7-02-sweep.tsv	157	1.12 scorer test fixtures (copies of DEV tables and of the #7 sweep list)	declared
+HO-PXD040230-S2R1	pxd	PXD040230	acc112/acceptance/1.12/scorers/tests/e7-02-sweep.tsv	157	1.12 scorer test fixtures (copies of DEV tables and of the #7 sweep list)	declared
+HO-PXD049370-185	raw_name	201111_13_Orbi1_KN_SER_G90_T115_Paternoga_ysgA_185	acc112/acceptance/1.12/scorers/tests/e7-02-sweep.tsv	162	1.12 scorer test fixtures (copies of DEV tables and of the #7 sweep list)	declared
+HO-PXD049370-185	mzml_sha256	135ffb4b567eaa4d643f73be9ea0950b80f0304cf4930b66bf2d881df9eaa69a	acc112/acceptance/1.12/scorers/tests/e7-02-sweep.tsv	162	1.12 scorer test fixtures (copies of DEV tables and of the #7 sweep list)	declared
+HO-PXD049370-185	pxd	PXD049370	acc112/acceptance/1.12/scorers/tests/e7-02-sweep.tsv	162	1.12 scorer test fixtures (copies of DEV tables and of the #7 sweep list)	declared
+HO-PXD066944-OFF03	raw_name	TEMP_20250307_AST0_NEO5_JVO_MV50_DR_100SPD_10ng_HEK_Ref_DDA_2Th_1p5ms_10ms_v1Ref_cycle_OFF-03	acc112/acceptance/1.12/scorers/truth/item02.tsv	3	1.12 #2 truth list of the same held-out run	declared
+HO-PXD066944-OFF03	pxd	PXD066944	acc112/acceptance/1.12/scorers/truth/item02.tsv	3	1.12 #2 truth list of the same held-out run	declared
+HO-PXD076528-7673	pxd	PXD076528	acc112/acceptance/1.12/scripts/check_disjoint.py	6		reported
+HO-PXD066944-OFF03	pxd	PXD066944	acc112/acceptance/1.12/scripts/select_corpus.py	5		reported
+HO-PXD076528-7673	pxd	PXD076528	acc112/acceptance/1.12/scripts/select_corpus.py	28		reported
+HO-PXD066944-OFF03	pxd	PXD066944	acc112/acceptance/1.12/validation-registry.tsv	39		reported
+HO-PXD076528-7673	pxd	PXD076528	acc112/acceptance/1.12/validation-registry.tsv	273		reported
+HO-PXD066944-OFF03	pxd	PXD066944	acc113/acceptance/1.13/PREREG-compltol.md	33	concurrent 1.13 compltol (#15) held-out run (opt-in option, FAIL; no default changed)	declared
+HO-PXD066944-OFF03	pxd	PXD066944	acc113/acceptance/1.13/census/inputs/excl_pxd_draw.txt	1276		reported
+HO-PXD076528-7673	pxd	PXD076528	acc113/acceptance/1.13/census/inputs/excl_pxd_draw.txt	1406		reported
+HO-PXD009612-MW3	pxd	PXD009612	acc113/acceptance/1.13/census/inputs/excl_pxd_draw.txt	247		reported
+HO-PXD040230-S2R1	pxd	PXD040230	acc113/acceptance/1.13/census/inputs/excl_pxd_draw.txt	808		reported
+HO-PXD049370-185	pxd	PXD049370	acc113/acceptance/1.13/census/inputs/excl_pxd_draw.txt	972		reported
+HO-PXD066944-OFF03	raw_name	TEMP_20250307_AST0_NEO5_JVO_MV50_DR_100SPD_10ng_HEK_Ref_DDA_2Th_1p5ms_10ms_v1Ref_cycle_OFF-03	acc113/acceptance/1.13/disjointness/compltol-H1.tsv	3	concurrent 1.13 compltol (#15) held-out run (opt-in option, FAIL; no default changed)	declared
+HO-PXD066944-OFF03	mzml_sha256	bb58b7234572b83de114a01a20b358de36e214fa7c4562763986c82ab21ef540	acc113/acceptance/1.13/disjointness/compltol-H1.tsv	3	concurrent 1.13 compltol (#15) held-out run (opt-in option, FAIL; no default changed)	declared
+HO-PXD066944-OFF03	pxd	PXD066944	acc113/acceptance/1.13/disjointness/compltol-H1.tsv	3	concurrent 1.13 compltol (#15) held-out run (opt-in option, FAIL; no default changed)	declared
+HO-PXD066944-OFF03	pxd	PXD066944	acc113/acceptance/1.13/hdrcharge/scripts/select_heldout.py	11		reported
+HO-PXD066944-OFF03	raw_name	TEMP_20250307_AST0_NEO5_JVO_MV50_DR_100SPD_10ng_HEK_Ref_DDA_2Th_1p5ms_10ms_v1Ref_cycle_OFF-03	acc113/acceptance/1.13/inputs/item08_dev_label_call.tsv	158	concurrent 1.13 #8 label-call DEV table (opt-in report)	declared
+HO-PXD066944-OFF03	pxd	PXD066944	acc113/acceptance/1.13/inputs/item08_dev_label_call.tsv	158	concurrent 1.13 #8 label-call DEV table (opt-in report)	declared
+HO-PXD076528-7673	pxd	PXD076528	acc113/acceptance/1.13/inputs/item08_dev_label_call.tsv	167	concurrent 1.13 #8 label-call DEV table (opt-in report)	declared
+HO-PXD009612-MW3	raw_name	170928_MW_3	acc113/acceptance/1.13/inputs/item08_dev_label_call.tsv	21	concurrent 1.13 #8 label-call DEV table (opt-in report)	declared
+HO-PXD009612-MW3	pxd	PXD009612	acc113/acceptance/1.13/inputs/item08_dev_label_call.tsv	21	concurrent 1.13 #8 label-call DEV table (opt-in report)	declared
+HO-PXD040230-S2R1	raw_name	20210629_Sample2red_CTRworms_repl1	acc113/acceptance/1.13/inputs/item08_dev_label_call.tsv	43	concurrent 1.13 #8 label-call DEV table (opt-in report)	declared
+HO-PXD040230-S2R1	pxd	PXD040230	acc113/acceptance/1.13/inputs/item08_dev_label_call.tsv	43	concurrent 1.13 #8 label-call DEV table (opt-in report)	declared
+HO-PXD049370-185	raw_name	201111_13_Orbi1_KN_SER_G90_T115_Paternoga_ysgA_185	acc113/acceptance/1.13/inputs/item08_dev_label_call.tsv	48	concurrent 1.13 #8 label-call DEV table (opt-in report)	declared
+HO-PXD049370-185	pxd	PXD049370	acc113/acceptance/1.13/inputs/item08_dev_label_call.tsv	48	concurrent 1.13 #8 label-call DEV table (opt-in report)	declared
+HO-PXD076528-7673	pxd	PXD076528	acc113/acceptance/1.13/item23/results/per_run.tsv	35		reported
+HO-PXD076528-7673	pxd	PXD076528	acc113/acceptance/1.13/item23/results/times.tsv	34		reported
+HO-PXD066944-OFF03	raw_name	TEMP_20250307_AST0_NEO5_JVO_MV50_DR_100SPD_10ng_HEK_Ref_DDA_2Th_1p5ms_10ms_v1Ref_cycle_OFF-03	acc113/acceptance/1.13/manifests/compltol-H1.tsv	4	concurrent 1.13 compltol (#15) held-out run (opt-in option, FAIL; no default changed)	declared
+HO-PXD066944-OFF03	mzml_sha256	bb58b7234572b83de114a01a20b358de36e214fa7c4562763986c82ab21ef540	acc113/acceptance/1.13/manifests/compltol-H1.tsv	4	concurrent 1.13 compltol (#15) held-out run (opt-in option, FAIL; no default changed)	declared
+HO-PXD066944-OFF03	pxd	PXD066944	acc113/acceptance/1.13/manifests/compltol-H1.tsv	4	concurrent 1.13 compltol (#15) held-out run (opt-in option, FAIL; no default changed)	declared
+HO-PXD076528-7673	raw_name	7673_YD12_P116861_S00_R1	acc113/acceptance/1.13/manifests/item23-digqual.tsv	45	concurrent 1.13 #23 digqual evaluation run (opt-in report); same raw file, item 12 scores the unchanged 1.12.1 binary	declared
+HO-PXD076528-7673	pxd	PXD076528	acc113/acceptance/1.13/manifests/item23-digqual.tsv	45	concurrent 1.13 #23 digqual evaluation run (opt-in report); same raw file, item 12 scores the unchanged 1.12.1 binary	declared
+HO-PXD066944-OFF03	pxd	PXD066944	acc113/acceptance/1.13/results/compltol/measured_windows.tsv	14	concurrent 1.13 compltol (#15) held-out run (opt-in option, FAIL; no default changed); concurrent 1.13 compltol (#15) held-out run table	declared
+HO-PXD066944-OFF03	raw_name	TEMP_20250307_AST0_NEO5_JVO_MV50_DR_100SPD_10ng_HEK_Ref_DDA_2Th_1p5ms_10ms_v1Ref_cycle_OFF-03	acc113/acceptance/1.13/results/compltol/runs.tsv	2	concurrent 1.13 compltol (#15) held-out run (opt-in option, FAIL; no default changed); concurrent 1.13 compltol (#15) held-out run table	declared
+HO-PXD066944-OFF03	pxd	PXD066944	acc113/acceptance/1.13/results/compltol/runs.tsv	2	concurrent 1.13 compltol (#15) held-out run (opt-in option, FAIL; no default changed); concurrent 1.13 compltol (#15) held-out run table	declared
+HO-PXD066944-OFF03	raw_name	TEMP_20250307_AST0_NEO5_JVO_MV50_DR_100SPD_10ng_HEK_Ref_DDA_2Th_1p5ms_10ms_v1Ref_cycle_OFF-03	acc113/acceptance/1.13/scorers/tests/dev_results/item08/runs.tsv	120	concurrent 1.13 #8 label-call DEV results (opt-in report)	declared
+HO-PXD066944-OFF03	pxd	PXD066944	acc113/acceptance/1.13/scorers/tests/dev_results/item08/runs.tsv	120	concurrent 1.13 #8 label-call DEV results (opt-in report)	declared
+HO-PXD076528-7673	pxd	PXD076528	acc113/acceptance/1.13/scorers/tests/dev_results/item08/runs.tsv	129	concurrent 1.13 #8 label-call DEV results (opt-in report)	declared
+HO-PXD009612-MW3	raw_name	170928_MW_3	acc113/acceptance/1.13/scorers/tests/dev_results/item08/runs.tsv	11	concurrent 1.13 #8 label-call DEV results (opt-in report)	declared
+HO-PXD009612-MW3	pxd	PXD009612	acc113/acceptance/1.13/scorers/tests/dev_results/item08/runs.tsv	11	concurrent 1.13 #8 label-call DEV results (opt-in report)	declared
+HO-PXD040230-S2R1	raw_name	20210629_Sample2red_CTRworms_repl1	acc113/acceptance/1.13/scorers/tests/dev_results/item08/runs.tsv	23	concurrent 1.13 #8 label-call DEV results (opt-in report)	declared
+HO-PXD040230-S2R1	pxd	PXD040230	acc113/acceptance/1.13/scorers/tests/dev_results/item08/runs.tsv	23	concurrent 1.13 #8 label-call DEV results (opt-in report)	declared
+HO-PXD066944-OFF03	pxd	PXD066944	acc113/acceptance/1.13/validation-registry.tsv	16		reported
+HO-PXD076528-7673	pxd	PXD076528	acc113/acceptance/1.13/validation-registry.tsv	16		reported
+HO-PXD009612-MW3	pxd	PXD009612	acc113/acceptance/1.13/validation-registry.tsv	16		reported
+HO-PXD040230-S2R1	pxd	PXD040230	acc113/acceptance/1.13/validation-registry.tsv	16		reported
+HO-PXD049370-185	pxd	PXD049370	acc113/acceptance/1.13/validation-registry.tsv	16		reported
+HO-PXD076528-7673	pxd	PXD076528	backlog113/alknodb/alkt_dev.tsv	58	concurrent 1.13 alknodb DEV table (opt-in alkylation report)	declared
+HO-PXD009612-MW3	raw_name	170928_MW_3	backlog113/alknodb/alkt_dev.tsv	149	concurrent 1.13 alknodb DEV table (opt-in alkylation report)	declared
+HO-PXD009612-MW3	pxd	PXD009612	backlog113/alknodb/alkt_dev.tsv	149	concurrent 1.13 alknodb DEV table (opt-in alkylation report)	declared
+HO-PXD040230-S2R1	raw_name	20210629_Sample2red_CTRworms_repl1	backlog113/alknodb/alkt_dev.tsv	168	concurrent 1.13 alknodb DEV table (opt-in alkylation report)	declared
+HO-PXD040230-S2R1	pxd	PXD040230	backlog113/alknodb/alkt_dev.tsv	168	concurrent 1.13 alknodb DEV table (opt-in alkylation report)	declared
+HO-PXD049370-185	raw_name	201111_13_Orbi1_KN_SER_G90_T115_Paternoga_ysgA_185	backlog113/alknodb/alkt_dev.tsv	171	concurrent 1.13 alknodb DEV table (opt-in alkylation report)	declared
+HO-PXD049370-185	pxd	PXD049370	backlog113/alknodb/alkt_dev.tsv	171	concurrent 1.13 alknodb DEV table (opt-in alkylation report)	declared

@@ -82,6 +82,10 @@ table.taxa.dt td.mono { font-family: var(--font-seq); font-size: var(--text-xs);
 .dt-filters label.check { flex-direction: row; align-items: center; gap: 6px; }
 .dt-filters input[type='number'] { width: 8em; }
 .recon-empty { max-width: 560px; }
+/* button.primary shrinks to fit a run bar (flex: 1; ellipsis); here its label
+   ("Choose a FASTA and run again") is the whole instruction, so it keeps its
+   width and the row wraps instead (it was cut to "Choose a ..."). */
+.recon-empty .row-actions button { flex: none; max-width: 100%; white-space: normal; overflow: visible; text-overflow: clip; height: auto; min-height: 40px; }
 
 @media (forced-colors: active) {
   .mg-stick { stroke: CanvasText; }

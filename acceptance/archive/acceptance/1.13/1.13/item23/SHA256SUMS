@@ -1,0 +1,5 @@
+7ed431b9b88b819f60b8b98c93b5c9596779f953b0733036001c29fe81dcec7d  scorer/score_digqual.py
+8e8f9e27bf488127eefff3153f6ea06d7fb25d55a08ad9fbae015c99b1c7ca0f  scripts/run_eval.sh
+2769b5690fb3bb7dc527396b4a4e7acb502288b4ede6a94ef62a22e064015cef  scripts/build_manifest.py
+52aab216fe63bcef9b6fc26da491f5e132f2aacf5b52e544ba4ccf84301e96be  ../manifests/item23-digqual.tsv
+de2c3e18796868e94ec895178ec276f08f049c3afde4af31284bf71f41f247bd  ../PREREG-item23.md

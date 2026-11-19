@@ -1,0 +1,16 @@
+start 2026-11-09T19:41:49Z load 116.79
+RUN_EVAL_DONE
+runs_end 2026-11-09T19:42:48Z
+runs_manifest	35
+runs_scored	32
+runs_not_scored	PXD033852_MSB43757A:not_measured;PXD065430_fat:measured;PXD073843_Pf_RBC:measured
+E1_spearman_retention_fastag_vs_sage	0.8335777126099705
+E1_pearson_retention_fastag_vs_sage	0.9021915424262724
+E2_spearman_retention_fastag_vs_sage_mc_share	0.7232404692082111
+E3_median_ratio_retention_fastag_over_sage	0.8590899312786514
+E3_median_abs_diff_site_share	0.0022781455852477674
+median_fastag_retention	0.07808445134554633
+median_sage_retention	0.07122276952209708
+median_sage_mc_share	0.10821460626144438
+median_fastag_nonspecific_mle	0.05902244251216926
+EVAL_DONE

@@ -57,19 +57,14 @@ test('without the probe: "not checked" before the run; after it the ion-trap red
   await expect(flag).toContainText('LTQ Orbitrap XL')
   await expect(flag).toContainText("From the digest report and FASTag's log.")
 
-  await flag.getByRole('button', { name: 'Re-run with 0.3 Da' }).click()
-  // Characterize a run has species on: its Da red flag waits on Setup.
-  const da = checkNamed(page, /^Red flag: Species detection with a tolerance in Da/)
-  await expect(da).toBeVisible()
-  // By keyboard: Run anyway stays a pressed toggle, and focus moves on to Run.
-  await da.getByRole('button', { name: 'Run anyway' }).focus()
-  await page.keyboard.press('Enter')
-  await expect(da.getByRole('button', { name: 'Run anyway: chosen' })).toHaveAttribute('aria-pressed', 'true')
-  await expect(page.getByRole('button', { name: 'Run on run01.mzML' })).toBeFocused()
-  await page.keyboard.press('Enter')
+  // Characterize a run has species on, and species calls are not validated
+  // in Da: the re-run says so, leaves the species report out and starts at once.
+  await expect(flag).toContainText('Species calls are not validated with a tolerance in Da')
+  await flag.getByRole('button', { name: 'Re-run with 0.3 Da, without species' }).click()
   await expect.poll(async () => (await mockState<unknown[]>(page, 'runCalls')).length).toBe(2)
   const calls = await mockState<{ params: Record<string, unknown> }[]>(page, 'runCalls')
-  expect(calls[1].params).toMatchObject({ fragment_tolerance: '0.3', fragment_tolerance_unit: 'Da', species: true })
+  expect(calls[1].params).toMatchObject({ fragment_tolerance: '0.3', fragment_tolerance_unit: 'Da' })
+  expect(calls[1].params['species']).not.toBe(true)
 })
 
 test('FASTag 1.12 refuses raw DIA (exit 11): a clear block naming DIAspeXtract, not a generic failure', async ({ page }) => {

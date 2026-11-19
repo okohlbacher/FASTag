@@ -321,6 +321,8 @@ def main():
     print(f"rank-1: {st['rank1']:5d}  ({pct['rank1']:.2f}%)")
     print(f"top-5 : {st['top5']:5d}  ({pct['top5']:.2f}%)")
     print(f"total : {st['total']:5d}  ({pct['total']:.2f}%)")
+    print(f"any valid tag, all accepted-PSM spectra: {st['total']}/{st['n_gt']} "
+          f"({100.0 * st['total'] / st['n_gt']:.2f}%)")
     print(f"gapped share of rank-1: {st['g1']} ({100.0*st['g1']/n:.2f}%); "
           f"of those correct: {st['g1_correct']} "
           f"({100.0*st['g1_correct']/st['g1']:.2f}%)" if st['g1'] else

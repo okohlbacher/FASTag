@@ -1,0 +1,88 @@
+name: Bug report
+description: FASTag crashes, fails, or gives a result you think is wrong.
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting. Security problems go through SECURITY.md, not here.
+        Please share only public data or a small file that shows the problem.
+  - type: input
+    id: version
+    attributes:
+      label: FASTag version
+      description: "Output of `FASTag --help | grep Version` (desktop app: About, or Help)."
+      placeholder: "Version: 1.15.0 (OpenMS 3.7.0-pre-HEAD-2026-11-02)"
+    validations:
+      required: true
+  - type: dropdown
+    id: platform
+    attributes:
+      label: Platform
+      options:
+        - macOS, Apple silicon
+        - macOS, Intel
+        - Windows x64
+        - Windows on ARM64 (x64 build emulated)
+        - Linux x64
+        - Linux arm64
+        - Built from source (say where below)
+    validations:
+      required: true
+  - type: input
+    id: os
+    attributes:
+      label: Operating system version and how FASTag was installed
+      placeholder: "macOS 15.2, Homebrew cask / Ubuntu 24.04, .deb / Windows 11, installer"
+    validations:
+      required: true
+  - type: dropdown
+    id: interface
+    attributes:
+      label: Command line or desktop app
+      options:
+        - Command line
+        - Desktop app
+    validations:
+      required: true
+  - type: textarea
+    id: command
+    attributes:
+      label: Command line
+      description: "The full command (the desktop app shows it under History, or offers it to copy after a failed run)."
+      render: shell
+    validations:
+      required: true
+  - type: dropdown
+    id: format
+    attributes:
+      label: Input format
+      multiple: true
+      options:
+        - mzML
+        - mzPeak
+        - MGF
+        - FASTA (-fasta, -recon_fasta, ...)
+        - idXML / mzid (-census_ids)
+        - Other
+    validations:
+      required: true
+  - type: input
+    id: data
+    attributes:
+      label: Input data
+      description: "Instrument and acquisition (e.g. timsTOF ddaPASEF, Orbitrap HCD, ion-trap CID), how the file was converted, and a PXD accession if it is public."
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened, and what you expected
+    validations:
+      required: true
+  - type: textarea
+    id: log
+    attributes:
+      label: Log
+      description: "The complete output of the run (stdout and stderr), including the exit code (`echo $?`). Desktop app: the error text, or last-failure.log."
+      render: text
+    validations:
+      required: true

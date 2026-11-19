@@ -1,0 +1,5 @@
+criterion	value	threshold	verdict
+P	+4.57 pp [+1.66, +7.46]; worst project +4.57 pp	lower bound > +1.0 pp and no project below -1.0 pp	INCONCLUSIVE
+G1	+4.57 pp	>= -1.0 pp	INCONCLUSIVE
+G2	1.49	<= 2.0	INCONCLUSIVE
+projects	1	>= 4	INCONCLUSIVE

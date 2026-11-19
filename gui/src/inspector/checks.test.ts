@@ -24,6 +24,9 @@ import orbiErr from '../fixtures/cli-1.12/orbitrap_hcd.stderr?raw'
 import diaErr from '../fixtures/cli-1.12/dia_raw.stderr?raw'
 import diaOut from '../fixtures/cli-1.12/dia_raw.stdout?raw'
 import diaRc from '../fixtures/cli-1.12/dia_raw.rc?raw'
+import ecoliProbe from '../fixtures/probe/ecoli_ms2_small.probe.jsonl?raw'
+import ecoliDigest from '../fixtures/cli-1.15/ecoli_ms2_small_20ppm.digest.tsv?raw'
+import ecoliErr from '../fixtures/cli-1.15/ecoli_ms2_small_20ppm.stderr?raw'
 
 const ppm = { fragment_tolerance: '20', fragment_tolerance_unit: 'ppm' }
 const da = { fragment_tolerance: '0.3', fragment_tolerance_unit: 'Da' }
@@ -225,6 +228,13 @@ describe('postRunChecks (from the reports and the log of a real 1.12 run)', () =
   it('no reports: nothing detected', () => {
     expect(postRunChecks({ reports: [], notes: [] })).toEqual({ checks: [], detected: null })
   })
+
+  it('no reports, but the log names low-resolution MS2: red flag with the re-run', () => {
+    const r = postRunChecks({ reports: [], notes: notes(it20Err) })
+    expect(ids(r.checks)).toContain('flag:iontrap-ppm')
+    expect(r.checks[0].title).toBe('The fragment tolerance is too narrow; the MS2 look like ion trap')
+    expect(r.checks[0].fix).toMatchObject({ instrument: 'iontrap-cid', rerun: true })
+  })
 })
 
 describe('refusalOf (FASTag 1.12 exit 11)', () => {
@@ -244,5 +254,51 @@ describe('refusalOf (FASTag 1.12 exit 11)', () => {
     expect(refusalOf(msg, 1)).toBeNull()
     expect(refusalOf(['FASTAG_REFUSED reason=other'], 11)).toBeNull()
     expect(refusalOf(notes(it20Err), 0)).toBeNull()
+  })
+})
+
+// test/fixtures/Ecoli_MS2_small.mzML (LTQ Orbitrap XL, ion-trap CID MS2,
+// no two peaks closer than 0.600 Th): the real FASTag 1.15.0 probe and run
+// (fixtures/cli-1.15/README.md). Its one instrument configuration names the
+// orbitrap and no MS2 references it, so the probe's analyser is the run's
+// default, which says nothing of where the MS2 were read.
+describe('Ecoli_MS2_small.mzML: the checks before and after the run agree', () => {
+  const rep = (t: string, p: string) => parseReport(t, p)
+
+  it('before the run: no preset is detected, and 20 ppm is questioned, not recommended', () => {
+    const r = pre(ecoliProbe)
+    expect(r.notChecked).toBeNull()
+    expect(r.detected).toMatchObject({ family: 'hybrid-ion-trap', preset: null, text: 'LTQ Orbitrap XL', source: 'the probe' })
+    expect(ids(r.checks)).toEqual(['warn:hybrid-ppm'])
+    const w = r.checks[0]
+    expect(w.detail).toContain('do not say which')
+    expect(w.detail).toContain('names the orbitrap, but no MS2 spectrum references it')
+    expect(w.fix).toEqual({ label: 'Use Ion trap CID 0.3 Da', instrument: 'iontrap-cid' })
+    // Nothing anywhere proposes the Orbitrap preset.
+    expect(JSON.stringify(r)).not.toContain('orbitrap-hcd')
+  })
+
+  it('before the run at 0.3 Da: nothing to question', () => {
+    const r = pre(ecoliProbe, da)
+    expect(r.checks).toEqual([])
+    expect(r.detected?.preset).toBeNull()
+  })
+
+  it('after a 20 ppm run: the red flag, from the digest report and the peak-spacing line of the log', () => {
+    const r = postRunChecks({ reports: [rep(ecoliDigest, '/d/e.digest.tsv')], notes: notes(ecoliErr) })
+    expect(ids(r.checks)).toEqual(['flag:iontrap-ppm'])
+    expect(r.checks[0].detail).toContain('closer than 0.600 Th')
+    expect(r.checks[0].fix).toEqual({ label: 'Re-run with 0.3 Da', instrument: 'iontrap-cid', rerun: true })
+    expect(r.detected).toMatchObject({ family: 'hybrid-ion-trap', preset: 'iontrap-cid' })
+  })
+
+  it('after a run with the species report: the re-run leaves it out and says why', () => {
+    const r = postRunChecks({ reports: [rep(ecoliDigest, '/d/e.digest.tsv')], notes: notes(ecoliErr), species: true })
+    const flag = r.checks[0]
+    expect(flag.fix).toEqual({ label: 'Re-run with 0.3 Da, without species', instrument: 'iontrap-cid', params: { species: false }, rerun: true })
+    expect(flag.detail).toContain('Species calls are not validated with a tolerance in Da')
+    // The re-run's settings raise no species check before it.
+    const values = { ...ppm, species: true, ...flag.fix!.params, fragment_tolerance: '0.3', fragment_tolerance_unit: 'Da' }
+    expect(pre(ecoliProbe, values).checks).toEqual([])
   })
 })

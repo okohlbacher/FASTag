@@ -1,0 +1,4 @@
+E1 rr 3.0377268329 (>= 2.0: True), ci_lo 3.0377268329 (>= 1.5: True)
+E2 run rr PXD003531 3.1270851403, PXD014764 3.3728241238 (all > 1: True)
+E3 d_n_peaks 0.0397017707 (> 0: True), ci_lo 0.0223683009 (> 0: True)
+VERDICT PASS
