@@ -122,7 +122,10 @@ ck ".d -qc_out exit code" "$?" "0"
 ck ".d -qc_out: tags unchanged" "$(cmp -s "$W/d.tsv" "$W/q.tsv" && echo same)" "same"
 ck ".d qc instrument_serial_number" "$(qcv "$W/q.qc.tsv" instrument_serial_number)" "1838271.00025"
 ck ".d qc start_timestamp" "$(qcv "$W/q.qc.tsv" start_timestamp)" "2022-02-25T16:48:55.043+01:00"
-ck ".d qc instrument_model stated" "$(case "$(qcv "$W/q.qc.tsv" instrument_model)" in n/a|MISSING|"") echo no;; *) echo yes;; esac)" "yes"
+# bash 3.2 (macOS) cannot parse a case statement inside $(...).
+m=$(qcv "$W/q.qc.tsv" instrument_model); stated=yes
+case "$m" in n/a|MISSING|"") stated=no;; esac
+ck ".d qc instrument_model stated" "$stated" "yes"
 
 # A .d without analysis.tdf is not a timsTOF run.
 mkdir -p "$W/empty.d"
