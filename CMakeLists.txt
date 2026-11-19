@@ -83,7 +83,7 @@ endif()
 # anchored list, in the fixed order E, A, D, F (E data types and acquisition,
 # A identification and search hand-off, D organism and run chemistry, F quality
 # control).
-set(FASTAG_CORE_SOURCES src/FASTagger.cpp src/AveragineDeisotoper.cpp src/Digest.cpp src/DigestReport.cpp src/DigestQuality.cpp src/FastaFilter.cpp src/ProteomeIndex.cpp src/ReconIds.cpp src/TagRecon.cpp src/TaxDeconv.cpp src/TaxIndex.cpp src/TaxStats.cpp)
+set(FASTAG_CORE_SOURCES src/FASTagger.cpp src/AveragineDeisotoper.cpp src/Digest.cpp src/DigestReport.cpp src/DigestQuality.cpp src/FastaFilter.cpp src/ProteomeIndex.cpp src/ReconIds.cpp src/ShiftSurvey.cpp src/TagRecon.cpp src/TaxDeconv.cpp src/TaxIndex.cpp src/TaxStats.cpp)
 # ---- 1.12 E: core sources ----
 set(FASTAG_CORE_SOURCES_E src/Acquisition.cpp src/Centroid.cpp src/PrecursorHypotheses.cpp)
 # ---- 1.12 A: core sources ----
@@ -310,6 +310,17 @@ if(FASTAG_BUILD_TESTS)
   # links Boost::headers PRIVATE, and OpenMS's target carries no Boost include
   # path on Windows.
   target_link_libraries(complement_test PRIVATE Boost::headers)
+
+  # 1.16: the mass-shift survey (-delta_out site and name columns).
+  add_executable(shift_survey_test test/shift_survey_test.cpp)
+  target_link_libraries(shift_survey_test PRIVATE fastag_core)
+  add_test(NAME shift_survey_test COMMAND shift_survey_test ${CMAKE_CURRENT_SOURCE_DIR}/test/fixtures)
+  add_test(NAME delta_sites_cli_test
+           COMMAND bash ${CMAKE_CURRENT_SOURCE_DIR}/test/delta_sites_cli_test.sh $<TARGET_FILE:FASTag>
+                   ${CMAKE_CURRENT_SOURCE_DIR}/test/fixtures/Ecoli_MS2_small.mzML
+                   ${CMAKE_CURRENT_SOURCE_DIR}/test/fixtures/Ecoli_MS2_small.fasta
+                   ${CMAKE_CURRENT_SOURCE_DIR}/test/fixtures/delta_sites.mgf)
+  set_tests_properties(delta_sites_cli_test PROPERTIES SKIP_RETURN_CODE 77)
 
   # 1.12 P4: the shared run report section (src/RunMeta.h) is frozen here.
   add_executable(runmeta_test test/runmeta_test.cpp)

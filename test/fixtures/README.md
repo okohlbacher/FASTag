@@ -239,3 +239,19 @@ error of sd 0.004 Da (hires; a complement pair's 95% window 0.0111 Da) or
 `-complement_tolerance_unit auto` on them. sha256: `compltol_hires.mgf`
 `ff0210b513bf9c5515f845774617ca1de2959ed5c7f19d52d56e375e1cd3a7e0`,
 `compltol_lowres.mgf` `3437bfdef43f685735c8d00e39c302009ad4350d5173e5bd47e7254790ed8aa2`.
+
+`psimod_mini.obo` — five PSI-MOD terms (MOD:00719, MOD:00189, MOD:00040,
+MOD:00793, MOD:00425, plus the cross-link MOD:00119) copied from OpenMS's
+`share/OpenMS/CHEMISTRY/PSI-MOD.obo` at the pinned develop commit 70cebcd144
+and cut to the fields FASTag reads, with two synthetic terms (MOD:99901,
+MOD:99902) that the reader must leave out. For `shift_survey_test`: a PSI-only
+term, Unimod-linked terms, a terminal term and the exclusions. PSI-MOD is
+CC BY 4.0.
+
+`delta_sites.mgf` — written by `make_delta_sites_fixture.py` (standard library,
+seed 20261118): 12 in-silico b/y spectra of four `Ecoli_MS2_small.fasta`
+peptides, three copies each, every one carrying a modification FASTag is not
+told about (Oxidation on M, Cys->Dha on a Cys without the fixed
+Carbamidomethyl, Acetyl on the peptide N-terminus, Dehydrated on S). For
+`delta_sites_cli_test`. Derived from the OpenMS example FASTA, so
+BSD-3-Clause.

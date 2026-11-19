@@ -562,6 +562,9 @@ jobs:
           mkdir -p dist/FASTag/share-OpenMS/examples/ID
           cp test/fixtures/Ecoli_MS2_small.mzML dist/FASTag/share-OpenMS/examples/ID/
           test -s dist/FASTag/share-OpenMS/examples/ID/Ecoli_MS2_small.mzML
+          # -delta_out names its rows from these two (1.16 mass-shift survey).
+          test -s dist/FASTag/share-OpenMS/CHEMISTRY/unimod.xml
+          test -s dist/FASTag/share-OpenMS/CHEMISTRY/PSI-MOD.obo
 
           # The taxonomy -species resolves by default. The pruned NCBI dumps
           # (12 KB) go here for every build; on TAG builds the "Embed taxonomy
@@ -681,6 +684,9 @@ jobs:
           mkdir -p dist/FASTag/share-OpenMS/examples/ID
           cp test/fixtures/Ecoli_MS2_small.mzML dist/FASTag/share-OpenMS/examples/ID/
           test -s dist/FASTag/share-OpenMS/examples/ID/Ecoli_MS2_small.mzML
+          # -delta_out names its rows from these two (1.16 mass-shift survey).
+          test -s dist/FASTag/share-OpenMS/CHEMISTRY/unimod.xml
+          test -s dist/FASTag/share-OpenMS/CHEMISTRY/PSI-MOD.obo
 
           # Same taxonomy copy as the Linux step above. It lives in BOTH because
           # Linux and macOS have separate bundle steps; adding it to only one

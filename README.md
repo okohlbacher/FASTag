@@ -629,9 +629,22 @@ MGF→mzML direction is exact.
 | `-recon_fasta <file>` | `-fasta` | Database for `-recon_out`; independent of the membership filter, so a proteome-scale reconciliation never forces the filter's per-length index build |
 | `-recon_missed_cleavages <n>` | 1 | Missed tryptic cleavages in reconciliation windows; 2 under `-search_engine msfragger` with `-search_config_out` and a tryptic shortlist unless given (the held-out-tested MSFragger configuration) |
 | `-recon_min_length <n>` | 0 | Shortest tag worth reconciling; 0 derives the chance-match floor from database size; 6 under `-search_engine msfragger` with `-search_config_out` and a tryptic shortlist unless given |
+| `-recon_sub_tolerance <tol>` | 5 | Advanced: tolerance of a `sub:X->Y` reading in `delta_interp` (and so in `-delta_out`'s `top_interps`), never looser than `-fragment_tolerance`. Residue mass differences lie a few mDa apart, so at a 20 ppm fragment tolerance most unexplained gaps fitted some substitution (+2.004 read as `sub:P->V`, 11.7 mDa off). `0` = `-fragment_tolerance` (1.15) |
+| `-recon_sub_tolerance_unit <unit>` | ppm | Advanced: `ppm` (of the flank the gap is on, as the modification reading) or `Da` |
 | `-recon_localize` | off | Localize each reconciliation's mass gap to one residue of its region by the b/y fragments it shifts; appends `loc_site` (residue + 1-based protein position, the first on a tie), `loc_score` (b/y ion/charge matches) and `loc_ties` (sites sharing that score; 1 = unique) to `-recon_out`. Requires `-recon_out` |
 | `-recon_id_out <file>` | none | The `-recon_out` placements as identifications: idXML, mzid or mzTab by extension (see Reconciliation). NOT FDR-controlled. Requires `-recon_out` |
-| `-delta_out <file>` | none | Aggregated mass-shift histogram over reconciliations (one best placement per spectrum). Region-level candidates, NOT localized identifications, NOT FDR-controlled. Requires `-recon_out` |
+| `-delta_out <file>` | none | Aggregated mass-shift histogram over reconciliations (one best placement per spectrum), with the sites the spectra's fragments determine and the Unimod and PSI-MOD entries that fit them (see Mass-shift survey). Candidates, NOT identifications, NOT FDR-controlled. Requires `-recon_out` |
+| `-delta_name_tolerance <tol>` | 10 | Advanced: tolerance of the `-delta_out` `unimod` and `psimod` columns (an entry names a row when its mass is within this of the row's `delta`) |
+| `-delta_name_tolerance_unit <unit>` | ppm | Advanced: `ppm` (of the median peptide mass of the row's spectra: a gap carries a flank's error, which is on the peptide's mass scale) or `Da` |
+| `-delta_group <Da>` | 0.004 | Advanced: group `-delta_out`'s 0.5 mDa bins into rows. The most populated bin takes every bin within this many Da, then the next most populated one not yet taken, without chaining: one shift is one row (at most 2 x this wide) and every sampled spectrum counts in exactly one row. `0` = the 1.15 rows (a bin no neighbour exceeds and its two smaller neighbours; a bin that is neither is not written) |
+| `-delta_spectra_out <file>` | none | Advanced: the `-delta_out` sample of every spectrum, one line each in input order: `spectrum` (native ID), `delta` (Da, 6 decimals), `row` (the `-delta_out` row it counts in; `-` for a bin no 1.15 row took), `interp` (`delta_interp`), `peptide`, `site` (residue) and `site_pos` (1-based in `peptide`) of the best-scoring site, written also when the gap is unlocalized (`-` when exact), `localized` (the site class as in `residues`; `-` when not fragment-localized or sequence-constrained, or exact), `loc_evidence` (site-determining ions or peaks), `evalue` (the tag's); then (1.16b) the provenance: `delta_full` (unrounded), `tag`, `protein`, `pos` (1-based tag start in `peptide`), `orientation` (`forward` y-read / `reversed` b-read), `gap_side` (`N`, `C`, `-` exact), `flank` (`precursor`: the flank is the precursor less a fragment, where a precursor isotope or charge error lands; `fragment`), `region` (1-based residues the gap may sit on), `charge` and `charge_source` (`given`, `inferred`, or `assumed` 2+ when the precursor has none), `precursor_isotope` (k of the tagged hypothesis), `loc_class` (`fragment`, `sequence`, `ambiguous`, `unlocalized`, `-`), `loc_score`, `loc_ties`, `loc_excluded` (loss satellites not counted, `strict`), `null_class` / `null_evidence` (`-delta_loc_null`), `obs_class` / `obs_detail` (the observation class, see Mass-shift survey), and the selected tag's competing placements: `n_placements`, `n_exact`, `n_gapped`, `n_peptides` (distinct, I/L folded), `tag_support` (placed tags of the spectrum agreeing with the sample: same peptide, gap within 0.05 Da), `tags_placed`, `placements` (`protein\|peptide\|pos\|f/r\|delta;...`). Candidates, NOT identifications. Requires `-delta_out` |
+| `-delta_select <rule>` | min_delta | Advanced: how a spectrum's `-delta_out` sample is chosen: `min_delta` (the lowest-E-value placed tag, its smallest-\|delta\| placement; 1.15) or `consensus` (the placement the most placed tags agree with: same peptide, gap within 0.05 Da; then E-value, \|delta\|). Measured on PXD045734 development runs, `consensus` agreed no better with an open search, so it is not the default (see Mass-shift survey) |
+| `-delta_loc_model <model>` | strict | Advanced: how `-delta_out` localizes a sample's gap: `count` (every matched b/y ion and charge, as `-recon_localize`; 1.16a), `unique` (a site's distinct matched peaks: one peak supports one ion) or `strict` (`unique`, and a shifted ion's peak that is an H2O or NH3 loss satellite of an observed unshifted ion does not count). `-recon_out`'s `loc_*` columns always use `count` |
+| `-delta_loc_min_evidence <n>` | 2 | Advanced: the lead over the best rival site (ions, or peaks under `unique`/`strict`) a gap needs to be fragment-localized; below it and above 0 it is ambiguous. `1` = 1.16a |
+| `-delta_loc_null <Th>` | 0 | Advanced: `-delta_spectra_out`'s `null_class`/`null_evidence`: each gapped sample is also localized on its spectrum's peaks moved by this many Th (the same peak density, no ladder), the false-localization null. `0` = off |
+| `-delta_isotope_flank <flank>` | precursor | Advanced: `isotope_error` only on rows with at least half of their gaps on the precursor-derived flank (`precursor`), or on any row (`any`, 1.16a) |
+| `-delta_isobar_tolerance <Da>` | 0.001 | Advanced: `-delta_out`'s `isobars` column takes the members within this many Da of the row's best name |
+| `-delta_counts_out <file>` | none | Advanced: the run's survey reconciliation as `key value` TSV: MS2 read, tagged (a selected-hypothesis tag reached placement), placed, clamped, samples (exact, gapped, terminal gap), the gaps' evidence classes, precursor-flank and charge-assumed counts, observation classes, rows and their spectra, and `check_*` rows (`ok`/`FAIL`) for the sums that must hold. Requires `-delta_out` |
 | `-digest_out <file>` | none | Terminal residues of the tags (ungapped, E-value ≤ 1) at P4..P1 and P1'..P4', and the protease call they support with its margin, or `no_call` with the reason (see Digest, label and mass-gap reports) |
 | `-label_out <file>` | none | TMT, TMTpro and iTRAQ4 gaps at either tag end (N- and C-terminal counts pooled, each given in the description) and the heavy Lys8/Arg10 shares |
 | `-label_discovery_out <file>`, `-label_discovery_max_flank`, `-label_discovery_depth`, `-label_discovery_min_spectra`, `-label_discovery_min_share`, `-label_discovery_window_n`, `-label_discovery_window_c`, `-label_discovery_unimod_top` | none | Removed in 1.14 (failed its held-out tests, see Held-out acceptance): accepted with a warning, no effect |
@@ -945,16 +958,32 @@ reported tag on the database.
 | `nterm_match` / `cterm_match` | 1 when that flanking mass agrees with the window; both 1 = exact placement |
 | `delta_mass` | spectrum flank minus database flank on the side that disagrees, Da, 4 decimals; `0.0000` when exact |
 | `region` | `lo-hi`, the 0-based inclusive residue range of `peptide` the gap lies in; empty when exact |
-| `delta_interp` | `mod:Name@X`, `sub:X->Y` or `?`; empty when exact |
+| `delta_interp` | `mod:Name@X`, `sub:X->Y` or `?`; empty when exact. A modification is judged at the fragment tolerance in ppm of the flank the gap is on, a substitution at `-recon_sub_tolerance` (5 ppm of that flank by default) |
 | `loc_site`, `loc_score`, `loc_ties` | only with `-recon_localize`: best site (residue + 1-based protein position), its b/y ion matches, sites sharing that score; empty when not localized |
 
 **`-delta_out`**: one row per mass-gap peak, in increasing `delta`.
 
 | Column | Meaning |
 |---|---|
-| `delta` | peak centre in Da (0.0005 Da bins; a bin no neighbour exceeds absorbs its smaller neighbours), 4 decimals |
-| `spectra` | spectra in the peak (each spectrum counts once, by its best tag's smallest-\|delta\| placement) |
+| `delta` | the row's most populated 0.0005 Da bin, Da, 4 decimals; the row holds the bins within `-delta_group` (0.004 Da) of it not taken by a more populated row (`-delta_group 0`: a bin no neighbour exceeds and its smaller neighbours, as in 1.15) |
+| `spectra` | spectra in the row (each spectrum counts once, by its best tag's smallest-\|delta\| placement; the rows sum to the sampled spectra) |
 | `top_interps` | up to three `interpretation:count` pairs separated by `;`, most frequent first; `-` when none |
+| `localized` | spectra whose gap the fragments place on one site class (the sum of `residues`) |
+| `residues` | `site:count` pairs separated by `,`, most frequent first (ties by name), localized spectra only: a residue (`K`), or a terminal-ambiguous site (`N-term\|K`, `C-term\|R`, `Protein N-term\|M`, `Protein C-term\|L`); `-` when none |
+| `unlocalized` | spectra with a gap and no site-determining evidence (no fragment tells the chosen site from another, or a tie); exact placements count in neither column |
+| `unimod` | Unimod entries within `-delta_name_tolerance` of `delta` on a site of `residues`, at most 5, by the localized spectra on their sites (most first), then by mass error: `Name@Site/Site(error)`, sites most-supported first, e.g. `Oxidation@M/W(+0.4ppm)`, `Acetyl@Protein N-term/K(-1.2ppm)`, `Gln->pyro-Glu@N-term Q(…)`; `[-Fixed]` marks an entry that replaces the residue's fixed modification (below); `-` when none |
+| `psimod` | the same for PSI-MOD terms, ranked the same way: `MOD:accession name@Site(error)`; generic and abstract terms left out (see Mass-shift survey) |
+| `isotope_error` | `13C+1(error)` or `13C+2(error)` when `delta` is within `-delta_name_tolerance` of 1 or 2 x 1.00336 Da, at least half of the row's gaps are on the precursor-derived flank (`-delta_isotope_flank`) and no better residue-specific name fits (below); `-` otherwise |
+| `fragment_localized` | (1.16b) localized spectra whose site the fragments chose with at least `-delta_loc_min_evidence` site-determining evidence |
+| `sequence_constrained` | localized spectra whose gap region is one residue: the placement, not a fragment, puts the gap there (`fragment_localized` + `sequence_constrained` = `localized`) |
+| `ambiguous` | unlocalized spectra with some site-determining evidence, below `-delta_loc_min_evidence` |
+| `precursor_flank` | spectra whose gap is on the precursor-derived flank (where a precursor isotope or charge error lands) |
+| `charge_assumed` | spectra whose precursor had no charge and was tagged as 2+; report rows with and without them |
+| `class` | the observation classes of the row's gaps, `class:count`, most frequent first (three at most): `extension`, `truncation`, `adduct`, `isotope`, `loss`, `fixed_loss`, `fixed_replacement`, `terminal`, `residue`, `substitution`, `unknown` (see Mass-shift survey) |
+| `isobars` | the exact isobars of the row's best name, `=`-separated (`Oxidation=Ala->Ser=Phe->Tyr`); `-` when it has none. Mass cannot choose among them |
+
+These columns are candidates, not identifications: nothing in them is
+FDR-controlled. See Mass-shift survey.
 
 **`-glyco_out`** (see Glyco flag): one row per processed MS2 spectrum.
 
@@ -1006,6 +1035,129 @@ region-level, nothing here is FDR-controlled, and `delta_interp` names a
 hypothesis, not an identification. On a human Astral run the zero bin
 dominates, the +1.003 isotope-error peak and a +128.095 missed-K peak appear
 where chemistry predicts them.
+
+### Mass-shift survey
+
+`-delta_out` also says where each row's gaps sit and what they could be
+(1.16). For every spectrum the placement selected for the histogram (above) is
+localized on the spectrum's own peaks, as `-recon_localize` does: each residue
+of the gap's region is scored by the b/y ions (at fragment charges up to the
+precursor's less one) it explains carrying the gap.
+
+- **Site-determining evidence only.** Ions that put every candidate site in the
+  same state add the same to every score; what tells the chosen site from the
+  others is its score less the best other site's. The `residues` column counts
+  localized spectra only.
+- **Evidence classes (1.16b).** A gap is **fragment-localized** when that lead
+  is at least `-delta_loc_min_evidence` (2), **ambiguous** when it is 1 to
+  that less one, **unlocalized** on a tie, and **sequence-constrained** when
+  its region is a single residue: then the placement puts it there and no
+  fragment chose it, however many ions match. Localized = fragment-localized
+  + sequence-constrained (both name rows). Under the default
+  `-delta_loc_model strict` a site scores its distinct matched peaks (a peak
+  supports one ion of a site's hypothesis at most), and a shifted ion's peak
+  that is an H2O or NH3 loss satellite of an observed unshifted ion does not
+  count: in HCD those peaks sit exactly where a -18.011 or -17.027 shift puts
+  every ion. On the six PXD045734 development runs, fragment-localized sites
+  at evidence 2 agreed with MSFragger's localized residues for 0.88 (95% CI
+  0.86-0.90) of 731 checkable spectra, against 0.73 (0.72-0.75) at 1; the same
+  placements on spectra moved by 7.3 Th localized 2 of 15,405 gaps at
+  evidence 2 (268 at 1). `-delta_loc_model count -delta_loc_min_evidence 1`
+  is the 1.16a rule. `-recon_out`'s localization is unchanged.
+- **Terminal-ambiguous sites.** No b/y ion tells the peptide's first residue
+  from its N-terminus (or the last from the C-terminus), so a gap on the
+  N-side placed on the first residue is `N-term|X`, on the C-side placed on the
+  last residue `C-term|X`, with `Protein` in front when the peptide starts
+  (position 0, or 1 after an initiator Met) or ends its protein. A one-residue
+  region has no rival and is always terminal-ambiguous.
+- **Names.** Unimod entries come from OpenMS's `unimod.xml` (read as
+  ModificationsDB reads it, without `custom_mods.xml`'s CUSTOM entries), one
+  per site specificity; PSI-MOD terms are read from `PSI-MOD.obo` itself
+  with their own residue and terminus, since ModificationsDB keeps a PSI-MOD
+  term that cross-references Unimod only as an alias of the Unimod entry.
+  Cross-link terms (two origins), obsolete terms and terms on any residue (`X`)
+  without a terminus are left out, and so are generic and abstract terms: the
+  children of MOD:00008 "common" (placeholders "from UniMod representing one
+  or more entries in RESID", named after a Unimod site classification:
+  MOD:00565 "glycosylated asparagine" is Unimod 7 Deamidated's
+  N-glycosylation site, +0.984) and residue-generic classes (an origin-`X`
+  term other terms are `is_a` of, e.g. MOD:00400 "deamidated residue").
+  Deamidation on N is therefore MOD:00684 "deamidated L-asparagine". A residue site takes the entries on that
+  residue; a terminal-ambiguous site also takes the entries of its terminus
+  (`N-term`/`C-term`, the `Protein` ones only at the protein's terminus), never
+  an entry on another residue. One entry per accession with the sites it fits
+  (most localized spectra first); Unimod and PSI-MOD alike sorted by those
+  spectra (the entry that explains more of the row comes first), then by mass
+  error, at most five per column.
+  The tolerance is `-delta_name_tolerance` (default 10 ppm of the row's median
+  peptide mass); the error is written in ppm of that mass (mDa with `Da`).
+- **Fixed modifications.** Database residues carry the fixed modifications,
+  so a gap on such a residue is measured against the modified residue, and
+  Unimod masses are relative to the unmodified one. Each entry on that residue
+  is tried both ways: on top of the fixed modification (gap = entry mass) and
+  instead of it (gap = entry mass − fixed mass, written `[-Carbamidomethyl]`).
+  Dehydroalanine from Cys (Unimod `Cys->Dha`, −33.988 Da against Cys) is
+  therefore a row at −91.009 with `Cys->Dha@C[-Carbamidomethyl]` when
+  Carbamidomethyl (C) is fixed, and a row at −33.988 with `Cys->Dha@C` when it
+  is not. Fixed terminal labels (TMT, iTRAQ) are not undone.
+- **Isotope errors.** A gap on the N-side of a forward (y-read) placement is
+  the precursor mass less the top fragment, so a wrongly picked monoisotopic
+  precursor peak enters it: a +1.003 row is a 13C error candidate, and a
+  +0.984 row (deamidation) should be read next to it. Gaps on the other side
+  come from fragments only. The `isotope_error` column marks a row within the
+  name tolerance of 13C+1 (+1.00336) or 13C+2 (+2.00671) unless a
+  residue-specific name explains it better: a Unimod entry that is not an
+  isotopic label (`Label:15N(1)` and the like are the same mass coincidence,
+  not a better reading), sits on a residue, fits with a smaller error and
+  covers at least half of the row's localized spectra. A deamidation row
+  (+0.984, 19 mDa below 13C+1, localized on N/Q) keeps its name and gets no
+  isotope reading; the 0.5 mDa bins and ppm name errors keep the two apart.
+- **Rows.** One shift spread over neighbouring bins (deamidation over
+  0.981-0.997 on a Q Exactive run, the gap's error being on the peptide's
+  mass scale) is one row by default: rows are grouped around the most
+  populated bins within `-delta_group` (0.004 Da), without chaining, so two
+  shifts more than twice that apart (0.984 and 1.003) never merge, and every
+  spectrum counts once. `-delta_group 0` writes the 1.15 rows.
+  `-delta_spectra_out` lists each spectrum's sample and row, for checking
+  rows against a search engine spectrum by spectrum.
+
+- **Provenance and counts (1.16b).** `-delta_spectra_out` gives each
+  sample's tag, placement, orientation, gap side and whether that flank comes
+  from the precursor, charge and its source, the unrounded gap and the
+  selected tag's competing placements; `-delta_counts_out` reconciles the run
+  from MS2 to rows with sum checks. Tagging, selection and rows are
+  thread-independent.
+- **Observation classes (1.16b).** Each gap is classed before any name, the
+  first that fits within the name tolerance: `extension` (the 1-3 protein
+  residues beyond the peptide on the gap's side: a missed cleavage, +156.101
+  for Arg), `truncation` (minus the 1-3 region residues at that terminus),
+  `adduct` (the nearest of Na+, Mg2+, K+, Ca2+, Fe3+, Fe2+ for protons, or
+  NH3), `isotope` (1 or 2 x 13C on a precursor-derived flank, nearer 13C than
+  deamidation), `loss` (H2O, NH3, CH4SO, H3PO4), `fixed_loss` (minus a fixed
+  modification on a residue carrying it: -57.021 on carbamidomethyl-Cys is an
+  unalkylated Cys; tried first when the gap is localized on that residue),
+  `fixed_replacement` / `terminal` / `residue` (a non-label Unimod entry fits
+  instead of a fixed modification, on a terminus, on a residue),
+  `substitution` (the placement's `sub:X->Y`), else `unknown`. A class says
+  what kind of observation the mass is, not that the chemistry is proven.
+- **Exact isobars (1.16b).** Oxidation = Ala->Ser = Phe->Tyr, dioxidation =
+  Pro->Glu = 2 x oxidation, acetyl = Ser->Glu, deamidation = Asn->Asp =
+  Gln->Glu, carbamidomethyl = Gly->Asn, carboxymethyl = acetyl + oxidation
+  share one elemental composition: the `isobars` column lists the class of
+  the row's best name (catalogue names, substitutions of the row's localized
+  residues, sums of two common modifications within
+  `-delta_isobar_tolerance`), so a row is not read as its first name alone.
+- **Charge.** A precursor without a charge is tagged and localized as 2+
+  (`charge_source` `assumed`); a 3+ precursor then gives a wrong
+  precursor-derived flank. `charge_assumed` counts them per row. On the
+  PXD045734 development runs they were 7.6% of the samples, and 10% of their
+  gaps agreed with an open search (73% of the others').
+
+What the columns are not: a placement is a peptide window chosen by tag
+E-value and the smallest gap, not a validated peptide; a localized site is the
+best-supported residue of that window; a name is a catalogue entry that fits
+the mass on that residue. Frequencies of modifications need validated
+placements and sites; these are candidates to check.
 
 ## Protein shortlist and search hand-off
 

@@ -387,6 +387,8 @@ TOPPFASTag::ExitCodes TOPPFASTag::main_(int, const char**)
         {"taxdb", nullptr},
         {"out_spectra", nullptr},
         {"delta_out", nullptr},
+        {"delta_spectra_out", nullptr},
+        {"delta_counts_out", nullptr},
         {"recon_id_out", nullptr},
         {"usi_collection", nullptr},
         {"digest_out", nullptr},
@@ -735,6 +737,7 @@ TOPPFASTag::ExitCodes TOPPFASTag::main_(int, const char**)
 
   const std::string recon_out = getStringOption_("recon_out");
   const std::string delta_out = getStringOption_("delta_out");
+  const std::string delta_spectra_out = getStringOption_("delta_spectra_out");
   // recon_on: -recon_out is written. place_on: tags are placed on the
   // database (the index is built, every tag reconciled, the delta sample
   // taken), whether or not -recon_out is written. Every reader of the
@@ -770,6 +773,11 @@ TOPPFASTag::ExitCodes TOPPFASTag::main_(int, const char**)
   {
     OPENMS_LOG_ERROR << "-delta_out requires -recon_out (the histogram is "
                         "aggregated over reconciliations)." << std::endl;
+    return ILLEGAL_PARAMETERS;
+  }
+  if (!delta_spectra_out.empty() && delta_out.empty())
+  {
+    OPENMS_LOG_ERROR << "-delta_spectra_out requires -delta_out (it lists that table's samples)." << std::endl;
     return ILLEGAL_PARAMETERS;
   }
   const bool recon_loc = getFlag_("recon_localize");
@@ -1104,6 +1112,8 @@ TOPPFASTag::ExitCodes TOPPFASTag::main_(int, const char**)
       if (m.variable) cands.push_back({m.name, m.delta, std::string(1, m.residue)});
     recon.setModCandidates(std::move(cands));
     recon.setFixedTermMods(fixed_term_n, fixed_term_c);
+    recon.setSubstitutionTolerance(getDoubleOption_("recon_sub_tolerance"),
+                                   getStringOption_("recon_sub_tolerance_unit") == "ppm");
     if (recon_ids_on)
     {
       // The modifications the index was built with: residue ones only. A
@@ -1163,6 +1173,50 @@ TOPPFASTag::ExitCodes TOPPFASTag::main_(int, const char**)
       ;
   // delta_on: one delta sample per spectrum is taken and binned.
   const bool delta_on = !delta_out.empty() || gap_needed;
+  // 1.16 mass-shift survey: -delta_out's site and name columns. The
+  // selected sample's gap is localized (if -recon_localize did not) and
+  // classed; each row is named from Unimod (ModificationsDB) and PSI-MOD
+  // (the OBO file read with its own specificity, ShiftSurvey.h).
+  const bool delta_sites = !delta_out.empty();
+  const bool delta_per_spectrum = !delta_spectra_out.empty();
+  const int64_t delta_group_bins = static_cast<int64_t>(std::llround(getDoubleOption_("delta_group") / 0.0005));
+  std::vector<FASTag::ShiftSurvey::Entry> survey_unimod, survey_psimod;
+  std::vector<FASTag::ShiftSurvey::FixedMod> survey_fixed;
+  const double survey_tol = getDoubleOption_("delta_name_tolerance");
+  const bool survey_ppm = getStringOption_("delta_name_tolerance_unit") == "ppm";
+  // 1.16b survey rules (README "Mass-shift survey"): the sample's
+  // selection, its localization model and evidence threshold, the null,
+  // the isotope reading's flank, the isobar classes and the count table.
+  const bool delta_consensus = getStringOption_("delta_select") == "consensus";
+  const std::string delta_loc_model_s = getStringOption_("delta_loc_model");
+  const FASTag::LocModel delta_loc_model = delta_loc_model_s == "count"  ? FASTag::LocModel::COUNT
+                                         : delta_loc_model_s == "unique" ? FASTag::LocModel::UNIQUE
+                                                                         : FASTag::LocModel::STRICT;
+  const int delta_loc_min_evidence = getIntOption_("delta_loc_min_evidence");
+  const double delta_loc_null = getDoubleOption_("delta_loc_null");
+  const bool delta_iso_precursor = getStringOption_("delta_isotope_flank") == "precursor";
+  const double delta_isobar_tol = getDoubleOption_("delta_isobar_tolerance");
+  const std::string delta_counts_out = getStringOption_("delta_counts_out");
+  if (!delta_counts_out.empty() && delta_out.empty())
+  {
+    OPENMS_LOG_ERROR << "-delta_counts_out requires -delta_out (it counts that table's samples)." << std::endl;
+    return ILLEGAL_PARAMETERS;
+  }
+  if (delta_sites)
+  {
+    std::string err;
+    survey_unimod = FASTag::ShiftSurvey::unimodEntries("CHEMISTRY/unimod.xml", &err);
+    if (!err.empty())
+      OPENMS_LOG_WARN << "-delta_out: Unimod not read (" << err << "); the unimod column stays empty."
+                      << std::endl;
+    err.clear();
+    survey_psimod = FASTag::ShiftSurvey::psimodEntries("CHEMISTRY/PSI-MOD.obo", &err);
+    if (!err.empty())
+      OPENMS_LOG_WARN << "-delta_out: PSI-MOD not read (" << err << "); the psimod column stays empty."
+                      << std::endl;
+    for (const auto& m : p.mods)
+      if (!m.variable) survey_fixed.push_back({m.residue, m.delta, m.name});
+  }
   if (massgap_on && !place_reports)
   {
     OPENMS_LOG_ERROR << "-massgap_out requires -recon_out (the gaps are those of the "
@@ -2461,6 +2515,8 @@ TOPPFASTag::ExitCodes TOPPFASTag::main_(int, const char**)
     guard.output("out_spectra", out_spectra);
     guard.output("recon_out", recon_out);
     guard.output("delta_out", delta_out);
+    guard.output("delta_spectra_out", delta_spectra_out);
+    guard.output("delta_counts_out", delta_counts_out);
     guard.output("recon_id_out", recon_id_out);
     guard.output("digest_out", digest_out);
     guard.output("label_out", label_out);
@@ -2672,6 +2728,33 @@ TOPPFASTag::ExitCodes TOPPFASTag::main_(int, const char**)
   {
     double delta = 0.0;
     std::string interp;
+    // 1.16 (-delta_out only): whether the placement has a gap to localize,
+    // its site class (ShiftSurvey::siteKey; empty = unlocalized) and the
+    // peptide's mass (the ppm scale of the name tolerance).
+    bool gap = false;
+    std::string site;
+    double pep_mass = 0.0;
+    // -delta_spectra_out only: the spectrum, the placement and the site.
+    size_t index = 0;
+    std::string native_id, peptide;
+    int site_pos = -1;  ///< 0-based in peptide, -1 = none
+    int loc_evidence = 0;
+    double evalue = 0.0;
+    // 1.16b provenance and classes (-delta_out; the strings only with
+    // -delta_spectra_out). The site above follows -delta_loc_model and
+    // -delta_loc_min_evidence.
+    bool region_gap = false;       ///< a gap with residues between the tag and the terminus
+    bool precursor_flank = false;  ///< the gap's flank is the precursor less a fragment
+    bool charge_assumed = false;   ///< the precursor gave no charge; tagged and localized as 2+
+    bool exact_vs_gapped = false;  ///< the selected tag also has an exact (or a gapped) placement
+    std::uint8_t loc_class = 0;    ///< ShiftSurvey::LocClass
+    std::uint8_t obs_class = 0;    ///< ShiftSurvey::ObsClass
+    std::string tag, protein, placements, obs_detail, charge_src, null_class;
+    char gap_side = '-';
+    bool reversed = false;
+    int pos = 0, region_lo = 0, region_hi = -1, charge = 2, prec_iso = 0;
+    int loc_score = 0, loc_ties = 0, loc_excluded = 0, null_evidence = 0;
+    int n_placements = 0, n_exact = 0, n_gapped = 0, n_peptides = 0, tag_support = 0, tags_placed = 0;
   };
   // Per-thread accumulators, summed after the loop. One cache-line-aligned
   // struct per thread, so neighbouring threads' counters never share a line.
@@ -2693,6 +2776,9 @@ TOPPFASTag::ExitCodes TOPPFASTag::main_(int, const char**)
     // flank clamped to 0 (FASTagger's max(0,.)) makes its delta bogus.
     std::vector<DeltaSample> delta;
     size_t delta_clamped = 0;
+    // 1.16b -delta_counts_out: MS2 with a selected-hypothesis tag that
+    // reached placement, and of them those with at least one placement.
+    size_t delta_tagged = 0, delta_placed = 0;
     // -digest_out / -label_out: tag-end counts, and the MS2 metadata the
     // no-call rules read.
     FASTag::Digest::TerminusCounter digest;
@@ -3039,9 +3125,24 @@ TOPPFASTag::ExitCodes TOPPFASTag::main_(int, const char**)
     // One -delta_out sample per spectrum: the placed tag with the lowest
     // E-value. Each length's tags arrive sorted best first, so with one
     // length this is simply the first placed tag.
-    bool delta_have = false, delta_clamped = false;
+    bool delta_have = false, delta_clamped = false, delta_tagged = false;
     double delta_e = 0.0;
     DeltaSample delta_sample;
+    // 1.16b: the placed tags a sample is chosen from. The tag with the
+    // lowest E-value (the first on a tie) and its placements; with
+    // -delta_select consensus or -delta_spectra_out every placed tag's.
+    struct DeltaCand
+    {
+      size_t ti = 0;
+      double evalue = 0.0;
+      std::vector<FASTag::Reconciliation> places;
+      std::vector<std::string> folded;  ///< the placements' peptides, I folded to L
+      bool modded = false, cz = false;
+      std::vector<double> shift;
+    };
+    DeltaCand delta_best;
+    std::vector<DeltaCand> delta_all;
+    const bool delta_keep_all = delta_consensus || delta_per_spectrum;
     FASTag::Alkylation::Vote alk_vote;  // 1.12 D #3g
     const std::string usi = usi_prefix.empty() || tags.empty()
         ? std::string()
@@ -3055,7 +3156,7 @@ TOPPFASTag::ExitCodes TOPPFASTag::main_(int, const char**)
     // -recon_localize matches against the spectrum's own peaks: every
     // positive one, m/z sorted (the tagger's peak selection is its own).
     MSSpectrum loc_peaks;
-    if (recon_loc && !tags.empty())
+    if ((recon_loc || delta_sites) && !tags.empty())
     {
       for (const auto& pk : spec)
         if (pk.getIntensity() > 0 && std::isfinite(pk.getMZ())) loc_peaks.push_back(pk);
@@ -3228,30 +3329,240 @@ TOPPFASTag::ExitCodes TOPPFASTag::main_(int, const char**)
         // ---- 1.12 D: per-tag placement records ----
         if (alk_tag)  // #3g
           FASTag::Alkylation::addTag(pt.acc.d.alk, alk_vote, places, t.evalue, alk_settings, alk_forms);
-        // A candidate for the spectrum's -delta_out sample: take this
-        // tag's min-|delta| placement.
-        if (delta_on && sel && !places.empty() && (!delta_have || t.evalue < delta_e))
+        // A candidate for the spectrum's -delta_out sample (chosen after
+        // the loop, -delta_select): this tag's placements.
+        if (delta_on && sel) delta_tagged = true;
+        if (delta_on && sel && !places.empty())
         {
-          const FASTag::Reconciliation* best = nullptr;
-          for (const auto& pl : places)
-            if (!best || std::fabs(pl.delta_mass) < std::fabs(best->delta_mass)) best = &pl;
-          // The delta lives on the mismatched side; the spectrum flank that
-          // fed it is nterm/cterm swapped for reversed placements. A 0.0
-          // there is indistinguishable from FASTagger's negative-flank clamp,
-          // so the sample is excluded either way and counted.
-          double side_flank = 0.0;
-          if (!best->nterm_match) side_flank = best->reversed ? t.cterm_mass : t.nterm_mass;
-          else if (!best->cterm_match) side_flank = best->reversed ? t.nterm_mass : t.cterm_mass;
-          delta_clamped = std::fabs(best->delta_mass) > 1e-6 && side_flank == 0.0;
-          delta_sample.delta = best->delta_mass;
-          delta_sample.interp = best->delta_interp;
-          delta_e = t.evalue;
+          const bool better = !delta_have || t.evalue < delta_e;
+          if (better || delta_keep_all)
+          {
+            DeltaCand c;
+            c.ti = ti;
+            c.evalue = t.evalue;
+            c.places = places;
+            c.modded = tag_modded;
+            c.cz = tag_cz;
+            if (tag_modded) c.shift = tag_shift;
+            if (delta_keep_all)
+            {
+              c.folded.reserve(places.size());
+              for (const auto& pl : places)
+              {
+                std::string f = pl.peptide;
+                for (char& ch : f) if (ch == 'I') ch = 'L';
+                c.folded.push_back(std::move(f));
+              }
+            }
+            if (better) delta_best = c;
+            if (delta_keep_all) delta_all.push_back(std::move(c));
+          }
+          if (better) delta_e = t.evalue;
           delta_have = true;
         }
       }
     }
+    if (delta_tagged) ++pt.delta_tagged;
     if (delta_have)
     {
+      ++pt.delta_placed;
+      // ---- the spectrum's -delta_out sample (1.16b: -delta_select) ----
+      // min_delta (1.15): the lowest-E-value tag (the first on a tie) and
+      // its smallest-|delta| placement (the first on a tie). consensus: the
+      // placement the most placed tags agree with (the same peptide, I/L
+      // folded, and a gap within DELTA_CONSENSUS_DA), then the lower tag
+      // E-value, the smaller |delta|, the earlier tag and placement.
+      constexpr double DELTA_CONSENSUS_DA = 0.05;
+      auto support = [&](const std::string& pep, double d) {
+        int n = 0;
+        for (const DeltaCand& c2 : delta_all)
+          for (size_t k = 0; k < c2.places.size(); ++k)
+            if (c2.folded[k] == pep && std::fabs(c2.places[k].delta_mass - d) <= DELTA_CONSENSUS_DA) { ++n; break; }
+        return n;
+      };
+      const DeltaCand* selc = &delta_best;
+      size_t selk = 0;
+      int sel_support = 0;
+      if (delta_consensus)
+      {
+        bool any = false;
+        double best_e = 0.0, best_abs = 0.0;
+        for (const DeltaCand& c : delta_all)
+          for (size_t k = 0; k < c.places.size(); ++k)
+          {
+            const int n = support(c.folded[k], c.places[k].delta_mass);
+            const double ad = std::fabs(c.places[k].delta_mass);
+            if (!any || n > sel_support || (n == sel_support && (c.evalue < best_e || (c.evalue == best_e && ad < best_abs))))
+            {
+              any = true; selc = &c; selk = k; sel_support = n; best_e = c.evalue; best_abs = ad;
+            }
+          }
+      }
+      else
+      {
+        for (size_t k = 1; k < selc->places.size(); ++k)
+          if (std::fabs(selc->places[k].delta_mass) < std::fabs(selc->places[selk].delta_mass)) selk = k;
+        if (delta_per_spectrum)
+        {
+          std::string f = selc->places[selk].peptide;
+          for (char& ch : f) if (ch == 'I') ch = 'L';
+          sel_support = support(f, selc->places[selk].delta_mass);
+        }
+      }
+      const FASTag::Tag& t = tags[selc->ti];
+      const FASTag::Hyp::Hypothesis& hy = hyp_of(selc->ti);
+      const FASTag::Reconciliation* best = &selc->places[selk];
+      const std::vector<double>* tshift = selc->modded ? &selc->shift : nullptr;
+      const FASTag::IonSeries::IonPair* tser = selc->cz ? &cz_pair : nullptr;
+      // The delta lives on the mismatched side; the spectrum flank that
+      // fed it is nterm/cterm swapped for reversed placements. A 0.0
+      // there is indistinguishable from FASTagger's negative-flank clamp,
+      // so the sample is excluded either way and counted.
+      double side_flank = 0.0;
+      if (!best->nterm_match) side_flank = best->reversed ? t.cterm_mass : t.nterm_mass;
+      else if (!best->cterm_match) side_flank = best->reversed ? t.nterm_mass : t.cterm_mass;
+      delta_clamped = std::fabs(best->delta_mass) > 1e-6 && side_flank == 0.0;
+      delta_sample.delta = best->delta_mass;
+      delta_sample.interp = best->delta_interp;
+      delta_sample.charge = hy.charge > 0 ? hy.charge : 2;
+      delta_sample.charge_assumed = hy.charge <= 0 || hy.src == FASTag::Hyp::ChargeSource::ASSUMED;
+      delta_sample.gap_side = !best->nterm_match ? 'N' : !best->cterm_match ? 'C' : '-';
+      // The precursor-derived flank: the N-side of a forward (y-read)
+      // placement, the C-side of a reversed one (TagReconciler::tryPlace_).
+      delta_sample.precursor_flank = delta_sample.gap_side != '-' && ((delta_sample.gap_side == 'N') != best->reversed);
+      for (const auto& pl : selc->places)
+      {
+        if (std::fabs(pl.delta_mass) <= 1e-6) ++delta_sample.n_exact;
+        else ++delta_sample.n_gapped;
+      }
+      delta_sample.exact_vs_gapped = delta_sample.n_exact > 0 && delta_sample.n_gapped > 0;
+      if (delta_sites)
+      {
+        // The placement selected, localized on this spectrum's peaks with
+        // -delta_loc_model (COUNT: as -recon_localize does).
+        FASTag::Reconciliation chosen = *best;
+        chosen.loc_pos = -1; chosen.loc_score = 0; chosen.loc_ties = 0; chosen.loc_evidence = 0;
+        chosen.loc_alternatives = 0; chosen.loc_excluded = 0; chosen.loc_site = 0;
+        recon.localize(chosen, loc_peaks, hy.charge, tshift, tser, delta_loc_model);
+        delta_sample.gap = chosen.region_hi >= chosen.region_lo && std::fabs(chosen.delta_mass) > 1e-6;
+        delta_sample.region_gap = delta_sample.gap;
+        const FASTag::ShiftSurvey::LocClass lc = FASTag::ShiftSurvey::locClass(chosen, delta_loc_min_evidence);
+        delta_sample.loc_class = static_cast<std::uint8_t>(lc);
+        FASTag::ShiftSurvey::Site site;
+        const bool localized = delta_sample.gap && FASTag::ShiftSurvey::siteOf(chosen, site, delta_loc_min_evidence);
+        delta_sample.site = localized ? FASTag::ShiftSurvey::siteKey(site) : std::string();
+        delta_sample.pep_mass = chosen.pep_mass;
+        // The observation class, before any catalogue name.
+        if (std::fabs(chosen.delta_mass) > 1e-6)
+        {
+          namespace SS = FASTag::ShiftSurvey;
+          SS::Observation ob;
+          ob.delta = chosen.delta_mass;
+          ob.tol_da = survey_ppm ? survey_tol * chosen.pep_mass * 1e-6 : survey_tol;
+          ob.precursor_flank = delta_sample.precursor_flank;
+          ob.interp = chosen.delta_interp;
+          const uint32_t L = chosen.win_end - chosen.win_start;
+          const uint32_t pstart = chosen.win_start - static_cast<uint32_t>(chosen.start);
+          const uint32_t pend = pstart + pindex.proteinLength(chosen.protein_index);
+          for (uint32_t k = 1; k <= 3; ++k)
+          {
+            if (delta_sample.gap_side == 'N' && chosen.win_start >= pstart + k)
+              ob.beyond.push_back(pindex.massBetween(chosen.win_start - k, chosen.win_start));
+            if (delta_sample.gap_side == 'C' && chosen.win_end + k <= pend)
+              ob.beyond.push_back(pindex.massBetween(chosen.win_end, chosen.win_end + k));
+          }
+          if (delta_sample.gap)
+          {
+            const uint32_t n_reg = static_cast<uint32_t>(chosen.region_hi - chosen.region_lo + 1);
+            for (uint32_t k = 1; k <= 3 && k <= n_reg; ++k)
+            {
+              if (delta_sample.gap_side == 'N') ob.inside.push_back(pindex.massBetween(chosen.win_start, chosen.win_start + k));
+              else ob.inside.push_back(pindex.massBetween(chosen.win_end - k, chosen.win_end));
+            }
+            ob.region = chosen.peptide.substr(static_cast<size_t>(chosen.region_lo), n_reg);
+          }
+          ob.localized = localized;
+          if (localized) ob.sites.push_back(site);
+          else if (delta_sample.gap)
+            for (int j = chosen.region_lo; j <= chosen.region_hi; ++j)
+            {
+              SS::Site st;
+              st.residue = chosen.peptide[static_cast<size_t>(j)];
+              if (delta_sample.gap_side == 'N' && j == 0) { st.kind = 'N'; st.protein_term = chosen.protein_nterm; }
+              else if (delta_sample.gap_side == 'C' && j == static_cast<int>(L) - 1) { st.kind = 'C'; st.protein_term = chosen.protein_cterm; }
+              ob.sites.push_back(st);
+            }
+          else if (!chosen.peptide.empty())
+          {
+            // No residue between the tag and the terminus: the gap is on the terminus.
+            SS::Site st;
+            st.kind = delta_sample.gap_side == 'N' ? 'N' : 'C';
+            st.residue = st.kind == 'N' ? chosen.peptide.front() : chosen.peptide.back();
+            st.protein_term = st.kind == 'N' ? chosen.protein_nterm : chosen.protein_cterm;
+            ob.sites.push_back(st);
+          }
+          delta_sample.obs_class = static_cast<std::uint8_t>(
+              SS::observationClass(ob, survey_unimod, survey_fixed, delta_per_spectrum ? &delta_sample.obs_detail : nullptr));
+        }
+        if (delta_per_spectrum)
+        {
+          delta_sample.index = index;
+          delta_sample.native_id = spec.getNativeID();
+          delta_sample.peptide = chosen.peptide;
+          delta_sample.site_pos = delta_sample.gap ? chosen.loc_pos : -1;
+          delta_sample.loc_evidence = chosen.loc_evidence;
+          delta_sample.loc_score = chosen.loc_pos >= 0 ? chosen.loc_score : 0;
+          delta_sample.loc_ties = chosen.loc_pos >= 0 ? chosen.loc_ties : 0;
+          delta_sample.loc_excluded = chosen.loc_excluded;
+          delta_sample.evalue = t.evalue;
+          delta_sample.tag = t.seq;
+          delta_sample.protein = chosen.protein;
+          for (char& ch : delta_sample.protein) if (ch == '\t' || ch == '\n' || ch == '\r') ch = ' ';
+          delta_sample.reversed = chosen.reversed;
+          delta_sample.pos = static_cast<int>(chosen.pos);
+          delta_sample.region_lo = chosen.region_lo;
+          delta_sample.region_hi = chosen.region_hi;
+          delta_sample.prec_iso = hy.iso;
+          {
+            using CS = FASTag::Hyp::ChargeSource;
+            delta_sample.charge_src = hy.charge <= 0 || hy.src == CS::ASSUMED ? "assumed"
+                                    : hy.src == CS::HEADER ? "given" : "inferred";
+          }
+          delta_sample.n_placements = static_cast<int>(selc->places.size());
+          delta_sample.tag_support = sel_support;
+          delta_sample.tags_placed = static_cast<int>(delta_all.size());
+          {
+            std::vector<std::string> peps;
+            char num[40];
+            for (const auto& pl : selc->places)
+            {
+              std::string f = pl.peptide;
+              for (char& ch : f) if (ch == 'I') ch = 'L';
+              peps.push_back(f);
+              if (!delta_sample.placements.empty()) delta_sample.placements += ';';
+              std::string prot = pl.protein;
+              for (char& ch : prot) if (ch == '\t' || ch == '\n' || ch == '\r' || ch == ';' || ch == '|') ch = ' ';
+              std::snprintf(num, sizeof num, "|%zu|%c|%.6f", pl.pos + 1, pl.reversed ? 'r' : 'f', pl.delta_mass);
+              delta_sample.placements += prot + '|' + pl.peptide + num;
+            }
+            std::sort(peps.begin(), peps.end());
+            delta_sample.n_peptides = static_cast<int>(std::unique(peps.begin(), peps.end()) - peps.begin());
+          }
+          if (delta_loc_null > 0.0 && delta_sample.gap)
+          {
+            // The null: the same placement on the spectrum's peaks moved by
+            // -delta_loc_null in m/z (the same peak density, no ladder).
+            FASTag::Reconciliation nul = *best;
+            nul.loc_pos = -1; nul.loc_score = 0; nul.loc_ties = 0; nul.loc_evidence = 0;
+            nul.loc_alternatives = 0; nul.loc_excluded = 0;
+            MSSpectrum moved = loc_peaks;
+            for (auto& pk : moved) pk.setMZ(pk.getMZ() + delta_loc_null);
+            recon.localize(nul, moved, hy.charge, tshift, tser, delta_loc_model);
+            delta_sample.null_class = FASTag::ShiftSurvey::locClassName(FASTag::ShiftSurvey::locClass(nul, delta_loc_min_evidence));
+            delta_sample.null_evidence = nul.loc_alternatives > 0 ? nul.loc_evidence : 0;
+          }
+        }
+      }
       if (delta_clamped) ++pt.delta_clamped;
       else pt.delta.push_back(std::move(delta_sample));
     }
@@ -4261,10 +4572,29 @@ TOPPFASTag::ExitCodes TOPPFASTag::main_(int, const char**)
     if (delta_on)
     {
       std::map<int64_t, std::pair<uint64_t, std::map<std::string, uint64_t>>> bins;
-      size_t clamped = 0, samples = 0;
+      // 1.16 survey columns, per bin: sites of the localized gaps, the
+      // unlocalized gaps, and the peptide masses (the ppm scale).
+      struct SiteBin
+      {
+        std::map<std::string, uint64_t> sites;
+        uint64_t unloc = 0;
+        std::vector<double> masses;
+        // 1.16b: evidence classes, flank, charge and observation classes.
+        uint64_t frag = 0, seq = 0, ambiguous = 0, nonzero = 0, prec_flank = 0, charge_assumed = 0;
+        std::map<std::string, uint64_t> classes;
+      };
+      std::map<int64_t, SiteBin> site_bins;
+      size_t clamped = 0, samples = 0, survey_loc = 0, survey_unloc = 0;
+      // 1.16b -delta_counts_out: the run's reconciliation, MS2 to rows.
+      namespace SSc = FASTag::ShiftSurvey;
+      size_t c_tagged = 0, c_placed = 0, c_exact = 0, c_region = 0, c_terminal = 0, c_frag = 0, c_seq = 0,
+             c_amb = 0, c_unloc = 0, c_assumed = 0, c_assumed_gap = 0, c_prec = 0, c_evg = 0, c_zero_gap = 0;
+      std::map<std::string, size_t> c_classes;
       for (const PerThread& pt : per_thread)
       {
         clamped += pt.delta_clamped;
+        c_tagged += pt.delta_tagged;
+        c_placed += pt.delta_placed;
         for (const auto& d : pt.delta)
         {
           ++samples;
@@ -4272,6 +4602,38 @@ TOPPFASTag::ExitCodes TOPPFASTag::main_(int, const char**)
           auto& b = bins[bin_key];
           ++b.first;
           if (!d.interp.empty()) ++b.second[d.interp];
+          const bool nonzero = std::fabs(d.delta) > 1e-6;
+          if (!nonzero) ++c_exact;
+          else if (d.region_gap) ++c_region;
+          else ++c_terminal;
+          if (nonzero && bin_key == 0) ++c_zero_gap;
+          if (d.charge_assumed) { ++c_assumed; if (nonzero) ++c_assumed_gap; }
+          if (nonzero && d.precursor_flank) ++c_prec;
+          if (d.exact_vs_gapped) ++c_evg;
+          if (delta_sites)
+          {
+            SiteBin& sb = site_bins[bin_key];
+            sb.masses.push_back(d.pep_mass);
+            if (d.charge_assumed) ++sb.charge_assumed;
+            if (nonzero)
+            {
+              ++sb.nonzero;
+              if (d.precursor_flank) ++sb.prec_flank;
+              const char* cn = SSc::obsClassName(static_cast<SSc::ObsClass>(d.obs_class));
+              ++sb.classes[cn];
+              ++c_classes[cn];
+            }
+            if (!d.gap) continue;
+            switch (static_cast<SSc::LocClass>(d.loc_class))
+            {
+              case SSc::LocClass::FRAGMENT_LOCALIZED: ++sb.frag; ++c_frag; break;
+              case SSc::LocClass::SEQUENCE_CONSTRAINED: ++sb.seq; ++c_seq; break;
+              case SSc::LocClass::AMBIGUOUS: ++sb.ambiguous; ++c_amb; break;
+              default: ++c_unloc; break;
+            }
+            if (d.site.empty()) { ++sb.unloc; ++survey_unloc; }
+            else { ++sb.sites[d.site]; ++survey_loc; }
+          }
         }
       }
       // Local-max grouping: a bin whose count is not exceeded by either
@@ -4288,27 +4650,52 @@ TOPPFASTag::ExitCodes TOPPFASTag::main_(int, const char**)
           OPENMS_LOG_ERROR << "Cannot open output file " << delta_out << " for writing." << std::endl;
           return CANNOT_WRITE_OUTPUT_FILE;
         }
-        dtsv << "delta\tspectra\ttop_interps\n";
+        dtsv << "delta\tspectra\ttop_interps\tlocalized\tresidues\tunlocalized\tunimod\tpsimod\tisotope_error"
+                "\tfragment_localized\tsequence_constrained\tambiguous\tprecursor_flank\tcharge_assumed\tclass\tisobars\n";
       }
-      std::set<int64_t> absorbed;
-      for (const auto& kv : bins)
+      // Rows (ShiftSurvey::groupBins): -delta_group > 0 groups the bins
+      // around the most populated ones, every bin in one row; 0 keeps the
+      // 1.15 local-maximum rows.
+      namespace SS = FASTag::ShiftSurvey;
+      std::map<int64_t, uint64_t> bin_counts;
+      for (const auto& kv : bins) bin_counts[kv.first] = kv.second.first;
+      const std::vector<SS::BinGroup> groups = SS::groupBins(bin_counts, delta_group_bins);
+      std::map<int64_t, int64_t> row_of;  // bin -> its row's center (-delta_spectra_out)
+      size_t n_rows = 0;
+      uint64_t rows_sum = 0, rows_zero_gap = 0;
+      for (const SS::BinGroup& g : groups)
       {
-        if (absorbed.count(kv.first)) continue;
-        auto lo = bins.find(kv.first - 1), hi = bins.find(kv.first + 1);
-        const uint64_t nl = lo != bins.end() ? lo->second.first : 0;
-        const uint64_t nh = hi != bins.end() ? hi->second.first : 0;
-        if (kv.second.first < nl || kv.second.first < nh) continue;  // not the local max
-        uint64_t count = kv.second.first;
-        std::map<std::string, uint64_t> interps = kv.second.second;
-        for (auto* nb : {lo != bins.end() ? &*lo : nullptr, hi != bins.end() ? &*hi : nullptr})
-          // A valley bin between two peaks goes to the first (lower-delta)
-          // one only: counted twice, the rows summed to more spectra than
-          // were sampled.
-          if (nb && nb->second.first < kv.second.first && !absorbed.count(nb->first))
+        const auto& kv = *bins.find(g.center);
+        uint64_t count = 0;
+        std::map<std::string, uint64_t> interps;
+        SiteBin row_sites;
+        for (int64_t key : g.bins)
+        {
+          const auto& b = bins.at(key);
+          count += b.first;
+          for (const auto& ip : b.second) interps[ip.first] += ip.second;
+          if (delta_per_spectrum) row_of[key] = g.center;
+          if (!delta_sites) continue;
+          const auto it = site_bins.find(key);
+          if (it == site_bins.end()) continue;
+          for (const auto& sc : it->second.sites) row_sites.sites[sc.first] += sc.second;
+          row_sites.unloc += it->second.unloc;
+          row_sites.masses.insert(row_sites.masses.end(), it->second.masses.begin(), it->second.masses.end());
+          for (const auto& sc : it->second.classes) row_sites.classes[sc.first] += sc.second;
+          row_sites.frag += it->second.frag;
+          row_sites.seq += it->second.seq;
+          row_sites.ambiguous += it->second.ambiguous;
+          row_sites.nonzero += it->second.nonzero;
+          row_sites.prec_flank += it->second.prec_flank;
+          row_sites.charge_assumed += it->second.charge_assumed;
+        }
+        ++n_rows;
+        rows_sum += count;
+        if (g.center == 0)
+          for (int64_t key : g.bins)
           {
-            count += nb->second.first;
-            for (const auto& ip : nb->second.second) interps[ip.first] += ip.second;
-            absorbed.insert(nb->first);
+            const auto it = site_bins.find(key);
+            if (it != site_bins.end()) rows_zero_gap += it->second.nonzero;
           }
         // top 3 interpretations by count, deterministic tie-break on name
         std::vector<std::pair<uint64_t, std::string>> ranked;
@@ -4333,10 +4720,173 @@ TOPPFASTag::ExitCodes TOPPFASTag::main_(int, const char**)
           dtsv << ranked[r].second << ':' << ranked[r].first;
         }
         if (ranked.empty()) dtsv << '-';
+        {
+          // 1.16 survey columns. Names only for a localized site; the
+          // tolerance in ppm is of the row's median peptide mass.
+          uint64_t nloc = 0;
+          std::vector<SS::Site> sites;
+          std::vector<uint64_t> support;
+          for (const auto& sc : row_sites.sites)
+          {
+            nloc += sc.second;
+            SS::Site st;
+            if (SS::parseSiteKey(sc.first, st)) { sites.push_back(st); support.push_back(sc.second); }
+          }
+          double ref = 0.0;
+          if (!row_sites.masses.empty())
+          {
+            std::vector<double>& m = row_sites.masses;
+            std::sort(m.begin(), m.end());
+            ref = m.size() % 2 ? m[m.size() / 2] : 0.5 * (m[m.size() / 2 - 1] + m[m.size() / 2]);
+          }
+          const double tol_da = survey_ppm ? survey_tol * ref * 1e-6 : survey_tol;
+          const double row_delta = kv.first * 0.0005;
+          constexpr size_t NAME_CAP = 5;
+          // Uncapped for the isotope reading (a better-supported name past the cap counts too).
+          auto um = SS::match(survey_unimod, row_delta, tol_da, sites, survey_fixed, SIZE_MAX, &support);
+          // 1.16b: an isotope error is a precursor's, so the reading needs
+          // at least half of the row's gaps on the precursor-derived flank
+          // (-delta_isotope_flank any: 1.16a, every row).
+          const bool iso_flank = !delta_iso_precursor ||
+                                 (row_sites.nonzero > 0 && 2 * row_sites.prec_flank >= row_sites.nonzero);
+          const std::string iso =
+              iso_flank ? SS::isotopeError(row_delta, tol_da, um, nloc, survey_ppm ? ref : 0.0) : std::string("-");
+          const std::string isobars = SS::isobarClass(row_delta, um, sites, survey_fixed, delta_isobar_tol);
+          if (um.size() > NAME_CAP) um.resize(NAME_CAP);
+          const auto pm = SS::match(survey_psimod, row_delta, tol_da, sites, survey_fixed, NAME_CAP, &support);
+          dtsv << '\t' << nloc << '\t' << SS::formatSites(row_sites.sites) << '\t' << row_sites.unloc << '\t'
+               << SS::format(um, false, survey_ppm ? ref : 0.0) << '\t'
+               << SS::format(pm, true, survey_ppm ? ref : 0.0) << '\t' << iso;
+          // The observation classes, most frequent first (three at most).
+          std::vector<std::pair<uint64_t, std::string>> cls;
+          for (const auto& c : row_sites.classes) cls.emplace_back(c.second, c.first);
+          std::sort(cls.begin(), cls.end(), [](const auto& a, const auto& b) {
+            return a.first != b.first ? a.first > b.first : a.second < b.second;
+          });
+          std::string ccell;
+          for (size_t i = 0; i < cls.size() && i < 3; ++i)
+            ccell += (i ? "," : "") + cls[i].second + ":" + std::to_string(cls[i].first);
+          dtsv << '\t' << row_sites.frag << '\t' << row_sites.seq << '\t' << row_sites.ambiguous << '\t'
+               << row_sites.prec_flank << '\t' << row_sites.charge_assumed << '\t' << (ccell.empty() ? "-" : ccell)
+               << '\t' << isobars;
+        }
         dtsv << '\n';
+      }
+      if (delta_per_spectrum)
+      {
+        // One line per sampled spectrum, in input order; a spectrum in a
+        // bin no 1.15 row took (-delta_group 0) has row "-".
+        std::vector<const DeltaSample*> all;
+        all.reserve(samples);
+        for (const PerThread& pt : per_thread)
+          for (const auto& d : pt.delta) all.push_back(&d);
+        std::sort(all.begin(), all.end(), [](const DeltaSample* a, const DeltaSample* b) { return a->index < b->index; });
+        std::ofstream stsv(delta_spectra_out.c_str());
+        if (!stsv)
+        {
+          OPENMS_LOG_ERROR << "Cannot open output file " << delta_spectra_out << " for writing." << std::endl;
+          return CANNOT_WRITE_OUTPUT_FILE;
+        }
+        stsv << "spectrum\tdelta\trow\tinterp\tpeptide\tsite\tsite_pos\tlocalized\tloc_evidence\tevalue"
+                "\tdelta_full\ttag\tprotein\tpos\torientation\tgap_side\tflank\tregion\tcharge\tcharge_source"
+                "\tprecursor_isotope\tloc_class\tloc_score\tloc_ties\tloc_excluded\tnull_class\tnull_evidence"
+                "\tobs_class\tobs_detail\tn_placements\tn_exact\tn_gapped\tn_peptides\ttag_support\ttags_placed"
+                "\tplacements\n";
+        char num[64];
+        for (const DeltaSample* d : all)
+        {
+          const int64_t key = static_cast<int64_t>(std::llround(d->delta / 0.0005));
+          const auto r = row_of.find(key);
+          stsv << d->native_id << '\t';
+          std::snprintf(num, sizeof num, "%.6f\t", d->delta);
+          stsv << num;
+          if (r != row_of.end())
+          {
+            std::snprintf(num, sizeof num, "%.4f", r->second * 0.0005);
+            stsv << num;
+          }
+          else stsv << '-';
+          stsv << '\t' << (d->interp.empty() ? "-" : d->interp) << '\t' << d->peptide << '\t';
+          if (d->site_pos >= 0 && d->site_pos < static_cast<int>(d->peptide.size()))
+            stsv << d->peptide[static_cast<size_t>(d->site_pos)] << '\t' << d->site_pos + 1;
+          else stsv << "-\t-";
+          std::snprintf(num, sizeof num, "%.3g", d->evalue);
+          stsv << '\t' << (d->site.empty() ? "-" : d->site) << '\t' << d->loc_evidence << '\t' << num;
+          std::snprintf(num, sizeof num, "%.10g", d->delta);
+          stsv << '\t' << num << '\t' << d->tag << '\t' << d->protein << '\t' << d->pos + 1 << '\t'
+               << (d->reversed ? "reversed" : "forward") << '\t' << d->gap_side << '\t'
+               << (d->gap_side == '-' ? "-" : d->precursor_flank ? "precursor" : "fragment") << '\t';
+          if (d->region_hi >= d->region_lo) stsv << d->region_lo + 1 << '-' << d->region_hi + 1;
+          else stsv << '-';
+          stsv << '\t' << d->charge << '\t' << d->charge_src << '\t' << d->prec_iso << '\t'
+               << SSc::locClassName(static_cast<SSc::LocClass>(d->loc_class)) << '\t' << d->loc_score << '\t'
+               << d->loc_ties << '\t' << d->loc_excluded << '\t' << (d->null_class.empty() ? "-" : d->null_class)
+               << '\t' << d->null_evidence << '\t' << SSc::obsClassName(static_cast<SSc::ObsClass>(d->obs_class))
+               << '\t' << (d->obs_detail.empty() ? "-" : d->obs_detail) << '\t' << d->n_placements << '\t'
+               << d->n_exact << '\t' << d->n_gapped << '\t' << d->n_peptides << '\t' << d->tag_support << '\t'
+               << d->tags_placed << '\t' << (d->placements.empty() ? "-" : d->placements) << '\n';
+        }
+        stsv.close();
+        if (stsv.fail())
+        {
+          OPENMS_LOG_ERROR << "Failed writing " << delta_spectra_out << "." << std::endl;
+          return CANNOT_WRITE_OUTPUT_FILE;
+        }
+      }
+      if (!delta_counts_out.empty())
+      {
+        // 1.16b: every MS2 to the rows, with the sums that must hold.
+        size_t ms2 = 0;
+        for (const PerThread& pt : per_thread) ms2 += pt.ms2;
+        std::ofstream ctsv(delta_counts_out.c_str());
+        if (!ctsv)
+        {
+          OPENMS_LOG_ERROR << "Cannot open output file " << delta_counts_out << " for writing." << std::endl;
+          return CANNOT_WRITE_OUTPUT_FILE;
+        }
+        const auto ok = [](bool b) { return b ? "ok" : "FAIL"; };
+        ctsv << "key\tvalue\n"
+             << "ms2_read\t" << ms2 << "\n"
+             << "ms2_tagged\t" << c_tagged << "\n"
+             << "ms2_placed\t" << c_placed << "\n"
+             << "clamped_excluded\t" << clamped << "\n"
+             << "samples\t" << samples << "\n"
+             << "samples_exact\t" << c_exact << "\n"
+             << "samples_gap_region\t" << c_region << "\n"
+             << "samples_gap_terminal\t" << c_terminal << "\n"
+             << "gap_fragment_localized\t" << c_frag << "\n"
+             << "gap_sequence_constrained\t" << c_seq << "\n"
+             << "gap_ambiguous\t" << c_amb << "\n"
+             << "gap_unlocalized\t" << c_unloc << "\n"
+             << "gap_precursor_flank\t" << c_prec << "\n"
+             << "samples_charge_assumed\t" << c_assumed << "\n"
+             << "gaps_charge_assumed\t" << c_assumed_gap << "\n"
+             << "samples_exact_vs_gapped\t" << c_evg << "\n"
+             << "gaps_in_zero_bin\t" << c_zero_gap << "\n"
+             << "gaps_in_zero_row\t" << rows_zero_gap << "\n";
+        for (const auto& c : c_classes) ctsv << "class_" << c.first << "\t" << c.second << "\n";
+        ctsv << "rows\t" << n_rows << "\n"
+             << "rows_spectra_sum\t" << rows_sum << "\n"
+             << "check_tagged_le_ms2\t" << ok(c_tagged <= ms2) << "\n"
+             << "check_placed_le_tagged\t" << ok(c_placed <= c_tagged) << "\n"
+             << "check_placed_eq_samples_plus_clamped\t" << ok(c_placed == samples + clamped) << "\n"
+             << "check_samples_eq_exact_region_terminal\t" << ok(samples == c_exact + c_region + c_terminal) << "\n"
+             << "check_region_eq_classes\t" << ok(c_region == c_frag + c_seq + c_amb + c_unloc) << "\n"
+             << "check_rows_sum_eq_samples\t" << ok(rows_sum == samples) << "\n";
+        ctsv.close();
+        if (ctsv.fail())
+        {
+          OPENMS_LOG_ERROR << "Failed writing " << delta_counts_out << "." << std::endl;
+          return CANNOT_WRITE_OUTPUT_FILE;
+        }
       }
       if (write_delta)
       {
+        OPENMS_LOG_INFO << "Delta counts: " << c_placed << " MS2 placed of " << c_tagged << " tagged; " << samples
+                        << " samples (" << c_exact << " exact, " << c_region << " gapped, " << c_terminal
+                        << " terminal gaps); gaps " << c_frag << " fragment-localized, " << c_seq
+                        << " sequence-constrained, " << c_amb << " ambiguous, " << c_unloc << " unlocalized; "
+                        << rows_sum << " in " << n_rows << " rows" << std::endl;
         dtsv.close();
         if (dtsv.fail())
         {
@@ -4346,6 +4896,9 @@ TOPPFASTag::ExitCodes TOPPFASTag::main_(int, const char**)
         OPENMS_LOG_INFO << "Delta histogram: " << samples << " spectra sampled"
                         << (clamped ? ", " + std::to_string(clamped) + " excluded (clamped flank)" : std::string())
                         << " -> " << delta_out << std::endl;
+        OPENMS_LOG_INFO << "Delta sites: " << survey_loc << " gaps localized, " << survey_unloc
+                        << " unlocalized; names from " << survey_unimod.size() << " Unimod and "
+                        << survey_psimod.size() << " PSI-MOD entries" << std::endl;
       }
       // One gap result for every gap reader (FD::gapResult): -massgap_out
       // and the 1.12 readers see the same peaks on the same rows.
