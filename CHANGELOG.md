@@ -1,6 +1,8 @@
 # Changelog
 
-## Unreleased
+## 1.15.3 (2026-11-19)
+
+Reads SCIEX MS Data Converter mzML (before: every spectrum read as MS1), adds instrument model, serial number and start time to the run QC report, and lets `-census_ids` take identification files without q-values (`-census_ids_accept`). Default tag output on files that do not use mzML parameter groups is unchanged from 1.15.2.
 
 - **SCIEX MS Data Converter mzML is read (bug fix).** The mzML reader now
   resolves `referenceableParamGroupRef`s for the MS level, retention time,

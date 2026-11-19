@@ -987,7 +987,7 @@ dependencies = [
 
 [[package]]
 name = "fastag"
-version = "1.15.2"
+version = "1.15.3"
 dependencies = [
  "dunce",
  "libc",
