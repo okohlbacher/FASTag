@@ -10,6 +10,12 @@
 #      renamed) has spectra with precursors but no MS2: the outputs are
 #      written and FASTag exits with 13 and an error
 #   d. an MS1-only run (no MS2 level, no precursor) only warns, exit 0
+#   e. the deposited Mascot mzid of the run (test/fixtures/sciex_mascot.mzid:
+#      no q-values, no decoys, references index=<n>, native ids in the
+#      spectrum titles): refused by -census_ids by default; joined under
+#      -census_ids_accept threshold (1 identified: the second result was
+#      edited to fail its threshold) and all (2), by the titles' native ids,
+#      with the tag TSV unchanged
 # Exits 77 (ctest SKIP) when the binary cannot start.
 #
 # Copyright (c) 2026 Oliver Kohlbacher and contributors
@@ -18,6 +24,7 @@ set -u
 BIN="$1"
 MZML="$2"
 DATA="$3"   # data/digest
+MZID="$4"   # sciex_mascot.mzid
 if ! "$BIN" --help >/dev/null 2>&1; then
   echo "SKIP: binary cannot initialize (OpenMS share data unreachable?)" >&2
   exit 77
@@ -53,4 +60,20 @@ awk '/<precursorList/{skip=1} !skip{print} /<\/precursorList>/{skip=0}' "$MZML" 
 "$BIN" -in "$TMP/ms1.mzML" -out "$TMP/d.tsv" "${ARGS[@]}" >"$TMP/d.log" 2>&1 || { cat "$TMP/d.log" >&2; fail "d: exit $?"; }
 grep -q "an MS1-only run has nothing to tag" "$TMP/d.log" || { cat "$TMP/d.log" >&2; fail "d: no warning"; }
 
+# e. Mascot mzid without q-values
+val() { awk -F'\t' -v s="$2" -v k="$3" '$1 == s && $2 == k { print $3; f = 1 } END { if (!f) print "MISSING" }' "$1"; }
+"$BIN" -in "$MZML" -out "$TMP/e0.tsv" -census -census_ids "$MZID" "${ARGS[@]}" >"$TMP/e0.log" 2>&1
+rc=$?
+[ "$rc" -eq 11 ] && grep -q "no hit carries a q-value" "$TMP/e0.log" || { cat "$TMP/e0.log" >&2; fail "e: default rule exit $rc, want 11"; }
+for rule in threshold:1 all:2; do
+  r=${rule%%:*}; want=${rule##*:}
+  "$BIN" -in "$MZML" -out "$TMP/e_$r.tsv" -census -census_ids "$MZID" -census_ids_accept "$r" "${ARGS[@]}" \
+    >"$TMP/e_$r.log" 2>&1 || { cat "$TMP/e_$r.log" >&2; fail "e: $r exit $?"; }
+  S="$TMP/e_$r.census_summary.tsv"
+  [ "$(val "$S" census_ids ids_accept)" = "$r" ] || fail "e: $r: ids_accept row"
+  [ "$(val "$S" census_ids identified_1)" = "$want" ] || fail "e: $r: identified_1 $(val "$S" census_ids identified_1), want $want"
+  [ "$(val "$S" census_ids id_ref_title)" = 2 ] || fail "e: $r: id_ref_title"
+  [ "$(val "$S" census_ids refs_exact)" = 2 ] || fail "e: $r: refs_exact"
+  cmp -s "$TMP/a.tsv" "$TMP/e_$r.tsv" || fail "e: $r: the tag TSV changed with -census_ids"
+done
 echo "PASS"

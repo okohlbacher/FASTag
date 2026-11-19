@@ -425,6 +425,7 @@ TOPPFASTag::ExitCodes TOPPFASTag::main_(int, const char**)
         {"census_summary_out", nullptr},
         {"census_ids", nullptr},
         {"census_ids_fdr", nullptr},
+        {"census_ids_accept", nullptr},    // 1.16
         {"census_triage_evalue", nullptr},
         // ---- 1.16 QC: -stream refusals ----
         {"qc_out", nullptr},
@@ -1334,7 +1335,9 @@ TOPPFASTag::ExitCodes TOPPFASTag::main_(int, const char**)
         {"census_out", "-census", getFlag_("census")},
         {"census_summary_out", "-census", getFlag_("census")},
         {"census_ids", "-census", getFlag_("census")},
-        {"census_ids_fdr", "-census_ids", getFlag_("census") && !getStringOption_("census_ids").empty()},
+        {"census_ids_fdr", "-census_ids",
+         getFlag_("census") && !getStringOption_("census_ids").empty() && getStringOption_("census_ids_accept") == "qvalue"},
+        {"census_ids_accept", "-census_ids", getFlag_("census") && !getStringOption_("census_ids").empty()},
         {"census_triage_evalue", "-census_ids", getFlag_("census") && !getStringOption_("census_ids").empty()},
         {"census_ids_exact", "-census_ids", getFlag_("census") && !getStringOption_("census_ids").empty()},
         {"census_score", "-census", getFlag_("census")},
@@ -2739,7 +2742,8 @@ TOPPFASTag::ExitCodes TOPPFASTag::main_(int, const char**)
   census_ids_index.setExact(census_ids_exact);
   if (census_ids_on)
   {
-    census_ids_loaded = FASTag::CensusIds::load(census_ids, census_ids_fdr, census_ids_index);
+    census_ids_loaded = FASTag::CensusIds::load(census_ids, census_ids_fdr, census_ids_index,
+                                                FASTag::CensusIds::acceptOf(getStringOption_("census_ids_accept")));
     if (!census_ids_loaded.refusal.empty())
     {
       OPENMS_LOG_ERROR << census_ids_loaded.refusal << std::endl;
@@ -2762,9 +2766,17 @@ TOPPFASTag::ExitCodes TOPPFASTag::main_(int, const char**)
       OPENMS_LOG_WARN << "Warning: -census_ids names the run '" << census_ids_loaded.runs.front() << "', -in is '"
                       << FASTag::CensusIds::runStem(in) << "'; the spectrum references are matched anyway."
                       << std::endl;
+    using FASTag::CensusIds::Accept;
     OPENMS_LOG_INFO << "Census ids: " << census_ids_loaded.n_accepted << " of " << census_ids_loaded.n_ids
-                    << " spectrum identifications pass q <= " << census_ids_fdr << " (" << census_ids << ")"
-                    << std::endl;
+                    << " spectrum identifications ";
+    if (census_ids_loaded.accept == Accept::QVALUE) OPENMS_LOG_INFO << "pass q <= " << census_ids_fdr;
+    else if (census_ids_loaded.accept == Accept::THRESHOLD)
+      OPENMS_LOG_INFO << "hold a target hit that passes the file's own threshold (-census_ids_accept threshold, no FDR)";
+    else OPENMS_LOG_INFO << "hold a target hit (-census_ids_accept all, no FDR)";
+    OPENMS_LOG_INFO << " (" << census_ids << ")" << std::endl;
+    if (census_ids_loaded.n_ref_title > 0)
+      OPENMS_LOG_INFO << "Census ids: " << census_ids_loaded.n_ref_title
+                      << " of them name their spectrum by the NativeID in the spectrum title." << std::endl;
   }
 
   std::ofstream tsv(out.c_str());

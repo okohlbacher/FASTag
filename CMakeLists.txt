@@ -864,11 +864,13 @@ if(FASTAG_BUILD_TESTS)
   set_tests_properties(mgf_cli_test PROPERTIES SKIP_RETURN_CODE 77)
 
   # SCIEX MS Data Converter mzML: MS levels in param groups, the converter's
-  # index, and the exit when no MS2 can be read (test/sciex_cli_test.sh).
+  # index, the exit when no MS2 can be read, and -census_ids_accept on the
+  # run's Mascot mzid (test/sciex_cli_test.sh).
   add_test(NAME sciex_cli_test
            COMMAND bash ${CMAKE_CURRENT_SOURCE_DIR}/test/sciex_cli_test.sh $<TARGET_FILE:FASTag>
                    ${CMAKE_CURRENT_SOURCE_DIR}/test/fixtures/sciex_paramgroup.mzML
-                   ${CMAKE_CURRENT_SOURCE_DIR}/data/digest)
+                   ${CMAKE_CURRENT_SOURCE_DIR}/data/digest
+                   ${CMAKE_CURRENT_SOURCE_DIR}/test/fixtures/sciex_mascot.mzid)
   set_tests_properties(sciex_cli_test PROPERTIES SKIP_RETURN_CODE 77)
 
   # tools/mzml_to_mgf.py on the fixture mzML and on diaTracer- and
