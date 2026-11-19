@@ -80,7 +80,9 @@ EOF
 "$BIN" -in "$W/PXD040281_SA_02_trim.d.zip" -out "$W/z.tsv" "${A[@]}" > "$W/z.out" 2> "$W/z.err"
 ck ".d.zip exit code" "$?" "0"
 ck ".d.zip same tags as .d" "$(cmp -s "$W/d.tsv" "$W/z.tsv" && echo same)" "same"
-has ".d.zip unpacked under OPENMS_TMPDIR" "unpacked under $OPENMS_TMPDIR" "$W/z.err"
+# FASTag prints the native path (C:\... on Windows); compare the last component.
+has ".d.zip unpacked under OPENMS_TMPDIR" "$(basename "$OPENMS_TMPDIR")" "$W/z.err"
+has ".d.zip says where it unpacked" "unpacked under" "$W/z.err"
 ck ".d.zip temp space released" "$(find "$OPENMS_TMPDIR" -mindepth 1 | head -1)" ""
 
 # USI: the msRun is the run name without .d / .d.zip; OpenMS's merged

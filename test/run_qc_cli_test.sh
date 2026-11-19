@@ -26,7 +26,8 @@ TMP=$(mktemp -d "${TMPDIR:-/tmp}/fastag-qc-cli.XXXXXX") || exit 1
 trap 'rm -rf "$TMP"' EXIT
 fail() { echo "FAIL: $*" >&2; exit 1; }
 run() { local log="$1"; shift; "$BIN" "$@" >"$log" 2>&1 || { cat "$log" >&2; fail "run failed: $*"; }; }
-qcv() { awk -F'\t' -v k="$2" '$1 == "qc" && $2 == k { print $3; f = 1 } END { if (!f) print "MISSING" }' "$1"; }
+# \r stripped: on Windows the QC file and the Python-written expectations end lines in CRLF.
+qcv() { awk -F'\t' -v k="$2" '{ sub(/\r$/, "") } $1 == "qc" && $2 == k { print $3; f = 1 } END { if (!f) print "MISSING" }' "$1"; }
 LOOSE=(-fragment_tolerance 0.3 -fragment_tolerance_unit Da)
 TIGHT=(-fragment_tolerance 0.02 -fragment_tolerance_unit Da)
 
@@ -75,6 +76,7 @@ cmp -s "$TMP/sqc1.tsv" "$TMP/sqc4.tsv" || fail "(c) synthetic: QC differs betwee
 Q="$TMP/sqc1.tsv"
 in_clusters=
 while read -r key want; do
+  want=${want%$'\r'}
   case "$key" in
     resolution_FTMS_ms1)
       got=$(qcv "$Q" resolution_FTMS_ms1)
