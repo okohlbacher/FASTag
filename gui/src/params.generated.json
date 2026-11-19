@@ -101,6 +101,19 @@
       ]
     },
     {
+      "name": "census_ids_accept",
+      "type": "string",
+      "default": "qvalue",
+      "description": "Which hits of -census_ids identify their spectrum: qvalue (a target hit with a q-value <= -census_ids_fdr), threshold (a target hit the file marks as passing its own threshold, mzid passThreshold; no FDR is estimated) or all (every target hit in the file)",
+      "required": false,
+      "toppAdvanced": true,
+      "choices": [
+        "qvalue",
+        "threshold",
+        "all"
+      ]
+    },
+    {
       "name": "census_ids_exact",
       "type": "bool",
       "default": "false",

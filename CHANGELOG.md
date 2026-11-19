@@ -1,5 +1,40 @@
 # Changelog
 
+## Unreleased
+
+- **SCIEX MS Data Converter mzML is read (bug fix).** The mzML reader now
+  resolves `referenceableParamGroupRef`s for the MS level, retention time,
+  scan windows, ion mobility, isolation window and selected ion (m/z, charge,
+  intensity), as OpenMS's `MzMLFile` does; an element's own cvParam still
+  wins. SCIEX MS Data Converter keeps the MS level only in such groups, so
+  before every spectrum of its mzML read as MS1: 0 MS2, empty outputs, exit
+  code 0. Files that state these fields in the elements themselves read as
+  before (tags byte-identical on the gate runs). On the 48 PXD079630 runs the
+  MS2 count now equals an independent count, and the tags equal those of the
+  OpenMS FileConverter rewrite of each run.
+- **No silent success without MS2.** A run with spectra of which some are MS2
+  or carry a precursor, but none can be tagged, now ends with exit code 13
+  (UNEXPECTED_RESULT) and an error after its (empty) outputs are written. An
+  MS1-only run (no MS2 level, no precursor) warns and exits with 0.
+- **Index offsets in whitespace.** An mzML index whose offsets point into the
+  whitespace just before each `<spectrum` by varying amounts (SCIEX MS Data
+  Converter: 10 bytes for the first spectrum, 9 for the others, CRLF) is used
+  as written instead of being rescanned with the "no index, or one that no
+  longer matches" warning. An offset that points past a tag's start is still
+  refused.
+- **`-census_ids_accept <qvalue|threshold|all>`** (default `qvalue`, output
+  unchanged): identification files without q-values can mark spectra
+  identified by the file's own threshold (mzid `passThreshold`, read through
+  OpenMS as the hit meta value `pass_threshold`) or by any target hit, e.g. a
+  Mascot mzid without decoys. No FDR is estimated; the summary row
+  `ids_accept` names the rule. Decoys are ignored; `-census_ids_exact` still
+  refuses hits without a target/decoy annotation.
+- **`-census_ids` references from spectrum titles.** When an identification's
+  reference is empty or `index=<n>` (a search on an MGF) and its spectrum
+  title holds `NativeID:"<id>"` (msconvert, Mascot), the native id is used;
+  counted in the summary row `id_ref_title`. Such files matched no spectrum
+  before.
+
 ## 1.15.2 (2026-11-19)
 
 Four experimental, opt-in features: vendor input (Thermo `.raw`, Bruker

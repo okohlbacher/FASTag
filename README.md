@@ -460,6 +460,14 @@ fast reader cannot understand at all still falls back to loading the whole run
 into memory, with its own warning. `-out_spectra` runs need run-level metadata
 and read it up front instead.
 
+**Param groups and index offsets.** Spectrum, scan, precursor and selected-ion
+parameters given through `referenceableParamGroupRef`s are read as OpenMS's
+`MzMLFile` reads them; SCIEX MS Data Converter keeps the MS level and the scan
+window only there (before 1.16 FASTag read every spectrum of such a file as
+MS1, found no MS2 and exited with 0; see Exit codes, 13). An index whose
+offsets point into the whitespace just before each `<spectrum` (SCIEX MS Data
+Converter: 9 or 10 bytes early; ThermoRawFileParser: 3) is used as it is.
+
 **A selected ion m/z of 0** (or below 0, or not a number) is read as no
 selected ion m/z: the precursor takes the isolation window target m/z, as when
 `MS:1000744` is missing. mzpeak-convert 0.18 (`--to mzml` from a Bruker `.d`)
@@ -844,8 +852,9 @@ vendored.
 | `-census` | off | Per-spectrum census: one row per MS2 spectrum read, tagged or not, plus a run summary (see Census) |
 | `-census_out <file>` | `<out>` with its extension replaced by `.census.tsv` | With `-census`: the per-spectrum table |
 | `-census_summary_out <file>` | `<out>` with its extension replaced by `.census_summary.tsv` | With `-census`: the run summary |
-| `-census_ids <file>` | none | With `-census`: identifications of `-in` (idXML or mzid with q-values); adds the columns `identified` and `triage` and a `census_ids` summary section (see Census) |
+| `-census_ids <file>` | none | With `-census`: identifications of `-in` (idXML or mzid with q-values, or see `-census_ids_accept`); adds the columns `identified` and `triage` and a `census_ids` summary section (see Census) |
 | `-census_ids_fdr <f>` | 0.01 | With `-census_ids`: the q-value a target hit needs to identify its spectrum (advanced) |
+| `-census_ids_accept <qvalue\|threshold\|all>` | qvalue | With `-census_ids`: which hits identify their spectrum: a target hit with a q-value at most `-census_ids_fdr`, a target hit the file marks as passing its own threshold (mzid `passThreshold`; Mascot's homology or identity threshold), or every target hit. `threshold` and `all` estimate no FDR; the summary row `ids_accept` names the rule (advanced; see Census) |
 | `-census_triage_evalue <f>` | 0.01 | With `-census_ids`: the best E-value at or below which an unidentified tagged or placed spectrum is a triage candidate (advanced) |
 | `-qc_out <file>` | none | Run QC report: spectra per MS level and analyser class, stated and measured resolution, precursor charges, isobaric reporter kits, tag yield and MS2 redundancy (see Run QC report) |
 | `-census_ids_exact` | off | 1.15.2, with `-census_ids`: a one-to-one join (native ids only, no scan fallback; refused when any reference names no MS2 spectrum of `-in`, a spectrum has two identifications, a hit has no target/decoy annotation, or the file names no run or another run). Adds `ids_exact`, `unidentified_with_psm`, `unidentified_no_psm` to the summary (advanced; see Census) |
@@ -934,7 +943,7 @@ have no `spectrum_reference`, or when the file names more than one run. After th
 run, when more than 50 % of the file's spectrum references match no spectrum
 read: every other output is complete, and neither census file is written.
 
-Code 13 covers three runs that fail although files were written:
+Code 13 covers four runs that fail although files were written:
 
 - `-fasta_out` when the reduced FASTA would hold no protein (no protein
   reaches `-shortlist_min_spectra` and there is no `-shortlist_background`).
@@ -944,6 +953,12 @@ Code 13 covers three runs that fail although files were written:
 - `-out_spectra` when no spectrum carried a reported tag. The tag TSV and every
   report are complete; the spectra file is not written, and a stale one from an
   earlier run is removed.
+- An input with spectra but no MS2 spectrum FASTag can tag, although some of
+  them are MS2 (without peaks or a precursor) or carry a precursor: the run's
+  MS/MS was not read (before 1.16 every SCIEX MS Data Converter mzML read as
+  MS1 this way, with exit code 0). Every output is written and holds no tags;
+  the error names the counts. A run with no MS2 level and no precursor at all
+  is MS1-only: FASTag warns and exits with 0.
 - `-entrapment_fasta` whose key space lies entirely inside the target's. The
   files written while the spectra are read (the tag TSV, `-recon_out`,
   `-glyco_out`) are kept, the tag TSV without a `q_db` column; the outputs
@@ -1624,7 +1639,22 @@ q-value (lower is better), otherwise its `q-value` or `MS:1002354` meta
 value. Decoy hits are ignored (target+decoy counts as a target), an empty hit
 list is not an identification, and a spectrum no identification names is 0.
 A file in which no hit carries a q-value is refused: filter it with
-FalseDiscoveryRate and IDFilter first. So is a file with identifications
+FalseDiscoveryRate and IDFilter first, or choose another rule with
+`-census_ids_accept`. `-census_ids_accept threshold` identifies a spectrum by a
+target hit the file itself marks as passing its threshold (mzid
+`passThreshold="true"`, which OpenMS keeps as the hit's `pass_threshold` meta
+value, also in an idXML converted from it; a file without that flag is
+refused), and `-census_ids_accept all` by any target hit the file contains.
+Both are for files without q-values, such as a Mascot mzid export without
+decoys (homology threshold): they estimate no FDR, the identifications are
+only as reliable as the search engine's own threshold, and the summary says so
+(`ids_accept`; `ids_fdr` then reads "Not used"). Decoy hits are ignored under
+every rule, hits without a target/decoy annotation count as targets, and
+`-census_ids_exact` still refuses those. When an identification's reference is
+empty or `index=<n>` (a search on an MGF, which numbers its spectra) and its
+spectrum title (MS:1000796) holds `NativeID:"<id>"`, as in msconvert and
+Mascot exports, that native id is the reference (summary row `id_ref_title`).
+So is a file with identifications
 (with hits) that carry no `spectrum_reference`, as pepXML converted without
 `-mz_file` and older idXML may: add the references with IDFileConverter
 `-mz_file`. References are matched to native ids

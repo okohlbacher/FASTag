@@ -277,3 +277,32 @@ OpenMS's `BrukerTimsFile` reads it (164 MS2 spectra); readers built on
 mzdata/timsrust (mzpeak-convert, BRFP) write no spectra from it, presumably
 because of the emptied MS1 frames. `bruker_cli_test.sh` zips it and adds a
 `DiaFrameMsMsWindows` table at test time for the `.d.zip` and dia-PASEF cases.
+
+## SCIEX fixtures (1.16)
+
+`sciex_paramgroup.mzML` — 14 spectra of
+`250226_Sterre_P2020__250226_Sterre_P2020_1.mzML` of PRIDE PXD079630 (SCIEX
+ZenoTOF, converted by SCIEX MS Data Converter; licence CC0; source sha256
+`9682cd34af2015e3a1ed0ddf57b82bf3841d786f523e6cf468e045778201cd0f`), made by
+`make_sciex_fixture.py <source.mzML> <out.mzML>`: the two empty MS1 scans at
+the run start and the MS2 of cycle 1610, experiments 2-13, byte for byte. The
+converter's layout is kept: CRLF line ends, the MS level and the scan windows
+only in `referenceableParamGroup`s (the group list cut to the 26 the kept
+spectra reference), and an index whose offsets point into the whitespace
+before each `<spectrum` (10 bytes early for the first, 9 for the others) and
+whose `indexListOffset` points at the CR before `<indexList`. No chromatogram
+list. sha256 `c5a4a5100f7a3f80b3a066bb671a36178092e362014020e5dafde87b504b3f69`.
+
+`sciex_mascot.mzid` — the deposited Mascot Server 3.1 mzid of the same run
+(PXD079630, `250226_Sterre_P2020.mzid`, CC0, sha256
+`43ce2523e4162a637346b221b99dfef3c9ffc2e5d0f1566c7051ed3ae294a6ef`; searched
+on an MSConvert MGF, homology threshold p < 0.01, no decoys, no q-values; its
+references are `index=<n>` and the native ids are in the spectrum titles), made
+by `make_sciex_mzid_fixture.py <source.mzid> sciex_paramgroup.mzML <out.mzid>`:
+the two results that name a spectrum of `sciex_paramgroup.mzML` (cycle 1610,
+experiments 3 and 13) with the sequences, peptides and evidence they
+reference; the protein detection step and list are dropped. One edit: every
+hit of the second result is set to `passThreshold="false"`, so that
+`-census_ids_accept threshold` and `all` differ. sha256
+`3c45b62916944ccc94a6f7a8cb9eeab9c72e8fc8ab68f572dba7d15eb2aa3b0e`.
+Both are read by `sciex_cli_test.sh`, the mzML also by `indexed_mzml_test`.
