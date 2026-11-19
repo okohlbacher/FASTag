@@ -1,0 +1,19 @@
+{
+ "G1": "FAIL",
+ "G2": "PASS",
+ "G3": "PASS",
+ "G4": "PENDING (hand-check)",
+ "G5": {
+  "Cys->Dha (vs CAM)": "PENDING (hand-check)",
+  "Cys->Dha (unalkylated)": "INCONCLUSIVE (0 < 20 calls)",
+  "Dehydrated S/T": "PENDING (hand-check)"
+ },
+ "G6": "PASS",
+ "G7": "PASS",
+ "overall": "FAIL",
+ "call_list_sha256": {
+  "G4_population.tsv": "40a6b881e0f6b889abff6373b6eb08b45561658ca080b1ae859b8d0e7ee10408",
+  "G5_population.tsv": "abc5ef22fe8e4e8201772e061cd438351f437eb1598c7426f829eb2a2eddd457",
+  "G4_sample.tsv": "71ce230acd93c9ec4d5614e62f2082e337192c890f6f99c89a9b9332cab4942b"
+ }
+}
