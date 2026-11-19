@@ -309,6 +309,8 @@ namespace FASTag
 
     /// A tag name ends at whitespace or '>': <spectrum is not <spectrumList.
     bool is_name_end(char c) { return c == ' ' || c == '\t' || c == '\n' || c == '\r' || c == '>'; }
+    /// XML whitespace.
+    bool is_space(char c) { return c == ' ' || c == '\t' || c == '\n' || c == '\r'; }
 
     /// "no offset here", for the scan's per-piece bookkeeping below.  At file
     /// scope, not inside scanSpectrumOffsets: MSVC refuses to construct a
@@ -606,24 +608,41 @@ namespace FASTag
       }
       if (offsets->empty()) return nullptr;
 
+      // Whitespace before a <spectrum tag at offset @p off: its length, or
+      // npos when no <spectrum tag follows it within 64 bytes.
+      const auto lead_at = [&f](std::uint64_t off) -> std::size_t {
+        std::string head(64, '\0');
+        f.seekg(static_cast<std::streamoff>(off));
+        f.read(head.data(), static_cast<std::streamsize>(head.size()));
+        if (!f) return std::string::npos;
+        std::size_t ws = 0;
+        while (ws < head.size() && is_space(head[ws])) ++ws;
+        if (ws + 10 > head.size() || head.compare(ws, 9, "<spectrum") != 0 || !is_name_end(head[ws + 9]))
+          return std::string::npos;
+        return ws;
+      };
       // ThermoRawFileParser (2.0.0 at least) writes every offset a few bytes
       // short: into the indentation before the tag, not at it (it adds a
       // fixed guess of that whitespace to the stream position). When the
       // first offset lands in whitespace that runs straight into its
-      // <spectrum tag, every offset is moved by that run; the exact check
-      // below then holds the whole index to the corrected offsets, so an
+      // <spectrum tag, every offset is moved by that run if the exact check
+      // below then holds for the moved offsets.
+      //
+      // SCIEX MS Data Converter writes offsets into the whitespace too, but
+      // not by one fixed run (the first spectrum 10 bytes early, the others
+      // 9: CRLF line ends). Such an index is used as written, an offset in
+      // the whitespace before its tag being accepted by the check below and
+      // skipped by read_(). That is safe: whitespace that runs into a
+      // <spectrum tag lies after the previous spectrum's end tag, so each
+      // range still holds its whole spectrum and nothing of another one. An
       // index shifted in any other way is still refused.
+      const std::size_t first_lead = lead_at(offsets->front());
+      if (first_lead == std::string::npos) return nullptr;
+      std::shared_ptr<std::vector<std::uint64_t>> moved;
+      if (first_lead > 0)
       {
-        std::string head(64, '\0');
-        f.seekg(static_cast<std::streamoff>(offsets->front()));
-        f.read(head.data(), static_cast<std::streamsize>(head.size()));
-        if (!f) return nullptr;
-        std::size_t ws = 0;
-        while (ws < head.size() && (head[ws] == ' ' || head[ws] == '\t' || head[ws] == '\n' || head[ws] == '\r')) ++ws;
-        if (ws > 0 && ws + 10 <= head.size() && head.compare(ws, 9, "<spectrum") == 0 && is_name_end(head[ws + 9]))
-        {
-          for (auto& o : *offsets) o += ws;
-        }
+        moved = std::make_shared<std::vector<std::uint64_t>>(*offsets);
+        for (auto& o : *moved) o += first_lead;
       }
       if (offsets->back() >= index_offset) return nullptr;
 
@@ -651,6 +670,7 @@ namespace FASTag
         if (next != std::string::npos && next < close) return nullptr; // more spectra than offsets
 
         offsets->push_back(offsets->back() + after);
+        if (moved) moved->push_back(offsets->back());
       }
 
       // 33 evenly spaced offsets, first and last included, must point
@@ -670,18 +690,20 @@ namespace FASTag
       // 33 probes cost 33 reads of 16 bytes.
       // Known limit: sampled, not exhaustive -- an edit that shifts no sampled
       // offset still gets through; check every offset if one ever does.
-      {
-        const std::size_t last = offsets->size() - 2; // -1 is the terminator
-        std::string head(16, '\0');
+      // An offset in the whitespace before its tag passes only when
+      // @p lenient (the SCIEX case above).
+      const auto points_at_spectra = [&](const std::vector<std::uint64_t>& offs, bool lenient) {
+        const std::size_t last = offs.size() - 2; // -1 is the terminator
         for (std::size_t j = 0; j <= 32; ++j)
         {
-          const std::size_t k = last * j / 32;
-          f.seekg(static_cast<std::streamoff>((*offsets)[k]));
-          f.read(head.data(), static_cast<std::streamsize>(head.size()));
-          if (!f || head.compare(0, 9, "<spectrum") != 0 || !is_name_end(head[9])) return nullptr;
+          const std::size_t ws = lead_at(offs[last * j / 32]);
+          if (ws == std::string::npos || (ws > 0 && !lenient)) return false;
         }
-      }
-      return offsets;
+        return true;
+      };
+      if (moved && moved->back() > (*moved)[moved->size() - 2] && points_at_spectra(*moved, false)) return moved;
+      if (points_at_spectra(*offsets, true)) return offsets;
+      return nullptr;
     }
   }
 
@@ -926,7 +948,7 @@ namespace FASTag
   {
     MSSpectrum spec;
     if (!impl_->ok || i + 1 >= impl_->offsets->size()) return spec;
-    const std::uint64_t begin = (*impl_->offsets)[i];
+    std::uint64_t begin = (*impl_->offsets)[i];
     const std::uint64_t end = (*impl_->offsets)[i + 1];
     // A spectrum the tagging loop wants but cannot read is an error, as it
     // is on OpenMS's reader: returned empty, it would be skipped as "not MS2"
@@ -947,13 +969,24 @@ namespace FASTag
     // profile MS1 the arrays are almost the whole element (57 KB of a 58 KB
     // spectrum). Reading every spectrum whole to discover it is an MS1 and
     // then discarding it moved 81 MB per run for nothing.
-    const std::uint64_t len = end - begin;
+    std::uint64_t len = end - begin;
     constexpr std::uint64_t HEAD = 16384;
-    const std::uint64_t head_len = std::min(len, HEAD);
+    std::uint64_t head_len = std::min(len, HEAD);
     if (!impl_->raw.reserve(static_cast<std::size_t>(head_len), 0))
       return unreadable("no memory for " + std::to_string(head_len) + " bytes");
     if (!impl_->in.read(begin, impl_->raw.data.get(), static_cast<std::size_t>(head_len)))
       return unreadable(impl_->in.error());
+    // An index offset in the whitespace before the tag (SCIEX MS Data
+    // Converter; see offsets_from_index): the spectrum starts at its tag.
+    if (std::uint64_t lead = 0; is_space(impl_->raw.data[0]))
+    {
+      while (lead < head_len && is_space(impl_->raw.data[lead])) ++lead;
+      if (lead == head_len) return unreadable("no spectrum at the index offset");
+      std::memmove(impl_->raw.data.get(), impl_->raw.data.get() + lead, static_cast<std::size_t>(head_len - lead));
+      begin += lead;
+      len -= lead;
+      head_len -= lead;
+    }
     impl_->bytes = std::string_view(impl_->raw.data.get(), static_cast<std::size_t>(head_len));
 
     // The head is only known to hold the whole metadata region once the
@@ -1003,15 +1036,13 @@ namespace FASTag
     // below, since the schema puts references before cvParams and OpenMS
     // keeps the last value it sees.
     //
-    // Groups are resolved for the step-0 fields ONLY (type, filter string,
-    // activation, possible charge states, the isolation-target meta value).
-    // The fields 1.11 already read and the tagger consumes -- MS level,
-    // selected-ion m/z, charge and intensity, the isolation window target
-    // and offsets -- are still read from the element's own cvParams, as in
-    // 1.11, so tags stay byte-identical. Resolving them from groups too
-    // changes tags on mzMLs that keep them in a group (1.11: an MS level only
-    // in a group is no MS2, a charge only in a group is tagged as 2+); that
-    // is a separate, declared output-changing item, not part of step 0.
+    // Every field read here is resolved this way (1.16; before, the fields
+    // the tagger consumes -- MS level, retention time, scan windows,
+    // selected-ion m/z, charge and intensity, the isolation window -- came
+    // from the element's own cvParams only, and SCIEX MS Data Converter
+    // mzML, which keeps the MS level only in a group, read as all MS1). A
+    // file without groups, or with these fields in the elements themselves,
+    // reads exactly as before.
     static const ParamGroups NO_GROUPS;
     const ParamGroups& groups = impl_->groups ? *impl_->groups : NO_GROUPS;
     // The cvParam with accession @p acc in a group referenced directly in
@@ -1074,7 +1105,14 @@ namespace FASTag
     int ms_level = 0;
     {
       const std::string_view h = meta();
-      if (to_number(cv_value(h, MS_LEVEL, 0, h.size()), ms_level) && ms_level > 0)
+      // The spectrum's own cvParam anywhere in the head, as before; else a
+      // group the spectrum itself references (SCIEX MS Data Converter keeps
+      // the MS level only there).
+      std::string_view level = cv_value(h, MS_LEVEL, 0, h.size());
+      if (level.empty())
+        if (const GroupParam* gp = group_param(h, needle_accession(MS_LEVEL), 0, spectrum_params_end(h)))
+          level = gp->value;
+      if (to_number(level, ms_level) && ms_level > 0)
         spec.setMSLevel(static_cast<UInt>(ms_level));
     }
 
@@ -1133,13 +1171,13 @@ namespace FASTag
     const std::size_t n = xml.size();
 
     double rt = 0;
-    if (to_number(cv_value(xml, SCAN_TIME, 0, n), rt))
+    if (to_number(cvg(xml, SCAN_TIME, 0, n), rt))
     {
       // mzML records the unit; OpenMS wants seconds. As OpenMS's MzMLHandler
       // reads it: minutes (UO:0000031) are converted and anything else is
       // taken as seconds -- an absent unit included -- so RTs in -recon_id_out
       // match the OpenMS path that -out_spectra takes.
-      const std::string_view unit = cv_value(xml, SCAN_TIME, 0, n, UNIT);
+      const std::string_view unit = cvg(xml, SCAN_TIME, 0, n, UNIT);
       spec.setRT(unit == "UO:0000031" ? rt * 60.0 : rt);
     }
 
@@ -1160,19 +1198,19 @@ namespace FASTag
         if (w + 11 >= n || !(is_name_end(xml[w + 11]) || xml[w + 11] == '/')) continue;  // <scanWindowList
         const std::size_t we = find_or(xml, "</scanWindow>", w, sle);
         ScanWindow win;
-        if (to_number(cv_value(xml, SCAN_LOW, w, we), win.begin))
+        if (to_number(cvg(xml, SCAN_LOW, w, we), win.begin))
         {
-          to_number(cv_value(xml, SCAN_HIGH, w, we), win.end);
+          to_number(cvg(xml, SCAN_HIGH, w, we), win.end);
           spec.getInstrumentSettings().getScanWindows().push_back(win);
         }
       }
       double im = 0;
-      if (to_number(cv_value(xml, INV_K0, slb, sle), im))
+      if (to_number(cvg(xml, INV_K0, slb, sle), im))
       {
         spec.setDriftTime(im);
         spec.setDriftTimeUnit(DriftTimeUnit::VSSC);
       }
-      else if (to_number(cv_value(xml, DRIFT_TIME, slb, sle), im))
+      else if (to_number(cvg(xml, DRIFT_TIME, slb, sle), im))
       {
         spec.setDriftTime(im);
         spec.setDriftTimeUnit(DriftTimeUnit::MILLISECOND);
@@ -1180,7 +1218,7 @@ namespace FASTag
     }
     // FAIMS: the compensation voltage among the spectrum's own cvParams.
     if (double cv = 0; spec.getDriftTimeUnit() == DriftTimeUnit::NONE &&
-                       to_number(cv_value(xml, FAIMS_CV, 0, std::min(plb, n)), cv))
+                       to_number(cvg(xml, FAIMS_CV, 0, std::min(plb, n)), cv))
     {
       spec.setDriftTime(cv);
       spec.setDriftTimeUnit(DriftTimeUnit::FAIMS_COMPENSATION_VOLTAGE);
@@ -1307,18 +1345,16 @@ namespace FASTag
         q += 10;
       }
 
-      // The window as 1.11 reads it (own cvParams only, see above); the
-      // target again with the group fallback for the step-0 meta value only.
-      double target = 0, lower = 0, upper = 0, meta_target = 0;
-      bool has_meta_target = false;
+      // The isolation window, own cvParams first, then referenced groups.
+      double target = 0, lower = 0, upper = 0;
+      bool has_target = false;
       const std::size_t iwb = find_before(xml, "<isolationWindow", p, p_end);
       if (iwb != std::string_view::npos)
       {
         const std::size_t iwe = find_or(xml, "</isolationWindow>", iwb, p_end);
-        to_number(cv_value(xml, ISO_TARGET, iwb, iwe), target);
-        to_number(cv_value(xml, ISO_LOWER, iwb, iwe), lower);
-        to_number(cv_value(xml, ISO_UPPER, iwb, iwe), upper);
-        if (fields & STEP0_TARGET_META) has_meta_target = to_number(cvg(xml, ISO_TARGET, iwb, iwe), meta_target);
+        has_target = to_number(cvg(xml, ISO_TARGET, iwb, iwe), target);
+        to_number(cvg(xml, ISO_LOWER, iwb, iwe), lower);
+        to_number(cvg(xml, ISO_UPPER, iwb, iwe), upper);
       }
 
       // The activation (step 0): dissociation methods and activation energy,
@@ -1365,7 +1401,7 @@ namespace FASTag
         double mz = 0;
         int charge = 0;
         double intensity = 0;
-        const bool has_mz = to_number(cv_value(xml, SELECTED_MZ, s, s_end), mz);
+        const bool has_mz = to_number(cvg(xml, SELECTED_MZ, s, s_end), mz);
         // A selected-ion m/z of 0, below 0 or not finite is no m/z:
         // it is read as a missing MS:1000744, so the isolation target stands
         // in for it. A converter writes 0 for a precursor without a
@@ -1384,7 +1420,7 @@ namespace FASTag
           // meta value "isolation window target m/z" whenever the selected
           // ion moved the precursor m/z away from it -- 0 when the window
           // gave no target, as there.
-          const double window_mz = has_meta_target ? meta_target : 0.0;
+          const double window_mz = has_target ? target : 0.0;
           if ((fields & STEP0_TARGET_META) && mz != window_mz)
           {
             static const UInt TARGET_IDX =
@@ -1393,8 +1429,8 @@ namespace FASTag
           }
         }
         else if (target > 0) prec.setMZ(target);
-        if (to_number(cv_value(xml, CHARGE_STATE, s, s_end), charge)) prec.setCharge(charge);
-        if (to_number(cv_value(xml, PEAK_INTENSITY, s, s_end), intensity))
+        if (to_number(cvg(xml, CHARGE_STATE, s, s_end), charge)) prec.setCharge(charge);
+        if (to_number(cvg(xml, PEAK_INTENSITY, s, s_end), intensity))
           prec.setIntensity(static_cast<float>(intensity));
         // Possible charge states (MS:1000633, step 0), every one listed, in
         // the order OpenMS reads them: referenced groups, then own cvParams.
