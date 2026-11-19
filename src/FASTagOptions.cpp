@@ -646,6 +646,16 @@ void TOPPFASTag::registerOptionsAndFlags_()
                      "Proteins always appended to -fasta_out (host proteome, contaminants); decoys "
                      "and entries already in the database are left out", false);
   setValidFormats_("shortlist_background", ListUtils::create<std::string>("fasta"));
+  // 1.15.4: the shortlist recipe as the default of every tryptic shortlist run;
+  // 'plain' restores the 1.15.3 defaults (also the only way to turn
+  // -shortlist_gapped off again, since a flag cannot be given as off).
+  registerStringOption_("shortlist_defaults", "<set>", "recipe",
+                        "Defaults of a tryptic shortlist run (-shortlist_out, -fasta_out or -search_config_out): "
+                        "'recipe' (doc/SHORTLIST.md) sets -tag_length 4, -extension 6, -shortlist_gapped, "
+                        "-shortlist_max_evalue 10, -shortlist_min_spectra 1, -recon_min_length 6 and "
+                        "-recon_missed_cleavages 2 unless given; 'plain' keeps every option at its own default",
+                        false, true);
+  setValidStrings_("shortlist_defaults", ListUtils::create<std::string>("recipe,plain"));
   registerDoubleOption_("shortlist_max_evalue", "<f>", 0.1,
                         "E-value a tag needs for its placements to count for the shortlist. 10 by "
                         "the shortlist recipe default: with -shortlist_out, -fasta_out or -search_config_out and -shortlist_protease trypsin (doc/SHORTLIST.md), unless given on the command line or in an INI",

@@ -14,6 +14,7 @@
   `-fasta_out` on a metaproteome database came out empty (exit 13). The log
   line `Shortlist recipe defaults (...)` and the shortlist header name the
   values applied; an option given on the command line or in an INI wins.
+  `-shortlist_defaults plain` restores the 1.15.3 defaults.
   Runs without a shortlist output are unchanged. The recipe passed the
   second MSFragger held-out test and failed the third, so it is a working
   default, not a validated claim.

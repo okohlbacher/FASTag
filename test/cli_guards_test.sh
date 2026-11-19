@@ -317,6 +317,7 @@ grep -q "census_ids" "$TMP/ci6.log" || fail "no message naming -census_ids for a
 # reads the shipped models.
 export FASTAG_DIGEST_DIR="${FASTAG_DIGEST_DIR:-$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)/data/digest}"
 SLA=(-in "$IN" -tag_length 4 -extension 1 -fragment_tolerance 0.5 -fragment_tolerance_unit Da -threads 2)
+SLA+=(-shortlist_defaults plain)  # 1.15.4: pre-recipe defaults (the recipe: shortlist_cli_test section r)
 cp "$DB" "$TMP/sl_db.fasta"
 db_sum=$(cksum < "$TMP/sl_db.fasta")
 "$BIN" "${SLA[@]}" -out "$TMP/sl.tsv" -recon_fasta "$TMP/sl_db.fasta" -fasta_out "$TMP/sl_db.fasta" >"$TMP/sl1.log" 2>&1 \

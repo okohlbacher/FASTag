@@ -226,7 +226,8 @@ TOPPFASTag::ExitCodes TOPPFASTag::main_(int, const char**)
   {
     const bool recipe_on = (!getStringOption_("shortlist_out").empty() || !getStringOption_("fasta_out").empty() ||
                             !getStringOption_("search_config_out").empty()) &&
-                           getStringOption_("shortlist_protease") == "trypsin";
+                           getStringOption_("shortlist_protease") == "trypsin" &&
+                           getStringOption_("shortlist_defaults") == "recipe";
     const auto take = [&](const char* name, const std::string& shown) {
       const bool apply = recipe_on && !optionGiven_(name);
       if (apply) recipe_defaults_ += std::string(recipe_defaults_.empty() ? "" : ", ") + "-" + name + " " + shown;
@@ -1318,6 +1319,7 @@ TOPPFASTag::ExitCodes TOPPFASTag::main_(int, const char**)
         {"shortlist_parsimony", "-shortlist_out or -fasta_out", shortlist_on},
         {"shortlist_top", "-shortlist_out or -fasta_out", shortlist_on},
         {"shortlist_protease", "-shortlist_out, -fasta_out or -search_config_out", handoff_on},
+        {"shortlist_defaults", "-shortlist_out, -fasta_out or -search_config_out", handoff_on},
         {"shortlist_specificity", "-shortlist_protease other than trypsin", sl_nontryptic},
         {"search_engine", "-search_config_out", !search_config_out.empty()},
         {"search_config_template", "-search_config_out", !search_config_out.empty()},
