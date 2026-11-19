@@ -19,6 +19,9 @@ py=$(command -v python3 || command -v python)
 w=$(mktemp -d); trap 'rm -rf "$w"' EXIT
 mkdir -p "$w/in" "$w/gz" "$w/xz"
 tar -xzf "$pinned" -C "$w/in"
+# The pinned tarball was packed on a Mac: drop its AppleDouble metadata (._*),
+# which is not part of the index and would make the file lists below differ.
+find "$w/in" -name '._*' -type f -delete
 d="$w/in/share-FASTag-taxonomy"
 [ -d "$d" ] || { echo "::error::$pinned has no share-FASTag-taxonomy/"; exit 1; }
 "$py" "$here/check_taxonomy_manifest.py" "$d" "$manifest"
