@@ -20,7 +20,8 @@ namespace FASTag::CensusScore
   const Model& model()
   {
     // FROZEN-MODEL-BEGIN (tools/census_ident.py fit writes this block)
-    static const Model m{"unfitted", 0.0, {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}};
+    static const Model m{"pxd000561-dev-v1", -1.648331,
+                         {0.995422, -0.613517, 0.333596, 1.54932, 0.588419, -0.290168, 0.440959, 1.457329, -0.71173, -0.206347, -0.452941, -1.046685}};
     // FROZEN-MODEL-END
     return m;
   }
