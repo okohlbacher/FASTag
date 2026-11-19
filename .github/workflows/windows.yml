@@ -1165,7 +1165,8 @@ jobs:
           $target = ((rustc -vV) | Select-String '^host: ').ToString().Substring(6).Trim()
           python ../tools/gui_third_party_notices.py --gui . --target $target --platform windows --out src-tauri/resources/fastag/GUI-THIRD-PARTY-NOTICES.txt
           if ($LASTEXITCODE) { exit $LASTEXITCODE }
-          npm run tauri build; if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          # --verbose: shows WiX light.exe's own messages when the MSI step fails.
+          npm run tauri build -- --verbose; if ($LASTEXITCODE) { exit $LASTEXITCODE }
           Get-ChildItem src-tauri/target/release/bundle/nsis/ -ErrorAction SilentlyContinue
 
       # bundle.windows.nsis.compression is "lzma" in tauri.conf.json, set
