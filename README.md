@@ -352,8 +352,10 @@ it cannot know the analyser, so the setting is yours.
 
 ## File formats
 
-`-in` accepts mzML, [mzPeak](https://github.com/OpenMS/mzpeak) or MGF;
-`-out` is TSV; `-out_spectra` writes mzML or mzPeak, chosen by extension. All
+`-in` accepts mzML, [mzPeak](https://github.com/OpenMS/mzpeak) or MGF, and,
+in a build with timsTOF support, a Bruker timsTOF run as a `.d` directory or a
+zipped `.d.zip` (see [Bruker timsTOF](#bruker-timstof-d-dzip)), and, in a build
+with Thermo support, a Thermo `.raw` (see [Thermo .raw](#thermo-raw)); `-out` is TSV; `-out_spectra` writes mzML or mzPeak, chosen by extension. All
 six in/out combinations work, and on centroided input the container does not
 change the tags: a run read as mzPeak gives the same spectra as the same run
 read as mzML, and a run written to mzPeak and tagged again reproduces the
@@ -594,11 +596,134 @@ mzML→MGF is lossy** (m/z to 15 and intensities to 6 significant digits, so pea
 ranks can tie or swap), and tags from its MGFs can differ slightly. Its
 MGF→mzML direction is exact.
 
+### Bruker timsTOF (.d, .d.zip)
+
+A timsTOF DDA-PASEF run is read directly, as a `.d` directory or as a zipped
+`.d.zip` (the form PRIDE often serves), through OpenMS's `BrukerTimsFile`
+(opentims, MIT licensed; Bruker's own SDK is neither needed nor used). This
+needs a FASTag built against an OpenMS with `WITH_OPENTIMS=ON` (see
+BUILDING.md); a build without it refuses `.d` input with a message saying so.
+
+```bash
+FASTag -in run.d     -out tags.tsv -fragment_tolerance 20 -fragment_tolerance_unit ppm
+FASTag -in run.d.zip -out tags.tsv -fragment_tolerance 20 -fragment_tolerance_unit ppm
+```
+
+- **Spectra.** One MS2 spectrum per precursor: OpenMS merges the PASEF
+  windows of a precursor (over all frames it was fragmented in) and centroids
+  them. The MS1 frames are not decoded. Precursor m/z is the monoisotopic m/z
+  from `analysis.tdf`; m/z and 1/K0 come from the run's own calibration tables
+  (`MzCalibration`, `TimsCalibration`).
+- **Unknown charge.** A precursor whose monoisotopic peak the acquisition
+  software did not find has no charge in `analysis.tdf` (2-3 % of the
+  precursors in the PXD040281 runs measured); its m/z is that of its most
+  intense isotope peak. FASTag keeps the charge as unknown: `-unknown_charge`
+  decides how such a spectrum is tagged (`assume2`, the default, tags it as 2+
+  and records the charge source `assumed`; `infer` calls the charge from the
+  fragments), and the stderr log, the run summary and the `charge_source`
+  columns count them.
+- **Counts without decoding.** Before anything is decoded FASTag reads the
+  run's frame and precursor counts from `analysis.tdf` by SQL and logs them
+  (`Bruker timsTOF input (analysis.tdf): ... frames, ... MS1, ... DDA-PASEF
+  MS/MS, ... dia-PASEF MS/MS; ... precursors, ... without a charge`). For a
+  `.d.zip` only `analysis.tdf` is extracted for this.
+- **dia-PASEF is refused** from those same tables (a `DiaFrameMsMsWindows`
+  table with rows, or dia-PASEF MS/MS frames), with exit code 11 and the
+  `FASTAG_REFUSED reason=raw_dia` line, as for other raw DIA; nothing is
+  unpacked or decoded first. `-acquisition_check warn` or `off` hands the run
+  to the reader anyway.
+- **Temporary space for `.d.zip`.** The archive is unpacked in full for the
+  read, into OpenMS's temporary directory (`OPENMS_TMPDIR`, else `TMPDIR`), and
+  removed afterwards: about the archive's size again (8.06 GB for a 7.73 GB
+  PXD040281 run). FASTag refuses up front when that directory has less than
+  1.5x the archive's size free and names it; point `OPENMS_TMPDIR` at a local
+  disk or `/dev/shm`, or unzip once and give the `.d` directory.
+- **Memory.** The MS2 spectra are held in memory (not the MS1 frames): 4.6-4.9
+  GB peak RSS for a 120-min run of 200,000 precursors, tagging with 32 threads.
+- **Native IDs and USI.** Spectra keep OpenMS's native IDs,
+  `frame=<F> scan=<S> precursor=<P>`: the first PASEF window of precursor
+  `P` (Bruker's `Precursors.Id`). Converters that do not merge per precursor
+  (mzdata, timsrust, msconvert) write one spectrum per PASEF window instead
+  (`merged=<n> frame=<F> startScan=<S> endScan=<E>`); the two meet on frame
+  and scan of the first window. With `-usi_collection` the USI run is the name
+  without `.d` / `.d.zip`, and the index is `index:<i>`, the spectrum's
+  position among the run's MS2 spectra as FASTag reads them, since a spectrum
+  merged from several windows has no PSI native ID of its own.
+- **Not yet:** the desktop app's input probe and `-dump_spectrum` do not read
+  `.d` (they say so); timsTOF data without ion mobility (`analysis.tsf`) and
+  QTOF `.baf` data are refused.
+
+### Thermo .raw
+
+A FASTag built against an OpenMS with `WITH_THERMO_RAW=ON` (BUILDING.md) reads
+Thermo `.raw` files directly (`-in run.raw`), through OpenMS's
+`OnDiscThermoRawExperiment`: the openms-thermo-bridge around Thermo's
+RawFileReader, hosted in a .NET 8 runtime. Other builds refuse a `.raw` with a
+message; convert it with
+[ThermoRawFileParser](https://github.com/compomics/ThermoRawFileParser) then.
+
+- **Runtime.** A .NET 8 (or newer) runtime must be installed; set
+  `DOTNET_ROOT` if it is not where .NET installs itself. The bridge's managed
+  files (`ThermoWrapperManaged.dll`, Thermo's CommonCore assemblies) are found
+  in OpenMS's `share/OpenMS/openms_thermo_bridge/managed`, or where
+  `OPENMS_THERMO_MANAGED_DIR` points. A missing runtime ends the run before any
+  output is opened, with a hint.
+- **Reading.** The scan headers are indexed once (about 1 s for 30,000 scans);
+  each tagging thread then decodes the scans it is given through its own
+  handle, like the indexed mzML path. Memory stays per thread, plus the .NET
+  runtime (peak RSS 1.5–2.3× that of the same run as mzML on the runs below).
+- **Centroids.** Tagging reads Thermo's own centroids (vendor peak picking,
+  set explicitly: the reader's default is the acquired profile). Profile
+  scans as acquired stay available to code that measures peak shapes
+  (`FASTag::Thermo::open(path, Representation::PROFILE)` in
+  `src/ThermoInput.h`), and so does the resolving power the instrument states
+  per scan ("mass resolving power", MS:1000800; `massResolvingPower()`), for
+  the run QC.
+- **Reference and exception peaks.** OpenMS's reader leaves out the peaks
+  Thermo flags as reference or exception peaks (the lock-mass calibrant at
+  m/z 445.12 and others). ThermoRawFileParser keeps them unless given `-x`
+  (`--excludeExceptionData`). A `.raw` therefore gives exactly the tags of its
+  `ThermoRawFileParser -f=2 -x` conversion, but not of a default conversion:
+  on three development runs the tag sets of `.raw` and default conversion
+  overlapped with Jaccard 0.86–0.98 (below).
+- **Identifiers.** Native IDs are Thermo's
+  `controllerType=0 controllerNumber=1 scan=N`, as in ThermoRawFileParser's
+  and msconvert's mzML, so the tag table's `spectrum` column, the USI
+  (`-usi_collection`: run = file name without `.raw`, `scan:N`) and
+  `-census_ids` joins are the same for a run read as `.raw` or as mzML.
+  `-out_spectra` writes the tagged spectra as mzML or mzPeak with the Thermo
+  native-ID format (MS:1000768).
+- **Precursors.** m/z is the selected ion m/z the reader gives (the
+  monoisotopic m/z of the scan trailer where the instrument found one, as in
+  ThermoRawFileParser); a precursor without a charge stays charge 0, tagged per
+  `-unknown_charge` and counted with its charge source like any other input.
+- **Not yet:** `-probe_input` and `-dump_spectrum` (the desktop app's modes)
+  refuse `.raw`; a zipped `.raw.zip` is refused as compressed.
+- **Licence.** RawFileReader is Thermo Fisher Scientific's, under its own
+  licence (`share/OpenMS/LICENSES/ThermoRawFileReader-License.doc` of the
+  OpenMS install), not FASTag's MIT licence. A build that reads `.raw` prints
+  the notice that licence requires with `--version` and in `--help`:
+  "RawFileReader reading tool. Copyright © 2016 by Thermo Fisher Scientific,
+  Inc. All rights reserved." What bundling it in release packages would
+  require is in BOM.md (Thermo RawFileReader); the release bundles do not
+  include it yet.
+
+Checked on three development runs (two PXD000561 Orbitrap Velos/Elite runs,
+one PXD045734 Q Exactive run; FASTag 1.16 item 3): every spectrum, native ID,
+retention time, precursor m/z and charge, filter string and peak equal to the
+ThermoRawFileParser 2.0 `-f=2 -x` conversion, and every FASTag output (tags,
+census, `-recon_out`, the mass-shift survey tables) byte-identical once the
+input name is masked. Against the default conversion only the reference and
+exception peaks differ. ctest `thermo_cli_test` checks the build's gate
+always, and a real run when `FASTAG_THERMO_RAW` (and `FASTAG_THERMO_MZML` for
+the spectrum-level comparison, `thermo_parity`) name one; no `.raw` is
+vendored.
+
 ## Command-line reference
 
 | Option | Default | Meaning |
 |---|---|---|
-| `-in <file>` | — | Input spectra: mzML, mzpeak or MGF (uncompressed) |
+| `-in <file>` | — | Input spectra: mzML, mzpeak or MGF (uncompressed), or a Bruker timsTOF `.d` directory or `.d.zip` (DDA-PASEF; builds with timsTOF support, see File formats) |
 | `-out <file>` | — | Tag list, tab-separated |
 | `-fasta <file>` | none | Report only tags occurring in these sequences |
 | `-out_spectra <file>` | none | Write spectra carrying a reported tag here, as mzML or mzpeak (by extension). Needs memory proportional to the *file*, not the thread count, unlike every other path |
@@ -766,10 +891,10 @@ half.
 |---|---|---|
 | 0 | EXECUTION_OK | Success |
 | 2 | INPUT_FILE_NOT_READABLE | The input cannot be opened or read |
-| 3 | INPUT_FILE_CORRUPT | The input cannot be decoded, the `-digest_models` table or a shipped digest table is invalid, or the species index or taxonomy cannot be loaded |
+| 3 | INPUT_FILE_CORRUPT | The input cannot be decoded (a `.raw` also when no .NET 8 runtime is found), the `-digest_models` table or a shipped digest table is invalid, or the species index or taxonomy cannot be loaded |
 | 4 | INPUT_FILE_EMPTY | The `-fasta` or `-entrapment_fasta` file has no usable sequence, or an MGF input has no `BEGIN IONS` block |
 | 5 | CANNOT_WRITE_OUTPUT_FILE | An output cannot be written, for example because the disk is full |
-| 6 | ILLEGAL_PARAMETERS | Options conflict, a value is out of range, or the input is not mzML, mzPeak or MGF (or is a compressed mzML or MGF) |
+| 6 | ILLEGAL_PARAMETERS | Options conflict, a value is out of range, or the input is not mzML, mzPeak or MGF (or is a compressed mzML or MGF), or is a `.raw` and the build has no Thermo support |
 | 11 | INCOMPATIBLE_INPUT_DATA | The input is raw DIA (see Raw DIA input is refused; stderr carries a `FASTAG_REFUSED` line); `-out_spectra` is `.mzpeak` but the MS2 spectra carry ion mobility per peak (write `.mzML` instead); or the `-census_ids` file cannot be joined to the run (see below) |
 | 13 | UNEXPECTED_RESULT | See below |
 

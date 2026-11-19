@@ -6,6 +6,35 @@ Mass-shift survey (`-delta_out`). Tag output is unchanged; `-recon_out`'s
 `delta_interp` changes (the ppm fix and the substitution tolerance below), and
 so do `-delta_out`'s rows (`-delta_group`).
 
+- **Bruker timsTOF input (`-in run.d`, `-in run.d.zip`):** DDA-PASEF runs are
+  read directly through OpenMS's `BrukerTimsFile` (opentims; no Bruker SDK) in
+  a build against an OpenMS with `WITH_OPENTIMS=ON` (BUILDING.md); other builds
+  refuse `.d` with a message. One centroided MS2 spectrum per precursor, MS1
+  frames not decoded; a `.d.zip` is unpacked into `OPENMS_TMPDIR` for the read
+  (refused up front when less than 1.5x the archive is free there). Frame and
+  precursor counts come from `analysis.tdf` by SQL before anything is decoded,
+  and dia-PASEF is refused from them (exit 11, `FASTAG_REFUSED reason=raw_dia`).
+  Precursors without a charge keep charge 0 (unknown) and are tagged per
+  `-unknown_charge`, with their charge source reported. `-probe_input` and
+  `-dump_spectrum` do not read `.d` yet. New ctest `bruker_cli_test` on a
+  trimmed PXD040281 run (`test/fixtures/bruker/`). The input-type error now
+  reads "is neither .mzML, .mzpeak, .mgf, a Thermo .raw nor a Bruker timsTOF .d
+  directory or .d.zip archive". Tag output for mzML, mzPeak and MGF is unchanged.
+- **Thermo `.raw` input** in a build against an OpenMS with
+  `WITH_THERMO_RAW=ON` (needs a .NET 8 runtime; BUILDING.md): read through
+  OpenMS's `OnDiscThermoRawExperiment`, random access with one handle per
+  tagging thread, Thermo's vendor centroiding set explicitly (the reader's
+  default is profile; `src/ThermoInput.h` keeps a profile path and the
+  instrument-stated resolving power for the run QC). Native IDs, USIs and
+  `-census_ids` joins match ThermoRawFileParser's mzML. On three development
+  runs every spectrum and every output equals the ThermoRawFileParser 2.0
+  `-f=2 -x` conversion; a default conversion differs by the reference and
+  exception peaks it keeps (tag Jaccard 0.86–0.98). Builds without Thermo
+  support refuse `.raw` with a message; `-probe_input`/`-dump_spectrum`
+  refuse it for now. RawFileReader's required notice is printed by the new
+  `--version` and in `--help`, and added to bundle notices; release bundles
+  do not include the reader yet (BOM.md, Thermo RawFileReader). ctest
+  `thermo_cli_test` (data part with `FASTAG_THERMO_RAW`) and `thermo_parity`.
 - **Mass-shift survey (`-delta_out`):** five columns appended (six with
   `isotope_error`, below). `localized` and `unlocalized` count the spectra whose gap the
   fragments do or do not place on one site, judged by site-determining

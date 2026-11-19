@@ -182,6 +182,16 @@ def licence_texts(rec: dict, prefix: Path, cache: Path, log: list[str]) -> list[
     return []
 
 
+THERMO_NOTICE = """Thermo RawFileReader (Thermo .raw input)
+  RawFileReader reading tool. Copyright \u00a9 2016 by Thermo Fisher Scientific, Inc. All rights reserved.
+  ThermoFisher.CommonCore.*.dll (in share-OpenMS/openms_thermo_bridge/managed/) are Thermo Fisher
+  Scientific's RawFileReader, licensed under its own licence,
+  share-OpenMS/LICENSES/ThermoRawFileReader-License.doc, NOT under FASTag's MIT licence: among
+  other terms, they may not be redistributed by end users, nor exploited commercially without
+  Thermo's written consent. The openms-thermo-bridge that loads them (BSD-3-Clause) and its
+  other assemblies are listed in share-OpenMS/THIRD-PARTY-NOTICES.txt."""
+
+
 def main() -> int:
     if len(sys.argv) < 4:
         print(__doc__, file=sys.stderr)
@@ -232,6 +242,12 @@ def main() -> int:
     if unowned:
         lines += ["", "Libraries not installed by a conda package (built with FASTag/OpenMS):"]
         lines += [f"  {lib}" for lib in unowned]
+    # A bundle whose OpenMS reads Thermo .raw carries Thermo's RawFileReader
+    # (through openms_thermo_bridge), which is not MIT and not a conda
+    # package. Its licence asks for this notice (section 3.2); the licence
+    # itself and the bridge's own notices travel in share-OpenMS/.
+    if any("openms_thermo_bridge" in lib for lib in libs):
+        lines += ["", THERMO_NOTICE]
     lines += ["", "Libraries by package:"]
     for name in sorted(used):
         lines.append(f"  {name}: {', '.join(libs_of[name])}")

@@ -60,13 +60,18 @@ TOPPFASTag::TOPPFASTag()
   // FASTAG_VERSION comes from project(FASTag VERSION ...).
   version_ = FASTAG_VERSION;
   verboseVersion_ = std::string(FASTAG_VERSION) + " (OpenMS " + VersionInfo::getVersion() + ")";
+  // A build that reads .raw includes Thermo's RawFileReader, whose licence
+  // asks for its notice in the About text: on the help's Version line (the
+  // GUI reads only the first word after "Version:") and in --version.
+  if (FASTag::Thermo::supported())
+    verboseVersion_ += std::string("; ") + FASTag::Thermo::copyrightNotice();
 }
 
 void TOPPFASTag::registerOptionsAndFlags_()
 {
   // No setValidFormats_ on the two spectrum files: main_ decides by type
   // and refuses an unsupported one with its own message.
-  registerInputFile_("in", "<file>", "", "Input spectra (mzML, mzpeak or MGF)", /*required=*/false);
+  registerInputFile_("in", "<file>", "", "Input spectra (mzML, mzpeak, MGF; Thermo .raw or a Bruker timsTOF .d directory or .d.zip in a build with that vendor's support)", /*required=*/false);
   registerOutputFile_("out", "<file>", "", "Tag list (tab-separated)", /*required=*/false);
   setValidFormats_("out", ListUtils::create<std::string>("tsv"));
 

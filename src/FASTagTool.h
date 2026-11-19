@@ -42,6 +42,7 @@
 #include "AcquisitionProbe.h"
 #include "AlkylationCall.h"
 #include "AlkylationTags.h"
+#include "BrukerInput.h"
 #include "Centroid.h"
 #include "CliParam.h"
 #include "ComplementTol.h"
@@ -77,6 +78,7 @@
 #include "TaxDeconv.h"
 #include "TaxIndex.h"
 #include "TaxStats.h"
+#include "ThermoInput.h"
 #include "Usi.h"
 #include "MzPeakStream.h"
 

@@ -91,12 +91,16 @@ set(FASTAG_CORE_SOURCES_A src/Shortlist.cpp src/SearchConfig.cpp)
 # ---- 1.12 D: core sources ----
 set(FASTAG_CORE_SOURCES_D src/SpeciesLookup.cpp src/SpeciesCall.cpp src/AlkylationCall.cpp src/AlkylationTags.cpp src/Sha256.cpp)
 # ---- 1.12 F: core sources ----
-set(FASTAG_CORE_SOURCES_F src/OutputGuard.cpp src/CensusIds.cpp)
+set(FASTAG_CORE_SOURCES_F src/OutputGuard.cpp src/CensusIds.cpp
+    src/ThermoInput.cpp)  # 1.16: Thermo .raw input (WITH_THERMO_RAW)
 # ---- 1.13: core sources ----
 set(FASTAG_CORE_SOURCES_113 src/Cleavage.cpp)
+# ---- 1.16: core sources ----
+# Bruker timsTOF input through OpenMS's BrukerTimsFile (WITH_OPENTIMS).
+set(FASTAG_CORE_SOURCES_116 src/BrukerInput.cpp)
 add_library(fastag_core STATIC ${FASTAG_CORE_SOURCES}
             ${FASTAG_CORE_SOURCES_E} ${FASTAG_CORE_SOURCES_A} ${FASTAG_CORE_SOURCES_D} ${FASTAG_CORE_SOURCES_F}
-            ${FASTAG_CORE_SOURCES_113})
+            ${FASTAG_CORE_SOURCES_113} ${FASTAG_CORE_SOURCES_116})
 target_include_directories(fastag_core PUBLIC
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/src>)
@@ -321,6 +325,13 @@ if(FASTAG_BUILD_TESTS)
                    ${CMAKE_CURRENT_SOURCE_DIR}/test/fixtures/Ecoli_MS2_small.fasta
                    ${CMAKE_CURRENT_SOURCE_DIR}/test/fixtures/delta_sites.mgf)
   set_tests_properties(delta_sites_cli_test PROPERTIES SKIP_RETURN_CODE 77)
+
+  # 1.16: Bruker timsTOF input (.d, .d.zip, dia-PASEF refusal) on a trimmed
+  # real run; a build without WITH_OPENTIMS checks its refusal instead.
+  add_test(NAME bruker_cli_test
+           COMMAND bash ${CMAKE_CURRENT_SOURCE_DIR}/test/bruker_cli_test.sh $<TARGET_FILE:FASTag>
+                   ${CMAKE_CURRENT_SOURCE_DIR}/test/fixtures)
+  set_tests_properties(bruker_cli_test PROPERTIES SKIP_RETURN_CODE 77)
 
   # 1.12 P4: the shared run report section (src/RunMeta.h) is frozen here.
   add_executable(runmeta_test test/runmeta_test.cpp)
@@ -841,6 +852,18 @@ if(FASTAG_BUILD_TESTS)
   target_compile_definitions(deisotoper_test PRIVATE
                              FASTAG_TEST_DATA="${CMAKE_CURRENT_SOURCE_DIR}/test/fixtures")
   add_test(NAME deisotoper_test COMMAND deisotoper_test)
+
+  # 1.16: Thermo .raw input. thermo_parity is the stage-1 check of a .raw
+  # against its reference conversion (tolerances in the source). The CLI test
+  # always checks the gate (refusal, or --version notice and bad files); with
+  # FASTAG_THERMO_RAW / FASTAG_THERMO_MZML set it also tags a real run and
+  # runs thermo_parity, else that part is skipped (77; no RAW is vendored).
+  add_executable(thermo_parity test/thermo_parity.cpp)
+  target_link_libraries(thermo_parity PRIVATE fastag_core)
+  add_test(NAME thermo_cli_test
+           COMMAND bash ${CMAKE_CURRENT_SOURCE_DIR}/test/thermo_cli_test.sh $<TARGET_FILE:FASTag>
+                   $<TARGET_FILE:thermo_parity>)
+  set_tests_properties(thermo_cli_test PROPERTIES SKIP_RETURN_CODE 77)
 
   # One short run per acquisition class, gaps and deisotoping ON.
   #

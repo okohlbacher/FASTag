@@ -9,6 +9,7 @@
 #include "IndexedMzMLReader.h"
 #include "MgfReader.h"
 #include "MzPeakStream.h"
+#include "ThermoInput.h"
 
 #include <OpenMS/CONCEPT/Exception.h>
 #include <OpenMS/FORMAT/FileHandler.h>
@@ -135,7 +136,7 @@ namespace FASTag::Acquisition
       else
       {
         // DIAspeXtract and diaTracer name themselves in the mzML header.
-        const bool provenance = !src.mgf && mzmlHeaderProvenance(in);
+        const bool provenance = !src.mgf && !src.ra && mzmlHeaderProvenance(in);
         std::function<MSSpectrum(Size)> head;
         std::shared_ptr<PeakMap> od_meta;
         if (src.mgf)
@@ -149,6 +150,8 @@ namespace FASTag::Acquisition
               return MSSpectrum();
             }
           };
+        else if (src.ra)
+          head = [&](Size i) { return i < src.ra->getNrSpectra() ? FASTag::Thermo::ms2Metadata(*src.ra, i) : MSSpectrum(); };
         else if (src.fastmz)
           head = nullptr;  // collectFastMs2Meta() below
         else if (src.ondisc && (od_meta = src.ondisc->getMetaData()))
@@ -178,10 +181,17 @@ namespace FASTag::Acquisition
     std::unique_ptr<FASTag::MgfReader> mgf;
     std::unique_ptr<FASTag::IndexedMzMLReader> fastmz;
     auto ondisc = std::make_unique<OnDiscMSExperiment>();
+    std::unique_ptr<OpenMS::IMSExperimentRandomAccess> ra;
     PeakMap exp;
     try
     {
-      if (FileHandler::getTypeByFileName(in) == FileTypes::MZPEAK || MzPeakFile::isMzPeak(in))
+      if (FASTag::Thermo::isThermoPath(in))
+      {
+        ra = FASTag::Thermo::open(in);
+        src.ra = ra.get();
+        src.n_total = ra->getNrSpectra();
+      }
+      else if (FileHandler::getTypeByFileName(in) == FileTypes::MZPEAK || MzPeakFile::isMzPeak(in))
       {
         src.mzpeak = true;
         src.mzpeak_threads = mzpeak_threads;
