@@ -268,7 +268,9 @@ mkdir -p "$TMP/r3"; ( cd "$TMP/r3" && "$BIN" "${RIN[@]}" -out t.tsv "${NEW[@]}" 
 grep -q -i 'recipe defaults' "$TMP/r3/run.log" "$TMP/r3/sl.tsv" && fail "r: plain still applied the recipe"
 cmp -s "$TMP/r2/t.tsv" "$TMP/r3/t.tsv" || fail "r: plain shortlist outputs changed the tag TSV"
 # tagging options given on the command line win: the tags equal a run without a shortlist
-rgo "$TMP/r4" -out t.tsv "${NEW[@]}" -tag_length 3 -extension 0
+# (tags of 3 without extension cannot reach the recipe's -recon_min_length 6: empty shortlist, exit 13)
+mkdir -p "$TMP/r4"; ( cd "$TMP/r4" && "$BIN" "${RIN[@]}" -out t.tsv "${NEW[@]}" -tag_length 3 -extension 0 > run.log 2>&1 ); rc=$?
+[ $rc = 13 ] || { cat "$TMP/r4/run.log" >&2; fail "r: r4: exit $rc, not 13"; }
 cmp -s "$TMP/r2/t.tsv" "$TMP/r4/t.tsv" || fail "r: explicit -tag_length 3 -extension 0 lost under the recipe"
 grep -q -- '-tag_length 4\|-extension 6' <(grep 'Shortlist recipe defaults' "$TMP/r4/run.log") && fail "r: the log lists a tagging value the command line set"
 # -tag_lengths replaces -tag_length, so the recipe leaves both alone
