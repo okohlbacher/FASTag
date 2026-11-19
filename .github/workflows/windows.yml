@@ -77,6 +77,12 @@ env:
   # release contains -- and part of the cache key. Keep in lockstep with
   # ci.yml.
   OPENMS_REF: 70cebcd14442cecd6bcd9794fb6786d3342cacc6
+  # The .NET pins of ci.yml (vendor readers, 1.15.2): the SDK builds the Thermo
+  # bridge's managed half (part of the OpenMS cache key), the runtime ships in
+  # the bundle. Must move in lockstep with ci.yml.
+  DOTNET_SDK_VERSION: "8.0.428"
+  DOTNET_RUNTIME_VERSION: "8.0.34"
+  THERMO_SMOKE_RAW_SHA256: ad87e20816a6383fa38f4991b3df012d8a05e92c1e67d8e9e1ef0b6a979330f2
   # SignPath PROJECT slug. Empty because no project exists yet.
   #
   # 'OpenMS_Apps' briefly lived here and was wrong: that is the slug of a
@@ -153,7 +159,7 @@ jobs:
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
         with:
           path: openms-install
-          key: windows-x64-openms-${{ env.OPENMS_REF }}-msvc2022-${{ hashFiles('fastag/.github/env/openms.yml') }}-v1
+          key: windows-x64-openms-${{ env.OPENMS_REF }}-msvc2022-${{ hashFiles('fastag/.github/env/openms.yml') }}-vendor-dotnet${{ env.DOTNET_SDK_VERSION }}-v1
 
       - name: Install OpenMS's dependencies
         if: steps.cache-openms.outputs.cache-hit != 'true'
@@ -189,11 +195,23 @@ jobs:
           grep -q '"/we4100"' src/openms/CMakeLists.txt
           sed -i -e 's#"/we4100"#"/w14100"#' -e 's#"/we4189"#"/w14189"#' src/openms/CMakeLists.txt
 
+      # The .NET SDK the Thermo bridge's managed half is built with (ci.yml).
+      - name: Install the .NET SDK (OpenMS Thermo bridge)
+        if: steps.cache-openms.outputs.cache-hit != 'true'
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          Invoke-WebRequest -Uri https://dot.net/v1/dotnet-install.ps1 -OutFile "$env:RUNNER_TEMP\dotnet-install.ps1"
+          & "$env:RUNNER_TEMP\dotnet-install.ps1" -Version $env:DOTNET_SDK_VERSION -InstallDir "$env:RUNNER_TEMP\dotnet-sdk" -NoPath
+          & "$env:RUNNER_TEMP\dotnet-sdk\dotnet.exe" --info | Select-Object -First 20
+
       - name: Build and install OpenMS
         if: steps.cache-openms.outputs.cache-hit != 'true'
         shell: bash -el {0}
         run: |
           set -euo pipefail
+          DN="${RUNNER_TEMP//\\//}/dotnet-sdk"
+          export DOTNET_ROOT="$DN" DOTNET_CLI_TELEMETRY_OPTOUT=1 DOTNET_NOLOGO=1
           # conda's Windows packages live under Library/. Forward slashes:
           # CMake treats a backslash in a quoted path as an escape.
           # Not LIB: that is MSVC's library search path, and overwriting it
@@ -216,7 +234,8 @@ jobs:
             -DOPENMS_ENABLE_MZPEAK=ON \
             -DARROW_USE_STATIC=OFF \
             -DWITH_GUI=OFF -DPYOPENMS=OFF -DENABLE_DOCS=OFF -DHAS_XSERVER=OFF \
-            -DWITH_OPENTIMS=OFF -DWITH_THERMO_RAW=OFF \
+            -DWITH_OPENTIMS=ON -DWITH_THERMO_RAW=ON \
+            -DDOTNET_EXECUTABLE="$DN/dotnet.exe" \
             -DMT_ENABLE_OPENMP=ON -DMT_REQUIRE_OPENMP=ON \
             -DBUILD_TOPP_TOOLS=OFF \
             -DINSTALL_OPENMS_EXAMPLES=OFF \
@@ -238,6 +257,14 @@ jobs:
           grep -q "void store(" "$HDR"
           find openms-install -type d -path '*/share/OpenMS' | grep -q . \
             || { echo "::error::No share/OpenMS after install."; exit 1; }
+          # The vendor readers (1.15.2): the Thermo bridge's managed half and
+          # Thermo's licence in share/OpenMS, which the bundle copies.
+          find openms-install -path '*/share/OpenMS/openms_thermo_bridge/managed/ThermoWrapperManaged.dll' | grep -q . \
+            || { echo "::error::No Thermo bridge managed files in share/OpenMS."; exit 1; }
+          find openms-install -path '*/share/OpenMS/LICENSES/ThermoRawFileReader-License.doc' | grep -q . \
+            || { echo "::error::No ThermoRawFileReader-License.doc in share/OpenMS."; exit 1; }
+          find openms-install -name 'BrukerTimsFile.h' | grep -q . \
+            || { echo "::error::OpenMS installed without the timsTOF reader."; exit 1; }
 
   # ----------------------------------------------------------------- FASTag
   #
@@ -299,7 +326,7 @@ jobs:
         uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
         with:
           path: openms-install
-          key: windows-x64-openms-${{ env.OPENMS_REF }}-msvc2022-${{ hashFiles('fastag/.github/env/openms.yml') }}-v1
+          key: windows-x64-openms-${{ env.OPENMS_REF }}-msvc2022-${{ hashFiles('fastag/.github/env/openms.yml') }}-vendor-dotnet${{ env.DOTNET_SDK_VERSION }}-v1
           fail-on-cache-miss: true
 
       - name: Install the dependencies

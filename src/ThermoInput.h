@@ -113,4 +113,13 @@ namespace FASTag::Thermo
     environment variables to check. Empty when the error does not look like one.
   */
   std::string runtimeHint(const std::string& error);
+
+  /**
+    @brief Points DOTNET_ROOT at the .NET runtime shipped beside the executable
+    (<executable dir>/dotnet, as the release bundles carry it), unless
+    DOTNET_ROOT is set already or there is no such directory. Call once, first
+    thing in main(): OpenMS's Thermo bridge reads DOTNET_ROOT when it starts
+    the runtime. A no-op in a build without Thermo support.
+  */
+  void useBundledRuntime();
 }

@@ -175,6 +175,13 @@ pub fn build<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<Menu<R>> {
             version: Some(pkg.version.to_string()),
             copyright: app.config().bundle.copyright.clone(),
             authors: app.config().bundle.publisher.clone().map(|p| vec![p]),
+            // RawFileReader distribution licence, section 3.2 (verbatim; the
+            // Help > About dialog and the CLI's --version carry it too).
+            credits: Some(
+                "Thermo .raw input, in the builds that include it: RawFileReader reading tool. \
+                 Copyright \u{a9} 2016 by Thermo Fisher Scientific, Inc. All rights reserved."
+                    .to_string(),
+            ),
             ..Default::default()
         };
         let quit = MenuItem::with_id(app, QUIT_ID, format!("Quit {}", pkg.name), true, Some("CmdOrCtrl+Q"))?;

@@ -5,6 +5,11 @@
 import type { JSX } from 'react'
 import type { BinaryInfo } from '../types'
 
+// RawFileReader distribution licence, section 3.2: shown verbatim in the About
+// box of software that distributes it (the CLI prints it in --version/--help).
+export const THERMO_NOTICE =
+  'RawFileReader reading tool. Copyright \u00a9 2016 by Thermo Fisher Scientific, Inc. All rights reserved.'
+
 export default function AboutDialog({ bin, onClose }: { bin: BinaryInfo | null; onClose(): void }): JSX.Element {
   return (
     <div className="modal-backdrop" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
@@ -27,6 +32,9 @@ export default function AboutDialog({ bin, onClose }: { bin: BinaryInfo | null; 
         <p className="muted">
           An OpenMS TOPP tool. MIT licence. By Oliver Kohlbacher and contributors.
           {bin && !bin.ok ? ` The FASTag command-line tool cannot start: ${bin.detail}.` : ''}
+        </p>
+        <p className="muted">
+          Thermo .raw input, in the builds that include it: {THERMO_NOTICE}
         </p>
         <div className="row actions">
           <button type="button" className="secondary" autoFocus onClick={onClose}>

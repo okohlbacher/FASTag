@@ -7,6 +7,7 @@
 #include "ThermoInput.h"
 
 #include <OpenMS/CONCEPT/Exception.h>
+#include <OpenMS/SYSTEM/File.h>
 #include <OpenMS/config.h>
 
 #ifdef WITH_THERMO_RAW
@@ -15,6 +16,7 @@
 
 #include <algorithm>
 #include <cctype>
+#include <cstdlib>
 
 using namespace OpenMS;
 
@@ -106,8 +108,24 @@ namespace FASTag::Thermo
                          || e.find("hostfxr") != std::string::npos || e.find("managed") != std::string::npos
                          || e.find("runtime") != std::string::npos || e.find("bridge") != std::string::npos;
     if (!runtime) return {};
-    return "Reading .raw needs a .NET 8 (or newer) runtime: install it, or set DOTNET_ROOT to where it is; "
+    return "Reading .raw needs a .NET 8 (or newer) runtime: the release bundles carry one (dotnet/ beside the "
+           "executable); otherwise install it, or set DOTNET_ROOT to where it is; "
            "OPENMS_THERMO_MANAGED_DIR may name the directory with the bridge's managed files "
            "(ThermoWrapperManaged.dll and the Thermo CommonCore assemblies).";
+  }
+
+  void useBundledRuntime()
+  {
+#ifdef WITH_THERMO_RAW
+    const char* set = std::getenv("DOTNET_ROOT");
+    if (set != nullptr && *set != '\0') return;
+    const std::string dir = File::getExecutablePath() + "dotnet";
+    if (!File::isDirectory(dir)) return;
+#ifdef _WIN32
+    _putenv_s("DOTNET_ROOT", dir.c_str());
+#else
+    ::setenv("DOTNET_ROOT", dir.c_str(), 0);
+#endif
+#endif
   }
 }

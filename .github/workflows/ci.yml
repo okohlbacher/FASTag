@@ -117,6 +117,19 @@ env:
   # read the floor off that plist. OpenMS is built here with the same floor,
   # and the floor is part of its cache key.
   MACOS_MIN_VERSION: "13.4"
+  # Vendor readers (1.15.2): OpenMS is built WITH_OPENTIMS=ON (Bruker .d,
+  # opentims, MIT) and WITH_THERMO_RAW=ON (Thermo .raw through
+  # openms-thermo-bridge and Thermo's RawFileReader assemblies). The bridge's
+  # managed half is compiled by this .NET SDK (part of the OpenMS cache key);
+  # the bundles carry the matching .NET runtime (MIT), which the CLI finds
+  # beside itself (src/ThermoInput.h, useBundledRuntime). Both pinned:
+  # dotnet-install takes an exact version. windows.yml carries the same pins.
+  DOTNET_SDK_VERSION: "8.0.428"
+  DOTNET_RUNTIME_VERSION: "8.0.34"
+  # A Thermo .raw from OpenMS's own test data at OPENMS_REF (2 MB, small
+  # molecules: it has MS2 but no peptide tags). It proves a bundle's
+  # Thermo reader starts its .NET runtime and reads scans.
+  THERMO_SMOKE_RAW_SHA256: ad87e20816a6383fa38f4991b3df012d8a05e92c1e67d8e9e1ef0b6a979330f2
 
 jobs:
   # ------------------------------------------------------ release version
@@ -259,7 +272,7 @@ jobs:
         uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
         with:
           path: openms-install
-          key: openms-${{ env.OPENMS_REF }}-${{ matrix.name }}-${{ matrix.toolchain }}-${{ hashFiles('.github/env/openms.yml') }}-osx${{ env.MACOS_MIN_VERSION }}-v1
+          key: openms-${{ env.OPENMS_REF }}-${{ matrix.name }}-${{ matrix.toolchain }}-${{ hashFiles('.github/env/openms.yml') }}-osx${{ env.MACOS_MIN_VERSION }}-vendor-dotnet${{ env.DOTNET_SDK_VERSION }}-v1
 
       - name: Check out OpenMS at the pinned commit
         if: steps.openms-cache.outputs.cache-hit != 'true'
@@ -281,6 +294,18 @@ jobs:
           git checkout -q "$OPENMS_REF"
           test -f src/openms/include/OpenMS/FORMAT/MzPeakFile.h
 
+      # The .NET SDK the Thermo bridge's managed half is built with (only
+      # when OpenMS is built; the runtime the CLI uses is installed below on
+      # every run).
+      - name: Install the .NET SDK (OpenMS Thermo bridge)
+        if: steps.openms-cache.outputs.cache-hit != 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl -fsSL --retry 3 -o "$RUNNER_TEMP/dotnet-install.sh" https://dot.net/v1/dotnet-install.sh
+          bash "$RUNNER_TEMP/dotnet-install.sh" --version "$DOTNET_SDK_VERSION" --install-dir "$RUNNER_TEMP/dotnet-sdk" --no-path
+          "$RUNNER_TEMP/dotnet-sdk/dotnet" --info | head -20
+
       - name: Build and install OpenMS
         if: steps.openms-cache.outputs.cache-hit != 'true'
         shell: bash -el {0}
@@ -288,8 +313,11 @@ jobs:
           set -euo pipefail
           # The flags the cluster build of this commit used, minus the TOPP
           # tools: FASTag links libOpenMS and OpenMS_CLI, which build without
-          # them. No GUI, pyOpenMS, docs, tests, Thermo or timsTOF readers.
+          # them. No GUI, pyOpenMS, docs or tests. The vendor readers ON
+          # (1.15.2): timsTOF (opentims) and Thermo (bridge, built by the SDK
+          # above; DOTNET_ROOT for its build-time runs).
           # mzPeak ON (the vendored library); Arrow shared, from conda.
+          export DOTNET_ROOT="$RUNNER_TEMP/dotnet-sdk" DOTNET_CLI_TELEMETRY_OPTOUT=1 DOTNET_NOLOGO=1
           OSX_MIN=()
           if [ "$RUNNER_OS" = macOS ]; then
             export MACOSX_DEPLOYMENT_TARGET="$MACOS_MIN_VERSION"
@@ -303,7 +331,8 @@ jobs:
             -DOPENMS_ENABLE_MZPEAK=ON \
             -DARROW_USE_STATIC=OFF \
             -DWITH_GUI=OFF -DPYOPENMS=OFF -DENABLE_DOCS=OFF -DHAS_XSERVER=OFF \
-            -DWITH_OPENTIMS=OFF -DWITH_THERMO_RAW=OFF \
+            -DWITH_OPENTIMS=ON -DWITH_THERMO_RAW=ON \
+            -DDOTNET_EXECUTABLE="$RUNNER_TEMP/dotnet-sdk/dotnet" \
             -DMT_ENABLE_OPENMP=ON -DMT_REQUIRE_OPENMP=ON \
             -DBUILD_TOPP_TOOLS=OFF \
             -DINSTALL_OPENMS_EXAMPLES=OFF \
@@ -318,7 +347,7 @@ jobs:
         uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
         with:
           path: openms-install
-          key: openms-${{ env.OPENMS_REF }}-${{ matrix.name }}-${{ matrix.toolchain }}-${{ hashFiles('.github/env/openms.yml') }}-osx${{ env.MACOS_MIN_VERSION }}-v1
+          key: openms-${{ env.OPENMS_REF }}-${{ matrix.name }}-${{ matrix.toolchain }}-${{ hashFiles('.github/env/openms.yml') }}-osx${{ env.MACOS_MIN_VERSION }}-vendor-dotnet${{ env.DOTNET_SDK_VERSION }}-v1
 
       - name: Verify the OpenMS install
         shell: bash
@@ -329,6 +358,14 @@ jobs:
           test -f openms-install/include/OpenMS/FORMAT/MzPeakFile.h
           test -f openms-install/include/OpenMS/APPLICATIONS/TOPPBase.h
           test -d openms-install/share/OpenMS
+          # The vendor readers (1.15.2): the Thermo bridge's managed half and
+          # Thermo's licence in share/OpenMS (the bundles copy that tree), and
+          # the readers' headers.
+          test -s openms-install/share/OpenMS/openms_thermo_bridge/managed/ThermoWrapperManaged.dll
+          test -s openms-install/share/OpenMS/openms_thermo_bridge/managed/ThermoFisher.CommonCore.RawFileReader.dll
+          test -s openms-install/share/OpenMS/LICENSES/ThermoRawFileReader-License.doc
+          test -f openms-install/include/OpenMS/FORMAT/OnDiscThermoRawExperiment.h
+          find openms-install/include -name 'BrukerTimsFile.h' | grep -q .
           grep -m1 -oE 'PACKAGE_VERSION "[^"]+"' openms-install/lib/cmake/OpenMS/OpenMSConfigVersion.cmake
 
       - name: Point the build at OpenMS

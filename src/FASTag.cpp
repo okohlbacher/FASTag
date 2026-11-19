@@ -6167,6 +6167,9 @@ int main(int argc, const char** argv)
 #else
   ::setenv("OPENMS_DISABLE_UPDATE_CHECK", "ON", 0);
 #endif
+  // Thermo .raw: the .NET runtime the release bundles ship beside the
+  // executable, unless the user's DOTNET_ROOT names another (1.15.2).
+  FASTag::Thermo::useBundledRuntime();
 #ifdef FASTAG_MIMALLOC
   // Which heap this process allocates from. The redirection has to cover the
   // DLLs (libxml2, OpenMS), so it is only real when mimalloc-redirect.dll
