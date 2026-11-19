@@ -867,6 +867,90 @@ export const PARAM_UI: Record<string, ParamUi> = {
       text: 'Where the census run summary goes. By default next to the tags file, ending in .census_summary.tsv.'
     }
   },
+  delta_counts_out: {
+    hidden: '1.15.2 experimental command-line option, not in the form (CLI default applies)',
+    help: {
+      text: 'The reconciliation of the mass-shift survey: how many MS2 spectra reach each step, with sum checks.'
+    }
+  },
+  delta_group: {
+    hidden: '1.15.2 experimental command-line option, not in the form (CLI default applies)',
+    help: {
+      text: 'How wide one row of the mass-shift survey may be, in Da: neighbouring bins within this distance of the most populated one form one row.'
+    }
+  },
+  delta_isobar_tolerance: {
+    hidden: '1.15.2 experimental command-line option, not in the form (CLI default applies)',
+    help: {
+      text: 'How close two explanations of a mass shift must be to be listed as exact isobars (oxidation and Ala to Ser, for example).'
+    }
+  },
+  delta_isotope_flank: {
+    hidden: '1.15.2 experimental command-line option, not in the form (CLI default applies)',
+    help: {
+      text: 'Which survey rows may be called an isotope error: only rows whose gaps mostly sit on the precursor-derived side, or any row.'
+    }
+  },
+  delta_loc_min_evidence: {
+    hidden: '1.15.2 experimental command-line option, not in the form (CLI default applies)',
+    help: {
+      text: 'How much more evidence the best site needs than the next one before a mass shift counts as localized by the fragments.'
+    }
+  },
+  delta_loc_model: {
+    hidden: '1.15.2 experimental command-line option, not in the form (CLI default applies)',
+    help: {
+      text: 'How the survey localizes a mass shift on the peptide: by every matched ion, by distinct peaks, or by distinct peaks without neutral-loss satellites (strict).'
+    }
+  },
+  delta_loc_null: {
+    hidden: '1.15.2 experimental command-line option, not in the form (CLI default applies)',
+    help: {
+      text: 'Repeat the localization on peaks moved by this many m/z units, to see how often a site is found by chance.'
+    }
+  },
+  delta_name_tolerance: {
+    hidden: '1.15.2 experimental command-line option, not in the form (CLI default applies)',
+    help: {
+      text: 'How close a mass shift must be to a Unimod or PSI-MOD entry to be named after it.'
+    }
+  },
+  delta_name_tolerance_unit: {
+    hidden: '1.15.2 experimental command-line option, not in the form (CLI default applies)',
+    help: {
+      text: 'The unit of the naming tolerance: ppm of the median peptide mass, or Da.'
+    }
+  },
+  delta_select: {
+    hidden: '1.15.2 experimental command-line option, not in the form (CLI default applies)',
+    help: {
+      text: 'Which placement of a spectrum the survey counts: the one with the smallest shift of its best tag, or the one most of its tags agree on.'
+    }
+  },
+  delta_spectra_out: {
+    hidden: '1.15.2 experimental command-line option, not in the form (CLI default applies)',
+    help: {
+      text: 'One line per spectrum behind the mass-shift survey: the shift, its row, peptide, site and provenance, for comparison with a search engine.'
+    }
+  },
+  qc_out: {
+    hidden: '1.15.2 experimental command-line option, not in the form (CLI default applies)',
+    help: {
+      text: 'A run QC report: spectra per MS level and analyser, resolution, precursor charges, isobaric reporters, tag yield and redundancy.'
+    }
+  },
+  recon_sub_tolerance: {
+    hidden: '1.15.2 experimental command-line option, not in the form (CLI default applies)',
+    help: {
+      text: 'How close a leftover mass must be to an amino-acid substitution to be read as one.'
+    }
+  },
+  recon_sub_tolerance_unit: {
+    hidden: '1.15.2 experimental command-line option, not in the form (CLI default applies)',
+    help: {
+      text: 'The unit of the substitution tolerance: ppm of the flanking mass, or Da.'
+    }
+  },
   census_ids_exact: {
     hidden: '1.16 command-line option for label joins, not in the form (CLI default applies)',
     help: {
