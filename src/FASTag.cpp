@@ -2887,6 +2887,32 @@ TOPPFASTag::ExitCodes TOPPFASTag::main_(int, const char**)
   }
   else kept.getExperimentalSettings() = exp.getExperimentalSettings();
 
+  // -qc_out: instrument model, serial number and acquisition start, from the
+  // run settings OpenMS's readers fill. The fast mzML reader skips the
+  // header, so it is read alone (parsing stops at the spectrumList).
+  if (qc)
+  {
+    if (mgf_in) qc->setRunInfo({}, "MGF carries no run metadata");
+    else if (fastmz)
+    {
+      try
+      {
+        PeakMap head;
+        MzMLFile mf;
+        mf.getOptions().setMetadataOnly(true);
+        mf.load(in, head);
+        qc->setRunInfo(FASTag::RunQC::runInfoOf(head.getExperimentalSettings()));
+      }
+      catch (const Exception::BaseException& e)
+      {
+        OPENMS_LOG_WARN << "-qc_out: could not read the run header of " << in << " (" << e.what()
+                        << "); instrument and start time are reported n/a." << std::endl;
+        qc->setRunInfo({}, "the run header could not be read");
+      }
+    }
+    else qc->setRunInfo(FASTag::RunQC::runInfoOf(kept.getExperimentalSettings()));
+  }
+
   // ---- phase 6: the tagging loop -----------------------------------------
 
   size_t n_ms2 = 0, n_tags = 0, n_reported = 0;

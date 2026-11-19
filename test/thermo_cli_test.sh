@@ -84,6 +84,17 @@ ck "raw: Thermo native IDs" \
 "$BIN" -in "$RAW" -out "$W/r1.tsv" -threads 1 "${A[@]}" > /dev/null 2>&1
 ck "raw: 1 and 3 threads give the same tags" "$(cmp -s "$W/r1.tsv" "$W/r3.tsv" && echo same)" "same"
 
+# -qc_out: the instrument and acquisition start the .raw states.
+qcv() { awk -F'\t' -v k="$2" '{ sub(/\r$/, "") } $1 == "qc" && $2 == k { print $3; f = 1 } END { if (!f) print "MISSING" }' "$1"; }
+"$BIN" -in "$RAW" -out "$W/q.tsv" -qc_out "$W/q.qc.tsv" -threads 3 "${A[@]}" > /dev/null 2>&1
+ck "raw: -qc_out leaves the tags unchanged" "$(cmp -s "$W/q.tsv" "$W/r3.tsv" && echo same)" "same"
+for k in instrument_model instrument_serial_number; do
+  ck "raw: qc $k stated" "$(case "$(qcv "$W/q.qc.tsv" $k)" in n/a|MISSING|"") echo no;; *) echo yes;; esac)" "yes"
+done
+ck "raw: qc start_timestamp is ISO 8601" \
+   "$(qcv "$W/q.qc.tsv" start_timestamp | grep -Eq '^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}' && echo yes)" "yes"
+echo "  info raw: $(qcv "$W/q.qc.tsv" instrument_model) / $(qcv "$W/q.qc.tsv" instrument_serial_number) / $(qcv "$W/q.qc.tsv" start_timestamp)"
+
 run=$(basename "$RAW"); run=${run%.*}
 "$BIN" -in "$RAW" -out "$W/u.tsv" -usi_collection PXD000000 -threads 3 "${A[@]}" > /dev/null 2>&1
 ck "raw: USI run is the file name without .raw, scan that of the native ID" \
