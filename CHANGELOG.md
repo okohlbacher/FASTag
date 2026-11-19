@@ -60,9 +60,20 @@ What was and was not validated:
   exception peaks it keeps (tag Jaccard 0.86–0.98). Builds without Thermo
   support refuse `.raw` with a message; `-probe_input`/`-dump_spectrum`
   refuse it for now. RawFileReader's required notice is printed by the new
-  `--version` and in `--help`, and added to bundle notices; release bundles
-  do not include the reader yet (BOM.md, Thermo RawFileReader). ctest
+  `--version` and in `--help`, and added to bundle notices. ctest
   `thermo_cli_test` (data part with `FASTAG_THERMO_RAW`) and `thermo_parity`.
+- **Release bundles read `.raw` and `.d`.** OpenMS is built with
+  `WITH_OPENTIMS=ON` and `WITH_THERMO_RAW=ON` on every platform. Every bundle
+  reads Bruker `.d`; every bundle except the Linux AppImage also carries
+  Thermo's RawFileReader and a .NET 8 runtime (8.0.34, MIT, `dotnet/` beside
+  the executable, used unless `DOTNET_ROOT` names another), so `.raw` works
+  without installing anything. The AppImage ships without RawFileReader
+  (licence section 4.3; BOM.md, Vendor readers). RawFileReader is under
+  Thermo's own licence, not MIT: every bundle has it in `LICENSES/` and the
+  terms in `THIRD-PARTY-NOTICES.txt`; the Windows installer shows a licence
+  page and the macOS disk images a licence agreement before they open; the
+  desktop app's About shows Thermo's notice. README, Install, states the
+  terms (no redistribution of the RawFileReader assemblies).
 - **Census identifiability score (`-census_score`, experimental):**
   four census columns taken before any database filter (`pre_best_evalue`,
   `pre_best_len`, `pre_best_mean_conf`, `pre_tag_cover`) and `ident_score`, a
