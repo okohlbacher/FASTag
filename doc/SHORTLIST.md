@@ -416,9 +416,13 @@ runs the tested configuration: `-shortlist_gapped` on, `-shortlist_max_evalue 10
 `-recon_missed_cleavages 2`. Each applies unless the option is given on the
 command line, or set in an INI to a value other than its 1.13.1 default (an
 INI value equal to that default cannot be told from it, as for
-`-shortlist_specificity`). The log line `MSFragger defaults (...)` and the
-shortlist header line `# msfragger defaults (...)` name the values applied;
-the reconciler's line says `min tag length 6 (msfragger default)`. On the
+`-shortlist_specificity`). Since 1.15.4 the recipe, with `-tag_length 4
+-extension 6 -shortlist_min_spectra 1` of the tested command, is the default
+of every tryptic shortlist run (`-shortlist_out`, `-fasta_out` or
+`-search_config_out`, any engine). The log line `Shortlist recipe defaults
+(...)` and the shortlist header line `# shortlist recipe defaults (...)` name
+the values applied; the reconciler's line says `min tag length 6 (shortlist
+recipe default)`. On the
 development run PXD003531 the export without these options is
 byte-identical to the one with them. Sage, Comet, a run without
 `-search_config_out` and a `-shortlist_protease` other than trypsin (not

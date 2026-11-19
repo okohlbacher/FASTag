@@ -213,6 +213,36 @@ TOPPFASTag::ExitCodes TOPPFASTag::main_(int, const char**)
   // stdout carries JSON lines only, sealed below as -stream seals its data
   // channel.
   const bool probe_mode = !getFlag_("stream") && !getStringOption_("probe_input").empty();
+
+  // 1.15.4: the shortlist recipe is the default of every tryptic shortlist run
+  // (before, only -search_engine msfragger with -search_config_out took part of
+  // it). At FASTag's tagging defaults (-tag_length 3, no extension) no tag
+  // reaches the reconciliation length a real database derives (8 for 94k
+  // proteins, 9 for 870k), so -fasta_out was empty (exit 13). The values are
+  // those of PREREG-msfragger2 (PASS; its repeat PREREG-exactonly FAILED, so
+  // they are a working default, not a validated claim). Another protease
+  // keeps the plain defaults. An option given on the command line or in an
+  // INI wins; the log and the shortlist header name what was applied.
+  {
+    const bool recipe_on = (!getStringOption_("shortlist_out").empty() || !getStringOption_("fasta_out").empty() ||
+                            !getStringOption_("search_config_out").empty()) &&
+                           getStringOption_("shortlist_protease") == "trypsin";
+    const auto take = [&](const char* name, const std::string& shown) {
+      const bool apply = recipe_on && !optionGiven_(name);
+      if (apply) recipe_defaults_ += std::string(recipe_defaults_.empty() ? "" : ", ") + "-" + name + " " + shown;
+      return apply;
+    };
+    if (!optionGiven_("tag_lengths") && take("tag_length", "4")) recipe_int_["tag_length"] = 4;
+    if (take("extension", "6")) recipe_int_["extension"] = 6;
+    if (take("shortlist_min_spectra", "1")) recipe_int_["shortlist_min_spectra"] = 1;
+    if (take("recon_min_length", "6")) recipe_int_["recon_min_length"] = 6;
+    if (take("recon_missed_cleavages", "2")) recipe_int_["recon_missed_cleavages"] = 2;
+    recipe_gapped_ = take("shortlist_gapped", "on");
+    recipe_evalue_ = take("shortlist_max_evalue", "10");
+    if (!recipe_defaults_.empty())
+      OPENMS_LOG_INFO << "Shortlist recipe defaults (doc/SHORTLIST.md): " << recipe_defaults_
+                      << "; an option given on the command line or in an INI wins." << std::endl;
+  }
   const bool dump_mode = !getFlag_("stream") && !getStringOption_("dump_spectrum").empty();
 
   if (getIntOption_("threads") == 0)
@@ -279,7 +309,7 @@ TOPPFASTag::ExitCodes TOPPFASTag::main_(int, const char**)
   const IntList tag_lengths = getIntList_("tag_lengths");
   const std::set<int> distinct_lengths(tag_lengths.begin(), tag_lengths.end());
   std::vector<int> lengths(distinct_lengths.begin(), distinct_lengths.end());
-  if (lengths.empty()) lengths.push_back(getIntOption_("tag_length"));
+  if (lengths.empty()) lengths.push_back(intOption_("tag_length"));
   else if (getIntOption_("tag_length") != static_cast<int>(findEntry_("tag_length").default_value)
            && !distinct_lengths.count(getIntOption_("tag_length")))
     OPENMS_LOG_WARN << "tag_length " << getIntOption_("tag_length")
@@ -339,11 +369,11 @@ TOPPFASTag::ExitCodes TOPPFASTag::main_(int, const char**)
     const int index_k = probe_taxdb.empty() ? -1 : peekTaxdbK_(probe_taxdb);
     if (index_k > 0)
     {
-      const int reach = lengths.back() + 2 * getIntOption_("extension");
+      const int reach = lengths.back() + 2 * intOption_("extension");
       if (reach < index_k)
       {
         OPENMS_LOG_ERROR << "-species: tag_length (" << lengths.back()
-                         << ") + 2*extension (" << getIntOption_("extension") << ") = "
+                         << ") + 2*extension (" << intOption_("extension") << ") = "
                          << reach << " cannot reach the index k = " << index_k
                          << ", so every tag would be too short to look up and the "
                          << "report would be empty. Set " << length_opt << index_k
@@ -563,7 +593,7 @@ TOPPFASTag::ExitCodes TOPPFASTag::main_(int, const char**)
     std::cerr << "TMT pseudo-filter: " << tmt_filter_rec_ << std::endl;
   }
   p.tag_length = lengths.front();
-  p.max_extension = getIntOption_("extension");
+  p.max_extension = intOption_("extension");
   p.max_gaps = getIntOption_("gaps");
   p.deisotope = !getFlag_("no_deisotope");
   p.peaks_per_window = getIntOption_("peaks_per_window");
@@ -815,30 +845,15 @@ TOPPFASTag::ExitCodes TOPPFASTag::main_(int, const char**)
                         "(a Sage or MSFragger configuration is written complete)." << std::endl;
     return ILLEGAL_PARAMETERS;
   }
-  // post-1.13.1: with -search_engine msfragger (and -search_config_out) the
-  // shortlist options take the configuration of the second held-out test
-  // (PREREG-msfragger2.md, PASS; the third, PREREG-exactonly.md, FAILED, so
-  // the defaults are not validated) unless the user set them. Tested with the
-  // tryptic shortlist only, so a -shortlist_protease other than trypsin keeps
-  // 1.13.1's values. The help of the two -recon_* options is frozen (1.11
-  // interface, baseline_identity_test); -search_engine's help says it.
-  std::string msf_defaults;  // what was applied, for the log and the shortlist header
-  const bool msf_shortlist = !search_config_out.empty() && search_engine == "msfragger" &&
-                             getStringOption_("shortlist_protease") == "trypsin";
-  const auto msfDefault = [&](const char* name, const std::string& shown) {
-    const bool apply = msf_shortlist && !optionGiven_(name);
-    if (apply) msf_defaults += std::string(msf_defaults.empty() ? "" : ", ") + "-" + name + " " + shown;
-    return apply;
-  };
+  // The shortlist settings; the recipe defaults (set at the start of main_)
+  // replace the values the user did not give. The help of the two -recon_*
+  // options is frozen (1.11 interface, baseline_identity_test).
   FASTag::Shortlist::Settings sl_settings;
-  sl_settings.gapped = msfDefault("shortlist_gapped", "on") || getFlag_("shortlist_gapped");
-  sl_settings.max_evalue = msfDefault("shortlist_max_evalue", "10") ? 10.0 : getDoubleOption_("shortlist_max_evalue");
-  const int recon_min_length = msfDefault("recon_min_length", "6") ? 6 : getIntOption_("recon_min_length");
-  const int recon_mc = msfDefault("recon_missed_cleavages", "2") ? 2 : getIntOption_("recon_missed_cleavages");
-  if (!msf_defaults.empty())
-    OPENMS_LOG_INFO << "MSFragger defaults (the configuration of its second held-out test): " << msf_defaults
-                    << "; an option given on the command line or in an INI wins." << std::endl;
-  sl_settings.min_spectra = static_cast<std::uint64_t>(getIntOption_("shortlist_min_spectra"));
+  sl_settings.gapped = recipe_gapped_ || getFlag_("shortlist_gapped");
+  sl_settings.max_evalue = recipe_evalue_ ? 10.0 : getDoubleOption_("shortlist_max_evalue");
+  const int recon_min_length = intOption_("recon_min_length");
+  const int recon_mc = intOption_("recon_missed_cleavages");
+  sl_settings.min_spectra = static_cast<std::uint64_t>(intOption_("shortlist_min_spectra"));
   {
     const std::string pm = getStringOption_("shortlist_parsimony");
     sl_settings.parsimony = pm == "subset" ? FASTag::Shortlist::Parsimony::SUBSET
@@ -1142,7 +1157,7 @@ TOPPFASTag::ExitCodes TOPPFASTag::main_(int, const char**)
                     << pindex.collapseRuleCount() << " isobaric rules; min tag length "
                     << rmin
                     << (recon_min_length == 0 ? " (derived)"
-                        : optionGiven_("recon_min_length") || !msf_shortlist ? " (set)" : " (msfragger default)")
+                        : recipe_int_.count("recon_min_length") ? " (shortlist recipe default)" : " (set)")
                     << std::endl;
     // 1.13 (#24): a run whose tags cannot reach that length places nothing,
     // and -alkylation_out cannot call (the default -tag_length 3 on a
@@ -5493,8 +5508,8 @@ TOPPFASTag::ExitCodes TOPPFASTag::main_(int, const char**)
                                    : "missed cleavages <= " + std::to_string(recon_mc)) +
                               ", windows by flank mass (" + sl_choice.reason + ")" +
                               (sl_withheld.empty() ? std::string() : "; " + sl_withheld + " withheld"));
-          if (!msf_defaults.empty())
-            header.push_back("msfragger defaults (the configuration of its second held-out test): " + msf_defaults);
+          if (!recipe_defaults_.empty())
+            header.push_back("shortlist recipe defaults (doc/SHORTLIST.md): " + recipe_defaults_);
           if (subsampling) header.push_back("counts are over the -subsample_* spectra only");
           if (filtering) header.push_back("-fasta filtered the tags before placement");
           std::string err;
