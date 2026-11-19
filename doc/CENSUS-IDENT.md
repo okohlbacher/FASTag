@@ -65,7 +65,21 @@ references).
   and k = 10% of the unidentified spectra.
 - Development numbers are leave-one-sample-out: the model scoring a run was fitted without that run's tissue.
 
-## Results
+## Development result (PXD000561, 78 runs of 13 dev samples; no held-out data)
 
-See the development result (`output/features-1.16/item4-dev/RESULT.md`) and the draft held-out preregistration
-(`output/features-1.16/item4-heldout/PREREG-ident.md`, not run).
+Leave-one-sample-out, 77 evaluable runs:
+
+| | ident_score | best E-value | n_peaks |
+|---|---|---|---|
+| mean per-run AUC | 0.744 | 0.714 | 0.649 |
+| ΔAUC, run-bootstrap 95% CI | | +0.030 (0.025-0.036) | +0.095 (0.087-0.104) |
+| top-10% precision | 0.621 | 0.585 | 0.465 |
+
+Second-search recovery (semi-enzymatic, subset FDR 1%) at the census-triage budget: 11.73% of the top k by
+`ident_score` vs 10.96% of the triage set (+0.77 points, CI 0.58-0.95); at 10% of the unidentified 16.1% vs 14.7%
+(best E-value). The margins hold, but the gain over triage is small, so census triage stays the recommended list
+and `-census_score` is experimental until a held-out test (draft preregistration, not run).
+
+Label-join finding: SageAdapter (OpenMS 70cebcd144) writes no charge-1 PSM to its idXML (1,338 of 988,709 dev rows
+differ from `results.sage.tsv` for that reason, one more for a `target+decoy` annotation), so labels come from the
+Sage TSV.
