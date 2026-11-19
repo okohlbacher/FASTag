@@ -7,8 +7,8 @@
 # closure) with licence texts, not only names; GUI-THIRD-PARTY-NOTICES.txt
 # (tools/gui_third_party_notices.py) of a plausible size, naming the app's own
 # stack (Tauri, React, IBM Plex) and carrying licence texts; with "appimage",
-# its section on the system libraries the AppImage bundles; and
-# examples/Ecoli_MS2_small.mzML with the sha256 examples/README.md gives.
+# its section on the system libraries the AppImage bundles; the vendor
+# readers' state (below); and examples/Ecoli_MS2_small.mzML with the sha256 examples/README.md gives.
 # Writes a line to the job summary when there is one. Exits 1 on the first
 # failure.
 set -euo pipefail
@@ -27,6 +27,16 @@ for want in '^tauri ' '^wry ' '^react ' 'IBM Plex' '^\[T1\] used by' 'Permission
 done
 if [ "$kind" = appimage ]; then
   grep -q "^System libraries bundled in the AppImage" "$gui" || fail "the AppImage's GUI-THIRD-PARTY-NOTICES.txt has no section on its bundled libraries"
+fi
+# The vendor readers (1.15.2): every bundle but the AppImage carries the
+# Thermo reader with its licence, notices and .NET runtime
+# (tools/vendor_bundle.py check); the AppImage carries none of it and says so.
+if [ "$kind" = appimage ]; then
+  grep -q "does not include Thermo's RawFileReader" "$cli" || fail "the AppImage's THIRD-PARTY-NOTICES.txt does not say it has no Thermo reader"
+  ! grep -q "Thermo RawFileReader -- licence terms" "$cli" || fail "the AppImage's THIRD-PARTY-NOTICES.txt states Thermo terms"
+else
+  python3 "$(dirname "$0")/vendor_bundle.py" check --root "$R" --exe-dir "$R/bin" --share "$R/share/OpenMS" \
+    || fail "the Thermo reader, its licence or its notices are incomplete"
 fi
 ex="$R/examples/Ecoli_MS2_small.mzML"
 [ -s "$ex" ] || fail "no examples/Ecoli_MS2_small.mzML"

@@ -126,6 +126,12 @@ namespace FASTag::Thermo
 #else
     ::setenv("DOTNET_ROOT", dir.c_str(), 0);
 #endif
+#ifdef __linux__
+    // The bundled runtime must not depend on the machine having libicu: the
+    // reader parses no culture-specific text, so invariant globalization is
+    // enough (a user's own setting still wins).
+    ::setenv("DOTNET_SYSTEM_GLOBALIZATION_INVARIANT", "1", 0);
+#endif
 #endif
   }
 }

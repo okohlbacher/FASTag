@@ -54,6 +54,7 @@
     "targets": "all",
     "category": "Education",
     "resources": ["resources/fastag"],
+    "licenseFile": "installer-license.txt",
     "icon": [
       "icons/32x32.png",
       "icons/64x64.png",

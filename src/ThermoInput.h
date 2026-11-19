@@ -119,7 +119,9 @@ namespace FASTag::Thermo
     (<executable dir>/dotnet, as the release bundles carry it), unless
     DOTNET_ROOT is set already or there is no such directory. Call once, first
     thing in main(): OpenMS's Thermo bridge reads DOTNET_ROOT when it starts
-    the runtime. A no-op in a build without Thermo support.
+    the runtime. On Linux it also sets DOTNET_SYSTEM_GLOBALIZATION_INVARIANT=1
+    (unless set) when it uses the bundled runtime, so the bundle needs no libicu.
+    A no-op in a build without Thermo support.
   */
   void useBundledRuntime();
 }

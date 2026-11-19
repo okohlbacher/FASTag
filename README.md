@@ -157,6 +157,24 @@ On macOS both are also on [Homebrew](https://github.com/okohlbacher/homebrew-fas
 The casks need macOS 14 (Sonoma) or later; on macOS 13.4 to 13.x install the disk images
 from the release page instead.
 
+**Thermo .raw and the RawFileReader licence (from 1.15.2).** Every download
+above except the Linux AppImage reads Thermo `.raw` files directly, and so
+includes Thermo Fisher Scientific's RawFileReader and a .NET runtime (MIT).
+RawFileReader is not under FASTag's MIT licence but under Thermo's own
+(`LICENSES/ThermoRawFileReader-License.doc`, as text
+`LICENSES/ThermoRawFileReader-License.txt`, in every bundle). By installing or
+using FASTag you accept it; in particular **you may not redistribute the
+RawFileReader assemblies** (`ThermoFisher.CommonCore.*.dll`) to others, nor
+exploit them commercially without Thermo's written consent. The Windows
+installer and the macOS disk images ask you to agree before they install or
+open; the tarballs, the `.deb`, the Windows zip and the Homebrew casks carry the
+same licence files and the terms at the end of `THIRD-PARTY-NOTICES.txt`. To
+run FASTag without RawFileReader, delete the bundle's
+`openms_thermo_bridge/managed` folder: `.raw` is then refused and every other
+format is read as before. The AppImage ships without it (see BOM.md, Vendor
+readers); convert `.raw` with ThermoRawFileParser there. Bruker timsTOF `.d`
+input (opentims, MIT) is in every bundle, the AppImage included.
+
 A disk image or archive holds a `FASTag/` folder — run `FASTag/FASTag`
 (Linux/macOS) or `FASTag/FASTag.bat` (Windows); everything else inside is a
 bundled dependency the wrapper needs, not something to run directly. The
@@ -600,9 +618,10 @@ MGF→mzML direction is exact.
 
 A timsTOF DDA-PASEF run is read directly, as a `.d` directory or as a zipped
 `.d.zip` (the form PRIDE often serves), through OpenMS's `BrukerTimsFile`
-(opentims, MIT licensed; Bruker's own SDK is neither needed nor used). This
-needs a FASTag built against an OpenMS with `WITH_OPENTIMS=ON` (see
-BUILDING.md); a build without it refuses `.d` input with a message saying so.
+(opentims, MIT licensed; Bruker's own SDK is neither needed nor used). The
+release bundles (from 1.15.2) read it; a source build needs an OpenMS with
+`WITH_OPENTIMS=ON` (see BUILDING.md), and a build without it refuses `.d`
+input with a message saying so.
 
 ```bash
 FASTag -in run.d     -out tags.tsv -fragment_tolerance 20 -fragment_tolerance_unit ppm
@@ -655,15 +674,18 @@ FASTag -in run.d.zip -out tags.tsv -fragment_tolerance 20 -fragment_tolerance_un
 
 ### Thermo .raw
 
-A FASTag built against an OpenMS with `WITH_THERMO_RAW=ON` (BUILDING.md) reads
-Thermo `.raw` files directly (`-in run.raw`), through OpenMS's
-`OnDiscThermoRawExperiment`: the openms-thermo-bridge around Thermo's
+The release bundles from 1.15.2 (all but the AppImage; see Install for the
+licence) and any FASTag built against an OpenMS with `WITH_THERMO_RAW=ON`
+(BUILDING.md) read Thermo `.raw` files directly (`-in run.raw`), through
+OpenMS's `OnDiscThermoRawExperiment`: the openms-thermo-bridge around Thermo's
 RawFileReader, hosted in a .NET 8 runtime. Other builds refuse a `.raw` with a
 message; convert it with
 [ThermoRawFileParser](https://github.com/compomics/ThermoRawFileParser) then.
 
-- **Runtime.** A .NET 8 (or newer) runtime must be installed; set
-  `DOTNET_ROOT` if it is not where .NET installs itself. The bridge's managed
+- **Runtime.** The release bundles carry a .NET 8 runtime (`dotnet/` beside
+  the executable) and use it unless `DOTNET_ROOT` names another; a source
+  build needs a .NET 8 (or newer) runtime installed, with `DOTNET_ROOT` set if
+  it is not where .NET installs itself. The bridge's managed
   files (`ThermoWrapperManaged.dll`, Thermo's CommonCore assemblies) are found
   in OpenMS's `share/OpenMS/openms_thermo_bridge/managed`, or where
   `OPENMS_THERMO_MANAGED_DIR` points. A missing runtime ends the run before any
@@ -704,9 +726,10 @@ message; convert it with
   OpenMS install), not FASTag's MIT licence. A build that reads `.raw` prints
   the notice that licence requires with `--version` and in `--help`:
   "RawFileReader reading tool. Copyright © 2016 by Thermo Fisher Scientific,
-  Inc. All rights reserved." What bundling it in release packages would
-  require is in BOM.md (Thermo RawFileReader); the release bundles do not
-  include it yet.
+  Inc. All rights reserved." The desktop app shows it in Help > About. The
+  release bundles include RawFileReader (all but the AppImage); its terms for
+  you are under Install, the distribution terms and how the bundles meet them
+  in BOM.md (Vendor readers).
 
 Checked on three development runs (two PXD000561 Orbitrap Velos/Elite runs,
 one PXD045734 Q Exactive run; FASTag 1.15.2): every spectrum, native ID,

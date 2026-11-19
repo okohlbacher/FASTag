@@ -378,6 +378,28 @@ jobs:
           echo "OPENMS_INSTALL=$GITHUB_WORKSPACE/openms-install" >> "$GITHUB_ENV"
           echo "OPENMS_DATA_PATH=$GITHUB_WORKSPACE/openms-install/share/OpenMS" >> "$GITHUB_ENV"
 
+      # The .NET runtime the Thermo reader runs on (1.15.2): pinned, on every
+      # run. ctest and the smoke runs use it through DOTNET_ROOT; the bundle
+      # steps copy it into dist/FASTag/dotnet (tools/vendor_bundle.py), where
+      # the shipped CLI finds it itself. And a .raw to read: OpenMS's own
+      # 2 MB test file at OPENMS_REF, checked by its sha256.
+      - name: Install the .NET runtime and fetch a Thermo .raw
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl -fsSL --retry 3 -o "$RUNNER_TEMP/dotnet-install.sh" https://dot.net/v1/dotnet-install.sh
+          bash "$RUNNER_TEMP/dotnet-install.sh" --runtime dotnet --version "$DOTNET_RUNTIME_VERSION" \
+            --install-dir "$RUNNER_TEMP/dotnet-rt" --no-path
+          ls "$RUNNER_TEMP/dotnet-rt/shared/Microsoft.NETCore.App"
+          echo "DOTNET_RT=$RUNNER_TEMP/dotnet-rt" >> "$GITHUB_ENV"
+          echo "DOTNET_ROOT=$RUNNER_TEMP/dotnet-rt" >> "$GITHUB_ENV"
+          echo "DOTNET_CLI_TELEMETRY_OPTOUT=1" >> "$GITHUB_ENV"
+          mkdir -p ci-data
+          curl -fsSL --retry 3 -o ci-data/thermo-smoke.raw \
+            "https://raw.githubusercontent.com/OpenMS/OpenMS/$OPENMS_REF/src/tests/topp/THIRDPARTY/ginkgotoxin-ms-switching.raw"
+          echo "$THERMO_SMOKE_RAW_SHA256  ci-data/thermo-smoke.raw" > ci-data/thermo-smoke.sha256
+          if command -v sha256sum >/dev/null; then sha256sum -c ci-data/thermo-smoke.sha256; else shasum -a 256 -c ci-data/thermo-smoke.sha256; fi
+
       # The mzPeak fixture of OpenMS's own tests at the pinned commit: 34 MS2
       # spectra, written by the reference converter. The smoke runs read it,
       # and the validator step uses it as its control.
@@ -482,10 +504,22 @@ jobs:
           # or without the validator. This job has both, so a skip here would
           # be a broken harness presenting as green -- the very class of
           # failure this coverage exists for. Require a Passed line for each.
-          for t in mzpeak_roundtrip mzpeak_validate mzpeak_stream_test; do
+          # The vendor readers (1.15.2) likewise: bruker_cli_test reads the
+          # trimmed timsTOF fixture, thermo_cli_test checks the reader's gate
+          # and notice (its data part needs a peptide .raw, which CI has not).
+          for t in mzpeak_roundtrip mzpeak_validate mzpeak_stream_test bruker_cli_test thermo_cli_test; do
             grep -E "Test +#[0-9]+: $t " ctest.log | grep -q 'Passed' \
               || { echo "::error::$t did not pass (skipped, not run or missing)"; grep -E "$t" ctest.log || true; exit 1; }
           done
+          # ...and the binary reads both for real, not only their refusals.
+          ./build/FASTag -in test/fixtures/bruker/PXD040281_SA_02_trim.d -out /tmp/ci-bruker.tsv -threads 2 > /tmp/ci-bruker.log 2>&1 \
+            || { cat /tmp/ci-bruker.log; echo "::error::the build cannot read the Bruker fixture"; exit 1; }
+          grep -E "Bruker timsTOF input: [1-9][0-9]* MS2 spectra" /tmp/ci-bruker.log \
+            || { cat /tmp/ci-bruker.log; echo "::error::no MS2 spectra read from the Bruker fixture"; exit 1; }
+          ./build/FASTag -in ci-data/thermo-smoke.raw -out /tmp/ci-thermo.tsv -threads 2 > /tmp/ci-thermo.log 2>&1 \
+            || { cat /tmp/ci-thermo.log; echo "::error::the build cannot read a Thermo .raw"; exit 1; }
+          grep -E "Thermo .raw input: [1-9][0-9]* scans indexed" /tmp/ci-thermo.log \
+            || { cat /tmp/ci-thermo.log; echo "::error::no scans read from the Thermo .raw"; exit 1; }
 
       # A real mzPeak read. The count is asserted exactly: 34 MS2 in that
       # archive, and a reader that dropped spectra or precursors would report
@@ -629,6 +663,17 @@ jobs:
           cp LICENSE dist/FASTag/LICENSE
           python3 tools/third_party_notices.py "$CONDA_PREFIX" dist/FASTag/THIRD-PARTY-NOTICES.txt dist/FASTag/lib
           test -s dist/FASTag/THIRD-PARTY-NOTICES.txt
+          # The vendor readers (1.15.2): the .NET runtime beside FASTag.bin,
+          # Thermo's licence (LICENSES/) and the RawFileReader terms, .NET and
+          # opentims notices; then checked, so a bundle cannot ship the Thermo
+          # reader without them.
+          du -sh dist/FASTag
+          python3 tools/vendor_bundle.py add --root dist/FASTag --exe-dir dist/FASTag \
+            --share dist/FASTag/share-OpenMS --runtime "$DOTNET_RT"
+          python3 tools/vendor_bundle.py check --root dist/FASTag --exe-dir dist/FASTag --share dist/FASTag/share-OpenMS
+          # The installers' and disk images' licence page is generated from
+          # LICENSE and LICENSES/ (tools/vendor_bundle.py); a stale copy fails.
+          python3 tools/vendor_bundle.py installer-license gui/src-tauri/installer-license.txt --check
           # printf, not a heredoc: a heredoc's body has to be indented to
           # satisfy YAML's block-scalar rules, but leading whitespace before
           # `#!` breaks shebang recognition -- the kernel requires it at byte
@@ -746,6 +791,14 @@ jobs:
           cp LICENSE dist/FASTag/LICENSE
           python3 tools/third_party_notices.py "$CONDA_PREFIX" dist/FASTag/THIRD-PARTY-NOTICES.txt dist/FASTag/lib
           test -s dist/FASTag/THIRD-PARTY-NOTICES.txt
+          # The vendor readers (1.15.2): the .NET runtime beside FASTag.bin,
+          # Thermo's licence (LICENSES/) and the RawFileReader terms, .NET and
+          # opentims notices; then checked, so a bundle cannot ship the Thermo
+          # reader without them.
+          du -sh dist/FASTag
+          python3 tools/vendor_bundle.py add --root dist/FASTag --exe-dir dist/FASTag \
+            --share dist/FASTag/share-OpenMS --runtime "$DOTNET_RT"
+          python3 tools/vendor_bundle.py check --root dist/FASTag --exe-dir dist/FASTag --share dist/FASTag/share-OpenMS
           # printf, not a heredoc: a heredoc's body has to be indented to
           # satisfy YAML's block-scalar rules, but leading whitespace before
           # `#!` breaks shebang recognition -- the kernel requires it at byte
@@ -907,6 +960,24 @@ jobs:
           [ "${alk8:-0}" -gt 0 ] && ! grep -q $'^alkylation_call\treason\ttags_too_short' "$BW/alk8.tsv" \
             || { cat "$BW/alk8.log" "$BW/alk8.tsv"; echo "::error::no tag placed on the shipped ecoli proteome at -tag_length 8"; exit 1; }
 
+          # The vendor readers through the shipped bundle, as a download runs
+          # it (env -i: no DOTNET_ROOT, so the bundle's own dotnet/ serves).
+          env -i HOME="$HOME" PATH=/usr/bin:/bin "$GITHUB_WORKSPACE/dist/FASTag/FASTag" \
+            -in "$GITHUB_WORKSPACE/ci-data/thermo-smoke.raw" -out "$BW/raw.tsv" -threads 2 > "$BW/raw.log" 2>&1 \
+            || { cat "$BW/raw.log"; echo "::error::the shipped bundle cannot read a Thermo .raw"; exit 1; }
+          grep -E "Thermo .raw input: [1-9][0-9]* scans indexed" "$BW/raw.log" \
+            || { cat "$BW/raw.log"; echo "::error::the shipped bundle read no scans from the .raw"; exit 1; }
+          env -i HOME="$HOME" PATH=/usr/bin:/bin "$GITHUB_WORKSPACE/dist/FASTag/FASTag" --version > "$BW/version.txt" 2>&1
+          grep -qF "RawFileReader reading tool. Copyright" "$BW/version.txt" \
+            || { cat "$BW/version.txt"; echo "::error::--version lacks the RawFileReader notice"; exit 1; }
+          env -i HOME="$HOME" PATH=/usr/bin:/bin "$GITHUB_WORKSPACE/dist/FASTag/FASTag" \
+            -in "$GITHUB_WORKSPACE/test/fixtures/bruker/PXD040281_SA_02_trim.d" -out "$BW/bruker.tsv" -threads 2 > "$BW/bruker.log" 2>&1 \
+            || { cat "$BW/bruker.log"; echo "::error::the shipped bundle cannot read a Bruker .d"; exit 1; }
+          grep -E "Bruker timsTOF input: [1-9][0-9]* MS2 spectra" "$BW/bruker.log" \
+            || { cat "$BW/bruker.log"; echo "::error::the shipped bundle read no spectra from the .d"; exit 1; }
+          echo "vendor input through the bundle: $(grep -oE '[0-9]+ scans indexed' "$BW/raw.log") (.raw), $(grep -oE '[0-9]+ MS2 spectra' "$BW/bruker.log" | head -1) (.d)"
+          du -sh "$GITHUB_WORKSPACE/dist/FASTag" "$GITHUB_WORKSPACE/dist/FASTag/dotnet"
+
           # Listed once into a variable, not `ls | grep -q` three times: this step
           # runs under `shell: bash`, which is pipefail, and grep -q exits at the
           # first match -- so ls dies of SIGPIPE and the pipeline reports failure
@@ -1058,8 +1129,22 @@ jobs:
             [ -L "$dylib" ] && continue
             codesign --force --options runtime --sign "$MACOS_SIGNING_IDENTITY" --timestamp "$dylib"
           done
-          codesign --force --options runtime --sign "$MACOS_SIGNING_IDENTITY" --timestamp dist/FASTag/FASTag.bin
+          # The .NET runtime (1.15.2): every Mach-O in it, re-signed with this
+          # identity, so the hardened CLI loads it with library validation on.
+          find dist/FASTag/dotnet -type f | while read -r f; do
+            file -b "$f" | grep -q Mach-O || continue
+            codesign --force --options runtime --sign "$MACOS_SIGNING_IDENTITY" --timestamp "$f"
+          done
+          # Entitlements: CoreCLR's JIT (tools/macos-cli.entitlements).
+          codesign --force --options runtime --entitlements tools/macos-cli.entitlements \
+            --sign "$MACOS_SIGNING_IDENTITY" --timestamp dist/FASTag/FASTag.bin
           codesign --verify --strict --verbose=2 dist/FASTag/FASTag.bin
+          codesign -d --entitlements - dist/FASTag/FASTag.bin
+          # The signed, hardened bundle still reads .raw (the JIT entitlements).
+          env -i HOME="$HOME" PATH=/usr/bin:/bin dist/FASTag/FASTag -in ci-data/thermo-smoke.raw \
+            -out "$RUNNER_TEMP/signed-raw.tsv" -threads 2 > "$RUNNER_TEMP/signed-raw.log" 2>&1 \
+            || { cat "$RUNNER_TEMP/signed-raw.log"; echo "::error::the signed CLI cannot read a Thermo .raw"; exit 1; }
+          grep -E "scans indexed" "$RUNNER_TEMP/signed-raw.log"
 
       - name: Submit to Apple notary + wait (macOS)
         if: steps.mac-signing.outputs.enabled == 'true'
@@ -1214,6 +1299,15 @@ jobs:
           cp -RL dist/FASTag/share-FASTag-digest "$R/share/FASTag/digest"
           cp -RL dist/FASTag/share-FASTag-alkylation "$R/share/FASTag/alkylation"
           cp dist/FASTag/LICENSE dist/FASTag/THIRD-PARTY-NOTICES.txt "$R/"
+          # The vendor readers (1.15.2): the .NET runtime beside the CLI (it
+          # looks in <its dir>/dotnet) and the licences; checked as a set.
+          cp -RL dist/FASTag/dotnet "$R/bin/dotnet"
+          cp -RL dist/FASTag/LICENSES "$R/LICENSES"
+          python3 tools/vendor_bundle.py check --root "$R" --exe-dir "$R/bin" --share "$R/share/OpenMS"
+          env -i HOME="$HOME" OPENMS_DATA_PATH="$R/share/OpenMS" "$R/bin/FASTag" -in ci-data/thermo-smoke.raw \
+            -out "$RUNNER_TEMP/app-raw.tsv" -threads 2 > "$RUNNER_TEMP/app-raw.log" 2>&1 \
+            || { cat "$RUNNER_TEMP/app-raw.log"; echo "::error::the app's CLI cannot read a Thermo .raw"; exit 1; }
+          grep -E "scans indexed" "$RUNNER_TEMP/app-raw.log"
           # File > Open Example Data (gui/src-tauri/src/examples.rs).
           cp -R dist/FASTag/examples "$R/examples"
           test -s "$R/examples/Ecoli_MS2_small.mzML"
@@ -1371,6 +1465,9 @@ jobs:
           fmt=$(hdiutil imageinfo "$ULMO" | awk '/^Format:/ {print $2}')
           [ "$fmt" = "ULMO" ] || { echo "::error::converted image is $fmt, not ULMO"; exit 1; }
           hdiutil verify "$ULMO"
+          # The licence agreement Finder shows before mounting (Thermo's
+          # RawFileReader terms, section 3.3; tools/dmg_license.py).
+          python3 tools/dmg_license.py "$ULMO" gui/src-tauri/installer-license.txt
           mv -f "$ULMO" "$DMG"
 
           if [ "$SIGNED" = "true" ]; then
@@ -1390,7 +1487,9 @@ jobs:
           # bundled CLI from inside it with nothing from this runner on PATH.
           MNT="$RUNNER_TEMP/fastag-dmg-mnt"
           mkdir -p "$MNT"
-          hdiutil attach "$DMG" -readonly -nobrowse -noautoopen -mountpoint "$MNT"
+          # The image asks for the licence agreement: answered here, as a
+          # user (or Homebrew) does.
+          PAGER=cat hdiutil attach "$DMG" -readonly -nobrowse -noautoopen -mountpoint "$MNT" < <(yes) > /dev/null
           trap 'hdiutil detach "$MNT" -force >/dev/null 2>&1 || true' EXIT
           apps=("$MNT"/*.app)
           [ ${#apps[@]} -eq 1 ] || { echo "::error::expected one .app in the dmg, found ${#apps[@]}"; exit 1; }
@@ -1532,6 +1631,8 @@ jobs:
           rm -f "$DMG"
           hdiutil convert "$RW" -format UDZO -o "$DMG"
           rm -f "$RW"
+          # The licence agreement (Thermo's RawFileReader terms, section 3.3).
+          python3 tools/dmg_license.py "$DMG" gui/src-tauri/installer-license.txt
 
           codesign --force --timestamp --sign "$MACOS_SIGNING_IDENTITY" "$DMG"
           xcrun notarytool submit "$DMG" \
@@ -1827,6 +1928,12 @@ jobs:
           cp -RL "$D/share-FASTag-digest" "$R/share/FASTag/digest"
           cp -RL "$D/share-FASTag-alkylation" "$R/share/FASTag/alkylation"
           cp "$D/LICENSE" "$D/THIRD-PARTY-NOTICES.txt" "$R/"
+          # The vendor readers (1.15.2): the .NET runtime beside the CLI and
+          # the licences. The .deb and the tarball carry them; the AppImage
+          # does not (the step before it removes them).
+          cp -RL "$D/dotnet" "$R/bin/dotnet"
+          cp -RL "$D/LICENSES" "$R/LICENSES"
+          python3 tools/vendor_bundle.py check --root "$R" --exe-dir "$R/bin" --share "$R/share/OpenMS"
           # File > Open Example Data (gui/src-tauri/src/examples.rs).
           cp -RL "$D/examples" "$R/examples"
           test -s "$R/examples/Ecoli_MS2_small.mzML"
@@ -1889,6 +1996,19 @@ jobs:
       # WebKitGTK and GStreamer on top of the resources, and a failure here
       # must not hold back the .deb and the tarball. NO_STRIP: linuxdeploy's
       # bundled strip cannot read the newer ELF sections of the libraries.
+      # The AppImage ships WITHOUT the Thermo reader: RawFileReader's licence
+      # (section 4.3) bars distributing it with GPL-type software in a way
+      # that makes a combined work, and the AppImage packs the LGPL GTK and
+      # WebKitGTK stack into the same image. The .deb and the tarball, built
+      # above, keep it. Removed from the staged resources here, after the
+      # .deb, and checked absent in the AppImage (check_bundle_notices.sh).
+      - name: Remove the Thermo reader from the AppImage's resources
+        shell: bash
+        run: |
+          set -euo pipefail
+          R=gui/src-tauri/resources/fastag
+          python3 tools/vendor_bundle.py strip --root "$R" --exe-dir "$R/bin" --share "$R/share/OpenMS"
+          python3 tools/vendor_bundle.py check --absent --root "$R" --exe-dir "$R/bin" --share "$R/share/OpenMS"
       - name: Build the AppImage (best-effort)
         id: appimage
         continue-on-error: true
@@ -1920,6 +2040,10 @@ jobs:
           unsquashfs -o "$("$app" --appimage-offset)" -lls "$app" > "$L"
           inside=$(awk '{print $NF}' "$L" | grep '/resources/fastag/GUI-THIRD-PARTY-NOTICES.txt$' | head -1)
           [ -n "$inside" ] || { echo "::error::the AppImage carries no resources/fastag/GUI-THIRD-PARTY-NOTICES.txt"; exit 1; }
+          # No Thermo reader and no .NET runtime in the AppImage (see above).
+          if grep -E 'ThermoFisher\.CommonCore|/resources/fastag/bin/dotnet/|ThermoRawFileReader-License' "$L"; then
+            echo "::error::the AppImage carries the Thermo reader"; exit 1
+          fi
           X="$RUNNER_TEMP/appimage-notice"; rm -rf "$X"
           unsquashfs -o "$("$app" --appimage-offset)" -d "$X" "$app" "${inside#squashfs-root/}" \
             "$(dirname "${inside#squashfs-root/}")/LICENSE" \
