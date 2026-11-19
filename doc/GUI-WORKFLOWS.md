@@ -1,0 +1,348 @@
+# FASTag GUI: workflow-based Setup (spec)
+
+Status: design spec for branch `feat/gui-workflows`, 2026-11-19. GUI-only:
+no change to C++ sources or `gui/src/params.generated.json` (185 params,
+manifest of FASTag 1.15.3). It merges three proposals (workflows, peer tools,
+adversarial critique). Decisions on conflicts are marked **Decision**.
+
+## 0. Principles
+
+1. Setup reads top to bottom: **Input -> Workflow -> Settings -> Outputs ->
+   Run**, then **Results**. This matches SearchGUI, PEAKS, FragPipe and
+   MaxQuant: the files come first, because defaults can depend on the data.
+2. A workflow is a named preset. Its values are a diff over the CLI defaults.
+   It shows only the fields that a typical user changes for that question
+   (2 to 5). Everything else is under one collapsed **Advanced** disclosure.
+3. Products are checkboxes with derived file names. There is no free path
+   field per output.
+4. Dependencies are wiring, not choices. Example: checking "Mass-shift
+   table" also checks the placements file (greyed, with the reason). No
+   field exists only to enable another field.
+5. Every parameter can be reached from every run workflow, through Advanced
+   or the parameter search (Cmd+K). Hiding is only for boilerplate, options
+   the GUI manages itself, and options removed from the CLI.
+
+## 1. Workflows (task chooser)
+
+The chooser shows seven run workflows in this order. "Open results" leaves the
+grid; see the Decision at the end of this section.
+
+| # | Workflow (label) | Purpose (blurb, shown under the chooser) | Required inputs | Outputs, on by default (off) | Results tabs opened |
+|---|---|---|---|---|---|
+| W1 | **Export tags** (landing) | Sequence tags from every spectrum, with per-residue confidence, for de novo assembly and export. | spectra | tags.tsv (spectra with tags .mzML) | Overview, Tags, Spectrum |
+| W2 | **Run QC** | QC of one run: MS/MS counts and resolution by analyzer, charges, isobaric kit, tag yield, instrument, serial and start time. | spectra | qc.tsv; tags.tsv (always) | Overview, QC, Tags |
+| W3 | **Mass-shift survey** (blind modification search) | Mass shifts between tags and the database: a frequency table, sites and UniMod names. | spectra, protein FASTA | recon.tsv, delta.tsv, delta_spectra.tsv, delta_counts.tsv (massgap.tsv, recon_id.tsv) | Overview, Mass shifts, Tags, Spectrum |
+| W4 | **Species** | Which taxa the sample contains, from the bundled taxonomy index. No FASTA needed. | spectra | species.tsv | Overview, Species |
+| W5 | **Database reduction** | A protein shortlist, a reduced FASTA and a Sage, Comet or MSFragger configuration for your search. | spectra, protein FASTA | shortlist.tsv, reduced.fasta, engine config | Overview, Shortlist |
+| W6 | **Identifiability triage** | Rank MS/MS spectra by how identifiable they are, and mark those your search identified. | spectra (IDs optional) | census.tsv, census_summary.tsv, census_sorted.tsv | Overview, Triage, Spectrum |
+| W7 | **Characterize a run** | Protease, isobaric and SILAC labels, alkylation, glycopeptides and species, from 10% of the spectra. | spectra | digest.tsv, label.tsv, alkylation.tsv, glyco.tsv, species.tsv | Overview, Digest, Species, Glyco |
+
+- **Batch.** Batch is an input mode of every run workflow, not a separate
+  workflow: the Input card has a **One file | Batch** switch. Batch mode
+  shows "Add files… / Add folder…", an output folder, and an **SDRF file
+  (optional)** field. Results open on the Batch view: one row per file, the
+  workflow's key columns, and the SDRF check. The top-level Batch tab stays
+  as the queue and summary view.
+  **Decision:** batch is an input mode, as in FragPipe and MaxQuant. A
+  separate W8 duplicated W2 and W7 and gave a single-file `-out` in a batch.
+- **Open results.** Open earlier results from the header (Results > Open…,
+  File > Open) and from a link "Open earlier results…" under the chooser. It
+  is not a card.
+  **Decision:** it is navigation, not a run.
+- **Task IDs.** New IDs: `run-qc`, `mass-shift`, `species`, `db-reduction`,
+  `triage`. The IDs `export-tags` and `characterize` stay. Saved presets
+  with `batch-qc` load as `characterize` in Batch mode; presets with
+  `open-results` load as `export-tags`.
+- **Species and Database reduction stay separate.** Species needs no FASTA
+  and answers "what is in it". Database reduction needs a FASTA and hands
+  off to a search engine. Merging them would make the database "optional
+  but required for half the outputs".
+- **No "Custom" workflow.** Any workflow plus Advanced reaches every option.
+  Editing a value marks the workflow "(modified)", and "Save as preset…"
+  keeps it.
+
+### Values each workflow sets (diff over CLI defaults)
+
+| Workflow | Values |
+|---|---|
+| all run workflows | `threads 0` (all cores; the CLI default is 1), `progress true` |
+| W1 | `res_conf true` |
+| W2 | `qc_out` |
+| W3 | `recon_out`, `delta_out`, `delta_spectra_out`, `delta_counts_out`, `extension 3` |
+| W4 | `species true`, `species_out`, `extension 2` (validated in the paper: seed 3 + 2 x 2 = k 7) |
+| W5 | `shortlist_out`, `fasta_out`, `search_config_out`, `extension 3`, plus the validated recipe `shortlist_gapped true`, `recon_min_length 6`, `shortlist_max_evalue 10`, `recon_missed_cleavages 2` (doc/SHORTLIST.md). The manifest is 1.15.3, where the recipe is not yet the CLI default; setting it explicitly gives the same result on 1.15.4 and later. |
+| W6 | `census true`, `census_score true`, `census_sorted_out` |
+| W7 | `digest_out`, `label_out`, `alkylation_out`, `glyco true`, `species true`, `extension 2`, `subsample_fraction 0.1` |
+
+## 2. Parameters per workflow
+
+### 2.1 Common block (top of Settings, the same in every run workflow)
+
+| Field | Params | One-line help |
+|---|---|---|
+| Instrument | `fragment_tolerance`, `fragment_tolerance_unit`, `ion_series` | Sets the fragment tolerance for your analyzer. Presets: Orbitrap or TOF HCD 20 ppm; Orbitrap ETD or EThcD 20 ppm with c/z ions (`ion_series auto`); ion trap CID 0.5 Da; Custom. |
+| Fixed modifications | `fixed_modifications` | Modifications on every such residue. Remove Carbamidomethyl (C) if cysteines were not alkylated; add TMT for labelled runs. |
+
+- The Instrument preset is matched by value: 20 ppm with b/y ions shows
+  "Orbitrap/TOF HCD", not "custom".
+- Custom shows the value and unit fields inline.
+- The tolerance preset is removed from the Run bar.
+
+### 2.2 Settings shown by default per workflow
+
+Inputs other than spectra appear at the top of Settings, marked "required"
+where needed.
+
+| W | Field (param) | One-line help |
+|---|---|---|
+| W1 | Seed length (`tag_length`) | Residues in a seed tag. 3 suits most runs. |
+| W1 | Extension (`extension`) | Residues added per end. Set 3 or more to export long tags (8+ residues) for Stitch or ALPS. |
+| W1 | E-value cutoff (`max_evalue`) | Keep tags at or below this E-value. 0 keeps all. |
+| W1 | Tags per spectrum (`max_tags`) | At most this many tags per spectrum. 0 = no limit. |
+| W1 | Per-residue confidence (`res_conf`) | Adds a 0 to 100 confidence per residue, used by assembly export. |
+| W2 | Spectra to read (`subsample_fraction`) | Fraction of spectra to read, 0 = all. Counts cover only the spectra read. |
+| W2 | DIA input (`acquisition_check`) | Raw DIA is refused by default. Choose "warn" to run anyway. |
+| W3 | Protein database (`recon_fasta`), required | FASTA the tags are placed on. Mass shifts are measured against it. |
+| W3 | Extension (`extension`) | Residues added per tag end. Longer tags place more uniquely. |
+| W3 | Missed cleavages (`recon_missed_cleavages`) | Missed tryptic cleavages allowed in a placement window (0 to 10). |
+| W4 | Report rank (`species_rank`) | Taxonomic level of the report: genus, family, … |
+| W4 | Presence call (`species_call`) | "decoy" calls each taxon present or absent against decoy tags; "none" ranks only. |
+| W4 | Spectra to read (`subsample_fraction`) | Fraction of spectra to read, 0 = all. 0.1 is usually enough. |
+| W5 | Protein database (`recon_fasta`), required | FASTA to shortlist from. |
+| W5 | Background proteins (`shortlist_background`) | Host proteome and contaminants, always added to the reduced FASTA. |
+| W5 | Search engine (`search_engine`) | Engine to write a configuration for: Sage, Comet or MSFragger (experimental). |
+| W5 | Protease (`shortlist_protease`) | Cleavage rule. Trypsin refuses clearly non-tryptic runs; "auto" uses the protease FASTag detects. |
+| W5 | Variable modifications (`variable_modifications`) | Written into the engine configuration, for example Oxidation (M). |
+| W6 | Identifications (`census_ids`), optional | idXML or mzIdentML of this run. Marks which spectra your search identified. |
+| W6 | ID q-value (`census_ids_fdr`) | q-value a target hit needs to count as identified. |
+| W6 | Triage E-value (`census_triage_evalue`) | An unidentified spectrum with a tag at or below this E-value is a triage candidate. |
+| W7 | Spectra to read (`subsample_fraction`) | Fraction of spectra to read. 0.1 gives stable calls in a tenth of the time. |
+
+### 2.3 Outputs card (per workflow)
+
+The card has two fields:
+
+- **Output folder.** Defaults to the input's folder.
+- **Run name.** The stem; defaults to the input name.
+
+Below them is a checklist of products. Each row is "Label -> stem.suffix" in
+grey monospace, with "Change…" behind a small link. The list holds the
+workflow's products from section 1, followed by its tags-table columns:
+
+- W1: ProForma column (`proforma`), USI column (`usi_collection`, which asks
+  for the PRIDE accession), spectra with tags (`out_spectra`).
+- The tags table (`out`) is always written because the CLI needs it. Outside
+  W1 it shows as a checked, greyed row: "Tags table (always written)".
+
+Wiring rules (the checkbox drives the boolean; there is no separate field):
+
+| Checked output | Also set or required |
+|---|---|
+| species.tsv | `species true` |
+| glyco.tsv | `glyco true` |
+| any census_* | `census true` |
+| census_sorted.tsv | `census_score true` |
+| delta.tsv, massgap.tsv, recon_id.tsv | recon.tsv checked and greyed ("needed by …") |
+| delta_spectra.tsv, delta_counts.tsv | delta.tsv |
+| shortlist, reduced FASTA, engine config | Protein database required |
+| check_header.tsv | `check_header_charge` set |
+
+### 2.4 Advanced (one disclosure, collapsed; header "Advanced (n changed)")
+
+Order inside Advanced:
+
+1. **This workflow's groups** (section 4), open.
+2. **Global** (the same in every workflow): Performance, Peaks, Charge and
+   ions, Complement pairs, Isobaric reporters (experimental).
+3. **Other analyses** (collapsed): the remaining workflow groups, with their
+   outputs as checkboxes. A tagging run can still add a species report.
+
+- Experimental options carry an "experimental" badge, taken from the README
+  wording.
+- A dependent field whose prerequisite is off stays visible but disabled,
+  with its reason ("needs Mass-shift table").
+- Parameter search (Cmd+K) covers all reachable params. A hit inside
+  Advanced expands the disclosure and its group and focuses the field.
+
+### 2.5 Global settings, one place
+
+These are always the **Global** group of Advanced:
+
+- `threads`: the GUI sends 0, meaning all cores.
+- Peaks, charge, ion series details and complement tolerances.
+
+The Instrument control (2.1) is the only basic global setting. Preferences
+does not duplicate any of these.
+
+## 3. Screen flow, layout, help
+
+```
+[Header: Setup | Run | Results | Batch | History      Open… | ? Help]
+1 Input        file chip + probe line (instrument, MS2 count, DIA check)  [One file | Batch]
+2 Workflow     7 cards in a 4+3 grid, each: label, one-line blurb, "-> products"
+               row: "Export tags (modified)"  Reset | Presets ▾ (Save as…, Load, Delete)
+3 Settings     required inputs of the workflow, then Common (Instrument, Fixed mods),
+               then the 2 to 5 workflow fields
+4 Outputs      folder, run name, product checklist
+5 Advanced (n changed) ▸
+[Run bar:  "Run QC on run01.mzML · 2 reports"   Copy command line   Export INI…   [Run]]
+```
+
+Rules:
+
+- One column, at most 960 px wide, cards numbered 1 to 5. At the default
+  window size (1280x800), cards 1 to 4 fit without scrolling for every
+  workflow except W5.
+- Removed: the "Starting from" select, the "Same as …" line, the plan footer
+  that repeats the cards, the tolerance preset in the Run bar, "Checks before
+  the run" as a separate section (probe results go into the Input card),
+  and the "Or choose one file…" link in Batch.
+- **Help, three layers:**
+  - Layer 1: one gray line under each basic field (section 2.2), and the
+    workflow blurb under the chooser.
+  - Layer 2: a (?) popover per field, opened by click or keyboard. It shows
+    the full CLI description, the default, and the flag (`-delta_out`) in
+    monospace.
+  - Layer 3: a "Learn more" link on each card to its README or doc section:
+    | Workflow | Link target |
+    |---|---|
+    | W1 | Assembly export |
+    | W2 | Run QC report |
+    | W3 | Reconciliation and mass shifts |
+    | W4 | Species detection |
+    | W5 | doc/SHORTLIST.md |
+    | W6 | Census |
+    | W7 | Digest, label and mass-gap reports |
+  - Advanced fields show the description inline under the label, one line,
+    truncated, with the full text in (?).
+- **Results tabs:**
+  - Show only tabs whose report exists, in the order of section 1.
+  - Rename "Mass gaps & recon" to **Mass shifts**.
+  - New tabs: **QC** (qc.tsv as grouped key/value pairs), **Triage**
+    (census_sorted with an identified/unidentified filter), and **Shortlist**
+    (ranked proteins, "Reveal reduced FASTA / engine config").
+  - Until a view exists, the file opens in the generic table.
+  - The Overview names the workflow, shows the evidence-cutoff caveat once
+    at the top, and replaces CLI flags with "Run again with …" buttons.
+  - A missing report gives a styled empty state with an action, never a bare
+    flag.
+- **Harness first:** the e2e bridge must report the manifest version (1.15.3)
+  and list every manifest option. The baseline screenshots show 1.11.0 gating
+  ("needs FASTag 1.12", "With tags: not counted"), so a review of them
+  judges a stale UI.
+
+## 4. Parameter-to-workflow mapping (all 185)
+
+Basic = shown by default in that workflow (section 2). Output = a checkbox in
+Outputs. Wired = set by the GUI from a checkbox or the workflow. Every other
+param sits in the named Advanced group. That group is open in its home
+workflow and under "Other analyses" in all others.
+
+| Group (home) | Params | Tier |
+|---|---|---|
+| Input / output (all) | `in`, `out` | Input card; Outputs run name |
+| Common (all) | `fragment_tolerance`, `fragment_tolerance_unit`, `fixed_modifications` | Basic, all |
+| Tagging (W1) | `tag_length`, `extension`, `max_evalue`, `max_tags`, `res_conf` | Basic W1; `extension` basic in W3 |
+| Tag columns (W1) | `proforma`, `usi_collection`, `out_spectra` | Output W1 |
+| Tagging, advanced (W1) | `tag_lengths`, `gaps`, `gap_penalty`, `diversity`, `orientation`, `isobaric_tolerance` | Advanced |
+| Tag filter by database (W1) ("Keep only tags found in…") | `fasta`, `min_filter_length`, `entrapment_fasta` | Advanced |
+| Run QC (W2) | `qc_out` | Output W2 |
+| Run QC (W2) | `subsample_fraction`, `acquisition_check` | Basic W2; `subsample_fraction` basic in W4, W7 |
+| Sampling and checks (W2) | `subsample_spectra`, `subsample_seed`, `acquisition_probe_spectra`, `check_header_charge`, `check_header_margin` | Advanced |
+| Sampling and checks (W2) | `check_header_out` | Output (Advanced, wires `check_header_charge`) |
+| Placement (W3) | `recon_fasta`, `recon_missed_cleavages` | Basic W3; `recon_fasta` basic in W5 |
+| Placement (W3) | `recon_out`, `recon_id_out` | Output W3 |
+| Placement, advanced (W3) | `recon_localize`, `recon_min_length`, `recon_sub_tolerance`, `recon_sub_tolerance_unit` | Advanced |
+| Mass-shift survey (W3) | `delta_out`, `delta_spectra_out`, `delta_counts_out`, `massgap_out` | Output W3 |
+| Mass-shift survey, advanced (W3) | `delta_select`, `delta_group`, `delta_isobar_tolerance`, `delta_isotope_flank`, `delta_loc_model`, `delta_loc_min_evidence`, `delta_loc_null`, `delta_name_tolerance`, `delta_name_tolerance_unit` | Advanced (experimental) |
+| Mass-gap report (W3) | `massgap_max_mods`, `massgap_min_bin`, `massgap_min_share`, `massgap_min_spectra`, `massgap_silac_min`, `massgap_silac_share`, `massgap_top`, `massgap_window`, `massgap_window_da` | Advanced, enabled with massgap.tsv |
+| Species (W4) | `species` | Wired by species.tsv |
+| Species (W4) | `species_out` | Output W4, W7 |
+| Species (W4) | `species_rank`, `species_call` | Basic W4 |
+| Species, advanced (W4) | `species_evidence`, `species_min_len`, `species_use_gapped`, `species_deconvolve`, `species_max_kmer_share`, `species_min_margin`, `species_orientation`, `species_call_decoys`, `species_call_min_units`, `species_call_params`, `species_pi0` | Advanced |
+| Taxonomy (W4) | `taxdb`, `taxonomy_nodes`, `taxonomy_names` | Advanced ("bundled index" when empty) |
+| Shortlist (W5) | `shortlist_out`, `fasta_out`, `search_config_out` | Output W5 |
+| Shortlist (W5) | `shortlist_background`, `shortlist_protease`, `search_engine`, `variable_modifications` | Basic W5; `variable_modifications` is Global > Chemistry elsewhere |
+| Shortlist, advanced (W5) | `shortlist_min_spectra`, `shortlist_top`, `shortlist_parsimony`, `shortlist_specificity`, `shortlist_gapped`, `shortlist_max_evalue`, `shortlist_force`, `shortlist_decoy_affix` | Advanced |
+| Search configuration (W5) | `search_config_template`, `search_decoy_prefix`, `search_isotope_errors`, `search_missed_cleavages`, `search_nterm_acetyl`, `search_precursor_tolerance`, `search_precursor_unit` | Advanced |
+| Census (W6) | `census`, `census_score` | Wired by census outputs |
+| Census (W6) | `census_out`, `census_summary_out`, `census_sorted_out` | Output W6 |
+| Census (W6) | `census_ids`, `census_ids_fdr`, `census_triage_evalue` | Basic W6 |
+| Census, advanced (W6) | `census_ids_accept`, `census_ids_exact` | Advanced |
+| Characterize (W7) | `digest_out`, `label_out`, `alkylation_out`, `glyco_out` | Output W7 |
+| Characterize (W7) | `glyco` | Wired by glyco.tsv |
+| Digest and labels (W7) | `digest_models`, `digest_models_version`, `digest_calibration`, `digest_detection`, `digest_flank2`, `digest_min_confidence`, `digest_tag_min`, `digest_window`, `digest_background_share`, `digest_silac_min`, `digest_quality` | Advanced (`digest_quality` experimental) |
+| Alkylation (W7) | `alkylation_proteome`, `alkylation_min_share`, `alkylation_min_spectra`, `alkylation_window`, `alkylation_tags_out` | Advanced (`alkylation_tags_out` experimental, Output) |
+| Glyco (W7) | `glyco_min_fraction` | Advanced |
+| Global > Performance | `threads` | Advanced (GUI default 0) |
+| Global > Peaks | `no_deisotope`, `max_peaks`, `peaks_per_window`, `pick_profile` | Advanced |
+| Global > Charge and ions | `ion_series`, `ion_series_hybrid`, `unknown_charge`, `charge_min`, `charge_max`, `charge_infer_margin`, `isotope_error` | Advanced (`ion_series` is also set by the Instrument preset) |
+| Global > Complement pairs | `complement_rule`, `complement_tolerance`, `complement_tolerance_unit`, `complement_tol_factor`, `complement_probe`, `complement_midp` | Advanced |
+| Global > Isobaric reporters | `tmt_pseudo_filter`, `tmt_reporter_filter` | Advanced (experimental) |
+| Hidden, managed by the GUI | `progress`, `dump_spectrum`, `probe_input` | Hidden (progress bar, Spectrum tab, Input probe) |
+| Hidden, boilerplate or no effect | `no_progress`, `version`, `log`, `debug`, `force`, `test`, `stream`, `mzpeak_read_memory` | Hidden |
+| Hidden, removed in 1.14 | `ion_series_photo`, `label_call_min_tags`, `label_discovery_depth`, `label_discovery_max_flank`, `label_discovery_min_share`, `label_discovery_min_spectra`, `label_discovery_out`, `label_discovery_unimod_top`, `label_discovery_window_c`, `label_discovery_window_n`, `pick_unknown_type`, `search_shifts`, `search_shifts_out`, `shift_expand_sites`, `shift_max_offsets`, `shift_max_variable`, `shift_site_min_count`, `shift_site_min_ions`, `shift_site_min_share`, `shortlist_exact_only`, `species_reagents` | Hidden; listed under Help > "Options not in the GUI" |
+
+Implementation notes:
+
+- Encode this table in `paramUi.ts` as
+  `{ group, tier: 'basic'|'advanced'|'output'|'wired'|'hidden', basicIn?: TaskId[] }`.
+- `paramUi.test.ts` asserts that every manifest name has exactly one entry,
+  and that nothing hidden is basic or output in a workflow.
+- Help texts in `paramUi.ts` that name 1.16 (`census_score`,
+  `census_ids_accept`, `census_ids_exact`) must name a released version or
+  none. The manifest is 1.15.3.
+- Alkylation: the Overview must not say "needs a FASTA".
+  `alkylation_proteome auto` uses the shipped human proteome.
+
+## 5. Acceptance criteria (checkable on screenshots)
+
+Screenshots per workflow: empty, with a file, Advanced open, Batch mode, and
+every results tab.
+
+1. The chooser shows exactly 7 workflow cards in the order of section 1, each
+   with a blurb of at most 1 line and its products. "Open results" is not a
+   card; Open… is in the header.
+2. Setup shows the numbered cards in this order: Input, Workflow, Settings,
+   Outputs, Advanced. The Run bar holds only the plan line, Copy command
+   line, Export INI… and Run.
+3. Per workflow, Settings shows the Common block plus exactly the fields of
+   section 2.2 (at most 6 incl. inputs) and nothing else. Export tags shows
+   no Species, Glyco, Digest or Reconciliation field.
+4. Every basic field has a one-line help under it and a (?) control. The
+   (?) popover shows the CLI flag and default.
+5. Advanced is collapsed on load and reads "Advanced (0 changed)". After one
+   edit inside it, the header reads "Advanced (1 changed)" when collapsed.
+6. The fragment tolerance appears once (Instrument), and with 20 ppm the
+   preset reads "Orbitrap/TOF HCD".
+7. Outputs shows a folder, a run name and checkboxes with derived file
+   names. There is no per-output path field. In W3, unchecking recon.tsv is
+   impossible while delta.tsv is checked, and the row says why.
+8. W3 and W5 mark "Protein database" as required. Run is disabled with the
+   reason until it is set.
+9. Batch mode shows Add files/folder, Output folder and SDRF (optional).
+   There is no single-file Output stem or "Or choose one file…".
+10. No screen text names a CLI option as an instruction ("-census", "FASTag
+    1.12") outside the (?) popovers and the command line preview. No screen
+    shows "needs FASTag 1.12 or later" with the 1.15.3 bridge.
+11. Results show only tabs for reports that exist. Mass shifts, QC, Triage
+    and Shortlist appear after W3, W2, W6 and W5 runs. Missing reports show
+    a padded empty state with an action button.
+12. All UI text is English, sentence case, and uses no abbreviations a
+    first-time user cannot resolve (unexplained "recon" or "census" as a
+    heading counts as a failure).
+
+## 6. Implementation order (small commits on feat/gui-workflows)
+
+1. e2e bridge: version and options from the manifest; screens.spec.ts shots
+   per workflow (section 5).
+2. `paramUi.ts`: tiers and groups for all 185 params, plus the test.
+3. `tasks.ts`: 7 workflows with `values`, `basic`, `outputs`, `inputs` and
+   `docs`; preset ID migration.
+4. `SetupForm.tsx` / `plan.ts`: five numbered cards, Common block with the
+   Instrument preset; remove duplicate controls.
+5. Outputs checklist and wiring rules.
+6. Batch as an input mode with SDRF.
+7. Results: tab gating, rename Mass shifts, generic table for QC, Triage and
+   Shortlist, then dedicated views; empty states.
+8. Help text pass, cross-model screenshot review, then iterate.
