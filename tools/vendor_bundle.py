@@ -26,8 +26,9 @@ strip: removes the Thermo reader (the managed half, the .NET runtime, Thermo's
   The native bridge library stays: libOpenMS links it, and without its managed
   half it reads nothing; FASTag then refuses .raw with the bridge's message.
 installer-license: writes the licence page of the Windows installer and the
-  macOS disk images (gui/src-tauri/installer-license.txt; UTF-8 with BOM, as
-  NSIS reads it): FASTag's MIT licence, then the RawFileReader terms the user
+  macOS disk images (gui/src-tauri/installer-license.txt; UTF-8 without BOM:
+  tauri's NSIS step adds one itself, and WiX rejects it as outside code page
+  1252): FASTag's MIT licence, then the RawFileReader terms the user
   accepts by installing, then Thermo's licence. With --check, exits 1 when OUT
   differs from what it would write.
 check: the state `add` leaves (or, with --absent, the one `strip` leaves);
@@ -213,7 +214,7 @@ def main() -> int:
     if a.cmd == "installer-license":
         if not a.out:
             die("installer-license needs OUT")
-        want = "\ufeff" + installer_license()
+        want = installer_license()
         out = Path(a.out)
         if a.check:
             if not out.is_file() or out.read_text(encoding="utf-8") != want:

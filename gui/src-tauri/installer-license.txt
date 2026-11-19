@@ -1,4 +1,4 @@
-﻿FASTag is free software under the MIT licence (below). The FASTag
+FASTag is free software under the MIT licence (below). The FASTag
 installer also installs Thermo Fisher Scientific's RawFileReader, which
 reads Thermo .raw files and is NOT under the MIT licence:
 
