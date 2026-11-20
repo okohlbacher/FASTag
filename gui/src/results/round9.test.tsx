@@ -194,7 +194,7 @@ describe('round 9, 5-7: one rule for every database the alkylation report places
     expect(note).toMatch(/A FASTA of your own \(as the proteome or as Protein database\)[^.]*: Extension is not raised/)
     const help = PARAM_UI['alkylation_proteome'].help!.text
     expect(help).not.toMatch(/or choose a protein database/)
-    expect(help).toMatch(/Extension is not raised for it/)
+    expect(help).toMatch(/Extension is not raised for a FASTA file/)
     // The mass-gap help (round 9, 9) against alkylationTarget/Extension.
     const page = render(<>{DIGEST.sections.map((x, k) => <div key={k}>{x.body}</div>)}</>).container.textContent ?? ''
     expect(page).toMatch(/not on a FASTA of your own, as the proteome or as Protein database/)

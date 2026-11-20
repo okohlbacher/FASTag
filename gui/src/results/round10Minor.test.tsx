@@ -50,3 +50,11 @@ describe('round 10 minor: the alkylation note says where Extension is', () => {
     expect(note.textContent).toBe('Turning it on raises Extension 0 → 3 (Settings); that changes every tag.')
   })
 })
+
+describe('round 10 minor: alkylation_proteome help names the field plainly', () => {
+  it('no comma-laden path; says where the group is outside Mass-shift survey', () => {
+    const t = PARAM_UI.alkylation_proteome.help!.text
+    expect(t).not.toMatch(/Advanced › Placement, advanced,/)
+    expect(t).toMatch(/group “Placement, advanced”, which is under Other analyses in every workflow but Mass-shift survey/)
+  })
+})

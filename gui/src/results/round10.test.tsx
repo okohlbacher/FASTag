@@ -138,7 +138,7 @@ describe('round 10, 11 to 14: help texts', () => {
   })
   it('12, 13: the real label of the shortest placed tag, and that it replaces 8 or 7', () => {
     const text = PARAM_UI['alkylation_proteome'].help!.text
-    expect(text).toMatch(/Shortest tag placed, under Advanced › Placement, advanced, sets it/)
+    expect(text).toMatch(/Shortest tag placed sets that length; it is in Advanced, group “Placement, advanced”/)
     expect(text).toMatch(/7 \(yeast, E\. coli\) \(or Shortest tag placed, when set above 0\)/)
     expect(text).not.toMatch(/Minimum tag length/)
     expect(TASKS.find((t) => t.id === 'characterize')!.productNotes!['alkylation_out']).toMatch(/\(or Shortest tag placed, when set above 0\)/)
