@@ -1,4 +1,4 @@
-import type { JSX } from 'react'
+import type { JSX, ReactNode } from 'react'
 import type { SpeciesReport, Taxon } from './types'
 import { baseName, fmt, fmtQ } from './digestReport'
 import { IconFlag, IconWarning } from './icons'
@@ -55,6 +55,19 @@ function CzNote({ n }: { n: number | null | undefined }): JSX.Element | null {
   )
 }
 
+/// The caveat of a fragment tolerance in Da: on the ranking and on an empty report.
+function DaBanner({ tol, children }: { tol: number | null | undefined; children: ReactNode }): JSX.Element | null {
+  if (tol == null) return null
+  return (
+    <p className="banner warn" role="note">
+      <IconWarning />
+      <span>
+        <strong>Unreliable here.</strong> The fragment tolerance is {fmt(tol)} Da: {DA_SPECIES_CAVEAT}. {children}
+      </span>
+    </p>
+  )
+}
+
 export default function SpeciesPanel({
   report,
   enabled,
@@ -103,6 +116,7 @@ export default function SpeciesPanel({
       <div className="species">
         <ReportHeader title="Species" paths={[report.path]} help={{ to: 'species-reading', label: 'About this tab' }} />
         <CzNote n={czExcluded} />
+        <DaBanner tol={daTolerance}>An empty report at this tolerance says nothing about the sample.</DaBanner>
         <div className="empty-state">
           <h2>No taxon in the report</h2>
           <p>
@@ -150,15 +164,9 @@ export default function SpeciesPanel({
         }
       />
       <CzNote n={czExcluded} />
-      {da && (
-        <p className="banner warn" role="note">
-          <IconWarning />
-          <span>
-            <strong>Unreliable here.</strong> The fragment tolerance is {fmt(daTolerance!)} Da: {DA_SPECIES_CAVEAT}.
-            The ranking is shown, but do not read the top taxon as the sample&apos;s organism.
-          </span>
-        </p>
-      )}
+      <DaBanner tol={daTolerance}>
+        The ranking is shown, but do not read the top taxon as the sample&apos;s organism.
+      </DaBanner>
 
       <section className="cards" aria-label="Taxon ranking">
         <div className="card headline">
