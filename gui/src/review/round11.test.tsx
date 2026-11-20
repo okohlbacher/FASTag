@@ -56,7 +56,7 @@ describe('round 11: Triage shows its candidates; an unscored census is no rankin
     render(<ReportTable kind="triage" path="/d/a.census.tsv" />)
     await waitFor(() => expect(document.querySelector('.report-sum')?.textContent).toMatch(/2 MS2 spectra in file order \(no identifiability score\)/))
     expect(document.body.textContent).not.toMatch(/ranked by how identifiable/)
-    expect(screen.getByRole('grid', { name: 'Per-spectrum census' })).toBeTruthy()
+    expect(screen.getByRole('grid', { name: 'Spectra, one row each' })).toBeTruthy()
   })
 })
 

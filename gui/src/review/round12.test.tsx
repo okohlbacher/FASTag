@@ -35,9 +35,9 @@ describe('round 12: Triage candidates go to a file for the second search', () =>
     const mock = installMockBridge()
     mock.reportFiles['/d/a.census.tsv'] = 'index\tspectrum\tstatus\tbest_evalue\n0\ts1\tno_tags\t\n1\ts2\ttagged\t3\n2\ts3\ttagged\t0.5\n'
     render(<ReportTable kind="triage" path="/d/a.census.tsv" />)
-    await waitFor(() => expect(screen.getByRole('heading', { name: 'Per-spectrum census' })).toBeTruthy())
+    await waitFor(() => expect(screen.getByRole('heading', { name: 'Spectra, one row each (no identifiability score)' })).toBeTruthy())
     await click(screen.getByRole('button', { name: /^Best E-value/ }))
-    const rows = screen.getByRole('grid', { name: 'Per-spectrum census' }).querySelectorAll('tbody tr')
+    const rows = screen.getByRole('grid', { name: 'Spectra, one row each' }).querySelectorAll('tbody tr')
     expect(rows[rows.length - 1].textContent).toMatch(/s1/)
   })
 })

@@ -64,7 +64,7 @@ export const TASKS: readonly Task[] = [
       tag_length: 'Residues in a seed tag; 3 suits most runs.',
       extension: '3 lets a seed of 3 grow to 9.',
       max_evalue: 'Keeps tags at or below this E-value; 0 keeps all.',
-      max_tags: 'Most tags per spectrum; 0 sets no limit.',
+      max_tags: 'At most this many per spectrum; 0 sets no limit.',
       res_conf: 'Adds a confidence per residue for assembly.'
     },
     outputs: ['out', 'proforma', 'usi_collection', 'out_spectra'],

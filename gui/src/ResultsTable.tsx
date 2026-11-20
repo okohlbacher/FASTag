@@ -906,7 +906,7 @@ export default function ResultsTable({ path, source, rerunResConf, spectrum }: P
     const row = activeRowCells()
     if (!row) return
     if (usiCol < 0) {
-      setCopyNote('This file has no usi column: run FASTag with -usi_collection to write one.')
+      setCopyNote('This file has no USI column: turn on USI column under Outputs and run again.')
       return
     }
     const usi = row[usiCol] ?? ''
@@ -1101,7 +1101,7 @@ export default function ResultsTable({ path, source, rerunResConf, spectrum }: P
           type="button"
           className="secondary"
           disabled={currentPos() == null}
-          title={usiCol >= 0 ? "Copy the active row's USI (⇧⌘C)" : 'This file has no usi column: run FASTag with -usi_collection to write one'}
+          title={usiCol >= 0 ? "Copy the active row's USI (⇧⌘C)" : 'This file has no USI column: turn on USI column under Outputs and run again'}
           onClick={copyUsi}
         >
           Copy USI
@@ -1131,7 +1131,7 @@ export default function ResultsTable({ path, source, rerunResConf, spectrum }: P
             id={`${id}-fmt`}
             value={kind}
             disabled={!meta}
-            title={readsOk ? undefined : 'Stitch and ALPS reads need the res_conf column: run FASTag with -res_conf'}
+            title={readsOk ? undefined : 'Stitch and ALPS reads need the Residue conf. (%) column: run again with Per-residue confidence on'}
             onChange={(e) => setExportKind(e.target.value as 'table' | DenovoFormat)}
           >
             <option value="table">Table (TSV or CSV)</option>
@@ -1151,7 +1151,7 @@ export default function ResultsTable({ path, source, rerunResConf, spectrum }: P
             type="button"
             className="secondary"
             disabled={rerunResConf.disabled}
-            title="Runs this input again with -res_conf on: it adds the Residue conf. (%) column, one confidence per residue, which Stitch and ALPS reads need. Min. and Mean conf. are step scores of the whole tag."
+            title="Runs this input again with Per-residue confidence on: it adds the Residue conf. (%) column, one confidence per residue, which Stitch and ALPS reads need. Min. and Mean conf. are step scores of the whole tag."
             onClick={rerunResConf.run}
           >
             Re-run to add Residue conf. (%)

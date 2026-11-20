@@ -124,7 +124,7 @@ describe('Overview model: calls', () => {
     expect(tile(overviewOf(CLI_CASES.v112), 'label').value).toBe('none (label-free)')
     const old = tile(overviewOf(CLI_CASES.v111Tmt), 'label')
     expect(old.value).toBe('not called')
-    expect(old.note).toMatch(/FASTag 1\.12/)
+    expect(old.note).toMatch(/no label call/) // round 14: no version named on screen
   })
 
   it('no alkylation report: "not assessed" with "Add Alkylation report and run again"', () => {

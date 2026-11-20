@@ -7,7 +7,7 @@
 // the census summary) as a generic table. Each reads the file the backend
 // resolved for the run; a report that cannot be read says so.
 
-import { useEffect, useMemo, useState, type JSX } from 'react'
+import { useEffect, useMemo, useRef, useState, type JSX } from 'react'
 import DataTable, { type Column } from './DataTable'
 import { baseName } from '../digestReport'
 import { revealLabel, stripExt } from '../app/paths'
@@ -553,11 +553,13 @@ function TriageView({ tsv, path, openSpectrum }: { tsv: Tsv; path: string; openS
     return Uint32Array.from(keep)
   }, [tsv, filter, idc, trc, states])
   const counts = st >= 0 ? Object.entries(tsv.rows.reduce<Record<string, number>>((m, r) => ({ ...m, [r[st]]: (m[r[st]] ?? 0) + 1 }), {})) : []
-  const label = scored ? 'Spectra ranked by identifiability' : 'Per-spectrum census'
+  const label = scored ? 'Spectra ranked by identifiability' : 'Spectra, one row each'
   // The shown rows to a TSV (the candidates for a second search, or any
   // other filter): every column, in the file's order; the table itself is
   // never written over.
   const [saved, setSaved] = useState<{ ok: boolean; text: string } | null>(null)
+  // The rows in the order the table shows them (the user's sort).
+  const shownOrder = useRef<readonly number[] | null>(null)
   async function exportShown(): Promise<void> {
     setSaved(null)
     const suffix = filter === 'candidates' ? 'triage_candidates' : filter === 'all' ? 'all' : filter
@@ -568,10 +570,11 @@ function TriageView({ tsv, path, openSpectrum }: { tsv: Tsv; path: string; openS
       return
     }
     const clean = (v: string): string => v.replace(/[\t\r\n]+/g, ' ')
-    const text = [tsv.columns.join('\t'), ...Array.from(ids, (i) => tsv.rows[i].map((v) => clean(v ?? '')).join('\t'))].join('\n') + '\n'
+    const order = shownOrder.current && shownOrder.current.length === ids.length ? shownOrder.current : Array.from(ids)
+    const text = [tsv.columns.join('\t'), ...order.map((i) => tsv.rows[i].map((v) => clean(v ?? '')).join('\t'))].join('\n') + '\n'
     try {
       await window.fastag.writeSummary(dest, text, [path])
-      setSaved({ ok: true, text: `${fmtInt(ids.length)} rows written to ${dest}.` })
+      setSaved({ ok: true, text: `${fmtInt(order.length)} rows written to ${dest}, in the order shown.` })
     } catch (e) {
       setSaved({ ok: false, text: `Could not write the rows: ${e instanceof Error ? e.message : String(e)}` })
     }
@@ -613,6 +616,9 @@ function TriageView({ tsv, path, openSpectrum }: { tsv: Tsv; path: string; openS
         total={tsv.rows.length}
         keep={tsv}
         sort={scored && !sorted ? { column: 'ident_score', desc: true } : null}
+        onOrder={(o) => {
+          shownOrder.current = o
+        }}
         onOpen={openSpectrum && sp >= 0 ? (i) => openSpectrum(tsv.rows[i][sp] ?? '') : undefined}
         openLabel="Open in Spectrum"
       />
@@ -652,8 +658,8 @@ export default function ReportTable({ kind, path, gen, files = [], openSpectrum 
   const { tsv, error } = useReport(path, gen)
   // A census without a score is no ranking (TriageView says the same).
   const census = kind === 'triage' && !!tsv && !tsv.columns.includes('ident_score')
-  const title = census ? 'Per-spectrum census' : (REPORT_TITLE[kind] ?? headText(baseName(path)))
-  const help = census ? { to: 'workflow-triage', label: 'How to read the census' } : REPORT_HELP[kind]
+  const title = census ? 'Spectra, one row each (no identifiability score)' : (REPORT_TITLE[kind] ?? headText(baseName(path)))
+  const help = census ? { to: 'workflow-triage', label: 'How to read this table' } : REPORT_HELP[kind]
   return (
     <div className={`report-view report-${kind}`}>
       <ReportHeader title={title} paths={[path]} help={help} />

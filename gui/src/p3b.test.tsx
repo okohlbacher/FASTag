@@ -265,11 +265,11 @@ describe('copy row and copy USI', () => {
     stubClipboard()
     const cols = COLUMNS.slice(0, -1)
     await renderTable({ columns: cols, rows: ROWS.map((r) => r.slice(0, -1)) })
-    expect(screen.getByRole('button', { name: 'Copy USI' }).getAttribute('title')).toMatch(/-usi_collection/)
+    expect(screen.getByRole('button', { name: 'Copy USI' }).getAttribute('title')).toMatch(/turn on USI column under Outputs/)
     await key(table(), 'ArrowDown')
     await key(activeRow()!, 'C', { metaKey: true, shiftKey: true })
     expect(writeText).not.toHaveBeenCalled()
-    expect(await screen.findByText(/no usi column.*-usi_collection/)).toBeDefined()
+    expect(await screen.findByText(/no USI column.*turn on USI column under Outputs/)).toBeDefined()
   })
 
   it('a refused clipboard is said, not swallowed', async () => {
@@ -374,7 +374,7 @@ describe('Stitch and ALPS export', () => {
     const opts = Array.from(format().options)
     expect(opts.find((o) => o.value === 'stitch')!.disabled).toBe(true)
     expect(opts.find((o) => o.value === 'alps')!.disabled).toBe(true)
-    expect(format().getAttribute('title')).toMatch(/-res_conf/)
+    expect(format().getAttribute('title')).toMatch(/Per-residue confidence on/)
   })
 
   it('reports a file the script refuses, and writes nothing', async () => {

@@ -193,7 +193,7 @@ export default function MassGapChart({ bins, peaks = [], window, windowAssumed =
           ? `nearest known mass ${d.mark.name} (${da(d.mark.mass)} Da, ±${fmt(window, 1)} Da assumed; not a CLI assignment)`
           : `near ${d.mark.name} (${da(d.mark.mass)} Da, ${fmt(Math.abs(d.bin.gap - d.mark.mass) * 1000, 1)} mDa off)`
       )
-    if (d.bin.interps?.length) parts.push(`recon: ${d.bin.interps.map((i) => `${i.name} ${fmt(i.n)}`).join(', ')}`)
+    if (d.bin.interps?.length) parts.push(`placements: ${d.bin.interps.map((i) => `${i.name} ${fmt(i.n)}`).join(', ')}`)
     return parts.join('; ')
   }
 
@@ -271,7 +271,7 @@ export default function MassGapChart({ bins, peaks = [], window, windowAssumed =
         return p ? `${p.index}: ${p.explainedBy}` : ''
       }
     },
-    { id: 'interps', label: 'Recon interpretations', text: (i) => (sorted[i].interps ?? []).map((x) => `${x.name} ${x.n}`).join(', ') }
+    { id: 'interps', label: 'Placement interpretations', text: (i) => (sorted[i].interps ?? []).map((x) => `${x.name} ${x.n}`).join(', ') }
   ]
   const allIds = useMemo(() => Uint32Array.from(sorted, (_, i) => i), [sorted])
 
@@ -418,7 +418,7 @@ export default function MassGapChart({ bins, peaks = [], window, windowAssumed =
                 )}
                 {windowAssumed && <span className="muted">window assumed {fmt(window, 1)} Da (no mass-gap report)</span>}
                 {cur.bin.interps && cur.bin.interps.length > 0 && (
-                  <span className="muted">recon: {cur.bin.interps.map((i) => `${i.name} ${fmt(i.n)}`).join(', ')}</span>
+                  <span className="muted">placements: {cur.bin.interps.map((i) => `${i.name} ${fmt(i.n)}`).join(', ')}</span>
                 )}
               </div>
             )}

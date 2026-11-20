@@ -499,7 +499,7 @@ export const BRIEF_HINT: Record<string, string> = {
   tag_length: 'Residues in a seed tag; 3 suits most runs.',
   extension: 'Residues read on past each end of a seed; 0 reads none.',
   max_evalue: 'Keeps tags at or below this E-value; 0 keeps all.',
-  max_tags: 'Most tags per spectrum; 0 sets no limit.',
+  max_tags: 'At most this many per spectrum; 0 sets no limit.',
   res_conf: 'Adds a confidence per residue for assembly.',
   tag_lengths: 'Several seed lengths in one pass, in place of Seed length.',
   diversity: 'Prefers tags from other peaks over near-copies of a kept tag.',

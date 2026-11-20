@@ -17,7 +17,7 @@ import type { Session } from './useSession'
 import type { RunState } from '../run/useRun'
 import type { SdrfState } from '../sdrf/useSdrf'
 import { Leftovers } from '../Leftovers'
-import { dirName, outputKind, revealLabel } from '../app/paths'
+import { dirName, perJobOutputs, revealLabel } from '../app/paths'
 import { clock, duration } from '../app/format'
 import TaskChooser, { PresetRow } from './TaskChooser'
 import { LANDING_TASK, taskById, type Task } from './tasks'
@@ -65,6 +65,9 @@ function sageCantRead(values: Record<string, unknown>, input: string): boolean {
   const engine = String(values['search_engine'] ?? '').trim() || 'sage'
   return engine === 'sage' && /\.(raw|mzpeak|zip)$/i.test(input)
 }
+
+/// The tags output a batch job is shown with in Outputs: the naming rule.
+const BATCH_OUT = '<input>.tags.tsv'
 
 export function advancedParams(task: Task): string[] {
   const shown = new Set([...task.basic, ...task.outputs, ...SECTIONS.filter((s) => s.home === 'common').flatMap((s) => s.params)])
@@ -306,9 +309,9 @@ export default function SetupForm({
     const locked = p.param === 'out' || (on && needed.length > 0) || !!follows
     // A batch names each output after its input (jobOut, rebaseOutputs):
     // the rule, not one run's file.
-    const one = fileName(p, values, out)
-    const kind = PARAM_BY_NAME.get(p.param)?.type === 'output-file' || p.param === 'out' ? (p.param === 'out' ? '.tags.tsv' : `.${outputKind(p.param)}${(one.match(/(\.[^.]+)$/) ?? ['', '.tsv'])[1]}`) : ''
-    const name = batch ? (one || kind ? `<input>${kind}` : '') : one
+    // Each job's names by the job's own rule (perJobOutputs over
+    // <input>.tags.tsv), so CLI-derived ones read <input>.tags.glyco.tsv.
+    const name = batch ? fileName(p, perJobOutputs(values, BATCH_OUT), BATCH_OUT) : fileName(p, values, out)
     // A report driven by a switch (species, glyco, census) is that switch's
     // control, so it carries the switch's field id.
     const id = p.flag && !p.follows ? `p-${p.flag}` : `out-${p.param}`

@@ -519,7 +519,7 @@ export function buildOverview(i: OverviewInputs): Overview {
       text: `Acquisition: ${log.acquisition.mode}`,
       detail: log.acquisition.why
     })
-  else checks.push({ tone: 'muted', text: 'Acquisition not checked: this FASTag writes no acquisition check line (FASTag 1.12 does)' })
+  else checks.push({ tone: 'muted', text: 'Acquisition not checked: this run\'s log has no acquisition check line' })
   // The species report counts b/y tags only: a c/z run's left-out rows
   // explain a sparse or empty report (the CLI says so in its log only).
   const czExcluded = ((): number | null => {
@@ -636,7 +636,7 @@ export function buildOverview(i: OverviewInputs): Overview {
             lab.state === 'absent'
               ? 'default; label report not written'
               : lab.state === 'not_called'
-                ? 'default; this FASTag makes no label call (FASTag 1.12 does)'
+                ? 'default; the label report makes no label call'
                 : lab.state === 'call' && lab.weak
                 ? `default; label-free from ${fmt(lab.ends)} C-terminal tag ends only (no label rule fired)`
                 : `default; no label call (${lab.state === 'no_call' ? lab.reason : 'too little evidence'})`
@@ -797,7 +797,7 @@ function labelTile(c: LabelCall): Tile {
     return { ...base, value: c.label === 'label-free' ? 'none (label-free)' : c.label, tone: 'call', note: `Label call over ${fmt(c.ends)} C-terminal tag ends: ${c.why}` }
   if (c.state === 'no_call') return { ...base, value: 'no call', tone: 'nocall', note: c.why || `no label call (${c.reason})` }
   if (c.state === 'not_called')
-    return { ...base, value: 'not called', tone: 'off', note: 'this FASTag writes the label counts but no label call (FASTag 1.12 does); the counts are in the Digest tab' }
+    return { ...base, value: 'not called', tone: 'off', note: 'the label report has counts but no label call; the counts are in the Digest tab' }
   return { ...base, value: 'not assessed', tone: 'off', note: 'the label report was not written', action: enable('Label report', { label_out: 'label.tsv' }) }
 }
 

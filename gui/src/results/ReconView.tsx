@@ -123,25 +123,33 @@ function extensionOf(params: Record<string, unknown>): number {
 
 /// The gap window of the run whose delta.tsv is shown without its mass-gap
 /// report: run/window_da of the sibling <stem>.massgap.tsv (same folder and
-/// stem), read once; null while unknown.
+/// stem), only when the app's records say one run wrote both (or neither is
+/// recorded: files opened from elsewhere). A mass-gap report a former run
+/// left there is another run's (round 14): the window stays assumed.
+/// null while unknown.
 function useSiblingWindow(deltaPath: string | undefined, skip: boolean): number | null {
   const [found, setFound] = useState<{ at: string; win: number | null } | null>(null)
   const sib = deltaPath && !skip ? siblingMassgap(deltaPath) : null
+  const key = sib && deltaPath ? `${deltaPath}\u0000${sib}` : null
   useEffect(() => {
-    if (!sib) return
+    if (!sib || !deltaPath || !key) return
     let live = true
-    window.fastag
-      .report(sib)
-      .then((text) => {
+    void (async () => {
+      try {
+        const [rd, rs] = await Promise.all([window.fastag.historyOf(deltaPath).catch(() => null), window.fastag.historyOf(sib).catch(() => null)])
+        const oneRun = rd && rs ? rd.id === rs.id : !rd && !rs
+        const text = oneRun ? await window.fastag.report(sib) : null
         const win = text == null ? null : num(value(parseReport(text, sib), 'run', 'window_da'))
-        if (live) setFound({ at: sib, win: win ?? null })
-      })
-      .catch(() => live && setFound({ at: sib, win: null }))
+        if (live) setFound({ at: key, win: win ?? null })
+      } catch {
+        if (live) setFound({ at: key, win: null })
+      }
+    })()
     return () => {
       live = false
     }
-  }, [sib])
-  return sib && found?.at === sib ? found.win : null
+  }, [key, sib, deltaPath])
+  return key && found?.at === key ? found.win : null
 }
 
 /// <dir>/<stem>.massgap.tsv beside @p deltaPath (massgap.tsv for a bare delta.tsv).

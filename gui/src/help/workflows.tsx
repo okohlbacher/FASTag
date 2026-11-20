@@ -32,7 +32,7 @@ export const WORKFLOWS: HelpPage = {
             configure a search engine or change Setup. Check them before using them elsewhere.
           </p>
           <p>
-            A <strong>Turn on and run again</strong> button starts a new analysis with the missing report enabled.
+            An <strong>Add … and run again</strong> button starts a new analysis with the missing report enabled.
             Adding a FASTA for mass gaps can also raise the extension so tags can reach the database&apos;s required
             length. Review overwrite questions. For detail, open <L to="species">Species</L>,{' '}
             <L to="digest">Digest</L> or <L to="results">Tags</L>.
@@ -47,8 +47,8 @@ export const WORKFLOWS: HelpPage = {
         <>
           <ol>
             <li>In Setup, switch the Input card to <strong>Batch</strong> and add files or a folder. Every workflow runs on a batch; <strong>Characterize a run</strong> is the usual survey. An SDRF file is optional.</li>
-            <li>Use <strong>Add…</strong> to select files or <strong>Add folder…</strong> for the spectra files directly inside a folder. Check the common settings in Setup; each file runs in turn with those settings.</li>
-            <li>Use <strong>Choose output folder…</strong> if results should go elsewhere, for example when the inputs are read-only. <strong>Beside inputs</strong> restores the usual location. Changing the folder affects pending or retried jobs; completed jobs keep their existing output paths.</li>
+            <li>Use <strong>Add files…</strong> (in Setup; <strong>Add…</strong> in the Batch view) to select files or <strong>Add folder…</strong> for the spectra files directly inside a folder. Check the common settings in Setup; each file runs in turn with those settings.</li>
+            <li>Use <strong>Change…</strong> beside Output folder (Setup) or <strong>Choose output folder…</strong> (Batch view) if results should go elsewhere, for example when the inputs are read-only. <strong>Beside inputs</strong> restores the usual location. Changing the folder affects pending or retried jobs; completed jobs keep their existing output paths.</li>
             <li><strong>Run N remaining files</strong> continues the queue. <strong>Retry failed</strong> retries failed jobs. Cancel stops the active job and the queue; it does not remove results of completed jobs.</li>
             <li>After processing stops, click a completed file to open its results. Each file&apos;s <strong>Log</strong> opens its own messages.</li>
           </ol>
@@ -219,7 +219,7 @@ export const WORKFLOWS: HelpPage = {
           </p>
           <ul>
             <li>Switch the gap plot between <strong>Chart</strong> and <strong>Bins</strong> (a table of the plotted bins; the Mass-shift table below has sites and UniMod names). Change the gap range to inspect outlying peaks; the chart reports peaks outside the shown range and any clipped zero peak. Arrow keys step through peaks when the chart is focused.</li>
-            <li><strong>Unimod marks</strong> show known mass changes near a peak. A nearby mark or a CLI explanation is a hypothesis, not an identified modification. Opening a delta table without its mass-gap report uses an explicitly labelled, assumed 0.5 Da matching window.</li>
+            <li>UniMod marks (all of them with <strong>All UniMod marks</strong>) show known mass changes near a peak. A nearby mark or a CLI explanation is a hypothesis, not an identified modification. Opening a delta table without its mass-gap report uses an explicitly labelled, assumed 0.5 Da matching window.</li>
             <li>In the placement table, <strong>Contains</strong> searches spectrum, tag, protein or peptide. <strong>|Δ| at least (Da)</strong> filters by the size of the gap in either direction. <strong>Interpretation</strong> selects modification, substitution or unexplained rows; <strong>One flank off</strong> keeps placements with a gap localized to one side of the tag.</li>
           </ul>
           <p>

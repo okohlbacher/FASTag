@@ -47,6 +47,8 @@ export interface DataTableProps {
   /// double-click, and from a button over the table named @p openLabel.
   onOpen?(id: number): void
   openLabel?: string
+  /// Told the rows in the order shown (after the user's sort), for an export.
+  onOrder?(order: readonly number[]): void
 }
 
 /// The ids of @p ids in the order of @p col (stable: ties keep file order).
@@ -78,7 +80,7 @@ export function sortIds(ids: ArrayLike<number>, col: Column | undefined, desc: b
   return order.map((j) => out[j])
 }
 
-export default function DataTable({ label, columns, ids, total, empty, sort: initial = null, keep, onOpen, openLabel = 'Open' }: DataTableProps): JSX.Element {
+export default function DataTable({ label, columns, ids, total, empty, sort: initial = null, keep, onOpen, openLabel = 'Open', onOrder }: DataTableProps): JSX.Element {
   const [sort, setSort] = useSticky(keep, `sort:${label}`, initial)
   const [active, setActive] = useState(0)
   const base = useId()
@@ -97,6 +99,11 @@ export default function DataTable({ label, columns, ids, total, empty, sort: ini
     () => sortIds(ids, columnsNow.current.find((c) => c.id === sortColumn), sortDesc),
     [ids, sortColumn, sortDesc]
   )
+  const onOrderNow = useRef(onOrder)
+  onOrderNow.current = onOrder
+  useEffect(() => {
+    onOrderNow.current?.(order)
+  }, [order])
   const n = order.length
   // A new filter or sort starts at the first row.
   useEffect(() => setActive(0), [ids, sort])
