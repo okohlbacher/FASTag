@@ -9,6 +9,7 @@ import { TASKS } from '../setup/tasks'
 import { PRODUCTS } from '../setup/products'
 import { PARAM_UI } from '../paramUi'
 import { buildOverview } from './overview'
+import OverviewPanel from './OverviewPanel'
 
 describe('round 10 minor: Species tab, empty report', () => {
   it('says the caveat of a tolerance in Da on an empty report too', () => {
@@ -71,5 +72,23 @@ describe('round 10 minor: the Outputs card layout of the alkylation row', () => 
     const note = kids.findIndex((e) => e.classList.contains('product-note'))
     expect(help).toBe(label + 1)
     expect(note).toBeGreaterThan(help)
+  })
+})
+
+describe('round 10 minor: Overview headings', () => {
+  it('a workflow with a main result heads it and the run facts', () => {
+    const ids = 'ident_rank\tident_score\tidentified\n1\t0.9\t1\n2\t0.5\t0\n'
+    const params = { census: true, census_sorted_out: 'c.tsv', census_ids: '/d/a.idXML' }
+    const o = buildOverview({ log: ['2 MS2 spectra, 5 tags'], reports: [], species: null, census: null, params, instrument: null, triage: ids })
+    const { container } = render(<OverviewPanel overview={o} input="/d/a.mzML" busy={false} onAction={() => {}} params={params} workflowId="triage" />)
+    const heads = [...container.querySelectorAll('.tiles-head')]
+    expect(heads.map((h) => h.textContent)).toEqual(['Main result', 'Run'])
+    expect(heads[0].nextElementSibling!.getAttribute('aria-label')).toBe('Main result')
+    expect(heads[1].nextElementSibling!.getAttribute('aria-label')).toBe('Key figures')
+  })
+  it('no headings without a main result', () => {
+    const o = buildOverview({ log: ['2 MS2 spectra, 5 tags'], reports: [], species: null, census: null, params: {}, instrument: null })
+    const { container } = render(<OverviewPanel overview={o} input="/d/a.mzML" busy={false} onAction={() => {}} />)
+    expect(container.querySelector('.tiles-head')).toBeNull()
   })
 })
