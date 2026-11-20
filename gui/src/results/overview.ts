@@ -494,7 +494,7 @@ export function buildOverview(i: OverviewInputs): Overview {
   if (fewPlaced && (given(i.params['delta_out']) || given(i.params['delta_counts_out']) || given(i.params['recon_out'])))
     checks.push({
       tone: 'flag',
-      text: `${placed === 0 ? 'No spectrum is placed' : `Only ${fmt(placed)} spectra are placed`} with a mass gap: too few for any conclusion about modifications or alkylation (the Mass shifts tab asks for ${LOW_PLACED}).`
+      text: `${placed === 0 ? 'No spectrum is placed' : `Only ${fmt(placed)} spectra are placed`} on the database: too few for any conclusion about modifications or alkylation (the Mass shifts tab asks for ${LOW_PLACED}).`
     })
   if (!cutoffApplied)
     checks.push({

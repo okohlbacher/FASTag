@@ -58,7 +58,7 @@ describe('round 8, 4: the survey always has its tile', () => {
     const t = shownTiles(o, params).figures.find((x) => x.id === 'topshift')!
     expect(t).toMatchObject({ value: 'no shift peak', tone: 'nocall' })
     expect(t.note).toMatch(/with 5 placed spectra none could stand out/)
-    expect(o.checks.find((c) => c.tone === 'flag')!.text).toMatch(/^Only 5 spectra are placed with a mass gap: too few for any conclusion/)
+    expect(o.checks.find((c) => c.tone === 'flag')!.text).toMatch(/^Only 5 spectra are placed on the database: too few for any conclusion/)
   })
   it('a found shift keeps its value; enough placements raise no check', () => {
     const o = buildOverview(base({ params, delta: 'delta\tspectra\n15.995\t300\n', deltaCounts: 'key\tvalue\nms2_placed\t900\nms2_tagged\t1000\n' }))

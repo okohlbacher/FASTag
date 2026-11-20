@@ -266,7 +266,9 @@ describe('ReconView', () => {
     const stat = (l: string): string | null | undefined => screen.getByText(l, { selector: 'dt' }).nextElementSibling?.textContent
     // Round 9, 12: the spectra with a gap, and the gap peaks of 0.5 Da or
     // more as the Overview counts shifts (3 of the 273 bins sit near 0).
-    expect(stat('Spectra with a mass gap')).toBe('475')
+    expect(stat('Placed spectra')).toBe('475')
+    // Round 10 minor: the spectra away from 0 Da (awk over the hist rows).
+    expect(stat('Shifted (≥ 0.5 Da)')).toBe('334')
     expect(stat('Placements')).toBe('4,706')
     expect(stat('Spectra with a placement')).toBe('482')
     expect(stat('Gap peaks (≥ 0.5 Da)')).toBe('270')
@@ -291,7 +293,7 @@ describe('ReconView', () => {
   it('warns when too few spectra are placed: 0 (ext2) and 8 (E. coli)', async () => {
     installMockBridge()
     const { unmount } = render(<ReconView massgap={parseReport(ext2Massgap, '/r/e2.massgap.tsv')} tables={{}} onOpen={vi.fn()} />)
-    expect(screen.getByRole('status').textContent).toMatch(/No spectrum is placed with a mass gap\..*too few for any conclusion/)
+    expect(screen.getByRole('status').textContent).toMatch(/No spectrum is placed on the database\..*too few for any conclusion/)
     unmount()
     render(<ReconView massgap={parseReport(ecoliMassgap, '/r/e.massgap.tsv')} tables={{}} onOpen={vi.fn()} />)
     expect(screen.getByRole('status').textContent).toMatch(new RegExp(`Only 8 spectra are placed.*asks for ${LOW_PLACED}`))

@@ -178,7 +178,7 @@ describe('P4c viewers in the app', () => {
     expect(mock.reportCalls).toContain(paths.recon_id_out)
     expect(screen.queryByRole('alert')).toBeNull()
     const banner = document.querySelector('.recon-view .banner.warn') as HTMLElement
-    expect(banner.textContent).toMatch(/No spectrum is placed with a mass gap/)
+    expect(banner.textContent).toMatch(/No spectrum is placed on the database/)
     expect(mock.runCalls).toHaveLength(1)
     await click(within(banner).getByRole('button', { name: 'Run again with extension 3' }))
     await flush()

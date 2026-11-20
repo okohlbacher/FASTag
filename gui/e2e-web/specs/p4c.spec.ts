@@ -61,7 +61,7 @@ test('Mass shifts: figures equal the oracles of the PXD014764 recon run', async 
   expect(o.deltaSum).toBe(o.placed) // the histogram counts each placed spectrum once
   await runOn(page, 'gate-recon')
   await page.getByRole('tab', { name: 'Mass shifts' }).click()
-  await expect(stat(page, 'Spectra with a mass gap')).toHaveText(en(o.placed))
+  await expect(stat(page, 'Placed spectra')).toHaveText(en(o.placed))
   await expect(stat(page, 'Placements')).toHaveText(en(o.placements))
   await expect(stat(page, 'Spectra with a placement')).toHaveText(en(o.spectra))
   await expect(stat(page, 'Gap peaks (≥ 0.5 Da)')).toHaveText(en(o.shiftRows))
@@ -165,7 +165,7 @@ test('E. coli recon run: -recon_localize columns, the mzTab identifications, and
   const psm = read('v1111-ecoli-recon-loc', 'run.recon.mzTab').split('\n').filter((l) => l.startsWith('PSM\t')).length
   await runOn(page, 'gate-recon-loc')
   await page.getByRole('tab', { name: 'Mass shifts' }).click()
-  await expect(page.locator('.recon-view .banner.warn')).toContainText(`Only ${o.placed} spectra are placed with a mass gap`)
+  await expect(page.locator('.recon-view .banner.warn')).toContainText(`Only ${o.placed} spectra are placed on the database`)
   const grid = page.getByRole('grid', { name: 'Placements' })
   await expect(grid).toHaveAttribute('aria-rowcount', String(o.placements + 1))
   await expect(grid.getByRole('columnheader', { name: /Site score/ })).toBeVisible()

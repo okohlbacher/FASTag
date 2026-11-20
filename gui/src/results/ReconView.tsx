@@ -220,7 +220,7 @@ export default function ReconView({ massgap, tables, gen = {}, notice, action, e
           <IconWarning />
           <span>
             <strong>
-              {placed === 0 ? 'No spectrum is placed' : `Only ${fmt(placed)} spectra are placed`} with a mass gap.
+              {placed === 0 ? 'No spectrum is placed' : `Only ${fmt(placed)} spectra are placed`} on the database.
             </strong>{' '}
             That is too few for any conclusion about modifications or alkylation (this view asks for {LOW_PLACED}).
             {placed === 0 && ' Tags may be shorter than the recon index needs; its log line names the minimum length.'}
@@ -233,10 +233,18 @@ export default function ReconView({ massgap, tables, gen = {}, notice, action, e
         </div>
       )}
       <dl className="headline stats">
-        <div className="stat">
-          <dt>Spectra with a mass gap</dt>
+        <div className="stat" title="Spectra placed on the database; the gap of an unmodified one is near 0 Da">
+          <dt>Placed spectra</dt>
           <dd>{fmt(placed)}</dd>
         </div>
+        {bins.length > 0 && (
+          // The spectra with a gap of 0.5 Da or more: the bin near 0 Da
+          // (unmodified) holds placed spectra without a shift.
+          <div className="stat" title={`Placed spectra with a gap at least ${SHIFT_MIN_DA} Da from 0`}>
+            <dt>Shifted (≥ {SHIFT_MIN_DA} Da)</dt>
+            <dd>{fmt(bins.reduce((n, b) => n + (Math.abs(b.gap) >= SHIFT_MIN_DA ? b.spectra : 0), 0))}</dd>
+          </div>
+        )}
         {recon.table && (
           <>
             <div className="stat">
