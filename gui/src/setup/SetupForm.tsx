@@ -39,6 +39,18 @@ export const WIRED: ReadonlySet<string> = new Set(
   PRODUCTS.flatMap((p) => [...(p.flag ? [p.flag] : []), ...Object.keys(p.also ?? {}).filter((k) => PARAM_BY_NAME.get(k)?.type === 'bool')])
 )
 
+/// The control that owns @p name when it has no field of its own (round 4,
+/// 24): the count is the "Custom count…" of subsample_fraction (its input
+/// p-subsample_spectra once revealed); a wired switch is the checkbox of
+/// the product that sets it (census_score: Spectra ranked by
+/// identifiability). Null for a parameter with a field.
+export function ownerOf(name: string): { id: string; revealCount?: boolean } | null {
+  if (name === 'subsample_spectra') return { id: 'p-subsample_fraction', revealCount: true }
+  if (!WIRED.has(name)) return null
+  const prod = PRODUCTS.find((p) => p.flag === name) ?? PRODUCTS.find((p) => p.also && name in p.also)
+  return prod ? { id: `out-${prod.param}` } : null
+}
+
 /// The params Advanced shows for @p task: every group's, less what
 /// Settings and Outputs already show and the switches products drive.
 export function advancedParams(task: Task): string[] {
@@ -216,11 +228,11 @@ export default function SetupForm({
     const d = disclosure(open, (o) => setOpenGroups((st) => ({ ...st, [sec.title]: o })))
     const products = names.filter((n) => PRODUCT_OF.has(n))
     const fields = names.filter((n) => !PRODUCT_OF.has(n))
-    // Fields waiting for the same reports or switches: said once per set of
-    // masters, with a Turn on for each, and folded until then
-    // (doc/GUI-WORKFLOWS.md 2.4). A field holding a value of its own stays
-    // in view (a dropped taxonomy), as does one alone in its set and one
-    // replaced by another option (Turn on would not help).
+    // Fields waiting for the same reports or switches, one or several:
+    // folded, with one short note per set of masters and the reason in its
+    // (?) (doc/GUI-WORKFLOWS.md 2.4). A field holding a value of its own
+    // stays in view (a dropped taxonomy), as does one replaced by another
+    // option (Turn on would not help).
     const waiting = new Map<string, { dep: Dependency; names: string[] }>()
     for (const n of fields) {
       const d = inertDependency(n, values)
@@ -230,31 +242,30 @@ export default function SetupForm({
       if (w) w.names.push(n)
       else waiting.set(key, { dep: d, names: [n] })
     }
-    const sets = [...waiting.values()].filter((w) => w.names.length > 1)
+    const sets = [...waiting.values()]
     const folded = new Set(sets.flatMap((w) => w.names))
     const shown = fields.filter((n) => !folded.has(n))
-    const words = (m: string): string => {
-      const w = productLabel(m) ?? humanName(m)
-      return `the ${w.charAt(0).toLowerCase()}${w.slice(1)}`
-    }
     const needs = sets.map((w) => {
       const ms = masters(w.dep)
-      const notes = new Set(w.names.map((n) => inertDependency(n, values)?.note))
+      const what = w.dep.say ?? ms.map((m) => productLabel(m) ?? humanName(m)).join(' or ')
+      // One Turn on, for a report whose checkbox is not in this group.
+      const m = ms.find((x) => !sec.params.includes(x) && (PRODUCT_OF.has(x) || PRODUCTS.some((q) => q.flag === x)))
+      const prod = m ? (PRODUCT_OF.get(m) ?? PRODUCTS.find((q) => q.flag === m)) : undefined
+      const list = w.names.map(humanName).join(', ')
       return (
         <div className="group-needs" role="note" key={ms.join(',')}>
-          <span>
-            Needs {w.dep.say ?? ms.map(words).join(' or ')}
-            {notes.size === 1 ? ` (${w.dep.note})` : ''}: its {w.names.length} settings show once it is on.
-          </span>
-          {/* A Turn on for each report it waits for, two at most. */}
-          {ms.filter((m) => PRODUCT_OF.has(m) || PRODUCTS.some((q) => q.flag === m)).slice(0, 2).map((m) => {
-            const prod = PRODUCT_OF.get(m) ?? PRODUCTS.find((q) => q.flag === m)
-            return prod ? (
-              <button type="button" key={m} className="secondary small" onClick={() => toggle(prod, true)} aria-label={`Turn on ${words(m)}`}>
-                Turn on {productLabel(m) ?? humanName(m)}
-              </button>
-            ) : null
-          })}
+          <span>Needs {what}.</span>
+          <HelpPopover
+            name={w.names[0]}
+            label={`the settings waiting for ${what}`}
+            description={`${list} ${w.names.length === 1 ? 'is' : 'are'} not used yet (${w.dep.note}); ${w.names.length === 1 ? 'it shows' : 'they show'} once ${what} is on.`}
+            deflt=""
+          />
+          {prod && m && (
+            <button type="button" className="secondary small" onClick={() => toggle(prod, true)} aria-label={`Turn on ${productLabel(m) ?? humanName(m)}`}>
+              Turn on
+            </button>
+          )}
         </div>
       )
     })
@@ -308,6 +319,13 @@ export default function SetupForm({
   )
 
   const isInputField = (n: string): boolean => !!task.required?.includes(n) || PARAM_BY_NAME.get(n)?.type === 'input-file'
+  // A setting of an optional file that Settings itself shows (Triage's ID
+  // q-value and E-value, waiting for Identifications): hidden until the file
+  // is chosen, not a disabled field with a note (round 4, 18).
+  const waitsOnShownFile = (n: string): boolean => {
+    const d = inertDependency(n, values)
+    return !!d && !d.replaced && masters(d).some((m) => task.basic.includes(m) && PARAM_BY_NAME.get(m)?.type === 'input-file')
+  }
 
   const inputCard = card(
     1,
@@ -462,7 +480,7 @@ export default function SetupForm({
       {field('fixed_modifications', {
         brief: 'Drop Carbamidomethyl (C) without alkylation.'
       })}
-      {task.basic.filter((n) => !isInputField(n)).map((n) => field(n, { brief: task.help[n] }))}
+      {task.basic.filter((n) => !isInputField(n) && !waitsOnShownFile(n)).map((n) => field(n, { brief: task.help[n] }))}
     </div>,
     <button
       type="button"
@@ -543,10 +561,11 @@ export default function SetupForm({
         <span className="card-n" aria-hidden="true">
           5
         </span>
-        <h2>Advanced ({advChanged} changed)</h2>
-        <span className={`chev ${session.advancedOpen ? 'open' : ''}`} aria-hidden="true">
+        {/* The chevron before the title, as in the groups inside. */}
+        <span className={`chev big ${session.advancedOpen ? 'open' : ''}`} aria-hidden="true">
           ▸
         </span>
+        <h2>Advanced ({advChanged} changed)</h2>
       </summary>
       <div className="adv-body">
         <p className="hint">

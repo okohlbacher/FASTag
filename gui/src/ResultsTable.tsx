@@ -83,7 +83,7 @@ export const columnLabel = (c: string): string => LABEL[c] ?? c
 
 // A fasta_hit value in the words of the Database hit filter; the raw value
 // stays the cell's name and tooltip.
-function hitWords(v: string): string {
+export function hitWords(v: string): string {
   if (v === '-' || v === '') return 'No match'
   if (v === 'efwd' || v === 'erev') return 'Entrapment'
   if (v === 'fwd' || v === 'rev') return 'In database'
@@ -193,18 +193,27 @@ function numericColumns(columns: string[], rows: string[][]): Set<string> {
 // The exponent is drawn with <sup>; the raw value stays the cell's name.
 const SUP: Record<string, string> = { '-': '⁻', '0': '⁰', '1': '¹', '2': '²', '3': '³', '4': '⁴', '5': '⁵', '6': '⁶', '7': '⁷', '8': '⁸', '9': '⁹' }
 
+/// An E-value of 0.001 or more in 2 significant digits (3 from 100 on, so
+/// 123 stays 123), like the 2 of the scientific form below it.
+function plainEValue(v: number): string {
+  const a = Math.abs(v)
+  return String(Number(v.toPrecision(a >= 100 ? 3 : 2)))
+}
+
 /// An E-value as the Tags table shows it, as plain text (the report tables):
 /// below 0.001 as 3.2 × 10⁻⁵, else as written.
 export function evalueText(text: string): string {
   const v = Number(text)
-  if (text.trim() === '' || !Number.isFinite(v) || v === 0 || Math.abs(v) >= 1e-3) return text
+  if (text.trim() === '' || !Number.isFinite(v) || v === 0) return text
+  if (Math.abs(v) >= 1e-3) return plainEValue(v)
   const [m, e] = v.toExponential(1).split('e')
   return `${m} × 10${String(Number(e)).replace(/./g, (c) => SUP[c] ?? c)}`
 }
 
 export function EValue({ text }: { text: string }): JSX.Element {
   const v = Number(text)
-  if (text.trim() === '' || !Number.isFinite(v) || v === 0 || Math.abs(v) >= 1e-3) return <>{text}</>
+  if (text.trim() === '' || !Number.isFinite(v) || v === 0) return <>{text}</>
+  if (Math.abs(v) >= 1e-3) return <>{plainEValue(v)}</>
   const [m, e] = v.toExponential(1).split('e')
   const exp = Number(e)
   return (

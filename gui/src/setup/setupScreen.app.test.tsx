@@ -176,57 +176,71 @@ describe('Setup: the task chooser', () => {
 })
 
 describe('Setup: hidden dependent fields', () => {
+  // Round 4, 13: one pattern for every waiting field, one or several: folded
+  // under one short note naming the master, its reason in the note's (?),
+  // and one Turn on only when the master's checkbox is in another group.
   it('a group waiting for a report says so once, with Turn on; its fields show once it is on', async () => {
     const mock = installMockBridge()
     await renderApp(mock) // FASTag defaults: species off
     await openGroup('Species')
     await openGroup('Species, advanced')
-    // Folded: one line for the group, not one per field.
     const group = document.querySelector('[data-group="Species, advanced"]')!
-    expect(group.querySelector('.group-needs')!.textContent).toMatch(/Needs the species report/)
+    expect(group.querySelector('.group-needs')!.textContent).toMatch(/^Needs Species report\./)
+    expect(group.querySelector('.group-needs [data-param-help]')).not.toBeNull()
     expect(field('species_min_len')).toBeNull()
-    await click(within(group as HTMLElement).getByRole('button', { name: /Turn on the species report/ }))
+    await click(within(group as HTMLElement).getByRole('button', { name: 'Turn on Species report' }))
     expect(field('species_min_len')!.disabled).toBe(false)
     expect(field('species')!.checked).toBe(true)
   })
 
-  it('Digest and labels folds its waiting fields under one line per report set', async () => {
+  it('Digest and labels folds its waiting fields under one line per report set, with no Turn on beside its own checkbox', async () => {
     const mock = installMockBridge()
     await renderApp(mock)
     await openGroup('Digest and labels')
     const group = document.querySelector('[data-group="Digest and labels"]')!
     const banners = group.querySelectorAll('.group-needs')
     expect(banners.length).toBeGreaterThan(0)
-    expect(banners[0].textContent).toMatch(/Needs the digest report/)
-    // At most a field or two waits on its own; the rest are folded.
-    expect(group.querySelectorAll('.field.off').length).toBeLessThanOrEqual(2)
-    await click(within(group as HTMLElement).getByRole('button', { name: 'Turn on the digest report' }))
-    expect(group.querySelectorAll('.group-needs').length).toBeLessThan(banners.length + 1)
+    expect(banners[0].textContent).toMatch(/^Needs Digest report\./)
+    // No waiting field is left in view, disabled.
+    expect(group.querySelectorAll('.field.off')).toHaveLength(0)
+    // The digest report's checkbox is in this group: no Turn on repeats it.
+    expect(within(group as HTMLElement).queryByRole('button', { name: /^Turn on Digest report/ })).toBeNull()
+    await click(document.getElementById('out-digest_out')!)
     expect(field('digest_tag_min')!.disabled).toBe(false)
   })
 
-  it('a single dependent field stays visible but disabled, and names the report it needs', async () => {
+  it('a single waiting field is folded too, under the same short note', async () => {
     const mock = installMockBridge()
     await renderApp(mock) // FASTag defaults: glyco off
     await openGroup('Glycopeptides')
-    expect(field('glyco_min_fraction')!.closest('[hidden]')).toBeNull()
-    expect(field('glyco_min_fraction')!.disabled).toBe(true)
-    expect(document.getElementById('h-glyco_min_fraction')!.textContent).toMatch(/Needs Glycopeptide report/)
+    const group = document.querySelector('[data-group="Glycopeptides"]')!
+    expect(field('glyco_min_fraction')).toBeNull()
+    expect(group.querySelector('.group-needs')!.textContent).toMatch(/^Needs Glycopeptide report\./)
     // The report's checkbox is the switch.
     await click(field('glyco')!)
     expect(field('glyco_min_fraction')!.disabled).toBe(false)
   })
 
-  // Beside setup.app.test "an inert field keeps its description and names
-  // what it needs" (isobaric_tolerance, now also hidden until fasta): a field
-  // that waits for something other than its section's switch is shown.
-  it('a field waiting for a report names it in words', async () => {
+  it('Triage hides the ID q-value and Triage E-value until Identifications is set (round 4, 18)', async () => {
+    const mock = installMockBridge()
+    await renderColdApp(mock)
+    await click(task(/^Identifiability triage/))
+    expect(field('census_ids')).not.toBeNull()
+    expect(field('census_ids_fdr')).toBeNull()
+    expect(field('census_triage_evalue')).toBeNull()
+    await change(field('census_ids')!, '/d/run01.idXML')
+    expect(field('census_ids_fdr')!.disabled).toBe(false)
+    expect(field('census_triage_evalue')!.disabled).toBe(false)
+  })
+
+  it('a field waiting for either of two reports names both in words', async () => {
     const mock = installMockBridge()
     await renderApp(mock)
     await openGroup('Digest and labels')
-    const help = document.getElementById('h-digest_window')!
-    expect(help.textContent).toMatch(/Needs Digest report or Label report/)
-    expect(field('digest_window')!.disabled).toBe(true)
+    const group = document.querySelector('[data-group="Digest and labels"]')!
+    const notes = [...group.querySelectorAll('.group-needs')].map((n) => n.textContent ?? '')
+    expect(notes.some((t) => /^Needs Digest report or Label report\./.test(t))).toBe(true)
+    expect(field('digest_window')).toBeNull()
   })
 
   it('the parameter search opens a hidden field at its switch', async () => {
@@ -239,6 +253,27 @@ describe('Setup: hidden dependent fields', () => {
       fireEvent.keyDown(box, { key: 'Enter' })
     })
     await waitFor(() => expect(document.activeElement).toBe(field('species')))
+  })
+
+  it('the parameter search routes folded and wired parameters to their owning control (round 4, 24)', async () => {
+    const mock = installMockBridge()
+    await renderColdApp(mock)
+    const search = async (q: string): Promise<void> => {
+      await click(screen.getByRole('button', { name: /Search settings…/ }))
+      const box = await screen.findByRole('combobox', { name: /Search parameters/ })
+      await change(box, q)
+      await act(async () => {
+        fireEvent.keyDown(box, { key: 'Enter' })
+      })
+    }
+    // The count is the Custom count… of Spectra to read: revealed, focused.
+    await search('subsample_spectra')
+    await waitFor(() => expect(document.activeElement?.id).toBe('p-subsample_spectra'))
+    expect((field('subsample_fraction') as unknown as HTMLSelectElement).value).toBe('__count')
+    // A switch a report sets: that report's checkbox.
+    await click(task(/^Identifiability triage/))
+    await search('census_score')
+    await waitFor(() => expect(document.activeElement?.id).toBe('out-census_sorted_out'))
   })
 
   it('a native view menu closes search instead of leaving a modal over a hidden form', async () => {

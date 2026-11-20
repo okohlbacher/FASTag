@@ -15,7 +15,7 @@ import { useEffect, useMemo, useRef, useState, type JSX, type KeyboardEvent, typ
 import { parseDump, type SpectrumPeaks } from './dump'
 import { ladderFor, residueMasses, tagRowFrom, type Ladder } from './ladder'
 import { baseName } from '../digestReport'
-import { EValue } from '../ResultsTable'
+import { EValue, columnLabel, hitWords, spectrumHint } from '../ResultsTable'
 import { HelpLink } from '../help/HelpLink'
 import type { ResultsView } from '../types'
 
@@ -199,8 +199,8 @@ export default function SpectrumPanel({ target, source, onTarget, onLocate }: Pr
 
   const header = (
     <div className="sp-head">
-      <h2 className="mono" title={target.spectrum}>
-        {target.spectrum}
+      <h2 className="mono" title={target.spectrum} tabIndex={-1}>
+        {spectrumHint(target.spectrum) || target.spectrum}
       </h2>
       {spectrum && (
         <span className="muted">
@@ -302,7 +302,7 @@ export default function SpectrumPanel({ target, source, onTarget, onLocate }: Pr
       <section className="sp-tags" aria-label="Tags of this spectrum">
         <h3>
           Tags of this spectrum{tags ? ` (n=${tags.rows.length.toLocaleString('en-US')})` : ''}
-          <span className="hint"> · choose one to draw its ladder · <HelpLink to="results-spectrum">the Spectrum tab</HelpLink></span>
+          <span className="hint"> · choose one to draw its ladder</span>
         </h3>
         {tagsError ? (
           <p className="hint">Cannot read the tags: {tagsError}</p>
@@ -315,6 +315,9 @@ export default function SpectrumPanel({ target, source, onTarget, onLocate }: Pr
     </div>
   )
 }
+
+// The columns of the tags table that hold numbers: right-aligned, header too.
+const NUMERIC = new Set(['length', 'charge', 'evalue', 'gapped'])
 
 function TagsTable(p: {
   tags: TagsOf
@@ -343,12 +346,12 @@ function TagsTable(p: {
         <thead>
           <tr>
             {show.map((c) => (
-              <th key={c} scope="col" role="columnheader">
-                {c}
+              <th key={c} scope="col" role="columnheader" className={NUMERIC.has(c) ? 'num' : undefined} title={c}>
+                {columnLabel(c)}
               </th>
             ))}
             <th scope="col" role="columnheader">
-              ladder
+              Ladder
             </th>
           </tr>
         </thead>
@@ -366,8 +369,8 @@ function TagsTable(p: {
                 onKeyDown={(e) => key(e, i)}
               >
                 {show.map((c) => (
-                  <td key={c} role="gridcell" className={c === 'tag' ? 'mono' : c === 'fasta_hit' ? undefined : 'num'}>
-                    {c === 'evalue' ? <EValue text={r[col(c)] ?? ''} /> : (r[col(c)] ?? '')}
+                  <td key={c} role="gridcell" className={c === 'tag' ? 'mono' : NUMERIC.has(c) ? 'num' : undefined}>
+                    {c === 'evalue' ? <EValue text={r[col(c)] ?? ''} /> : c === 'fasta_hit' ? hitWords(r[col(c)] ?? '') : (r[col(c)] ?? '')}
                   </td>
                 ))}
                 <td role="gridcell">{!l ? '–' : l.complete ? `${l.series} on ${l.matched}/${l.positions.length} peaks` : `not on the peaks (${l.matched}/${l.positions.length})`}</td>

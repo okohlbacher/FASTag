@@ -17,6 +17,7 @@ import { filterRecon, type DeltaTable, type ReconFilter, type ReconIdTable, type
 import { useTable } from './useTable'
 import { useSticky } from './tableStore'
 import { FASTA_EXTENSION, type TileAction } from './overview'
+import ReportHeader from './ReportHeader'
 import './viewers.css'
 
 /// Below this many placed spectra the gap distribution supports no
@@ -170,15 +171,7 @@ export default function ReconView({ massgap, tables, gen = {}, notice, action, e
   const sources = [...new Set(files)]
   return (
     <div className="recon-view">
-      <div className="card-head">
-        <h2 id="recon-title">Mass shifts</h2>
-        <HelpLink to="workflow-reconciliation">How to read these reports</HelpLink>
-        {sources.map((p) => (
-          <code className="src" key={p} title={p}>
-            {baseName(p)}
-          </code>
-        ))}
-      </div>
+      <ReportHeader id="recon-title" title="Mass shifts" paths={sources} help={{ to: 'workflow-reconciliation', label: 'How to read these reports' }} />
       {notice && (
         <p className="caveat" role="status">
           {notice}

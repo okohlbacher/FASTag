@@ -130,6 +130,9 @@ export default function DataTable({ label, columns, ids, total, empty, sort: ini
     setActive(j)
   }
   function onKey(e: KeyboardEvent<HTMLTableElement>): void {
+    // Keys of the grid itself only: Enter on a sortable column heading
+    // sorts, it does not open a row (round 4, 23).
+    if (e.target !== e.currentTarget) return
     if (e.key === 'Enter' && onOpen && n > 0) {
       e.preventDefault()
       onOpen(order[at])

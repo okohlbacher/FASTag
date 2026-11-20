@@ -6,7 +6,7 @@
 
 import { useEffect, useRef, useState, type JSX } from 'react'
 import { baseName } from '../digestReport'
-import { shownTiles, type Overview, type Tile, type TileAction } from './overview'
+import { settingWords, shownTiles, type Overview, type Tile, type TileAction } from './overview'
 import { HelpLink } from '../help/HelpLink'
 
 export interface OverviewPanelProps {
@@ -126,7 +126,7 @@ export default function OverviewPanel({ overview: o, input, busy, onAction, para
           <tbody>
             {o.suggestions.map((s) => (
               <tr key={s.setting}>
-                <th scope="row">{s.setting}</th>
+                <th scope="row">{settingWords(s.setting)}</th>
                 <td className="mono">{s.value}</td>
                 <td>
                   <span className={`evidence ev-${s.evidence}`}>{EVIDENCE[s.evidence]}</span> {s.note}

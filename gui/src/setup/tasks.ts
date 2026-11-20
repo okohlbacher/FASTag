@@ -110,7 +110,6 @@ export const TASKS: readonly Task[] = [
     basic: ['species_rank', 'subsample_fraction'],
     help: {
       species_rank: 'The taxonomic level of the report.',
-      species_call: 'Decoy calls each taxon present, no call or not detected against decoy tags; None only ranks the taxa.',
       subsample_fraction: '10% ranks the main taxa in a tenth of the time.'
     },
     outputs: ['out', 'species_out'],
@@ -158,7 +157,7 @@ export const TASKS: readonly Task[] = [
     values: { ...ALL, census: true, census_score: true, census_sorted_out: 'census_sorted.tsv' },
     basic: ['census_ids', 'census_ids_fdr', 'census_triage_evalue'],
     help: {
-      census_ids: 'Optional: the idXML or mzIdentML of this run, to mark the spectra your search identified.',
+      census_ids: 'Optional: the idXML or mzIdentML of this run; its q-value and E-value show once chosen.',
       census_ids_fdr: 'The q-value a hit needs to count as identified.',
       census_triage_evalue: 'An unidentified spectrum this good is a candidate.'
     },

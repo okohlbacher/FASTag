@@ -1,5 +1,5 @@
-import { useRef, useState, type JSX } from 'react'
-import { choiceText, defaultText, hintText, humanName, invalidBecause, isChanged, masters, PARAM_BY_NAME, uiOf, type Dependency, type ParamSpec } from './paramLayout'
+import { useEffect, useRef, useState, type JSX } from 'react'
+import { briefHint, choiceText, defaultText, hintText, humanName, invalidBecause, isChanged, masters, PARAM_BY_NAME, uiOf, type Dependency, type ParamSpec } from './paramLayout'
 import { IconError } from './icons'
 import HelpPopover from './help/HelpPopover'
 import { productLabel } from './setup/products'
@@ -73,6 +73,16 @@ export default function ParamField({ spec, value, onChange, onPickFile, needs, u
   const [customStep, setCustomStep] = useState(false)
   // "Custom count…" chosen, before a count is typed.
   const [countPicked, setCountPicked] = useState(false)
+  // The parameter search reveals the count (App chooseParam): an event on
+  // the select, as the choice lives here.
+  const selectRef = useRef<HTMLSelectElement>(null)
+  useEffect(() => {
+    const el = selectRef.current
+    if (!el || !count) return
+    const reveal = (): void => setCountPicked(true)
+    el.addEventListener('fastag:reveal-count', reveal)
+    return () => el.removeEventListener('fastag:reveal-count', reveal)
+  }, [count])
   const deflt = `${defaultText(spec)}${unit ? ` ${defaultText(unit.spec)}` : ''}`
   // An invalid value says what is wrong with it in place of the description;
   // an inert field keeps its description and adds what would switch it on.
@@ -87,7 +97,7 @@ export default function ParamField({ spec, value, onChange, onPickFile, needs, u
         id={helpId}
         ref={helpRef}
         className={`${off ? 'help inert' : 'help'}${brief ? ' brief' : ''}`}
-        title={off ? undefined : (brief ?? sentence(plainOptions(spec.description)))}
+        title={off ? undefined : (brief ?? sentence(hintText(spec.name, plainOptions(spec.description))))}
       >
         {blocked ? (
           <span className="needs">{blocked}</span>
@@ -100,7 +110,7 @@ export default function ParamField({ spec, value, onChange, onPickFile, needs, u
             {` (${needs.note}).`}
           </span>
         ) : (
-          brief ?? sentence(hintText(spec.name, plainOptions(spec.description)))
+          brief ?? briefHint(sentence(hintText(spec.name, plainOptions(spec.description))))
         )}
         {!!turnsOn && (
           <span className="turns-on">
@@ -228,6 +238,7 @@ export default function ParamField({ spec, value, onChange, onPickFile, needs, u
         <div className="row tight">
           <select
             id={`p-${spec.name}`}
+            ref={selectRef}
             aria-describedby={helpId}
             disabled={off}
             value={counting ? '__count' : custom ? '__custom' : hit!.value}
@@ -251,6 +262,7 @@ export default function ParamField({ spec, value, onChange, onPickFile, needs, u
           </select>
           {counting && count && (
             <input
+              id={`p-${count.spec.name}`}
               className="num"
               aria-label={`${title}, number of spectra`}
               aria-invalid={countBad ? true : undefined}

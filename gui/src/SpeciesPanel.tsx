@@ -2,6 +2,7 @@ import type { JSX } from 'react'
 import type { SpeciesReport, Taxon } from './types'
 import { baseName, fmtQ } from './digestReport'
 import { IconFlag } from './icons'
+import ReportHeader from './results/ReportHeader'
 import { HelpLink } from './help/HelpLink'
 
 // Genera that turn up in almost any LC-MS/MS run regardless of the sample:
@@ -103,16 +104,22 @@ export default function SpeciesPanel({
 
   return (
     <div className="species">
-      <p className="src">
-        From <code title={report.path}>{baseName(report.path)}</code> ·{' '}
-        {top.rank && (
+      <ReportHeader
+        title="Species"
+        paths={[report.path]}
+        help={{ to: 'species-reading', label: 'About this tab' }}
+        sub={
           <>
-            rank <code>{top.rank}</code> ·{' '}
+            {runInput && enabled && (
+              <>
+                Of <span className="mono" title={runInput}>{baseName(runInput)}</span> ·{' '}
+              </>
+            )}
+            {top.rank && <>Rank {top.rank} · </>}
+            {deconvolved ? 'Shared sequence subtracted' : 'No deconvolution'}
           </>
-        )}
-        {deconvolved ? 'shared sequence subtracted' : 'no deconvolution'} ·{' '}
-        <HelpLink to="species-reading">About this tab</HelpLink>
-      </p>
+        }
+      />
 
       <section className="cards" aria-label="Taxon ranking">
         <div className="card headline">

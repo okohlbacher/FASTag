@@ -1275,7 +1275,7 @@ export const PARAM_UI: Record<string, ParamUi> = {
   search_config_out: {
     section: 'Shortlist',
     help: {
-      text: 'Write search-engine settings (Sage or Comet) for the smaller FASTA.'
+      text: 'Write search-engine settings (Sage, Comet, or MSFragger, experimental) for the smaller FASTA.'
     }
   },
   search_config_template: {

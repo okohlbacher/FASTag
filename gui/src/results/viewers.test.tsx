@@ -157,6 +157,22 @@ describe('DataTable', () => {
   })
 })
 
+describe('DataTable: Enter on a column heading (round 4, 23)', () => {
+  it('sorts by the heading and does not open the active row', async () => {
+    const onOpen = vi.fn()
+    const ids = Uint32Array.from({ length: 3 }, (_, i) => i)
+    const many: Column[] = [{ id: 'i', label: 'Row', num: true, text: (i) => `r${i}`, key: (i) => i }]
+    render(<DataTable label="Rows" columns={many} ids={ids} total={3} onOpen={onOpen} />)
+    const head = screen.getByRole('button', { name: /^Row/ })
+    // A real keyboard: Enter goes down to the heading's button, then
+    // bubbles to the grid; the button's own click sorts.
+    await act(async () => void fireEvent.keyDown(head, { key: 'Enter' }))
+    expect(onOpen).not.toHaveBeenCalled()
+    await act(async () => void fireEvent.keyDown(screen.getByRole('grid', { name: 'Rows' }), { key: 'Enter' }))
+    expect(onOpen).toHaveBeenCalledWith(0)
+  })
+})
+
 describe('DataTable: no re-sort and no page scroll on a move (review fixes)', () => {
   it('a re-render of its caller or a move of the active row does not sort all rows again', async () => {
     const key = vi.fn((i: number) => (i * 7919) % 1000)
@@ -448,7 +464,7 @@ describe('result tabs: the P4c viewers', () => {
     await act(async () => void fireEvent.keyDown(screen.getByRole('tablist'), { key: 'End' }))
     await flush()
     expect(screen.getByRole('tab', { name: 'Glyco' }).getAttribute('aria-selected')).toBe('true')
-    expect(screen.getByRole('heading', { name: 'Glyco: oxonium ions per spectrum' })).toBeTruthy()
+    expect(screen.getByRole('heading', { name: 'Glycopeptides: oxonium ions per spectrum' })).toBeTruthy()
     await act(async () => void fireEvent.keyDown(screen.getByRole('tablist'), { key: 'ArrowLeft' }))
     await act(async () => void fireEvent.keyDown(screen.getByRole('tablist'), { key: 'ArrowLeft' }))
     expect(screen.getByRole('heading', { name: 'Mass shifts' })).toBeTruthy()

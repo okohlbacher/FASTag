@@ -61,9 +61,9 @@ describe('redesign: setup and run bar', () => {
     // Orientation and the isobaric tolerance wait for the same thing: one
     // line for both, with a Turn on, and the fields folded until then.
     const group = document.querySelector('[data-group="Tagging, advanced"]')!
-    expect(group.querySelector('.group-needs')!.textContent).toMatch(/Needs tags matched against or placed on a protein database.*its 2 settings/)
+    expect(group.querySelector('.group-needs')!.textContent).toMatch(/^Needs tags matched against or placed on a protein database\./)
     expect(document.getElementById('p-isobaric_tolerance')).toBeNull()
-    await click(within(group as HTMLElement).getByRole('button', { name: 'Turn on the tag placements' }))
+    await click(within(group as HTMLElement).getByRole('button', { name: 'Turn on Tag placements' }))
     expect((document.getElementById('p-isobaric_tolerance') as HTMLInputElement).disabled).toBe(false)
   })
 

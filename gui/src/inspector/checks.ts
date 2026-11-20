@@ -82,8 +82,7 @@ export function pseudoPath(input: string): string {
 /// The DIAspeXtract call for a raw-DIA input.
 export const diaspextract = (input: string): string[] => ['DIAspeXtract', '-in', input, '-out', pseudoPath(input)]
 
-export const NOT_CHECKED_NO_PROBE =
-  'Not checked before the run: this FASTag cannot read the metadata of a file before running on it. The instrument and the checks come from the reports after the run.'
+export const NOT_CHECKED_NO_PROBE = 'The instrument and checks come from the reports after the run.'
 
 /// The release asset with the taxonomy k-mer index (versioned, see releaseAssets.ts).
 export { TAXONOMY_ASSET }

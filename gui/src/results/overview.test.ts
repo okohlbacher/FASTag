@@ -295,7 +295,7 @@ describe('Overview model: suggested settings', () => {
 
   it('copies as plain text, one line per setting with its evidence', () => {
     const o = overviewOf(CLI_CASES.v112)
-    expect(o.copyText.split('\n')).toContain('fixed C+57.021: Carbamidomethyl (C) (default, alkylation not assessed (alkylation report not written))')
+    expect(o.copyText.split('\n')).toContain('Fixed modification (C +57.021): Carbamidomethyl (C) (default, alkylation not assessed (alkylation report not written))')
   })
 })
 

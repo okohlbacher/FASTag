@@ -1,6 +1,7 @@
 import { useState, type JSX, type ReactNode } from 'react'
 import SequenceLogo, { LogoLegend } from './SequenceLogo'
 import { HelpButton, HelpLink } from './help/HelpLink'
+import ReportHeader from './results/ReportHeader'
 import { alkylationReason } from './results/overview'
 import {
   alkylationCall,
@@ -70,13 +71,7 @@ function heavyValue(key: string, v: string): string {
 function Heading({ id, title, report, help }: { id: string; title: string; report: Report; help: string }): JSX.Element {
   return (
     <>
-      <div className="card-head">
-        <h2 id={id}>{title}</h2>
-        <HelpButton to={help} what={title} />
-        <code className="src" title={report.path}>
-          {baseName(report.path)}
-        </code>
-      </div>
+      <ReportHeader id={id} title={title} paths={[report.path]} helpButton={<HelpButton to={help} what={title} />} />
       {report.warnings.map((w) => (
         <div className="caveat" key={w}>
           {w}

@@ -468,6 +468,18 @@ export function hintText(name: string, fallback: string): string {
   return first.trim()
 }
 
+/// The line under an Advanced field, short enough for one line of the
+/// grid: hintText up to its first clause break (a colon, a semicolon, a
+/// bracket, ", because ..."), as a sentence. The full text is the line's
+/// tooltip and the (?) popover's.
+export function briefHint(text: string): string {
+  const t = text.trim()
+  const m = /(?:[:;]\s|\s\(|,\s(?:because|so|and|but|which|while|as|for|or)\s|\s(?:—|–)\s)/.exec(t.slice(20))
+  if (!m) return t
+  const cut = t.slice(0, 20 + m.index).replace(/[,\s]+$/, '')
+  return /[.!?]$/.test(cut) ? cut : `${cut}.`
+}
+
 // The words a choice is shown as; the CLI token is what is sent.
 const CHOICE_WORDS: Record<string, string> = {
   sage: 'Sage',

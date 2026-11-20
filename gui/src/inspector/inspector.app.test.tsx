@@ -104,10 +104,12 @@ describe('inspector before a run', () => {
     const mock = installMockBridge()
     await renderApp(mock)
     await pickSingle(mock, IN)
-    notChecked(/Not checked before the run: this FASTag cannot read the metadata of a file before running on it/)
-    expect(summary()).toMatch(/^Not checked before the run: this FASTag cannot read the metadata of a file before running on it/)
+    notChecked(/^The instrument and checks come from the reports after the run\.$/)
+    expect(summary()).toMatch(/^The instrument and checks come from the reports after the run\./)
     expect(mock.probeCalls).toEqual([])
     expect(screen.queryByRole('list', { name: 'Checks before the run' })).toBeNull()
+    // Round 4, 17: no section heading over checks that did not run.
+    expect(screen.queryByRole('heading', { name: 'Checks before the run' })).toBeNull()
     expect((runButton() as HTMLButtonElement).disabled).toBe(false)
   })
 

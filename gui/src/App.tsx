@@ -8,7 +8,7 @@ import type { ParamHit } from './setup/searchRank'
 import { viewOfAction, type Action, type View } from './setup/shortcuts'
 import { useKeys } from './shell/useKeys'
 import { useSession } from './setup/useSession'
-import SetupForm from './setup/SetupForm'
+import SetupForm, { ownerOf } from './setup/SetupForm'
 import { useRun } from './run/useRun'
 import RunBar from './run/RunBar'
 import LogDrawer from './run/LogDrawer'
@@ -385,7 +385,22 @@ export default function App({ start = LANDING }: { start?: Origin } = {}): JSX.E
       // Folded behind its group's "Needs …" line: the switch it waits for,
       // else that line's Turn on.
       const waits = inertDependency(hit.name, values)
-      let el = (byName(hit.name) ??
+      // No field of its own: the control that owns it (round 4, 24).
+      const owner = ownerOf(hit.name)
+      if (owner?.revealCount) {
+        const sel = document.getElementById(owner.id)
+        if (sel && !(sel as HTMLSelectElement).disabled) {
+          sel.dispatchEvent(new Event('fastag:reveal-count'))
+          setTimeout(() => {
+            const c = document.getElementById(`p-${hit.name}`) ?? sel
+            c.scrollIntoView?.({ block: 'center' })
+            c.focus()
+          })
+          return
+        }
+      }
+      let el = ((owner && document.getElementById(owner.id)) ??
+        byName(hit.name) ??
         (waits ? byName(Array.isArray(waits.on) ? waits.on[0] : waits.on) : null) ??
         (hit.section ? document.querySelector(`[data-group="${hit.section}"] .group-needs button`) : null)) as HTMLInputElement | null
       // Hidden until its section's switch is on: the switch.

@@ -37,10 +37,10 @@ describe('Overview panel', () => {
   it('lists the suggested settings with their evidence, the C+57.021 line a default', () => {
     render(<OverviewPanel overview={model(CLI_CASES.v112)} input="/d/run01.mzML" busy={false} onAction={vi.fn()} />)
     const table = screen.getByRole('table', { name: 'Suggested search settings' })
-    const row = within(table).getByRole('row', { name: /fixed C\+57\.021/ })
+    const row = within(table).getByRole('row', { name: /Fixed modification \(C \+57\.021\)/ })
     expect(within(row).getByText('default')).toBeDefined()
     expect(row.textContent).toMatch(/alkylation not assessed \(alkylation report not written\)/)
-    expect(within(within(table).getByRole('row', { name: /^enzyme/ })).getByText('call')).toBeDefined()
+    expect(within(within(table).getByRole('row', { name: /^Enzyme/ })).getByText('call')).toBeDefined()
   })
 
   it('a tile action names the report it adds and runs again; locked while busy', async () => {

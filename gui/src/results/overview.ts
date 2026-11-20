@@ -480,7 +480,7 @@ export function buildOverview(i: OverviewInputs): Overview {
     'The species calls are unreliable on ion-trap/Da data.'
   ]
   const copyText = [
-    ...suggestions.map((s) => `${s.setting}: ${s.value} (${s.note})`),
+    ...suggestions.map((s) => `${settingWords(s.setting)}: ${s.value} (${s.note})`),
     ...caveats.map((c) => `* ${c}`)
   ].join('\n')
   const measured = suggestions.some((x) => x.evidence === 'call' || x.evidence === 'ranking')
@@ -673,3 +673,16 @@ export function shownTiles(o: Overview, params: Record<string, unknown>): { figu
   }
   return { figures: o.figures.filter((t) => want[t.id]), calls: o.calls.filter((t) => want[t.id]) }
 }
+
+// A suggested setting in the words of the search engine forms (the key
+// stays the short token the tests and exports match on).
+const SETTING_WORDS: Record<string, string> = {
+  enzyme: 'Enzyme',
+  'missed cleavages': 'Missed cleavages',
+  'fixed C+57.021': 'Fixed modification (C +57.021)',
+  label: 'Label',
+  'variable M+15.995': 'Variable modification (M +15.995)',
+  'fragment tol.': 'Fragment tolerance',
+  database: 'Database'
+}
+export const settingWords = (s: string): string => SETTING_WORDS[s] ?? s

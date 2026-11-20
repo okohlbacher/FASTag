@@ -171,7 +171,9 @@ for (const w of [1000, 1400]) {
     expect(m.itemsInside).toBe(true)
   })
 
-  test(`${w} px: the Overview's tiles keep their text inside, notes at two lines`, async ({ page }) => {
+  // Round 4, 14: a tile note is never cut mid-sentence (no line clamp); it
+  // is whole, inside its tile.
+  test(`${w} px: the Overview's tiles keep their text inside, notes whole`, async ({ page }) => {
     await page.setViewportSize({ width: w, height: 800 })
     await openApp(page, 'gate')
     await page.getByRole('radio', { name: /^Characterize a run/ }).check()
@@ -183,9 +185,9 @@ for (const w of [1000, 1400]) {
       [...document.querySelectorAll<HTMLElement>('.tile')].every((t) => t.scrollWidth <= t.clientWidth + 1 && t.getBoundingClientRect().right <= window.innerWidth)
     )
     expect(fits).toBe(true)
-    const lines = await page.evaluate(() =>
-      Math.max(...[...document.querySelectorAll<HTMLElement>('.tile-note')].map((n) => Math.round(n.getBoundingClientRect().height / parseFloat(getComputedStyle(n).lineHeight))))
+    const clipped = await page.evaluate(() =>
+      [...document.querySelectorAll<HTMLElement>('.tile-note')].filter((n) => n.scrollHeight > n.clientHeight + 1 || n.getBoundingClientRect().bottom > n.closest('.tile')!.getBoundingClientRect().bottom + 1).map((n) => n.textContent)
     )
-    expect(lines).toBeLessThanOrEqual(2)
+    expect(clipped).toEqual([])
   })
 }

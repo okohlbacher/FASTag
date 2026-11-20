@@ -12,6 +12,8 @@ import DataTable, { type Column } from './DataTable'
 import { baseName } from '../digestReport'
 import { revealLabel } from '../app/paths'
 import { evalueText, spectrumHint } from '../ResultsTable'
+import { humanName } from '../paramLayout'
+import ReportHeader from './ReportHeader'
 
 export type ReportKind = 'qc' | 'shortlist' | 'triage' | 'generic'
 
@@ -346,6 +348,69 @@ function QcView({ tsv }: { tsv: Tsv }): JSX.Element {
 
 // ---- Shortlist ---------------------------------------------------------------
 
+/// The shortlist's '#' lines as a labelled list in the GUI's words: the
+/// caveat as one sentence, "key: value" lines as rows, the settings line
+/// split into its options under their field names.
+const SETTING_PARAM: Record<string, string> = {
+  max_evalue: 'shortlist_max_evalue',
+  min_spectra: 'shortlist_min_spectra',
+  gapped: 'shortlist_gapped',
+  parsimony: 'shortlist_parsimony',
+  top: 'shortlist_top'
+}
+export function shortlistNotes(notes: string[]): { caveat: string | null; rows: { label: string; value: string }[] } {
+  let caveat: string | null = null
+  const rows: { label: string; value: string }[] = []
+  for (const n of notes) {
+    if (/protein shortlist:/i.test(n)) {
+      caveat = 'A search-space reduction from tag placements: not an identification, not protein inference and not FDR-controlled.'
+      continue
+    }
+    const m = /^([a-z_ ]+):\s*(.*)$/i.exec(n)
+    if (!m) {
+      rows.push({ label: 'Note', value: n })
+      continue
+    }
+    const key = m[1].trim().toLowerCase()
+    if (key === 'settings') {
+      for (const part of m[2].split(/,\s*/)) {
+        const [k, ...v] = part.trim().split(/\s+/)
+        const param = SETTING_PARAM[k]
+        rows.push({ label: param ? humanName(param) : headText(k), value: v.join(' ') })
+      }
+    } else if (key === 'input') {
+      // "input: run01.mzML; database: ecoli.fasta"
+      for (const part of n.split(/;\s*/)) {
+        const [k, ...v] = part.split(':')
+        rows.push({ label: headText(k.trim()), value: v.join(':').trim() })
+      }
+    } else rows.push({ label: headText(key), value: m[2] })
+  }
+  return { caveat, rows }
+}
+
+function ShortlistNotes({ notes }: { notes: string[] }): JSX.Element | null {
+  const { caveat, rows } = useMemo(() => shortlistNotes(notes), [notes])
+  if (!caveat && rows.length === 0) return null
+  return (
+    <div className="report-notes">
+      {caveat && <p className="hint">{caveat}</p>}
+      {rows.length > 0 && (
+        <table className="kv shortlist-notes" aria-label="Shortlist settings">
+          <tbody>
+            {rows.map((r, i) => (
+              <tr key={`${r.label}-${i}`}>
+                <th scope="row">{r.label}</th>
+                <td>{r.value}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+    </div>
+  )
+}
+
 function ShortlistView({ tsv, files }: { tsv: Tsv; files: { label: string; path: string }[] }): JSX.Element {
   const columns = useMemo(() => columnsOf(tsv), [tsv])
   // A file that cannot be revealed says why.
@@ -358,15 +423,7 @@ function ShortlistView({ tsv, files }: { tsv: Tsv; files: { label: string; path:
       <p className="report-sum">
         <strong>{nKept}</strong> of {tsv.rows.length} proteins with evidence are kept in the reduced FASTA.
       </p>
-      {tsv.notes.length > 0 && (
-        <div className="report-notes">
-          {tsv.notes.map((n) => (
-            <p key={n} className="hint">
-              {n.charAt(0).toUpperCase() + n.slice(1)}
-            </p>
-          ))}
-        </div>
-      )}
+      <ShortlistNotes notes={tsv.notes} />
       {files.length > 0 && (
         <div className="row tight">
           {files.map((f) => (
@@ -472,13 +529,22 @@ export interface ReportTableProps {
   openSpectrum?(spectrum: string): void
 }
 
+const REPORT_TITLE: Partial<Record<ReportKind, string>> = {
+  qc: 'Run QC',
+  shortlist: 'Protein shortlist',
+  triage: 'Spectra ranked by identifiability'
+}
+const REPORT_HELP: Partial<Record<ReportKind, { to: string; label: string }>> = {
+  qc: { to: 'workflow-run-qc', label: 'How to read the QC report' },
+  shortlist: { to: 'workflow-db-reduction', label: 'How to read the shortlist' },
+  triage: { to: 'workflow-triage', label: 'How to read the ranking' }
+}
+
 export default function ReportTable({ kind, path, files = [], openSpectrum }: ReportTableProps): JSX.Element {
   const { tsv, error } = useReport(path)
   return (
     <div className={`report-view report-${kind}`}>
-      <p className="src" title={path}>
-        <span className="mono">{baseName(path)}</span>
-      </p>
+      <ReportHeader title={REPORT_TITLE[kind] ?? headText(baseName(path))} paths={[path]} help={REPORT_HELP[kind]} />
       {error ? (
         <p className="warn" role="alert">
           {error}

@@ -49,7 +49,7 @@ test('without the probe: "not checked" before the run; after it the ion-trap red
   await openApp(page, 'iontrap')
   await page.getByRole('radio', { name: /^Characterize a run/ }).check()
   await page.getByRole('button', { name: 'Choose file…' }).click()
-  await expect(page.locator('p.not-checked', { hasText: /Not checked before the run: this FASTag cannot read the metadata of a file before running on it/ })).toBeVisible()
+  await expect(page.locator('p.not-checked', { hasText: /^The instrument and checks come from the reports after the run\.$/ })).toBeVisible()
   await page.getByRole('button', { name: 'Run', exact: true }).click()
   const after = page.getByRole('list', { name: 'Checks after the run' })
   const flag = after.locator('li.check').filter({ hasText: 'This run used 20 ppm; the MS2 look like ion trap' })

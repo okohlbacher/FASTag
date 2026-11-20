@@ -182,6 +182,8 @@ export default function ResultTabs(p: ResultTabsProps): JSX.Element {
     if (!path) return
     setTarget({ path, spectrum, rowId })
     setTab('spectrum')
+    // Keyboard focus follows the row to the Spectrum tab's heading.
+    focusLater(() => document.querySelector<HTMLElement>('#tabpanel .sp-head h2'))
   }
   // Arrow keys, Home and End move between the tabs (WAI-ARIA tabs pattern).
   function onTabKey(e: KeyboardEvent<HTMLDivElement>): void {
@@ -328,11 +330,6 @@ export default function ResultTabs(p: ResultTabsProps): JSX.Element {
           </div>
         ) : tab === 'species' ? (
           <div className="tablewrap">
-            {speciesRun?.enabled && (
-              <p className="src" title={species?.path}>
-                Species of <span className="mono">{speciesRun.input}</span>
-              </p>
-            )}
             <SpeciesPanel
               report={species}
               enabled={speciesRun ? speciesRun.enabled : p.speciesOn}

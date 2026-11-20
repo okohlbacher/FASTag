@@ -90,7 +90,7 @@ test('no alkylation report asked for: no Alkylation tile, and C+57.021 a default
     expect(calls[0].params.alkylation_out ?? '').toBe('')
     expect(oracle(fixture === 'gate' ? 'v112-pxd003531' : 'v111-pxd003531').massgap).toBe(false)
     await expect(tile(page, 'Alkylation')).toHaveCount(0)
-    const row = page.getByRole('table', { name: 'Suggested search settings' }).getByRole('row', { name: /fixed C\+57\.021/ })
+    const row = page.getByRole('table', { name: 'Suggested search settings' }).getByRole('row', { name: /Fixed modification \(C \+57\.021\)/ })
     await expect(row.locator('.evidence')).toHaveText('default')
     await expect(row).toContainText('alkylation not assessed (alkylation report not written)')
   }
