@@ -65,6 +65,7 @@ export default function ParamField({ spec, value, onChange, onPickFile, needs, u
         description={sentence(plainOptions(spec.description))}
         deflt={`${defaultText(spec)}${unit ? ` ${defaultText(unit.spec)}` : ''}`}
         more={uiOf(spec.name).help?.text}
+        tip={uiOf(spec.name).help?.tip}
       />
     </span>
   )
@@ -299,6 +300,11 @@ export default function ParamField({ spec, value, onChange, onPickFile, needs, u
   // locale and reports a half-typed `5e` as '', so the CLI default would run.
   // The text is kept as typed and checked by invalidBecause().
   const numeric = spec.type === 'int' || spec.type === 'double'
+  // A "not set" value (-1: by engine) reads as an empty field with its
+  // placeholder; emptied, the field goes back to that value (not sent).
+  const unset = uiOf(spec.name).unset
+  const raw = String(value ?? '')
+  const isUnset = !!unset && (raw.trim() === '' || Number(raw) === Number(unset.value))
   const input = (
     <input
       id={`p-${spec.name}`}
@@ -308,8 +314,9 @@ export default function ParamField({ spec, value, onChange, onPickFile, needs, u
       type="text"
       inputMode={spec.type === 'int' ? 'numeric' : spec.type === 'double' ? 'decimal' : undefined}
       disabled={off}
-      value={String(value ?? '')}
-      onChange={(e) => onChange(e.target.value)}
+      value={isUnset ? '' : raw}
+      placeholder={unset?.placeholder}
+      onChange={(e) => onChange(unset && e.target.value.trim() === '' ? String(spec.default ?? unset.value) : e.target.value)}
     />
   )
   if (unit) {

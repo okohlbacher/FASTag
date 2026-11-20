@@ -933,7 +933,7 @@ export const DIGEST: HelpPage = {
             own. The chip below names the candidate cysteine modification with the most matching placed spectra;
             these are counts, not an alkylation call. The{' '}
             <L to="param-alkylation_out">alkylation report</L>, an optional report of Characterize a run, makes that
-            call; it needs tags of 8 or more residues, so turning it on raises Extension to 3.
+            call; on a shipped proteome it needs tags of 8 residues (human, mouse) or 7 (yeast, E. coli), so turning it on raises Extension to 3 or 2 (not with a FASTA proteome or another report that places tags).
           </p>
         </>
       )

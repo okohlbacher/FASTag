@@ -348,7 +348,24 @@ function PlacementTable({ t }: { t: ReconTable }): JSX.Element {
 
 /// The survey columns of a mass-shift table, in words (README, -delta_out).
 const DELTA_EXTRA: { id: string; label: string; title: string; num?: true }[] = [
-  { id: 'localized', label: 'Localized', title: 'Spectra whose shift the fragments place on one site class', num: true },
+  {
+    id: 'localized',
+    label: 'Localized',
+    title: 'Spectra whose shift is placed on one site class: fragment-localized plus sequence-constrained',
+    num: true
+  },
+  {
+    id: 'fragment_localized',
+    label: 'Fragment-localized',
+    title: 'Localized spectra whose site the fragments chose, with enough site-determining evidence',
+    num: true
+  },
+  {
+    id: 'sequence_constrained',
+    label: 'Sequence-constrained',
+    title: 'Localized spectra whose shift region is one residue: the placement, not a fragment, fixes the site',
+    num: true
+  },
   { id: 'residues', label: 'Sites', title: 'Site:count pairs of the localized spectra, most frequent first' },
   { id: 'unlocalized', label: 'Unlocalized', title: 'Spectra with a shift and no site-determining evidence', num: true },
   { id: 'ambiguous', label: 'Ambiguous', title: 'Unlocalized spectra with some site evidence, below the localization margin', num: true },

@@ -887,6 +887,8 @@ details.raw td.wrap { white-space: normal; min-width: 300px; }
 .rt-row { display: grid; height: 28px; align-items: center; border-bottom: 1px solid var(--row-rule); }
 .rt-cell { padding: 0 10px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-variant-numeric: tabular-nums; }
 .rt-cell.n { text-align: right; }
+/* Tags and ProForma in the mono font: their width is known (ResultsTable SEQ_CHAR_W). */
+.rt-cell.seq { font-family: var(--font-seq); font-size: 13px; }
 .rt-cell.dim { color: var(--muted-foreground); }
 .rt-cell sup { font-size: var(--text-xs); line-height: 0; }
 /* A narrow window (960-900 px wide and less in a browser): tighter margins. */
@@ -1196,9 +1198,9 @@ label.task { align-content: start; }
 .help-pop-more { color: var(--muted-foreground); }
 .help-pop-facts { display: flex; flex-wrap: wrap; gap: var(--space-1) var(--space-3); }
 .help-pop .help-link { align-self: flex-start; font-size: var(--text-xs); }
-/* One line in the grid: the brief hint (paramLayout briefHint) fits; the
-   whole sentence is its tooltip and the (?) popover's. */
-.advanced .help:not(.brief):not(.invalid):not(.inert) { -webkit-line-clamp: 1; }
+/* Two lines in the grid, as a brief hint: most sentences end inside them;
+   the whole sentence is its tooltip and the (?) popover's. */
+.advanced .help:not(.brief):not(.invalid):not(.inert) { -webkit-line-clamp: 2; }
 details.advanced { padding: 0; }
 details.advanced > summary.card-head { padding: var(--space-3) var(--space-4); min-height: 0; }
 details.advanced > summary h2 { flex: 1; }

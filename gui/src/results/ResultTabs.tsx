@@ -18,7 +18,7 @@ import type { Tab } from '../app/viewStore'
 import type { Evidence, Failure, Reports, Results } from '../run/useRun'
 import type { speciesReach } from '../paramLayout'
 import OverviewPanel from './OverviewPanel'
-import type { Overview, TileAction } from './overview'
+import { daSpeciesTolerance, type Overview, type TileAction } from './overview'
 import ReconView from './ReconView'
 import ReportTable from './ReportTable'
 import type { WorkflowReports } from './workflowReports'
@@ -96,7 +96,7 @@ export interface ResultTabsProps {
   showFailure?: boolean
   // The Overview of the run shown (none: no Overview tab), its input, and
   // what its actions do; locked while busy.
-  overview?: { model: Overview; input: string; locked: boolean; params?: Record<string, unknown>; workflow?: string | null; missing?: string[] } | null
+  overview?: { model: Overview; input: string; locked: boolean; params?: Record<string, unknown>; workflow?: string | null; workflowId?: string | null; missing?: string[] } | null
   onOverviewAction?(a: TileAction): void
   // Over the tabs while a single run goes (RunningPanel).
   runningState?: ReactNode
@@ -254,6 +254,24 @@ export default function ResultTabs(p: ResultTabsProps): JSX.Element {
         </p>
       )}
 
+      {results?.reportsReplaced && results.reportsReplaced.length > 0 && (
+        <div className="banner warn" role="status">
+          <IconWarning />
+          <span>
+            <strong>Reports overwritten.</strong> A later run wrote over{' '}
+            {results.reportsReplaced.length === 1 ? 'a report' : 'reports'} of the run shown, so{' '}
+            {results.reportsReplaced.length === 1 ? 'it is' : 'they are'} not shown:{' '}
+            {results.reportsReplaced.map((x, k) => (
+              <span key={x.path}>
+                {k > 0 && '; '}
+                <code>{baseName(x.path)}</code> by the run of {baseName(x.by)} ({new Date(x.end).toLocaleString()})
+              </span>
+            ))}
+            .
+          </span>
+        </div>
+      )}
+
       {p.runningState}
 
       <div className="tabpanel" id="tabpanel" role="tabpanel" aria-labelledby={`tab-${tab}`}>
@@ -264,6 +282,7 @@ export default function ResultTabs(p: ResultTabsProps): JSX.Element {
               input={p.overview.input}
               params={p.overview.params}
               workflow={p.overview.workflow}
+              workflowId={p.overview.workflowId}
               missing={p.overview.missing}
               busy={busy || p.overview.locked}
               onAction={(a) => p.onOverviewAction?.(a)}
@@ -275,20 +294,21 @@ export default function ResultTabs(p: ResultTabsProps): JSX.Element {
               key={`${tab}:${wr[tab]}`}
               kind={tab}
               path={wr[tab]!}
+              gen={reports.workflowGen?.[tab]}
               files={tab === 'shortlist' ? wr.files : undefined}
               openSpectrum={tab === 'triage' && spectrumOn ? (sp) => openSpectrum(sp, null) : undefined}
             />
             {tab === 'triage' && wr.censusSummary && (
               <details className="raw">
                 <summary>Run summary of the identifiability table</summary>
-                <ReportTable key={`sum:${wr.censusSummary}`} kind="generic" path={wr.censusSummary} />
+                <ReportTable key={`sum:${wr.censusSummary}`} kind="generic" path={wr.censusSummary} gen={reports.workflowGen?.censusSummary} />
               </details>
             )}
           </div>
         ) : tab === 'triage' && wr.censusSummary ? (
           <div className="tablewrap">
             <p className="hint">The run summary of the identifiability table; the ranking of the spectra is in a file of its own.</p>
-            <ReportTable key={`sum:${wr.censusSummary}`} kind="generic" path={wr.censusSummary} />
+            <ReportTable key={`sum:${wr.censusSummary}`} kind="generic" path={wr.censusSummary} gen={reports.workflowGen?.censusSummary} />
           </div>
         ) : tab === 'recon' ? (
           <div className="tablewrap">
@@ -298,13 +318,13 @@ export default function ResultTabs(p: ResultTabsProps): JSX.Element {
             {wr.deltaSpectra && (
               <details className="raw" open={!hasRecon}>
                 <summary>Spectra per mass shift</summary>
-                <ReportTable key={`ds:${wr.deltaSpectra}`} kind="generic" path={wr.deltaSpectra} />
+                <ReportTable key={`ds:${wr.deltaSpectra}`} kind="generic" path={wr.deltaSpectra} gen={reports.workflowGen?.deltaSpectra} />
               </details>
             )}
             {wr.deltaCounts && (
               <details className="raw" open={!hasRecon}>
                 <summary>Mass-shift accounting: how many spectra reach each step</summary>
-                <ReportTable key={`dc:${wr.deltaCounts}`} kind="generic" path={wr.deltaCounts} />
+                <ReportTable key={`dc:${wr.deltaCounts}`} kind="generic" path={wr.deltaCounts} gen={reports.workflowGen?.deltaCounts} />
               </details>
             )}
           </div>
@@ -352,6 +372,7 @@ export default function ResultTabs(p: ResultTabsProps): JSX.Element {
               contributed={p.evidence.contributed}
               totalMs2={p.evidence.ms2}
               czExcluded={p.evidence.czExcluded ?? null}
+              daTolerance={daSpeciesTolerance(reports.list, p.overview?.params ?? p.spectrumRun?.params ?? rec?.params)}
             />
           </div>
         ) : batchMiss ? (

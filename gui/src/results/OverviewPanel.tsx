@@ -6,7 +6,7 @@
 
 import { useEffect, useRef, useState, type JSX } from 'react'
 import { baseName } from '../digestReport'
-import { settingWords, shownTiles, type Overview, type Tile, type TileAction } from './overview'
+import { leadTiles, settingWords, shownTiles, type Overview, type Tile, type TileAction } from './overview'
 import { HelpLink } from '../help/HelpLink'
 
 export interface OverviewPanelProps {
@@ -21,6 +21,8 @@ export interface OverviewPanelProps {
   params?: Record<string, unknown>
   /// The workflow the run was started from, by name.
   workflow?: string | null
+  /// Its id (tasks.ts): its own tiles come first (leadTiles).
+  workflowId?: string | null
   /// Reports the run was asked for and did not write, in words.
   missing?: string[]
 }
@@ -47,14 +49,14 @@ function TileView({ t, busy, onAction }: { t: Tile; busy: boolean; onAction(a: T
   )
 }
 
-export default function OverviewPanel({ overview: o, input, busy, onAction, params, workflow, missing = [] }: OverviewPanelProps): JSX.Element {
+export default function OverviewPanel({ overview: o, input, busy, onAction, params, workflow, workflowId, missing = [] }: OverviewPanelProps): JSX.Element {
   const [copied, setCopied] = useState<'yes' | 'no' | null>(null)
   const revision = useRef(0)
   useEffect(() => {
     setCopied(null)
     return () => { revision.current++ }
   }, [input, o.copyText])
-  const tiles = params ? shownTiles(o, params) : { figures: o.figures, calls: o.calls }
+  const tiles = leadTiles(params ? shownTiles(o, params) : { figures: o.figures, calls: o.calls }, workflowId)
   async function copy(): Promise<void> {
     const started = revision.current
     try {

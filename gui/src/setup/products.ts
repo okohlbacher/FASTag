@@ -63,7 +63,8 @@ export const PRODUCTS: readonly Product[] = [
   { param: 'check_header_out', label: 'Precursor charge check', what: 'Each precursor charge of the file against the MS1 isotope spacing.', also: { check_header_charge: 'warn' }, experimental: true }
 ]
 
-/// The tag length the shipped human proteome needs (alkylation report).
+/// The tag length the shipped human and mouse proteomes need (alkylation
+/// report); yeast and E. coli need one less.
 export const ALKYLATION_TAG = 8
 
 /// The accession the CLI takes until a data set has one (usi_collection):
@@ -128,26 +129,61 @@ function bareName(p: Product, engine?: unknown): string {
   return `${outputKind(p.param)}.${ext}`
 }
 
-/// The extension the alkylation report needs in @p values, when it must
-/// rise; null when it need not. The CLI places the alkylation report's tags
-/// on a shipped proteome (FASTag.cpp alkylation_only_db) only when no other
-/// report places tags (placements, shortlist, reduced FASTA, search
-/// configuration) and no protein database is given; otherwise on -recon_fasta
-/// or -fasta. The shipped proteomes need tags of 8 residues (human): the
-/// extension rises so that seed plus both ends reach them.
-export function alkylationExtension(values: V): string | null {
+/// The tag length the alkylation report's database needs (FASTag.cpp
+/// alkylation_proteome): 8 residues on the shipped human or mouse proteome
+/// (auto is human), 7 on yeast or E. coli; null for a FASTA file of the
+/// user's, for which the shipped-length rule does not hold (no raise).
+export function alkylationTarget(values: V): number | null {
+  const prot = (text(values['alkylation_proteome']) || String(PARAM_BY_NAME.get('alkylation_proteome')?.default ?? 'auto')).toLowerCase()
+  if (prot === 'auto' || prot === 'human' || prot === 'mouse') return ALKYLATION_TAG
+  if (prot === 'yeast' || prot === 'ecoli') return ALKYLATION_TAG - 1
+  return null
+}
+
+/// The extension the alkylation report needs in @p values, whatever
+/// Extension holds now; null when it needs none. The CLI places the
+/// alkylation report's tags on a shipped proteome (FASTag.cpp
+/// alkylation_only_db) only when no other report places tags (placements,
+/// shortlist, reduced FASTA, search configuration) and no protein database
+/// is given; otherwise on -recon_fasta or -fasta. The extension rises so
+/// that seed plus both ends reach the proteome's tag length.
+export function alkylationNeed(values: V): number | null {
   if (isActive('recon_fasta', values)) return null
   if (['recon_out', 'shortlist_out', 'fasta_out', 'search_config_out'].some((n) => isActive(n, values))) return null
+  const target = alkylationTarget(values)
   const seed = Number(text(values['tag_length']) || PARAM_BY_NAME.get('tag_length')?.default || 3)
+  if (target == null || !Number.isFinite(seed)) return null
+  const need = Math.ceil((target - seed) / 2)
+  return need > 0 ? need : null
+}
+
+/// The extension the alkylation report raises @p values to, when it must
+/// rise; null when it need not (Extension already reaches it).
+export function alkylationExtension(values: V): string | null {
+  const need = alkylationNeed(values)
   const ext = Number(text(values['extension']) || PARAM_BY_NAME.get('extension')?.default || 0)
-  const need = Math.ceil((ALKYLATION_TAG - seed) / 2)
-  return Number.isFinite(seed) && Number.isFinite(ext) && ext < need ? String(need) : null
+  return need != null && Number.isFinite(ext) && ext < need ? String(need) : null
+}
+
+/// The raised Extension put back once the raise is no longer needed (another
+/// report places the tags, a protein database is set, a FASTA proteome),
+/// when Extension still holds the raised value; an Extension edited since
+/// forgets the raise.
+export function restoreRaised(
+  values: V,
+  raised: { from: ParamValue; to: ParamValue } | null
+): { values: V; raised: { from: ParamValue; to: ParamValue } | null } {
+  if (!raised) return { values, raised }
+  if (text(values['extension']) !== text(raised.to)) return { values, raised: null }
+  if (alkylationNeed(values) != null) return { values, raised }
+  return { values: { ...values, extension: raised.from }, raised: null }
 }
 
 /// What turning product @p p on or off does beyond itself: on, the
 /// extension the alkylation report raises (@p raised remembers it); off,
 /// the extension restored when it is still the raised one (not edited
-/// since). Used by the Outputs card's toggle.
+/// since). Another product that places tags makes the raise unneeded, and
+/// restores it too. Used by the Outputs card's toggle.
 export function toggleProduct(
   p: Product,
   on: boolean,
@@ -156,7 +192,7 @@ export function toggleProduct(
   raised: { from: ParamValue; to: ParamValue } | null
 ): { values: V; raised: { from: ParamValue; to: ParamValue } | null } {
   const next = setProduct(p, on, values, tagsOut)
-  if (p.param !== 'alkylation_out') return { values: next, raised }
+  if (p.param !== 'alkylation_out') return restoreRaised(next, raised)
   if (on) return { values: next, raised: next['extension'] !== values['extension'] ? { from: values['extension'] ?? '', to: next['extension'] } : null }
   if (raised && text(values['extension']) === text(raised.to)) next['extension'] = raised.from
   return { values: next, raised: null }

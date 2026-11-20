@@ -322,7 +322,7 @@ describe('round 5 dependencies and conflicts', () => {
     const custom = { ...on, digest_models: '/d/models.tsv', digest_models_version: 'v2' }
     expect(inertBecause('digest_models_version', custom)).toBeNull()
     expect(sentValues(custom)).toMatchObject({ digest_models: '/d/models.tsv', digest_models_version: 'v2' })
-    expect(uiOf('digest_models_version').help?.tip).toMatch(/v2 only adds the calibrated v2 rows/)
+    expect(uiOf('digest_models_version').help?.tip).toMatch(/v2 still loads the calibration and adds the p_correct rows/)
   })
 
   it('refuses isotope offsets at a low-resolution tolerance, and auto modes on mzPeak, each with its fix', () => {

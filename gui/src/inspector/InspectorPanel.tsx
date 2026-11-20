@@ -262,7 +262,7 @@ export function AfterRunPanel(p: AfterRunPanelProps): JSX.Element | null {
           <CheckItem
             key={c.id}
             check={c}
-            onFix={c.fix?.instrument && c.fix.rerun ? () => p.onRerun?.(c.fix!) : undefined}
+            onFix={c.fix?.rerun && (c.fix.instrument || c.fix.params) ? () => p.onRerun?.(c.fix!) : undefined}
             fixDisabled={!p.onRerun}
           />
         ))}

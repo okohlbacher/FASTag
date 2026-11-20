@@ -96,6 +96,9 @@ export interface ParamUi {
   /// Named values offered in a select, with Custom for any other: a bare
   /// number would read wrong (0.0 spectra to read means all of them).
   steps?: { label: string; value: string }[]
+  /// A value that stands for "not set" (-1: by engine): its field is shown
+  /// empty with this placeholder, and an emptied field goes back to it.
+  unset?: { value: string; placeholder: string }
   help?: ParamHelp
 }
 
@@ -1234,7 +1237,7 @@ export const PARAM_UI: Record<string, ParamUi> = {
     depends: [DIGEST_OFF],
     help: {
       text: 'Which protease models the digest report uses: the shipped ones (as in 1.11) or v2. v2 is not validated on held-out data.',
-      tip: "With a custom models file, v2 only adds the calibrated v2 rows; the file's models are used as given."
+      tip: "With a custom models file the file's models are used as given (the log says v2 is ignored for the table); v2 still loads the calibration and adds the p_correct rows."
     }
   },
   dump_spectrum: {
@@ -1317,6 +1320,7 @@ export const PARAM_UI: Record<string, ParamUi> = {
   },
   search_isotope_errors: {
     section: 'Search configuration',
+    unset: { value: '-1', placeholder: 'engine default' },
     depends: [SEARCH_OFF],
     help: {
       text: 'How many precursor isotope errors the search engine should consider; -1 leaves it to the engine: none for Sage and Comet, up to 3 for MSFragger.'
@@ -1324,6 +1328,7 @@ export const PARAM_UI: Record<string, ParamUi> = {
   },
   search_missed_cleavages: {
     section: 'Search configuration',
+    unset: { value: '-1', placeholder: 'engine default' },
     depends: [SEARCH_OFF],
     help: {
       text: 'How many missed cleavages the search engine should allow; -1 leaves it to the engine: the tag placement setting for Sage and Comet, 2 for MSFragger with trypsin.'
@@ -1338,6 +1343,7 @@ export const PARAM_UI: Record<string, ParamUi> = {
   },
   search_precursor_tolerance: {
     section: 'Search configuration',
+    unset: { value: '-1', placeholder: 'engine default' },
     unit: 'search_precursor_unit',
     depends: [SEARCH_OFF],
     help: {

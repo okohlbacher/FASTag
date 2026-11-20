@@ -171,7 +171,7 @@ describe('round 6, 15: the alkylation report raises Extension only where the CLI
   })
 
   it('the Characterize product note says what the calls are validated at', () => {
-    expect(TASKS.find((t) => t.id === 'characterize')!.productNotes!['alkylation_out']).toMatch(/validated at 2/)
+    expect(TASKS.find((t) => t.id === 'characterize')!.productNotes!['alkylation_out']).toMatch(/validated at Extension 2/)
   })
 })
 

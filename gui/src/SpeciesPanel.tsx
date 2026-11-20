@@ -1,7 +1,9 @@
 import type { JSX } from 'react'
 import type { SpeciesReport, Taxon } from './types'
-import { baseName, fmtQ } from './digestReport'
-import { IconFlag } from './icons'
+import { baseName, fmt, fmtQ } from './digestReport'
+import { IconFlag, IconWarning } from './icons'
+import { DA_SPECIES_CAVEAT } from './results/overview'
+import { EValue } from './ResultsTable'
 import ReportHeader from './results/ReportHeader'
 import { HelpLink } from './help/HelpLink'
 import { tiedLeaders } from './results/calls'
@@ -37,6 +39,9 @@ interface Props {
   runInput?: string
   /// Tag rows read as c/z ions the report left out (it counts b/y only).
   czExcluded?: number | null
+  /// The run's fragment tolerance when it is in Da (daSpeciesTolerance):
+  /// the ranking is shown under the Overview's caveat, its top name muted.
+  daTolerance?: number | null
 }
 
 /// Why a c/z run's species report is sparse: said on the tab.
@@ -58,7 +63,8 @@ export default function SpeciesPanel({
   totalMs2,
   formOn,
   runInput,
-  czExcluded
+  czExcluded,
+  daTolerance
 }: Props): JSX.Element {
   if (!enabled && formOn) {
     return (
@@ -123,6 +129,7 @@ export default function SpeciesPanel({
   const pctSpectra =
     contributed != null && totalMs2 ? Math.round((contributed / totalMs2) * 1000) / 10 : null
   const counted = deconvolved ? 'adjusted' : 'observed'
+  const da = daTolerance != null
 
   return (
     <div className="species">
@@ -143,12 +150,21 @@ export default function SpeciesPanel({
         }
       />
       <CzNote n={czExcluded} />
+      {da && (
+        <p className="banner warn" role="note">
+          <IconWarning />
+          <span>
+            <strong>Unreliable here.</strong> The fragment tolerance is {fmt(daTolerance!)} Da: {DA_SPECIES_CAVEAT}.
+            The ranking is shown, but do not read the top taxon as the sample&apos;s organism.
+          </span>
+        </p>
+      )}
 
       <section className="cards" aria-label="Taxon ranking">
         <div className="card headline">
           <span className="card-label">Top-ranked taxon</span>
           <div className="call">
-            <span className="taxon">{tied.length > 1 ? 'No single leader' : <TaxonName t={top} />}</span>
+            <span className={`taxon${da ? ' muted' : ''}`} title={da ? 'Unreliable at a fragment tolerance in Da' : undefined}>{tied.length > 1 ? 'No single leader' : <TaxonName t={top} />}</span>
             {top.rank && <span className="rank">{top.rank}</span>}
           </div>
           {tied.length > 1 && (
@@ -162,7 +178,7 @@ export default function SpeciesPanel({
           </div>
           <div className="muted">
             Ranked first by {counted} spectra ·{' '}
-            <span title={top.q === null ? Q_NA_TITLE : Q_TITLE}>q {fmtQ(top.q)}</span>
+            <span title={top.q === null ? Q_NA_TITLE : Q_TITLE}>q <QValue q={top.q} /></span>
             {next && (
               <>
                 {' '}· next: <TaxonName t={next} /> at {relOf(next)}% of its evidence
@@ -244,7 +260,7 @@ export default function SpeciesPanel({
                   </td>
                   <td className="num">{t.observed.toLocaleString('en-US')}</td>
                   {deconvolved && <td className="num">{t.adjusted.toLocaleString('en-US')}</td>}
-                  <td className="num dim" title={t.q === null ? Q_NA_TITLE : undefined}>{fmtQ(t.q)}</td>
+                  <td className="num dim" title={t.q === null ? Q_NA_TITLE : undefined}><QValue q={t.q} /></td>
                 </tr>
               )
             })}
@@ -285,4 +301,11 @@ const Q_TITLE = 'q-value: smaller means the evidence is less likely to be chance
 /// Genus and species names are italic, as taxonomy writes them.
 function TaxonName({ t }: { t: Taxon }): JSX.Element {
   return t.rank === 'genus' || t.rank === 'species' ? <em>{t.name}</em> : <>{t.name}</>
+}
+
+/// A q-value as the other tables write small values: 2.4 × 10⁻⁵ below
+/// 0.001 (EValue), else as fmtQ writes it (uncalibrated, <1e-300, 0.012).
+function QValue({ q }: { q: number | null }): JSX.Element {
+  if (q === null || q === 0 || q >= 0.001) return <>{fmtQ(q)}</>
+  return <EValue text={String(q)} />
 }

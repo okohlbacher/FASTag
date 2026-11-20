@@ -17,12 +17,14 @@ export interface HelpPopoverProps {
   deflt: string
   /// A longer plain-language text (PARAM_UI help), when there is one.
   more?: string
+  /// A tip below it (PARAM_UI help.tip), when there is one.
+  tip?: string
   /// More flags the control sets (the Instrument sets three), each with its
   /// default.
   flags?: { name: string; deflt: string }[]
 }
 
-export default function HelpPopover({ name, label, description, deflt, more, flags }: HelpPopoverProps): JSX.Element {
+export default function HelpPopover({ name, label, description, deflt, more, tip, flags }: HelpPopoverProps): JSX.Element {
   const [open, setOpen] = useState(false)
   const id = useId()
   const box = useRef<HTMLSpanElement>(null)
@@ -64,6 +66,7 @@ export default function HelpPopover({ name, label, description, deflt, more, fla
         <span id={id} className="help-pop" role="dialog" aria-label={`About ${label}`}>
           <span className="help-pop-text">{description}</span>
           {more && more !== description && <span className="help-pop-more">{more}</span>}
+          {tip && <span className="help-pop-more help-pop-tip">{tip}</span>}
           {/* The dash is written here, once: copied, the flag is what the
               CLI takes (-max_evalue, never --max_evalue). */}
           {flags ? (

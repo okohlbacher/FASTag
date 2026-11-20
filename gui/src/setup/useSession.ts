@@ -4,7 +4,6 @@
 
 import { useEffect, useRef, useState, type SetStateAction } from 'react'
 import {
-  SECTIONS,
   PARAM_BY_NAME,
   RENDERED,
   RECIPE_FIELDS,
@@ -85,9 +84,9 @@ export function useSession(start: Origin = DEFAULTS) {
     setRawValues(v)
   }
   const [undoSnapshot, setUndoSnapshot] = useState<Snapshot | null>(null)
-  const [openGroups, setOpenGroups] = useState<Record<string, boolean>>(() =>
-    Object.fromEntries(SECTIONS.map((s) => [s.title, s.open]))
-  )
+  // Only the user's own toggles: a group not toggled yet opens as its
+  // place says (a workflow's own groups open, SetupForm renderGroup).
+  const [openGroups, setOpenGroups] = useState<Record<string, boolean>>({})
   // The parameters of the last session's run (D6): offered with "Apply
   // last-used (n)", never applied on their own. null once applied.
   const [lastUsed, setLastUsed] = useState<Record<string, ParamValue> | null>(null)

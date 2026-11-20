@@ -253,7 +253,13 @@ function Digest({ report }: { report: Report }): JSX.Element {
             // those the Reason figure states already: the first rule's id
             // ("The first no-call rule that applies is low_resolution.") and
             // the sentences of the rules it names.
-            ...section(report, 'call').filter((r) => !['model', 'class', 'runner_up_class', 'reason'].includes(r.key)),
+            // The status sentence of a no call ("No protease is called: the
+            // fragment tolerance is in Da, ...") restates the Reason figure too.
+            ...section(report, 'call').filter(
+              (r) =>
+                !['model', 'class', 'runner_up_class', 'reason'].includes(r.key) &&
+                !(r.key === 'status' && call.status === 'no_call' && !!call.reason && !!REASON[call.reason])
+            ),
             ...nocall.filter((r) => r.value !== 'no' && !(call.status === 'no_call' && call.fired.includes(r.key) && REASON[r.key])),
             ...section(report, 'count'),
             ...section(report, 'share')
@@ -271,12 +277,20 @@ function Label({ report }: { report: Report }): JSX.Element {
   // Counts only, as the report gives them: a label with tag ends is named,
   // to be compared with the chance count 0.5 Da above it, in the column below.
   const seen = labels.filter((l) => (l.count ?? 0) > 0)
+  const lowRes = value(report, 'run', 'low_resolution') === 'yes'
   return (
     <section className="dg-block card" aria-labelledby="dg-label">
       <Heading id="dg-label" title="Labels" report={report} help="digest-labels" />
       {labels.length > 0 && (
         <div className="chip-line">
-          {seen.length === 0 ? (
+          {seen.length === 0 && lowRes ? (
+            // At a tolerance in Da the label windows do not hold: no count
+            // of 0 reads as a verified "unlabelled".
+            <>
+              <span className="chip">Not assessable (tolerance in Da)</span>
+              <span className="muted">{labels.map((l) => l.label).join(', ')}: 0 tag ends each.</span>
+            </>
+          ) : seen.length === 0 ? (
             <>
               <span className="chip ok">No label tag ends</span>
               <span className="muted">{labels.map((l) => l.label).join(', ')}: 0 tag ends each.</span>
@@ -292,7 +306,7 @@ function Label({ report }: { report: Report }): JSX.Element {
           )}
         </div>
       )}
-      {value(report, 'run', 'low_resolution') === 'yes' && (
+      {lowRes && (
         <div className="caveat">The fragment tolerance is in Da, so the label windows do not hold.</div>
       )}
       {labels.length > 0 && (

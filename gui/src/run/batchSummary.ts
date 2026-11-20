@@ -17,7 +17,7 @@
 import { baseName, type Report } from '../digestReport'
 import type { SpeciesReport } from '../types'
 import { alkylationCall as alkylationReportCall } from '../digestReport'
-import { censusFacts, labelCall, proteaseCall, speciesCall, parseLog } from '../results/calls'
+import { censusFacts, labelCall, proteaseCall, speciesCall, parseLog, tiedLeaders, unassessedKits } from '../results/calls'
 import { buildOverview, keyValues, reportRank, shortlistFacts, topShift, type Tile } from '../results/overview'
 import { jobWords, type BatchJob } from './batch'
 
@@ -178,13 +178,11 @@ export function qcCells(text: string | null | undefined): Record<(typeof QC_COLU
   // RunQC writes "none" whenever no kit is compatible, also when no kit
   // could be assessed: the reporter_<kit> states tell the two apart. Not
   // assessable is no call, and stays out of the majority.
-  const kitStates = [...rows].filter(([k, v]) => /^reporter_/.test(k) && KIT_STATES.includes(v))
-  const unassessed = kit === 'none' && kitStates.length > 0 && kitStates.every(([, v]) => v === 'not_assessable')
-  const why = [...new Set(kitStates.map(([k]) => (notes.get(k) ?? '').replace(/^Not assessable: /, '').replace(/\.$/, '')).filter(Boolean))]
+  const why = unassessedKits(kit, [...rows].map(([key, value]) => ({ key, value, desc: notes.get(key) ?? '' })))
   const kitCell: Cell =
     kit == null
       ? none('isobaric kit row')
-      : unassessed
+      : why
         ? { text: 'Not assessable', call: null, note: `no kit could be assessed${why.length ? `: ${why.join('; ')}` : ''}` }
         : { text: kit, call: kit, note: 'isobaric kits whose reporters are present' }
   return {
@@ -197,8 +195,6 @@ export function qcCells(text: string | null | undefined): Record<(typeof QC_COLU
   }
 }
 
-// The states of a reporter_<kit> row (RunQC.cpp KitCall).
-const KIT_STATES = ['present', 'absent', 'not_assessable']
 
 const fmtN = (n: number): string => n.toLocaleString('en-US')
 
@@ -251,6 +247,9 @@ export interface Cell {
   call: string | null
   /// Its cutoff or caveat (the Overview tile's note).
   note: string
+  /// The genus cell: a call of present taxa tied at the top (tiedLeaders),
+  /// their names. No single call: it stays out of the majority.
+  tied?: string[]
 }
 
 export interface Majority {
@@ -294,7 +293,10 @@ export function jobCells(d: JobData): { tags: number | null; cells: Record<Summa
     sp.state === 'ranked'
       ? // The top of the ranking, not a presence call: shown, never counted.
         { text: g.tone === 'call' ? `${g.value} (ranking)` : g.value, call: null, note: g.note }
-      : called(g, sp.state === 'called' && sp.present.length > 0 ? sp.present[0].name : null)
+      : sp.state === 'called' && tiedLeaders(sp.present).length > 1
+        ? // A tie at the top is no single call: its first taxon is arbitrary.
+          { ...called(g, null), ...(g.tone === 'call' ? { tied: tiedLeaders(sp.present).map((t) => t.name) } : {}) }
+        : called(g, sp.state === 'called' && sp.present.length > 0 ? sp.present[0].name : null)
   const a = tile('alkylation')
   // A report the job was sent that could not be read: its cell says that,
   // with the reason, and never counts.

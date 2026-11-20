@@ -186,7 +186,10 @@ export const TASKS: readonly Task[] = [
       subsample_fraction: '10% gives stable calls in a tenth of the time.'
     },
     outputs: ['out', 'digest_out', 'label_out', 'alkylation_out', 'glyco_out', 'species_out'],
-    productNotes: { alkylation_out: 'raises Extension to 3 (the shipped proteome needs tags of 8+); species and digest calls are validated at 2' },
+    productNotes: {
+      alkylation_out:
+        'Without a protein database the alkylation report places its tags on a shipped proteome, which needs tags of 8 residues (human, mouse) or 7 (yeast, E. coli). Turning it on raises Extension so the tags reach that length; this changes every tag of the run. The species and digest calls are validated at Extension 2. With a FASTA proteome, or another report that places tags, Extension is left as it is.'
+    },
     docs: { to: 'digest', label: 'Digest, label and mass-gap reports' }
   }
 ]

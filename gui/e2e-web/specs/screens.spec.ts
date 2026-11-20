@@ -1,7 +1,7 @@
 // Review screenshots (doc/GUI-WORKFLOWS.md 5): the landing screen, every
 // workflow's Setup with Advanced closed and open (the whole form: the Setup
 // pane scrolls inside itself, so the window is made as tall as its content),
-// Batch mode, two (?) popovers, the run bar, and every Results view after a
+// Batch mode, three (?) popovers (one with a tip), the run bar, and every Results view after a
 // run of each workflow. Not a check: it only runs with SCREENS_DIR set, for
 // design reviews by people and models.
 import type { Page } from '@playwright/test'
@@ -89,6 +89,19 @@ test('help popovers and the run bar', async ({ page, browserName }) => {
     await page.screenshot({ path: shot(`20-help-popover-${name}`) })
     await page.keyboard.press('Escape')
   }
+  // A (?) with a tip below its text (digest_models_version), in the
+  // Characterize workflow's own Advanced group.
+  await workflow(page, 'Characterize a run').check()
+  await openAdvanced(page)
+  const tip = page.locator('button[data-param-help="digest_models_version"]').first()
+  if ((await tip.count()) > 0) {
+    await tip.scrollIntoViewIfNeeded()
+    await tip.click()
+    await expect(page.getByRole('dialog', { name: /^About / })).toBeVisible()
+    await page.screenshot({ path: shot('20-help-popover-digest_models_version') })
+    await page.keyboard.press('Escape')
+  }
+  await page.locator('details.advanced > summary').click()
   await page.locator('.view-setup .runbar').screenshot({ path: shot('21-run-bar') })
   await page.screenshot({ path: shot('22-setup-file-chosen') })
 })

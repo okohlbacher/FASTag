@@ -14,6 +14,7 @@ import { revealLabel } from '../app/paths'
 import { evalueText, spectrumHint } from '../ResultsTable'
 import { PARAM_BY_NAME, choiceText, humanName } from '../paramLayout'
 import ReportHeader from './ReportHeader'
+import { unassessedKits } from './calls'
 
 export type ReportKind = 'qc' | 'shortlist' | 'triage' | 'generic'
 
@@ -47,19 +48,21 @@ export const headText = (c: string): string => {
   return s.charAt(0).toUpperCase() + s.slice(1)
 }
 
-function useReport(path: string): { tsv: Tsv | null; error: string | null } {
-  const [state, setState] = useState<{ path: string; tsv: Tsv | null; error: string | null }>({ path: '', tsv: null, error: null })
+/// The report at @p path, read again on each @p gen (an explicit open or a
+/// finished run bumps it: the file may have been rewritten at that path).
+function useReport(path: string, gen = 0): { tsv: Tsv | null; error: string | null } {
+  const [state, setState] = useState<{ path: string; gen: number; tsv: Tsv | null; error: string | null }>({ path: '', gen: 0, tsv: null, error: null })
   useEffect(() => {
     let live = true
     window.fastag
       .report(path)
-      .then((t) => live && setState({ path, tsv: t == null ? null : parseTsv(t), error: t == null ? 'The run did not write this report.' : null }))
-      .catch((e: unknown) => live && setState({ path, tsv: null, error: `Cannot read ${path}: ${e instanceof Error ? e.message : String(e)}` }))
+      .then((t) => live && setState({ path, gen, tsv: t == null ? null : parseTsv(t), error: t == null ? 'The run did not write this report.' : null }))
+      .catch((e: unknown) => live && setState({ path, gen, tsv: null, error: `Cannot read ${path}: ${e instanceof Error ? e.message : String(e)}` }))
     return () => {
       live = false
     }
-  }, [path])
-  return state.path === path ? state : { tsv: null, error: null }
+  }, [path, gen])
+  return state.path === path && state.gen === gen ? state : { tsv: null, error: null }
 }
 
 /// How a column of a FASTag table is shown: its header in words, and its
@@ -287,7 +290,15 @@ export function qcSummary(rows: QcRow[]): { label: string; value: string; title?
     if (r) out.push({ label, value: r.value, title: r.desc })
   }
   const kits = get('reporter_compatible_kits')
-  if (kits) out.push({ label: 'Isobaric kit', value: kits.value === 'none' ? 'none found' : kits.value.replace(/,/g, ', '), title: kits.desc })
+  // "none" also when no kit could be assessed (unassessedKits): that is no
+  // call, said as such, with the reason as the tooltip.
+  const why = kits ? unassessedKits(kits.value, rows) : null
+  if (kits)
+    out.push(
+      why
+        ? { label: 'Isobaric kit', value: 'Not assessable', title: `No kit could be assessed${why.length ? `: ${why.join('; ')}` : ''}.` }
+        : { label: 'Isobaric kit', value: kits.value === 'none' ? 'none found' : kits.value.replace(/,/g, ', '), title: kits.desc }
+    )
   return out
 }
 
@@ -559,6 +570,8 @@ function GenericView({ tsv, label }: { tsv: Tsv; label: string }): JSX.Element {
 export interface ReportTableProps {
   kind: ReportKind
   path: string
+  /// Bumped on each open or run that wrote the file: it is read again.
+  gen?: number
   /// Shortlist: the reduced FASTA and the engine configuration, when written.
   files?: { label: string; path: string }[]
   /// Triage: open the spectrum of a row (its native ID) in the Spectrum tab.
@@ -576,8 +589,8 @@ const REPORT_HELP: Partial<Record<ReportKind, { to: string; label: string }>> = 
   triage: { to: 'workflow-triage', label: 'How to read the ranking' }
 }
 
-export default function ReportTable({ kind, path, files = [], openSpectrum }: ReportTableProps): JSX.Element {
-  const { tsv, error } = useReport(path)
+export default function ReportTable({ kind, path, gen, files = [], openSpectrum }: ReportTableProps): JSX.Element {
+  const { tsv, error } = useReport(path, gen)
   return (
     <div className={`report-view report-${kind}`}>
       <ReportHeader title={REPORT_TITLE[kind] ?? headText(baseName(path))} paths={[path]} help={REPORT_HELP[kind]} />

@@ -4,7 +4,7 @@
 // for its question; every other option is under Advanced, in its group.
 // While a run is in flight, a locked summary of what it uses.
 
-import { useRef, useState, type JSX, type RefObject } from 'react'
+import { useEffect, useRef, useState, type JSX, type RefObject } from 'react'
 import { BRIEF_HINT, SECTIONS, PARAM_BY_NAME, type Dependency, type Section, UNIT_PARAMS, defaultText, dependsOf, forcedValue, humanName, inertDependency, masters, recipeNote, unknownParams, unitOf, unplacedParams } from '../paramLayout'
 import ParamField, { type ParamValue } from '../ParamField'
 import { disclosure } from '../disclosure'
@@ -22,7 +22,7 @@ import { clock, duration } from '../app/format'
 import TaskChooser, { PresetRow } from './TaskChooser'
 import { LANDING_TASK, taskById, type Task } from './tasks'
 import { INSTRUMENTS, presetText, shownInstrument } from './presets'
-import { PRODUCT_OF, PRODUCTS, USI_PLACEHOLDER, fileName, isOn, missingDatabase, neededBy, productLabel, alkylationExtension, toggleProduct, type Product } from './products'
+import { PRODUCT_OF, PRODUCTS, USI_PLACEHOLDER, fileName, isOn, missingDatabase, neededBy, productLabel, alkylationExtension, restoreRaised, toggleProduct, type Product } from './products'
 
 // A parameter that exists in the CLI but nowhere in the layout would silently
 // be unreachable; surface it instead of hiding it.
@@ -146,6 +146,13 @@ export default function SetupForm({
   // The extension the alkylation report raised, restored when it is
   // unticked while Extension still holds the raised value.
   const raisedExt = useRef<{ from: ParamValue; to: ParamValue } | null>(null)
+  // A protein database (or a FASTA proteome) set since makes the raise
+  // unneeded: Extension goes back while it still holds the raised value.
+  useEffect(() => {
+    const r = restoreRaised(values, raisedExt.current)
+    raisedExt.current = r.raised
+    if (r.values !== values) session.setValues(r.values)
+  }, [values['recon_fasta'], values['alkylation_proteome'], values['tag_length']])
   // The note of a group's settings that wait on other reports: one report
   // that every one of them needs is named in a plain sentence; else each
   // report that would show some of them, once (the per-setting detail is
@@ -153,11 +160,13 @@ export default function SetupForm({
   const needsSentence = (n: number, deps: Dependency[]): string => {
     const lead = n === 1 ? 'One more setting' : `${n} more settings`
     const name = (m: string): string => productLabel(m) ?? humanName(m)
-    if (deps.length === 1) return `${lead} ${n === 1 ? 'needs' : 'need'} ${deps[0].say ?? masters(deps[0]).map(name).join(' or ')}.`
+    // A long list of conditions goes to the (?), not the note.
+    const few = (xs: string[]): string => (xs.length <= 2 ? xs.join(' or ') : `one of ${xs.length} reports (see ?)`)
+    if (deps.length === 1) return `${lead} ${n === 1 ? 'needs' : 'need'} ${deps[0].say ?? few(masters(deps[0]).map(name))}.`
     const common = masters(deps[0]).filter((m) => deps.every((d) => !d.say && masters(d).includes(m)))
     if (common.length === 1) return `${lead} need ${name(common[0])}.`
     const each = [...new Set(deps.flatMap((d) => (d.say ? [d.say] : masters(d).map(name))))]
-    return `${lead} appear when one of these is on: ${each.join(', ')}.`
+    return each.length <= 2 ? `${lead} appear when ${each.join(' or ')} is on.` : `${lead} appear when one of ${each.length} reports or switches is on (see ?).`
   }
   const toggle = (p: Product, on: boolean): void => {
     const r = toggleProduct(p, on, values, out, raisedExt.current)
@@ -185,9 +194,13 @@ export default function SetupForm({
           ? `needed by ${needed.join(', ')}`
           : follows
             ? `written with the ${follows.label.toLowerCase()}`
-            : !on
-              ? (task.productNotes?.[p.param] ?? null)
+            : !on && p.param === 'alkylation_out'
+              ? alkylationExtension(values)
+                ? `Raises Extension to ${alkylationExtension(values)}.`
+                : null
               : null
+    // The detail of a workflow's note (tasks.ts productNotes): its (?).
+    const detail = !on ? task.productNotes?.[p.param] : undefined
     const spec = PARAM_BY_NAME.get(p.param)
     return (
       <li key={p.param} className={`product${on ? ' on' : ''}${locked ? ' fixed' : ''}`}>
@@ -209,6 +222,7 @@ export default function SetupForm({
         <span id={`${id}-d`} className="product-note">
           {why}
         </span>
+        {detail && <HelpPopover name={p.param} label={p.label} description={detail} deflt="not written" />}
         {on && !!out && !p.column && p.param !== 'out' && spec?.type === 'output-file' && (
           <button type="button" className="link small" aria-label={`Change the file of ${p.label}`} onClick={() => void session.pickFor(spec)}>
             Change…
@@ -292,15 +306,18 @@ export default function SetupForm({
     const needs =
       parts.length === 0 ? null : (
         <div className="group-needs" role="note">
-          <span>{needsSentence(waitingNames.length, parts.map((x) => x.w.dep))}</span>
-          <HelpPopover
+          {/* The (?) inline at the end of the note, never on a line of its own. */}
+          <span className="needs-text">
+            {needsSentence(waitingNames.length, parts.map((x) => x.w.dep))}{' '}
+            <HelpPopover
             name={waitingNames[0]}
             label={`the settings of ${sec.title} not used yet`}
             description={parts
               .map((x) => `${x.w.names.map(humanName).join(', ')}: not used yet (${x.w.dep.note}); ${x.w.names.length === 1 ? 'it shows' : 'they show'} once ${x.what} is on.`)
               .join(' ')}
             deflt=""
-          />
+            />
+          </span>
           {targets.map((prod) => (
             <button type="button" key={prod.param} className="secondary small" onClick={() => toggle(prod, true)}>
               Turn on {prod.label}

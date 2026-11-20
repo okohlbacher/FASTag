@@ -236,7 +236,7 @@ export function buildOverview(i: OverviewInputs): Overview {
   const massgap = kind('massgap')
   const census = i.census ? censusFacts(i.census) : null
   const facts = runFacts(digest ?? label ?? massgap)
-  const tol = facts.tolerance ?? paramTolerance(i.params)
+  const tol = runTolerance(i.reports, i.params)
   const da = tol?.unit === 'Da'
   const fasta = given(i.params['fasta']) || given(i.params['recon_fasta'])
 
@@ -386,7 +386,7 @@ export function buildOverview(i: OverviewInputs): Overview {
     lowRes.length || daSpecies
       ? `The fragment tolerance is ${fmt(tol!.value)} Da: ${[
           lowRes.length ? `FASTag makes no ${lowRes.join(' or ')} call at a tolerance in Da` : '',
-          daSpecies ? 'species calls are unreliable on ion-trap/Da data' : ''
+          daSpecies ? DA_SPECIES_CAVEAT : ''
         ]
           .filter(Boolean)
           .join(', and ')}.`
@@ -440,6 +440,28 @@ export function buildOverview(i: OverviewInputs): Overview {
         noActivationMeta(i.input ?? '')
           ? 'This format carries no activation per spectrum: set Ion series to cz, or convert the run to mzML and use auto.'
           : 'Choose the Orbitrap ETD preset (Ion series auto), or the EThcD preset for hybrid spectra.'
+      }`
+    })
+  // Under auto and cz the CLI warns in lines of its own (IonSeries.h).
+  if (log.hybridAuto)
+    checks.push({
+      tone: 'flag',
+      text: `${fmt(log.hybridAuto.hybrid)} of ${fmt(log.hybridAuto.of)} MS2 spectra were activated by a hybrid method (EThcD, ETciD) and tagged as b/y ions only; their c/z ions were not read. ${
+        noActivationMeta(i.input ?? '')
+          ? 'This format carries no activation per spectrum: set Ion series to cz, or convert the run to mzML and use auto.'
+          : 'Set Hybrid ion series to both (or choose the Orbitrap EThcD preset).'
+      }`
+    })
+  if (log.autoNoColumn)
+    checks.push({
+      tone: 'flag',
+      text: `${fmt(log.autoNoColumn)} electron-activated MS2 spectra were tagged as b/y ions: Ion series auto reads the activation of mzML input only. Set Ion series to cz, or convert the run to mzML and use auto.`
+    })
+  if (log.collisionalCz)
+    checks.push({
+      tone: 'flag',
+      text: `${fmt(log.collisionalCz.collisional)} of ${fmt(log.collisionalCz.of)} MS2 spectra were activated by collision (CID, HCD) but read as c/z ions under Ion series cz; their tags are unreliable. ${
+        noActivationMeta(i.input ?? '') ? 'Use Ion series by, or convert the run to mzML and use auto.' : 'Use Ion series auto.'
       }`
     })
 
@@ -554,6 +576,23 @@ export function addNote(note: string, more: string): string {
   if (!/[.!?]$/.test(note)) return `${note}; ${more}`
   return `${note} ${more.charAt(0).toUpperCase()}${more.slice(1)}${/[.!?]$/.test(more) ? '' : '.'}`
 }
+
+/// The run's fragment tolerance: as a report states it (digest, label, mass
+/// gap), else as the run was sent.
+export function runTolerance(reports: readonly Report[], params: Record<string, unknown> | null | undefined): { value: number; unit: 'ppm' | 'Da' } | null {
+  const r = reports.find((x) => x.kind === 'digest') ?? reports.find((x) => x.kind === 'label') ?? reports.find((x) => x.kind === 'massgap')
+  return runFacts(r).tolerance ?? paramTolerance(params ?? {})
+}
+
+/// The species caveat of a run at a fragment tolerance in Da (the Overview's
+/// daSpecies): its tolerance in Da, else null. The Species tab says it too.
+export function daSpeciesTolerance(reports: readonly Report[], params: Record<string, unknown> | null | undefined): number | null {
+  const tol = runTolerance(reports, params)
+  return tol?.unit === 'Da' ? tol.value : null
+}
+
+/// The caveat's text, as the Overview and the Species tab say it.
+export const DA_SPECIES_CAVEAT = 'species calls are unreliable on ion-trap/Da data'
 
 function paramTolerance(p: Record<string, unknown>): { value: number; unit: 'ppm' | 'Da' } | null {
   const v = Number(p['fragment_tolerance'])
@@ -752,6 +791,26 @@ export function shownTiles(o: Overview, params: Record<string, unknown>): { figu
     alkylation: on('alkylation_out') || on('massgap_out')
   }
   return { figures: o.figures.filter((t) => want[t.id]), calls: o.calls.filter((t) => want[t.id]) }
+}
+
+/// The tiles of each workflow's main result (doc/GUI-WORKFLOWS.md 1): shown
+/// first, in the grid of the counts, not on a row of their own below them.
+const LEAD_TILES: Record<string, string[]> = {
+  'run-qc': ['qc-tagged', 'instrument', 'qc-charge'],
+  'mass-shift': ['topshift', 'placed'],
+  species: ['genus'],
+  'db-reduction': ['shortlist'],
+  triage: ['tagged']
+}
+
+/// @p tiles with the workflow's own (LEAD_TILES) first among the figures.
+export function leadTiles(tiles: { figures: Tile[]; calls: Tile[] }, workflowId?: string | null): { figures: Tile[]; calls: Tile[] } {
+  const ids = (workflowId && LEAD_TILES[workflowId]) || []
+  if (!ids.length) return tiles
+  const all = [...tiles.figures, ...tiles.calls]
+  const lead = ids.map((id) => all.find((t) => t.id === id)).filter((t): t is Tile => !!t)
+  const isLead = (t: Tile): boolean => lead.includes(t)
+  return { figures: [...lead, ...tiles.figures.filter((t) => !isLead(t))], calls: tiles.calls.filter((t) => !isLead(t)) }
 }
 
 // A suggested setting in the words of the search engine forms (the key

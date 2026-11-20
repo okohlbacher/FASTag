@@ -86,8 +86,8 @@ function splitTables(tables: TablePaths | undefined, path: string, replaced?: Ta
   return { kept, closed }
 }
 
-function bumpGen(gen: TableGen | undefined, kinds: TableKind[]): TableGen {
-  const g: TableGen = { ...gen }
+function bumpGen<K extends string>(gen: Partial<Record<K, number>> | undefined, kinds: K[]): Partial<Record<K, number>> {
+  const g: Partial<Record<K, number>> = { ...gen }
   for (const k of kinds) g[k] = (g[k] ?? 0) + 1
   return g
 }
@@ -549,7 +549,15 @@ export function useRun(s: RunInputs, view: ViewStore, hooks: RunHooks = {}) {
     if (stale()) return
     dispatch({
       type: 'REPORTS',
-      update: (cur) => ({ list: rep.reports, errors: rep.errors, tables, gen: bumpGen(cur.gen, Object.keys(tables) as TableKind[]), workflow, missing })
+      update: (cur) => ({
+        list: rep.reports,
+        errors: rep.errors,
+        tables,
+        gen: bumpGen(cur.gen, Object.keys(tables) as TableKind[]),
+        workflow,
+        workflowGen: bumpGen(cur.workflowGen, (Object.keys(workflow) as (keyof WorkflowReports)[]).filter((k): k is WorkflowKind => k !== 'files')),
+        missing
+      })
     })
     if (ran) {
       const sentParams = (ran.params['params'] ?? {}) as Record<string, unknown>
@@ -869,11 +877,33 @@ export function useRun(s: RunInputs, view: ViewStore, hooks: RunHooks = {}) {
     if (last && last.status !== 'ok') return openTagsPath(out, t)
     const shown = last && last.id !== r.id ? last : r
     const call: Record<string, unknown> = { params: shown.params ?? {}, ...(shown.workflow ? { workflow: shown.workflow } : {}) }
-    await showResults(shown.input, recordOutputs(shown, out), { params: call, log: createLogStore() }).catch(logResultsError)
-    if (shown !== r)
+    // Each report path is checked as the tags are: a report a later run
+    // wrote over (another tags file, the same report path) is withheld, and
+    // the banner names that run. B's QC beside A's tags would read as one run.
+    const outputs = recordOutputs(shown, out)
+    const reportsReplaced: { path: string; by: string; end: number }[] = []
+    const slots = outputs as unknown as Record<string, string | null | undefined>
+    for (const [k, p] of Object.entries(slots)) {
+      if (k === 'out' || !p || p === out) continue
+      const w = await window.fastag.historyOf(p).catch(() => null)
+      if (superseded(t)) return
+      if (w && w.id !== shown.id && w.end >= shown.end) {
+        slots[k] = null
+        reportsReplaced.push({ path: p, by: w.input, end: w.end })
+      }
+    }
+    await showResults(shown.input, outputs, { params: call, log: createLogStore() }).catch(logResultsError)
+    if (shown !== r || reportsReplaced.length)
       dispatch({
         type: 'RESULTS',
-        update: (x) => (x && x.path === out ? { ...x, replaced: { input: r.input, by: shown.input, end: shown.end } } : x)
+        update: (x) =>
+          x && x.path === out
+            ? {
+                ...x,
+                ...(shown !== r ? { replaced: { input: r.input, by: shown.input, end: shown.end } } : {}),
+                ...(reportsReplaced.length ? { reportsReplaced } : {})
+              }
+            : x
       })
   }
 
@@ -886,9 +916,16 @@ export function useRun(s: RunInputs, view: ViewStore, hooks: RunHooks = {}) {
     await openReportPath(p)
   }
 
-  // Reports dropped together: each is added as a picked one would be.
+  // Reports dropped together: each is added as a picked one would be,
+  // under one selection for the whole drop. A later choice (another file
+  // opened while these are read) stops the rest: they never replace it.
   async function openReportPaths(paths: string[]): Promise<void> {
-    for (const p of paths) await openReportPath(p)
+    if (!paths.length) return
+    const t = select(paths[0])
+    for (const p of paths) {
+      if (t.g !== showGen.current) return
+      await openReportPath(p, undefined, { g: t.g, p })
+    }
   }
 
   // A species report, dropped or opened: shown in the Species tab, in
@@ -931,7 +968,8 @@ export function useRun(s: RunInputs, view: ViewStore, hooks: RunHooks = {}) {
         type: 'REPORTS',
         update: (cur) => {
           const kept = closeOtherRuns(cur, p)
-          return { ...kept, workflow: { ...kept.workflow, [wk]: p }, missing: undefined }
+          // Opening the file again reads it again (it may have changed).
+          return { ...kept, workflow: { ...kept.workflow, [wk]: p }, workflowGen: bumpGen(cur.workflowGen, [wk]), missing: undefined }
         }
       })
       if (latest(t)) setTab(TAB_OF[wk])

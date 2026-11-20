@@ -41,8 +41,13 @@ function colWidth(name: string): number {
   if (name === 'tag' || name === 'proforma') return 150
   return 90
 }
-// The system UI font at 13 px: an upper-case tag runs to about 9 px a character.
+// The system UI font at 13 px: an upper-case value runs to about 9 px a character.
 const CHAR_W = 9
+// Tags and ProForma are drawn in the bundled IBM Plex Mono at 13 px (.rt-cell.seq),
+// 0.6 em a character: their width is exact, W and M included.
+const SEQ_COLUMNS = new Set(['tag', 'proforma'])
+const SEQ_CHAR_W = 8
+const charW = (c: string): number => (SEQ_COLUMNS.has(c) ? SEQ_CHAR_W : CHAR_W)
 const CELL_PAD = 20
 const MIN_W = 48
 const MAX_AUTO_W = 480
@@ -100,7 +105,7 @@ export function autoWidths(columns: string[], rows: string[][]): Record<string, 
     let w = columnLabel(c).length * HEAD_CHAR_W + GLYPH_W + CELL_PAD
     for (const r of rows) {
       const v = r[j] ?? ''
-      w = Math.max(w, (c === 'fasta_hit' ? hitWords(v) : v).length * CHAR_W + CELL_PAD)
+      w = Math.max(w, (c === 'fasta_hit' ? hitWords(v) : v).length * charW(c) + CELL_PAD)
     }
     // The Database hit column is never narrower than its header and words.
     const floor = c === 'fasta_hit' ? HIT_MIN_W : MIN_W
@@ -127,8 +132,8 @@ function growWidths(
 
 // Middle ellipsis: spectrum IDs differ at the end (`… scan=N`), so an
 // end-truncated cell hides exactly the part that tells rows apart.
-function fitMiddle(text: string, width: number): string {
-  const cap = Math.floor((width - CELL_PAD) / CHAR_W)
+function fitMiddle(text: string, width: number, cw = CHAR_W): string {
+  const cap = Math.floor((width - CELL_PAD) / cw)
   if (text.length <= cap || cap < 5) return text
   const keep = cap - 1
   const head = Math.floor(keep * 0.4)
@@ -1002,7 +1007,7 @@ export default function ResultsTable({ path, source, rerunResConf, spectrum }: P
             const c = row[j] ?? ''
             const name = columns[j] ?? ''
             return (
-              <div className={`rt-cell${numeric.has(name) ? ' n' : ''}`} role="gridcell" key={j} title={c} aria-label={c}>
+              <div className={`rt-cell${numeric.has(name) ? ' n' : ''}${SEQ_COLUMNS.has(name) ? ' seq' : ''}`} role="gridcell" key={j} title={c} aria-label={c}>
                 {name === 'evalue' ? (
                   <EValue text={c} />
                 ) : name === 'fasta_hit' ? (
@@ -1011,7 +1016,7 @@ export default function ResultsTable({ path, source, rerunResConf, spectrum }: P
                   // The scan number tells rows apart; the native ID is the tooltip.
                   fitMiddle(spectrumHint(c) || c, width(name))
                 ) : (
-                  fitMiddle(c, width(name))
+                  fitMiddle(c, width(name), charW(name))
                 )}
               </div>
             )

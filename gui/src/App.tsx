@@ -41,7 +41,7 @@ import { buildOverview, type TileAction } from './results/overview'
 import { reconExtend, reconRerun } from './results/ReconView'
 import { useInspector } from './inspector/useInspector'
 import { AfterRunPanel, PreStartPanel } from './inspector/InspectorPanel'
-import { postRunChecks } from './inspector/checks'
+import { postRunChecks, type CheckFix } from './inspector/checks'
 import { INSTRUMENTS, matchesInstrument, presetText, shownInstrument } from './setup/presets'
 
 // The tab a workflow's run lands on (doc/GUI-WORKFLOWS.md 3): its own view.
@@ -118,8 +118,9 @@ export default function App({ start = LANDING }: { start?: Origin } = {}): JSX.E
   // The checks before a run (GUI-DESIGN 3 S1, P2b): from the CLI's metadata
   // probe when it has one, and the form.
   const inspector = useInspector({ input, values, binOk: !!bin?.ok })
-  // Re-run with this instrument preset once the form holds its values.
-  const [rerunWith, setRerunWith] = useState<string | null>(null)
+  // Re-run with this fix (an instrument preset, its parameters) once the
+  // form holds its values.
+  const [rerunWith, setRerunWith] = useState<CheckFix | null>(null)
 
   const help = useHelp()
   // F1, ?, Esc, the Cmd/Ctrl shortcuts and the native menus (shell/useKeys.ts).
@@ -310,6 +311,7 @@ export default function App({ start = LANDING }: { start?: Origin } = {}): JSX.E
             input: shown.input,
             params: shown.params,
             workflow: shown.workflow ? (taskById(shown.workflow)?.label ?? null) : null,
+            workflowId: shown.workflow ? (taskById(shown.workflow)?.id ?? null) : null,
             missing: run.reports.missing ?? [],
             // Its actions run the form's input again: not another file's.
             locked: shown.input !== input || jobs.length > 0
@@ -368,8 +370,11 @@ export default function App({ start = LANDING }: { start?: Origin } = {}): JSX.E
   const canRerun = !busy && jobs.length === 0 && !!bin?.ok && !!afterInput && afterInput === input && run.lastRun?.input === input
   useEffect(() => {
     if (!rerunWith) return
-    const p = INSTRUMENTS.find((x) => x.id === rerunWith)
-    if (!p || !matchesInstrument(values, p)) return
+    if (rerunWith.instrument) {
+      const p = INSTRUMENTS.find((x) => x.id === rerunWith.instrument)
+      if (!p || !matchesInstrument(values, p)) return
+    }
+    if (rerunWith.params && !Object.entries(rerunWith.params).every(([k, v]) => values[k] === v)) return
     setRerunWith(null)
     // Another check holds the run (species with a Da tolerance): Setup
     // shows it, with its Run anyway.
@@ -665,8 +670,8 @@ export default function App({ start = LANDING }: { start?: Origin } = {}): JSX.E
                   canRerun
                     ? (fix) => {
                         if (fix.params) session.setValues((v) => ({ ...v, ...fix.params }))
-                        session.chooseInstrument(fix.instrument!)
-                        setRerunWith(fix.instrument!)
+                        if (fix.instrument) session.chooseInstrument(fix.instrument)
+                        setRerunWith(fix)
                       }
                     : null
                 }
