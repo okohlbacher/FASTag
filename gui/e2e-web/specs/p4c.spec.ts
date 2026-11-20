@@ -67,13 +67,16 @@ test('Mass shifts: figures equal the oracles of the PXD014764 recon run', async 
   await expect(stat(page, 'Gap peaks (≥ 0.5 Da)')).toHaveText(en(o.shiftRows))
   // Enough placed spectra: no warning.
   await expect(page.locator('.recon-view .banner.warn')).toHaveCount(0)
+  // The mass-shift table leads; the placements are one click away.
+  await expect(page.getByRole('grid', { name: 'Mass-shift table' })).toHaveAttribute('aria-rowcount', String(o.deltaRows + 1))
+  await page.getByRole('button', { name: 'Placements', exact: true }).click()
   const grid = page.getByRole('grid', { name: 'Placements' })
   await expect(grid).toHaveAttribute('aria-rowcount', String(o.placements + 1))
   await page.getByRole('checkbox', { name: /One flank off/ }).check()
   await expect(page.locator('.dt-count').first()).toHaveText(`${en(o.gapped)} of ${en(o.placements)} rows · showing 1–100`)
   // The shared table: the gap peaks.
-  await page.getByRole('button', { name: 'Gap peaks', exact: true }).click()
-  await expect(page.getByRole('grid', { name: 'Gap peaks' })).toHaveAttribute('aria-rowcount', String(o.deltaRows + 1))
+  await page.getByRole('button', { name: 'Mass-shift table', exact: true }).click()
+  await expect(page.getByRole('grid', { name: 'Mass-shift table' })).toHaveAttribute('aria-rowcount', String(o.deltaRows + 1))
 })
 
 test('the mass-gap chart: thin sticks, UniMod marks, legend, hover and keyboard tooltips, and a table view', async ({ page }) => {
@@ -124,6 +127,7 @@ test('the shared table by keyboard: arrows, Page Down, End and Home move the act
   const o = oracle('v112-pxd014764-delta-ext3')
   await runOn(page, 'gate-recon')
   await page.getByRole('tab', { name: 'Mass shifts' }).click()
+  await page.getByRole('button', { name: 'Placements', exact: true }).click()
   const grid = page.getByRole('grid', { name: 'Placements' })
   await grid.focus()
   const active = grid.locator('tr[aria-selected="true"]')
@@ -166,6 +170,7 @@ test('E. coli recon run: -recon_localize columns, the mzTab identifications, and
   await runOn(page, 'gate-recon-loc')
   await page.getByRole('tab', { name: 'Mass shifts' }).click()
   await expect(page.locator('.recon-view .banner.warn')).toContainText(`Only ${o.placed} spectra are placed on the database`)
+  await page.getByRole('button', { name: 'Placements', exact: true }).click()
   const grid = page.getByRole('grid', { name: 'Placements' })
   await expect(grid).toHaveAttribute('aria-rowcount', String(o.placements + 1))
   await expect(grid.getByRole('columnheader', { name: /Site score/ })).toBeVisible()
@@ -192,7 +197,7 @@ test('Open report… opens a delta table in Mass shifts', async ({ page }) => {
   await goTo(page, 'Results')
   await page.getByRole('button', { name: 'Open a FASTag report…' }).click()
   await expect(page.getByRole('tab', { name: 'Mass shifts' })).toHaveAttribute('aria-selected', 'true')
-  await expect(page.getByRole('grid', { name: 'Gap peaks' })).toHaveAttribute('aria-rowcount', '274')
+  await expect(page.getByRole('grid', { name: 'Mass-shift table' })).toHaveAttribute('aria-rowcount', '274')
   await expect(page.locator('.mg-stick')).not.toHaveCount(0)
 })
 

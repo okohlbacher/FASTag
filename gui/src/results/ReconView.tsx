@@ -153,7 +153,7 @@ export function siblingMassgap(deltaPath: string): string {
 type Dataset = 'recon' | 'delta' | 'reconIds'
 const DATASET_LABEL: Record<Dataset, string> = {
   recon: 'Placements',
-  delta: 'Gap peaks',
+  delta: 'Mass-shift table',
   reconIds: 'Identifications (mzTab)'
 }
 
@@ -303,8 +303,10 @@ export default function ReconView({ massgap, tables, gen = {}, notice, action, e
 }
 
 function ReconTables({ recon, delta, ids, loading }: { recon: ReconTable | null; delta: DeltaTable | null; ids: ReconIdTable | null; loading: boolean }): JSX.Element | null {
-  const avail = (['recon', 'delta', 'reconIds'] as Dataset[]).filter((d) => (d === 'recon' ? recon : d === 'delta' ? delta : ids))
-  const [pick, setPick] = useSticky<Dataset | null>(recon ?? delta ?? ids, 'dataset', null)
+  // The survey's answer first: the mass-shift table with sites and UniMod
+  // names; the placements behind it are the detail.
+  const avail = (['delta', 'recon', 'reconIds'] as Dataset[]).filter((d) => (d === 'recon' ? recon : d === 'delta' ? delta : ids))
+  const [pick, setPick] = useSticky<Dataset | null>(delta ?? recon ?? ids, 'dataset', null)
   const ds = pick && avail.includes(pick) ? pick : avail[0]
   if (!ds) return loading ? <p className="muted">Reading the tables…</p> : null
   return (
@@ -466,7 +468,7 @@ function DeltaPeaks({ t }: { t: DeltaTable }): JSX.Element {
           <input type="number" min={0} step={1} value={minSpectra} onChange={(e) => setMinSpectra(e.target.value)} />
         </label>
       </div>
-      <DataTable label="Gap peaks" columns={cols} ids={rows} total={t.rows} sort={{ column: 'spectra', desc: true }} keep={t} />
+      <DataTable label="Mass-shift table" columns={cols} ids={rows} total={t.rows} sort={{ column: 'spectra', desc: true }} keep={t} />
     </>
   )
 }

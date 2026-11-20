@@ -65,6 +65,9 @@ describe('P4c viewers in the app', () => {
     // mass-shift table for the Overview's top shift; the placements wait.
     expect(mock.reportCalls).toEqual([paths.massgap_out, paths.delta_out])
     await click(tab)
+    // Round 11: the mass-shift table leads; the placements are one click away.
+    await screen.findByRole('grid', { name: 'Mass-shift table' })
+    await click(await screen.findByRole('button', { name: 'Placements' }))
     expect((await screen.findByRole('grid', { name: 'Placements' })).getAttribute('aria-rowcount')).toBe('4707')
     expect(mock.reportCalls).toContain(paths.recon_out)
     expect(mock.reportCalls).toContain(paths.delta_out)

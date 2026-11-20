@@ -237,6 +237,7 @@ describe('DataTable: no re-sort and no page scroll on a move (review fixes)', ()
     try {
       render(<ReconView massgap={human()} tables={{ recon: P.recon, delta: P.delta }} onOpen={vi.fn()} />)
       await flush()
+      await click(screen.getByRole('button', { name: 'Placements' }))
       const grid = screen.getByRole('grid', { name: 'Placements' })
       const wrap = grid.closest('.dt-wrap') as HTMLElement
       expect(scroll).not.toHaveBeenCalled()
@@ -274,6 +275,9 @@ describe('ReconView', () => {
     expect(stat('Gap peaks (≥ 0.5 Da)')).toBe('270')
     expect(screen.queryByRole('status')).toBeNull() // 475 >= LOW_PLACED: no warning
     expect(screen.getByRole('group', { name: /^Mass-gap chart/ })).toBeTruthy()
+    // Round 11: the mass-shift table leads; the placements are one click away.
+    expect(screen.getByRole('grid', { name: 'Mass-shift table' }).getAttribute('aria-rowcount')).toBe('274')
+    await click(screen.getByRole('button', { name: 'Placements' }))
     const grid = screen.getByRole('grid', { name: 'Placements' })
     expect(grid.getAttribute('aria-rowcount')).toBe('4707')
     await click(screen.getByRole('checkbox', { name: /One flank off/ }))
@@ -286,8 +290,8 @@ describe('ReconView', () => {
     await act(async () => void fireEvent.change(screen.getByRole('searchbox', { name: 'Contains' }), { target: { value: 'UBB_HUMAN' } }))
     expect(screen.getByText(/^3 of 4,706 rows/)).toBeTruthy()
     // The shared table: the gap peaks.
-    await click(screen.getByRole('button', { name: 'Gap peaks' }))
-    expect(screen.getByRole('grid', { name: 'Gap peaks' }).getAttribute('aria-rowcount')).toBe('274')
+    await click(screen.getByRole('button', { name: 'Mass-shift table' }))
+    expect(screen.getByRole('grid', { name: 'Mass-shift table' }).getAttribute('aria-rowcount')).toBe('274')
   })
 
   it('warns when too few spectra are placed: 0 (ext2) and 8 (E. coli)', async () => {
@@ -319,7 +323,7 @@ describe('ReconView', () => {
     render(<ReconView massgap={null} tables={{ recon: P.recon, delta: P.delta }} onOpen={vi.fn()} />)
     await flush()
     expect(screen.getByRole('alert').textContent).toMatch(/Cannot read \/r\/run\.recon\.tsv: .*idXML/)
-    expect(screen.getByRole('grid', { name: 'Gap peaks' })).toBeTruthy()
+    expect(screen.getByRole('grid', { name: 'Mass-shift table' })).toBeTruthy()
   })
 
   it('empty: offers the FASTA and the run, and opening a report', async () => {
