@@ -32,8 +32,8 @@ describe('the Overview of Run QC', () => {
 
   it('shows its tag yield and top charge, and no suggested settings of defaults alone', () => {
     const o = buildOverview({ ...base, params: { qc_out: '/d/a.qc.tsv' }, qc: qcTsv })
-    expect(tile(o, 'qc-tagged')!.value).toBe('18.71% (26)')
-    expect(tile(o, 'qc-charge')!.value).toMatch(/^2\+ \(69\.78?%\)$/)
+    expect(tile(o, 'qc-tagged')!.value).toBe('18.7% (26)')
+    expect(tile(o, 'qc-charge')!.value).toBe('2+ (69.8%)')
     const shown = shownTiles(o, { qc_out: '/d/a.qc.tsv' })
     expect(shown.figures.map((t) => t.id)).toEqual(['spectra', 'instrument', 'tags', 'qc-tagged', 'qc-charge'])
     expect(o.measured).toBe(false)

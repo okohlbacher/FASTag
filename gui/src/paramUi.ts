@@ -55,6 +55,9 @@ export interface Dependency {
   /// Shown in place of the field's help when unmet. Phrased as the consequence,
   /// not the rule: a user wants to know what would happen, not what to obey.
   note: string
+  /// What the field says it needs, in place of the masters' names (two
+  /// masters that are one control: Spectra to read).
+  say?: string
 }
 
 export interface ParamUi {
@@ -112,7 +115,8 @@ const DB_UNUSED: Dependency = {
 /// orientation and the isobaric tolerance).
 const TAGS_ON_DB: Dependency = {
   on: ['fasta', ...(DB_UNUSED.on as string[])],
-  note: 'only used when tags are matched against or placed on a protein database: keep only tags found in a database, or turn on the placements, the shortlist or the alkylation report'
+  say: 'tags matched against or placed on a protein database',
+  note: 'keep only tags found in a database, or turn on the placements, the shortlist or the alkylation report'
 }
 const DELTA_OFF: Dependency = { on: 'delta_out', note: 'only the mass-shift table uses it' }
 const SHORTLIST_OFF: Dependency = { on: ['shortlist_out', 'fasta_out', 'search_config_out'], note: 'no shortlist is written' }
@@ -179,7 +183,7 @@ export const PARAM_UI: Record<string, ParamUi> = {
   },
   subsample_seed: {
     section: 'Sampling and checks',
-    depends: [{ on: ['subsample_spectra', 'subsample_fraction'], note: 'nothing is being subsampled' }],
+    depends: [{ on: ['subsample_fraction', 'subsample_spectra'], note: 'nothing is being subsampled', say: 'Spectra to read' }],
     help: {
       text: 'The starting number of the random choice. The same seed picks the same spectra again.',
       tip: 'Change it to draw a different random subset.'

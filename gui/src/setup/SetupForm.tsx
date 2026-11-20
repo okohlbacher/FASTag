@@ -5,7 +5,7 @@
 // While a run is in flight, a locked summary of what it uses.
 
 import { useState, type JSX, type RefObject } from 'react'
-import { SECTIONS, PARAM_BY_NAME, type Section, UNIT_PARAMS, defaultText, dependsOf, forcedValue, humanName, inertDependency, masters, unknownParams, unitOf, unplacedParams } from '../paramLayout'
+import { SECTIONS, PARAM_BY_NAME, type Dependency, type Section, UNIT_PARAMS, defaultText, dependsOf, forcedValue, humanName, inertDependency, masters, unknownParams, unitOf, unplacedParams } from '../paramLayout'
 import ParamField from '../ParamField'
 import { disclosure } from '../disclosure'
 import { baseName } from '../digestReport'
@@ -29,6 +29,11 @@ import { PRODUCT_OF, PRODUCTS, USI_PLACEHOLDER, fileName, isOn, missingDatabase,
 const UNPLACED = unplacedParams()
 const UNKNOWN = unknownParams()
 
+/// The count of spectra to read: one control with the share
+/// (subsample_fraction's "Custom count…"), never a field of its own.
+const countSpec = PARAM_BY_NAME.get('subsample_spectra')
+export const FOLDED: ReadonlySet<string> = new Set(['subsample_spectra'])
+
 /// Switches a product checkbox drives (setup/products.ts): never a field.
 export const WIRED: ReadonlySet<string> = new Set(
   PRODUCTS.flatMap((p) => [...(p.flag ? [p.flag] : []), ...Object.keys(p.also ?? {}).filter((k) => PARAM_BY_NAME.get(k)?.type === 'bool')])
@@ -38,7 +43,7 @@ export const WIRED: ReadonlySet<string> = new Set(
 /// Settings and Outputs already show and the switches products drive.
 export function advancedParams(task: Task): string[] {
   const shown = new Set([...task.basic, ...task.outputs, ...SECTIONS.filter((s) => s.home === 'common').flatMap((s) => s.params)])
-  return SECTIONS.flatMap((s) => s.params).filter((n) => !shown.has(n) && !WIRED.has(n) && !UNIT_PARAMS.has(n))
+  return SECTIONS.flatMap((s) => s.params).filter((n) => !shown.has(n) && !WIRED.has(n) && !UNIT_PARAMS.has(n) && !FOLDED.has(n))
 }
 
 export interface SetupFormProps {
@@ -120,6 +125,7 @@ export default function SetupForm({
         required={opts.required}
         blocked={batchBlocked(name) ?? forced?.note}
         unit={unitSpec && unitName ? { spec: unitSpec, value: values[unitName], onChange: (v) => setValue(unitName, v) } : undefined}
+        count={name === 'subsample_fraction' && countSpec ? { spec: countSpec, value: values['subsample_spectra'], onChange: (v) => setValue('subsample_spectra', v) } : undefined}
       />
     )
   }
@@ -210,20 +216,48 @@ export default function SetupForm({
     const d = disclosure(open, (o) => setOpenGroups((st) => ({ ...st, [sec.title]: o })))
     const products = names.filter((n) => PRODUCT_OF.has(n))
     const fields = names.filter((n) => !PRODUCT_OF.has(n))
-    // Every field waits for the same report or switch: said once, over the
-    // group, with the control that turns it on; the fields stay folded
-    // until then (doc/GUI-WORKFLOWS.md 2.4).
-    const deps = fields.map((n) => inertDependency(n, values))
-    // A field holding a value of its own stays in view (a dropped taxonomy).
-    const shared =
-      fields.length > 1 &&
-      !fields.some((n) => session.diff.includes(n)) &&
-      deps.every((d) => d && d.note === deps[0]!.note && masters(d).join() === masters(deps[0]!).join())
-        ? deps[0]!
-        : null
-    const master = shared ? masters(shared)[0] : null
-    const masterProduct = master ? PRODUCT_OF.get(master) ?? PRODUCTS.find((q) => q.flag === master) : undefined
-    const masterWords = master ? (productLabel(master) ?? humanName(master)) : ''
+    // Fields waiting for the same reports or switches: said once per set of
+    // masters, with a Turn on for each, and folded until then
+    // (doc/GUI-WORKFLOWS.md 2.4). A field holding a value of its own stays
+    // in view (a dropped taxonomy), as does one alone in its set and one
+    // replaced by another option (Turn on would not help).
+    const waiting = new Map<string, { dep: Dependency; names: string[] }>()
+    for (const n of fields) {
+      const d = inertDependency(n, values)
+      if (!d || d.replaced || session.diff.includes(n)) continue
+      const key = masters(d).join(',')
+      const w = waiting.get(key)
+      if (w) w.names.push(n)
+      else waiting.set(key, { dep: d, names: [n] })
+    }
+    const sets = [...waiting.values()].filter((w) => w.names.length > 1)
+    const folded = new Set(sets.flatMap((w) => w.names))
+    const shown = fields.filter((n) => !folded.has(n))
+    const words = (m: string): string => {
+      const w = productLabel(m) ?? humanName(m)
+      return `the ${w.charAt(0).toLowerCase()}${w.slice(1)}`
+    }
+    const needs = sets.map((w) => {
+      const ms = masters(w.dep)
+      const notes = new Set(w.names.map((n) => inertDependency(n, values)?.note))
+      return (
+        <div className="group-needs" role="note" key={ms.join(',')}>
+          <span>
+            Needs {w.dep.say ?? ms.map(words).join(' or ')}
+            {notes.size === 1 ? ` (${w.dep.note})` : ''}: its {w.names.length} settings show once it is on.
+          </span>
+          {/* A Turn on for each report it waits for, two at most. */}
+          {ms.filter((m) => PRODUCT_OF.has(m) || PRODUCTS.some((q) => q.flag === m)).slice(0, 2).map((m) => {
+            const prod = PRODUCT_OF.get(m) ?? PRODUCTS.find((q) => q.flag === m)
+            return prod ? (
+              <button type="button" key={m} className="secondary small" onClick={() => toggle(prod, true)} aria-label={`Turn on ${words(m)}`}>
+                Turn on {productLabel(m) ?? humanName(m)}
+              </button>
+            ) : null
+          })}
+        </div>
+      )
+    })
     return (
       <details className={`sec${open ? ' open' : ''}${changed ? ' active' : ''}`} key={sec.title} data-group={sec.title} {...d.details}>
         <summary className="disclosure" {...d.summary}>
@@ -240,20 +274,8 @@ export default function SetupForm({
           <div className="sec-body">
             <p className="blurb">{sec.blurb}</p>
             {products.length > 0 && <ul className="products">{products.map(productRow)}</ul>}
-            {shared ? (
-              <div className="group-needs" role="note">
-                <span>
-                  Needs the {masterWords.charAt(0).toLowerCase() + masterWords.slice(1)} ({shared.note}): its {fields.length} settings show once it is on.
-                </span>
-                {masterProduct && (
-                  <button type="button" className="secondary small" onClick={() => toggle(masterProduct, true)} aria-label={`Turn on the ${masterWords.toLowerCase()}`}>
-                    Turn on
-                  </button>
-                )}
-              </div>
-            ) : (
-              fields.map((n) => field(n))
-            )}
+            {needs}
+            {shown.length > 0 && <div className="adv-fields">{shown.map((n) => field(n))}</div>}
           </div>
         )}
       </details>
@@ -416,10 +438,10 @@ export default function SetupForm({
           <HelpPopover
             name="fragment_tolerance"
             label="Instrument"
-            description="A preset sets three options at once: the fragment tolerance, its unit, and the ion series the MS/MS spectra are read as. Orbitrap and TOF HCD: 20 ppm, b/y ions. Orbitrap ETD: 20 ppm, c/z ions for electron-activated spectra (ion series auto). Ion trap CID: 0.3 Da. Custom shows the tolerance and its unit."
+            description="A preset sets four options at once: the fragment tolerance, its unit, the ion series the MS/MS spectra are read as, and how hybrid (EThcD) spectra are read. Orbitrap and TOF HCD: 20 ppm, b/y ions. Orbitrap ETD: 20 ppm, c/z ions for electron-activated spectra (ion series auto). Orbitrap EThcD: as ETD, and hybrid spectra read as both b/y and c/z. Ion trap CID: 0.3 Da. timsTOF: 30 ppm. Astral: 20 ppm. Custom shows the tolerance and its unit."
             deflt=""
             more="The tolerance is the largest m/z error accepted between a fragment peak and a residue mass step. Too tight loses tags; too loose admits wrong ones. Species calls are unreliable at Da tolerances."
-            flags={['fragment_tolerance', 'fragment_tolerance_unit', 'ion_series'].map((n) => ({ name: n, deflt: PARAM_BY_NAME.get(n) ? defaultText(PARAM_BY_NAME.get(n)!) : '' }))}
+            flags={['fragment_tolerance', 'fragment_tolerance_unit', 'ion_series', 'ion_series_hybrid'].map((n) => ({ name: n, deflt: PARAM_BY_NAME.get(n) ? defaultText(PARAM_BY_NAME.get(n)!) : '' }))}
           />
         </span>
         <select id="instrument" value={custom ? 'custom' : instrument.id} onChange={(e) => session.chooseInstrument(e.target.value)} aria-describedby="instrument-h">
@@ -432,13 +454,13 @@ export default function SetupForm({
           <option value="custom">Custom</option>
         </select>
         <p id="instrument-h" className="help brief">
-          Sets the fragment tolerance and ion series for your analyzer.
+          Sets the fragment tolerance and ion series.
           {instrument && !instrument.validated && !custom ? ` ${instrument.label} is not validated against the paper's benchmark.` : ''}
         </p>
         {custom && <div className="custom-tol">{field('fragment_tolerance', { brief: 'The tolerance and its unit, for a custom analyzer.' })}</div>}
       </div>
       {field('fixed_modifications', {
-        brief: 'Modifications on every such residue. Remove Carbamidomethyl (C) if cysteines were not alkylated; add TMT for labelled runs.'
+        brief: 'Drop Carbamidomethyl (C) without alkylation.'
       })}
       {task.basic.filter((n) => !isInputField(n)).map((n) => field(n, { brief: task.help[n] }))}
     </div>,

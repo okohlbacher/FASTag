@@ -31,13 +31,16 @@ interface Props {
   /// Not usable here, and why (census_ids in Batch mode): disabled, with
   /// the reason in place of its help.
   blocked?: string
+  /// A steps select's count option (subsample_fraction with
+  /// subsample_spectra): "Custom count…" sets the count, a share clears it.
+  count?: { spec: ParamSpec; value: ParamValue; onChange: (v: ParamValue) => void }
 }
 
 // One widget per declared type. The tool's restrictions drive the control: a
 // string with `choices` becomes a select. A number is a text field checked by
 // invalidBecause() against the type, min and max the CLI declares; a value the
 // CLI would refuse is marked invalid and says why (App keeps Run disabled).
-export default function ParamField({ spec, value, onChange, onPickFile, needs, unit, turnsOn, brief, label: name, required, blocked }: Props): JSX.Element {
+export default function ParamField({ spec, value, onChange, onPickFile, needs, unit, turnsOn, brief, label: name, required, blocked, count }: Props): JSX.Element {
   const off = !!needs || !!blocked
   // An inert field is not sent, so its value cannot fail the run.
   const invalid = off ? null : invalidBecause(spec, value)
@@ -68,6 +71,8 @@ export default function ParamField({ spec, value, onChange, onPickFile, needs, u
   const helpRef = useRef<HTMLParagraphElement>(null)
   // Custom chosen in a steps select, before a value of its own is typed.
   const [customStep, setCustomStep] = useState(false)
+  // "Custom count…" chosen, before a count is typed.
+  const [countPicked, setCountPicked] = useState(false)
   const deflt = `${defaultText(spec)}${unit ? ` ${defaultText(unit.spec)}` : ''}`
   // An invalid value says what is wrong with it in place of the description;
   // an inert field keeps its description and adds what would switch it on.
@@ -90,9 +95,7 @@ export default function ParamField({ spec, value, onChange, onPickFile, needs, u
           <span className="needs">
             <strong>
               {needs.replaced ? 'Replaced by ' : 'Needs '}
-              {masters(needs).map((m, i) => (
-                <Cli key={m} name={m} sep={i > 0} />
-              ))}
+              {needs.say ?? masters(needs).map((m, i) => <Cli key={m} name={m} sep={i > 0} />)}
             </strong>
             {` (${needs.note}).`}
           </span>
@@ -214,7 +217,11 @@ export default function ParamField({ spec, value, onChange, onPickFile, needs, u
     // Named values, and Custom for any other (shown as a field beside).
     const v = String(value ?? '').trim()
     const hit = steps.find((x) => v !== '' && Number(x.value) === Number(v)) ?? (v === '' ? steps.find((x) => Number(x.value) === Number(spec.default)) : undefined)
-    const custom = !hit || customStep
+    // A count set (not 0) wins over the share, as in the CLI.
+    const cv = count ? String(count.value ?? '').trim() : ''
+    const counting = !!count && (countPicked || (cv !== '' && Number(cv) !== 0))
+    const custom = !counting && (!hit || customStep)
+    const countBad = counting && count ? invalidBecause(count.spec, count.value) : null
     return (
       <div className={cls}>
         {label}
@@ -223,11 +230,15 @@ export default function ParamField({ spec, value, onChange, onPickFile, needs, u
             id={`p-${spec.name}`}
             aria-describedby={helpId}
             disabled={off}
-            value={custom ? '__custom' : hit!.value}
+            value={counting ? '__count' : custom ? '__custom' : hit!.value}
             onChange={(e) => {
               const x = e.target.value
               setCustomStep(x === '__custom')
-              if (x !== '__custom') onChange(x)
+              setCountPicked(x === '__count')
+              // A share clears the count; the count leaves the share alone
+              // (the CLI reads the count first).
+              if (x !== '__count' && count && cv !== '' && Number(cv) !== 0) count.onChange('0')
+              if (x !== '__custom' && x !== '__count') onChange(x)
             }}
           >
             {steps.map((x) => (
@@ -235,8 +246,22 @@ export default function ParamField({ spec, value, onChange, onPickFile, needs, u
                 {x.label}
               </option>
             ))}
-            <option value="__custom">Custom</option>
+            <option value="__custom">Custom share</option>
+            {count && <option value="__count">Custom count…</option>}
           </select>
+          {counting && count && (
+            <input
+              className="num"
+              aria-label={`${title}, number of spectra`}
+              aria-invalid={countBad ? true : undefined}
+              type="text"
+              inputMode="numeric"
+              placeholder="spectra"
+              disabled={off}
+              value={cv === '0' ? '' : String(count.value ?? '')}
+              onChange={(e) => count.onChange(e.target.value)}
+            />
+          )}
           {custom && (
             <input
               className="num"

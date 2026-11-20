@@ -1,0 +1,15 @@
+spectrum	n_oxonium	oxonium_frac	glyco	ions
+controllerType=0 controllerNumber=1 scan=11491	1	0.019	0	HexHexNAcdHex
+controllerType=0 controllerNumber=1 scan=11495	2	0.057	0	HexNAc-CH6O3;NeuGc
+controllerType=0 controllerNumber=1 scan=11502	4	0.205	1	HexNAc-C2H4O2;HexNAc-H2O;NeuAc-H2O;HexHexNAc
+controllerType=0 controllerNumber=1 scan=11526	2	0.042	0	HexP;HexHexNAcNeuAc
+controllerType=0 controllerNumber=1 scan=11542	8	0.047	0	HexNAc-C2H4O2;HexNAc-H2O;HexP;NeuGc-H2O;NeuAc;NeuGc;HexNAcHexP;HexHexNAcdHex
+controllerType=0 controllerNumber=1 scan=11545	5	0.062	0	HexNAc;HexP;NeuGc-H2O;NeuAc;HexHexNAcdHex
+controllerType=0 controllerNumber=1 scan=11547	6	0.064	0	HexP;NeuAc-H2O;NeuGc-H2O;NeuAc;HexNAcHexP;HexHexNAcNeuAc
+controllerType=0 controllerNumber=1 scan=11552	3	0.022	0	HexNAc-C2H4O2;HexP;HexHexNAcdHex
+controllerType=0 controllerNumber=1 scan=11569	3	0.033	0	HexP;NeuGc-H2O;HexHexNAc
+controllerType=0 controllerNumber=1 scan=11571	4	0.214	1	HexNAc-C2H4O2;HexP;NeuGc-H2O;HexHexNAcdHex
+controllerType=0 controllerNumber=1 scan=11582	5	0.014	0	HexNAc-C2H4O2;HexNAc-H2O;NeuGc-H2O;HexHexNAc;HexHexNAcdHex
+controllerType=0 controllerNumber=1 scan=11592	7	0.153	1	HexNAc-H2O;HexP;NeuAc-H2O;NeuAc;NeuGc;HexNAcHexP;HexHexNAcdHex
+controllerType=0 controllerNumber=1 scan=11608	2	0.280	1	HexNAc-H2O;HexHexNAc
+controllerType=0 controllerNumber=1 scan=11610	0	0.000	0	-

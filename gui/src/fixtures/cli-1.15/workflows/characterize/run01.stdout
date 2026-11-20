@@ -1,0 +1,9 @@
+-threads 0: using 8 of 16 logical cores.
+Modifications: Carbamidomethyl (C, fixed)
+Subsampling: tagging 14 of 139 input spectra (seed 1)
+Glyco: 4 of 14 processed MS2 spectra carry oxonium evidence -> run01.tags.glyco.tsv
+Digest: 62 filtered tags, reason low_resolution -> run01.digest.tsv
+Labels: 62 filtered tags -> run01.label.tsv
+Species: 3 spectra contributed taxon evidence; top genus calls -> run01.tags.species.tsv
+14 MS2 spectra, 598 tags
+FASTag took 0.13 s (wall), 0.17 s (CPU), 0.02 s (system), 0.15 s (user); Peak Memory Usage: 527 MB.

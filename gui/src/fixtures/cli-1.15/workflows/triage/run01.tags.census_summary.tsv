@@ -1,0 +1,68 @@
+section	key	value	n	description
+run	version	1.15.3	-	FASTag 1.15.3 wrote this report.
+run	input	run01.mzML	-	The spectra were read from run01.mzML.
+run	fragment_tolerance	0.3	-	The fragment tolerance is 0.3 Da.
+run	fragment_tolerance_unit	Da	-	The fragment tolerance is in Da.
+run	tag_length	3	-	Tags were seeded at length 3.
+run	subsample_fraction	0	-	A fraction of 0 of the spectra was tagged (0 = all).
+run	subsample_spectra	0	-	0 spectra were drawn for tagging (0 = all).
+run	run_report_version	5	-	The run section follows FASTag run report format 5.
+run	pick_profile	legacy	-	Profile MS2 was centroided under -pick_profile legacy.
+run	profile_ms2_picked	0	0	0 of 0 profile MS2 spectra were centroided before tagging.
+run	profile_ms2_kept	0	0	0 of 0 profile MS2 spectra were tagged as profile (picking yielded nothing).
+run	activation_collisional	139	139	139 of 139 MS2 spectra were activated by collision (CID, HCD, trap-type CID, PQD).
+run	activation_electron	0	139	0 of 139 MS2 spectra were activated by electron transfer or capture (ETD, ECD).
+run	activation_hybrid	0	139	0 of 139 MS2 spectra were activated by a hybrid method (EThcD, ETciD).
+run	activation_unknown	0	139	0 of 139 MS2 spectra carry no activation FASTag classifies.
+run	unknown_charge	assume2	-	Precursors without a charge were tagged under -unknown_charge assume2.
+run	isotope_error	0	-	Precursor isotope offsets 0 were considered.
+run	charge_header	0	0	0 of 0 MS2 spectra were reported at their precursor's charge.
+run	charge_possible	0	0	0 of 0 MS2 spectra were reported at a listed possible charge.
+run	charge_inferred	0	0	0 of 0 MS2 spectra were reported at an inferred charge.
+run	charge_ambiguous	0	0	0 of 0 MS2 spectra were reported at the better of two inferred charges.
+run	charge_assumed	0	0	0 of 0 MS2 spectra were reported at charge 2 without charge evidence.
+run	charge_enumerated	0	0	0 of 0 MS2 spectra were reported at an enumerated charge.
+run	isotope_shifted	0	0	0 of 0 MS2 spectra were reported at a precursor isotope offset other than 0.
+run	multi_hypothesis	0	0	0 of 0 MS2 spectra were tagged under more than one precursor hypothesis.
+run	ion_series	by	-	MS2 spectra were read under -ion_series by.
+run	ion_series_by	139	139	139 of 139 MS2 spectra were tagged as b/y ions.
+run	ion_series_cz	0	139	0 of 139 MS2 spectra were tagged as c/z-dot ions.
+census	census_version	1	-	The census follows format 1: one row per MS2 spectrum read; statuses are append-only; no status is a quality call.
+census	input_spectra	139	-	139 input spectra of all MS levels (the basis of subsampling).
+census	ms2_seen	139	-	139 MS2 spectra were read and have a census row.
+census	ms2_processed	139	-	139 MS2 spectra had peaks and a precursor and went to the tagger (the 'MS2 spectra' count of the log).
+census	ms2_total	139	-	The input holds 139 MS2 spectra.
+census	subsampled	0	-	Every spectrum was read.
+census	subsample_basis	input_spectra	-	Subsampling draws from the input spectra of all MS levels, not from MS2 only.
+census	count_empty	0	139	0 MS2 spectra have status empty.
+census	share_empty	0	139	The share of the MS2 spectra read that have status empty.
+census	count_no_precursor	0	139	0 MS2 spectra have status no_precursor.
+census	share_no_precursor	0	139	The share of the MS2 spectra read that have status no_precursor.
+census	count_no_signal	0	139	0 MS2 spectra have status no_signal.
+census	share_no_signal	0	139	The share of the MS2 spectra read that have status no_signal.
+census	count_bad_precursor	0	139	0 MS2 spectra have status bad_precursor.
+census	share_bad_precursor	0	139	The share of the MS2 spectra read that have status bad_precursor.
+census	count_too_few_peaks	0	139	0 MS2 spectra have status too_few_peaks.
+census	share_too_few_peaks	0	139	The share of the MS2 spectra read that have status too_few_peaks.
+census	count_no_tags	0	139	0 MS2 spectra have status no_tags.
+census	share_no_tags	0	139	The share of the MS2 spectra read that have status no_tags.
+census	count_filtered	0	139	0 MS2 spectra have status filtered.
+census	share_filtered	0	139	The share of the MS2 spectra read that have status filtered.
+census	count_placed	0	139	0 MS2 spectra have status placed.
+census	share_placed	0	139	The share of the MS2 spectra read that have status placed.
+census	count_tagged	139	139	139 MS2 spectra have status tagged.
+census	share_tagged	1	139	The share of the MS2 spectra read that have status tagged.
+census	no_charge	0	139	0 processed MS2 spectra carry no precursor charge (tagged as 2+).
+census	best_evalue_p10	0.0007885039548712174	139	The p10 of the best reported E-value of tagged and placed spectra over 139 spectra.
+census	best_evalue_p50	0.4785534623991414	139	The p50 of the best reported E-value of tagged and placed spectra over 139 spectra.
+census	best_evalue_p90	19.006369105396004	139	The p90 of the best reported E-value of tagged and placed spectra over 139 spectra.
+census	n_peaks_kept_p10	58	139	The p10 of the peaks kept after preprocessing over 139 spectra.
+census	n_peaks_kept_p50	84	139	The p50 of the peaks kept after preprocessing over 139 spectra.
+census	n_peaks_kept_p90	111	139	The p90 of the peaks kept after preprocessing over 139 spectra.
+census	int_gini_p10	0.4654667367978608	139	The p10 of the intensity Gini coefficient over 139 spectra.
+census	int_gini_p50	0.6723085190475022	139	The p50 of the intensity Gini coefficient over 139 spectra.
+census	int_gini_p90	0.8161623943355627	139	The p90 of the intensity Gini coefficient over 139 spectra.
+census_score	ident_model	pxd000561-dev-v1	-	ident_score is the frozen logistic model pxd000561-dev-v1 on per-run mid-ranks of the census features; a ranking score, not a probability.
+census_score	ident_features	pre_best_evalue,pre_best_len,pre_best_mean_conf,pre_tag_cover,n_found,n_peaks,n_compl,n_edges,n_peaks_kept,int_gini,charge_used,precursor_mz	-	Features in model order; pre_* are taken before any database filter.
+census_score	ident_rows	139	-	139 census rows have an ident_score.
+census_score	ident_pre_tagged	139	139	139 of them have a tag before any database filter.

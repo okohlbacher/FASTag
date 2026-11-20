@@ -303,14 +303,15 @@ export function buildOverview(i: OverviewInputs): Overview {
     figures.push({
       id: 'qc-tagged',
       label: 'Tagged',
-      value: qc.tagYield != null ? `${pct(qc.tagYield)}${qc.tagged != null ? ` (${fmt(qc.tagged)})` : ''}` : '–',
+      // To one decimal, as the QC view's summary strip writes it.
+      value: qc.tagYield != null ? `${(qc.tagYield * 100).toFixed(1)}%${qc.tagged != null ? ` (${fmt(qc.tagged)})` : ''}` : '–',
       tone: qc.tagYield != null ? 'figure' : 'off',
       note: 'MS2 spectra read with a tag at E ≤ 0.01 (QC report)'
     })
     figures.push({
       id: 'qc-charge',
       label: 'Top charge',
-      value: qc.topCharge ? `${qc.topCharge.z}+${qc.topCharge.share != null ? ` (${pct(qc.topCharge.share)})` : ''}` : 'none given',
+      value: qc.topCharge ? `${qc.topCharge.z}+${qc.topCharge.share != null ? ` (${(qc.topCharge.share * 100).toFixed(1)}%)` : ''}` : 'none given',
       tone: qc.topCharge ? 'figure' : 'off',
       note: qc.topCharge ? 'the most frequent precursor charge of the MS2 spectra (QC report)' : 'no MS2 spectrum states its precursor charge'
     })

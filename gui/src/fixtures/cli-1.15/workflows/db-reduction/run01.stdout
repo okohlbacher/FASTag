@@ -1,0 +1,8 @@
+-threads 0: using 8 of 16 logical cores.
+Modifications: Carbamidomethyl (C, fixed)
+Recon index: 3 proteins, 876 residues, 13 isobaric rules; min tag length 6 (set)
+Shortlist: 2 of 3 proteins with evidence kept, not FDR-controlled -> run01.shortlist.tsv
+Reduced FASTA: 2 entries (no decoys) -> run01.reduced.fasta
+Search configuration (sage, database run01.reduced.fasta) -> run01.search.json
+139 MS2 spectra, 6279 tags
+FASTag took 0.07 s (wall), 0.26 s (CPU), 0.01 s (system), 0.25 s (user); Peak Memory Usage: 101 MB.

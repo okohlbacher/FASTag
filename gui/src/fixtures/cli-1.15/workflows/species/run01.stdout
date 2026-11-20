@@ -1,0 +1,5 @@
+-threads 0: using 8 of 16 logical cores.
+Modifications: Carbamidomethyl (C, fixed)
+Species: 47 spectra contributed taxon evidence; top genus calls -> run01.tags.species.tsv
+139 MS2 spectra, 6301 tags
+FASTag took 0.30 s (wall), 0.32 s (CPU), 0.04 s (system), 0.28 s (user); Peak Memory Usage: 562 MB.

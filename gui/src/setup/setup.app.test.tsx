@@ -2,7 +2,7 @@
 // App.test.tsx (GUI P1 PR c), plus the wiring checks that the component
 // successors (RunBar.test, useSession.test) cannot see.
 
-import { act, fireEvent, screen, waitFor } from '@testing-library/react'
+import { act, fireEvent, screen, waitFor, within } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 import { installMockBridge, type MockBridge } from '../testing/mockBridge'
 import { addBatch, click, openGroup, pickSingle, renderApp, runButton, startBatch } from '../testing/render'
@@ -58,9 +58,13 @@ describe('redesign: setup and run bar', () => {
     const mock = installMockBridge()
     await renderApp(mock)
     await openGroup('Tagging, advanced')
-    const help = document.getElementById('h-isobaric_tolerance')!
-    expect(help.textContent).toMatch(/Needs Filter database or Tag placements/)
-    expect((document.getElementById('p-isobaric_tolerance') as HTMLInputElement).disabled).toBe(true)
+    // Orientation and the isobaric tolerance wait for the same thing: one
+    // line for both, with a Turn on, and the fields folded until then.
+    const group = document.querySelector('[data-group="Tagging, advanced"]')!
+    expect(group.querySelector('.group-needs')!.textContent).toMatch(/Needs tags matched against or placed on a protein database.*its 2 settings/)
+    expect(document.getElementById('p-isobaric_tolerance')).toBeNull()
+    await click(within(group as HTMLElement).getByRole('button', { name: 'Turn on the tag placements' }))
+    expect((document.getElementById('p-isobaric_tolerance') as HTMLInputElement).disabled).toBe(false)
   })
 
   it('the failure banner opens the log and copies the command line', async () => {

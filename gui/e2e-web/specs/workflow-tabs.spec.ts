@@ -10,7 +10,7 @@ const RUNS = [
   { name: 'Mass-shift survey', fixture: 'gate-recon', fasta: '/data/human.fasta', tabs: ['Overview', 'Mass shifts', 'Tags', 'Spectrum'] },
   { name: 'Species', fixture: 'gate', tabs: ['Overview', 'Species', 'Tags', 'Spectrum'] },
   { name: 'Database reduction', fixture: 'gate', fasta: '/data/Ecoli_MS2_small.fasta', tabs: ['Overview', 'Shortlist', 'Tags', 'Spectrum'] },
-  { name: 'Identifiability triage', fixture: 'gate', tabs: ['Overview', 'Triage', 'Spectrum', 'Tags'] },
+  { name: 'Identifiability triage', fixture: 'gate', tabs: ['Overview', 'Triage', 'Tags', 'Spectrum'] },
   { name: 'Characterize a run', fixture: 'gate', tabs: ['Overview', 'Digest', 'Species', 'Glyco', 'Tags', 'Spectrum'] }
 ]
 

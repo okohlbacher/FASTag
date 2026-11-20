@@ -14,14 +14,17 @@ test.use({ viewport: { width: 1280, height: 800 } })
 const shot = (name: string): string => `${DIR}/${name}.png`
 const slug = (s: string): string => s.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 40)
 
+// Every Results view comes from one real run of its workflow (the
+// `workflows` scenario: src/fixtures/cli-1.15/workflows, the E. coli example
+// with the Ion trap CID preset), so the Overview and the tabs agree.
 const WORKFLOWS = [
-  { name: 'Export tags', fixture: 'gate' },
-  { name: 'Run QC', fixture: 'gate' },
-  { name: 'Mass-shift survey', fixture: 'gate-recon', fasta: '/data/human.fasta' },
-  { name: 'Species', fixture: 'gate' },
-  { name: 'Database reduction', fixture: 'gate', fasta: '/data/Ecoli_MS2_small.fasta' },
-  { name: 'Identifiability triage', fixture: 'gate' },
-  { name: 'Characterize a run', fixture: 'gate' }
+  { name: 'Export tags', fixture: 'workflows' },
+  { name: 'Run QC', fixture: 'workflows' },
+  { name: 'Mass-shift survey', fixture: 'workflows', fasta: '/data/ecoli.fasta' },
+  { name: 'Species', fixture: 'workflows' },
+  { name: 'Database reduction', fixture: 'workflows', fasta: '/data/ecoli.fasta' },
+  { name: 'Identifiability triage', fixture: 'workflows' },
+  { name: 'Characterize a run', fixture: 'workflows' }
 ]
 
 /// The whole Setup form in one picture: the window as tall as the pane's
@@ -95,7 +98,12 @@ for (const [i, w] of WORKFLOWS.entries()) {
     await openApp(page, w.fixture)
     await workflow(page, w.name).check()
     await page.getByRole('button', { name: 'Choose file…' }).click()
+    // The example's MS2 are ion trap CID, as the recorded runs were.
+    await page.locator('#instrument').selectOption('iontrap-cid')
     if (w.fasta) await page.locator('#p-recon_fasta').fill(w.fasta)
+    // Species at 0.3 Da is a red flag of the checks before the run: answered.
+    const anyway = page.getByRole('button', { name: 'Run anyway' })
+    if ((await anyway.count()) > 0) await anyway.first().click()
     const run = page.locator('.view-setup .runbar').getByRole('button', { name: /^Run$/ })
     await expect(run).toBeEnabled({ timeout: 10_000 })
     await run.click()
@@ -104,12 +112,30 @@ for (const [i, w] of WORKFLOWS.entries()) {
     await page.waitForTimeout(500)
     const tabs = page.getByRole('tab')
     const n = await tabs.count()
-    for (let t = 0; t < n; t++) {
-      const tab = tabs.nth(t)
-      const name = slug((await tab.textContent()) || `tab${t}`)
-      await tab.click()
-      await page.waitForTimeout(400)
-      await page.screenshot({ path: shot(`3${i + 1}-results-${slug(w.name)}-${t}-${name}`) })
+    const names: string[] = []
+    for (let t = 0; t < n; t++) names.push((await tabs.nth(t).textContent()) || `tab${t}`)
+    for (const [t, label] of names.entries()) {
+      // The Spectrum tab with a spectrum in it: opened from the Triage
+      // ranking or the Tags table (their Open in Spectrum), as a user would.
+      if (label === 'Spectrum') {
+        const from = names.includes('Triage') ? 'Triage' : 'Tags'
+        if (names.includes(from)) {
+          await page.getByRole('tab', { name: new RegExp(`^${from}`) }).click()
+          await page.waitForTimeout(400)
+          const open = page.getByRole('button', { name: 'Open in Spectrum' }).first()
+          if ((await open.count()) > 0 && (await open.isEnabled())) await open.click()
+          else {
+            const row = page.locator('[role="grid"] [role="row"]').nth(1)
+            if ((await row.count()) > 0) {
+              await row.click()
+              await page.keyboard.press('Enter')
+            }
+          }
+        }
+      }
+      await page.getByRole('tab', { name: new RegExp(`^${label.replace(/\d+$/, '')}`) }).first().click()
+      await page.waitForTimeout(500)
+      await page.screenshot({ path: shot(`3${i + 1}-results-${slug(w.name)}-${t}-${slug(label)}`) })
     }
   })
 }

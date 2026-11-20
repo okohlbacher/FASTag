@@ -70,6 +70,11 @@
 //               (src/fixtures/cli-1.12/iontrap_20ppm.*)
 //   dia-refusal P2b: a run prints FASTag 1.12's real raw-DIA refusal and
 //               exits 11 (src/fixtures/cli-1.12/dia_raw.*)
+//   workflows   review round 3: a run of each Setup workflow plays one real
+//               FASTag 1.15.3 run of that workflow on the E. coli example
+//               (src/fixtures/cli-1.15/workflows): its log, its tags table
+//               and every report it wrote, so the Overview, the report tabs
+//               and Tags agree. The workflow is the one the run call names.
 //
 // &hold=probes holds every probe until a spec calls
 // __fastagE2E.mock.releaseProbes() (a probe still in flight).
@@ -91,6 +96,7 @@ import type { BrowserEvent, DropRoute, ExportFormat, ResultsPage, ResultsView, R
 import ecoliTags from '../../e2e-web/fixtures/ecoli.tags.tsv?raw'
 import ecoliResConf from '../fixtures/denovo/ecoli.res_conf.tags.tsv?raw'
 import ecoliDumps from '../fixtures/cli/v112-ecoli-dump/dumps.ppm.jsonl?raw'
+import ecoliDumpsDa from '../fixtures/cli/v112-ecoli-dump/dumps.da.jsonl?raw'
 import { splitDumps } from '../spectrum/dump'
 import digestTsv from '../fixtures/digest.tsv?raw'
 import labelTsv from '../fixtures/label.tsv?raw'
@@ -125,6 +131,21 @@ import shortlistTsv from '../fixtures/cli-1.15/ecoli_ms2_small_0.3da.shortlist.t
 import manifest from '../params.generated.json'
 import pkg from '../../package.json'
 import diaOut from '../fixtures/cli-1.12/dia_raw.stdout?raw'
+
+// One real run per workflow (fixtures/cli-1.15/workflows/<workflow>/<file>).
+const WORKFLOW_FILES = import.meta.glob('../fixtures/cli-1.15/workflows/*/*', { query: '?raw', import: 'default', eager: true }) as Record<string, string>
+/// The files of the run of @p wf, by name; the tags table it shares with
+/// another workflow (README there) under its own name.
+function workflowRun(wf: string): Record<string, string> {
+  const files: Record<string, string> = {}
+  for (const [k, text] of Object.entries(WORKFLOW_FILES)) {
+    const m = /workflows\/([^/]+)\/([^/]+)$/.exec(k)
+    if (m && m[1] === wf) files[m[2]] = text
+  }
+  const shared: Record<string, string> = { triage: 'run-qc', 'db-reduction': 'mass-shift' }
+  if (!files['run01.tags.tsv'] && shared[wf]) files['run01.tags.tsv'] = workflowRun(shared[wf])['run01.tags.tsv']
+  return files
+}
 
 // The ?fixture= names of the P4c viewer scenarios.
 const RECON: Record<string, ReconCase> = {
@@ -483,6 +504,32 @@ export function installE2EBridge(): Origin | undefined {
 
   const exports: { dest: string; format: ExportFormat; text: string }[] = []
   let held: { jobId: number; finish: () => void; cancel: () => void } | null = null
+  if (fixture === 'workflows') {
+    // The peaks of the E. coli spectra at 0.3 Da (the runs' tolerance), as
+    // the Spectrum tab dumps them.
+    for (const d of splitDumps(ecoliDumpsDa)) {
+      const id = (JSON.parse(d.slice(0, d.indexOf('\n'))) as { native_id: string }).native_id
+      mock.spectrumDumps[id] = d
+    }
+    // The tags table of the run shown, filtered and sorted as browser.rs
+    // does (the Spectrum tab asks for one spectrum's tags).
+    const ids = (view: ResultsView): number[] => viewIds(mock.resultsColumns, mock.resultsRows, view)
+    mock.resultsQuery = (path, view, offset, limit): Promise<ResultsPage> => {
+      mock.resultsQueryCalls.push({ path, view, offset, limit })
+      const all = ids(view)
+      const sel = all.slice(offset, offset + Math.min(limit, MAX_WINDOW))
+      return Promise.resolve({
+        columns: mock.resultsColumns,
+        totalRows: mock.resultsRows.length,
+        matchedRows: all.length,
+        rows: sel.map((i) => mock.resultsRows[i]),
+        rowIds: sel,
+        ranked: true,
+        pending: false
+      })
+    }
+    mock.resultsPosition = (_path, view, row) => Promise.resolve(ids(view).indexOf(row))
+  }
   if (fixture === 'spectrum' || fixture === 'spectrum-1.11') {
     const has = fixture === 'spectrum'
     mock.spectrumSupportResult = has
@@ -630,6 +677,11 @@ export function installE2EBridge(): Origin | undefined {
       }
     if (gate) return { phase: 'Reading spectra', lines: asked(logLines(gate), params), ok: true, code: 0, step: 100 }
     if (recon) return { phase: 'Reading spectra', lines: asked(recon.log.split(/\r?\n/).filter((l) => l !== ''), params), ok: true, code: 0, step: 40 }
+    if (fixture === 'workflows') {
+      const files = workflowRun(String(params['__workflow'] ?? 'export-tags'))
+      const lines = [files['run01.stderr'] ?? '', files['run01.stdout'] ?? ''].flatMap((t) => t.split(/\r?\n/)).filter((l) => l.trim() !== '')
+      return { phase: 'Reading spectra', lines, ok: true, code: 0, step: 30 }
+    }
     if (fixture === 'gate-batch') {
       const lines = (t: string): string[] => t.split(/\r?\n/).filter((l) => l !== '')
       if (name === `${DIA_REFUSAL.name}.mzML`) return { phase: 'Reading spectra', lines: lines(DIA_REFUSAL.log), ok: false, code: DIA_REFUSAL.code, step: 10 }
@@ -677,8 +729,25 @@ export function installE2EBridge(): Origin | undefined {
       if (want('glyco')) o.glyco_out = '/data/run01.tags.glyco.tsv'
       if (want('recon_id_out')) o.recon_id_out = recon.mzTab ? '/data/run01.recon.mzTab' : null
     }
+    if (fixture === 'workflows') {
+      // The files of the real run of the call's workflow, where this run
+      // writes them (/data/run01.*), its tags table the one Tags reads.
+      const files = workflowRun(typeof params['workflow'] === 'string' ? params['workflow'] : 'export-tags')
+      const reports: Record<string, string> = {}
+      for (const [name, text] of Object.entries(files)) if (name.startsWith('run01.') && !/\.std(err|out)$/.test(name)) reports[`/data/${name}`] = text
+      mock.reportFiles = reports
+      const t = parseTsv(files['run01.tags.tsv'] ?? '')
+      mock.resultsColumns = t.columns
+      mock.resultsRows = t.rows
+      mock.tagsFiles['/data/run01.tags.tsv'] = files['run01.tags.tsv'] ?? ''
+      const sp = files['run01.tags.species.tsv']
+      mock.speciesResult = sp ? speciesFromTsv(sp, '/data/run01.tags.species.tsv') : null
+    }
     const id = mock.lastRunId
-    const s = script(String(params['in']), (params['params'] ?? {}) as Record<string, unknown>)
+    const s = script(String(params['in']), {
+      ...((params['params'] ?? {}) as Record<string, unknown>),
+      __workflow: params['workflow']
+    })
     const at = (ms: number, f: () => void): void => {
       setTimeout(() => {
         if (!cancelled.has(id)) f()

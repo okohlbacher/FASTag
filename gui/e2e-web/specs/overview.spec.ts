@@ -79,7 +79,7 @@ test('Overview figures and calls equal the oracles of the 1.12 gate output', asy
   await expect(value(page, 'Label')).toHaveText('none (label-free)')
   // Every tile names its cutoff or caveat.
   for (const note of await page.locator('.tile .tile-note').allTextContents()) expect(note.trim()).not.toBe('')
-  await expect(page.getByRole('list', { name: 'Checks', exact: true })).toContainText('Acquisition check: DDA')
+  await expect(page.getByRole('list', { name: 'Checks', exact: true })).toContainText('Acquisition: DDA')
 })
 
 test('no alkylation report asked for: no Alkylation tile, and C+57.021 a default', async ({ page }) => {

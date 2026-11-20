@@ -1,0 +1,3 @@
+'../ecoli.fasta' looks like a target-decoy database with the decoy prefix '', which -shortlist_decoy_affix does not list; add it there, or its decoys count as targets.
+Acquisition check: DDA (no repeating window scheme (periodicity 0.12 over 26 repeat gaps, cycle 51, 113 distinct precursor m/z, 0% uncharged, 139 MS2 probed))
+Shortlist protease check inconclusive: the fragment tolerance is in Da, so the residue windows at the tag ends do not hold; the placement assumes trypsin.

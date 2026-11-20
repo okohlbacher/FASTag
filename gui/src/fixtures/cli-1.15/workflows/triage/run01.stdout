@@ -1,0 +1,5 @@
+-threads 0: using 8 of 16 logical cores.
+Modifications: Carbamidomethyl (C, fixed)
+Census: 139 MS2 spectra read, 139 with a reported tag (0 placed), 0 no_tags -> run01.tags.census.tsv, summary -> run01.tags.census_summary.tsv
+139 MS2 spectra, 5937 tags
+FASTag took 0.04 s (wall), 0.22 s (CPU), 0.01 s (system), 0.21 s (user); Peak Memory Usage: 80 MB.

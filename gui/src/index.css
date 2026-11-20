@@ -1189,8 +1189,8 @@ label.task { align-content: start; }
 .help-pop-more { color: var(--muted-foreground); }
 .help-pop-facts { display: flex; flex-wrap: wrap; gap: var(--space-1) var(--space-3); }
 .help-pop .help-link { align-self: flex-start; font-size: var(--text-xs); }
-/* Advanced: descriptions on one line, the full text in (?). */
-.advanced .help:not(.brief):not(.invalid):not(.inert) { -webkit-line-clamp: 1; }
+/* Two lines in the grid: the first sentence whole in most fields. */
+.advanced .help:not(.brief):not(.invalid):not(.inert) { -webkit-line-clamp: 2; }
 details.advanced { padding: 0; }
 details.advanced > summary.card-head { padding: var(--space-3) var(--space-4); min-height: 0; }
 details.advanced > summary h2 { flex: 1; }
@@ -1269,15 +1269,21 @@ dl.qc-strip .stat dd { margin: 0; font-size: var(--text-md); font-weight: 600; }
    the card's tooltip and its description). */
 .view-setup label.task { display: flex; align-items: baseline; gap: 6px; padding: 4px var(--space-2); min-width: 0; }
 .view-setup .task-label { white-space: nowrap; }
+/* Short enough to fit beside the label (tasks.ts products). */
 .view-setup .task-products { font-size: 11px; line-height: 1.3; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
 .view-setup .task-blurb-line { font-size: var(--text-xs); color: var(--muted-foreground); }
 /* Settings: the fields in three columns; a path or list spans two. */
 .view-setup .settings { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px var(--space-4); align-items: start; }
 .view-setup .settings > .field:has(.path-input) { grid-column: span 2; }
+/* One line: each workflow's hints are short whole sentences (tasks.ts). */
 .view-setup .settings .help.brief { -webkit-line-clamp: 1; }
 .view-setup .instrument-field select { min-width: 0; width: 100%; }
 @media (max-width: 900px) { .view-setup .settings { grid-template-columns: minmax(0, 1fr); } .view-setup .settings > .field { grid-column: auto !important; } }
 .view-setup .settings textarea { min-height: 0; }
+/* Advanced: the fields of a group in the Settings grid. */
+.adv-fields { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 8px var(--space-4); align-items: start; }
+.adv-fields > .field:has(textarea), .adv-fields > .field:has(.path-input) { grid-column: span 2; }
+@media (max-width: 900px) { .adv-fields { grid-template-columns: minmax(0, 1fr); } .adv-fields > .field { grid-column: auto !important; } }
 /* Outputs: the products in two columns. */
 #card-outputs ul.products { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 2px var(--space-4); }
 @media (max-width: 900px) { #card-outputs ul.products { grid-template-columns: minmax(0, 1fr); } }

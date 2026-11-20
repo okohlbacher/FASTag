@@ -18,7 +18,8 @@ export interface Task {
   label: string
   /// One line under the chooser: what the workflow answers.
   blurb: string
-  /// The products, as the chooser card lists them.
+  /// The products, as the chooser card lists them: a word or two that fit
+  /// beside the label (the outputs are listed in full under Outputs).
   products: string
   /// What the workflow changes from FASTag's defaults. A report is switched
   /// on by its output name (qc.tsv), which goes beside the tags output once
@@ -51,11 +52,11 @@ export const TASKS: readonly Task[] = [
     values: { ...ALL, res_conf: true },
     basic: ['tag_length', 'extension', 'max_evalue', 'max_tags', 'res_conf'],
     help: {
-      tag_length: 'Residues in a seed tag. 3 suits most runs.',
-      extension: 'Residues added per end. Set 3 or more to export long tags (8+ residues) for Stitch or ALPS.',
-      max_evalue: 'Keep tags at or below this E-value. 0 keeps all.',
-      max_tags: 'At most this many tags per spectrum. 0 = no limit.',
-      res_conf: 'Adds a 0 to 100 confidence per residue, used by assembly export.'
+      tag_length: 'Residues in a seed tag; 3 suits most runs.',
+      extension: 'Residues added per end; 3 gives tags of 8+.',
+      max_evalue: 'Keeps tags at or below this E-value; 0 keeps all.',
+      max_tags: 'Most tags per spectrum; 0 sets no limit.',
+      res_conf: 'Adds a confidence per residue for assembly.'
     },
     outputs: ['out', 'proforma', 'usi_collection', 'out_spectra'],
     docs: { to: 'results-export', label: 'Assembly export' }
@@ -69,7 +70,7 @@ export const TASKS: readonly Task[] = [
     // The DIA check is a safety switch, not a QC setting: under Advanced.
     basic: ['subsample_fraction'],
     help: {
-      subsample_fraction: 'How many spectra to read. The counts cover only the spectra read.'
+      subsample_fraction: 'The counts cover only the spectra read.'
     },
     outputs: ['out', 'qc_out'],
     docs: { to: 'workflow-run-qc', label: 'Run QC report' }
@@ -78,7 +79,7 @@ export const TASKS: readonly Task[] = [
     id: 'mass-shift',
     label: 'Mass-shift survey',
     blurb: 'Blind modification search: mass shifts between tags and the database, with sites and UniMod names.',
-    products: 'placements, mass-shift table',
+    products: 'shift table',
     values: {
       ...ALL,
       recon_out: 'recon.tsv',
@@ -90,9 +91,9 @@ export const TASKS: readonly Task[] = [
     basic: ['recon_fasta', 'extension', 'recon_missed_cleavages'],
     required: ['recon_fasta'],
     help: {
-      recon_fasta: 'FASTA the tags are placed on. Mass shifts are measured against it.',
-      extension: 'Residues added per tag end. Longer tags place more uniquely.',
-      recon_missed_cleavages: 'Missed tryptic cleavages allowed in a placement window (0 to 10).'
+      recon_fasta: 'The FASTA the tags are placed on; mass shifts are measured against it.',
+      extension: 'Longer tags place more uniquely.',
+      recon_missed_cleavages: 'Missed cleavages per placement, 0 to 10.'
     },
     outputs: ['out', 'recon_out', 'delta_out', 'delta_spectra_out', 'delta_counts_out', 'massgap_out', 'recon_id_out'],
     docs: { to: 'workflow-reconciliation', label: 'Reconciliation and mass shifts' }
@@ -108,9 +109,9 @@ export const TASKS: readonly Task[] = [
     // The presence call is experimental: under Advanced (Species).
     basic: ['species_rank', 'subsample_fraction'],
     help: {
-      species_rank: 'Taxonomic level of the report: genus, family, …',
+      species_rank: 'The taxonomic level of the report.',
       species_call: 'Decoy calls each taxon present, no call or not detected against decoy tags; None only ranks the taxa.',
-      subsample_fraction: 'All spectra by default. 10% is usually enough to rank the main taxa, in a tenth of the time.'
+      subsample_fraction: '10% ranks the main taxa in a tenth of the time.'
     },
     outputs: ['out', 'species_out'],
     docs: { to: 'species-howto', label: 'Species detection' }
@@ -119,7 +120,7 @@ export const TASKS: readonly Task[] = [
     id: 'db-reduction',
     label: 'Database reduction',
     blurb: 'A protein shortlist, a reduced FASTA and a Sage, Comet or MSFragger configuration for your search.',
-    products: 'shortlist, reduced FASTA, engine config',
+    products: 'shortlist',
     // The shortlist recipe of doc/SHORTLIST.md. It is not validated: it
     // passed its second held-out test and failed the third. From 1.15.4 the
     // CLI applies it by default only with -search_engine msfragger and the
@@ -140,11 +141,11 @@ export const TASKS: readonly Task[] = [
     basic: ['recon_fasta', 'shortlist_background', 'search_engine', 'variable_modifications'],
     required: ['recon_fasta'],
     help: {
-      recon_fasta: 'FASTA to shortlist from.',
-      shortlist_background: 'Host proteome and contaminants, always added to the reduced FASTA.',
-      search_engine: 'Engine to write a configuration for: Sage, Comet or MSFragger (experimental).',
+      recon_fasta: 'The FASTA to shortlist from.',
+      shortlist_background: 'Host and contaminant proteins, always kept in the reduced FASTA.',
+      search_engine: 'The engine the configuration is for.',
       shortlist_protease: 'Cleavage rule. Trypsin refuses clearly non-tryptic runs; Auto uses the protease FASTag detects. With another protease only exact placements count.',
-      variable_modifications: 'Also tagged as alternatives, which changes the tags and their placements; written into the engine configuration.'
+      variable_modifications: 'Tagged as alternatives and written for the engine.'
     },
     outputs: ['out', 'shortlist_out', 'fasta_out', 'search_config_out'],
     docs: { to: 'workflow-db-reduction', label: 'Database reduction' }
@@ -153,13 +154,13 @@ export const TASKS: readonly Task[] = [
     id: 'triage',
     label: 'Identifiability triage',
     blurb: 'Rank MS/MS spectra by how identifiable they are, and mark those your search identified.',
-    products: 'identifiability tables',
+    products: 'ranking',
     values: { ...ALL, census: true, census_score: true, census_sorted_out: 'census_sorted.tsv' },
     basic: ['census_ids', 'census_ids_fdr', 'census_triage_evalue'],
     help: {
-      census_ids: 'idXML or mzIdentML of this run (optional). Marks which spectra your search identified. Needs q-values, unless Accept hits (Advanced) is threshold or all.',
-      census_ids_fdr: 'q-value a target hit needs to count as identified.',
-      census_triage_evalue: 'An unidentified spectrum with a tag at or below this E-value is a triage candidate.'
+      census_ids: 'Optional: the idXML or mzIdentML of this run, to mark the spectra your search identified.',
+      census_ids_fdr: 'The q-value a hit needs to count as identified.',
+      census_triage_evalue: 'An unidentified spectrum this good is a candidate.'
     },
     outputs: ['out', 'census_out', 'census_summary_out', 'census_sorted_out'],
     docs: { to: 'workflow-triage', label: 'Identifiability triage' }
@@ -168,7 +169,7 @@ export const TASKS: readonly Task[] = [
     id: 'characterize',
     label: 'Characterize a run',
     blurb: 'Protease, labels, glycopeptides and species from 10% of the spectra; alkylation on request.',
-    products: 'digest, label, glyco, species',
+    products: '4 reports',
     // No alkylation report by default: it places tags on a shipped proteome,
     // which needs tags of 8 residues (human), and extension 2 (validated
     // for the species call) reaches 7 with seed 3: every run would end with
@@ -184,7 +185,7 @@ export const TASKS: readonly Task[] = [
     },
     basic: ['subsample_fraction'],
     help: {
-      subsample_fraction: 'How many spectra to read. 10% gives stable calls in a tenth of the time.'
+      subsample_fraction: '10% gives stable calls in a tenth of the time.'
     },
     outputs: ['out', 'digest_out', 'label_out', 'alkylation_out', 'glyco_out', 'species_out'],
     productNotes: { alkylation_out: 'needs tags of 8+ residues: Extension 3, or a protein database' },

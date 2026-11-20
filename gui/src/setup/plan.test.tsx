@@ -1,12 +1,13 @@
 // The plan line of the run bar (doc/GUI-WORKFLOWS.md 3) and the products a
 // workflow writes (setup/products.ts).
 
+import type { JSX } from 'react'
 import { describe, expect, it } from 'vitest'
 import { planLine, reportsOn, samplingSummary } from './plan'
 import { baseValues, startValues, TASKS } from './tasks'
 import { PRODUCT_OF, fileName, isOn, neededBy, setProduct } from './products'
 import { SECTIONS, PARAM_BY_NAME, RENDERED } from '../paramLayout'
-import { advancedParams, WIRED } from './SetupForm'
+import { advancedParams, FOLDED, WIRED } from './SetupForm'
 
 const ctx = { input: '/d/run01.mzML', files: 0 }
 
@@ -39,7 +40,9 @@ describe('the workflows', () => {
     expect([...all].sort()).toEqual([...RENDERED].sort())
     const common = SECTIONS.filter((s) => s.home === 'common').flatMap((s) => s.params)
     for (const t of TASKS) {
-      const reach = new Set([...t.basic, ...t.outputs, ...common, ...advancedParams(t), ...WIRED])
+      // The spectra count is reached through Spectra to read (Custom count…).
+      const folded = [...FOLDED].filter(() => [...t.basic, ...advancedParams(t)].includes('subsample_fraction'))
+      const reach = new Set([...t.basic, ...t.outputs, ...common, ...advancedParams(t), ...WIRED, ...folded])
       const units = RENDERED.filter((n) => !reach.has(n) && /_unit$/.test(n))
       expect(RENDERED.filter((n) => !reach.has(n) && !units.includes(n)), t.id).toEqual([])
     }
@@ -51,12 +54,18 @@ describe('the workflows', () => {
       for (const n of t.basic) {
         expect(PARAM_BY_NAME.has(n), n).toBe(true)
         expect(t.help[n], `${t.id} ${n}`).toBeTruthy()
+        // A whole sentence that fits its one line: a path field spans two
+        // columns, any other one (review round 3: no hint cut mid-word).
+        const wide = PARAM_BY_NAME.get(n)?.type === 'input-file'
+        expect(t.help[n].length, `${t.id} ${n}: ${t.help[n]}`).toBeLessThanOrEqual(wide ? 95 : 52)
+        expect(t.help[n], `${t.id} ${n}`).toMatch(/[.:]$/)
       }
+      expect(t.products.length, `${t.id} products`).toBeLessThanOrEqual(14)
       for (const o of t.outputs) expect(PRODUCT_OF.has(o), o).toBe(true)
       expect(t.outputs[0]).toBe('out')
     }
   })
-  it('the database-reduction workflow sets the validated shortlist recipe', () => {
+  it('the database-reduction workflow sets the shortlist recipe (not validated)', () => {
     const v = baseValues('builtin:db-reduction')
     expect([v.shortlist_gapped, v.recon_min_length, v.shortlist_max_evalue, v.recon_missed_cleavages, v.extension]).toEqual([true, '6', '10', '2', '3'])
   })
@@ -85,5 +94,38 @@ describe('the products', () => {
     expect(fileName(PRODUCT_OF.get('fasta_out')!, setProduct(PRODUCT_OF.get('fasta_out')!, true, v, out), out)).toBe('run01.reduced.fasta')
     v = setProduct(species, false, v, out)
     expect([v.species, v.species_out]).toEqual([false, ''])
+  })
+})
+
+// Review round 3: the count of spectra is one control with the share.
+describe('Spectra to read', () => {
+  it('offers a custom count in its select, sent as the count option', async () => {
+    const { render, screen, fireEvent } = await import('@testing-library/react')
+    const { default: ParamField } = await import('../ParamField')
+    const { PARAM_BY_NAME } = await import('../paramLayout')
+    const values: Record<string, unknown> = { subsample_fraction: '0', subsample_spectra: '0' }
+    const set = (n: string) => (v: unknown) => {
+      values[n] = v
+    }
+    const ui = (): JSX.Element => (
+      <ParamField
+        spec={PARAM_BY_NAME.get('subsample_fraction')!}
+        value={values.subsample_fraction as string}
+        onChange={set('subsample_fraction')}
+        count={{ spec: PARAM_BY_NAME.get('subsample_spectra')!, value: values.subsample_spectra as string, onChange: set('subsample_spectra') }}
+      />
+    )
+    const r = render(ui())
+    const select = screen.getByRole('combobox') as HTMLSelectElement
+    expect([...select.options].map((o) => o.text)).toContain('Custom count…')
+    fireEvent.change(select, { target: { value: '__count' } })
+    r.rerender(ui())
+    fireEvent.change(screen.getByRole('textbox', { name: /number of spectra/ }), { target: { value: '5000' } })
+    expect(values.subsample_spectra).toBe('5000')
+    r.rerender(ui())
+    // A share clears the count.
+    fireEvent.change(screen.getByRole('combobox'), { target: { value: '0.1' } })
+    expect(values.subsample_spectra).toBe('0')
+    expect(values.subsample_fraction).toBe('0.1')
   })
 })

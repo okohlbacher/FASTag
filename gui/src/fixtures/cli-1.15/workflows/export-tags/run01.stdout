@@ -1,0 +1,4 @@
+-threads 0: using 8 of 16 logical cores.
+Modifications: Carbamidomethyl (C, fixed)
+139 MS2 spectra, 5937 tags
+FASTag took 0.04 s (wall), 0.23 s (CPU), 0.01 s (system), 0.22 s (user); Peak Memory Usage: 79 MB.

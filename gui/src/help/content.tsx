@@ -105,7 +105,7 @@ export const START: HelpPage = {
           </ol>
           <p>
             For a QC survey, choose <strong>Characterize a run</strong>; for many files, switch the Input card to
-            <strong> Batch</strong>. It samples 10% of the spectra and enables species, digest, label, alkylation and glyco reports, opening on{' '}
+            <strong> Batch</strong>. It samples 10% of the spectra and enables the species, digest, label and glyco reports (the alkylation report on request), opening on{' '}
             <L to="workflow-overview">Overview</L>. A report that says “not assessed” or “no call” is not evidence
             that a feature is absent.
           </p>
@@ -930,8 +930,9 @@ export const DIGEST: HelpPage = {
             names the simplest combination that fits, &quot;Alternatives&quot; others that fit as well, and
             &quot;Context&quot; says when an explanation was chosen because its parts also appear as peaks of their
             own. The chip below names the candidate cysteine modification with the most matching placed spectra;
-            these are counts, not an alkylation call. The separate command-line{' '}
-            <L to="param-alkylation_out">alkylation report</L> can make a call, but is not part of this GUI workflow.
+            these are counts, not an alkylation call. The{' '}
+            <L to="param-alkylation_out">alkylation report</L>, an optional report of Characterize a run, makes that
+            call; it needs tags of 8 or more residues, so turning it on raises Extension to 3.
           </p>
         </>
       )

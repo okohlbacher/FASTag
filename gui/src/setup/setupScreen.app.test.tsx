@@ -190,6 +190,21 @@ describe('Setup: hidden dependent fields', () => {
     expect(field('species')!.checked).toBe(true)
   })
 
+  it('Digest and labels folds its waiting fields under one line per report set', async () => {
+    const mock = installMockBridge()
+    await renderApp(mock)
+    await openGroup('Digest and labels')
+    const group = document.querySelector('[data-group="Digest and labels"]')!
+    const banners = group.querySelectorAll('.group-needs')
+    expect(banners.length).toBeGreaterThan(0)
+    expect(banners[0].textContent).toMatch(/Needs the digest report/)
+    // At most a field or two waits on its own; the rest are folded.
+    expect(group.querySelectorAll('.field.off').length).toBeLessThanOrEqual(2)
+    await click(within(group as HTMLElement).getByRole('button', { name: 'Turn on the digest report' }))
+    expect(group.querySelectorAll('.group-needs').length).toBeLessThan(banners.length + 1)
+    expect(field('digest_tag_min')!.disabled).toBe(false)
+  })
+
   it('a single dependent field stays visible but disabled, and names the report it needs', async () => {
     const mock = installMockBridge()
     await renderApp(mock) // FASTag defaults: glyco off
