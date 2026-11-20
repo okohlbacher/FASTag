@@ -906,6 +906,7 @@ export function shownTiles(o: Overview, params: Record<string, unknown>): { figu
     tagged: on('census') || on('census_sorted_out'),
     'ident-score': on('census_sorted_out'),
     identified: on('census_sorted_out') && on('census_ids'),
+    candidates: on('census_sorted_out') && on('census_ids'),
     // The digest filter's count is the Digest tab's (DigestPanel), not a
     // figure of the run.
     filtered: false,
