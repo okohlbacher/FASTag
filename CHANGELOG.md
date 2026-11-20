@@ -13,8 +13,11 @@
 - **Complement window `auto` under a Da fragment tolerance (change A).** With
   `-fragment_tolerance_unit Da` and no complement option given, the window is measured on the run
   instead of the fixed 0.02 Da (not under `-stream` or with mzPeak input).
-- Both are under a preregistered held-out test (PREREG-lowres-defaults); the verdict decides whether
-  they stay defaults.
+- **Held-out test: PASS** (PREREG-lowres-defaults, frozen 2026-11-20, scored once): 61 runs from 6 PRIDE projects
+  (35 ion trap, 16 mixed, 10 Orbitrap). Correct rank-1 tags on ion-trap spectra rise from 0.070 to 0.431. The new
+  defaults equal the best manual setting (+0.003, CI 0.000 to +0.019) and beat the best single global setting on
+  mixed runs (+0.049, CI +0.015 to +0.088). Orbitrap tags are byte-identical (10 of 10). Change A alone: +0.064.
+  The cost is the wider tolerance: 6.7 ms against 0.38 ms CPU per ion-trap MS2.
 
 ## 1.15.4 (2026-11-20)
 

@@ -1217,6 +1217,18 @@ export const PARAM_UI: Record<string, ParamUi> = {
       text: 'Write the smaller FASTA and the search settings even when the protease of the run does not fit tryptic placement.'
     }
   },
+  tolerance_by_analyzer: {
+    hidden: '1.15.5 command-line option, not in the form (CLI default applies: on)',
+    help: {
+      text: 'Tags each MS2 spectrum with the tolerance of its analyzer: ion-trap spectra with the ion-trap tolerance (0.5 Da) and a complement window measured on them, Orbitrap and TOF spectra with the fragment tolerance. Off tags every spectrum with the fragment tolerance, as before 1.15.5.'
+    }
+  },
+  fragment_tolerance_itms: {
+    hidden: '1.15.5 command-line option, not in the form (CLI default applies)',
+    help: {
+      text: 'Fragment tolerance (Da) of ion-trap MS2 spectra when tolerances follow the analyzer.'
+    }
+  },
   shortlist_defaults: {
     hidden: '1.15.4 command-line option, not in the form (CLI default applies: the shortlist recipe)',
     help: {
