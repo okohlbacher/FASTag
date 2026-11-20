@@ -323,6 +323,37 @@ namespace FASTag
     std::string isobarClass(double delta, const std::vector<Match>& names, const std::vector<Site>& sites,
                             const std::vector<FixedMod>& fixed, double iso_tol);
 
+    /**
+      @brief A two-modification reading of a named row that fits its localized site, or "".
+
+      Exact isobars cannot be told apart by mass (isobarClass() lists them), but
+      the site can favour one: +58.005 on a protein N-terminal Met is Acetyl
+      (protein N-term) + Oxidation (M), while the single Unimod name,
+      Carboxymethyl@N-term, does not involve the Met at all. Returned only when
+      the row's best name (the first non-label entry of @p names) is not
+      specific to the residue of the most-supported site nor itself one of the common
+      modifications (Acetyl@N-term stays, though it equals Methyl+Formyl), and a sum of two
+      common modifications (the list isobarClass() uses) within @p iso_tol of
+      that name's mass has both parts fit that site (match() on it) with at
+      least one part specific to its residue. Then -delta_out writes it before
+      the Unimod names: "Oxidation+Acetyl@M/Protein N-term(-0.3ppm)". Rows whose
+      best name is already residue-specific (e.g. Dimethyl@K, also Methyl+Methyl)
+      are left alone.
+
+      @param[in] delta the row's delta (Da)
+      @param[in] names the row's Unimod matches, best first
+      @param[in] sites the row's localized sites
+      @param[in] support localized spectra per site (parallel to @p sites), or nullptr
+      @param[in] entries the Unimod catalogue
+      @param[in] fixed the fixed residue modifications
+      @param[in] iso_tol the isobar tolerance (Da)
+      @param[in] ppm_of the mass a ppm error is relative to; <= 0 writes the error in mDa
+      @return the cell entry, or "" when there is none
+    */
+    std::string siteCombination(double delta, const std::vector<Match>& names, const std::vector<Site>& sites,
+                                const std::vector<std::uint64_t>* support, const std::vector<Entry>& entries,
+                                const std::vector<FixedMod>& fixed, double iso_tol, double ppm_of);
+
     /// One -delta_out row: its centre bin and the bins it takes.
     struct BinGroup
     {

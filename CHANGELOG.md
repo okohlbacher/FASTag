@@ -1,5 +1,14 @@
 # Changelog
 
+## Unreleased
+
+- **Combined mass-shift names.** `-delta_out`'s `unimod` column now names a two-modification reading
+  first when it fits the row's most-supported localized site and the best single Unimod name does not
+  explain that site's residue. +58.005 on a protein N-terminal Met was named only
+  `Carboxymethyl@N-term`; it now reads `Oxidation+Acetyl@…` (sites M and Protein N-term) before `Carboxymethyl@N-term`
+  (seen in the PXD040281 FFPE survey). The `isobars` column, which already listed both, and rows
+  with a residue-specific best name (e.g. Dimethyl@K) are unchanged.
+
 ## 1.15.4 (2026-11-20)
 
 Shortlist runs now use the tested shortlist recipe by default (`-shortlist_defaults plain` restores 1.15.3), and metaproteomes get a held-out-tested recommendation (`-shortlist_max_evalue 100`). Runs without a shortlist output are unchanged.
