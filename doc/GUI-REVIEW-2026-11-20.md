@@ -99,7 +99,11 @@ been found.
 
 ## 4. Open findings (round 10, at 6a81f2ab)
 
-No critical findings. Round 10 has not been fixed yet.
+No critical findings. The three round-10 majors are fixed in f54dd66b:
+- Characterize alkylation note: the off state says "Turning it on raises Extension 2 → 3 …" (test round10.test.tsx).
+- Run association: two persisted run ids are two runs; the outputs-list match only for the run just shown (test round10.app.test.tsx).
+- Mass-shift chart labels: named from the CLI's interpretations; an assumed window labels the mass only (test round11.test.tsx).
+The round-10 minors are open except the stale "Tags E ≤ 1" help text, removed in f54dd66b.
 
 ### Major (3)
 
