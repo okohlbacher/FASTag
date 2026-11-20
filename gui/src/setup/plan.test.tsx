@@ -7,6 +7,7 @@ import { planLine, reportsOn, samplingSummary } from './plan'
 import { baseValues, startValues, TASKS } from './tasks'
 import { PRODUCT_OF, fileName, isOn, neededBy, setProduct } from './products'
 import { SECTIONS, PARAM_BY_NAME, RENDERED } from '../paramLayout'
+import { PARAM_UI } from '../paramUi'
 import { advancedParams, FOLDED, WIRED } from './SetupForm'
 
 const ctx = { input: '/d/run01.mzML', files: 0 }
@@ -50,7 +51,10 @@ describe('the workflows', () => {
   it('shows 2 to 5 fields per workflow, each with its own one-line help, and products the manifest knows', () => {
     for (const t of TASKS) {
       expect(t.basic.length, t.id).toBeGreaterThanOrEqual(1)
-      expect(t.basic.length, t.id).toBeLessThanOrEqual(5)
+      // At most 5 at once: a field that waits for another Settings field
+      // (the Comet template, on Search engine) shows only with it.
+      const conditional = (n: string): boolean => (PARAM_UI[n]?.depends ?? []).some((d) => (Array.isArray(d.on) ? d.on : [d.on]).some((m) => t.basic.includes(m)))
+      expect(t.basic.filter((n) => !conditional(n)).length, t.id).toBeLessThanOrEqual(5)
       for (const n of t.basic) {
         expect(PARAM_BY_NAME.has(n), n).toBe(true)
         expect(t.help[n], `${t.id} ${n}`).toBeTruthy()

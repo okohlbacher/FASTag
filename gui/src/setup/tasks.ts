@@ -141,12 +141,15 @@ export const TASKS: readonly Task[] = [
       shortlist_max_evalue: '10',
       recon_missed_cleavages: '2'
     },
-    // The protease rule is experimental: under Advanced (Shortlist).
-    basic: ['recon_fasta', 'shortlist_background', 'search_engine', 'variable_modifications'],
+    // The protease is a search setting as in any search tool (round 11);
+    // the Comet template shows only with Comet (it waits on Search engine).
+    basic: ['recon_fasta', 'shortlist_background', 'search_config_template', 'shortlist_protease', 'search_engine', 'variable_modifications'],
     required: ['recon_fasta'],
     help: {
       recon_fasta: 'The FASTA to shortlist from.',
       shortlist_background: 'Host and contaminant proteins, always kept in the reduced FASTA.',
+      search_config_template: 'Your comet.params (from comet -p); without it a fragment to merge by hand.',
+      shortlist_protease: 'Trypsin; Auto for another or unknown digest.',
       search_engine: 'The engine the configuration is for.',
       variable_modifications: 'Tagged as alternatives and written for the engine.'
     },

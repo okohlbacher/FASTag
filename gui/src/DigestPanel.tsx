@@ -3,6 +3,7 @@ import SequenceLogo, { LogoLegend } from './SequenceLogo'
 import { HelpButton, HelpLink } from './help/HelpLink'
 import ReportHeader from './results/ReportHeader'
 import { alkylationReason } from './results/overview'
+import { labelCall } from './results/calls'
 import {
   alkylationCall,
   backgroundWords,
@@ -282,9 +283,25 @@ function Label({ report }: { report: Report }): JSX.Element {
   // to be compared with the chance count 0.5 Da above it, in the column below.
   const seen = labels.filter((l) => (l.count ?? 0) > 0)
   const lowRes = value(report, 'run', 'low_resolution') === 'yes'
+  // The CLI's label call leads (SILAC, a kit, label-free, or no call); the
+  // isobaric tag-end counts below are its evidence, not a call of their own.
+  const call = labelCall(report)
   return (
     <section className="dg-block card" aria-labelledby="dg-label">
       <Heading id="dg-label" title="Labels" report={report} help="digest-labels" />
+      {(call.state === 'call' || call.state === 'no_call') && (
+        <div className="chip-line label-call">
+          {call.state === 'call' ? (
+            <span className={`chip ${call.label === 'label-free' ? 'ok' : 'warn'}`}>
+              Label call: {call.label === 'label-free' ? 'none (label-free)' : call.label}
+            </span>
+          ) : (
+            <span className="chip">No label call</span>
+          )}
+          <span className="muted">{call.why}</span>
+        </div>
+      )}
+      {labels.length > 0 && (call.state === 'call' || call.state === 'no_call') && <h4 className="dg-sub">Isobaric tag ends</h4>}
       {labels.length > 0 && (
         <div className="chip-line">
           {seen.length === 0 && lowRes ? (

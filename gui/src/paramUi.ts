@@ -1307,7 +1307,7 @@ export const PARAM_UI: Record<string, ParamUi> = {
     section: 'Search configuration',
     depends: [SEARCH_OFF, { on: 'search_engine', when: { search_engine: { is: ['comet'] } }, say: 'Search engine set to Comet', note: 'a Sage or MSFragger configuration is written complete' }],
     help: {
-      text: 'For Comet only: a parameter file the written settings are merged into.'
+      text: 'For Comet only: your comet.params (comet -p writes one). The written settings are merged into it, giving a complete file; without it FASTag writes a fragment of the managed keys to merge by hand.'
     }
   },
   search_decoy_prefix: {

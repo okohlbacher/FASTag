@@ -310,7 +310,9 @@ export default function SetupForm({
             ? `written with the ${follows.label.toLowerCase()}`
             : p.param === 'alkylation_out'
               ? alkylationWhy(on)
-              : null
+              : p.param === 'search_config_out' && on && String(values['search_engine'] ?? '') === 'comet' && !String(values['search_config_template'] ?? '').trim()
+                ? 'a Comet fragment: merge it into your comet.params, or give your template in Settings'
+                : null
     // The detail of a workflow's note (tasks.ts productNotes): its (?).
     const detail = !on ? task.productNotes?.[p.param] : undefined
     const spec = PARAM_BY_NAME.get(p.param)
@@ -527,9 +529,11 @@ export default function SetupForm({
   // A setting of an optional file that Settings itself shows (Triage's ID
   // q-value and E-value, waiting for Identifications): hidden until the file
   // is chosen, not a disabled field with a note (round 4, 18).
+  // Likewise a setting waiting for another Settings field (the Comet
+  // template, until Search engine is Comet).
   const waitsOnShownFile = (n: string): boolean => {
     const d = inertDependency(n, values)
-    return !!d && !d.replaced && masters(d).some((m) => task.basic.includes(m) && PARAM_BY_NAME.get(m)?.type === 'input-file')
+    return !!d && !d.replaced && masters(d).some((m) => task.basic.includes(m))
   }
 
   const inputCard = card(
@@ -657,7 +661,7 @@ export default function SetupForm({
     'settings',
     'Settings',
     <div className="settings">
-      {task.basic.filter(isInputField).map((n) => field(n, { brief: task.help[n], required: task.required?.includes(n) }))}
+      {task.basic.filter((n) => isInputField(n) && !waitsOnShownFile(n)).map((n) => field(n, { brief: task.help[n], required: task.required?.includes(n) }))}
       <div className="field instrument-field">
         <span className="label-row">
           <label htmlFor="instrument">
