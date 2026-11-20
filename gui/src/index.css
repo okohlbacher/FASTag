@@ -1263,6 +1263,10 @@ input::placeholder, textarea::placeholder { font-family: var(--font-sans); font-
 .group-needs { display: flex; align-items: center; gap: var(--space-2); flex-wrap: wrap; padding: var(--space-2) var(--space-3); border: 1px dashed var(--border); border-radius: var(--radius-sm); font-size: var(--text-xs); color: var(--muted-foreground); }
 .group-needs span { flex: 0 1 auto; }
 .group-needs button { margin-left: 0; }
+/* A group waiting for a report: one line, the title then its note. */
+.sec.waiting-line { display: flex; align-items: center; gap: var(--space-2); flex-wrap: wrap; padding: 6px var(--space-3); font-weight: 500; }
+.sec.waiting-line .sec-title { flex: 0 1 auto; padding-left: 22px; }
+.sec.waiting-line .group-needs { flex: 1 1 auto; justify-content: flex-end; border: none; padding: 0; font-weight: 400; }
 /* The Preset select first in its row, in the same place for every workflow. */
 .preset-pick { display: inline-flex; align-items: center; gap: var(--space-2); }
 .preset-pick .sublabel { font-size: var(--text-xs); color: var(--muted-foreground); }

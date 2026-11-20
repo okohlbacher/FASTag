@@ -444,11 +444,31 @@ export default function SetupForm({
             />
           </span>
           {targets.map((prod) => (
-            <button type="button" key={prod.param} className="secondary small" onClick={() => toggle(prod, true)}>
+            <button
+              type="button"
+              key={prod.param}
+              className="secondary small"
+              onClick={() => {
+                toggle(prod, true)
+                // Its settings are what the click was for: show them.
+                setOpenGroups((st) => ({ ...st, [sec.title]: true }))
+              }}
+            >
               Turn on {prod.label}
               {prod.param === 'alkylation_out' && alkylationExtension(values) ? ` (sets Extension ${alkylationExtension(values)})` : ''}
             </button>
           ))}
+        </div>
+      )
+    // A group with nothing to set until a report is on: one line, its
+    // note and Turn on beside the title, not a group to open (Other
+    // analyses lists many of them).
+    if (needs && products.length === 0 && shown.length === 0)
+      return (
+        <div className="sec waiting-line" key={sec.title} data-group={sec.title} title={sec.blurb}>
+          <span className="sec-title">{sec.title}</span>
+          {sec.experimental && <span className="badge">experimental</span>}
+          {needs}
         </div>
       )
     return (

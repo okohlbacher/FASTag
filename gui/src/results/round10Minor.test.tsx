@@ -1,6 +1,6 @@
 // Review round 10 minors (doc/GUI-REVIEW-2026-11-20.md section 4).
 
-import { render, screen } from '@testing-library/react'
+import { render, screen, within } from '@testing-library/react'
 import { installMockBridge } from '../testing/mockBridge'
 import { click, openGroup, renderApp, renderCharacterizeApp } from '../testing/render'
 import { describe, expect, it } from 'vitest'
@@ -90,5 +90,21 @@ describe('round 10 minor: Overview headings', () => {
     const o = buildOverview({ log: ['2 MS2 spectra, 5 tags'], reports: [], species: null, census: null, params: {}, instrument: null })
     const { container } = render(<OverviewPanel overview={o} input="/d/a.mzML" busy={false} onAction={() => {}} />)
     expect(container.querySelector('.tiles-head')).toBeNull()
+  })
+})
+
+describe('round 10 minor: Advanced density', () => {
+  it('a group waiting for a report is one line with its Turn on, and opens once it is on', async () => {
+    const mock = installMockBridge()
+    await renderApp(mock) // FASTag defaults: species off
+    await openGroup('Species')
+    const line = document.querySelector('[data-group="Species, advanced"]') as HTMLElement
+    expect(line.tagName).toBe('DIV')
+    expect(line.classList.contains('waiting-line')).toBe(true)
+    expect(line.querySelector('summary')).toBeNull()
+    await click(within(line).getByRole('button', { name: 'Turn on Species report' }))
+    const group = document.querySelector('[data-group="Species, advanced"]') as HTMLElement
+    expect(group.tagName).toBe('DETAILS')
+    expect(document.getElementById('p-species_min_len')).not.toBeNull()
   })
 })
