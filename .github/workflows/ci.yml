@@ -917,8 +917,10 @@ jobs:
           # The tags from the archive must be byte-identical to the tags from
           # the mzML, exactly as ctest's mzpeak_roundtrip demands of the
           # unbundled binary. The archive is validated in the next step.
-          # -tolerance_by_analyzer off: it does not apply to mzPeak input (README),
-          # and this example is ion trap, so its mzML would be tagged at 0.5 Da.
+          # -tolerance_by_analyzer off: this example is ion trap by its filter
+          # strings, which the archive loses at OPENMS_REF (no OpenMS/OpenMS#10955
+          # yet), so the mzML would be tagged at 0.5 Da and the archive not.
+          # Drop the pin when OPENMS_REF includes #10955.
           BW=/tmp/bundle-mzpeak; rm -rf "$BW"; mkdir -p "$BW"
           MZ="$GITHUB_WORKSPACE/dist/FASTag/share-OpenMS/examples/ID/Ecoli_MS2_small.mzML"
           env -i HOME="$HOME" PATH=/usr/bin:/bin "$GITHUB_WORKSPACE/dist/FASTag/FASTag" \

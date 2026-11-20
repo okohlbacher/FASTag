@@ -2540,21 +2540,50 @@ TOPPFASTag::ExitCodes TOPPFASTag::main_(int, const char**)
   // (MS1 included; the level is known only once read), every one read; of
   // the MS2 among them that @p keep accepts, a second uniform draw keeps the
   // probe size (ComplTol::pickProbe), so the probe spans the whole run.
-  const auto draw_probe = [&](Size want, auto&& keep) {
+  // mzPeak input (read in one pass by MzPeakStream) reads the same
+  // candidates in a pass of its own before the tagging pass
+  // (readMzPeakSpectra, centroided as the tagging pass centroids) and keeps
+  // the accepted ones, so the probe is the one the same run read as mzML
+  // draws. @p pass_s, when given, receives that pass's wall time.
+  const auto draw_probe = [&](Size want, auto&& keep, double* pass_s = nullptr) {
     namespace CT = FASTag::ComplTol;
     const FASTag::SampleMask cand = FASTag::sampleByCount(n_total, std::min<Size>(n_total, 4 * want), 0x434F4D50u);
+    const auto accept = [&keep](const MSSpectrum& s) {
+      return s.getMSLevel() == 2 && !s.empty() && !s.getPrecursors().empty() && keep(s);
+    };
     std::vector<Size> ms2_idx;
-    for (Size i = 0; i < n_total; ++i)
+    std::map<Size, MSSpectrum> held;  // mzPeak: the accepted candidates, as read
+    if (mzs)
     {
-      if (!cand[i]) continue;
-      const MSSpectrum s = read_spectrum(i);
-      if (s.getMSLevel() == 2 && !s.empty() && !s.getPrecursors().empty() && keep(s)) ms2_idx.push_back(i);
+      const auto a = std::chrono::steady_clock::now();
+      std::vector<Size> cand_idx;
+      for (Size i = 0; i < n_total; ++i)
+        if (cand[i]) cand_idx.push_back(i);
+      Size k = 0;
+      FASTag::readMzPeakSpectra(
+          in, mzpeak_decode_threads, cand_idx,
+          [&](MSSpectrum& s) {
+            const Size i = cand_idx[k++];
+            if (!accept(s)) return;
+            ms2_idx.push_back(i);
+            held.emplace(i, std::move(s));
+          },
+          pick_mzpeak);
+      if (pass_s) *pass_s = std::chrono::duration<double>(std::chrono::steady_clock::now() - a).count();
+    }
+    else
+    {
+      for (Size i = 0; i < n_total; ++i)
+      {
+        if (!cand[i]) continue;
+        if (accept(read_spectrum(i))) ms2_idx.push_back(i);
+      }
     }
     std::vector<MSSpectrum> probe_specs;
     probe_specs.reserve(want);
     for (const Size i : CT::pickProbe(ms2_idx, want, 0x50524F42u))
     {
-      MSSpectrum s = read_spectrum(i);
+      MSSpectrum s = mzs ? std::move(held.at(i)) : read_spectrum(i);
       s.sortByPosition();
       probe_specs.push_back(std::move(s));
     }
@@ -2687,14 +2716,21 @@ TOPPFASTag::ExitCodes TOPPFASTag::main_(int, const char**)
   // its own spectra. A run whose probe draw has no ion-trap spectrum keeps
   // every Param as before (byte-identical tags); an ion-trap spectrum found
   // later in such a run still gets the ion-trap tolerance, with the
-  // -complement_tolerance window. Not under -stream or mzPeak input (read
-  // in one pass): there every spectrum keeps -fragment_tolerance.
+  // -complement_tolerance window. Not under -stream. mzPeak input (read in
+  // one pass) draws the same probe in a pass of its own (draw_probe); an
+  // archive without filter strings or analyzer metadata (OpenMS before
+  // OpenMS/OpenMS#10955 drops the filter string) finds no ion-trap MS2 and
+  // keeps its tags.
   itms_on_ = false;
-  if (by_analyzer && !mzs)
+  if (by_analyzer)
   {
     namespace CT = FASTag::ComplTol;
     const Size want = static_cast<Size>(getIntOption_("complement_probe"));
-    const std::vector<MSSpectrum> it_specs = draw_probe(want, is_itms);
+    double mzpeak_pass_s = 0;
+    const std::vector<MSSpectrum> it_specs = draw_probe(want, is_itms, &mzpeak_pass_s);
+    if (mzs)
+      std::cerr << "Tolerance by analyzer: mzPeak probe pass " << std::fixed << std::setprecision(2) << mzpeak_pass_s
+                << std::defaultfloat << " s" << std::endl;
     FASTag::Param base_it = len_params.front();
     base_it.frag_tol = itms_tol;
     base_it.tol_ppm = false;

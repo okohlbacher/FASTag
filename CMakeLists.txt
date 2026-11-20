@@ -802,6 +802,16 @@ if(FASTAG_BUILD_TESTS)
   set_tests_properties(mzpeak_validate PROPERTIES SKIP_RETURN_CODE 77
                        FIXTURES_REQUIRED mzpeak_roundtrip_archives)
 
+  # -tolerance_by_analyzer on with mzPeak input: an archive of the whole
+  # fixture tags exactly as the mzML (ion-trap probe and window included).
+  # SKIPs when the archive carries no analyzer (OpenMS without the mzPeak
+  # filter string, OpenMS/OpenMS#10955), after checking on == off there.
+  add_test(NAME mzpeak_tolerance_by_analyzer
+           COMMAND bash ${CMAKE_CURRENT_SOURCE_DIR}/test/mzpeak_tolerance_by_analyzer.sh $<TARGET_FILE:FASTag>
+                   ${CMAKE_CURRENT_SOURCE_DIR}/test/fixtures/Ecoli_MS2_small.mzML
+                   ${CMAKE_CURRENT_BINARY_DIR}/mzpeak-tolerance-by-analyzer)
+  set_tests_properties(mzpeak_tolerance_by_analyzer PROPERTIES SKIP_RETURN_CODE 77)
+
   # The mzPeak reader, spectrum by spectrum: what MzPeakStream hands out
   # (with a mask, from several threads, centroiding profile MS2) against
   # MzPeakFile::load() of the same archive, written from the fixture.
