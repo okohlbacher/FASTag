@@ -131,6 +131,18 @@ describe('round 10, 2: one run, told by its record, else its run name', () => {
   })
 })
 
+describe('round 10 minor: a drop of custom-named files of one run', () => {
+  it('the tags and the QC report stay together (one selection per drop)', async () => {
+    const mock = installMockBridge()
+    mock.reportFiles['/d/qc-final.tsv'] = QC
+    mock.history = [rec('R', '/d/Ecoli_MS2_small.mzML', ['/d/final.tsv', '/d/qc-final.tsv'], 1_000)]
+    const { result } = hook(mock)
+    await act(async () => result.current.openDropped({ results: '/d/final.tsv', reports: ['/d/qc-final.tsv'] }))
+    await waitFor(() => expect(result.current.reports.workflow?.qc).toBe('/d/qc-final.tsv'))
+    expect(result.current.results?.path).toBe('/d/final.tsv')
+  })
+})
+
 describe('round 10, 3: what another run left shown goes in the reducer', () => {
   it('with A shown, B\'s tags that land first survive B\'s report read out of order', async () => {
     const mock = installMockBridge()

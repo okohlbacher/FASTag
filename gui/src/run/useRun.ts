@@ -967,13 +967,28 @@ export function useRun(s: RunInputs, view: ViewStore, hooks: RunHooks = {}) {
   // report, selected as it starts) is part of the same choice: superseded,
   // not a strict generation check, or the drop's other reports would be
   // dropped after the first.
-  async function openReportPaths(paths: string[]): Promise<void> {
+  async function openReportPaths(paths: string[], t: Selection | undefined = undefined): Promise<void> {
     if (!paths.length) return
-    const t = select(paths[0])
+    t ??= select(paths[0])
     for (const p of paths) {
       if (superseded(t)) return
       await openReportPath(p, undefined, { g: t.g, p })
     }
+  }
+
+  // One drop: its tags, reports and species report under ONE selection.
+  // Taken apart, each later part would supersede the tags whenever the
+  // names do not tell one run (custom names, no record read yet), and the
+  // tags of the run dropped would be dropped as another run's.
+  async function openDropped(d: { results?: string | null; reports: string[]; species?: string | null }): Promise<void> {
+    const first = d.results ?? d.reports[0] ?? d.species
+    if (!first) return
+    const t = select(first)
+    await Promise.all([
+      d.results ? openResultsPath(d.results, t) : null,
+      d.reports.length ? openReportPaths(d.reports, t) : null,
+      d.species ? openSpeciesPath(d.species, t) : null
+    ])
   }
 
   // A species report, dropped or opened: shown in the Species tab, in
@@ -1211,8 +1226,9 @@ export function useRun(s: RunInputs, view: ViewStore, hooks: RunHooks = {}) {
     openResults,
     openResultsPath: (p: string) => openResultsPath(p),
     openReport,
-    openReportPaths,
+    openReportPaths: (paths: string[]) => openReportPaths(paths),
     openSpeciesPath: (p: string) => openSpeciesPath(p),
+    openDropped,
     reveal
   }
 }
