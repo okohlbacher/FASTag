@@ -65,15 +65,22 @@ describe('round 10, 2: one run, told by its record, else its run name', () => {
     const a2 = parseReport(LABEL, '/d/runA.label.tsv')
     expect(sameRun(a, b)).toBe(false)
     expect(sameRun(a, a2)).toBe(true)
-    // Custom names have no run name: the run rows decide, unless recorded.
+    // Custom names have no run name: unknown identity without a record
+    // (round 10 minor: the run rows do not tell two runs that differ only
+    // in Extension), the record decides with one.
     const q = parseReport(digestTsv, '/d/digest-final.tsv')
     const l = parseReport(LABEL, '/d/label-final.tsv')
-    expect(sameRun(q, l)).toBe(true)
+    expect(sameRun(q, l)).toBe(false)
     const runs = new Map([
       ['/d/digest-final.tsv', { id: 'R1', outputs: ['/d/digest-final.tsv'] }],
       ['/d/label-final.tsv', { id: 'R2', outputs: ['/d/label-final.tsv'] }]
     ])
     expect(sameRun(q, l, runs)).toBe(false)
+    const one = new Map([
+      ['/d/digest-final.tsv', { id: 'R1', outputs: ['/d/digest-final.tsv', '/d/label-final.tsv'] }],
+      ['/d/label-final.tsv', { id: 'R1', outputs: ['/d/digest-final.tsv', '/d/label-final.tsv'] }]
+    ])
+    expect(sameRun(q, l, one)).toBe(true)
   })
 
   it('sameRunIn: the record first, file stems only for unknown files', () => {

@@ -43,17 +43,19 @@ export function sameRunIn(runs: RunsOf, a: string, b: string): boolean {
 // Two runs wrote the same report when the run rows they share agree and the
 // files sit in one folder. run.input is only a basename (sample.mzML from two
 // folders, or one file run with two tag lengths, would otherwise read as one).
-// Two runs of one input in one folder differ in their run name: where both
-// names have one (<stem>.<kind>.tsv), the stems must agree too. A custom
-// name (qc-final.tsv) has none, and the run rows decide. A file the app
-// recorded is told by its record (@p runs, sameRunIn) instead.
+// Two runs of one input in one folder differ in their run name: both names
+// must have one (<stem>.<kind>.tsv) and the stems must agree. A custom name
+// (qc-final.tsv) has none: its run is unknown, and the run rows cannot tell
+// it (two runs that differ only in Extension write the same rows), so it is
+// another run. A file the app recorded is told by its record (@p runs,
+// sameRunIn) instead.
 const RUN_KEYS = ['input', 'version', 'fragment_tolerance', 'fragment_tolerance_unit', 'tag_length', 'subsample_fraction', 'subsample_spectra']
 export function sameRun(a: Report, b: Report, runs?: RunsOf): boolean {
   if (runs && (runs.has(a.path) || runs.has(b.path))) return sameRunIn(runs, a.path, b.path)
   if (dirName(a.path) !== dirName(b.path) || !RUN_KEYS.every((k) => value(a, 'run', k) === value(b, 'run', k))) return false
   const sa = runStem(a.path)
   const sb = runStem(b.path)
-  return sa == null || sb == null || sa === sb
+  return sa != null && sa === sb
 }
 
 /// The run a file belongs to by its name, <stem>.<kind>.<ext> as the GUI
