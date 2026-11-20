@@ -7,8 +7,8 @@ abstract: >-
   algorithm as a parallel OpenMS TOPP tool with bounded memory, and ships as a command-line tool and a
   desktop app for macOS, Linux and Windows.
 type: software
-version: 1.15.3
-date-released: 2026-11-19
+version: 1.15.4
+date-released: 2026-11-20
 license: MIT
 repository-code: "https://github.com/okohlbacher/FASTag"
 url: "https://okohlbacher.github.io/FASTag/"
