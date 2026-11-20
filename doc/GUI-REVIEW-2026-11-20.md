@@ -96,6 +96,7 @@ failed; the WebKit Playwright project was not run.
 | 11 | 3f16dffd | typecheck OK; vitest 1425 passed, 17 skipped; screens 59 PNGs (Playwright suites not run) | 0 / 8 / 12 (0) | 8 |
 | 12 | 11fc5c5d | typecheck OK; vitest 1431 passed, 17 skipped; Playwright chromium 117 passed, 9 skipped, 1 failed (test pinned the old table order; fixed in 3ca5eab9); screens 59 PNGs | 0 / 4 / 9 (2, and 1 in part) | 4 |
 | 13 | ae258271 | typecheck OK; vitest 1440 passed, 17 skipped; Playwright chromium 118 passed, 9 skipped; screens 59 PNGs | 0 / 2 / 7 (0, and 1 in part) | 2 |
+| 14 | 5884793d | typecheck OK; vitest 1444 passed, 17 skipped; Playwright chromium 117 passed, 9 skipped, 1 failed (pinned the hint text changed in round 13; fixed in ec2d3340); screens 59 PNGs | 0 / 2 / 8 (0) | 2 |
 
 Blocking findings fell from 19 to 3; since round 4 no critical finding has
 been found.
@@ -229,9 +230,26 @@ Codex, Kimi and Vibe (Vibe: no major). All fixed in ce346005; tests
 | Minor | Recipe note | Named one Advanced group for values in three. | Fixed. |
 | Minor | Help, fixed modifications | Help said "Chart and Table"; "Drop Carbamidomethyl (C) without alkylation" in every workflow. | Fixed: "Chart and Bins"; "Drop it if the sample was not alkylated." |
 
-### Continuation (state at the end of round 13)
+### Round 14 (at 5884793d)
 
-- Next: round 14 on ce346005 or later (screens `output/gui-workflows/screens/r14`, brief as `r13-brief.md` with the round number and the round-13 summary). Stop at the first round with no confirmed critical or major finding; cap: round 16.
+Codex, Kimi and Vibe (Vibe: no major). All fixed in 04bfc568 and
+ec2d3340; tests `gui/src/review/round14.test.tsx` and updated pins.
+
+| Severity | Area | Problem | Result |
+|---|---|---|---|
+| Major | Mass shifts window | A mass-gap report a former run left beside the delta table lent its window, unchecked. | Fixed: only when one run wrote both (or neither is recorded); else assumed and said so. |
+| Major | Batch Outputs names | The round-13 rule dropped `.tags` and the .fasta/.json extensions. | Fixed: each job's own naming rule. |
+| Minor | Batch summary export | Could export "reading…" cells. | Fixed: disabled until read. |
+| Minor | Triage export order | File order, not the order shown. | Fixed. |
+| Minor | CLI flags on screen | `-usi_collection`, `-res_conf` in messages and tooltips. | Fixed: the GUI settings. |
+| Minor | Versions on screen | "(FASTag 1.12 does)" in Overview notes. | Fixed. |
+| Minor | "recon", "census" | Unexplained words in the Mass shifts chart and an unscored table's heading. | Fixed: "Placement interpretations", "Spectra, one row each". |
+| Minor | Help control names | Named "Turn on and run again", "Add…", "Choose output folder…", "Unimod marks" where Setup shows others. | Fixed. |
+| Minor | Tags per spectrum | "Most tags per spectrum" read as "the highest". | Fixed: "At most this many per spectrum". |
+
+### Continuation (state at the end of round 14)
+
+- Next: round 15 on ec2d3340 or later (screens `output/gui-workflows/screens/r15`). Stop at the first round with no confirmed critical or major finding; cap: round 16.
 - Open: merge `origin/main` once v1.15.5 is tagged (new options `-tolerance_by_analyzer`, `-fragment_tolerance_itms` under Advanced; check the "Ion trap CID" preset); then vitest, tsc, Playwright chromium and webkit; push; PR against main (no version bump, no tag).
 
 Before merging: `origin/main` has moved on to 1.15.4 (regenerated
