@@ -5340,10 +5340,16 @@ TOPPFASTag::ExitCodes TOPPFASTag::main_(int, const char**)
           const std::string iso =
               iso_flank ? SS::isotopeError(row_delta, tol_da, um, nloc, survey_ppm ? ref : 0.0) : std::string("-");
           const std::string isobars = SS::isobarClass(row_delta, um, sites, survey_fixed, delta_isobar_tol);
+          // 1.15.5: a two-modification reading that fits the localized site goes first
+          // (Acetyl+Oxidation on a protein N-terminal Met, not Carboxymethyl@N-term).
+          const std::string combo = SS::siteCombination(row_delta, um, sites, &support, survey_unimod, survey_fixed,
+                                                        delta_isobar_tol, survey_ppm ? ref : 0.0);
           if (um.size() > NAME_CAP) um.resize(NAME_CAP);
           const auto pm = SS::match(survey_psimod, row_delta, tol_da, sites, survey_fixed, NAME_CAP, &support);
           dtsv << '\t' << nloc << '\t' << SS::formatSites(row_sites.sites) << '\t' << row_sites.unloc << '\t'
-               << SS::format(um, false, survey_ppm ? ref : 0.0) << '\t'
+               << (combo.empty() ? SS::format(um, false, survey_ppm ? ref : 0.0)
+                                 : um.empty() ? combo : combo + ";" + SS::format(um, false, survey_ppm ? ref : 0.0))
+               << '\t'
                << SS::format(pm, true, survey_ppm ? ref : 0.0) << '\t' << iso;
           // The observation classes, most frequent first (three at most).
           std::vector<std::pair<uint64_t, std::string>> cls;

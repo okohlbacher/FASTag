@@ -18,6 +18,12 @@
   defaults equal the best manual setting (+0.003, CI 0.000 to +0.019) and beat the best single global setting on
   mixed runs (+0.049, CI +0.015 to +0.088). Orbitrap tags are byte-identical (10 of 10). Change A alone: +0.064.
   The cost is the wider tolerance: 6.7 ms against 0.38 ms CPU per ion-trap MS2.
+- **Combined mass-shift names.** `-delta_out`'s `unimod` column now names a two-modification reading
+  first when it fits the row's most-supported localized site and the best single Unimod name does not
+  explain that site's residue. +58.005 on a protein N-terminal Met was named only
+  `Carboxymethyl@N-term`; it now reads `Oxidation+Acetyl@…` (sites M and Protein N-term) before `Carboxymethyl@N-term`
+  (seen in the PXD040281 FFPE survey). The `isobars` column, which already listed both, and rows
+  with a residue-specific best name (e.g. Dimethyl@K) are unchanged.
 
 ## 1.15.4 (2026-11-20)
 

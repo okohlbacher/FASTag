@@ -316,6 +316,24 @@ int main(int argc, char** argv)
     const std::string cmx = iso(58.0055, {"Protein N-term|M"});
     check(cmx.find("Oxidation+Acetyl") != std::string::npos, "carboxymethyl = acetyl + oxidation: " + cmx);
     check(iso(52.912, {"W"}) == "-", "no name: no class");
+
+    // 1.15.5: a two-modification reading that fits the localized site is named first.
+    auto combo = [&](double d, const std::vector<std::string>& keys, const std::vector<std::uint64_t>& sup) {
+      std::vector<SS::Site> st;
+      for (const auto& k : keys) st.push_back(site(k));
+      const auto ms = SS::match(umc, d, 0.005, st, cam, SIZE_MAX, &sup);
+      return SS::siteCombination(d, ms, st, &sup, umc, cam, 0.001, 0.0);
+    };
+    const std::string pnm = combo(58.0055, {"Protein N-term|M"}, {1007});
+    check(pnm.rfind("Oxidation+Acetyl@", 0) == 0 && pnm.find("M") != std::string::npos &&
+              pnm.find("Protein N-term") != std::string::npos,
+          "+58.005 on a protein N-terminal Met: Acetyl+Oxidation, not Carboxymethyl@N-term: " + pnm);
+    check(combo(58.0055, {"Protein N-term|M", "K"}, {1007, 3}).rfind("Oxidation+Acetyl@", 0) == 0,
+          "the most-supported site decides");
+    check(combo(58.0055, {"K"}, {10}).empty(), "+58.005 on K: no Acetyl+Oxidation reading (Oxidation does not fit K)");
+    check(combo(28.0313, {"K"}, {10}).empty(), "Dimethyl@K already explains K: no Methyl+Methyl entry");
+    check(combo(15.9949, {"M"}, {10}).empty(), "a single unambiguous name stays alone");
+    check(combo(42.0106, {"N-term|S"}, {10}).empty(), "Acetyl@N-term is common: not Methyl+Formyl");
   }
 
   // ---------------------------------------------------------------- Unimod
