@@ -93,11 +93,14 @@ failed; the WebKit Playwright project was not run.
 | 8 | 410784c9 | typecheck OK; vitest 1370 passed; Playwright 118 passed; screens 58 PNGs (incl. popover-in-pane check) | 0 / 5 / 11 (4) | 5 |
 | 9 | 78322292 | typecheck OK; vitest 1384 passed, 17 skipped; Playwright 118 passed, 9 skipped; screens 59 PNGs | 0 / 3 / 17 (5) | 3 |
 | 10 | 6a81f2ab | typecheck OK; vitest 1405 passed, 17 skipped; Playwright 118 passed, 9 skipped; screens 59 PNGs | 0 / 3 / 18 (4) | 3 |
+| 11 | 3f16dffd | typecheck OK; vitest 1425 passed, 17 skipped; screens 59 PNGs (Playwright suites not run) | 0 / 8 / 12 (0) | 8 |
 
 Blocking findings fell from 19 to 3; since round 4 no critical finding has
 been found.
 
-## 4. Open findings (round 10, at 6a81f2ab)
+## 4. Findings of rounds 10 and later
+
+### Round 10 (at 6a81f2ab)
 
 No critical findings. The three round-10 majors are fixed in f54dd66b:
 - Characterize alkylation note: the off state says "Turning it on raises Extension 2 → 3 …" (test round10.test.tsx).
@@ -105,7 +108,7 @@ No critical findings. The three round-10 majors are fixed in f54dd66b:
 - Mass-shift chart labels: named from the CLI's interpretations; an assumed window labels the mass only (test round11.test.tsx).
 The 18 round-10 minors are fixed (table below).
 
-### Major (3)
+#### Major (3)
 
 | Area | Problem | Fix |
 |---|---|---|
@@ -113,7 +116,7 @@ The 18 round-10 minors are fixed (table below).
 | Run association | `sameRunIn` (`reports.ts:23-30`) treats two files with different persisted run ids as one run when either record lists the other path. Run B rewrites `sample.tags.tsv`; A's leftover `sample.qc.tsv` is shown beside B's tags with no warning. | Two distinct persisted run ids are different runs; use the outputs-list match only for synthetic `shown:<out>` mappings; regression test. |
 | Mass-shift chart labels | Bins are named after the nearest bundled modification within the window, which without a mass-gap report (the workflow default) is an assumed ±0.5 Da: a +15.600 Da bin is labelled "Oxidation", which can contradict the CLI's UniMod assignments (`MassGapChart.tsx:146-163`). | Name bins only from the CLI's assignments; draw mass-only matches in a separate, marked style ("nearest known mass ±0.5 Da"). |
 
-### Minor (18)
+#### Minor (18)
 
 All 18 fixed; none rejected. Tests: `results/round10Minor.test.tsx` unless named.
 
@@ -137,6 +140,42 @@ All 18 fixed; none rejected. Tests: `results/round10Minor.test.tsx` unless named
 | Mass shifts: 0 Da bin | "Spectra with a mass gap" and its warning count the unshifted 0 Da bin. | Fixed in 895aec4f: "Placed spectra" beside "Shifted (≥ 0.5 Da)"; the warning says "placed on the database" and keeps its threshold on the placed spectra (the CLI's gap-peak share is of those). |
 | Species tab, empty report | The Da-tolerance banner is skipped in the empty branch. | Fixed in c9b8d810. |
 | Table sort | Blank numeric cells sort as 0, not last (`Number('')`). | Fixed in d2f11248 (test `viewers.test.tsx`). |
+
+### Round 11 (at 3f16dffd)
+
+Lens: simplicity and intuitiveness per workflow. Codex, Kimi, Vibe and
+Claude; duplicates merged. All fixed, none rejected. Tests:
+`gui/src/review/round11.test.tsx` unless named.
+
+#### Major (8)
+
+| Area | Problem | Result |
+|---|---|---|
+| Digest: Labels | The panel showed only the isobaric tag-end counts: a SILAC call read "No label tag ends". | Fixed in c5f4c41c: the CLI's label call (or no call, with its reason) leads; the counts follow under "Isobaric tag ends". |
+| Database reduction: Comet | The Comet template sat in Advanced; without it the CLI writes a fragment the GUI called a configuration. | Fixed in c5f4c41c: with Comet, Settings shows the template; without one the product says it is a fragment to merge. |
+| Database reduction: protease | Protease only in Advanced; a non-tryptic run withholds the FASTA and configuration. | Fixed in c5f4c41c: Protease in Settings ("Trypsin; Auto for another or unknown digest"). |
+| Mass shifts: first table | The placements were the first table; the mass-shift table (sites, UniMod) was a second click under "Gap peaks". | Fixed in e07afe8a (tests `viewers.test.tsx`, `viewers.app.test.tsx`, `p4c.spec.ts`): "Mass-shift table" first, Placements beside it. |
+| Triage: candidates | Setup asks for the Triage E-value, but Results had no way to list the candidates (triage = 1). | Fixed in e5382ae4, 697d52b9: "Triage candidates" filter and count, column beside Identified, Overview tile. |
+| Export tags: extension | Extension 0 gives 3-residue tags, so the workflow's assembly read export (8+) was empty. | Fixed in ff13d4c0: Extension 3; the e2e fixture re-recorded (6,279 tags). |
+| Batch: Triage | A Triage batch summary showed only spectrum counts. | Fixed in 8f21c27c (test `batchWorkflows.test.ts`): Median identifiability per job. |
+| Input: vendor files | Picker, drop and folder add refused .raw and timsTOF .d/.d.zip, which the bundled CLI reads; the FAQ said they are not read. | Fixed in 714b42a8 (Rust test `drop.rs`). |
+
+#### Minor (12)
+
+| Area | Problem | Result |
+|---|---|---|
+| Outputs card | The wide alkylation row left a gap beside Label report. | Fixed in 368de7c8 (grid-auto-flow dense). |
+| Triage: unscored census | A census without a score opened as a ranking, in file order. | Fixed in e5382ae4: "Per-spectrum census", no ranking claim; a scored unsorted census is sorted by score. |
+| Batch: One file disabled | No reason given while a batch is queued. | Fixed in 368de7c8. |
+| Mass shifts: trypsin | Placements are tryptic; the help did not say so. | Fixed in 368de7c8 (field help and low-placed warning). |
+| Decoys | Help said FASTag adds no decoys; for MSFragger it appends rev_ decoys. | Fixed in 368de7c8. |
+| Species help | Named removed workflows. | Fixed in 368de7c8. |
+| Placements as identifications | No caveat at the product. | Fixed in 368de7c8: "candidates, not FDR-controlled" (README name kept). |
+| Mass shifts empty state | Said the workflow writes the Mass-gap report. | Fixed in 368de7c8. |
+| Species footnote | Named the CLI option `species_deconvolve`. | Fixed in 368de7c8. |
+| Batch plan line | "out:" (CLI name). | Fixed in 368de7c8: "outputs in …". |
+| Ranked product | No experimental badge. | Fixed in 368de7c8. |
+| Glyco stat | "Flag rule (glyco_min_fraction)". | Fixed in 368de7c8: "minimum oxonium share". |
 
 Before merging: `origin/main` has moved on to 1.15.4 (regenerated
 `params.generated.json`, `-shortlist_defaults`, `-shortlist_max_evalue`
