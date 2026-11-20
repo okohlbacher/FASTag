@@ -54,7 +54,7 @@ export const PRODUCTS: readonly Product[] = [
   { param: 'census_summary_out', label: 'Identifiability summary', what: 'The counts of the run, written with the table.', flag: 'census', follows: 'census_out' },
   // The CLI writes the ranking from the census rows: without -census it
   // ignores census_sorted_out, so the table is needed (and locked) with it.
-  { param: 'census_sorted_out', label: 'Spectra ranked by identifiability', what: 'The table ordered by the identifiability score.', needs: ['census_out'], also: { census: true, census_score: true } },
+  { param: 'census_sorted_out', label: 'Spectra ranked by identifiability', what: 'The table ordered by the identifiability score (experimental).', needs: ['census_out'], also: { census: true, census_score: true } },
   { param: 'digest_out', label: 'Digest report', what: 'Terminal residues and the protease they fit.' },
   { param: 'label_out', label: 'Label report', what: 'Isobaric and SILAC labels the tags carry.' },
   { param: 'alkylation_out', label: 'Alkylation report', what: 'The reagent that alkylated the cysteines, from a shipped proteome.' },

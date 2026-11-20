@@ -156,7 +156,7 @@ export const TASKS: readonly Task[] = [
   {
     id: 'triage',
     label: 'Identifiability triage',
-    blurb: 'Rank MS/MS spectra by how identifiable they are, and mark those your search identified.',
+    blurb: 'Rank MS/MS spectra by how identifiable they are (experimental score), and mark those your search identified.',
     products: 'ranking',
     values: { ...ALL, census: true, census_score: true, census_sorted_out: 'census_sorted.tsv' },
     basic: ['census_ids', 'census_ids_fdr', 'census_triage_evalue'],

@@ -397,7 +397,7 @@ export function buildOverview(i: OverviewInputs): Overview {
       label: 'Median identifiability',
       value: tf.median != null ? tf.median.toFixed(3) : '–',
       tone: tf.median != null ? 'figure' : 'off',
-      note: `the middle score of ${fmt(tf.ranked)} ranked MS2 spectra (0 to 1); a ranking, not a quality call`
+      note: `the middle score of ${fmt(tf.ranked)} ranked MS2 spectra (0 to 1); an experimental ranking, not a quality call`
     })
   if (tf?.ids)
     figures.push({

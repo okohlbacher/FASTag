@@ -1099,7 +1099,7 @@ export const PARAM_UI: Record<string, ParamUi> = {
     label: 'Identifiability score',
     depends: [CENSUS_OFF],
     help: {
-      text: 'Add an identifiability score to the census: a ranking of the MS2 spectra by how likely a standard database search identifies them. Not a quality call.'
+      text: 'Add an identifiability score to the census: a ranking of the MS2 spectra by how likely a standard database search identifies them. Experimental: not validated on held-out data. Not a quality call.'
     }
   },
   census_sorted_out: {

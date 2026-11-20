@@ -187,7 +187,8 @@ export const WORKFLOWS: HelpPage = {
             identified; an unidentified spectrum with a good tag is a triage candidate.
           </p>
           <p>
-            The score ranks spectra; it is not a quality call and not an error rate.
+            The score ranks spectra; it is not a quality call and not an error rate. It is experimental
+            (<code>-census_score</code>): not yet validated on held-out data.
           </p>
         </>
       )
