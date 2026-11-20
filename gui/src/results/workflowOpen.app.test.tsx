@@ -5,6 +5,7 @@
 import { act, fireEvent, screen, waitFor, within } from '@testing-library/react'
 import { describe, expect, it } from 'vitest'
 import { installMockBridge } from '../testing/mockBridge'
+import type { RunRecord } from '../types'
 import { click, flush, goTo, pickSingle, renderColdApp, runButton } from '../testing/render'
 import qcTsv from '../fixtures/cli-1.15/ecoli_ms2_small_0.3da.qc.tsv?raw'
 import shortlistTsv from '../fixtures/cli-1.15/ecoli_ms2_small_0.3da.shortlist.tsv?raw'
@@ -203,4 +204,40 @@ describe('opening another run\'s report (round 4)', () => {
     await click(screen.getByRole('button', { name: 'Open report…' }))
     await waitFor(() => expect(tabs()).not.toContain('QC'))
   })
+})
+
+// Round 10 minor: a spectrum opened from a ranking alone draws the tags of
+// the ranking's run only, never those of a later run that rewrote its path.
+describe('round 10 minor: Spectrum from a ranking', () => {
+  const rec = (id: string, outputs: string[], end: number): RunRecord => ({
+    id, input: '/d/a.mzML', outputs, cwd: '/d', argv: ['FASTag', '-in', '/d/a.mzML', '-out', '/d/a.tags.tsv'], status: 'ok', exitCode: 0, message: null,
+    start: end - 1000, end, cleanup: { removed: [], renamed: [], failed: [] }, params: {}, workflow: 'triage'
+  })
+  for (const [what, later, queried] of [
+    ['its own run wrote the tags last: they are read', false, true],
+    ['a later run rewrote the tags path: none are read', true, false]
+  ] as const) {
+    it(what, async () => {
+      const mock = installMockBridge()
+      mock.reportFiles['/d/a.census_sorted.tsv'] = censusSortedTsv
+      const a = rec('A', ['/d/a.tags.tsv', '/d/a.census_sorted.tsv'], 1_000)
+      // historyOf: the newest record listing the path first.
+      mock.history = later ? [rec('B', ['/d/a.tags.tsv'], 2_000), a] : [a]
+      mock.nextPickReport = '/d/a.census_sorted.tsv'
+      mock.spectrumSupportResult = { supported: true, probed: true, detail: '' }
+      await renderColdApp(mock)
+      await goTo('results')
+      await click(screen.getByRole('button', { name: 'Open report…' }))
+      await waitFor(() => expect(selected()).toBe('Triage'))
+      await click(await screen.findByRole('button', { name: 'Open in Spectrum' }))
+      await waitFor(() => expect(selected()).toBe('Spectrum'))
+      await flush()
+      await flush()
+      if (queried) await waitFor(() => expect(mock.resultsQueryCalls.some((c) => c.path === '/d/a.tags.tsv')).toBe(true))
+      else {
+        await waitFor(() => expect(screen.getByText(/^Tags file not opened/)).toBeDefined())
+        expect(mock.resultsQueryCalls.some((c) => c.path === '/d/a.tags.tsv')).toBe(false)
+      }
+    })
+  }
 })

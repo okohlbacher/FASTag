@@ -167,10 +167,18 @@ export default function ResultTabs(p: ResultTabsProps): JSX.Element {
   useEffect(() => {
     if (!path || fromRun || !spectrumOn) return
     let live = true
-    window.fastag
-      .historyOf(path)
-      .catch(() => null)
-      .then((r) => live && setRecord({ path, input: r?.input ?? null, params: r?.params ?? null, tags: r ? tagsOutput(r) : null }))
+    void (async () => {
+      const r = await window.fastag.historyOf(path).catch(() => null)
+      let tags = r ? tagsOutput(r) : null
+      // The ranking's tags output may have been rewritten by a later run:
+      // its newest writer must be the ranking's run, or the tags drawn
+      // would be another run's.
+      if (r && tags && tags !== path) {
+        const w = await window.fastag.historyOf(tags).catch(() => null)
+        if (w && w.id !== r.id) tags = null
+      }
+      if (live) setRecord({ path, input: r?.input ?? null, params: r?.params ?? null, tags })
+    })()
     return () => {
       live = false
     }
