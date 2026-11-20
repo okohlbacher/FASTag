@@ -314,8 +314,12 @@ export default function SetupForm({
     // The detail of a workflow's note (tasks.ts productNotes): its (?).
     const detail = !on ? task.productNotes?.[p.param] : undefined
     const spec = PARAM_BY_NAME.get(p.param)
+    // A sentence of a note (the alkylation raise) takes a line of its own
+    // across the card, so it neither squeezes the row nor pushes the (?)
+    // under it.
+    const wide = p.param === 'alkylation_out' && why != null
     return (
-      <li key={p.param} className={`product${on ? ' on' : ''}${locked ? ' fixed' : ''}`}>
+      <li key={p.param} className={`product${on ? ' on' : ''}${locked ? ' fixed' : ''}${wide ? ' wide' : ''}`}>
         <input
           id={id}
           type="checkbox"
@@ -329,6 +333,7 @@ export default function SetupForm({
         <label htmlFor={id} title={p.what}>
           {p.label}
         </label>
+        {detail && <HelpPopover name={p.param} label={p.label} description={detail} deflt="not written" />}
         {p.experimental && <span className="badge">experimental</span>}
         {name && <span className="product-file mono">→ {name}</span>}
         <span id={`${id}-d`} className="product-note">
@@ -339,7 +344,6 @@ export default function SetupForm({
             Set Extension to {alkylationShort(values)}
           </button>
         )}
-        {detail && <HelpPopover name={p.param} label={p.label} description={detail} deflt="not written" />}
         {on && !!out && !p.column && p.param !== 'out' && spec?.type === 'output-file' && (
           <button type="button" className="link small" aria-label={`Change the file of ${p.label}`} onClick={() => void session.pickFor(spec)}>
             Change…

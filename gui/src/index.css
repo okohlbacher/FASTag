@@ -1312,6 +1312,8 @@ dl.qc-strip .stat dd { margin: 0; font-size: var(--text-md); font-weight: 600; }
    pushes the next checkbox out of line. */
 #card-outputs li.product { align-self: start; row-gap: 0; }
 #card-outputs li.product .product-note { min-width: 0; }
+#card-outputs li.product.wide { grid-column: 1 / -1; }
+li.product.wide .product-note { flex-basis: 100%; padding-left: calc(13px + var(--space-2)); }
 @media (max-width: 900px) { #card-outputs ul.products { grid-template-columns: minmax(0, 1fr); } }
 /* The run bar: plan line, its buttons and Run on one row. */
 .view-setup .runbar { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; column-gap: var(--space-4); row-gap: 4px; padding-top: var(--space-2); padding-bottom: var(--space-2); }

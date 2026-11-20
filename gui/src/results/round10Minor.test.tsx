@@ -2,7 +2,7 @@
 
 import { render, screen } from '@testing-library/react'
 import { installMockBridge } from '../testing/mockBridge'
-import { click, openGroup, renderApp } from '../testing/render'
+import { click, openGroup, renderApp, renderCharacterizeApp } from '../testing/render'
 import { describe, expect, it } from 'vitest'
 import SpeciesPanel from '../SpeciesPanel'
 import { TASKS } from '../setup/tasks'
@@ -56,5 +56,20 @@ describe('round 10 minor: alkylation_proteome help names the field plainly', () 
     const t = PARAM_UI.alkylation_proteome.help!.text
     expect(t).not.toMatch(/Advanced › Placement, advanced,/)
     expect(t).toMatch(/group “Placement, advanced”, which is under Other analyses in every workflow but Mass-shift survey/)
+  })
+})
+
+describe('round 10 minor: the Outputs card layout of the alkylation row', () => {
+  it('the (?) follows the label and the note takes a full line', async () => {
+    const mock = installMockBridge()
+    await renderCharacterizeApp(mock)
+    const row = document.getElementById('out-alkylation_out')!.closest('li')!
+    expect(row.classList.contains('wide')).toBe(true)
+    const kids = [...row.children]
+    const label = kids.findIndex((e) => e.tagName === 'LABEL')
+    const help = kids.findIndex((e) => e.classList.contains('help-pop-wrap'))
+    const note = kids.findIndex((e) => e.classList.contains('product-note'))
+    expect(help).toBe(label + 1)
+    expect(note).toBeGreaterThan(help)
   })
 })
