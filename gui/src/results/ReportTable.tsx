@@ -131,6 +131,8 @@ const FORMATS: Record<string, Format> = {
     },
     num: false
   },
+  // -census_ids: an unidentified spectrum with a tag at or below the triage E-value.
+  triage: { label: 'Triage candidate', text: (v) => (v === '1' ? 'yes' : v === '0' ? 'no' : ''), num: false },
   accession: { label: 'Accession' },
   kept: { label: 'Kept', text: (v) => (v === '1' ? '✓' : v === '0' ? '–' : v), num: false },
   reason: { label: 'Reason', text: (v) => REASON_WORDS[v] ?? v.replace(/_/g, ' ') },
@@ -501,6 +503,7 @@ function ShortlistView({ tsv, files }: { tsv: Tsv; files: { label: string; path:
 
 const FILTERS = [
   { id: 'all', label: 'All spectra' },
+  { id: 'candidates', label: 'Triage candidates' },
   { id: 'identified', label: 'Identified' },
   { id: 'not', label: 'Not identified' },
   { id: 'unknown', label: 'Unknown' }
@@ -510,54 +513,65 @@ type Filter = (typeof FILTERS)[number]['id']
 const NO_IDS = 'Give the identifications of this run in Setup to mark identified spectra.'
 
 function TriageView({ tsv, openSpectrum }: { tsv: Tsv; openSpectrum?: (spectrum: string) => void }): JSX.Element {
-  // The ranking first: rank, score, identified, status, then what the spectrum is.
+  // The ranking first: rank, score, identified, candidate, status, then what the spectrum is.
   const columns = useMemo(() => {
     const all = columnsOf(tsv)
-    const lead = ['ident_rank', 'ident_score', 'identified', 'status', 'spectrum', 'best_evalue', 'best_len', 'charge_used', 'precursor_mz', 'rt']
+    const lead = ['ident_rank', 'ident_score', 'identified', 'triage', 'status', 'spectrum', 'best_evalue', 'best_len', 'charge_used', 'precursor_mz', 'rt']
     const at = (c: Column): number => (lead.includes(c.id) ? lead.indexOf(c.id) : lead.length)
     return all.map((c, i) => ({ c, i })).sort((x, y) => at(x.c) - at(y.c) || x.i - y.i).map((x) => x.c)
   }, [tsv])
   const st = tsv.columns.indexOf('status')
   const idc = tsv.columns.indexOf('identified')
+  const trc = tsv.columns.indexOf('triage')
   const sp = tsv.columns.indexOf('spectrum')
+  // A census without -census_score has no ranking: it is shown in file
+  // order and named as what it is. A scored census not yet sorted
+  // (census_out) is sorted by its score.
+  const scored = tsv.columns.includes('ident_score')
+  const sorted = tsv.columns.includes('ident_rank')
   const [filter, setFilter] = useState<Filter>('all')
   const states = useMemo(() => (idc < 0 ? [] : tsv.rows.map((r) => idState(r[idc]))), [tsv, idc])
-  const count = (f: Filter): number => (f === 'all' ? tsv.rows.length : states.filter((x) => x === f).length)
+  const isCandidate = (i: number): boolean => trc >= 0 && (tsv.rows[i][trc] ?? '').trim() === '1'
+  const off = (f: Filter): boolean => f !== 'all' && (f === 'candidates' ? trc < 0 : idc < 0)
+  const count = (f: Filter): number =>
+    f === 'all' ? tsv.rows.length : f === 'candidates' ? tsv.rows.filter((_, i) => isCandidate(i)).length : states.filter((x) => x === f).length
   const ids = useMemo(() => {
-    const keep = tsv.rows.map((_, i) => i).filter((i) => filter === 'all' || idc < 0 || states[i] === filter)
+    const keep = tsv.rows
+      .map((_, i) => i)
+      .filter((i) => filter === 'all' || off(filter) || (filter === 'candidates' ? isCandidate(i) : states[i] === filter))
     return Uint32Array.from(keep)
-  }, [tsv, filter, idc, states])
+  }, [tsv, filter, idc, trc, states])
   const counts = st >= 0 ? Object.entries(tsv.rows.reduce<Record<string, number>>((m, r) => ({ ...m, [r[st]]: (m[r[st]] ?? 0) + 1 }), {})) : []
+  const label = scored ? 'Spectra ranked by identifiability' : 'Per-spectrum census'
   return (
     <>
       <p className="report-sum">
-        {fmtInt(tsv.rows.length)} MS2 spectra, ranked by how identifiable they are
+        {fmtInt(tsv.rows.length)} MS2 spectra{scored ? ', ranked by how identifiable they are' : ' in file order (no identifiability score)'}
+        {trc >= 0 && <>; {fmtInt(count('candidates'))} triage candidates</>}
         {counts.length > 0 && <>; tag status: {counts.map(([k, n]) => `${fmtInt(n)} ${k.replace(/_/g, ' ')}`).join(', ')}</>}.
       </p>
       <div className="row tight" role="group" aria-label="Show">
         {FILTERS.map((f) => (
-          <label
-            key={f.id}
-            className={`seg-opt small${f.id !== 'all' && idc < 0 ? ' off' : ''}`}
-            title={f.id !== 'all' && idc < 0 ? NO_IDS : undefined}
-          >
-            <input type="radio" name="triage-filter" checked={filter === f.id} disabled={f.id !== 'all' && idc < 0} onChange={() => setFilter(f.id)} />
+          <label key={f.id} className={`seg-opt small${off(f.id) ? ' off' : ''}`} title={off(f.id) ? NO_IDS : undefined}>
+            <input type="radio" name="triage-filter" checked={filter === f.id} disabled={off(f.id)} onChange={() => setFilter(f.id)} />
             {f.label}
-            {idc >= 0 && <span className="count">{fmtInt(count(f.id))}</span>}
+            {!off(f.id) && f.id !== 'all' && <span className="count">{fmtInt(count(f.id))}</span>}
           </label>
         ))}
         {idc < 0 && <span className="muted">{NO_IDS}</span>}
       </div>
       <p className="hint">
-        The score ranks spectra; it is not a quality call and not an error rate.
+        {scored && 'The score ranks spectra; it is not a quality call and not an error rate.'}
+        {trc >= 0 && ' Triage candidates: spectra not identified whose best tag is at or below the Triage E-value, a list for a second (for example semi-specific) search.'}
         {idc >= 0 && ' Unknown: the identifications neither name nor rule out the spectrum.'}
       </p>
       <DataTable
-        label="Spectra ranked by identifiability"
+        label={label}
         columns={columns}
         ids={ids}
         total={tsv.rows.length}
         keep={tsv}
+        sort={scored && !sorted ? { column: 'ident_score', desc: true } : null}
         onOpen={openSpectrum && sp >= 0 ? (i) => openSpectrum(tsv.rows[i][sp] ?? '') : undefined}
         openLabel="Open in Spectrum"
       />

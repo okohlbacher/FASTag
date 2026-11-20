@@ -204,6 +204,8 @@ export function triageFacts(text: string | null | undefined): {
   ranked: number
   median: number | null
   ids: { identified: number; not: number; unknown: number } | null
+  /// Triage candidates (triage = 1), when the table has the column.
+  candidates?: number
 } | null {
   if (!text) return null
   const lines = text.split(/\r?\n/).filter((l) => l !== '' && !l.startsWith('#'))
@@ -222,7 +224,8 @@ export function triageFacts(text: string | null | undefined): {
       ids[t === '1' || t === 'true' || t === 'yes' ? 'identified' : t === '0' || t === 'false' || t === 'no' ? 'not' : 'unknown']++
     }
   }
-  return { ranked: rows.length, median: mid, ids }
+  const trc = head.indexOf('triage')
+  return { ranked: rows.length, median: mid, ids, ...(trc >= 0 ? { candidates: rows.filter((r) => (r[trc] ?? '').trim() === '1').length } : {}) }
 }
 
 /// The smallest mass shift counted as one (Da): nearer 0 is the
@@ -406,6 +409,14 @@ export function buildOverview(i: OverviewInputs): Overview {
       value: `${fmt(tf.ids.identified)} of ${fmt(tf.ranked)}`,
       tone: 'figure',
       note: `by the identifications given; ${fmt(tf.ids.not)} not identified, ${fmt(tf.ids.unknown)} unknown`
+    })
+  if (tf?.candidates != null)
+    figures.push({
+      id: 'candidates',
+      label: 'Triage candidates',
+      value: fmt(tf.candidates),
+      tone: 'figure',
+      note: 'not identified, with a tag at or below the Triage E-value: for a second search (Triage tab)'
     })
   const dc = keyValues(i.deltaCounts)
   const placed = numOf(dc.get('ms2_placed'))
@@ -914,7 +925,7 @@ const LEAD_TILES: Record<string, string[]> = {
   'mass-shift': ['topshift', 'placed'],
   species: ['genus'],
   'db-reduction': ['shortlist'],
-  triage: ['ident-score', 'identified', 'tagged'],
+  triage: ['ident-score', 'identified', 'candidates', 'tagged'],
   characterize: ['protease', 'label', 'genus', 'glyco', 'alkylation']
 }
 
