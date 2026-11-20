@@ -24,7 +24,7 @@ import { renameSearchConfig } from './products'
 import { defaultSpeciesOut, dirName, rebaseOutputs, stripExt } from '../app/paths'
 import { cliText, sameValue } from '../app/format'
 import { focusLater } from '../app/focus'
-import { DEFAULTS, baseOf, baseValues, originText, startValues, taskById, taskOf, type Origin, type TaskId } from './tasks'
+import { DEFAULTS, LAST_WORKFLOW, baseOf, baseValues, originText, startValues, taskById, taskOf, type Origin, type TaskId } from './tasks'
 import { applyPreset as presetValues, diffNames, droppedPaths, normalizePreset, presetDiff } from './presetDiff'
 
 // Initial form state IS the tool's own defaults, straight from the manifest.
@@ -49,6 +49,8 @@ interface Snapshot {
   values: Record<string, ParamValue>
   origin: Origin
   originValues: Record<string, ParamValue>
+  // The recipe fields the user edited (fillRecipe keeps them).
+  edited: Set<string>
 }
 
 /// @p start: where the session's values come from (D1: the app passes the
@@ -95,6 +97,8 @@ export function useSession(start: Origin = DEFAULTS) {
   // The parameters of the last session's run (D6): offered with "Apply
   // last-used (n)", never applied on their own. null once applied.
   const [lastUsed, setLastUsed] = useState<Record<string, ParamValue> | null>(null)
+  // The workflow those values ran in, when the run recorded one.
+  const [lastWorkflow, setLastWorkflow] = useState<TaskId | null>(null)
   const [taxdbK, setTaxdbK] = useState<number | null>(null)
   // The instrument preset last chosen (read-only built-ins, presets.ts).
   const [instrument, setInstrument] = useState('')
@@ -115,6 +119,8 @@ export function useSession(start: Origin = DEFAULTS) {
       if (st.lastUsed) {
         const known = Object.entries(st.lastUsed).filter(([n]) => RENDERED.includes(n)) as [string, ParamValue][]
         if (known.length) setLastUsed(Object.fromEntries(known))
+        const wf = st.lastUsed[LAST_WORKFLOW]
+        if (typeof wf === 'string' && taskById(wf)) setLastWorkflow(taskById(wf)!.id)
       }
     })
   }, [])
@@ -149,12 +155,16 @@ export function useSession(start: Origin = DEFAULTS) {
   // changed engine renames its unedited configuration file. Report paths go
   // beside the current tags output, or this run would overwrite the last
   // session's reports.
+  // The workflow the values ran in comes back with them: its label, the
+  // record and the Overview's lead tiles name it, not the form's.
   function applyLastUsed(): void {
     if (!lastUsed) return
     const lu = lastUsed
     let merged: Record<string, ParamValue> = { ...values, ...lu }
     if ('search_engine' in lu && !('search_config_out' in lu)) merged = renameSearchConfig(merged, lu['search_engine'])
-    replaceForm(origin, originValues, fillRecipe(merged, new Set(Object.keys(lu))), true)
+    const o: Origin = lastWorkflow ? { kind: 'builtin', id: lastWorkflow } : origin
+    const ov = lastWorkflow ? baseValues(`builtin:${lastWorkflow}`) : originValues
+    replaceForm(o, ov, fillRecipe(merged, new Set(Object.keys(lu))), true)
     setLastUsed(null)
     focusLater(() => presetRef.current)
   }
@@ -181,17 +191,20 @@ export function useSession(start: Origin = DEFAULTS) {
   // last-used offer); @p always: take the snapshot even over a form without
   // edits of the user's, since @p v differs from the origin it keeps.
   function replaceForm(o: Origin, ov: Record<string, ParamValue>, v: Record<string, ParamValue> = ov, always = false): void {
-    if (always || diffNames(originValues, values).length > 0) setUndoSnapshot({ values, origin, originValues })
+    if (always || diffNames(originValues, values).length > 0) setUndoSnapshot({ values, origin, originValues, edited: new Set(edited.current) })
     setPresetError(null)
     setOrigin(o)
     setOriginValues(ov)
     replaceValues(beside(v))
   }
+  // The form as it was, unchanged: its output paths (custom ones too) and
+  // the recipe fields the user had edited.
   function undo(): void {
     if (!undoSnapshot) return
     setOrigin(undoSnapshot.origin)
     setOriginValues(undoSnapshot.originValues)
-    replaceValues(beside(undoSnapshot.values))
+    replaceValues(undoSnapshot.values)
+    edited.current = new Set(undoSnapshot.edited)
     setUndoSnapshot(null)
   }
   function chooseTask(id: TaskId): void {

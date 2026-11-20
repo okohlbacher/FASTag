@@ -2,7 +2,8 @@
 
 import { render, screen, within } from '@testing-library/react'
 import { installMockBridge } from '../testing/mockBridge'
-import { click, openGroup, renderApp, renderCharacterizeApp } from '../testing/render'
+import { click, openGroup, pickSingle, renderApp, renderCharacterizeApp, runButton } from '../testing/render'
+import { act, waitFor } from '@testing-library/react'
 import { describe, expect, it } from 'vitest'
 import SpeciesPanel from '../SpeciesPanel'
 import { TASKS } from '../setup/tasks'
@@ -106,5 +107,17 @@ describe('round 10 minor: Advanced density', () => {
     const group = document.querySelector('[data-group="Species, advanced"]') as HTMLElement
     expect(group.tagName).toBe('DETAILS')
     expect(document.getElementById('p-species_min_len')).not.toBeNull()
+  })
+})
+
+describe('round 10 minor: the last-used values keep their workflow', () => {
+  it('a run saves the workflow it ran in with its values', async () => {
+    const mock = installMockBridge()
+    await renderCharacterizeApp(mock)
+    await pickSingle(mock, '/d/a.mzML')
+    await click(runButton())
+    await act(async () => mock.emitDone({ ok: true, code: 0, runId: mock.lastRunId }))
+    await waitFor(() => expect(mock.savedLast.length).toBeGreaterThan(0))
+    expect(mock.savedLast[0]['workflow']).toBe('characterize')
   })
 })

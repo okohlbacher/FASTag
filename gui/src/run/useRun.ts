@@ -5,6 +5,7 @@
 // (runJob.ts), and its log lines go to its log store (logStore.ts), not to
 // React state, so a Log batch re-renders only the drawer.
 
+import { LAST_WORKFLOW } from '../setup/tasks'
 import { useCallback, useEffect, useMemo, useReducer, useRef, type Dispatch, type SetStateAction } from 'react'
 import type { LogLine, ResolvedOutputs, RunRecord, RunResult, SpeciesReport } from '../types'
 import { recordOutputs } from '../shell/HistoryView'
@@ -361,6 +362,12 @@ export function useRun(s: RunInputs, view: ViewStore, hooks: RunHooks = {}) {
   // A run call with the workflow it is started from, which the run record
   // keeps (history.rs RunRecord.workflow): its results, and a Re-run's, are
   // shown as that workflow's, whatever the form shows by then.
+  // The last-used values with the workflow they ran in (useSession
+  // applyLastUsed puts that workflow back with them).
+  const lastOf = (v: Record<string, unknown>): Record<string, unknown> => {
+    const wf = hooks.workflow?.()
+    return wf ? { ...v, [LAST_WORKFLOW]: wf } : v
+  }
   const withWorkflow = (call: Record<string, unknown>): Record<string, unknown> => {
     const wf = hooks.workflow?.()
     return wf ? { ...call, workflow: wf } : call
@@ -658,7 +665,7 @@ export function useRun(s: RunInputs, view: ViewStore, hooks: RunHooks = {}) {
       input,
       out,
       withWorkflow(runParams(input, out, overrides)),
-      () => window.fastag.saveLast(overrides ? { ...values, ...overrides } : values),
+      () => window.fastag.saveLast(lastOf(overrides ? { ...values, ...overrides } : values)),
       changedParams
     )
   }
@@ -732,7 +739,7 @@ export function useRun(s: RunInputs, view: ViewStore, hooks: RunHooks = {}) {
       dispatch({ type: 'FAILURE', failure: { title: 'Not started: the CLI would refuse these settings', reasons: refusedNow.map((c) => ({ text: c.note })) } })
       return
     }
-    window.fastag.saveLast(values)
+    window.fastag.saveLast(lastOf(values))
     view.setLogJob(null)
     dispatch({ type: 'BATCH_RUNNING', on: true })
     // Snapshot the queue we're running and key status updates by input path (the

@@ -202,6 +202,10 @@ export const TASKS: readonly Task[] = [
 
 export const LANDING_TASK: TaskId = 'export-tags'
 
+/// The key of the last-used values that names the workflow they ran in
+/// (not a parameter: the form renders no such field).
+export const LAST_WORKFLOW = 'workflow'
+
 /// Workflow ids of earlier versions, as saved presets name them: Batch QC is
 /// Characterize in Batch mode, Open results is navigation now.
 const RENAMED: Record<string, { id: TaskId; batch?: true }> = {

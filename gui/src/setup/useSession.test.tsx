@@ -9,6 +9,7 @@ import { describe, expect, it } from 'vitest'
 import { initialValues, useSession } from './useSession'
 import { PARAM_BY_NAME, msfRecipeOn } from '../paramLayout'
 import { installMockBridge } from '../testing/mockBridge'
+import { TASKS, startValues } from './tasks'
 
 describe('useSession', () => {
   it('starts from the CLI defaults, straight from the manifest', () => {
@@ -105,5 +106,46 @@ describe('useSession', () => {
     expect(result.current.values['fragment_tolerance']).toBe('0.3')
     expect(result.current.values['fragment_tolerance_unit']).toBe('Da')
     expect(result.current.instrument).toBe('iontrap-cid')
+  })
+
+  // Round 10 minor: Undo after a replacement.
+  it('Undo puts the form back unchanged: custom output paths and the recipe fields edited', async () => {
+    installMockBridge()
+    const { result } = renderHook(() => useSession())
+    act(() => result.current.setOut('/d/a.tags.tsv'))
+    act(() => result.current.chooseTask('db-reduction'))
+    act(() => {
+      result.current.setValue('shortlist_out', '/elsewhere/my-shortlist.tsv')
+      result.current.setValue('search_engine', 'msfragger')
+      result.current.setValue('shortlist_protease', 'trypsin')
+    })
+    act(() => result.current.setValue('recon_min_length', '9'))
+    act(() => result.current.chooseTask('run-qc'))
+    act(() => result.current.undo())
+    expect(result.current.task).toBe('db-reduction')
+    expect(result.current.values['shortlist_out']).toBe('/elsewhere/my-shortlist.tsv')
+    expect(result.current.values['recon_min_length']).toBe('9')
+    // The edit is still the user's: the recipe turning off leaves it.
+    act(() => result.current.setValue('search_engine', 'sage'))
+    expect(result.current.values['recon_min_length']).toBe('9')
+  })
+
+  // Round 10 minor: Apply last-used brings back the workflow it ran in.
+  it('Apply last-used with a full value set restores its workflow as the origin', async () => {
+    const mock = installMockBridge()
+    const full = startValues('builtin:characterize', '/old/a.tags.tsv')
+    mock.settings.lastUsed = { ...full, tag_length: '4', workflow: 'characterize' }
+    const { result } = renderHook(() => useSession())
+    await waitFor(() => expect(result.current.lastUsed).not.toBeNull())
+    expect(result.current.task).toBe(null)
+    act(() => result.current.setOut('/d/b.tags.tsv'))
+    act(() => result.current.applyLastUsed())
+    expect(result.current.task).toBe('characterize')
+    expect(result.current.originText).toBe(TASKS.find((t) => t.id === 'characterize')!.label)
+    expect(result.current.values['tag_length']).toBe('4')
+    expect(result.current.values['digest_out']).toBe('/d/b.digest.tsv')
+    expect(result.current.values['species']).toBe(true)
+    // Its own value set: only the changed tag length differs from the workflow.
+    expect(result.current.diff).toEqual(['tag_length'])
   })
 })
