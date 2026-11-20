@@ -202,15 +202,19 @@ export const WORKFLOWS: HelpPage = {
             <L to="gloss-reconciliation">Reconciliation</L> places tags in database peptides and reports the mass
             left over. In <strong>Mass shifts</strong>, choose <strong>Choose a FASTA and run again</strong>,
             or enable the reports with <strong>Write these reports and run again</strong>. These actions enable
-            the reconciliation table, mass-shift histogram and mass-gap report, and raise extension to 3 if it
-            was lower. You can instead open a recon, delta or mass-gap report from an earlier run.
+            the reconciliation table, mass-shift histogram and mass-gap report, and raise the extension, if it
+            was lower, to what the seeds need to reach the shortest tag placed (8 residues unless set: 3 at seed
+            length 3). You can instead open a recon, delta or mass-gap report from an earlier run.
           </p>
           <p>
+            <strong>Placed spectra</strong> counts the spectra placed on the database, unmodified ones (gap near
+            0 Da) included; <strong>Shifted</strong> counts those with a gap of 0.5 Da or more.{' '}
             <strong>Placements</strong> counts table rows; one spectrum can have several placements.{' '}
             <strong>Spectra with a placement</strong> counts the distinct spectra in that table. The view warns
             below 100 placed spectra: too few for a conclusion about modifications. If none placed, check the
-            minimum tag length in the log; <strong>Run again with extension 3</strong> may help, but does not
-            guarantee a match.
+            minimum tag length in the log; <strong>Run again with extension N</strong> computes the extension the
+            seeds need (with a FASTA filter, every seed must reach its floor) and, past the largest extension of
+            12, suggests a longer seed instead. It may help, but does not guarantee a match.
           </p>
           <ul>
             <li>Switch the gap plot between <strong>Chart</strong> and <strong>Table</strong>. Change the gap range to inspect outlying peaks; the chart reports peaks outside the shown range and any clipped zero peak. Arrow keys step through peaks when the chart is focused.</li>

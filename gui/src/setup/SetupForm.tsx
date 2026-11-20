@@ -226,9 +226,14 @@ export default function SetupForm({
   // The Extension field is under Advanced: the note's link opens its group
   // and focuses it, as the parameter search does.
   const extGroup = SECTION_OF.get('extension')?.title ?? 'Tagging'
+  // Export tags and Mass-shift survey show Extension in Settings.
+  const extInSettings = task.basic.includes('extension')
+  const extWhere = extInSettings ? 'Settings' : `Advanced › ${extGroup}`
   const goToExtension = (): void => {
-    session.setAdvancedOpen(true)
-    setOpenGroups((g) => ({ ...g, [extGroup]: true, 'Other analyses': true }))
+    if (!extInSettings) {
+      session.setAdvancedOpen(true)
+      setOpenGroups((g) => ({ ...g, [extGroup]: true, 'Other analyses': true }))
+    }
     setTimeout(() => {
       const el = document.getElementById('p-extension')
       el?.scrollIntoView?.({ block: 'center' })
@@ -245,9 +250,17 @@ export default function SetupForm({
       <button type="button" className="link small" onClick={goToExtension}>
         Extension
       </button>{' '}
-      {String(from ?? '') || '0'} → {String(to)} (Advanced › {extGroup}); {pending ? 'that changes' : 'changes'} every tag; species and digest are validated at 2.
+      {String(from ?? '') || '0'} → {String(to)} ({extWhere}); {pending ? 'that changes' : 'changes'} every tag
+      {validatedAt2()}.
     </>
   )
+  // The species and digest calls are validated at Extension 2: said only
+  // when one of those reports is on.
+  const validatedAt2 = (): string => {
+    const on = (['species_out', 'digest_out'] as const).filter((n) => { const q = PRODUCT_OF.get(n); return !!q && isOn(q, values) })
+    if (!on.length) return ''
+    return `; ${on.length === 2 ? 'species and digest are' : on[0] === 'species_out' ? 'species is' : 'digest is'} validated at 2`
+  }
   const alkylationWhy = (on: boolean): JSX.Element | string | null => {
     const need = alkylationExtension(values)
     const short = alkylationShort(values)
