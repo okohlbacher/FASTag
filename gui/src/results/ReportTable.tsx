@@ -10,11 +10,13 @@
 import { useEffect, useMemo, useState, type JSX } from 'react'
 import DataTable, { type Column } from './DataTable'
 import { baseName } from '../digestReport'
-import { revealLabel } from '../app/paths'
+import { revealLabel, stripExt } from '../app/paths'
+import { pathKey } from '../run/batch'
 import { evalueText, spectrumHint } from '../ResultsTable'
 import { PARAM_BY_NAME, choiceText, humanName } from '../paramLayout'
 import ReportHeader from './ReportHeader'
 import { unassessedKits } from './calls'
+import { shortlistFacts } from './overview'
 
 export type ReportKind = 'qc' | 'shortlist' | 'triage' | 'generic'
 
@@ -151,7 +153,8 @@ function columnsOf(tsv: Tsv): Column[] {
       num,
       mono: c === 'accession',
       text: f.text ? (i: number) => f.text!(raw(i)) : raw,
-      key: num ? (i: number) => Number(raw(i)) : undefined,
+      // A blank cell is no value: it sorts last, not as 0 (Number('')).
+      key: num ? (i: number) => (raw(i).trim() === '' ? NaN : Number(raw(i))) : undefined,
       cellTitle: f.title ? (i: number) => f.title!(raw(i)) : undefined
     }
   })
@@ -460,7 +463,14 @@ function ShortlistView({ tsv, files }: { tsv: Tsv; files: { label: string; path:
   // A file that cannot be revealed says why.
   const [revealErr, setRevealErr] = useState<string | null>(null)
   const kept = tsv.columns.indexOf('kept')
-  const nKept = kept >= 0 ? tsv.rows.filter((r) => r[kept] === '1').length : tsv.rows.length
+  const reason = tsv.columns.indexOf('reason')
+  // Background proteins (-shortlist_background) are rows without evidence:
+  // counted apart, never as proteins with evidence. The CLI's header line
+  // ("proteins: N with evidence, M kept") is the count, as the Overview's.
+  const background = reason >= 0 ? tsv.rows.filter((r) => r[reason] === 'background').length : 0
+  const head = shortlistFacts(tsv.notes.map((n) => `# ${n}`).join('\n'))
+  const nKept = head ? head.kept : kept >= 0 ? tsv.rows.filter((r) => r[kept] === '1' && r[reason] !== 'background').length : tsv.rows.length - background
+  const nOf = head ? head.of : tsv.rows.length - background
   const ids = useMemo(() => Uint32Array.from(tsv.rows.map((_, i) => i)), [tsv])
   // Only a run that wrote the reduced FASTA keeps them in it; a shortlist
   // opened alone, or one without -fasta_out, keeps them on the list.
@@ -468,7 +478,8 @@ function ShortlistView({ tsv, files }: { tsv: Tsv; files: { label: string; path:
   return (
     <>
       <p className="report-sum">
-        <strong>{nKept}</strong> of {tsv.rows.length} proteins with evidence are kept {reduced ? 'in the reduced FASTA' : 'on the shortlist'}.
+        <strong>{nKept}</strong> of {nOf} proteins with evidence are kept {reduced ? 'in the reduced FASTA' : 'on the shortlist'}
+        {background > 0 && <>, plus {background} background {background === 1 ? 'protein' : 'proteins'} kept without evidence</>}.
       </p>
       <ShortlistNotes notes={tsv.notes} />
       {files.length > 0 && (
@@ -512,7 +523,7 @@ type Filter = (typeof FILTERS)[number]['id']
 
 const NO_IDS = 'Give the identifications of this run in Setup to mark identified spectra.'
 
-function TriageView({ tsv, openSpectrum }: { tsv: Tsv; openSpectrum?: (spectrum: string) => void }): JSX.Element {
+function TriageView({ tsv, path, openSpectrum }: { tsv: Tsv; path: string; openSpectrum?: (spectrum: string) => void }): JSX.Element {
   // The ranking first: rank, score, identified, candidate, status, then what the spectrum is.
   const columns = useMemo(() => {
     const all = columnsOf(tsv)
@@ -543,6 +554,28 @@ function TriageView({ tsv, openSpectrum }: { tsv: Tsv; openSpectrum?: (spectrum:
   }, [tsv, filter, idc, trc, states])
   const counts = st >= 0 ? Object.entries(tsv.rows.reduce<Record<string, number>>((m, r) => ({ ...m, [r[st]]: (m[r[st]] ?? 0) + 1 }), {})) : []
   const label = scored ? 'Spectra ranked by identifiability' : 'Per-spectrum census'
+  // The shown rows to a TSV (the candidates for a second search, or any
+  // other filter): every column, in the file's order; the table itself is
+  // never written over.
+  const [saved, setSaved] = useState<{ ok: boolean; text: string } | null>(null)
+  async function exportShown(): Promise<void> {
+    setSaved(null)
+    const suffix = filter === 'candidates' ? 'triage_candidates' : filter === 'all' ? 'all' : filter
+    const dest = await window.fastag.saveFile(`${stripExt(path)}.${suffix}.tsv`, ['tsv'])
+    if (!dest) return
+    if (pathKey(dest) === pathKey(path)) {
+      setSaved({ ok: false, text: `Not written: ${dest} is the table shown. Choose another name.` })
+      return
+    }
+    const clean = (v: string): string => v.replace(/[\t\r\n]+/g, ' ')
+    const text = [tsv.columns.join('\t'), ...Array.from(ids, (i) => tsv.rows[i].map((v) => clean(v ?? '')).join('\t'))].join('\n') + '\n'
+    try {
+      await window.fastag.writeSummary(dest, text, [path])
+      setSaved({ ok: true, text: `${fmtInt(ids.length)} rows written to ${dest}.` })
+    } catch (e) {
+      setSaved({ ok: false, text: `Could not write the rows: ${e instanceof Error ? e.message : String(e)}` })
+    }
+  }
   return (
     <>
       <p className="report-sum">
@@ -559,7 +592,15 @@ function TriageView({ tsv, openSpectrum }: { tsv: Tsv; openSpectrum?: (spectrum:
           </label>
         ))}
         {idc < 0 && <span className="muted">{NO_IDS}</span>}
+        <button type="button" className="secondary small" disabled={ids.length === 0} onClick={() => void exportShown()}>
+          {filter === 'candidates' ? 'Export candidates…' : 'Export shown rows…'}
+        </button>
       </div>
+      {saved && (
+        <p className={saved.ok ? 'hint' : 'warn'} role="status">
+          {saved.text}
+        </p>
+      )}
       <p className="hint">
         {scored && 'The score ranks spectra; it is not a quality call and not an error rate.'}
         {trc >= 0 && ' Triage candidates: spectra not identified whose best tag is at or below the Triage E-value, a list for a second (for example semi-specific) search.'}
@@ -609,9 +650,13 @@ const REPORT_HELP: Partial<Record<ReportKind, { to: string; label: string }>> = 
 
 export default function ReportTable({ kind, path, gen, files = [], openSpectrum }: ReportTableProps): JSX.Element {
   const { tsv, error } = useReport(path, gen)
+  // A census without a score is no ranking (TriageView says the same).
+  const census = kind === 'triage' && !!tsv && !tsv.columns.includes('ident_score')
+  const title = census ? 'Per-spectrum census' : (REPORT_TITLE[kind] ?? headText(baseName(path)))
+  const help = census ? { to: 'workflow-triage', label: 'How to read the census' } : REPORT_HELP[kind]
   return (
     <div className={`report-view report-${kind}`}>
-      <ReportHeader title={REPORT_TITLE[kind] ?? headText(baseName(path))} paths={[path]} help={REPORT_HELP[kind]} />
+      <ReportHeader title={title} paths={[path]} help={help} />
       {error ? (
         <p className="warn" role="alert">
           {error}
@@ -623,7 +668,7 @@ export default function ReportTable({ kind, path, gen, files = [], openSpectrum 
       ) : kind === 'shortlist' ? (
         <ShortlistView tsv={tsv} files={files} />
       ) : kind === 'triage' ? (
-        <TriageView tsv={tsv} openSpectrum={openSpectrum} />
+        <TriageView tsv={tsv} path={path} openSpectrum={openSpectrum} />
       ) : (
         <GenericView tsv={tsv} label={baseName(path)} />
       )}

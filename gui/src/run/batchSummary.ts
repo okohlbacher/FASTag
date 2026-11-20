@@ -32,7 +32,7 @@ export const QC_COLUMNS = ['ms2', 'yield', 'charge', 'analyzer', 'instrument', '
 /// The key figures of the other workflows, each from its own report: the
 /// log's counts (Export tags), the mass-shift accounting and table, the
 /// shortlist, the identifiability summary.
-export const WORKFLOW_COLUMNS = ['spectra', 'tagRate', 'placed', 'topShift', 'kept', 'config', 'censusTagged', 'identScore'] as const
+export const WORKFLOW_COLUMNS = ['spectra', 'tagRate', 'placed', 'topShift', 'kept', 'config', 'censusTagged', 'identScore', 'glyco'] as const
 export type SummaryColumn = (typeof SUMMARY_COLUMNS)[number] | (typeof QC_COLUMNS)[number] | (typeof WORKFLOW_COLUMNS)[number]
 
 /// The columns of a batch of @p workflow: its key columns.
@@ -51,7 +51,8 @@ export function columnsFor(workflow?: string | null): readonly SummaryColumn[] {
     case 'triage':
       return ['spectra', 'identScore', 'censusTagged']
     default:
-      return SUMMARY_COLUMNS
+      // Characterize: its calls, and the glycopeptide screen it runs by default.
+      return ['genus', 'protease', 'label', 'glyco', 'alkylation']
   }
 }
 
@@ -74,7 +75,8 @@ export const COLUMN_LABEL: Record<SummaryColumn, string> = {
   kept: 'Proteins kept',
   config: 'Engine configuration',
   censusTagged: 'Tagged spectra',
-  identScore: 'Median identifiability'
+  identScore: 'Median identifiability',
+  glyco: 'Glyco flagged'
 }
 const TSV_NAME: Record<SummaryColumn, string> = {
   genus: 'top_genus',
@@ -94,7 +96,8 @@ const TSV_NAME: Record<SummaryColumn, string> = {
   kept: 'proteins_kept',
   config: 'engine_configuration',
   censusTagged: 'tagged_spectra',
-  identScore: 'median_ident_score'
+  identScore: 'median_ident_score',
+  glyco: 'glyco_flagged'
 }
 
 /// The header of column @p k for a batch whose species reports are at
@@ -247,7 +250,14 @@ export function workflowCells(d: JobData): Record<(typeof WORKFLOW_COLUMNS)[numb
     : tf && tf.median != null
       ? { text: tf.median.toFixed(3), call: null, note: `the middle score of ${fmtN(tf.ranked)} ranked MS2 spectra (0 to 1); an experimental ranking, not a quality call` }
       : { text: 'not in the report', call: null, note: 'the ranking has no identifiability score' }
-  return { spectra, tagRate, placed, topShift: topShiftCell, kept, config, censusTagged, identScore }
+  const g = log.glyco
+  const glycoOn = d.params['glyco'] === true || (typeof d.params['glyco_out'] === 'string' && d.params['glyco_out'] !== '')
+  const glyco: Cell = g
+    ? { text: `${fmtN(g.flagged)} of ${fmtN(g.of)}${g.of ? ` (${((g.flagged / g.of) * 100).toFixed(1)}%)` : ''}`, call: null, note: 'MS2 spectra with oxonium ions; evidence, not an identification' }
+    : glycoOn
+      ? { text: '–', call: null, note: 'the log has no glyco line' }
+      : off('glycopeptide report')
+  return { spectra, tagRate, placed, topShift: topShiftCell, kept, config, censusTagged, identScore, glyco }
 }
 
 export interface Cell {
@@ -392,7 +402,12 @@ export function columnsOfRuns(workflows: readonly (string | null)[]): readonly S
 /// @p workflow: the batch's workflow, which picks the columns (columnsFor),
 /// or the workflows its jobs ran with (columnsOfRuns).
 export function buildSummary(jobs: readonly BatchJob[], data: ReadonlyMap<string, JobData>, workflow?: string | readonly (string | null)[] | null): Summary {
-  const columns = Array.isArray(workflow) ? columnsOfRuns(workflow) : columnsFor(workflow as string | null | undefined)
+  const all = Array.isArray(workflow) ? columnsOfRuns(workflow) : columnsFor(workflow as string | null | undefined)
+  // Alkylation is off by default: its column only when a job asked for the
+  // alkylation or mass-gap report (the Overview shows its tile alike).
+  const sent = (d: JobData, k: string): boolean => typeof d.params[k] === 'string' && d.params[k] !== ''
+  const alkAsked = [...data.values()].some((d) => sent(d, 'alkylation_out') || sent(d, 'massgap_out'))
+  const columns = alkAsked ? all : all.filter((c) => c !== 'alkylation')
   const base = jobs.map((j) => {
     const done = j.status === 'done'
     const d = done && j.outputs ? data.get(j.input) : undefined

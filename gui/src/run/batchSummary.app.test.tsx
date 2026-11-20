@@ -48,7 +48,9 @@ describe('the batch summary', () => {
     await waitFor(() => expect(within(bodyRows()[2]).getByText('none (label-free)')).toBeDefined())
     const [a, b, c] = bodyRows().map(cells)
     expect(a.slice(0, 1)).toEqual(['a.mzML'])
-    expect(a).toEqual(expect.arrayContaining(['128,821', 'Homo', 'Trypsin', 'none (label-free)', 'not assessed']))
+    expect(a).toEqual(expect.arrayContaining(['128,821', 'Homo', 'Trypsin', 'none (label-free)']))
+    // Round 12: no Alkylation column when no job asked for that report.
+    expect(screen.queryByRole('columnheader', { name: /^Alkylation/ })).toBeNull()
     expect(b).toEqual(expect.arrayContaining(['172,237', 'Homo', 'Trypsin', 'TMT']))
     expect(c).toEqual(expect.arrayContaining(['none (label-free)']))
     // TMT differs from label-free (2 of 3 calls); its cell says so, in words too.

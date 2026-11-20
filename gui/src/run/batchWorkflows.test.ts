@@ -20,7 +20,7 @@ describe('the key columns of each workflow', () => {
     expect(columnsFor('mass-shift')).toEqual(['spectra', 'placed', 'topShift'])
     expect(columnsFor('db-reduction')).toEqual(['kept', 'config'])
     expect(columnsFor('triage')).toEqual(['spectra', 'identScore', 'censusTagged'])
-    expect(columnsFor('characterize')).toEqual(['genus', 'protease', 'label', 'alkylation'])
+    expect(columnsFor('characterize')).toEqual(['genus', 'protease', 'label', 'glyco', 'alkylation'])
   })
 
   // Round 11: a Triage batch shows the workflow's own figure.

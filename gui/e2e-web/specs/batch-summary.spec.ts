@@ -95,8 +95,10 @@ test('Batch summary: one row per job, the CLI calls and the majority flags equal
     }
     expect(r[2]).toBe(x.tags.toLocaleString('en-US'))
     expect([r[3], r[4], r[5]]).toEqual([x.genus.text, x.protease.text, x.label.text])
-    // Alkylation: no FASTA in the batch, no call.
-    expect(r[6]).toBe('not assessed')
+    // Round 12: Glyco flagged follows the label; no job asked for the
+    // alkylation report, so there is no Alkylation column.
+    expect(r[6]).toMatch(/^[\d,]+ of [\d,]+ \(\d+\.\d%\)$|^–$|^not written$/)
+    expect(r).toHaveLength(7)
   }
   // ≠ exactly where a call differs from its column's majority.
   const flagged = await bodyRows(page).evaluateAll((trs) =>

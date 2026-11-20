@@ -191,8 +191,9 @@ describe('the summary of a batch', () => {
       'protease_differs',
       'label',
       'label_differs',
-      'alkylation',
-      'alkylation_differs',
+      'glyco_flagged',
+      'glyco_flagged_differs',
+      // No job asked for the alkylation or mass-gap report: no column (round 12).
       'tags_tsv'
     ])
     expect(body).toHaveLength(s.rows.length)
@@ -202,10 +203,8 @@ describe('the summary of a batch', () => {
       expect(b[1]).toBe(r.input)
       expect(b[2]).toBe(r.statusText)
       expect(b[4]).toBe(r.tags == null ? '' : String(r.tags))
-      expect([b[5], b[7], b[9], b[11]]).toEqual([r.cells.genus.text, r.cells.protease.text, r.cells.label.text, r.cells.alkylation.text])
-      expect([b[6], b[8], b[10], b[12]]).toEqual(
-        [r.differs.genus, r.differs.protease, r.differs.label, r.differs.alkylation].map((d) => (d ? 'yes' : ''))
-      )
+      expect([b[5], b[7], b[9], b[11]]).toEqual([r.cells.genus.text, r.cells.protease.text, r.cells.label.text, r.cells.glyco.text])
+      expect([b[6], b[8], b[10], b[12]]).toEqual([r.differs.genus, r.differs.protease, r.differs.label, r.differs.glyco].map((d) => (d ? 'yes' : '')))
     })
     expect(body[0][3]).toBe('2')
     expect(body[0][13]).toBe('/b/run01.tags.tsv')

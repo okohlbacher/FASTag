@@ -129,15 +129,18 @@ export default function ParamField({ spec, value, onChange, onPickFile, needs, u
       </p>
       {/* On a line of its own, not run on from the hint (which the grid
           clamps to two lines). */}
-      {changed && !brief && (
+      {/* A Settings field (brief) shows it too when the workflow set a value
+          off the CLI's default (Export tags: Extension 3, FASTag's 0), so a
+          run compared with a plain CLI run holds no surprise. */}
+      {changed && (!brief || !!setBy) && (
         <p id={`${helpId}-c`} className="help changed">
-          Default {deflt} · {setBy ? <>set by {setBy}</> : <span className="mark">changed</span>}
+          {brief ? 'FASTag default' : 'Default'} {deflt} · {setBy ? <>set by {setBy}</> : <span className="mark">changed</span>}
         </p>
       )}
     </>
   )
   // The hint, and the changed line when it shows.
-  const describedBy = !invalid && changed && !brief ? `${helpId} ${helpId}-c` : helpId
+  const describedBy = !invalid && changed && (!brief || !!setBy) ? `${helpId} ${helpId}-c` : helpId
   const cls = `field${off ? ' off' : ''}${invalid ? ' invalid' : ''}`
 
   if (spec.type === 'bool') {

@@ -570,6 +570,13 @@ export function buildOverview(i: OverviewInputs): Overview {
 
   // ---- suggested settings
   const callOk = !lowEvidence
+  // The cysteine modification among the fixed modifications the run was
+  // sent, when it is not the default Carbamidomethyl: null when its list has
+  // no cysteine modification; undefined when it ran with Carbamidomethyl
+  // (or the list is not known).
+  const sentFixed = i.params['fixed_modifications']
+  const sentC = Array.isArray(sentFixed) ? (sentFixed.map(String).find((m) => /\([^)]*\bC\b[^)]*\)\s*$/.test(m)) ?? null) : undefined
+  const runFixedC: string | null | undefined = sentC !== undefined && sentC !== null && /^Carbamidomethyl\b/.test(sentC) ? undefined : sentC
   const suggestions: Suggestion[] = [
     protease.state === 'call' && callOk
       ? {
@@ -595,7 +602,16 @@ export function buildOverview(i: OverviewInputs): Overview {
           evidence: 'call',
           note: `from the alkylation call (not validated)${cutoffApplied ? '' : `; ${NOT_APPLIED}`}`
         }
-      : {
+      : runFixedC !== undefined
+        ? {
+            // The run was sent its own fixed modifications (a run sends only
+            // what differs from the CLI's Carbamidomethyl): those, as run.
+            setting: 'fixed C',
+            value: runFixedC ?? 'None (no fixed cysteine modification)',
+            evidence: 'run',
+            note: 'as this run used; alkylation not called'
+          }
+        : {
       setting: 'fixed C',
       value: 'Carbamidomethyl (C, +57.021)',
       evidence: 'default',
