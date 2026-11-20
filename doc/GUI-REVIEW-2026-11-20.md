@@ -95,6 +95,7 @@ failed; the WebKit Playwright project was not run.
 | 10 | 6a81f2ab | typecheck OK; vitest 1405 passed, 17 skipped; Playwright 118 passed, 9 skipped; screens 59 PNGs | 0 / 3 / 18 (4) | 3 |
 | 11 | 3f16dffd | typecheck OK; vitest 1425 passed, 17 skipped; screens 59 PNGs (Playwright suites not run) | 0 / 8 / 12 (0) | 8 |
 | 12 | 11fc5c5d | typecheck OK; vitest 1431 passed, 17 skipped; Playwright chromium 117 passed, 9 skipped, 1 failed (test pinned the old table order; fixed in 3ca5eab9); screens 59 PNGs | 0 / 4 / 9 (2, and 1 in part) | 4 |
+| 13 | ae258271 | typecheck OK; vitest 1440 passed, 17 skipped; Playwright chromium 118 passed, 9 skipped; screens 59 PNGs | 0 / 2 / 7 (0, and 1 in part) | 2 |
 
 Blocking findings fell from 19 to 3; since round 4 no critical finding has
 been found.
@@ -209,6 +210,29 @@ Same lens; Codex, Kimi and Vibe (Vibe: no critical or major). Tests:
 Rejected: "Help names the wrong first Results tab" (Run QC, Triage and Export tags land on QC, Triage and Tags, App.tsx LANDING_TAB; the screenshots open Overview on purpose); "1.15.4 named beside a 1.15.3 app" (the statement is true, and the bundled manifest is 1.15.5 after the merge).
 
 Also changed (coordinator): a Settings value a workflow sets off the CLI default says so on its hint line ("FASTag default 0."), first for Export tags' Extension 3 (317345f0, 15506022).
+
+### Round 13 (at ae258271)
+
+Codex, Kimi and Vibe (Vibe: no major). All fixed in ce346005; tests
+`gui/src/review/round13.test.tsx`, `sdrf/compare.test.ts`,
+`round12.test.tsx`, Rust `report.rs`.
+
+| Severity | Area | Problem | Result |
+|---|---|---|---|
+| Major | Batch outputs | Batch offered "Change…" for a report and showed one run's file names, though each job writes its own. | Fixed: "→ <input>.qc.tsv", no single destination. |
+| Major | Triage export size | Report-row export capped at 32 MiB, reports read up to 128 MiB. | Fixed: same 128 MiB cap. |
+| Minor | SDRF matching | First basename match won: /B/run.raw could match /A/run.raw. | Fixed: exact path first; a name only when unique. |
+| Minor | Sage note in Batch | Checked the single input, not the queue. | Fixed. |
+| Minor | CLI-default note | Cut to one line; not in the tooltip. | Fixed: two lines and tooltip; shorter Extension hint. |
+| Minor | Triage handoff | The candidate TSV is no spectra file. | In part: "Export candidate table…" and a hint to join a second search's identifications by native ID. Exporting candidate spectra (MGF/mzML) rejected: the CLI has no spectrum subsetting, and the CLI's triage evaluation searches the whole run and joins by native ID. |
+| Minor | Shortlist wording | "kept without evidence" for background proteins. | Fixed: "kept as background". |
+| Minor | Recipe note | Named one Advanced group for values in three. | Fixed. |
+| Minor | Help, fixed modifications | Help said "Chart and Table"; "Drop Carbamidomethyl (C) without alkylation" in every workflow. | Fixed: "Chart and Bins"; "Drop it if the sample was not alkylated." |
+
+### Continuation (state at the end of round 13)
+
+- Next: round 14 on ce346005 or later (screens `output/gui-workflows/screens/r14`, brief as `r13-brief.md` with the round number and the round-13 summary). Stop at the first round with no confirmed critical or major finding; cap: round 16.
+- Open: merge `origin/main` once v1.15.5 is tagged (new options `-tolerance_by_analyzer`, `-fragment_tolerance_itms` under Advanced; check the "Ion trap CID" preset); then vitest, tsc, Playwright chromium and webkit; push; PR against main (no version bump, no tag).
 
 Before merging: `origin/main` has moved on to 1.15.4 (regenerated
 `params.generated.json`, `-shortlist_defaults`, `-shortlist_max_evalue`
