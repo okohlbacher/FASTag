@@ -1,5 +1,21 @@
 # Changelog
 
+## Unreleased
+
+- **Tolerance per MS2 analyzer (`-tolerance_by_analyzer`, default on; PREREG-lowres-defaults change B).**
+  Each MS2 spectrum is tagged with the tolerance of its analyzer: ion-trap (ITMS) spectra at
+  `-fragment_tolerance_itms` (0.5 Da) with a complement window measured on the run's ion-trap spectra,
+  Orbitrap, FT-ICR and TOF spectra at `-fragment_tolerance` as before. Ion-trap MS2 read at the 20 ppm
+  default gave about 10 % correct rank-1 tags (CPTAC colon development data) against 54 % at 0.5 Da.
+  Only the tags change; placement, mass-shift and other reports keep `-fragment_tolerance`. Not under
+  `-stream` or with mzPeak input. `off` restores 1.15.4 exactly; an Orbitrap-only run gives the same
+  tags either way.
+- **Complement window `auto` under a Da fragment tolerance (change A).** With
+  `-fragment_tolerance_unit Da` and no complement option given, the window is measured on the run
+  instead of the fixed 0.02 Da (not under `-stream` or with mzPeak input).
+- Both are under a preregistered held-out test (PREREG-lowres-defaults); the verdict decides whether
+  they stay defaults.
+
 ## 1.15.4 (2026-11-20)
 
 Shortlist runs now use the tested shortlist recipe by default (`-shortlist_defaults plain` restores 1.15.3), and metaproteomes get a held-out-tested recommendation (`-shortlist_max_evalue 100`). Runs without a shortlist output are unchanged.
