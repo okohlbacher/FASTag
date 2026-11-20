@@ -65,6 +65,7 @@ awk 'NR <= 120 { p = int((NR - 1) / 40); s[p] = s[p] $0 }
 
 # 5-mers: the index derives a minimum placed tag length of 5 for this database.
 CH=(-in "$CHYMO" -recon_fasta "$DB" -tag_length 5 -fragment_tolerance 20 -fragment_tolerance_unit ppm -threads 2)
+CH+=(-shortlist_defaults plain)
 # go NAME EXTRA...: one run in $TMP/NAME; prints the exit code
 go() {
   local d="$TMP/$1"; shift
@@ -169,6 +170,7 @@ cmp -s "$TMP/t1.rows" "$TMP/auto.rows" || fail "-threads 1 and 2 differ under au
 # ---- g: a tryptic Da run under auto
 EC=(-in "$FIX/Ecoli_MS2_small.mzML" -recon_fasta "$DB0" -tag_length 4 -extension 1 -fragment_tolerance 0.5
     -fragment_tolerance_unit Da -threads 2)
+EC+=(-shortlist_defaults plain)
 [ "$(go ec "${EC[@]}" -out t.tsv -shortlist_out sl.tsv -fasta_out red.fasta -shortlist_protease auto)" = 0 ] \
   || { cat "$TMP/ec/run.log" >&2; fail "E. coli auto: exit non-zero"; }
 grep -q '^# placement: Trypsin, full specificity.*no confident protease call; Trypsin assumed' "$TMP/ec/sl.tsv" \
@@ -240,6 +242,7 @@ mkmgf argc "$TMP/argc.mgf"
 [ "$(grep -c '^BEGIN IONS' "$TMP/aspn.mgf")" -ge 100 ] || fail "fewer than 100 Asp-N spectra"
 [ "$(grep -c '^BEGIN IONS' "$TMP/argc.mgf")" -ge 100 ] || fail "fewer than 100 Arg-C spectra"
 AN=(-in "$TMP/aspn.mgf" -recon_fasta "$DB0" -tag_length 5 -fragment_tolerance 20 -fragment_tolerance_unit ppm -threads 2)
+AN+=(-shortlist_defaults plain)
 rc=$(go anod "${AN[@]}" -out t.tsv -shortlist_out sl.tsv -fasta_out red.fasta -search_config_out comet.params \
        -search_engine comet -shortlist_protease auto)
 grep -q '^# placement: Asp-N' "$TMP/anod/sl.tsv" \
@@ -258,6 +261,7 @@ grep -q '"cleave_at": "D"' "$TMP/anos/sage.json" && [ -s "$TMP/anos/red.fasta" ]
 
 # ---- j: Lys-C named on an Arg-C call
 AR=(-in "$TMP/argc.mgf" -recon_fasta "$DB0" -tag_length 5 -fragment_tolerance 20 -fragment_tolerance_unit ppm -threads 2)
+AR+=(-shortlist_defaults plain)
 [ "$(go arc "${AR[@]}" -out t.tsv -shortlist_out sl.tsv -fasta_out red.fasta -shortlist_protease auto)" = 0 ] \
   || { cat "$TMP/arc/run.log" >&2; fail "Arg-C MGF auto: exit non-zero"; }
 grep -q '^# placement: Arg-C' "$TMP/arc/sl.tsv" \

@@ -51,6 +51,7 @@ VERSION=$("$BIN" --help 2>&1 | sed -n 's/^Version: \([^ ]*\).*/\1/p' | head -1)
 # The fixture's MS2 is ion trap.
 ARGS=(-in "$IN" -recon_fasta "$DB" -tag_length 4 -extension 1 -fragment_tolerance 0.5
       -fragment_tolerance_unit Da)
+ARGS+=(-shortlist_defaults plain)  # 1.15.4: these checks pin the pre-recipe defaults; section r tests the recipe
 # run DIR BIN EXTRA...: one run in DIR, relative output names
 run() {
   local d=$1 bin=$2; shift 2
@@ -150,7 +151,8 @@ run "$TMP/dflt" "$BIN" "${SHARED[@]}" -threads 2 -shortlist_max_evalue 0.1 -shor
 for f in t.tsv r.tsv d.tsv m.tsv; do
   cmp -s "$TMP/a/$f" "$TMP/dflt/$f" || fail "$f: #5 options at their defaults differ from none"
 done
-grep -qi 'ignored' "$TMP/dflt/run.log" && fail "options at their defaults draw an ignored-option warning"
+# (ARGS pins -shortlist_defaults plain, a non-default value that is rightly warned about without a shortlist output)
+grep -i 'ignored' "$TMP/dflt/run.log" | grep -qv -- '-shortlist_defaults' && fail "options at their defaults draw an ignored-option warning"
 # ... and a non-default one without its output is warned about
 run "$TMP/ign" "$BIN" -out t.tsv -shortlist_top 5 -search_engine comet -threads 2
 grep -q -- '-shortlist_top is only read for' "$TMP/ign/run.log" || fail "no warning for an ignored -shortlist_top"
@@ -204,6 +206,7 @@ grep -q 'holds 4 decoys' "$TMP/c2/run.log" || fail "no warning that the configur
 
 # ---- h: protease check
 CH=(-in "$CHYMO" -recon_fasta "$DB" -fragment_tolerance 20 -fragment_tolerance_unit ppm -threads 2)
+CH+=(-shortlist_defaults plain)  # 1.15.4: these checks pin the pre-recipe defaults; section r tests the recipe
 ( cd "$TMP" && "$BIN" "${CH[@]}" -out ch.tsv -shortlist_out ch.sl.tsv -fasta_out ch.fasta -search_config_out ch.json \
     > ch.log 2>&1 ); rc=$?
 [ $rc != 0 ] || fail "a chymotryptic run wrote the hand-off outputs (exit 0)"
@@ -245,5 +248,34 @@ grep -q 'holds the background only' "$TMP/e/run.log" && fail "the WARN claims a 
     -shortlist_background "$TMP/bg.fasta" -threads 2 > runb.log 2>&1 ) || { cat "$TMP/e/runb.log" >&2; fail "a background-only reduced database did not exit 0"; }
 grep -q '^>BG1 host protein$' "$TMP/e/redb.fasta" || fail "the background-only reduced database lacks the background"
 grep -q 'holds the background only' "$TMP/e/runb.log" || fail "no WARN for a background-only reduced database"
+
+# ---- r: the shortlist recipe is the default of a tryptic shortlist run (1.15.4)
+RIN=(-in "$IN" -recon_fasta "$DB" -fragment_tolerance 0.5 -fragment_tolerance_unit Da -threads 2)
+RALL='-tag_length 4, -extension 6, -shortlist_min_spectra 1, -recon_min_length 6, -recon_missed_cleavages 2, -shortlist_gapped on, -shortlist_max_evalue 10'
+rgo() { local d=$1; shift; mkdir -p "$d"; ( cd "$d" && "$BIN" "${RIN[@]}" "$@" > run.log 2>&1 ) || { cat "$d/run.log" >&2; fail "r: $(basename "$d") exit non-zero"; }; }
+rgo "$TMP/r1" -out t.tsv "${NEW[@]}"
+grep -q "Shortlist recipe defaults (doc/SHORTLIST.md): $RALL;" "$TMP/r1/run.log" || fail "r: no recipe log line with all seven values"
+grep -qx "# shortlist recipe defaults (doc/SHORTLIST.md): $RALL" "$TMP/r1/sl.tsv" || fail "r: shortlist header lacks the recipe line"
+grep -q '^# settings: max_evalue 10, min_spectra 1, gapped yes,' "$TMP/r1/sl.tsv" || fail "r: shortlist settings are not the recipe"
+grep -q 'min tag length 6 (shortlist recipe default)' "$TMP/r1/run.log" || fail "r: recon min length not the recipe default"
+# without a shortlist output nothing changes; -shortlist_defaults plain leaves the tags alone
+rgo "$TMP/r2" -out t.tsv
+grep -q -i 'recipe defaults' "$TMP/r2/run.log" && fail "r: recipe applied without a shortlist output"
+# (at the plain defaults, -tag_length 3 without extension, no tag reaches the derived length 5 of this
+# database: the shortlist is empty and FASTag exits 13; this is the 1.15.3 behaviour the recipe fixes)
+mkdir -p "$TMP/r3"; ( cd "$TMP/r3" && "$BIN" "${RIN[@]}" -out t.tsv "${NEW[@]}" -shortlist_defaults plain > run.log 2>&1 ); rc=$?
+[ $rc = 13 ] || { cat "$TMP/r3/run.log" >&2; fail "r: plain on this fixture: exit $rc, not 13 (empty shortlist)"; }
+grep -q -i 'recipe defaults' "$TMP/r3/run.log" "$TMP/r3/sl.tsv" && fail "r: plain still applied the recipe"
+cmp -s "$TMP/r2/t.tsv" "$TMP/r3/t.tsv" || fail "r: plain shortlist outputs changed the tag TSV"
+# tagging options given on the command line win: the tags equal a run without a shortlist
+# (tags of 3 without extension cannot reach the recipe's -recon_min_length 6: empty shortlist, exit 13)
+mkdir -p "$TMP/r4"; ( cd "$TMP/r4" && "$BIN" "${RIN[@]}" -out t.tsv "${NEW[@]}" -tag_length 3 -extension 0 > run.log 2>&1 ); rc=$?
+[ $rc = 13 ] || { cat "$TMP/r4/run.log" >&2; fail "r: r4: exit $rc, not 13"; }
+cmp -s "$TMP/r2/t.tsv" "$TMP/r4/t.tsv" || fail "r: explicit -tag_length 3 -extension 0 lost under the recipe"
+grep -q -- '-tag_length 4\|-extension 6' <(grep 'Shortlist recipe defaults' "$TMP/r4/run.log") && fail "r: the log lists a tagging value the command line set"
+# -tag_lengths replaces -tag_length, so the recipe leaves both alone
+rgo "$TMP/r5" -out t.tsv "${NEW[@]}" -tag_lengths 3 4
+grep -q -- '-tag_length 4' <(grep 'Shortlist recipe defaults' "$TMP/r5/run.log") && fail "r: recipe set -tag_length although -tag_lengths was given"
+echo "r: shortlist recipe default, plain, explicit tagging options"
 
 echo "shortlist_cli_test: all checks passed"

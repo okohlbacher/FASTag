@@ -1,5 +1,28 @@
 # Changelog
 
+## Unreleased
+
+- **The shortlist recipe is the default of every tryptic shortlist run.**
+  With `-shortlist_out`, `-fasta_out` or `-search_config_out` and
+  `-shortlist_protease trypsin` (the default), every option the user does not
+  give takes the value of doc/SHORTLIST.md's recipe: `-tag_length 4
+  -extension 6 -shortlist_gapped -shortlist_max_evalue 10
+  -shortlist_min_spectra 1 -recon_min_length 6 -recon_missed_cleavages 2`.
+  Before, only `-search_engine msfragger` took four of these. At the tagging
+  defaults (`-tag_length 3`, no extension) no tag reaches the reconciliation
+  length a real database derives (8 for 94k proteins, 9 for 870k), so
+  `-fasta_out` on a metaproteome database came out empty (exit 13). The log
+  line `Shortlist recipe defaults (...)` and the shortlist header name the
+  values applied; an option given on the command line or in an INI wins.
+  `-shortlist_defaults plain` restores the 1.15.3 defaults.
+- **Metaproteomes: `-shortlist_max_evalue 100`** with the recipe default. Held-out test on
+  PXD045390 (28 runs, three matrices): 96 % of the full-search peptides kept (lower 95 % bound 0.954),
+  every spiked organism >= 0.94, with 23 % of an 870k-protein database. The reduced search's FDR is
+  optimistic (more entrapment hits); see doc/SHORTLIST.md.
+  Runs without a shortlist output are unchanged. The recipe passed the
+  second MSFragger held-out test and failed the third, so it is a working
+  default, not a validated claim.
+
 ## 1.15.3 (2026-11-19)
 
 Reads SCIEX MS Data Converter mzML (before: every spectrum read as MS1), adds instrument model, serial number and start time to the run QC report, and lets `-census_ids` take identification files without q-values (`-census_ids_accept`). Default tag output on files that do not use mzML parameter groups is unchanged from 1.15.2.

@@ -210,36 +210,41 @@ runh "$TMP/h4" -search_config_out f.params -search_engine msfragger -search_miss
 [ "$(key "$TMP/h4/f.params" allowed_missed_cleavage_1)" = 1 ] && [ "$(key "$TMP/h4/f.params" precursor_mass_upper)" = 10 ] \
   || fail "h: explicit missed cleavages / tolerance are not kept"
 grep -q '^variable_mod_01' "$TMP/h4/f.params" && fail "h: -search_nterm_acetyl no still writes the modification"
-grep -q '"missed_cleavages": 1,' "$TMP/h3/sage.json" && grep -q '"ppm": \[-10, 10\]' "$TMP/h3/sage.json" \
+# (1.15.4: the shortlist recipe sets -recon_missed_cleavages 2, which Sage follows; -shortlist_defaults plain keeps 1)
+grep -q '"missed_cleavages": 2,' "$TMP/h3/sage.json" && grep -q '"ppm": \[-10, 10\]' "$TMP/h3/sage.json" \
   || fail "h: the Sage default missed cleavages or precursor tolerance changed"
+runh "$TMP/h3p" -search_config_out sage.json -shortlist_defaults plain
+grep -q '"missed_cleavages": 1,' "$TMP/h3p/sage.json" || fail "h: -shortlist_defaults plain: Sage missed cleavages not 1"
 grep -q '42\.01' "$TMP/h3/sage.json" && fail "h: Sage got protein N-terminal acetylation by default"
 echo "h: isotope error, missed cleavage, tolerance and acetylation defaults by engine"
-# ---- i: the msfragger shortlist defaults
-REC=(-shortlist_gapped -shortlist_max_evalue 10 -recon_min_length 6 -recon_missed_cleavages 2)
+# ---- i: the shortlist recipe defaults (1.15.4: every tryptic shortlist run, any engine;
+# HARGS give -tag_length and -extension, so the recipe sets the other five)
+REC=(-shortlist_gapped -shortlist_max_evalue 10 -shortlist_min_spectra 1 -recon_min_length 6 -recon_missed_cleavages 2)
+ALL='-shortlist_min_spectra 1, -recon_min_length 6, -recon_missed_cleavages 2, -shortlist_gapped on, -shortlist_max_evalue 10'
 I=(-recon_out r.tsv -search_config_out cfg)
 runh "$TMP/i1" "${I[@]}" -search_engine msfragger
 runh "$TMP/i2" "${I[@]}" -search_engine msfragger "${REC[@]}"
-for f in t.tsv r.tsv red.fasta cfg; do cmp -s "$TMP/i1/$f" "$TMP/i2/$f" || fail "i: $f differs from the explicit held-out recipe"; done
-diff <(grep -v '^# msfragger defaults' "$TMP/i1/sl.tsv") "$TMP/i2/sl.tsv" > /dev/null || fail "i: sl.tsv differs from the explicit recipe"
-grep -q '^# settings: max_evalue 10, min_spectra 2, gapped yes,' "$TMP/i1/sl.tsv" || fail "i: shortlist header settings"
-grep -qx '# msfragger defaults (the configuration of its second held-out test): -shortlist_gapped on, -shortlist_max_evalue 10, -recon_min_length 6, -recon_missed_cleavages 2' \
-  "$TMP/i1/sl.tsv" || fail "i: shortlist header lacks the msfragger defaults line"
-grep -q 'MSFragger defaults (the configuration of its second held-out test): -shortlist_gapped on, -shortlist_max_evalue 10, -recon_min_length 6, -recon_missed_cleavages 2;' \
-  "$TMP/i1/run.log" || fail "i: no log line for the msfragger defaults"
-grep -q 'min tag length 6 (msfragger default)' "$TMP/i1/run.log" || fail "i: recon min length not logged as msfragger default"
-grep -q 'msfragger defaults\|MSFragger defaults' "$TMP/i2/sl.tsv" "$TMP/i2/run.log" && fail "i: defaults reported although all four were given"
-# Sage without the options: 1.13.1's values, no defaults line
+for f in t.tsv r.tsv red.fasta cfg; do cmp -s "$TMP/i1/$f" "$TMP/i2/$f" || fail "i: $f differs from the explicit recipe"; done
+diff <(grep -v '^# shortlist recipe defaults' "$TMP/i1/sl.tsv") "$TMP/i2/sl.tsv" > /dev/null || fail "i: sl.tsv differs from the explicit recipe"
+grep -q '^# settings: max_evalue 10, min_spectra 1, gapped yes,' "$TMP/i1/sl.tsv" || fail "i: shortlist header settings"
+grep -qx "# shortlist recipe defaults (doc/SHORTLIST.md): $ALL" "$TMP/i1/sl.tsv" || fail "i: shortlist header lacks the recipe defaults line"
+grep -q "Shortlist recipe defaults (doc/SHORTLIST.md): $ALL;" "$TMP/i1/run.log" || fail "i: no log line for the recipe defaults"
+grep -q 'min tag length 6 (shortlist recipe default)' "$TMP/i1/run.log" || fail "i: recon min length not logged as recipe default"
+grep -q -i 'recipe defaults' "$TMP/i2/sl.tsv" "$TMP/i2/run.log" && fail "i: defaults reported although all were given"
+# Sage takes the same recipe; -shortlist_defaults plain keeps 1.13.1's values and derives the length
 runh "$TMP/i3" "${I[@]}"
-grep -q '^# settings: max_evalue 0.1, min_spectra 2, gapped no,' "$TMP/i3/sl.tsv" || fail "i: Sage shortlist settings changed"
-grep -q -i 'msfragger defaults' "$TMP/i3/sl.tsv" "$TMP/i3/run.log" && fail "i: msfragger defaults applied to Sage"
-grep -q 'min tag length [0-9]* (derived)' "$TMP/i3/run.log" || fail "i: Sage recon min length not derived"
-# -search_engine msfragger without -search_config_out: no defaults
+grep -q '^# settings: max_evalue 10, min_spectra 1, gapped yes,' "$TMP/i3/sl.tsv" || fail "i: Sage did not take the recipe"
+runh "$TMP/i3p" "${I[@]}" -shortlist_defaults plain
+grep -q '^# settings: max_evalue 0.1, min_spectra 2, gapped no,' "$TMP/i3p/sl.tsv" || fail "i: plain: Sage shortlist settings changed"
+grep -q -i 'recipe defaults' "$TMP/i3p/sl.tsv" "$TMP/i3p/run.log" && fail "i: plain still applied the recipe"
+grep -q 'min tag length [0-9]* (derived)' "$TMP/i3p/run.log" || fail "i: plain: recon min length not derived"
+# a shortlist output alone (no -search_config_out) takes the recipe too
 runh "$TMP/i4" -recon_out r.tsv -search_engine msfragger
-grep -q -i 'msfragger defaults' "$TMP/i4/sl.tsv" "$TMP/i4/run.log" && fail "i: msfragger defaults without -search_config_out"
-# explicit values win, the rest stay msfragger defaults
+grep -q -i 'recipe defaults' "$TMP/i4/sl.tsv" || fail "i: no recipe with -shortlist_out alone"
+# explicit values win, the rest stay recipe defaults
 runh "$TMP/i5" "${I[@]}" -search_engine msfragger -shortlist_max_evalue 0.1 -recon_min_length 0 -recon_missed_cleavages 1
-grep -q '^# settings: max_evalue 0.1, min_spectra 2, gapped yes,' "$TMP/i5/sl.tsv" || fail "i: explicit -shortlist_max_evalue lost"
-grep -qx '# msfragger defaults (the configuration of its second held-out test): -shortlist_gapped on' "$TMP/i5/sl.tsv" \
+grep -q '^# settings: max_evalue 0.1, min_spectra 1, gapped yes,' "$TMP/i5/sl.tsv" || fail "i: explicit -shortlist_max_evalue lost"
+grep -qx '# shortlist recipe defaults (doc/SHORTLIST.md): -shortlist_min_spectra 1, -shortlist_gapped on' "$TMP/i5/sl.tsv" \
   || fail "i: header lists a default the command line set"
 grep -q 'min tag length [0-9]* (derived)' "$TMP/i5/run.log" || fail "i: explicit -recon_min_length 0 lost"
 # an INI value wins too
@@ -249,12 +254,12 @@ grep -q 'name="recon_min_length" value="7"' "$TMP/i5/y.ini" || fail "i: INI edit
 # (min length 7 places nothing here; the background keeps -fasta_out from being empty)
 runh "$TMP/i6" "${I[@]}" -search_engine msfragger -ini "$TMP/i5/y.ini" -shortlist_background "$TMP/bg.fasta"
 grep -q 'min tag length 7 (set)' "$TMP/i6/run.log" || fail "i: the INI -recon_min_length 7 lost"
-grep -q -- '-recon_min_length' <(grep '^# msfragger defaults' "$TMP/i6/sl.tsv") && fail "i: header lists the INI value as a default"
-# a shortlist protease other than trypsin keeps 1.13.1's values (tested held-out with trypsin only)
+grep -q -- '-recon_min_length' <(grep '^# shortlist recipe defaults' "$TMP/i6/sl.tsv") && fail "i: header lists the INI value as a default"
+# a shortlist protease other than trypsin keeps the plain defaults (the recipe was tested with trypsin only)
 runh "$TMP/i7" "${I[@]}" -search_engine msfragger -shortlist_protease auto
-grep -q -i 'msfragger defaults' "$TMP/i7/sl.tsv" "$TMP/i7/run.log" && fail "i: msfragger defaults with -shortlist_protease auto"
+grep -q -i 'recipe defaults' "$TMP/i7/sl.tsv" "$TMP/i7/run.log" && fail "i: recipe defaults with -shortlist_protease auto"
 grep -q '^# settings: max_evalue 0.1, min_spectra 2, gapped no,' "$TMP/i7/sl.tsv" || fail "i: -shortlist_protease auto settings changed"
-echo "i: msfragger shortlist defaults, explicit values and INI win"
+echo "i: shortlist recipe defaults, plain, explicit values and INI win"
 # ---- j: -shortlist_exact_only was removed in 1.14: no effect, one warning
 W='-shortlist_exact_only was removed in 1.14 (failed its held-out test); it has no effect'
 [ "$(grep -c -- "$W" "$TMP/i1/run.log")" = 0 ] || fail "j: warning without the option"
@@ -272,6 +277,6 @@ for p in j1:i1 j3:i1 j2:j4 j5:i3; do
   [ "$(grep -c -- "$W" "$TMP/$a/run.log")" = 1 ] || fail "j: $a: not exactly one removal warning"
   for f in t.tsv r.tsv sl.tsv red.fasta cfg; do cmp -s "$TMP/$b/$f" "$TMP/$a/$f" || fail "j: $a: $f differs from $b"; done
 done
-grep -q '^# settings: max_evalue 10, min_spectra 2, gapped yes,' "$TMP/j1/sl.tsv" || fail "j: msfragger gapped default lost"
+grep -q '^# settings: max_evalue 10, min_spectra 1, gapped yes,' "$TMP/j1/sl.tsv" || fail "j: recipe gapped default lost"
 echo "j: -shortlist_exact_only has no effect and warns once (msfragger, with -shortlist_gapped, INI, Sage)"
 echo "msfragger_cli_test: all checks passed"

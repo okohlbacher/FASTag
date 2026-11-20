@@ -646,20 +646,30 @@ void TOPPFASTag::registerOptionsAndFlags_()
                      "Proteins always appended to -fasta_out (host proteome, contaminants); decoys "
                      "and entries already in the database are left out", false);
   setValidFormats_("shortlist_background", ListUtils::create<std::string>("fasta"));
+  // 1.15.4: the shortlist recipe as the default of every tryptic shortlist run;
+  // 'plain' restores the 1.15.3 defaults (also the only way to turn
+  // -shortlist_gapped off again, since a flag cannot be given as off).
+  registerStringOption_("shortlist_defaults", "<set>", "recipe",
+                        "Defaults of a tryptic shortlist run (-shortlist_out, -fasta_out or -search_config_out): "
+                        "'recipe' (doc/SHORTLIST.md) sets -tag_length 4, -extension 6, -shortlist_gapped, "
+                        "-shortlist_max_evalue 10, -shortlist_min_spectra 1, -recon_min_length 6 and "
+                        "-recon_missed_cleavages 2 unless given; 'plain' keeps every option at its own default",
+                        false, true);
+  setValidStrings_("shortlist_defaults", ListUtils::create<std::string>("recipe,plain"));
   registerDoubleOption_("shortlist_max_evalue", "<f>", 0.1,
-                        "E-value a tag needs for its placements to count for the shortlist. With -search_engine "
-                        "msfragger, -search_config_out and -shortlist_protease trypsin the default is 10 (the "
-                        "held-out-tested MSFragger configuration) unless given on the command line or in an INI",
+                        "E-value a tag needs for its placements to count for the shortlist. 10 by "
+                        "the shortlist recipe default: with -shortlist_out, -fasta_out or -search_config_out and -shortlist_protease trypsin (doc/SHORTLIST.md), unless given on the command line or in an INI. For a "
+                        "metaproteome database use 100 (held-out PASS on PXD045390: 96% of the full-search peptides "
+                        "kept with 23% of an 870k-protein database)",
                         false, true);
   setMinFloat_("shortlist_max_evalue", 0.0);
   registerIntOption_("shortlist_min_spectra", "<n>", 2,
-                     "Spectra a protein needs to be kept", false, true);
+                     "Spectra a protein needs to be kept. 1 by the shortlist recipe default: with -shortlist_out, -fasta_out or -search_config_out and -shortlist_protease trypsin", false, true);
   setMinInt_("shortlist_min_spectra", 1);
   registerFlag_("shortlist_gapped",
                 "Let placements with one mismatched flank (a mass gap) count for the shortlist; "
-                "by default only exact ones count (a gap equal to a fixed terminal label is exact). On by default "
-                "with -search_engine msfragger, -search_config_out and -shortlist_protease trypsin (the "
-                "held-out-tested MSFragger configuration)");
+                "by default only exact ones count (a gap equal to a fixed terminal label is exact). On by "
+                "the shortlist recipe default: with -shortlist_out, -fasta_out or -search_config_out and -shortlist_protease trypsin");
   // 1.14: -shortlist_exact_only (added in 1.13.3) removed, failed its
   // held-out test; the name stays without effect (REMOVED_OPTIONS).
   registerFlag_("shortlist_exact_only", REMOVED_HELP, true);
@@ -701,10 +711,10 @@ void TOPPFASTag::registerOptionsAndFlags_()
                       "MSFragger fragger.params", false);
   registerStringOption_("search_engine", "<engine>", "sage",
                         "Engine of -search_config_out; msfragger (MSFragger 4.4.1, experimental) needs decoys in "
-                        "the database: -fasta_out then appends reversed ones. With msfragger and -shortlist_protease "
-                        "trypsin, -shortlist_gapped is on, -shortlist_max_evalue 10, -recon_min_length 6 and "
-                        "-recon_missed_cleavages 2, each unless given on the command line or in an INI. These "
-                        "defaults are not validated: they passed the second held-out test (kept share 0.83-0.98 of "
+                        "the database: -fasta_out then appends reversed ones. The shortlist recipe (since 1.15.4 the default "
+                        "of every tryptic shortlist run, any engine: -tag_length 4, -extension 6, -shortlist_gapped, "
+                        "-shortlist_max_evalue 10, -shortlist_min_spectra 1, -recon_min_length 6, "
+                        "-recon_missed_cleavages 2, each unless given) is not validated: they passed the second held-out test (kept share 0.83-0.98 of "
                         "a full MSFragger search, 9 runs) and failed the third (8 new runs: kept share 0.53 in one "
                         "run, entrapment FDP 2.12% in another); the first test, with the 1.13 shortlist, FAILED at "
                         "0.49-0.73", false);
@@ -1038,6 +1048,12 @@ bool TOPPFASTag::optionNonDefault_(const std::string& name) const
     case ParameterInformation::INTLIST: return getIntList_(name) != e.default_value.toIntVector();
     default: return stringOption_(name) != static_cast<std::string>(e.default_value);
   }
+}
+
+int TOPPFASTag::intOption_(const std::string& name) const
+{
+  const auto it = recipe_int_.find(name);
+  return it != recipe_int_.end() ? it->second : getIntOption_(name);
 }
 
 bool TOPPFASTag::optionGiven_(const std::string& name) const

@@ -1217,6 +1217,12 @@ export const PARAM_UI: Record<string, ParamUi> = {
       text: 'Write the smaller FASTA and the search settings even when the protease of the run does not fit tryptic placement.'
     }
   },
+  shortlist_defaults: {
+    hidden: '1.15.4 command-line option, not in the form (CLI default applies: the shortlist recipe)',
+    help: {
+      text: 'Defaults of a tryptic shortlist run (shortlist, reduced FASTA or search configuration): recipe (the default) sets tag length 4, extension 6, gapped placement, E-value 10, 1 spectrum per protein, reconciliation length 6 and 2 missed cleavages unless you set them; plain keeps every option at its own default, as before 1.15.4.'
+    }
+  },
   shortlist_protease: {
     hidden: EXPERIMENTAL_1_13,
     help: {
@@ -1239,7 +1245,7 @@ export const PARAM_UI: Record<string, ParamUi> = {
   shortlist_max_evalue: {
     hidden: OPT_IN_1_12,
     help: {
-      text: 'The E-value a tag needs for its placements to count for the shortlist.'
+      text: 'The E-value a tag needs for its placements to count for the shortlist. 10 by the shortlist recipe; for a metaproteome database use 100 (held-out test: 96% of the full-search peptides kept with 23% of an 870k-protein database).'
     }
   },
   shortlist_min_spectra: {
