@@ -89,6 +89,21 @@ describe('round 10, 2: one run, told by its record, else its run name', () => {
     expect(sameRunIn(runs, '/d/x.qc.tsv', '/d/x.digest.tsv')).toBe(true)
   })
 
+  it('sameRunIn: two persisted run ids are two runs, even when one lists the other path', () => {
+    // Run B rewrote sample.tags.tsv; A's leftover sample.qc.tsv must not join B.
+    const runs = new Map([
+      ['/d/sample.qc.tsv', { id: 'A', outputs: ['/d/sample.tags.tsv', '/d/sample.qc.tsv'] }],
+      ['/d/sample.tags.tsv', { id: 'B', outputs: ['/d/sample.tags.tsv'] }]
+    ])
+    expect(sameRunIn(runs, '/d/sample.tags.tsv', '/d/sample.qc.tsv')).toBe(false)
+    // The run just shown is known by its outputs.
+    const shown = new Map([
+      ['/d/sample.qc.tsv', { id: 'A', outputs: ['/d/sample.qc.tsv'] }],
+      ['/d/sample.tags.tsv', { id: 'shown:/d/sample.tags.tsv', outputs: ['/d/sample.tags.tsv', '/d/sample.qc.tsv'] }]
+    ])
+    expect(sameRunIn(shown, '/d/sample.tags.tsv', '/d/sample.qc.tsv')).toBe(true)
+  })
+
   it('two runs of one input in one folder: B\'s label report closes A\'s digest report, with a note', async () => {
     const mock = installMockBridge()
     mock.reportFiles['/d/runA.digest.tsv'] = digestTsv

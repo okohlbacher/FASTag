@@ -20,11 +20,21 @@ export type SameRun = (a: string, b: string) => boolean
 /// run shown after a run is known by its outputs); one recorded, the other
 /// among its outputs; neither recorded, their folder and file stems
 /// (sameRunFiles).
+const isShownId = (id: string): boolean => id.startsWith('shown:')
+
 export function sameRunIn(runs: RunsOf, a: string, b: string): boolean {
   if (a === b) return true
   const ra = runs.get(a)
   const rb = runs.get(b)
-  if (ra && rb) return ra.id === rb.id || ra.outputs.includes(b) || rb.outputs.includes(a)
+  if (ra && rb) {
+    if (ra.id === rb.id) return true
+    // Two persisted run ids are two runs, whatever the outputs lists say: a
+    // later run that rewrote one shared path lists it too. Only the run
+    // just shown (a synthetic `shown:<out>` id, useRun) is known by its
+    // outputs.
+    if (!isShownId(ra.id) && !isShownId(rb.id)) return false
+    return ra.outputs.includes(b) || rb.outputs.includes(a)
+  }
   if (ra) return ra.outputs.includes(b)
   if (rb) return rb.outputs.includes(a)
   return sameRunFiles(a, b)

@@ -111,6 +111,12 @@ interface Drawn {
   peak: GapPeak | null
 }
 
+/// The CLI's own name for a bin: its most frequent recon interpretation.
+function binName(b: GapBin): string | null {
+  const it = b.interps?.slice().sort((x, y) => y.n - x.n)[0]
+  return it ? it.name : null
+}
+
 export default function MassGapChart({ bins, peaks = [], window, windowAssumed = false, source }: MassGapChartProps): JSX.Element {
   // The modification window first: where the bundled deltas lie.
   const [range, setRange] = useState<GapRange>('mods')
@@ -158,10 +164,16 @@ export default function MassGapChart({ bins, peaks = [], window, windowAssumed =
     ...peaks
       .filter((p) => p.delta != null && p.delta >= lo && p.delta <= hi && p.explainedBy !== 'none')
       .map((p) => ({ x: x(p.delta!), text: `${da(p.delta!, 3)} ${p.explainedBy}` })),
+    // A bin is named from the CLI's own assignment (its recon interpretations);
+    // a bundled delta names it only when the window is the CLI's (a mass-gap
+    // report); with an assumed window the label is the mass alone.
     ...drawn
-      .filter((d) => d.mark && d.h >= MIN_HIT && Math.abs(d.bin.gap) > shiftedAt)
+      .filter((d) => (d.mark || binName(d.bin)) && d.h >= MIN_HIT && Math.abs(d.bin.gap) > shiftedAt)
       .sort((a, b) => b.h - a.h)
-      .map((d) => ({ x: d.x, text: `${da(d.bin.gap, 3)} ${d.mark!.name}` }))
+      .map((d) => {
+        const name = binName(d.bin) ?? (windowAssumed ? null : d.mark!.name)
+        return { x: d.x, text: name ? `${da(d.bin.gap, 3)} ${name}` : da(d.bin.gap, 3) }
+      })
   ]
   for (const c of candidates) {
     if (labels.length >= 4) break
@@ -175,7 +187,12 @@ export default function MassGapChart({ bins, peaks = [], window, windowAssumed =
   function describe(d: Drawn): string {
     const parts = [`${da(d.bin.gap)} Da: ${fmt(d.bin.spectra)} spectra`]
     if (d.peak) parts.push(`peak ${d.peak.index}${d.peak.explainedBy !== 'none' ? `, explained by ${d.peak.explainedBy}` : ', not explained'}`)
-    if (d.mark) parts.push(`near ${d.mark.name} (${da(d.mark.mass)} Da, ${fmt(Math.abs(d.bin.gap - d.mark.mass) * 1000, 1)} mDa off)`)
+    if (d.mark)
+      parts.push(
+        windowAssumed
+          ? `nearest known mass ${d.mark.name} (${da(d.mark.mass)} Da, ±${fmt(window, 1)} Da assumed; not a CLI assignment)`
+          : `near ${d.mark.name} (${da(d.mark.mass)} Da, ${fmt(Math.abs(d.bin.gap - d.mark.mass) * 1000, 1)} mDa off)`
+      )
     if (d.bin.interps?.length) parts.push(`recon: ${d.bin.interps.map((i) => `${i.name} ${fmt(i.n)}`).join(', ')}`)
     return parts.join('; ')
   }

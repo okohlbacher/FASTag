@@ -39,7 +39,8 @@ describe('round 10, 4: the alkylation note says where Extension is and what the 
     const mock = installMockBridge()
     await renderCharacterizeApp(mock)
     const note = (): HTMLElement => document.getElementById('out-alkylation_out-d')!
-    expect(note().textContent).toBe('Extension 2 → 3 (Advanced › Tagging); changes every tag; species and digest are validated at 2.')
+    // Off: nothing is raised yet, so the note says what turning it on would do (round 10 major 1).
+    expect(note().textContent).toBe('Turning it on raises Extension 2 → 3 (Advanced › Tagging); that changes every tag; species and digest are validated at 2.')
     await click(document.getElementById('out-alkylation_out')!)
     expect(note().textContent).toBe('Extension 2 → 3 (Advanced › Tagging); changes every tag; species and digest are validated at 2.')
     await click(within(note()).getByRole('button', { name: 'Extension' }))

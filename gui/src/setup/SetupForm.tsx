@@ -237,12 +237,15 @@ export default function SetupForm({
   }
   // The raise, said where the field is and what it changes (tasks.ts
   // productNotes has the detail).
-  const raiseNote = (from: ParamValue, to: ParamValue): JSX.Element => (
+  // `pending`: the report is off, so nothing is raised yet; say what turning
+  // it on would do, not a change the call does not make.
+  const raiseNote = (from: ParamValue, to: ParamValue, pending = false): JSX.Element => (
     <>
+      {pending ? 'Turning it on raises ' : ''}
       <button type="button" className="link small" onClick={goToExtension}>
         Extension
       </button>{' '}
-      {String(from ?? '') || '0'} → {String(to)} (Advanced › {extGroup}); changes every tag; species and digest are validated at 2.
+      {String(from ?? '') || '0'} → {String(to)} (Advanced › {extGroup}); {pending ? 'that changes' : 'changes'} every tag; species and digest are validated at 2.
     </>
   )
   const alkylationWhy = (on: boolean): JSX.Element | string | null => {
@@ -250,7 +253,7 @@ export default function SetupForm({
     const short = alkylationShort(values)
     const custom = !alkylationShipped(values)
     const min = Number(String(values['recon_min_length'] ?? '')) > 0
-    if (!on) return need ? raiseNote(values['extension'], need) : short && custom ? `Needs Extension ${short}${min ? '' : ' for a human-sized database'}.` : null
+    if (!on) return need ? raiseNote(values['extension'], need, true) : short && custom ? `Needs Extension ${short}${min ? '' : ' for a human-sized database'}.` : null
     const r = raisedNow()
     if (r && String(values['extension'] ?? '') === String(r.to)) return raiseNote(r.from, r.to)
     if (!short) return null
