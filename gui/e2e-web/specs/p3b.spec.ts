@@ -185,5 +185,5 @@ test('a file without res_conf offers no reads export', async ({ page }) => {
   const format = page.getByLabel('Export as')
   await expect(format.locator('option[value="stitch"]')).toBeDisabled()
   await expect(format.locator('option[value="alps"]')).toBeDisabled()
-  await expect(format).toHaveAttribute('title', /-res_conf/)
+  await expect(format).toHaveAttribute('title', /Per-residue confidence on/)
 })
