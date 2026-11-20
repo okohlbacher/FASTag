@@ -103,7 +103,7 @@ No critical findings. The three round-10 majors are fixed in f54dd66b:
 - Characterize alkylation note: the off state says "Turning it on raises Extension 2 → 3 …" (test round10.test.tsx).
 - Run association: two persisted run ids are two runs; the outputs-list match only for the run just shown (test round10.app.test.tsx).
 - Mass-shift chart labels: named from the CLI's interpretations; an assumed window labels the mass only (test round11.test.tsx).
-The round-10 minors are open except the stale "Tags E ≤ 1" help text, removed in f54dd66b.
+The 18 round-10 minors are fixed (table below).
 
 ### Major (3)
 
@@ -115,26 +115,28 @@ The round-10 minors are open except the stale "Tags E ≤ 1" help text, removed 
 
 ### Minor (18)
 
-| Area | Problem (fix) |
-|---|---|
-| Outputs card layout | Alkylation (?) wraps under the two-line note and leaves a gap in the left column (popover after the label; note on a full line). |
-| Alkylation note location | Always says "(Advanced › Tagging)", though Extension is a Settings field in Export tags and Mass-shift survey; the species/digest clause shows when neither report is on (location from the task layout; clause only when relevant). |
-| Overview grouping | Main-result tile and run facts are split into rows with no visible heading (add "Main result" / "Run" headings). |
-| Tags re-run button | "Re-run with per-residue confidence" shows beside existing Min./Mean conf. columns (name what it adds; reorder or hide all-zero columns). |
-| Advanced density | 6,100 to 7,400 px per workflow; Other analyses expands into many waiting sub-groups (collapse each to one line with Turn on). |
-| Spectrum from a ranking | With only a triage ranking open, tags of a later run that rewrote the tags path are drawn (check the newest writer's run id). |
-| Undo after replacement | `beside()` rewrites custom output paths, and the edited set is lost (restore the snapshot unchanged, with the edited set). |
-| Apply last-used | Restores every value but keeps the current workflow, so label, record and lead tiles name the wrong workflow; the test uses a partial value set (store the workflow id; full-value test). |
-| Drop of custom-named files | Tags and QC of one run with custom names: the tags are dropped as superseded (one selection token per drop). |
-| Run association without record | With no record and no `<stem>.<kind>` names, files of two runs with different Extension are shown as one (a missing stem is unknown identity). |
-| Help: Overview figures | Still describes the removed "Tags E ≤ 1" tile (`workflows.tsx:23`). |
-| Help: mass-shift extension | Says the action raises to 3; it now computes the value and may suggest a longer seed. |
-| Help: `alkylation_proteome` | Field path with commas reads badly and is incomplete outside Mass-shift survey. |
-| Re-run extension with `-fasta` | Targets `recon_min_length` and the longest seed; the CLI checks the filter floor with every seed, so it can refuse the suggested call. |
-| Triage: experimental | `-census_score` is experimental per the README; the product, help and Overview do not say so. |
-| Mass shifts: 0 Da bin | "Spectra with a mass gap" and its warning count the unshifted 0 Da bin. |
-| Species tab, empty report | The Da-tolerance banner is skipped in the empty branch. |
-| Table sort | Blank numeric cells sort as 0, not last (`Number('')`). |
+All 18 fixed; none rejected. Tests: `results/round10Minor.test.tsx` unless named.
+
+| Area | Problem (fix) | Result |
+|---|---|---|
+| Outputs card layout | Alkylation (?) wraps under the two-line note and leaves a gap in the left column (popover after the label; note on a full line). | Fixed in 1357e23c: (?) after the label; the alkylation row spans the card, its note on a line of its own. |
+| Alkylation note location | Always says "(Advanced › Tagging)", though Extension is a Settings field in Export tags and Mass-shift survey; the species/digest clause shows when neither report is on (location from the task layout; clause only when relevant). | Fixed in 5ec48309: "(Settings)" where the workflow shows Extension there; the clause names only the species or digest report that is on. |
+| Overview grouping | Main-result tile and run facts are split into rows with no visible heading (add "Main result" / "Run" headings). | Fixed in 9ec19d29. |
+| Tags re-run button | "Re-run with per-residue confidence" shows beside existing Min./Mean conf. columns (name what it adds; reorder or hide all-zero columns). | Fixed in 3593385e: "Re-run to add Residue conf. (%)"; the tooltip tells it from the step scores. |
+| Advanced density | 6,100 to 7,400 px per workflow; Other analyses expands into many waiting sub-groups (collapse each to one line with Turn on). | Fixed in 1a2b9141: a group whose settings all wait is one line with its note and Turn on; Turn on opens it. |
+| Spectrum from a ranking | With only a triage ranking open, tags of a later run that rewrote the tags path are drawn (check the newest writer's run id). | Fixed in 96be1cf6 (test `workflowOpen.app.test.tsx`). |
+| Undo after replacement | `beside()` rewrites custom output paths, and the edited set is lost (restore the snapshot unchanged, with the edited set). | Fixed in d82ae091 (test `useSession.test.tsx`). |
+| Apply last-used | Restores every value but keeps the current workflow, so label, record and lead tiles name the wrong workflow; the test uses a partial value set (store the workflow id; full-value test). | Fixed in d82ae091: the run saves its workflow with the values; Apply restores it as origin (full-value test in `useSession.test.tsx`). |
+| Drop of custom-named files | Tags and QC of one run with custom names: the tags are dropped as superseded (one selection token per drop). | Fixed in 707ad176: `useRun.openDropped` (test `run/round10.app.test.tsx`). |
+| Run association without record | With no record and no `<stem>.<kind>` names, files of two runs with different Extension are shown as one (a missing stem is unknown identity). | Fixed in ce1f1269 (test `run/round10.app.test.tsx`). |
+| Help: Overview figures | Still describes the removed "Tags E ≤ 1" tile (`workflows.tsx:23`). | Fixed in f54dd66b. |
+| Help: mass-shift extension | Says the action raises to 3; it now computes the value and may suggest a longer seed. | Fixed in 5ec48309. |
+| Help: `alkylation_proteome` | Field path with commas reads badly and is incomplete outside Mass-shift survey. | Fixed in 77f304fd. |
+| Re-run extension with `-fasta` | Targets `recon_min_length` and the longest seed; the CLI checks the filter floor with every seed, so it can refuse the suggested call. | Fixed in 5812fc23: with `-fasta` the shortest seed must reach `min_filter_length` (else 8) too (test `viewers.test.tsx`). |
+| Triage: experimental | `-census_score` is experimental per the README; the product, help and Overview do not say so. | Fixed in a359f948 (task, product, option help, Triage help, Overview tile). |
+| Mass shifts: 0 Da bin | "Spectra with a mass gap" and its warning count the unshifted 0 Da bin. | Fixed in 895aec4f: "Placed spectra" beside "Shifted (≥ 0.5 Da)"; the warning says "placed on the database" and keeps its threshold on the placed spectra (the CLI's gap-peak share is of those). |
+| Species tab, empty report | The Da-tolerance banner is skipped in the empty branch. | Fixed in c9b8d810. |
+| Table sort | Blank numeric cells sort as 0, not last (`Number('')`). | Fixed in d2f11248 (test `viewers.test.tsx`). |
 
 Before merging: `origin/main` has moved on to 1.15.4 (regenerated
 `params.generated.json`, `-shortlist_defaults`, `-shortlist_max_evalue`
