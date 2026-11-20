@@ -4,12 +4,46 @@ import { baseName, parseReport, value, type Report } from '../digestReport'
 import { dirName, stripExt } from '../app/paths'
 import { parseTable, sniffTable, type TableKind } from './tables'
 
+/// The run that wrote a file, as the app recorded it (history.rs
+/// RunRecord): its id and every output it wrote.
+export interface RunOf {
+  id: string
+  outputs: readonly string[]
+}
+/// The runs the app knows the opened files by (a path's historyOf record).
+export type RunsOf = ReadonlyMap<string, RunOf>
+/// Two paths of one run (useRun keeps the record map behind it).
+export type SameRun = (a: string, b: string) => boolean
+
+/// Two files of one run, by the app's own record first: both recorded, the
+/// same run id (or one record lists the other file among its outputs: the
+/// run shown after a run is known by its outputs); one recorded, the other
+/// among its outputs; neither recorded, their folder and file stems
+/// (sameRunFiles).
+export function sameRunIn(runs: RunsOf, a: string, b: string): boolean {
+  if (a === b) return true
+  const ra = runs.get(a)
+  const rb = runs.get(b)
+  if (ra && rb) return ra.id === rb.id || ra.outputs.includes(b) || rb.outputs.includes(a)
+  if (ra) return ra.outputs.includes(b)
+  if (rb) return rb.outputs.includes(a)
+  return sameRunFiles(a, b)
+}
+
 // Two runs wrote the same report when the run rows they share agree and the
 // files sit in one folder. run.input is only a basename (sample.mzML from two
 // folders, or one file run with two tag lengths, would otherwise read as one).
+// Two runs of one input in one folder differ in their run name: where both
+// names have one (<stem>.<kind>.tsv), the stems must agree too. A custom
+// name (qc-final.tsv) has none, and the run rows decide. A file the app
+// recorded is told by its record (@p runs, sameRunIn) instead.
 const RUN_KEYS = ['input', 'version', 'fragment_tolerance', 'fragment_tolerance_unit', 'tag_length', 'subsample_fraction', 'subsample_spectra']
-export function sameRun(a: Report, b: Report): boolean {
-  return dirName(a.path) === dirName(b.path) && RUN_KEYS.every((k) => value(a, 'run', k) === value(b, 'run', k))
+export function sameRun(a: Report, b: Report, runs?: RunsOf): boolean {
+  if (runs && (runs.has(a.path) || runs.has(b.path))) return sameRunIn(runs, a.path, b.path)
+  if (dirName(a.path) !== dirName(b.path) || !RUN_KEYS.every((k) => value(a, 'run', k) === value(b, 'run', k))) return false
+  const sa = runStem(a.path)
+  const sb = runStem(b.path)
+  return sa == null || sb == null || sa === sb
 }
 
 /// The run a file belongs to by its name, <stem>.<kind>.<ext> as the GUI

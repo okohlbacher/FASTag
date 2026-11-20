@@ -103,7 +103,7 @@ describe('round 8, 7: the raise belongs to the values it was raised in', () => {
     await renderCharacterizeApp(mock)
     const ext = (): string => (document.getElementById('p-extension') as HTMLInputElement | null)?.value ?? ''
     await click(document.getElementById('out-alkylation_out')!)
-    expect(screen.getByText(/Extension raised from 2 to 3\./)).toBeDefined()
+    expect(document.getElementById('out-alkylation_out-d')!.textContent).toMatch(/Extension 2 → 3 \(Advanced › Tagging\); changes every tag/)
     await click(screen.getByRole('radio', { name: /^Mass-shift survey/ }))
     const db = document.getElementById('p-recon_fasta') as HTMLInputElement
     await act(async () => {

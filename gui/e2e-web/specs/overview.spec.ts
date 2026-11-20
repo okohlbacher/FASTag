@@ -71,7 +71,6 @@ test('Overview figures and calls equal the oracles of the 1.12 gate output', asy
   await expect(page.getByRole('tab', { name: 'Overview' })).toHaveAttribute('aria-selected', 'true')
   await expect(value(page, 'MS2 spectra')).toHaveText(en(o.ms2))
   await expect(value(page, 'Tags')).toHaveText(en(o.tags))
-  await expect(value(page, 'Tags E ≤ 1')).toHaveText(en(o.filtered))
   await expect(value(page, 'Glyco')).toHaveText(`${en(o.glyco)} flagged`)
   await expect(value(page, 'Protease')).toHaveText(o.protease!)
   await expect(value(page, 'Top genus')).toHaveText(o.topGenus)
@@ -80,6 +79,10 @@ test('Overview figures and calls equal the oracles of the 1.12 gate output', asy
   // Every tile names its cutoff or caveat.
   for (const note of await page.locator('.tile .tile-note').allTextContents()) expect(note.trim()).not.toBe('')
   await expect(page.getByRole('list', { name: 'Checks', exact: true })).toContainText('Acquisition: DDA')
+  // The digest filter's count is the Digest tab's (round 10).
+  await expect(tile(page, 'Tags E ≤ 1')).toHaveCount(0)
+  await page.getByRole('tab', { name: /^Digest/ }).click()
+  await expect(page.locator('.stat', { has: page.locator('dt', { hasText: /^Tags E ≤ 1$/ }) }).locator('dd')).toHaveText(en(o.filtered))
 })
 
 test('no alkylation report asked for: no Alkylation tile, and the fixed cysteine line a default', async ({ page }) => {

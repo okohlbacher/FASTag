@@ -17,6 +17,7 @@ import { filterRecon, type DeltaTable, type ReconFilter, type ReconIdTable, type
 import { useTable } from './useTable'
 import { useSticky } from './tableStore'
 import { FASTA_EXTENSION, SHIFT_MIN_DA, type TileAction } from './overview'
+import { longestSeed } from '../paramLayout'
 import ReportHeader from './ReportHeader'
 import './viewers.css'
 
@@ -49,6 +50,25 @@ export interface ReconViewProps {
 
 const given = (v: unknown): boolean => (typeof v === 'string' ? v.trim() !== '' : v === true)
 
+/// The CLI's largest -extension.
+const MAX_EXTENSION = 12
+/// The shortest tag placed when -recon_min_length is 0 on a human-sized
+/// database (the index's minimum, products.ts alkylationTarget).
+const DEFAULT_MIN_PLACED = 8
+
+/// The extension a FASTA run of @p params needs so its longest seed
+/// (tag_lengths replaces tag_length) reaches the shortest tag placed: an
+/// explicit recon_min_length, else 8; never below FASTA_EXTENSION. Above
+/// the CLI's 12 the seed itself must grow (@p seed: the seed that would
+/// reach it at extension 12).
+export function fastaExtension(params: Record<string, unknown>): { ext: number; seed?: number } {
+  const seed = longestSeed(params) ?? 3
+  const ml = Number(String(params['recon_min_length'] ?? '').trim() || '0')
+  const target = Number.isFinite(ml) && ml > 0 ? ml : DEFAULT_MIN_PLACED
+  const need = Math.max(FASTA_EXTENSION, Math.ceil((target - seed) / 2))
+  return need > MAX_EXTENSION ? { ext: MAX_EXTENSION, seed: target - 2 * MAX_EXTENSION } : { ext: need }
+}
+
 /// What the empty state's button does for a run sent @p params: without a
 /// FASTA, pick one and run with the recon, delta and mass-gap reports (and
 /// the extension the overview's "Add FASTA" uses, so tags reach the length a
@@ -57,19 +77,27 @@ export function reconRerun(params: Record<string, unknown>): TileAction {
   const reports = { recon_out: 'recon.tsv', delta_out: 'delta.tsv', massgap_out: 'massgap.tsv' }
   // Either way the extension the FASTA needs: with a FASTA and extension 2
   // the run places nothing (v112-pxd014764-recon-ext2).
-  const raise: Record<string, string> = extensionOf(params) < FASTA_EXTENSION ? { extension: String(FASTA_EXTENSION) } : {}
+  const need = fastaExtension(params).ext
+  const raise: Record<string, string> = extensionOf(params) < need ? { extension: String(need) } : {}
   if (given(params['fasta']) || given(params['recon_fasta']))
     return { kind: 'enable', label: 'Write these reports and run again', values: { ...reports, ...raise } }
   return { kind: 'add-fasta', label: 'Choose a FASTA and run again', values: { delta_out: 'delta.tsv', ...raise } }
 }
 
 /// The low-placed banner's action for a run sent @p params: the run again
-/// with extension 3, when it had a FASTA and a shorter extension; else null.
+/// with the extension its seed and shortest placed tag need (fastaExtension),
+/// when it had a FASTA and a shorter extension; a longer seed when even 12
+/// does not reach (a single tag_length only); else null.
 export function reconExtend(params: Record<string, unknown>): TileAction | null {
   if (!(given(params['fasta']) || given(params['recon_fasta']))) return null
   const ext = extensionOf(params)
-  if (ext >= FASTA_EXTENSION) return null
-  return { kind: 'enable', label: `Run again with extension ${FASTA_EXTENSION}`, values: { extension: String(FASTA_EXTENSION) } }
+  const need = fastaExtension(params)
+  if (need.seed != null) {
+    if (Array.isArray(params['tag_lengths']) && params['tag_lengths'].length) return null
+    return { kind: 'enable', label: `Run again with seed length ${need.seed} and extension ${need.ext}`, values: { tag_length: String(need.seed), extension: String(need.ext) } }
+  }
+  if (ext >= need.ext) return null
+  return { kind: 'enable', label: `Run again with extension ${need.ext}`, values: { extension: String(need.ext) } }
 }
 
 // The CLI's -extension default is 0.

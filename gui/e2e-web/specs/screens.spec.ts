@@ -80,14 +80,17 @@ test('setup screens of every workflow', async ({ page, browserName }) => {
     await page.locator('details.advanced > summary').click()
   }
   // Characterize with the alkylation report on: the Extension it raises,
-  // said beside the report (round 9).
+  // said beside the report (round 9), at full page (round 10).
   await workflow(page, 'Characterize a run').check()
   const alk = page.locator('#out-alkylation_out')
   if ((await alk.count()) > 0) {
     await alk.scrollIntoViewIfNeeded()
     await alk.check()
     await page.waitForTimeout(150)
-    await page.locator('#out-alkylation_out').locator('xpath=ancestor::li[1]').screenshot({ path: shot('14-setup-characterize-alkylation-on') })
+    // At full page (round 10): the note beside the report, and the Settings
+    // card it refers to.
+    await page.locator('.view-setup .controls-body').evaluate((e) => e.scrollTo(0, 0))
+    await fullSetup(page, '14-setup-characterize-alkylation-on')
     await alk.uncheck()
   }
   // Batch mode of the Input card.

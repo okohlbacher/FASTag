@@ -196,7 +196,7 @@ export interface Shown {
   /// The texts of the workflow reports the Overview reads (QC, shortlist,
   /// mass-shift accounting and table), when the run wrote them; config: the
   /// engine configuration was written.
-  texts?: { qc?: string | null; shortlist?: string | null; deltaCounts?: string | null; delta?: string | null; config?: boolean }
+  texts?: { qc?: string | null; shortlist?: string | null; deltaCounts?: string | null; delta?: string | null; triage?: string | null; config?: boolean; reducedFasta?: boolean }
 }
 
 export interface RunState {
@@ -272,6 +272,14 @@ export type RunAction =
   | { type: 'REVEAL_ERR'; error: string | null }
   | { type: 'EVIDENCE'; evidence: Partial<Evidence> }
   | { type: 'SHOWN'; shown: Shown | null }
+  // A file of @p path's run opened: what another run left shown goes,
+  // judged against the state as it is when the action applies (not a
+  // render's closure: B's tags that landed first must stay). keepTags: the
+  // tags stay (the file is a tags table itself). tagsOpened: a tags table
+  // opened; nothing changes when it is the tags of the run shown, else the
+  // run shown goes whatever its run (its counts are not this file's) and
+  // @p reports updates the reports.
+  | { type: 'CLOSE_OTHER_RUN'; path: string; same: (a: string, b: string) => boolean; keepTags?: boolean; tagsOpened?: boolean; reports?: Update<Reports> }
 
 const noProgress: JobProgress = { done: null, total: null, phase: null, ratePerSec: null, etaSec: null }
 const noEvidence: Evidence = { contributed: null, ms2: null }
@@ -530,6 +538,16 @@ export function runReducer(s: RunState, a: RunAction): RunState {
       return s.revealErr === a.error ? s : { ...s, revealErr: a.error }
     case 'SHOWN':
       return s.shown === a.shown ? s : { ...s, shown: a.shown }
+    case 'CLOSE_OTHER_RUN': {
+      if (a.tagsOpened && s.shown?.out === a.path) return s
+      const other = (q: string | null | undefined): boolean => !!q && !a.same(q, a.path)
+      let n = s
+      if (!a.keepTags && other(s.results?.path)) n = { ...n, results: null }
+      if (s.species ? other(s.species.path) : s.speciesRun) n = { ...n, species: null, speciesRun: null }
+      if (s.shown && (a.tagsOpened || other(s.shown.out))) n = { ...n, shown: null }
+      if (a.reports) n = { ...n, reports: apply(a.reports, n.reports) }
+      return n
+    }
     case 'EVIDENCE': {
       const e = { ...s.evidence, ...a.evidence }
       return e.contributed === s.evidence.contributed && e.ms2 === s.evidence.ms2 && e.czExcluded === s.evidence.czExcluded ? s : { ...s, evidence: e }

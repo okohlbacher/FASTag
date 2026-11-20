@@ -501,7 +501,7 @@ export const BRIEF_HINT: Record<string, string> = {
   max_evalue: 'Keeps tags at or below this E-value; 0 keeps all.',
   max_tags: 'Most tags per spectrum; 0 sets no limit.',
   res_conf: 'Adds a confidence per residue for assembly.',
-  tag_lengths: 'Several seed lengths in one pass, in place of Tag length.',
+  tag_lengths: 'Several seed lengths in one pass, in place of Seed length.',
   diversity: 'Prefers tags from other peaks over near-copies of a kept tag.',
   isobaric_tolerance: 'Lets a residue stand for a pair of the same mass (N for GG).',
   gaps: 'Lets a tag cross one missing peak.',

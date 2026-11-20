@@ -55,7 +55,7 @@ describe('the Overview of Database reduction and the Mass-shift survey', () => {
     expect(topShift(DELTA)).toEqual({ delta: '-17.03', spectra: 60, name: 'Gln->pyro-Glu' })
     const o = buildOverview({ ...base, params: { delta_out: 'd', delta_counts_out: 'c' }, delta: DELTA, deltaCounts: COUNTS })
     expect(tile(o, 'placed')).toMatchObject({ value: '61' })
-    expect(tile(o, 'placed')!.note).toMatch(/of 100 tagged/)
+    expect(tile(o, 'placed')!.note).toMatch(/of 100 MS2 spectra with any tag/)
     expect(tile(o, 'topshift')!.value).toBe('-17.03 Da (Gln->pyro-Glu)')
     expect(shownTiles(o, { delta_out: 'd', delta_counts_out: 'c' }).figures.map((t) => t.id)).toEqual(['spectra', 'tags', 'placed', 'topshift'])
   })

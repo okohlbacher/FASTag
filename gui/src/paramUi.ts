@@ -292,7 +292,9 @@ export const PARAM_UI: Record<string, ParamUi> = {
     label: 'Extension',
     help: {
       text: 'After a seed is found, FASTag tries to read up to this many more residues at each end, and scores the longer tag again. 0 turns extension off; the maximum is 12.',
-      tip: 'Raise it for longer tags, for example 2 to let a seed of 3 grow to 7.'
+      tip: 'Raise it for longer tags, for example 3 to let a seed of 3 grow to 9.',
+      // The CLI line only repeats the text and the facts row (0 turns it off).
+      cliCovered: true
     }
   },
   max_tags: {
@@ -333,7 +335,7 @@ export const PARAM_UI: Record<string, ParamUi> = {
     section: 'Isobaric reporters',
     experimental: true,
     help: {
-      text: 'Also reject b/y tags whose low end is a singly charged TMT6/10 reporter ion. Needs the TMT pseudo-tag filter on or auto.',
+      text: 'Also reject b/y tags whose low end is a singly charged TMT6/10 reporter ion. Needs the TMT pseudo-tag filter on, or auto when auto detects TMT labelling.',
       cliCovered: true
     }
   },
@@ -913,7 +915,7 @@ export const PARAM_UI: Record<string, ParamUi> = {
       }
     ],
     help: {
-      text: 'The database the alkylation report uses when no placement database is given: auto (the human proteome), human, mouse, yeast or ecoli for the UniProt reference proteomes shipped with FASTag (reviewed entries; the release is in the report), or a FASTA file (.gz allowed). Tags place on the shipped proteomes from 8 residues (human, mouse) or 7 (yeast, E. coli), so tag length + 2 × Extension must reach that: at tag length 3, Extension 3 for human or mouse, 2 for yeast or E. coli; otherwise no tag places and there is no call (reason tags_too_short). A FASTA file, here or as Protein database, is indexed with a minimum length that grows with its size (8 for a human-sized one, 4 for a few proteins; Minimum tag length sets it); Extension is not raised for it, and a run on it that places nothing gives no tags_too_short reason.'
+      text: 'The database the alkylation report uses when no placement database is given: auto (the human proteome), human, mouse, yeast or ecoli for the UniProt reference proteomes shipped with FASTag (reviewed entries; the release is in the report), or a FASTA file (.gz allowed). Tags place on the shipped proteomes from 8 residues (human, mouse) or 7 (yeast, E. coli) (or Shortest tag placed, when set above 0), so tag length + 2 × Extension must reach that: at tag length 3, Extension 3 for human or mouse, 2 for yeast or E. coli; otherwise no tag places and there is no call (reason tags_too_short). A FASTA file, here or as Protein database, is indexed with a minimum length that grows with its size (8 for a human-sized one, 4 for a few proteins; Shortest tag placed, under Advanced › Placement, advanced, sets it); Extension is not raised for it, and a run on it that places nothing gives no tags_too_short reason.'
     }
   },
   alkylation_tags_out: {

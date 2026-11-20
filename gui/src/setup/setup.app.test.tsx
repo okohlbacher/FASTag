@@ -44,7 +44,7 @@ describe('redesign: setup and run bar', () => {
     })
     expect(group.textContent).toMatch(/1 changed/)
     expect(adv.textContent).toContain('Advanced (1 changed)')
-    expect(document.getElementById('h-gaps')!.textContent).toMatch(/Default 1 · changed$/)
+    expect(document.getElementById('h-gaps-c')!.textContent).toMatch(/^Default 1 · changed$/)
     // The tolerance is the Instrument's Custom: a value and its unit, one control.
     await act(async () => {
       fireEvent.change(document.getElementById('instrument')!, { target: { value: 'custom' } })

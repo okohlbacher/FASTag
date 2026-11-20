@@ -442,9 +442,13 @@ export default function App({ start = LANDING }: { start?: Origin } = {}): JSX.E
 
   // Shortcuts and native menus run the same actions (setup/shortcuts.ts).
   const act = (a: Action): void => {
-    // Native menu events bypass the modal's DOM keyboard handler.
-    if (searchOpen && a !== 'search-params') setSearchOpen(false)
     const v = viewOfAction(a)
+    // A question or About is open: shortcuts and native menu items reach
+    // here past its inert background; only a view change goes through (Run
+    // would ask the overwrite question again over the pending one).
+    if (!v && (closeAsk || run.overwriteAsk || aboutOpen)) return
+    // The parameter search closes for any other action.
+    if (searchOpen && a !== 'search-params') setSearchOpen(false)
     if (v) {
       setView(v)
       return

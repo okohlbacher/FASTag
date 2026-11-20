@@ -5,7 +5,7 @@
 // goes (S2).
 
 import { useEffect, useMemo, useState, type Dispatch, type JSX, type KeyboardEvent, type ReactNode, type SetStateAction } from 'react'
-import type { SpeciesReport, SpectrumSupport } from '../types'
+import type { RunRecord, SpeciesReport, SpectrumSupport } from '../types'
 import ResultsTable from '../ResultsTable'
 import FailureBanner from './FailureBanner'
 import SpeciesPanel from '../SpeciesPanel'
@@ -118,6 +118,15 @@ export interface ResultTabsProps {
   workflow?: string | null
 }
 
+/// The tags output a recorded run wrote (its -out), as one of its outputs.
+function tagsOutput(r: RunRecord): string | null {
+  const i = r.argv.indexOf('-out')
+  const out = i >= 0 ? r.argv[i + 1] : undefined
+  if (!out) return null
+  const name = out.replace(/^.*[\\/]/, '')
+  return r.outputs.find((o) => o === out || o.replace(/^.*[\\/]/, '') === name) ?? null
+}
+
 export default function ResultTabs(p: ResultTabsProps): JSX.Element {
   const { setTab, species, speciesRun, reports, batchMiss, results, running, busy, failure, copied } = p
   const tables = reports.tables ?? {}
@@ -150,7 +159,7 @@ export default function ResultTabs(p: ResultTabsProps): JSX.Element {
   // the input and parameters of the run that wrote the table shown.
   const [target, setTarget] = useState<SpectrumTarget | null>(null)
   const [located, setLocated] = useState<Record<string, string>>({})
-  const [record, setRecord] = useState<{ path: string; input: string | null; params: Record<string, unknown> | null } | null>(null)
+  const [record, setRecord] = useState<{ path: string; input: string | null; params: Record<string, unknown> | null; tags: string | null } | null>(null)
   // The file the Spectrum tab reads tags and the run's record from: the
   // tags table, or the identifiability ranking opened without one.
   const path = results?.path ?? wr.triage ?? null
@@ -161,7 +170,7 @@ export default function ResultTabs(p: ResultTabsProps): JSX.Element {
     window.fastag
       .historyOf(path)
       .catch(() => null)
-      .then((r) => live && setRecord({ path, input: r?.input ?? null, params: r?.params ?? null }))
+      .then((r) => live && setRecord({ path, input: r?.input ?? null, params: r?.params ?? null, tags: r ? tagsOutput(r) : null }))
     return () => {
       live = false
     }
@@ -177,6 +186,10 @@ export default function ResultTabs(p: ResultTabsProps): JSX.Element {
     if (rec?.input) return { input: rec.input, params, from: 'history' }
     return { input: null, params: null, from: 'none' }
   }, [path, located, fromRun, runInput, runParams, rec])
+  // The tags the Spectrum tab reads: the Tags tab's table, else the tags
+  // output of the run that wrote the ranking (its record), never the
+  // ranking itself (a census row is no tag).
+  const tagsPath = results?.path ?? (rec?.tags || null)
   // A target of another file (a new run, another TSV) is not shown.
   const shownTarget = target && target.path === path ? target : null
   function openSpectrum(spectrum: string, rowId: number | null): void {
@@ -218,7 +231,6 @@ export default function ResultTabs(p: ResultTabsProps): JSX.Element {
             >
               {TAB_LABEL[t]}
               {t === 'species' && species && <span className={`count${species.taxa.length === 0 ? ' zero' : ''}`}>{species.taxa.length}</span>}
-              {t === 'digest' && reports.list.length > 0 && <span className="count">{reports.list.length}</span>}
             </button>
           ))}
         </div>
@@ -379,6 +391,7 @@ export default function ResultTabs(p: ResultTabsProps): JSX.Element {
               <SpectrumPanel
                 target={shownTarget}
                 source={source}
+                tags={tagsPath}
                 onTarget={setTarget}
                 onLocate={(input) => path && setLocated((l) => ({ ...l, [path]: input }))}
               />

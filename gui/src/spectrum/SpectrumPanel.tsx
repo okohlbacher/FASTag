@@ -39,6 +39,11 @@ export interface SpectrumSource {
 interface Props {
   target: SpectrumTarget
   source: SpectrumSource
+  // The tags table its tags are read from: the Tags tab's, or the tags
+  // output of the run that wrote the ranking it was opened from; null: no
+  // tags table is open (a ranking opened alone is not one). Left out, the
+  // target's own file.
+  tags?: string | null
   // Another spectrum of the file (◀ ▶).
   onTarget(t: SpectrumTarget): void
   // The input moved or is unknown: the user picks it.
@@ -116,7 +121,8 @@ async function neighbour(path: string, spectrum: string, rowId: number | null, d
   return { spectrum: page.rows[0][page.columns.indexOf('spectrum')] ?? '', rowId: page.rowIds?.[0] ?? null }
 }
 
-export default function SpectrumPanel({ target, source, onTarget, onLocate }: Props): JSX.Element {
+export default function SpectrumPanel({ target, source, tags: tagsFile, onTarget, onLocate }: Props): JSX.Element {
+  const tagsPath = tagsFile === undefined ? target.path : tagsFile
   const [peaks, setPeaks] = useState<Peaks>({ state: 'loading' })
   const [tags, setTags] = useState<TagsOf | null>(null)
   const [tagsError, setTagsError] = useState<string | null>(null)
@@ -157,7 +163,8 @@ export default function SpectrumPanel({ target, source, onTarget, onLocate }: Pr
     setNav({ prev: false, next: false })
     // The tags first, then where ◀ ▶ lead: one view build at a time, so the
     // panel's own queries do not cancel each other (see query()).
-    tagsOf(target.path, target.spectrum)
+    if (!tagsPath) return
+    tagsOf(tagsPath, target.spectrum)
       .then((t) => {
         if (!live) return
         setTags(t)
@@ -165,13 +172,13 @@ export default function SpectrumPanel({ target, source, onTarget, onLocate }: Pr
         setChosen(at >= 0 ? at : 0)
       })
       .catch((e: unknown) => live && setTagsError(e instanceof Error ? e.message : String(e)))
-      .then(() => Promise.all([neighbour(target.path, target.spectrum, target.rowId, -1), neighbour(target.path, target.spectrum, target.rowId, 1)]))
+      .then(() => Promise.all([neighbour(tagsPath, target.spectrum, target.rowId, -1), neighbour(tagsPath, target.spectrum, target.rowId, 1)]))
       .then(([p, n]) => live && setNav({ prev: !!p, next: !!n }))
       .catch(() => live && setNav({ prev: false, next: false }))
     return () => {
       live = false
     }
-  }, [target.path, target.spectrum, target.rowId])
+  }, [tagsPath, target.spectrum, target.rowId])
 
   const residues = useMemo(() => {
     const f = source.params?.['fixed_modifications']
@@ -183,7 +190,7 @@ export default function SpectrumPanel({ target, source, onTarget, onLocate }: Pr
   const ladder = spectrum && row ? ladderFor(row, spectrum, residues) : null
 
   async function go(dir: -1 | 1): Promise<void> {
-    const n = await neighbour(target.path, target.spectrum, target.rowId, dir).catch(() => null)
+    const n = tagsPath ? await neighbour(tagsPath, target.spectrum, target.rowId, dir).catch(() => null) : null
     if (!n) {
       setNavNote(dir < 0 ? 'This is the first tagged spectrum.' : 'This is the last tagged spectrum.')
       return
@@ -302,9 +309,11 @@ export default function SpectrumPanel({ target, source, onTarget, onLocate }: Pr
       <section className="sp-tags" aria-label="Tags of this spectrum">
         <h3>
           Tags of this spectrum{tags ? ` (n=${tags.rows.length.toLocaleString('en-US')})` : ''}
-          <span className="hint"> · choose one to draw its ladder</span>
+          {tagsPath && <span className="hint"> · choose one to draw its ladder</span>}
         </h3>
-        {tagsError ? (
+        {!tagsPath ? (
+          <p className="hint">Tags file not opened: open the run's tags table to see the tags of this spectrum.</p>
+        ) : tagsError ? (
           <p className="hint">Cannot read the tags: {tagsError}</p>
         ) : !tags ? (
           <p className="hint">Reading…</p>

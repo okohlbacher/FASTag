@@ -193,7 +193,7 @@ export const TASKS: readonly Task[] = [
     outputs: ['out', 'digest_out', 'label_out', 'alkylation_out', 'glyco_out', 'species_out'],
     productNotes: {
       alkylation_out:
-        'Without a protein database the alkylation report places its tags on a shipped proteome, which needs tags of 8 residues (human, mouse) or 7 (yeast, E. coli). Turning it on raises Extension so that tag length + 2 × Extension reaches that length; this changes every tag of the run. The species and digest calls are validated at Extension 2. A FASTA of your own (as the proteome or as Protein database) needs a length that grows with its size (8 for a human-sized one): Extension is not raised, and the note says what a human-sized one needs. With another report that places tags, Extension is left as it is.'
+        'Without a protein database the alkylation report places its tags on a shipped proteome, which needs tags of 8 residues (human, mouse) or 7 (yeast, E. coli) (or Shortest tag placed, when set above 0). Turning it on raises Extension so that tag length + 2 × Extension reaches that length; this changes every tag of the run. The species and digest calls are validated at Extension 2. A FASTA of your own (as the proteome or as Protein database) needs a length that grows with its size (8 for a human-sized one): Extension is not raised, and the note says what a human-sized one needs. With another report that places tags, Extension is left as it is.'
     },
     leadGroups: ['Species', 'Species, advanced', 'Taxonomy'],
     docs: { to: 'digest', label: 'Digest, label and mass-gap reports' }

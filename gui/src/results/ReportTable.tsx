@@ -121,7 +121,8 @@ const FORMATS: Record<string, Format> = {
   int_gini: { label: 'Intensity spread (Gini)' },
   n_found: { label: 'Tags found' },
   n_reported: { label: 'Tags reported' },
-  status: { label: 'Status', text: (v) => v.replace(/_/g, ' ') },
+  // The CLI's tag status (tagged, no tags, ...), not the identification.
+  status: { label: 'Tag status', text: (v) => v.replace(/_/g, ' ') },
   identified: {
     label: 'Identified',
     text: (v) => {
@@ -459,10 +460,13 @@ function ShortlistView({ tsv, files }: { tsv: Tsv; files: { label: string; path:
   const kept = tsv.columns.indexOf('kept')
   const nKept = kept >= 0 ? tsv.rows.filter((r) => r[kept] === '1').length : tsv.rows.length
   const ids = useMemo(() => Uint32Array.from(tsv.rows.map((_, i) => i)), [tsv])
+  // Only a run that wrote the reduced FASTA keeps them in it; a shortlist
+  // opened alone, or one without -fasta_out, keeps them on the list.
+  const reduced = files.some((f) => f.label === 'reduced FASTA')
   return (
     <>
       <p className="report-sum">
-        <strong>{nKept}</strong> of {tsv.rows.length} proteins with evidence are kept in the reduced FASTA.
+        <strong>{nKept}</strong> of {tsv.rows.length} proteins with evidence are kept {reduced ? 'in the reduced FASTA' : 'on the shortlist'}.
       </p>
       <ShortlistNotes notes={tsv.notes} />
       {files.length > 0 && (
@@ -528,7 +532,7 @@ function TriageView({ tsv, openSpectrum }: { tsv: Tsv; openSpectrum?: (spectrum:
     <>
       <p className="report-sum">
         {fmtInt(tsv.rows.length)} MS2 spectra, ranked by how identifiable they are
-        {counts.length > 0 && <>: {counts.map(([k, n]) => `${fmtInt(n)} ${k.replace(/_/g, ' ')}`).join(', ')}</>}.
+        {counts.length > 0 && <>; tag status: {counts.map(([k, n]) => `${fmtInt(n)} ${k.replace(/_/g, ' ')}`).join(', ')}</>}.
       </p>
       <div className="row tight" role="group" aria-label="Show">
         {FILTERS.map((f) => (

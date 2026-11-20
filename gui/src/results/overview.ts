@@ -122,6 +122,11 @@ export interface OverviewInputs {
   delta?: string | null
   /// The shortlist's engine configuration was written.
   config?: boolean
+  /// The reduced FASTA was written (the shortlist's proteins are kept in
+  /// it); else they are kept on the shortlist only.
+  reducedFasta?: boolean
+  /// The identifiability table (-census_sorted_out): its ranking.
+  triage?: string | null
 }
 
 /// The value column of a key/value report (QC: section key value n ...;
@@ -190,6 +195,34 @@ export function shortlistFacts(text: string | null | undefined): { kept: number;
   if (k < 0) return null
   const rows = lines.slice(1).map((l) => l.split('\t'))
   return { kept: rows.filter((r) => r[k] === '1').length, of: rows.length }
+}
+
+/// What an identifiability table says: the median score of the ranked
+/// spectra and, with identifications given (census_ids), how many each
+/// state has.
+export function triageFacts(text: string | null | undefined): {
+  ranked: number
+  median: number | null
+  ids: { identified: number; not: number; unknown: number } | null
+} | null {
+  if (!text) return null
+  const lines = text.split(/\r?\n/).filter((l) => l !== '' && !l.startsWith('#'))
+  const head = (lines[0] ?? '').split('\t').map((h) => h.trim())
+  const sc = head.indexOf('ident_score')
+  if (sc < 0) return null
+  const rows = lines.slice(1).map((l) => l.split('\t'))
+  const scores = rows.map((r) => Number(r[sc])).filter((x) => Number.isFinite(x)).sort((a, b) => a - b)
+  const mid = scores.length ? (scores.length % 2 ? scores[(scores.length - 1) / 2] : (scores[scores.length / 2 - 1] + scores[scores.length / 2]) / 2) : null
+  const idc = head.indexOf('identified')
+  let ids: { identified: number; not: number; unknown: number } | null = null
+  if (idc >= 0) {
+    ids = { identified: 0, not: 0, unknown: 0 }
+    for (const r of rows) {
+      const t = (r[idc] ?? '').trim().toLowerCase()
+      ids[t === '1' || t === 'true' || t === 'yes' ? 'identified' : t === '0' || t === 'false' || t === 'no' ? 'not' : 'unknown']++
+    }
+  }
+  return { ranked: rows.length, median: mid, ids }
 }
 
 /// The smallest mass shift counted as one (Da): nearer 0 is the
@@ -304,12 +337,12 @@ export function buildOverview(i: OverviewInputs): Overview {
     census || log.census
       ? {
           id: 'tagged',
-          label: 'With tags',
+          label: 'With any tag',
           value: `${fmt(tagged)}${census?.taggedShare != null ? ` (${pct(census.taggedShare)})` : ''}`,
           tone: 'figure',
-          note: 'spectra with a reported tag (identifiability table)'
+          note: 'MS2 spectra with any reported tag (identifiability table)'
         }
-      : { id: 'tagged', label: 'With tags', value: 'not counted', tone: 'off', note: 'counted by the identifiability table (Identifiability triage)' },
+      : { id: 'tagged', label: 'With any tag', value: 'not counted', tone: 'off', note: 'counted by the identifiability table (Identifiability triage)' },
     { id: 'tags', label: 'Tags', value: count(log.tags), tone: 'figure', note: 'every reported tag, gapped ones included' },
     (() => {
       const f = digest ? digest.rows.find((r) => r.section === 'count' && r.key === 'tags_filtered') : undefined
@@ -333,7 +366,7 @@ export function buildOverview(i: OverviewInputs): Overview {
   if (qc) {
     figures.push({
       id: 'qc-tagged',
-      label: 'Tagged',
+      label: 'Tagged (E ≤ 0.01)',
       // To one decimal, as the QC view's summary strip writes it.
       value: qc.tagYield != null ? `${(qc.tagYield * 100).toFixed(1)}%${qc.tagged != null ? ` (${fmt(qc.tagged)})` : ''}` : '–',
       tone: qc.tagYield != null ? 'figure' : 'off',
@@ -354,7 +387,25 @@ export function buildOverview(i: OverviewInputs): Overview {
       label: 'Shortlist',
       value: `${fmt(sl.kept)} of ${fmt(sl.of)} proteins kept`,
       tone: 'figure',
-      note: `proteins with tag evidence kept for the reduced FASTA; ${i.config ? 'search-engine configuration written' : 'no search-engine configuration written'}. A search-space reduction, not an identification`
+      note: `proteins with tag evidence kept ${i.reducedFasta ? 'for the reduced FASTA' : 'on the shortlist'}; ${i.config ? 'search-engine configuration written' : 'no search-engine configuration written'}. A search-space reduction, not an identification`
+    })
+  // The triage's own result: the ranking, and the identifications given.
+  const tf = triageFacts(i.triage)
+  if (tf)
+    figures.push({
+      id: 'ident-score',
+      label: 'Median identifiability',
+      value: tf.median != null ? tf.median.toFixed(3) : '–',
+      tone: tf.median != null ? 'figure' : 'off',
+      note: `the middle score of ${fmt(tf.ranked)} ranked MS2 spectra (0 to 1); a ranking, not a quality call`
+    })
+  if (tf?.ids)
+    figures.push({
+      id: 'identified',
+      label: 'Identified',
+      value: `${fmt(tf.ids.identified)} of ${fmt(tf.ranked)}`,
+      tone: 'figure',
+      note: `by the identifications given; ${fmt(tf.ids.not)} not identified, ${fmt(tf.ids.unknown)} unknown`
     })
   const dc = keyValues(i.deltaCounts)
   const placed = numOf(dc.get('ms2_placed'))
@@ -364,7 +415,7 @@ export function buildOverview(i: OverviewInputs): Overview {
       label: 'Placed spectra',
       value: fmt(placed),
       tone: 'figure',
-      note: `of ${fmt(numOf(dc.get('ms2_tagged')))} tagged MS2 spectra, placed on the database (mass-shift accounting)`
+      note: `of ${fmt(numOf(dc.get('ms2_tagged')))} MS2 spectra with any tag, placed on the database (mass-shift accounting)`
     })
   const shift = topShift(i.delta)
   const fewPlaced = placed != null && placed < LOW_PLACED
@@ -842,7 +893,11 @@ export function shownTiles(o: Overview, params: Record<string, unknown>): { figu
     placed: on('delta_counts_out'),
     topshift: on('delta_out'),
     tagged: on('census') || on('census_sorted_out'),
-    filtered: on('digest_out'),
+    'ident-score': on('census_sorted_out'),
+    identified: on('census_sorted_out') && on('census_ids'),
+    // The digest filter's count is the Digest tab's (DigestPanel), not a
+    // figure of the run.
+    filtered: false,
     glyco: on('glyco'),
     protease: on('digest_out'),
     genus: on('species'),
@@ -859,18 +914,18 @@ const LEAD_TILES: Record<string, string[]> = {
   'mass-shift': ['topshift', 'placed'],
   species: ['genus'],
   'db-reduction': ['shortlist'],
-  triage: ['tagged'],
+  triage: ['ident-score', 'identified', 'tagged'],
   characterize: ['protease', 'label', 'genus', 'glyco', 'alkylation']
 }
 
 /// @p tiles with the workflow's own (LEAD_TILES) first among the figures.
-export function leadTiles(tiles: { figures: Tile[]; calls: Tile[] }, workflowId?: string | null): { figures: Tile[]; calls: Tile[] } {
+export function leadTiles(tiles: { figures: Tile[]; calls: Tile[] }, workflowId?: string | null): { figures: Tile[]; calls: Tile[]; lead?: number } {
   const ids = (workflowId && LEAD_TILES[workflowId]) || []
   if (!ids.length) return tiles
   const all = [...tiles.figures, ...tiles.calls]
   const lead = ids.map((id) => all.find((t) => t.id === id)).filter((t): t is Tile => !!t)
   const isLead = (t: Tile): boolean => lead.includes(t)
-  return { figures: [...lead, ...tiles.figures.filter((t) => !isLead(t))], calls: tiles.calls.filter((t) => !isLead(t)) }
+  return { figures: [...lead, ...tiles.figures.filter((t) => !isLead(t))], calls: tiles.calls.filter((t) => !isLead(t)), lead: lead.length }
 }
 
 // A suggested setting in the words of the search engine forms (the key

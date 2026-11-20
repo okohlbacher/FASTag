@@ -15,7 +15,7 @@ import { baseName, value, type Report } from '../digestReport'
 import { perJobOutputs, REPORT_PARAMS } from '../app/paths'
 import { cleanupLines, failText } from '../app/format'
 import type { Tab, ViewStore } from '../app/viewStore'
-import { loadReports, sameRun, sameRunFiles, sniffPath } from '../results/reports'
+import { loadReports, sameRun, sameRunFiles, sameRunIn, sniffPath, type RunOf, type SameRun } from '../results/reports'
 import { TAB_OF, sniffLongForm, sniffSpecies, sniffTags, sniffWorkflow, workflowFiles, workflowPaths, workflowReportsOf, type WorkflowKind, type WorkflowReports } from '../results/workflowReports'
 import { sniffTable } from '../results/tables'
 import { productLabel } from '../setup/products'
@@ -75,12 +75,12 @@ const noOutputs: ResolvedOutputs = { out: null }
 
 // The tables shown that belong to the run of @p path (sameRunFiles), and
 // the paths of the others; @p replaced is the kind about to be replaced.
-function splitTables(tables: TablePaths | undefined, path: string, replaced?: TableKind): { kept: TablePaths; closed: string[] } {
+function splitTables(tables: TablePaths | undefined, path: string, replaced?: TableKind, same: SameRun = sameRunFiles): { kept: TablePaths; closed: string[] } {
   const kept: TablePaths = {}
   const closed: string[] = []
   for (const [k, q] of Object.entries(tables ?? {}) as [TableKind, string | undefined][]) {
     if (!q || k === replaced) continue
-    if (sameRunFiles(q, path)) kept[k] = q
+    if (same(q, path)) kept[k] = q
     else closed.push(q)
   }
   return { kept, closed }
@@ -93,15 +93,15 @@ function bumpGen<K extends string>(gen: Partial<Record<K, number>> | undefined, 
 }
 
 // What stays shown when a file of the run of @p path opens: the reports,
-// tables and workflow reports of that run (sameRunFiles); those of another
-// run close.
-function closeOtherRuns(cur: Reports, path: string): Reports {
-  const { kept } = splitTables(cur.tables, path)
+// tables and workflow reports of that run (@p same: by the app's record,
+// else sameRunFiles); those of another run close.
+function closeOtherRuns(cur: Reports, path: string, same: SameRun = sameRunFiles): Reports {
+  const { kept } = splitTables(cur.tables, path, undefined, same)
   const workflow: WorkflowReports = {}
-  for (const [k, q] of workflowPaths(cur.workflow ?? {})) if (sameRunFiles(q, path)) workflow[k] = q
+  for (const [k, q] of workflowPaths(cur.workflow ?? {})) if (same(q, path)) workflow[k] = q
   if (cur.workflow?.files && workflow.shortlist) workflow.files = cur.workflow.files
-  const partial = cur.partial?.filter((x) => sameRunFiles(x.path, path))
-  return { ...cur, list: cur.list.filter((r) => sameRunFiles(r.path, path)), tables: kept, workflow, missing: undefined, partial: partial?.length ? partial : undefined }
+  const partial = cur.partial?.filter((x) => same(x.path, path))
+  return { ...cur, list: cur.list.filter((r) => same(r.path, path)), tables: kept, workflow, missing: undefined, partial: partial?.length ? partial : undefined }
 }
 
 // The reports with @p path marked partial when its run (@p rec, the record
@@ -228,8 +228,16 @@ export function useRun(s: RunInputs, view: ViewStore, hooks: RunHooks = {}) {
     selected.current = p
     return { g: ++showGen.current, p }
   }
+  // The run each opened or shown file belongs to, by the app's record
+  // (historyOf): two runs of one input in one folder, or one run's outputs
+  // under custom names, are told by it; a file without one by its name.
+  const runs = useRef(new Map<string, RunOf>())
+  const recordRun = (p: string, rec: RunRecord | null): void => {
+    if (rec) runs.current.set(p, { id: rec.id, outputs: rec.outputs })
+  }
+  const same: SameRun = (a, b) => sameRunIn(runs.current, a, b)
   // A later selection of another run took over: dispatch nothing more.
-  const superseded = (t: Selection): boolean => t.g !== showGen.current && !sameRunFiles(selected.current, t.p)
+  const superseded = (t: Selection): boolean => t.g !== showGen.current && !same(selected.current, t.p)
   // No later selection at all: only this one may still switch the tab.
   const latest = (t: Selection): boolean => t.g === showGen.current
   // A killed run's exit status says nothing (Windows reports code 1), so a
@@ -393,8 +401,24 @@ export function useRun(s: RunInputs, view: ViewStore, hooks: RunHooks = {}) {
       }
     })
   }
-  const askOverwrite = (files: string[]): Promise<boolean> =>
-    new Promise((answer) => dispatch({ type: 'ASK', ask: { files, answer } }))
+  // While the overwrite question is open, no other run starts: a second
+  // Run (a shortcut, the menu) would ask again over the pending question.
+  const asking = useRef(false)
+  const askOverwrite = (files: string[]): Promise<boolean> => {
+    asking.current = true
+    return new Promise<boolean>((answer) =>
+      dispatch({
+        type: 'ASK',
+        ask: {
+          files,
+          answer: (yes) => {
+            asking.current = false
+            answer(yes)
+          }
+        }
+      })
+    )
+  }
 
   // Run one file and resolve when it finishes. Shared by single and batch runs.
   // Resolves with how it ended, every output the backend resolved for it
@@ -484,6 +508,10 @@ export function useRun(s: RunInputs, view: ViewStore, hooks: RunHooks = {}) {
     }
     const g = ++showGen.current
     selected.current = outFile
+    // The run shown is one run: its outputs are known as such, whatever
+    // their names (a later file is told against them, sameRunIn).
+    const written = Object.values(outputs as unknown as Record<string, unknown>).filter((x): x is string => typeof x === 'string' && x !== '')
+    for (const x of written) runs.current.set(x, { id: `shown:${outFile}`, outputs: written })
     const stale = (): boolean => g !== showGen.current
     dispatch({ type: 'RESULTS', update: (r) => ({ path: outFile, gen: (r?.gen ?? 0) + 1, input: inFile }) })
     dispatch({ type: 'BATCH_MISS', miss: null })
@@ -554,7 +582,9 @@ export function useRun(s: RunInputs, view: ViewStore, hooks: RunHooks = {}) {
       shortlist: await read(workflow.shortlist),
       deltaCounts: await read(workflow.deltaCounts),
       delta: await read(tables.delta),
-      config: wf.files.some((f) => f.path === outputs.search_config_out)
+      triage: await read(workflow.triage),
+      config: wf.files.some((f) => f.path === outputs.search_config_out),
+      reducedFasta: wf.files.some((f) => f.path === outputs.fasta_out)
     }
     if (stale()) return
     dispatch({
@@ -639,7 +669,7 @@ export function useRun(s: RunInputs, view: ViewStore, hooks: RunHooks = {}) {
   // so its command line is the recorded one. Like Run: the overwrite
   // question, then Results. False when it did not start.
   async function rerun(id: string): Promise<boolean> {
-    if (running || batchRunning || checking.current) return false
+    if (running || batchRunning || checking.current || asking.current) return false
     const call = await window.fastag.historyRerun(id)
     const inFile = typeof call.in === 'string' ? call.in : ''
     const outFile = typeof call.out === 'string' ? call.out : ''
@@ -656,7 +686,7 @@ export function useRun(s: RunInputs, view: ViewStore, hooks: RunHooks = {}) {
     beforeStart?: () => void,
     changed?: string[]
   ): Promise<boolean> {
-    if (checking.current) return false
+    if (checking.current || asking.current) return false
     checking.current = true
     let existing: string[]
     try {
@@ -694,7 +724,7 @@ export function useRun(s: RunInputs, view: ViewStore, hooks: RunHooks = {}) {
   }
 
   async function runBatch(only?: BatchJob['status']): Promise<void> {
-    if (jobs.length === 0 || batchRunning || running || blocked) return
+    if (jobs.length === 0 || batchRunning || running || blocked || asking.current) return
     // Checked again over the queue itself: the form's checks may not have
     // seen a file just added (the CLI would refuse each mzPeak job, rc 6).
     const refusedNow = conflicts(values, { inputs: jobs.map((j) => j.input) })
@@ -814,12 +844,11 @@ export function useRun(s: RunInputs, view: ViewStore, hooks: RunHooks = {}) {
 
   // What another run left shown goes when a file of @p p's run opens: its
   // tags, its species report (with the run it describes) and its Overview.
-  // The reports and tables are closed by the opener itself.
+  // The reports and tables are closed by the opener itself. Judged in the
+  // reducer, against the state as it is then: a render's state read after
+  // an await may still show the run before.
   function closeOtherRun(p: string, keepTags = false): void {
-    if (!keepTags && state.results?.path && !sameRunFiles(state.results.path, p)) dispatch({ type: 'RESULTS', update: () => null })
-    if (state.species && !sameRunFiles(state.species.path, p)) dispatch({ type: 'SPECIES', species: null, speciesRun: null })
-    else if (!state.species && state.speciesRun) dispatch({ type: 'SPECIES', species: null, speciesRun: null })
-    if (state.shown?.out && !sameRunFiles(state.shown.out, p)) dispatch({ type: 'SHOWN', shown: null })
+    dispatch({ type: 'CLOSE_OTHER_RUN', path: p, same, keepTags })
   }
 
   // Any file FASTag wrote, picked or dropped (Open earlier results…, Open
@@ -845,6 +874,7 @@ export function useRun(s: RunInputs, view: ViewStore, hooks: RunHooks = {}) {
     // could not remove it) is not opened as a complete table.
     const rec = await window.fastag.historyOf(p).catch(() => null)
     if (superseded(t)) return
+    recordRun(p, rec)
     const recorded = rec && rec.status !== 'ok' ? { status: rec.status, end: rec.end } : undefined
     dispatch({
       type: 'RESULTS',
@@ -854,11 +884,7 @@ export function useRun(s: RunInputs, view: ViewStore, hooks: RunHooks = {}) {
     // Tags of another run: the Overview, the species and the reports of the
     // run shown are not this file's (B's tags beside A's QC would read as
     // one run).
-    if (!state.shown?.out || state.shown.out !== p) {
-      closeOtherRun(p, true)
-      dispatch({ type: 'SHOWN', shown: null })
-      dispatch({ type: 'REPORTS', update: (cur) => closeOtherRuns(cur, p) })
-    }
+    dispatch({ type: 'CLOSE_OTHER_RUN', path: p, same, keepTags: true, tagsOpened: true, reports: (cur) => closeOtherRuns(cur, p, same) })
   }
 
   // A done batch job's tags and reports, as the batch writes them.
@@ -959,8 +985,9 @@ export function useRun(s: RunInputs, view: ViewStore, hooks: RunHooks = {}) {
       // The run that wrote it, when the app recorded it; else the report.
       const rec = await window.fastag.historyOf(p).catch(() => null)
       if (superseded(t)) return
+      recordRun(p, rec)
       closeOtherRun(p)
-      dispatch({ type: 'REPORTS', update: (cur) => closeOtherRuns(cur, p) })
+      dispatch({ type: 'REPORTS', update: (cur) => closeOtherRuns(cur, p, same) })
       // A report read is shown whatever Setup's species switch and reach
       // check say; the counts of the run shown before are not its own.
       dispatch({ type: 'REPORTS', update: (cur) => withPartial(cur, p, rec) })
@@ -988,6 +1015,7 @@ export function useRun(s: RunInputs, view: ViewStore, hooks: RunHooks = {}) {
     // is not shown as complete.
     const rec = await window.fastag.historyOf(p).catch(() => null)
     if (superseded(t)) return
+    recordRun(p, rec)
     const mark = (): void => dispatch({ type: 'REPORTS', update: (cur) => withPartial(cur, p, rec) })
     // A report of another run replaces its tags, species and Overview.
     closeOtherRun(p)
@@ -996,7 +1024,7 @@ export function useRun(s: RunInputs, view: ViewStore, hooks: RunHooks = {}) {
       dispatch({
         type: 'REPORTS',
         update: (cur) => {
-          const kept = closeOtherRuns(cur, p)
+          const kept = closeOtherRuns(cur, p, same)
           // Opening the file again reads it again (it may have changed).
           return { ...kept, workflow: { ...kept.workflow, [wk]: p }, workflowGen: bumpGen(cur.workflowGen, [wk]), missing: undefined }
         }
@@ -1016,24 +1044,24 @@ export function useRun(s: RunInputs, view: ViewStore, hooks: RunHooks = {}) {
           // Like a long-form report of another run (below), a table of
           // another run closes what the view showed of the run before:
           // B's recon bins must not sit under A's peaks and counts.
-          const closedReports = cur.list.filter((r) => !sameRunFiles(r.path, p))
-          const { kept, closed: closedTables } = splitTables(cur.tables, p, table.kind)
+          const closedReports = cur.list.filter((r) => !same(r.path, p))
+          const { kept, closed: closedTables } = splitTables(cur.tables, p, table.kind, same)
           const closed = [...closedReports.map((r) => r.path), ...closedTables]
           const tables = { ...kept, [table.kind]: p }
           // Opening the file again reads it again (it may have changed).
           const gen = bumpGen(cur.gen, [table.kind])
           // The workflow reports of another run close as well: B's table
           // beside A's QC, Shortlist or Triage would read as one run.
-          const workflow = closeOtherRuns(cur, p).workflow
+          const workflow = closeOtherRuns(cur, p, same).workflow
           if (closed.length === 0) return { ...cur, tables, gen, workflow, missing: undefined, notice: undefined }
           const note = closedNote(p, closed)
-          return { list: cur.list.filter((r) => !closedReports.includes(r)), errors: [note], tables, gen, workflow, notice: note, partial: closeOtherRuns(cur, p).partial }
+          return { list: cur.list.filter((r) => !closedReports.includes(r)), errors: [note], tables, gen, workflow, notice: note, partial: closeOtherRuns(cur, p, same).partial }
         }
       })
       mark()
       // An unreadable one is named where report errors are: the Digest tab.
       if (latest(t)) setTab('kind' in table ? (table.kind === 'glyco' ? 'glyco' : 'recon') : 'digest')
-      if (state.shown?.out && !sameRunFiles(state.shown.out, p)) dispatch({ type: 'SHOWN', shown: null })
+      closeOtherRun(p)
       return
     }
     const rep = await loadReports([p])
@@ -1044,7 +1072,7 @@ export function useRun(s: RunInputs, view: ViewStore, hooks: RunHooks = {}) {
       update: (cur) => {
         const input = (r: Report): string | undefined => value(r, 'run', 'input')
         const fresh = rep.reports[0]
-        const other = fresh ? cur.list.filter((r) => !sameRun(r, fresh)) : []
+        const other = fresh ? cur.list.filter((r) => !sameRun(r, fresh, runs.current)) : []
         const notes = other.length
           ? [
               `${baseName(fresh.path)} is from ${
@@ -1058,15 +1086,15 @@ export function useRun(s: RunInputs, view: ViewStore, hooks: RunHooks = {}) {
         // The tables of another run close too; those of the fresh report's
         // run (its folder and stem) stay, so B's recon dropped with B's
         // massgap is kept whichever opens first.
-        const split = fresh ? splitTables(cur.tables, fresh.path) : { kept: cur.tables ?? {}, closed: [] }
+        const split = fresh ? splitTables(cur.tables, fresh.path, undefined, same) : { kept: cur.tables ?? {}, closed: [] }
         if (fresh && other.length === 0 && split.closed.length > 0) notes.push(closedNote(fresh.path, split.closed))
         else if (notes.length && split.closed.length > 0) notes[0] = notes[0].replace(/ (was|were) closed\.$/, `, ${split.closed.join(', ')} were closed.`)
-        const closedRuns = closeOtherRuns(cur, p)
+        const closedRuns = closeOtherRuns(cur, p, same)
         return { list: [...kept, ...rep.reports], errors: [...notes, ...rep.errors], tables: split.kept, gen: cur.gen, workflow: closedRuns.workflow, partial: closedRuns.partial }
       }
     })
     mark()
-    if (state.shown?.out && !sameRunFiles(state.shown.out, p)) dispatch({ type: 'SHOWN', shown: null })
+    closeOtherRun(p)
     if (latest(t)) setTab('digest')
   }
 

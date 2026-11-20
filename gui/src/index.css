@@ -495,6 +495,8 @@ summary.disclosure:hover { background: var(--panel); }
 .help[style] { display: block; -webkit-line-clamp: unset; }
 .help.invalid { color: var(--destructive-text); display: flex; gap: 6px; align-items: flex-start; -webkit-line-clamp: unset; }
 .help.invalid .icon { margin-top: 2px; }
+/* The changed note under a hint, on its own line (ParamField). */
+.help.changed { margin-top: 0; -webkit-line-clamp: 1; }
 .help .mark { color: var(--primary-text); }
 .help strong { font-weight: 600; color: var(--foreground); }
 button.link.help-more { font-size: var(--text-xs); align-self: flex-start; }
@@ -1198,8 +1200,9 @@ label.task { align-content: start; }
 }
 .help-pop.right { left: auto; right: 0; }
 .help-pop-more { color: var(--muted-foreground); }
-/* The CLI description below the plain text: what it adds, in smaller type. */
-.help-pop-cli { font-size: 0.92em; }
+/* The CLI description below the plain text: what it adds, at the help
+   text's size and contrast (12 px is the minimum), set apart by space. */
+.help-pop-cli { font-size: var(--text-xs); color: var(--foreground); margin-top: var(--space-1); padding-top: var(--space-2); border-top: 1px solid var(--border); }
 .help-pop-facts { display: flex; flex-wrap: wrap; gap: var(--space-1) var(--space-3); }
 .help-pop .help-link { align-self: flex-start; font-size: var(--text-xs); }
 /* Two lines in the grid, as a brief hint: most sentences end inside them;

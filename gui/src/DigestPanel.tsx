@@ -177,6 +177,7 @@ function Digest({ report }: { report: Report }): JSX.Element {
   const nocall = section(report, 'nocall')
   const nC = num(value(report, 'count', 'n_c'))
   const nN = num(value(report, 'count', 'n_n'))
+  const filtered = report.rows.find((r) => r.section === 'count' && r.key === 'tags_filtered')?.n ?? null
   return (
     <section className="dg-block card" aria-labelledby="dg-digest">
       <Heading id="dg-digest" title="Protease" report={report} help="digest-protease" />
@@ -210,6 +211,9 @@ function Digest({ report }: { report: Report }): JSX.Element {
         ) : (
           <Stat label="Protease call">The report has no call rows.</Stat>
         )}
+        {/* The digest filter's count: the tags the call reads (moved from
+            the Overview, round 10). */}
+        {filtered != null && <Stat label="Tags E ≤ 1">{fmt(filtered)}</Stat>}
         {(nC != null || nN != null || call.usesNterm != null) && (
           <Stat label="Tag ends used">
             {[nC != null && `${fmt(nC)} C`, nN != null && `${fmt(nN)} N`].filter(Boolean).join(' · ')}

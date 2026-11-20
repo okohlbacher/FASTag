@@ -120,7 +120,7 @@ describe('docs: Digest tab vs doc/DESIGN-digest.md "GUI: Digest tab"', () => {
     const { container } = render(<DigestPanel reports={[r]} errors={[]} onOpen={() => {}} />)
     expect(container.querySelector('.headline .sub')?.textContent).toBe('N end not used')
     const stats = [...container.querySelectorAll('.headline dt')].map((d) => d.textContent)
-    expect(stats).toEqual(['Protease call', 'Tag ends used']) // no runner-up, no margin
+    expect(stats).toEqual(['Protease call', 'Tags E ≤ 1', 'Tag ends used']) // no runner-up, no margin
     const logos = [...container.querySelectorAll('svg[role="img"]')].map((l) => l.getAttribute('aria-label')?.split(':')[0])
     expect(logos).toEqual(['Observed', 'Called'])
   })

@@ -126,7 +126,10 @@ describe('round 9, 3: a drop of reports and a species report opens all of them',
     await flush()
     await waitFor(() => expect(screen.getAllByRole('tab').some((t) => /^Species/.test(t.textContent ?? ''))).toBe(true))
     const digest = screen.getAllByRole('tab').find((t) => /^Digest/.test(t.textContent ?? ''))!
-    await waitFor(() => expect(digest.querySelector('.count')?.textContent).toBe('2'))
+    // Round 10: no badge counts reports; both are in the Digest tab.
+    expect(digest.querySelector('.count')).toBeNull()
+    await click(digest)
+    await waitFor(() => expect(document.querySelectorAll('.dg-block').length).toBeGreaterThanOrEqual(2))
   })
 })
 
@@ -216,7 +219,7 @@ describe('round 9, 8: the (?) shows the plain text first, and the CLI facts it l
     expect(PARAM_UI['alkylation_proteome'].help!.text).toMatch(/\.gz/)
   })
   it('13: the TMT reporter filter names b/y tags and the TMT6/10 reporter ions', () => {
-    expect(PARAM_UI['tmt_reporter_filter'].help!.text).toBe('Also reject b/y tags whose low end is a singly charged TMT6/10 reporter ion. Needs the TMT pseudo-tag filter on or auto.')
+    expect(PARAM_UI['tmt_reporter_filter'].help!.text).toBe('Also reject b/y tags whose low end is a singly charged TMT6/10 reporter ion. Needs the TMT pseudo-tag filter on, or auto when auto detects TMT labelling.')
   })
 })
 

@@ -5,7 +5,7 @@
 // While a run is in flight, a locked summary of what it uses.
 
 import { useEffect, useRef, useState, type JSX, type RefObject } from 'react'
-import { BRIEF_HINT, SECTIONS, PARAM_BY_NAME, type Dependency, type Section, UNIT_PARAMS, defaultText, dependsOf, forcedValue, humanName, inertDependency, masters, recipeNote, unknownParams, unitOf, unplacedParams } from '../paramLayout'
+import { BRIEF_HINT, SECTIONS, SECTION_OF, PARAM_BY_NAME, type Dependency, type Section, UNIT_PARAMS, defaultText, dependsOf, forcedValue, humanName, inertDependency, masters, recipeNote, unknownParams, unitOf, unplacedParams } from '../paramLayout'
 import ParamField, { type ParamValue } from '../ParamField'
 import { disclosure } from '../disclosure'
 import { baseName } from '../digestReport'
@@ -32,6 +32,12 @@ const UNKNOWN = unknownParams()
 /// The count of spectra to read: one control with the share
 /// (subsample_fraction's "Custom count…"), never a field of its own.
 const countSpec = PARAM_BY_NAME.get('subsample_spectra')
+// The masters every one of @p deps names (none said in words).
+function commonMasters(deps: Dependency[]): string[] {
+  if (!deps.length) return []
+  return masters(deps[0]).filter((m) => deps.every((d) => !d.say && masters(d).includes(m)))
+}
+
 export const FOLDED: ReadonlySet<string> = new Set(['subsample_spectra'])
 
 /// Switches a product checkbox drives (setup/products.ts): never a field.
@@ -190,36 +196,63 @@ export default function SetupForm({
     keepRaised(r.raised)
     if (r.values['extension'] !== values['extension']) session.setValues((v) => ({ ...v, extension: r.values['extension'] }))
   }, [placing, proteome, seeds, alkOn, session.formGen])
-  // The note of a group's settings that wait on other reports: one report
-  // that every one of them needs is named in a plain sentence; else each
-  // report that would show some of them, once (the per-setting detail is
-  // the popover's).
-  const needsSentence = (n: number, deps: Dependency[]): string => {
+  // The note of a group's settings that wait on other reports. With Turn
+  // on buttons it names exactly the reports they turn on (@p targets);
+  // else one report that every setting needs, in a plain sentence, or each
+  // report that would show some of them, once. Up to three are named; the
+  // per-setting detail is the popover's.
+  const listOr = (xs: string[]): string =>
+    xs.length <= 1 ? xs.join('') : xs.length <= 3 ? `${xs.slice(0, -1).join(', ')} or ${xs[xs.length - 1]}` : `${xs.slice(0, 3).join(', ')} or ${xs.length - 3} more`
+  const needsSentence = (n: number, parts: { dep: Dependency; prod?: Product }[], one?: Product): string => {
     const lead = n === 1 ? 'One more setting' : `${n} more settings`
+    const need = n === 1 ? 'needs' : 'need'
     const name = (m: string): string => productLabel(m) ?? humanName(m)
-    // A long list of conditions goes to the (?), not the note.
-    const few = (xs: string[]): string => (xs.length <= 2 ? xs.join(' or ') : `one of ${xs.length} reports (see ?)`)
-    if (deps.length === 1) return `${lead} ${n === 1 ? 'needs' : 'need'} ${deps[0].say ?? few(masters(deps[0]).map(name))}.`
-    const common = masters(deps[0]).filter((m) => deps.every((d) => !d.say && masters(d).includes(m)))
+    if (one) return `${lead} ${need} ${one.label}.`
+    const deps = parts.map((x) => x.dep)
+    if (parts.some((x) => x.prod)) {
+      // A set with a Turn on is named by the report it turns on (or its
+      // condition in words); one without, by its reports.
+      const items = [...new Set(parts.flatMap((x) => (x.dep.say ? [x.dep.say] : x.prod ? [`${x.prod.label} on`] : masters(x.dep).map((m) => `${name(m)} on`))))]
+      if (items.length === 1 && parts.length === 1) return `${lead} ${need} ${parts[0].dep.say ?? parts[0].prod!.label}.`
+      return `${lead} appear with ${listOr(items)}.`
+    }
+    if (deps.length === 1) return `${lead} ${need} ${deps[0].say ?? listOr(masters(deps[0]).map(name))}.`
+    const common = commonMasters(deps)
     if (common.length === 1) return `${lead} need ${name(common[0])}.`
     // A report or switch is "on"; a condition in words (say) is said as it is.
     const items = [...new Set(deps.flatMap((d) => (d.say ? [d.say] : masters(d).map((m) => `${name(m)} on`))))]
-    return items.length <= 2 ? `${lead} appear with ${items.join(' or ')}.` : `${lead} appear when one of ${items.length} reports or switches is on (see ?).`
+    return `${lead} appear with ${listOr(items)}.`
   }
-  // What the alkylation report does to Extension: off, the raise it would
-  // make; on, the raise in force, or the Extension still too short (edited
-  // below what the proteome needs).
-  // On a FASTA of the user's (alkylationShipped false) nothing is raised:
-  // its length depends on its size, so the note says what a human-sized one
-  // needs. A short Extension offers the raise in one click.
-  const alkylationWhy = (on: boolean): string | null => {
+  // The Extension field is under Advanced: the note's link opens its group
+  // and focuses it, as the parameter search does.
+  const extGroup = SECTION_OF.get('extension')?.title ?? 'Tagging'
+  const goToExtension = (): void => {
+    session.setAdvancedOpen(true)
+    setOpenGroups((g) => ({ ...g, [extGroup]: true, 'Other analyses': true }))
+    setTimeout(() => {
+      const el = document.getElementById('p-extension')
+      el?.scrollIntoView?.({ block: 'center' })
+      el?.focus()
+    }, 0)
+  }
+  // The raise, said where the field is and what it changes (tasks.ts
+  // productNotes has the detail).
+  const raiseNote = (from: ParamValue, to: ParamValue): JSX.Element => (
+    <>
+      <button type="button" className="link small" onClick={goToExtension}>
+        Extension
+      </button>{' '}
+      {String(from ?? '') || '0'} → {String(to)} (Advanced › {extGroup}); changes every tag; species and digest are validated at 2.
+    </>
+  )
+  const alkylationWhy = (on: boolean): JSX.Element | string | null => {
     const need = alkylationExtension(values)
     const short = alkylationShort(values)
     const custom = !alkylationShipped(values)
     const min = Number(String(values['recon_min_length'] ?? '')) > 0
-    if (!on) return need ? `Raises Extension to ${need}.` : short && custom ? `Needs Extension ${short}${min ? '' : ' for a human-sized database'}.` : null
+    if (!on) return need ? raiseNote(values['extension'], need) : short && custom ? `Needs Extension ${short}${min ? '' : ' for a human-sized database'}.` : null
     const r = raisedNow()
-    if (r && String(values['extension'] ?? '') === String(r.to)) return `Extension raised from ${String(r.from) || '0'} to ${String(r.to)}.`
+    if (r && String(values['extension'] ?? '') === String(r.to)) return raiseNote(r.from, r.to)
     if (!short) return null
     if (custom && !min) return `Needs Extension ${short} for a human-sized database: shorter tags may not place on it.`
     return `Needs Extension ${short}: shorter tags do not place on the ${custom ? 'database' : 'proteome'}.`
@@ -367,16 +400,20 @@ export default function SetupForm({
         cands.find(quiet) ??
         cands.find((x) => task.outputs.includes(productOf(x)!.param)) ??
         cands[0]
-      return { w, what, prod: m ? productOf(m) : undefined }
+      return { w, what, prod: m ? productOf(m) : undefined, cands }
     })
-    const targets = [...new Map(parts.flatMap((x) => (x.prod ? [[x.prod.param, x.prod] as [string, Product]] : []))).values()]
+    // One report every waiting setting needs: its Turn on is the only one,
+    // so the note and the button name the same report.
+    const common = commonMasters(parts.map((x) => x.w.dep))
+    const one = common.length === 1 && parts.every((x) => x.cands.includes(common[0])) ? productOf(common[0]) : undefined
+    const targets = one ? [one] : [...new Map(parts.flatMap((x) => (x.prod ? [[x.prod.param, x.prod] as [string, Product]] : []))).values()]
     const waitingNames = sets.flatMap((w) => w.names)
     const needs =
       parts.length === 0 ? null : (
         <div className="group-needs" role="note">
           {/* The (?) inline at the end of the note, never on a line of its own. */}
           <span className="needs-text">
-            {needsSentence(waitingNames.length, parts.map((x) => x.w.dep))}{' '}
+            {needsSentence(waitingNames.length, parts.map((x) => ({ dep: x.w.dep, prod: x.prod })), one)}{' '}
             <HelpPopover
             name={waitingNames[0]}
             label={`the settings of ${sec.title} not used yet`}

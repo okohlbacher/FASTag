@@ -97,8 +97,17 @@ export default function OverviewPanel({ overview: o, input, busy, onAction, acti
           <li className="flag">{o.warning}</li>
         </ul>
       )}
+      {/* The workflow's own result on a row of its own, the run's facts
+          below it: a call never shares a row with a count. */}
+      {!!tiles.lead && (
+        <ul className="tiles" aria-label="Main result">
+          {tiles.figures.slice(0, tiles.lead).map((t) => (
+            <TileView key={t.id} t={t} busy={busy} actionable={actionable} onAction={onAction} />
+          ))}
+        </ul>
+      )}
       <ul className="tiles" aria-label="Key figures">
-        {tiles.figures.map((t) => (
+        {tiles.figures.slice(tiles.lead ?? 0).map((t) => (
           <TileView key={t.id} t={t} busy={busy} actionable={actionable} onAction={onAction} />
         ))}
       </ul>

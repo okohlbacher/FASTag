@@ -163,9 +163,9 @@ describe('round 8, 13: a value the workflow set reads "set by", not "changed"', 
   it('ParamField', () => {
     const spec = PARAM_BY_NAME.get('extension')!
     const { rerender } = render(<ParamField spec={spec} value="2" onChange={vi.fn()} setBy="Characterize a run" />)
-    expect(document.getElementById('h-extension')!.textContent).toMatch(/Default 0 · set by Characterize a run/)
+    expect(document.getElementById('h-extension-c')!.textContent).toMatch(/Default 0 · set by Characterize a run/)
     rerender(<ParamField spec={spec} value="4" onChange={vi.fn()} />)
-    expect(document.getElementById('h-extension')!.textContent).toMatch(/Default 0 · changed/)
+    expect(document.getElementById('h-extension-c')!.textContent).toMatch(/Default 0 · changed/)
   })
 })
 

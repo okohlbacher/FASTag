@@ -7,7 +7,7 @@
 import { act, renderHook, waitFor } from '@testing-library/react'
 import { describe, expect, it } from 'vitest'
 import { initialValues, useSession } from './useSession'
-import { PARAM_BY_NAME } from '../paramLayout'
+import { PARAM_BY_NAME, msfRecipeOn } from '../paramLayout'
 import { installMockBridge } from '../testing/mockBridge'
 
 describe('useSession', () => {
@@ -37,6 +37,34 @@ describe('useSession', () => {
     expect(result.current.values['tag_length']).toBe('5')
     expect(result.current.values['digest_out']).toBe('/d/b.digest.tsv')
     expect(result.current.lastUsedDiff).toEqual([])
+  })
+
+  it('applies last-used MSFragger/trypsin values as they ran, and Undo puts the form back (round 10)', async () => {
+    const mock = installMockBridge()
+    mock.settings.lastUsed = {
+      recon_fasta: '/d/h.fasta',
+      shortlist_out: '/old/a.shortlist.tsv',
+      search_config_out: '/old/a.search.params',
+      search_engine: 'msfragger',
+      shortlist_protease: 'trypsin',
+      shortlist_max_evalue: '0.5',
+      recon_min_length: '10',
+      recon_missed_cleavages: '4'
+    }
+    const { result } = renderHook(() => useSession())
+    await waitFor(() => expect(result.current.lastUsed).not.toBeNull())
+    act(() => result.current.setValue('tag_length', '6'))
+    const before = { ...result.current.values }
+    const gen = result.current.formGen
+    act(() => result.current.applyLastUsed())
+    const v = result.current.values
+    expect([v['shortlist_max_evalue'], v['recon_min_length'], v['recon_missed_cleavages']]).toEqual(['0.5', '10', '4'])
+    expect(msfRecipeOn(v)).toBe(true)
+    expect(v['tag_length']).toBe('6')
+    expect(result.current.formGen).toBe(gen + 1)
+    expect(result.current.canUndo).toBe(true)
+    act(() => result.current.undo())
+    expect(result.current.values).toEqual(before)
   })
 
   it('a preset is applied with its report paths beside the tags output; save and delete refresh the list', async () => {

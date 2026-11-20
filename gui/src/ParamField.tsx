@@ -126,14 +126,18 @@ export default function ParamField({ spec, value, onChange, onPickFile, needs, u
             {' '}Turns on {turnsOn} {turnsOn === 1 ? 'setting' : 'settings'}.
           </span>
         )}
-        {changed && !brief && (
-          <span className="changed">
-            {' '}Default {deflt} · {setBy ? <>set by {setBy}</> : <span className="mark">changed</span>}
-          </span>
-        )}
       </p>
+      {/* On a line of its own, not run on from the hint (which the grid
+          clamps to two lines). */}
+      {changed && !brief && (
+        <p id={`${helpId}-c`} className="help changed">
+          Default {deflt} · {setBy ? <>set by {setBy}</> : <span className="mark">changed</span>}
+        </p>
+      )}
     </>
   )
+  // The hint, and the changed line when it shows.
+  const describedBy = !invalid && changed && !brief ? `${helpId} ${helpId}-c` : helpId
   const cls = `field${off ? ' off' : ''}${invalid ? ' invalid' : ''}`
 
   if (spec.type === 'bool') {
@@ -141,7 +145,7 @@ export default function ParamField({ spec, value, onChange, onPickFile, needs, u
       <div className={`${cls} check`}>
         <input
           id={`p-${spec.name}`}
-          aria-describedby={helpId}
+          aria-describedby={describedBy}
           type="checkbox"
           disabled={off}
           checked={value === true}
@@ -160,7 +164,7 @@ export default function ParamField({ spec, value, onChange, onPickFile, needs, u
         {label}
         <textarea
           id={`p-${spec.name}`}
-          aria-describedby={helpId}
+          aria-describedby={describedBy}
           aria-invalid={invalid ? true : undefined}
           rows={Math.max(2, items.length + 1)}
           disabled={off}
@@ -181,7 +185,7 @@ export default function ParamField({ spec, value, onChange, onPickFile, needs, u
           <input
             id={`p-${spec.name}`}
             className="path-input"
-            aria-describedby={helpId}
+            aria-describedby={describedBy}
             type="text"
             disabled={off}
             value={String(value ?? '')}
@@ -214,7 +218,7 @@ export default function ParamField({ spec, value, onChange, onPickFile, needs, u
         {label}
         <select
           id={`p-${spec.name}`}
-          aria-describedby={helpId}
+          aria-describedby={describedBy}
           aria-invalid={invalid ? true : undefined}
           disabled={off}
           value={v}
@@ -248,7 +252,7 @@ export default function ParamField({ spec, value, onChange, onPickFile, needs, u
           <select
             id={`p-${spec.name}`}
             ref={selectRef}
-            aria-describedby={helpId}
+            aria-describedby={describedBy}
             disabled={off}
             value={counting ? '__count' : custom ? '__custom' : hit!.value}
             onChange={(e) => {
@@ -314,7 +318,7 @@ export default function ParamField({ spec, value, onChange, onPickFile, needs, u
     <input
       id={`p-${spec.name}`}
       className={numeric ? 'num' : undefined}
-      aria-describedby={helpId}
+      aria-describedby={describedBy}
       aria-invalid={invalid ? true : undefined}
       type="text"
       inputMode={spec.type === 'int' ? 'numeric' : spec.type === 'double' ? 'decimal' : undefined}

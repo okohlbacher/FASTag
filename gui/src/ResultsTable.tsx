@@ -78,11 +78,13 @@ const LABEL: Record<string, string> = {
   extended: 'Extended',
   gapped: 'Gapped',
   evalue: 'E-value',
-  min_conf: 'Min. conf.',
-  mean_conf: 'Mean conf.',
+  // Two scales, each named in its header: the step scores 0–1, the
+  // per-residue confidence (-res_conf) in percent.
+  min_conf: 'Min. conf. (0–1)',
+  mean_conf: 'Mean conf. (0–1)',
   fasta_hit: 'Database hit',
   proforma: 'ProForma',
-  res_conf: 'Residue conf.',
+  res_conf: 'Residue conf. (%)',
   usi: 'USI',
   q_db: 'Database q-value'
 }

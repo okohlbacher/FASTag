@@ -142,15 +142,19 @@ export function useSession(start: Origin = DEFAULTS) {
 
   // The last session's values that differ from the form's (D6).
   const lastUsedDiff = lastUsed ? Object.keys(lastUsed).filter((n) => !sameValue(lastUsed[n], values[n])) : []
-  // Apply the offer. Report paths go beside the current tags output, as a
-  // preset's do, or this run would overwrite the last session's reports.
+  // Apply the offer. It replaces the form as a preset does (Undo, formGen,
+  // no field the user's yet) and keeps the origin: the saved values are
+  // set as they ran, so a recipe field they hold is not overwritten by the
+  // MSFragger recipe (fillRecipe treats every saved key as given). A
+  // changed engine renames its unedited configuration file. Report paths go
+  // beside the current tags output, or this run would overwrite the last
+  // session's reports.
   function applyLastUsed(): void {
     if (!lastUsed) return
     const lu = lastUsed
-    setValues((v) => {
-      const merged = { ...v, ...lu }
-      return out ? { ...merged, ...rebaseOutputs(merged, out) } : merged
-    })
+    let merged: Record<string, ParamValue> = { ...values, ...lu }
+    if ('search_engine' in lu && !('search_config_out' in lu)) merged = renameSearchConfig(merged, lu['search_engine'])
+    replaceForm(origin, originValues, fillRecipe(merged, new Set(Object.keys(lu))), true)
     setLastUsed(null)
     focusLater(() => presetRef.current)
   }
@@ -173,12 +177,15 @@ export function useSession(start: Origin = DEFAULTS) {
   // keeps the snapshot taken before it: arrowing through the task radios
   // replaces the form once per task, and the edits made before the first
   // one must survive the second.
-  function replaceForm(o: Origin, ov: Record<string, ParamValue>): void {
-    if (diffNames(originValues, values).length > 0) setUndoSnapshot({ values, origin, originValues })
+  // @p v: the form's new values when they are not the origin's (the
+  // last-used offer); @p always: take the snapshot even over a form without
+  // edits of the user's, since @p v differs from the origin it keeps.
+  function replaceForm(o: Origin, ov: Record<string, ParamValue>, v: Record<string, ParamValue> = ov, always = false): void {
+    if (always || diffNames(originValues, values).length > 0) setUndoSnapshot({ values, origin, originValues })
     setPresetError(null)
     setOrigin(o)
     setOriginValues(ov)
-    replaceValues(beside(ov))
+    replaceValues(beside(v))
   }
   function undo(): void {
     if (!undoSnapshot) return

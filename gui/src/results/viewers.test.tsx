@@ -361,6 +361,24 @@ describe('ReconView', () => {
     expect(reconExtend({ extension: '2' })).toBeNull()
   })
 
+  // Round 10, 16: the extension follows the seed and an explicit shortest placed tag.
+  it('reconExtend: the extension the seed needs to reach recon_min_length; a longer seed past 12', () => {
+    // Seed 3, shortest placed 10: extension 4 (3 + 2 × 4 = 11), not 3 (9).
+    expect(reconExtend({ fasta: '/db/h.fasta', extension: '2', recon_min_length: '10' })).toEqual({ kind: 'enable', label: 'Run again with extension 4', values: { extension: '4' } })
+    // Extension 3 is still too short for 10: offered again.
+    expect(reconExtend({ fasta: '/db/h.fasta', extension: '3', recon_min_length: '10' })?.values).toEqual({ extension: '4' })
+    // The longest of several seeds counts: 5 + 2 × 3 reaches 10.
+    expect(reconExtend({ fasta: '/db/h.fasta', extension: '2', tag_lengths: ['3', '5'], recon_min_length: '10' })?.values).toEqual({ extension: '3' })
+    expect(reconExtend({ fasta: '/db/h.fasta', extension: '3', tag_lengths: ['3', '5'], recon_min_length: '10' })).toBeNull()
+    // Past 12 the seed grows instead.
+    expect(reconExtend({ fasta: '/db/h.fasta', extension: '2', tag_length: '3', recon_min_length: '30' })).toEqual({
+      kind: 'enable',
+      label: 'Run again with seed length 6 and extension 12',
+      values: { tag_length: '6', extension: '12' }
+    })
+    expect(reconRerun({ recon_fasta: '/db/h.fasta', recon_min_length: '10' }).values).toMatchObject({ extension: '4' })
+  })
+
   // Review fix: the 0-placed case (ext2) has a way forward in the banner.
   it('the low-placed banner offers the run with extension 3', async () => {
     installMockBridge()
@@ -468,7 +486,7 @@ describe('result tabs: the P4c viewers', () => {
     mock.reportFiles = { [P.glyco]: humanGlyco }
     render(<Harness reports={{ list: [human()], errors: [], tables: { glyco: P.glyco } }} />)
     // No tags table: no Tags tab.
-    expect(screen.getAllByRole('tab').map((t) => t.textContent)).toEqual(['Mass shifts', 'Digest1', 'Glyco'])
+    expect(screen.getAllByRole('tab').map((t) => t.textContent)).toEqual(['Mass shifts', 'Digest', 'Glyco'])
     await act(async () => void fireEvent.keyDown(screen.getByRole('tablist'), { key: 'End' }))
     await flush()
     expect(screen.getByRole('tab', { name: 'Glyco' }).getAttribute('aria-selected')).toBe('true')

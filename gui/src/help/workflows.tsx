@@ -19,7 +19,7 @@ export const WORKFLOWS: HelpPage = {
             the figures describe the processed subset, not the whole input.
           </p>
           <ul>
-            <li><strong>MS2 spectra</strong> counts spectra processed by the tagger. <strong>With tags</strong> counts spectra with a reported tag, when the run recorded that count.</li>
+            <li><strong>MS2 spectra</strong> counts spectra processed by the tagger. <strong>With any tag</strong> counts spectra with any reported tag, when the run recorded that count.</li>
             <li><strong>Tags</strong> is the tag count from FASTag&apos;s final log summary; one spectrum can contribute several tags. <strong>Tags E ≤ 1</strong> counts the ungapped tags used by the digest report.</li>
             <li><strong>No call</strong> means the report did not support a classification; read its reason. <strong>Not assessed</strong> means the necessary analysis or report is missing. <strong>Not checked</strong> means the relevant check was unavailable. None establishes absence.</li>
             <li><strong>Too little evidence</strong> replaces protease, genus or label results when fewer than 1,000 tagged spectra were counted. If the run did not count tagged spectra, this extra GUI cutoff cannot be applied; the warning says so. Alkylation uses separate mass-gap counts.</li>
