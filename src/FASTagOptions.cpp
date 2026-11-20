@@ -130,6 +130,19 @@ void TOPPFASTag::registerOptionsAndFlags_()
   setMinFloat_("fragment_tolerance", 1e-9);
   registerStringOption_("fragment_tolerance_unit", "<unit>", FASTag::Cli::FRAGMENT_TOLERANCE_UNIT, "Tolerance unit", false);
   setValidStrings_("fragment_tolerance_unit", ListUtils::create<std::string>("ppm,Da"));
+  // 1.15.5 (PREREG-lowres-defaults, change B): the tolerance follows each MS2
+  // spectrum's analyzer. off reproduces 1.15.4 exactly.
+  registerStringOption_("tolerance_by_analyzer", "<on|off>", "on",
+                        "Tag each MS2 spectrum with the tolerance of its analyzer: ion-trap (ITMS) spectra with "
+                        "-fragment_tolerance_itms (Da) and a complement window measured on the run's ion-trap "
+                        "spectra; Orbitrap, FT-ICR and TOF spectra, and spectra without analyzer information, with "
+                        "-fragment_tolerance. It changes the tags only; placement, mass-shift and other reports use "
+                        "-fragment_tolerance. off: every spectrum with -fragment_tolerance, as before 1.15.5",
+                        false);
+  setValidStrings_("tolerance_by_analyzer", ListUtils::create<std::string>("on,off"));
+  registerDoubleOption_("fragment_tolerance_itms", "<Da>", 0.5,
+                        "Fragment tolerance (Da) of ion-trap MS2 spectra under -tolerance_by_analyzer on", false, true);
+  setMinFloat_("fragment_tolerance_itms", 1e-9);
 
   registerIntOption_("max_peaks", "<n>", FASTag::Cli::MAX_PEAKS,
                      "Peaks kept per spectrum, at most 1024; 0 means 1024, not "
@@ -536,7 +549,9 @@ void TOPPFASTag::registerOptionsAndFlags_()
                         "-complement_tol_factor scales the run's -fragment_tolerance at "
                         "both partners. auto (validated: its third held-out test passed, +3.3 points of correct rank-1 tags on ion trap, not worse on timsTOF; the first, with an earlier estimator, failed, the second was inconclusive): the window is measured on the run, "
                         "from the complement pairs of high-confidence tags in a probe of "
-                        "-complement_probe MS2 spectra; -complement_tolerance when too few pairs",
+                        "-complement_probe MS2 spectra; -complement_tolerance when too few pairs. "
+                        "Since 1.15.5 auto is the default when -fragment_tolerance_unit is Da and no complement "
+                        "option is given (not under -stream or with mzPeak input)",
                         false, true);
   setValidStrings_("complement_tolerance_unit", ListUtils::create<std::string>("Da,fragment,auto"));
   // 1.13 item 15 (src/ComplementTol.h): the probe size of

@@ -2,6 +2,22 @@
 
 ## Unreleased
 
+- **Tolerance per MS2 analyzer (`-tolerance_by_analyzer`, default on; PREREG-lowres-defaults change B).**
+  Each MS2 spectrum is tagged with the tolerance of its analyzer: ion-trap (ITMS) spectra at
+  `-fragment_tolerance_itms` (0.5 Da) with a complement window measured on the run's ion-trap spectra,
+  Orbitrap, FT-ICR and TOF spectra at `-fragment_tolerance` as before. Ion-trap MS2 read at the 20 ppm
+  default gave about 10 % correct rank-1 tags (CPTAC colon development data) against 54 % at 0.5 Da.
+  Only the tags change; placement, mass-shift and other reports keep `-fragment_tolerance`. Not under
+  `-stream` or with mzPeak input. `off` restores 1.15.4 exactly; an Orbitrap-only run gives the same
+  tags either way.
+- **Complement window `auto` under a Da fragment tolerance (change A).** With
+  `-fragment_tolerance_unit Da` and no complement option given, the window is measured on the run
+  instead of the fixed 0.02 Da (not under `-stream` or with mzPeak input).
+- **Held-out test: PASS** (PREREG-lowres-defaults, frozen 2026-11-20, scored once): 61 runs from 4 PRIDE data sets (PXD000865 sub-projects and three new projects)
+  (35 ion trap, 16 mixed, 10 Orbitrap). Correct rank-1 tags on ion-trap spectra rise from 0.070 to 0.431. The new
+  defaults equal the best manual setting (+0.003, CI 0.000 to +0.019) and beat the best single global setting on
+  mixed runs (+0.049, CI +0.015 to +0.088). Orbitrap tags are byte-identical (10 of 10). Change A alone: +0.064.
+  The cost is the wider tolerance: 6.7 ms against 0.38 ms CPU per ion-trap MS2.
 - **Combined mass-shift names.** `-delta_out`'s `unimod` column now names a two-modification reading
   first when it fits the row's most-supported localized site and the best single Unimod name does not
   explain that site's residue. +58.005 on a protein N-terminal Met was named only

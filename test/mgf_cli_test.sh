@@ -38,7 +38,8 @@ export FASTAG_DIGEST_DIR="$DATA"
 TMP=$(mktemp -d "${TMPDIR:-/tmp}/fastag-mgf-cli.XXXXXX") || exit 1
 trap 'rm -rf "$TMP"' EXIT
 fail() { echo "FAIL: $*" >&2; exit 1; }
-ARGS=(-tag_length 4 -extension 1 -fragment_tolerance 0.3 -fragment_tolerance_unit Da -threads 2)
+# 1.15.5: these checks pin the 1.15.4 tolerance defaults (PREREG-lowres-defaults changes A and B; tolerance_by_analyzer_cli_test tests them)
+ARGS=(-tag_length 4 -extension 1 -fragment_tolerance 0.3 -fragment_tolerance_unit Da -complement_tolerance_unit Da -tolerance_by_analyzer off -threads 2)
 run() {  # run <log> <args...>: must exit 0
   local log="$1"; shift
   "$BIN" "$@" >"$log" 2>&1 || { cat "$log" >&2; fail "run failed: $*"; }

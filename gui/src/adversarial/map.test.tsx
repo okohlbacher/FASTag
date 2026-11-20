@@ -18,7 +18,7 @@ describe('map: param overlay vs CLI manifest', () => {
     expect(c).toContain('domain')
     expect(c).not.toContain('superkingdom')
   })
-  it('renders 68 parameters and hides 118 (17 command-line-only options of 1.15.2, census_ids_accept of 1.16, shortlist_defaults of 1.15.4), including the experimental TMT filters', () => {
+  it('renders 68 parameters and hides 120 (17 command-line-only options of 1.15.2, census_ids_accept of 1.16, shortlist_defaults of 1.15.4, tolerance_by_analyzer and fragment_tolerance_itms of 1.15.5), including the experimental TMT filters', () => {
     // 1.10.0 added species_evidence (rendered) to the 1.9.0 set; 1.12.0 adds
     // 64 options (8 of them #17 -search_shifts), hidden until each has its GUI design, except
     // acquisition_check: its default refuses raw DIA, so the form offers warn/off.
@@ -44,7 +44,8 @@ describe('map: param overlay vs CLI manifest', () => {
     // 1.14 removes shortlist_exact_only (failed its held-out test): the name stays, hidden, advanced since.
     // 1.16 adds census_ids_accept (command-line only), hidden.
     // 1.15.4 adds shortlist_defaults (command-line only), hidden.
-    expect(HIDDEN_PARAMS.length).toBe(118)
+    // 1.15.5 adds tolerance_by_analyzer and fragment_tolerance_itms (command-line only), hidden.
+    expect(HIDDEN_PARAMS.length).toBe(120)
     for (const n of ['qc_out', 'census_score', 'census_sorted_out', 'delta_spectra_out', 'census_ids_accept']) expect(HIDDEN_PARAMS).toContain(n)
     expect(HIDDEN_PARAMS).toContain('shortlist_exact_only')
     expect(HIDDEN_PARAMS).toContain('search_missed_cleavages')
@@ -65,7 +66,7 @@ describe('map: param overlay vs CLI manifest', () => {
     expect(RENDERED).toContain('acquisition_check')
     expect(PARAM_BY_NAME.get('acquisition_check')?.choices).toEqual(['refuse', 'warn', 'off'])
     expect(HIDDEN_PARAMS).toContain('shortlist_defaults')
-    expect(manifest.params.length).toBe(186)
+    expect(manifest.params.length).toBe(188)
   })
   it('renders or hides every parameter of the manifest once (mzpeak_read_memory hidden)', () => {
     // In addition to the pinned counts above: every manifest parameter is

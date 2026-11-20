@@ -24,7 +24,7 @@ fi
 TMP=$(mktemp -d "${TMPDIR:-/tmp}/fastag-complement-cli.XXXXXX") || exit 1
 trap 'rm -rf "$TMP"' EXIT
 fail() { echo "FAIL: $*" >&2; exit 1; }
-run() { local name=$1; shift; "$BIN" -in "$IN" -out "$TMP/$name.tsv" -threads 2 "$@" >"$TMP/$name.log" 2>&1 \
+run() { local name=$1; shift; "$BIN" -in "$IN" -out "$TMP/$name.tsv" -threads 2 -tolerance_by_analyzer off "$@" >"$TMP/$name.log" 2>&1 \
           || { cat "$TMP/$name.log" >&2; fail "run $name failed"; }; }
 # The run's time stamps (completionTime and the MS:1000747 "completion time"
 # cvParam, minute resolution) are the only run-dependent fields.
@@ -34,9 +34,9 @@ mzml_masked() { tr -d '\r' < "$1" | sed -E 's/completionTime="[^"]*"//; s/(name=
 # are themselves listed in the exported mzML.
 mkdir -p "$TMP/a" "$TMP/e"
 IN_ABS=$(cd "$(dirname "$IN")" && pwd)/$(basename "$IN")
-( cd "$TMP/a" && "$BIN" -in "$IN_ABS" -out t.tsv -out_spectra s.mzML -threads 2 > log 2>&1 ) \
+( cd "$TMP/a" && "$BIN" -in "$IN_ABS" -out t.tsv -out_spectra s.mzML -threads 2 -tolerance_by_analyzer off > log 2>&1 ) \
   || { cat "$TMP/a/log" >&2; fail "run at defaults failed"; }
-( cd "$TMP/e" && "$BIN" -in "$IN_ABS" -out t.tsv -out_spectra s.mzML -threads 2 \
+( cd "$TMP/e" && "$BIN" -in "$IN_ABS" -out t.tsv -out_spectra s.mzML -threads 2 -tolerance_by_analyzer off \
     -complement_rule same_charge -complement_tolerance 0.02 -complement_tol_factor 0.5 \
     -complement_tolerance_unit Da > log 2>&1 ) \
   || { cat "$TMP/e/log" >&2; fail "run with the complement defaults spelled out failed"; }

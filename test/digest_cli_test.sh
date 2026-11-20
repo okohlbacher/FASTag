@@ -37,7 +37,8 @@ run() { "$BIN" -threads 2 "$@" > "$TMP/log" 2>&1 || { cat "$TMP/log" >&2; fail "
 val() { tr -d '\r' < "$1" | awk -F'\t' -v s="$2" -v k="$3" '$1 == s && $2 == k { print $3; exit }'; }
 
 # The fixture's MS2 is ion trap: at 20 ppm almost no tag passes E <= 1.
-COMMON=(-in "$IN" -tag_length 4 -fragment_tolerance 0.5 -fragment_tolerance_unit Da)
+# 1.15.5: these checks pin the 1.15.4 tolerance defaults (PREREG-lowres-defaults changes A and B; tolerance_by_analyzer_cli_test tests them)
+COMMON=(-in "$IN" -tag_length 4 -fragment_tolerance 0.5 -fragment_tolerance_unit Da -complement_tolerance_unit Da -tolerance_by_analyzer off)
 
 # ---- existing outputs unchanged, report structure
 run "${COMMON[@]}" -out "$TMP/base.tsv"
@@ -149,7 +150,7 @@ nover_label "$FIX/label_1.12.0_Ecoli_MS2_small_ppm.tsv" > "$TMP/plabel_112.cmp"
 nover_label "$TMP/plabel.tsv" > "$TMP/plabel_def.cmp"
 same "$TMP/plabel_112.cmp" "$TMP/plabel_def.cmp" "the default -label_out is not the 1.12.0 -label_out"
 # 1.14: -label_call_min_tags is a removed option: accepted, one warning, no effect
-"$BIN" -threads 2 -in "$IN" -tag_length 4 -out "$TMP/p0.tsv" -label_out "$TMP/plabel0.tsv" -label_call_min_tags 0 > "$TMP/log" 2>&1 \
+"$BIN" -threads 2 -in "$IN" -tag_length 4 -tolerance_by_analyzer off -out "$TMP/p0.tsv" -label_out "$TMP/plabel0.tsv" -label_call_min_tags 0 > "$TMP/log" 2>&1 \
   || fail "-label_call_min_tags 0 was refused"
 [ "$(grep -c -- "-label_call_min_tags was removed in 1.14 (failed its held-out test); it has no effect" "$TMP/log")" = 1 ] \
   || fail "-label_call_min_tags: not exactly one removal warning"
