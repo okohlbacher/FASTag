@@ -718,7 +718,7 @@ export default function App({ start = LANDING }: { start?: Origin } = {}): JSX.E
                   // Not after a run that was already sent res_conf: it would write the same file.
                   run.results?.input && run.results.input === input && run.shownRerunnable && jobs.length === 0 && bin?.ok && shown?.params['res_conf'] !== true
                     ? {
-                        run: () => void overviewAction({ kind: 'enable', label: 'Re-run with per-residue confidence', values: { res_conf: true } }),
+                        run: () => void overviewAction({ kind: 'enable', label: 'Re-run to add Residue conf. (%)', values: { res_conf: true } }),
                         disabled: busy || !!blocked
                       }
                     : null

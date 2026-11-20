@@ -100,7 +100,7 @@ export interface ResultTabsProps {
   onOverviewAction?(a: TileAction): void
   // Over the tabs while a single run goes (RunningPanel).
   runningState?: ReactNode
-  // GUI-DESIGN S8: the Tags table's "Re-run with per-residue confidence"
+  // GUI-DESIGN S8: the Tags table's "Re-run to add Residue conf. (%)"
   // for a file without res_conf; null when the form would not repeat the
   // run that wrote the file shown.
   rerunResConf?: { run(): void; disabled: boolean } | null

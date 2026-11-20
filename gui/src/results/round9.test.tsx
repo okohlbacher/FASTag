@@ -93,7 +93,7 @@ describe('round 9, 2: the re-run actions belong to the run on screen', () => {
     await goTo('results')
     await click(screen.getByRole('tab', { name: 'Tags' }))
     // The session's own run: the form would repeat it.
-    expect(await screen.findByRole('button', { name: 'Re-run with per-residue confidence' })).toBeTruthy()
+    expect(await screen.findByRole('button', { name: 'Re-run to add Residue conf. (%)' })).toBeTruthy()
     // An older run of the same input, sent another tag length, to another file.
     mock.history = [rec('old', '/d/a.mzML', '/d/a.old.tags.tsv', { tag_length: '5' }), ...mock.history]
     const rows = await historyRows()
@@ -103,7 +103,7 @@ describe('round 9, 2: the re-run actions belong to the run on screen', () => {
     await goTo('results')
     await click(screen.getByRole('tab', { name: 'Tags' }))
     await flush()
-    expect(screen.queryByRole('button', { name: 'Re-run with per-residue confidence' })).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Re-run to add Residue conf. (%)' })).toBeNull()
   })
 })
 

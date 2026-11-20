@@ -452,18 +452,18 @@ describe('Stitch and ALPS export', () => {
     const run = vi.fn()
     const { rerender } = render(<ResultsTable path="/d/x.tags.tsv" rerunResConf={{ run, disabled: false }} />)
     await flush()
-    await click(screen.getByRole('button', { name: 'Re-run with per-residue confidence' }))
+    await click(screen.getByRole('button', { name: 'Re-run to add Residue conf. (%)' }))
     expect(run).toHaveBeenCalledTimes(1)
     rerender(<ResultsTable path="/d/x.tags.tsv" rerunResConf={{ run, disabled: true }} />)
-    expect(screen.getByRole('button', { name: 'Re-run with per-residue confidence' })).toHaveProperty('disabled', true)
+    expect(screen.getByRole('button', { name: 'Re-run to add Residue conf. (%)' })).toHaveProperty('disabled', true)
     // Not without a run to repeat, and not for a file that has res_conf.
     rerender(<ResultsTable path="/d/x.tags.tsv" rerunResConf={null} />)
-    expect(screen.queryByRole('button', { name: 'Re-run with per-residue confidence' })).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Re-run to add Residue conf. (%)' })).toBeNull()
   })
 
   it('has no re-run for a file with res_conf', async () => {
     await renderTable()
-    expect(screen.queryByRole('button', { name: 'Re-run with per-residue confidence' })).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Re-run to add Residue conf. (%)' })).toBeNull()
   })
 
   it('Cmd+E exports reads when reads are chosen', async () => {
@@ -478,7 +478,7 @@ describe('Stitch and ALPS export', () => {
   })
 })
 
-describe('Re-run with per-residue confidence (S8)', () => {
+describe('Re-run to add Residue conf. (%) (S8)', () => {
   it('runs the same input again with -res_conf on, from the Tags table of its output', async () => {
     const mock = installMockBridge()
     await renderApp(mock)
@@ -490,7 +490,7 @@ describe('Re-run with per-residue confidence (S8)', () => {
     await goTo('results')
     await click(screen.getByRole('tab', { name: 'Tags' }))
     await flush()
-    const rerun = await screen.findByRole('button', { name: 'Re-run with per-residue confidence' })
+    const rerun = await screen.findByRole('button', { name: 'Re-run to add Residue conf. (%)' })
     await click(rerun)
     await waitFor(() => expect(mock.runCalls).toHaveLength(2))
     expect(mock.runCalls[1].in).toBe('/d/a.mzML')

@@ -1151,10 +1151,10 @@ export default function ResultsTable({ path, source, rerunResConf, spectrum }: P
             type="button"
             className="secondary"
             disabled={rerunResConf.disabled}
-            title="Stitch and ALPS reads need the res_conf column: runs this input again with -res_conf on"
+            title="Runs this input again with -res_conf on: it adds the Residue conf. (%) column, one confidence per residue, which Stitch and ALPS reads need. Min. and Mean conf. are step scores of the whole tag."
             onClick={rerunResConf.run}
           >
-            Re-run with per-residue confidence
+            Re-run to add Residue conf. (%)
           </button>
         )}
         <span className="rt-copied" role="status" aria-live="polite">
