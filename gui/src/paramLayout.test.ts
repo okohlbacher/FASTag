@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+// @ts-ignore -- node built-in; the app's tsconfig has no node types
 import { readFileSync } from 'node:fs'
 import {
   PARAM_BY_NAME,

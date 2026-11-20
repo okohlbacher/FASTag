@@ -5,7 +5,7 @@
 import { describe, expect, it } from 'vitest'
 import { parseReport } from '../digestReport'
 import type { BatchJob } from './batch'
-import { buildSummary, columnLabel, columnsFor, jobCells, summaryTsv, workflowCells, type JobData } from './batchSummary'
+import { buildSummary, columnLabel, columnsFor, columnsOfRuns, jobCells, summaryTsv, workflowCells, type JobData } from './batchSummary'
 import shortlistTsv from '../fixtures/cli-1.15/ecoli_ms2_small_0.3da.shortlist.tsv?raw'
 import censusSummary from '../fixtures/cli/batch/pxd003531/run.tags.census_summary.tsv?raw'
 import alkylationTsv from '../fixtures/alkylation.tsv?raw'
@@ -53,6 +53,17 @@ describe('the key columns of each workflow', () => {
     expect(s.majority.topShift.value).toBe('Oxidation')
     expect(s.rows.map((r) => r.differs.topShift)).toEqual([false, false, false, true])
     expect(summaryTsv(s).split('\n')[0]).toContain('top_mass_shift')
+  })
+})
+
+// Round 4, 11: the columns are those of the workflow the jobs ran with.
+describe('the columns of a batch that ran', () => {
+  it('keeps the recorded workflow\'s columns, and shows each workflow\'s for a mixed batch', () => {
+    expect(columnsOfRuns(['run-qc', 'run-qc'])).toEqual(columnsFor('run-qc'))
+    expect(columnsOfRuns([])).toEqual(columnsFor(null))
+    expect(columnsOfRuns(['export-tags', 'db-reduction'])).toEqual(['spectra', 'tagRate', 'kept', 'config'])
+    const jobs = [{ input: '/d/a.mzML', out: '/d/a.tags.tsv', status: 'done' } as unknown as BatchJob]
+    expect(buildSummary(jobs, new Map(), ['run-qc']).columns).toEqual(columnsFor('run-qc'))
   })
 })
 

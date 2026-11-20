@@ -315,6 +315,39 @@ describe('History', () => {
     expect(document.querySelector('.input-card .fname')?.textContent).toBe('x.mzML')
   })
 
+  // Round 4, 12: the run's workflow comes back with its settings, origin
+  // and base; Undo restores the workflow the form had.
+  it('Settings into form restores the run\'s workflow; Undo restores the form\'s', async () => {
+    const mock = installMockBridge()
+    await renderApp(mock)
+    await pickSingle(mock, '/d/x.mzML')
+    const wf = (id: string): HTMLInputElement => screen.getByRole('radio', { name: new RegExp(`^${id}`) }) as HTMLInputElement
+    const chosen = (): string | undefined => document.querySelector<HTMLInputElement>('input[name="task"]:checked')?.value
+    const before = chosen()
+    expect(before).not.toBe('run-qc')
+    mock.history = [rec('1', '/d/a.mzML', 'ok', { workflow: 'run-qc', params: { qc_out: '/d/a.qc.tsv', threads: '0', subsample_fraction: '0.1' } })]
+    const [row] = await history()
+    await click(btn(row, 'Settings into form')!)
+    await goTo('setup')
+    expect(wf('Run QC').checked).toBe(true)
+    expect(await formValue('subsample_fraction')).toBe('0.1')
+    // Its base is Run QC's: only the changed fraction differs from it.
+    await goTo('history')
+    await click(within(screen.getByRole('status', { name: 'History' })).getByRole('button', { name: 'Undo' }))
+    await goTo('setup')
+    expect(chosen()).toBe(before)
+  })
+
+  it('Settings into form leaves a record without a workflow unlabelled', async () => {
+    const mock = installMockBridge()
+    await renderApp(mock)
+    mock.history = [rec('1', '/d/a.mzML', 'ok', { params: { tag_length: '4' } })]
+    const [row] = await history()
+    await click(btn(row, 'Settings into form')!)
+    await goTo('setup')
+    expect(document.querySelector('input[name="task"]:checked')).toBeNull()
+  })
+
   it('a record without the parameters (from 1.13) offers no Settings into form; Open is off while a run is busy', async () => {
     const mock = installMockBridge()
     const [row] = await showWith(mock, [rec('1', '/d/a.mzML', 'ok')])

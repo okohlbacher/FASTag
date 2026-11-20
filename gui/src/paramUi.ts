@@ -169,7 +169,7 @@ export const PARAM_UI: Record<string, ParamUi> = {
   // 1.12: the one changed default (raw DIA is refused), so the form offers
   // warn and off, or a GUI user could not tag raw DIA at all.
   acquisition_check: {
-    section: 'Run QC',
+    section: 'Sampling and checks',
     label: 'DIA input',
     help: {
       text: 'Before tagging, FASTag checks whether the file is raw DIA data, whose MS2 spectra each mix several peptides. By default (refuse) a file classified as raw DIA is not tagged: the run stops with exit code 11 before any file is written. warn tags it anyway, with a warning in the log; off skips the check. The revised 1.13 check passed its second held-out test on Thermo files: 0 of 58 non-DIA files and 35 of 37 DIA files were refused. A third test on Astral, timsTOF and SCIEX files refused 0 of 75 non-DIA and 60 of 60 DIA files; it is inconclusive because it had only 3 Astral DDA files and no closed-window DIA file. A fourth test refused 0 of 86 non-DIA files (12 Astral DDA) and 70 of 71 DIA files; it is also inconclusive, with only 1 closed-window DIA file. If a known DDA file is refused, inspect the acquisition metadata before choosing warn or off.',
@@ -207,7 +207,7 @@ export const PARAM_UI: Record<string, ParamUi> = {
     }
   },
   subsample_fraction: {
-    section: 'Run QC',
+    section: 'Sampling and checks',
     label: 'Spectra to read',
     steps: [
       { label: 'All spectra', value: '0' },
@@ -236,7 +236,7 @@ export const PARAM_UI: Record<string, ParamUi> = {
     depends: [{ on: 'tag_lengths', replaced: true, note: 'the seed lengths listed under Tagging, advanced replace it' }],
     help: {
       text: 'The length of the shortest tag FASTag looks for, in residues. Every tag starts as a seed of this length; extension can make it longer.',
-      tip: '3 is the default. Species detection needs tags of 7 residues: set 7 here (see How species detection works).'
+      tip: '3 is the default. Species detection needs tags of 7 residues: seed 3 with extension 2 (the Species workflow) reaches them, or set 7 here.'
     }
   },
   tag_lengths: {
@@ -385,7 +385,7 @@ export const PARAM_UI: Record<string, ParamUi> = {
     label: 'Species report',
     help: {
       text: 'Work out which organisms the tags come from, using the species reference index bundled with FASTag. The result appears in the Species tab and in a report beside the tags.',
-      tip: 'Needs tags of 7 residues: set tag length 7 (extension alone lets few tags reach 7). Subsample a large run (fraction 0.1) for a fast answer.'
+      tip: 'Tags must reach 7 residues: tag length + 2 × extension. The Species and Characterize workflows use extension 2 (seed 3 + 2 × 2), the setting validated in the paper; tag length 7 also works. Subsample a large run (fraction 0.1) for a fast answer.'
     }
   },
   species_rank: {

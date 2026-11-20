@@ -215,6 +215,40 @@ describe('run/batch orchestration', () => {
     expect(mock.resultsQueryCalls[0].path).toBe('/d/b.tags.tsv')
   })
 
+  // Round 4, 10: selecting job A after B shows A's taxa under A's name, with
+  // A's counts (from A's own log), not B's.
+  it('a selected batch job shows its own species run and counts', async () => {
+    const mock = installMockBridge()
+    mock.settings.lastUsed = { species: true }
+    const taxon = (name: string) => ({ rank: 'genus', taxid: name.length, name, observed: 10, adjusted: 10, q: 0.01 })
+    mock.speciesFiles['/d/a.tags.species.tsv'] = { path: '/d/a.tags.species.tsv', taxa: [taxon('Escherichia')] }
+    mock.speciesFiles['/d/b.tags.species.tsv'] = { path: '/d/b.tags.species.tsv', taxa: [taxon('Bacillus')] }
+    await renderApp(mock)
+    await applyLastUsed(1)
+    await addBatch(mock, ['/d/a.mzML', '/d/b.mzML'])
+    await startBatch()
+    await waitFor(() => expect(mock.runCalls).toHaveLength(1))
+    await act(async () => mock.emitLog('1000 MS2 spectra, 3000 tags'))
+    await act(async () => mock.emitLog('Species: 111 spectra contributed taxon evidence; x'))
+    await emitDone(mock, 1, true)
+    await waitFor(() => expect(mock.runCalls).toHaveLength(2))
+    await act(async () => mock.emitLog('2000 MS2 spectra, 3000 tags'))
+    await act(async () => mock.emitLog('Species: 222 spectra contributed taxon evidence; x'))
+    await emitDone(mock, 2, true)
+    await waitFor(() => expect(screen.getByText('2/2 done')).toBeDefined())
+    showView('batch')
+    await click(screen.getByTitle('Show the results of /d/a.mzML'))
+    await goTo('results')
+    await click(await screen.findByRole('tab', { name: /^Species/ }))
+    await waitFor(() => expect(document.querySelector('.tablewrap')!.textContent).toContain('Escherichia'))
+    const text = document.querySelector('.tablewrap')!.textContent ?? ''
+    expect(text).toContain('a.mzML')
+    expect(text).not.toContain('b.mzML')
+    expect(text).not.toContain('Bacillus')
+    expect(text).toMatch(/111/)
+    expect(text).not.toMatch(/222/)
+  })
+
   it('takes an MGF input like an mzML: offered by the dialogs, named on the empty card, run with its own outputs', async () => {
     expect(SPECTRA[0].extensions).toEqual(expect.arrayContaining(['mzML', 'mzpeak', 'mgf', 'MGF']))
     const mock = installMockBridge()

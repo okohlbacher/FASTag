@@ -123,6 +123,24 @@ export interface RunHooks {
   workflow?(): string | null
 }
 
+// The workflow a run was sent with: a Re-run's is its record's, not the
+// form's. A record without one (before 1.15.4) has none.
+const workflowOf = (call: Record<string, unknown>): string | null => (typeof call['workflow'] === 'string' ? call['workflow'] : null)
+
+// What the log of a run says of its evidence: the MS2 count and the spectra
+// that gave taxon evidence (the CLI's summary lines).
+export function evidenceOfLog(lines: readonly string[]): { contributed: number | null; ms2: number | null } {
+  let contributed: number | null = null
+  let ms2: number | null = null
+  for (const line of lines) {
+    const sp = /^Species:\s+(\d+) spectra contributed/.exec(line)
+    if (sp) contributed = Number(sp[1])
+    const m = /^(\d+) MS2 spectra,/.exec(line)
+    if (m) ms2 = Number(m[1])
+  }
+  return { contributed, ms2 }
+}
+
 // The option behind each table and workflow report, for its name in words.
 const TABLE_PARAM: Record<TableKind, string> = { recon: 'recon_out', delta: 'delta_out', glyco: 'glyco_out', reconIds: 'recon_id_out' }
 const WORKFLOW_PARAM: Record<WorkflowKind, string> = {
@@ -180,8 +198,15 @@ export function useRun(s: RunInputs, view: ViewStore, hooks: RunHooks = {}) {
   const jobs = useMemo(() => queueView(state), [state.jobs])
   // The batch summary (GUI-DESIGN 3 S6): one row per job, from its reports.
   const batchData = useBatchData(state.jobs)
-  // Its columns are the workflow's (Run QC: the QC report's figures).
-  const batchWorkflow = hooks.workflow?.() ?? null
+  // Its columns are those of the workflow its jobs ran with (each job's
+  // call records it), not the one Setup shows now: a Run QC batch keeps its
+  // QC columns when the form moves on. A batch that ran with several
+  // workflows shows the columns of each; one that has not run yet, the
+  // form's.
+  const ranWith = state.jobs.filter((j) => j.batch && j.params).map((j) => workflowOf(j.params!))
+  const ranKey = ranWith.join('\n')
+  const formWorkflow = hooks.workflow?.() ?? null
+  const batchWorkflow = useMemo<readonly (string | null)[] | string | null>(() => (ranKey ? ranKey.split('\n').map((w) => w || null) : formWorkflow), [ranKey, formWorkflow])
   const summary = useMemo(() => buildSummary(jobs, batchData, batchWorkflow), [jobs, batchData, batchWorkflow])
 
   // The last run of an earlier session, from the run record: a cancelled or
@@ -292,7 +317,6 @@ export function useRun(s: RunInputs, view: ViewStore, hooks: RunHooks = {}) {
   // The workflow and the species switch of a run, from what it was sent: a
   // Re-run's are its record's, not the form's. A record without a workflow
   // (before 1.15.4) has none.
-  const workflowOf = (call: Record<string, unknown>): string | null => (typeof call['workflow'] === 'string' ? call['workflow'] : null)
   const speciesOf = (call: Record<string, unknown>): boolean => ((call['params'] ?? {}) as Record<string, unknown>)['species'] === true
 
   // The outputs of these runs that already exist. A failed check asks
@@ -417,6 +441,11 @@ export function useRun(s: RunInputs, view: ViewStore, hooks: RunHooks = {}) {
     // What the run was sent decides (a Re-run's record), else the form.
     const runSpecies = ran ? speciesOf(ran.params) : speciesOn
     const runWorkflow = ran ? workflowOf(ran.params) : null
+    // The Species tab and the evidence counts are this run's (a batch job
+    // selected after a later one), from its own call and log; none are
+    // left from the run shown before.
+    dispatch({ type: 'SPECIES', species: null, speciesRun: { input: inFile, enabled: runSpecies } })
+    dispatch({ type: 'EVIDENCE', evidence: ran ? evidenceOfLog(ran.log.get()) : { contributed: null, ms2: null } })
     if (runSpecies && outputs.species_out) {
       // An unreadable species report must not also cost the Digest reports.
       try {
@@ -771,9 +800,14 @@ export function useRun(s: RunInputs, view: ViewStore, hooks: RunHooks = {}) {
   async function openSpeciesPath(p: string): Promise<void> {
     try {
       const sp = await window.fastag.species(p)
+      // The run that wrote it, when the app recorded it; else the report.
+      const rec = await window.fastag.historyOf(p).catch(() => null)
       closeOtherRun(p)
       dispatch({ type: 'REPORTS', update: (cur) => closeOtherRuns(cur, p) })
-      dispatch({ type: 'SPECIES', species: sp, speciesRun: null })
+      // A report read is shown whatever Setup's species switch and reach
+      // check say; the counts of the run shown before are not its own.
+      dispatch({ type: 'SPECIES', species: sp, speciesRun: { input: baseName(rec?.input ?? p), enabled: true } })
+      dispatch({ type: 'EVIDENCE', evidence: { contributed: null, ms2: null } })
       setTab('species')
     } catch (err) {
       logResultsError(err)
@@ -820,9 +854,12 @@ export function useRun(s: RunInputs, view: ViewStore, hooks: RunHooks = {}) {
           const tables = { ...kept, [table.kind]: p }
           // Opening the file again reads it again (it may have changed).
           const gen = bumpGen(cur.gen, [table.kind])
-          if (closed.length === 0) return { ...cur, tables, gen, notice: undefined }
+          // The workflow reports of another run close as well: B's table
+          // beside A's QC, Shortlist or Triage would read as one run.
+          const workflow = closeOtherRuns(cur, p).workflow
+          if (closed.length === 0) return { ...cur, tables, gen, workflow, missing: undefined, notice: undefined }
           const note = closedNote(p, closed)
-          return { list: cur.list.filter((r) => !closedReports.includes(r)), errors: [note], tables, gen, notice: note }
+          return { list: cur.list.filter((r) => !closedReports.includes(r)), errors: [note], tables, gen, workflow, notice: note }
         }
       })
       // An unreadable one is named where report errors are: the Digest tab.

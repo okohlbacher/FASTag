@@ -76,12 +76,12 @@ export interface Section {
 /// its PARAM_UI `section` names it (paramUi.test.ts holds both to that).
 const SECTION_DEFS: Omit<Section, 'open'>[] = [
   { title: 'Common', home: 'common', blurb: 'The fragment tolerance of your analyzer and the fixed modifications.', params: ['fragment_tolerance', 'fragment_tolerance_unit', 'fixed_modifications'] },
-  { title: 'Tagging', home: 'export-tags', blurb: 'How long the tags are, how good, and how many per spectrum.', params: ['tag_length', 'extension', 'max_evalue', 'max_tags', 'res_conf'] },
+  { title: 'Tagging', home: 'global', blurb: 'How long the tags are, how good, and how many per spectrum.', params: ['tag_length', 'extension', 'max_evalue', 'max_tags', 'res_conf'] },
   { title: 'Tag columns and files', home: 'export-tags', blurb: 'Extra columns in the tags table, and the spectra that carry tags.', params: ['proforma', 'usi_collection', 'out_spectra'] },
-  { title: 'Tagging, advanced', home: 'export-tags', blurb: 'Several seed lengths, gapped tags, and how near-copies of a tag are ranked.', params: ['tag_lengths', 'gaps', 'gap_penalty', 'diversity', 'orientation', 'isobaric_tolerance'] },
-  { title: 'Keep only tags found in a database', home: 'export-tags', blurb: 'Write only tags that occur in sequences you supply.', params: ['fasta', 'min_filter_length', 'entrapment_fasta'] },
-  { title: 'Run QC', home: 'run-qc', blurb: 'How much of the run is read, and the check for raw DIA data.', params: ['qc_out', 'subsample_fraction', 'acquisition_check'] },
-  { title: 'Sampling and checks', home: 'run-qc', blurb: 'A random subset of spectra, and checks of the acquisition and the precursor charges.', params: ['subsample_spectra', 'subsample_seed', 'acquisition_probe_spectra', 'check_header_charge', 'check_header_margin', 'check_header_out'] },
+  { title: 'Tagging, advanced', home: 'global', blurb: 'Several seed lengths, gapped tags, and how near-copies of a tag are ranked.', params: ['tag_lengths', 'gaps', 'gap_penalty', 'diversity', 'orientation', 'isobaric_tolerance'] },
+  { title: 'Keep only tags found in a database', home: 'global', blurb: 'Write only tags that occur in sequences you supply.', params: ['fasta', 'min_filter_length', 'entrapment_fasta'] },
+  { title: 'Run QC', home: 'run-qc', blurb: 'Counts, resolution, charges, labels and instrument of the run, in one report.', params: ['qc_out'] },
+  { title: 'Sampling and checks', home: 'global', blurb: 'How much of the run is read, the check for raw DIA data, and the check of the precursor charges.', params: ['subsample_fraction', 'acquisition_check', 'subsample_spectra', 'subsample_seed', 'acquisition_probe_spectra', 'check_header_charge', 'check_header_margin', 'check_header_out'] },
   { title: 'Placement on the database', home: 'mass-shift', blurb: 'Place tags on the proteins of a FASTA and keep the mass left over at each end.', params: ['recon_fasta', 'recon_missed_cleavages', 'recon_out', 'recon_id_out'] },
   { title: 'Placement, advanced', home: 'mass-shift', blurb: 'Site localization, the shortest tag placed, and single-residue substitutions.', params: ['recon_localize', 'recon_min_length', 'recon_sub_tolerance', 'recon_sub_tolerance_unit'] },
   { title: 'Mass-shift survey', home: 'mass-shift', blurb: 'The mass shifts between tag flanks and the database: a frequency table with sites and UniMod names.', params: ['delta_out', 'delta_spectra_out', 'delta_counts_out', 'massgap_out'] },

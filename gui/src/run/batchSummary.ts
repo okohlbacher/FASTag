@@ -347,9 +347,19 @@ const none = (text: string, note: string): Record<SummaryColumn, Cell> =>
 /// The rows of @p jobs, in queue order; @p data: what each done job wrote,
 /// by its input (a done job with outputs and without an entry is still being
 /// read).
-/// @p workflow: the batch's workflow, which picks the columns (columnsFor).
-export function buildSummary(jobs: readonly BatchJob[], data: ReadonlyMap<string, JobData>, workflow?: string | null): Summary {
-  const columns = columnsFor(workflow)
+/// The columns of a batch whose jobs ran with @p workflows: one workflow's
+/// own, or for a batch that mixed workflows (the form changed between two
+/// passes) the columns of each, in the order they ran, each once.
+export function columnsOfRuns(workflows: readonly (string | null)[]): readonly SummaryColumn[] {
+  const seen = [...new Set(workflows)]
+  if (seen.length <= 1) return columnsFor(seen[0] ?? null)
+  return [...new Set(seen.flatMap((w) => columnsFor(w)))]
+}
+
+/// @p workflow: the batch's workflow, which picks the columns (columnsFor),
+/// or the workflows its jobs ran with (columnsOfRuns).
+export function buildSummary(jobs: readonly BatchJob[], data: ReadonlyMap<string, JobData>, workflow?: string | readonly (string | null)[] | null): Summary {
+  const columns = Array.isArray(workflow) ? columnsOfRuns(workflow) : columnsFor(workflow as string | null | undefined)
   const base = jobs.map((j) => {
     const done = j.status === 'done'
     const d = done && j.outputs ? data.get(j.input) : undefined

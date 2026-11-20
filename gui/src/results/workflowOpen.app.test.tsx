@@ -10,6 +10,7 @@ import qcTsv from '../fixtures/cli-1.15/ecoli_ms2_small_0.3da.qc.tsv?raw'
 import shortlistTsv from '../fixtures/cli-1.15/ecoli_ms2_small_0.3da.shortlist.tsv?raw'
 import censusSortedTsv from '../fixtures/cli-1.15/ecoli_ms2_small_0.3da.census_sorted.tsv?raw'
 import { sniffWorkflow } from './workflowReports'
+import humanDelta from '../fixtures/cli/v112-pxd014764-delta-ext3/run.delta.tsv?raw'
 
 const tabs = (): string[] => screen.getAllByRole('tab').map((t) => t.textContent ?? '')
 const selected = (): string | undefined => screen.getAllByRole('tab').find((t) => t.getAttribute('aria-selected') === 'true')?.textContent ?? undefined
@@ -168,5 +169,38 @@ describe('the identified column', () => {
     const grid = screen.getByRole('grid', { name: 'Spectra ranked by identifiability' })
     expect(within(grid).getAllByRole('row')).toHaveLength(2)
     expect(grid.textContent).toContain('unknown')
+  })
+})
+
+// Round 4, 8 and 9: a report opened shows as what it is, and closes what
+// another run left shown.
+describe('opening another run\'s report (round 4)', () => {
+  it('a species report opened on a cold start shows its taxa whatever Setup\'s species switch says', async () => {
+    const mock = installMockBridge()
+    const path = '/old/run07.tags.species.tsv'
+    mock.reportFiles[path] = 'rank\ttaxid\tname\tobserved\tadjusted\tq\ngenus\t561\tEscherichia\t40\t40\t0.001\n'
+    mock.speciesFiles[path] = { path, taxa: [{ rank: 'genus', taxid: 561, name: 'Escherichia', observed: 40, adjusted: 40, q: 0.001 }] }
+    mock.nextPickResults = path
+    await renderColdApp(mock)
+    await click(screen.getByRole('button', { name: 'Open earlier results…' }))
+    await goTo('results')
+    await waitFor(() => expect(selected()).toMatch(/^Species/))
+    const panel = document.querySelector('.tablewrap')!
+    expect(panel.textContent).toContain('Escherichia')
+    expect(panel.textContent).not.toMatch(/Species detection is off|too short/)
+  })
+
+  it("opening B's mass-shift table after A's QC report closes A's QC tab", async () => {
+    const mock = installMockBridge()
+    mock.reportFiles['/a/a.qc.tsv'] = qcTsv
+    mock.reportFiles['/b/b.delta.tsv'] = humanDelta
+    mock.nextPickReport = '/a/a.qc.tsv'
+    await renderColdApp(mock)
+    await goTo('results')
+    await click(screen.getByRole('button', { name: 'Open report…' }))
+    await waitFor(() => expect(selected()).toBe('QC'))
+    mock.nextPickReport = '/b/b.delta.tsv'
+    await click(screen.getByRole('button', { name: 'Open report…' }))
+    await waitFor(() => expect(tabs()).not.toContain('QC'))
   })
 })
