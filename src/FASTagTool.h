@@ -250,6 +250,11 @@ class TOPPFASTag : public OpenMS::TOPPBase
     std::string probe;   ///< the probe's statistics, as logged
   };
   ComplAutoRecord compl_auto_rec_;
+  /// 1.15.5 change A: complement auto because the fragment unit is Da and no complement option was given.
+  bool compl_auto_by_unit_ = false;
+  /// 1.15.5 change B: ion-trap Params in force, and the log line naming them.
+  bool itms_on_ = false;
+  std::string itms_log_;
   std::string tmt_filter_rec_;
 
   /// 1.15.4: the shortlist recipe (doc/SHORTLIST.md; the configuration of the
