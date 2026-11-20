@@ -253,7 +253,7 @@ describe('run/batch orchestration', () => {
     expect(SPECTRA[0].extensions).toEqual(expect.arrayContaining(['mzML', 'mzpeak', 'mgf', 'MGF']))
     const mock = installMockBridge()
     await renderApp(mock)
-    expect(screen.getByText('Spectra as mzML, mzPeak or MGF')).toBeDefined()
+    expect(screen.getByText('Spectra: mzML, mzPeak, MGF, Thermo .raw or timsTOF .d.zip (drop a .d folder)')).toBeDefined()
     await pickSingle(mock, '/d/run.mgf')
     expect(outField().value).toBe('run')
     await click(runButton())

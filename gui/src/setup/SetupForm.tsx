@@ -576,7 +576,7 @@ export default function SetupForm({
         ) : (
           <div className="input-card empty-input">
             <IconFile />
-            <span className="muted">Spectra as mzML, mzPeak or MGF</span>
+            <span className="muted">Spectra: mzML, mzPeak, MGF, Thermo .raw or timsTOF .d.zip (drop a .d folder)</span>
             <button onClick={onPickInput}>Choose file…</button>
           </div>
         ))}
@@ -597,7 +597,7 @@ export default function SetupForm({
           ) : (
             <div className="input-card empty-input">
               <IconFile />
-              <span className="muted">Spectra files as mzML, mzPeak or MGF, run in turn</span>
+              <span className="muted">Spectra files (mzML, mzPeak, MGF, .raw, timsTOF .d), run in turn</span>
             </div>
           )}
           <div className="row tight">

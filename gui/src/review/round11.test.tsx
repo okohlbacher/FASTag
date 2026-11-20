@@ -3,6 +3,9 @@
 
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import ReportTable from '../results/ReportTable'
+import { SPECTRA } from '../api'
+import { defaultOut } from '../app/paths'
+import { jobOut } from '../run/batch'
 import { buildOverview, leadTiles, shownTiles, triageFacts } from '../results/overview'
 import { installMockBridge } from '../testing/mockBridge'
 import { click, renderColdApp } from '../testing/render'
@@ -66,5 +69,17 @@ describe('round 11: the Triage Overview names the candidates', () => {
     const lead = leadTiles(shownTiles(o, params), 'triage')
     expect(lead.figures.slice(0, 3).map((f) => f.id)).toEqual(['ident-score', 'identified', 'candidates'])
     expect(lead.figures[2].value).toBe('2')
+  })
+})
+
+describe('round 11: vendor input the bundled CLI reads', () => {
+  it('the picker offers .raw and .d.zip; a .d run is named as the run', () => {
+    expect(SPECTRA[0].extensions).toEqual(expect.arrayContaining(['raw', 'zip']))
+    expect(defaultOut('/d/run.raw')).toBe('/d/run.tags.tsv')
+    expect(defaultOut('/d/run.d.zip')).toBe('/d/run.tags.tsv')
+    expect(defaultOut('/d/run.d')).toBe('/d/run.tags.tsv')
+    expect(defaultOut('/d/run.d/')).toBe('/d/run.tags.tsv')
+    expect(jobOut('/d/run.d.zip', '/out')).toBe('/out/run.tags.tsv')
+    expect(jobOut('/d/run.mzML', '/out')).toBe('/out/run.tags.tsv')
   })
 })

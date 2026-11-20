@@ -242,7 +242,7 @@ export default function App({ start = LANDING }: { start?: Origin } = {}): JSX.E
     setFolderNote(null)
     try {
       const r = await run.addBatchFolder()
-      if (r && r.files === 0) setFolderNote({ text: `No spectra files (mzML, mzPeak, MGF) directly in ${r.dir}.`, from })
+      if (r && r.files === 0) setFolderNote({ text: `No spectra files (mzML, mzPeak, MGF, .raw, timsTOF .d) directly in ${r.dir}.`, from })
     } catch (e) {
       setFolderNote({ text: `Cannot read the folder: ${e instanceof Error ? e.message : String(e)}`, from })
     }

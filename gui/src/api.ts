@@ -33,8 +33,10 @@ import type {
 } from './types'
 import { parseSpecies } from './results/species'
 
-// The spectra the CLI reads as -in (its input-format check is by extension).
-export const SPECTRA = [{ name: 'Spectra', extensions: ['mzML', 'mzml', 'mzpeak', 'mzPeak', 'mgf', 'MGF'] }]
+// The spectra the CLI reads as -in (its input-format check is by extension):
+// mzML, mzPeak, MGF and the vendor input of the bundled CLI, Thermo .raw and
+// a timsTOF .d.zip (a .d folder is dropped, or added with its folder).
+export const SPECTRA = [{ name: 'Spectra', extensions: ['mzML', 'mzml', 'mzpeak', 'mzPeak', 'mgf', 'MGF', 'raw', 'RAW', 'zip'] }]
 
 // A parameter's declared formats as a dialog filter; none means no filter
 // (a .taxdb, the taxonomy dumps), not the spectra one.

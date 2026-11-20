@@ -1138,8 +1138,10 @@ export const FILES: HelpPage = {
             </li>
           </ul>
           <p>
-            Vendor files (Thermo .raw, Bruker .d) are not read: convert them first, for example with msconvert or
-            ThermoRawFileParser. MS2 spectra should be <G to="gloss-centroid">centroided</G> (one peak per ion); profile
+            The bundled FASTag also reads vendor files: a Bruker timsTOF <strong>.d</strong> folder (drop it on the
+            window) or its <strong>.d.zip</strong> archive, and a Thermo <strong>.raw</strong> file in every download
+            but the Linux AppImage (convert .raw there with ThermoRawFileParser). Other vendor formats need converting
+            first, for example with msconvert. MS2 spectra should be <G to="gloss-centroid">centroided</G> (one peak per ion); profile
             spectra in an mzML file are tagged as they are, which finds fewer tags.
           </p>
           <p>

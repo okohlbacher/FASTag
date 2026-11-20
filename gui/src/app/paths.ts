@@ -25,7 +25,9 @@ export function defaultSpeciesOut(out: string): string {
 }
 
 export function defaultOut(input: string): string {
-  return `${stripExt(input)}.tags.tsv`
+  // run.d.zip and a run.d folder are named run, as run.mzML is.
+  const base = /\.d\.zip$/i.test(input) ? input.slice(0, -'.d.zip'.length) : /\.d[\\/]?$/i.test(input) ? input.replace(/\.d[\\/]?$/i, '') : stripExt(input)
+  return `${base}.tags.tsv`
 }
 
 // The folder part of a path, separator kept.

@@ -160,7 +160,7 @@ describe('folder input and the output folder', () => {
     mock.nextPickFolder = '/empty'
     mock.folderFiles['/empty'] = []
     await click(screen.getByRole('button', { name: 'Add folder…' }))
-    expect(await screen.findByText('No spectra files (mzML, mzPeak, MGF) directly in /empty.')).toBeDefined()
+    expect(await screen.findByText('No spectra files (mzML, mzPeak, MGF, .raw, timsTOF .d) directly in /empty.')).toBeDefined()
     expect(screen.getByText('No batch yet')).toBeDefined()
   })
 
@@ -279,7 +279,7 @@ describe('what a summary cell says when a read goes wrong, and where notes show'
     mock.nextPickFolder = '/empty'
     mock.folderFiles['/empty'] = []
     await click(screen.getByRole('button', { name: 'Add folder…' }))
-    const note = await screen.findByText('No spectra files (mzML, mzPeak, MGF) directly in /empty.')
+    const note = await screen.findByText('No spectra files (mzML, mzPeak, MGF, .raw, timsTOF .d) directly in /empty.')
     expect(note.closest('.view')!.getAttribute('data-view')).toBe('setup')
     expect(note.closest('.view')!.hasAttribute('hidden')).toBe(false)
     expect(note.getAttribute('role')).toBe('status')

@@ -56,8 +56,14 @@ fn lower_name(p: &Path) -> String {
 pub fn classify(p: &Path) -> Kind {
     let name = lower_name(p);
     let ext = name.rsplit_once('.').map(|(_, e)| e).unwrap_or("");
+    // Vendor input the bundled CLI reads (README, Input formats): a Thermo
+    // .raw file and a Bruker timsTOF .d.zip archive; a .d folder is told
+    // apart in is_bruker_dir.
+    if name.ends_with(".d.zip") {
+        return Kind::Spectra;
+    }
     match ext {
-        "mzml" | "mzpeak" | "mgf" => return Kind::Spectra,
+        "mzml" | "mzpeak" | "mgf" | "raw" => return Kind::Spectra,
         "fasta" | "fa" | "faa" => return Kind::Fasta,
         "taxdb" => return Kind::Taxdb,
         // -recon_id_out (P4c): the Mass gaps & recon tab reads the mzTab
@@ -109,6 +115,12 @@ pub struct DropRoute {
     pub ignored: Vec<String>,
 }
 
+/// A Bruker timsTOF run folder (<name>.d): one spectra input, not a folder
+/// of spectra.
+fn is_bruker_dir(p: &Path) -> bool {
+    p.is_dir() && lower_name(p).ends_with(".d")
+}
+
 fn text(p: &Path) -> String {
     p.to_string_lossy().into_owned()
 }
@@ -118,7 +130,7 @@ fn folder_spectra(dir: &Path) -> Vec<PathBuf> {
     let mut v: Vec<PathBuf> = std::fs::read_dir(dir)
         .map(|rd| {
             rd.filter_map(|e| e.ok().map(|e| e.path()))
-                .filter(|p| p.is_file() && classify(p) == Kind::Spectra)
+                .filter(|p| (p.is_file() && classify(p) == Kind::Spectra) || is_bruker_dir(p))
                 .collect()
         })
         .unwrap_or_default();
@@ -155,6 +167,10 @@ pub fn route(paths: &[PathBuf]) -> DropRoute {
         }
     };
     for p in paths {
+        if is_bruker_dir(p) {
+            r.spectra.push(text(p));
+            continue;
+        }
         if p.is_dir() {
             let found = folder_spectra(p);
             if found.is_empty() {
@@ -218,6 +234,9 @@ mod tests {
         assert_eq!(k("/d/RUN01.MZML"), Kind::Spectra);
         assert_eq!(k("/d/a.mzpeak"), Kind::Spectra);
         assert_eq!(k("/d/a.mgf"), Kind::Spectra);
+        assert_eq!(k("/d/a.RAW"), Kind::Spectra);
+        assert_eq!(k("/d/run.d.zip"), Kind::Spectra);
+        assert_eq!(k("/d/other.zip"), Kind::Other);
         assert_eq!(k("/d/human.fasta"), Kind::Fasta);
         assert_eq!(k("/d/human.fa"), Kind::Fasta);
         assert_eq!(k("/d/human.faa"), Kind::Fasta);
@@ -337,12 +356,14 @@ mod tests {
         for f in ["b.MGF", "a.mzML", "c.mzpeak", "notes.txt", "run.tags.tsv", "sub/d.mzML"] {
             std::fs::write(dir.join(f), b"x").unwrap();
         }
-        // A folder named like spectra is not a file to run.
+        // A folder named like spectra is not a file to run; a timsTOF .d
+        // folder is one input.
         std::fs::create_dir_all(dir.join("e.mzML")).unwrap();
+        std::fs::create_dir_all(dir.join("f.d")).unwrap();
         let got = folder_spectra_cmd(text(&dir)).unwrap();
-        assert_eq!(got, vec![text(&dir.join("a.mzML")), text(&dir.join("b.MGF")), text(&dir.join("c.mzpeak"))]);
+        assert_eq!(got, vec![text(&dir.join("a.mzML")), text(&dir.join("b.MGF")), text(&dir.join("c.mzpeak")), text(&dir.join("f.d"))]);
         // A folder without spectra: none, not an error.
-        assert!(folder_spectra_cmd(text(&dir.join("sub").join(".."))).unwrap().len() == 3);
+        assert!(folder_spectra_cmd(text(&dir.join("sub").join(".."))).unwrap().len() == 4);
         let empty = dir.join("empty");
         std::fs::create_dir_all(&empty).unwrap();
         assert!(folder_spectra_cmd(text(&empty)).unwrap().is_empty());

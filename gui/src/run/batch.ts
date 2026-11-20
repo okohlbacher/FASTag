@@ -3,7 +3,8 @@
 
 import type { ResolvedOutputs } from '../types'
 import type { JobStatus } from '../icons'
-import { defaultOut, stripExt } from '../app/paths'
+import { defaultOut } from '../app/paths'
+import { baseName } from '../digestReport'
 import { duration } from '../app/format'
 import type { LogStore } from './logStore'
 
@@ -39,7 +40,7 @@ export function jobOut(input: string, outDir: string | null, n = 0): string {
   const cut = Math.max(input.lastIndexOf('/'), input.lastIndexOf('\\')) + 1
   const name = input.slice(cut)
   const dir = outDir ? folderPath(outDir) : input.slice(0, cut)
-  if (n === 0) return outDir ? `${dir}${stripExt(name)}.tags.tsv` : defaultOut(input)
+  if (n === 0) return outDir ? `${dir}${baseName(defaultOut(name))}` : defaultOut(input)
   return n === 1 ? `${dir}${name}.tags.tsv` : `${dir}${name}.${n}.tags.tsv`
 }
 
