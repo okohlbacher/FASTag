@@ -94,6 +94,7 @@ failed; the WebKit Playwright project was not run.
 | 9 | 78322292 | typecheck OK; vitest 1384 passed, 17 skipped; Playwright 118 passed, 9 skipped; screens 59 PNGs | 0 / 3 / 17 (5) | 3 |
 | 10 | 6a81f2ab | typecheck OK; vitest 1405 passed, 17 skipped; Playwright 118 passed, 9 skipped; screens 59 PNGs | 0 / 3 / 18 (4) | 3 |
 | 11 | 3f16dffd | typecheck OK; vitest 1425 passed, 17 skipped; screens 59 PNGs (Playwright suites not run) | 0 / 8 / 12 (0) | 8 |
+| 12 | 11fc5c5d | typecheck OK; vitest 1431 passed, 17 skipped; Playwright chromium 117 passed, 9 skipped, 1 failed (test pinned the old table order; fixed in 3ca5eab9); screens 59 PNGs | 0 / 4 / 9 (2, and 1 in part) | 4 |
 
 Blocking findings fell from 19 to 3; since round 4 no critical finding has
 been found.
@@ -176,6 +177,38 @@ Claude; duplicates merged. All fixed, none rejected. Tests:
 | Batch plan line | "out:" (CLI name). | Fixed in 368de7c8: "outputs in …". |
 | Ranked product | No experimental badge. | Fixed in 368de7c8. |
 | Glyco stat | "Flag rule (glyco_min_fraction)". | Fixed in 368de7c8: "minimum oxonium share". |
+
+### Round 12 (at 11fc5c5d)
+
+Same lens; Codex, Kimi and Vibe (Vibe: no critical or major). Tests:
+`gui/src/review/round12.test.tsx` unless named.
+
+#### Major (4)
+
+| Area | Problem | Result |
+|---|---|---|
+| Overview: suggested fixed Cys | Always Carbamidomethyl without an alkylation call, even when the run had none or Propionamide. | Fixed in 317345f0: the run's own fixed cysteine modification (or none), marked "as run". |
+| Shortlist headline | Counted every row, background proteins included, as "proteins with evidence"; the Overview used the CLI header. | Fixed in 317345f0: the CLI header's counts; background proteins counted apart. |
+| Triage candidates | No way to take the candidates to the second search. | Fixed in 317345f0: "Export candidates…" (or "Export shown rows…") writes the filtered rows, never over the table. |
+| Database reduction recipe | The unvalidated shortlist recipe was said only in help. | Fixed in 1b79a9e7: a note under Settings, with where its values are. |
+
+#### Minor (9)
+
+| Area | Problem | Result |
+|---|---|---|
+| Unscored census heading | The page heading still said "Spectra ranked by identifiability". | Fixed in 317345f0. |
+| Census sort | Blank E-values sorted as 0 in the report tables. | Fixed in 317345f0. |
+| Characterize batch | No glyco column; Alkylation shown when no job asked for it. | Fixed in 317345f0 (tests `batchSummary*.test.ts*`, `batchWorkflows.test.ts`, `batch-summary.spec.ts`). |
+| Sage and vendor input | A Sage configuration names a .raw, mzPeak or .d.zip input Sage cannot read. | Fixed in 1b79a9e7: the product says to convert it to mzML. |
+| Picker .zip | Any .zip could be picked. | Fixed in 1b79a9e7: a .zip that is no .d.zip is refused with why (batch: left out). |
+| Mass shifts chart toggle | "Table" competed with the Mass-shift table. | Fixed in 1b79a9e7: "Bins". Moving the table above the chart rejected: the chart is the run's summary and the table directly follows it. |
+| Labels at Da | The Da reason said three times. | Fixed in 1b79a9e7: once. |
+| Species help | "10%" read as the default. | Fixed in 1b79a9e7. |
+| Advanced hint | "the groups of Export tags first" with none there. | Fixed in 1b79a9e7. |
+
+Rejected: "Help names the wrong first Results tab" (Run QC, Triage and Export tags land on QC, Triage and Tags, App.tsx LANDING_TAB; the screenshots open Overview on purpose); "1.15.4 named beside a 1.15.3 app" (the statement is true, and the bundled manifest is 1.15.5 after the merge).
+
+Also changed (coordinator): a Settings value a workflow sets off the CLI default says so on its hint line ("FASTag default 0."), first for Export tags' Extension 3 (317345f0, 15506022).
 
 Before merging: `origin/main` has moved on to 1.15.4 (regenerated
 `params.generated.json`, `-shortlist_defaults`, `-shortlist_max_evalue`
