@@ -503,6 +503,13 @@ namespace FASTag
       return ObsClass::UNKNOWN;
     }
 
+    /// The common modifications whose pairwise sums isobarClass() and siteCombination() try.
+    static const std::pair<const char*, double> COMMON_MODS[] = {
+        {"Oxidation", 15.994915}, {"Deamidated", 0.984016}, {"Acetyl", 42.010565}, {"Methyl", 14.01565},
+        {"Carbamidomethyl", 57.021464}, {"Carbamyl", 43.005814}, {"Formyl", 27.994915},
+        {"Phospho", 79.966331}, {"Dehydrated", -18.010565}, {"Amidated", -0.984016},
+        {"Cation:Na", 21.981943}};
+
     std::string isobarClass(double delta, const std::vector<Match>& names, const std::vector<Site>& sites,
                             const std::vector<FixedMod>& fixed, double iso_tol)
     {
@@ -548,11 +555,6 @@ namespace FASTag
             add(THREE.at(x) + "->" + THREE.at(y.first));
         }
       }
-      static const std::pair<const char*, double> COMMON_MODS[] = {
-          {"Oxidation", 15.994915}, {"Deamidated", 0.984016}, {"Acetyl", 42.010565}, {"Methyl", 14.01565},
-          {"Carbamidomethyl", 57.021464}, {"Carbamyl", 43.005814}, {"Formyl", 27.994915},
-          {"Phospho", 79.966331}, {"Dehydrated", -18.010565}, {"Amidated", -0.984016},
-          {"Cation:Na", 21.981943}};
       const std::size_t nc = sizeof(COMMON_MODS) / sizeof(COMMON_MODS[0]);
       for (std::size_t i = 0; i < nc; ++i)
         for (std::size_t j = i; j < nc; ++j)
@@ -562,6 +564,58 @@ namespace FASTag
       std::string o;
       for (const std::string& m : members) { if (!o.empty()) o += '='; o += m; }
       return o;
+    }
+
+    std::string siteCombination(double delta, const std::vector<Match>& names, const std::vector<Site>& sites,
+                                const std::vector<std::uint64_t>* support, const std::vector<Entry>& entries,
+                                const std::vector<FixedMod>& fixed, double iso_tol, double ppm_of)
+    {
+      const Match* best = nullptr;
+      for (const Match& m : names)
+        if (m.entry && !m.entry->label) { best = &m; break; }
+      if (!best || sites.empty()) return "";
+      std::size_t top = 0;
+      if (support && support->size() == sites.size())
+        for (std::size_t i = 1; i < sites.size(); ++i)
+          if ((*support)[i] > (*support)[top]) top = i;
+      const Site& site = sites[top];
+      const char res = site.residue == 'I' ? 'L' : site.residue;
+      if (best->entry->origin == res) return "";  // the name already explains the residue
+      const double mass = delta - best->error;
+      // A part fits when the catalogue has it on the site; its labels, and whether it is residue-specific.
+      auto fits = [&](const char* name, double m, std::vector<std::string>& labels, bool& specific) {
+        for (const Match& c : match(entries, m, iso_tol, {site}, fixed, SIZE_MAX))
+          if (c.entry && !c.entry->label && c.fixed.empty() && clean(c.entry->name) == name)
+          {
+            labels = c.sites;
+            specific = c.entry->origin == res;
+            return true;
+          }
+        return false;
+      };
+      const std::size_t nc = sizeof(COMMON_MODS) / sizeof(COMMON_MODS[0]);
+      for (std::size_t i = 0; i < nc; ++i)
+        for (std::size_t j = i; j < nc; ++j)
+        {
+          const double sum = COMMON_MODS[i].second + COMMON_MODS[j].second;
+          if (std::fabs(sum - mass) > iso_tol) continue;
+          std::vector<std::string> li, lj;
+          bool si = false, sj = false;
+          if (!fits(COMMON_MODS[i].first, COMMON_MODS[i].second, li, si) ||
+              !fits(COMMON_MODS[j].first, COMMON_MODS[j].second, lj, sj) || !(si || sj))
+            continue;
+          std::string o = std::string(COMMON_MODS[i].first) + "+" + COMMON_MODS[j].first + "@";
+          std::vector<std::string> labels = li;
+          for (const std::string& l : lj)
+            if (std::find(labels.begin(), labels.end(), l) == labels.end()) labels.push_back(l);
+          for (std::size_t k = 0; k < labels.size(); ++k) o += (k ? "/" : "") + labels[k];
+          char num[48];
+          const double err = delta - sum;
+          if (ppm_of > 0) std::snprintf(num, sizeof num, "(%+.1fppm)", err / ppm_of * 1e6);
+          else std::snprintf(num, sizeof num, "(%+.1fmDa)", err * 1e3);
+          return o + num;
+        }
+      return "";
     }
 
     std::vector<BinGroup> groupBins(const std::map<std::int64_t, std::uint64_t>& counts, std::int64_t width)
