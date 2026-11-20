@@ -18,7 +18,7 @@ import { baseName, type Report } from '../digestReport'
 import type { SpeciesReport } from '../types'
 import { alkylationCall as alkylationReportCall } from '../digestReport'
 import { censusFacts, labelCall, proteaseCall, speciesCall, parseLog, tiedLeaders, unassessedKits } from '../results/calls'
-import { buildOverview, keyValues, reportRank, shortlistFacts, topShift, type Tile } from '../results/overview'
+import { buildOverview, keyValues, reportRank, shortlistFacts, topShift, triageFacts, type Tile } from '../results/overview'
 import { jobWords, type BatchJob } from './batch'
 
 /// A column has a majority only over at least this many calls.
@@ -32,7 +32,7 @@ export const QC_COLUMNS = ['ms2', 'yield', 'charge', 'analyzer', 'instrument', '
 /// The key figures of the other workflows, each from its own report: the
 /// log's counts (Export tags), the mass-shift accounting and table, the
 /// shortlist, the identifiability summary.
-export const WORKFLOW_COLUMNS = ['spectra', 'tagRate', 'placed', 'topShift', 'kept', 'config', 'censusTagged'] as const
+export const WORKFLOW_COLUMNS = ['spectra', 'tagRate', 'placed', 'topShift', 'kept', 'config', 'censusTagged', 'identScore'] as const
 export type SummaryColumn = (typeof SUMMARY_COLUMNS)[number] | (typeof QC_COLUMNS)[number] | (typeof WORKFLOW_COLUMNS)[number]
 
 /// The columns of a batch of @p workflow: its key columns.
@@ -49,7 +49,7 @@ export function columnsFor(workflow?: string | null): readonly SummaryColumn[] {
     case 'db-reduction':
       return ['kept', 'config']
     case 'triage':
-      return ['spectra', 'censusTagged']
+      return ['spectra', 'identScore', 'censusTagged']
     default:
       return SUMMARY_COLUMNS
   }
@@ -73,7 +73,8 @@ export const COLUMN_LABEL: Record<SummaryColumn, string> = {
   topShift: 'Top mass shift',
   kept: 'Proteins kept',
   config: 'Engine configuration',
-  censusTagged: 'Tagged spectra'
+  censusTagged: 'Tagged spectra',
+  identScore: 'Median identifiability'
 }
 const TSV_NAME: Record<SummaryColumn, string> = {
   genus: 'top_genus',
@@ -92,7 +93,8 @@ const TSV_NAME: Record<SummaryColumn, string> = {
   topShift: 'top_mass_shift',
   kept: 'proteins_kept',
   config: 'engine_configuration',
-  censusTagged: 'tagged_spectra'
+  censusTagged: 'tagged_spectra',
+  identScore: 'median_ident_score'
 }
 
 /// The header of column @p k for a batch whose species reports are at
@@ -119,6 +121,8 @@ export interface JobData {
   deltaCounts?: string | null
   delta?: string | null
   shortlist?: string | null
+  /// The text of its identifiability ranking (census_sorted_out).
+  triage?: string | null
   config?: boolean | null
   /// The reports the job was sent (a path in its resolved outputs) that
   /// could not be read or parsed, with why: their cells say so, not that
@@ -140,6 +144,7 @@ export type SentReport =
   | 'delta_counts_out'
   | 'shortlist_out'
   | 'census_summary_out'
+  | 'census_sorted_out'
 
 /// The QC cells of a job, from its QC report (section, key, value, n): the
 /// figures as the report states them; only the instrument and the isobaric
@@ -236,7 +241,13 @@ export function workflowCells(d: JobData): Record<(typeof WORKFLOW_COLUMNS)[numb
     : cf
       ? { text: `${fmtN(cf.tagged)} of ${fmtN(cf.read)}${cf.taggedShare != null ? ` (${(cf.taggedShare * 100).toFixed(1)}%)` : ''}`, call: null, note: 'MS2 spectra with a reported tag (identifiability summary); a batch uses no identifications' }
       : { text: 'not in the report', call: null, note: 'the summary has no census counts' }
-  return { spectra, tagRate, placed, topShift: topShiftCell, kept, config, censusTagged }
+  const tf = d.triage ? triageFacts(d.triage) : null
+  const identScore: Cell = !d.triage
+    ? off('identifiability ranking')
+    : tf && tf.median != null
+      ? { text: tf.median.toFixed(3), call: null, note: `the middle score of ${fmtN(tf.ranked)} ranked MS2 spectra (0 to 1); an experimental ranking, not a quality call` }
+      : { text: 'not in the report', call: null, note: 'the ranking has no identifiability score' }
+  return { spectra, tagRate, placed, topShift: topShiftCell, kept, config, censusTagged, identScore }
 }
 
 export interface Cell {
@@ -324,6 +335,7 @@ export function jobCells(d: JobData): { tags: number | null; cells: Record<Summa
       topShift: or('delta_out', w.topShift),
       kept: or('shortlist_out', w.kept),
       censusTagged: or('census_summary_out', w.censusTagged),
+      identScore: or('census_sorted_out', w.identScore),
       genus: or('species_out', genus),
       protease: or('digest_out', called(tile('protease'), p.state === 'call' ? p.enzyme : null)),
       label: or('label_out', called(tile('label'), l.state === 'call' ? l.label : null)),

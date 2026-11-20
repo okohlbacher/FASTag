@@ -36,6 +36,7 @@ async function readJob(j: Job): Promise<JobData> {
   const delta = await text('delta_out', o.delta_out)
   const shortlist = await text('shortlist_out', o.shortlist_out)
   const census = await text('census_summary_out', o.census_summary_out)
+  const triage = await text('census_sorted_out', o.census_sorted_out)
   const config = o.search_config_out ? await window.fastag.reportHead(o.search_config_out).then((t) => t != null, () => false) : null
   const [reports, species] = await Promise.all([
     Promise.all(reads).then((rs) => rs.flat()),
@@ -65,6 +66,7 @@ async function readJob(j: Job): Promise<JobData> {
     deltaCounts,
     delta,
     shortlist,
+    triage,
     config,
     unread
   }

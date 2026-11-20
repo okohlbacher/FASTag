@@ -19,8 +19,15 @@ describe('the key columns of each workflow', () => {
     expect(columnsFor('export-tags')).toEqual(['spectra', 'tagRate'])
     expect(columnsFor('mass-shift')).toEqual(['spectra', 'placed', 'topShift'])
     expect(columnsFor('db-reduction')).toEqual(['kept', 'config'])
-    expect(columnsFor('triage')).toEqual(['spectra', 'censusTagged'])
+    expect(columnsFor('triage')).toEqual(['spectra', 'identScore', 'censusTagged'])
     expect(columnsFor('characterize')).toEqual(['genus', 'protease', 'label', 'alkylation'])
+  })
+
+  // Round 11: a Triage batch shows the workflow's own figure.
+  it('Triage: the median identifiability of each job', () => {
+    const triage = 'ident_rank\tident_score\n1\t0.9\n2\t0.4\n3\t0.1\n'
+    expect(workflowCells(data({ triage })).identScore.text).toBe('0.400')
+    expect(workflowCells(data({})).identScore.text).toBe('not written')
   })
 
   it('reads each from its own report', () => {
