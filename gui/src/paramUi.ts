@@ -1245,7 +1245,7 @@ export const PARAM_UI: Record<string, ParamUi> = {
   shortlist_max_evalue: {
     hidden: OPT_IN_1_12,
     help: {
-      text: 'The E-value a tag needs for its placements to count for the shortlist.'
+      text: 'The E-value a tag needs for its placements to count for the shortlist. 10 by the shortlist recipe; for a metaproteome database use 100 (held-out test: 96% of the full-search peptides kept with 23% of an 870k-protein database).'
     }
   },
   shortlist_min_spectra: {

@@ -15,6 +15,10 @@
   line `Shortlist recipe defaults (...)` and the shortlist header name the
   values applied; an option given on the command line or in an INI wins.
   `-shortlist_defaults plain` restores the 1.15.3 defaults.
+- **Metaproteomes: `-shortlist_max_evalue 100`** with the recipe default. Held-out test on
+  PXD045390 (28 runs, three matrices): 96 % of the full-search peptides kept (lower 95 % bound 0.954),
+  every spiked organism >= 0.94, with 23 % of an 870k-protein database. The reduced search's FDR is
+  optimistic (more entrapment hits); see doc/SHORTLIST.md.
   Runs without a shortlist output are unchanged. The recipe passed the
   second MSFragger held-out test and failed the third, so it is a working
   default, not a validated claim.

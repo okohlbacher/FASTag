@@ -658,7 +658,9 @@ void TOPPFASTag::registerOptionsAndFlags_()
   setValidStrings_("shortlist_defaults", ListUtils::create<std::string>("recipe,plain"));
   registerDoubleOption_("shortlist_max_evalue", "<f>", 0.1,
                         "E-value a tag needs for its placements to count for the shortlist. 10 by "
-                        "the shortlist recipe default: with -shortlist_out, -fasta_out or -search_config_out and -shortlist_protease trypsin (doc/SHORTLIST.md), unless given on the command line or in an INI",
+                        "the shortlist recipe default: with -shortlist_out, -fasta_out or -search_config_out and -shortlist_protease trypsin (doc/SHORTLIST.md), unless given on the command line or in an INI. For a "
+                        "metaproteome database use 100 (held-out PASS on PXD045390: 96% of the full-search peptides "
+                        "kept with 23% of an 870k-protein database)",
                         false, true);
   setMinFloat_("shortlist_max_evalue", 0.0);
   registerIntOption_("shortlist_min_spectra", "<n>", 2,
