@@ -92,7 +92,7 @@ function GlycoBody({ t, minFraction }: { t: Glyco; minFraction: number | null })
         </div>
         {minFraction != null && (
           <div className="stat">
-            <dt>Flag rule (glyco_min_fraction)</dt>
+            <dt>Flag rule (minimum oxonium share)</dt>
             <dd>{fmt(minFraction, 3)}</dd>
           </div>
         )}

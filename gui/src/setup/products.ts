@@ -45,7 +45,7 @@ export const PRODUCTS: readonly Product[] = [
   { param: 'delta_spectra_out', label: 'Spectra per mass shift', what: 'The spectra behind each mass shift, with the site.', needs: ['delta_out'], db: true, experimental: true },
   { param: 'delta_counts_out', label: 'Mass-shift accounting', what: 'How many spectra reach each step of the survey.', needs: ['delta_out'], db: true, experimental: true },
   { param: 'massgap_out', label: 'Mass-gap report', what: 'Peaks of the mass gaps, explained as UniMod combinations.', needs: ['recon_out'], db: true },
-  { param: 'recon_id_out', label: 'Placements as identifications', what: 'The placements as idXML, mzid or mzTab, for other tools.', needs: ['recon_out'], db: true },
+  { param: 'recon_id_out', label: 'Placements as identifications', what: 'The placements as idXML, mzid or mzTab, for other tools: candidates, not FDR-controlled.', needs: ['recon_out'], db: true },
   { param: 'species_out', label: 'Species report', what: 'The taxa the tags point to, ranked.', flag: 'species' },
   { param: 'shortlist_out', label: 'Protein shortlist', what: 'Proteins ranked by the spectra placed on them.', db: true },
   { param: 'fasta_out', label: 'Reduced FASTA', what: 'The shortlisted proteins plus your background proteins.', db: true },
@@ -54,7 +54,7 @@ export const PRODUCTS: readonly Product[] = [
   { param: 'census_summary_out', label: 'Identifiability summary', what: 'The counts of the run, written with the table.', flag: 'census', follows: 'census_out' },
   // The CLI writes the ranking from the census rows: without -census it
   // ignores census_sorted_out, so the table is needed (and locked) with it.
-  { param: 'census_sorted_out', label: 'Spectra ranked by identifiability', what: 'The table ordered by the identifiability score (experimental).', needs: ['census_out'], also: { census: true, census_score: true } },
+  { param: 'census_sorted_out', label: 'Spectra ranked by identifiability', what: 'The table ordered by the identifiability score (experimental).', needs: ['census_out'], experimental: true, also: { census: true, census_score: true } },
   { param: 'digest_out', label: 'Digest report', what: 'Terminal residues and the protease they fit.' },
   { param: 'label_out', label: 'Label report', what: 'Isobaric and SILAC labels the tags carry.' },
   { param: 'alkylation_out', label: 'Alkylation report', what: 'The reagent that alkylated the cysteines, from a shipped proteome.' },

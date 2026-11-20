@@ -984,8 +984,8 @@ export const SPECIES: HelpPage = {
           <p>
             Only tags without a gap count by default, because the two residues across a gap are inferred; letting them
             in moved the true genus from rank 1 to rank 20 on a public test run (<L to="param-species_use_gapped">use
-            gapped tags</L>). Tags need at least 7 residues. The <strong>Find organisms</strong> and{' '}
-            <strong>Characterize sample</strong> tasks use <L to="param-tag_length">tag length</L> 3 with{' '}
+            gapped tags</L>). Tags need at least 7 residues. The <strong>Species</strong> and{' '}
+            <strong>Characterize a run</strong> workflows use <L to="param-tag_length">tag length</L> 3 with{' '}
             <L to="param-extension">extension</L> 2, which can reach 7; only tags that actually grow that far
             count. You can also request 7-residue seeds directly. Check the Evidence card afterwards: choosing
             a reachable length does not guarantee that the spectra provide enough evidence.

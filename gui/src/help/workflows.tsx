@@ -158,7 +158,8 @@ export const WORKFLOWS: HelpPage = {
             <strong>Database reduction</strong> places the tags on a protein FASTA and writes a ranked protein
             shortlist, a reduced FASTA (the shortlisted proteins plus your background proteins) and a configuration
             for Sage, Comet or MSFragger. The shortlist is a search-space reduction, not an identification and not
-            FDR-controlled: search the reduced FASTA with your engine, which makes its own decoys.
+            FDR-controlled: search the reduced FASTA with your engine. Sage and Comet make their own decoys; for
+            MSFragger, FASTag appends reversed <code>rev_</code> decoys to the reduced FASTA.
           </p>
           <p>
             The workflow sets the shortlist recipe of doc/SHORTLIST.md (gapped placements, E-value 10, shortest placed

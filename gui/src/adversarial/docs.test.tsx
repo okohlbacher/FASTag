@@ -90,7 +90,7 @@ describe('docs: species headline and footnote vs SPECIES-DETECTOR.md / README', 
     // Without -species_deconvolve adjusted == observed: no second column of the same numbers.
     expect(heads).not.toContain('Adjusted')
     expect(heads).not.toContain('enrich.')
-    expect(container.querySelector('.footnote')?.textContent).toMatch(/species_deconvolve to add an Adjusted column/)
+    expect(container.querySelector('.footnote')?.textContent).toMatch(/Subtract shared evidence \(Advanced › Species, advanced\) to add an Adjusted column/)
     unmount()
     const dec = { ...rep, taxa: rep.taxa.map((t, i) => (i === 0 ? { ...t, adjusted: t.adjusted - 1 } : t)) }
     const r2 = render(<SpeciesPanel report={dec} enabled tooShort={null} contributed={null} totalMs2={null} />)

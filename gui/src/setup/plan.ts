@@ -39,6 +39,6 @@ export function planLine(label: string, values: V, ctx: { input: string; files: 
   const named = ctx.files > 0 || (!batch && !!ctx.input)
   const n = reportsOn(values).length
   const parts = [named ? `${label} on ${what}` : `${label} · ${what}`, n ? `${n} ${n === 1 ? 'report' : 'reports'}` : 'tags table only', samplingSummary(values)]
-  if (batch) parts.push(ctx.outDir ? `out: ${ctx.outDir}` : 'out: beside each input')
+  if (batch) parts.push(ctx.outDir ? `outputs in ${ctx.outDir}` : 'outputs beside each input')
   return parts.join(' · ')
 }

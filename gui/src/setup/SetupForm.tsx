@@ -540,7 +540,11 @@ export default function SetupForm({
       <div className={batch ? 'input-row batch' : 'input-row'}>
       <div className="seg" role="radiogroup" aria-label="Input mode">
         {(['one', 'batch'] as const).map((m) => (
-          <label key={m} className={`seg-opt${(m === 'batch') === batch ? ' on' : ''}`}>
+          <label
+            key={m}
+            className={`seg-opt${(m === 'batch') === batch ? ' on' : ''}`}
+            title={m === 'one' && jobs.length > 0 ? 'Clear the batch (Open the batch, then Clear) to use one file' : undefined}
+          >
             <input
               type="radio"
               name="input-mode"
@@ -579,7 +583,8 @@ export default function SetupForm({
             <div className="input-card">
               <IconFile />
               <span className="grow">
-                {jobs.length} {jobs.length === 1 ? 'file' : 'files'} in the batch; each runs with these settings.
+                {jobs.length} {jobs.length === 1 ? 'file' : 'files'} in the batch; each runs with these settings. To use one
+                file, clear the batch.
               </span>
               <button type="button" className="secondary small" onClick={onOpenBatch}>
                 Open the batch

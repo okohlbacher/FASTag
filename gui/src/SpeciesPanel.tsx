@@ -285,8 +285,8 @@ export default function SpeciesPanel({
         ) : (
           <>
             Ranked by observed spectra. Shared sequence was not subtracted, so close relatives share evidence
-            with the top taxon; run with <code className="cli">species_deconvolve</code> to add an Adjusted
-            column.
+            with the top taxon; run again with <strong>Subtract shared evidence</strong> (Advanced › Species,
+            advanced) to add an Adjusted column.
           </>
         )}{' '}
         Ranking by significance instead would favour a near neighbour, whose borrowed count is

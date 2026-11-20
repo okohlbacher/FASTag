@@ -175,10 +175,10 @@ describe('folder input and the output folder', () => {
     await click(screen.getByRole('button', { name: 'Choose output folder…' }))
     expect(within(outdir()).getByText('/out')).toBeDefined()
     // The plan footer says so too.
-    expect(document.querySelector('.view[data-view="batch"] .runbar')!.textContent).toContain('out: /out')
+    expect(document.querySelector('.view[data-view="batch"] .runbar')!.textContent).toContain('outputs in /out')
     await click(screen.getByRole('button', { name: 'Beside inputs' }))
     expect(within(outdir()).getByText('beside each input')).toBeDefined()
-    expect(document.querySelector('.view[data-view="batch"] .runbar')!.textContent).toContain('out: beside each input')
+    expect(document.querySelector('.view[data-view="batch"] .runbar')!.textContent).toContain('outputs beside each input')
     await click(screen.getByRole('button', { name: 'Choose output folder…' }))
     serve(mock, 'a', BATCH_CASES.pxd003531, '/out')
     serve(mock, 'b', BATCH_CASES.pxd004541, '/out')

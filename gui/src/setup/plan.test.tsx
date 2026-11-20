@@ -24,12 +24,12 @@ describe('the plan line', () => {
     expect(planLine('Characterize a run', v, ctx)).toBe('Characterize a run on run01.mzML · 4 reports · 10% of spectra')
     expect(planLine('Run QC', startValues('builtin:run-qc', '/d/run01.tags.tsv'), ctx)).toBe('Run QC on run01.mzML · 1 report · all spectra')
     expect(planLine('Export tags', baseValues('builtin:export-tags'), { input: '', files: 0 })).toBe('Export tags · no file yet · tags table only · all spectra')
-    expect(planLine('Run QC', v, { input: '', files: 3, outDir: '/share/out' })).toBe('Run QC on 3 files · 4 reports · 10% of spectra · out: /share/out')
-    expect(planLine('Run QC', v, { input: '', files: 3 })).toBe('Run QC on 3 files · 4 reports · 10% of spectra · out: beside each input')
+    expect(planLine('Run QC', v, { input: '', files: 3, outDir: '/share/out' })).toBe('Run QC on 3 files · 4 reports · 10% of spectra · outputs in /share/out')
+    expect(planLine('Run QC', v, { input: '', files: 3 })).toBe('Run QC on 3 files · 4 reports · 10% of spectra · outputs beside each input')
   })
   it('in Batch mode the queue is the input: no files yet, never the single file', () => {
     const v = startValues('builtin:run-qc', '/d/run01.tags.tsv')
-    expect(planLine('Run QC', v, { input: '/d/run01.mzML', files: 0, batch: true })).toBe('Run QC · no files yet · 1 report · all spectra · out: beside each input')
+    expect(planLine('Run QC', v, { input: '/d/run01.mzML', files: 0, batch: true })).toBe('Run QC · no files yet · 1 report · all spectra · outputs beside each input')
   })
 })
 

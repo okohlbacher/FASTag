@@ -329,7 +329,7 @@ describe('ReconView', () => {
     const { rerender } = render(<ReconView massgap={null} tables={{}} action={{ label: 'Choose a FASTA and run again', run, disabled: false }} onOpen={onOpen} />)
     expect(screen.getByRole('heading', { name: 'No mass shifts yet' })).toBeTruthy()
     // Products in words, never a flag.
-    expect(screen.getByText(/choose a FASTA and write the Tag placements, the Mass-shift table and the Mass-gap report/)).toBeTruthy()
+    expect(screen.getByText(/choose a FASTA and write the Tag placements and the Mass-shift table \(the Mass-shift survey workflow does\); add the Mass-gap report/)).toBeTruthy()
     expect(document.querySelector('code.cli')).toBeNull()
     await click(screen.getByRole('button', { name: 'Choose a FASTA and run again' }))
     expect(run).toHaveBeenCalledTimes(1)

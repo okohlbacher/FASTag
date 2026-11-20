@@ -189,8 +189,9 @@ export default function ReconView({ massgap, tables, gen = {}, notice, action, e
       <div className="empty-state recon-empty">
         <h2>No mass shifts yet</h2>
         <p>
-          Mass shifts come from placing the tags on a protein database: choose a FASTA and write the Tag placements,
-          the Mass-shift table and the Mass-gap report (the Mass-shift survey workflow does).
+          Mass shifts come from placing the tags on a protein database: choose a FASTA and write the Tag placements
+          and the Mass-shift table (the Mass-shift survey workflow does); add the Mass-gap report for explained
+          peaks.
         </p>
         <div className="row-actions">
           {action && (
@@ -238,6 +239,7 @@ export default function ReconView({ massgap, tables, gen = {}, notice, action, e
             </strong>{' '}
             That is too few for any conclusion about modifications or alkylation (this view asks for {LOW_PLACED}).
             {placed === 0 && ' Tags may be shorter than the recon index needs; its log line names the minimum length.'}
+            {' Placements use tryptic peptides: a run digested with another protease places fewer tags.'}
           </span>
           {extend && (
             <button type="button" className="secondary" disabled={extend.disabled} onClick={extend.run}>

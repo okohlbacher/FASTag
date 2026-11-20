@@ -1256,7 +1256,7 @@ export const PARAM_UI: Record<string, ParamUi> = {
   fasta_out: {
     section: 'Shortlist',
     help: {
-      text: 'Write a smaller FASTA with the proteins of the shortlist, for a database search. No decoys are added; let the search engine make them. When it would hold no protein, it is not written and the run fails with exit code 13.'
+      text: 'Write a smaller FASTA with the proteins of the shortlist, for a database search. For Sage and Comet no decoys are added (the engine makes them); for MSFragger, FASTag appends reversed rev_ decoys. When it would hold no protein, it is not written and the run fails with exit code 13.'
     }
   },
   ion_series: {

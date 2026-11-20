@@ -1311,7 +1311,7 @@ dl.qc-strip .stat dd { margin: 0; font-size: var(--text-md); font-weight: 600; }
 .adv-fields > .field:has(textarea), .adv-fields > .field:has(.path-input) { grid-column: span 2; }
 @media (max-width: 900px) { .adv-fields { grid-template-columns: minmax(0, 1fr); } .adv-fields > .field { grid-column: auto !important; } }
 /* Outputs: the products in two columns. */
-#card-outputs ul.products { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-1) var(--space-4); align-items: start; }
+#card-outputs ul.products { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); grid-auto-flow: row dense; gap: var(--space-1) var(--space-4); align-items: start; }
 /* Row by row: a cell holds its checkbox and its hint (beside the label,
    wrapping under it in that cell), so a long hint grows its row, never
    pushes the next checkbox out of line. */
