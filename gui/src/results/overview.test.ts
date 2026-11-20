@@ -111,18 +111,17 @@ describe('Overview model: calls', () => {
     expect(old.note).toMatch(/FASTag 1\.12/)
   })
 
-  it('no FASTA, no alkylation call: "not assessed" with "Add FASTA and run again"', () => {
+  it('no alkylation report: "not assessed" with "Add Alkylation report and run again"', () => {
     const o = overviewOf(CLI_CASES.v112)
     const t = tile(o, 'alkylation')
     expect(t.value).toBe('not assessed')
     expect(t.tone).toBe('off')
     // Characterize's extension 2 cannot place tags in a proteome: the action
     // raises it to 3, and the tile says so.
-    expect(t.action).toEqual({ kind: 'add-fasta', label: 'Add FASTA and run again', values: { extension: '3' } })
-    expect(t.note).toMatch(/sets the extension from 2 to 3/)
+    expect(t.action).toEqual({ kind: 'enable', label: 'Add Alkylation report and run again', values: { alkylation_out: 'alkylation.tsv', extension: '3' } })
+    expect(t.note).toMatch(/raises the extension from 2 to 3/)
     expect(line(o, 'fixed C+57.021')).toMatchObject({ evidence: 'default' })
-    expect(line(o, 'fixed C+57.021').note).toBe('default, alkylation not assessed (no FASTA)')
-    expect(line(o, 'variable M+15.995').note).toBe('default; mass gaps not assessed (no FASTA)')
+    expect(line(o, 'fixed C+57.021').note).toBe('default, alkylation not assessed (alkylation report not written)')
   })
 
   it('also for FASTag 1.11', () => {
@@ -281,9 +280,9 @@ describe('Overview model: suggested settings', () => {
       params: { glyco: false },
       instrument: null
     })
-    expect(tile(o, 'protease').action).toEqual({ kind: 'enable', label: 'Turn on and run again', values: { digest_out: 'digest.tsv' } })
-    expect(tile(o, 'label').action).toEqual({ kind: 'enable', label: 'Turn on and run again', values: { label_out: 'label.tsv' } })
-    expect(tile(o, 'genus').action).toEqual({ kind: 'enable', label: 'Turn on and run again', values: { species: true, extension: '2' } })
+    expect(tile(o, 'protease').action).toEqual({ kind: 'enable', label: 'Add Digest report and run again', values: { digest_out: 'digest.tsv' } })
+    expect(tile(o, 'label').action).toEqual({ kind: 'enable', label: 'Add Label report and run again', values: { label_out: 'label.tsv' } })
+    expect(tile(o, 'genus').action).toEqual({ kind: 'enable', label: 'Add Species report and run again', values: { species: true, extension: '2' } })
     // The log of this case has a glyco line, but the run was told glyco off: the log wins.
     expect(tile(o, 'glyco').action).toBeUndefined()
   })
@@ -295,7 +294,7 @@ describe('Overview model: suggested settings', () => {
 
   it('copies as plain text, one line per setting with its evidence', () => {
     const o = overviewOf(CLI_CASES.v112)
-    expect(o.copyText.split('\n')).toContain('fixed C+57.021: Carbamidomethyl (C) (default, alkylation not assessed (no FASTA))')
+    expect(o.copyText.split('\n')).toContain('fixed C+57.021: Carbamidomethyl (C) (default, alkylation not assessed (alkylation report not written))')
   })
 })
 
@@ -342,5 +341,32 @@ describe('Overview card text: tiny numbers and punctuation', () => {
         expect(t.note, `${c.name} ${t.id}`).not.toMatch(/0\.0{6,}/)
       }
     }
+  })
+})
+
+describe('Overview model: the alkylation report', () => {
+  const report = (status: string, reason: string, extra = ''): string =>
+    [
+      'section\tkey\tvalue\tn\tdescription',
+      'alk_run\tformat\t1\t-\t-',
+      'alk_run\tdatabase_source\tbundled:human\t-\t-',
+      `alkylation_call\tstatus\t${status}\t42\t-`,
+      `alkylation_call\treason\t${reason}\t-\t-`,
+      extra
+    ].join('\n')
+  const of = (text: string, params: Record<string, unknown> = { extension: '2' }) =>
+    buildOverview({ log: [], reports: [parseReport(text, '/d/a.alkylation.tsv')], species: null, census: null, params, instrument: null })
+
+  it('shows the no call with its reason in words; too short tags offer extension 3', () => {
+    const t = tile(of(report('no_call', 'tags_too_short')), 'alkylation')
+    expect(t).toMatchObject({ value: 'no call', tone: 'nocall' })
+    expect(t.note).toMatch(/no tag reaches the length the proteome needs/)
+    expect(t.action).toEqual({ kind: 'enable', label: 'Run again with extension 3', values: { extension: '3' } })
+  })
+
+  it('shows the call with its reagent, and suggests it for the search', () => {
+    const o = of(report('call', '-', 'alkylation_call\treagent\tPropionamide\t-\t-\nalkylation_call\tshare\t0.9\t42\t-'))
+    expect(tile(o, 'alkylation')).toMatchObject({ value: 'Propionamide', tone: 'call' })
+    expect(line(o, 'fixed C+57.021')).toMatchObject({ value: 'Propionamide (C)', evidence: 'call' })
   })
 })

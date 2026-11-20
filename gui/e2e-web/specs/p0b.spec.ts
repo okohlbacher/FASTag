@@ -105,7 +105,8 @@ test('presets: "Ion trap CID" sets 0.3 Da and nothing else', async ({ page }) =>
   await page.getByRole('button', { name: 'Choose file…' }).click()
   await expect(page.locator('#instrument').locator('option')).toHaveText([
     'Orbitrap/TOF HCD 20 ppm',
-    'Orbitrap ETD or EThcD 20 ppm',
+    'Orbitrap ETD 20 ppm (unvalidated)',
+    'Orbitrap EThcD 20 ppm (unvalidated)',
     'Ion trap CID 0.3 Da',
     'timsTOF 30 ppm (unvalidated)',
     'Astral 20 ppm (unvalidated)',

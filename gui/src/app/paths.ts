@@ -34,16 +34,18 @@ export function dirName(p: string): string {
 }
 
 // The file manager's own name for "show this file".
+// The platform first, as setup/shortcuts isMac reads it: a user agent can
+// name another system than the one the app runs on.
 export function revealLabel(): string {
-  const ua = typeof navigator === 'undefined' ? '' : navigator.userAgent
-  if (/Mac/.test(ua)) return 'Reveal in Finder'
-  if (/Win/.test(ua)) return 'Show in Explorer'
+  const os = typeof navigator === 'undefined' ? '' : navigator.platform || navigator.userAgent
+  if (/Mac/.test(os)) return 'Reveal in Finder'
+  if (/Win/.test(os)) return 'Show in Explorer'
   return 'Show in folder'
 }
 
 // The report options whose files the Digest tab reads: keys of
 // ResolvedOutputs, so a key the backend does not send fails the typecheck.
-export const REPORT_PARAMS = ['digest_out', 'label_out', 'massgap_out'] as const satisfies readonly (keyof ResolvedOutputs)[]
+export const REPORT_PARAMS = ['digest_out', 'label_out', 'massgap_out', 'alkylation_out'] as const satisfies readonly (keyof ResolvedOutputs)[]
 
 // A batch must not write every job's extra outputs to one configured path, or
 // each job overwrites the last. Each configured output-file option gets a
@@ -51,8 +53,13 @@ export const REPORT_PARAMS = ['digest_out', 'label_out', 'massgap_out'] as const
 // extension: <stem>.<option without _out>.<ext>, e.g. a.glyco.tsv, and
 // a.spectra.mzpeak for out_spectra. species_out is blanked instead, so the CLI
 // derives its own per-input default.
+//
+// census_ids is blanked too: the identifications of one run are no
+// identifications of another, and the scan-number fallback would mark
+// spectra of unrelated runs identified. Until a batch maps each input to its
+// own file, a batch sends none (the Setup field says so).
 export function perJobOutputs(values: Record<string, unknown>, tagsOut: string): Record<string, ParamValue> {
-  return { ...rebaseOutputs(values, tagsOut), species_out: '' }
+  return { ...rebaseOutputs(values, tagsOut), species_out: '', census_ids: '' }
 }
 
 // The middle part of an output's file name: digest_out writes <stem>.digest.tsv,

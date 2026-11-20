@@ -1,5 +1,5 @@
-import { useLayoutEffect, useRef, useState, type JSX } from 'react'
-import { defaultText, humanName, invalidBecause, isChanged, masters, PARAM_BY_NAME, uiOf, type Dependency, type ParamSpec } from './paramLayout'
+import { useRef, useState, type JSX } from 'react'
+import { choiceText, defaultText, hintText, humanName, invalidBecause, isChanged, masters, PARAM_BY_NAME, uiOf, type Dependency, type ParamSpec } from './paramLayout'
 import { IconError } from './icons'
 import HelpPopover from './help/HelpPopover'
 import { productLabel } from './setup/products'
@@ -28,14 +28,17 @@ interface Props {
   label?: string
   /// The run cannot do without it (a workflow's protein database).
   required?: boolean
+  /// Not usable here, and why (census_ids in Batch mode): disabled, with
+  /// the reason in place of its help.
+  blocked?: string
 }
 
 // One widget per declared type. The tool's restrictions drive the control: a
 // string with `choices` becomes a select. A number is a text field checked by
 // invalidBecause() against the type, min and max the CLI declares; a value the
 // CLI would refuse is marked invalid and says why (App keeps Run disabled).
-export default function ParamField({ spec, value, onChange, onPickFile, needs, unit, turnsOn, brief, label: name, required }: Props): JSX.Element {
-  const off = !!needs
+export default function ParamField({ spec, value, onChange, onPickFile, needs, unit, turnsOn, brief, label: name, required, blocked }: Props): JSX.Element {
+  const off = !!needs || !!blocked
   // An inert field is not sent, so its value cannot fail the run.
   const invalid = off ? null : invalidBecause(spec, value)
   const changed = !off && (isChanged(spec.name, value) || (!!unit && isChanged(unit.spec.name, unit.value)))
@@ -47,7 +50,8 @@ export default function ParamField({ spec, value, onChange, onPickFile, needs, u
       <label htmlFor={`p-${spec.name}`}>
         <span className="pname">{title}</span>
       </label>
-      {required && <span className={`badge${missing ? ' warn' : ''}`}>required</span>}
+      {/* Neutral: a field not filled in yet is no error. */}
+      {required && <span className={`badge${missing ? ' todo' : ''}`}>required</span>}
       {uiOf(spec.name).experimental && <span className="badge">experimental</span>}
       <HelpPopover
         name={spec.name}
@@ -59,24 +63,11 @@ export default function ParamField({ spec, value, onChange, onPickFile, needs, u
     </span>
   )
   const helpId = `h-${spec.name}`
-  // The help is clamped to two lines; a longer text gets a toggle instead of
-  // being cut mid-word with the rest only in a tooltip.
+  // The help is one line in words (hintText); the full CLI description is
+  // in the (?) popover and the line's tooltip, so no field needs a 'more'.
   const helpRef = useRef<HTMLParagraphElement>(null)
-  const [expanded, setExpanded] = useState(false)
-  const [clipped, setClipped] = useState(false)
-  useLayoutEffect(() => {
-    const el = helpRef.current
-    if (!el || expanded) return
-    const measure = (): void => setClipped(el.scrollHeight > el.clientHeight + 1)
-    measure()
-    // Re-measured when the paragraph's width changes: the aside is full
-    // width below 720 px and 300-400 px above, so a text clipped at one
-    // width may fit at another.
-    if (typeof ResizeObserver === 'undefined') return
-    const ro = new ResizeObserver(measure)
-    ro.observe(el)
-    return () => ro.disconnect()
-  }, [needs, invalid, changed, expanded])
+  // Custom chosen in a steps select, before a value of its own is typed.
+  const [customStep, setCustomStep] = useState(false)
   const deflt = `${defaultText(spec)}${unit ? ` ${defaultText(unit.spec)}` : ''}`
   // An invalid value says what is wrong with it in place of the description;
   // an inert field keeps its description and adds what would switch it on.
@@ -91,9 +82,11 @@ export default function ParamField({ spec, value, onChange, onPickFile, needs, u
         id={helpId}
         ref={helpRef}
         className={`${off ? 'help inert' : 'help'}${brief ? ' brief' : ''}`}
-        style={expanded ? { maxHeight: 'none' } : undefined}
+        title={off ? undefined : (brief ?? sentence(plainOptions(spec.description)))}
       >
-        {needs ? (
+        {blocked ? (
+          <span className="needs">{blocked}</span>
+        ) : needs ? (
           <span className="needs">
             <strong>
               {needs.replaced ? 'Replaced by ' : 'Needs '}
@@ -104,7 +97,7 @@ export default function ParamField({ spec, value, onChange, onPickFile, needs, u
             {` (${needs.note}).`}
           </span>
         ) : (
-          brief ?? sentence(plainOptions(spec.description))
+          brief ?? sentence(hintText(spec.name, plainOptions(spec.description)))
         )}
         {!!turnsOn && (
           <span className="turns-on">
@@ -117,17 +110,6 @@ export default function ParamField({ spec, value, onChange, onPickFile, needs, u
           </span>
         )}
       </p>
-      {(clipped || expanded) && (
-        <button
-          type="button"
-          className="link help-more"
-          aria-expanded={expanded}
-          aria-controls={helpId}
-          onClick={() => setExpanded((x) => !x)}
-        >
-          {expanded ? 'less' : 'more'}
-        </button>
-      )}
     </>
   )
   const cls = `field${off ? ' off' : ''}${invalid ? ' invalid' : ''}`
@@ -181,7 +163,7 @@ export default function ParamField({ spec, value, onChange, onPickFile, needs, u
             type="text"
             disabled={off}
             value={String(value ?? '')}
-            placeholder="(not set)"
+            placeholder="not set"
             onChange={(e) => onChange(e.target.value)}
           />
           {/* Named per field: eight "Browse…" buttons would read alike. */}
@@ -218,10 +200,56 @@ export default function ParamField({ spec, value, onChange, onPickFile, needs, u
         >
           {choices.map((c) => (
             <option key={c} value={c}>
-              {c}
+              {choiceText(spec.name, c)}
             </option>
           ))}
         </select>
+        {help}
+      </div>
+    )
+  }
+
+  const steps = uiOf(spec.name).steps
+  if (steps) {
+    // Named values, and Custom for any other (shown as a field beside).
+    const v = String(value ?? '').trim()
+    const hit = steps.find((x) => v !== '' && Number(x.value) === Number(v)) ?? (v === '' ? steps.find((x) => Number(x.value) === Number(spec.default)) : undefined)
+    const custom = !hit || customStep
+    return (
+      <div className={cls}>
+        {label}
+        <div className="row tight">
+          <select
+            id={`p-${spec.name}`}
+            aria-describedby={helpId}
+            disabled={off}
+            value={custom ? '__custom' : hit!.value}
+            onChange={(e) => {
+              const x = e.target.value
+              setCustomStep(x === '__custom')
+              if (x !== '__custom') onChange(x)
+            }}
+          >
+            {steps.map((x) => (
+              <option key={x.value} value={x.value}>
+                {x.label}
+              </option>
+            ))}
+            <option value="__custom">Custom</option>
+          </select>
+          {custom && (
+            <input
+              className="num"
+              aria-label={`${title}, custom value`}
+              aria-invalid={invalid ? true : undefined}
+              type="text"
+              inputMode="decimal"
+              disabled={off}
+              value={String(value ?? '')}
+              onChange={(e) => onChange(e.target.value)}
+            />
+          )}
+        </div>
         {help}
       </div>
     )
@@ -263,7 +291,7 @@ export default function ParamField({ spec, value, onChange, onPickFile, needs, u
           >
             {(u === '' || choices.includes(u) ? choices : [...choices, u]).map((c) => (
               <option key={c} value={c}>
-                {c}
+                {choiceText(unit.spec.name, c)}
               </option>
             ))}
           </select>

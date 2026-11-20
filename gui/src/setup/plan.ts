@@ -31,10 +31,14 @@ export function reportsOn(values: V): string[] {
 
 /// "Run QC on run01.mzML · 1 report · 10% of spectra"; a batch counts its
 /// files, and names its output folder when it has one.
-export function planLine(label: string, values: V, ctx: { input: string; files: number; outDir?: string | null }): string {
-  const what = ctx.files > 0 ? `${ctx.files} ${ctx.files === 1 ? 'file' : 'files'}` : ctx.input ? baseName(ctx.input) : 'no file yet'
+/// In Batch mode (@p ctx.batch) the queue is the input: "no files yet"
+/// until it holds one, never the single file.
+export function planLine(label: string, values: V, ctx: { input: string; files: number; outDir?: string | null; batch?: boolean }): string {
+  const batch = ctx.batch || ctx.files > 0
+  const what = ctx.files > 0 ? `${ctx.files} ${ctx.files === 1 ? 'file' : 'files'}` : batch ? 'no files yet' : ctx.input ? baseName(ctx.input) : 'no file yet'
+  const named = ctx.files > 0 || (!batch && !!ctx.input)
   const n = reportsOn(values).length
-  const parts = [ctx.files > 0 || ctx.input ? `${label} on ${what}` : `${label} · ${what}`, n ? `${n} ${n === 1 ? 'report' : 'reports'}` : 'tags table only', samplingSummary(values)]
-  if (ctx.files > 0) parts.push(ctx.outDir ? `out: ${ctx.outDir}` : 'out: beside each input')
+  const parts = [named ? `${label} on ${what}` : `${label} · ${what}`, n ? `${n} ${n === 1 ? 'report' : 'reports'}` : 'tags table only', samplingSummary(values)]
+  if (batch) parts.push(ctx.outDir ? `out: ${ctx.outDir}` : 'out: beside each input')
   return parts.join(' · ')
 }

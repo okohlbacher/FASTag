@@ -8,13 +8,15 @@
 import { useCallback, useEffect, useMemo, useReducer, useRef, type Dispatch, type SetStateAction } from 'react'
 import type { LogLine, ResolvedOutputs, RunResult, SpeciesReport } from '../types'
 import { newJobId, runJob, type Job as RunJob, type JobAction } from '../runJob'
-import { RENDERED, inertBecause } from '../paramLayout'
+import { sentValues } from '../paramLayout'
 import type { ParamValue } from '../ParamField'
 import { baseName, value, type Report } from '../digestReport'
 import { perJobOutputs, REPORT_PARAMS } from '../app/paths'
 import { cleanupLines, failText } from '../app/format'
 import type { Tab, ViewStore } from '../app/viewStore'
 import { loadReports, sameRun, sameRunFiles, sniffPath } from '../results/reports'
+import { TAB_OF, sniffWorkflow, workflowPaths, workflowReportsOf, type WorkflowKind, type WorkflowReports } from '../results/workflowReports'
+import { productLabel } from '../setup/products'
 import { tablePaths, type TableGen, type TableKind, type TablePaths } from '../results/tables'
 import type { BatchJob } from './batch'
 import { buildSummary } from './batchSummary'
@@ -29,6 +31,7 @@ import {
   type BatchEnd,
   type Failure,
   type OverwriteAsk,
+  type Reports,
   type Results
 } from './runReducer'
 
@@ -84,6 +87,17 @@ function bumpGen(gen: TableGen | undefined, kinds: TableKind[]): TableGen {
   return g
 }
 
+// What stays shown when a file of the run of @p path opens: the reports,
+// tables and workflow reports of that run (sameRunFiles); those of another
+// run close.
+function closeOtherRuns(cur: Reports, path: string): Reports {
+  const { kept } = splitTables(cur.tables, path)
+  const workflow: WorkflowReports = {}
+  for (const [k, q] of workflowPaths(cur.workflow ?? {})) if (sameRunFiles(q, path)) workflow[k] = q
+  if (cur.workflow?.files && workflow.shortlist) workflow.files = cur.workflow.files
+  return { ...cur, list: cur.list.filter((r) => sameRunFiles(r.path, path)), tables: kept, workflow, missing: undefined }
+}
+
 // The note when a file of another run closed what was shown.
 function closedNote(path: string, closed: string[]): string {
   return `${baseName(path)} is from another run; ${closed.join(', ')} ${closed.length === 1 ? 'was' : 'were'} closed.`
@@ -99,6 +113,19 @@ function closedNote(path: string, closed: string[]): string {
 export interface RunHooks {
   onStart?(): void
   landing?(): Tab | null
+  // The workflow a run is started from (its tab order and Overview).
+  workflow?(): string | null
+}
+
+// The option behind each table and workflow report, for its name in words.
+const TABLE_PARAM: Record<TableKind, string> = { recon: 'recon_out', delta: 'delta_out', glyco: 'glyco_out', reconIds: 'recon_id_out' }
+const WORKFLOW_PARAM: Record<WorkflowKind, string> = {
+  qc: 'qc_out',
+  shortlist: 'shortlist_out',
+  triage: 'census_sorted_out',
+  censusSummary: 'census_summary_out',
+  deltaSpectra: 'delta_spectra_out',
+  deltaCounts: 'delta_counts_out'
 }
 
 export function useRun(s: RunInputs, view: ViewStore, hooks: RunHooks = {}) {
@@ -147,7 +174,9 @@ export function useRun(s: RunInputs, view: ViewStore, hooks: RunHooks = {}) {
   const jobs = useMemo(() => queueView(state), [state.jobs])
   // The batch summary (GUI-DESIGN 3 S6): one row per job, from its reports.
   const batchData = useBatchData(state.jobs)
-  const summary = useMemo(() => buildSummary(jobs, batchData), [jobs, batchData])
+  // Its columns are the workflow's (Run QC: the QC report's figures).
+  const batchWorkflow = hooks.workflow?.() ?? null
+  const summary = useMemo(() => buildSummary(jobs, batchData, batchWorkflow), [jobs, batchData, batchWorkflow])
 
   // The last run of an earlier session, from the run record: a cancelled or
   // failed one still reads as such after a restart.
@@ -235,24 +264,16 @@ export function useRun(s: RunInputs, view: ViewStore, hooks: RunHooks = {}) {
   // Remove these inputs from the queue (a running job stays).
   const removeJobs = (inputs: string[]): void => dispatch({ type: 'BATCH_REMOVE', inputs })
 
-  // Only the parameters the UI renders. The form seeds a value for every manifest
-  // entry, but HIDDEN ones must never reach the command line: `-version` is
-  // recorded in the INI yet rejected as an option, so sending the whole record
-  // aborts the run with "Unknown option(s) '[-version]'".
-  //
-  // Inert ones (their master is unset) with a value stay out too: the CLI
-  // ignores most of them, but refuses some (-massgap_out without -recon_out).
-  // An empty value still goes, as it asks for the CLI's default.
-  const submittedParams = (): Record<string, ParamValue> =>
-    Object.fromEntries(RENDERED.map((name) => [name, values[name]]))
-  const withoutInert = (p: Record<string, ParamValue>): Record<string, ParamValue> =>
-    Object.fromEntries(Object.entries(p).filter(([name, v]) => v === '' || !inertBecause(name, { ...values, ...p })))
-
-  // What `run` is given for one file.
+  // What a run sends (paramLayout sentValues): only the parameters the UI
+  // renders (`-version` is recorded in the INI yet rejected as an option),
+  // none that is inert (the CLI refuses some: -massgap_out without
+  // -recon_out), and an option outside the 1.15.3 set (ALWAYS_SENT) only
+  // when it differs from the CLI default: the CLI reads some options by
+  // whether they were given at all.
   const runParams = (inFile: string, outFile: string, overrides?: Record<string, ParamValue>): Record<string, unknown> => ({
     in: inFile,
     out: outFile,
-    params: withoutInert({ ...submittedParams(), ...overrides })
+    params: sentValues({ ...values, ...overrides })
   })
 
   // The outputs of these runs that already exist. A failed check asks
@@ -376,21 +397,45 @@ export function useRun(s: RunInputs, view: ViewStore, hooks: RunHooks = {}) {
     // path is not an output and may hold an old file.
     const sent = REPORT_PARAMS.map((n) => outputs[n]).filter((p): p is string => !!p)
     const rep = await loadReports(sent)
+    // A view only for a file that exists (doc/GUI-WORKFLOWS.md 3): a report
+    // the run was asked for and did not write gets no tab; the Overview
+    // names it instead.
+    const exists = (p: string): Promise<boolean> => window.fastag.reportHead(p).then((t) => t != null, () => true)
+    const missing: string[] = []
+    for (const n of REPORT_PARAMS) {
+      const p = outputs[n]
+      if (p && !rep.reports.some((r) => r.path === p) && !rep.errors.some((e) => e.includes(p))) missing.push(productLabel(n) ?? n)
+    }
+    if (outputs.species_out && speciesOn && !species) missing.push(productLabel('species_out') ?? 'Species report')
     // A run re-reads its tables even where the last one wrote them.
-    const tables = tablePaths(outputs)
+    const tables: TablePaths = {}
+    for (const [k, p] of Object.entries(tablePaths(outputs)) as [TableKind, string][]) {
+      if (await exists(p)) tables[k] = p
+      else if (k !== 'reconIds') missing.push(productLabel(TABLE_PARAM[k]) ?? k)
+    }
+    const all = workflowReportsOf(outputs)
+    const workflow: WorkflowReports = all.files ? { files: all.files } : {}
+    for (const [k, p] of workflowPaths(all)) {
+      if (await exists(p)) workflow[k] = p
+      else missing.push(productLabel(WORKFLOW_PARAM[k]) ?? k)
+    }
+    const census = workflow.censusSummary ? await window.fastag.report(workflow.censusSummary).catch(() => null) : null
     dispatch({
       type: 'REPORTS',
-      update: (cur) => ({ list: rep.reports, errors: rep.errors, tables, gen: bumpGen(cur.gen, Object.keys(tables) as TableKind[]) })
+      update: (cur) => ({ list: rep.reports, errors: rep.errors, tables, gen: bumpGen(cur.gen, Object.keys(tables) as TableKind[]), workflow, missing })
     })
     if (ran) {
       const sentParams = (ran.params['params'] ?? {}) as Record<string, unknown>
-      dispatch({ type: 'SHOWN', shown: { input: inFile, params: sentParams, log: ran.log.get(), reports: rep.reports, species } })
+      dispatch({
+        type: 'SHOWN',
+        shown: { input: inFile, params: sentParams, log: ran.log.get(), reports: rep.reports, species, out: outFile, workflow: hooks.workflow?.() ?? undefined, census }
+      })
       const landing = hooks.landing?.()
       if (landing) {
         setTab(landing)
         return
       }
-    }
+    } else dispatch({ type: 'SHOWN', shown: null })
     if (!switched) setTab(rep.reports.length || rep.errors.length ? 'digest' : 'results')
   }
 
@@ -599,6 +644,12 @@ export function useRun(s: RunInputs, view: ViewStore, hooks: RunHooks = {}) {
       update: (r) => ({ path: p, gen: (r?.gen ?? 0) + 1, ...(recorded ? { stale: true, incomplete: true, recorded } : {}) })
     })
     dispatch({ type: 'BATCH_MISS', miss: null })
+    // Tags of another run: the Overview and the reports of the run shown
+    // are not this file's (B's tags beside A's QC would read as one run).
+    if (!state.shown?.out || state.shown.out !== p) {
+      dispatch({ type: 'SHOWN', shown: null })
+      dispatch({ type: 'REPORTS', update: (cur) => closeOtherRuns(cur, p) })
+    }
   }
 
   // A done batch job's tags and reports, as the batch writes them.
@@ -635,8 +686,24 @@ export function useRun(s: RunInputs, view: ViewStore, hooks: RunHooks = {}) {
   }
 
   async function openReportPath(p: string): Promise<void> {
+    // A workflow report (QC, shortlist, identifiability, survey tables)
+    // opens in its own view, told by its content: not the Digest parser.
+    const head = await window.fastag.reportHead(p).catch(() => null)
+    const wk = head != null ? sniffWorkflow(head, p) : null
+    if (wk) {
+      dispatch({ type: 'SHOWN', shown: null })
+      dispatch({
+        type: 'REPORTS',
+        update: (cur) => {
+          const kept = closeOtherRuns(cur, p)
+          return { ...kept, workflow: { ...kept.workflow, [wk]: p }, missing: undefined }
+        }
+      })
+      setTab(TAB_OF[wk])
+      return
+    }
     // A wide table (P4c: recon, delta, mzTab ids, glyco) opens in its viewer.
-    const table = await sniffPath(p)
+    const table = await sniffPath(p, head)
     if (table) {
       dispatch({
         type: 'REPORTS',
@@ -658,6 +725,7 @@ export function useRun(s: RunInputs, view: ViewStore, hooks: RunHooks = {}) {
       })
       // An unreadable one is named where report errors are: the Digest tab.
       setTab('kind' in table ? (table.kind === 'glyco' ? 'glyco' : 'recon') : 'digest')
+      if (state.shown?.out && !sameRunFiles(state.shown.out, p)) dispatch({ type: 'SHOWN', shown: null })
       return
     }
     const rep = await loadReports([p])
@@ -684,9 +752,10 @@ export function useRun(s: RunInputs, view: ViewStore, hooks: RunHooks = {}) {
         const split = fresh ? splitTables(cur.tables, fresh.path) : { kept: cur.tables ?? {}, closed: [] }
         if (fresh && other.length === 0 && split.closed.length > 0) notes.push(closedNote(fresh.path, split.closed))
         else if (notes.length && split.closed.length > 0) notes[0] = notes[0].replace(/ (was|were) closed\.$/, `, ${split.closed.join(', ')} were closed.`)
-        return { list: [...kept, ...rep.reports], errors: [...notes, ...rep.errors], tables: split.kept, gen: cur.gen }
+        return { list: [...kept, ...rep.reports], errors: [...notes, ...rep.errors], tables: split.kept, gen: cur.gen, workflow: closeOtherRuns(cur, p).workflow }
       }
     })
+    if (state.shown?.out && !sameRunFiles(state.shown.out, p)) dispatch({ type: 'SHOWN', shown: null })
     setTab('digest')
   }
 

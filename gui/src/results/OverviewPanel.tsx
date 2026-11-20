@@ -6,7 +6,7 @@
 
 import { useEffect, useRef, useState, type JSX } from 'react'
 import { baseName } from '../digestReport'
-import type { Overview, Tile, TileAction } from './overview'
+import { shownTiles, type Overview, type Tile, type TileAction } from './overview'
 import { HelpLink } from '../help/HelpLink'
 
 export interface OverviewPanelProps {
@@ -16,6 +16,13 @@ export interface OverviewPanelProps {
   /// A run is going: no action may start another.
   busy: boolean
   onAction(a: TileAction): void
+  /// What the run was sent: only the tiles of the reports it asked for are
+  /// shown (all of them without).
+  params?: Record<string, unknown>
+  /// The workflow the run was started from, by name.
+  workflow?: string | null
+  /// Reports the run was asked for and did not write, in words.
+  missing?: string[]
 }
 
 const EVIDENCE: Record<string, string> = { call: 'call', ranking: 'ranking', default: 'default', preset: 'preset', run: 'as run' }
@@ -26,7 +33,10 @@ function TileView({ t, busy, onAction }: { t: Tile; busy: boolean; onAction(a: T
       <section className={`tile tone-${t.tone}`} aria-label={t.label}>
         <h3 className="tile-label">{t.label}</h3>
         <p className="tile-value">{t.value}</p>
-        <p className="tile-note">{t.note}</p>
+        {/* Two lines at most; the whole note is its tooltip. */}
+        <p className="tile-note" title={t.note}>
+          {t.note}
+        </p>
         {t.action && (
           <button type="button" className="secondary small" disabled={busy} onClick={() => onAction(t.action!)}>
             {t.action.label}
@@ -37,13 +47,14 @@ function TileView({ t, busy, onAction }: { t: Tile; busy: boolean; onAction(a: T
   )
 }
 
-export default function OverviewPanel({ overview: o, input, busy, onAction }: OverviewPanelProps): JSX.Element {
+export default function OverviewPanel({ overview: o, input, busy, onAction, params, workflow, missing = [] }: OverviewPanelProps): JSX.Element {
   const [copied, setCopied] = useState<'yes' | 'no' | null>(null)
   const revision = useRef(0)
   useEffect(() => {
     setCopied(null)
     return () => { revision.current++ }
   }, [input, o.copyText])
+  const tiles = params ? shownTiles(o, params) : { figures: o.figures, calls: o.calls }
   async function copy(): Promise<void> {
     const started = revision.current
     try {
@@ -58,17 +69,32 @@ export default function OverviewPanel({ overview: o, input, busy, onAction }: Ov
       <h2>
         Overview of <span className="mono">{baseName(input)}</span>
       </h2>
-      <p><HelpLink to="workflow-overview">How to read this overview</HelpLink></p>
+      <p className="overview-sub">
+        {workflow && (
+          <>
+            <strong>{workflow}</strong>
+            {' · '}
+          </>
+        )}
+        <HelpLink to="workflow-overview">How to read this overview</HelpLink>
+      </p>
+      {missing.length > 0 && (
+        <p className="caveat" role="status">
+          Asked for, but not written: {missing.join(', ')}. The log says why.
+        </p>
+      )}
       <ul className="tiles" aria-label="Key figures">
-        {o.figures.map((t) => (
+        {tiles.figures.map((t) => (
           <TileView key={t.id} t={t} busy={busy} onAction={onAction} />
         ))}
       </ul>
+      {tiles.calls.length > 0 && (
       <ul className="tiles" aria-label="Calls">
-        {o.calls.map((t) => (
+        {tiles.calls.map((t) => (
           <TileView key={t.id} t={t} busy={busy} onAction={onAction} />
         ))}
       </ul>
+      )}
       <ul className="checks" aria-label="Checks">
         {o.checks.map((c) => (
           <li key={c.text} className={c.tone}>

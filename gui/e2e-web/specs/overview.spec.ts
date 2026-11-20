@@ -82,20 +82,17 @@ test('Overview figures and calls equal the oracles of the 1.12 gate output', asy
   await expect(page.getByRole('list', { name: 'Checks', exact: true })).toContainText('Acquisition check: DDA')
 })
 
-test('no FASTA, no alkylation call: "not assessed", and C+57.021 a default', async ({ page }) => {
+test('no alkylation report asked for: no Alkylation tile, and C+57.021 a default', async ({ page }) => {
   for (const fixture of ['gate', 'gate-1.11']) {
     await characterize(page, fixture)
     await expect(page.getByRole('tab', { name: 'Overview' })).toHaveAttribute('aria-selected', 'true')
-    // Oracle: the run had no FASTA and no report has a Cys section.
     const calls = await mockState<{ params: Record<string, unknown> }[]>(page, 'runCalls')
-    expect(calls[0].params.fasta ?? '').toBe('')
-    expect(calls[0].params.recon_fasta ?? '').toBe('')
+    expect(calls[0].params.alkylation_out ?? '').toBe('')
     expect(oracle(fixture === 'gate' ? 'v112-pxd003531' : 'v111-pxd003531').massgap).toBe(false)
-    await expect(value(page, 'Alkylation')).toHaveText('not assessed')
-    await expect(tile(page, 'Alkylation').getByRole('button', { name: 'Add FASTA and run again' })).toBeEnabled()
+    await expect(tile(page, 'Alkylation')).toHaveCount(0)
     const row = page.getByRole('table', { name: 'Suggested search settings' }).getByRole('row', { name: /fixed C\+57\.021/ })
     await expect(row.locator('.evidence')).toHaveText('default')
-    await expect(row).toContainText('alkylation not assessed (no FASTA)')
+    await expect(row).toContainText('alkylation not assessed (alkylation report not written)')
   }
 })
 

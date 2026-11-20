@@ -39,17 +39,35 @@ describe('Overview panel', () => {
     const table = screen.getByRole('table', { name: 'Suggested search settings' })
     const row = within(table).getByRole('row', { name: /fixed C\+57\.021/ })
     expect(within(row).getByText('default')).toBeDefined()
-    expect(row.textContent).toMatch(/alkylation not assessed \(no FASTA\)/)
+    expect(row.textContent).toMatch(/alkylation not assessed \(alkylation report not written\)/)
     expect(within(within(table).getByRole('row', { name: /^enzyme/ })).getByText('call')).toBeDefined()
   })
 
-  it('a tile action asks to turn the option on and run again; locked while busy', async () => {
+  it('a tile action names the report it adds and runs again; locked while busy', async () => {
     const onAction = vi.fn()
     const { rerender } = render(<OverviewPanel overview={model(CLI_CASES.v112)} input="/d/a.mzML" busy={false} onAction={onAction} />)
-    await click(within(tile('Alkylation')).getByRole('button', { name: 'Add FASTA and run again' }))
-    expect(onAction).toHaveBeenCalledWith({ kind: 'add-fasta', label: 'Add FASTA and run again', values: { extension: '3' } })
+    await click(within(tile('Alkylation')).getByRole('button', { name: 'Add Alkylation report and run again' }))
+    expect(onAction).toHaveBeenCalledWith({ kind: 'enable', label: 'Add Alkylation report and run again', values: { alkylation_out: 'alkylation.tsv', extension: '3' } })
     rerender(<OverviewPanel overview={model(CLI_CASES.v112)} input="/d/a.mzML" busy onAction={onAction} />)
-    expect(within(tile('Alkylation')).getByRole('button', { name: 'Add FASTA and run again' }).hasAttribute('disabled')).toBe(true)
+    expect(within(tile('Alkylation')).getByRole('button', { name: 'Add Alkylation report and run again' }).hasAttribute('disabled')).toBe(true)
+  })
+
+  it('names the workflow, shows only the tiles of the reports asked for, and names a missing report', () => {
+    render(
+      <OverviewPanel
+        overview={model(CLI_CASES.v112)}
+        input="/d/a.mzML"
+        busy={false}
+        onAction={vi.fn()}
+        params={{ qc_out: '/d/a.qc.tsv', glyco: true }}
+        workflow="Run QC"
+        missing={['Glycopeptide report']}
+      />
+    )
+    expect(screen.getByText('Run QC')).toBeDefined()
+    expect(screen.getByRole('status').textContent).toMatch(/not written: Glycopeptide report/)
+    const names = screen.getAllByRole('region').filter((r) => r.classList.contains('tile')).map((r) => r.getAttribute('aria-label'))
+    expect(names).toEqual(['MS2 spectra', 'Instrument', 'Tags', 'Glyco'])
   })
 
   it('copies the suggested settings as text', async () => {

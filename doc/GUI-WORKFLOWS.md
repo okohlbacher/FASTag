@@ -70,9 +70,9 @@ grid; see the Decision at the end of this section.
 | W2 | `qc_out` |
 | W3 | `recon_out`, `delta_out`, `delta_spectra_out`, `delta_counts_out`, `extension 3` |
 | W4 | `species true`, `species_out`, `extension 2` (validated in the paper: seed 3 + 2 x 2 = k 7) |
-| W5 | `shortlist_out`, `fasta_out`, `search_config_out`, `extension 3`, plus the validated recipe `shortlist_gapped true`, `recon_min_length 6`, `shortlist_max_evalue 10`, `recon_missed_cleavages 2` (doc/SHORTLIST.md). The manifest is 1.15.3, where the recipe is not yet the CLI default; setting it explicitly gives the same result on 1.15.4 and later. |
+| W5 | `shortlist_out`, `fasta_out`, `search_config_out`, `extension 3`, plus the shortlist recipe `shortlist_gapped true`, `recon_min_length 6`, `shortlist_max_evalue 10`, `recon_missed_cleavages 2` (doc/SHORTLIST.md). The recipe is **not validated**: with MSFragger and the tryptic shortlist it passed its second held-out test and failed the third. From 1.15.4 the CLI applies it by default only under `-search_engine msfragger` with `-shortlist_protease trypsin`; the GUI sets it for every engine and protease as its default recipe, and the workflow help says so. |
 | W6 | `census true`, `census_score true`, `census_sorted_out` |
-| W7 | `digest_out`, `label_out`, `alkylation_out`, `glyco true`, `species true`, `extension 2`, `subsample_fraction 0.1` |
+| W7 | `digest_out`, `label_out`, `glyco true`, `species true`, `extension 2`, `subsample_fraction 0.1`. `alkylation_out` is offered unchecked (round 2): its shipped proteome needs tags of 8+ residues, and extension 2 (validated for the species call) reaches 7. |
 
 ## 2. Parameters per workflow
 
@@ -80,7 +80,7 @@ grid; see the Decision at the end of this section.
 
 | Field | Params | One-line help |
 |---|---|---|
-| Instrument | `fragment_tolerance`, `fragment_tolerance_unit`, `ion_series` | Sets the fragment tolerance for your analyzer. Presets: Orbitrap or TOF HCD 20 ppm; Orbitrap ETD or EThcD 20 ppm with c/z ions (`ion_series auto`); ion trap CID 0.5 Da; Custom. |
+| Instrument | `fragment_tolerance`, `fragment_tolerance_unit`, `ion_series`, `ion_series_hybrid` | Sets the fragment tolerance for your analyzer. Presets: Orbitrap or TOF HCD 20 ppm; Orbitrap ETD 20 ppm with c/z ions (`ion_series auto`, unvalidated); Orbitrap EThcD, the same plus `ion_series_hybrid both` (unvalidated); ion trap CID 0.3 Da; Custom. |
 | Fixed modifications | `fixed_modifications` | Modifications on every such residue. Remove Carbamidomethyl (C) if cysteines were not alkylated; add TMT for labelled runs. |
 
 - The Instrument preset is matched by value: 20 ppm with b/y ions shows
@@ -100,18 +100,17 @@ where needed.
 | W1 | E-value cutoff (`max_evalue`) | Keep tags at or below this E-value. 0 keeps all. |
 | W1 | Tags per spectrum (`max_tags`) | At most this many tags per spectrum. 0 = no limit. |
 | W1 | Per-residue confidence (`res_conf`) | Adds a 0 to 100 confidence per residue, used by assembly export. |
-| W2 | Spectra to read (`subsample_fraction`) | Fraction of spectra to read, 0 = all. Counts cover only the spectra read. |
-| W2 | DIA input (`acquisition_check`) | Raw DIA is refused by default. Choose "warn" to run anyway. |
+| W2 | Spectra to read (`subsample_fraction`) | A select: All spectra, 10%, 25%, Custom. Counts cover only the spectra read. (`acquisition_check`, a safety switch, is under Advanced: round 2.) |
 | W3 | Protein database (`recon_fasta`), required | FASTA the tags are placed on. Mass shifts are measured against it. |
 | W3 | Extension (`extension`) | Residues added per tag end. Longer tags place more uniquely. |
 | W3 | Missed cleavages (`recon_missed_cleavages`) | Missed tryptic cleavages allowed in a placement window (0 to 10). |
 | W4 | Report rank (`species_rank`) | Taxonomic level of the report: genus, family, … |
-| W4 | Presence call (`species_call`) | "decoy" calls each taxon present or absent against decoy tags; "none" ranks only. |
+| W4 | Presence call (`species_call`) | Experimental: under Advanced (round 2). Decoy calls each taxon present, no call or not detected. |
 | W4 | Spectra to read (`subsample_fraction`) | Fraction of spectra to read, 0 = all. 0.1 is usually enough. |
 | W5 | Protein database (`recon_fasta`), required | FASTA to shortlist from. |
 | W5 | Background proteins (`shortlist_background`) | Host proteome and contaminants, always added to the reduced FASTA. |
 | W5 | Search engine (`search_engine`) | Engine to write a configuration for: Sage, Comet or MSFragger (experimental). |
-| W5 | Protease (`shortlist_protease`) | Cleavage rule. Trypsin refuses clearly non-tryptic runs; "auto" uses the protease FASTag detects. |
+| W5 | Protease (`shortlist_protease`) | Experimental: under Advanced (round 2). Trypsin refuses clearly non-tryptic runs; Auto uses the protease FASTag detects. |
 | W5 | Variable modifications (`variable_modifications`) | Written into the engine configuration, for example Oxidation (M). |
 | W6 | Identifications (`census_ids`), optional | idXML or mzIdentML of this run. Marks which spectra your search identified. |
 | W6 | ID q-value (`census_ids_fdr`) | q-value a target hit needs to count as identified. |
@@ -346,3 +345,34 @@ every results tab.
 7. Results: tab gating, rename Mass shifts, generic table for QC, Triage and
    Shortlist, then dedicated views; empty states.
 8. Help text pass, cross-model screenshot review, then iterate.
+
+## 7. Round 2 (review of 2026-11-20)
+
+Changes after the second review, beyond the table edits above:
+
+- **What a run sends.** Options of the 1.15.3 GUI set (`ALWAYS_SENT`) go
+  at their value; every other option only when it differs from the CLI
+  default, and a unit only with its value. The CLI reads some options by
+  whether they were given (`-shortlist_specificity` under
+  `-shortlist_protease auto`, the MSFragger defaults of `-search_engine`).
+- **Outputs.** The backend's output list is the manifest's output-file
+  options, plus the census table and summary the CLI derives from `-out`:
+  every workflow report is confirmed before an overwrite, removed after a
+  failed or cancelled run, recorded and revealable.
+- **Batch.** Run needs queued files in Batch mode; the output folder is in
+  the Input card; `census_ids` is disabled (one file of identifications
+  cannot belong to every input). The summary has each workflow's key
+  columns (Run QC: MS/MS count, tag yield, charges, analyzer, instrument,
+  isobaric kit, read from each job's QC report).
+- **Results.** A tab only for a report that exists, the workflow's tabs
+  first in the order of section 1; a requested report that was not written
+  is named in the Overview. The Overview names the workflow and shows only
+  the tiles of the reports the run asked for, plus MS2 spectra and tags;
+  actions name the report they add. Opened files are told by their content
+  (QC, shortlist, identifiability, survey tables) and open in their view;
+  another run's tags close the reports of the run shown. The alkylation
+  report is read (Digest and the Overview tile).
+- **Setup.** Cards 1 to 4 fit 1280 x 800 for every workflow but Database
+  reduction (three-column Settings, two-column products, one-row run bar,
+  the workflow row in the Workflow card's head). A group waiting for a
+  report says so once with Turn on. Choice values are shown in words.

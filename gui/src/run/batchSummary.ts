@@ -23,17 +23,45 @@ import { jobWords, type BatchJob } from './batch'
 /// A column has a majority only over at least this many calls.
 export const MIN_CALLS = 3
 
+/// The calls of a characterizing batch (the default columns).
 export const SUMMARY_COLUMNS = ['genus', 'protease', 'label', 'alkylation'] as const
-export type SummaryColumn = (typeof SUMMARY_COLUMNS)[number]
+/// The key figures of a Run QC batch, from each job's QC report: what a
+/// comparison across files needs (doc/GUI-WORKFLOWS.md 1, Batch).
+export const QC_COLUMNS = ['ms2', 'yield', 'charge', 'analyzer', 'instrument', 'kit'] as const
+export type SummaryColumn = (typeof SUMMARY_COLUMNS)[number] | (typeof QC_COLUMNS)[number]
+
+/// The columns of a batch of @p workflow: its key columns.
+export function columnsFor(workflow?: string | null): readonly SummaryColumn[] {
+  if (workflow === 'run-qc') return QC_COLUMNS
+  if (workflow === 'species') return ['genus']
+  return SUMMARY_COLUMNS
+}
 
 /// The column headers of the table, and the TSV's names for them.
 export const COLUMN_LABEL: Record<SummaryColumn, string> = {
   genus: 'Top genus',
   protease: 'Protease',
   label: 'Label',
-  alkylation: 'Alkylation'
+  alkylation: 'Alkylation',
+  ms2: 'MS/MS spectra',
+  yield: 'Tagged (E ≤ 0.01)',
+  charge: 'Charges 2+ / 3+ / 4+',
+  analyzer: 'Analyzer, resolution',
+  instrument: 'Instrument',
+  kit: 'Isobaric kit'
 }
-const TSV_NAME: Record<SummaryColumn, string> = { genus: 'top_genus', protease: 'protease', label: 'label', alkylation: 'alkylation' }
+const TSV_NAME: Record<SummaryColumn, string> = {
+  genus: 'top_genus',
+  protease: 'protease',
+  label: 'label',
+  alkylation: 'alkylation',
+  ms2: 'ms2_spectra',
+  yield: 'tag_yield',
+  charge: 'charge_2_3_4',
+  analyzer: 'analyzer_resolution',
+  instrument: 'instrument',
+  kit: 'isobaric_kit'
+}
 
 /// What one finished job wrote, as useRun read it.
 export interface JobData {
@@ -45,6 +73,8 @@ export interface JobData {
   census: string | null
   /// The parameters the job was sent.
   params: Record<string, unknown>
+  /// The text of its QC report (qc_out), when it wrote one.
+  qc?: string | null
   /// The reports the job was sent (a path in its resolved outputs) that
   /// could not be read or parsed, with why: their cells say so, not that
   /// the report was not written or the detection was off.
@@ -54,7 +84,47 @@ export interface JobData {
 }
 
 /// The reports a summary cell reads, by the output that names them.
-export type SentReport = 'digest_out' | 'label_out' | 'massgap_out' | 'species_out'
+export type SentReport = 'digest_out' | 'label_out' | 'massgap_out' | 'alkylation_out' | 'qc_out' | 'species_out'
+
+/// The QC cells of a job, from its QC report (section, key, value, n): the
+/// figures as the report states them; only the instrument and the isobaric
+/// kit are categories a majority can count.
+export function qcCells(text: string | null | undefined): Record<(typeof QC_COLUMNS)[number], Cell> {
+  const rows = new Map<string, string>()
+  for (const line of (text ?? '').split(/\r?\n/).slice(1)) {
+    const f = line.split('\t')
+    if (f.length >= 3 && !rows.has(f[1])) rows.set(f[1], f[2])
+  }
+  const get = (k: string): string | undefined => rows.get(k)
+  const none = (what: string): Cell => ({ text: 'not in the report', call: null, note: `the QC report has no ${what}` })
+  if (!text) {
+    const off: Cell = { text: 'not written', call: null, note: 'the job wrote no QC report' }
+    return { ms2: off, yield: off, charge: off, analyzer: off, instrument: off, kit: off }
+  }
+  const num = (v: string | undefined): number | null => (v != null && v.trim() !== '' && Number.isFinite(Number(v)) ? Number(v) : null)
+  const ms2 = num(get('count_ms2'))
+  const y = num(get('tag_yield'))
+  const share = (z: number): string => {
+    const v = num(get(`precursor_charge_${z}_share`))
+    return v == null ? '–' : `${Math.round(v * 100)}%`
+  }
+  // The analyzers that took MS/MS spectra, each with its resolution.
+  const analyzers = [...rows.keys()].filter((k) => /^count_ms2_./.test(k) && (num(rows.get(k)) ?? 0) > 0).map((k) => k.slice('count_ms2_'.length))
+  const res = (a: string): string => {
+    const v = get(`resolution_${a}_ms2`)
+    return v && v !== 'n/a' ? ` ${v}` : ''
+  }
+  const instrument = get('instrument_model')
+  const kit = get('reporter_compatible_kits')
+  return {
+    ms2: ms2 == null ? none('MS/MS count') : { text: ms2.toLocaleString('en-US'), call: null, note: 'MS/MS spectra read' },
+    yield: y == null ? none('tag yield') : { text: `${(y * 100).toFixed(1)}%`, call: null, note: 'share of MS/MS spectra with a tag of E-value ≤ 0.01' },
+    charge: { text: [2, 3, 4].map(share).join(' / '), call: null, note: 'shares of the precursor charges 2, 3 and 4' },
+    analyzer: analyzers.length ? { text: analyzers.map((a) => `${a}${res(a)}`).join(', '), call: null, note: 'the analyzers of the MS/MS spectra, with the resolution stated or measured' } : none('analyzer counts'),
+    instrument: instrument && instrument !== 'n/a' ? { text: instrument, call: instrument, note: 'the instrument model the file names' } : none('instrument model'),
+    kit: kit != null ? { text: kit === 'none' ? 'none' : kit, call: kit, note: 'isobaric kits whose reporters are present' } : none('isobaric kit row')
+  }
+}
 
 export interface Cell {
   /// What the cell shows, and the TSV writes.
@@ -116,9 +186,12 @@ export function jobCells(d: JobData): { tags: number | null; cells: Record<Summa
     if (!why) return c
     return why.startsWith(NOT_READ) ? { text: 'not read', call: null, note: why.slice(NOT_READ.length) } : { text: 'unreadable', call: null, note: why }
   }
+  const qc = qcCells(d.qc)
   return {
     tags: parseLog(d.log).tags,
     cells: {
+      ...qc,
+      ms2: or('qc_out', qc.ms2),
       genus: or('species_out', genus),
       protease: or('digest_out', called(tile('protease'), p.state === 'call' ? p.enzyme : null)),
       label: or('label_out', called(tile('label'), l.state === 'call' ? l.label : null)),
@@ -149,17 +222,22 @@ export interface SummaryRow {
 }
 
 export interface Summary {
+  /// The columns shown and exported: the workflow's key columns.
+  columns: readonly SummaryColumn[]
   rows: SummaryRow[]
   majority: Record<SummaryColumn, Majority>
 }
 
+const ALL_COLUMNS: readonly SummaryColumn[] = [...SUMMARY_COLUMNS, ...QC_COLUMNS]
 const none = (text: string, note: string): Record<SummaryColumn, Cell> =>
-  Object.fromEntries(SUMMARY_COLUMNS.map((k) => [k, { text, call: null, note }])) as Record<SummaryColumn, Cell>
+  Object.fromEntries(ALL_COLUMNS.map((k) => [k, { text, call: null, note }])) as Record<SummaryColumn, Cell>
 
 /// The rows of @p jobs, in queue order; @p data: what each done job wrote,
 /// by its input (a done job with outputs and without an entry is still being
 /// read).
-export function buildSummary(jobs: readonly BatchJob[], data: ReadonlyMap<string, JobData>): Summary {
+/// @p workflow: the batch's workflow, which picks the columns (columnsFor).
+export function buildSummary(jobs: readonly BatchJob[], data: ReadonlyMap<string, JobData>, workflow?: string | null): Summary {
+  const columns = columnsFor(workflow)
   const base = jobs.map((j) => {
     const done = j.status === 'done'
     const d = done && j.outputs ? data.get(j.input) : undefined
@@ -187,18 +265,18 @@ export function buildSummary(jobs: readonly BatchJob[], data: ReadonlyMap<string
       canOpen: done && !!j.outputs?.out
     }
   })
-  const maj = Object.fromEntries(SUMMARY_COLUMNS.map((k) => [k, majority(base.map((r) => r.cells[k].call))])) as Record<SummaryColumn, Majority>
+  const maj = Object.fromEntries(ALL_COLUMNS.map((k) => [k, majority(base.map((r) => r.cells[k].call))])) as Record<SummaryColumn, Majority>
   const rows: SummaryRow[] = base.map((r) => ({
     ...r,
     differs: Object.fromEntries(
-      SUMMARY_COLUMNS.map((k) => {
+      ALL_COLUMNS.map((k) => {
         const m = maj[k].value
         const c = r.cells[k].call
         return [k, m != null && c != null && c !== m]
       })
     ) as Record<SummaryColumn, boolean>
   }))
-  return { rows, majority: maj }
+  return { columns, rows, majority: maj }
 }
 
 /// The majority of a column in words, for the table's foot.
@@ -214,7 +292,8 @@ const tsvCell = (s: string): string => s.replace(/[\t\r\n]+/g, ' ')
 /// The summary TSV: a header, then one line per row with the table's text;
 /// each call column is followed by "yes" where it differs from the majority.
 export function summaryTsv(s: Summary): string {
-  const head = ['file', 'input', 'status', 'duration_s', 'tags', ...SUMMARY_COLUMNS.flatMap((k) => [TSV_NAME[k], `${TSV_NAME[k]}_differs`]), 'tags_tsv']
+  const cols = s.columns ?? SUMMARY_COLUMNS
+  const head = ['file', 'input', 'status', 'duration_s', 'tags', ...cols.flatMap((k) => [TSV_NAME[k], `${TSV_NAME[k]}_differs`]), 'tags_tsv']
   const lines = s.rows.map((r) =>
     [
       r.file,
@@ -222,7 +301,7 @@ export function summaryTsv(s: Summary): string {
       r.statusText,
       r.ms == null ? '' : String(Math.round(r.ms / 100) / 10),
       r.tags == null ? '' : String(r.tags),
-      ...SUMMARY_COLUMNS.flatMap((k) => [r.cells[k].text, r.differs[k] ? 'yes' : '']),
+      ...cols.flatMap((k) => [r.cells[k].text, r.differs[k] ? 'yes' : '']),
       r.tagsPath ?? ''
     ]
       .map(tsvCell)

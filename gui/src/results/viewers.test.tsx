@@ -295,11 +295,13 @@ describe('ReconView', () => {
     const run = vi.fn()
     const onOpen = vi.fn()
     const { rerender } = render(<ReconView massgap={null} tables={{}} action={{ label: 'Choose a FASTA and run again', run, disabled: false }} onOpen={onOpen} />)
-    expect(screen.getByRole('heading', { name: 'No mass gaps yet' })).toBeTruthy()
-    expect(screen.getByText(/choose a FASTA and write these reports/)).toBeTruthy()
+    expect(screen.getByRole('heading', { name: 'No mass shifts yet' })).toBeTruthy()
+    // Products in words, never a flag.
+    expect(screen.getByText(/choose a FASTA and write the Tag placements, the Mass-shift table and the Mass-gap report/)).toBeTruthy()
+    expect(document.querySelector('code.cli')).toBeNull()
     await click(screen.getByRole('button', { name: 'Choose a FASTA and run again' }))
     expect(run).toHaveBeenCalledTimes(1)
-    await click(screen.getByRole('button', { name: 'Open a recon, delta or mass-gap report…' }))
+    await click(screen.getByRole('button', { name: 'Open a placements, mass-shift or mass-gap report…' }))
     expect(onOpen).toHaveBeenCalledTimes(1)
     rerender(<ReconView massgap={null} tables={{}} action={{ label: 'Choose a FASTA and run again', run, disabled: true }} onOpen={onOpen} />)
     expect(screen.getByRole('button', { name: 'Choose a FASTA and run again' }).hasAttribute('disabled')).toBe(true)
@@ -404,7 +406,7 @@ describe('GlycoTable', () => {
     installMockBridge()
     render(<GlycoTable path="/r/none.glyco.tsv" />)
     await flush()
-    expect(screen.getByText(/The run named \/r\/none\.glyco\.tsv, but the file does not exist/)).toBeTruthy()
+    expect(screen.getByText(/none\.glyco\.tsv is not on disk/)).toBeTruthy()
   })
 })
 
@@ -448,7 +450,7 @@ describe('result tabs: the P4c viewers', () => {
     expect(screen.getByRole('heading', { name: 'Glyco: oxonium ions per spectrum' })).toBeTruthy()
     await act(async () => void fireEvent.keyDown(screen.getByRole('tablist'), { key: 'ArrowLeft' }))
     await act(async () => void fireEvent.keyDown(screen.getByRole('tablist'), { key: 'ArrowLeft' }))
-    expect(screen.getByRole('heading', { name: 'Mass gaps and reconciliation' })).toBeTruthy()
+    expect(screen.getByRole('heading', { name: 'Mass shifts' })).toBeTruthy()
   })
 
   it('no viewer tab without a run, a report or a table', () => {

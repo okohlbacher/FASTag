@@ -1,7 +1,9 @@
 import { useState, type JSX, type ReactNode } from 'react'
 import SequenceLogo, { LogoLegend } from './SequenceLogo'
 import { HelpButton, HelpLink } from './help/HelpLink'
+import { alkylationReason } from './results/overview'
 import {
+  alkylationCall,
   backgroundWords,
   baseName,
   digestCall,
@@ -94,18 +96,28 @@ interface Props {
   onOpen: () => void
 }
 
+/// The report's own sentences: the first few, which carry the call; the rest
+/// stay in All report rows below (each row's description is there too).
+const SAYS_SHOWN = 4
+
 function Sentences({ rows }: { rows: ReportRow[] }): JSX.Element | null {
   const seen = new Set<string>()
   const list = rows.map((r) => r.description).filter((d) => d && !seen.has(d) && seen.add(d))
   if (!list.length) return null
+  const more = list.length - SAYS_SHOWN
   return (
     <div className="says">
       <span className="card-label">FASTag says</span>
       <ul className="sentences">
-        {list.map((d) => (
+        {list.slice(0, SAYS_SHOWN).map((d) => (
           <li key={d}>{groupDigits(d)}</li>
         ))}
       </ul>
+      {more > 0 && (
+        <p className="hint">
+          {more} more {more === 1 ? 'sentence' : 'sentences'} in All report rows below.
+        </p>
+      )}
     </div>
   )
 }
@@ -242,7 +254,8 @@ function Digest({ report }: { report: Report }): JSX.Element {
         )}
         <Sentences
           rows={[
-            ...section(report, 'call'),
+            // Not the lines that restate the call (its model, its class).
+            ...section(report, 'call').filter((r) => !['model', 'class', 'runner_up_class'].includes(r.key)),
             ...nocall.filter((r) => r.value !== 'no'),
             ...section(report, 'count'),
             ...section(report, 'share')
@@ -541,11 +554,34 @@ function GapHistogram({ bins }: { bins: GapBin[] }): JSX.Element {
   )
 }
 
+/// The alkylation report (-alkylation_out): the reagent called, or why no
+/// call was made, from placements on a shipped proteome or the FASTA given.
+function Alkylation({ report }: { report: Report }): JSX.Element {
+  const c = alkylationCall(report)
+  const db = value(report, 'alk_run', 'database')
+  return (
+    <section className="dg-block card" aria-labelledby="dg-alk">
+      <Heading id="dg-alk" title="Alkylation" report={report} help="digest-gaps" />
+      <dl className="stats">
+        <Stat label={c.status === 'call' ? 'Reagent' : 'No call'} big>
+          {c.status === 'call' ? (c.reagent === 'none' ? 'none (not alkylated)' : c.reagent) : alkylationReason(c.reason)}
+        </Stat>
+        {c.binned != null && <Stat label="Spectra with one cysteine">{fmt(c.binned)}</Stat>}
+        {c.share != null && c.status === 'call' && <Stat label="Share">{pct(c.share)}</Stat>}
+        {db && <Stat label="Database">{db}</Stat>}
+      </dl>
+      <p className="hint">Not validated on held-out data: a call to check, not a setting to copy.</p>
+      <RawRows report={report} />
+    </section>
+  )
+}
+
 export default function DigestPanel({ reports, errors, onOpen }: Props): JSX.Element {
   const by = (k: Report['kind']): Report | undefined => reports.find((r) => r.kind === k)
   const d = by('digest')
   const l = by('label')
   const m = by('massgap')
+  const a = by('alkylation')
   return (
     <div className="digest">
       {errors.map((e) => (
@@ -553,20 +589,26 @@ export default function DigestPanel({ reports, errors, onOpen }: Props): JSX.Ele
           {e}
         </p>
       ))}
-      {!d && !l && !m && errors.length === 0 && (
-        <div className="empty">
-          The digest, label and mass-gap reports appear here after a run that writes them (<code className="cli">digest_out</code>,{' '}
-          <code className="cli">label_out</code>, <code className="cli">massgap_out</code>), or{' '}
-          <button className="link" onClick={onOpen}>
-            open a report TSV…
-          </button>{' '}
-          <HelpLink to="faq-digest-empty">How to write them</HelpLink>
+      {!d && !l && !m && !a && errors.length === 0 && (
+        <div className="empty-state">
+          <h2>No digest or label report</h2>
+          <p>
+            The Digest, Label, Mass-gap and Alkylation reports appear here after a run that writes them: check them in
+            the Outputs card of Characterize a run (or under Advanced, Other analyses).
+          </p>
+          <div className="row-actions">
+            <button className="secondary" onClick={onOpen}>
+              Open a report…
+            </button>
+            <HelpLink to="faq-digest-empty">How to write them</HelpLink>
+          </div>
         </div>
       )}
       {d && <Digest report={d} />}
       {l && <Label report={l} />}
+      {a && <Alkylation report={a} />}
       {m && <MassGap report={m} />}
-      {(d || l || m) && (
+      {(d || l || m || a) && (
         <button className="secondary" onClick={onOpen}>
           Open another report…
         </button>

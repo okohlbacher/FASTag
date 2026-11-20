@@ -1226,3 +1226,68 @@ table.kv { table-layout: auto; }
 table.kv tr + tr { border-top: 1px solid var(--border); }
 .task-chooser { display: flex; flex-direction: column; gap: var(--space-2); }
 details.advanced:not([open]) { gap: 0; }
+
+/* ---- Round 2 of the workflow review ------------------------------------- */
+/* A flag written in full (the (?) popover): no dash drawn before it. */
+code.flag { color: var(--foreground); }
+/* Required, not filled in yet: neutral, a fresh form is no error. */
+.badge.todo { border-color: var(--primary-text); color: var(--primary-text); }
+/* Empty fields read as empty: proportional, muted, never like a value. */
+input::placeholder, textarea::placeholder { font-family: var(--font-sans); font-style: italic; color: var(--muted-foreground); opacity: 0.8; }
+.path-input:placeholder-shown { font-family: var(--font-sans); }
+/* A group waiting for its report: said once, with its Turn on. */
+.group-needs { display: flex; align-items: center; gap: var(--space-2); flex-wrap: wrap; padding: var(--space-2) var(--space-3); border: 1px dashed var(--border); border-radius: var(--radius-sm); font-size: var(--text-xs); color: var(--muted-foreground); }
+.group-needs span { flex: 1 1 240px; }
+/* The Preset select first in its row, in the same place for every workflow. */
+.preset-pick { display: inline-flex; align-items: center; gap: var(--space-2); }
+.preset-pick .sublabel { font-size: var(--text-xs); color: var(--muted-foreground); }
+/* The Overview: workflow line, two-line notes. */
+.overview-sub { margin: 0; display: flex; gap: 4px; align-items: baseline; flex-wrap: wrap; font-size: var(--text-sm); }
+.overview .tile-note { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; flex: 1; }
+/* The QC summary strip. */
+dl.qc-strip { display: flex; flex-wrap: wrap; gap: var(--space-2) var(--space-5); margin: 0; padding: var(--space-3) var(--space-4); border: 1px solid var(--border); border-radius: var(--radius-md); background: var(--card); }
+dl.qc-strip .stat dt { font-size: var(--text-xs); color: var(--muted-foreground); }
+dl.qc-strip .stat dd { margin: 0; font-size: var(--text-md); font-weight: 600; }
+.check-inline { display: inline-flex; align-items: center; gap: 6px; font-size: var(--text-xs); color: var(--muted-foreground); }
+.report-notes { padding-left: 0; display: flex; flex-direction: column; gap: 2px; }
+.seg-opt .count { margin-left: 4px; color: var(--muted-foreground); font-variant-numeric: tabular-nums; }
+/* Tags toolbar: the row actions and the export as two groups. */
+.rt-group { display: inline-flex; align-items: center; gap: 4px; padding-left: var(--space-2); border-left: 1px solid var(--border); }
+.rt-group-label { font-size: var(--text-xs); color: var(--muted-foreground); }
+/* Setup compact enough that cards 1 to 4 fit at 1280 x 800 (doc/GUI-WORKFLOWS.md 3). */
+.view-setup .controls-body { padding: var(--space-2) var(--space-4); gap: 8px; }
+.view-setup .step-card { padding: 6px var(--space-3); gap: 6px; }
+.view-setup .card-head h2 { font-size: var(--text-sm); }
+.view-setup .card-head .link.small { font-size: var(--text-xs); }
+/* Input: the mode switch and the file on one row. */
+.input-row { display: flex; align-items: center; gap: var(--space-3); flex-wrap: wrap; }
+.input-row .input-card { flex: 1 1 360px; padding-top: 2px; padding-bottom: 2px; min-height: 0; }
+/* Workflow cards: label and products on one line (the products in full as
+   the card's tooltip and its description). */
+.view-setup label.task { display: flex; align-items: baseline; gap: 6px; padding: 4px var(--space-2); min-width: 0; }
+.view-setup .task-label { white-space: nowrap; }
+.view-setup .task-products { font-size: 11px; line-height: 1.3; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+.view-setup .task-blurb-line { font-size: var(--text-xs); color: var(--muted-foreground); }
+/* Settings: the fields in three columns; a path or list spans two. */
+.view-setup .settings { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px var(--space-4); align-items: start; }
+.view-setup .settings > .field:has(.path-input) { grid-column: span 2; }
+.view-setup .settings .help.brief { -webkit-line-clamp: 1; }
+.view-setup .instrument-field select { min-width: 0; width: 100%; }
+@media (max-width: 900px) { .view-setup .settings { grid-template-columns: minmax(0, 1fr); } .view-setup .settings > .field { grid-column: auto !important; } }
+.view-setup .settings textarea { min-height: 0; }
+/* Outputs: the products in two columns. */
+#card-outputs ul.products { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 2px var(--space-4); }
+@media (max-width: 900px) { #card-outputs ul.products { grid-template-columns: minmax(0, 1fr); } }
+/* The run bar: plan line, its buttons and Run on one row. */
+.view-setup .runbar { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; column-gap: var(--space-4); row-gap: 4px; padding-top: var(--space-2); padding-bottom: var(--space-2); }
+.view-setup .runbar > * { grid-column: 1 / -1; }
+.view-setup .runbar > .plan-footer { grid-column: 1; grid-row: 1; }
+.view-setup .runbar > .row.actions { grid-column: 2; grid-row: 1; }
+.view-setup .runbar > .row.actions button.primary { min-width: 180px; height: 38px; }
+/* Outputs: the folder and the run name side by side. */
+.out-rows { display: flex; flex-wrap: wrap; gap: 6px var(--space-4); }
+.out-rows > .out-row { flex: 1 1 320px; }
+.out-rows > .warn { flex-basis: 100%; }
+/* The workflow row in the Workflow card's head. */
+.card-head .starting { flex: 0 1 auto; justify-content: flex-end; gap: var(--space-2); }
+.card-head .starting .spacer { display: none; }

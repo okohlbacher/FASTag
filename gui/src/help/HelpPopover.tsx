@@ -17,9 +17,12 @@ export interface HelpPopoverProps {
   deflt: string
   /// A longer plain-language text (PARAM_UI help), when there is one.
   more?: string
+  /// More flags the control sets (the Instrument sets three), each with its
+  /// default.
+  flags?: { name: string; deflt: string }[]
 }
 
-export default function HelpPopover({ name, label, description, deflt, more }: HelpPopoverProps): JSX.Element {
+export default function HelpPopover({ name, label, description, deflt, more, flags }: HelpPopoverProps): JSX.Element {
   const [open, setOpen] = useState(false)
   const id = useId()
   const box = useRef<HTMLSpanElement>(null)
@@ -61,14 +64,26 @@ export default function HelpPopover({ name, label, description, deflt, more }: H
         <span id={id} className="help-pop" role="dialog" aria-label={`About ${label}`}>
           <span className="help-pop-text">{description}</span>
           {more && more !== description && <span className="help-pop-more">{more}</span>}
-          <span className="help-pop-facts">
-            <span>
-              Default: <strong>{deflt}</strong>
+          {/* The dash is written here, once: copied, the flag is what the
+              CLI takes (-max_evalue, never --max_evalue). */}
+          {flags ? (
+            <span className="help-pop-facts">
+              {flags.map((f) => (
+                <span key={f.name}>
+                  <code className="flag">-{f.name}</code> default <strong>{f.deflt}</strong>
+                </span>
+              ))}
             </span>
-            <span>
-              Command line: <code className="cli">-{name}</code>
+          ) : (
+            <span className="help-pop-facts">
+              <span>
+                Default: <strong>{deflt}</strong>
+              </span>
+              <span>
+                Command line: <code className="flag">-{name}</code>
+              </span>
             </span>
-          </span>
+          )}
           <HelpLink to={`param-${name}`}>More in Help</HelpLink>
         </span>
       )}

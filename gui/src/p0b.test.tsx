@@ -40,24 +40,29 @@ describe('parameter search ranking', () => {
 })
 
 describe('instrument presets', () => {
-  it('are the four of Q5 plus ETD, two marked unvalidated', () => {
+  it('are the four of Q5 plus ETD and EThcD, four marked unvalidated', () => {
     expect(INSTRUMENTS.map(presetText)).toEqual([
       'Orbitrap/TOF HCD 20 ppm',
-      'Orbitrap ETD or EThcD 20 ppm',
+      'Orbitrap ETD 20 ppm (unvalidated)',
+      'Orbitrap EThcD 20 ppm (unvalidated)',
       'Ion trap CID 0.3 Da',
       'timsTOF 30 ppm (unvalidated)',
       'Astral 20 ppm (unvalidated)'
     ])
   })
 
-  it('set fragment_tolerance, its unit and the ion series, nothing else', () => {
+  it('set fragment_tolerance, its unit, the ion series and how hybrid spectra are read, nothing else', () => {
     const before = { tag_length: '5', fragment_tolerance: '20', fragment_tolerance_unit: 'ppm', species: true }
     const it = INSTRUMENTS.find((p) => p.id === 'iontrap-cid')!
     const after = applyInstrument(before, it)
     const changed = Object.keys(after).filter((k) => JSON.stringify(after[k]) !== JSON.stringify((before as Record<string, unknown>)[k]))
-    expect(changed.sort()).toEqual(['fragment_tolerance', 'fragment_tolerance_unit', 'ion_series'])
+    expect(changed.sort()).toEqual(['fragment_tolerance', 'fragment_tolerance_unit', 'ion_series', 'ion_series_hybrid'])
     expect(after).toMatchObject({ fragment_tolerance: '0.3', fragment_tolerance_unit: 'Da' })
     expect(matchesInstrument(after, it)).toBe(true)
+    // EThcD reads hybrid spectra both ways; ETD alone leaves them b/y.
+    const ethcd = applyInstrument(before, INSTRUMENTS.find((p) => p.id === 'orbitrap-ethcd')!)
+    expect([ethcd['ion_series'], ethcd['ion_series_hybrid']]).toEqual(['auto', 'both'])
+    expect(matchesInstrument(ethcd, INSTRUMENTS.find((p) => p.id === 'orbitrap-etd')!)).toBe(false)
     // An empty field is the CLI default (20 ppm): the Orbitrap preset.
     expect(matchesInstrument({ fragment_tolerance: '', fragment_tolerance_unit: '' }, INSTRUMENTS[0])).toBe(true)
     expect(matchesInstrument({ fragment_tolerance: '20.0', fragment_tolerance_unit: 'Da' }, INSTRUMENTS[0])).toBe(false)

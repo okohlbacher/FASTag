@@ -303,12 +303,13 @@ describe('run/batch orchestration', () => {
     const values = { glyco_out: '/tmp/all.glyco.tsv', recon_out: '/tmp/r.tsv', recon_id_out: '/tmp/r.idXML', out_spectra: '/tmp/s' }
     expect(perJobOutputs(values, '/d/a.tags.tsv')).toEqual({
       species_out: '',
+      census_ids: '',
       glyco_out: '/d/a.glyco.tsv',
       recon_out: '/d/a.recon.tsv',
       recon_id_out: '/d/a.recon_id.idXML',
       out_spectra: '/d/a.spectra.mzML'
     })
-    expect(perJobOutputs({}, '/d/b.out.tsv')).toEqual({ species_out: '' })
+    expect(perJobOutputs({}, '/d/b.out.tsv')).toEqual({ species_out: '', census_ids: '' })
   })
 
   it('shows the failure and the last error line when the CLI fails', async () => {
@@ -371,7 +372,7 @@ describe('run/batch orchestration', () => {
     await pickSingle(mock, '/d/b.mzML')
     expect((runButton() as HTMLButtonElement).disabled).toBe(true)
     expect(screen.getByText('The placements need a protein database: choose one under Protein database.')).toBeDefined()
-    expect(screen.getByText(/1 value to fix before running: Max peaks \(must be at most 1024\)/)).toBeDefined()
+    expect(screen.getByText(/1 value to fix before running: Peaks kept \(must be at most 1024\)/)).toBeDefined()
     await click(runButton())
     expect(mock.runCalls).toHaveLength(0)
   })

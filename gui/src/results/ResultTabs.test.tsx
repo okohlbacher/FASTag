@@ -75,8 +75,14 @@ describe('result tabs', () => {
     installMockBridge()
     const { rerender } = render(<Harness />)
     expect(screen.getAllByRole('tab').map((t) => t.textContent)).toEqual(['Tags'])
-    rerender(<Harness species={SPECIES} reports={REPORTS} workflowReports={{ qc: '/d/a.qc.tsv', shortlist: '/d/a.shortlist.tsv', triage: '/d/a.census_sorted.tsv' }} />)
+    const all = { ...REPORTS, workflow: { qc: '/d/a.qc.tsv', shortlist: '/d/a.shortlist.tsv', triage: '/d/a.census_sorted.tsv' } }
+    rerender(<Harness species={SPECIES} reports={all} />)
     expect(screen.getAllByRole('tab').map((t) => t.textContent)).toEqual(['Tags', 'QC', 'Species1', 'Shortlist', 'Triage', 'Digest'])
+    // A workflow's own tabs first, in its order (doc/GUI-WORKFLOWS.md 1).
+    rerender(<Harness species={SPECIES} reports={all} workflow="characterize" />)
+    expect(screen.getAllByRole('tab').map((t) => t.textContent)).toEqual(['Digest', 'Species1', 'Tags', 'QC', 'Shortlist', 'Triage'])
+    rerender(<Harness species={SPECIES} reports={all} workflow="db-reduction" />)
+    expect(screen.getAllByRole('tab').map((t) => t.textContent)[0]).toBe('Shortlist')
   })
 
   it('the empty pane offers both opens, locked while busy', async () => {

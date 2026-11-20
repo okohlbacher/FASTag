@@ -33,6 +33,8 @@ export interface RunBarProps {
   onFix(values: Record<string, ParamValue>): void
   input: string
   out: string
+  // Batch input mode: the queue is the input, never the single file.
+  batchMode?: boolean
   // The number of queued batch jobs, those not run yet and the failed ones.
   jobs: number
   remaining: number
@@ -64,7 +66,8 @@ export default function RunBar(p: RunBarProps): JSX.Element {
 
   const nInvalid = Object.keys(invalid).length
   const blocked = nInvalid > 0 || refused.length > 0
-  const held = !busy && !blocked && jobs === 0 && !!p.input && !!p.inspectorHeld
+  const single = jobs === 0 && !p.batchMode
+  const held = !busy && !blocked && single && !!p.input && !!p.inspectorHeld
 
   const pct = progress && progress.total > 0 ? Math.round((progress.done / progress.total) * 100) : null
   const elapsed = running && p.startedAt ? ` · ${duration(Date.now() - p.startedAt)} elapsed` : ''
@@ -129,10 +132,14 @@ export default function RunBar(p: RunBarProps): JSX.Element {
           )}
           {refused.map((c) => (
             <div key={c.params.join(',')}>
-              <p className="warn">
-                <IconError />
-                <span>{c.note}</span>
-              </p>
+              {c.neutral ? (
+                <p className="hint">{c.note}</p>
+              ) : (
+                <p className="warn">
+                  <IconError />
+                  <span>{c.note}</span>
+                </p>
+              )}
               {/* The species reach conflict: one-click fixes. */}
               {c.params.includes('species') && c.params.includes('extension') && fixes.length > 0 && (
                 <div className="row fixes">
@@ -155,8 +162,9 @@ export default function RunBar(p: RunBarProps): JSX.Element {
         </div>
       )}
       {!busy && p.plan}
-      {!busy && !blocked && jobs === 0 && !p.input && <p className="hint">Choose an input file to run.</p>}
-      {!busy && jobs === 0 && !!p.input && !p.out && <p className="warn" id="run-output-required">Choose a run name in Outputs before running.</p>}
+      {!busy && !blocked && single && !p.input && <p className="hint">Choose an input file to run.</p>}
+      {!busy && !blocked && jobs === 0 && p.batchMode && <p className="hint">Add files or a folder to run.</p>}
+      {!busy && single && !!p.input && !p.out && <p className="warn" id="run-output-required">Choose a run name in Outputs before running.</p>}
       {/* No live region of its own: the checks' summary (InspectorPanel) is
           announced; Run's aria-describedby names this line. */}
       {held && p.inspectorChecking && (
@@ -193,7 +201,7 @@ export default function RunBar(p: RunBarProps): JSX.Element {
               onClick={p.onRun}
               disabled={!p.canRun}
               data-run=""
-              aria-describedby={[held ? 'run-held' : '', p.input && !p.out ? 'run-output-required' : ''].filter(Boolean).join(' ') || undefined}
+              aria-describedby={[held ? 'run-held' : '', single && p.input && !p.out ? 'run-output-required' : ''].filter(Boolean).join(' ') || undefined}
               aria-keyshortcuts={isMac() ? 'Meta+Enter' : 'Control+Enter'}
               title={`Run (${keyText(isMac() ? '⏎' : 'Enter')})`}
             >

@@ -69,7 +69,9 @@ describe('presets as diffs', () => {
     expect(TASKS.map((t) => t.label)).toEqual(['Export tags', 'Run QC', 'Mass-shift survey', 'Species', 'Database reduction', 'Identifiability triage', 'Characterize a run'])
     const c = baseValues('builtin:characterize')
     expect([c['species'], c['extension'], c['glyco'], c['subsample_fraction'], c['threads']]).toEqual([true, '2', true, '0.1', '0'])
-    expect(Boolean(c['digest_out']) && Boolean(c['label_out']) && Boolean(c['alkylation_out'])).toBe(true)
+    expect(Boolean(c['digest_out']) && Boolean(c['label_out'])).toBe(true)
+    // Off by default: the shipped proteome needs tags of 8+ residues.
+    expect(c['alkylation_out']).toBe('')
     expect(baseValues('builtin:export-tags')['res_conf']).toBe(true)
     expect(baseValues('defaults')).toEqual(defaults)
     expect(originText(LANDING)).toBe('Export tags')

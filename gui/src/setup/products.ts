@@ -52,7 +52,9 @@ export const PRODUCTS: readonly Product[] = [
   { param: 'search_config_out', label: 'Search-engine configuration', what: 'Settings for Sage, Comet or MSFragger with the reduced FASTA.', db: true },
   { param: 'census_out', label: 'Identifiability table', what: 'One row per MS/MS spectrum, tagged or not.', flag: 'census' },
   { param: 'census_summary_out', label: 'Identifiability summary', what: 'The counts of the run, written with the table.', flag: 'census', follows: 'census_out' },
-  { param: 'census_sorted_out', label: 'Spectra ranked by identifiability', what: 'The table ordered by the identifiability score.', also: { census: true, census_score: true } },
+  // The CLI writes the ranking from the census rows: without -census it
+  // ignores census_sorted_out, so the table is needed (and locked) with it.
+  { param: 'census_sorted_out', label: 'Spectra ranked by identifiability', what: 'The table ordered by the identifiability score.', needs: ['census_out'], also: { census: true, census_score: true } },
   { param: 'digest_out', label: 'Digest report', what: 'Terminal residues and the protease they fit.' },
   { param: 'label_out', label: 'Label report', what: 'Isobaric and SILAC labels the tags carry.' },
   { param: 'alkylation_out', label: 'Alkylation report', what: 'The reagent that alkylated the cysteines, from a shipped proteome.' },
@@ -60,6 +62,24 @@ export const PRODUCTS: readonly Product[] = [
   { param: 'glyco_out', label: 'Glycopeptide report', what: 'Spectra with oxonium ions.', flag: 'glyco' },
   { param: 'check_header_out', label: 'Precursor charge check', what: 'Each precursor charge of the file against the MS1 isotope spacing.', also: { check_header_charge: 'warn' }, experimental: true }
 ]
+
+/// The accession the CLI takes until a data set has one (usi_collection):
+/// checking USI column writes the column at once, never an empty option.
+export const USI_PLACEHOLDER = 'USI000000'
+
+/// The extension of a search-engine configuration: Sage reads JSON, Comet
+/// and MSFragger a .params file.
+export const searchConfigExt = (engine: unknown): string => (engine === 'comet' || engine === 'msfragger' ? 'params' : 'json')
+
+/// After the engine changed to @p engine: an unedited default configuration
+/// name (<stem>.search.json) gets the engine's extension; a name the user
+/// chose stays.
+export function renameSearchConfig(values: V, engine: unknown): V {
+  const cur = text(values['search_config_out'])
+  const m = /^(.*(?:^|[\\/.])search)\.(json|params)$/.exec(cur)
+  if (!m) return values
+  return { ...values, search_config_out: `${m[1]}.${searchConfigExt(engine)}` }
+}
 
 export const PRODUCT_OF: ReadonlyMap<string, Product> = new Map(PRODUCTS.map((p) => [p.param, p]))
 
@@ -99,9 +119,9 @@ export function fileName(p: Product, values: V, tagsOut: string): string {
 
 /// The default file of a product before it has a folder: its kind and
 /// extension (qc.tsv), moved beside the tags table by rebaseOutputs.
-function bareName(p: Product): string {
+function bareName(p: Product, engine?: unknown): string {
   const fmt = PARAM_BY_NAME.get(p.param)?.formats?.[0]
-  const ext = p.param === 'out_spectra' ? 'mzML' : p.param === 'search_config_out' ? 'json' : p.param === 'recon_id_out' ? 'idXML' : fmt ?? 'tsv'
+  const ext = p.param === 'out_spectra' ? 'mzML' : p.param === 'search_config_out' ? searchConfigExt(engine) : p.param === 'recon_id_out' ? 'idXML' : fmt ?? 'tsv'
   return `${outputKind(p.param)}.${ext}`
 }
 
@@ -118,8 +138,9 @@ export function setProduct(p: Product, on: boolean, values: V, tagsOut: string):
     if (q.also) Object.assign(next, q.also)
     if (q.flag) next[q.flag] = true
     else if (PARAM_BY_NAME.get(q.param)?.type === 'bool') next[q.param] = true
+    else if (q.param === 'usi_collection' && !text(next[q.param])) next[q.param] = USI_PLACEHOLDER
     else if (!q.column && !text(next[q.param])) {
-      const bare = bareName(q)
+      const bare = bareName(q, next['search_engine'])
       next[q.param] = tagsOut ? rebaseOutputs({ [q.param]: bare }, tagsOut)[q.param] ?? bare : bare
     }
   }

@@ -9,7 +9,8 @@
 //   .taxdb                       -> Taxonomy (-taxdb)
 //   *.tags.tsv, any other .tsv   -> Results (the tags table)
 //   *.digest / label / massgap / recon / delta / recon_id / glyco /
-//   species TSVs                 -> their result tab
+//   species / qc / shortlist / census* / alkylation / delta_spectra /
+//   delta_counts / check_header TSVs -> their result tab
 //   *.sdrf.tsv                   -> Batch
 //
 // A folder adds the spectra directly inside it (not its subfolders), as a
@@ -40,7 +41,12 @@ pub enum Kind {
 }
 
 /// The report kinds and the name endings that mark them (before ".tsv").
-const REPORTS: &[&str] = &["digest", "label", "massgap", "recon_id", "recon", "delta", "glyco", "species"];
+/// A longer ending before one it ends with (census_sorted before census);
+/// the renderer reads the file's header to tell what it holds.
+const REPORTS: &[&str] = &[
+    "digest", "label", "massgap", "recon_id", "recon", "delta_spectra", "delta_counts", "delta", "glyco", "species", "qc",
+    "shortlist", "census_sorted", "census_summary", "census", "alkylation", "check_header",
+];
 
 fn lower_name(p: &Path) -> String {
     p.file_name().map(|n| n.to_string_lossy().to_lowercase()).unwrap_or_default()
@@ -227,6 +233,15 @@ mod tests {
         assert_eq!(k("/d/run01.delta.tsv"), Kind::Report("delta"));
         assert_eq!(k("/d/run01.glyco.tsv"), Kind::Report("glyco"));
         assert_eq!(k("/d/run01.species.tsv"), Kind::Report("species"));
+        // The reports of the workflows: their own views, never the tags table.
+        assert_eq!(k("/d/run01.qc.tsv"), Kind::Report("qc"));
+        assert_eq!(k("/d/run01.shortlist.tsv"), Kind::Report("shortlist"));
+        assert_eq!(k("/d/run01.census_sorted.tsv"), Kind::Report("census_sorted"));
+        assert_eq!(k("/d/run01.tags.census.tsv"), Kind::Report("census"));
+        assert_eq!(k("/d/run01.tags.census_summary.tsv"), Kind::Report("census_summary"));
+        assert_eq!(k("/d/run01.alkylation.tsv"), Kind::Report("alkylation"));
+        assert_eq!(k("/d/run01.delta_spectra.tsv"), Kind::Report("delta_spectra"));
+        assert_eq!(k("/d/run01.delta_counts.tsv"), Kind::Report("delta_counts"));
         assert_eq!(k("/d/PXD004541.sdrf.tsv"), Kind::Sdrf);
         assert_eq!(k("/d/sdrf.tsv"), Kind::Sdrf);
         // "digest" alone is a tags table named digest.tsv, not a report.

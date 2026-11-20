@@ -85,6 +85,9 @@ export interface ParamUi {
   depends?: Dependency[]
   /// Experimental in the CLI (README): the form marks it so.
   experimental?: true
+  /// Named values offered in a select, with Custom for any other: a bare
+  /// number would read wrong (0.0 spectra to read means all of them).
+  steps?: { label: string; value: string }[]
   help?: ParamHelp
 }
 
@@ -143,7 +146,7 @@ export const PARAM_UI: Record<string, ParamUi> = {
     section: 'Peaks',
     help: {
       text: 'Keep this many of the strongest peaks in every 100 Da window, instead of the strongest peaks of the whole spectrum. A wide spectrum then keeps more peaks than a narrow one. 0 turns it off.',
-      tip: '10 is the default. Set 0 to keep simply the strongest "Max peaks" peaks.'
+      tip: '10 is the default. Set 0 to keep simply the strongest "Peaks kept" peaks.'
     }
   },
   subsample_spectra: {
@@ -156,6 +159,11 @@ export const PARAM_UI: Record<string, ParamUi> = {
   subsample_fraction: {
     section: 'Run QC',
     label: 'Spectra to read',
+    steps: [
+      { label: 'All spectra', value: '0' },
+      { label: '10%', value: '0.1' },
+      { label: '25%', value: '0.25' }
+    ],
     help: {
       text: 'Tag only this share of the spectra (more than 0, up to 1), chosen at random. 0 tags all of them.',
       tip: '0.1 gives a fast species call on a large run.'
@@ -184,7 +192,7 @@ export const PARAM_UI: Record<string, ParamUi> = {
   tag_lengths: {
     section: 'Tagging, advanced',
     help: {
-      text: 'Several seed lengths in one pass over the file, one per line, instead of tag length. Each length is tagged as if run on its own, with its own "Max tags" limit, and a spectrum\'s rows come in order of length. A tag that several lengths find is kept once, from the length that scores it best.',
+      text: 'Several seed lengths in one pass over the file, one per line, instead of tag length. Each length is tagged as if run on its own, with its own "Tags per spectrum" limit, and a spectrum\'s rows come in order of length. A tag that several lengths find is kept once, from the length that scores it best.',
       tip: 'Cannot be combined with the entrapment database.'
     }
   },
@@ -219,7 +227,7 @@ export const PARAM_UI: Record<string, ParamUi> = {
     section: 'Tagging, advanced',
     depends: [{ on: 'gaps', note: 'only applies when tags may cross a gap' }],
     help: {
-      text: 'Gapped tags are ranked as if their E-value were this many times worse, because they claim a peak nobody saw. The printed E-value of a gapped tag includes this factor. It never removes a tag at the E-value cutoff, but it decides which tags fill the "Max tags" places.',
+      text: 'Gapped tags are ranked as if their E-value were this many times worse, because they claim a peak nobody saw. The printed E-value of a gapped tag includes this factor. It never removes a tag at the E-value cutoff, but it decides which tags fill the "Tags per spectrum" places.',
       tip: '100 is the default. 1 turns the penalty off.'
     }
   },
@@ -254,7 +262,7 @@ export const PARAM_UI: Record<string, ParamUi> = {
         'When a spectrum has more candidate tags than max_tags allows, prefer tags that read different peaks over near-copies of a tag already kept. The number of tags kept stays the same.'
     },
     help: {
-      text: 'When a spectrum has more tags than "Max tags" allows, prefer tags that read other peaks over near-copies of a tag already kept. The number of tags and the best tag stay the same.',
+      text: 'When a spectrum has more tags than "Tags per spectrum" allows, prefer tags that read other peaks over near-copies of a tag already kept. The number of tags and the best tag stay the same.',
       tip: 'Try it for spectra that hold two peptides at once (common in TMT runs).'
     }
   },
@@ -536,7 +544,7 @@ export const PARAM_UI: Record<string, ParamUi> = {
     depends: [DB_UNUSED],
     help: {
       text: 'The protein database for reconciliation. Empty: the sequence database (fasta) is used.',
-      tip: 'With a database here and none under Sequence matching, every tag is reconciled, not only those that match the sequence database.'
+      tip: 'With a database here and none under Keep only tags found in a database (Advanced), every tag is placed, not only those that match a filter database.'
     }
   },
   recon_missed_cleavages: {
@@ -869,7 +877,7 @@ export const PARAM_UI: Record<string, ParamUi> = {
     label: 'Identifications',
     depends: [CENSUS_OFF],
     help: {
-      text: 'Identifications of the same run (idXML or mzid) for the census: each spectrum is then marked identified or not. The file needs q-values.'
+      text: 'Identifications of the same run (idXML or mzid) for the census: each spectrum is then marked identified, not identified or unknown. Needs q-values, unless Accept hits (Advanced) is threshold or all.'
     }
   },
   census_ids_fdr: {
@@ -1369,7 +1377,7 @@ export const PARAM_UI: Record<string, ParamUi> = {
     // 1.14: explain was removed; the CLI still accepts it and reads none.
     choices: ['none', 'decoy'],
     help: {
-      text: 'Add experimental organism calls to the species report. none leaves calls off; decoy compares evidence with decoy tags. The explain call was removed in 1.14: it failed its held-out test.',
+      text: 'Call each taxon of the species report present, no call or not detected (experimental). Decoy compares its evidence with decoy tags; None only ranks the taxa. The explain call was removed in 1.14: it failed its held-out test.',
       tip: 'The decision settings are provisional. These calls and their decoy q-values are not calibrated error guarantees; not detected never proves biological absence.'
     }
   },

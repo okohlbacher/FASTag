@@ -245,3 +245,18 @@ describe('a report the job was sent but could not read', () => {
     expect(jobCells(d).cells.genus).toEqual({ text: 'not read', call: null, note: 'the species report /b/x.tags.species.tsv was not found or could not be parsed' })
   })
 })
+
+describe('the key columns of a Run QC batch', () => {
+  it('reads each job QC report: MS/MS count, tag yield, charges, analyzer, instrument and kit', async () => {
+    const { qcCells, columnsFor } = await import('./batchSummary')
+    const text = (await import('../fixtures/cli-1.15/ecoli_ms2_small_0.3da.qc.tsv?raw')).default
+    expect(columnsFor('run-qc')).toEqual(['ms2', 'yield', 'charge', 'analyzer', 'instrument', 'kit'])
+    const c = qcCells(text)
+    expect(c.ms2.text).toBe('139')
+    expect(c.yield.text).toBe('18.7%')
+    expect(c.charge.text).toBe('70% / 24% / 6%')
+    expect(c.analyzer.text).toBe('FTMS')
+    expect(c.kit).toMatchObject({ text: 'none', call: 'none' })
+    expect(qcCells(null).ms2.text).toBe('not written')
+  })
+})

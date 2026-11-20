@@ -28,7 +28,16 @@ export default function GlycoTable({ path, gen, minFraction }: GlycoTableProps):
         {st.error}
       </p>
     )
-  if (st.missing) return <p className="muted">The run named {path}, but the file does not exist.</p>
+  if (st.missing)
+    return (
+      <div className="empty-state">
+        <h2>No glycopeptide report</h2>
+        <p>
+          {baseName(path)} is not on disk: the run did not write it, or it was moved. Check Glycopeptide report in the
+          Outputs card and run again.
+        </p>
+      </div>
+    )
   if (!st.table) return <p className="muted">Reading {baseName(path)}…</p>
   return <GlycoBody t={st.table} minFraction={minFraction ?? null} />
 }

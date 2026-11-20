@@ -17,6 +17,7 @@ import {
 import type { ParamValue } from '../ParamField'
 import { baseName } from '../digestReport'
 import { applyInstrument, INSTRUMENTS, speciesFixes } from './presets'
+import { renameSearchConfig } from './products'
 import { defaultSpeciesOut, dirName, rebaseOutputs, stripExt } from '../app/paths'
 import { cliText, sameValue } from '../app/format'
 import { focusLater } from '../app/focus'
@@ -106,7 +107,10 @@ export function useSession(start: Origin = DEFAULTS) {
   // Species tab why it is empty. The same rule as that conflict.
   const tooShort = speciesReach(values, taxdbK)
 
-  const setValue = (name: string, v: ParamValue): void => setValues((s) => ({ ...s, [name]: v }))
+  // A changed engine renames its unedited configuration file (.json for
+  // Sage, .params for Comet and MSFragger).
+  const setValue = (name: string, v: ParamValue): void =>
+    setValues((s) => (name === 'search_engine' ? renameSearchConfig({ ...s, [name]: v }, v) : { ...s, [name]: v }))
 
   // The last session's values that differ from the form's (D6).
   const lastUsedDiff = lastUsed ? Object.keys(lastUsed).filter((n) => !sameValue(lastUsed[n], values[n])) : []

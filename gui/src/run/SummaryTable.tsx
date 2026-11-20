@@ -8,7 +8,7 @@ import { dirName } from '../app/paths'
 import { folderPath } from './batch'
 import type { SdrfComparison } from '../sdrf/compare'
 import { samePath } from '../sdrf/SdrfPanel'
-import { COLUMN_LABEL, majorityWords, MIN_CALLS, SUMMARY_COLUMNS, summaryTsv, type Summary } from './batchSummary'
+import { COLUMN_LABEL, majorityWords, MIN_CALLS, summaryTsv, type Summary } from './batchSummary'
 
 export interface SummaryTableProps {
   summary: Summary
@@ -87,7 +87,7 @@ export default function SummaryTable({ summary, busy, outDir, onShow, sdrf, prot
               <th scope="col" className="num">
                 Tags
               </th>
-              {SUMMARY_COLUMNS.map((k) => (
+              {summary.columns.map((k) => (
                 <th scope="col" key={k}>
                   {COLUMN_LABEL[k]}
                 </th>
@@ -113,7 +113,7 @@ export default function SummaryTable({ summary, busy, outDir, onShow, sdrf, prot
                 <td data-text={count(r.tags)} className="num">
                   {count(r.tags)}
                 </td>
-                {SUMMARY_COLUMNS.map((k) => {
+                {summary.columns.map((k) => {
                   const c = r.cells[k]
                   const differs = r.differs[k]
                   return (
@@ -146,7 +146,7 @@ export default function SummaryTable({ summary, busy, outDir, onShow, sdrf, prot
               <th scope="row" colSpan={3}>
                 Majority (n ≥ {MIN_CALLS} calls)
               </th>
-              {SUMMARY_COLUMNS.map((k) => (
+              {summary.columns.map((k) => (
                 <td key={k}>{majorityWords(summary.majority[k])}</td>
               ))}
               {sdrf && <td />}

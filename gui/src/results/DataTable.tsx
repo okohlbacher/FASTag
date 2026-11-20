@@ -19,6 +19,8 @@ export interface Column {
   /// The sort key of row @p i; text() when absent.
   key?(i: number): number | string
   title?: string
+  /// A tooltip for the cell of row @p i (the full native ID behind a scan number).
+  cellTitle?(i: number): string | undefined
 }
 
 export const PAGE = 100
@@ -215,7 +217,7 @@ export default function DataTable({ label, columns, ids, total, empty, sort: ini
                     }}
                   >
                     {columns.map((c) => (
-                      <td key={c.id} role="gridcell" className={[c.num ? 'num' : '', c.mono ? 'mono' : ''].join(' ').trim() || undefined}>
+                      <td key={c.id} role="gridcell" className={[c.num ? 'num' : '', c.mono ? 'mono' : ''].join(' ').trim() || undefined} title={c.cellTitle?.(id)}>
                         {c.text(id)}
                       </td>
                     ))}

@@ -12,7 +12,7 @@
 // no call is never overridden. The acquisition and tolerance checks repeat
 // what the CLI wrote or was given. Pure, for vitest.
 
-import { fmt, fmtQ, pct, type Report } from '../digestReport'
+import { alkylationCall as alkylationReportCall, fmt, fmtQ, pct, type AlkylationCall as AlkylationReport, type Report } from '../digestReport'
 import type { ParamValue } from '../ParamField'
 import type { SpeciesReport } from '../types'
 import {
@@ -90,8 +90,9 @@ export interface OverviewInputs {
   instrument: string | null
 }
 
-const ON = 'Turn on and run again'
-const enable = (values: Record<string, ParamValue>): TileAction => ({ kind: 'enable', label: ON, values })
+/// An action that turns a report on and runs again, named after it
+/// ("Add Digest report and run again").
+const enable = (what: string, values: Record<string, ParamValue>): TileAction => ({ kind: 'enable', label: `Add ${what} and run again`, values })
 const given = (v: unknown): boolean => (typeof v === 'string' ? v.trim() !== '' : v === true)
 const count = (v: number | null): string => (v == null ? '–' : fmt(v))
 
@@ -120,6 +121,8 @@ export function buildOverview(i: OverviewInputs): Overview {
   const protease = proteaseCall(digest)
   const lab = labelCall(label)
   const alk = alkylationCall(massgap)
+  const alkReport = kind('alkylation')
+  const alkCall = alkReport ? alkylationReportCall(alkReport) : null
   const sp = speciesCall(i.species)
 
   // The evidence the calls rest on: spectra with a tag, as the census
@@ -162,7 +165,7 @@ export function buildOverview(i: OverviewInputs): Overview {
       const f = digest ? digest.rows.find((r) => r.section === 'count' && r.key === 'tags_filtered') : undefined
       return f
         ? { id: 'filtered', label: 'Tags E ≤ 1', value: count(f.n ?? null), tone: 'figure' as const, note: 'ungapped tags with an E-value ≤ 1 (the digest filter)' }
-        : { id: 'filtered', label: 'Tags E ≤ 1', value: 'not counted', tone: 'off' as const, note: 'counted by the digest report', action: enable({ digest_out: 'digest.tsv' }) }
+        : { id: 'filtered', label: 'Tags E ≤ 1', value: 'not counted', tone: 'off' as const, note: 'counted by the digest report', action: enable('Digest report', { digest_out: 'digest.tsv' }) }
     })(),
     log.glyco
       ? {
@@ -174,7 +177,7 @@ export function buildOverview(i: OverviewInputs): Overview {
         }
       : given(i.params['glyco'])
         ? { id: 'glyco', label: 'Glyco', value: '–', tone: 'off', note: 'the log has no glyco line' }
-        : { id: 'glyco', label: 'Glyco', value: 'off', tone: 'off', note: 'oxonium flagging was off', action: enable({ glyco: true }) }
+        : { id: 'glyco', label: 'Glyco', value: 'off', tone: 'off', note: 'oxonium flagging was off', action: enable('Glycopeptide report', { glyco: true }) }
   ]
 
   // ---- calls
@@ -182,7 +185,7 @@ export function buildOverview(i: OverviewInputs): Overview {
     proteaseTile(protease),
     genusTile(sp, da),
     labelTile(lab),
-    alkylationTile(alk, fasta, i.params, log.reconMinLength)
+    alkCall ? alkylationReportTile(alkCall, i.params) : alkylationTile(alk, fasta, i.params, log.reconMinLength)
   ]
   for (const t of calls) {
     if (t.id === 'alkylation') continue
@@ -235,18 +238,27 @@ export function buildOverview(i: OverviewInputs): Overview {
               : `default; no digest call (${protease.state === 'no_call' ? protease.reason : 'too little evidence'})`
         },
     { setting: 'missed cleavages', value: '2', evidence: 'default', note: 'default, not measured' },
-    {
+    alkCall?.status === 'call' && alkCall.reagent && callOk
+      ? {
+          setting: 'fixed C+57.021',
+          value: alkCall.reagent === 'none' ? 'none (cysteines not alkylated)' : `${alkCall.reagent} (C)`,
+          evidence: 'call',
+          note: `from the alkylation call (not validated)${cutoffApplied ? '' : `; ${NOT_APPLIED}`}`
+        }
+      : {
       setting: 'fixed C+57.021',
       value: 'Carbamidomethyl (C)',
       evidence: 'default',
       note:
-        alk.state === 'counts' && !alk.placed
+        alkCall
+          ? `default; no alkylation call (${alkylationReason(alkCall.reason)})`
+          : alk.state === 'counts' && !alk.placed
           ? 'default, alkylation not assessed (no tag placed in the FASTA)'
           : alk.state === 'counts'
           ? 'default; the mass-gap report has Cys gap counts, no alkylation call'
           : fasta
             ? 'default, alkylation not assessed (mass-gap report not written)'
-            : 'default, alkylation not assessed (no FASTA)'
+            : 'default, alkylation not assessed (alkylation report not written)'
     },
     lab.state === 'call' && callOk && !(lab.weak && lab.label === 'label-free')
       ? { setting: 'label', value: labelMods(lab.label), evidence: 'call', note: `from the label call (${lab.label})${cutoffApplied ? '' : `; ${NOT_APPLIED}`}` }
@@ -330,7 +342,7 @@ function proteaseTile(c: ProteaseCall): Tile {
       note: `digest call over ${fmt(c.ends)} C-terminal tag ends${c.margin != null && c.runnerUp ? `, margin ${fmt(c.margin, 2)} log-likelihood per end over ${c.runnerUp}` : ''}`
     }
   if (c.state === 'no_call') return { ...base, value: 'no call', tone: 'nocall', note: c.why || `no digest call (${c.reason})` }
-  return { ...base, value: 'not assessed', tone: 'off', note: 'the digest report was not written', action: enable({ digest_out: 'digest.tsv' }) }
+  return { ...base, value: 'not assessed', tone: 'off', note: 'the digest report was not written', action: enable('Digest report', { digest_out: 'digest.tsv' }) }
 }
 
 function genusTile(c: SpeciesCall, da: boolean): Tile {
@@ -360,7 +372,7 @@ function genusTile(c: SpeciesCall, da: boolean): Tile {
       note: `q = ${c.top.q === null ? 'NA (uncalibrated under -species_orientation both)' : fmtQ(c.top.q)}; ranked first of ${c.genera} genera by adjusted count, not a presence call.${caveat}`
     }
   if (c.state === 'none') return { ...base, value: 'no genus', tone: 'nocall', note: `the species report lists no genus.${caveat}` }
-  return { ...base, value: 'not assessed', tone: 'off', note: 'species detection was off', action: enable({ species: true, extension: '2' }) }
+  return { ...base, value: 'not assessed', tone: 'off', note: 'species detection was off', action: enable('Species report', { species: true, extension: '2' }) }
 }
 
 function labelTile(c: LabelCall): Tile {
@@ -370,7 +382,7 @@ function labelTile(c: LabelCall): Tile {
   if (c.state === 'no_call') return { ...base, value: 'no call', tone: 'nocall', note: c.why || `no label call (${c.reason})` }
   if (c.state === 'not_called')
     return { ...base, value: 'not called', tone: 'off', note: 'this FASTag writes the label counts but no label call (FASTag 1.12 does); the counts are in the Digest tab' }
-  return { ...base, value: 'not assessed', tone: 'off', note: 'the label report was not written', action: enable({ label_out: 'label.tsv' }) }
+  return { ...base, value: 'not assessed', tone: 'off', note: 'the label report was not written', action: enable('Label report', { label_out: 'label.tsv' }) }
 }
 
 /// The extension "Add FASTA and run again" runs with: tags of tag_length +
@@ -414,22 +426,77 @@ function alkylationTile(c: AlkylationCall, fasta: boolean, params: Record<string
       note: `${hits.length ? hits.map((s) => `${s.name} ${fmt(s.spectra)} of ${placed} placed spectra`).join(', ') : `no Cys alkylation gap among ${placed} placed spectra`}; this mass-gap report contains counts, not an alkylation call. The alkylation report (Characterize a run) makes that call`
     }
   }
-  if (fasta)
-    return {
-      ...base,
-      value: 'not assessed',
-      tone: 'off',
-      note: 'the mass-gap report was not written',
-      action: enable({ recon_out: 'recon.tsv', massgap_out: 'massgap.tsv' })
-    }
+  // Asked for and not written: the log says why; no action to add it.
+  if (given(params['alkylation_out'])) return { ...base, value: 'not assessed', tone: 'off', note: 'the alkylation report was asked for but not written; the log says why' }
   const raise = ext < FASTA_EXTENSION
+  // The alkylation report places tags on a shipped proteome (or the FASTA
+  // given): tags of 8 residues for the human one, so the extension goes to
+  // 3 with it.
   return {
     ...base,
     value: 'not assessed',
     tone: 'off',
-    note: `the alkylation report of Characterize a run calls it from a shipped proteome; the Cys gaps here come from placing the tags in a FASTA (the mass-gap report)${
-      raise ? `; adding one also sets the extension from ${ext} to ${FASTA_EXTENSION}, so tags reach the length a proteome database needs` : ''
-    }`,
-    action: { kind: 'add-fasta', label: 'Add FASTA and run again', ...(raise ? { values: { extension: String(FASTA_EXTENSION) } } : {}) }
+    note: `the alkylation report was not written${raise ? `; adding it raises the extension from ${ext} to ${FASTA_EXTENSION}, so tags reach the 8 residues a proteome needs` : ''}`,
+    action: enable('Alkylation report', { alkylation_out: 'alkylation.tsv', ...(raise ? { extension: String(FASTA_EXTENSION) } : {}) })
   }
+}
+
+/// The reasons of an alkylation no call, in words.
+export function alkylationReason(reason: string | undefined): string {
+  switch (reason) {
+    case 'tags_too_short':
+      return 'no tag reaches the length the proteome needs (8 residues for human or mouse)'
+    case 'few_cys_spectra':
+      return 'too few spectra with one cysteine'
+    case 'ambiguous':
+      return 'no reagent has a clear majority'
+    default:
+      return reason ? reason.replace(/_/g, ' ') : 'no reason given'
+  }
+}
+
+/// The tile of an alkylation report (-alkylation_out): its call or its no
+/// call with the reason; too short tags offer the run with extension 3.
+function alkylationReportTile(c: AlkylationReport, params: Record<string, unknown>): Tile {
+  const base = { id: 'alkylation', label: 'Alkylation' }
+  const db = c.databaseSource ? ` on ${c.databaseSource.replace(/^bundled:/, 'the shipped ').replace(/^proteome$/, 'the proteome given')}` : ''
+  if (c.status === 'call')
+    return {
+      ...base,
+      value: c.reagent === 'none' ? 'none (not alkylated)' : (c.reagent ?? 'call'),
+      tone: 'call',
+      note: `${c.share != null ? `${pct(c.share)} of ` : ''}${fmt(c.binned)} spectra with one cysteine${db}; not validated`
+    }
+  const ext = intParam(params['extension'], 0)
+  const short = c.reason === 'tags_too_short' && ext < FASTA_EXTENSION
+  return {
+    ...base,
+    value: 'no call',
+    tone: 'nocall',
+    note: alkylationReason(c.reason),
+    ...(short ? { action: { kind: 'enable' as const, label: `Run again with extension ${FASTA_EXTENSION}`, values: { extension: String(FASTA_EXTENSION) } } } : {})
+  }
+}
+
+// ---- what the Overview shows of a workflow ---------------------------------
+
+/// The tiles of @p o worth showing for a run sent @p params: MS2 spectra and
+/// tags always, every other only when the run asked for its report
+/// (doc/GUI-WORKFLOWS.md 3: no "not assessed" tile for a report nobody
+/// asked for).
+export function shownTiles(o: Overview, params: Record<string, unknown>): { figures: Tile[]; calls: Tile[] } {
+  const on = (n: string): boolean => given(params[n])
+  const want: Record<string, boolean> = {
+    spectra: true,
+    tags: true,
+    instrument: on('digest_out') || on('label_out') || on('massgap_out') || on('qc_out'),
+    tagged: on('census') || on('census_sorted_out'),
+    filtered: on('digest_out'),
+    glyco: on('glyco'),
+    protease: on('digest_out'),
+    genus: on('species'),
+    label: on('label_out'),
+    alkylation: on('alkylation_out') || on('massgap_out')
+  }
+  return { figures: o.figures.filter((t) => want[t.id]), calls: o.calls.filter((t) => want[t.id]) }
 }

@@ -5,12 +5,13 @@
 // While a run is in flight, a locked summary of what it uses.
 
 import { useState, type JSX, type RefObject } from 'react'
-import { SECTIONS, PARAM_BY_NAME, type Section, UNIT_PARAMS, inertDependency, unknownParams, unitOf, unplacedParams } from '../paramLayout'
+import { SECTIONS, PARAM_BY_NAME, type Section, UNIT_PARAMS, defaultText, humanName, inertDependency, masters, unknownParams, unitOf, unplacedParams } from '../paramLayout'
 import ParamField from '../ParamField'
 import { disclosure } from '../disclosure'
 import { baseName } from '../digestReport'
 import { IconError, IconFile, IconLock, JobIcon } from '../icons'
 import { HelpButton, HelpLink } from '../help/HelpLink'
+import HelpPopover from '../help/HelpPopover'
 import { isMac, keyText } from './shortcuts'
 import type { Session } from './useSession'
 import type { RunState } from '../run/useRun'
@@ -18,10 +19,10 @@ import type { SdrfState } from '../sdrf/useSdrf'
 import { Leftovers } from '../Leftovers'
 import { dirName, revealLabel } from '../app/paths'
 import { clock, duration } from '../app/format'
-import TaskChooser from './TaskChooser'
+import TaskChooser, { PresetRow } from './TaskChooser'
 import { LANDING_TASK, taskById, type Task } from './tasks'
 import { INSTRUMENTS, presetText, shownInstrument } from './presets'
-import { PRODUCT_OF, PRODUCTS, fileName, isOn, missingDatabase, neededBy, setProduct, type Product } from './products'
+import { PRODUCT_OF, PRODUCTS, USI_PLACEHOLDER, fileName, isOn, missingDatabase, neededBy, productLabel, setProduct, type Product } from './products'
 
 // A parameter that exists in the CLI but nowhere in the layout would silently
 // be unreachable; surface it instead of hiding it.
@@ -84,8 +85,15 @@ export default function SetupForm({
   const { busy, jobs, lastRun, evidence, revealErr, reveal } = run
   const task = taskById(session.task ?? LANDING_TASK)!
   const batch = jobs.length > 0 || session.mode === 'batch'
-  // The USI row is checked while its accession is still being typed.
-  const [usiOpen, setUsiOpen] = useState(false)
+  // The USI accession is being typed: its row stays checked while empty.
+  const [usiEditing, setUsiEditing] = useState(false)
+
+  // Fields a batch cannot use, and why: one run's identifications are no
+  // identifications of another (useRun sends none in a batch).
+  const batchBlocked = (name: string): string | undefined =>
+    batch && name === 'census_ids'
+      ? 'Not in Batch mode: one file of identifications cannot belong to every input, so a batch marks no spectrum identified. Run each file on its own to use its identifications.'
+      : undefined
 
   const field = (name: string, opts: { brief?: string; required?: boolean } = {}): JSX.Element | null => {
     const spec = PARAM_BY_NAME.get(name)
@@ -103,26 +111,20 @@ export default function SetupForm({
         onPickFile={session.pickFor}
         brief={opts.brief}
         required={opts.required}
+        blocked={batchBlocked(name)}
         unit={unitSpec && unitName ? { spec: unitSpec, value: values[unitName], onChange: (v) => setValue(unitName, v) } : undefined}
       />
     )
   }
 
-  const toggle = (p: Product, on: boolean): void => {
-    if (p.param === 'usi_collection') {
-      setUsiOpen(on)
-      if (!on) setValue('usi_collection', '')
-      return
-    }
-    session.setValues((v) => setProduct(p, on, v, out))
-  }
+  const toggle = (p: Product, on: boolean): void => session.setValues((v) => setProduct(p, on, v, out))
 
   // One product row: checkbox, label, the file it writes, and why it is
   // locked or what it still needs.
   const productRow = (param: string): JSX.Element | null => {
     const p = PRODUCT_OF.get(param)
     if (!p) return null
-    const on = p.param === 'usi_collection' ? usiOpen || isOn(p, values) : isOn(p, values)
+    const on = isOn(p, values) || (p.param === 'usi_collection' && usiEditing)
     const needed = neededBy(p, values)
     const follows = p.follows ? PRODUCT_OF.get(p.follows) : undefined
     const locked = p.param === 'out' || (on && needed.length > 0) || !!follows
@@ -137,7 +139,9 @@ export default function SetupForm({
           ? `needed by ${needed.join(', ')}`
           : follows
             ? `written with the ${follows.label.toLowerCase()}`
-            : null
+            : !on
+              ? (task.productNotes?.[p.param] ?? null)
+              : null
     const spec = PARAM_BY_NAME.get(p.param)
     return (
       <li key={p.param} className={`product${on ? ' on' : ''}${locked ? ' fixed' : ''}`}>
@@ -159,19 +163,31 @@ export default function SetupForm({
         <span id={`${id}-d`} className="product-note">
           {why}
         </span>
-        {on && !!out && !p.column && !p.flag && p.param !== 'out' && spec?.type === 'output-file' && (
+        {on && !!out && !p.column && p.param !== 'out' && spec?.type === 'output-file' && (
           <button type="button" className="link small" aria-label={`Change the file of ${p.label}`} onClick={() => void session.pickFor(spec)}>
             Change…
           </button>
         )}
         {p.param === 'usi_collection' && on && (
-          <input
-            className="usi-acc"
-            aria-label="PRIDE accession for the USI column"
-            placeholder="PXD000000"
-            value={String(values['usi_collection'] ?? '')}
-            onChange={(e) => setValue('usi_collection', e.target.value)}
-          />
+          <>
+            <input
+              className="usi-acc"
+              aria-label="PRIDE accession for the USI column"
+              aria-describedby="usi-h"
+              value={String(values['usi_collection'] ?? '')}
+              onChange={(e) => setValue('usi_collection', e.target.value)}
+              onFocus={() => setUsiEditing(true)}
+              // Left empty, the placeholder again: the CLI writes the column
+              // only with an accession, and the row is checked.
+              onBlur={(e) => {
+                setUsiEditing(false)
+                if (!e.target.value.trim()) setValue('usi_collection', USI_PLACEHOLDER)
+              }}
+            />
+            <span id="usi-h" className="product-note">
+              {String(values['usi_collection']).trim() === USI_PLACEHOLDER ? 'the placeholder until the data set has a PXD accession' : 'the data set accession'}
+            </span>
+          </>
         )}
       </li>
     )
@@ -187,6 +203,20 @@ export default function SetupForm({
     const d = disclosure(open, (o) => setOpenGroups((st) => ({ ...st, [sec.title]: o })))
     const products = names.filter((n) => PRODUCT_OF.has(n))
     const fields = names.filter((n) => !PRODUCT_OF.has(n))
+    // Every field waits for the same report or switch: said once, over the
+    // group, with the control that turns it on; the fields stay folded
+    // until then (doc/GUI-WORKFLOWS.md 2.4).
+    const deps = fields.map((n) => inertDependency(n, values))
+    // A field holding a value of its own stays in view (a dropped taxonomy).
+    const shared =
+      fields.length > 1 &&
+      !fields.some((n) => session.diff.includes(n)) &&
+      deps.every((d) => d && d.note === deps[0]!.note && masters(d).join() === masters(deps[0]!).join())
+        ? deps[0]!
+        : null
+    const master = shared ? masters(shared)[0] : null
+    const masterProduct = master ? PRODUCT_OF.get(master) ?? PRODUCTS.find((q) => q.flag === master) : undefined
+    const masterWords = master ? (productLabel(master) ?? humanName(master)) : ''
     return (
       <details className={`sec${open ? ' open' : ''}${changed ? ' active' : ''}`} key={sec.title} data-group={sec.title} {...d.details}>
         <summary className="disclosure" {...d.summary}>
@@ -203,7 +233,20 @@ export default function SetupForm({
           <div className="sec-body">
             <p className="blurb">{sec.blurb}</p>
             {products.length > 0 && <ul className="products">{products.map(productRow)}</ul>}
-            {fields.map((n) => field(n))}
+            {shared ? (
+              <div className="group-needs" role="note">
+                <span>
+                  Needs the {masterWords.charAt(0).toLowerCase() + masterWords.slice(1)} ({shared.note}): its {fields.length} settings show once it is on.
+                </span>
+                {masterProduct && (
+                  <button type="button" className="secondary small" onClick={() => toggle(masterProduct, true)} aria-label={`Turn on the ${masterWords.toLowerCase()}`}>
+                    Turn on
+                  </button>
+                )}
+              </div>
+            ) : (
+              fields.map((n) => field(n))
+            )}
           </div>
         )}
       </details>
@@ -242,6 +285,7 @@ export default function SetupForm({
     'input',
     'Input',
     <>
+      <div className={batch ? 'input-row batch' : 'input-row'}>
       <div className="seg" role="radiogroup" aria-label="Input mode">
         {(['one', 'batch'] as const).map((m) => (
           <label key={m} className={`seg-opt${(m === 'batch') === batch ? ' on' : ''}`}>
@@ -255,6 +299,26 @@ export default function SetupForm({
             />
             {m === 'one' ? 'One file' : 'Batch'}
           </label>
+        ))}
+      </div>
+      {!batch &&
+        (input ? (
+          <div className="input-card">
+            <IconFile />
+            <div className="path" title={input}>
+              <span className="fname">{baseName(input)}</span>
+              <span className="dir">{dirName(input)}</span>
+            </div>
+            <button className="secondary" onClick={onPickInput}>
+              Change…
+            </button>
+          </div>
+        ) : (
+          <div className="input-card empty-input">
+            <IconFile />
+            <span className="muted">Spectra as mzML, mzPeak or MGF</span>
+            <button onClick={onPickInput}>Choose file…</button>
+          </div>
         ))}
       </div>
       {batch ? (
@@ -286,6 +350,18 @@ export default function SetupForm({
             )}
           </div>
           {folderNote}
+          <div className="out-row">
+            <span className="sublabel">Output folder</span>
+            <span className={run.outDir ? 'mono grow' : 'muted grow'}>{run.outDir ?? 'beside each input file'}</span>
+            <button type="button" className="secondary small" aria-label="Change the output folder" onClick={() => void run.chooseOutDir()}>
+              Change…
+            </button>
+            {run.outDir && (
+              <button type="button" className="link small" onClick={() => run.setOutDir(null)}>
+                Beside inputs
+              </button>
+            )}
+          </div>
           {sdrf && (
             <div className="out-row sdrf-row">
               <span className="sublabel">SDRF file (optional)</span>
@@ -304,33 +380,20 @@ export default function SetupForm({
           {sdrf?.error && <p className="warn">{sdrf.error}</p>}
         </div>
       ) : (
-        <>
-          {input ? (
-            <div className="input-card">
-              <IconFile />
-              <div className="path" title={input}>
-                <span className="fname">{baseName(input)}</span>
-                <span className="dir">{dirName(input)}</span>
-              </div>
-              <button className="secondary" onClick={onPickInput}>
-                Change…
-              </button>
-            </div>
-          ) : (
-            <div className="input-card empty-input">
-              <IconFile />
-              <span className="muted">Spectra as mzML, mzPeak or MGF</span>
-              <button onClick={onPickInput}>Choose file…</button>
-            </div>
-          )}
-          {input && inspector}
-        </>
+        input && inspector
       )}
     </>,
-    <HelpButton to="files-inputs" what="input files" />
+    <>
+      {!batch && (
+        <button type="button" className="link small" onClick={onOpenResults}>
+          Open earlier results…
+        </button>
+      )}
+      <HelpButton to="files-inputs" what="input files" />
+    </>
   )
 
-  const workflowCard = card(2, 'workflow', 'Workflow', <TaskChooser session={session} onOpenResults={onOpenResults} />)
+  const workflowCard = card(2, 'workflow', 'Workflow', <TaskChooser session={session} rowInHead />, <PresetRow session={session} />)
 
   const settingsCard = card(
     3,
@@ -343,6 +406,14 @@ export default function SetupForm({
           <label htmlFor="instrument">
             <span className="pname">Instrument</span>
           </label>
+          <HelpPopover
+            name="fragment_tolerance"
+            label="Instrument"
+            description="A preset sets three options at once: the fragment tolerance, its unit, and the ion series the MS/MS spectra are read as. Orbitrap and TOF HCD: 20 ppm, b/y ions. Orbitrap ETD: 20 ppm, c/z ions for electron-activated spectra (ion series auto). Ion trap CID: 0.3 Da. Custom shows the tolerance and its unit."
+            deflt=""
+            more="The tolerance is the largest m/z error accepted between a fragment peak and a residue mass step. Too tight loses tags; too loose admits wrong ones. Species calls are unreliable at Da tolerances."
+            flags={['fragment_tolerance', 'fragment_tolerance_unit', 'ion_series'].map((n) => ({ name: n, deflt: PARAM_BY_NAME.get(n) ? defaultText(PARAM_BY_NAME.get(n)!) : '' }))}
+          />
         </span>
         <select id="instrument" value={custom ? 'custom' : instrument.id} onChange={(e) => session.chooseInstrument(e.target.value)} aria-describedby="instrument-h">
           {INSTRUMENTS.map((x) => (
@@ -382,20 +453,9 @@ export default function SetupForm({
     'Outputs',
     <>
       {batch ? (
-        <div className="out-row">
-          <span className="sublabel">Output folder</span>
-          <span className={run.outDir ? 'mono grow' : 'muted grow'}>{run.outDir ?? 'beside each input file'}</span>
-          <button type="button" className="secondary small" aria-label="Change the output folder" onClick={() => void run.chooseOutDir()}>
-            Change…
-          </button>
-          {run.outDir && (
-            <button type="button" className="link small" onClick={() => run.setOutDir(null)}>
-              Beside inputs
-            </button>
-          )}
-        </div>
+        <p className="hint">Each file's outputs are named after it, in the output folder of the Input card.</p>
       ) : (
-        <>
+        <div className="out-rows">
           <div className="out-row">
             <span className="sublabel">Output folder</span>
             <span className={session.outDir ? 'mono grow' : 'muted grow'} title={session.outDir}>
@@ -425,19 +485,22 @@ export default function SetupForm({
               disabled={!input}
               placeholder="set from the input file"
               aria-invalid={!!input && !out}
-              aria-describedby="out-help"
+              aria-describedby={input && !out ? 'out-help' : undefined}
+              title="Each file of the run is named after the run, in the output folder"
               onChange={(e) => {
                 const v = e.target.value.replace(/[\\/]/g, '')
                 session.moveOut(v ? `${session.outDir || dirName(input)}${v}.tags.tsv` : '')
               }}
             />
           </div>
-          <p id="out-help" className={input && !out ? 'warn' : 'hint'}>
-            {input && !out ? 'Choose a run name before running.' : 'Each file of the run is named after the run, in the output folder.'}
-          </p>
-        </>
+          {input && !out && (
+            <p id="out-help" className="warn">
+              Choose a run name before running.
+            </p>
+          )}
+        </div>
       )}
-      {missingDatabase(values) && <p className="warn">Some of these need the protein database: choose it in Settings.</p>}
+      {missingDatabase(values) && <p className="hint">Some of these need the protein database: choose it in Settings.</p>}
       <ul className="products" aria-label="Products">
         {task.outputs.map(productRow)}
       </ul>

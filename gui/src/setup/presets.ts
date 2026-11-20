@@ -14,6 +14,9 @@ export interface InstrumentPreset {
   unit: 'ppm' | 'Da'
   /// The ion series the spectra are read as (by unless said).
   ions?: 'by' | 'auto'
+  /// How hybrid-activated spectra (EThcD, ETciD) are read under ions auto
+  /// (by unless said): both tags them as b/y and as c/z.
+  hybrid?: 'by' | 'both'
   validated: boolean
 }
 
@@ -21,7 +24,11 @@ export interface InstrumentPreset {
 // (Astral HCD at 20 ppm reads as Orbitrap/TOF HCD: the same values).
 export const INSTRUMENTS: readonly InstrumentPreset[] = [
   { id: 'orbitrap-hcd', label: 'Orbitrap/TOF HCD', tolerance: '20', unit: 'ppm', validated: true },
-  { id: 'orbitrap-etd', label: 'Orbitrap ETD or EThcD', tolerance: '20', unit: 'ppm', ions: 'auto', validated: true },
+  // ion_series auto is opt-in and its held-out result was inconclusive
+  // (README): not validated. Under auto alone, EThcD and ETciD spectra are
+  // still read as b/y; the EThcD preset adds ion_series_hybrid both.
+  { id: 'orbitrap-etd', label: 'Orbitrap ETD', tolerance: '20', unit: 'ppm', ions: 'auto', validated: false },
+  { id: 'orbitrap-ethcd', label: 'Orbitrap EThcD', tolerance: '20', unit: 'ppm', ions: 'auto', hybrid: 'both', validated: false },
   { id: 'iontrap-cid', label: 'Ion trap CID', tolerance: '0.3', unit: 'Da', validated: true },
   { id: 'timstof', label: 'timsTOF', tolerance: '30', unit: 'ppm', validated: false },
   { id: 'astral', label: 'Astral', tolerance: '20', unit: 'ppm', validated: false }
@@ -32,9 +39,10 @@ export function presetText(p: InstrumentPreset): string {
   return `${p.label} ${p.tolerance} ${p.unit}${p.validated ? '' : ' (unvalidated)'}`
 }
 
-/// The values @p p changes: fragment_tolerance, its unit and the ion series.
+/// The values @p p changes: fragment_tolerance, its unit, the ion series
+/// and how hybrid spectra are read.
 export function applyInstrument(values: Record<string, ParamValue>, p: InstrumentPreset): Record<string, ParamValue> {
-  return { ...values, fragment_tolerance: p.tolerance, fragment_tolerance_unit: p.unit, ion_series: p.ions ?? 'by' }
+  return { ...values, fragment_tolerance: p.tolerance, fragment_tolerance_unit: p.unit, ion_series: p.ions ?? 'by', ion_series_hybrid: p.hybrid ?? 'by' }
 }
 
 const num = (v: unknown, fallback: unknown): number => Number(String(v === '' || v == null ? fallback : v).trim())
@@ -44,7 +52,8 @@ export function matchesInstrument(values: Record<string, unknown>, p: Instrument
   const tol = num(values['fragment_tolerance'], PARAM_BY_NAME.get('fragment_tolerance')?.default)
   const unit = String(values['fragment_tolerance_unit'] || PARAM_BY_NAME.get('fragment_tolerance_unit')?.default)
   const ions = String(values['ion_series'] || PARAM_BY_NAME.get('ion_series')?.default || 'by')
-  return tol === Number(p.tolerance) && unit === p.unit && ions === (p.ions ?? 'by')
+  const hybrid = String(values['ion_series_hybrid'] || PARAM_BY_NAME.get('ion_series_hybrid')?.default || 'by')
+  return tol === Number(p.tolerance) && unit === p.unit && ions === (p.ions ?? 'by') && hybrid === (p.hybrid ?? 'by')
 }
 
 /// The preset Settings shows for @p values: the one last chosen while the

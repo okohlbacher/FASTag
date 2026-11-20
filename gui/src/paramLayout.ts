@@ -128,6 +128,39 @@ export const ALWAYS_SENT: ReadonlySet<string> = new Set([
   'proforma', 'res_conf', 'usi_collection', 'out_spectra', 'threads'
 ])
 
+/// The value option a unit option belongs to (fragment_tolerance_unit ->
+/// fragment_tolerance), or undefined.
+export const valueOfUnit = (unit: string): string | undefined => Object.keys(PARAM_UI).find((n) => PARAM_UI[n].unit === unit)
+
+/// What a run sends of @p values (the rendered options only, so hidden ones
+/// like -version never reach the command line):
+/// - an option of ALWAYS_SENT, unless it is inert;
+/// - any other option only when it differs from the CLI default and is live.
+///   The CLI tests whether some options were given at all (optionGiven_): an
+///   explicit default changes what it does (-shortlist_specificity full turns
+///   the semi-specific Asp-N export of -shortlist_protease auto off, and the
+///   MSFragger defaults of -search_engine apply only to options not given);
+/// - a value and its unit as one: both when either differs from its
+///   default (5 with Da is not 5 ppm), neither otherwise.
+/// An empty ALWAYS_SENT value still goes: it asks for the CLI's default.
+export function sentValues<T>(values: Record<string, T>): Record<string, T> {
+  const out: Record<string, T> = {}
+  for (const name of RENDERED) {
+    if (UNIT_PARAMS.has(name)) continue
+    const v = values[name]
+    if (v !== undefined && (v as unknown) !== '' && inertBecause(name, values)) continue
+    const unit = unitOf(name)
+    if (!ALWAYS_SENT.has(name) && !isChanged(name, v) && !(unit && isChanged(unit, values[unit]))) continue
+    if (v === undefined) continue
+    out[name] = v
+  }
+  for (const unit of UNIT_PARAMS) {
+    const of = valueOfUnit(unit)
+    if (of && of in out && values[unit] !== undefined) out[unit] = values[unit]
+  }
+  return out
+}
+
 /// The dependencies of @p name (PARAM_UI `depends`), none for most.
 export const dependsOf = (name: string): Dependency[] => uiOf(name).depends ?? []
 
@@ -176,10 +209,157 @@ export function masters(d: Dependency): string[] {
 export const unitOf = (name: string): string | undefined => uiOf(name).unit
 export const UNIT_PARAMS = new Set(Object.keys(PARAM_UI).flatMap((n) => (PARAM_UI[n].unit ? [PARAM_UI[n].unit!] : [])))
 
+// Labels in words for options whose CLI name reads as a flag in title case
+// (Species pi0, Massgap min bin). PARAM_UI `label` wins where it is set.
+const LABEL_WORDS: Record<string, string> = {
+  min_filter_length: 'Shortest tag matched',
+  entrapment_fasta: 'Entrapment database',
+  subsample_spectra: 'Spectra to read (count)',
+  subsample_seed: 'Random seed',
+  acquisition_probe_spectra: 'Spectra read by the DIA check',
+  check_header_charge: 'Check precursor charges',
+  check_header_margin: 'Charge check margin',
+  check_header_out: 'Precursor charge check',
+  recon_sub_tolerance: 'Substitution tolerance',
+  delta_spectra_out: 'Spectra per mass shift',
+  delta_counts_out: 'Mass-shift accounting',
+  delta_select: 'Placement counted',
+  delta_group: 'Row width (Da)',
+  delta_isobar_tolerance: 'Isobar tolerance',
+  delta_isotope_flank: 'Isotope-error rows',
+  delta_loc_model: 'Localization evidence',
+  delta_loc_min_evidence: 'Localization margin',
+  delta_loc_null: 'Localization null shift',
+  delta_name_tolerance: 'Naming tolerance',
+  massgap_max_mods: 'Modifications per gap',
+  massgap_min_bin: 'Spectra per histogram row',
+  massgap_min_share: 'Minimum share of a peak',
+  massgap_min_spectra: 'Minimum spectra of a peak',
+  massgap_top: 'Most frequent modifications listed',
+  species_out: 'Species report file',
+  species_evidence: 'Tags counted per spectrum',
+  species_min_len: 'Shortest tag looked up',
+  species_use_gapped: 'Count gapped tags',
+  species_deconvolve: 'Subtract shared evidence',
+  species_orientation: 'Tag orientation',
+  species_call_decoys: 'Decoys per tag',
+  species_call_min_units: 'Minimum spectra for a call',
+  species_call_params: 'Call settings file',
+  species_pi0: 'Share of absent taxa (pi0)',
+  taxonomy_nodes: 'Taxonomy tree (nodes.dmp)',
+  taxonomy_names: 'Taxonomy names (names.dmp)',
+  shortlist_out: 'Protein shortlist',
+  fasta_out: 'Reduced FASTA',
+  search_config_out: 'Search-engine configuration',
+  shortlist_min_spectra: 'Minimum spectra per protein',
+  shortlist_top: 'Proteins kept at most',
+  shortlist_parsimony: 'Drop subsumed proteins',
+  shortlist_specificity: 'Cleavage specificity',
+  shortlist_gapped: 'Count gapped placements',
+  shortlist_max_evalue: 'E-value cutoff for placements',
+  shortlist_force: 'Write for non-tryptic runs',
+  shortlist_decoy_affix: 'Decoy name markers',
+  search_config_template: 'Comet template',
+  search_decoy_prefix: 'Decoy prefix',
+  search_isotope_errors: 'Precursor isotope errors',
+  search_missed_cleavages: 'Missed cleavages in the search',
+  search_nterm_acetyl: 'Protein N-terminal acetylation',
+  search_precursor_tolerance: 'Precursor tolerance',
+  census_out: 'Identifiability table',
+  census_summary_out: 'Identifiability summary',
+  census_sorted_out: 'Spectra ranked by identifiability',
+  census_ids_accept: 'Accept hits',
+  census_ids_exact: 'Exact spectrum match',
+  digest_out: 'Digest report',
+  label_out: 'Label report',
+  digest_models: 'Protease models file',
+  digest_models_version: 'Protease models',
+  digest_calibration: 'Calibration file',
+  digest_detection: 'Per-instrument weights',
+  digest_flank2: 'Use two residues before the cut',
+  digest_min_confidence: 'Minimum call confidence',
+  digest_tag_min: 'Minimum tag ends for a call',
+  digest_window: 'Mass window at tag ends',
+  digest_background_share: 'Background share',
+  digest_quality: 'Cleavage quality',
+  alkylation_out: 'Alkylation report',
+  alkylation_tags_out: 'Alkylation from tags',
+  alkylation_proteome: 'Alkylation proteome',
+  alkylation_min_share: 'Minimum share for a call',
+  alkylation_min_spectra: 'Minimum spectra for a call',
+  alkylation_window: 'Mass window',
+  glyco_out: 'Glycopeptide report file',
+  glyco_min_fraction: 'Minimum oxonium intensity',
+  max_peaks: 'Peaks kept',
+  peaks_per_window: 'Peaks per 100 Da',
+  pick_profile: 'Centroid profile spectra',
+  ion_series_hybrid: 'Hybrid spectra (EThcD)',
+  unknown_charge: 'Precursors without a charge',
+  charge_min: 'Lowest charge tried',
+  charge_max: 'Highest charge tried',
+  charge_infer_margin: 'Charge margin',
+  isotope_error: 'Precursor isotope error',
+  complement_rule: 'Complement pairs',
+  complement_tolerance: 'Complement tolerance',
+  complement_tol_factor: 'Complement tolerance factor',
+  complement_probe: 'Spectra for the auto window',
+  complement_midp: 'Mid-p complement test',
+  tmt_pseudo_filter: 'TMT pseudo-tag filter',
+  tmt_reporter_filter: 'TMT reporter filter'
+}
+
 /// The CLI name in words, for the label beside it: tag_length -> Tag length.
 export function humanName(name: string): string {
   const s = name.replace(/_/g, ' ')
-  return uiOf(name).label ?? s.charAt(0).toUpperCase() + s.slice(1)
+  return uiOf(name).label ?? LABEL_WORDS[name] ?? s.charAt(0).toUpperCase() + s.slice(1)
+}
+
+/// The one line under an Advanced field (doc/GUI-WORKFLOWS.md 3): the first
+/// sentence of the plain help, without option names or version history (the
+/// (?) popover keeps the full text).
+export function hintText(name: string, fallback: string): string {
+  const text = uiOf(name).help?.text ?? fallback
+  // Sentences about removed or earlier versions go; so does "(as in 1.11)".
+  const kept = text
+    .split(/(?<=[.!?])\s+/)
+    .filter((x) => !/\b(removed|was removed)\b.*\b1\.\d|\b1\.\d+(\.\d+)?\b.*\bremoved\b/i.test(x))
+  let first = (kept[0] ?? text)
+    .replace(/\s*\((?:[^()]*\b(?:as in|as before|before|since|from|until|of)\s+1\.\d+(?:\.\d+)?[^()]*)\)/g, '')
+    .replace(/,?\s*as before 1\.\d+(\.\d+)?/g, '')
+  // A flag or snake_case option name reads as its label.
+  first = first.replace(/-?\b([a-z]+(?:_[a-z0-9]+)+)\b/g, (m, n: string) => (PARAM_BY_NAME.has(n) ? humanName(n).toLowerCase() : m))
+  return first.trim()
+}
+
+// The words a choice is shown as; the CLI token is what is sent.
+const CHOICE_WORDS: Record<string, string> = {
+  sage: 'Sage',
+  comet: 'Comet',
+  msfragger: 'MSFragger',
+  'lys-c': 'Lys-C',
+  'arg-c': 'Arg-C',
+  'asp-n': 'Asp-N',
+  'glu-c': 'Glu-C',
+  'lys-n': 'Lys-N',
+  by: 'b/y ions',
+  cz: 'c/z ions',
+  ax: 'a/x ions',
+  both: 'Both',
+  ppm: 'ppm',
+  Da: 'Da',
+  idXML: 'idXML',
+  mzid: 'mzIdentML',
+  mzTab: 'mzTab',
+  tsv: 'TSV'
+}
+
+/// A choice of @p name in words: Sage for sage, Lys-C for lys-c, Genus for
+/// genus. Units and formats keep their spelling.
+export function choiceText(name: string, choice: string): string {
+  if (UNIT_PARAMS.has(name)) return choice
+  if (Object.prototype.hasOwnProperty.call(CHOICE_WORDS, choice)) return CHOICE_WORDS[choice]
+  const s = choice.replace(/_/g, ' ')
+  return s.charAt(0).toUpperCase() + s.slice(1)
 }
 
 const listText = (v: unknown): string =>
@@ -332,6 +512,9 @@ export interface Conflict {
   params: string[]
   /// Why the CLI would refuse, phrased like the CLI's own message.
   note: string
+  /// A required input not chosen yet, not a wrong value: shown in a
+  /// neutral colour (a fresh form is no error).
+  neutral?: true
 }
 
 const int = (v: unknown): number | null => (INT.test(String(v ?? '').trim()) ? Number(String(v).trim()) : null)
@@ -390,12 +573,12 @@ export const CONFLICTS: ((values: Record<string, unknown>, ctx: PreflightContext
   // "-recon_out needs a database: give -recon_fasta (or -fasta)."
   (values) =>
     isActive('recon_out', values) && !isActive('recon_fasta', values) && !isActive('fasta', values)
-      ? { params: ['recon_fasta', 'recon_out', 'fasta'], note: 'The placements need a protein database: choose one under Protein database.' }
+      ? { params: ['recon_fasta', 'recon_out', 'fasta'], note: 'The placements need a protein database: choose one under Protein database.', neutral: true }
       : null,
   // "-shortlist_out needs a database: give -recon_fasta (or -fasta)."
   (values) =>
     ['shortlist_out', 'fasta_out', 'search_config_out'].some((n) => isActive(n, values)) && !isActive('recon_fasta', values) && !isActive('fasta', values)
-      ? { params: ['recon_fasta', 'shortlist_out', 'fasta'], note: 'The shortlist needs a protein database: choose one under Protein database.' }
+      ? { params: ['recon_fasta', 'shortlist_out', 'fasta'], note: 'The shortlist needs a protein database: choose one under Protein database.', neutral: true }
       : null,
   // "-taxdb, -taxonomy_nodes and -taxonomy_names are one set: give all three, or none (to use the bundled taxonomy)."
   (values) => {

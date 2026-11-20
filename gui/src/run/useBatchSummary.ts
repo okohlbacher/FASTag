@@ -21,6 +21,13 @@ async function readJob(j: Job): Promise<JobData> {
     return r.reports
   })
   const sp = o.species_out
+  // The QC report of a Run QC job: its key figures are the batch's columns.
+  const qc = o.qc_out
+    ? await window.fastag.report(o.qc_out).catch((e: unknown) => {
+        unread.qc_out = `Cannot read ${o.qc_out}: ${message(e)}`
+        return null
+      })
+    : null
   const [reports, species] = await Promise.all([
     Promise.all(reads).then((rs) => rs.flat()),
     // An unreadable species report costs the genus cell only.
@@ -45,6 +52,7 @@ async function readJob(j: Job): Promise<JobData> {
     species,
     census: null,
     params: (j.params?.['params'] ?? {}) as Record<string, unknown>,
+    qc,
     unread
   }
 }

@@ -12,19 +12,37 @@ use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
 
-/// The output-file options of FASTag (FASTag.cpp registerOutputFile_), in the
-/// order the CLI lists them in its own output-collision check.
-const OUTPUT_OPTIONS: [&str; 10] = [
-    "out",
-    "out_spectra",
-    "recon_out",
-    "delta_out",
-    "recon_id_out",
-    "digest_out",
-    "label_out",
-    "massgap_out",
-    "glyco_out",
-    "species_out",
+/// The output-file options of FASTag, from the manifest the GUI is built
+/// against (gui/src/params.generated.json, generated from the CLI's own
+/// -write_ini): every `output-file` parameter, so a report a new workflow
+/// writes (qc_out, shortlist_out, census_*, ...) is confirmed before it is
+/// overwritten, cleaned up after a failed or cancelled run, recorded and
+/// revealable like the tags table.
+static MANIFEST: &str = include_str!("../../src/params.generated.json");
+
+pub fn output_options() -> &'static [String] {
+    static OPTIONS: std::sync::OnceLock<Vec<String>> = std::sync::OnceLock::new();
+    OPTIONS.get_or_init(|| {
+        let m: serde_json::Value = serde_json::from_str(MANIFEST).expect("params.generated.json is JSON");
+        m["params"]
+            .as_array()
+            .map(|ps| {
+                ps.iter()
+                    .filter(|p| p["type"] == "output-file")
+                    .filter_map(|p| p["name"].as_str().map(String::from))
+                    .collect()
+            })
+            .unwrap_or_default()
+    })
+}
+
+/// The reports the CLI derives from -out when a switch is on without a path
+/// of their own (FASTag.cpp defaultReportPath): (switch, option, suffix).
+const DERIVED: [(&str, &str, &str); 4] = [
+    ("glyco", "glyco_out", ".glyco.tsv"),
+    ("species", "species_out", ".species.tsv"),
+    ("census", "census_out", ".census.tsv"),
+    ("census", "census_summary_out", ".census_summary.tsv"),
 ];
 
 /// <out> with its final extension (a dot inside the basename) replaced by
@@ -39,21 +57,22 @@ fn default_report_path(out: &str, suffix: &str) -> String {
 
 /// Every file the CLI writes for @p args (as build_args produced them, the
 /// binary not included), with the option that names it: each output-file
-/// option with a value, plus the species and glyco reports the CLI derives
-/// from -out when -species or -glyco is on without a path of their own
-/// (FASTag.cpp 1928-1937), under species_out and glyco_out. Paths are as the
-/// child sees them; relative ones are relative to its cwd. In the CLI's
+/// option with a value, plus the reports the CLI derives from -out when
+/// their switch is on without a path of their own (DERIVED: species, glyco,
+/// and the census table and summary), under their own option. Paths are as
+/// the child sees them; relative ones are relative to its cwd. In argv
 /// order, derived reports last, without empty values.
 pub fn outputs_by_option(args: &[String]) -> Vec<(&'static str, String)> {
+    let options = output_options();
     let mut found: Vec<(&'static str, String)> = Vec::new();
     let mut flags: Vec<&str> = Vec::new();
     let mut i = 0;
     while i < args.len() {
         let a = args[i].as_str();
         if let Some(name) = a.strip_prefix('-') {
-            if let Some(opt) = OUTPUT_OPTIONS.iter().find(|o| **o == name) {
+            if let Some(opt) = options.iter().find(|o| o.as_str() == name) {
                 if let Some(v) = args.get(i + 1) {
-                    found.push((*opt, v.clone()));
+                    found.push((opt.as_str(), v.clone()));
                 }
                 i += 2;
                 continue;
@@ -64,16 +83,15 @@ pub fn outputs_by_option(args: &[String]) -> Vec<(&'static str, String)> {
     }
     let get = |opt: &str| found.iter().find(|(o, _)| *o == opt).map(|(_, v)| v.clone()).unwrap_or_default();
     let out = get("out");
-    // -species writes its report also without -species_out (and -taxdb plus
-    // -species_out turns it on); -glyco likewise without -glyco_out.
-    let glyco = flags.contains(&"glyco") && get("glyco_out").is_empty() && !out.is_empty();
-    let species = flags.contains(&"species") && get("species_out").is_empty() && !out.is_empty();
-    if glyco {
-        found.push(("glyco_out", default_report_path(&out, ".glyco.tsv")));
+    let mut derived: Vec<(&'static str, String)> = Vec::new();
+    if !out.is_empty() {
+        for (flag, opt, suffix) in DERIVED {
+            if flags.contains(&flag) && get(opt).is_empty() {
+                derived.push((opt, default_report_path(&out, suffix)));
+            }
+        }
     }
-    if species {
-        found.push(("species_out", default_report_path(&out, ".species.tsv")));
-    }
+    found.extend(derived);
     found.retain(|(_, v)| !v.is_empty());
     found
 }
@@ -200,6 +218,85 @@ mod tests {
         assert_eq!(default_report_path("C:\\r.1\\x.tsv", ".glyco.tsv"), "C:\\r.1\\x.glyco.tsv");
         // No -out: nothing derived.
         assert!(resolved_outputs(&v(&["-in", "i", "-species"])).is_empty());
+        // -census writes its table and summary beside -out.
+        assert_eq!(
+            resolved_outputs(&v(&["-in", "i", "-out", "/d/a.tags.tsv", "-census", "-census_sorted_out", "/d/a.census_sorted.tsv"])),
+            v(&["/d/a.tags.tsv", "/d/a.census_sorted.tsv", "/d/a.tags.census.tsv", "/d/a.tags.census_summary.tsv"])
+        );
+    }
+
+    #[test]
+    fn every_output_file_option_of_the_manifest_is_an_output() {
+        let options = output_options();
+        for o in [
+            "out", "qc_out", "shortlist_out", "fasta_out", "search_config_out", "census_out", "census_summary_out",
+            "census_sorted_out", "alkylation_out", "alkylation_tags_out", "delta_spectra_out", "delta_counts_out",
+            "check_header_out", "species_out", "glyco_out", "recon_out", "delta_out",
+        ] {
+            assert!(options.iter().any(|x| x == o), "{o} is not an output-file option of the manifest");
+        }
+        assert!(!options.iter().any(|x| x == "in" || x == "recon_fasta"));
+    }
+
+    /// The argv each Setup workflow sends (gui/src/setup/tasks.ts), and the
+    /// files it writes: every one must be confirmed before an overwrite and
+    /// removed after a cancel or failure.
+    fn workflow_argv() -> Vec<(&'static str, Vec<String>, Vec<&'static str>)> {
+        let base = |extra: &[&str]| {
+            let mut a = v(&["-in", "a.mzML", "-out", "a.tags.tsv", "-threads", "0"]);
+            a.extend(extra.iter().map(|s| s.to_string()));
+            a
+        };
+        vec![
+            ("export-tags", base(&["-res_conf", "-out_spectra", "a.spectra.mzML"]), vec!["a.tags.tsv", "a.spectra.mzML"]),
+            ("run-qc", base(&["-qc_out", "a.qc.tsv"]), vec!["a.tags.tsv", "a.qc.tsv"]),
+            (
+                "mass-shift",
+                base(&[
+                    "-recon_fasta", "h.fasta", "-recon_out", "a.recon.tsv", "-delta_out", "a.delta.tsv", "-delta_spectra_out",
+                    "a.delta_spectra.tsv", "-delta_counts_out", "a.delta_counts.tsv",
+                ]),
+                vec!["a.tags.tsv", "a.recon.tsv", "a.delta.tsv", "a.delta_spectra.tsv", "a.delta_counts.tsv"],
+            ),
+            ("species", base(&["-species", "-extension", "2"]), vec!["a.tags.tsv", "a.tags.species.tsv"]),
+            (
+                "db-reduction",
+                base(&["-recon_fasta", "h.fasta", "-shortlist_out", "a.shortlist.tsv", "-fasta_out", "a.reduced.fasta", "-search_config_out", "a.search.json"]),
+                vec!["a.tags.tsv", "a.shortlist.tsv", "a.reduced.fasta", "a.search.json"],
+            ),
+            (
+                "triage",
+                base(&["-census", "-census_score", "-census_sorted_out", "a.census_sorted.tsv"]),
+                vec!["a.tags.tsv", "a.census_sorted.tsv", "a.tags.census.tsv", "a.tags.census_summary.tsv"],
+            ),
+            (
+                "characterize",
+                base(&["-digest_out", "a.digest.tsv", "-label_out", "a.label.tsv", "-alkylation_out", "a.alkylation.tsv", "-glyco", "-species", "-check_header_out", "a.check_header.tsv"]),
+                vec!["a.tags.tsv", "a.digest.tsv", "a.label.tsv", "a.alkylation.tsv", "a.check_header.tsv", "a.tags.glyco.tsv", "a.tags.species.tsv"],
+            ),
+        ]
+    }
+
+    #[test]
+    fn every_workflow_output_is_confirmed_and_cleaned_up() {
+        for (wf, argv, files) in workflow_argv() {
+            assert_eq!(resolved_outputs(&argv), v(&files), "{wf}");
+            let d = tmp(&format!("wf-{wf}"));
+            let input = d.join("a.mzML");
+            std::fs::write(&input, "spectra").unwrap();
+            for f in &files {
+                std::fs::write(d.join(f), "an earlier result").unwrap();
+            }
+            let paths = resolve(&resolved_outputs(&argv), Some(&d));
+            // Overwrite confirmation: every earlier file is asked about.
+            assert_eq!(existing(&paths, &input).len(), files.len(), "{wf}: existing");
+            // Cancel or failure: none is left behind.
+            let c = cleanup(&paths, &input);
+            assert_eq!(c.removed.len(), files.len(), "{wf}: cleanup");
+            assert!(files.iter().all(|f| !d.join(f).exists()), "{wf}: a file was left");
+            assert!(input.exists());
+            let _ = std::fs::remove_dir_all(&d);
+        }
     }
 
     fn tmp(name: &str) -> PathBuf {

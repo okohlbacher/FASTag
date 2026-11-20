@@ -61,9 +61,9 @@ export default function PlanFooter({ session, run }: { session: Session; run: Ru
   const label = originText.replace(/^preset /, '')
   return (
     <div className="plan-footer" role="region" aria-label="Plan">
-      <p className="plan-line">{planLine(label === 'FASTag defaults' ? 'FASTag' : label, values, { input, files: run.jobs.length, outDir: run.outDir })}</p>
+      <p className="plan-line">{planLine(label === 'FASTag defaults' ? 'FASTag' : label, values, { input, files: run.jobs.length, outDir: run.outDir, batch: session.mode === 'batch' })}</p>
       <div className="row tight plan-actions">
-        <button type="button" className="secondary small" onClick={copy} disabled={!input || run.jobs.length > 0}>
+        <button type="button" className="secondary small" onClick={copy} disabled={!input || run.jobs.length > 0 || session.mode === 'batch'}>
           {copied === 'yes' ? 'Copied' : 'Copy command line'}
         </button>
         <button type="button" className="secondary small" onClick={exportIni} title="Write these settings as an INI file the FASTag command line reads">

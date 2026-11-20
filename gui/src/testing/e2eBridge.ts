@@ -119,6 +119,8 @@ import it20Out from '../fixtures/cli-1.12/iontrap_20ppm.stdout?raw'
 import diaErr from '../fixtures/cli-1.12/dia_raw.stderr?raw'
 import qcTsv from '../fixtures/cli-1.15/ecoli_ms2_small_0.3da.qc.tsv?raw'
 import censusSortedTsv from '../fixtures/cli-1.15/ecoli_ms2_small_0.3da.census_sorted.tsv?raw'
+// A real census summary (FASTag 1.11, PXD003531) beside the ranking.
+import censusSummaryTsv from '../fixtures/cli/batch/pxd003531/run.tags.census_summary.tsv?raw'
 import shortlistTsv from '../fixtures/cli-1.15/ecoli_ms2_small_0.3da.shortlist.tsv?raw'
 import manifest from '../params.generated.json'
 import pkg from '../../package.json'
@@ -335,7 +337,8 @@ export function installE2EBridge(): Origin | undefined {
   const workflowFiles: Record<string, string> = {
     '/data/run01.qc.tsv': qcTsv,
     '/data/run01.shortlist.tsv': shortlistTsv,
-    '/data/run01.census_sorted.tsv': censusSortedTsv
+    '/data/run01.census_sorted.tsv': censusSortedTsv,
+    '/data/run01.tags.census_summary.tsv': censusSummaryTsv
   }
   mock.reportFiles = {
     '/data/run01.digest.tsv': digestTsv,
@@ -350,7 +353,9 @@ export function installE2EBridge(): Origin | undefined {
 
   const gate = GATE[fixture]
   if (gate) {
-    mock.reportFiles = { '/data/run01.digest.tsv': gate.digest, '/data/run01.label.tsv': gate.label, ...workflowFiles }
+    // The glyco table of the recon gate run, where a -glyco run of run01
+    // writes it (the gate case has the log line, not the table).
+    mock.reportFiles = { '/data/run01.digest.tsv': gate.digest, '/data/run01.label.tsv': gate.label, '/data/run01.tags.glyco.tsv': RECON_CASES.human.glyco, ...workflowFiles }
     mock.speciesResult = speciesFromTsv(gate.species, '/data/run01.tags.species.tsv')
   }
   const recon = RECON[fixture]
@@ -594,8 +599,22 @@ export function installE2EBridge(): Origin | undefined {
     mock.resultsPosition = (_path, view, row) => Promise.resolve(sortedIds(view).ids.indexOf(row))
   }
 
+  // The lines of a recorded log the run asked for: a run sent no -glyco
+  // prints no glyco line, one that reads all spectra no subsampling line,
+  // one without -species no species line (the fixtures were recorded with
+  // them on).
+  const asked = (lines: string[], params: Record<string, unknown>): string[] => {
+    const on = (n: string): boolean => params[n] === true || (typeof params[n] === 'string' && String(params[n]).trim() !== '' && Number(params[n]) !== 0)
+    return lines.filter(
+      (l) =>
+        !(/^Glyco: /.test(l) && !on('glyco')) &&
+        !(/^Subsampling: /.test(l) && !on('subsample_fraction') && !on('subsample_spectra')) &&
+        !(/^Species: /.test(l) && !on('species'))
+    )
+  }
+
   // What the simulated CLI prints for a run of @p input.
-  const script = (input: string): Script => {
+  const script = (input: string, params: Record<string, unknown> = {}): Script => {
     const name = base(input)
     const reading = [`${name}: Reading spectra`, `${name}: Loading the spectra index`]
     if (fixture === 'slow') return { phase: 'Reading spectra', lines: reading, ok: false, code: null, hang: true }
@@ -609,8 +628,8 @@ export function installE2EBridge(): Origin | undefined {
         ok: false,
         code: 1
       }
-    if (gate) return { phase: 'Reading spectra', lines: logLines(gate), ok: true, code: 0, step: 100 }
-    if (recon) return { phase: 'Reading spectra', lines: recon.log.split(/\r?\n/).filter((l) => l !== ''), ok: true, code: 0, step: 40 }
+    if (gate) return { phase: 'Reading spectra', lines: asked(logLines(gate), params), ok: true, code: 0, step: 100 }
+    if (recon) return { phase: 'Reading spectra', lines: asked(recon.log.split(/\r?\n/).filter((l) => l !== ''), params), ok: true, code: 0, step: 40 }
     if (fixture === 'gate-batch') {
       const lines = (t: string): string[] => t.split(/\r?\n/).filter((l) => l !== '')
       if (name === `${DIA_REFUSAL.name}.mzML`) return { phase: 'Reading spectra', lines: lines(DIA_REFUSAL.log), ok: false, code: DIA_REFUSAL.code, step: 10 }
@@ -647,18 +666,19 @@ export function installE2EBridge(): Origin | undefined {
     // The reply's command, which the run record keeps (mockBridge recordRuns).
     started.command = e2eCommand(mock.binaryInfo.bin, params, started.out ?? '')
     if (recon && started.outputs) {
-      // The outputs of the recorded run, whatever the form sent.
-      started.outputs = {
-        ...started.outputs,
-        massgap_out: '/data/run01.massgap.tsv',
-        recon_out: '/data/run01.recon.tsv',
-        delta_out: '/data/run01.delta.tsv',
-        glyco_out: '/data/run01.tags.glyco.tsv',
-        recon_id_out: recon.mzTab ? '/data/run01.recon.mzTab' : null
-      }
+      // The files of the recorded run, for the outputs the form asked for
+      // only: a run without -glyco has no glyco report.
+      const sent = (params['params'] ?? {}) as Record<string, unknown>
+      const want = (n: string): boolean => sent[n] === true || (typeof sent[n] === 'string' && String(sent[n]).trim() !== '')
+      const o = started.outputs
+      if (want('massgap_out')) o.massgap_out = '/data/run01.massgap.tsv'
+      if (want('recon_out')) o.recon_out = '/data/run01.recon.tsv'
+      if (want('delta_out')) o.delta_out = '/data/run01.delta.tsv'
+      if (want('glyco')) o.glyco_out = '/data/run01.tags.glyco.tsv'
+      if (want('recon_id_out')) o.recon_id_out = recon.mzTab ? '/data/run01.recon.mzTab' : null
     }
     const id = mock.lastRunId
-    const s = script(String(params['in']))
+    const s = script(String(params['in']), (params['params'] ?? {}) as Record<string, unknown>)
     const at = (ms: number, f: () => void): void => {
       setTimeout(() => {
         if (!cancelled.has(id)) f()

@@ -1484,6 +1484,7 @@ mod tests {
                 recon_id_out: at("a.ids.tsv"),
                 glyco_out: at("a.tags.glyco.tsv"),
                 out_spectra: at("a.spectra.mzML"),
+                ..Default::default()
             }
         );
         // The same files the cleanup removes.
@@ -2436,6 +2437,7 @@ mod tests {
                 recon_id_out: s("/d/a.recon_id.tsv"),
                 glyco_out: s("/d/a.tags.glyco.tsv"),
                 out_spectra: s("/d/a.spectra.mzpeak"),
+                ..Default::default()
             }),
             command: Some(["/bin/FASTag", "-in", "/d/a.mzML", "-out", "/d/a.tags.tsv", "-progress"].map(String::from).to_vec()),
         };

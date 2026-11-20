@@ -95,3 +95,23 @@ describe('help vs docs', () => {
     })
   }
 })
+
+describe('settings groups in Help', () => {
+  it('every topic link is keyed by a current group title and points at a Help section', async () => {
+    const { SECTION_TOPIC, PAGE_OF } = await import('./HelpView')
+    const { SECTIONS } = await import('../paramLayout')
+    const titles = new Set(SECTIONS.map((s) => s.title))
+    for (const [title, [to]] of Object.entries(SECTION_TOPIC)) {
+      expect(titles.has(title), title).toBe(true)
+      expect(PAGE_OF.has(to), `${title} -> ${to}`).toBe(true)
+    }
+  })
+
+  it('no Help text names the groups or tasks of the old Setup', async () => {
+    const { PAGES } = await import('./content')
+    const { renderToStaticMarkup } = await import('react-dom/server')
+    const text = PAGES.flatMap((p) => p.sections.map((s) => renderToStaticMarkup(<>{s.body}</>))).join('\n')
+    for (const old of ['Sequence matching', 'Reports › ', 'Open results / inspect spectra', 'Batch QC vs SDRF', 'Starting from'])
+      expect(text, old).not.toContain(old)
+  })
+})

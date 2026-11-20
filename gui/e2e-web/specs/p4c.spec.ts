@@ -33,12 +33,22 @@ function oracle(c: string) {
   }
 }
 
+// A Mass-shift survey of the recon gate run: its FASTA, the mass-gap report,
+// the placements as identifications and, under Advanced > Other analyses,
+// the glyco report, all of which the recorded run wrote.
 async function runOn(page: Page, fixture: string): Promise<void> {
   await openApp(page, fixture)
-  await page.getByRole('radio', { name: /^Characterize a run/ }).check()
+  await page.getByRole('radio', { name: /^Mass-shift survey/ }).check()
   await page.getByRole('button', { name: 'Choose file…' }).click()
+  await page.locator('#p-recon_fasta').fill('/data/human.fasta')
+  await page.locator('#out-massgap_out').check()
+  await page.locator('#out-recon_id_out').check()
+  await page.locator('details.advanced > summary').click()
+  await page.locator('summary', { hasText: 'Other analyses' }).click()
+  await page.locator('summary', { has: page.locator('.sec-title', { hasText: /^Glycopeptides$/ }) }).click()
+  await page.locator('#p-glyco').check()
   await page.getByRole('button', { name: 'Run', exact: true }).click()
-  await expect(page.getByRole('tab', { name: 'Overview' })).toHaveAttribute('aria-selected', 'true')
+  await expect(page.getByRole('tab', { name: 'Mass shifts' })).toHaveAttribute('aria-selected', 'true')
 }
 
 const stat = (page: Page, label: string) => page.locator('.recon-view .stat', { has: page.locator('dt', { hasText: new RegExp(`^${label}$`) }) }).locator('dd')
@@ -159,20 +169,14 @@ test('E. coli recon run: -recon_localize columns, the mzTab identifications, and
   await expect(page.getByText(/NOT FDR-controlled/)).toBeVisible()
 })
 
-test('no FASTA: no Mass shifts tab; the Overview offers the FASTA and runs with extension 3 and the placement reports', async ({ page }) => {
-  await runOn(page, 'gate')
+test('Characterize: no Mass shifts tab, and no FASTA action in the Overview', async ({ page }) => {
+  await openApp(page, 'gate')
+  await page.getByRole('radio', { name: /^Characterize a run/ }).check()
+  await page.getByRole('button', { name: 'Choose file…' }).click()
+  await page.getByRole('button', { name: 'Run', exact: true }).click()
+  await expect(page.getByRole('tab', { name: 'Overview' })).toHaveAttribute('aria-selected', 'true')
   await expect(page.getByRole('tab', { name: 'Mass shifts' })).toHaveCount(0)
-  await page.evaluate(() => {
-    ;(window as unknown as { __fastagE2E: { mock: { nextPickInput: string } } }).__fastagE2E.mock.nextPickInput = '/db/human.fasta'
-  })
-  await page.getByRole('tab', { name: 'Overview' }).click()
-  await page.getByRole('button', { name: 'Add FASTA and run again' }).click()
-  await expect.poll(async () => (await mockState<unknown[]>(page, 'runCalls')).length).toBe(2)
-  const calls = await mockState<{ params: Record<string, unknown> }[]>(page, 'runCalls')
-  const p = calls[1].params
-  expect(p.recon_fasta).toBe('/db/human.fasta')
-  expect(p.extension).toBe('3')
-  for (const k of ['recon_out', 'massgap_out']) expect(String(p[k])).toMatch(new RegExp(`/data/.*${k.replace('_out', '')}\\.tsv$`))
+  await expect(page.getByRole('button', { name: /FASTA/ })).toHaveCount(0)
 })
 
 test('Open report… opens a delta table in Mass shifts', async ({ page }) => {

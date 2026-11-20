@@ -968,7 +968,16 @@ export default function ResultsTable({ path, source, rerunResConf, spectrum }: P
             const name = columns[j] ?? ''
             return (
               <div className={`rt-cell${numeric.has(name) ? ' n' : ''}`} role="gridcell" key={j} title={c} aria-label={c}>
-                {name === 'evalue' ? <EValue text={c} /> : name === 'fasta_hit' ? hitWords(c) : fitMiddle(c, width(name))}
+                {name === 'evalue' ? (
+                  <EValue text={c} />
+                ) : name === 'fasta_hit' ? (
+                  hitWords(c)
+                ) : name === 'spectrum' ? (
+                  // The scan number tells rows apart; the native ID is the tooltip.
+                  fitMiddle(spectrumHint(c) || c, width(name))
+                ) : (
+                  fitMiddle(c, width(name))
+                )}
               </div>
             )
           })
@@ -1018,6 +1027,10 @@ export default function ResultsTable({ path, source, rerunResConf, spectrum }: P
         >
           Columns…
         </button>
+        <span className="rt-group" role="group" aria-label="Active row">
+        <span className="rt-group-label" aria-hidden="true">
+          Row
+        </span>
         <button
           type="button"
           className="secondary"
@@ -1053,7 +1066,9 @@ export default function ResultsTable({ path, source, rerunResConf, spectrum }: P
             {spectrum.state === 'no' ? SPECTRUM_NEEDS : 'Open in Spectrum'}
           </button>
         )}
-        <span className="rt-exp">
+        </span>
+        {/* One export control: what to write, and the button that writes it. */}
+        <span className="rt-exp rt-group" role="group" aria-label="Export">
           <label htmlFor={`${id}-fmt`}>Export as</label>
           <select
             id={`${id}-fmt`}
@@ -1070,6 +1085,9 @@ export default function ResultsTable({ path, source, rerunResConf, spectrum }: P
               ALPS reads (CSV)
             </option>
           </select>
+          <button ref={exportBtnRef} type="button" className="secondary" disabled={!canExport} onClick={startExport}>
+            {kind === 'table' ? 'Export shown rows…' : 'Export reads…'}
+          </button>
         </span>
         {meta && !readsOk && rerunResConf && (
           <button
@@ -1082,9 +1100,6 @@ export default function ResultsTable({ path, source, rerunResConf, spectrum }: P
             Re-run with per-residue confidence
           </button>
         )}
-        <button ref={exportBtnRef} type="button" className="secondary" disabled={!canExport} onClick={startExport}>
-          {kind === 'table' ? 'Export shown rows…' : 'Export reads…'}
-        </button>
         <span className="rt-copied" role="status" aria-live="polite">
           {copyNote}
         </span>

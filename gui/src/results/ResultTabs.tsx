@@ -21,6 +21,7 @@ import OverviewPanel from './OverviewPanel'
 import type { Overview, TileAction } from './overview'
 import ReconView from './ReconView'
 import ReportTable from './ReportTable'
+import type { WorkflowReports } from './workflowReports'
 import GlycoTable from './GlycoTable'
 import SpectrumPanel, { type SpectrumSource, type SpectrumTarget } from '../spectrum/SpectrumPanel'
 
@@ -36,24 +37,31 @@ const TAB_LABEL: Record<Tab, string> = {
   digest: 'Digest',
   glyco: 'Glyco'
 }
-/// The tabs, in the order of the workflows (doc/GUI-WORKFLOWS.md 3): only
-/// those whose report exists. The Overview while a run's results are shown,
-/// Tags always, the Spectrum tab (P4) only with a CLI that has
-/// -dump_spectrum.
-export function tabsOf(has: Partial<Record<Tab, boolean>>): Tab[] {
-  const order: Tab[] = ['overview', 'results', 'spectrum', 'qc', 'recon', 'species', 'shortlist', 'triage', 'digest', 'glyco']
+// The order of every tab, after those a workflow puts first.
+const ORDER: Tab[] = ['overview', 'results', 'spectrum', 'qc', 'recon', 'species', 'shortlist', 'triage', 'digest', 'glyco']
+
+/// The tabs each workflow opens, in its order (doc/GUI-WORKFLOWS.md 1).
+export const WORKFLOW_TABS: Record<string, Tab[]> = {
+  'export-tags': ['overview', 'results', 'spectrum'],
+  'run-qc': ['overview', 'qc', 'results'],
+  'mass-shift': ['overview', 'recon', 'results', 'spectrum'],
+  species: ['overview', 'species'],
+  'db-reduction': ['overview', 'shortlist'],
+  triage: ['overview', 'triage', 'spectrum'],
+  characterize: ['overview', 'digest', 'species', 'glyco']
+}
+
+/// The tabs shown: only those whose report exists (the Overview while a
+/// run's results are shown, Tags always, the Spectrum tab (P4) only with a
+/// CLI that has -dump_spectrum), the workflow's own first, in its order
+/// (doc/GUI-WORKFLOWS.md 1), then the others.
+export function tabsOf(has: Partial<Record<Tab, boolean>>, workflow?: string | null): Tab[] {
+  const first = (workflow && WORKFLOW_TABS[workflow]) || []
+  const order = [...first, ...ORDER.filter((t) => !first.includes(t))]
   return order.filter((t) => t === 'results' || has[t])
 }
 
-/// The reports of the run shown that have a view of their own: the QC
-/// report, the shortlist (with its reduced FASTA and engine configuration)
-/// and the identifiability ranking, at the paths the run was sent.
-export interface WorkflowReports {
-  qc?: string
-  shortlist?: string
-  triage?: string
-  files?: { label: string; path: string }[]
-}
+export type { WorkflowReports }
 
 export interface ResultTabsProps {
   tab: Tab
@@ -84,7 +92,7 @@ export interface ResultTabsProps {
   showFailure?: boolean
   // The Overview of the run shown (none: no Overview tab), its input, and
   // what its actions do; locked while busy.
-  overview?: { model: Overview; input: string; locked: boolean } | null
+  overview?: { model: Overview; input: string; locked: boolean; params?: Record<string, unknown>; workflow?: string | null; missing?: string[] } | null
   onOverviewAction?(a: TileAction): void
   // Over the tabs while a single run goes (RunningPanel).
   runningState?: ReactNode
@@ -102,8 +110,8 @@ export interface ResultTabsProps {
   // which the Spectrum tab dumps peaks under the run's own options.
   spectrumSupport?: SpectrumSupport | null
   spectrumRun?: { input: string; params: Record<string, unknown> } | null
-  // The QC, shortlist and triage reports of the run shown.
-  workflowReports?: WorkflowReports | null
+  // The workflow of the run shown: its tabs come first, in its order.
+  workflow?: string | null
 }
 
 export default function ResultTabs(p: ResultTabsProps): JSX.Element {
@@ -112,18 +120,18 @@ export default function ResultTabs(p: ResultTabsProps): JSX.Element {
   const massgap = reports.list.find((r) => r.kind === 'massgap') ?? null
   const hasRecon = !!(massgap || tables.recon || tables.delta || tables.reconIds)
   const spectrumOn = !!p.spectrumSupport?.supported
-  const wr = p.workflowReports ?? {}
+  const wr: WorkflowReports = reports.workflow ?? {}
   const tabs = tabsOf({
     overview: !!p.overview,
     spectrum: spectrumOn,
     qc: !!wr.qc,
-    recon: hasRecon,
+    recon: hasRecon || !!wr.deltaSpectra || !!wr.deltaCounts,
     species: !!species || !!speciesRun?.enabled,
     shortlist: !!wr.shortlist,
     triage: !!wr.triage,
     digest: reports.list.length > 0 || reports.errors.length > 0,
     glyco: !!tables.glyco
-  })
+  }, p.workflow)
   // A tab whose content is gone (a new run started, or the Spectrum tab with
   // a CLI that cannot dump spectra) shows the Tags.
   const tab: Tab = tabs.includes(p.tab) ? p.tab : 'results'
@@ -229,6 +237,9 @@ export default function ResultTabs(p: ResultTabsProps): JSX.Element {
             <OverviewPanel
               overview={p.overview.model}
               input={p.overview.input}
+              params={p.overview.params}
+              workflow={p.overview.workflow}
+              missing={p.overview.missing}
               busy={busy || p.overview.locked}
               onAction={(a) => p.onOverviewAction?.(a)}
             />
@@ -236,10 +247,30 @@ export default function ResultTabs(p: ResultTabsProps): JSX.Element {
         ) : (tab === 'qc' || tab === 'shortlist' || tab === 'triage') && wr[tab] ? (
           <div className="tablewrap">
             <ReportTable key={`${tab}:${wr[tab]}`} kind={tab} path={wr[tab]!} files={tab === 'shortlist' ? wr.files : undefined} />
+            {tab === 'triage' && wr.censusSummary && (
+              <details className="raw">
+                <summary>Run summary of the identifiability table</summary>
+                <ReportTable key={`sum:${wr.censusSummary}`} kind="generic" path={wr.censusSummary} />
+              </details>
+            )}
           </div>
         ) : tab === 'recon' ? (
           <div className="tablewrap">
-            <ReconView massgap={massgap} tables={tables} gen={reports.gen} notice={reports.notice} action={p.reconAction} extend={p.reconExtend} onOpen={p.openReport} />
+            {(hasRecon || (!wr.deltaSpectra && !wr.deltaCounts)) && (
+              <ReconView massgap={massgap} tables={tables} gen={reports.gen} notice={reports.notice} action={p.reconAction} extend={p.reconExtend} onOpen={p.openReport} />
+            )}
+            {wr.deltaSpectra && (
+              <details className="raw" open={!hasRecon}>
+                <summary>Spectra per mass shift</summary>
+                <ReportTable key={`ds:${wr.deltaSpectra}`} kind="generic" path={wr.deltaSpectra} />
+              </details>
+            )}
+            {wr.deltaCounts && (
+              <details className="raw" open={!hasRecon}>
+                <summary>Mass-shift accounting: how many spectra reach each step</summary>
+                <ReportTable key={`dc:${wr.deltaCounts}`} kind="generic" path={wr.deltaCounts} />
+              </details>
+            )}
           </div>
         ) : tab === 'glyco' && tables.glyco ? (
           <div className="tablewrap">

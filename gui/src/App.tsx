@@ -31,12 +31,10 @@ import { useDrops } from './shell/useDrops'
 import { CloseQuestion, OverwriteQuestion } from './shell/Questions'
 import Notices, { type Toast } from './shell/Notices'
 import { useFinish } from './shell/useFinish'
-import { LANDING, type Origin, type TaskId } from './setup/tasks'
+import { LANDING, taskById, type Origin, type TaskId } from './setup/tasks'
 import PlanFooter from './setup/PlanFooter'
 import { SECTION_OF } from './paramLayout'
 import type { Tab } from './app/viewStore'
-import type { WorkflowReports } from './results/ResultTabs'
-import { stripExt } from './app/paths'
 import type { ParamValue } from './ParamField'
 import RunningPanel from './results/RunningPanel'
 import { buildOverview, type TileAction } from './results/overview'
@@ -99,7 +97,8 @@ export default function App({ start = LANDING }: { start?: Origin } = {}): JSX.E
   taskRef.current = session.task
   const run = useRun(session, viewStore, {
     onStart: () => setView('results'),
-    landing: () => (taskRef.current ? (LANDING_TAB[taskRef.current] ?? null) : null)
+    landing: () => (taskRef.current ? (LANDING_TAB[taskRef.current] ?? null) : null),
+    workflow: () => taskRef.current ?? null
   })
   const { running, batchRunning, busy, jobs } = run
   // The Batch view's SDRF (P4): compared with the jobs as they finish.
@@ -285,35 +284,22 @@ export default function App({ start = LANDING }: { start?: Origin } = {}): JSX.E
   const shown = run.shown
   // The Spectrum tab dumps peaks under the options of the run shown.
   const spectrumRun = useMemo(() => (shown ? { input: shown.input, params: shown.params } : null), [shown])
-  // The QC, shortlist and triage reports of the run shown, where it was
-  // told to write them (the census table goes beside the tags by default).
-  const tagsPath = run.results?.path ?? ''
-  const workflowReports = useMemo((): WorkflowReports | null => {
-    if (!shown) return null
-    const sent = (n: string): string | undefined => {
-      const v = shown.params[n]
-      return typeof v === 'string' && v.trim() ? v : undefined
-    }
-    const census = shown.params['census'] === true && tagsPath ? `${stripExt(tagsPath)}.census.tsv` : undefined
-    const files = [
-      { label: 'reduced FASTA', path: sent('fasta_out') },
-      { label: 'engine configuration', path: sent('search_config_out') }
-    ].filter((f): f is { label: string; path: string } => !!f.path)
-    return { qc: sent('qc_out'), shortlist: sent('shortlist_out'), triage: sent('census_sorted_out') ?? sent('census_out') ?? census, files }
-  }, [shown, tagsPath])
   const preset = INSTRUMENTS.find((x) => x.id === session.instrument)
   const presetLabel = shown && preset && matchesInstrument(shown.params, preset) ? presetText(preset) : null
   const overview = useMemo(
     () =>
       shown
         ? {
-            model: buildOverview({ log: shown.log, reports: shown.reports, species: shown.species, census: null, params: shown.params, instrument: presetLabel }),
+            model: buildOverview({ log: shown.log, reports: shown.reports, species: shown.species, census: shown.census ?? null, params: shown.params, instrument: presetLabel }),
             input: shown.input,
+            params: shown.params,
+            workflow: shown.workflow ? (taskById(shown.workflow)?.label ?? null) : null,
+            missing: run.reports.missing ?? [],
             // Its actions run the form's input again: not another file's.
             locked: shown.input !== input || jobs.length > 0
           }
         : null,
-    [shown, presetLabel, input, jobs.length]
+    [shown, presetLabel, input, jobs.length, run.reports.missing]
   )
 
   // An Overview tile's action: the option on in the form, and the run again
@@ -337,9 +323,11 @@ export default function App({ start = LANDING }: { start?: Origin } = {}): JSX.E
     await run.runWith(over)
   }
 
-  // Not behind a batch queue or the browse-only task: their single-file
-  // run controls are hidden, so shortcuts must not start that hidden setup.
-  const canRun = !!bin?.ok && !!input && !!out && !running && !batchRunning && jobs.length === 0 && !blocked && !inspector.held
+  // Not behind a batch queue, nor in Batch mode with an empty queue: the
+  // single-file controls are hidden there, so neither Run nor a shortcut
+  // may start that hidden single-file setup.
+  const batchMode = session.mode === 'batch' || jobs.length > 0
+  const canRun = !!bin?.ok && !!input && !!out && !running && !batchRunning && !batchMode && !blocked && !inspector.held
 
   // The checks after a run, from its reports and FASTag's log lines.
   const after = postRunChecks({ reports: run.reports.list, notes: run.shownNotes, species: values['species'] === true })
@@ -378,7 +366,17 @@ export default function App({ start = LANDING }: { start?: Origin } = {}): JSX.E
     // The tolerance shows under the Instrument's Custom.
     if (SECTION_OF.get(hit.name)?.home === 'common' && !document.getElementById(`p-${hit.name}`)) session.chooseInstrument('custom')
     setTimeout(() => {
-      let el = document.getElementById(`p-${hit.name}`) as HTMLInputElement | null
+      // The field, or the product checkbox of an output (out-<name>, or the
+      // switch it drives), or, while its group waits for a report, the
+      // group's Turn on.
+      const byName = (n: string): HTMLElement | null =>
+        document.getElementById(`p-${n}`) ?? document.getElementById(`out-${n}`) ?? document.querySelector(`.products input[data-param="${n}"]`)
+      // Folded behind its group's "Needs …" line: the switch it waits for,
+      // else that line's Turn on.
+      const waits = inertDependency(hit.name, values)
+      let el = (byName(hit.name) ??
+        (waits ? byName(Array.isArray(waits.on) ? waits.on[0] : waits.on) : null) ??
+        (hit.section ? document.querySelector(`[data-group="${hit.section}"] .group-needs button`) : null)) as HTMLInputElement | null
       // Hidden until its section's switch is on: the switch.
       const master = SECTION_OF.get(hit.name)?.master
       if (el?.closest('[hidden]') && master) el = document.getElementById(`p-${master}`) as HTMLInputElement | null
@@ -501,6 +499,7 @@ export default function App({ start = LANDING }: { start?: Origin } = {}): JSX.E
       onFix={session.applyFix}
       input={input}
       out={out}
+      batchMode={batchMode}
       jobs={jobs.length}
       remaining={run.remaining}
       failedJobs={run.failedJobs}
@@ -659,10 +658,11 @@ export default function App({ start = LANDING }: { start?: Origin } = {}): JSX.E
                 onOverviewAction={(a) => void overviewAction(a)}
                 spectrumSupport={spectrumSupport}
                 spectrumRun={spectrumRun}
-                workflowReports={workflowReports}
+                workflow={shown?.workflow ?? null}
                 rerunResConf={
                   // Only for the output of the run the form would repeat.
-                  run.results?.input && run.results.input === input && jobs.length === 0 && bin?.ok
+                  // Not after a run that was already sent res_conf: it would write the same file.
+                  run.results?.input && run.results.input === input && jobs.length === 0 && bin?.ok && shown?.params['res_conf'] !== true
                     ? {
                         run: () => void overviewAction({ kind: 'enable', label: 'Re-run with per-residue confidence', values: { res_conf: true } }),
                         disabled: busy || !!blocked

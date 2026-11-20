@@ -171,16 +171,21 @@ for (const w of [1000, 1400]) {
     expect(m.itemsInside).toBe(true)
   })
 
-  test(`${w} px: the Overview's FASTA action shows its whole button label`, async ({ page }) => {
+  test(`${w} px: the Overview's tiles keep their text inside, notes at two lines`, async ({ page }) => {
     await page.setViewportSize({ width: w, height: 800 })
     await openApp(page, 'gate')
     await page.getByRole('radio', { name: /^Characterize a run/ }).check()
     await page.getByRole('button', { name: 'Choose file…' }).click()
     await page.getByRole('button', { name: 'Run', exact: true }).click()
     await page.getByRole('tab', { name: 'Overview' }).click()
-    const btn = page.getByRole('button', { name: 'Add FASTA and run again' })
-    await expect(btn).toBeVisible()
-    const fits = await btn.evaluate((b) => b.scrollWidth <= b.clientWidth && b.getBoundingClientRect().right <= window.innerWidth)
+    await expect(page.locator('.tile').first()).toBeVisible()
+    const fits = await page.evaluate(() =>
+      [...document.querySelectorAll<HTMLElement>('.tile')].every((t) => t.scrollWidth <= t.clientWidth + 1 && t.getBoundingClientRect().right <= window.innerWidth)
+    )
     expect(fits).toBe(true)
+    const lines = await page.evaluate(() =>
+      Math.max(...[...document.querySelectorAll<HTMLElement>('.tile-note')].map((n) => Math.round(n.getBoundingClientRect().height / parseFloat(getComputedStyle(n).lineHeight))))
+    )
+    expect(lines).toBeLessThanOrEqual(2)
   })
 }

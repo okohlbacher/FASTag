@@ -161,9 +161,14 @@ export const WORKFLOWS: HelpPage = {
             FDR-controlled: search the reduced FASTA with your engine, which makes its own decoys.
           </p>
           <p>
-            The workflow uses the validated shortlist recipe of doc/SHORTLIST.md (gapped placements, E-value 10,
-            shortest placed tag 6 residues, 2 missed cleavages). Add the host proteome and contaminants as
-            <strong> Background proteins</strong>, so they are always searched.
+            The workflow sets the shortlist recipe of doc/SHORTLIST.md (gapped placements, E-value 10, shortest placed
+            tag 6 residues, 2 missed cleavages) as its default recipe. It is <strong>not validated</strong>: with
+            MSFragger and the tryptic shortlist it passed its second held-out test and failed the third (8 new runs:
+            one run kept 53% of the full search, another had an entrapment FDP of 2.1%). From FASTag 1.15.4 the CLI
+            applies it by default only with MSFragger and the trypsin shortlist; the GUI also sets it for Sage, Comet
+            and other proteases, where it has no held-out test. Change it under Advanced. Add the host proteome and
+            contaminants as <strong>Background proteins</strong>, so they are always searched. Details: doc/SHORTLIST.md
+            in the FASTag sources.
           </p>
         </>
       )

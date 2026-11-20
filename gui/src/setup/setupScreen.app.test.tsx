@@ -174,17 +174,30 @@ describe('Setup: the task chooser', () => {
 })
 
 describe('Setup: hidden dependent fields', () => {
-  it('a dependent field stays visible but disabled, and names the report it needs', async () => {
+  it('a group waiting for a report says so once, with Turn on; its fields show once it is on', async () => {
     const mock = installMockBridge()
     await renderApp(mock) // FASTag defaults: species off
     await openGroup('Species')
     await openGroup('Species, advanced')
-    expect(field('species_rank')!.closest('[hidden]')).toBeNull()
-    expect(field('species_rank')!.disabled).toBe(true)
-    expect(document.getElementById('h-species_rank')!.textContent).toMatch(/Needs Species report/)
+    // Folded: one line for the group, not one per field.
+    const group = document.querySelector('[data-group="Species, advanced"]')!
+    expect(group.querySelector('.group-needs')!.textContent).toMatch(/Needs the species report/)
+    expect(field('species_min_len')).toBeNull()
+    await click(within(group as HTMLElement).getByRole('button', { name: /Turn on the species report/ }))
+    expect(field('species_min_len')!.disabled).toBe(false)
+    expect(field('species')!.checked).toBe(true)
+  })
+
+  it('a single dependent field stays visible but disabled, and names the report it needs', async () => {
+    const mock = installMockBridge()
+    await renderApp(mock) // FASTag defaults: glyco off
+    await openGroup('Glycopeptides')
+    expect(field('glyco_min_fraction')!.closest('[hidden]')).toBeNull()
+    expect(field('glyco_min_fraction')!.disabled).toBe(true)
+    expect(document.getElementById('h-glyco_min_fraction')!.textContent).toMatch(/Needs Glycopeptide report/)
     // The report's checkbox is the switch.
-    await click(field('species')!)
-    expect(field('species_rank')!.disabled).toBe(false)
+    await click(field('glyco')!)
+    expect(field('glyco_min_fraction')!.disabled).toBe(false)
   })
 
   // Beside setup.app.test "an inert field keeps its description and names
@@ -249,7 +262,7 @@ describe('Setup: the plan footer', () => {
     await openGroup('Tagging')
     mock.nextPickInput = '/d/run01.mzML'
     await click(screen.getByRole('button', { name: 'Choose file…' }))
-    expect(within(footer()).getByText('Characterize a run on run01.mzML · 5 reports · 10% of spectra')).toBeDefined()
+    expect(within(footer()).getByText('Characterize a run on run01.mzML · 4 reports · 10% of spectra')).toBeDefined()
     expect(screen.queryByText('(modified)')).toBeNull()
     await change(field('tag_length')!, '4')
     await change(field('max_tags')!, '20')

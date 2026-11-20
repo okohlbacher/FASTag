@@ -144,11 +144,10 @@ export default function ReconView({ massgap, tables, gen = {}, notice, action, e
   if (!have) {
     return (
       <div className="empty-state recon-empty">
-        <h2>No mass gaps yet</h2>
+        <h2>No mass shifts yet</h2>
         <p>
-          Mass gaps and reconciliations come from placing the tags in a protein database: choose a FASTA and write
-          these reports (<code className="cli">recon_out</code>, <code className="cli">delta_out</code>,{' '}
-          <code className="cli">massgap_out</code>).
+          Mass shifts come from placing the tags on a protein database: choose a FASTA and write the Tag placements,
+          the Mass-shift table and the Mass-gap report (the Mass-shift survey workflow does).
         </p>
         <div className="row-actions">
           {action && (
@@ -157,7 +156,7 @@ export default function ReconView({ massgap, tables, gen = {}, notice, action, e
             </button>
           )}
           <button type="button" className="secondary big" onClick={onOpen}>
-            Open a recon, delta or mass-gap report…
+            Open a placements, mass-shift or mass-gap report…
           </button>
         </div>
         <p>
@@ -172,7 +171,7 @@ export default function ReconView({ massgap, tables, gen = {}, notice, action, e
   return (
     <div className="recon-view">
       <div className="card-head">
-        <h2 id="recon-title">Mass gaps and reconciliation</h2>
+        <h2 id="recon-title">Mass shifts</h2>
         <HelpLink to="workflow-reconciliation">How to read these reports</HelpLink>
         {sources.map((p) => (
           <code className="src" key={p} title={p}>
@@ -237,7 +236,7 @@ export default function ReconView({ massgap, tables, gen = {}, notice, action, e
         )}
         {massgap && section(massgap, 'top').length > 0 && (
           <div className="stat">
-            <dt>Largest explained shares (CLI)</dt>
+            <dt>Largest explained shares</dt>
             <dd>{section(massgap, 'top').map((t) => t.value).join(', ')}</dd>
           </div>
         )}
@@ -354,6 +353,18 @@ function PlacementTable({ t }: { t: ReconTable }): JSX.Element {
   )
 }
 
+/// The survey columns of a mass-shift table, in words (README, -delta_out).
+const DELTA_EXTRA: { id: string; label: string; title: string; num?: true }[] = [
+  { id: 'localized', label: 'Localized', title: 'Spectra whose shift the fragments place on one site class', num: true },
+  { id: 'residues', label: 'Sites', title: 'Site:count pairs of the localized spectra, most frequent first' },
+  { id: 'unlocalized', label: 'Unlocalized', title: 'Spectra with a shift and no site-determining evidence', num: true },
+  { id: 'ambiguous', label: 'Ambiguous', title: 'Unlocalized spectra with some site evidence, below the localization margin', num: true },
+  { id: 'unimod', label: 'UniMod match', title: 'UniMod entries within the naming tolerance on a site of the row' },
+  { id: 'isotope_error', label: 'Isotope error', title: 'A precursor isotope error, when the shift is one' },
+  { id: 'isobars', label: 'Isobars', title: 'Exact isobars of the best name: mass cannot choose among them' },
+  { id: 'class', label: 'Observation class', title: 'The observation classes of the row, most frequent first' }
+]
+
 function DeltaPeaks({ t }: { t: DeltaTable }): JSX.Element {
   const [minSpectra, setMinSpectra] = useSticky(t, 'minSpectra', '')
   const min = minSpectra.trim() !== '' && Number.isFinite(Number(minSpectra)) ? Number(minSpectra) : 0
@@ -366,7 +377,22 @@ function DeltaPeaks({ t }: { t: DeltaTable }): JSX.Element {
   const cols: Column[] = [
     { id: 'delta', label: 'Gap (Da)', num: true, text: (i) => t.keys[i], key: (i) => t.delta[i] },
     { id: 'spectra', label: 'Spectra', num: true, text: (i) => fmt(t.spectra[i]), key: (i) => t.spectra[i] },
-    { id: 'interps', label: 'Top interpretations', mono: true, text: (i) => t.interps[i].map((x) => `${x.name} ${x.n}`).join(', ') }
+    { id: 'interps', label: 'Top interpretations', mono: true, text: (i) => t.interps[i].map((x) => `${x.name} ${x.n}`).join(', ') },
+    // The survey columns (1.15.2 on): localization, residues, UniMod names
+    // and ambiguity, shown when the file has them.
+    ...DELTA_EXTRA.filter((c) => t.extra[c.id]).map((c): Column => {
+      const v = t.extra[c.id]!
+      const numeric = c.num === true
+      return {
+        id: c.id,
+        label: c.label,
+        title: c.title,
+        num: numeric,
+        mono: !numeric,
+        text: (i) => (v[i] === '-' ? '' : v[i]),
+        key: numeric ? (i) => Number(v[i]) : undefined
+      }
+    })
   ]
   return (
     <>

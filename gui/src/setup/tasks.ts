@@ -32,6 +32,9 @@ export interface Task {
   help: Record<string, string>
   /// Its products in the Outputs checklist (setup/products.ts), in order.
   outputs: string[]
+  /// A line beside a product of this workflow that is off by default: what
+  /// it needs here.
+  productNotes?: Record<string, string>
   /// The Help section its "Learn more" link opens, and its name.
   docs: { to: string; label: string }
 }
@@ -63,10 +66,10 @@ export const TASKS: readonly Task[] = [
     blurb: 'QC of one run: MS/MS counts and resolution by analyzer, charges, isobaric kit, tag yield and instrument.',
     products: 'QC report',
     values: { ...ALL, qc_out: 'qc.tsv' },
-    basic: ['subsample_fraction', 'acquisition_check'],
+    // The DIA check is a safety switch, not a QC setting: under Advanced.
+    basic: ['subsample_fraction'],
     help: {
-      subsample_fraction: 'Fraction of spectra to read, 0 = all. Counts cover only the spectra read.',
-      acquisition_check: 'Raw DIA is refused by default. Choose "warn" to run anyway.'
+      subsample_fraction: 'How many spectra to read. The counts cover only the spectra read.'
     },
     outputs: ['out', 'qc_out'],
     docs: { to: 'workflow-run-qc', label: 'Run QC report' }
@@ -102,11 +105,12 @@ export const TASKS: readonly Task[] = [
     // Extension 2 is the paper-validated setting (Q1): seed 3 plus 2 x 2
     // reaches the bundled index's k = 7.
     values: { ...ALL, species: true, extension: '2' },
-    basic: ['species_rank', 'species_call', 'subsample_fraction'],
+    // The presence call is experimental: under Advanced (Species).
+    basic: ['species_rank', 'subsample_fraction'],
     help: {
       species_rank: 'Taxonomic level of the report: genus, family, …',
-      species_call: '"decoy" calls each taxon present or absent against decoy tags; "none" ranks only.',
-      subsample_fraction: 'Fraction of spectra to read, 0 = all. 0.1 is usually enough.'
+      species_call: 'Decoy calls each taxon present, no call or not detected against decoy tags; None only ranks the taxa.',
+      subsample_fraction: 'All spectra by default. 10% is usually enough to rank the main taxa, in a tenth of the time.'
     },
     outputs: ['out', 'species_out'],
     docs: { to: 'species-howto', label: 'Species detection' }
@@ -116,8 +120,11 @@ export const TASKS: readonly Task[] = [
     label: 'Database reduction',
     blurb: 'A protein shortlist, a reduced FASTA and a Sage, Comet or MSFragger configuration for your search.',
     products: 'shortlist, reduced FASTA, engine config',
-    // The shortlist recipe of doc/SHORTLIST.md, the CLI default from 1.15.4:
-    // set here, it gives the same result on 1.15.3.
+    // The shortlist recipe of doc/SHORTLIST.md. It is not validated: it
+    // passed its second held-out test and failed the third. From 1.15.4 the
+    // CLI applies it by default only with -search_engine msfragger and the
+    // tryptic shortlist; the GUI sets it for every engine and protease, as
+    // its default recipe, and says so (help/workflows.tsx).
     values: {
       ...ALL,
       shortlist_out: 'shortlist.tsv',
@@ -129,14 +136,15 @@ export const TASKS: readonly Task[] = [
       shortlist_max_evalue: '10',
       recon_missed_cleavages: '2'
     },
-    basic: ['recon_fasta', 'shortlist_background', 'search_engine', 'shortlist_protease', 'variable_modifications'],
+    // The protease rule is experimental: under Advanced (Shortlist).
+    basic: ['recon_fasta', 'shortlist_background', 'search_engine', 'variable_modifications'],
     required: ['recon_fasta'],
     help: {
       recon_fasta: 'FASTA to shortlist from.',
       shortlist_background: 'Host proteome and contaminants, always added to the reduced FASTA.',
       search_engine: 'Engine to write a configuration for: Sage, Comet or MSFragger (experimental).',
-      shortlist_protease: 'Cleavage rule. Trypsin refuses clearly non-tryptic runs; "auto" uses the protease FASTag detects.',
-      variable_modifications: 'Written into the engine configuration, for example Oxidation (M).'
+      shortlist_protease: 'Cleavage rule. Trypsin refuses clearly non-tryptic runs; Auto uses the protease FASTag detects.',
+      variable_modifications: 'Also tagged as alternatives, which changes the tags and their placements; written into the engine configuration.'
     },
     outputs: ['out', 'shortlist_out', 'fasta_out', 'search_config_out'],
     docs: { to: 'workflow-db-reduction', label: 'Database reduction' }
@@ -149,7 +157,7 @@ export const TASKS: readonly Task[] = [
     values: { ...ALL, census: true, census_score: true, census_sorted_out: 'census_sorted.tsv' },
     basic: ['census_ids', 'census_ids_fdr', 'census_triage_evalue'],
     help: {
-      census_ids: 'idXML or mzIdentML of this run (optional). Marks which spectra your search identified.',
+      census_ids: 'idXML or mzIdentML of this run (optional). Marks which spectra your search identified. Needs q-values, unless Accept hits (Advanced) is threshold or all.',
       census_ids_fdr: 'q-value a target hit needs to count as identified.',
       census_triage_evalue: 'An unidentified spectrum with a tag at or below this E-value is a triage candidate.'
     },
@@ -159,13 +167,16 @@ export const TASKS: readonly Task[] = [
   {
     id: 'characterize',
     label: 'Characterize a run',
-    blurb: 'Protease, labels, alkylation, glycopeptides and species, from 10% of the spectra.',
-    products: 'digest, label, alkylation, glyco, species',
+    blurb: 'Protease, labels, glycopeptides and species from 10% of the spectra; alkylation on request.',
+    products: 'digest, label, glyco, species',
+    // No alkylation report by default: it places tags on a shipped proteome,
+    // which needs tags of 8 residues (human), and extension 2 (validated
+    // for the species call) reaches 7 with seed 3: every run would end with
+    // tags_too_short.
     values: {
       ...ALL,
       digest_out: 'digest.tsv',
       label_out: 'label.tsv',
-      alkylation_out: 'alkylation.tsv',
       glyco: true,
       species: true,
       extension: '2',
@@ -173,9 +184,10 @@ export const TASKS: readonly Task[] = [
     },
     basic: ['subsample_fraction'],
     help: {
-      subsample_fraction: 'Fraction of spectra to read. 0.1 gives stable calls in a tenth of the time.'
+      subsample_fraction: 'How many spectra to read. 10% gives stable calls in a tenth of the time.'
     },
     outputs: ['out', 'digest_out', 'label_out', 'alkylation_out', 'glyco_out', 'species_out'],
+    productNotes: { alkylation_out: 'needs tags of 8+ residues: Extension 3, or a protein database' },
     docs: { to: 'digest', label: 'Digest, label and mass-gap reports' }
   }
 ]

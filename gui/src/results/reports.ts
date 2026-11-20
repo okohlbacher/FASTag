@@ -53,16 +53,19 @@ export async function loadReports(paths: string[]): Promise<{ reports: Report[];
 /// (results/tables.ts): its kind, or why it cannot be shown (an idXML or
 /// mzIdentML -recon_id_out); null for anything else, which is read as a
 /// long-form report.
-export async function sniffPath(path: string): Promise<{ kind: TableKind } | { error: string } | null> {
+/// @p head: the head when the caller has read it already (one read per open).
+export async function sniffPath(path: string, head?: string | null): Promise<{ kind: TableKind } | { error: string } | null> {
   // The head only (report.rs HEAD_BYTES): the header line, the mzTab
   // prefixes and the XML root are at the start, and the file is read whole
   // once, by its viewer or loadReports.
   let text: string | null
-  try {
-    text = await window.fastag.reportHead(path)
-  } catch {
-    return null
-  }
+  if (head !== undefined) text = head
+  else
+    try {
+      text = await window.fastag.reportHead(path)
+    } catch {
+      return null
+    }
   if (text == null) return null
   const kind = sniffTable(text)
   if (kind) return { kind }

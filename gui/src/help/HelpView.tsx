@@ -8,17 +8,25 @@ import { parameterLimits, searchHelp } from './search'
 
 export const slug = (s: string): string => s.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')
 
-// Where each settings group points for the idea behind it.
-const SECTION_TOPIC: Record<string, [string, string]> = {
-  Spectra: ['files-inputs', 'Input files'],
+// Where each settings group (paramLayout SECTION_DEFS) points for the idea
+// behind it; help-docs.test.ts holds every key to a current group title.
+export const SECTION_TOPIC: Record<string, [string, string]> = {
+  Common: ['files-inputs', 'Input files'],
   Tagging: ['tags-tag', 'Tags and gapped tags'],
-  'Sequence matching': ['results-fasta', 'Matching a sequence database'],
-  'Species detection': ['species-howto', 'How species detection works'],
+  'Tag columns and files': ['files-outputs', 'Output files'],
+  'Tagging, advanced': ['tags-tag', 'Tags and gapped tags'],
+  'Keep only tags found in a database': ['results-fasta', 'Matching a sequence database'],
+  'Run QC': ['workflow-run-qc', 'Run QC report'],
+  'Placement on the database': ['workflow-reconciliation', 'Reconciliation and mass shifts'],
+  'Mass-shift survey': ['workflow-reconciliation', 'Reconciliation and mass shifts'],
+  'Mass-gap report': ['digest-gaps', 'Mass gaps'],
+  Species: ['species-howto', 'How species detection works'],
+  'Species, advanced': ['species-howto', 'How species detection works'],
+  Shortlist: ['workflow-db-reduction', 'Database reduction'],
+  Identifiability: ['workflow-triage', 'Identifiability triage'],
   'Digest and labels': ['digest-ends', 'The Digest tab'],
-  Reconciliation: ['digest-gaps', 'Mass gaps'],
-  Modifications: ['tags-mods', 'Modifications'],
   Glycopeptides: ['files-glyco', 'The glyco report'],
-  Output: ['files-outputs', 'Output files']
+  Modifications: ['tags-mods', 'Modifications']
 }
 
 /// Every link target, with the page it is on.

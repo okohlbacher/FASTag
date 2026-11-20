@@ -20,6 +20,7 @@ import { addJobs, renameJobs, type BatchJob } from './batch'
 import type { Refusal } from '../inspector/checks'
 import { createLogStore, type LogStore } from './logStore'
 import type { TableGen, TablePaths } from '../results/tables'
+import type { WorkflowReports } from '../results/workflowReports'
 
 // A run that failed: what failed, and FASTag's own words for why (each failed
 // job of a batch has its own), plus the command line to reproduce it.
@@ -90,6 +91,12 @@ export interface Reports {
   // Why the tables or reports of another run were closed when a table
   // opened, shown above the viewers.
   notice?: string
+  // The workflow reports with a view of their own (QC, shortlist, triage,
+  // the survey tables), of the run shown or opened from disk.
+  workflow?: WorkflowReports
+  // Reports the run shown was asked for that it did not write, in words
+  // (the Overview says so; they get no tab).
+  missing?: string[]
 }
 
 export type JobStatus = 'queued' | 'running' | 'ok' | 'failed' | 'cancelled'
@@ -160,6 +167,12 @@ export interface Shown {
   log: readonly string[]
   reports: Report[]
   species: SpeciesReport | null
+  /// Its tags table (ResolvedOutputs out): what it is shown with.
+  out?: string
+  /// The workflow the run was started from (its tab order and Overview).
+  workflow?: string
+  /// The census summary's text, when the run wrote one.
+  census?: string | null
 }
 
 export interface RunState {
