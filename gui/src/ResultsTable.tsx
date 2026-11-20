@@ -88,6 +88,21 @@ const LABEL: Record<string, string> = {
 }
 export const columnLabel = (c: string): string => LABEL[c] ?? c
 
+/// The columns' indices in the order the table shows them: the per-residue
+/// confidence (-res_conf, the headline of Export tags) right after the tag
+/// and its length, ahead of the flank masses, Extended and Gapped, so it is
+/// in view without scrolling; otherwise the file's order.
+export function displayOrder(columns: readonly string[]): number[] {
+  const idx = columns.map((_, j) => j)
+  const rc = columns.indexOf('res_conf')
+  if (rc < 0) return idx
+  const after = Math.max(columns.indexOf('length'), columns.indexOf('tag'))
+  if (after < 0 || after > rc) return idx
+  const rest = idx.filter((j) => j !== rc)
+  rest.splice(rest.indexOf(after) + 1, 0, rc)
+  return rest
+}
+
 // A fasta_hit value in the words of the Database hit filter; the raw value
 // stays the cell's name and tooltip. '-' is a run without a database filter
 // (-fasta): with one, only matching tags are written (README), so '-' is a
@@ -681,8 +696,8 @@ export default function ResultsTable({ path, source, rerunResConf, spectrum }: P
     return j >= 0 && !!head && head.rows.length > 0 && head.rows.every((r) => (r[j] ?? '-') === '-' || r[j] === '')
   })()
   const has = (c: string): boolean => columns.includes(c) && !(noDb && c === 'fasta_hit')
-  // The shown columns, as indices into each row.
-  const shown = columns.map((_, j) => j).filter((j) => has(columns[j]) && !hidden.has(columns[j]))
+  // The shown columns, as indices into each row, in display order.
+  const shown = displayOrder(columns).filter((j) => has(columns[j]) && !hidden.has(columns[j]))
   const width = (c: string): number => userW[c] ?? autoW?.[c] ?? colWidth(c)
   const grid = shown.map((j) => `${width(columns[j])}px`).join(' ')
   const totalW = shown.reduce((w, j) => w + width(columns[j]), 0)

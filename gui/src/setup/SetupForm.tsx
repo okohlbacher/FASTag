@@ -22,7 +22,7 @@ import { clock, duration } from '../app/format'
 import TaskChooser, { PresetRow } from './TaskChooser'
 import { LANDING_TASK, taskById, type Task } from './tasks'
 import { INSTRUMENTS, presetText, shownInstrument } from './presets'
-import { PRODUCT_OF, PRODUCTS, USI_PLACEHOLDER, fileName, isOn, missingDatabase, neededBy, productLabel, alkylationExtension, restoreRaised, toggleProduct, type Product } from './products'
+import { PRODUCT_OF, PRODUCTS, USI_PLACEHOLDER, fileName, isOn, missingDatabase, neededBy, productLabel, alkylationExtension, alkylationRaise, toggleProduct, type Product } from './products'
 
 // A parameter that exists in the CLI but nowhere in the layout would silently
 // be unreachable; surface it instead of hiding it.
@@ -136,6 +136,7 @@ export default function SetupForm({
         brief={recipeNote(name, values) ?? opts.brief}
         hint={task.help[name] ?? BRIEF_HINT[name]}
         required={opts.required}
+        setBy={session.diff.includes(name) || (!!unitName && session.diff.includes(unitName)) ? undefined : session.originText}
         blocked={batchBlocked(name) ?? forced?.note}
         unit={unitSpec && unitName ? { spec: unitSpec, value: values[unitName], onChange: (v) => setValue(unitName, v) } : undefined}
         count={name === 'subsample_fraction' && countSpec ? { spec: countSpec, value: values['subsample_spectra'], onChange: (v) => setValue('subsample_spectra', v) } : undefined}
@@ -143,16 +144,34 @@ export default function SetupForm({
     )
   }
 
-  // The extension the alkylation report raised, restored when it is
-  // unticked while Extension still holds the raised value.
-  const raisedExt = useRef<{ from: ParamValue; to: ParamValue } | null>(null)
-  // A protein database (or a FASTA proteome) set since makes the raise
-  // unneeded: Extension goes back while it still holds the raised value.
+  // The extension the alkylation report raised ({from, to}), restored when
+  // it is unticked while Extension still holds the raised value. It belongs
+  // to the values it was raised in: a workflow, preset, reset or undo that
+  // replaces them forgets it (gen), or a later workflow's own Extension
+  // would read as the raise and be put back.
+  const raisedExt = useRef<{ from: ParamValue; to: ParamValue; gen: number } | null>(null)
+  const raisedNow = (): { from: ParamValue; to: ParamValue } | null =>
+    raisedExt.current && raisedExt.current.gen === session.formGen ? raisedExt.current : null
+  const keepRaised = (r: { from: ParamValue; to: ParamValue } | null): void => {
+    raisedExt.current = r ? { ...r, gen: session.formGen } : null
+  }
+  // The proteome as committed: a name typed letter by letter ("m" on the
+  // way to "mouse") would read as a FASTA path. A value set by the form
+  // itself (a workflow, a preset) counts at once.
+  const [proteome, setProteome] = useState(values['alkylation_proteome'])
   useEffect(() => {
-    const r = restoreRaised(values, raisedExt.current)
-    raisedExt.current = r.raised
-    if (r.values !== values) session.setValues(r.values)
-  }, [values['recon_fasta'], values['alkylation_proteome'], values['tag_length']])
+    if (document.activeElement?.id !== 'p-alkylation_proteome') setProteome(values['alkylation_proteome'])
+  }, [values['alkylation_proteome']])
+  // While the alkylation report is on, Extension follows what its proteome
+  // and the tag length need (alkylationRaise): raised, lowered or put back;
+  // a protein database or a report that places tags makes it unneeded.
+  const alkOn = isOn(PRODUCT_OF.get('alkylation_out')!, values)
+  const placing = ['recon_fasta', 'recon_out', 'shortlist_out', 'fasta_out', 'search_config_out'].map((n) => String(values[n] ?? '')).join('|')
+  useEffect(() => {
+    const r = alkylationRaise({ ...values, alkylation_proteome: proteome }, raisedNow())
+    keepRaised(r.raised)
+    if (r.values['extension'] !== values['extension']) session.setValues((v) => ({ ...v, extension: r.values['extension'] }))
+  }, [placing, proteome, values['tag_length'], alkOn, session.formGen])
   // The note of a group's settings that wait on other reports: one report
   // that every one of them needs is named in a plain sentence; else each
   // report that would show some of them, once (the per-setting detail is
@@ -165,12 +184,23 @@ export default function SetupForm({
     if (deps.length === 1) return `${lead} ${n === 1 ? 'needs' : 'need'} ${deps[0].say ?? few(masters(deps[0]).map(name))}.`
     const common = masters(deps[0]).filter((m) => deps.every((d) => !d.say && masters(d).includes(m)))
     if (common.length === 1) return `${lead} need ${name(common[0])}.`
-    const each = [...new Set(deps.flatMap((d) => (d.say ? [d.say] : masters(d).map(name))))]
-    return each.length <= 2 ? `${lead} appear when ${each.join(' or ')} is on.` : `${lead} appear when one of ${each.length} reports or switches is on (see ?).`
+    // A report or switch is "on"; a condition in words (say) is said as it is.
+    const items = [...new Set(deps.flatMap((d) => (d.say ? [d.say] : masters(d).map((m) => `${name(m)} on`))))]
+    return items.length <= 2 ? `${lead} appear with ${items.join(' or ')}.` : `${lead} appear when one of ${items.length} reports or switches is on (see ?).`
+  }
+  // What the alkylation report does to Extension: off, the raise it would
+  // make; on, the raise in force, or the Extension still too short (edited
+  // below what the proteome needs).
+  const alkylationWhy = (on: boolean): string | null => {
+    const need = alkylationExtension(values)
+    if (!on) return need ? `Raises Extension to ${need}.` : null
+    const r = raisedNow()
+    if (r && String(values['extension'] ?? '') === String(r.to)) return `Extension raised from ${String(r.from) || '0'} to ${String(r.to)}.`
+    return need ? `Needs Extension ${need}: shorter tags do not place on the proteome.` : null
   }
   const toggle = (p: Product, on: boolean): void => {
-    const r = toggleProduct(p, on, values, out, raisedExt.current)
-    raisedExt.current = r.raised
+    const r = toggleProduct(p, on, values, out, raisedNow())
+    keepRaised(r.raised)
     session.setValues(r.values)
   }
 
@@ -194,10 +224,8 @@ export default function SetupForm({
           ? `needed by ${needed.join(', ')}`
           : follows
             ? `written with the ${follows.label.toLowerCase()}`
-            : !on && p.param === 'alkylation_out'
-              ? alkylationExtension(values)
-                ? `Raises Extension to ${alkylationExtension(values)}.`
-                : null
+            : p.param === 'alkylation_out'
+              ? alkylationWhy(on)
               : null
     // The detail of a workflow's note (tasks.ts productNotes): its (?).
     const detail = !on ? task.productNotes?.[p.param] : undefined
@@ -350,9 +378,12 @@ export default function SetupForm({
     )
   }
 
-  const ownGroups = SECTIONS.filter((s) => s.home === task.id)
+  // The workflow's own groups, then those of another home it writes a
+  // report of by default (Characterize: the species groups).
+  const leads = new Set(task.leadGroups ?? [])
+  const ownGroups = [...SECTIONS.filter((s) => s.home === task.id), ...SECTIONS.filter((s) => leads.has(s.title))]
   const globalGroups = SECTIONS.filter((s) => s.home === 'global')
-  const otherGroups = SECTIONS.filter((s) => s.home !== task.id && s.home !== 'global' && s.home !== 'common')
+  const otherGroups = SECTIONS.filter((s) => s.home !== task.id && s.home !== 'global' && s.home !== 'common' && !leads.has(s.title))
   const advChanged = session.diff.filter((n) => ADV.has(n)).length
   const advD = disclosure(session.advancedOpen, session.setAdvancedOpen)
   const otherOpen = openGroups['Other analyses'] ?? false
@@ -646,7 +677,12 @@ export default function SetupForm({
   )
 
   return (
-    <div className="controls-body">
+    <div
+      className="controls-body"
+      onBlur={(e) => {
+        if (e.target.id === 'p-alkylation_proteome') setProteome(values['alkylation_proteome'])
+      }}
+    >
       {busy ? (
         <>
           {/* The form is not editable mid-run: a changed value would not

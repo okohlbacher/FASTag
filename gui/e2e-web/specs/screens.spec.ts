@@ -1,7 +1,7 @@
 // Review screenshots (doc/GUI-WORKFLOWS.md 5): the landing screen, every
 // workflow's Setup with Advanced closed and open (the whole form: the Setup
 // pane scrolls inside itself, so the window is made as tall as its content),
-// Batch mode, three (?) popovers (one with a tip), the run bar, and every Results view after a
+// Batch mode, four (?) popovers (one with a tip, one of the third column), the run bar, and every Results view after a
 // run of each workflow. Not a check: it only runs with SCREENS_DIR set, for
 // design reviews by people and models.
 import type { Page } from '@playwright/test'
@@ -51,6 +51,16 @@ async function openAdvanced(page: Page): Promise<void> {
   for (let k = 0; k < 80 && (await closed.count()) > 0; k++) await closed.first().click()
 }
 
+/// The open (?) popover lies inside the Setup pane, which clips it: no
+/// word of its text or flag is cut off at the pane's edge.
+async function expectPopoverInPane(page: Page): Promise<void> {
+  const pop = await page.locator('.help-pop').boundingBox()
+  const pane = await page.locator('.view-setup .controls-body').boundingBox()
+  expect(pop && pane).toBeTruthy()
+  expect(pop!.x).toBeGreaterThanOrEqual(pane!.x - 1)
+  expect(pop!.x + pop!.width).toBeLessThanOrEqual(pane!.x + pane!.width + 1)
+}
+
 const workflow = (page: Page, name: string) => page.getByRole('radio', { name: new RegExp(`^${name}`) })
 
 test('setup screens of every workflow', async ({ page, browserName }) => {
@@ -81,11 +91,15 @@ test('help popovers and the run bar', async ({ page, browserName }) => {
   test.skip(browserName !== 'chromium')
   await openApp(page, 'gate')
   await page.getByRole('button', { name: 'Choose file…' }).click()
-  for (const name of ['extension', 'max_evalue']) {
+  // tag_length sits in the third column of Settings: its popover opens to
+  // the left of its (?).
+  for (const name of ['extension', 'max_evalue', 'tag_length']) {
     const q = page.locator(`button[data-param-help="${name}"]`).first()
+    if ((await q.count()) === 0) continue
     await q.scrollIntoViewIfNeeded()
     await q.click()
     await expect(page.getByRole('dialog', { name: /^About / })).toBeVisible()
+    await expectPopoverInPane(page)
     await page.screenshot({ path: shot(`20-help-popover-${name}`) })
     await page.keyboard.press('Escape')
   }
@@ -98,6 +112,7 @@ test('help popovers and the run bar', async ({ page, browserName }) => {
     await tip.scrollIntoViewIfNeeded()
     await tip.click()
     await expect(page.getByRole('dialog', { name: /^About / })).toBeVisible()
+    await expectPopoverInPane(page)
     await page.screenshot({ path: shot('20-help-popover-digest_models_version') })
     await page.keyboard.press('Escape')
   }

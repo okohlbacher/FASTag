@@ -435,6 +435,9 @@ export function postRunChecks(o: {
   ionSeries?: unknown
   ionSeriesHybrid?: unknown
   input?: string
+  /// The MS2 spectra the run tagged (its summary line), when known: Ion
+  /// series cz is offered as a re-run only for a run all electron-activated.
+  ms2?: number | null
 }): { checks: Check[]; detected: Detected | null } {
   const checks: Check[] = []
   const inst = instrumentFromReports(o.reports)
@@ -510,12 +513,15 @@ export function postRunChecks(o: {
       id: 'hybrid-auto',
       level: 'warn',
       title: 'Hybrid activation',
-      detail: `${of(hyb[1], hyb[2])} MS2 spectra were activated by a hybrid method (EThcD, ETciD) and tagged as b/y ions only under Ion series auto, so their c/z ions were not read. ${etdAdvice(input, true)}`,
+      detail: `${of(hyb[1], hyb[2])} MS2 spectra were activated by a hybrid method (EThcD, ETciD) and tagged as b/y ions only: under Ion series auto their c/z ions were not read. ${etdAdvice(input, true)}`,
       faq: 'faq-inspector',
       source: "FASTag's log",
       fix: { ...etdFix(input, true), rerun: true }
     })
   const noCol = find(AUTO_NO_COLUMN_LINE)
+  // cz reads every spectrum as c/z: a fix only for a run that is all
+  // electron-activated; a mixed run would go to the collisional warning.
+  const allElectron = !!noCol && o.ms2 != null && Number(noCol[1]) === o.ms2
   if (noCol)
     checks.push({
       id: 'auto-no-column',
@@ -524,7 +530,7 @@ export function postRunChecks(o: {
       detail: `${Number(noCol[1]).toLocaleString('en-US')} electron-activated MS2 spectra were tagged as b/y ions: Ion series auto reads the activation of mzML input only, so their tags are unreliable. Set Ion series to cz if the run is all electron-activated (cz reads every spectrum as c/z), or convert the run to mzML and use auto.`,
       faq: 'faq-inspector',
       source: "FASTag's log",
-      fix: { label: 'Read every spectrum as c/z (Ion series cz)', params: { ion_series: 'cz' }, rerun: true }
+      ...(allElectron ? { fix: { label: 'Read every spectrum as c/z (Ion series cz)', params: { ion_series: 'cz' }, rerun: true } } : {})
     })
   const coll = find(COLLISIONAL_CZ_LINE)
   if (coll)

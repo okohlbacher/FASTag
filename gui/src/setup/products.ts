@@ -131,13 +131,14 @@ function bareName(p: Product, engine?: unknown): string {
 
 /// The tag length the alkylation report's database needs (FASTag.cpp
 /// alkylation_proteome): 8 residues on the shipped human or mouse proteome
-/// (auto is human), 7 on yeast or E. coli; null for a FASTA file of the
-/// user's, for which the shipped-length rule does not hold (no raise).
-export function alkylationTarget(values: V): number | null {
+/// (auto is human), 7 on yeast or E. coli. A FASTA file of the user's is
+/// indexed with a minimum length that grows with its size (about 8 for a
+/// human-sized one), and the CLI gives no tags_too_short reason for it:
+/// 8, the conservative length.
+export function alkylationTarget(values: V): number {
   const prot = (text(values['alkylation_proteome']) || String(PARAM_BY_NAME.get('alkylation_proteome')?.default ?? 'auto')).toLowerCase()
-  if (prot === 'auto' || prot === 'human' || prot === 'mouse') return ALKYLATION_TAG
   if (prot === 'yeast' || prot === 'ecoli') return ALKYLATION_TAG - 1
-  return null
+  return ALKYLATION_TAG
 }
 
 /// The extension the alkylation report needs in @p values, whatever
@@ -152,7 +153,7 @@ export function alkylationNeed(values: V): number | null {
   if (['recon_out', 'shortlist_out', 'fasta_out', 'search_config_out'].some((n) => isActive(n, values))) return null
   const target = alkylationTarget(values)
   const seed = Number(text(values['tag_length']) || PARAM_BY_NAME.get('tag_length')?.default || 3)
-  if (target == null || !Number.isFinite(seed)) return null
+  if (!Number.isFinite(seed)) return null
   const need = Math.ceil((target - seed) / 2)
   return need > 0 ? need : null
 }
@@ -165,18 +166,26 @@ export function alkylationExtension(values: V): string | null {
   return need != null && Number.isFinite(ext) && ext < need ? String(need) : null
 }
 
-/// The raised Extension put back once the raise is no longer needed (another
-/// report places the tags, a protein database is set, a FASTA proteome),
-/// when Extension still holds the raised value; an Extension edited since
-/// forgets the raise.
-export function restoreRaised(
+/// Extension for the alkylation report, worked out again from the value
+/// before any raise: while the report is on, raised to what the proteome
+/// and the tag length need now (human to yeast lowers a raise of 3 to 2; a
+/// lower tag length raises it further); put back once no raise is needed
+/// (another report places the tags, a protein database is set, the report
+/// is off). @p raised is the raise in force; an Extension edited since
+/// (it no longer holds raised.to) is the user's, and the base of any new
+/// raise.
+export function alkylationRaise(
   values: V,
   raised: { from: ParamValue; to: ParamValue } | null
 ): { values: V; raised: { from: ParamValue; to: ParamValue } | null } {
-  if (!raised) return { values, raised }
-  if (text(values['extension']) !== text(raised.to)) return { values, raised: null }
-  if (alkylationNeed(values) != null) return { values, raised }
-  return { values: { ...values, extension: raised.from }, raised: null }
+  const kept = raised && text(values['extension']) === text(raised.to) ? raised : null
+  const base: ParamValue = kept ? kept.from : (values['extension'] ?? '')
+  const before: V = { ...values, extension: base }
+  const alk = PRODUCT_OF.get('alkylation_out')
+  const to = alk && isOn(alk, values) ? alkylationExtension(before) : null
+  if (to) return { values: text(values['extension']) === to ? values : { ...values, extension: to }, raised: { from: base, to } }
+  if (kept) return { values: text(values['extension']) === text(base) ? values : before, raised: null }
+  return { values, raised: null }
 }
 
 /// What turning product @p p on or off does beyond itself: on, the
@@ -192,7 +201,7 @@ export function toggleProduct(
   raised: { from: ParamValue; to: ParamValue } | null
 ): { values: V; raised: { from: ParamValue; to: ParamValue } | null } {
   const next = setProduct(p, on, values, tagsOut)
-  if (p.param !== 'alkylation_out') return restoreRaised(next, raised)
+  if (p.param !== 'alkylation_out') return alkylationRaise(next, raised)
   if (on) return { values: next, raised: next['extension'] !== values['extension'] ? { from: values['extension'] ?? '', to: next['extension'] } : null }
   if (raised && text(values['extension']) === text(raised.to)) next['extension'] = raised.from
   return { values: next, raised: null }

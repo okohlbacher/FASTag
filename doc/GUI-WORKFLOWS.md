@@ -240,7 +240,12 @@ Rules:
 Basic = shown by default in that workflow (section 2). Output = a checkbox in
 Outputs. Wired = set by the GUI from a checkbox or the workflow. Every other
 param sits in the named Advanced group. That group is open in its home
-workflow and under "Other analyses" in all others.
+workflow and under "Other analyses" in all others. A workflow that writes
+another home's report by default leads with that home's groups too
+(`Task.leadGroups` in `tasks.ts`): W7 writes the species report, so
+Species, Species, advanced and Taxonomy follow Digest and labels,
+Alkylation and Glycopeptides in W7, open, and are not under "Other
+analyses" there.
 
 | Group (home) | Params | Tier |
 |---|---|---|
@@ -264,7 +269,7 @@ workflow and under "Other analyses" in all others.
 | Species (W4) | `species_out` | Output W4, W7 |
 | Species (W4) | `species_rank`, `species_call` | Basic W4 |
 | Species, advanced (W4) | `species_evidence`, `species_min_len`, `species_use_gapped`, `species_deconvolve`, `species_max_kmer_share`, `species_min_margin`, `species_orientation`, `species_call_decoys`, `species_call_min_units`, `species_call_params`, `species_pi0` | Advanced |
-| Taxonomy (W4) | `taxdb`, `taxonomy_nodes`, `taxonomy_names` | Advanced ("bundled index" when empty) |
+| Taxonomy (W4) | `taxdb`, `taxonomy_nodes`, `taxonomy_names` | Advanced ("bundled index" when empty); the species groups also lead in W7 |
 | Shortlist (W5) | `shortlist_out`, `fasta_out`, `search_config_out` | Output W5 |
 | Shortlist (W5) | `shortlist_background`, `shortlist_protease`, `search_engine`, `variable_modifications` | Basic W5; `variable_modifications` is Global > Chemistry elsewhere |
 | Shortlist, advanced (W5) | `shortlist_min_spectra`, `shortlist_top`, `shortlist_parsimony`, `shortlist_specificity`, `shortlist_gapped`, `shortlist_max_evalue`, `shortlist_force`, `shortlist_decoy_affix` | Advanced |

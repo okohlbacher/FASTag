@@ -34,7 +34,9 @@ function TileView({ t, busy, onAction }: { t: Tile; busy: boolean; onAction(a: T
     <li>
       <section className={`tile tone-${t.tone}`} aria-label={t.label}>
         <h3 className="tile-label">{t.label}</h3>
-        <p className="tile-value">{t.value}</p>
+        <p className={`tile-value${t.muted ? ' muted' : ''}`} title={t.muted}>
+          {t.value}
+        </p>
         {/* Two lines at most; the whole note is its tooltip. */}
         <p className="tile-note" title={t.note}>
           {t.note}
@@ -56,7 +58,8 @@ export default function OverviewPanel({ overview: o, input, busy, onAction, para
     setCopied(null)
     return () => { revision.current++ }
   }, [input, o.copyText])
-  const tiles = leadTiles(params ? shownTiles(o, params) : { figures: o.figures, calls: o.calls }, workflowId)
+  const shown = params ? shownTiles(o, params) : { figures: o.figures, calls: o.calls }
+  const tiles = leadTiles(shown, workflowId)
   async function copy(): Promise<void> {
     const started = revision.current
     try {
@@ -105,7 +108,9 @@ export default function OverviewPanel({ overview: o, input, busy, onAction, para
       <ul className="checks" aria-label="Checks">
         {/* The evidence cutoff only next to a call it gates. */}
         {o.checks
-          .filter((c) => !c.gates || tiles.calls.some((t) => t.tone === 'call' || t.tone === 'nocall' || t.tone === 'low'))
+          // Decided on the calls before the workflow's own lead the grid
+          // (leadTiles moves Top genus among the figures).
+          .filter((c) => !c.gates || shown.calls.some((t) => t.tone === 'call' || t.tone === 'nocall' || t.tone === 'low'))
           .map((c) => (
             <li key={c.text} className={c.tone}>
               {c.text}

@@ -23,7 +23,7 @@ import { jobCells, majority, qcCells, type JobData } from '../run/batchSummary'
 import { compareSdrf } from '../sdrf/compare'
 import { parseSdrf } from '../sdrf/sdrfTable'
 import { parseTaxdump } from '../sdrf/taxonomy'
-import { alkylationExtension, alkylationTarget, PRODUCT_OF, restoreRaised, toggleProduct } from '../setup/products'
+import { alkylationExtension, alkylationTarget, PRODUCT_OF, alkylationRaise, toggleProduct } from '../setup/products'
 import { PARAM_BY_NAME, uiOf } from '../paramLayout'
 import { installMockBridge } from '../testing/mockBridge'
 import type { SpeciesReport, Taxon } from '../types'
@@ -90,7 +90,8 @@ describe('round 7, 2: the CLI activation lines after a run', () => {
   })
 
   it('the no-column line (auto on MGF or mzPeak): cz, or convert to mzML', () => {
-    const c = postRunChecks({ reports: [], notes: [NOCOL], ionSeries: 'auto', input: '/d/a.mgf' }).checks.find((x) => x.id === 'auto-no-column')!
+    // All 40 MS2 spectra electron-activated: cz is the re-run (round 8, 17).
+    const c = postRunChecks({ reports: [], notes: [NOCOL], ionSeries: 'auto', input: '/d/a.mgf', ms2: 40 }).checks.find((x) => x.id === 'auto-no-column')!
     expect(c.level).toBe('warn')
     expect(c.detail).toMatch(/convert the run to mzML and use auto/)
     expect(c.fix).toEqual({ label: 'Read every spectrum as c/z (Ion series cz)', params: { ion_series: 'cz' }, rerun: true })
@@ -242,13 +243,13 @@ describe('round 7, 14: the field popover shows the tip below the text', () => {
 describe('round 7, 15 and 16: the alkylation extension by proteome, restored when unneeded', () => {
   const alk = PRODUCT_OF.get('alkylation_out')!
   const base = { tag_length: '3', extension: '0' }
-  it('human and mouse need 8, yeast and E. coli 7, a FASTA file no raise', () => {
+  it('human and mouse need 8, yeast and E. coli 7, a FASTA file as human (8)', () => {
     expect(alkylationTarget({})).toBe(8)
     expect(alkylationTarget({ alkylation_proteome: 'mouse' })).toBe(8)
     expect(alkylationTarget({ alkylation_proteome: 'yeast' })).toBe(7)
     expect(alkylationExtension({ ...base, alkylation_proteome: 'auto' })).toBe('3')
     expect(alkylationExtension({ ...base, alkylation_proteome: 'ecoli' })).toBe('2')
-    expect(alkylationExtension({ ...base, alkylation_proteome: '/d/my.fasta' })).toBeNull()
+    expect(alkylationExtension({ ...base, alkylation_proteome: '/d/my.fasta' })).toBe('3')
   })
 
   it('another product that places tags restores the raised Extension', () => {
@@ -259,9 +260,9 @@ describe('round 7, 15 and 16: the alkylation extension by proteome, restored whe
     expect(placed.values['extension']).toBe('0')
     expect(placed.raised).toBeNull()
     // A protein database set in the form does the same.
-    expect(restoreRaised({ ...on.values, recon_fasta: '/d/db.fasta' }, on.raised).values['extension']).toBe('0')
+    expect(alkylationRaise({ ...on.values, recon_fasta: '/d/db.fasta' }, on.raised).values['extension']).toBe('0')
     // An Extension edited since stays.
-    expect(restoreRaised({ ...on.values, extension: '4', recon_fasta: '/d/db.fasta' }, on.raised)).toMatchObject({ raised: null, values: { extension: '4' } })
+    expect(alkylationRaise({ ...on.values, extension: '4', recon_fasta: '/d/db.fasta' }, on.raised)).toMatchObject({ raised: null, values: { extension: '4' } })
     // Still needed (glyco places nothing): kept.
     const glyco = toggleProduct(PRODUCT_OF.get('glyco_out')!, true, on.values, '/d/a.tags.tsv', on.raised)
     expect(glyco.values['extension']).toBe('3')

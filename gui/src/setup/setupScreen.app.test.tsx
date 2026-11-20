@@ -201,7 +201,7 @@ describe('Setup: hidden dependent fields', () => {
     const banners = group.querySelectorAll('.group-needs')
     expect(banners.length).toBeGreaterThan(0)
     // Round 6, 12: each report once, not one list per dependency.
-    expect(banners[0].textContent).toMatch(/^\d+ more settings appear when Digest report or Label report is on\./)
+    expect(banners[0].textContent).toMatch(/^\d+ more settings appear with Digest report on or Label report on\./)
     // No waiting field is left in view, disabled.
     expect(group.querySelectorAll('.field.off')).toHaveLength(0)
     // The digest report's checkbox is in this group: no Turn on repeats it.

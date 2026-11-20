@@ -391,7 +391,7 @@ describe('Overview model: the alkylation report', () => {
   it('shows the no call with its reason in words; too short tags offer extension 3', () => {
     const t = tile(of(report('no_call', 'tags_too_short')), 'alkylation')
     expect(t).toMatchObject({ value: 'no call', tone: 'nocall' })
-    expect(t.note).toMatch(/no tag reaches the length the proteome needs/)
+    expect(t.note).toMatch(/no tag reaches the 8 residues the proteome needs/)
     expect(t.action).toEqual({ kind: 'enable', label: 'Run again with extension 3', values: { extension: '3' } })
   })
 

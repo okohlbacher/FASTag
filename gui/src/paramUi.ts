@@ -158,7 +158,7 @@ const CALL_OFF: Dependency = {
 const CHARGES_TRIED: Dependency = {
   on: ['unknown_charge', 'check_header_charge'],
   when: { unknown_charge: { isNot: ['assume2'] }, check_header_charge: { isNot: ['off'] } },
-  say: 'Precursors without a charge set to try each charge or infer it, or the Charge check mode on',
+  say: 'Precursors without a charge set to try other charges, or the Charge check on',
   note: 'charge 2 is assumed for spectra without a charge'
 }
 const SEARCH_OFF: Dependency = { on: 'search_config_out', note: 'no search configuration is written' }
@@ -909,7 +909,7 @@ export const PARAM_UI: Record<string, ParamUi> = {
       }
     ],
     help: {
-      text: 'The database the alkylation report uses when no placement database is given: auto (the human proteome), human, mouse, yeast or ecoli for the UniProt reference proteomes shipped with FASTag (reviewed entries; the release is in the report), or a FASTA file. Tags place on the shipped proteomes from 8 residues (human, mouse) or 7 (yeast, E. coli): raise Extension to 3 (or choose a protein database), otherwise no tag places and there is no call (reason tags_too_short).'
+      text: 'The database the alkylation report uses when no placement database is given: auto (the human proteome), human, mouse, yeast or ecoli for the UniProt reference proteomes shipped with FASTag (reviewed entries; the release is in the report), or a FASTA file. Tags place on the shipped proteomes from 8 residues (human, mouse) or 7 (yeast, E. coli), so tag length + 2 × Extension must reach that: at tag length 3, Extension 3 for human or mouse, 2 for yeast or E. coli (or choose a protein database); otherwise no tag places and there is no call (reason tags_too_short). A FASTA file is indexed with a minimum length that grows with its size (about 8 for a human-sized one); a run on it that places nothing gives no tags_too_short reason.'
     }
   },
   alkylation_tags_out: {

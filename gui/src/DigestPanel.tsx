@@ -183,7 +183,7 @@ function Digest({ report }: { report: Report }): JSX.Element {
       <dl className="headline stats">
         {call.status === 'call' ? (
           <>
-            <Stat label="Called" big>
+            <Stat label="Protease call" big>
               {call.model}
               {call.cls && call.cls !== call.model && <span className="rank">{call.cls}</span>}
             </Stat>
@@ -197,7 +197,7 @@ function Digest({ report }: { report: Report }): JSX.Element {
           </>
         ) : call.status === 'no_call' ? (
           <>
-            <Stat label="Called" big>
+            <Stat label="Protease call" big>
               No call
             </Stat>
             <Stat label="Reason">
@@ -208,7 +208,7 @@ function Digest({ report }: { report: Report }): JSX.Element {
             </Stat>
           </>
         ) : (
-          <Stat label="Called">The report has no call rows.</Stat>
+          <Stat label="Protease call">The report has no call rows.</Stat>
         )}
         {(nC != null || nN != null || call.usesNterm != null) && (
           <Stat label="Tag ends used">

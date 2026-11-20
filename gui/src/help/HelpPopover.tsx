@@ -3,7 +3,7 @@
 // and the command-line flag, and a link to the parameter's Help entry. The
 // form itself names no CLI option; this is where the flag is shown.
 
-import { useEffect, useId, useRef, useState, type JSX } from 'react'
+import { useEffect, useId, useLayoutEffect, useRef, useState, type JSX } from 'react'
 import { HelpLink } from './HelpLink'
 
 export interface HelpPopoverProps {
@@ -24,11 +24,72 @@ export interface HelpPopoverProps {
   flags?: { name: string; deflt: string }[]
 }
 
+/// The pane a popover must stay inside: the nearest ancestor that scrolls
+/// or clips (the Setup form's pane), else the window.
+function clipBox(el: HTMLElement): { left: number; right: number } {
+  for (let p = el.parentElement; p; p = p.parentElement) {
+    const o = getComputedStyle(p)
+    if (/(auto|scroll|hidden|clip)/.test(`${o.overflowX}${o.overflow}`)) {
+      const r = p.getBoundingClientRect()
+      return { left: r.left, right: r.right }
+    }
+  }
+  return { left: 0, right: document.documentElement.clientWidth || window.innerWidth }
+}
+
+/// The popover's texts without what its facts row says: a sentence that
+/// only states the default ("20 is the default.") goes, as does the value
+/// that turns the option off ("0 turns the cutoff off"), which the row
+/// names once. The CLI's one-line description goes when a longer text is
+/// there (it says the same). Pure, for vitest.
+export function popoverTexts(description: string, more?: string, tip?: string): { text: string; more?: string; tip?: string; off?: string } {
+  let off: string | undefined
+  const clean = (t: string | undefined): string | undefined => {
+    if (!t) return t
+    const kept: string[] = []
+    for (const s of t.split(/(?<=[.!?])\s+/)) {
+      if (/^\S+ is the default\.?$/i.test(s.trim())) continue
+      // Clauses of a sentence (";"): the one that names the off value goes.
+      const parts = s.replace(/[.!?]$/, '').split(/;\s*/)
+      const rest = parts.filter((c) => {
+        const m = /^(-?[\d.]+) (?:turns (?:the |it )?[\w -]+ off|disables(?: it)?)$/i.exec(c.trim())
+        if (m) off = m[1]
+        return !m
+      })
+      if (rest.length === 0) continue
+      const joined = rest.join('; ')
+      kept.push(`${joined.charAt(0).toUpperCase()}${joined.slice(1)}${/[.!?]$/.test(s) ? s.slice(-1) : ''}`)
+    }
+    const out = kept.join(' ').trim()
+    return out === '' ? undefined : out
+  }
+  const m = clean(more)
+  const t = clean(tip)
+  const d = clean(description) ?? ''
+  // A CLI line no longer than the plain text of the same option says
+  // nothing new; a longer one keeps its place before it.
+  const keepCli = !m || d.length > m.length
+  return { text: keepCli ? d : m!, ...(keepCli && m && m !== d ? { more: m } : {}), ...(t ? { tip: t } : {}), ...(off ? { off } : {}) }
+}
+
 export default function HelpPopover({ name, label, description, deflt, more, tip, flags }: HelpPopoverProps): JSX.Element {
   const [open, setOpen] = useState(false)
   const id = useId()
   const box = useRef<HTMLSpanElement>(null)
   const btn = useRef<HTMLButtonElement>(null)
+  const pop = useRef<HTMLSpanElement>(null)
+  // Opened at the left of its (?), or at its right when the popover would
+  // run past the pane's right edge (a field of the third column): never
+  // cut off mid-word by the scrolling pane.
+  const [align, setAlign] = useState<'left' | 'right'>('left')
+  useLayoutEffect(() => {
+    if (!open || !box.current || !pop.current) return
+    const pane = clipBox(box.current)
+    const at = box.current.getBoundingClientRect()
+    const w = pop.current.getBoundingClientRect().width
+    setAlign(at.left + w > pane.right - 8 && at.right - w >= pane.left ? 'right' : 'left')
+  }, [open])
+  const shown = popoverTexts(description, more, tip)
   // A click outside, or Escape, closes it; Escape gives focus back.
   useEffect(() => {
     if (!open) return
@@ -63,10 +124,10 @@ export default function HelpPopover({ name, label, description, deflt, more, tip
         ?
       </button>
       {open && (
-        <span id={id} className="help-pop" role="dialog" aria-label={`About ${label}`}>
-          <span className="help-pop-text">{description}</span>
-          {more && more !== description && <span className="help-pop-more">{more}</span>}
-          {tip && <span className="help-pop-more help-pop-tip">{tip}</span>}
+        <span id={id} ref={pop} className={`help-pop${align === 'right' ? ' right' : ''}`} role="dialog" aria-label={`About ${label}`}>
+          <span className="help-pop-text">{shown.text}</span>
+          {shown.more && <span className="help-pop-more">{shown.more}</span>}
+          {shown.tip && <span className="help-pop-more help-pop-tip">{shown.tip}</span>}
           {/* The dash is written here, once: copied, the flag is what the
               CLI takes (-max_evalue, never --max_evalue). */}
           {flags ? (
@@ -82,6 +143,11 @@ export default function HelpPopover({ name, label, description, deflt, more, tip
               <span>
                 Default: <strong>{deflt}</strong>
               </span>
+              {shown.off && (
+                <span>
+                  <strong>{shown.off}</strong> turns it off
+                </span>
+              )}
               <span>
                 Command line: <code className="flag">-{name}</code>
               </span>

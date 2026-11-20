@@ -72,7 +72,7 @@ export interface ResultTabsProps {
   setTab(t: Tab): void
   species: SpeciesReport | null
   // The run the Species tab describes, as it was submitted.
-  speciesRun: { input: string; enabled: boolean } | null
+  speciesRun: { input: string; enabled: boolean; params?: Record<string, unknown> | null } | null
   // The form's species switch, and why its run would find no species.
   speciesOn: boolean
   tooShort: ReturnType<typeof speciesReach>
@@ -272,6 +272,25 @@ export default function ResultTabs(p: ResultTabsProps): JSX.Element {
         </div>
       )}
 
+      {results?.reportsTouched && results.reportsTouched.length > 0 && (
+        <p className="banner warn" role="status">
+          <IconWarning />
+          <span>
+            <strong>Reports may be partial.</strong> A later run that did not finish named{' '}
+            {results.reportsTouched.length === 1 ? 'a report' : 'reports'} of the run shown too; if it wrote to{' '}
+            {results.reportsTouched.length === 1 ? 'it' : 'them'} before it stopped, the file is not this run&apos;s:{' '}
+            {results.reportsTouched.map((x, k) => (
+              <span key={x.path}>
+                {k > 0 && '; '}
+                <code>{baseName(x.path)}</code> by the run of {baseName(x.by)} ({x.status},{' '}
+                {new Date(x.end).toLocaleString()})
+              </span>
+            ))}
+            .
+          </span>
+        </p>
+      )}
+
       {p.runningState}
 
       <div className="tabpanel" id="tabpanel" role="tabpanel" aria-labelledby={`tab-${tab}`}>
@@ -372,7 +391,7 @@ export default function ResultTabs(p: ResultTabsProps): JSX.Element {
               contributed={p.evidence.contributed}
               totalMs2={p.evidence.ms2}
               czExcluded={p.evidence.czExcluded ?? null}
-              daTolerance={daSpeciesTolerance(reports.list, p.overview?.params ?? p.spectrumRun?.params ?? rec?.params)}
+              daTolerance={daSpeciesTolerance(reports.list, speciesRun?.params ?? p.overview?.params ?? p.spectrumRun?.params ?? rec?.params)}
             />
           </div>
         ) : batchMiss ? (

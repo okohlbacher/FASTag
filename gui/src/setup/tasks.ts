@@ -36,6 +36,10 @@ export interface Task {
   /// A line beside a product of this workflow that is off by default: what
   /// it needs here.
   productNotes?: Record<string, string>
+  /// Groups of Advanced with another home (paramLayout SECTIONS) that lead
+  /// with the workflow's own, by title: the settings of a report it writes
+  /// by default (Characterize: species).
+  leadGroups?: string[]
   /// The Help section its "Learn more" link opens, and its name.
   docs: { to: string; label: string }
 }
@@ -188,8 +192,9 @@ export const TASKS: readonly Task[] = [
     outputs: ['out', 'digest_out', 'label_out', 'alkylation_out', 'glyco_out', 'species_out'],
     productNotes: {
       alkylation_out:
-        'Without a protein database the alkylation report places its tags on a shipped proteome, which needs tags of 8 residues (human, mouse) or 7 (yeast, E. coli). Turning it on raises Extension so the tags reach that length; this changes every tag of the run. The species and digest calls are validated at Extension 2. With a FASTA proteome, or another report that places tags, Extension is left as it is.'
+        'Without a protein database the alkylation report places its tags on a shipped proteome, which needs tags of 8 residues (human, mouse) or 7 (yeast, E. coli); a FASTA proteome of your own needs a length that grows with its size (about 8 for a human-sized one), so it is raised as for human. Turning it on raises Extension so that tag length + 2 × Extension reaches that length; this changes every tag of the run. The species and digest calls are validated at Extension 2. With a protein database, or another report that places tags, Extension is left as it is.'
     },
+    leadGroups: ['Species', 'Species, advanced', 'Taxonomy'],
     docs: { to: 'digest', label: 'Digest, label and mass-gap reports' }
   }
 ]

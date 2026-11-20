@@ -16,6 +16,7 @@ import { alkylationCall as alkylationReportCall, fmt, fmtQ, pct, type Alkylation
 import type { ParamValue } from '../ParamField'
 import type { SpeciesReport } from '../types'
 import { electronReadAsBy, noActivationMeta } from '../inspector/checks'
+import { alkylationExtension, alkylationTarget } from '../setup/products'
 import {
   alkylationCall,
   censusFacts,
@@ -34,6 +35,12 @@ import {
 /// Calls over fewer tagged spectra than this read "too little evidence".
 export const MIN_TAGGED = 1000
 
+/// Below this many placed spectra the gap distribution supports no
+/// conclusion (provisional: the CLI's own gap peaks need 20 spectra, and a
+/// share of 0.005 of the placed; 100 is where one such peak can stand out).
+/// The Mass shifts tab and the Overview say so alike.
+export const LOW_PLACED = 100
+
 export type TileAction =
   | { kind: 'enable'; label: string; values: Record<string, ParamValue> }
   // Picks a FASTA, turns the mass-gap report on and runs again, with the
@@ -50,6 +57,9 @@ export interface Tile {
   /// low: too little evidence.
   tone: 'figure' | 'call' | 'nocall' | 'off' | 'low'
   action?: TileAction
+  /// The value is shown, but muted, for this reason (a species call at a
+  /// tolerance in Da): its tooltip.
+  muted?: string
 }
 
 export interface Check {
@@ -351,6 +361,7 @@ export function buildOverview(i: OverviewInputs): Overview {
       note: `of ${fmt(numOf(dc.get('ms2_tagged')))} tagged MS2 spectra, placed on the database (mass-shift accounting)`
     })
   const shift = topShift(i.delta)
+  const fewPlaced = placed != null && placed < LOW_PLACED
   if (shift)
     figures.push({
       id: 'topshift',
@@ -358,6 +369,21 @@ export function buildOverview(i: OverviewInputs): Overview {
       value: `${Number(shift.delta) > 0 ? '+' : ''}${shift.delta} Da${shift.name ? ` (${shift.name})` : ''}`,
       tone: 'figure',
       note: `${fmt(shift.spectra)} spectra, away from 0; a candidate, not an identified modification`
+    })
+  // The survey's main result has a tile whatever it found (shownTiles shows
+  // it when the mass-shift table was asked for): none is a result too.
+  else
+    figures.push({
+      id: 'topshift',
+      label: 'Top mass shift',
+      value: 'no shift peak',
+      tone: 'nocall',
+      note:
+        i.delta == null
+          ? 'the mass-shift table was not read'
+          : fewPlaced
+            ? `no shift of 0.5 Da or more; with ${fmt(placed)} placed spectra none could stand out (see below)`
+            : 'the mass-shift table has no shift of 0.5 Da or more away from 0'
     })
 
   // ---- calls
@@ -382,6 +408,8 @@ export function buildOverview(i: OverviewInputs): Overview {
       }
   }
   const daSpecies = da && (i.species != null || given(i.params['species']))
+  // The species name stays, muted, as the Species tab shows it.
+  if (daSpecies && calls[1].tone === 'call') calls[1].muted = `Unreliable: ${DA_SPECIES_CAVEAT}`
   const warning =
     lowRes.length || daSpecies
       ? `The fragment tolerance is ${fmt(tol!.value)} Da: ${[
@@ -404,6 +432,13 @@ export function buildOverview(i: OverviewInputs): Overview {
 
   // ---- checks
   const checks: Check[] = []
+  // As the Mass shifts tab leads with it: a survey over so few placed
+  // spectra must not read as clean.
+  if (fewPlaced && (given(i.params['delta_out']) || given(i.params['delta_counts_out']) || given(i.params['recon_out'])))
+    checks.push({
+      tone: 'flag',
+      text: `${placed === 0 ? 'No spectrum is placed' : `Only ${fmt(placed)} spectra are placed`} with a mass gap: too few for any conclusion about modifications or alkylation (the Mass shifts tab asks for ${LOW_PLACED}).`
+    })
   if (!cutoffApplied)
     checks.push({
       tone: 'muted',
@@ -541,7 +576,17 @@ export function buildOverview(i: OverviewInputs): Overview {
     )
   // A tie at the top names no proteome, called or ranked: which one would
   // be arbitrary (the Species tab says No single leader).
-  if (callOk && sp.state === 'called' && sp.present.length > 0 && tiedLeaders(sp.present).length < 2)
+  // At a tolerance in Da no proteome is suggested: the Species tab says not
+  // to read the top taxon as the sample's organism.
+  const spSuggest = (sp.state === 'called' && sp.present.length > 0 && tiedLeaders(sp.present).length < 2) || (sp.state === 'ranked' && sp.tied.length < 2)
+  if (callOk && daSpecies && spSuggest)
+    suggestions.push({
+      setting: 'database',
+      value: 'not suggested',
+      evidence: 'default',
+      note: 'species calls are unreliable at a fragment tolerance in Da'
+    })
+  else if (callOk && sp.state === 'called' && sp.present.length > 0 && tiedLeaders(sp.present).length < 2)
     suggestions.push({
       setting: 'database',
       value: `${sp.present[0].name} proteome`,
@@ -715,16 +760,18 @@ function alkylationTile(c: AlkylationCall, fasta: boolean, params: Record<string
   }
   // Asked for and not written: the log says why; no action to add it.
   if (given(params['alkylation_out'])) return { ...base, value: 'not assessed', tone: 'off', note: 'the alkylation report was asked for but not written; the log says why' }
-  const raise = ext < FASTA_EXTENSION
   // The alkylation report places tags on a shipped proteome (or the FASTA
-  // given): tags of 8 residues for the human one, so the extension goes to
-  // 3 with it.
+  // given): the extension it needs follows the proteome and the tag length
+  // (products.ts alkylationExtension), as the Setup toggle raises it.
+  const withAlk = { ...(params as Record<string, ParamValue>), alkylation_out: 'alkylation.tsv' }
+  const raise = alkylationExtension(withAlk)
+  const target = alkylationTarget(withAlk)
   return {
     ...base,
     value: 'not assessed',
     tone: 'off',
-    note: `the alkylation report was not written${raise ? `; adding it raises the extension from ${ext} to ${FASTA_EXTENSION}, so tags reach the 8 residues a proteome needs` : ''}`,
-    action: enable('Alkylation report', { alkylation_out: 'alkylation.tsv', ...(raise ? { extension: String(FASTA_EXTENSION) } : {}) })
+    note: `the alkylation report was not written${raise ? `; adding it raises the extension from ${ext} to ${raise}, so tags reach the ${target} residues the proteome needs` : ''}`,
+    action: enable('Alkylation report', { alkylation_out: 'alkylation.tsv', ...(raise ? { extension: raise } : {}) })
   }
 }
 
@@ -732,7 +779,7 @@ function alkylationTile(c: AlkylationCall, fasta: boolean, params: Record<string
 export function alkylationReason(reason: string | undefined): string {
   switch (reason) {
     case 'tags_too_short':
-      return 'no tag reaches the length the proteome needs (8 residues for human or mouse)'
+      return 'no tag reaches the length the proteome needs (8 residues for human or mouse, 7 for yeast or E. coli)'
     case 'few_cys_spectra':
       return 'too few spectra with one cysteine'
     case 'ambiguous':
@@ -754,14 +801,16 @@ function alkylationReportTile(c: AlkylationReport, params: Record<string, unknow
       tone: 'call',
       note: `${c.share != null ? `${pct(c.share)} of ` : ''}${fmt(c.binned)} spectra with one cysteine${db}; not validated`
     }
-  const ext = intParam(params['extension'], 0)
-  const short = c.reason === 'tags_too_short' && ext < FASTA_EXTENSION
+  // The extension the run's proteome needs at its tag length; a FASTA of
+  // the user's needs about 8 residues (its index sets the length).
+  const need = c.reason === 'tags_too_short' ? alkylationExtension(params as Record<string, ParamValue>) : null
+  const target = alkylationTarget(params as Record<string, ParamValue>)
   return {
     ...base,
     value: 'no call',
     tone: 'nocall',
-    note: alkylationReason(c.reason),
-    ...(short ? { action: { kind: 'enable' as const, label: `Run again with extension ${FASTA_EXTENSION}`, values: { extension: String(FASTA_EXTENSION) } } } : {})
+    note: c.reason === 'tags_too_short' ? `no tag reaches the ${target} residues the proteome needs` : alkylationReason(c.reason),
+    ...(need ? { action: { kind: 'enable' as const, label: `Run again with extension ${need}`, values: { extension: need } } } : {})
   }
 }
 
@@ -800,7 +849,8 @@ const LEAD_TILES: Record<string, string[]> = {
   'mass-shift': ['topshift', 'placed'],
   species: ['genus'],
   'db-reduction': ['shortlist'],
-  triage: ['tagged']
+  triage: ['tagged'],
+  characterize: ['protease', 'label', 'genus', 'glyco', 'alkylation']
 }
 
 /// @p tiles with the workflow's own (LEAD_TILES) first among the figures.

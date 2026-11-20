@@ -26,6 +26,9 @@ const key = (el: Element, k: string, mods: { metaKey?: boolean; ctrlKey?: boolea
 const fixture = (name: string): string => readFileSync(`src/fixtures/denovo/${name}`, 'utf8')
 
 const COLUMNS = ['spectrum', 'tag', 'length', 'charge', 'nterm_mass', 'cterm_mass', 'evalue', 'res_conf', 'usi']
+// The table shows res_conf after the length (ResultsTable displayOrder):
+// a row is copied as shown.
+const SHOWN = (r: string[]): string[] => [r[0], r[1], r[2], r[7], r[3], r[4], r[5], r[6], r[8]]
 const N = 60
 const ROWS: string[][] = Array.from({ length: N }, (_, i) => [
   `frame=${100 + i} scan=${i}`,
@@ -221,7 +224,7 @@ describe('copy row and copy USI', () => {
     await key(table(), 'ArrowDown')
     await key(activeRow()!, 'ArrowDown')
     await key(activeRow()!, 'c', { metaKey: true })
-    expect(writeText).toHaveBeenCalledWith(ROWS[1].join('\t'))
+    expect(writeText).toHaveBeenCalledWith(SHOWN(ROWS[1]).join('\t'))
     expect(await screen.findByText('Copied the row.')).toBeDefined()
   })
 
@@ -232,8 +235,7 @@ describe('copy row and copy USI', () => {
     await click(screen.getByRole('checkbox', { name: 'Charge' }))
     await key(table(), 'ArrowDown')
     await key(activeRow()!, 'c', { ctrlKey: true })
-    const j = COLUMNS.indexOf('charge')
-    expect(writeText).toHaveBeenCalledWith(ROWS[0].filter((_, k) => k !== j).join('\t'))
+    expect(writeText).toHaveBeenCalledWith(SHOWN(ROWS[0]).filter((_, k) => k !== 4).join('\t'))
   })
 
   it('⇧⌘C copies the USI of the active row', async () => {
@@ -256,7 +258,7 @@ describe('copy row and copy USI', () => {
     await click(screen.getByRole('button', { name: 'Copy USI' }))
     expect(writeText).toHaveBeenLastCalledWith('mzspec:USI000000:run:scan:3')
     await click(screen.getByRole('button', { name: 'Copy row' }))
-    expect(writeText).toHaveBeenLastCalledWith(ROWS[3].join('\t'))
+    expect(writeText).toHaveBeenLastCalledWith(SHOWN(ROWS[3]).join('\t'))
   })
 
   it('without a usi column Copy USI says how to get one, and copies nothing', async () => {

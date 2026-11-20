@@ -37,13 +37,17 @@ interface Props {
   /// A steps select's count option (subsample_fraction with
   /// subsample_spectra): "Custom count…" sets the count, a share clears it.
   count?: { spec: ParamSpec; value: ParamValue; onChange: (v: ParamValue) => void }
+  /// The value is the one the workflow or preset set (not changed since):
+  /// a value off the CLI default reads "set by <it>", not "changed", as
+  /// Advanced counts changes against where the form started.
+  setBy?: string
 }
 
 // One widget per declared type. The tool's restrictions drive the control: a
 // string with `choices` becomes a select. A number is a text field checked by
 // invalidBecause() against the type, min and max the CLI declares; a value the
 // CLI would refuse is marked invalid and says why (App keeps Run disabled).
-export default function ParamField({ spec, value, onChange, onPickFile, needs, unit, turnsOn, brief, hint, label: name, required, blocked, count }: Props): JSX.Element {
+export default function ParamField({ spec, value, onChange, onPickFile, needs, unit, turnsOn, brief, hint, label: name, required, blocked, count, setBy }: Props): JSX.Element {
   const off = !!needs || !!blocked
   // An inert field is not sent, so its value cannot fail the run.
   const invalid = off ? null : invalidBecause(spec, value)
@@ -123,7 +127,7 @@ export default function ParamField({ spec, value, onChange, onPickFile, needs, u
         )}
         {changed && !brief && (
           <span className="changed">
-            {' '}Default {deflt} · <span className="mark">changed</span>
+            {' '}Default {deflt} · {setBy ? <>set by {setBy}</> : <span className="mark">changed</span>}
           </span>
         )}
       </p>

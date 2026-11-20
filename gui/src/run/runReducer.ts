@@ -58,6 +58,10 @@ export interface Results {
   // Opened from History: reports of the run shown that a later run (of
   // @p by, ended @p end) wrote over at @p path; they are withheld.
   reportsReplaced?: { path: string; by: string; end: number }[]
+  // Opened from History: reports of the run shown that a later run which
+  // did not finish (@p status) named too. Shown, with a note: that run may
+  // have written part of the file, or nothing.
+  reportsTouched?: { path: string; by: string; end: number; status: 'cancelled' | 'failed' }[]
 }
 
 // The last run that finished, for the summary over the form, with the
@@ -215,7 +219,9 @@ export interface RunState {
   // The run the Species tab describes, as it was submitted: unticking species
   // or lowering tag_length afterwards must not hide (or re-show) its report.
   // null until the first run; the tab then follows the form.
-  speciesRun: { input: string; enabled: boolean } | null
+  // params: the parameters of the run that wrote an opened species report
+  // (its History record), so the tab knows its tolerance (Da caveat).
+  speciesRun: { input: string; enabled: boolean; params?: Record<string, unknown> | null } | null
   reports: Reports
   // Why the last run failed, shown above the result tabs.
   failure: Failure | null

@@ -79,8 +79,13 @@ export function useSession(start: Origin = DEFAULTS) {
   const setValues = (u: SetStateAction<Record<string, ParamValue>>): void =>
     setRawValues((s) => syncRecipe(s, typeof u === 'function' ? u(s) : u, edited.current, originRef.current))
   // A task, preset or run replaces the form: no field is the user's yet.
+  // formGen counts the replacements (workflow, preset, reset, undo, a run
+  // taken over): what the form remembered of the values before (the
+  // Extension the alkylation report raised) is forgotten with them.
+  const [formGen, setFormGen] = useState(0)
   const replaceValues = (v: Record<string, ParamValue>): void => {
     edited.current = new Set()
+    setFormGen((g) => g + 1)
     setRawValues(v)
   }
   const [undoSnapshot, setUndoSnapshot] = useState<Snapshot | null>(null)
@@ -319,6 +324,7 @@ export function useSession(start: Origin = DEFAULTS) {
       setOrigin(before.origin)
       setOriginValues(before.originValues)
       setRawValues(before.values)
+      setFormGen((g) => g + 1)
       edited.current = before.edited
     }
   }
@@ -364,6 +370,7 @@ export function useSession(start: Origin = DEFAULTS) {
     values,
     setValues,
     setValue,
+    formGen,
     // Reset… (RunBar): every parameter to FASTag's default.
     reset: (): void => {
       setOrigin(DEFAULTS)

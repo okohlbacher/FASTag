@@ -882,18 +882,25 @@ export function useRun(s: RunInputs, view: ViewStore, hooks: RunHooks = {}) {
     // the banner names that run. B's QC beside A's tags would read as one run.
     const outputs = recordOutputs(shown, out)
     const reportsReplaced: { path: string; by: string; end: number }[] = []
+    // A later run that did not finish withholds nothing: its record may name
+    // a path it never wrote. The report is shown, with a note.
+    const reportsTouched: { path: string; by: string; end: number; status: 'cancelled' | 'failed' }[] = []
     const slots = outputs as unknown as Record<string, string | null | undefined>
     for (const [k, p] of Object.entries(slots)) {
       if (k === 'out' || !p || p === out) continue
       const w = await window.fastag.historyOf(p).catch(() => null)
       if (superseded(t)) return
       if (w && w.id !== shown.id && w.end >= shown.end) {
+        if (w.status !== 'ok') {
+          reportsTouched.push({ path: p, by: w.input, end: w.end, status: w.status })
+          continue
+        }
         slots[k] = null
         reportsReplaced.push({ path: p, by: w.input, end: w.end })
       }
     }
     await showResults(shown.input, outputs, { params: call, log: createLogStore() }).catch(logResultsError)
-    if (shown !== r || reportsReplaced.length)
+    if (shown !== r || reportsReplaced.length || reportsTouched.length)
       dispatch({
         type: 'RESULTS',
         update: (x) =>
@@ -901,7 +908,8 @@ export function useRun(s: RunInputs, view: ViewStore, hooks: RunHooks = {}) {
             ? {
                 ...x,
                 ...(shown !== r ? { replaced: { input: r.input, by: shown.input, end: shown.end } } : {}),
-                ...(reportsReplaced.length ? { reportsReplaced } : {})
+                ...(reportsReplaced.length ? { reportsReplaced } : {}),
+                ...(reportsTouched.length ? { reportsTouched } : {})
               }
             : x
       })
@@ -941,7 +949,7 @@ export function useRun(s: RunInputs, view: ViewStore, hooks: RunHooks = {}) {
       dispatch({ type: 'REPORTS', update: (cur) => closeOtherRuns(cur, p) })
       // A report read is shown whatever Setup's species switch and reach
       // check say; the counts of the run shown before are not its own.
-      dispatch({ type: 'SPECIES', species: sp, speciesRun: { input: baseName(rec?.input ?? p), enabled: true } })
+      dispatch({ type: 'SPECIES', species: sp, speciesRun: { input: baseName(rec?.input ?? p), enabled: true, params: rec?.params ?? null } })
       dispatch({ type: 'EVIDENCE', evidence: { contributed: null, ms2: null, czExcluded: null } })
       if (latest(t)) setTab('species')
     } catch (err) {
@@ -1075,6 +1083,18 @@ export function useRun(s: RunInputs, view: ViewStore, hooks: RunHooks = {}) {
   const setOverwriteAsk = useCallback((a: OverwriteAsk | null) => dispatch({ type: 'ASK', ask: a }), [])
 
   const p = running ? active?.progress : undefined
+  // The job whose tags are shown, by its output path: an older History run
+  // of the same input is not the session's last run, and its notes are not
+  // that run's.
+  const shownPath = state.results?.path
+  const shownJob = shownPath
+    ? state.jobs.find((j) => j.status !== 'running' && (j.resolvedOutputs?.out === shownPath || j.out === shownPath))
+    : undefined
+  // A re-run fix applies its values to the form and runs that: only when
+  // the run shown is the session's last single run and the form would send
+  // the same call again.
+  const shownRerunnable =
+    !!shownJob && !shownJob.batch && !!input && !!out && sameCall(shownJob.params, withWorkflow(runParams(input, out)))
   return {
     running,
     batchRunning,
@@ -1092,7 +1112,8 @@ export function useRun(s: RunInputs, view: ViewStore, hooks: RunHooks = {}) {
     startedAt: active?.startedAt ?? 0,
     evidence: state.evidence,
     // The inspector's CLI lines of the run whose results are shown.
-    shownNotes: state.jobs.find((j) => j.input === state.results?.input && j.status !== 'running')?.notes ?? [],
+    shownNotes: shownJob?.notes ?? [],
+    shownRerunnable,
     jobs,
     summary,
     // What each done batch job wrote (useBatchData), for the SDRF comparison.
@@ -1144,3 +1165,15 @@ export function useRun(s: RunInputs, view: ViewStore, hooks: RunHooks = {}) {
 }
 
 export type RunState = ReturnType<typeof useRun>
+
+/// Two run calls send the same: input, output and parameters alike (the
+/// overwrite confirmation and the workflow name aside).
+export function sameCall(a: Record<string, unknown> | undefined, b: Record<string, unknown>): boolean {
+  if (!a) return false
+  if (a['in'] !== b['in'] || a['out'] !== b['out']) return false
+  const pa = (a['params'] ?? {}) as Record<string, unknown>
+  const pb = (b['params'] ?? {}) as Record<string, unknown>
+  const keys = new Set([...Object.keys(pa), ...Object.keys(pb)])
+  for (const k of keys) if (JSON.stringify(pa[k]) !== JSON.stringify(pb[k])) return false
+  return true
+}

@@ -284,7 +284,7 @@ export default function SpectrumPanel({ target, source, onTarget, onLocate }: Pr
     body = (
       <>
         <StickPlot spectrum={peaks.spectrum} ladder={ladder} />
-        {ladder && <LadderLine ladder={ladder} tag={row?.tag ?? ''} />}
+        {ladder && <LadderLine ladder={ladder} tag={row?.tag ?? ''} unit={peaks.spectrum.toleranceUnit} />}
         {!row && tags && tags.rows.length > 0 && <p className="hint">This file has no nterm_mass, cterm_mass or charge column: no ladder can be drawn.</p>}
       </>
     )
@@ -386,7 +386,18 @@ function TagsTable(p: {
   )
 }
 
-function LadderLine({ ladder, tag }: { ladder: Ladder; tag: string }): JSX.Element {
+/// A step's distance from where it should be, in the run's tolerance unit
+/// (a Da run's +0.12 Da, not +160.8 ppm), the other unit in its tooltip.
+function StepDelta({ to, unit }: { to: Ladder['positions'][number]; unit: string }): JSX.Element {
+  const da = to.deltaMz == null ? '–' : `${to.deltaMz >= 0 ? '+' : '−'}${Math.abs(to.deltaMz).toFixed(3)}`
+  return unit === 'Da' ? (
+    <span className="muted" title={`${ppm(to.deltaPpm)} ppm`}> Δ {da} Da</span>
+  ) : (
+    <span className="muted" title={`${da} Da`}> Δ {ppm(to.deltaPpm)} ppm</span>
+  )
+}
+
+function LadderLine({ ladder, tag, unit }: { ladder: Ladder; tag: string; unit: string }): JSX.Element {
   const steps = ladder.residues.map((res, k) => ({ res, to: ladder.positions[k + 1] }))
   return (
     <div className="sp-ladder" data-testid="ladder">
@@ -414,7 +425,7 @@ function LadderLine({ ladder, tag }: { ladder: Ladder; tag: string }): JSX.Eleme
           <li key={k} className={s.to.peak == null ? 'off' : undefined}>
             <span className="sp-res">—{s.res}—</span>
             <span className="mono">{s.to.mz != null ? fmt(s.to.mz) : `(${fmt(s.to.expected)} missing)`}</span>
-            <span className="muted"> Δ {ppm(s.to.deltaPpm)} ppm</span>
+            <StepDelta to={s.to} unit={unit} />
           </li>
         ))}
       </ol>

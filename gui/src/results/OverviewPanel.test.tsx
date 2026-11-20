@@ -97,7 +97,7 @@ describe('Overview panel', () => {
     const { rerender } = render(<OverviewPanel {...props} overview={model(CLI_CASES.v112)} />)
     await click(screen.getByRole('button', { name: 'Copy suggested settings' }))
     expect(screen.getByText('Copied.')).toBeDefined()
-    rerender(<OverviewPanel {...props} overview={model(CLI_CASES.v112Da)} />)
+    rerender(<OverviewPanel {...props} overview={model(CLI_CASES.v112Tmt)} />)
     expect(screen.queryByText('Copied.')).toBeNull()
     await click(screen.getByRole('button', { name: 'Copy suggested settings' }))
     rerender(<OverviewPanel {...props} input="/d/b.mzML" overview={model(CLI_CASES.v112)} />)

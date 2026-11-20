@@ -357,7 +357,8 @@ export default function App({ start = LANDING }: { start?: Origin } = {}): JSX.E
     species: values['species'] === true,
     ionSeries: afterIons,
     ionSeriesHybrid: afterHybrid,
-    input: run.results?.input ?? ''
+    input: run.results?.input ?? '',
+    ms2: run.evidence.ms2
   })
   const afterInput = run.results?.input ?? ''
   // A finished run names its red flags after the run too (the panel over
@@ -367,7 +368,7 @@ export default function App({ start = LANDING }: { start?: Origin } = {}): JSX.E
     !running && afterFlags > 0 && run.announce.startsWith('Finished ')
       ? `${run.announce} ${afterFlags} ${afterFlags === 1 ? 'red flag' : 'red flags'} after the run: see Checks after the run.`
       : run.announce
-  const canRerun = !busy && jobs.length === 0 && !!bin?.ok && !!afterInput && afterInput === input && run.lastRun?.input === input
+  const canRerun = !busy && jobs.length === 0 && !!bin?.ok && !!afterInput && afterInput === input && run.lastRun?.input === input && run.shownRerunnable
   useEffect(() => {
     if (!rerunWith) return
     if (rerunWith.instrument) {
