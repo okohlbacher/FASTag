@@ -40,12 +40,19 @@ import manifest from '../params.generated.json'
 import { tagsToDenovo } from '../export/denovo'
 import { forgetTables } from '../results/tableStore'
 
+// As outputs.rs is_proteome_file: -alkylation_proteome names a FASTA unless
+// it is a shipped proteome's name.
+const proteomeFile = (v: unknown): string[] =>
+  typeof v === 'string' && v.trim() !== '' && !['auto', 'human', 'mouse', 'yeast', 'ecoli'].includes(v.trim().toLowerCase()) ? [v] : []
+
 export interface RunCall {
   in: string
   out: string
   params: Record<string, unknown>
   // Set (true) only when the user confirmed overwriting existing outputs.
   overwrite?: boolean
+  // The inputs of the other jobs of a batch (fastag.rs RunParams.protect).
+  protect?: string[]
 }
 
 export interface ResultsQueryCall {
@@ -654,7 +661,7 @@ export function installMockBridge(): MockBridge {
       const inputs = new Set([call.in, ...(manifest.params as { name: string; type: string }[])
         .filter((p) => p.type === 'input-file')
         .map((p) => call.params?.[p.name])
-        .filter((v): v is string => typeof v === 'string' && v !== '')])
+        .filter((v): v is string => typeof v === 'string' && v !== ''), ...proteomeFile(call.params?.['alkylation_proteome']), ...(call.protect ?? [])])
       return Promise.resolve({
         outputs,
         existing: outputs.filter((p) => mock.existingOutputs.includes(p) && !inputs.has(p)),

@@ -53,7 +53,9 @@ export interface HistoryViewProps {
   onOpen(path: string): void
   // Put a recorded run's input, output and parameters into the form;
   // returns the Undo.
-  onSettings(input: string, out: string, params: Record<string, unknown>): () => void
+  // @p workflow: the run's own (RunRecord.workflow), null for a record
+  // made before workflows were recorded.
+  onSettings(input: string, out: string, params: Record<string, unknown>, workflow?: string | null): () => void
   // Start the recorded run @p id again (useRun.rerun).
   onRerun(id: string): Promise<unknown>
   onGoSetup(): void
@@ -161,7 +163,7 @@ export default function HistoryView(p: HistoryViewProps): JSX.Element {
   }
 
   function settings(r: RunRecord, out: string): void {
-    const undo = p.onSettings(r.input, out, r.params ?? {})
+    const undo = p.onSettings(r.input, out, r.params ?? {}, r.workflow ?? null)
     setNote({ kind: 'settings', input: r.input, undo })
   }
 

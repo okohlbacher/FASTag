@@ -5,7 +5,7 @@
 // While a run is in flight, a locked summary of what it uses.
 
 import { useState, type JSX, type RefObject } from 'react'
-import { SECTIONS, PARAM_BY_NAME, type Dependency, type Section, UNIT_PARAMS, defaultText, dependsOf, forcedValue, humanName, inertDependency, masters, unknownParams, unitOf, unplacedParams } from '../paramLayout'
+import { SECTIONS, PARAM_BY_NAME, type Dependency, type Section, UNIT_PARAMS, defaultText, dependsOf, forcedValue, humanName, inertDependency, masters, recipeNote, unknownParams, unitOf, unplacedParams } from '../paramLayout'
 import ParamField from '../ParamField'
 import { disclosure } from '../disclosure'
 import { baseName } from '../digestReport'
@@ -121,7 +121,7 @@ export default function SetupForm({
         needs={inertDependency(name, values)}
         onChange={(v) => setValue(name, v)}
         onPickFile={session.pickFor}
-        brief={opts.brief}
+        brief={recipeNote(name, values) ?? opts.brief}
         required={opts.required}
         blocked={batchBlocked(name) ?? forced?.note}
         unit={unitSpec && unitName ? { spec: unitSpec, value: values[unitName], onChange: (v) => setValue(unitName, v) } : undefined}

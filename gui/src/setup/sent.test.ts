@@ -4,8 +4,10 @@
 // whether they were given at all (optionGiven_), so an explicit default
 // changes what it does.
 import { describe, expect, it } from 'vitest'
-import { ALWAYS_SENT, forcedValue, isChanged, sentValues, sentValues as sentValuesFrom } from '../paramLayout'
-import { TASKS, startValues } from './tasks'
+import { ALWAYS_SENT, RECIPE_FIELDS, fillRecipe, forcedValue, isChanged, recipeNote, sentValues, sentValues as sentValuesFrom, syncRecipe } from '../paramLayout'
+import { TASKS, baseValues, startValues } from './tasks'
+import { applyPreset, presetDiff } from './presetDiff'
+import type { ParamValue } from '../ParamField'
 
 describe('the parameters a run sends', () => {
   for (const t of TASKS) {
@@ -63,16 +65,47 @@ describe('the parameters a run sends', () => {
     expect([da['fragment_tolerance'], da['fragment_tolerance_unit']]).toEqual(['0.02', 'Da'])
   })
 
-  it('names none of the MSFragger recipe options at their defaults outside Database reduction', () => {
-    const v = {
-      ...startValues('builtin:export-tags', '/d/a.tags.tsv'),
-      recon_fasta: '/d/h.fasta',
-      search_config_out: '/d/a.search.json',
-      search_engine: 'msfragger'
-    }
-    const sent = sentValues(v)
+  // Round 4, 3: under the MSFragger recipe the form shows what runs. An
+  // untouched recipe field shows 10/6/2 (syncRecipe) and is not named; an
+  // explicit 0.1/0/1 is the user's and is sent, though it is the manifest
+  // default.
+  it('shows the MSFragger recipe in untouched fields outside Database reduction, and sends an explicit 0.1/0/1', () => {
+    const base = startValues('builtin:export-tags', '/d/a.tags.tsv')
+    const before = { ...base, recon_fasta: '/d/h.fasta', shortlist_out: '/d/a.shortlist.tsv', search_config_out: '/d/a.search.json' }
+    const v = syncRecipe(before, { ...before, search_engine: 'msfragger' }, new Set(), base)
+    expect([v['shortlist_max_evalue'], v['recon_min_length'], v['recon_missed_cleavages']]).toEqual(['10', '6', '2'])
+    expect(recipeNote('shortlist_max_evalue', v)).toMatch(/^MSFragger default/)
+    const sent = sentValuesFrom(v, base)
     expect(sent['search_engine']).toBe('msfragger')
     for (const n of ['recon_min_length', 'recon_missed_cleavages', 'shortlist_gapped', 'shortlist_max_evalue']) expect(n in sent, n).toBe(false)
+    // The static defaults, entered on purpose: the CLI would use 10/6/2.
+    const explicit = sentValuesFrom({ ...v, shortlist_max_evalue: '0.1', recon_min_length: '0', recon_missed_cleavages: '1' }, base)
+    expect(explicit).toMatchObject({ shortlist_max_evalue: '0.1', recon_min_length: '0', recon_missed_cleavages: '1' })
+    // The recipe off again: untouched fields go back to the origin's value,
+    // an edited one keeps its own.
+    const off = syncRecipe({ ...v, shortlist_max_evalue: '0.5' }, { ...v, shortlist_max_evalue: '0.5', search_engine: 'sage' }, new Set(['shortlist_max_evalue']), base)
+    expect([off['shortlist_max_evalue'], off['recon_min_length'], off['recon_missed_cleavages']]).toEqual(['0.5', '0', '1'])
+    expect(recipeNote('shortlist_max_evalue', off)).toBeNull()
+  })
+
+  it('keeps an explicit 0.1 under the MSFragger recipe through a saved and loaded preset', () => {
+    const base = baseValues('builtin:export-tags')
+    const shown = syncRecipe(base, { ...base, recon_fasta: '/d/h.fasta', shortlist_out: 'shortlist.tsv', search_config_out: 'search.params', search_engine: 'msfragger' }, new Set(), base)
+    const edited: Record<string, ParamValue> = { ...shown, shortlist_max_evalue: '0.1' }
+    // Saved as useSession commitPreset does: the recipe fields as shown.
+    const diff = presetDiff(base, edited)
+    for (const n of RECIPE_FIELDS) diff[n] = edited[n]
+    const loaded = fillRecipe(applyPreset({ v: 2, base: 'builtin:export-tags', diff }, ''), new Set(Object.keys(diff)))
+    expect(loaded['shortlist_max_evalue']).toBe('0.1')
+    expect(loaded['recon_min_length']).toBe('6')
+    // Loaded, its values are the origin: 0.1 still goes, 6 still does not.
+    const sent = sentValuesFrom(loaded, loaded)
+    expect(sent['shortlist_max_evalue']).toBe('0.1')
+    expect('recon_min_length' in sent).toBe(false)
+    // A preset saved before the recipe fields were stored ran the recipe.
+    const old = fillRecipe(applyPreset({ v: 2, base: 'builtin:export-tags', diff: { shortlist_out: 'shortlist.tsv', search_config_out: 'search.params', search_engine: 'msfragger' } }, ''), new Set(['shortlist_out', 'search_config_out', 'search_engine']))
+    expect(old['shortlist_max_evalue']).toBe('10')
+    expect('shortlist_max_evalue' in sentValuesFrom(old, old)).toBe(false)
   })
 
   it('sends a value that differs from the MSFragger recipe, even when it is the static default', () => {

@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import { readFileSync } from 'node:fs'
 import {
   PARAM_BY_NAME,
   PARAM_UI,
@@ -17,7 +18,9 @@ import {
   unplacedParams,
   choiceText,
   dependsOf,
-  hintText
+  hintText,
+  sentValues,
+  UNIT_PARAMS
 } from './paramLayout'
 
 // The pre-P5 tables, as views of PARAM_UI.
@@ -161,6 +164,94 @@ describe('preflight conflicts', () => {
     expect(conflicts({ species: true, taxdb: '/a', taxonomy_nodes: '/b', taxonomy_names: '/c' })).toEqual([])
     expect(conflicts({ species: false, taxdb: '/d/x.taxdb' })).toEqual([])
   })
+
+  // Round 4, 4: the combinations FASTag refuses with ILLEGAL_PARAMETERS.
+  it('refuses the TMT reporter filter without the pseudo-tag filter', () => {
+    const c = conflicts({ tmt_reporter_filter: true })
+    expect(c.map((x) => x.params[0])).toEqual(['tmt_pseudo_filter'])
+    expect(c[0].note).toMatch(/^tmt_reporter_filter requires tmt_pseudo_filter auto or on/)
+    expect(conflicts({ tmt_reporter_filter: true, tmt_pseudo_filter: 'auto' })).toEqual([])
+    expect(conflicts({ tmt_reporter_filter: false, tmt_pseudo_filter: 'off' })).toEqual([])
+  })
+
+  it('refuses exact identification matching with subsampling', () => {
+    const ids = { census: true, census_ids: '/d/a.idXML', census_ids_exact: true }
+    const c = conflicts({ ...ids, subsample_fraction: '0.1' })
+    expect(c.map((x) => x.params[0])).toEqual(['subsample_fraction'])
+    expect(c[0].note).toMatch(/^census_ids_exact needs every spectrum read/)
+    expect(conflicts({ ...ids, subsample_spectra: '5000' })).toHaveLength(1)
+    expect(conflicts({ ...ids, subsample_fraction: '0.0' })).toEqual([])
+    // Without identifications the switch is inert: nothing to refuse.
+    expect(conflicts({ census: true, census_ids_exact: true, subsample_fraction: '0.1' })).toEqual([])
+  })
+
+  it('never sends a Comet template left set after the engine changed', () => {
+    const v = { search_config_out: '/d/a.search.json', recon_fasta: '/d/h.fasta', search_config_template: '/d/comet.params', search_engine: 'sage' }
+    expect(inertBecause('search_config_template', v)).toMatch(/written complete/)
+    expect('search_config_template' in sentValues(v)).toBe(false)
+    expect(conflicts(v)).toEqual([])
+    expect(inertBecause('search_config_template', { ...v, search_engine: 'comet' })).toBeNull()
+    expect(sentValues({ ...v, search_engine: 'comet' })['search_config_template']).toBe('/d/comet.params')
+  })
+})
+
+// Round 4, 5: every dependency agrees with the reader column of the CLI's
+// IgnoredOption table (src/FASTag.cpp): the option is live with its reader
+// on and inert with it off.
+describe('dependencies follow the CLI reader table', () => {
+  const cpp = readFileSync('../src/FASTag.cpp', 'utf8')
+  const block = cpp.slice(cpp.indexOf('const IgnoredOption ignored[] = {'), cpp.indexOf('for (const IgnoredOption& r : ignored)'))
+  const rows = [...block.matchAll(/\{"(\w+)",\s*(?:\w+\s*\?\s*)?"([^"]+)"/g)].map((m) => ({ option: m[1], reader: m[2] }))
+  const ids = { census: true, census_ids: '/d/a.idXML' }
+  // Each reader: values that turn it on, and values that leave it off (the
+  // nearest that do not: a search configuration alone for the shortlist).
+  const READERS: Record<string, { on: Record<string, unknown>[]; off: Record<string, unknown>[] }> = {
+    '-digest_out': { on: [{ digest_out: 'd.tsv' }], off: [{}] },
+    '-digest_out or -label_out': { on: [{ digest_out: 'd.tsv' }, { label_out: 'l.tsv' }], off: [{}] },
+    '-label_out': { on: [{ label_out: 'l.tsv' }], off: [{ digest_out: 'd.tsv' }] },
+    '-glyco': { on: [{ glyco: true }], off: [{}] },
+    '-species': { on: [{ species: true }], off: [{}] },
+    '-acquisition_check refuse or warn': { on: [{ acquisition_check: 'warn' }, { acquisition_check: 'refuse' }], off: [{ acquisition_check: 'off' }] },
+    '-ion_series auto': { on: [{ ion_series: 'auto' }], off: [{ ion_series: 'by' }] },
+    '-unknown_charge enumerate or infer, or -check_header_charge': {
+      on: [{ unknown_charge: 'infer' }, { unknown_charge: 'enumerate' }, { check_header_charge: 'warn' }],
+      off: [{ unknown_charge: 'assume2', check_header_charge: 'off' }]
+    },
+    '-check_header_charge warn or both': { on: [{ check_header_charge: 'warn' }, { check_header_charge: 'both' }], off: [{ check_header_charge: 'off' }] },
+    '-fasta_out': { on: [{ fasta_out: 'r.fasta' }], off: [{ shortlist_out: 's.tsv', search_config_out: 'c.json' }] },
+    '-shortlist_out or -fasta_out': { on: [{ shortlist_out: 's.tsv' }, { fasta_out: 'r.fasta' }], off: [{ search_config_out: 'c.json' }] },
+    '-shortlist_out, -fasta_out or -search_config_out': { on: [{ search_config_out: 'c.json' }, { shortlist_out: 's.tsv' }], off: [{}] },
+    '-shortlist_protease other than trypsin': { on: [{ shortlist_out: 's.tsv', shortlist_protease: 'auto' }], off: [{ shortlist_out: 's.tsv', shortlist_protease: 'trypsin' }] },
+    '-search_config_out': { on: [{ search_config_out: 'c.json', search_engine: 'comet' }], off: [{ shortlist_out: 's.tsv' }] },
+    '-species_call decoy': { on: [{ species: true, species_call: 'decoy' }], off: [{ species: true, species_call: 'none' }] },
+    '-alkylation_out': { on: [{ alkylation_out: 'a.tsv' }], off: [{ alkylation_tags_out: 't.tsv' }] },
+    '-alkylation_out or -alkylation_tags_out': { on: [{ alkylation_out: 'a.tsv' }, { alkylation_tags_out: 't.tsv' }], off: [{}] },
+    '-census': { on: [{ census: true }], off: [{}] },
+    '-census_ids': { on: [ids], off: [{ census: true }] },
+    '-census_score': { on: [{ census: true, census_score: true }], off: [{ census: true }] }
+  }
+  // Read under a further condition of the table's `read` column.
+  const ALSO_OFF: Record<string, Record<string, unknown>[]> = {
+    census_ids_fdr: [{ ...ids, census_ids_accept: 'all' }]
+  }
+  // Switches a product checkbox drives, and options the CLI accepts without
+  // a reader of their own in the form: their reports are their switch.
+  const FORM_ONLY = new Set(['species_out', 'glyco_out', 'census_out', 'census_summary_out', 'census_sorted_out', 'census_score', 'census_ids', 'species_call'])
+
+  it('reads the table', () => {
+    expect(rows.length).toBeGreaterThan(60)
+    for (const r of rows) expect(READERS[r.reader], `${r.option}: reader ${r.reader}`).toBeDefined()
+  })
+
+  for (const r of rows) {
+    // A unit goes with its value (sentValues), so the value's dependency is its.
+    if (FORM_ONLY.has(r.option) || !RENDERED.includes(r.option) || UNIT_PARAMS.has(r.option)) continue
+    it(`${r.option} is read for ${r.reader}`, () => {
+      const rd = READERS[r.reader]
+      for (const on of rd.on) expect(inertBecause(r.option, on), `${r.option} with ${JSON.stringify(on)}`).toBeNull()
+      for (const off of [...rd.off, ...(ALSO_OFF[r.option] ?? [])]) expect(inertBecause(r.option, off), `${r.option} with ${JSON.stringify(off)}`).not.toBeNull()
+    })
+  }
 })
 
 describe('labels', () => {

@@ -307,14 +307,17 @@ export function useRun(s: RunInputs, view: ViewStore, hooks: RunHooks = {}) {
       return { existing: [], clashes: [] }
     }
   }
-  // The refusal of a run whose output would overwrite one of its inputs.
-  function refuseClash(clashes: string[]): void {
-    hooks.onStart?.()
+  // The refusal of a run whose output would overwrite one of its inputs
+  // (@p batch: an input of any job of the batch).
+  // A batch's refusal stays in the Batch view, where its banner is.
+  function refuseClash(clashes: string[], batch = false): void {
+    if (!batch) hooks.onStart?.()
+    const what = batch ? 'this batch' : 'this run'
     dispatch({
       type: 'FAILURE',
       failure: {
-        title: 'Not started: an output is also an input of this run',
-        reasons: clashes.map((p) => ({ text: `${p} is read by this run; writing it would destroy it. Choose another output name.` }))
+        title: `Not started: an output is also an input of ${what}`,
+        reasons: clashes.map((p) => ({ text: `${p} is read by ${what}; writing it would destroy it. Choose another output name${batch ? ' or folder' : ''}.` }))
       }
     })
   }
@@ -617,10 +620,16 @@ export function useRun(s: RunInputs, view: ViewStore, hooks: RunHooks = {}) {
     const ended: BatchEnd = { ran: 0, failed: 0, cancelled: false }
     batchCancel.current = false
     try {
+      // Every input of the queue is protected in every job (fastag.rs
+      // RunParams.protect): job 1's output must not be the file job 2 reads
+      // (s.mzML writing s.spectra.mzML, queued too). The backend compares
+      // canonical paths, refuses such a run and never cleans one up.
+      const protect = [...new Set(jobs.map((j) => j.input))]
+      const calls = queue.map((j) => withWorkflow({ ...runParams(j.input, j.out, perJobOutputs(values, j.out)), protect }))
       // One question for the whole batch, before its first job.
-      const check = await existingOutputs(queue.map((j) => runParams(j.input, j.out, perJobOutputs(values, j.out))))
+      const check = await existingOutputs(calls)
       if (check.clashes.length) {
-        refuseClash(check.clashes)
+        refuseClash(check.clashes, true)
         return
       }
       const existing = check.existing
@@ -631,7 +640,7 @@ export function useRun(s: RunInputs, view: ViewStore, hooks: RunHooks = {}) {
         const job = queue[i]
         // RUN_START marks the job running and DONE records how it ended
         // (status, reason, time, outputs and its own log) in the queue.
-        const r = await runOne(job.input, job.out, perJobOutputs(values, job.out), overwrite)
+        const r = await runOne(job.input, job.out, undefined, overwrite, calls[i])
         const status: BatchJob['status'] = r.ok ? 'done' : isCancelled(r) ? 'cancelled' : 'failed'
         ended.ran++
         if (status === 'failed') ended.failed++

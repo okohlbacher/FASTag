@@ -9,7 +9,7 @@ import App from '../App'
 import { perJobOutputs } from '../app/paths'
 import { SPECTRA } from '../api'
 import { installMockBridge, type MockBridge } from '../testing/mockBridge'
-import { addBatch, click, goTo, logText, openGroup, pickSingle, renderApp, runButton, startBatch } from '../testing/render'
+import { addBatch, click, goTo, logText, openGroup, pickSingle, renderApp, runButton, showView, startBatch } from '../testing/render'
 import { applyLastUsed, formValue } from '../testing/lastUsed'
 
 // fireEvent wraps only the synchronous handler in act; the async continuations
@@ -23,6 +23,37 @@ const emitDone = (mock: MockBridge, runId: number | undefined, ok: boolean): Pro
   act(async () => mock.emitDone({ ok, code: ok ? 0 : 1, runId }))
 
 describe('run/batch orchestration', () => {
+  // Round 4, 1: job 1 (s.mzML) writes s.spectra.mzML, which job 2 reads.
+  // Every job is checked against every queued input, and the batch is refused
+  // before its first job; the protected set reaches each run call.
+  it('refuses a batch whose job would write another queued job\'s input', async () => {
+    const mock = installMockBridge()
+    mock.settings.lastUsed = { out_spectra: '/tmp/all.mzML' }
+    await renderApp(mock)
+    await applyLastUsed(1)
+    await addBatch(mock, ['/d/s.mzML', '/d/s.spectra.mzML'])
+    await startBatch()
+    await waitFor(() => expect(mock.outputsCheckCalls.length).toBeGreaterThanOrEqual(2))
+    expect(mock.outputsCheckCalls[0].protect).toEqual(['/d/s.mzML', '/d/s.spectra.mzML'])
+    showView('batch')
+    const alert = await screen.findByRole('alert')
+    expect(alert.textContent).toMatch(/Not started: an output is also an input of this batch/)
+    expect(alert.textContent).toContain('/d/s.spectra.mzML is read by this batch')
+    expect(mock.runCalls).toHaveLength(0)
+  })
+
+  it('sends the queued inputs as protected with every batch job', async () => {
+    const mock = installMockBridge()
+    await renderApp(mock)
+    await addBatch(mock, ['/d/a.mzML', '/d/b.mzML'])
+    await startBatch()
+    await waitFor(() => expect(mock.runCalls).toHaveLength(1))
+    expect((mock.runCalls[0] as { protect?: string[] }).protect).toEqual(['/d/a.mzML', '/d/b.mzML'])
+    await emitDone(mock, 1, true)
+    await waitFor(() => expect(mock.runCalls).toHaveLength(2))
+    await emitDone(mock, 2, true)
+  })
+
   it('drops duplicate and unknown-id terminal events instead of settling another job', async () => {
     const mock = installMockBridge()
     const container = await renderApp(mock)

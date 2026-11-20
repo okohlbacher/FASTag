@@ -159,6 +159,55 @@ export function msfRecipeOn(values: Record<string, unknown>): boolean {
   return isActive('search_config_out', values) && textOf(values, 'search_engine') === 'msfragger' && textOf(values, 'shortlist_protease') === 'trypsin'
 }
 
+/// The recipe options the form shows as a value (shortlist_gapped is a
+/// switch the recipe forces on: forcedValue).
+export const RECIPE_FIELDS: readonly string[] = ['shortlist_max_evalue', 'recon_min_length', 'recon_missed_cleavages']
+
+const sameNumberText = (a: unknown, b: string): boolean => {
+  const t = String(a ?? '').trim()
+  return t === b || (t !== '' && Number.isFinite(Number(t)) && Number(t) === Number(b))
+}
+
+/// The note under a recipe field while the recipe holds: the value shown is
+/// the one FASTag uses unless another is entered, which is then sent.
+export function recipeNote(name: string, values: Record<string, unknown>): string | null {
+  if (!RECIPE_FIELDS.includes(name) || !msfRecipeOn(values)) return null
+  const r = MSF_RECIPE[name]
+  return sameNumberText(values[name], r)
+    ? `MSFragger default: FASTag uses ${r} here unless you enter another value.`
+    : `MSFragger default is ${r}; this value is sent instead.`
+}
+
+/// The form after a change from @p prev to @p next: when the MSFragger
+/// recipe turns on, each recipe field the user has not edited (@p edited)
+/// shows the recipe's value, which is what runs; when it turns off, such a
+/// field goes back to @p origin's value (the workflow's, else the manifest
+/// default). An edited field keeps its value either way and is sent when it
+/// differs from what the CLI would use (sentValues).
+export function syncRecipe<T>(prev: Record<string, T>, next: Record<string, T>, edited: ReadonlySet<string>, origin?: Record<string, unknown>): Record<string, T> {
+  const was = msfRecipeOn(prev)
+  const on = msfRecipeOn(next)
+  if (was === on) return next
+  const out = { ...next }
+  for (const n of RECIPE_FIELDS) {
+    if (edited.has(n)) continue
+    const back = origin && n in origin ? String(origin[n] ?? '') : listText(PARAM_BY_NAME.get(n)?.default ?? '')
+    out[n] = (on ? MSF_RECIPE[n] : back) as T
+  }
+  return out
+}
+
+/// @p values with the recipe's value in each recipe field the CLI would
+/// apply it to: the recipe holds and the field is not among @p given (a
+/// run record's sent options, a preset's stored ones) and is at the
+/// manifest default. What a recorded or saved run did, shown as it ran.
+export function fillRecipe<T>(values: Record<string, T>, given: ReadonlySet<string>): Record<string, T> {
+  if (!msfRecipeOn(values)) return values
+  const out = { ...values }
+  for (const n of RECIPE_FIELDS) if (!given.has(n) && !isChanged(n, values[n])) out[n] = MSF_RECIPE[n] as T
+  return out
+}
+
 /// What the CLI uses for @p name when the option is not named, given the
 /// rest of @p values: the manifest default, or the conditional default the
 /// CLI applies instead (the MSFragger recipe).
@@ -201,7 +250,8 @@ function differsFromCli(name: string, value: unknown, values: Record<string, unk
 ///   -shortlist_protease auto off, and the MSFragger recipe of -search_engine
 ///   applies only to options not given), so such a value goes whenever it
 ///   differs from what the CLI would do;
-///   A value counts as set when it differs from the manifest default or from
+///   A value counts as set when it is a recipe field under the MSFragger
+///   recipe, or differs from the manifest default or from
 ///   @p base, the values the session started from (the workflow's): a
 ///   field left at the manifest default by both is the CLI's to decide, so
 ///   Export tags with MSFragger names no recipe option, while Database
@@ -214,6 +264,10 @@ function differsFromCli(name: string, value: unknown, values: Record<string, unk
 export function sentValues<T>(values: Record<string, T>, base?: Record<string, unknown>): Record<string, T> {
   const set = (name: string, v: unknown): boolean =>
     isChanged(name, v) || (!!base && name in base && listText(base[name]) !== listText(v))
+  // Under the MSFragger recipe a recipe field shows the recipe's value
+  // (syncRecipe): any other value in it is the user's and is sent, even the
+  // manifest default (0.1 is not the 10 the CLI would use).
+  const recipe = msfRecipeOn(values)
   const out: Record<string, T> = {}
   for (const name of RENDERED) {
     if (UNIT_PARAMS.has(name)) continue
@@ -222,7 +276,7 @@ export function sentValues<T>(values: Record<string, T>, base?: Record<string, u
     if (forcedValue(name, values)) continue
     const unit = unitOf(name)
     if (unit && String(v ?? '').trim() === '') continue
-    const own = set(name, v) && differsFromCli(name, v, values)
+    const own = (set(name, v) || (recipe && RECIPE_FIELDS.includes(name))) && differsFromCli(name, v, values)
     if (!ALWAYS_SENT.has(name) && !own && !(unit && isChanged(unit, values[unit]))) continue
     if (v === undefined) continue
     out[name] = v
@@ -261,10 +315,20 @@ export function isActive(name: string, values: Record<string, unknown>): boolean
 /// naming one thing to fix beats listing two.
 export function inertDependency(name: string, values: Record<string, unknown>): Dependency | null {
   for (const d of dependsOf(name)) {
-    const set = masters(d).some((n) => isActive(n, values))
+    const set = masters(d).some((n) => masterSet(d, n, values))
     if (d.replaced ? set : !set) return d
   }
   return null
+}
+
+/// Master @p n of @p d is set: by its value where the dependency names one
+/// (a choice: species_call decoy), else as isActive says. An empty choice
+/// reads as its default, as the CLI does.
+export function masterSet(d: Dependency, n: string, values: Record<string, unknown>): boolean {
+  const w = d.when?.[n]
+  if (!w) return isActive(n, values)
+  const v = String(values[n] ?? '').trim() || listText(PARAM_BY_NAME.get(n)?.default ?? '')
+  return w.is ? w.is.includes(v) : !(w.isNot ?? []).includes(v)
 }
 
 /// Why @p name is inert right now, or null if it is live.
@@ -660,6 +724,25 @@ export const CONFLICTS: ((values: Record<string, unknown>, ctx: PreflightContext
     ['shortlist_out', 'fasta_out', 'search_config_out'].some((n) => isActive(n, values)) && !isActive('recon_fasta', values) && !isActive('fasta', values)
       ? { params: ['recon_fasta', 'shortlist_out', 'fasta'], note: 'The shortlist needs a protein database: choose one under Protein database.', neutral: true }
       : null,
+  // "-tmt_reporter_filter requires -tmt_pseudo_filter auto or on."
+  (values) =>
+    isActive('tmt_reporter_filter', values) && textOf(values, 'tmt_pseudo_filter') === 'off'
+      ? {
+          params: ['tmt_pseudo_filter', 'tmt_reporter_filter'],
+          note: 'tmt_reporter_filter requires tmt_pseudo_filter auto or on: set the TMT pseudo-tag filter to auto or on, or turn the reporter filter off.'
+        }
+      : null,
+  // "-census_ids_exact needs every spectrum read: it cannot be combined with subsampling."
+  (values) =>
+    !inertBecause('census_ids_exact', values) && isActive('census_ids_exact', values) && (isActive('subsample_fraction', values) || isActive('subsample_spectra', values))
+      ? {
+          params: ['subsample_fraction', 'census_ids_exact', 'subsample_spectra'],
+          note: 'census_ids_exact needs every spectrum read: it cannot be combined with subsampling. Set Spectra to read to All, or turn exact matching off.'
+        }
+      : null,
+  // "-search_config_template is a `comet -p` parameter file; it needs
+  // -search_engine comet": no entry here, the template depends on Comet
+  // (paramUi.ts), so a template left over from Comet is inert and not sent.
   // "-taxdb, -taxonomy_nodes and -taxonomy_names are one set: give all three, or none (to use the bundled taxonomy)."
   (values) => {
     if (!isActive('species', values)) return null

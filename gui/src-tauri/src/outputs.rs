@@ -56,15 +56,29 @@ pub fn input_options() -> &'static [String] {
     })
 }
 
+/// The names -alkylation_proteome takes for a shipped proteome; any other
+/// value is the path of a FASTA the user supplies (a string option in the
+/// manifest, yet a file the run reads).
+pub const PROTEOME_NAMES: [&str; 5] = ["auto", "human", "mouse", "yeast", "ecoli"];
+
+/// @p value of -alkylation_proteome names a file, not a shipped proteome.
+pub fn is_proteome_file(value: &str) -> bool {
+    let v = value.trim();
+    !v.is_empty() && !PROTEOME_NAMES.contains(&v.to_ascii_lowercase().as_str())
+}
+
 /// Every file @p args (as build_args produced them) reads: the value of each
-/// input-file option, -in included, without empty ones.
+/// input-file option, -in included, and a FASTA given as
+/// -alkylation_proteome, without empty ones.
 pub fn inputs_of(args: &[String]) -> Vec<String> {
     let options = input_options();
     let mut found = Vec::new();
     let mut i = 0;
     while i < args.len() {
         if let Some(name) = args[i].strip_prefix('-') {
-            if options.iter().any(|o| o == name) {
+            let file_valued = options.iter().any(|o| o == name)
+                || (name == "alkylation_proteome" && args.get(i + 1).is_some_and(|v| is_proteome_file(v)));
+            if file_valued {
                 if let Some(v) = args.get(i + 1).filter(|v| !v.is_empty()) {
                     found.push(v.clone());
                 }
@@ -135,6 +149,18 @@ pub fn outputs_by_option(args: &[String]) -> Vec<(&'static str, String)> {
     found.extend(derived);
     found.retain(|(_, v)| !v.is_empty());
     found
+}
+
+/// Every file a run reads, resolved as the child sees it: -in, each input of
+/// @p args (inputs_of) and @p protect, the inputs of the other jobs of its
+/// batch, which no job may write either (one job's output must not be the
+/// input a later job reads). The one set the clash check, the overwrite
+/// check, the cleanup of a failed run and Export INI compare against.
+pub fn run_inputs(input: &str, args: &[String], protect: &[String], cwd: Option<&Path>) -> Vec<PathBuf> {
+    let mut all = vec![input.to_string()];
+    all.extend(inputs_of(args));
+    all.extend(protect.iter().filter(|p| !p.trim().is_empty()).cloned());
+    resolve(&all, cwd)
 }
 
 /// Every file the CLI writes for @p args (outputs_by_option), each once.
@@ -435,6 +461,54 @@ mod tests {
         assert!(existing(&paths, &inputs).is_empty(), "an input is not offered for overwriting");
         let c = cleanup(&paths, &inputs);
         assert!(c.removed.is_empty() && db.exists() && spectra.exists());
+        let _ = std::fs::remove_dir_all(&d);
+    }
+
+    // -alkylation_proteome is a string option (a shipped proteome's name or
+    // a FASTA path): a FASTA named there is an input like -recon_fasta. An
+    // output named like it is refused, never offered for overwriting, and a
+    // failed run's cleanup leaves its bytes as they were.
+    #[test]
+    fn a_proteome_fasta_is_an_input_and_keeps_its_bytes() {
+        let d = tmp("proteome");
+        let spectra = d.join("a.mzML");
+        let db = d.join("my.reduced.fasta");
+        let bytes = b">P1\nPEPTIDECK\n";
+        std::fs::write(&spectra, "spectra").unwrap();
+        std::fs::write(&db, bytes).unwrap();
+        let argv = v(&["-in", "a.mzML", "-out", "a.tags.tsv", "-alkylation_out", "a.alk.tsv", "-alkylation_proteome", "my.reduced.fasta", "-fasta_out", "./my.reduced.fasta"]);
+        assert_eq!(inputs_of(&argv), v(&["a.mzML", "my.reduced.fasta"]));
+        let inputs = run_inputs("a.mzML", &argv, &[], Some(&d));
+        let paths = resolve(&resolved_outputs(&argv), Some(&d));
+        assert_eq!(clashes(&paths, &inputs), vec![d.join("./my.reduced.fasta")]);
+        assert!(existing(&paths, &inputs).is_empty());
+        let c = cleanup(&paths, &inputs);
+        assert!(c.removed.is_empty());
+        assert_eq!(std::fs::read(&db).unwrap(), bytes, "the proteome keeps its bytes");
+        // A shipped proteome's name is not a file.
+        for name in PROTEOME_NAMES {
+            assert!(!is_proteome_file(name));
+            assert_eq!(inputs_of(&v(&["-alkylation_proteome", name])), Vec::<String>::new());
+        }
+        let _ = std::fs::remove_dir_all(&d);
+    }
+
+    // A batch: job 1 (s.mzML) writes s.spectra.mzML, which job 2 reads. The
+    // other jobs' inputs are protected like the job's own.
+    #[test]
+    fn another_batch_jobs_input_is_protected() {
+        let d = tmp("batch");
+        let job2 = d.join("s.spectra.mzML");
+        std::fs::write(d.join("s.mzML"), "spectra").unwrap();
+        std::fs::write(&job2, "job 2 input").unwrap();
+        let argv = v(&["-in", "s.mzML", "-out", "s.tags.tsv", "-out_spectra", "s.spectra.mzML"]);
+        let protect = vec![job2.display().to_string()];
+        let alone = run_inputs("s.mzML", &argv, &[], Some(&d));
+        let paths = resolve(&resolved_outputs(&argv), Some(&d));
+        assert!(clashes(&paths, &alone).is_empty(), "alone, the run sees an existing output");
+        let inputs = run_inputs("s.mzML", &argv, &protect, Some(&d));
+        assert_eq!(clashes(&paths, &inputs).len(), 1);
+        assert!(cleanup(&paths, &inputs).removed.is_empty() && job2.exists());
         let _ = std::fs::remove_dir_all(&d);
     }
 

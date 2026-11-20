@@ -58,6 +58,11 @@ export interface Dependency {
   /// What the field says it needs, in place of the masters' names (two
   /// masters that are one control: Spectra to read).
   say?: string
+  /// A master that is a choice counts as set by its value, not by being
+  /// non-empty: `is` lists the values that set it, `isNot` those that do
+  /// not (an empty field reads as its default). A master without an entry
+  /// is set as paramLayout isActive says.
+  when?: Record<string, { is?: string[]; isNot?: string[] }>
 }
 
 export interface ParamUi {
@@ -120,6 +125,39 @@ const TAGS_ON_DB: Dependency = {
 }
 const DELTA_OFF: Dependency = { on: 'delta_out', note: 'only the mass-shift table uses it' }
 const SHORTLIST_OFF: Dependency = { on: ['shortlist_out', 'fasta_out', 'search_config_out'], note: 'no shortlist is written' }
+/// Read for the shortlist and the reduced FASTA only, not for the search
+/// configuration alone (FASTag.cpp IgnoredOption: shortlist_on).
+const SHORTLIST_READ: Dependency = { on: ['shortlist_out', 'fasta_out'], note: 'only the shortlist and the reduced FASTA use it' }
+const TRYPSIN_ONLY: Dependency = {
+  on: 'shortlist_protease',
+  when: { shortlist_protease: { is: ['trypsin'] } },
+  say: 'the protease rule Trypsin',
+  note: 'ignored with any other protease'
+}
+const NOT_TRYPSIN: Dependency = {
+  on: 'shortlist_protease',
+  when: { shortlist_protease: { isNot: ['trypsin'] } },
+  say: 'a protease rule other than Trypsin',
+  note: 'Trypsin always counts fully specific placements'
+}
+const HEADER_CHECK_OFF: Dependency = {
+  on: 'check_header_charge',
+  when: { check_header_charge: { isNot: ['off'] } },
+  say: 'the charge check (warn or both)',
+  note: 'the charge check is off'
+}
+const CALL_OFF: Dependency = {
+  on: 'species_call',
+  when: { species_call: { is: ['decoy'] } },
+  say: 'the presence call Decoy',
+  note: 'the presence call is None'
+}
+const CHARGES_TRIED: Dependency = {
+  on: ['unknown_charge', 'check_header_charge'],
+  when: { unknown_charge: { isNot: ['assume2'] }, check_header_charge: { isNot: ['off'] } },
+  say: 'unknown charges enumerated or inferred, or the charge check',
+  note: 'charge 2 is assumed for spectra without a charge'
+}
 const SEARCH_OFF: Dependency = { on: 'search_config_out', note: 'no search configuration is written' }
 const CENSUS_OFF: Dependency = { on: 'census', note: 'no identifiability table is written' }
 const IDS_OFF: Dependency = { on: 'census_ids', note: 'only used with an identification file' }
@@ -828,6 +866,7 @@ export const PARAM_UI: Record<string, ParamUi> = {
   // ---- Options added since 1.12, each in its workflow group
   acquisition_probe_spectra: {
     section: 'Sampling and checks',
+    depends: [{ on: 'acquisition_check', when: { acquisition_check: { isNot: ['off'] } }, say: 'the DIA check (refuse or warn)', note: 'the DIA check is off' }],
     help: {
       text: 'How many MS2 spectra at the start of the run the acquisition check reads (metadata only).'
     }
@@ -854,7 +893,7 @@ export const PARAM_UI: Record<string, ParamUi> = {
   },
   alkylation_proteome: {
     section: 'Alkylation',
-    depends: [ALKYLATION_OFF],
+    depends: [{ on: 'alkylation_out', note: 'only the alkylation report uses it' }],
     help: {
       text: 'The database the alkylation report uses when no placement database is given: auto (the human proteome), human, mouse, yeast or ecoli for the UniProt reference proteomes shipped with FASTag (reviewed entries; the release is in the report), or a FASTA file. Tags place on the shipped proteomes from 8 residues (human, mouse) or 7 (yeast, E. coli): raise Extension to 3 (or choose a protein database), otherwise no tag places and there is no call (reason tags_too_short).'
     }
@@ -868,7 +907,7 @@ export const PARAM_UI: Record<string, ParamUi> = {
   },
   alkylation_window: {
     section: 'Alkylation',
-    depends: [ALKYLATION_OFF],
+    depends: [{ on: 'alkylation_out', note: 'only the alkylation report uses it' }],
     help: {
       text: 'The mass window around each cysteine form for the alkylation report. 0 means 0.02 Da on a ppm run and 0.5 Da on a Da run.'
     }
@@ -891,7 +930,7 @@ export const PARAM_UI: Record<string, ParamUi> = {
   census_ids_fdr: {
     section: 'Identifiability',
     label: 'ID q-value',
-    depends: [CENSUS_OFF, IDS_OFF],
+    depends: [CENSUS_OFF, IDS_OFF, { on: 'census_ids_accept', when: { census_ids_accept: { is: ['qvalue'] } }, say: 'hits accepted by q-value', note: 'only read when hits are accepted by q-value' }],
     help: {
       text: 'The q-value a target hit needs for its spectrum to count as identified in the census.'
     }
@@ -1060,18 +1099,21 @@ export const PARAM_UI: Record<string, ParamUi> = {
   },
   charge_infer_margin: {
     section: 'Charge and ions',
+    depends: [CHARGES_TRIED],
     help: {
       text: 'By how much the supported charge must beat the next one to be tagged alone; when the two are closer, both are tagged.'
     }
   },
   charge_max: {
     section: 'Charge and ions',
+    depends: [CHARGES_TRIED],
     help: {
       text: 'The highest charge tried for a precursor without a charge, when it is not tagged as 2+.'
     }
   },
   charge_min: {
     section: 'Charge and ions',
+    depends: [CHARGES_TRIED],
     help: {
       text: 'The lowest charge tried for a precursor without a charge, when it is not tagged as 2+.'
     }
@@ -1085,6 +1127,7 @@ export const PARAM_UI: Record<string, ParamUi> = {
   },
   check_header_margin: {
     section: 'Sampling and checks',
+    depends: [HEADER_CHECK_OFF],
     experimental: true,
     help: {
       text: 'By how much the supported charge must beat the given charge before the header charge check calls a disagreement.'
@@ -1092,6 +1135,7 @@ export const PARAM_UI: Record<string, ParamUi> = {
   },
   check_header_out: {
     section: 'Sampling and checks',
+    depends: [HEADER_CHECK_OFF],
     experimental: true,
     help: {
       text: 'Where the header charge check writes one row per spectrum with a given charge: the given charge, the supported charge, the evidence and the verdict.'
@@ -1201,6 +1245,7 @@ export const PARAM_UI: Record<string, ParamUi> = {
   ion_series_photo: { hidden: REMOVED_1_14, help: REMOVED_1_14_HELP },
   ion_series_hybrid: {
     section: 'Charge and ions',
+    depends: [{ on: 'ion_series', when: { ion_series: { is: ['auto'] } }, say: 'the ion series auto', note: 'only read when the ion series follows each spectrum\'s activation' }],
     experimental: true,
     help: {
       text: 'Under ion series auto: read hybrid EThcD/ETciD spectra as b/y ions (the default) or tag them twice, as b/y and as c/z ions, and merge the rows (both). Experimental; passed its held-out test (5 projects: +43 points of identified spectra with a correct tag, 1.6x CPU time).'
@@ -1235,7 +1280,7 @@ export const PARAM_UI: Record<string, ParamUi> = {
   },
   search_config_template: {
     section: 'Search configuration',
-    depends: [SEARCH_OFF],
+    depends: [SEARCH_OFF, { on: 'search_engine', when: { search_engine: { is: ['comet'] } }, say: 'the search engine Comet', note: 'a Sage or MSFragger configuration is written complete' }],
     help: {
       text: 'For Comet only: a parameter file the written settings are merged into.'
     }
@@ -1301,7 +1346,7 @@ export const PARAM_UI: Record<string, ParamUi> = {
   shortlist_background: {
     section: 'Shortlist',
     label: 'Background proteins',
-    depends: [SHORTLIST_OFF],
+    depends: [{ on: 'fasta_out', note: 'only the reduced FASTA uses it' }],
     help: {
       text: 'Proteins that are always added to the smaller FASTA, such as the host proteome or contaminants.'
     }
@@ -1331,7 +1376,7 @@ export const PARAM_UI: Record<string, ParamUi> = {
   },
   shortlist_specificity: {
     section: 'Shortlist, advanced',
-    depends: [SHORTLIST_OFF],
+    depends: [SHORTLIST_OFF, NOT_TRYPSIN],
     // '' (Automatic) is not sent: the CLI then chooses (full, but semi for a
     // run Auto calls Asp-N). An explicit full is sent, and the CLI keeps it.
     choices: ['', 'full', 'semi', 'none'],
@@ -1342,7 +1387,7 @@ export const PARAM_UI: Record<string, ParamUi> = {
   },
   shortlist_gapped: {
     section: 'Shortlist, advanced',
-    depends: [SHORTLIST_OFF],
+    depends: [SHORTLIST_READ, TRYPSIN_ONLY],
     help: {
       text: 'Let placements with one mismatched flank count for the shortlist. Only with trypsin: with another protease gapped placements are ignored.'
     }
@@ -1350,14 +1395,14 @@ export const PARAM_UI: Record<string, ParamUi> = {
   shortlist_exact_only: { hidden: REMOVED_1_14, help: REMOVED_1_14_HELP },
   shortlist_max_evalue: {
     section: 'Shortlist, advanced',
-    depends: [SHORTLIST_OFF],
+    depends: [SHORTLIST_READ],
     help: {
       text: 'The E-value a tag needs for its placements to count for the shortlist.'
     }
   },
   shortlist_min_spectra: {
     section: 'Shortlist, advanced',
-    depends: [SHORTLIST_OFF],
+    depends: [SHORTLIST_READ],
     help: {
       text: 'How many spectra a protein needs to stay on the shortlist.'
     }
@@ -1370,14 +1415,14 @@ export const PARAM_UI: Record<string, ParamUi> = {
   },
   shortlist_parsimony: {
     section: 'Shortlist, advanced',
-    depends: [SHORTLIST_OFF],
+    depends: [SHORTLIST_READ],
     help: {
       text: 'Whether proteins whose spectra a higher-ranked protein already has are dropped from the shortlist.'
     }
   },
   shortlist_top: {
     section: 'Shortlist, advanced',
-    depends: [SHORTLIST_OFF],
+    depends: [SHORTLIST_READ],
     help: {
       text: 'Keep at most this many proteins on the shortlist. 0 means no limit.'
     }
@@ -1396,21 +1441,21 @@ export const PARAM_UI: Record<string, ParamUi> = {
   },
   species_call_decoys: {
     section: 'Species, advanced',
-    depends: [SPECIES_OFF],
+    depends: [SPECIES_OFF, CALL_OFF],
     help: {
       text: 'How many decoy tags are made for each tag when organisms are called.'
     }
   },
   species_call_min_units: {
     section: 'Species, advanced',
-    depends: [SPECIES_OFF],
+    depends: [SPECIES_OFF, CALL_OFF],
     help: {
       text: 'Fewer spectra with organism evidence than this give no call for the whole run.'
     }
   },
   species_call_params: {
     section: 'Species, advanced',
-    depends: [SPECIES_OFF],
+    depends: [SPECIES_OFF, CALL_OFF],
     help: {
       text: 'A file with the decision settings of the organism call. By default the one in the taxonomy folder.'
     }
@@ -1426,7 +1471,7 @@ export const PARAM_UI: Record<string, ParamUi> = {
   species_reagents: { hidden: REMOVED_1_14, help: REMOVED_1_14_HELP },
   species_pi0: {
     section: 'Species, advanced',
-    depends: [SPECIES_OFF],
+    depends: [SPECIES_OFF, CALL_OFF],
     help: {
       text: 'The share of absent organisms assumed for the q-values of the organism call. 1 is the standard (Benjamini-Hochberg) correction.'
     }
