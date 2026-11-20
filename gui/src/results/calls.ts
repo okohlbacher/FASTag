@@ -180,7 +180,7 @@ export type SpeciesCall =
   // No call columns: the CLI's ranking, its first row at the rank; tied:
   // the taxa level with it on both sort keys (more than one: no single
   // leader, tiedLeaders).
-  | { state: 'ranked'; top: Taxon; genera: number; tied: Taxon[] }
+  | { state: 'ranked'; top: Taxon; genera: number; tied: Taxon[]; counted: 'adjusted' | 'observed' }
   | { state: 'none' }
   | { state: 'absent' }
 
@@ -191,6 +191,14 @@ export type SpeciesCall =
 export function tiedLeaders(rows: readonly Taxon[]): Taxon[] {
   const top = rows[0]
   return top ? rows.filter((t) => t.adjusted === top.adjusted && t.observed === top.observed) : []
+}
+
+/// The count the ranking is by, as the Species tab and the Overview say
+/// it: without -species_deconvolve the CLI writes adjusted = observed for
+/// every taxon, so nothing was subtracted and the ranking is by observed
+/// spectra.
+export function rankedBy(taxa: readonly Taxon[]): 'adjusted' | 'observed' {
+  return taxa.some((t) => t.adjusted !== t.observed) ? 'adjusted' : 'observed'
 }
 
 export function speciesCall(sp: SpeciesReport | null | undefined, rank = 'genus'): SpeciesCall {
@@ -209,7 +217,7 @@ export function speciesCall(sp: SpeciesReport | null | undefined, rank = 'genus'
     }
   }
   // species.rs keeps the CLI's order (ranked by the adjusted count).
-  return { state: 'ranked', top: rows[0], genera: rows.length, tied: tiedLeaders(rows) }
+  return { state: 'ranked', top: rows[0], genera: rows.length, tied: tiedLeaders(rows), counted: rankedBy(sp.taxa) }
 }
 
 // ---- run facts ------------------------------------------------------------------

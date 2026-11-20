@@ -100,7 +100,17 @@ function closeOtherRuns(cur: Reports, path: string): Reports {
   const workflow: WorkflowReports = {}
   for (const [k, q] of workflowPaths(cur.workflow ?? {})) if (sameRunFiles(q, path)) workflow[k] = q
   if (cur.workflow?.files && workflow.shortlist) workflow.files = cur.workflow.files
-  return { ...cur, list: cur.list.filter((r) => sameRunFiles(r.path, path)), tables: kept, workflow, missing: undefined }
+  const partial = cur.partial?.filter((x) => sameRunFiles(x.path, path))
+  return { ...cur, list: cur.list.filter((r) => sameRunFiles(r.path, path)), tables: kept, workflow, missing: undefined, partial: partial?.length ? partial : undefined }
+}
+
+// The reports with @p path marked partial when its run (@p rec, the record
+// of the run that last wrote it) did not finish, unmarked when it did.
+function withPartial(cur: Reports, path: string, rec: RunRecord | null): Reports {
+  const rest = (cur.partial ?? []).filter((x) => x.path !== path)
+  const bad = rec && rec.status !== 'ok' ? [{ path, status: rec.status, end: rec.end }] : []
+  const partial = [...rest, ...bad]
+  return { ...cur, partial: partial.length ? partial : undefined }
 }
 
 // The note when a file of another run closed what was shown.
@@ -925,13 +935,17 @@ export function useRun(s: RunInputs, view: ViewStore, hooks: RunHooks = {}) {
   }
 
   // Reports dropped together: each is added as a picked one would be,
-  // under one selection for the whole drop. A later choice (another file
-  // opened while these are read) stops the rest: they never replace it.
+  // under one selection for the whole drop. A later choice of another run
+  // (another file opened while these are read) stops the rest: they never
+  // replace it. A file of the same run opened meanwhile (the drop's species
+  // report, selected as it starts) is part of the same choice: superseded,
+  // not a strict generation check, or the drop's other reports would be
+  // dropped after the first.
   async function openReportPaths(paths: string[]): Promise<void> {
     if (!paths.length) return
     const t = select(paths[0])
     for (const p of paths) {
-      if (t.g !== showGen.current) return
+      if (superseded(t)) return
       await openReportPath(p, undefined, { g: t.g, p })
     }
   }
@@ -949,6 +963,7 @@ export function useRun(s: RunInputs, view: ViewStore, hooks: RunHooks = {}) {
       dispatch({ type: 'REPORTS', update: (cur) => closeOtherRuns(cur, p) })
       // A report read is shown whatever Setup's species switch and reach
       // check say; the counts of the run shown before are not its own.
+      dispatch({ type: 'REPORTS', update: (cur) => withPartial(cur, p, rec) })
       dispatch({ type: 'SPECIES', species: sp, speciesRun: { input: baseName(rec?.input ?? p), enabled: true, params: rec?.params ?? null } })
       dispatch({ type: 'EVIDENCE', evidence: { contributed: null, ms2: null, czExcluded: null } })
       if (latest(t)) setTab('species')
@@ -968,6 +983,12 @@ export function useRun(s: RunInputs, view: ViewStore, hooks: RunHooks = {}) {
       if (sniffTags(head)) return openTagsPath(p, t)
     }
     const wk = head != null ? sniffWorkflow(head, p) : null
+    // The run that wrote it, as tags and History records are checked: a
+    // report of a cancelled or failed run (its cleanup could not remove it)
+    // is not shown as complete.
+    const rec = await window.fastag.historyOf(p).catch(() => null)
+    if (superseded(t)) return
+    const mark = (): void => dispatch({ type: 'REPORTS', update: (cur) => withPartial(cur, p, rec) })
     // A report of another run replaces its tags, species and Overview.
     closeOtherRun(p)
     if (wk) {
@@ -980,6 +1001,7 @@ export function useRun(s: RunInputs, view: ViewStore, hooks: RunHooks = {}) {
           return { ...kept, workflow: { ...kept.workflow, [wk]: p }, workflowGen: bumpGen(cur.workflowGen, [wk]), missing: undefined }
         }
       })
+      mark()
       if (latest(t)) setTab(TAB_OF[wk])
       return
     }
@@ -1005,9 +1027,10 @@ export function useRun(s: RunInputs, view: ViewStore, hooks: RunHooks = {}) {
           const workflow = closeOtherRuns(cur, p).workflow
           if (closed.length === 0) return { ...cur, tables, gen, workflow, missing: undefined, notice: undefined }
           const note = closedNote(p, closed)
-          return { list: cur.list.filter((r) => !closedReports.includes(r)), errors: [note], tables, gen, workflow, notice: note }
+          return { list: cur.list.filter((r) => !closedReports.includes(r)), errors: [note], tables, gen, workflow, notice: note, partial: closeOtherRuns(cur, p).partial }
         }
       })
+      mark()
       // An unreadable one is named where report errors are: the Digest tab.
       if (latest(t)) setTab('kind' in table ? (table.kind === 'glyco' ? 'glyco' : 'recon') : 'digest')
       if (state.shown?.out && !sameRunFiles(state.shown.out, p)) dispatch({ type: 'SHOWN', shown: null })
@@ -1038,9 +1061,11 @@ export function useRun(s: RunInputs, view: ViewStore, hooks: RunHooks = {}) {
         const split = fresh ? splitTables(cur.tables, fresh.path) : { kept: cur.tables ?? {}, closed: [] }
         if (fresh && other.length === 0 && split.closed.length > 0) notes.push(closedNote(fresh.path, split.closed))
         else if (notes.length && split.closed.length > 0) notes[0] = notes[0].replace(/ (was|were) closed\.$/, `, ${split.closed.join(', ')} were closed.`)
-        return { list: [...kept, ...rep.reports], errors: [...notes, ...rep.errors], tables: split.kept, gen: cur.gen, workflow: closeOtherRuns(cur, p).workflow }
+        const closedRuns = closeOtherRuns(cur, p)
+        return { list: [...kept, ...rep.reports], errors: [...notes, ...rep.errors], tables: split.kept, gen: cur.gen, workflow: closedRuns.workflow, partial: closedRuns.partial }
       }
     })
+    mark()
     if (state.shown?.out && !sameRunFiles(state.shown.out, p)) dispatch({ type: 'SHOWN', shown: null })
     if (latest(t)) setTab('digest')
   }

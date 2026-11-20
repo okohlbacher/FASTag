@@ -70,6 +70,7 @@ export default function ParamField({ spec, value, onChange, onPickFile, needs, u
         deflt={`${defaultText(spec)}${unit ? ` ${defaultText(unit.spec)}` : ''}`}
         more={uiOf(spec.name).help?.text}
         tip={uiOf(spec.name).help?.tip}
+        covered={uiOf(spec.name).help?.cliCovered}
       />
     </span>
   )

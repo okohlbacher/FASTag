@@ -16,7 +16,8 @@ import { alkylationCall as alkylationReportCall, fmt, fmtQ, pct, type Alkylation
 import type { ParamValue } from '../ParamField'
 import type { SpeciesReport } from '../types'
 import { electronReadAsBy, noActivationMeta } from '../inspector/checks'
-import { alkylationExtension, alkylationTarget } from '../setup/products'
+import { alkylationExtension, alkylationShipped, alkylationShort, alkylationTarget } from '../setup/products'
+import { longestSeed } from '../paramLayout'
 import {
   alkylationCall,
   censusFacts,
@@ -191,6 +192,11 @@ export function shortlistFacts(text: string | null | undefined): { kept: number;
   return { kept: rows.filter((r) => r[k] === '1').length, of: rows.length }
 }
 
+/// The smallest mass shift counted as one (Da): nearer 0 is the
+/// unmodified bin (calibration spread), not a shift. The Mass shifts view
+/// counts its gap peaks the same way.
+export const SHIFT_MIN_DA = 0.5
+
 /// The most frequent mass shift of a mass-shift table (-delta_out) away
 /// from 0, with its UniMod name (or first interpretation) when it has one.
 export function topShift(text: string | null | undefined): { delta: string; spectra: number; name: string | null } | null {
@@ -204,7 +210,7 @@ export function topShift(text: string | null | undefined): { delta: string; spec
     const f = l.split('\t')
     const delta = Number(f[d])
     const n = Number(f[sp])
-    if (!Number.isFinite(delta) || !Number.isFinite(n) || Math.abs(delta) < 0.5) continue
+    if (!Number.isFinite(delta) || !Number.isFinite(n) || Math.abs(delta) < SHIFT_MIN_DA) continue
     if (best && n <= best.spectra) continue
     const named = (un >= 0 ? f[un] : '')?.trim()
     const interp = (ti >= 0 ? f[ti] : '')?.trim().split(/[;,]/)[0]?.replace(/:\d+$/, '').trim()
@@ -701,7 +707,7 @@ function genusTile(c: SpeciesCall, rank = 'genus'): Tile {
       ...base,
       value: c.top.name,
       tone: 'call',
-      note: `q = ${c.top.q === null ? 'NA (uncalibrated with tag orientation both)' : fmtQ(c.top.q)}; ranked first of ${c.genera} taxa at ${rank} rank by adjusted count, not a presence call.${caveat}`
+      note: `q = ${c.top.q === null ? 'NA (uncalibrated with tag orientation both)' : fmtQ(c.top.q)}; ranked first of ${c.genera} taxa at ${rank} rank by ${c.counted === 'adjusted' ? 'adjusted count' : 'observed spectra'}, not a presence call.${caveat}`
     }
   if (c.state === 'none') return { ...base, value: `no ${rank}`, tone: 'nocall', note: `the species report lists no ${rank}.${caveat}` }
   return { ...base, value: 'not assessed', tone: 'off', note: 'species detection was off', action: enable('Species report', { species: true, extension: '2' }) }
@@ -732,7 +738,8 @@ const intParam = (v: unknown, dflt: number): number => {
 function alkylationTile(c: AlkylationCall, fasta: boolean, params: Record<string, unknown>, reconMin: number | null): Tile {
   const base = { id: 'alkylation', label: 'Alkylation' }
   const ext = intParam(params['extension'], 0)
-  const len = intParam(params['tag_length'], 3)
+  // The longest seed (tag_lengths replaces tag_length).
+  const len = longestSeed(params) ?? 3
   if (c.state === 'counts' && !c.placed) {
     // Nothing placed: no measurement, not an absence of alkylation.
     const longest = len + 2 * ext
@@ -764,13 +771,16 @@ function alkylationTile(c: AlkylationCall, fasta: boolean, params: Record<string
   // given): the extension it needs follows the proteome and the tag length
   // (products.ts alkylationExtension), as the Setup toggle raises it.
   const withAlk = { ...(params as Record<string, ParamValue>), alkylation_out: 'alkylation.tsv' }
+  // On a FASTA of the user's nothing is raised (its length follows its
+  // size): the note says what a human-sized one needs.
   const raise = alkylationExtension(withAlk)
+  const short = alkylationShipped(withAlk) ? null : alkylationShort(withAlk)
   const target = alkylationTarget(withAlk)
   return {
     ...base,
     value: 'not assessed',
     tone: 'off',
-    note: `the alkylation report was not written${raise ? `; adding it raises the extension from ${ext} to ${raise}, so tags reach the ${target} residues the proteome needs` : ''}`,
+    note: `the alkylation report was not written${raise ? `; adding it raises the extension from ${ext} to ${raise}, so tags reach the ${target} residues the proteome needs` : short ? `; on this database it needs extension ${short}${Number(String(params['recon_min_length'] ?? '')) > 0 ? '' : ' for a human-sized one'}` : ''}`,
     action: enable('Alkylation report', { alkylation_out: 'alkylation.tsv', ...(raise ? { extension: raise } : {}) })
   }
 }
@@ -803,7 +813,7 @@ function alkylationReportTile(c: AlkylationReport, params: Record<string, unknow
     }
   // The extension the run's proteome needs at its tag length; a FASTA of
   // the user's needs about 8 residues (its index sets the length).
-  const need = c.reason === 'tags_too_short' ? alkylationExtension(params as Record<string, ParamValue>) : null
+  const need = c.reason === 'tags_too_short' ? alkylationShort(params as Record<string, ParamValue>) : null
   const target = alkylationTarget(params as Record<string, ParamValue>)
   return {
     ...base,

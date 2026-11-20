@@ -19,6 +19,9 @@ export interface HelpPopoverProps {
   more?: string
   /// A tip below it (PARAM_UI help.tip), when there is one.
   tip?: string
+  /// The plain text says all the CLI description does (PARAM_UI
+  /// help.cliCovered): the description is not shown.
+  covered?: boolean
   /// More flags the control sets (the Instrument sets three), each with its
   /// default.
   flags?: { name: string; deflt: string }[]
@@ -40,9 +43,17 @@ function clipBox(el: HTMLElement): { left: number; right: number } {
 /// The popover's texts without what its facts row says: a sentence that
 /// only states the default ("20 is the default.") goes, as does the value
 /// that turns the option off ("0 turns the cutoff off"), which the row
-/// names once. The CLI's one-line description goes when a longer text is
-/// there (it says the same). Pure, for vitest.
-export function popoverTexts(description: string, more?: string, tip?: string): { text: string; more?: string; tip?: string; off?: string } {
+/// names once. The plain text (PARAM_UI help), when there is one, comes
+/// first; the CLI's description follows in smaller type (@p cli) unless it
+/// says nothing the plain text does not: marked so (@p covered, PARAM_UI
+/// help.cliCovered), or every word of it is in the plain text. Pure, for
+/// vitest.
+export function popoverTexts(
+  description: string,
+  more?: string,
+  tip?: string,
+  covered?: boolean
+): { text: string; cli?: string; tip?: string; off?: string } {
   let off: string | undefined
   const clean = (t: string | undefined): string | undefined => {
     if (!t) return t
@@ -66,13 +77,21 @@ export function popoverTexts(description: string, more?: string, tip?: string): 
   const m = clean(more)
   const t = clean(tip)
   const d = clean(description) ?? ''
-  // A CLI line no longer than the plain text of the same option says
-  // nothing new; a longer one keeps its place before it.
-  const keepCli = !m || d.length > m.length
-  return { text: keepCli ? d : m!, ...(keepCli && m && m !== d ? { more: m } : {}), ...(t ? { tip: t } : {}), ...(off ? { off } : {}) }
+  // Against the text as written: its off sentence goes to the facts row,
+  // and still says what the CLI line does.
+  const cli = m && d && !covered && !saysNothingNew(d, `${more ?? ''} ${tip ?? ''}`) ? d : undefined
+  return { text: m ?? d, ...(cli ? { cli } : {}), ...(t ? { tip: t } : {}), ...(off ? { off } : {}) }
 }
 
-export default function HelpPopover({ name, label, description, deflt, more, tip, flags }: HelpPopoverProps): JSX.Element {
+/// Every word of @p cli (4 letters or more, numbers too) is in @p plain:
+/// the CLI line repeats it.
+function saysNothingNew(cli: string, plain: string): boolean {
+  const words = (x: string): string[] => x.toLowerCase().match(/[a-z0-9][a-z0-9+-]*/g) ?? []
+  const have = new Set(words(plain))
+  return words(cli).every((w) => (w.length < 4 && !/\d/.test(w)) || have.has(w))
+}
+
+export default function HelpPopover({ name, label, description, deflt, more, tip, covered, flags }: HelpPopoverProps): JSX.Element {
   const [open, setOpen] = useState(false)
   const id = useId()
   const box = useRef<HTMLSpanElement>(null)
@@ -89,7 +108,7 @@ export default function HelpPopover({ name, label, description, deflt, more, tip
     const w = pop.current.getBoundingClientRect().width
     setAlign(at.left + w > pane.right - 8 && at.right - w >= pane.left ? 'right' : 'left')
   }, [open])
-  const shown = popoverTexts(description, more, tip)
+  const shown = popoverTexts(description, more, tip, covered)
   // A click outside, or Escape, closes it; Escape gives focus back.
   useEffect(() => {
     if (!open) return
@@ -126,7 +145,7 @@ export default function HelpPopover({ name, label, description, deflt, more, tip
       {open && (
         <span id={id} ref={pop} className={`help-pop${align === 'right' ? ' right' : ''}`} role="dialog" aria-label={`About ${label}`}>
           <span className="help-pop-text">{shown.text}</span>
-          {shown.more && <span className="help-pop-more">{shown.more}</span>}
+          {shown.cli && <span className="help-pop-more help-pop-cli">{shown.cli}</span>}
           {shown.tip && <span className="help-pop-more help-pop-tip">{shown.tip}</span>}
           {/* The dash is written here, once: copied, the flag is what the
               CLI takes (-max_evalue, never --max_evalue). */}

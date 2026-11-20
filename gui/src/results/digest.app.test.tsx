@@ -125,7 +125,7 @@ describe('digest tab', () => {
     mock.reportFiles = { '/r/b.label.tsv': labelTsv, '/r/o.digest.tsv': other }
     await renderApp(mock)
     await goTo('results') // the empty results pane
-    await click(screen.getByRole('button', { name: 'Open a digest, label or mass-gap report…' }))
+    await click(screen.getByRole('button', { name: 'Open a FASTag report…' }))
     await screen.findAllByText('TMTpro')
     mock.nextPickReport = '/r/o.digest.tsv'
     await click(screen.getByRole('button', { name: 'Open another report…' }))
@@ -140,7 +140,7 @@ describe('digest tab', () => {
     mock.reportFiles = { '/r/b.label.tsv': labelTsv }
     await renderApp(mock)
     await goTo('results') // the empty results pane
-    await click(screen.getByRole('button', { name: 'Open a digest, label or mass-gap report…' }))
+    await click(screen.getByRole('button', { name: 'Open a FASTag report…' }))
     await screen.findAllByText('TMTpro')
     expect(screen.getByRole('tab', { name: /Digest/ }).getAttribute('aria-selected')).toBe('true')
   })

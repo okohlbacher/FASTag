@@ -31,7 +31,7 @@ test('while a run goes the open buttons are locked; the close guard asks, and Ke
   await expect(page.getByRole('region', { name: 'Running' }).getByRole('button', { name: 'Cancel' })).toBeVisible()
   await expect(page.getByRole('group', { name: 'Run status' }).getByRole('button', { name: 'Cancel' })).toHaveCount(0)
   await expect(page.getByRole('button', { name: 'Open a tags TSV…' })).toBeDisabled()
-  await expect(page.getByRole('button', { name: 'Open a digest, label or mass-gap report…' })).toBeDisabled()
+  await expect(page.getByRole('button', { name: 'Open a FASTag report…' })).toBeDisabled()
 
   await page.evaluate(() => (window as unknown as { __fastagE2E: { requestClose(w: string): void } }).__fastagE2E.requestClose('quit'))
   const dlg = page.getByRole('alertdialog')

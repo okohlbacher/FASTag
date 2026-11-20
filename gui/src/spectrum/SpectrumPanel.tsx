@@ -397,7 +397,10 @@ function StepDelta({ to, unit }: { to: Ladder['positions'][number]; unit: string
   )
 }
 
-function LadderLine({ ladder, tag, unit }: { ladder: Ladder; tag: string; unit: string }): JSX.Element {
+/// The tag's ladder and its verdict. A ladder that could not be built (a
+/// modification without a known mass, a tag that does not parse) has no
+/// positions: then only the verdict with its reason is shown.
+export function LadderLine({ ladder, tag, unit }: { ladder: Ladder; tag: string; unit: string }): JSX.Element {
   const steps = ladder.residues.map((res, k) => ({ res, to: ladder.positions[k + 1] }))
   return (
     <div className="sp-ladder" data-testid="ladder">
@@ -410,6 +413,10 @@ function LadderLine({ ladder, tag, unit }: { ladder: Ladder; tag: string; unit: 
           <span data-testid="ladder-verdict">
             on {ladder.matched} of {ladder.positions.length} positions within the run&apos;s tolerance
           </span>
+        ) : ladder.positions.length === 0 ? (
+          <span className="warn-text" data-testid="ladder-verdict">
+            no ladder: {ladder.reason}
+          </span>
         ) : (
           <span className="warn-text" data-testid="ladder-verdict">
             not on the peaks: {ladder.reason}
@@ -417,18 +424,20 @@ function LadderLine({ ladder, tag, unit }: { ladder: Ladder; tag: string; unit: 
         )}
         {ladder.charge > 1 ? ` · fragment charge ${ladder.charge}+` : ''}
       </p>
-      <ol className="sp-steps" aria-label="Ladder steps">
-        <li>
-          <span className="mono">{ladder.positions[0].mz != null ? fmt(ladder.positions[0].mz) : `(${fmt(ladder.positions[0].expected)})`}</span>
-        </li>
-        {steps.map((s, k) => (
-          <li key={k} className={s.to.peak == null ? 'off' : undefined}>
-            <span className="sp-res">—{s.res}—</span>
-            <span className="mono">{s.to.mz != null ? fmt(s.to.mz) : `(${fmt(s.to.expected)} missing)`}</span>
-            <StepDelta to={s.to} unit={unit} />
+      {ladder.positions.length > 0 && (
+        <ol className="sp-steps" aria-label="Ladder steps">
+          <li>
+            <span className="mono">{ladder.positions[0].mz != null ? fmt(ladder.positions[0].mz) : `(${fmt(ladder.positions[0].expected)})`}</span>
           </li>
-        ))}
-      </ol>
+          {steps.map((s, k) => (
+            <li key={k} className={s.to.peak == null ? 'off' : undefined}>
+              <span className="sp-res">—{s.res}—</span>
+              <span className="mono">{s.to.mz != null ? fmt(s.to.mz) : `(${fmt(s.to.expected)} missing)`}</span>
+              <StepDelta to={s.to} unit={unit} />
+            </li>
+          ))}
+        </ol>
+      )}
     </div>
   )
 }

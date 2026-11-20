@@ -243,13 +243,13 @@ describe('round 7, 14: the field popover shows the tip below the text', () => {
 describe('round 7, 15 and 16: the alkylation extension by proteome, restored when unneeded', () => {
   const alk = PRODUCT_OF.get('alkylation_out')!
   const base = { tag_length: '3', extension: '0' }
-  it('human and mouse need 8, yeast and E. coli 7, a FASTA file as human (8)', () => {
+  it('human and mouse need 8, yeast and E. coli 7; a FASTA file is not raised (round 9, 5)', () => {
     expect(alkylationTarget({})).toBe(8)
     expect(alkylationTarget({ alkylation_proteome: 'mouse' })).toBe(8)
     expect(alkylationTarget({ alkylation_proteome: 'yeast' })).toBe(7)
     expect(alkylationExtension({ ...base, alkylation_proteome: 'auto' })).toBe('3')
     expect(alkylationExtension({ ...base, alkylation_proteome: 'ecoli' })).toBe('2')
-    expect(alkylationExtension({ ...base, alkylation_proteome: '/d/my.fasta' })).toBe('3')
+    expect(alkylationExtension({ ...base, alkylation_proteome: '/d/my.fasta' })).toBeNull()
   })
 
   it('another product that places tags restores the raised Extension', () => {

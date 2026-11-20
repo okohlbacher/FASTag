@@ -24,6 +24,8 @@ function oracle(c: string) {
     spectra: new Set(recon.map((r) => r[0])).size,
     gapped: recon.filter((r) => r[6] !== r[7]).length,
     deltaRows: delta.length,
+    // The gap peaks the Mass shifts view counts: 0.5 Da or more from 0.
+    shiftRows: delta.filter((r) => Math.abs(Number(r[0])) >= 0.5).length,
     deltaSum: delta.reduce((n, r) => n + Number(r[1]), 0),
     placed,
     glycoRows: glyco.length,
@@ -51,17 +53,18 @@ async function runOn(page: Page, fixture: string): Promise<void> {
   await expect(page.getByRole('tab', { name: 'Mass shifts' })).toHaveAttribute('aria-selected', 'true')
 }
 
-const stat = (page: Page, label: string) => page.locator('.recon-view .stat', { has: page.locator('dt', { hasText: new RegExp(`^${label}$`) }) }).locator('dd')
+const stat = (page: Page, label: string) =>
+  page.locator('.recon-view .stat', { has: page.locator('dt', { hasText: new RegExp(`^${label.replace(/[()]/g, '\\$&')}$`) }) }).locator('dd')
 
 test('Mass shifts: figures equal the oracles of the PXD014764 recon run', async ({ page }) => {
   const o = oracle('v112-pxd014764-delta-ext3')
   expect(o.deltaSum).toBe(o.placed) // the histogram counts each placed spectrum once
   await runOn(page, 'gate-recon')
   await page.getByRole('tab', { name: 'Mass shifts' }).click()
-  await expect(stat(page, 'Placed spectra')).toHaveText(en(o.placed))
+  await expect(stat(page, 'Spectra with a mass gap')).toHaveText(en(o.placed))
   await expect(stat(page, 'Placements')).toHaveText(en(o.placements))
   await expect(stat(page, 'Spectra with a placement')).toHaveText(en(o.spectra))
-  await expect(stat(page, 'Gap peaks')).toHaveText(en(o.deltaRows))
+  await expect(stat(page, 'Gap peaks (≥ 0.5 Da)')).toHaveText(en(o.shiftRows))
   // Enough placed spectra: no warning.
   await expect(page.locator('.recon-view .banner.warn')).toHaveCount(0)
   const grid = page.getByRole('grid', { name: 'Placements' })
@@ -187,7 +190,7 @@ test('Open report… opens a delta table in Mass shifts', async ({ page }) => {
     ;(window as unknown as { __fastagE2E: { mock: { nextPickReport: string } } }).__fastagE2E.mock.nextPickReport = '/data/run01.delta.tsv'
   })
   await goTo(page, 'Results')
-  await page.getByRole('button', { name: 'Open a digest, label or mass-gap report…' }).click()
+  await page.getByRole('button', { name: 'Open a FASTag report…' }).click()
   await expect(page.getByRole('tab', { name: 'Mass shifts' })).toHaveAttribute('aria-selected', 'true')
   await expect(page.getByRole('grid', { name: 'Gap peaks' })).toHaveAttribute('aria-rowcount', '274')
   await expect(page.locator('.mg-stick')).not.toHaveCount(0)

@@ -44,7 +44,8 @@ export interface Task {
   docs: { to: string; label: string }
 }
 
-/// What every run workflow sets: all cores (the CLI default is 1).
+/// What every run workflow sets: threads 0 (FASTag uses half the logical
+/// cores; the manifest lists 1).
 const ALL: Record<string, ParamValue> = { threads: '0' }
 
 export const TASKS: readonly Task[] = [
@@ -57,7 +58,7 @@ export const TASKS: readonly Task[] = [
     basic: ['tag_length', 'extension', 'max_evalue', 'max_tags', 'res_conf'],
     help: {
       tag_length: 'Residues in a seed tag; 3 suits most runs.',
-      extension: 'Residues added per end; 3 gives tags of 8+.',
+      extension: 'Read on past each end; 3 lets a seed of 3 grow to 9.',
       max_evalue: 'Keeps tags at or below this E-value; 0 keeps all.',
       max_tags: 'Most tags per spectrum; 0 sets no limit.',
       res_conf: 'Adds a confidence per residue for assembly.'
@@ -192,7 +193,7 @@ export const TASKS: readonly Task[] = [
     outputs: ['out', 'digest_out', 'label_out', 'alkylation_out', 'glyco_out', 'species_out'],
     productNotes: {
       alkylation_out:
-        'Without a protein database the alkylation report places its tags on a shipped proteome, which needs tags of 8 residues (human, mouse) or 7 (yeast, E. coli); a FASTA proteome of your own needs a length that grows with its size (about 8 for a human-sized one), so it is raised as for human. Turning it on raises Extension so that tag length + 2 × Extension reaches that length; this changes every tag of the run. The species and digest calls are validated at Extension 2. With a protein database, or another report that places tags, Extension is left as it is.'
+        'Without a protein database the alkylation report places its tags on a shipped proteome, which needs tags of 8 residues (human, mouse) or 7 (yeast, E. coli). Turning it on raises Extension so that tag length + 2 × Extension reaches that length; this changes every tag of the run. The species and digest calls are validated at Extension 2. A FASTA of your own (as the proteome or as Protein database) needs a length that grows with its size (8 for a human-sized one): Extension is not raised, and the note says what a human-sized one needs. With another report that places tags, Extension is left as it is.'
     },
     leadGroups: ['Species', 'Species, advanced', 'Taxonomy'],
     docs: { to: 'digest', label: 'Digest, label and mass-gap reports' }

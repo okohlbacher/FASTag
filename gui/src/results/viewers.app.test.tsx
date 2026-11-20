@@ -23,7 +23,7 @@ describe('P4c viewers in the app', () => {
     mock.nextPickReport = '/r/run.recon.tsv'
     await renderApp(mock)
     await goTo('results')
-    await click(screen.getByRole('button', { name: 'Open a digest, label or mass-gap report…' }))
+    await click(screen.getByRole('button', { name: 'Open a FASTag report…' }))
     const recon = await screen.findByRole('tab', { name: 'Mass shifts' })
     expect(recon.getAttribute('aria-selected')).toBe('true')
     expect((await screen.findByRole('grid', { name: 'Placements' })).getAttribute('aria-rowcount')).toBe('4707')
@@ -41,7 +41,7 @@ describe('P4c viewers in the app', () => {
     mock.nextPickReport = '/r/run.recon.idXML'
     await renderApp(mock)
     await goTo('results')
-    await click(screen.getByRole('button', { name: 'Open a digest, label or mass-gap report…' }))
+    await click(screen.getByRole('button', { name: 'Open a FASTag report…' }))
     expect((await screen.findByRole('alert')).textContent).toMatch(/run\.recon\.idXML is idXML; this viewer reads the mzTab form/)
   })
 
@@ -79,7 +79,7 @@ describe('P4c viewers in the app', () => {
     mock.nextPickReport = '/a/run.massgap.tsv'
     await renderApp(mock)
     await goTo('results')
-    await click(screen.getByRole('button', { name: 'Open a digest, label or mass-gap report…' }))
+    await click(screen.getByRole('button', { name: 'Open a FASTag report…' }))
     await click(await screen.findByRole('tab', { name: 'Mass shifts' }))
     expect(await screen.findByText('run.massgap.tsv', { selector: 'code' })).toBeTruthy()
     mock.nextPickReport = '/b/run.delta.tsv'
@@ -101,7 +101,7 @@ describe('P4c viewers in the app', () => {
     mock.nextPickReport = '/a/run.massgap.tsv'
     await renderApp(mock)
     await goTo('results')
-    await click(screen.getByRole('button', { name: 'Open a digest, label or mass-gap report…' }))
+    await click(screen.getByRole('button', { name: 'Open a FASTag report…' }))
     mock.nextPickReport = '/a/run.delta.tsv'
     await click(screen.getByRole('button', { name: 'Open report…' }))
     await flush()
@@ -145,7 +145,7 @@ describe('P4c viewers in the app', () => {
     mock.nextPickReport = '/r/run.recon.tsv'
     await renderApp(mock)
     await goTo('results')
-    await click(screen.getByRole('button', { name: 'Open a digest, label or mass-gap report…' }))
+    await click(screen.getByRole('button', { name: 'Open a FASTag report…' }))
     expect((await screen.findByRole('grid', { name: 'Placements' })).getAttribute('aria-rowcount')).toBe('4707')
     // The CLI wrote the file again: its header and the first ten rows.
     mock.reportFiles = { '/r/run.recon.tsv': humanRecon.split('\n').slice(0, 11).join('\n') + '\n' }
@@ -195,7 +195,7 @@ describe('P4c viewers in the app', () => {
     mock.nextPickReport = '/r/run.recon.tsv'
     await renderApp(mock)
     await goTo('results')
-    await click(screen.getByRole('button', { name: 'Open a digest, label or mass-gap report…' }))
+    await click(screen.getByRole('button', { name: 'Open a FASTag report…' }))
     await screen.findByRole('grid', { name: 'Placements' })
     expect(mock.reportHeadCalls).toEqual(['/r/run.recon.tsv'])
     expect(mock.reportCalls).toEqual(['/r/run.recon.tsv'])

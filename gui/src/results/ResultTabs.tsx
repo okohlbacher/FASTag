@@ -291,6 +291,22 @@ export default function ResultTabs(p: ResultTabsProps): JSX.Element {
         </p>
       )}
 
+      {reports.partial && reports.partial.length > 0 && (
+        <p className="banner warn" role="status">
+          <IconWarning />
+          <span>
+            <strong>Reports may be partial.</strong> The run that wrote{' '}
+            {reports.partial.map((x, k) => (
+              <span key={x.path}>
+                {k > 0 && '; '}
+                <code>{baseName(x.path)}</code> ({x.status}, {new Date(x.end).toLocaleString()})
+              </span>
+            ))}{' '}
+            did not finish, and {reports.partial.length === 1 ? 'the file was' : 'the files were'} not removed: {reports.partial.length === 1 ? 'it' : 'they'} may hold part of the results only.
+          </span>
+        </p>
+      )}
+
       {p.runningState}
 
       <div className="tabpanel" id="tabpanel" role="tabpanel" aria-labelledby={`tab-${tab}`}>
@@ -303,7 +319,8 @@ export default function ResultTabs(p: ResultTabsProps): JSX.Element {
               workflow={p.overview.workflow}
               workflowId={p.overview.workflowId}
               missing={p.overview.missing}
-              busy={busy || p.overview.locked}
+              busy={busy}
+              actionable={!p.overview.locked}
               onAction={(a) => p.onOverviewAction?.(a)}
             />
           </div>
@@ -468,8 +485,8 @@ export default function ResultTabs(p: ResultTabsProps): JSX.Element {
             <div className="empty-state">
               <h2>No results yet</h2>
               <p>
-                Run FASTag on the chosen file, or open a tags TSV or a digest, label or mass-gap report from an
-                earlier run.
+                Run FASTag on the chosen file, or open a tags TSV or a FASTag report (QC, species, shortlist,
+                triage, digest, label, mass-gap, mass-shift or glyco) from an earlier run.
               </p>
               <p>
                 New to FASTag? <HelpLink to="start">Read Getting started</HelpLink> (F1 opens Help at any time).
@@ -480,7 +497,7 @@ export default function ResultTabs(p: ResultTabsProps): JSX.Element {
                   Open a tags TSV…
                 </button>
                 <button className="secondary big" onClick={p.openReport} disabled={busy}>
-                  Open a digest, label or mass-gap report…
+                  Open a FASTag report…
                 </button>
               </div>
             </div>

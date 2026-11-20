@@ -313,11 +313,13 @@ export default function App({ start = LANDING }: { start?: Origin } = {}): JSX.E
             workflow: shown.workflow ? (taskById(shown.workflow)?.label ?? null) : null,
             workflowId: shown.workflow ? (taskById(shown.workflow)?.id ?? null) : null,
             missing: run.reports.missing ?? [],
-            // Its actions run the form's input again: not another file's.
-            locked: shown.input !== input || jobs.length > 0
+            // Its actions apply a change to the form and run it: only when
+            // the form would repeat the run on screen (not an older History
+            // run of the same input, not after another workflow was chosen).
+            locked: shown.input !== input || jobs.length > 0 || !run.shownRerunnable
           }
         : null,
-    [shown, presetLabel, input, jobs.length, run.reports.missing]
+    [shown, presetLabel, input, jobs.length, run.reports.missing, run.shownRerunnable]
   )
 
   // An Overview tile's action: the option on in the form, and the run again
@@ -707,9 +709,10 @@ export default function App({ start = LANDING }: { start?: Origin } = {}): JSX.E
                 spectrumRun={spectrumRun}
                 workflow={shown?.workflow ?? null}
                 rerunResConf={
-                  // Only for the output of the run the form would repeat.
+                  // Only for the output of the run the form would repeat
+                  // (shownRerunnable: the run on screen, sent what the form sends).
                   // Not after a run that was already sent res_conf: it would write the same file.
-                  run.results?.input && run.results.input === input && jobs.length === 0 && bin?.ok && shown?.params['res_conf'] !== true
+                  run.results?.input && run.results.input === input && run.shownRerunnable && jobs.length === 0 && bin?.ok && shown?.params['res_conf'] !== true
                     ? {
                         run: () => void overviewAction({ kind: 'enable', label: 'Re-run with per-residue confidence', values: { res_conf: true } }),
                         disabled: busy || !!blocked

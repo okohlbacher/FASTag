@@ -16,7 +16,7 @@ import MassGapChart, { type GapBin } from './MassGapChart'
 import { filterRecon, type DeltaTable, type ReconFilter, type ReconIdTable, type ReconTable, type TableGen, type TablePaths } from './tables'
 import { useTable } from './useTable'
 import { useSticky } from './tableStore'
-import { FASTA_EXTENSION, type TileAction } from './overview'
+import { FASTA_EXTENSION, SHIFT_MIN_DA, type TileAction } from './overview'
 import ReportHeader from './ReportHeader'
 import './viewers.css'
 
@@ -206,7 +206,7 @@ export default function ReconView({ massgap, tables, gen = {}, notice, action, e
       )}
       <dl className="headline stats">
         <div className="stat">
-          <dt>Placed spectra</dt>
+          <dt>Spectra with a mass gap</dt>
           <dd>{fmt(placed)}</dd>
         </div>
         {recon.table && (
@@ -222,9 +222,11 @@ export default function ReconView({ massgap, tables, gen = {}, notice, action, e
           </>
         )}
         {bins.length > 0 && (
-          <div className="stat">
-            <dt>Gap peaks</dt>
-            <dd>{fmt(bins.length)}</dd>
+          // As the Overview counts shifts: 0.5 Da or more away from 0 (the
+          // bin near 0 is the unmodified one).
+          <div className="stat" title={`Bins at least ${SHIFT_MIN_DA} Da from 0; the bin near 0 Da (unmodified) is not counted`}>
+            <dt>Gap peaks (≥ {SHIFT_MIN_DA} Da)</dt>
+            <dd>{fmt(bins.filter((b) => Math.abs(b.gap) >= SHIFT_MIN_DA).length)}</dd>
           </div>
         )}
         {massgap && section(massgap, 'top').length > 0 && (

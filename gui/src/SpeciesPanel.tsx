@@ -6,7 +6,7 @@ import { DA_SPECIES_CAVEAT } from './results/overview'
 import { EValue } from './ResultsTable'
 import ReportHeader from './results/ReportHeader'
 import { HelpLink } from './help/HelpLink'
-import { tiedLeaders } from './results/calls'
+import { rankedBy, tiedLeaders } from './results/calls'
 
 // Genera that turn up in almost any LC-MS/MS run regardless of the sample:
 // porcine trypsin, bovine serum, keratin from handling. Flagged so a user does
@@ -118,7 +118,7 @@ export default function SpeciesPanel({
   const hasCalls = report.taxa.some((t) => t.call !== undefined)
   // Without -species_deconvolve the CLI writes adjusted = observed for every
   // taxon, so nothing was subtracted and the wording must not say so.
-  const deconvolved = report.taxa.some((t) => t.adjusted !== t.observed)
+  const deconvolved = rankedBy(report.taxa) === 'adjusted'
   // An exact tie on both sort keys is not a call: the order inside the tied
   // block is only the CLI's taxid order (the digest call treats it the same).
   const tied = tiedLeaders(report.taxa)

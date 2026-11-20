@@ -511,7 +511,7 @@ export const BRIEF_HINT: Record<string, string> = {
   ion_series_hybrid: 'How EThcD and ETciD spectra are read under Ion series auto.',
   unknown_charge: 'How a precursor without a charge in the file is tagged.',
   subsample_fraction: 'Tags only this share of the spectra, chosen at random.',
-  threads: 'Processor threads a run uses; 0 uses all cores.',
+  threads: 'Processor threads a run uses; 0 uses half the logical cores.',
   // Tag columns and files
   proforma: 'Adds each tag in ProForma 2.0 notation.',
   usi_collection: 'Adds each spectrum’s USI in this dataset (e.g. PXD000001).',
@@ -783,6 +783,13 @@ function seedLengths(values: Record<string, unknown>): { lengths: number[]; opti
   if (lengths.length) return { lengths, option: 'tag_lengths' }
   const one = int(values['tag_length']) ?? int(PARAM_BY_NAME.get('tag_length')?.default)
   return { lengths: one === null ? [] : [one], option: 'tag_length' }
+}
+
+/// The longest seed the CLI tags at (tag_lengths replaces tag_length), or
+/// null when none is a whole number.
+export function longestSeed(values: Record<string, unknown>): number | null {
+  const { lengths } = seedLengths(values)
+  return lengths.length ? lengths[lengths.length - 1] : null
 }
 
 /// With species detection on: how far the longest tag reaches (longest seed

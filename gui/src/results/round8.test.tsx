@@ -35,7 +35,7 @@ describe('round 8, 14: the popover says each fact once', () => {
     const ui = PARAM_UI['max_evalue'].help!
     const t = popoverTexts('E-value cutoff; 0 disables.', ui.text, ui.tip)
     expect(t.text).toBe(ui.text.replace(' 0 turns the cutoff off.', ''))
-    expect(t.more).toBeUndefined()
+    expect(t.cli).toBeUndefined()
     expect(t.tip).toBe('Lower it, for example to 1, to keep only the stronger tags.')
     expect(t.off).toBe('0')
   })
@@ -44,10 +44,10 @@ describe('round 8, 14: the popover says each fact once', () => {
     expect(t.text).toMatch(/at each end, and scores the longer tag again\. The maximum is 12\.$/)
     expect(t.off).toBe('0')
   })
-  it('a CLI line longer than the plain text stays before it', () => {
+  it('the plain text first; a CLI line with more facts follows it (round 9, 8)', () => {
     const t = popoverTexts('A long CLI description that says much more than the short plain text does.', 'Short text.')
-    expect(t.text).toMatch(/^A long CLI/)
-    expect(t.more).toBe('Short text.')
+    expect(t.text).toBe('Short text.')
+    expect(t.cli).toMatch(/^A long CLI/)
   })
 })
 
@@ -69,9 +69,9 @@ describe('round 8, 4: the survey always has its tile', () => {
 
 describe('round 8, 5, 6, 19, 20: the alkylation extension follows proteome and tag length', () => {
   const alk = PRODUCT_OF.get('alkylation_out')!
-  it('a FASTA proteome is raised as human (its index length grows with its size)', () => {
+  it('a FASTA proteome is not raised (round 9, 5): its index length grows with its size, the note says the human-sized need', () => {
     expect(alkylationTarget({ alkylation_proteome: '/x/human.fasta' })).toBe(8)
-    expect(alkylationExtension({ alkylation_proteome: '/x/human.fasta', tag_length: '3', extension: '0' })).toBe('3')
+    expect(alkylationExtension({ alkylation_proteome: '/x/human.fasta', tag_length: '3', extension: '0' })).toBeNull()
   })
   it('recomputed while the report is on: yeast lowers the raise, a shorter seed raises it, off puts it back', () => {
     const on = toggleProduct(alk, true, { tag_length: '3', extension: '0' }, '/d/a.tags.tsv', null)

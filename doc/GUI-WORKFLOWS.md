@@ -70,7 +70,7 @@ grid; see the Decision at the end of this section.
 
 | Workflow | Values |
 |---|---|
-| all run workflows | `threads 0` (all cores; the CLI default is 1), `progress true` |
+| all run workflows | `threads 0` (half the logical cores, FASTag's effective default: it puts 0 on argv; the manifest lists 1, inherited), `progress true` |
 | W1 | `res_conf true` |
 | W2 | `qc_out` |
 | W3 | `recon_out`, `delta_out`, `delta_spectra_out`, `delta_counts_out`, `extension 3` |
@@ -172,7 +172,7 @@ Order inside Advanced:
 
 These are always the **Global** group of Advanced:
 
-- `threads`: the GUI sends 0, meaning all cores.
+- `threads`: the GUI sends 0, meaning half the logical cores (`-threads 0: using 8 of 16 logical cores`); 0 is FASTag's effective default, although the manifest lists 1.
 - Peaks, charge, ion series details and complement tolerances.
 
 The Instrument control (2.1) is the only basic global setting. Preferences

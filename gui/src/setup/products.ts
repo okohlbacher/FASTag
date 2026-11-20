@@ -5,7 +5,7 @@
 // (the wiring rules of 2.3). Pure: the card renders what these say.
 
 import type { ParamValue } from '../ParamField'
-import { isActive, PARAM_BY_NAME } from '../paramLayout'
+import { isActive, longestSeed, PARAM_BY_NAME } from '../paramLayout'
 import { baseName } from '../digestReport'
 import { outputKind, rebaseOutputs, stripExt } from '../app/paths'
 
@@ -129,41 +129,69 @@ function bareName(p: Product, engine?: unknown): string {
   return `${outputKind(p.param)}.${ext}`
 }
 
-/// The tag length the alkylation report's database needs (FASTag.cpp
-/// alkylation_proteome): 8 residues on the shipped human or mouse proteome
-/// (auto is human), 7 on yeast or E. coli. A FASTA file of the user's is
-/// indexed with a minimum length that grows with its size (about 8 for a
-/// human-sized one), and the CLI gives no tags_too_short reason for it:
-/// 8, the conservative length.
+/// The shipped proteomes of -alkylation_proteome (auto is human).
+const SHIPPED_PROTEOMES = new Set(['auto', 'human', 'mouse', 'yeast', 'ecoli'])
+
+/// The proteome the alkylation report is sent, lower case (its default
+/// when cleared).
+const proteomeOf = (values: V): string =>
+  (text(values['alkylation_proteome']) || String(PARAM_BY_NAME.get('alkylation_proteome')?.default ?? 'auto')).toLowerCase()
+
+/// The tag length the alkylation report's database needs (FASTag.cpp: the
+/// placement index's minimum, -recon_min_length when it is above 0, else
+/// derived from the database): 8 residues on the shipped human or mouse
+/// proteome (auto is human), 7 on yeast or E. coli. A FASTA of the user's
+/// (an -alkylation_proteome file or -recon_fasta) is indexed with a minimum
+/// that grows with its size: 8 for a human-sized one, the length used for
+/// the note, never for a raise (alkylationShipped).
 export function alkylationTarget(values: V): number {
-  const prot = (text(values['alkylation_proteome']) || String(PARAM_BY_NAME.get('alkylation_proteome')?.default ?? 'auto')).toLowerCase()
-  if (prot === 'yeast' || prot === 'ecoli') return ALKYLATION_TAG - 1
+  const min = Number(text(values['recon_min_length']))
+  if (Number.isInteger(min) && min > 0) return min
+  if (alkylationShipped(values)) {
+    const prot = proteomeOf(values)
+    if (prot === 'yeast' || prot === 'ecoli') return ALKYLATION_TAG - 1
+  }
   return ALKYLATION_TAG
+}
+
+/// The alkylation report places its tags on a shipped proteome: no protein
+/// database is given and -alkylation_proteome names one (not a FASTA). Only
+/// then is its length known before the run (and only then does the CLI
+/// give tags_too_short), so only then does the report raise Extension.
+export function alkylationShipped(values: V): boolean {
+  return !isActive('recon_fasta', values) && SHIPPED_PROTEOMES.has(proteomeOf(values))
 }
 
 /// The extension the alkylation report needs in @p values, whatever
 /// Extension holds now; null when it needs none. The CLI places the
-/// alkylation report's tags on a shipped proteome (FASTag.cpp
-/// alkylation_only_db) only when no other report places tags (placements,
-/// shortlist, reduced FASTA, search configuration) and no protein database
-/// is given; otherwise on -recon_fasta or -fasta. The extension rises so
-/// that seed plus both ends reach the proteome's tag length.
+/// alkylation report's tags on its own database (the shipped proteome or
+/// the FASTA of -alkylation_proteome, or -recon_fasta when given) only when
+/// no other report places tags (placements, shortlist, reduced FASTA,
+/// search configuration); those set the index up themselves. The extension
+/// rises so that the longest seed plus both ends reach the tag length.
 export function alkylationNeed(values: V): number | null {
-  if (isActive('recon_fasta', values)) return null
   if (['recon_out', 'shortlist_out', 'fasta_out', 'search_config_out'].some((n) => isActive(n, values))) return null
   const target = alkylationTarget(values)
-  const seed = Number(text(values['tag_length']) || PARAM_BY_NAME.get('tag_length')?.default || 3)
-  if (!Number.isFinite(seed)) return null
+  const seed = longestSeed(values)
+  if (seed == null) return null
   const need = Math.ceil((target - seed) / 2)
   return need > 0 ? need : null
 }
 
-/// The extension the alkylation report raises @p values to, when it must
-/// rise; null when it need not (Extension already reaches it).
-export function alkylationExtension(values: V): string | null {
+/// The extension the alkylation report would need when Extension is short
+/// of it, on any database; null when Extension reaches it.
+export function alkylationShort(values: V): string | null {
   const need = alkylationNeed(values)
   const ext = Number(text(values['extension']) || PARAM_BY_NAME.get('extension')?.default || 0)
   return need != null && Number.isFinite(ext) && ext < need ? String(need) : null
+}
+
+/// The extension the alkylation report raises @p values to, when it must
+/// rise; null when it need not (Extension already reaches it) or may not
+/// (a FASTA of the user's: its length depends on its size, alkylationShort
+/// says it in a note instead).
+export function alkylationExtension(values: V): string | null {
+  return alkylationShipped(values) ? alkylationShort(values) : null
 }
 
 /// Extension for the alkylation report, worked out again from the value

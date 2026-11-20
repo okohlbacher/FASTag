@@ -39,6 +39,9 @@
 export interface ParamHelp {
   text: string
   tip?: string
+  /// The text says all the CLI description does: the (?) leaves the
+  /// description out (HelpPopover popoverTexts).
+  cliCovered?: true
 }
 
 /// Parameters that do nothing unless another parameter is set.
@@ -330,7 +333,8 @@ export const PARAM_UI: Record<string, ParamUi> = {
     section: 'Isobaric reporters',
     experimental: true,
     help: {
-      text: 'Also reject singly charged tags that use a TMT reporter ion as their low endpoint. Requires an active TMT pseudo-tag filter; ordinary residue and a-ion endpoints are retained.'
+      text: 'Also reject b/y tags whose low end is a singly charged TMT6/10 reporter ion. Needs the TMT pseudo-tag filter on or auto.',
+      cliCovered: true
     }
   },
 
@@ -536,7 +540,7 @@ export const PARAM_UI: Record<string, ParamUi> = {
     section: 'Digest and labels',
     depends: [{ on: 'digest_out', note: 'only the digest report uses the models' }],
     help: {
-      text: 'A table of protease models of your own, replacing the shipped ones (Trypsin, Lys-C, Arg-C, Glu-C, Chymotrypsin, Asp-N, Lys-N and unspecific).',
+      text: 'A table of protease models of your own, replacing the shipped ones (Trypsin, Lys-C, Arg-C, Glu-C, Chymotrypsin, Asp-N, Lys-N and unspecific). Its columns: model, class, end, residue, freq.',
       tip: 'Needed only for other models, such as HLA ligands or the proteasome.'
     }
   },
@@ -909,7 +913,7 @@ export const PARAM_UI: Record<string, ParamUi> = {
       }
     ],
     help: {
-      text: 'The database the alkylation report uses when no placement database is given: auto (the human proteome), human, mouse, yeast or ecoli for the UniProt reference proteomes shipped with FASTag (reviewed entries; the release is in the report), or a FASTA file. Tags place on the shipped proteomes from 8 residues (human, mouse) or 7 (yeast, E. coli), so tag length + 2 × Extension must reach that: at tag length 3, Extension 3 for human or mouse, 2 for yeast or E. coli (or choose a protein database); otherwise no tag places and there is no call (reason tags_too_short). A FASTA file is indexed with a minimum length that grows with its size (about 8 for a human-sized one); a run on it that places nothing gives no tags_too_short reason.'
+      text: 'The database the alkylation report uses when no placement database is given: auto (the human proteome), human, mouse, yeast or ecoli for the UniProt reference proteomes shipped with FASTag (reviewed entries; the release is in the report), or a FASTA file (.gz allowed). Tags place on the shipped proteomes from 8 residues (human, mouse) or 7 (yeast, E. coli), so tag length + 2 × Extension must reach that: at tag length 3, Extension 3 for human or mouse, 2 for yeast or E. coli; otherwise no tag places and there is no call (reason tags_too_short). A FASTA file, here or as Protein database, is indexed with a minimum length that grows with its size (8 for a human-sized one, 4 for a few proteins; Minimum tag length sets it); Extension is not raised for it, and a run on it that places nothing gives no tags_too_short reason.'
     }
   },
   alkylation_tags_out: {
@@ -1129,7 +1133,7 @@ export const PARAM_UI: Record<string, ParamUi> = {
     section: 'Charge and ions',
     depends: [CHARGES_TRIED],
     help: {
-      text: 'The lowest charge tried for a precursor without a charge, when it is not tagged as 2+.'
+      text: 'The lowest charge tried for a precursor without a charge, when it is not tagged as 2+ (each possible charge, or the one its fragment pairs support best). 1 lets the best-supported choice test 1+ too.'
     }
   },
   check_header_charge: {
@@ -1236,7 +1240,8 @@ export const PARAM_UI: Record<string, ParamUi> = {
     // the value is sent with a models file too.
     depends: [DIGEST_OFF],
     help: {
-      text: 'Which protease models the digest report uses: the shipped ones (as in 1.11) or v2. v2 is not validated on held-out data.',
+      text: 'Which protease models the digest report uses: the shipped ones (as in 1.11) or v2, which adds detection, LysargiNase and Asp-N (ammonium bicarbonate) rows and a pooled specificity. Version v2 is not validated on held-out data.',
+      cliCovered: true,
       tip: "With a custom models file the file's models are used as given (the log says v2 is ignored for the table); v2 still loads the calibration and adds the p_correct rows."
     }
   },
@@ -1495,7 +1500,7 @@ export const PARAM_UI: Record<string, ParamUi> = {
     section: 'Species, advanced',
     depends: [SPECIES_OFF, CALL_OFF],
     help: {
-      text: 'The share of absent organisms assumed for the q-values of the organism call. 1 is the standard (Benjamini-Hochberg) correction.'
+      text: 'The share of absent organisms assumed for the q-values of the organism call. 1 is the standard (Benjamini-Hochberg) correction; 0 estimates the share from the run (Storey).'
     }
   },
   unknown_charge: {

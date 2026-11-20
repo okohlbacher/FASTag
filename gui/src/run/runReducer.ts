@@ -113,6 +113,10 @@ export interface Reports {
   // Reports the run shown was asked for that it did not write, in words
   // (the Overview says so; they get no tab).
   missing?: string[]
+  // Reports opened from disk whose run (the app's record of the run that
+  // last wrote them) was cancelled or failed: a file its cleanup could not
+  // remove may be partial (Results says so).
+  partial?: { path: string; status: 'cancelled' | 'failed'; end: number }[]
 }
 
 export type JobStatus = 'queued' | 'running' | 'ok' | 'failed' | 'cancelled'

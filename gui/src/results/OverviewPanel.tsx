@@ -16,6 +16,10 @@ export interface OverviewPanelProps {
   /// A run is going: no action may start another.
   busy: boolean
   onAction(a: TileAction): void
+  /// The form would repeat this run: its tiles may offer a change and a run
+  /// again. Not for an older run or another input (their actions would run
+  /// the form, not the run on screen).
+  actionable?: boolean
   /// What the run was sent: only the tiles of the reports it asked for are
   /// shown (all of them without).
   params?: Record<string, unknown>
@@ -29,7 +33,7 @@ export interface OverviewPanelProps {
 
 const EVIDENCE: Record<string, string> = { call: 'call', ranking: 'ranking', default: 'default', preset: 'preset', run: 'as run' }
 
-function TileView({ t, busy, onAction }: { t: Tile; busy: boolean; onAction(a: TileAction): void }): JSX.Element {
+function TileView({ t, busy, actionable, onAction }: { t: Tile; busy: boolean; actionable: boolean; onAction(a: TileAction): void }): JSX.Element {
   return (
     <li>
       <section className={`tile tone-${t.tone}`} aria-label={t.label}>
@@ -41,7 +45,7 @@ function TileView({ t, busy, onAction }: { t: Tile; busy: boolean; onAction(a: T
         <p className="tile-note" title={t.note}>
           {t.note}
         </p>
-        {t.action && (
+        {t.action && actionable && (
           <button type="button" className="secondary small" disabled={busy} onClick={() => onAction(t.action!)}>
             {t.action.label}
           </button>
@@ -51,7 +55,7 @@ function TileView({ t, busy, onAction }: { t: Tile; busy: boolean; onAction(a: T
   )
 }
 
-export default function OverviewPanel({ overview: o, input, busy, onAction, params, workflow, workflowId, missing = [] }: OverviewPanelProps): JSX.Element {
+export default function OverviewPanel({ overview: o, input, busy, onAction, actionable = true, params, workflow, workflowId, missing = [] }: OverviewPanelProps): JSX.Element {
   const [copied, setCopied] = useState<'yes' | 'no' | null>(null)
   const revision = useRef(0)
   useEffect(() => {
@@ -95,13 +99,13 @@ export default function OverviewPanel({ overview: o, input, busy, onAction, para
       )}
       <ul className="tiles" aria-label="Key figures">
         {tiles.figures.map((t) => (
-          <TileView key={t.id} t={t} busy={busy} onAction={onAction} />
+          <TileView key={t.id} t={t} busy={busy} actionable={actionable} onAction={onAction} />
         ))}
       </ul>
       {tiles.calls.length > 0 && (
       <ul className="tiles" aria-label="Calls">
         {tiles.calls.map((t) => (
-          <TileView key={t.id} t={t} busy={busy} onAction={onAction} />
+          <TileView key={t.id} t={t} busy={busy} actionable={actionable} onAction={onAction} />
         ))}
       </ul>
       )}

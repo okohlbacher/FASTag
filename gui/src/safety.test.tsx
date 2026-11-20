@@ -348,7 +348,7 @@ describe('P0a: open buttons while busy', () => {
     await renderApp()
     const openTags = (): HTMLButtonElement => screen.getByRole('button', { name: 'Open a tags TSV…' }) as HTMLButtonElement
     const openReport = (): HTMLButtonElement =>
-      screen.getByRole('button', { name: 'Open a digest, label or mass-gap report…' }) as HTMLButtonElement
+      screen.getByRole('button', { name: 'Open a FASTag report…' }) as HTMLButtonElement
     await goTo('results') // the empty Tags pane (P2a: its own view)
     expect(openTags().disabled).toBe(false)
     await pickSingle(mock, '/d/a.mzML')

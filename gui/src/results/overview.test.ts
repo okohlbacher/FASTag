@@ -353,7 +353,8 @@ describe('Overview card text: tiny numbers and punctuation', () => {
     const reports = [parseReport(c.digest, '/d/a.digest.tsv'), parseReport(c.label, '/d/a.label.tsv')]
     const o = buildOverview({ log: logLines(c), reports, species, census: null, params: c.params, instrument: null })
     const note = tile(o, 'genus').note
-    expect(note).toMatch(/^q = 3\.2e-119; ranked first of 50 taxa at genus rank by adjusted count, not a presence call\.$/)
+    // Not deconvolved (adjusted = observed): by observed spectra, as the Species tab says (round 9, 11).
+    expect(note).toMatch(/^q = 3\.2e-119; ranked first of 50 taxa at genus rank by observed spectra, not a presence call\.$/)
     expect(note).not.toMatch(/0\.0{6,}/)
   })
 

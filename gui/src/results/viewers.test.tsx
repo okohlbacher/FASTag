@@ -258,10 +258,12 @@ describe('ReconView', () => {
     render(<ReconView massgap={human()} tables={{ recon: P.recon, delta: P.delta }} onOpen={vi.fn()} />)
     await flush()
     const stat = (l: string): string | null | undefined => screen.getByText(l, { selector: 'dt' }).nextElementSibling?.textContent
-    expect(stat('Placed spectra')).toBe('475')
+    // Round 9, 12: the spectra with a gap, and the gap peaks of 0.5 Da or
+    // more as the Overview counts shifts (3 of the 273 bins sit near 0).
+    expect(stat('Spectra with a mass gap')).toBe('475')
     expect(stat('Placements')).toBe('4,706')
     expect(stat('Spectra with a placement')).toBe('482')
-    expect(stat('Gap peaks')).toBe('273')
+    expect(stat('Gap peaks (≥ 0.5 Da)')).toBe('270')
     expect(screen.queryByRole('status')).toBeNull() // 475 >= LOW_PLACED: no warning
     expect(screen.getByRole('group', { name: /^Mass-gap chart/ })).toBeTruthy()
     const grid = screen.getByRole('grid', { name: 'Placements' })

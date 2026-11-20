@@ -22,7 +22,7 @@ import { clock, duration } from '../app/format'
 import TaskChooser, { PresetRow } from './TaskChooser'
 import { LANDING_TASK, taskById, type Task } from './tasks'
 import { INSTRUMENTS, presetText, shownInstrument } from './presets'
-import { PRODUCT_OF, PRODUCTS, USI_PLACEHOLDER, fileName, isOn, missingDatabase, neededBy, productLabel, alkylationExtension, alkylationRaise, toggleProduct, type Product } from './products'
+import { PRODUCT_OF, PRODUCTS, USI_PLACEHOLDER, fileName, isOn, missingDatabase, neededBy, productLabel, alkylationExtension, alkylationRaise, alkylationShipped, alkylationShort, toggleProduct, type Product } from './products'
 
 // A parameter that exists in the CLI but nowhere in the layout would silently
 // be unreachable; surface it instead of hiding it.
@@ -165,13 +165,31 @@ export default function SetupForm({
   // While the alkylation report is on, Extension follows what its proteome
   // and the tag length need (alkylationRaise): raised, lowered or put back;
   // a protein database or a report that places tags makes it unneeded.
+  // Only on the user's own edits: values that replace the form (History's
+  // Settings, a preset, a workflow, reset, undo) are taken as they are, so
+  // the form still sends the recorded call; a short Extension then shows
+  // the note and its one-click raise (alkylationWhy).
   const alkOn = isOn(PRODUCT_OF.get('alkylation_out')!, values)
   const placing = ['recon_fasta', 'recon_out', 'shortlist_out', 'fasta_out', 'search_config_out'].map((n) => String(values[n] ?? '')).join('|')
+  const seeds = JSON.stringify([values['tag_length'] ?? '', values['tag_lengths'] ?? '', values['recon_min_length'] ?? ''])
+  const raiseKey = (prot: ParamValue): string => JSON.stringify([placing, prot ?? '', seeds, alkOn])
+  // The inputs of the raise as the last replacement left them (its own
+  // proteome, not the state that lags a render behind): until one of them
+  // changes, nothing is raised. -1: the values the form opens with count
+  // as a replacement too.
+  const raiseBase = useRef<{ gen: number; key: string }>({ gen: -1, key: '' })
   useEffect(() => {
+    if (raiseBase.current.gen !== session.formGen) {
+      raiseBase.current = { gen: session.formGen, key: raiseKey(values['alkylation_proteome']) }
+      keepRaised(null)
+      return
+    }
+    if (raiseKey(proteome) === raiseBase.current.key) return
+    raiseBase.current.key = ''
     const r = alkylationRaise({ ...values, alkylation_proteome: proteome }, raisedNow())
     keepRaised(r.raised)
     if (r.values['extension'] !== values['extension']) session.setValues((v) => ({ ...v, extension: r.values['extension'] }))
-  }, [placing, proteome, values['tag_length'], alkOn, session.formGen])
+  }, [placing, proteome, seeds, alkOn, session.formGen])
   // The note of a group's settings that wait on other reports: one report
   // that every one of them needs is named in a plain sentence; else each
   // report that would show some of them, once (the per-setting detail is
@@ -191,12 +209,29 @@ export default function SetupForm({
   // What the alkylation report does to Extension: off, the raise it would
   // make; on, the raise in force, or the Extension still too short (edited
   // below what the proteome needs).
+  // On a FASTA of the user's (alkylationShipped false) nothing is raised:
+  // its length depends on its size, so the note says what a human-sized one
+  // needs. A short Extension offers the raise in one click.
   const alkylationWhy = (on: boolean): string | null => {
     const need = alkylationExtension(values)
-    if (!on) return need ? `Raises Extension to ${need}.` : null
+    const short = alkylationShort(values)
+    const custom = !alkylationShipped(values)
+    const min = Number(String(values['recon_min_length'] ?? '')) > 0
+    if (!on) return need ? `Raises Extension to ${need}.` : short && custom ? `Needs Extension ${short}${min ? '' : ' for a human-sized database'}.` : null
     const r = raisedNow()
     if (r && String(values['extension'] ?? '') === String(r.to)) return `Extension raised from ${String(r.from) || '0'} to ${String(r.to)}.`
-    return need ? `Needs Extension ${need}: shorter tags do not place on the proteome.` : null
+    if (!short) return null
+    if (custom && !min) return `Needs Extension ${short} for a human-sized database: shorter tags may not place on it.`
+    return `Needs Extension ${short}: shorter tags do not place on the ${custom ? 'database' : 'proteome'}.`
+  }
+  // The one-click raise beside that note. On a shipped proteome it is
+  // remembered as the report's raise (it follows the tag length and is put
+  // back with the report); on a FASTA it is the user's value.
+  const raiseExtension = (): void => {
+    const to = alkylationShort(values)
+    if (!to) return
+    keepRaised(alkylationShipped(values) ? { from: values['extension'] ?? '', to } : null)
+    session.setValues((v) => ({ ...v, extension: to }))
   }
   const toggle = (p: Product, on: boolean): void => {
     const r = toggleProduct(p, on, values, out, raisedNow())
@@ -250,6 +285,11 @@ export default function SetupForm({
         <span id={`${id}-d`} className="product-note">
           {why}
         </span>
+        {p.param === 'alkylation_out' && on && !!alkylationShort(values) && (
+          <button type="button" className="link small" onClick={raiseExtension}>
+            Set Extension to {alkylationShort(values)}
+          </button>
+        )}
         {detail && <HelpPopover name={p.param} label={p.label} description={detail} deflt="not written" />}
         {on && !!out && !p.column && p.param !== 'out' && spec?.type === 'output-file' && (
           <button type="button" className="link small" aria-label={`Change the file of ${p.label}`} onClick={() => void session.pickFor(spec)}>
