@@ -96,7 +96,7 @@ describe('MassGapChart', () => {
 
   it('has a table view with every peak, the mark within the window and the CLI peak', async () => {
     render(<MassGapChart bins={deltaBins()} peaks={gapPeaksOf(human())} window={0.02} source="d" />)
-    await click(screen.getByRole('button', { name: 'Table' }))
+    await click(screen.getByRole('button', { name: 'Bins' }))
     const grid = screen.getByRole('grid', { name: 'Gap peaks' })
     expect(grid.getAttribute('aria-rowcount')).toBe('274')
     // Sorted by spectra, descending: the zero bin first.
@@ -430,7 +430,7 @@ describe('ReconView', () => {
     await flush()
     expect(mock.reportCalls).toContain('/e/run.massgap.tsv')
     expect(document.querySelector('figcaption')?.textContent).not.toMatch(/assumed/)
-    await click(screen.getAllByRole('button', { name: 'Table' })[0])
+    await click(screen.getAllByRole('button', { name: 'Bins' })[0])
     const grid = screen.getAllByRole('grid', { name: 'Gap peaks' })[0]
     // 15.80 is 0.19 Da off Oxidation: within the run's 0.5 Da, not 0.02.
     expect(within(grid).getAllByRole('row')[1].textContent).toMatch(/^15\.800030Oxidation \(M\)/)

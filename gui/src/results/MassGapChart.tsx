@@ -285,7 +285,7 @@ export default function MassGapChart({ bins, peaks = [], window, windowAssumed =
         <div className="seg" role="group" aria-label="View">
           {(['chart', 'table'] as const).map((v) => (
             <button key={v} type="button" aria-pressed={view === v} onClick={() => setView(v)}>
-              {v === 'chart' ? 'Chart' : 'Table'}
+              {v === 'chart' ? 'Chart' : 'Bins'}
             </button>
           ))}
         </div>

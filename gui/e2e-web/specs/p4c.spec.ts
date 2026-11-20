@@ -116,7 +116,7 @@ test('the mass-gap chart: thin sticks, UniMod marks, legend, hover and keyboard 
   expect(await chart.locator('.mg-mark').count()).toBeGreaterThan(near)
   await page.getByRole('checkbox', { name: 'All UniMod marks' }).uncheck()
   // The table view has every value.
-  await chart.getByRole('button', { name: 'Table' }).click()
+  await chart.getByRole('button', { name: 'Bins' }).click()
   const t = chart.getByRole('grid', { name: 'Gap peaks' })
   await expect(t).toHaveAttribute('aria-rowcount', '274')
   await expect(t.getByRole('row').nth(1)).toContainText('0.0000')

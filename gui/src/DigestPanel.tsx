@@ -327,7 +327,8 @@ function Label({ report }: { report: Report }): JSX.Element {
           )}
         </div>
       )}
-      {lowRes && (
+      {/* Said once: the call line names the reason when there is one. */}
+      {lowRes && call.state !== 'call' && call.state !== 'no_call' && (
         <div className="caveat">The fragment tolerance is in Da, so the label windows do not hold.</div>
       )}
       {labels.length > 0 && (

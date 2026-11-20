@@ -4,6 +4,9 @@
 import { render, screen, waitFor } from '@testing-library/react'
 import { describe, expect, it } from 'vitest'
 import ReportTable from '../results/ReportTable'
+import DigestPanel from '../DigestPanel'
+import { parseReport } from '../digestReport'
+import daLabel from '../fixtures/cli-1.15/workflows/characterize/run01.label.tsv?raw'
 import { buildOverview } from '../results/overview'
 import { installMockBridge } from '../testing/mockBridge'
 import { click, renderColdApp } from '../testing/render'
@@ -66,5 +69,34 @@ describe('round 12: a Settings value the workflow set off the CLI default says s
     expect(document.getElementById('h-extension-c')?.textContent).toBe('FASTag default 0 · set by Export tags')
     // A field at the CLI default has no such line.
     expect(document.getElementById('h-tag_length-c')).toBeNull()
+  })
+})
+
+describe('round 12: Database reduction says its recipe is not validated, and what Sage cannot read', () => {
+  it('a note under Settings; the Sage note for a .raw input', async () => {
+    const mock = installMockBridge()
+    await renderColdApp(mock)
+    await click(screen.getByRole('radio', { name: /^Database reduction/ }))
+    expect(document.querySelector('.settings-note')!.textContent).toMatch(/^The shortlist recipe this workflow sets .* is not validated/)
+    mock.nextPickInput = '/d/run.raw'
+    await click(screen.getByRole('button', { name: 'Choose file…' }))
+    expect(document.getElementById('out-search_config_out-d')!.textContent).toMatch(/Sage cannot read: convert it to mzML/)
+  })
+  it('a picked .zip that is no .d.zip is refused, with why', async () => {
+    const mock = installMockBridge()
+    await renderColdApp(mock)
+    mock.nextPickInput = '/d/run.mzML.zip'
+    await click(screen.getByRole('button', { name: 'Choose file…' }))
+    expect(screen.getByText(/is not a timsTOF \.d\.zip archive/)).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Choose file…' })).toBeTruthy()
+  })
+})
+
+describe('round 12: Labels say the Da reason once', () => {
+  it('no separate caveat when the call line gives the reason', () => {
+    const label = parseReport(daLabel, '/d/run01.label.tsv')
+    render(<DigestPanel reports={[label]} errors={[]} onOpen={() => {}} />)
+    expect(screen.getByText('No label call')).toBeTruthy()
+    expect(document.querySelector('#dg-label')!.closest('section')!.querySelector('.caveat')).toBeNull()
   })
 })

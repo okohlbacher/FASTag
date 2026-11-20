@@ -59,6 +59,13 @@ export function ownerOf(name: string): { id: string; revealCount?: boolean } | n
 
 /// The params Advanced shows for @p task: every group's, less what
 /// Settings and Outputs already show and the switches products drive.
+/// A Sage configuration names the input; Sage reads mzML, MGF and a
+/// timsTOF .d folder, not .raw, mzPeak or a .d.zip archive.
+function sageCantRead(values: Record<string, unknown>, input: string): boolean {
+  const engine = String(values['search_engine'] ?? '').trim() || 'sage'
+  return engine === 'sage' && /\.(raw|mzpeak|zip)$/i.test(input)
+}
+
 export function advancedParams(task: Task): string[] {
   const shown = new Set([...task.basic, ...task.outputs, ...SECTIONS.filter((s) => s.home === 'common').flatMap((s) => s.params)])
   return SECTIONS.flatMap((s) => s.params).filter((n) => !shown.has(n) && !WIRED.has(n) && !UNIT_PARAMS.has(n) && !FOLDED.has(n))
@@ -312,7 +319,9 @@ export default function SetupForm({
               ? alkylationWhy(on)
               : p.param === 'search_config_out' && on && String(values['search_engine'] ?? '') === 'comet' && !String(values['search_config_template'] ?? '').trim()
                 ? 'a Comet fragment: merge it into your comet.params, or give your template in Settings'
-                : null
+                : p.param === 'search_config_out' && on && sageCantRead(values, input)
+                  ? 'it names this input, which Sage cannot read: convert it to mzML and give that on the Sage command line'
+                  : null
     // The detail of a workflow's note (tasks.ts productNotes): its (?).
     const detail = !on ? task.productNotes?.[p.param] : undefined
     const spec = PARAM_BY_NAME.get(p.param)
@@ -502,6 +511,9 @@ export default function SetupForm({
   const leads = new Set(task.leadGroups ?? [])
   const ownGroups = [...SECTIONS.filter((s) => s.home === task.id), ...SECTIONS.filter((s) => leads.has(s.title))]
   const globalGroups = SECTIONS.filter((s) => s.home === 'global')
+  // A group of its own with something to show in Advanced (Export tags'
+  // one lives in Outputs).
+  const ownShown = ownGroups.some((s) => s.params.some((n) => ADV.has(n)))
   const otherGroups = SECTIONS.filter((s) => s.home !== task.id && s.home !== 'global' && s.home !== 'common' && !leads.has(s.title))
   const advChanged = session.diff.filter((n) => ADV.has(n)).length
   const advD = disclosure(session.advancedOpen, session.setAdvancedOpen)
@@ -581,6 +593,8 @@ export default function SetupForm({
           </div>
         ))}
       </div>
+      {/* One file: why a picked file was not taken (a .zip that is no .d.zip). */}
+      {!batch && folderNote}
       {batch ? (
         <div className="batch-input">
           {jobs.length > 0 ? (
@@ -695,6 +709,11 @@ export default function SetupForm({
         brief: 'Drop Carbamidomethyl (C) without alkylation.'
       })}
       {task.basic.filter((n) => !isInputField(n) && !waitsOnShownFile(n)).map((n) => field(n, { brief: task.help[n] }))}
+      {task.settingsNote && (
+        <p className="hint settings-note" role="note">
+          {task.settingsNote} <HelpLink to={task.docs.to}>Learn more</HelpLink>
+        </p>
+      )}
     </div>,
     <button
       type="button"
@@ -783,7 +802,7 @@ export default function SetupForm({
       </summary>
       <div className="adv-body">
         <p className="hint">
-          Every other option of FASTag, by topic; the groups of {task.label} first. <HelpLink to={task.docs.to}>Learn more</HelpLink>
+          Every other option of FASTag, by topic{ownShown ? `; the groups of ${task.label} first` : ''}. <HelpLink to={task.docs.to}>Learn more</HelpLink>
         </p>
         {ownGroups.map((s) => renderGroup(s, true))}
         <h3 className="adv-h">For every workflow</h3>

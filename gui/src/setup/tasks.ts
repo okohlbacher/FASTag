@@ -40,6 +40,8 @@ export interface Task {
   /// with the workflow's own, by title: the settings of a report it writes
   /// by default (Characterize: species).
   leadGroups?: string[]
+  /// A caveat of the workflow's defaults, shown at the end of Settings.
+  settingsNote?: string
   /// The Help section its "Learn more" link opens, and its name.
   docs: { to: string; label: string }
 }
@@ -117,7 +119,7 @@ export const TASKS: readonly Task[] = [
     basic: ['species_rank', 'subsample_fraction'],
     help: {
       species_rank: 'The taxonomic level of the report.',
-      subsample_fraction: '10% ranks the main taxa in a tenth of the time.'
+      subsample_fraction: 'All spectra; 10% ranks the main taxa 10× faster.'
     },
     outputs: ['out', 'species_out'],
     docs: { to: 'species-howto', label: 'Species detection' }
@@ -156,6 +158,8 @@ export const TASKS: readonly Task[] = [
       variable_modifications: 'Tagged as alternatives and written for the engine.'
     },
     outputs: ['out', 'shortlist_out', 'fasta_out', 'search_config_out'],
+    settingsNote:
+      'The shortlist recipe this workflow sets (gapped placements, E-value 10, shortest placed tag 6, 2 missed cleavages) is not validated: it failed its third held-out test with MSFragger and has no held-out test with Sage, Comet or another protease. Its values are under Advanced › Shortlist, advanced.',
     docs: { to: 'workflow-db-reduction', label: 'Database reduction' }
   },
   {

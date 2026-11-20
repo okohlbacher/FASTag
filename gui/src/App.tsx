@@ -47,6 +47,8 @@ import { INSTRUMENTS, matchesInstrument, presetText, shownInstrument } from './s
 // The tab a workflow's run lands on (doc/GUI-WORKFLOWS.md 3): its own view.
 // Export tags and Species keep the Tags/Species rule of useRun.
 const LANDING_TAB: Partial<Record<TaskId, Tab>> = { 'run-qc': 'qc', 'mass-shift': 'recon', 'db-reduction': 'shortlist', triage: 'triage', characterize: 'overview' }
+// A .zip the picker let through that is not a timsTOF .d.zip.
+const notSpectraZip = (p: string): boolean => /\.zip$/i.test(p) && !/\.d\.zip$/i.test(p)
 // The FASTA formats the recon_fasta field takes.
 const FASTA_FORMATS = ['fasta', 'fa', 'faa']
 
@@ -233,6 +235,12 @@ export default function App({ start = LANDING }: { start?: Origin } = {}): JSX.E
   async function pickInput(): Promise<void> {
     if (running || batchRunning) return
     const p = await window.fastag.pickInput()
+    // The picker offers .zip for a timsTOF .d.zip; another archive is no input.
+    if (p && notSpectraZip(p)) {
+      setFolderNote({ text: `${p} is not a timsTOF .d.zip archive: FASTag reads only those of the .zip files.`, from: 'setup' })
+      return
+    }
+    setFolderNote(null)
     if (p) setInputPath(p)
   }
 

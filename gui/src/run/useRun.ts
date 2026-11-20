@@ -316,7 +316,8 @@ export function useRun(s: RunInputs, view: ViewStore, hooks: RunHooks = {}) {
   }
 
   async function addBatchFiles(): Promise<void> {
-    addBatchPaths(await window.fastag.pickInputs())
+    // The picker offers .zip for a timsTOF .d.zip; another archive is no input.
+    addBatchPaths((await window.fastag.pickInputs()).filter((p) => !/\.zip$/i.test(p) || /\.d\.zip$/i.test(p)))
   }
 
   // Files added to the queue by a pick or a drop (shell/dropRoute.ts).

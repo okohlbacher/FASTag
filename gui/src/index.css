@@ -1305,6 +1305,7 @@ dl.qc-strip .stat dd { margin: 0; font-size: var(--text-md); font-weight: 600; }
 /* One line: each workflow's hints are short whole sentences (tasks.ts). */
 .view-setup .settings .help.brief { -webkit-line-clamp: 1; }
 .view-setup .instrument-field select { min-width: 0; width: 100%; }
+.view-setup .settings > .settings-note { grid-column: 1 / -1; margin: 0; }
 @media (max-width: 900px) { .view-setup .settings { grid-template-columns: minmax(0, 1fr); } .view-setup .settings > .field { grid-column: auto !important; } }
 .view-setup .settings textarea { min-height: 0; }
 /* Advanced: the fields of a group in the Settings grid. */
