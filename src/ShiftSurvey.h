@@ -331,7 +331,8 @@ namespace FASTag
       (protein N-term) + Oxidation (M), while the single Unimod name,
       Carboxymethyl@N-term, does not involve the Met at all. Returned only when
       the row's best name (the first non-label entry of @p names) is not
-      specific to the residue of the most-supported site, and a sum of two
+      specific to the residue of the most-supported site nor itself one of the common
+      modifications (Acetyl@N-term stays, though it equals Methyl+Formyl), and a sum of two
       common modifications (the list isobarClass() uses) within @p iso_tol of
       that name's mass has both parts fit that site (match() on it) with at
       least one part specific to its residue. Then -delta_out writes it before

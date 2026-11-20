@@ -333,6 +333,7 @@ int main(int argc, char** argv)
     check(combo(58.0055, {"K"}, {10}).empty(), "+58.005 on K: no Acetyl+Oxidation reading (Oxidation does not fit K)");
     check(combo(28.0313, {"K"}, {10}).empty(), "Dimethyl@K already explains K: no Methyl+Methyl entry");
     check(combo(15.9949, {"M"}, {10}).empty(), "a single unambiguous name stays alone");
+    check(combo(42.0106, {"N-term|S"}, {10}).empty(), "Acetyl@N-term is common: not Methyl+Formyl");
   }
 
   // ---------------------------------------------------------------- Unimod

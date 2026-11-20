@@ -581,6 +581,9 @@ namespace FASTag
       const Site& site = sites[top];
       const char res = site.residue == 'I' ? 'L' : site.residue;
       if (best->entry->origin == res) return "";  // the name already explains the residue
+      const std::size_t nc = sizeof(COMMON_MODS) / sizeof(COMMON_MODS[0]);
+      for (std::size_t i = 0; i < nc; ++i)  // one common modification beats a sum of two (Acetyl = Methyl+Formyl)
+        if (clean(best->entry->name) == COMMON_MODS[i].first) return "";
       const double mass = delta - best->error;
       // A part fits when the catalogue has it on the site; its labels, and whether it is residue-specific.
       auto fits = [&](const char* name, double m, std::vector<std::string>& labels, bool& specific) {
@@ -593,7 +596,6 @@ namespace FASTag
           }
         return false;
       };
-      const std::size_t nc = sizeof(COMMON_MODS) / sizeof(COMMON_MODS[0]);
       for (std::size_t i = 0; i < nc; ++i)
         for (std::size_t j = i; j < nc; ++j)
         {
