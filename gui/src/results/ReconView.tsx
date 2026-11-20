@@ -17,7 +17,7 @@ import { filterRecon, type DeltaTable, type ReconFilter, type ReconIdTable, type
 import { useTable } from './useTable'
 import { useSticky } from './tableStore'
 import { FASTA_EXTENSION, SHIFT_MIN_DA, type TileAction } from './overview'
-import { longestSeed } from '../paramLayout'
+import { longestSeed, shortestSeed } from '../paramLayout'
 import ReportHeader from './ReportHeader'
 import './viewers.css'
 
@@ -58,15 +58,29 @@ const DEFAULT_MIN_PLACED = 8
 
 /// The extension a FASTA run of @p params needs so its longest seed
 /// (tag_lengths replaces tag_length) reaches the shortest tag placed: an
-/// explicit recon_min_length, else 8; never below FASTA_EXTENSION. Above
-/// the CLI's 12 the seed itself must grow (@p seed: the seed that would
-/// reach it at extension 12).
+/// explicit recon_min_length, else 8; never below FASTA_EXTENSION. With
+/// -fasta (the tag filter) every seed must also reach the filter's floor,
+/// min_filter_length when set, else 8 for a human-sized database: the CLI
+/// refuses the run otherwise (FASTag.cpp "Seed length ... reaches at most").
+/// Above the CLI's 12 the seed itself must grow (@p seed: the seed that
+/// would reach both at extension 12).
 export function fastaExtension(params: Record<string, unknown>): { ext: number; seed?: number } {
   const seed = longestSeed(params) ?? 3
-  const ml = Number(String(params['recon_min_length'] ?? '').trim() || '0')
-  const target = Number.isFinite(ml) && ml > 0 ? ml : DEFAULT_MIN_PLACED
-  const need = Math.max(FASTA_EXTENSION, Math.ceil((target - seed) / 2))
-  return need > MAX_EXTENSION ? { ext: MAX_EXTENSION, seed: target - 2 * MAX_EXTENSION } : { ext: need }
+  const target = positive(params['recon_min_length']) ?? DEFAULT_MIN_PLACED
+  let need = Math.max(FASTA_EXTENSION, Math.ceil((target - seed) / 2))
+  let reach = target
+  if (given(params['fasta'])) {
+    const floor = positive(params['min_filter_length']) ?? DEFAULT_MIN_PLACED
+    need = Math.max(need, Math.ceil((floor - (shortestSeed(params) ?? seed)) / 2))
+    reach = Math.max(reach, floor)
+  }
+  return need > MAX_EXTENSION ? { ext: MAX_EXTENSION, seed: reach - 2 * MAX_EXTENSION } : { ext: need }
+}
+
+/// A whole number above 0, else null.
+function positive(v: unknown): number | null {
+  const x = Number(String(v ?? '').trim() || '0')
+  return Number.isFinite(x) && x > 0 ? x : null
 }
 
 /// What the empty state's button does for a run sent @p params: without a

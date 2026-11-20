@@ -387,6 +387,19 @@ describe('ReconView', () => {
     expect(reconRerun({ recon_fasta: '/db/h.fasta', recon_min_length: '10' }).values).toMatchObject({ extension: '4' })
   })
 
+  // Round 10 minor: with -fasta the CLI checks the filter's floor with every seed.
+  it('reconExtend: with -fasta the shortest seed must reach the filter floor too', () => {
+    // Seeds 3 and 6, filter floor 12: 6 + 2 × 3 reaches the recon 8, but 3 needs 5 (3 + 10 = 13).
+    expect(reconExtend({ fasta: '/db/h.fasta', extension: '2', tag_lengths: ['3', '6'], min_filter_length: '12' })?.values).toEqual({ extension: '5' })
+    // Derived floor (not set): 8, so seed 3 needs 3.
+    expect(reconExtend({ fasta: '/db/h.fasta', extension: '2', tag_lengths: ['3', '6'] })?.values).toEqual({ extension: '3' })
+    // recon_fasta alone has no tag filter: the longest seed decides.
+    expect(reconExtend({ recon_fasta: '/db/h.fasta', extension: '1', tag_lengths: ['3', '6'], min_filter_length: '12', recon_min_length: '14' })?.values).toEqual({ extension: '4' })
+    expect(reconExtend({ fasta: '/db/h.fasta', extension: '1', tag_lengths: ['3', '6'], min_filter_length: '12', recon_min_length: '14' })?.values).toEqual({ extension: '5' })
+    // Past 12 the seed grows to reach the larger of both floors.
+    expect(reconExtend({ fasta: '/db/h.fasta', tag_length: '3', min_filter_length: '30' })?.values).toEqual({ tag_length: '6', extension: '12' })
+  })
+
   // Review fix: the 0-placed case (ext2) has a way forward in the banner.
   it('the low-placed banner offers the run with extension 3', async () => {
     installMockBridge()

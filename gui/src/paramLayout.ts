@@ -785,6 +785,13 @@ function seedLengths(values: Record<string, unknown>): { lengths: number[]; opti
   return { lengths: one === null ? [] : [one], option: 'tag_length' }
 }
 
+/// The shortest seed the CLI tags at (tag_lengths replaces tag_length), or
+/// null when none is a whole number.
+export function shortestSeed(values: Record<string, unknown>): number | null {
+  const { lengths } = seedLengths(values)
+  return lengths.length ? lengths[0] : null
+}
+
 /// The longest seed the CLI tags at (tag_lengths replaces tag_length), or
 /// null when none is a whole number.
 export function longestSeed(values: Record<string, unknown>): number | null {
