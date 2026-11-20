@@ -1,6 +1,6 @@
 # FASTag GUI review, 2026-11-20: workflow-based Setup
 
-Branch `feat/gui-workflows` (from `origin/main`), head `410784c9`, not pushed.
+Branch `feat/gui-workflows` (from `origin/main`), head `6a81f2ab`, not pushed.
 GUI-only: compared with the merge base, only files under `gui/` and `doc/`
 changed; no C++ source and no `gui/src/params.generated.json`.
 Spec: [GUI-WORKFLOWS.md](GUI-WORKFLOWS.md).
@@ -30,8 +30,9 @@ IDs `batch-qc` and `open-results` load as Characterize (Batch) and Export tags.
 
 ## 2. What changed from main
 
-148 files under `gui/src` (54 added, 93 changed, 1 removed), 31 under
-`gui/src-tauri` and `gui/e2e-web`, plus `doc/GUI-WORKFLOWS.md` and this report.
+Compared with the merge base: 156 files under `gui/src` (58 added, 97
+changed, 1 removed), 7 under `gui/src-tauri`, 24 under `gui/e2e-web`, plus
+`doc/GUI-WORKFLOWS.md` and this report (189 files, +38,770 / -2,448 lines).
 
 - **Setup.** Task chooser with seven workflows; per-workflow basic fields,
   required inputs and help; Instrument preset matched by value (incl. Orbitrap
@@ -45,7 +46,10 @@ IDs `batch-qc` and `open-results` load as Characterize (Batch) and Export tags.
   value/unit pairs travel together; the MSFragger recipe is shown as the CLI
   applies it; dependencies follow the CLI reader table, with value
   conditions; pre-run conflicts for combinations the CLI refuses (also in
-  Batch); History restore rebuilds from CLI defaults plus the recorded params.
+  Batch); History restore rebuilds from CLI defaults plus the recorded params;
+  Apply last-used goes through the same replacement (recipe kept, Undo); the
+  alkylation Extension raise happens only on the user's own toggle or edit,
+  only for shipped proteomes, and follows `recon_min_length` and `tag_lengths`.
 - **Output protection (Rust + TS).** All output-file options are tracked from
   the manifest (overwrite confirmation, cleanup, history, reveal); an output
   that names an input (incl. `alkylation_proteome` files and other queued
@@ -57,7 +61,9 @@ IDs `batch-qc` and `open-results` load as Characterize (Batch) and Export tags.
   reports); content-aware opening from Open, Open report, drop and History;
   selection tokens against stale async reads; c/z ladders; ETD/EThcD pre-
   and post-run checks by input format, keyed to the run shown; Da caveat on
-  Species; help popovers kept inside the pane.
+  Species; help popovers kept inside the pane; re-run actions only for the run
+  shown; reports grouped by History run id; one selection per drop; no crash
+  for a tag without a ladder; modal questions trap focus.
 - **Batch.** Run gated on the queue; per-workflow summary columns from the
   batch's recorded workflow; QC reports read; species ties and not-assessable
   isobaric runs kept out of the majority vote; SDRF check uses the QC report.
@@ -65,15 +71,15 @@ IDs `batch-qc` and `open-results` load as Characterize (Batch) and Export tags.
   Batch mode, Outputs and Advanced; single-dash flags.
 - **Tests and fixtures.** Real CLI 1.15 runs per workflow
   (`gui/src/fixtures/cli-1.15/workflows/`) drive the e2e bridge; vitest from
-  965 to 1370 passing tests; new Playwright specs `workflow-counts` and a
+  965 to 1405 passing tests; new Playwright specs `workflow-counts` and a
   popover-in-pane check in `screens`.
 
 ## 3. Review rounds
 
 Each round reviewed the commit named (Claude plus Codex, Kimi and Vibe;
-findings verified against the code); the next round's commit fixed them.
-Blocking = critical + major. In every round 0 tests failed; the WebKit
-Playwright project was not run.
+findings verified against the code and the screenshots); the next round's
+commit fixed them. Blocking = critical + major. In every round 0 tests
+failed; the WebKit Playwright project was not run.
 
 | Round | Commit reviewed | Tests at that commit | Confirmed: critical / major / minor (rejected) | Blocking |
 |---|---|---|---|---|
@@ -83,42 +89,53 @@ Playwright project was not run.
 | 4 | eadfc4b7 | typecheck OK; vitest 1260 passed; Playwright 118 passed; screens 56 PNGs | 0 / 11 / 18 (4) | 11 |
 | 5 | 5fae4e5c | typecheck OK; vitest 1278 passed; Playwright 118 passed; screens 56 PNGs | 0 / 8 / 19 (7) | 8 |
 | 6 | f6e7ee61 | typecheck OK; vitest 1318 passed; Playwright 118 passed; screens 56 PNGs | 0 / 8 / 15 (4) | 8 |
-| 7 | 9ae667a9 | typecheck OK; vitest 1346 passed, 17 skipped; Playwright 118 passed, 9 skipped; screens 57 PNGs | 0 / 8 / 15 (1) | 8 |
-| 8 | 410784c9 | typecheck OK; vitest 1370 passed, 17 skipped; Playwright 118 passed, 9 skipped; screens 58 PNGs (incl. popover-in-pane check) | 0 / 5 / 11 (4) | 5 |
+| 7 | 9ae667a9 | typecheck OK; vitest 1346 passed; Playwright 118 passed; screens 57 PNGs | 0 / 8 / 15 (1) | 8 |
+| 8 | 410784c9 | typecheck OK; vitest 1370 passed; Playwright 118 passed; screens 58 PNGs (incl. popover-in-pane check) | 0 / 5 / 11 (4) | 5 |
+| 9 | 78322292 | typecheck OK; vitest 1384 passed, 17 skipped; Playwright 118 passed, 9 skipped; screens 59 PNGs | 0 / 3 / 17 (5) | 3 |
+| 10 | 6a81f2ab | typecheck OK; vitest 1405 passed, 17 skipped; Playwright 118 passed, 9 skipped; screens 59 PNGs | 0 / 3 / 18 (4) | 3 |
 
-## 4. Open findings (round 8, at 410784c9)
+Blocking findings fell from 19 to 3; since round 4 no critical finding has
+been found.
 
-No critical findings remain. Round 8 has not been fixed yet.
+## 4. Open findings (round 10, at 6a81f2ab)
 
-### Major (5)
+No critical findings. Round 10 has not been fixed yet.
+
+### Major (3)
 
 | Area | Problem | Fix |
 |---|---|---|
-| Spectrum ladder crash | `LadderLine` (`SpectrumPanel.tsx:400-423`) reads `positions[0].mz` when `ladderFor` returned no positions; a tag with a modification missing from `MOD_DELTA` (e.g. `C[Carboxymethyl]`) throws and breaks the Spectrum view. | Show only the verdict with `ladder.reason` when positions is empty; render test. |
-| Re-run actions | "Re-run with per-residue confidence" and the Overview / Mass shifts re-run actions (`App.tsx:317, 709-733`) check only the input name, so on an older History run they run the current form plus the change and overwrite current outputs. | Gate them on `run.shownRerunnable`, or build the call from the shown run's params; regression test. |
-| Drops with a species file | `useDrops.ts:42-44`: `openSpeciesPath` bumps the selection token after `openReportPaths` started, so the drop's remaining reports are silently not opened (deterministic). | One selection per drop, passed to every opener, or compare with `superseded(t)`. |
-| Alkylation raise on replacement | The raise effect (`SetupForm.tsx:150-174`) runs on every History restore, preset, workflow, reset or undo; a loaded run with the alkylation report and a lower Extension is raised at once, so the recorded call is not reproduced (yeast flips 2 -> 3 -> 2). | Raise only on the user's own toggle or edit; on a replacement show "Needs Extension N" with a one-click raise; read the proteome from the new values. |
-| Alkylation and custom databases | A FASTA in `alkylation_proteome` always raises as for human, while the same FASTA as Protein database gets no raise and "Extension is left as it is"; the CLI indexes both the same way (size-dependent minimum, 4 for the 3-protein fixture). The help suggests a protein database as a way out of `tags_too_short`. | One rule for every custom database: raise only for shipped proteomes; for a FASTA show "Needs Extension N for a human-sized database"; fix the help and the Characterize product note. |
+| Characterize: alkylation note | With Alkylation report off, the note reads "Extension 2 → 3 (Advanced › Tagging); changes every tag; …", the same present-tense wording as after the raise, while the call still sends `-extension 2` (`SetupForm.tsx:238-253`). | Use `raiseNote` only when the raise is in force; for the off state say "Turning it on raises Extension 2 → 3 …"; test. |
+| Run association | `sameRunIn` (`reports.ts:23-30`) treats two files with different persisted run ids as one run when either record lists the other path. Run B rewrites `sample.tags.tsv`; A's leftover `sample.qc.tsv` is shown beside B's tags with no warning. | Two distinct persisted run ids are different runs; use the outputs-list match only for synthetic `shown:<out>` mappings; regression test. |
+| Mass-shift chart labels | Bins are named after the nearest bundled modification within the window, which without a mass-gap report (the workflow default) is an assumed ±0.5 Da: a +15.600 Da bin is labelled "Oxidation", which can contradict the CLI's UniMod assignments (`MassGapChart.tsx:146-163`). | Name bins only from the CLI's assignments; draw mass-only matches in a separate, marked style ("nearest known mass ±0.5 Da"). |
 
-### Minor (11)
+### Minor (18)
 
 | Area | Problem (fix) |
 |---|---|
-| Alkylation target, `recon_min_length` | The CLI checks tags against it when set; the GUI always targets 8 or 7 (return it when above 0; Setup note and Overview follow). |
-| Alkylation target, `tag_lengths` | Seed taken from `tag_length` only (use the longest effective seed; add to effect dependencies). |
-| Help popover CLI line | Kept or dropped by length, so jargon leads or facts are lost (Storey, 1+ test, column list, .gz) (curated text first; drop the CLI line only when covered). |
-| Mass-gap help | Says the raise does not apply to a FASTA proteome; code and product note say it does (align with the custom-database rule; docs test). |
-| Export tags Extension hint | "3 gives tags of 8+" (Extension is an upper bound: "3 lets a seed of 3 grow to 9"). |
-| Species wording | Overview says "by adjusted count", Species tab "by observed spectra" (one shared helper). |
-| Mass shifts headline | "Placed spectra" next to "Spectra with a placement"; "Gap peaks 1" counts the 0 Da bin, while the Overview says "no shift peak" (rename; count peaks of at least 0.5 Da). |
-| TMT reporter filter help | "singly charged tags" (the reporter ion is singly charged; reword). |
-| Report opened after a failed run | Species/QC/report opens skip the history status check (one opener with the "Reports may be partial" state). Plausible. |
-| Spec: threads | GUI-WORKFLOWS.md says 0 means all cores and the CLI default is 1; FASTag uses half the logical cores for 0 and that is its default. |
-| Empty Results text | "Open a digest, label or mass-gap report…" although the opener handles every report ("Open a FASTag report…"). |
+| Outputs card layout | Alkylation (?) wraps under the two-line note and leaves a gap in the left column (popover after the label; note on a full line). |
+| Alkylation note location | Always says "(Advanced › Tagging)", though Extension is a Settings field in Export tags and Mass-shift survey; the species/digest clause shows when neither report is on (location from the task layout; clause only when relevant). |
+| Overview grouping | Main-result tile and run facts are split into rows with no visible heading (add "Main result" / "Run" headings). |
+| Tags re-run button | "Re-run with per-residue confidence" shows beside existing Min./Mean conf. columns (name what it adds; reorder or hide all-zero columns). |
+| Advanced density | 6,100 to 7,400 px per workflow; Other analyses expands into many waiting sub-groups (collapse each to one line with Turn on). |
+| Spectrum from a ranking | With only a triage ranking open, tags of a later run that rewrote the tags path are drawn (check the newest writer's run id). |
+| Undo after replacement | `beside()` rewrites custom output paths, and the edited set is lost (restore the snapshot unchanged, with the edited set). |
+| Apply last-used | Restores every value but keeps the current workflow, so label, record and lead tiles name the wrong workflow; the test uses a partial value set (store the workflow id; full-value test). |
+| Drop of custom-named files | Tags and QC of one run with custom names: the tags are dropped as superseded (one selection token per drop). |
+| Run association without record | With no record and no `<stem>.<kind>` names, files of two runs with different Extension are shown as one (a missing stem is unknown identity). |
+| Help: Overview figures | Still describes the removed "Tags E ≤ 1" tile (`workflows.tsx:23`). |
+| Help: mass-shift extension | Says the action raises to 3; it now computes the value and may suggest a longer seed. |
+| Help: `alkylation_proteome` | Field path with commas reads badly and is incomplete outside Mass-shift survey. |
+| Re-run extension with `-fasta` | Targets `recon_min_length` and the longest seed; the CLI checks the filter floor with every seed, so it can refuse the suggested call. |
+| Triage: experimental | `-census_score` is experimental per the README; the product, help and Overview do not say so. |
+| Mass shifts: 0 Da bin | "Spectra with a mass gap" and its warning count the unshifted 0 Da bin. |
+| Species tab, empty report | The Da-tolerance banner is skipped in the empty branch. |
+| Table sort | Blank numeric cells sort as 0, not last (`Number('')`). |
 
 Before merging: `origin/main` has moved on to 1.15.4 (regenerated
 `params.generated.json`, `-shortlist_defaults`, `-shortlist_max_evalue`
-help); rebase and rerun the tests. The spec still names the 1.15.3 manifest.
+help, metaproteome recommendation `-shortlist_max_evalue 100`); rebase and
+rerun the tests. The spec still names the 1.15.3 manifest.
 
 The review notes per round are in
 `/Users/kohlbach/Claude/OpenMS/New Tools/FASTag/output/gui-workflows/r<N>-*.md`.
@@ -127,16 +144,17 @@ The review notes per round are in
 
 Each round's screenshots are in
 `/Users/kohlbach/Claude/OpenMS/New Tools/FASTag/output/gui-workflows/screens/r<N>`
-(N = 1 to 8; r8 shows the head). Naming: `00` landing, `10-setup-<k>-*`
-Setup per workflow, `11-*-full` whole form, `12-*-advanced` Advanced open,
-`13` Batch mode, `2x` help popovers, run bar and file chosen,
-`3<k>-results-*` Results tabs per workflow (k = 1 Export tags … 7
-Characterize). Open a folder in Finder or Preview
-(`open .../screens/r8`) to page through.
+(N = 1 to 10; r10 shows the head, 59 PNGs). Naming: `00` landing,
+`10-setup-<k>-*` Setup per workflow, `11-*-full` whole form, `12-*-advanced`
+Advanced open, `13` Batch mode, `14` Characterize with Alkylation on, `2x`
+help popovers, run bar and file chosen, `3<k>-results-*` Results tabs per
+workflow (k = 1 Export tags … 7 Characterize). Open a folder in Finder or
+Preview (`open ".../screens/r10"`) to page through; compare rounds by
+opening the same file name in two folders.
 
 To regenerate, in `gui/`:
 
 ```
 npm run build:e2e
-E2E_PORT=4410 SCREENS_DIR=<dir> npx playwright test -c e2e-web screens --project chromium
+E2E_PORT=4411 SCREENS_DIR=<dir> npx playwright test -c e2e-web screens --project chromium
 ```
