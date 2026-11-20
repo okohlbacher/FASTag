@@ -1,6 +1,8 @@
 # Changelog
 
-## Unreleased
+## 1.15.4 (2026-11-20)
+
+Shortlist runs now use the tested shortlist recipe by default (`-shortlist_defaults plain` restores 1.15.3), and metaproteomes get a held-out-tested recommendation (`-shortlist_max_evalue 100`). Runs without a shortlist output are unchanged.
 
 - **The shortlist recipe is the default of every tryptic shortlist run.**
   With `-shortlist_out`, `-fasta_out` or `-search_config_out` and
