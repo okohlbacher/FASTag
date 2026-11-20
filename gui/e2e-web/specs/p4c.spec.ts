@@ -267,6 +267,11 @@ test('opening Mass shifts or Glyco, or filtering, does not scroll the page; the 
   const outer = page.locator('.tablewrap')
   const top = (l: ReturnType<Page['locator']>): Promise<number> => l.evaluate((e) => e.scrollTop)
   await page.getByRole('tab', { name: 'Mass shifts' }).click()
+  await expect(page.getByRole('grid', { name: 'Mass-shift table' })).toBeVisible()
+  expect(await top(outer)).toBe(0)
+  // The placements (round 11: one click away), chosen from a script: a
+  // Playwright click scrolls its target into view, which is not the view's doing.
+  await page.getByRole('button', { name: 'Placements', exact: true }).evaluate((e: HTMLButtonElement) => e.click())
   const grid = page.getByRole('grid', { name: 'Placements' })
   await expect(grid).toBeVisible()
   // The view is taller than the window: a page scroll would be possible.
