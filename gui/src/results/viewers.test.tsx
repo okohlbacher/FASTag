@@ -134,6 +134,12 @@ describe('DataTable', () => {
     expect(sortIds([0, 1, 2, 3], cols[1], false)).toEqual([2, 3, 0, 1])
     expect(sortIds([0, 1, 2, 3], cols[1], true)).toEqual([0, 3, 2, 1])
   })
+  it('sorts blank numeric cells last, not as 0', () => {
+    const text = ['2', '', '-1', ' ']
+    const c: Column = { id: 't', label: 'T', num: true, text: (i) => text[i] }
+    expect(sortIds([0, 1, 2, 3], c, false)).toEqual([2, 0, 1, 3])
+    expect(sortIds([0, 1, 2, 3], c, true)).toEqual([0, 2, 1, 3])
+  })
 
   it('moves the active row with the keyboard and sorts from the header', async () => {
     const ids = Uint32Array.from({ length: 250 }, (_, i) => i)

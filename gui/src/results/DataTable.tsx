@@ -58,7 +58,8 @@ export function sortIds(ids: ArrayLike<number>, col: Column | undefined, desc: b
     const k = new Float64Array(out.length)
     out.forEach((id, j) => {
       const v = key(id)
-      k[j] = typeof v === 'number' ? v : Number(v)
+      // A blank cell is no value and sorts last (Number('') is 0).
+      k[j] = typeof v === 'number' ? v : String(v).trim() === '' ? NaN : Number(v)
     })
     const order = out.map((_, j) => j)
     order.sort((a, b) => {
