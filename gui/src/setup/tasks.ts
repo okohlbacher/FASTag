@@ -62,7 +62,7 @@ export const TASKS: readonly Task[] = [
     basic: ['tag_length', 'extension', 'max_evalue', 'max_tags', 'res_conf'],
     help: {
       tag_length: 'Residues in a seed tag; 3 suits most runs.',
-      extension: 'For assembly; 3 lets a seed of 3 grow to 9.',
+      extension: '3 lets a seed of 3 grow to 9.',
       max_evalue: 'Keeps tags at or below this E-value; 0 keeps all.',
       max_tags: 'Most tags per spectrum; 0 sets no limit.',
       res_conf: 'Adds a confidence per residue for assembly.'
@@ -159,7 +159,7 @@ export const TASKS: readonly Task[] = [
     },
     outputs: ['out', 'shortlist_out', 'fasta_out', 'search_config_out'],
     settingsNote:
-      'The shortlist recipe this workflow sets (gapped placements, E-value 10, shortest placed tag 6, 2 missed cleavages) is not validated: it failed its third held-out test with MSFragger and has no held-out test with Sage, Comet or another protease. Its values are under Advanced › Shortlist, advanced.',
+      'The shortlist recipe this workflow sets (gapped placements, E-value 10, shortest placed tag 6, 2 missed cleavages) is not validated: it failed its third held-out test with MSFragger and has no held-out test with Sage, Comet or another protease. Its values are under Advanced: Shortlist, advanced (E-value, gapped), Placement, advanced (shortest tag) and Placement on the database (missed cleavages).',
     docs: { to: 'workflow-db-reduction', label: 'Database reduction' }
   },
   {

@@ -460,3 +460,13 @@ describe('instrument and fragment tolerance', () => {
     expect(compareTolerance(['20 ppm'], null).state).toBe('no_call')
   })
 })
+
+// Round 13: two data files of one name in two folders are not told apart by it.
+describe('round 13: SDRF matching prefers the exact path', () => {
+  const t = parseSdrf(new TextEncoder().encode('source name\tcharacteristics[organism]\tcomment[data file]\nA\tHomo sapiens\t/A/run.raw\nB\tMus musculus\t/B/run.raw\nC\tHomo sapiens\tother.mzML\n'))
+  const job = (input: string) => ({ input, status: 'queued' as const, data: null })
+  it('the exact path, else a unique name; an ambiguous name matches nothing', () => {
+    const c = compareSdrf(t, [job('/B/run.raw'), job('/C/run.raw'), job('/x/other.mzML')] as never, null)
+    expect(c.jobs.map((j) => j.dataFile)).toEqual(['/B/run.raw', null, 'other.mzML'])
+  })
+})

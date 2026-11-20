@@ -479,7 +479,7 @@ function ShortlistView({ tsv, files }: { tsv: Tsv; files: { label: string; path:
     <>
       <p className="report-sum">
         <strong>{nKept}</strong> of {nOf} proteins with evidence are kept {reduced ? 'in the reduced FASTA' : 'on the shortlist'}
-        {background > 0 && <>, plus {background} background {background === 1 ? 'protein' : 'proteins'} kept without evidence</>}.
+        {background > 0 && <>, plus {background} {background === 1 ? 'protein' : 'proteins'} kept as background</>}.
       </p>
       <ShortlistNotes notes={tsv.notes} />
       {files.length > 0 && (
@@ -593,7 +593,7 @@ function TriageView({ tsv, path, openSpectrum }: { tsv: Tsv; path: string; openS
         ))}
         {idc < 0 && <span className="muted">{NO_IDS}</span>}
         <button type="button" className="secondary small" disabled={ids.length === 0} onClick={() => void exportShown()}>
-          {filter === 'candidates' ? 'Export candidates…' : 'Export shown rows…'}
+          {filter === 'candidates' ? 'Export candidate table…' : 'Export shown rows…'}
         </button>
       </div>
       {saved && (
@@ -603,7 +603,7 @@ function TriageView({ tsv, path, openSpectrum }: { tsv: Tsv; path: string; openS
       )}
       <p className="hint">
         {scored && 'The score ranks spectra; it is not a quality call and not an error rate.'}
-        {trc >= 0 && ' Triage candidates: spectra not identified whose best tag is at or below the Triage E-value, a list for a second (for example semi-specific) search.'}
+        {trc >= 0 && ' Triage candidates: spectra not identified whose best tag is at or below the Triage E-value. Run a second (for example semi-specific) search of the run and join its identifications to this list by the spectrum column (native ID).'}
         {idc >= 0 && ' Unknown: the identifications neither name nor rule out the spectrum.'}
       </p>
       <DataTable

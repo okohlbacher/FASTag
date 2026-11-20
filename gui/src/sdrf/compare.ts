@@ -582,13 +582,21 @@ export function compareSdrf(t: SdrfTable, jobs: readonly SdrfJob[], tx: Taxonomy
       if (!f || !stated(f)) continue
       files.set(f, [...(files.get(f) ?? []), r.row])
     }
+  // The exact path first; then the basename, then the stem, each only when
+  // one data file has it (two runs named run.raw in two folders are not
+  // told apart by their name).
   const lookup = (name: string | null): string | null => {
     if (!name) return null
-    const b = baseName(name.replace(/\\/g, '/')).toLowerCase()
-    for (const f of files.keys()) if (baseName(f.replace(/\\/g, '/')).toLowerCase() === b) return f
+    const norm = (p: string): string => p.replace(/\\/g, '/').toLowerCase()
+    const keys = [...files.keys()]
+    const exact = keys.filter((f) => norm(f) === norm(name))
+    if (exact.length === 1) return exact[0]
+    const b = baseName(norm(name))
+    const byBase = keys.filter((f) => baseName(norm(f)) === b)
+    if (byBase.length) return byBase.length === 1 ? byBase[0] : null
     const s = fileStem(name)
-    for (const f of files.keys()) if (fileStem(f) === s) return f
-    return null
+    const byStem = keys.filter((f) => fileStem(f) === s)
+    return byStem.length === 1 ? byStem[0] : null
   }
   const used = new Set<string>()
   const out: JobComparison[] = jobs.map((j) => {

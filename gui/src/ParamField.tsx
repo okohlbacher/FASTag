@@ -93,6 +93,8 @@ export default function ParamField({ spec, value, onChange, onPickFile, needs, u
     return () => el.removeEventListener('fastag:reveal-count', reveal)
   }, [count])
   const deflt = `${defaultText(spec)}${unit ? ` ${defaultText(unit.spec)}` : ''}`
+  // A Settings hint (brief) of a value the workflow set off the CLI default.
+  const defaultNote = !!brief && changed && !!setBy && !blocked && !needs
   // An invalid value says what is wrong with it in place of the description;
   // an inert field keeps its description and adds what would switch it on.
   const help = invalid ? (
@@ -105,8 +107,8 @@ export default function ParamField({ spec, value, onChange, onPickFile, needs, u
       <p
         id={helpId}
         ref={helpRef}
-        className={`${off ? 'help inert' : 'help'}${brief ? ' brief' : ''}`}
-        title={off ? undefined : (brief ?? sentence(hintText(spec.name, plainOptions(spec.description))))}
+        className={`${off ? 'help inert' : 'help'}${brief ? ' brief' : ''}${defaultNote ? ' with-default' : ''}`}
+        title={off ? undefined : `${brief ?? sentence(hintText(spec.name, plainOptions(spec.description)))}${defaultNote ? ` FASTag default ${deflt}.` : ''}`}
       >
         {blocked ? (
           <span className="needs">{blocked}</span>
@@ -124,7 +126,7 @@ export default function ParamField({ spec, value, onChange, onPickFile, needs, u
         {/* A Settings field (brief) the workflow set off the CLI's default
             (Export tags: Extension 3, FASTag's 0) says so on its hint line,
             so a run compared with a plain CLI run holds no surprise. */}
-        {!!brief && changed && !!setBy && !blocked && !needs && (
+        {defaultNote && (
           <span id={`${helpId}-c`} className="changed">
             {' '}FASTag default {deflt}.
           </span>

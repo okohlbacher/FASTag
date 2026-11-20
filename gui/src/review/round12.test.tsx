@@ -22,11 +22,11 @@ describe('round 12: Triage candidates go to a file for the second search', () =>
     await waitFor(() => expect(document.querySelector('.report-sum')).not.toBeNull())
     await click(screen.getByRole('radio', { name: /^Triage candidates/ }))
     mock.nextPickOutput = '/d/a.census_sorted.tsv'
-    await click(screen.getByRole('button', { name: 'Export candidates…' }))
+    await click(screen.getByRole('button', { name: 'Export candidate table…' }))
     expect(mock.summaryWrites).toHaveLength(0)
     expect(screen.getByRole('status').textContent).toMatch(/^Not written/)
     mock.nextPickOutput = '/d/a.triage_candidates.tsv'
-    await click(screen.getByRole('button', { name: 'Export candidates…' }))
+    await click(screen.getByRole('button', { name: 'Export candidate table…' }))
     expect(mock.summaryWrites).toHaveLength(1)
     expect(mock.summaryWrites[0].text).toBe('ident_rank\tspectrum\tstatus\tbest_evalue\tident_score\tidentified\ttriage\n1\ts1\ttagged\t0.1\t0.9\t0\t1\n')
   })
@@ -58,7 +58,7 @@ describe('round 12: Shortlist counts proteins with evidence as the CLI does', ()
     mock.reportFiles['/d/a.shortlist.tsv'] =
       '# proteins: 2 with evidence, 1 kept\nrank\taccession\tkept\treason\n1\tP1\t1\tkept\n2\tP2\t0\tbelow_cut\n3\tH1\t1\tbackground\n4\tH2\t1\tbackground\n'
     render(<ReportTable kind="shortlist" path="/d/a.shortlist.tsv" />)
-    await waitFor(() => expect(document.querySelector('.report-sum')?.textContent).toMatch(/^1 of 2 proteins with evidence are kept on the shortlist, plus 2 background proteins kept without evidence\.$/))
+    await waitFor(() => expect(document.querySelector('.report-sum')?.textContent).toMatch(/^1 of 2 proteins with evidence are kept on the shortlist, plus 2 proteins kept as background\.$/))
   })
 })
 
@@ -66,7 +66,7 @@ describe('round 12: a Settings value the workflow set off the CLI default says s
   it('Export tags: Extension 3, FASTag default 0', async () => {
     const mock = installMockBridge()
     await renderColdApp(mock)
-    expect(document.getElementById('h-extension')?.textContent).toBe('For assembly; 3 lets a seed of 3 grow to 9. FASTag default 0.')
+    expect(document.getElementById('h-extension')?.textContent).toBe('3 lets a seed of 3 grow to 9. FASTag default 0.')
     // A field at the CLI default has no such line.
     expect(document.getElementById('h-tag_length-c')).toBeNull()
   })

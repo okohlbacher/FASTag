@@ -1304,6 +1304,8 @@ dl.qc-strip .stat dd { margin: 0; font-size: var(--text-md); font-weight: 600; }
 .view-setup .settings > .field:has(.path-input) { grid-column: span 2; }
 /* One line: each workflow's hints are short whole sentences (tasks.ts). */
 .view-setup .settings .help.brief { -webkit-line-clamp: 1; }
+/* Two lines when it says the CLI default too (it must not be cut). */
+.view-setup .settings .help.brief.with-default { -webkit-line-clamp: 2; }
 .view-setup .instrument-field select { min-width: 0; width: 100%; }
 .view-setup .settings > .settings-note { grid-column: 1 / -1; margin: 0; }
 @media (max-width: 900px) { .view-setup .settings { grid-template-columns: minmax(0, 1fr); } .view-setup .settings > .field { grid-column: auto !important; } }

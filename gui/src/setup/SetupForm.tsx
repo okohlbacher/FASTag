@@ -17,7 +17,7 @@ import type { Session } from './useSession'
 import type { RunState } from '../run/useRun'
 import type { SdrfState } from '../sdrf/useSdrf'
 import { Leftovers } from '../Leftovers'
-import { dirName, revealLabel } from '../app/paths'
+import { dirName, outputKind, revealLabel } from '../app/paths'
 import { clock, duration } from '../app/format'
 import TaskChooser, { PresetRow } from './TaskChooser'
 import { LANDING_TASK, taskById, type Task } from './tasks'
@@ -304,7 +304,11 @@ export default function SetupForm({
     const needed = neededBy(p, values)
     const follows = p.follows ? PRODUCT_OF.get(p.follows) : undefined
     const locked = p.param === 'out' || (on && needed.length > 0) || !!follows
-    const name = fileName(p, values, out)
+    // A batch names each output after its input (jobOut, rebaseOutputs):
+    // the rule, not one run's file.
+    const one = fileName(p, values, out)
+    const kind = PARAM_BY_NAME.get(p.param)?.type === 'output-file' || p.param === 'out' ? (p.param === 'out' ? '.tags.tsv' : `.${outputKind(p.param)}${(one.match(/(\.[^.]+)$/) ?? ['', '.tsv'])[1]}`) : ''
+    const name = batch ? (one || kind ? `<input>${kind}` : '') : one
     // A report driven by a switch (species, glyco, census) is that switch's
     // control, so it carries the switch's field id.
     const id = p.flag && !p.follows ? `p-${p.flag}` : `out-${p.param}`
@@ -319,8 +323,10 @@ export default function SetupForm({
               ? alkylationWhy(on)
               : p.param === 'search_config_out' && on && String(values['search_engine'] ?? '') === 'comet' && !String(values['search_config_template'] ?? '').trim()
                 ? 'a Comet fragment: merge it into your comet.params, or give your template in Settings'
-                : p.param === 'search_config_out' && on && sageCantRead(values, input)
-                  ? 'it names this input, which Sage cannot read: convert it to mzML and give that on the Sage command line'
+                : p.param === 'search_config_out' && on && (batch ? jobs.some((j) => sageCantRead(values, j.input)) : sageCantRead(values, input))
+                  ? batch
+                    ? 'each names its input, and Sage cannot read .raw, mzPeak or .d.zip: convert those to mzML and give that on the Sage command line'
+                    : 'it names this input, which Sage cannot read: convert it to mzML and give that on the Sage command line'
                   : null
     // The detail of a workflow's note (tasks.ts productNotes): its (?).
     const detail = !on ? task.productNotes?.[p.param] : undefined
@@ -355,7 +361,7 @@ export default function SetupForm({
             Set Extension to {alkylationShort(values)}
           </button>
         )}
-        {on && !!out && !p.column && p.param !== 'out' && spec?.type === 'output-file' && (
+        {on && !!out && !batch && !p.column && p.param !== 'out' && spec?.type === 'output-file' && (
           <button type="button" className="link small" aria-label={`Change the file of ${p.label}`} onClick={() => void session.pickFor(spec)}>
             Change…
           </button>
@@ -706,7 +712,7 @@ export default function SetupForm({
         {custom && <div className="custom-tol">{field('fragment_tolerance', { brief: 'The tolerance and its unit, for a custom analyzer.' })}</div>}
       </div>
       {field('fixed_modifications', {
-        brief: 'Drop Carbamidomethyl (C) without alkylation.'
+        brief: 'Drop it if the sample was not alkylated.'
       })}
       {task.basic.filter((n) => !isInputField(n) && !waitsOnShownFile(n)).map((n) => field(n, { brief: task.help[n] }))}
       {task.settingsNote && (

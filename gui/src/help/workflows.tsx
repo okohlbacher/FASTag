@@ -218,7 +218,7 @@ export const WORKFLOWS: HelpPage = {
             12, suggests a longer seed instead. It may help, but does not guarantee a match.
           </p>
           <ul>
-            <li>Switch the gap plot between <strong>Chart</strong> and <strong>Table</strong>. Change the gap range to inspect outlying peaks; the chart reports peaks outside the shown range and any clipped zero peak. Arrow keys step through peaks when the chart is focused.</li>
+            <li>Switch the gap plot between <strong>Chart</strong> and <strong>Bins</strong> (a table of the plotted bins; the Mass-shift table below has sites and UniMod names). Change the gap range to inspect outlying peaks; the chart reports peaks outside the shown range and any clipped zero peak. Arrow keys step through peaks when the chart is focused.</li>
             <li><strong>Unimod marks</strong> show known mass changes near a peak. A nearby mark or a CLI explanation is a hypothesis, not an identified modification. Opening a delta table without its mass-gap report uses an explicitly labelled, assumed 0.5 Da matching window.</li>
             <li>In the placement table, <strong>Contains</strong> searches spectrum, tag, protein or peptide. <strong>|Δ| at least (Da)</strong> filters by the size of the gap in either direction. <strong>Interpretation</strong> selects modification, substitution or unexplained rows; <strong>One flank off</strong> keeps placements with a gap localized to one side of the tag.</li>
           </ul>
