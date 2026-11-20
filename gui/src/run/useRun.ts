@@ -9,7 +9,7 @@ import { useCallback, useEffect, useMemo, useReducer, useRef, type Dispatch, typ
 import type { LogLine, ResolvedOutputs, RunRecord, RunResult, SpeciesReport } from '../types'
 import { recordOutputs } from '../shell/HistoryView'
 import { newJobId, runJob, type Job as RunJob, type JobAction } from '../runJob'
-import { sentValues } from '../paramLayout'
+import { conflicts, sentValues } from '../paramLayout'
 import type { ParamValue } from '../ParamField'
 import { baseName, value, type Report } from '../digestReport'
 import { perJobOutputs, REPORT_PARAMS } from '../app/paths'
@@ -20,7 +20,7 @@ import { TAB_OF, sniffLongForm, sniffSpecies, sniffTags, sniffWorkflow, workflow
 import { sniffTable } from '../results/tables'
 import { productLabel } from '../setup/products'
 import { tablePaths, type TableGen, type TableKind, type TablePaths } from '../results/tables'
-import type { BatchJob } from './batch'
+import { sharedOutputs, type BatchJob } from './batch'
 import { buildSummary } from './batchSummary'
 import { useBatchData } from './useBatchSummary'
 import { createLogStore, type LogStore } from './logStore'
@@ -159,6 +159,12 @@ const WORKFLOW_PARAM: Record<WorkflowKind, string> = {
   deltaCounts: 'delta_counts_out'
 }
 
+// A selection: its showGen number and the file it opened.
+interface Selection {
+  g: number
+  p: string
+}
+
 export function useRun(s: RunInputs, view: ViewStore, hooks: RunHooks = {}) {
   const { values, input, out, blocked, speciesOn, changedParams, originValues } = s
   const setTab = view.setTab
@@ -203,6 +209,19 @@ export function useRun(s: RunInputs, view: ViewStore, hooks: RunHooks = {}) {
   // (job A's reports next to job B's tags). Bumped by each; showResults
   // dispatches nothing once it has moved on.
   const showGen = useRef(0)
+  // The file the latest selection opened (showGen's): an earlier open of
+  // the same run (a mixed drop: its tags beside its reports) still lands,
+  // one of another run does not.
+  const selected = useRef('')
+  // A selection token, taken at each entry point before its first await.
+  function select(p: string): Selection {
+    selected.current = p
+    return { g: ++showGen.current, p }
+  }
+  // A later selection of another run took over: dispatch nothing more.
+  const superseded = (t: Selection): boolean => t.g !== showGen.current && !sameRunFiles(selected.current, t.p)
+  // No later selection at all: only this one may still switch the tab.
+  const latest = (t: Selection): boolean => t.g === showGen.current
   // A killed run's exit status says nothing (Windows reports code 1), so a
   // cancel is read off the backend flag or the Cancel the user pressed. A run
   // that finished ok despite the kill stays ok.
@@ -337,12 +356,17 @@ export function useRun(s: RunInputs, view: ViewStore, hooks: RunHooks = {}) {
   // nothing: the backend still refuses to run over an unconfirmed file.
   // Also the outputs that are one of the run's inputs: such a run is not
   // started (the backend refuses it too, and keeps the input).
-  async function existingOutputs(calls: Record<string, unknown>[]): Promise<{ existing: string[]; clashes: string[] }> {
+  // shared: outputs two calls (two jobs of a batch) would both write.
+  async function existingOutputs(calls: Record<string, unknown>[]): Promise<{ existing: string[]; clashes: string[]; shared: string[] }> {
     try {
       const all = await Promise.all(calls.map((c) => window.fastag.outputsCheck(c)))
-      return { existing: [...new Set(all.flatMap((c) => c.existing))], clashes: [...new Set(all.flatMap((c) => c.clashes ?? []))] }
+      return {
+        existing: [...new Set(all.flatMap((c) => c.existing))],
+        clashes: [...new Set(all.flatMap((c) => c.clashes ?? []))],
+        shared: sharedOutputs(all.map((c) => c.outputs ?? []))
+      }
     } catch {
-      return { existing: [], clashes: [] }
+      return { existing: [], clashes: [], shared: [] }
     }
   }
   // The refusal of a run whose output would overwrite one of its inputs
@@ -449,6 +473,7 @@ export function useRun(s: RunInputs, view: ViewStore, hooks: RunHooks = {}) {
       return
     }
     const g = ++showGen.current
+    selected.current = outFile
     const stale = (): boolean => g !== showGen.current
     dispatch({ type: 'RESULTS', update: (r) => ({ path: outFile, gen: (r?.gen ?? 0) + 1, input: inFile }) })
     dispatch({ type: 'BATCH_MISS', miss: null })
@@ -652,6 +677,13 @@ export function useRun(s: RunInputs, view: ViewStore, hooks: RunHooks = {}) {
 
   async function runBatch(only?: BatchJob['status']): Promise<void> {
     if (jobs.length === 0 || batchRunning || running || blocked) return
+    // Checked again over the queue itself: the form's checks may not have
+    // seen a file just added (the CLI would refuse each mzPeak job, rc 6).
+    const refusedNow = conflicts(values, { inputs: jobs.map((j) => j.input) })
+    if (refusedNow.length) {
+      dispatch({ type: 'FAILURE', failure: { title: 'Not started: the CLI would refuse these settings', reasons: refusedNow.map((c) => ({ text: c.note })) } })
+      return
+    }
     window.fastag.saveLast(values)
     view.setLogJob(null)
     dispatch({ type: 'BATCH_RUNNING', on: true })
@@ -681,6 +713,20 @@ export function useRun(s: RunInputs, view: ViewStore, hooks: RunHooks = {}) {
       const check = await existingOutputs(calls)
       if (check.clashes.length) {
         refuseClash(check.clashes, true)
+        return
+      }
+      // Two jobs writing one file (case-insensitively: sample.tags.tsv and
+      // SAMPLE.tags.tsv on macOS): the second would overwrite the first.
+      if (check.shared.length) {
+        dispatch({
+          type: 'FAILURE',
+          failure: {
+            title: 'Not started: two jobs of this batch would write the same file',
+            reasons: check.shared.map((p) => ({
+              text: `${p} would be written by more than one job (file names that differ only in case are one file on most macOS and Windows volumes). Rename an input or choose an output folder.`
+            }))
+          }
+        })
         return
       }
       const existing = check.existing
@@ -762,24 +808,25 @@ export function useRun(s: RunInputs, view: ViewStore, hooks: RunHooks = {}) {
   // tags…, a drop): told by its content, so a QC report, a shortlist or an
   // identifiability table opens in its own view whatever its name. A file
   // is read as a tags table only once no report format fits.
-  async function openResultsPath(p: string): Promise<void> {
+  async function openResultsPath(p: string, t: Selection = select(p)): Promise<void> {
     const head = await window.fastag.reportHead(p).catch(() => null)
+    if (superseded(t)) return
     if (head != null) {
-      if (sniffWorkflow(head, p) || sniffTable(head) || sniffLongForm(head) || /^\s*</.test(head)) return openReportPath(p, head)
-      if (sniffSpecies(head)) return openSpeciesPath(p)
+      if (sniffWorkflow(head, p) || sniffTable(head) || sniffLongForm(head) || /^\s*</.test(head)) return openReportPath(p, head, t)
+      if (sniffSpecies(head)) return openSpeciesPath(p, t)
     }
-    return openTagsPath(p)
+    return openTagsPath(p, t)
   }
 
   // A tags table.
-  async function openTagsPath(p: string): Promise<void> {
-    showGen.current++
+  async function openTagsPath(p: string, t: Selection = select(p)): Promise<void> {
     // Select before waiting: a mixed drop may open a report alongside the
     // tags, and that report's later selection should remain in front.
-    setTab('results')
+    if (latest(t)) setTab('results')
     // A file whose run the record marks cancelled or failed (its cleanup
     // could not remove it) is not opened as a complete table.
     const rec = await window.fastag.historyOf(p).catch(() => null)
+    if (superseded(t)) return
     const recorded = rec && rec.status !== 'ok' ? { status: rec.status, end: rec.end } : undefined
     dispatch({
       type: 'RESULTS',
@@ -809,12 +856,25 @@ export function useRun(s: RunInputs, view: ViewStore, hooks: RunHooks = {}) {
   // The record keeps no log: the Overview reads the files alone. A tags
   // file a later run left incomplete (its record says so) opens as that,
   // marked, without the finished run's reports.
+  //
+  // The files are those of the run that wrote them last: when a later run
+  // (B) wrote @p out over this one (A), A's input, parameters and reports
+  // would be shown beside B's tags. B's record opens instead, with a
+  // notice that A's outputs were overwritten.
   async function showRecord(r: RunRecord, out: string): Promise<void> {
+    const t = select(out)
     setTab('results')
     const last = await window.fastag.historyOf(out).catch(() => null)
-    if (last && last.status !== 'ok') return openTagsPath(out)
-    const call: Record<string, unknown> = { params: r.params ?? {}, ...(r.workflow ? { workflow: r.workflow } : {}) }
-    return showResults(r.input, recordOutputs(r, out), { params: call, log: createLogStore() }).catch(logResultsError)
+    if (superseded(t)) return
+    if (last && last.status !== 'ok') return openTagsPath(out, t)
+    const shown = last && last.id !== r.id ? last : r
+    const call: Record<string, unknown> = { params: shown.params ?? {}, ...(shown.workflow ? { workflow: shown.workflow } : {}) }
+    await showResults(shown.input, recordOutputs(shown, out), { params: call, log: createLogStore() }).catch(logResultsError)
+    if (shown !== r)
+      dispatch({
+        type: 'RESULTS',
+        update: (x) => (x && x.path === out ? { ...x, replaced: { input: r.input, by: shown.input, end: shown.end } } : x)
+      })
   }
 
   // Add one report to those shown, replacing one of the same kind. A report
@@ -833,33 +893,34 @@ export function useRun(s: RunInputs, view: ViewStore, hooks: RunHooks = {}) {
 
   // A species report, dropped or opened: shown in the Species tab, in
   // place of what another run left shown.
-  async function openSpeciesPath(p: string): Promise<void> {
-    showGen.current++
+  async function openSpeciesPath(p: string, t: Selection = select(p)): Promise<void> {
     try {
       const sp = await window.fastag.species(p)
+      if (superseded(t)) return
       // The run that wrote it, when the app recorded it; else the report.
       const rec = await window.fastag.historyOf(p).catch(() => null)
+      if (superseded(t)) return
       closeOtherRun(p)
       dispatch({ type: 'REPORTS', update: (cur) => closeOtherRuns(cur, p) })
       // A report read is shown whatever Setup's species switch and reach
       // check say; the counts of the run shown before are not its own.
       dispatch({ type: 'SPECIES', species: sp, speciesRun: { input: baseName(rec?.input ?? p), enabled: true } })
       dispatch({ type: 'EVIDENCE', evidence: { contributed: null, ms2: null, czExcluded: null } })
-      setTab('species')
+      if (latest(t)) setTab('species')
     } catch (err) {
       logResultsError(err)
     }
   }
 
-  async function openReportPath(p: string, known?: string | null): Promise<void> {
-    showGen.current++
+  async function openReportPath(p: string, known?: string | null, t: Selection = select(p)): Promise<void> {
     // A workflow report (QC, shortlist, identifiability, survey tables)
     // opens in its own view, told by its content: not the Digest parser.
     const head = known !== undefined ? known : await window.fastag.reportHead(p).catch(() => null)
+    if (superseded(t)) return
     if (head != null && known === undefined && !sniffWorkflow(head, p) && !sniffTable(head) && !sniffLongForm(head) && !/^\s*</.test(head)) {
       // Picked as a report, yet a species report or a tags table.
-      if (sniffSpecies(head)) return openSpeciesPath(p)
-      if (sniffTags(head)) return openTagsPath(p)
+      if (sniffSpecies(head)) return openSpeciesPath(p, t)
+      if (sniffTags(head)) return openTagsPath(p, t)
     }
     const wk = head != null ? sniffWorkflow(head, p) : null
     // A report of another run replaces its tags, species and Overview.
@@ -873,11 +934,12 @@ export function useRun(s: RunInputs, view: ViewStore, hooks: RunHooks = {}) {
           return { ...kept, workflow: { ...kept.workflow, [wk]: p }, missing: undefined }
         }
       })
-      setTab(TAB_OF[wk])
+      if (latest(t)) setTab(TAB_OF[wk])
       return
     }
     // A wide table (P4c: recon, delta, mzTab ids, glyco) opens in its viewer.
     const table = await sniffPath(p, head)
+    if (superseded(t)) return
     if (table) {
       dispatch({
         type: 'REPORTS',
@@ -901,11 +963,12 @@ export function useRun(s: RunInputs, view: ViewStore, hooks: RunHooks = {}) {
         }
       })
       // An unreadable one is named where report errors are: the Digest tab.
-      setTab('kind' in table ? (table.kind === 'glyco' ? 'glyco' : 'recon') : 'digest')
+      if (latest(t)) setTab('kind' in table ? (table.kind === 'glyco' ? 'glyco' : 'recon') : 'digest')
       if (state.shown?.out && !sameRunFiles(state.shown.out, p)) dispatch({ type: 'SHOWN', shown: null })
       return
     }
     const rep = await loadReports([p])
+    if (superseded(t)) return
     if (rep.reports.length === 0 && rep.errors.length === 0) rep.errors.push(`${p} does not exist.`)
     dispatch({
       type: 'REPORTS',
@@ -933,7 +996,7 @@ export function useRun(s: RunInputs, view: ViewStore, hooks: RunHooks = {}) {
       }
     })
     if (state.shown?.out && !sameRunFiles(state.shown.out, p)) dispatch({ type: 'SHOWN', shown: null })
-    setTab('digest')
+    if (latest(t)) setTab('digest')
   }
 
   function cancelRun(): void {
@@ -1034,10 +1097,10 @@ export function useRun(s: RunInputs, view: ViewStore, hooks: RunHooks = {}) {
     showJob,
     showRecord,
     openResults,
-    openResultsPath,
+    openResultsPath: (p: string) => openResultsPath(p),
     openReport,
     openReportPaths,
-    openSpeciesPath,
+    openSpeciesPath: (p: string) => openSpeciesPath(p),
     reveal
   }
 }

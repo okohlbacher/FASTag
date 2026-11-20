@@ -249,9 +249,12 @@ function Digest({ report }: { report: Report }): JSX.Element {
         )}
         <Sentences
           rows={[
-            // Not the lines that restate the call (its model, its class).
-            ...section(report, 'call').filter((r) => !['model', 'class', 'runner_up_class'].includes(r.key)),
-            ...nocall.filter((r) => r.value !== 'no'),
+            // Not the lines that restate the call (its model, its class), nor
+            // those the Reason figure states already: the first rule's id
+            // ("The first no-call rule that applies is low_resolution.") and
+            // the sentences of the rules it names.
+            ...section(report, 'call').filter((r) => !['model', 'class', 'runner_up_class', 'reason'].includes(r.key)),
+            ...nocall.filter((r) => r.value !== 'no' && !(call.status === 'no_call' && call.fired.includes(r.key) && REASON[r.key])),
             ...section(report, 'count'),
             ...section(report, 'share')
           ]}

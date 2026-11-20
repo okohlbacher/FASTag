@@ -186,7 +186,7 @@ export const TASKS: readonly Task[] = [
       subsample_fraction: '10% gives stable calls in a tenth of the time.'
     },
     outputs: ['out', 'digest_out', 'label_out', 'alkylation_out', 'glyco_out', 'species_out'],
-    productNotes: { alkylation_out: 'raises Extension to 3: the shipped proteome needs tags of 8+ residues' },
+    productNotes: { alkylation_out: 'raises Extension to 3 (the shipped proteome needs tags of 8+); species and digest calls are validated at 2' },
     docs: { to: 'digest', label: 'Digest, label and mass-gap reports' }
   }
 ]

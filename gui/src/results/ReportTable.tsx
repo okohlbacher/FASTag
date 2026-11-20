@@ -291,12 +291,24 @@ export function qcSummary(rows: QcRow[]): { label: string; value: string; title?
   return out
 }
 
-/// The rows the summary strip shows: said there once, not again in the table.
-const SUMMARY_KEYS = new Set(['instrument_model', 'instrument_serial_number', 'start_timestamp'])
+/// The rows the summary strip shows (qcSummary): said there once, not again
+/// in the table. The yield's count goes with the yield.
+const SUMMARY_KEYS: Record<string, string[]> = {
+  'MS2 spectra': ['count_ms2'],
+  'Tagged (E ≤ 0.01)': ['tag_yield', 'ms2_tagged_e001'],
+  Instrument: ['instrument_model'],
+  Serial: ['instrument_serial_number'],
+  Started: ['start_timestamp'],
+  'Isobaric kit': ['reporter_compatible_kits']
+}
+export const summaryKeys = (summary: { label: string }[]): Set<string> => new Set(summary.flatMap((x) => SUMMARY_KEYS[x.label] ?? []))
 
 function QcView({ tsv }: { tsv: Tsv }): JSX.Element {
   const rows = useMemo(() => qcRows(tsv), [tsv])
-  const lines = useMemo(() => qcLines(rows).filter((l) => !SUMMARY_KEYS.has(l.key)), [rows])
+  const lines = useMemo(() => {
+    const strip = summaryKeys(qcSummary(rows))
+    return qcLines(rows).filter((l) => !strip.has(l.key))
+  }, [rows])
   const [all, setAll] = useState(false)
   const summary = qcSummary(rows)
   // The QC section first: the run settings are its context, not its result.
@@ -369,7 +381,9 @@ export function settingValue(param: string | undefined, v: string): string {
   const spec = PARAM_BY_NAME.get(param)
   if (param === 'shortlist_top' && Number(t) === 0) return 'no limit'
   if (t === 'none') return 'off'
-  if (spec?.type === 'bool' || /^(true|false)$/.test(t)) return t === 'true' || t === '1' || t === 'on' ? 'on' : t === 'false' || t === '0' || t === 'off' ? 'off' : t
+  // The CLI writes a switch as yes/no in the settings line (gapped yes).
+  if (spec?.type === 'bool' || /^(true|false|yes|no)$/.test(t))
+    return /^(true|1|on|yes)$/.test(t) ? 'on' : /^(false|0|off|no)$/.test(t) ? 'off' : t
   if (spec?.choices?.includes(t)) return choiceText(param, t)
   return t
 }
@@ -478,6 +492,8 @@ const FILTERS = [
 ] as const
 type Filter = (typeof FILTERS)[number]['id']
 
+const NO_IDS = 'Give the identifications of this run in Setup to mark identified spectra.'
+
 function TriageView({ tsv, openSpectrum }: { tsv: Tsv; openSpectrum?: (spectrum: string) => void }): JSX.Element {
   // The ranking first: rank, score, identified, status, then what the spectrum is.
   const columns = useMemo(() => {
@@ -500,18 +516,22 @@ function TriageView({ tsv, openSpectrum }: { tsv: Tsv; openSpectrum?: (spectrum:
   return (
     <>
       <p className="report-sum">
-        {fmtInt(tsv.rows.length)} MS/MS spectra, ranked by how identifiable they are
+        {fmtInt(tsv.rows.length)} MS2 spectra, ranked by how identifiable they are
         {counts.length > 0 && <>: {counts.map(([k, n]) => `${fmtInt(n)} ${k.replace(/_/g, ' ')}`).join(', ')}</>}.
       </p>
       <div className="row tight" role="group" aria-label="Show">
         {FILTERS.map((f) => (
-          <label key={f.id} className="seg-opt small">
+          <label
+            key={f.id}
+            className={`seg-opt small${f.id !== 'all' && idc < 0 ? ' off' : ''}`}
+            title={f.id !== 'all' && idc < 0 ? NO_IDS : undefined}
+          >
             <input type="radio" name="triage-filter" checked={filter === f.id} disabled={f.id !== 'all' && idc < 0} onChange={() => setFilter(f.id)} />
             {f.label}
             {idc >= 0 && <span className="count">{fmtInt(count(f.id))}</span>}
           </label>
         ))}
-        {idc < 0 && <span className="muted">Give the identifications of this run in Setup to mark identified spectra.</span>}
+        {idc < 0 && <span className="muted">{NO_IDS}</span>}
       </div>
       <p className="hint">
         The score ranks spectra; it is not a quality call and not an error rate.

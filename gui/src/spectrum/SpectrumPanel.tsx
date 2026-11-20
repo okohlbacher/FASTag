@@ -328,7 +328,9 @@ function TagsTable(p: {
 }): JSX.Element {
   const { tags, chosen } = p
   const col = (n: string): number => tags.columns.indexOf(n)
-  const show = ['tag', 'length', 'charge', 'evalue', 'gapped', 'fasta_hit'].filter((c) => col(c) >= 0)
+  // No Database column for a run without a database filter: every cell '-'.
+  const noDb = col('fasta_hit') >= 0 && tags.rows.every((r) => (r[col('fasta_hit')] ?? '-') === '-' || r[col('fasta_hit')] === '')
+  const show = ['tag', 'length', 'charge', 'evalue', 'gapped', 'fasta_hit'].filter((c) => col(c) >= 0 && !(c === 'fasta_hit' && noDb))
   const rows = tags.rows.slice(0, TAGS_SHOWN)
   function key(e: KeyboardEvent<HTMLTableRowElement>, i: number): void {
     const to = e.key === 'ArrowDown' ? i + 1 : e.key === 'ArrowUp' ? i - 1 : e.key === 'Enter' || e.key === ' ' ? i : -2

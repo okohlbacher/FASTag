@@ -15,7 +15,7 @@
 import { alkylationCall as alkylationReportCall, fmt, fmtQ, pct, type AlkylationCall as AlkylationReport, type Report } from '../digestReport'
 import type { ParamValue } from '../ParamField'
 import type { SpeciesReport } from '../types'
-import { electronReadAsBy } from '../inspector/checks'
+import { electronReadAsBy, noActivationMeta } from '../inspector/checks'
 import {
   alkylationCall,
   censusFacts,
@@ -24,6 +24,7 @@ import {
   proteaseCall,
   runFacts,
   speciesCall,
+  tiedLeaders,
   type AlkylationCall,
   type LabelCall,
   type ProteaseCall,
@@ -82,6 +83,9 @@ export interface Overview {
   /// At least one suggested setting comes from a measured call or ranking:
   /// only then is the table worth showing.
   measured: boolean
+  /// One warning above the tiles for a cause several calls share (a
+  /// fragment tolerance in Da): said once, the tiles say only "no call".
+  warning?: string
 }
 
 export interface OverviewInputs {
@@ -363,6 +367,30 @@ export function buildOverview(i: OverviewInputs): Overview {
     labelTile(lab),
     alkCall ? alkylationReportTile(alkCall, i.params) : alkylationTile(alk, fasta, i.params, log.reconMinLength)
   ]
+  // A tolerance in Da: the protease and label no calls (rule
+  // low_resolution) and the species caveat share one cause, said once
+  // above the tiles; their tiles say only "no call".
+  const lowRes: string[] = []
+  if (da) {
+    for (const [t, c, what] of [
+      [calls[0], protease, 'protease'],
+      [calls[2], lab, 'label']
+    ] as const)
+      if (c.state === 'no_call' && c.reason === 'low_resolution') {
+        t.note = 'no call at a fragment tolerance in Da (see above)'
+        lowRes.push(what)
+      }
+  }
+  const daSpecies = da && (i.species != null || given(i.params['species']))
+  const warning =
+    lowRes.length || daSpecies
+      ? `The fragment tolerance is ${fmt(tol!.value)} Da: ${[
+          lowRes.length ? `FASTag makes no ${lowRes.join(' or ')} call at a tolerance in Da` : '',
+          daSpecies ? 'species calls are unreliable on ion-trap/Da data' : ''
+        ]
+          .filter(Boolean)
+          .join(', and ')}.`
+      : undefined
   for (const t of calls) {
     if (t.id === 'alkylation') continue
     // Only a call the CLI made is held back; its no call stands, with its
@@ -389,8 +417,6 @@ export function buildOverview(i: OverviewInputs): Overview {
       detail: log.acquisition.why
     })
   else checks.push({ tone: 'muted', text: 'Acquisition not checked: this FASTag writes no acquisition check line (FASTag 1.12 does)' })
-  if (da && (i.species != null || given(i.params['species'])))
-    checks.push({ tone: 'flag', text: `The fragment tolerance is ${fmt(tol!.value)} Da: species calls are unreliable on ion-trap/Da data.` })
   // The species report counts b/y tags only: a c/z run's left-out rows
   // explain a sparse or empty report (the CLI says so in its log only).
   const czExcluded = ((): number | null => {
@@ -410,7 +436,11 @@ export function buildOverview(i: OverviewInputs): Overview {
   if (log.electron && log.electron.electron > 0 && electronReadAsBy(i.params['ion_series'], i.input ?? ''))
     checks.push({
       tone: 'flag',
-      text: `${fmt(log.electron.electron)} of ${fmt(log.electron.of)} MS2 spectra were electron-activated (ETD, ECD or hybrid) and read as b/y ions; their tags are unreliable. Choose the Orbitrap ETD preset or Ion series auto.`
+      text: `${fmt(log.electron.electron)} of ${fmt(log.electron.of)} MS2 spectra were electron-activated (ETD, ECD or hybrid) and read as b/y ions; their tags are unreliable. ${
+        noActivationMeta(i.input ?? '')
+          ? 'This format carries no activation per spectrum: set Ion series to cz, or convert the run to mzML and use auto.'
+          : 'Choose the Orbitrap ETD preset (Ion series auto), or the EThcD preset for hybrid spectra.'
+      }`
     })
 
   // ---- suggested settings
@@ -487,14 +517,15 @@ export function buildOverview(i: OverviewInputs): Overview {
         ? { setting: 'fragment tol.', value: `${fmt(tol.value)} ${tol.unit}`, evidence: 'preset', note: `from instrument preset ${i.instrument}` }
         : { setting: 'fragment tol.', value: `${fmt(tol.value)} ${tol.unit}`, evidence: 'run', note: 'as this run used; no instrument preset chosen' }
     )
-  if (callOk && sp.state === 'called' && sp.present.length > 0)
+  // A tie at the top names no proteome, called or ranked: which one would
+  // be arbitrary (the Species tab says No single leader).
+  if (callOk && sp.state === 'called' && sp.present.length > 0 && tiedLeaders(sp.present).length < 2)
     suggestions.push({
       setting: 'database',
       value: `${sp.present[0].name} proteome`,
       evidence: 'call',
       note: `from the CLI species call (not validated)${cutoffApplied ? '' : `; ${NOT_APPLIED}`}`
     })
-  // A tie at the top names no proteome: which one would be arbitrary.
   else if (callOk && sp.state === 'ranked' && sp.tied.length < 2)
     suggestions.push({
       setting: 'database',
@@ -506,14 +537,15 @@ export function buildOverview(i: OverviewInputs): Overview {
   const caveats = [
     'Not validated: these are what FASTag reports, not checked search settings.',
     ...(lab.state === 'call' ? ['The label call is FASTag’s label_call (prose-auto’s rule, ported into the CLI).'] : []),
-    'The species calls are unreliable on ion-trap/Da data.'
+    // Only where the check line says so: a tolerance in Da, or none known.
+    ...((da || !tol) && (i.species != null || given(i.params['species'])) ? ['The species calls are unreliable on ion-trap/Da data.'] : [])
   ]
   const copyText = [
     ...suggestions.map((s) => `${settingWords(s.setting)}: ${s.value} (${s.note})`),
     ...caveats.map((c) => `* ${c}`)
   ].join('\n')
   const measured = suggestions.some((x) => x.evidence === 'call' || x.evidence === 'ranking')
-  return { figures, calls, checks, suggestions, caveats, lowEvidence, cutoffApplied, copyText, measured }
+  return { figures, calls, checks, suggestions, caveats, lowEvidence, cutoffApplied, copyText, measured, ...(warning ? { warning } : {}) }
 }
 
 /// @p note with @p more after it: "a; more", or, when the note ends a
@@ -553,6 +585,17 @@ function genusTile(c: SpeciesCall, rank = 'genus'): Tile {
         value: c.noCall > 0 ? 'no presence call' : 'none detected',
         tone: 'nocall',
         note: `${c.runNoCall ? `run-level no call (${c.runNoCall})` : `the CLI did not call any ${rank} present; ${c.noCall} no call, ${c.notDetected} not detected`}. This does not establish absence.${caveat}`
+      }
+    // Present taxa level at the top: the calls stand, no single leader.
+    const tied = tiedLeaders(c.present)
+    if (tied.length > 1)
+      return {
+        ...base,
+        value: 'No single leader',
+        tone: 'call',
+        note: `present by the CLI species call (decoy null), tied at the top: ${tied.map((t) => t.name).join(', ')}${
+          c.present.length > tied.length ? `; also present: ${c.present.filter((t) => !tied.includes(t)).map((t) => t.name).join(', ')}` : ''
+        }.${caveat}`
       }
     const others = c.present.slice(1).map((t) => t.name)
     return {

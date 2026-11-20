@@ -4,9 +4,9 @@
 // for its question; every other option is under Advanced, in its group.
 // While a run is in flight, a locked summary of what it uses.
 
-import { useState, type JSX, type RefObject } from 'react'
-import { SECTIONS, PARAM_BY_NAME, type Dependency, type Section, UNIT_PARAMS, defaultText, dependsOf, forcedValue, humanName, inertDependency, masters, recipeNote, unknownParams, unitOf, unplacedParams } from '../paramLayout'
-import ParamField from '../ParamField'
+import { useRef, useState, type JSX, type RefObject } from 'react'
+import { BRIEF_HINT, SECTIONS, PARAM_BY_NAME, type Dependency, type Section, UNIT_PARAMS, defaultText, dependsOf, forcedValue, humanName, inertDependency, masters, recipeNote, unknownParams, unitOf, unplacedParams } from '../paramLayout'
+import ParamField, { type ParamValue } from '../ParamField'
 import { disclosure } from '../disclosure'
 import { baseName } from '../digestReport'
 import { IconChevron, IconError, IconFile, IconLock, JobIcon } from '../icons'
@@ -22,7 +22,7 @@ import { clock, duration } from '../app/format'
 import TaskChooser, { PresetRow } from './TaskChooser'
 import { LANDING_TASK, taskById, type Task } from './tasks'
 import { INSTRUMENTS, presetText, shownInstrument } from './presets'
-import { PRODUCT_OF, PRODUCTS, USI_PLACEHOLDER, fileName, isOn, missingDatabase, neededBy, productLabel, setProduct, type Product } from './products'
+import { PRODUCT_OF, PRODUCTS, USI_PLACEHOLDER, fileName, isOn, missingDatabase, neededBy, productLabel, alkylationExtension, toggleProduct, type Product } from './products'
 
 // A parameter that exists in the CLI but nowhere in the layout would silently
 // be unreachable; surface it instead of hiding it.
@@ -134,6 +134,7 @@ export default function SetupForm({
         onChange={(v) => setValue(name, v)}
         onPickFile={session.pickFor}
         brief={recipeNote(name, values) ?? opts.brief}
+        hint={task.help[name] ?? BRIEF_HINT[name]}
         required={opts.required}
         blocked={batchBlocked(name) ?? forced?.note}
         unit={unitSpec && unitName ? { spec: unitSpec, value: values[unitName], onChange: (v) => setValue(unitName, v) } : undefined}
@@ -142,7 +143,27 @@ export default function SetupForm({
     )
   }
 
-  const toggle = (p: Product, on: boolean): void => session.setValues((v) => setProduct(p, on, v, out))
+  // The extension the alkylation report raised, restored when it is
+  // unticked while Extension still holds the raised value.
+  const raisedExt = useRef<{ from: ParamValue; to: ParamValue } | null>(null)
+  // The note of a group's settings that wait on other reports: one report
+  // that every one of them needs is named in a plain sentence; else each
+  // report that would show some of them, once (the per-setting detail is
+  // the popover's).
+  const needsSentence = (n: number, deps: Dependency[]): string => {
+    const lead = n === 1 ? 'One more setting' : `${n} more settings`
+    const name = (m: string): string => productLabel(m) ?? humanName(m)
+    if (deps.length === 1) return `${lead} ${n === 1 ? 'needs' : 'need'} ${deps[0].say ?? masters(deps[0]).map(name).join(' or ')}.`
+    const common = masters(deps[0]).filter((m) => deps.every((d) => !d.say && masters(d).includes(m)))
+    if (common.length === 1) return `${lead} need ${name(common[0])}.`
+    const each = [...new Set(deps.flatMap((d) => (d.say ? [d.say] : masters(d).map(name))))]
+    return `${lead} appear when one of these is on: ${each.join(', ')}.`
+  }
+  const toggle = (p: Product, on: boolean): void => {
+    const r = toggleProduct(p, on, values, out, raisedExt.current)
+    raisedExt.current = r.raised
+    session.setValues(r.values)
+  }
 
   // One product row: checkbox, label, the file it writes, and why it is
   // locked or what it still needs.
@@ -255,7 +276,15 @@ export default function SetupForm({
       // naming its target, the workflow's own report first.
       const here = ms.some((x) => sec.params.includes(x) && isProduct(x))
       const cands = here ? [] : ms.filter((x) => !sec.params.includes(x) && isProduct(x))
-      const m = cands.find((x) => task.outputs.includes(productOf(x)!.param)) ?? cands[0]
+      // A target without side effects first: the alkylation report raises
+      // Extension (alkylationExtension), so Tag placements unlocks the same
+      // settings without changing the tags.
+      const quiet = (x: string): boolean => !(productOf(x)!.param === 'alkylation_out' && alkylationExtension(values) != null)
+      const m =
+        cands.find((x) => quiet(x) && task.outputs.includes(productOf(x)!.param)) ??
+        cands.find(quiet) ??
+        cands.find((x) => task.outputs.includes(productOf(x)!.param)) ??
+        cands[0]
       return { w, what, prod: m ? productOf(m) : undefined }
     })
     const targets = [...new Map(parts.flatMap((x) => (x.prod ? [[x.prod.param, x.prod] as [string, Product]] : []))).values()]
@@ -263,11 +292,7 @@ export default function SetupForm({
     const needs =
       parts.length === 0 ? null : (
         <div className="group-needs" role="note">
-          <span>
-            {parts.length === 1
-              ? `${waitingNames.length === 1 ? 'One more setting needs' : `${waitingNames.length} more settings need`} ${parts[0].what}.`
-              : `${waitingNames.length} more settings need: ${parts.map((x) => x.what).join('; ')}.`}
-          </span>
+          <span>{needsSentence(waitingNames.length, parts.map((x) => x.w.dep))}</span>
           <HelpPopover
             name={waitingNames[0]}
             label={`the settings of ${sec.title} not used yet`}
@@ -279,6 +304,7 @@ export default function SetupForm({
           {targets.map((prod) => (
             <button type="button" key={prod.param} className="secondary small" onClick={() => toggle(prod, true)}>
               Turn on {prod.label}
+              {prod.param === 'alkylation_out' && alkylationExtension(values) ? ` (sets Extension ${alkylationExtension(values)})` : ''}
             </button>
           ))}
         </div>

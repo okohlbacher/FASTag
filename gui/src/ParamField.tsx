@@ -24,6 +24,9 @@ interface Props {
   /// The one line under a basic field (the workflow's own help, tasks.ts);
   /// without it the CLI description is shown, clamped to one line.
   brief?: string
+  /// The curated one-line hint (BRIEF_HINT, the workflow's own): shown in
+  /// place of the clamped CLI description, wherever the field is.
+  hint?: string
   /// The label, when the workflow names the field its own way.
   label?: string
   /// The run cannot do without it (a workflow's protein database).
@@ -40,7 +43,7 @@ interface Props {
 // string with `choices` becomes a select. A number is a text field checked by
 // invalidBecause() against the type, min and max the CLI declares; a value the
 // CLI would refuse is marked invalid and says why (App keeps Run disabled).
-export default function ParamField({ spec, value, onChange, onPickFile, needs, unit, turnsOn, brief, label: name, required, blocked, count }: Props): JSX.Element {
+export default function ParamField({ spec, value, onChange, onPickFile, needs, unit, turnsOn, brief, hint, label: name, required, blocked, count }: Props): JSX.Element {
   const off = !!needs || !!blocked
   // An inert field is not sent, so its value cannot fail the run.
   const invalid = off ? null : invalidBecause(spec, value)
@@ -110,7 +113,7 @@ export default function ParamField({ spec, value, onChange, onPickFile, needs, u
             {` (${needs.note}).`}
           </span>
         ) : (
-          brief ?? briefHint(sentence(hintText(spec.name, plainOptions(spec.description))))
+          brief ?? hint ?? briefHint(sentence(hintText(spec.name, plainOptions(spec.description))))
         )}
         {!!turnsOn && (
           <span className="turns-on">

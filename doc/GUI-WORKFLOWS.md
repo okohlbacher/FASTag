@@ -30,13 +30,18 @@ grid; see the Decision at the end of this section.
 | # | Workflow (label) | Purpose (blurb, shown under the chooser) | Required inputs | Outputs, on by default (off) | Results tabs opened |
 |---|---|---|---|---|---|
 | W1 | **Export tags** (landing) | Sequence tags from every spectrum, with per-residue confidence, for de novo assembly and export. | spectra | tags.tsv (spectra with tags .mzML) | Overview, Tags, Spectrum |
-| W2 | **Run QC** | QC of one run: MS/MS counts and resolution by analyzer, charges, isobaric kit, tag yield, instrument, serial and start time. | spectra | qc.tsv; tags.tsv (always) | Overview, QC, Tags |
+| W2 | **Run QC** | QC of one run: MS/MS counts and resolution by analyzer, charges, isobaric kit, tag yield, instrument, serial and start time. | spectra | qc.tsv; tags.tsv (always) | Overview, QC, Tags, Spectrum |
 | W3 | **Mass-shift survey** (blind modification search) | Mass shifts between tags and the database: a frequency table, sites and UniMod names. | spectra, protein FASTA | recon.tsv, delta.tsv, delta_spectra.tsv, delta_counts.tsv (massgap.tsv, recon_id.tsv) | Overview, Mass shifts, Tags, Spectrum |
-| W4 | **Species** | Which taxa the sample contains, from the bundled taxonomy index. No FASTA needed. | spectra | species.tsv | Overview, Species |
-| W5 | **Database reduction** | A protein shortlist, a reduced FASTA and a Sage, Comet or MSFragger configuration for your search. | spectra, protein FASTA | shortlist.tsv, reduced.fasta, engine config | Overview, Shortlist |
-| W6 | **Identifiability triage** | Rank MS/MS spectra by how identifiable they are, and mark those your search identified. | spectra (IDs optional) | census.tsv, census_summary.tsv, census_sorted.tsv | Overview, Triage, Spectrum |
-| W7 | **Characterize a run** | Protease, isobaric and SILAC labels, alkylation, glycopeptides and species, from 10% of the spectra. | spectra | digest.tsv, label.tsv, alkylation.tsv, glyco.tsv, species.tsv | Overview, Digest, Species, Glyco |
+| W4 | **Species** | Which taxa the sample contains, from the bundled taxonomy index. No FASTA needed. | spectra | species.tsv | Overview, Species, Tags, Spectrum |
+| W5 | **Database reduction** | A protein shortlist, a reduced FASTA and a Sage, Comet or MSFragger configuration for your search. | spectra, protein FASTA | shortlist.tsv, reduced.fasta, engine config | Overview, Shortlist, Tags, Spectrum |
+| W6 | **Identifiability triage** | Rank MS/MS spectra by how identifiable they are, and mark those your search identified. | spectra (IDs optional) | census.tsv, census_summary.tsv, census_sorted.tsv | Overview, Triage, Tags, Spectrum |
+| W7 | **Characterize a run** | Protease, isobaric and SILAC labels, alkylation, glycopeptides and species, from 10% of the spectra. | spectra | digest.tsv, label.tsv, alkylation.tsv, glyco.tsv, species.tsv | Overview, Digest, Species, Glyco, Tags, Spectrum |
 
+- **Tabs.** Every run writes its tags table, so Tags and Spectrum follow
+  the workflow's own tabs in every workflow (results/ResultTabs.tsx
+  WORKFLOW_TABS). A tab is shown only when its file exists, and Spectrum
+  only with a CLI that has -dump_spectrum, beside the Tags table or the
+  Triage ranking.
 - **Batch.** Batch is an input mode of every run workflow, not a separate
   workflow: the Input card has a **One file | Batch** switch. Batch mode
   shows "Add files… / Add folder…", an output folder, and an **SDRF file

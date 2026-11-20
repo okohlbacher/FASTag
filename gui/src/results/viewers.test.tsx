@@ -53,16 +53,22 @@ describe('MassGapChart', () => {
     expect(container.querySelectorAll('.mg-grid line').length).toBeGreaterThanOrEqual(3)
     const legend = screen.getByRole('list', { name: 'Legend' })
     expect(legend.textContent).toMatch(/Spectra per gap peak/)
-    expect(legend.textContent).toMatch(/Unimod delta at a gap peak \(\d+\)/)
+    expect(legend.textContent).toMatch(/UniMod delta at a gap peak \(\d+\)/)
   })
 
-  it('marks the bundled Unimod deltas, and hides them on request', async () => {
+  // Round 6, 27: only the marks near a gap peak by default; every bundled
+  // delta in range on request.
+  it('marks the UniMod deltas near gap peaks, and all of them on request', async () => {
     const { container } = render(<MassGapChart bins={deltaBins()} window={0.02} source="d" />)
-    const marks = container.querySelectorAll('.mg-mark')
-    expect(marks.length).toBeGreaterThan(0)
-    expect([...marks].map((m) => m.querySelector('title')?.textContent)).toContain('Oxidation (M) +15.9949 Da')
-    await click(screen.getByRole('checkbox', { name: 'Unimod marks' }))
-    expect(container.querySelectorAll('.mg-mark').length).toBe(0)
+    const near = container.querySelectorAll('.mg-mark')
+    expect(near.length).toBeGreaterThan(0)
+    expect([...near].every((m) => m.classList.contains('hit'))).toBe(true)
+    expect(screen.getByRole('list', { name: 'Legend' }).textContent).not.toMatch(/Other UniMod delta/)
+    await click(screen.getByRole('checkbox', { name: 'All UniMod marks' }))
+    const all = container.querySelectorAll('.mg-mark')
+    expect(all.length).toBeGreaterThan(near.length)
+    expect([...all].map((m) => m.querySelector('title')?.textContent)).toContain('Oxidation (M) +15.9949 Da')
+    expect(screen.getByRole('list', { name: 'Legend' }).textContent).toMatch(/Other UniMod delta \(\d+\)/)
   })
 
   it('labels the peak the CLI explains, with its explanation', () => {

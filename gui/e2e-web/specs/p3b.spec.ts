@@ -18,6 +18,10 @@ const LINES = TSV.split('\n').filter(Boolean)
 const COLUMNS = LINES[0].split('\t')
 const ROWS = LINES.slice(1).map((l) => l.split('\t'))
 const SPECTRA = new Set(ROWS.map((r) => r[0]))
+// The run had no database filter: every fasta_hit cell is '-', and the
+// table leaves that column out (round 6, 13).
+const HIT = COLUMNS.indexOf('fasta_hit')
+const shownCells = (r: string[]): string[] => r.filter((_, j) => j !== HIT)
 const TOTAL = ROWS.length.toLocaleString('en-US')
 
 async function openTags(page: Page): Promise<void> {
@@ -65,7 +69,7 @@ test('the active row moves by keyboard: arrows, PageDown/PageUp, Home/End, with 
   await page.keyboard.press('ArrowDown')
   await expect(active(page)).toBeFocused()
   expect(await activeIndex(page)).toBe(0)
-  expect(await activeCells(page)).toEqual(rows[0])
+  expect(await activeCells(page)).toEqual(shownCells(rows[0]))
   await page.keyboard.press('ArrowDown')
   await page.keyboard.press('ArrowDown')
   await page.keyboard.press('ArrowUp')
@@ -79,7 +83,7 @@ test('the active row moves by keyboard: arrows, PageDown/PageUp, Home/End, with 
   await expect(active(page)).toBeFocused()
   expect(await activeIndex(page)).toBe(ROWS.length - 1)
   await expect(active(page)).toBeInViewport()
-  expect(await activeCells(page)).toEqual(rows[ROWS.length - 1])
+  expect(await activeCells(page)).toEqual(shownCells(rows[ROWS.length - 1]))
   await page.keyboard.press('ArrowDown')
   expect(await activeIndex(page)).toBe(ROWS.length - 1)
   await page.keyboard.press('Home')
@@ -104,7 +108,7 @@ test('copy row copies the shown cells of the active row, and copy USI its USI, b
   await page.keyboard.press('ControlOrMeta+Shift+c')
   await expect(page.getByText('Copied the USI.')).toBeVisible()
   const usi = COLUMNS.indexOf('usi')
-  expect(await copied(page)).toEqual([rows[1].join('\t'), rows[1][usi]])
+  expect(await copied(page)).toEqual([shownCells(rows[1]).join('\t'), rows[1][usi]])
   expect(rows[1][usi]).toMatch(/^mzspec:USI000000:Ecoli_MS2_small:scan:\d+$/)
   // Hidden columns are not copied; the buttons copy the active row too.
   await page.getByRole('button', { name: 'Columns…' }).click()
@@ -113,7 +117,7 @@ test('copy row copies the shown cells of the active row, and copy USI its USI, b
   await page.getByRole('button', { name: 'Copy row' }).click()
   await page.getByRole('button', { name: 'Copy USI' }).click()
   const rc = COLUMNS.indexOf('res_conf')
-  expect((await copied(page)).slice(2)).toEqual([rows[4].filter((_, j) => j !== rc).join('\t'), rows[4][usi]])
+  expect((await copied(page)).slice(2)).toEqual([rows[4].filter((_, j) => j !== rc && j !== HIT).join('\t'), rows[4][usi]])
 })
 
 test('the spectrum filter placeholder comes from the first spectrum ID of the file', async ({ page }) => {

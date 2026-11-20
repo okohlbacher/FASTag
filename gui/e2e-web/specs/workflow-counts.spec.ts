@@ -42,7 +42,7 @@ for (const w of RUNS) {
     }
     if (w.ranked) {
       await page.getByRole('tab', { name: 'Triage' }).click()
-      await expect(page.locator('.report-sum')).toContainText(`${ms2} MS/MS spectra`)
+      await expect(page.locator('.report-sum')).toContainText(`${ms2} MS2 spectra`)
     }
   })
 }

@@ -243,6 +243,17 @@ export default function ResultTabs(p: ResultTabsProps): JSX.Element {
         />
       )}
 
+      {results?.replaced && (
+        <p className="banner warn" role="status">
+          <IconWarning />
+          <span>
+            <strong>Outputs overwritten.</strong> The run of {baseName(results.replaced.input)} wrote{' '}
+            <code>{results.path}</code>, but a later run of {baseName(results.replaced.by)} (
+            {new Date(results.replaced.end).toLocaleString()}) wrote over it. Its results are shown.
+          </span>
+        </p>
+      )}
+
       {p.runningState}
 
       <div className="tabpanel" id="tabpanel" role="tabpanel" aria-labelledby={`tab-${tab}`}>

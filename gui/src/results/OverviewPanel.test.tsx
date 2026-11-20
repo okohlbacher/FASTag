@@ -82,10 +82,11 @@ describe('Overview panel', () => {
   it('flags the checks: a Da run and electron activation', () => {
     render(<OverviewPanel overview={model(CLI_CASES.v112Da)} input="/d/a.mzML" busy={false} onAction={vi.fn()} />)
     const checks = within(screen.getByRole('list', { name: 'Checks' })).getAllByRole('listitem')
-    expect(checks.filter((c) => c.classList.contains('flag'))).toHaveLength(2)
-    // No census: the CLI's no call stands, with its reason.
+    expect(checks.filter((c) => c.classList.contains('flag'))).toHaveLength(1)
+    // Round 6, 26: the Da cause once, above the tiles; the tiles say no call.
+    expect(within(screen.getByRole('list', { name: 'Warning' })).getByRole('listitem').textContent).toMatch(/no protease or label call at a tolerance in Da/)
     expect(within(tile('Protease')).getByText('no call')).toBeDefined()
-    expect(tile('Protease').textContent).toMatch(/the fragment tolerance is in Da/)
+    expect(tile('Protease').textContent).toMatch(/in Da \(see above\)/)
   })
 
   it('clears copied feedback for another result and ignores an earlier pending copy', async () => {

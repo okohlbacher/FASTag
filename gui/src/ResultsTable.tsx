@@ -57,6 +57,8 @@ const GLYPH_W = 16
 // out of an 840 px pane. Its cells are middle-truncated (fitMiddle), so the
 // scan number stays visible; dragging the edge widens it.
 const SPECTRUM_AUTO_W = 200
+// "Database hit" and "In database" / "Entrapment" whole.
+const HIT_MIN_W = 120
 
 // The tags file's column names in words, the optional ones (-proforma,
 // -res_conf, -usi_collection, -entrapment_fasta) included; any other column
@@ -100,7 +102,9 @@ export function autoWidths(columns: string[], rows: string[][]): Record<string, 
       const v = r[j] ?? ''
       w = Math.max(w, (c === 'fasta_hit' ? hitWords(v) : v).length * CHAR_W + CELL_PAD)
     }
-    out[c] = Math.round(Math.max(MIN_W, Math.min(c === 'spectrum' ? SPECTRUM_AUTO_W : MAX_AUTO_W, w)))
+    // The Database hit column is never narrower than its header and words.
+    const floor = c === 'fasta_hit' ? HIT_MIN_W : MIN_W
+    out[c] = Math.round(Math.max(floor, Math.min(c === 'spectrum' ? SPECTRUM_AUTO_W : MAX_AUTO_W, w)))
   })
   return out
 }
@@ -663,9 +667,17 @@ export default function ResultsTable({ path, source, rerunResConf, spectrum }: P
   }, [path, view, first, last])
 
   const columns = meta?.columns ?? head?.columns ?? []
-  const has = (c: string): boolean => columns.includes(c)
+  // A run without a database filter writes '-' in every fasta_hit cell
+  // (with -fasta only matching tags are written, README): its head rows
+  // tell, and the column and its filter, which could only say Not checked
+  // or find 0 rows, are left out.
+  const noDb = ((): boolean => {
+    const j = columns.indexOf('fasta_hit')
+    return j >= 0 && !!head && head.rows.length > 0 && head.rows.every((r) => (r[j] ?? '-') === '-' || r[j] === '')
+  })()
+  const has = (c: string): boolean => columns.includes(c) && !(noDb && c === 'fasta_hit')
   // The shown columns, as indices into each row.
-  const shown = columns.map((_, j) => j).filter((j) => !hidden.has(columns[j]))
+  const shown = columns.map((_, j) => j).filter((j) => has(columns[j]) && !hidden.has(columns[j]))
   const width = (c: string): number => userW[c] ?? autoW?.[c] ?? colWidth(c)
   const grid = shown.map((j) => `${width(columns[j])}px`).join(' ')
   const totalW = shown.reduce((w, j) => w + width(columns[j]), 0)
@@ -1174,7 +1186,7 @@ export default function ResultsTable({ path, source, rerunResConf, spectrum }: P
       {colsOpen && meta && (
         <fieldset className="rt-cols" id={`${id}-cols`}>
           <legend>Columns shown</legend>
-          {columns.map((c) => (
+          {columns.filter(has).map((c) => (
             <label key={c}>
               <input
                 type="checkbox"

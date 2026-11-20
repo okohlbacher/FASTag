@@ -200,13 +200,38 @@ describe('Setup: hidden dependent fields', () => {
     const group = document.querySelector('[data-group="Digest and labels"]')!
     const banners = group.querySelectorAll('.group-needs')
     expect(banners.length).toBeGreaterThan(0)
-    expect(banners[0].textContent).toMatch(/needs?:? (.*; )?Digest report[.;]/)
+    // Round 6, 12: each report once, not one list per dependency.
+    expect(banners[0].textContent).toMatch(/^\d+ more settings appear when one of these is on: Digest report, Label report\./)
     // No waiting field is left in view, disabled.
     expect(group.querySelectorAll('.field.off')).toHaveLength(0)
     // The digest report's checkbox is in this group: no Turn on repeats it.
     expect(within(group as HTMLElement).queryByRole('button', { name: /^Turn on Digest report/ })).toBeNull()
     await click(document.getElementById('out-digest_out')!)
     expect(field('digest_tag_min')!.disabled).toBe(false)
+  })
+
+  // Round 6, 17: a Turn on without side effects first: the alkylation
+  // report would raise Extension, Tag placements unlocks the same settings.
+  it('Characterize offers Tag placements, not the alkylation report, for the gapped-tag settings', async () => {
+    const mock = installMockBridge()
+    await renderCharacterizeApp(mock)
+    await openGroup('Tagging, advanced')
+    const group = document.querySelector('[data-group="Tagging, advanced"]') as HTMLElement
+    const note = group.querySelector('.group-needs') as HTMLElement
+    expect(within(note).queryByRole('button', { name: /^Turn on Alkylation report/ })).toBeNull()
+    expect(within(note).getByRole('button', { name: 'Turn on Tag placements' })).toBeDefined()
+  })
+
+  // Round 6, 11: one curated hint per field, the same in Settings and in
+  // Advanced; a fallback that does not fit is not cut into a fragment.
+  it('no Advanced hint ends in a fragment, and Settings and Advanced agree', async () => {
+    const mock = installMockBridge()
+    await renderApp(mock)
+    for (const g of ['Tagging', 'Tagging, advanced', 'Sampling and checks', 'Charge and ions']) await openGroup(g)
+    const helps = [...document.querySelectorAll('.field .help')].map((h) => h.textContent ?? '')
+    expect(helps.filter((t) => t.includes('…'))).toEqual([])
+    expect(document.body.textContent).not.toMatch(/Tags with an E-value above this are not written/)
+    expect(document.body.textContent).not.toMatch(/Before tagging, FASTag checks whether the/)
   })
 
   it('a single waiting field is folded too, under the same short note', async () => {
@@ -233,13 +258,15 @@ describe('Setup: hidden dependent fields', () => {
     expect(field('census_triage_evalue')!.disabled).toBe(false)
   })
 
-  it('a field waiting for either of two reports names both in words', async () => {
+  it('a field waiting for either of two reports names both in words, each report once', async () => {
     const mock = installMockBridge()
     await renderApp(mock)
     await openGroup('Digest and labels')
     const group = document.querySelector('[data-group="Digest and labels"]')!
-    const notes = [...group.querySelectorAll('.group-needs')].map((n) => n.textContent ?? '')
-    expect(notes.some((t) => /Digest report or Label report[.;]/.test(t))).toBe(true)
+    const note = group.querySelector('.group-needs')!.textContent ?? ''
+    expect(note.match(/Digest report/g)).toHaveLength(1)
+    expect(note.match(/Label report/g)).toHaveLength(1)
+    expect(note).not.toMatch(/;/)
     expect(field('digest_window')).toBeNull()
   })
 

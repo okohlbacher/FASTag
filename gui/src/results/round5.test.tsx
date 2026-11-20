@@ -23,13 +23,13 @@ describe('round 5', () => {
     expect(settingValue('shortlist_max_evalue', '10')).toBe('10')
   })
 
-  it('16: a hint without a clause break is cut at a word, never mid-word', () => {
-    const t = 'The factor on the fragment tolerance when the complement window follows it.'
-    const b = briefHint(t)
-    expect(b.length).toBeLessThanOrEqual(BRIEF_MAX)
-    expect(b.endsWith('…')).toBe(true)
-    expect(t.startsWith(b.slice(0, -1))).toBe(true)
-    expect(t.charAt(b.length - 1)).toBe(' ')
+  // Round 6, 11: no fragment cut at a word any more; a hint that does not
+  // fit one line is not shown (the full text stays the tooltip).
+  it('16: a hint without a clause break that does not fit is not shown', () => {
+    const t = 'The factor on the fragment tolerance when the complement window follows it, at both partners of a pair.'
+    expect(t.length).toBeGreaterThan(BRIEF_MAX)
+    expect(briefHint(t)).toBe('')
+    expect(briefHint('Short line.')).toBe('Short line.')
   })
 
   it('7: a run without a database filter is not checked, not a failed match', () => {

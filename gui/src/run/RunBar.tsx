@@ -145,6 +145,11 @@ export default function RunBar(p: RunBarProps): JSX.Element {
                   <button type="button" className="small" onClick={() => p.onFix(c.fix!.values)}>
                     {c.fix.label}
                   </button>
+                  {c.alt && (
+                    <button type="button" className="secondary small" onClick={() => p.onFix(c.alt!.values)}>
+                      {c.alt.label}
+                    </button>
+                  )}
                 </div>
               )}
               {/* The species reach conflict: one-click fixes. */}

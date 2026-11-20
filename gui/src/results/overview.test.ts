@@ -201,8 +201,10 @@ describe('Overview model: calls', () => {
     expect(o.lowEvidence).toBe(true)
     for (const id of ['protease', 'label']) {
       expect(tile(o, id).value, id).toBe('no call')
-      expect(tile(o, id).note, id).toMatch(/the fragment tolerance is in Da.*[.;] [Aa]lso 600 tagged spectra, fewer than 1,000\.?$/)
+      expect(tile(o, id).note, id).toMatch(/no call at a fragment tolerance in Da \(see above\); also 600 tagged spectra, fewer than 1,000\.?$/)
     }
+    // Round 6, 26: the shared cause is said once, above the tiles.
+    expect(o.warning).toMatch(/^The fragment tolerance is 0\.5 Da: FASTag makes no protease or label call at a tolerance in Da, and species calls are unreliable/)
     // The genus is a ranking the CLI made: held back.
     expect(tile(o, 'genus').value).toBe('too little evidence')
     expect(tile(o, 'genus').note).toMatch(/CLI: Gallus/)
@@ -220,7 +222,8 @@ describe('Overview model: calls', () => {
     // 686 MS2 spectra: the Da run's calls are what the CLI wrote.
     const da = overviewOf(CLI_CASES.v112Da)
     expect(tile(da, 'protease')).toMatchObject({ value: 'no call', tone: 'nocall' })
-    expect(tile(da, 'protease').note).toMatch(/^No protease is called: the fragment tolerance is in Da/)
+    expect(tile(da, 'protease').note).toBe('no call at a fragment tolerance in Da (see above)')
+    expect(da.warning).toMatch(/no protease or label call at a tolerance in Da/)
     expect(tile(da, 'genus').value).toBe('Gallus')
     // With a census of at least 1,000 tagged spectra it is applied, and passes.
     const called = overviewOf(CLI_CASES.v112Call)
@@ -252,11 +255,21 @@ describe('Overview model: checks and caveats', () => {
 
   it('a Da tolerance and electron activation are flagged; the species caveat names ion-trap/Da', () => {
     const o = overviewOf(CLI_CASES.v112Da)
-    expect(o.checks.filter((c) => c.tone === 'flag').map((c) => c.text)).toEqual([
-      expect.stringMatching(/fragment tolerance is 0\.5 Da.*species calls are unreliable on ion-trap\/Da data/i),
-      expect.stringMatching(/328 of 686 MS2 spectra were electron-activated/)
-    ])
-    expect(overviewOf(CLI_CASES.v112).caveats.join(' ')).toMatch(/species calls are unreliable on ion-trap\/Da data/)
+    // The Da cause once, as the warning above the tiles; the checks keep
+    // the electron activation.
+    expect(o.warning).toMatch(/fragment tolerance is 0\.5 Da.*species calls are unreliable on ion-trap\/Da data/i)
+    expect(o.checks.filter((c) => c.tone === 'flag').map((c) => c.text)).toEqual([expect.stringMatching(/328 of 686 MS2 spectra were electron-activated/)])
+    expect(o.caveats.join(' ')).toMatch(/species calls are unreliable on ion-trap\/Da data/)
+  })
+
+  // Round 6, 24: the Da caveat only where the check line would say it.
+  it('the ion-trap/Da caveat only for a Da or unknown tolerance', () => {
+    const ppm = buildOverview({ log: [], reports: [], species: null, census: null, params: { species: true, fragment_tolerance: '20', fragment_tolerance_unit: 'ppm' }, instrument: null })
+    expect(ppm.caveats.join(' ')).not.toMatch(/ion-trap\/Da/)
+    expect(ppm.copyText).not.toMatch(/ion-trap\/Da/)
+    expect(ppm.warning).toBeUndefined()
+    const da = buildOverview({ log: [], reports: [], species: null, census: null, params: { species: true, fragment_tolerance: '0.3', fragment_tolerance_unit: 'Da' }, instrument: null })
+    expect(da.caveats.join(' ')).toMatch(/ion-trap\/Da/)
   })
 })
 

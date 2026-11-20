@@ -118,13 +118,16 @@ test('a Da run without a census: the CLI no calls with their reason, the cutoff 
   await expect(value(page, 'MS2 spectra')).toHaveText(en(o.ms2))
   // The MS2 count is not a stand-in for tagged spectra: no GUI verdict.
   for (const t of ['Protease', 'Label']) await expect(value(page, t)).toHaveText('no call')
-  await expect(tile(page, 'Protease')).toContainText(why)
+  // The CLI's reason once, above the tiles (round 6, 26); the tiles say no call.
+  expect(why).toMatch(/fragment tolerance is in Da/)
+  await expect(page.getByRole('list', { name: 'Warning', exact: true })).toContainText('FASTag makes no protease or label call at a tolerance in Da')
+  await expect(tile(page, 'Protease')).toContainText('no call at a fragment tolerance in Da (see above)')
   for (const t of ['Protease', 'Top genus', 'Label']) await expect(value(page, t)).not.toHaveText('too little evidence')
   // The Overview's own checks: the Inspector's "Checks after the run" (#24)
   // is a second list beside it, so the name is matched exactly.
   const checks = page.getByRole('list', { name: 'Checks', exact: true })
   await expect(checks).toContainText('Evidence cutoff not applied: this run did not count tagged spectra')
-  await expect(checks).toContainText('species calls are unreliable on ion-trap/Da data')
+  await expect(page.getByRole('list', { name: 'Warning', exact: true })).toContainText('species calls are unreliable on ion-trap/Da data')
   await expect(checks).toContainText('electron-activated')
   // The instrument as the meta rows name it, no ion-trap inference.
   await expect(value(page, 'Instrument')).toHaveText(cell(digest, 'meta', 'instrument')!)

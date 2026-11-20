@@ -21,6 +21,7 @@ import {
   dependsOf,
   hintText,
   sentValues,
+  uiOf,
   UNIT_PARAMS
 } from './paramLayout'
 
@@ -170,7 +171,7 @@ describe('preflight conflicts', () => {
   it('refuses the TMT reporter filter without the pseudo-tag filter', () => {
     const c = conflicts({ tmt_reporter_filter: true })
     expect(c.map((x) => x.params[0])).toEqual(['tmt_pseudo_filter'])
-    expect(c[0].note).toMatch(/^tmt_reporter_filter requires tmt_pseudo_filter auto or on/)
+    expect(c[0].note).toMatch(/^The TMT reporter filter needs the TMT pseudo-tag filter on auto or on\./)
     expect(conflicts({ tmt_reporter_filter: true, tmt_pseudo_filter: 'auto' })).toEqual([])
     expect(conflicts({ tmt_reporter_filter: false, tmt_pseudo_filter: 'off' })).toEqual([])
   })
@@ -296,7 +297,7 @@ describe('round 5 dependencies and conflicts', () => {
     const on = { ...base, alkylation_out: '/d/a.alkylation.tsv' }
     expect(inertBecause('alkylation_proteome', on)).toBeNull()
     expect(inertBecause('alkylation_proteome', { ...on, recon_fasta: '/d/db.fasta' })).toMatch(/Protein database/)
-    expect(inertBecause('alkylation_proteome', { ...on, shortlist_out: '/d/a.shortlist.tsv' })).toMatch(/instead/)
+    expect(inertBecause('alkylation_proteome', { ...on, shortlist_out: '/d/a.shortlist.tsv' })).toMatch(/or on the Filter database when no Protein database is set/)
   })
 
   it('the ranking needs the census as well as the score', () => {
@@ -313,10 +314,15 @@ describe('round 5 dependencies and conflicts', () => {
     expect(inertBecause('shortlist_decoy_affix', cfg)).not.toBeNull()
   })
 
-  it('a custom digest models file replaces the models version', () => {
+  // Round 6, 5: with a custom models file v2 still loads its calibration
+  // and writes the v2 rows (FASTag.cpp), so the version is sent.
+  it('the models version is sent with a custom digest models file too', () => {
     const on = { ...base, digest_out: '/d/a.digest.tsv' }
     expect(inertBecause('digest_models_version', on)).toBeNull()
-    expect(inertBecause('digest_models_version', { ...on, digest_models: '/d/models.tsv' })).toMatch(/replaces/)
+    const custom = { ...on, digest_models: '/d/models.tsv', digest_models_version: 'v2' }
+    expect(inertBecause('digest_models_version', custom)).toBeNull()
+    expect(sentValues(custom)).toMatchObject({ digest_models: '/d/models.tsv', digest_models_version: 'v2' })
+    expect(uiOf('digest_models_version').help?.tip).toMatch(/v2 only adds the calibrated v2 rows/)
   })
 
   it('refuses isotope offsets at a low-resolution tolerance, and auto modes on mzPeak, each with its fix', () => {
@@ -327,5 +333,29 @@ describe('round 5 dependencies and conflicts', () => {
     const auto = { ...base, complement_tolerance_unit: 'auto', tmt_pseudo_filter: 'auto' }
     expect(conflicts(auto, { input: '/d/run.mzML' }).map((c) => c.params[0])).toEqual([])
     expect(conflicts(auto, { input: '/d/run.mzpeak' }).map((c) => c.params[0])).toEqual(['complement_tolerance_unit', 'tmt_pseudo_filter'])
+  })
+
+  // Round 6, 9: a batch's queued mzPeak files are checked as the one file is.
+  it('checks every queued input of a batch, naming the mzPeak files', () => {
+    const auto = { ...base, complement_tolerance_unit: 'auto' }
+    expect(conflicts(auto, { inputs: ['/d/a.mzML', '/d/b.mzML'] })).toEqual([])
+    const c = conflicts(auto, { inputs: ['/d/a.mzML', '/d/b.mzpeak', '/d/c.mzPeak'] })
+    expect(c.map((x) => x.params[0])).toEqual(['complement_tolerance_unit'])
+    expect(c[0].note).toMatch(/b\.mzpeak, c\.mzPeak in this batch/)
+    expect(c[0].fix?.values).toEqual({ complement_tolerance_unit: 'Da' })
+  })
+
+  // Round 6, 14: on mzPeak with the reporter filter on, the TMT fix must not
+  // raise the reporter-filter conflict: on, or both filters off.
+  it('the mzPeak TMT fix keeps the reporter filter satisfiable', () => {
+    const v = { ...base, tmt_pseudo_filter: 'auto', tmt_reporter_filter: true }
+    const c = conflicts(v, { input: '/d/run.mzpeak' }).find((x) => x.params[0] === 'tmt_pseudo_filter')!
+    expect(c.fix).toEqual({ label: 'Use on (known TMT6/10)', values: { tmt_pseudo_filter: 'on' } })
+    expect(c.alt).toEqual({ label: 'Turn both TMT filters off', values: { tmt_pseudo_filter: 'off', tmt_reporter_filter: false } })
+    expect(conflicts({ ...v, ...c.fix!.values }, { input: '/d/run.mzpeak' })).toEqual([])
+    expect(conflicts({ ...v, ...c.alt!.values }, { input: '/d/run.mzpeak' })).toEqual([])
+    const plain = conflicts({ ...base, tmt_pseudo_filter: 'auto' }, { input: '/d/run.mzpeak' })[0]
+    expect(plain.fix?.values).toEqual({ tmt_pseudo_filter: 'off' })
+    expect(plain.alt).toBeUndefined()
   })
 })

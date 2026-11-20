@@ -59,6 +59,9 @@ export function useSession(start: Origin = DEFAULTS) {
   const [out, setOut] = useState('')
   // The Input card: one file, or a batch of files run in turn (doc/GUI-WORKFLOWS.md 1).
   const [mode, setMode] = useState<'one' | 'batch'>('one')
+  // The inputs a batch has queued (App keeps them in step with the queue):
+  // the CLI refuses some options on each mzPeak file of a batch too.
+  const [batchInputs, setBatchInputs] = useState<readonly string[]>([])
   // The Advanced disclosure of Setup is open.
   const [advancedOpen, setAdvancedOpen] = useState(false)
   // Where the form's values came from, and the values that origin gives
@@ -324,7 +327,7 @@ export function useSession(start: Origin = DEFAULTS) {
   // Values the CLI would refuse, field by field, and combinations it refuses
   // before reading a spectrum (rc 6): either keeps Run and Run batch disabled.
   const invalid = invalidParams(values)
-  const refused = conflicts(values, { taxdbK, input: mode === 'one' ? input : undefined })
+  const refused = conflicts(values, { taxdbK, input: mode === 'one' ? input : undefined, inputs: batchInputs })
   const blocked = Object.keys(invalid).length > 0 || refused.length > 0
 
   // What a run writes, by file name: the tags, then each output it is sent.
@@ -412,6 +415,7 @@ export function useSession(start: Origin = DEFAULTS) {
     pickFor,
     invalid,
     refused,
+    setBatchInputs,
     blocked,
     writingFiles,
     changedParams

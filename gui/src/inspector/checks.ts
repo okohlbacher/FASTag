@@ -122,10 +122,53 @@ export function electronReadAsBy(ionSeries: unknown, input: string): boolean {
   return s !== 'cz'
 }
 
-/// The fix for ETD/ECD spectra read as b/y: the Orbitrap ETD preset
-/// (Ion series auto), on mzML.
-const ETD_FIX: CheckFix = { label: 'Use the Orbitrap ETD preset', instrument: 'orbitrap-etd' }
-const ETD_ADVICE = 'Choose the Orbitrap ETD preset under Instrument, or set Ion series (Advanced, Charge and ions) to auto or cz.'
+/// An input without activation per spectrum: MGF and mzPeak, read as b/y
+/// under Ion series auto, and without -ion_series_hybrid (mzML only).
+export const noActivationMeta = (input: string): boolean => /\.(mgf|mzpeak)$/i.test(input.trim())
+
+/// Hybrid-activated spectra (EThcD, ETciD) are read as b/y alone: under by,
+/// under auto with Hybrid ion series by (the default) on mzML, and under
+/// auto on MGF or mzPeak. Under cz, or auto with hybrid both on mzML, their
+/// c/z ions are read too.
+export function hybridReadAsByOnly(ionSeries: unknown, ionSeriesHybrid: unknown, input: string): boolean {
+  const s = String(ionSeries ?? '').trim() || 'by'
+  if (s === 'cz') return false
+  if (s !== 'auto') return true
+  if (noActivationMeta(input)) return true
+  return (String(ionSeriesHybrid ?? '').trim() || 'by') !== 'both'
+}
+
+/// Which activated spectra a run of @p input with @p values reads wrongly,
+/// from counts of electron- and hybrid-activated spectra.
+function misread(values: Record<string, unknown>, input: string, electron: number, hybrid: number): { electron: boolean; hybrid: boolean } {
+  return {
+    electron: electron > 0 && electronReadAsBy(values['ion_series'], input),
+    hybrid: hybrid > 0 && hybridReadAsByOnly(values['ion_series'], values['ion_series_hybrid'], input)
+  }
+}
+
+/// The fix for ETD/ECD or hybrid spectra read as b/y alone. It sets the ion
+/// settings only, never the tolerance. On mzML: Ion series auto (ETD/ECD
+/// as c/z), with Hybrid ion series both when hybrid spectra are there
+/// (the Orbitrap EThcD preset's reading). On MGF or mzPeak auto reads b/y,
+/// so the fix is cz, which reads every spectrum as c/z.
+function etdFix(input: string, hybrid: boolean): CheckFix {
+  if (noActivationMeta(input)) return { label: 'Read every spectrum as c/z (Ion series cz)', params: { ion_series: 'cz' } }
+  return hybrid
+    ? { label: 'Read ETD as c/z, EThcD as both (Ion series auto, Hybrid both)', params: { ion_series: 'auto', ion_series_hybrid: 'both' } }
+    : { label: 'Read ETD/ECD spectra as c/z (Ion series auto)', params: { ion_series: 'auto' } }
+}
+
+/// What to change, by input format. MGF and mzPeak carry no activation per
+/// spectrum: auto reads them as b/y, and cz reads the HCD spectra of a
+/// mixed run as c/z too.
+function etdAdvice(input: string, hybrid: boolean): string {
+  if (noActivationMeta(input))
+    return 'This format carries no activation per spectrum, so Ion series auto reads them as b/y too. Set Ion series to cz if the run is all electron-activated (cz reads every spectrum as c/z, collisional ones included), or convert the run to mzML and use auto.'
+  return hybrid
+    ? 'Choose the Orbitrap EThcD preset under Instrument, or set Ion series to auto and Hybrid ion series to both (Advanced, Charge and ions).'
+    : 'Choose the Orbitrap ETD preset under Instrument, or set Ion series to auto or cz (Advanced, Charge and ions).'
+}
 
 /// The checks before a run of @p input with @p values. @p probe: the probe's
 /// output, null when there is none (no -probe_input, or not run yet);
@@ -160,8 +203,11 @@ export function preStartChecks(o: {
   }
 
   // The species report counts b/y tags only (FASTag.cpp species_cz_excluded):
-  // under Ion series cz every tag is c/z, so the report stays empty.
-  if (values['species'] === true && String(values['ion_series'] ?? '').trim() === 'cz') {
+  // under Ion series cz every tag is c/z, so the report stays empty. Under
+  // auto on mzML the ETD/ECD spectra are read as c/z and left out too (the
+  // probe's counts say how many); on MGF and mzPeak auto stays b/y.
+  const series = String(values['ion_series'] ?? '').trim()
+  if (values['species'] === true && series === 'cz') {
     checks.push({
       id: 'cz-species',
       level: 'warn',
@@ -170,6 +216,23 @@ export function preStartChecks(o: {
       faq: 'faq-inspector',
       source: 'the settings'
     })
+  } else if (values['species'] === true && series === 'auto' && !noActivationMeta(o.input) && probe?.status === 'ok' && probe.activation) {
+    const a = probe.activation
+    // Hybrid spectra keep their b/y tags (under Hybrid both as well).
+    const cz = a.electron
+    if (a.of > 0 && cz > 0) {
+      const all = cz >= a.of - a.unknown
+      checks.push({
+        id: 'cz-species',
+        level: 'warn',
+        title: all ? 'Species detection with c/z ions' : 'Species detection leaves the ETD spectra out',
+        detail: all
+          ? `All ${a.of.toLocaleString('en-US')} MS2 spectra probed were activated by ETD or ECD. Ion series auto reads them as c/z ions, and the species report counts b/y tags only: it will be empty. Run species detection on a collisionally activated run instead.`
+          : `${cz.toLocaleString('en-US')} of ${a.of.toLocaleString('en-US')} MS2 spectra probed were activated by ETD or ECD. Ion series auto reads them as c/z ions, and the species report counts b/y tags only, so it rests on the other ${pct(a.of - cz, a.of)}.`,
+        faq: 'faq-inspector',
+        source: 'the probe and the settings'
+      })
+    }
   }
 
   let notChecked: string | null = null
@@ -275,19 +338,28 @@ export function preStartChecks(o: {
       source: 'the probe'
     })
   }
+  // Electron (ETD, ECD) and hybrid (EThcD, ETciD) spectra are judged
+  // apart: Ion series auto reads the first as c/z on mzML, the second only
+  // with Hybrid ion series both. Over 1% of the MS2, as the CLI warns.
   const act = probe.activation
-  if (act && act.of > 0 && (act.electron + act.hybrid) * 100 > act.of && electronReadAsBy(values['ion_series'], o.input)) {
-    const auto = String(values['ion_series'] ?? '').trim() === 'auto'
+  const wrong = act && act.of > 0 ? misread(values, o.input, act.electron, act.hybrid) : null
+  const n = act && wrong ? (wrong.electron ? act.electron : 0) + (wrong.hybrid ? act.hybrid : 0) : 0
+  if (act && wrong && n * 100 > act.of) {
+    const what = wrong.electron && wrong.hybrid ? 'ETD, ECD or a hybrid method (EThcD, ETciD)' : wrong.electron ? 'ETD or ECD' : 'a hybrid method (EThcD, ETciD)'
+    const how =
+      series === 'auto'
+        ? noActivationMeta(o.input)
+          ? 'This file carries no activation per spectrum, so Ion series auto reads them as b/y ions'
+          : 'Ion series auto with Hybrid ion series by reads the hybrid spectra as b/y ions only'
+        : 'Ion series by reads them as b/y ions'
     checks.push({
       id: 'electron',
       level: 'warn',
-      title: 'Electron activation',
-      detail: `${(act.electron + act.hybrid).toLocaleString('en-US')} of ${act.of.toLocaleString('en-US')} MS2 spectra probed were activated by ETD, ECD or a hybrid method. ${
-        auto ? 'This file carries no activation per spectrum, so Ion series auto reads them as b/y ions' : 'Ion series by reads them as b/y ions'
-      }, and their tags are unreliable. ${auto ? 'Set Ion series to cz, or convert the run to mzML.' : ETD_ADVICE}`,
+      title: wrong.electron ? 'Electron activation' : 'Hybrid activation',
+      detail: `${n.toLocaleString('en-US')} of ${act.of.toLocaleString('en-US')} MS2 spectra probed were activated by ${what}. ${how}, and their tags are unreliable. ${etdAdvice(o.input, wrong.hybrid)}`,
       faq: 'faq-inspector',
       source: 'the probe',
-      ...(auto ? {} : { fix: ETD_FIX })
+      fix: etdFix(o.input, wrong.hybrid)
     })
   }
   const fa = probe.fasta
@@ -317,7 +389,14 @@ const LOWRES = /^No two peaks anywhere in this file are closer than ([\d.]+) Th/
 /// check would hold that re-run otherwise).
 /// @p ionSeries and @p input: the run's (electronReadAsBy); left out, the
 /// default b/y reading.
-export function postRunChecks(o: { reports: Report[]; notes: string[]; species?: boolean; ionSeries?: unknown; input?: string }): { checks: Check[]; detected: Detected | null } {
+export function postRunChecks(o: {
+  reports: Report[]
+  notes: string[]
+  species?: boolean
+  ionSeries?: unknown
+  ionSeriesHybrid?: unknown
+  input?: string
+}): { checks: Check[]; detected: Detected | null } {
   const checks: Check[] = []
   const inst = instrumentFromReports(o.reports)
   const runReport = o.reports.find((r) => value(r, 'run', 'fragment_tolerance_unit'))
@@ -362,14 +441,21 @@ export function postRunChecks(o: { reports: Report[]; notes: string[]; species?:
     if (detected && !detected.preset && lowres) detected.preset = IONTRAP.id
   }
   const electron = o.notes.find((l) => l.startsWith('Electron activation: '))
-  if (electron && electronReadAsBy(o.ionSeries, o.input ?? '')) {
+  // The line names the counts per class (IonSeries.h byModeWarning):
+  // electron and hybrid spectra are judged apart, as before the run.
+  const per = electron ? /(\d+) collisional, (\d+) electron, (\d+) hybrid/.exec(electron) : null
+  const input = o.input ?? ''
+  const wrong = per
+    ? misread({ ion_series: o.ionSeries, ion_series_hybrid: o.ionSeriesHybrid }, input, Number(per[2]), Number(per[3]))
+    : { electron: electronReadAsBy(o.ionSeries, input), hybrid: false }
+  if (electron && (wrong.electron || wrong.hybrid)) {
     const m = /^Electron activation: (\d+) of (\d+) MS2 spectra/.exec(electron)
     checks.push({
       id: 'electron',
       level: 'warn',
       title: 'Electron activation',
       detail: m
-        ? `${Number(m[1]).toLocaleString('en-US')} of ${Number(m[2]).toLocaleString('en-US')} tagged MS2 spectra were activated by ETD, ECD or a hybrid method and read as b/y ions, so their tags and flanks are unreliable. ${ETD_ADVICE}`
+        ? `${Number(m[1]).toLocaleString('en-US')} of ${Number(m[2]).toLocaleString('en-US')} tagged MS2 spectra were activated by ETD, ECD or a hybrid method and read as b/y ions, so their tags and flanks are unreliable. ${etdAdvice(input, wrong.hybrid)}`
         : electron,
       faq: 'faq-inspector',
       source: "FASTag's log"

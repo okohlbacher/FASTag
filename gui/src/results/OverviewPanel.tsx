@@ -83,6 +83,11 @@ export default function OverviewPanel({ overview: o, input, busy, onAction, para
           Asked for, but not written: {missing.join(', ')}. The log says why.
         </p>
       )}
+      {o.warning && (
+        <ul className="checks" aria-label="Warning">
+          <li className="flag">{o.warning}</li>
+        </ul>
+      )}
       <ul className="tiles" aria-label="Key figures">
         {tiles.figures.map((t) => (
           <TileView key={t.id} t={t} busy={busy} onAction={onAction} />

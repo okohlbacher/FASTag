@@ -469,25 +469,107 @@ export function hintText(name: string, fallback: string): string {
   return first.trim()
 }
 
-/// The line under an Advanced field, short enough for one line of the
-/// grid: hintText up to its first clause break (a colon, a semicolon, a
-/// bracket, ", because ..."), as a sentence. The full text is the line's
-/// tooltip and the (?) popover's.
-/// Without a clause break, or still too long for the line, it is cut at a
-/// word boundary with an ellipsis (never mid-word by CSS).
-export const BRIEF_MAX = 46
+/// The line under an Advanced field when no curated hint (BRIEF_HINT, a
+/// workflow's own) is given: hintText up to its first clause break (a
+/// colon, a semicolon, a bracket, ", because ..."), as a sentence, when that
+/// fits one line. A break inside quotes is no break. A hint that does not
+/// fit is not cut into a fragment: the field shows none, and the full text
+/// stays the tooltip and the (?) popover's.
+export const BRIEF_MAX = 70
 export function briefHint(text: string): string {
   const t = text.trim()
-  const m = /(?:[:;]\s|\s\(|,\s(?:because|so|and|but|which|while|as|for|or)\s|\s(?:—|–)\s)/.exec(t.slice(20))
+  const quoted = (i: number): boolean => ((t.slice(0, i).match(/["“”]/g) ?? []).length % 2 === 1) || ((t.slice(0, i).match(/(^|\s)'/g) ?? []).length > (t.slice(0, i).match(/'(\s|[.,;:]|$)/g) ?? []).length)
+  const re = /(?:[:;]\s|\s\(|,\s(?:because|so|and|but|which|while|as|for|or)\s|\s(?:—|–)\s)/g
+  re.lastIndex = 20
   let s = t
-  if (m) {
-    const cut = t.slice(0, 20 + m.index).replace(/[,\s]+$/, '')
+  for (let m = re.exec(t); m; m = re.exec(t)) {
+    if (quoted(m.index)) continue
+    const cut = t.slice(0, m.index).replace(/[,\s]+$/, '')
     s = /[.!?]$/.test(cut) ? cut : `${cut}.`
+    break
   }
-  if (s.length <= BRIEF_MAX) return s
-  const head = s.slice(0, BRIEF_MAX - 1)
-  const sp = head.lastIndexOf(' ')
-  return `${(sp > 20 ? head.slice(0, sp) : head).replace(/[,;:\s]+$/, '')}…`
+  return s.length <= BRIEF_MAX ? s : ''
+}
+
+/// Curated one-line hints, the same in Settings and in Advanced (a
+/// workflow's own hint, tasks.ts help, comes first in its Settings card and
+/// in its Advanced groups alike).
+export const BRIEF_HINT: Record<string, string> = {
+  // Tagging
+  tag_length: 'Residues in a seed tag; 3 suits most runs.',
+  extension: 'Residues read on past each end of a seed; 0 reads none.',
+  max_evalue: 'Keeps tags at or below this E-value; 0 keeps all.',
+  max_tags: 'Most tags per spectrum; 0 sets no limit.',
+  res_conf: 'Adds a confidence per residue for assembly.',
+  tag_lengths: 'Several seed lengths in one pass, in place of Tag length.',
+  diversity: 'Prefers tags from other peaks over near-copies of a kept tag.',
+  isobaric_tolerance: 'Lets a residue stand for a pair of the same mass (N for GG).',
+  gaps: 'Lets a tag cross one missing peak.',
+  gap_penalty: 'Ranks a gapped tag below an ungapped one of the same E-value.',
+  fixed_modifications: 'Modifications every residue of that kind carries.',
+  ion_series: 'The ions the spectra are read as: b/y, c/z, or by activation.',
+  ion_series_hybrid: 'How EThcD and ETciD spectra are read under Ion series auto.',
+  unknown_charge: 'How a precursor without a charge in the file is tagged.',
+  subsample_fraction: 'Tags only this share of the spectra, chosen at random.',
+  threads: 'Processor threads a run uses; 0 uses all cores.',
+  // Tag columns and files
+  proforma: 'Adds each tag in ProForma 2.0 notation.',
+  usi_collection: 'Adds each spectrum’s USI in this dataset (e.g. PXD000001).',
+  out_spectra: 'Also writes the spectra that carry a reported tag.',
+  // Sampling and checks
+  acquisition_check: 'What happens to raw DIA input: refuse, warn or no check.',
+  acquisition_probe_spectra: 'MS2 spectra the acquisition check reads.',
+  check_header_charge: 'Checks the precursor charge the file gives.',
+  check_header_margin: 'How clearly the supported charge must win to disagree.',
+  check_header_out: 'One row per spectrum with the charge check’s verdict.',
+  // Run QC
+  qc_out: 'Spectra, resolution, charges, reporters and tag yield per run.',
+  // Placement and mass shifts
+  recon_out: 'Places each tag in the database’s peptides, one row each.',
+  recon_missed_cleavages: 'Missed trypsin sites a database peptide may hold, up to 10.',
+  recon_localize: 'Pins each leftover mass to one residue, by its fragment peaks.',
+  recon_sub_tolerance: 'How close a leftover mass must be to a substitution.',
+  delta_isobar_tolerance: 'How close two explanations of a shift must be to be isobars.',
+  delta_loc_min_evidence: 'How much the best site must lead to count as localized.',
+  delta_loc_null: 'Repeats the localization on shifted peaks, as a chance check.',
+  delta_name_tolerance: 'How close a shift must be to a UniMod or PSI-MOD entry.',
+  massgap_window: 'How close a leftover mass must be to a modification (ppm runs).',
+  // Species
+  species: 'Which organisms the tags come from, from the bundled index.',
+  species_call: 'Calls each taxon present, no call or not detected.',
+  species_deconvolve: 'Removes evidence an organism gets only from a stronger one.',
+  species_max_kmer_share: 'Ignores protein pieces shared by too many organisms.',
+  species_min_margin: 'Ignores a tag whose best organisms do not clearly lead.',
+  species_call_min_units: 'Fewer spectra with organism evidence give no call at all.',
+  species_pi0: 'The share of absent organisms the call’s q-values assume.',
+  // Shortlist and search configuration
+  shortlist_background: 'Proteins always added to the reduced FASTA (host, contaminants).',
+  shortlist_parsimony: 'Drops proteins whose spectra a higher one already has.',
+  shortlist_force: 'Writes the reduced FASTA even when the protease does not fit.',
+  search_nterm_acetyl: 'Protein N-terminal acetylation as a variable modification.',
+  // Identifiability
+  census: 'One row per MS2 spectrum read, tagged or not, and a run summary.',
+  census_ids_fdr: 'The q-value a hit needs for its spectrum to count as identified.',
+  census_triage_evalue: 'An unidentified spectrum with a tag this good is marked.',
+  // Digest and labels
+  digest_flank2: 'Also uses two residues before each cut when counts are few.',
+  digest_min_confidence: 'No digest call below this calibrated confidence; 0 is off.',
+  digest_window: 'How close a tag-end mass must be to a residue or label mass.',
+  digest_background_share: 'Background composition mixed into every protease model.',
+  digest_silac_min: 'K and R tag ends the label report needs for heavy SILAC.',
+  // Alkylation and glycopeptides
+  alkylation_proteome: 'The database the alkylation report uses without a placement one.',
+  glyco: 'Flags spectra with oxonium ions (glycopeptide sugar fragments).',
+  // Peaks, charges and complements
+  peaks_per_window: 'Keeps this many of the strongest peaks per 100 Da.',
+  charge_min: 'The lowest charge tried for a precursor without a charge.',
+  charge_max: 'The highest charge tried for a precursor without a charge.',
+  charge_infer_margin: 'How clearly one charge must win to be tagged alone.',
+  isotope_error: 'Also tries precursor masses one or more isotopes lower.',
+  complement_tolerance_unit: 'The complement window: in Da, by fragment tolerance, or auto.',
+  complement_midp: 'Scores tags with few complement pairs by the mid-p test.',
+  tmt_pseudo_filter: 'Filters G/A steps consistent with TMT label fragments.',
+  tmt_reporter_filter: 'Rejects tags anchored on a TMT reporter ion.'
 }
 
 // The words a choice is shown as; the CLI token is what is sent.
@@ -673,6 +755,8 @@ export interface PreflightContext {
   taxdbK?: number | null
   /// The input file (its format: the CLI refuses some options on mzPeak).
   input?: string
+  /// The inputs queued in a batch: checked as @p input is, each.
+  inputs?: readonly string[]
 }
 
 export interface Conflict {
@@ -685,6 +769,8 @@ export interface Conflict {
   neutral?: true
   /// The one-click change that resolves it.
   fix?: { label: string; values: Record<string, ParamValue> }
+  /// Another one, beside it.
+  alt?: { label: string; values: Record<string, ParamValue> }
 }
 
 const int = (v: unknown): number | null => (INT.test(String(v ?? '').trim()) ? Number(String(v).trim()) : null)
@@ -724,6 +810,17 @@ function fragmentDa(values: Record<string, unknown>): number | null {
 }
 const ISOTOPE_MAX_FRAGMENT_TOL_DA = 0.05
 const isMzPeak = (input: string | undefined): boolean => /\.mzpeak[\\/]?$/i.test(String(input ?? '').trim())
+/// The mzPeak files among the single input and a batch's queued inputs.
+function mzPeakInputs(ctx: PreflightContext): string[] {
+  return [...new Set([ctx.input, ...(ctx.inputs ?? [])].filter((p): p is string => isMzPeak(p)))]
+}
+/// "an mzPeak file is read in one pass", naming a batch's files.
+function onePass(ctx: PreflightContext, files: string[]): string {
+  if (!ctx.inputs?.length) return 'an mzPeak file is read in one pass'
+  const names = files.map((p) => p.replace(/[\\/]+$/, '').split(/[\\/]/).pop() ?? p)
+  const shown = names.length > 3 ? `${names.slice(0, 3).join(', ')} and ${names.length - 3} more` : names.join(', ')
+  return `mzPeak files are read in one pass (${shown} in this batch)`
+}
 
 export const CONFLICTS: ((values: Record<string, unknown>, ctx: PreflightContext) => Conflict | null)[] = [
   (values, { taxdbK }) => {
@@ -765,7 +862,7 @@ export const CONFLICTS: ((values: Record<string, unknown>, ctx: PreflightContext
     isActive('tmt_reporter_filter', values) && textOf(values, 'tmt_pseudo_filter') === 'off'
       ? {
           params: ['tmt_pseudo_filter', 'tmt_reporter_filter'],
-          note: 'tmt_reporter_filter requires tmt_pseudo_filter auto or on: set the TMT pseudo-tag filter to auto or on, or turn the reporter filter off.'
+          note: 'The TMT reporter filter needs the TMT pseudo-tag filter on auto or on. Set it to auto or on, or turn the reporter filter off.'
         }
       : null,
   // "-census_ids_exact needs every spectrum read: it cannot be combined with subsampling."
@@ -795,23 +892,32 @@ export const CONFLICTS: ((values: Record<string, unknown>, ctx: PreflightContext
   },
   // "-complement_tolerance_unit auto needs mzML or MGF input; mzPeak input
   // is read in one pass."
-  (values, { input }) =>
-    isMzPeak(input) && textOf(values, 'complement_tolerance_unit') === 'auto'
+  (values, ctx) => {
+    const mz = mzPeakInputs(ctx)
+    return mz.length && textOf(values, 'complement_tolerance_unit') === 'auto'
       ? {
           params: ['complement_tolerance_unit'],
-          note: 'Complement tolerance unit auto needs mzML or MGF input: an mzPeak file is read in one pass. Choose Da or fragment.',
+          note: `Complement tolerance unit auto needs mzML or MGF input: ${onePass(ctx, mz)}. Choose Da or fragment.`,
           fix: { label: 'Use Da', values: { complement_tolerance_unit: 'Da' } }
         }
-      : null,
+      : null
+  },
   // "-tmt_pseudo_filter auto needs random-access mzML or MGF input".
-  (values, { input }) =>
-    isMzPeak(input) && textOf(values, 'tmt_pseudo_filter') === 'auto'
-      ? {
-          params: ['tmt_pseudo_filter'],
-          note: 'TMT pseudo-tag filter auto needs mzML or MGF input: an mzPeak file is read in one pass. Choose on for known TMT6/10 input, or off.',
-          fix: { label: 'Turn the TMT filter off', values: { tmt_pseudo_filter: 'off' } }
-        }
-      : null,
+  // With the reporter filter on, off alone would raise the reporter-filter
+  // conflict: on, or both filters off, in one click.
+  (values, ctx) => {
+    const mz = mzPeakInputs(ctx)
+    if (!mz.length || textOf(values, 'tmt_pseudo_filter') !== 'auto') return null
+    const reporter = isActive('tmt_reporter_filter', values)
+    return {
+      params: ['tmt_pseudo_filter'],
+      note: `TMT pseudo-tag filter auto needs mzML or MGF input: ${onePass(ctx, mz)}. Choose on for known TMT6/10 input, or off.`,
+      fix: reporter
+        ? { label: 'Use on (known TMT6/10)', values: { tmt_pseudo_filter: 'on' } }
+        : { label: 'Turn the TMT filter off', values: { tmt_pseudo_filter: 'off' } },
+      ...(reporter ? { alt: { label: 'Turn both TMT filters off', values: { tmt_pseudo_filter: 'off', tmt_reporter_filter: false } } } : {})
+    }
+  },
   // "-taxdb, -taxonomy_nodes and -taxonomy_names are one set: give all three, or none (to use the bundled taxonomy)."
   (values) => {
     if (!isActive('species', values)) return null

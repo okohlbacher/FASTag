@@ -101,6 +101,10 @@ export default function App({ start = LANDING }: { start?: Origin } = {}): JSX.E
     workflow: () => taskRef.current ?? null
   })
   const { running, batchRunning, busy, jobs } = run
+  // The queued inputs reach the session's checks (mzPeak refusals per file).
+  const queued = jobs.map((j) => j.input).join('\n')
+  const { setBatchInputs } = session
+  useEffect(() => setBatchInputs(queued ? queued.split('\n') : []), [queued, setBatchInputs])
   // The Batch view's SDRF (P4): compared with the jobs as they finish.
   const sdrf = useSdrf(run.jobs, run.batchData, {
     nodes: typeof values['taxonomy_nodes'] === 'string' ? values['taxonomy_nodes'] : undefined,
@@ -344,7 +348,15 @@ export default function App({ start = LANDING }: { start?: Origin } = {}): JSX.E
   // The checks after a run, from its reports and FASTag's log lines.
   // The ion series of the run shown (its sent options: none is by), else the form's.
   const afterIons = run.shown ? (run.shown.params['ion_series'] ?? 'by') : values['ion_series']
-  const after = postRunChecks({ reports: run.reports.list, notes: run.shownNotes, species: values['species'] === true, ionSeries: afterIons, input: run.results?.input ?? '' })
+  const afterHybrid = run.shown ? (run.shown.params['ion_series_hybrid'] ?? 'by') : values['ion_series_hybrid']
+  const after = postRunChecks({
+    reports: run.reports.list,
+    notes: run.shownNotes,
+    species: values['species'] === true,
+    ionSeries: afterIons,
+    ionSeriesHybrid: afterHybrid,
+    input: run.results?.input ?? ''
+  })
   const afterInput = run.results?.input ?? ''
   // A finished run names its red flags after the run too (the panel over
   // the result tabs shows them).

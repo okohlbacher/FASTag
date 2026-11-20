@@ -73,7 +73,7 @@ test('Mass shifts: figures equal the oracles of the PXD014764 recon run', async 
   await expect(page.getByRole('grid', { name: 'Gap peaks' })).toHaveAttribute('aria-rowcount', String(o.deltaRows + 1))
 })
 
-test('the mass-gap chart: thin sticks, Unimod marks, legend, hover and keyboard tooltips, and a table view', async ({ page }) => {
+test('the mass-gap chart: thin sticks, UniMod marks, legend, hover and keyboard tooltips, and a table view', async ({ page }) => {
   await runOn(page, 'gate-recon')
   await page.getByRole('tab', { name: 'Mass shifts' }).click()
   const chart = page.locator('.mg-chart')
@@ -82,7 +82,7 @@ test('the mass-gap chart: thin sticks, Unimod marks, legend, hover and keyboard 
   expect(await chart.locator('.mg-stick').first().evaluate((e) => getComputedStyle(e).strokeWidth)).toBe('2px')
   expect(await chart.locator('.mg-mark').first().evaluate((e) => getComputedStyle(e).strokeWidth)).toBe('1px')
   await expect(chart.getByRole('list', { name: 'Legend' })).toContainText('Spectra per gap peak')
-  await expect(chart.getByRole('list', { name: 'Legend' })).toContainText(/Unimod delta at a gap peak \(\d+\)/)
+  await expect(chart.getByRole('list', { name: 'Legend' })).toContainText(/UniMod delta at a gap peak \(\d+\)/)
   await expect(chart.locator('.mg-label')).toContainText(['+10.009 Label:13C(6)15N(4)'])
   // Hover a stick: a tooltip with its count.
   const box = (await chart.locator('svg').boundingBox())!
@@ -103,10 +103,12 @@ test('the mass-gap chart: thin sticks, Unimod marks, legend, hover and keyboard 
   await expect(chart.locator('.mg-stick.on')).toHaveCount(1)
   await page.keyboard.press('Escape')
   await expect(chart.getByRole('tooltip')).toHaveCount(0)
-  // Unimod marks off and on.
-  await page.getByRole('checkbox', { name: 'Unimod marks' }).uncheck()
-  await expect(chart.locator('.mg-mark')).toHaveCount(0)
-  await page.getByRole('checkbox', { name: 'Unimod marks' }).check()
+  // Only the marks near a gap peak by default (round 6, 27); every one on request.
+  const near = await chart.locator('.mg-mark').count()
+  await expect(chart.locator('.mg-mark:not(.hit)')).toHaveCount(0)
+  await page.getByRole('checkbox', { name: 'All UniMod marks' }).check()
+  expect(await chart.locator('.mg-mark').count()).toBeGreaterThan(near)
+  await page.getByRole('checkbox', { name: 'All UniMod marks' }).uncheck()
   // The table view has every value.
   await chart.getByRole('button', { name: 'Table' }).click()
   const t = chart.getByRole('grid', { name: 'Gap peaks' })

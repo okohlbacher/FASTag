@@ -116,6 +116,20 @@ describe('ResultsTable', () => {
     expect(mock.resultsQueryCalls).toHaveLength(1)
   })
 
+  // Round 6, 13: a run without a database filter writes '-' in every row:
+  // no Database hit column and no filter that could only find 0 rows.
+  it('leaves the Database hit column and filter out when the run had no database filter', async () => {
+    const mock = installMockBridge()
+    mock.resultsColumns = ['spectrum', 'tag', 'evalue', 'fasta_hit']
+    mock.resultsRows = [['scan=1', 'PEPTIDE', '0.01', '-'], ['scan=2', 'PEPT', '0.02', '-']]
+    render(<ResultsTable path="/d/x.tags.tsv" />)
+    await flush()
+    expect(screen.getAllByRole('columnheader').map((h) => h.getAttribute('aria-label'))).toEqual(['Spectrum', 'Tag', 'E-value'])
+    expect(screen.queryByRole('button', { name: 'In database' })).toBeNull()
+    expect(screen.queryByText('Not checked')).toBeNull()
+    expect(autoWidths(['fasta_hit'], [['fwd']]).fasta_hit).toBeGreaterThanOrEqual(120)
+  })
+
   it('filters fasta_hit with a segmented control, and draws a small E-value as a × 10^n', async () => {
     const mock = installMockBridge()
     mock.resultsColumns = ['spectrum', 'tag', 'evalue', 'fasta_hit']

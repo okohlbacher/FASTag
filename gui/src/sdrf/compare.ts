@@ -527,7 +527,7 @@ const fieldWords = (fs: readonly FieldId[]): string => fs.map((f) => FIELD_LABEL
 /// A job's verdict: the fields that differ (✗), else consistent (✓), and
 /// after either the run settings that differ from the SDRF (≠), which are
 /// never a mismatch.
-function verdict(fields: Record<FieldId, FieldResult>): Verdict {
+export function verdict(fields: Record<FieldId, FieldResult>): Verdict {
   const mismatches = FIELDS.filter((f) => fields[f].state === 'mismatch')
   const settings = FIELDS.filter((f) => fields[f].state === 'setting_differs')
   const set = settings.length ? `≠ run setting: ${fieldWords(settings)}` : ''
@@ -539,7 +539,14 @@ function verdict(fields: Record<FieldId, FieldResult>): Verdict {
   const withSet = (t: string): string => [t, set, open].filter(Boolean).join('; ')
   if (mismatches.length) return { state: 'checked', text: withSet(`✗ ${fieldWords(mismatches)}`), mismatches, settings }
   const checked = FIELDS.filter((f) => fields[f].state === 'match' || fields[f].state === 'genus')
+  // An annotated organism called present below the top call: not wrong,
+  // and not the whole of a consistent verdict.
+  const below = FIELDS.filter((f) => fields[f].state === 'present_not_called')
+  const belowText = below.length ? `annotated ${fieldWords(below)} present but below the top call` : ''
+  if (checked.length && below.length)
+    return { state: 'checked', text: withSet(`✓ other fields consistent; ${belowText}`), mismatches: [], settings }
   if (checked.length) return { state: 'checked', text: withSet('✓ consistent'), mismatches: [], settings }
+  if (below.length) return { state: 'checked', text: withSet(belowText.charAt(0).toUpperCase() + belowText.slice(1)), mismatches: [], settings }
   return settings.length ? { state: 'checked', text: set, mismatches: [], settings } : { state: 'unchecked', text: '? nothing to compare', mismatches: [] }
 }
 

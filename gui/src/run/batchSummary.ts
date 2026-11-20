@@ -61,7 +61,7 @@ export const COLUMN_LABEL: Record<SummaryColumn, string> = {
   protease: 'Protease',
   label: 'Label',
   alkylation: 'Alkylation',
-  ms2: 'MS/MS spectra',
+  ms2: 'MS2 spectra',
   yield: 'Tagged (E ≤ 0.01)',
   charge: 'Charges 2+ / 3+ / 4+',
   analyzer: 'Analyzer, resolution',
@@ -146,9 +146,13 @@ export type SentReport =
 /// kit are categories a majority can count.
 export function qcCells(text: string | null | undefined): Record<(typeof QC_COLUMNS)[number], Cell> {
   const rows = new Map<string, string>()
+  const notes = new Map<string, string>()
   for (const line of (text ?? '').split(/\r?\n/).slice(1)) {
     const f = line.split('\t')
-    if (f.length >= 3 && !rows.has(f[1])) rows.set(f[1], f[2])
+    if (f.length >= 3 && !rows.has(f[1])) {
+      rows.set(f[1], f[2])
+      if (f[4]) notes.set(f[1], f[4])
+    }
   }
   const get = (k: string): string | undefined => rows.get(k)
   const none = (what: string): Cell => ({ text: 'not in the report', call: null, note: `the QC report has no ${what}` })
@@ -163,7 +167,7 @@ export function qcCells(text: string | null | undefined): Record<(typeof QC_COLU
     const v = num(get(`precursor_charge_${z}_share`))
     return v == null ? '–' : `${Math.round(v * 100)}%`
   }
-  // The analyzers that took MS/MS spectra, each with its resolution.
+  // The analyzers that took MS2 spectra, each with its resolution.
   const analyzers = [...rows.keys()].filter((k) => /^count_ms2_./.test(k) && (num(rows.get(k)) ?? 0) > 0).map((k) => k.slice('count_ms2_'.length))
   const res = (a: string): string => {
     const v = get(`resolution_${a}_ms2`)
@@ -171,15 +175,30 @@ export function qcCells(text: string | null | undefined): Record<(typeof QC_COLU
   }
   const instrument = get('instrument_model')
   const kit = get('reporter_compatible_kits')
+  // RunQC writes "none" whenever no kit is compatible, also when no kit
+  // could be assessed: the reporter_<kit> states tell the two apart. Not
+  // assessable is no call, and stays out of the majority.
+  const kitStates = [...rows].filter(([k, v]) => /^reporter_/.test(k) && KIT_STATES.includes(v))
+  const unassessed = kit === 'none' && kitStates.length > 0 && kitStates.every(([, v]) => v === 'not_assessable')
+  const why = [...new Set(kitStates.map(([k]) => (notes.get(k) ?? '').replace(/^Not assessable: /, '').replace(/\.$/, '')).filter(Boolean))]
+  const kitCell: Cell =
+    kit == null
+      ? none('isobaric kit row')
+      : unassessed
+        ? { text: 'Not assessable', call: null, note: `no kit could be assessed${why.length ? `: ${why.join('; ')}` : ''}` }
+        : { text: kit, call: kit, note: 'isobaric kits whose reporters are present' }
   return {
-    ms2: ms2 == null ? none('MS/MS count') : { text: ms2.toLocaleString('en-US'), call: null, note: 'MS/MS spectra read' },
-    yield: y == null ? none('tag yield') : { text: `${(y * 100).toFixed(1)}%`, call: null, note: 'share of MS/MS spectra with a tag of E-value ≤ 0.01' },
+    ms2: ms2 == null ? none('MS2 count') : { text: ms2.toLocaleString('en-US'), call: null, note: 'MS2 spectra read' },
+    yield: y == null ? none('tag yield') : { text: `${(y * 100).toFixed(1)}%`, call: null, note: 'share of MS2 spectra with a tag of E-value ≤ 0.01' },
     charge: { text: [2, 3, 4].map(share).join(' / '), call: null, note: 'shares of the precursor charges 2, 3 and 4' },
-    analyzer: analyzers.length ? { text: analyzers.map((a) => `${a}${res(a)}`).join(', '), call: null, note: 'the analyzers of the MS/MS spectra, with the resolution stated or measured' } : none('analyzer counts'),
+    analyzer: analyzers.length ? { text: analyzers.map((a) => `${a}${res(a)}`).join(', '), call: null, note: 'the analyzers of the MS2 spectra, with the resolution stated or measured' } : none('analyzer counts'),
     instrument: instrument && instrument !== 'n/a' ? { text: instrument, call: instrument, note: 'the instrument model the file names' } : none('instrument model'),
-    kit: kit != null ? { text: kit === 'none' ? 'none' : kit, call: kit, note: 'isobaric kits whose reporters are present' } : none('isobaric kit row')
+    kit: kitCell
   }
 }
+
+// The states of a reporter_<kit> row (RunQC.cpp KitCall).
+const KIT_STATES = ['present', 'absent', 'not_assessable']
 
 const fmtN = (n: number): string => n.toLocaleString('en-US')
 

@@ -52,6 +52,9 @@ export interface Results {
   // Opened from disk, and the run record says the run that last wrote it
   // did not finish (history.rs): withheld as incomplete.
   recorded?: { status: 'cancelled' | 'failed'; end: number }
+  // Opened from History for the run of @p input, whose outputs a later
+  // run (of @p by, ended @p end) overwrote: that later run is shown.
+  replaced?: { input: string; by: string; end: number }
 }
 
 // The last run that finished, for the summary over the form, with the

@@ -1252,7 +1252,7 @@ input::placeholder, textarea::placeholder { font-family: var(--font-sans); font-
 /* A group waiting for its report: said once, with its Turn on. */
 .group-needs { display: flex; align-items: center; gap: var(--space-2); flex-wrap: wrap; padding: var(--space-2) var(--space-3); border: 1px dashed var(--border); border-radius: var(--radius-sm); font-size: var(--text-xs); color: var(--muted-foreground); }
 .group-needs span { flex: 0 1 auto; }
-.group-needs button { margin-left: auto; }
+.group-needs button { margin-left: 0; }
 /* The Preset select first in its row, in the same place for every workflow. */
 .preset-pick { display: inline-flex; align-items: center; gap: var(--space-2); }
 .preset-pick .sublabel { font-size: var(--text-xs); color: var(--muted-foreground); }
@@ -1333,3 +1333,5 @@ dl.qc-strip .stat dd { margin: 0; font-size: var(--text-md); font-weight: 600; }
 .view-setup details.advanced > summary.card-head { padding: 0; min-height: 0; }
 .view-setup details.advanced > .adv-body { padding: var(--space-2) 0 var(--space-2); }
 .view-setup details.advanced > summary.card-head h2 { margin: 0; }
+/* A filter that needs identifications the run was not given. */
+.seg-opt.off { opacity: 0.5; cursor: not-allowed; }

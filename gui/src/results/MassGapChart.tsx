@@ -115,7 +115,9 @@ export default function MassGapChart({ bins, peaks = [], window, windowAssumed =
   // The modification window first: where the bundled deltas lie.
   const [range, setRange] = useState<GapRange>('mods')
   const [view, setView] = useState<'chart' | 'table'>('chart')
-  const [showMarks, setShowMarks] = useState(true)
+  // Only the marks near a gap peak by default: every bundled delta over
+  // -150 to +400 Da would swamp a run's few bars.
+  const [allMarks, setAllMarks] = useState(false)
   const [active, setActive] = useState<number | null>(null)
   const [hover, setHover] = useState<number | null>(null)
   const id = useId()
@@ -144,10 +146,10 @@ export default function MassGapChart({ bins, peaks = [], window, windowAssumed =
     mark: nearestMark(b.gap, window),
     peak: peakOf(b)
   }))
-  const marks = showMarks ? marksIn(lo, hi) : []
   // A mark is drawn full when a gap peak of at least MIN_HIT spectra (the
   // CLI's min_bin default) lies within the window; single spectra do not.
   const hit = new Set(drawn.flatMap((d) => (d.mark && d.bin.spectra >= MIN_HIT ? [d.mark.name] : [])))
+  const marks = allMarks ? marksIn(lo, hi) : marksIn(lo, hi).filter((m) => hit.has(m.name))
 
   // Direct labels, sparingly: the CLI's explained peaks, then the fullest
   // shifted bins that sit on a mark; at most 5, never two within 70 px.
@@ -225,7 +227,7 @@ export default function MassGapChart({ bins, peaks = [], window, windowAssumed =
     { id: 'spectra', label: 'Spectra', num: true, text: (i) => fmt(sorted[i].spectra), key: (i) => sorted[i].spectra },
     {
       id: 'mark',
-      label: 'Unimod delta within window',
+      label: 'UniMod delta within window',
       text: (i) => {
         const m = nearestMark(sorted[i].gap, window)
         return m ? `${m.name} (${m.site})` : ''
@@ -288,7 +290,7 @@ export default function MassGapChart({ bins, peaks = [], window, windowAssumed =
               ))}
             </div>
             <label className="mg-toggle">
-              <input type="checkbox" checked={showMarks} onChange={(e) => setShowMarks(e.target.checked)} /> Unimod marks
+              <input type="checkbox" checked={allMarks} onChange={(e) => setAllMarks(e.target.checked)} /> All UniMod marks
             </label>
           </>
         )}
@@ -301,15 +303,13 @@ export default function MassGapChart({ bins, peaks = [], window, windowAssumed =
             <li>
               <span className="key stick" aria-hidden="true" /> Spectra per gap peak
             </li>
-            {showMarks && (
-              <>
-                <li>
-                  <span className="key mark" aria-hidden="true" /> Unimod delta at a gap peak ({fmt(marks.filter((m) => hit.has(m.name)).length)})
-                </li>
-                <li>
-                  <span className="key mark faint" aria-hidden="true" /> Other Unimod delta ({fmt(marks.filter((m) => !hit.has(m.name)).length)})
-                </li>
-              </>
+            <li>
+              <span className="key mark" aria-hidden="true" /> UniMod delta at a gap peak ({fmt(marks.filter((m) => hit.has(m.name)).length)})
+            </li>
+            {allMarks && (
+              <li>
+                <span className="key mark faint" aria-hidden="true" /> Other UniMod delta ({fmt(marks.filter((m) => !hit.has(m.name)).length)})
+              </li>
             )}
           </ul>
           <div

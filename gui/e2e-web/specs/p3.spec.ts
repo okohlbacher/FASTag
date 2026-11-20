@@ -6,7 +6,8 @@
 // In that fixture every tag has length 3 and no database hit, and 129
 // spectra share the prefix scan=1: the filters that cut it are the
 // spectrum substring, the E-value cutoff and the per-spectrum rule (the
-// length and hit filters still take part, as filters that keep every row).
+// length filter still takes part, as a filter that keeps every row). A run
+// without a database filter shows no Database hit column or filter.
 import type { Page } from '@playwright/test'
 import { test, expect, goTo, openApp, mockState } from './fixtures'
 import type { ResultsView } from '../../src/types'
@@ -93,7 +94,6 @@ test('filters commute: the order they are set in changes neither the view nor it
   type Step = (p: Page) => Promise<void>
   const steps: Step[] = [
     (p) => setBox(p, 'Min. length', '3'),
-    (p) => p.getByRole('button', { name: 'No database hit', exact: true }).click(),
     (p) => setBox(p, 'Spectrum contains', 'SCAN=11'),
     (p) => p.getByLabel('Per spectrum', { exact: true }).selectOption({ label: 'Best 2' }),
     (p) => setBox(p, 'Max. E-value', '50')
@@ -108,9 +108,10 @@ test('filters commute: the order they are set in changes neither the view nor it
     await expect.poll(() => shownCount(page)).toBe(ids.length)
     return { view, count: await shownCount(page), ids, dom: (await domRows(page)).slice(0, 10) }
   }
-  const a = await run([0, 1, 2, 3, 4])
-  const b = await run([4, 3, 2, 1, 0])
-  const c = await run([2, 0, 4, 1, 3])
+  const a = await run([0, 1, 2, 3])
+  await expect(page.getByRole('button', { name: 'No database hit', exact: true })).toHaveCount(0)
+  const b = await run([3, 2, 1, 0])
+  const c = await run([1, 0, 3, 2])
   expect(a.count).toBeGreaterThan(0)
   expect(a.count).toBeLessThan(2028)
   for (const x of [b, c]) {
@@ -134,7 +135,8 @@ test('an export equals the view: its rows, its order, the shown columns, as TSV 
   await page.getByRole('checkbox', { name: 'Charge' }).uncheck()
   const view = await lastView(page)
   const { rows, columns } = await viewRows(page, view)
-  const shown = columns.filter((c) => c !== 'charge')
+  // Not charge (unchecked), nor fasta_hit (no database filter: not shown).
+  const shown = columns.filter((c) => c !== 'charge' && c !== 'fasta_hit')
   const pick = shown.map((c) => columns.indexOf(c))
   const n = rows.length.toLocaleString('en-US')
   for (const [dest, format] of [

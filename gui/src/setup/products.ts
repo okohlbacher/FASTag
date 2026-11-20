@@ -128,6 +128,40 @@ function bareName(p: Product, engine?: unknown): string {
   return `${outputKind(p.param)}.${ext}`
 }
 
+/// The extension the alkylation report needs in @p values, when it must
+/// rise; null when it need not. The CLI places the alkylation report's tags
+/// on a shipped proteome (FASTag.cpp alkylation_only_db) only when no other
+/// report places tags (placements, shortlist, reduced FASTA, search
+/// configuration) and no protein database is given; otherwise on -recon_fasta
+/// or -fasta. The shipped proteomes need tags of 8 residues (human): the
+/// extension rises so that seed plus both ends reach them.
+export function alkylationExtension(values: V): string | null {
+  if (isActive('recon_fasta', values)) return null
+  if (['recon_out', 'shortlist_out', 'fasta_out', 'search_config_out'].some((n) => isActive(n, values))) return null
+  const seed = Number(text(values['tag_length']) || PARAM_BY_NAME.get('tag_length')?.default || 3)
+  const ext = Number(text(values['extension']) || PARAM_BY_NAME.get('extension')?.default || 0)
+  const need = Math.ceil((ALKYLATION_TAG - seed) / 2)
+  return Number.isFinite(seed) && Number.isFinite(ext) && ext < need ? String(need) : null
+}
+
+/// What turning product @p p on or off does beyond itself: on, the
+/// extension the alkylation report raises (@p raised remembers it); off,
+/// the extension restored when it is still the raised one (not edited
+/// since). Used by the Outputs card's toggle.
+export function toggleProduct(
+  p: Product,
+  on: boolean,
+  values: V,
+  tagsOut: string,
+  raised: { from: ParamValue; to: ParamValue } | null
+): { values: V; raised: { from: ParamValue; to: ParamValue } | null } {
+  const next = setProduct(p, on, values, tagsOut)
+  if (p.param !== 'alkylation_out') return { values: next, raised }
+  if (on) return { values: next, raised: next['extension'] !== values['extension'] ? { from: values['extension'] ?? '', to: next['extension'] } : null }
+  if (raised && text(values['extension']) === text(raised.to)) next['extension'] = raised.from
+  return { values: next, raised: null }
+}
+
 /// The values after checking (@p on) or unchecking product @p p: its path or
 /// switch, what it needs, and, when it is turned off, nothing it needs
 /// (a needed product stays as it was).
@@ -147,15 +181,8 @@ export function setProduct(p: Product, on: boolean, values: V, tagsOut: string):
       if (typeof v === 'string' && cur !== '' && cur !== (typeof d === 'string' ? d : '')) continue
       next[k] = v
     }
-    // The alkylation report places tags on a shipped proteome when no
-    // protein database is given, which needs tags of 8 residues (human):
-    // the extension rises so that seed plus both ends reach them.
-    if (q.param === 'alkylation_out' && !isActive('recon_fasta', next)) {
-      const seed = Number(text(next['tag_length']) || PARAM_BY_NAME.get('tag_length')?.default || 3)
-      const ext = Number(text(next['extension']) || PARAM_BY_NAME.get('extension')?.default || 0)
-      const need = Math.ceil((ALKYLATION_TAG - seed) / 2)
-      if (Number.isFinite(seed) && Number.isFinite(ext) && ext < need) next['extension'] = String(need)
-    }
+    const raised = q.param === 'alkylation_out' ? alkylationExtension(next) : null
+    if (raised) next['extension'] = raised
     if (q.flag) next[q.flag] = true
     else if (PARAM_BY_NAME.get(q.param)?.type === 'bool') next[q.param] = true
     else if (q.param === 'usi_collection' && !text(next[q.param])) next[q.param] = USI_PLACEHOLDER

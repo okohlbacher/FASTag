@@ -902,7 +902,7 @@ export const PARAM_UI: Record<string, ParamUi> = {
         on: ['recon_fasta', 'recon_out', 'shortlist_out', 'fasta_out', 'search_config_out'],
         replaced: true,
         say: 'a protein database for the placements or the shortlist',
-        note: 'the alkylation report uses the Protein database of Placement on the database instead, which the placements or the shortlist read'
+        note: 'the alkylation report places on the Protein database, or on the Filter database when no Protein database is set'
       }
     ],
     help: {
@@ -1228,11 +1228,13 @@ export const PARAM_UI: Record<string, ParamUi> = {
   },
   digest_models_version: {
     section: 'Digest and labels',
-    // FASTag.cpp: a custom -digest_models file replaces the shipped and the
-    // v2 models (the CLI warns that the version is ignored).
-    depends: [DIGEST_OFF, { on: 'digest_models', replaced: true, note: 'the protease models file given replaces the shipped and the v2 models' }],
+    // FASTag.cpp: a custom -digest_models file decides the model table, but
+    // v2 still loads its calibration and writes the v2 rows (p_correct), so
+    // the value is sent with a models file too.
+    depends: [DIGEST_OFF],
     help: {
-      text: 'Which protease models the digest report uses: the shipped ones (as in 1.11) or v2. v2 is not validated on held-out data.'
+      text: 'Which protease models the digest report uses: the shipped ones (as in 1.11) or v2. v2 is not validated on held-out data.',
+      tip: "With a custom models file, v2 only adds the calibrated v2 rows; the file's models are used as given."
     }
   },
   dump_spectrum: {
