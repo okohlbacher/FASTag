@@ -105,7 +105,7 @@ describe('live: failure and stale results', () => {
     expect(screen.getByRole('alert').textContent).toContain('ConversionError')
   })
 
-  it('after B fails, the Species tab no longer shows A\'s taxa and names B; a species-off run has no badge', async () => {
+  it('after B fails, A\'s taxa are gone and no Species tab stands for a report B did not write; a species-off run has no tab', async () => {
     const mock = installMockBridge()
     mock.speciesResult = {
       path: '/s/A.tags.species.tsv',
@@ -123,9 +123,9 @@ describe('live: failure and stale results', () => {
     await pick(mock, '/s/B.mzML')
     await click(runButton())
     await done(mock, false)
-    await click(screen.getByRole('tab', { name: /Species/ }))
+    // B wrote no species report: no Species tab, and A's taxa are nowhere.
+    expect(screen.queryByRole('tab', { name: /Species/ })).toBeNull()
     expect(c.querySelector('.tabpanel')!.textContent).not.toContain('Escherichia')
-    expect(c.querySelector('.tabpanel')!.textContent).toContain('B.mzML')
     await click(field(c, 'species'))
     await click(runButton())
     await done(mock)

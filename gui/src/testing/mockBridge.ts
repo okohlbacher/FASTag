@@ -296,7 +296,8 @@ export function installMockBridge(): MockBridge {
       end: Date.now(),
       cleanup: r.cleanup ?? { removed: [], renamed: [], failed: [] },
       params: run.call.params,
-      tags: null
+      tags: null,
+      ...(typeof (run.call as { workflow?: unknown }).workflow === 'string' ? { workflow: (run.call as { workflow?: string }).workflow } : {})
     })
   }
   const closeListeners: ((what: 'close' | 'quit') => void)[] = []
@@ -649,7 +650,16 @@ export function installMockBridge(): MockBridge {
       mock.outputsCheckCalls.push(call)
       // As fastag.rs outputs_check: every output resolved like run() does.
       const outputs = [...new Set(Object.values(mockOutputs(call)).filter((p): p is string => !!p))]
-      return Promise.resolve({ outputs, existing: outputs.filter((p) => mock.existingOutputs.includes(p)) })
+      // As outputs.rs clashes: an output that is one of the run's inputs.
+      const inputs = new Set([call.in, ...(manifest.params as { name: string; type: string }[])
+        .filter((p) => p.type === 'input-file')
+        .map((p) => call.params?.[p.name])
+        .filter((v): v is string => typeof v === 'string' && v !== '')])
+      return Promise.resolve({
+        outputs,
+        existing: outputs.filter((p) => mock.existingOutputs.includes(p) && !inputs.has(p)),
+        clashes: outputs.filter((p) => inputs.has(p))
+      })
     },
     historyList: (limit) => Promise.resolve(mock.history.slice(0, limit ?? 50)),
     historyOf: (path) => Promise.resolve(mock.history.find((r) => r.outputs.includes(path)) ?? null),
@@ -680,7 +690,7 @@ export function installMockBridge(): MockBridge {
       const r = mock.history.find((h) => h.id === id)
       const i = r ? r.argv.indexOf('-out', 1) : -1
       if (!r?.params || i < 0 || i + 1 >= r.argv.length) return Promise.reject(new Error('no parameters'))
-      return Promise.resolve({ in: r.input, out: r.argv[i + 1], params: r.params })
+      return Promise.resolve({ in: r.input, out: r.argv[i + 1], params: r.params, ...(r.workflow ? { workflow: r.workflow } : {}) })
     },
     leftovers: () => Promise.resolve([...mock.leftoverFiles]),
     sweepLeftovers: (paths) => {

@@ -8,7 +8,7 @@ import { dirName } from '../app/paths'
 import { folderPath } from './batch'
 import type { SdrfComparison } from '../sdrf/compare'
 import { samePath } from '../sdrf/SdrfPanel'
-import { COLUMN_LABEL, majorityWords, MIN_CALLS, summaryTsv, type Summary } from './batchSummary'
+import { columnLabel, majorityWords, MIN_CALLS, summaryTsv, type Summary } from './batchSummary'
 
 export interface SummaryTableProps {
   summary: Summary
@@ -89,7 +89,7 @@ export default function SummaryTable({ summary, busy, outDir, onShow, sdrf, prot
               </th>
               {summary.columns.map((k) => (
                 <th scope="col" key={k}>
-                  {COLUMN_LABEL[k]}
+                  {columnLabel(k, summary.rank)}
                 </th>
               ))}
               {sdrf && <th scope="col">SDRF</th>}

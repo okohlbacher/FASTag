@@ -417,6 +417,7 @@ mod tests {
             cleanup: Cleanup::default(),
             params: None,
             tags: None,
+            workflow: None,
         }
     }
 

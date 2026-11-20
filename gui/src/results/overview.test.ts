@@ -71,7 +71,7 @@ describe('Overview model: calls', () => {
   it('top genus from the ranking, labelled as a ranking, not a presence call', () => {
     const o = overviewOf(CLI_CASES.v112)
     expect(tile(o, 'genus').value).toBe('Homo')
-    expect(tile(o, 'genus').note).toMatch(/q = <1e-300; ranked first of 50 genera.*not a presence call/)
+    expect(tile(o, 'genus').note).toMatch(/q = <1e-300; ranked first of 50 taxa at genus rank.*not a presence call/)
   })
 
   it('top genus from -species_call when present, with the other present genera', () => {
@@ -197,7 +197,7 @@ describe('Overview model: calls', () => {
       const o = overviewOf(c)
       expect(o.lowEvidence, c.name).toBe(false)
       expect(o.cutoffApplied, c.name).toBe(false)
-      expect(o.checks, c.name).toContainEqual({ tone: 'muted', text: expect.stringMatching(/^Evidence cutoff not applied: this run did not count tagged spectra/) })
+      expect(o.checks, c.name).toContainEqual({ tone: 'muted', gates: true, text: expect.stringMatching(/^Evidence cutoff not applied: this run did not count tagged spectra/) })
       for (const id of ['protease', 'genus', 'label']) expect(tile(o, id).note, `${c.name} ${id}`).toMatch(/[Ee]vidence cutoff \(1,000 tagged spectra\) not applied/)
     }
     // 686 MS2 spectra: the Da run's calls are what the CLI wrote.
@@ -228,7 +228,8 @@ describe('Overview model: instrument', () => {
 
 describe('Overview model: checks and caveats', () => {
   it('the acquisition check line when the CLI wrote one; "not checked" otherwise', () => {
-    expect(overviewOf(CLI_CASES.v112).checks).toContainEqual({ tone: 'ok', text: expect.stringMatching(/^Acquisition check: DDA/) })
+    // Short, with the CLI's reasoning on request.
+    expect(overviewOf(CLI_CASES.v112).checks).toContainEqual({ tone: 'ok', text: 'Acquisition: DDA', detail: expect.any(String) })
     expect(overviewOf(CLI_CASES.v111).checks).toContainEqual({ tone: 'muted', text: expect.stringMatching(/not checked/) })
   })
 
@@ -322,7 +323,7 @@ describe('Overview card text: tiny numbers and punctuation', () => {
     const reports = [parseReport(c.digest, '/d/a.digest.tsv'), parseReport(c.label, '/d/a.label.tsv')]
     const o = buildOverview({ log: logLines(c), reports, species, census: null, params: c.params, instrument: null })
     const note = tile(o, 'genus').note
-    expect(note).toMatch(/^q = 3\.2e-119; ranked first of 50 genera by adjusted count, not a presence call\. Evidence cutoff/)
+    expect(note).toMatch(/^q = 3\.2e-119; ranked first of 50 taxa at genus rank by adjusted count, not a presence call\. Evidence cutoff/)
     expect(note).not.toMatch(/0\.0{6,}/)
   })
 

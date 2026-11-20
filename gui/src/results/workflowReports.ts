@@ -42,7 +42,23 @@ export function workflowReportsOf(o: ResolvedOutputs): WorkflowReports {
   return w
 }
 
-/// The paths of @p w, by kind (files excluded).
+/// The shortlist's reduced FASTA and engine configuration of @p w that
+/// exist (@p exists), and the labels of those that do not: a file the run
+/// did not write gets no Reveal button, and the Overview names it.
+export async function workflowFiles(
+  w: WorkflowReports,
+  exists: (p: string) => Promise<boolean>
+): Promise<{ files: { label: string; path: string }[]; missing: string[] }> {
+  const files: { label: string; path: string }[] = []
+  const missing: string[] = []
+  for (const f of w.files ?? []) {
+    if (await exists(f.path)) files.push(f)
+    else missing.push(f.label.charAt(0).toUpperCase() + f.label.slice(1))
+  }
+  return { files, missing }
+}
+
+/// The paths of @p w, by kind (files excluded: workflowFiles checks them).
 export function workflowPaths(w: WorkflowReports): [WorkflowKind, string][] {
   return (['qc', 'shortlist', 'triage', 'censusSummary', 'deltaSpectra', 'deltaCounts'] as const)
     .filter((k) => !!w[k])
@@ -74,8 +90,33 @@ export function sniffWorkflow(text: string, path = ''): WorkflowKind | null {
   if (/^#[^\n]*protein shortlist/i.test(text) || has('rank', 'accession', 'kept')) return 'shortlist'
   if (has('spectrum', 'status', 'n_peaks')) return 'triage'
   if (has('spectrum', 'delta', 'row', 'interp')) return 'deltaSpectra'
-  if (/\.delta_counts\.tsv$/i.test(baseName(path)) || has('key', 'value')) return /\.delta_counts\.tsv$/i.test(baseName(path)) ? 'deltaCounts' : null
+  if (has('key', 'value')) {
+    // The accounting by its keys (FASTag.cpp -delta_counts_out): the MS2 it
+    // counts and its sum checks; a renamed file is still one.
+    const keys = new Set(text.split(/\r?\n/).slice(1).map((l) => l.split('\t')[0]))
+    if (keys.has('ms2_placed') && keys.has('ms2_tagged') && [...keys].some((k) => k.startsWith('check_'))) return 'deltaCounts'
+    return /\.delta_counts\.tsv$/i.test(baseName(path)) ? 'deltaCounts' : null
+  }
   return null
+}
+
+/// A tags table (-out) by its header: spectrum and tag.
+export function sniffTags(text: string): boolean {
+  const head = headerOf(text)
+  return head.includes('spectrum') && head.includes('tag')
+}
+
+/// A species report (-species_out) by its header: rank, taxid and name.
+export function sniffSpecies(text: string): boolean {
+  const head = headerOf(text)
+  return ['rank', 'taxid', 'name'].every((c) => head.includes(c))
+}
+
+/// A long-form report of the Digest tab (digest, label, mass-gap,
+/// alkylation): section, key and value, and none of the workflow reports.
+export function sniffLongForm(text: string): boolean {
+  const head = headerOf(text)
+  return ['section', 'key', 'value'].every((c) => head.includes(c))
 }
 
 /// The tab a workflow report opens in.

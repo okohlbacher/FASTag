@@ -36,6 +36,47 @@ pub fn output_options() -> &'static [String] {
     })
 }
 
+/// The input-file options of FASTag (the manifest's `input-file` parameters,
+/// -in among them): the spectra, the databases (fasta, recon_fasta,
+/// shortlist_background, ...), the identification file and the taxonomy. A
+/// run never writes one of them and its cleanup never removes one.
+pub fn input_options() -> &'static [String] {
+    static OPTIONS: std::sync::OnceLock<Vec<String>> = std::sync::OnceLock::new();
+    OPTIONS.get_or_init(|| {
+        let m: serde_json::Value = serde_json::from_str(MANIFEST).expect("params.generated.json is JSON");
+        m["params"]
+            .as_array()
+            .map(|ps| {
+                ps.iter()
+                    .filter(|p| p["type"] == "input-file")
+                    .filter_map(|p| p["name"].as_str().map(String::from))
+                    .collect()
+            })
+            .unwrap_or_default()
+    })
+}
+
+/// Every file @p args (as build_args produced them) reads: the value of each
+/// input-file option, -in included, without empty ones.
+pub fn inputs_of(args: &[String]) -> Vec<String> {
+    let options = input_options();
+    let mut found = Vec::new();
+    let mut i = 0;
+    while i < args.len() {
+        if let Some(name) = args[i].strip_prefix('-') {
+            if options.iter().any(|o| o == name) {
+                if let Some(v) = args.get(i + 1).filter(|v| !v.is_empty()) {
+                    found.push(v.clone());
+                }
+                i += 2;
+                continue;
+            }
+        }
+        i += 1;
+    }
+    found
+}
+
 /// The reports the CLI derives from -out when a switch is on without a path
 /// of their own (FASTag.cpp defaultReportPath): (switch, option, suffix).
 const DERIVED: [(&str, &str, &str); 4] = [
@@ -121,11 +162,34 @@ fn same_file(a: &Path, b: &Path) -> bool {
     a == b || matches!((a.canonicalize(), b.canonicalize()), (Ok(x), Ok(y)) if x == y)
 }
 
+fn is_input(p: &Path, inputs: &[PathBuf]) -> bool {
+    inputs.iter().any(|i| same_file(p, i))
+}
+
+/// The outputs that name the same file as one of @p inputs (compared as
+/// canonical paths): a run that wrote one would destroy what it reads, so it
+/// is refused before it starts (the CLI's OutputGuard refuses it too, and
+/// the cleanup of that failed run must not then remove the input).
+pub fn clashes(paths: &[PathBuf], inputs: &[PathBuf]) -> Vec<PathBuf> {
+    paths.iter().filter(|p| is_input(p, inputs)).cloned().collect()
+}
+
+/// The refusal of a run with an output that is one of its inputs.
+pub fn clash_reason(clash: &[PathBuf]) -> String {
+    let list: Vec<String> = clash.iter().map(|p| p.display().to_string()).collect();
+    format!(
+        "{} {} also an input of this run; writing {} would destroy it. Choose another output name.",
+        list.join(", "),
+        if list.len() == 1 { "is" } else { "are" },
+        if list.len() == 1 { "it" } else { "them" }
+    )
+}
+
 /// The outputs that already hold a regular file before the run: the GUI asks
 /// before it overwrites them (GUI-DESIGN 6.4, "a file that already exists is
-/// confirmed before the run, never after"). @p input is never an output.
-pub fn existing(paths: &[PathBuf], input: &Path) -> Vec<PathBuf> {
-    paths.iter().filter(|p| is_regular_file(p) && !same_file(p, input)).cloned().collect()
+/// confirmed before the run, never after"). An input is never an output.
+pub fn existing(paths: &[PathBuf], inputs: &[PathBuf]) -> Vec<PathBuf> {
+    paths.iter().filter(|p| is_regular_file(p) && !is_input(p, inputs)).cloned().collect()
 }
 
 /// What the cleanup did, for the done event, the log and the run record.
@@ -159,22 +223,23 @@ pub fn incomplete_name(p: &Path) -> PathBuf {
 /// confirmed for overwriting before it started (start_run refuses otherwise),
 /// so it is this run's output too: after a cancel or failure no file, of this
 /// run or an earlier one, is left at a resolved output path, and no report of
-/// an earlier run sits next to this run's missing table. @p input and
+/// an earlier run sits next to this run's missing table. Every file of
+/// @p inputs (the spectra, the databases, the identification file, ...) and
 /// anything that is not a regular file (/dev/null, a folder) are never
 /// touched.
-pub fn cleanup(paths: &[PathBuf], input: &Path) -> Cleanup {
-    cleanup_with(paths, input, |p| std::fs::remove_file(p), |a, b| std::fs::rename(a, b))
+pub fn cleanup(paths: &[PathBuf], inputs: &[PathBuf]) -> Cleanup {
+    cleanup_with(paths, inputs, |p| std::fs::remove_file(p), |a, b| std::fs::rename(a, b))
 }
 
 pub fn cleanup_with(
     paths: &[PathBuf],
-    input: &Path,
+    inputs: &[PathBuf],
     remove: impl Fn(&Path) -> std::io::Result<()>,
     rename: impl Fn(&Path, &Path) -> std::io::Result<()>,
 ) -> Cleanup {
     let mut c = Cleanup::default();
     for path in paths {
-        if !is_regular_file(path) || same_file(path, input) {
+        if !is_regular_file(path) || is_input(path, inputs) {
             continue;
         }
         let shown = path.display().to_string();
@@ -289,9 +354,9 @@ mod tests {
             }
             let paths = resolve(&resolved_outputs(&argv), Some(&d));
             // Overwrite confirmation: every earlier file is asked about.
-            assert_eq!(existing(&paths, &input).len(), files.len(), "{wf}: existing");
+            assert_eq!(existing(&paths, std::slice::from_ref(&input)).len(), files.len(), "{wf}: existing");
             // Cancel or failure: none is left behind.
-            let c = cleanup(&paths, &input);
+            let c = cleanup(&paths, std::slice::from_ref(&input));
             assert_eq!(c.removed.len(), files.len(), "{wf}: cleanup");
             assert!(files.iter().all(|f| !d.join(f).exists()), "{wf}: a file was left");
             assert!(input.exists());
@@ -314,7 +379,7 @@ mod tests {
         std::fs::write(&earlier, "an earlier result\n").unwrap();
         std::fs::write(&input, "spectra").unwrap();
         let paths = resolve(&v(&["a.tags.tsv", "a.digest.tsv", "a.mzML"]), Some(&d));
-        assert_eq!(existing(&paths, &input), vec![earlier.clone()]);
+        assert_eq!(existing(&paths, std::slice::from_ref(&input)), vec![earlier.clone()]);
         let _ = std::fs::remove_dir_all(&d);
     }
 
@@ -337,7 +402,7 @@ mod tests {
         // The run: writes new, truncates rewritten, has not reached untouched.
         std::fs::write(&new, "spectrum\ttag\n").unwrap();
         std::fs::write(&rewritten, "x").unwrap();
-        let c = cleanup(&paths, &input);
+        let c = cleanup(&paths, std::slice::from_ref(&input));
         assert_eq!(
             c.removed,
             vec![new.display().to_string(), rewritten.display().to_string(), untouched.display().to_string()]
@@ -348,6 +413,31 @@ mod tests {
         let _ = std::fs::remove_dir_all(&d);
     }
 
+    // A database reduction run with the reduced FASTA of an earlier run as its
+    // database: fasta_out names the database. The run is refused before it
+    // starts, and a cleanup never removes any input, not only the spectra.
+    #[test]
+    fn an_output_that_is_an_input_is_refused_and_never_cleaned_up() {
+        let d = tmp("clash");
+        let spectra = d.join("a.mzML");
+        let db = d.join("run01.reduced.fasta");
+        std::fs::write(&spectra, "spectra").unwrap();
+        std::fs::write(&db, ">P1\nPEPTIDE\n").unwrap();
+        let argv = v(&[
+            "-in", "a.mzML", "-out", "a.tags.tsv", "-recon_fasta", "run01.reduced.fasta", "-fasta_out", "./run01.reduced.fasta",
+            "-shortlist_background", "",
+        ]);
+        assert_eq!(inputs_of(&argv), v(&["a.mzML", "run01.reduced.fasta"]));
+        let inputs = resolve(&inputs_of(&argv), Some(&d));
+        let paths = resolve(&resolved_outputs(&argv), Some(&d));
+        assert_eq!(clashes(&paths, &inputs), vec![d.join("./run01.reduced.fasta")]);
+        assert!(clash_reason(&clashes(&paths, &inputs)).contains("also an input"));
+        assert!(existing(&paths, &inputs).is_empty(), "an input is not offered for overwriting");
+        let c = cleanup(&paths, &inputs);
+        assert!(c.removed.is_empty() && db.exists() && spectra.exists());
+        let _ = std::fs::remove_dir_all(&d);
+    }
+
     #[test]
     fn cleanup_renames_what_it_cannot_delete() {
         let d = tmp("rename");
@@ -355,12 +445,12 @@ mod tests {
         let paths = vec![out.clone()];
         std::fs::write(&out, "partial").unwrap();
         let denied = |_: &Path| Err(std::io::Error::from(std::io::ErrorKind::PermissionDenied));
-        let c = cleanup_with(&paths, Path::new("/nonexistent/in.mzML"), denied, |a, b| std::fs::rename(a, b));
+        let c = cleanup_with(&paths, &[PathBuf::from("/nonexistent/in.mzML")], denied, |a, b| std::fs::rename(a, b));
         assert_eq!(c.renamed, vec![format!("{}.incomplete", out.display())]);
         assert!(!out.exists() && d.join("a.tags.tsv.incomplete").exists());
         // Neither works: reported, not hidden.
         std::fs::write(&out, "partial").unwrap();
-        let c = cleanup_with(&paths, Path::new("/x"), denied, |_, _| Err(std::io::Error::from(std::io::ErrorKind::PermissionDenied)));
+        let c = cleanup_with(&paths, &[PathBuf::from("/x")], denied, |_, _| Err(std::io::Error::from(std::io::ErrorKind::PermissionDenied)));
         assert_eq!(c.failed, vec![out.display().to_string()]);
         let _ = std::fs::remove_dir_all(&d);
     }
@@ -369,8 +459,8 @@ mod tests {
     #[test]
     fn cleanup_never_touches_a_device() {
         let paths = resolve(&["/dev/null".to_string()], None);
-        assert!(existing(&paths, Path::new("/x")).is_empty());
-        assert!(cleanup(&paths, Path::new("/x")).is_empty());
+        assert!(existing(&paths, &[PathBuf::from("/x")]).is_empty());
+        assert!(cleanup(&paths, &[PathBuf::from("/x")]).is_empty());
         assert!(Path::new("/dev/null").exists());
     }
 

@@ -367,7 +367,7 @@ describe('dependency logic vs CLI defaults (no CLI needed)', () => {
   })
   it('tag_length is inert when tag_lengths replaces it (the CLI ignores it)', async () => {
     const { inertBecause } = await import('../paramLayout')
-    expect(inertBecause('tag_length', { tag_lengths: ['7', '8'] })).toBe('tag_lengths replaces it')
+    expect(inertBecause('tag_length', { tag_lengths: ['7', '8'] })).toBe('the seed lengths listed under Tagging, advanced replace it')
   })
   it('gap_penalty help shown in the GUI says, as the README does, that it decides the max_tags slots', () => {
     const d = PARAM_BY_NAME.get('gap_penalty')?.description

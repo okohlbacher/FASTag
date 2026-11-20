@@ -173,6 +173,10 @@ export interface Shown {
   workflow?: string
   /// The census summary's text, when the run wrote one.
   census?: string | null
+  /// The texts of the workflow reports the Overview reads (QC, shortlist,
+  /// mass-shift accounting and table), when the run wrote them; config: the
+  /// engine configuration was written.
+  texts?: { qc?: string | null; shortlist?: string | null; deltaCounts?: string | null; delta?: string | null; config?: boolean }
 }
 
 export interface RunState {
@@ -235,7 +239,8 @@ export type RunAction =
   | { type: 'BATCH_RUNNING'; on: boolean; ended?: BatchEnd }
   | { type: 'RESULTS'; update: Update<Results | null> }
   | { type: 'BATCH_MISS'; miss: RunState['batchMiss'] }
-  | { type: 'SPECIES'; species: SpeciesReport | null }
+  // speciesRun: replaced too when given (a report opened from another run).
+  | { type: 'SPECIES'; species: SpeciesReport | null; speciesRun?: RunState['speciesRun'] }
   | { type: 'REPORTS'; update: Update<Reports> }
   | { type: 'FAILURE'; failure: Failure | null }
   | { type: 'COPIED'; copied: RunState['copied'] }
@@ -488,7 +493,7 @@ export function runReducer(s: RunState, a: RunAction): RunState {
     case 'BATCH_MISS':
       return { ...s, batchMiss: a.miss }
     case 'SPECIES':
-      return { ...s, species: a.species }
+      return a.speciesRun === undefined ? { ...s, species: a.species } : { ...s, species: a.species, speciesRun: a.speciesRun }
     case 'REPORTS':
       return { ...s, reports: apply(a.update, s.reports) }
     case 'FAILURE':

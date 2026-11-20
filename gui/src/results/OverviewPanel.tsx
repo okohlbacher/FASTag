@@ -96,12 +96,23 @@ export default function OverviewPanel({ overview: o, input, busy, onAction, para
       </ul>
       )}
       <ul className="checks" aria-label="Checks">
-        {o.checks.map((c) => (
-          <li key={c.text} className={c.tone}>
-            {c.text}
-          </li>
-        ))}
+        {/* The evidence cutoff only next to a call it gates. */}
+        {o.checks
+          .filter((c) => !c.gates || tiles.calls.some((t) => t.tone === 'call' || t.tone === 'nocall' || t.tone === 'low'))
+          .map((c) => (
+            <li key={c.text} className={c.tone}>
+              {c.text}
+              {c.detail && (
+                <details className="check-detail">
+                  <summary>Why</summary>
+                  {c.detail}
+                </details>
+              )}
+            </li>
+          ))}
       </ul>
+      {/* Only when a row comes from a measured call: defaults alone say nothing about this run. */}
+      {o.measured && (
       <section className="suggested" aria-labelledby="suggested-h">
         <div className="suggested-head">
           <h3 id="suggested-h">Suggested search settings*</h3>
@@ -126,6 +137,7 @@ export default function OverviewPanel({ overview: o, input, busy, onAction, para
         </table>
         <p className="caveat muted">* {o.caveats.join(' ')}</p>
       </section>
+      )}
     </div>
   )
 }

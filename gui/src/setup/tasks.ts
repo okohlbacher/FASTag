@@ -143,7 +143,7 @@ export const TASKS: readonly Task[] = [
       recon_fasta: 'FASTA to shortlist from.',
       shortlist_background: 'Host proteome and contaminants, always added to the reduced FASTA.',
       search_engine: 'Engine to write a configuration for: Sage, Comet or MSFragger (experimental).',
-      shortlist_protease: 'Cleavage rule. Trypsin refuses clearly non-tryptic runs; Auto uses the protease FASTag detects.',
+      shortlist_protease: 'Cleavage rule. Trypsin refuses clearly non-tryptic runs; Auto uses the protease FASTag detects. With another protease only exact placements count.',
       variable_modifications: 'Also tagged as alternatives, which changes the tags and their placements; written into the engine configuration.'
     },
     outputs: ['out', 'shortlist_out', 'fasta_out', 'search_config_out'],

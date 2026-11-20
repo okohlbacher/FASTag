@@ -258,7 +258,7 @@ describe('what a summary cell says when a read goes wrong, and where notes show'
     // In the cell's text, so a screen reader reads it with the value; no
     // tooltip-only caveat.
     const label = within(bodyRows()[0]).getByText('none (label-free)').closest('td')!
-    expect(label.textContent).toMatch(/^none \(label-free\); CLI label call over/)
+    expect(label.textContent).toMatch(/^none \(label-free\); Label call over/)
     for (const td of bodyRows()[0].querySelectorAll<HTMLElement>('td.call-cell')) expect(td.getAttribute('title')).toBeNull()
     // Shown under each value by a keyboard-reachable toggle.
     expect(table().querySelectorAll('.cell-note')).toHaveLength(0)
@@ -269,7 +269,7 @@ describe('what a summary cell says when a read goes wrong, and where notes show'
     const notes = [...bodyRows()[0].querySelectorAll<HTMLElement>('td.call-cell .cell-note')]
     expect(notes).toHaveLength(4)
     for (const n of notes) expect(n.textContent!.replace(/^; /, '')).toBeTruthy()
-    expect(within(label).getByText(/^CLI label call over/).closest('.cell-note')).not.toBeNull()
+    expect(within(label).getByText(/^Label call over/).closest('.cell-note')).not.toBeNull()
   })
 
   it('an empty folder picked from the Batch input of Setup says so there', async () => {

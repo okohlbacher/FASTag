@@ -11,7 +11,7 @@ import { useEffect, useMemo, useState, type JSX } from 'react'
 import DataTable, { type Column } from './DataTable'
 import { baseName } from '../digestReport'
 import { revealLabel } from '../app/paths'
-import { spectrumHint } from '../ResultsTable'
+import { evalueText, spectrumHint } from '../ResultsTable'
 
 export type ReportKind = 'qc' | 'shortlist' | 'triage' | 'generic'
 
@@ -95,11 +95,28 @@ const FORMATS: Record<string, Format> = {
   rt: { label: 'RT (min)', text: (v) => (isNum(v) ? (Number(v) / 60).toFixed(2) : v), num: true },
   ident_rank: { label: 'Rank' },
   ident_score: { label: 'Identifiability', text: (v) => (isNum(v) ? Number(v).toFixed(3) : v) },
-  best_evalue: { label: 'Best E-value' },
+  best_evalue: { label: 'Best E-value', text: evalueText, num: true },
+  pre_best_evalue: { label: 'Best E-value before filtering', text: evalueText, num: true },
+  evalue: { label: 'E-value', text: evalueText, num: true },
   best_len: { label: 'Best tag length' },
+  pre_best_len: { label: 'Best tag length before filtering' },
+  best_min_conf: { label: 'Lowest residue confidence' },
+  best_mean_conf: { label: 'Mean residue confidence' },
+  pre_best_mean_conf: { label: 'Mean residue confidence before filtering' },
+  best_tic: { label: 'Tag intensity' },
+  tag_cover: { label: 'Tag coverage (m/z)' },
+  pre_tag_cover: { label: 'Tag coverage before filtering' },
+  charge_given: { label: 'Charge given' },
   charge_used: { label: 'Charge' },
+  index: { label: 'Index' },
   n_peaks: { label: 'Peaks' },
   n_peaks_kept: { label: 'Peaks kept' },
+  n_edges: { label: 'Residue steps' },
+  n_compl: { label: 'Complement pairs' },
+  int_gini: { label: 'Intensity spread (Gini)' },
+  n_found: { label: 'Tags found' },
+  n_reported: { label: 'Tags reported' },
+  status: { label: 'Status', text: (v) => v.replace(/_/g, ' ') },
   identified: {
     label: 'Identified',
     text: (v) => {
@@ -145,6 +162,105 @@ function qcRows(tsv: Tsv): QcRow[] {
 /// A row that says nothing: a count of 0 out of none ("0 of 0 …").
 const empty = (r: QcRow): boolean => /^0(\.0+)?$/.test(r.value) && (r.n === '0' || r.n === '-' || r.n === '')
 
+/// Rows that only say which format the report follows.
+const FORMAT_KEYS = new Set(['qc_version', 'run_report_version'])
+
+/// QC keys in words. A key not listed reads as its words (headText), with
+/// MS1, MS2, TMT and iTRAQ spelt as such.
+const QC_WORDS: Record<string, string> = {
+  version: 'FASTag version',
+  input: 'Input',
+  spectra_input: 'Spectra in the input',
+  spectra_read: 'Spectra read',
+  subsampled: 'Subsampled',
+  count_ms1: 'MS1 spectra',
+  count_ms2: 'MS2 spectra',
+  sps_ms3: 'SPS MS3 spectra',
+  ms2_tagged_e001: 'MS2 with a tag at E ≤ 0.01',
+  tag_yield: 'Tag yield (E ≤ 0.01)',
+  redundancy_ms2: 'MS2 clustered for redundancy',
+  redundancy_share: 'Redundant MS2 (spectrum clusters)',
+  redundancy_clusters: 'Spectrum clusters',
+  redundancy_largest: 'Largest spectrum cluster',
+  redundancy_pairs_compared: 'Spectrum pairs compared',
+  redundancy_components_split: 'Large groups split',
+  redundancy_tag_share: 'Redundant MS2 (same best tag)',
+  redundancy_tag_clusters: 'Same-tag clusters',
+  redundancy_tag_largest: 'Largest same-tag cluster',
+  redundancy_tag_pairs_compared: 'Same-tag pairs compared',
+  redundancy_tag_components_split: 'Large same-tag groups split',
+  reporter_compatible_kits: 'Compatible isobaric kits',
+  instrument_model: 'Instrument',
+  instrument_serial_number: 'Serial number',
+  start_timestamp: 'Started',
+  unknown_charge: 'Precursors without a charge',
+  isotope_error: 'Precursor isotope offsets',
+  ion_series: 'Ion series',
+  ion_series_by: 'Read as b/y ions',
+  ion_series_cz: 'Read as c/z ions',
+  pick_profile: 'Profile picking',
+  profile_ms2_picked: 'Profile MS2 centroided',
+  profile_ms2_kept: 'Profile MS2 tagged as profile'
+}
+const TOKEN_WORDS: Record<string, string> = { ms1: 'MS1', ms2: 'MS2', ms3: 'MS3', tmt: 'TMT', itraq: 'iTRAQ', sps: 'SPS' }
+
+/// A QC key in words: count_ms2_FTMS -> MS2 spectra, FTMS.
+export function qcKeyText(key: string): string {
+  if (Object.prototype.hasOwnProperty.call(QC_WORDS, key)) return QC_WORDS[key]
+  let m = /^precursor_charge_(\d+)$/.exec(key)
+  if (m) return m[1] === '0' ? 'Precursor charge unknown' : `Precursor charge ${m[1]}`
+  m = /^count_ms(\d)_(.+)$/.exec(key)
+  if (m) return `MS${m[1]} spectra, ${m[2]}`
+  m = /^analyzer_source_(.+)$/.exec(key)
+  if (m) return `Analyzer class from ${m[1] === 'none' ? 'nothing (unknown)' : m[1] === 'run' ? 'the run default' : `the ${m[1]}`}`
+  m = /^activation_(.+)$/.exec(key)
+  if (m) return `Activation: ${m[1]}`
+  m = /^charge_(.+)$/.exec(key)
+  if (m) return `Charge ${m[1]}`
+  m = /^resolution_(stated|measured|source)_(.+)$/.exec(key)
+  if (m) return `Resolution ${m[1]}, ${m[2].replace(/_ms(\d)$/, ' MS$1')}`
+  m = /^resolution_(.+)$/.exec(key)
+  if (m) return `Resolution, ${m[1].replace(/_ms(\d)$/, ' MS$1')}`
+  const words = key.split('_').map((w, i) => TOKEN_WORDS[w.toLowerCase()] ?? (/[A-Z]/.test(w) ? w : i === 0 ? w.charAt(0).toUpperCase() + w.slice(1) : w))
+  return words.join(' ')
+}
+
+/// One shown row of the QC table: a count merged with its share
+/// (precursor_charge_2 with precursor_charge_2_share: 97 (69.8%)).
+export interface QcLine {
+  key: string
+  label: string
+  value: string
+  n: string
+  desc: string
+  empty: boolean
+}
+
+const pct = (v: string): string => (isNum(v) ? `${(Number(v) * 100).toFixed(1)}%` : v)
+
+export function qcLines(rows: QcRow[]): QcLine[] {
+  const byKey = new Map(rows.map((r) => [r.key, r]))
+  const out: QcLine[] = []
+  for (const r of rows) {
+    if (FORMAT_KEYS.has(r.key)) continue
+    // A share row goes with its count.
+    if (r.key.endsWith('_share') && byKey.has(r.key.slice(0, -'_share'.length))) continue
+    const share = byKey.get(`${r.key}_share`)
+    const value = share && isNum(r.value) ? `${fmtInt(Number(r.value))} (${pct(share.value)})` : r.key.endsWith('_share') || r.key === 'tag_yield' ? pct(r.value) : isNum(r.value) && /^\d+$/.test(r.value) ? fmtInt(Number(r.value)) : r.value
+    out.push({ key: r.key, label: qcKeyText(r.key), value, n: r.n, desc: share ? `${r.desc} ${share.desc}` : r.desc, empty: empty(r) })
+  }
+  return out
+}
+
+/// The n most rows of @p lines count out of, said once over the section.
+function commonN(lines: QcLine[]): string | null {
+  const counts = new Map<string, number>()
+  for (const l of lines) if (l.n && l.n !== '-') counts.set(l.n, (counts.get(l.n) ?? 0) + 1)
+  let best: string | null = null
+  for (const [n, c] of counts) if (best === null || c > counts.get(best)!) best = n
+  return best
+}
+
 /// The headline numbers of a QC report (MS/MS read, tag yield, instrument,
 /// serial, start time, isobaric kit), each when the report has it.
 export function qcSummary(rows: QcRow[]): { label: string; value: string; title?: string }[] {
@@ -175,11 +291,12 @@ export function qcSummary(rows: QcRow[]): { label: string; value: string; title?
 
 function QcView({ tsv }: { tsv: Tsv }): JSX.Element {
   const rows = useMemo(() => qcRows(tsv), [tsv])
+  const lines = useMemo(() => qcLines(rows), [rows])
   const [all, setAll] = useState(false)
   const summary = qcSummary(rows)
   // The QC section first: the run settings are its context, not its result.
   const sections = [...new Set(rows.map((r) => r.sec))].sort((a, b) => (a === 'qc' ? -1 : b === 'qc' ? 1 : 0))
-  const hidden = rows.filter(empty).length
+  const hidden = lines.filter((l) => l.empty).length
   return (
     <div className="qc-view">
       {summary.length > 0 && (
@@ -194,28 +311,35 @@ function QcView({ tsv }: { tsv: Tsv }): JSX.Element {
       )}
       {hidden > 0 && (
         <label className="check-inline">
-          <input type="checkbox" checked={all} onChange={(e) => setAll(e.target.checked)} /> Show the {hidden} rows that count nothing (0 of 0)
+          <input type="checkbox" checked={all} onChange={(e) => setAll(e.target.checked)} /> Show {hidden} empty {hidden === 1 ? 'row' : 'rows'}
         </label>
       )}
-      {sections.map((sec) => (
-        <section key={sec} className="qc-section" aria-label={sec === 'run' ? 'Run' : sec === 'qc' ? 'Quality' : sec}>
-          <h3>{sec === 'run' ? 'Run settings and instrument' : sec === 'qc' ? 'Spectra and tags' : sec}</h3>
-          <table className="kv">
-            <tbody>
-              {rows
-                .filter((r) => r.sec === sec && (all || !empty(r)))
-                .map((r, i) => (
-                  // The row's sentence is its tooltip, not a column.
-                  <tr key={`${r.key}-${i}`} title={r.desc || undefined}>
-                    <th scope="row">{headText(r.key)}</th>
-                    <td className="mono">{r.value}</td>
-                    <td className="muted">{r.n && r.n !== '-' ? `n = ${r.n}` : ''}</td>
-                  </tr>
-                ))}
-            </tbody>
-          </table>
-        </section>
-      ))}
+      {sections.map((sec) => {
+        const secLines = lines.filter((l) => rows.some((r) => r.key === l.key && r.sec === sec))
+        const n = commonN(secLines)
+        return (
+          <section key={sec} className="qc-section" aria-label={sec === 'run' ? 'Run' : sec === 'qc' ? 'Quality' : sec}>
+            <h3>
+              {sec === 'run' ? 'Run settings and instrument' : sec === 'qc' ? 'Spectra and tags' : sec}
+              {n && <span className="muted small"> · counts of {fmtInt(Number(n))} spectra unless stated</span>}
+            </h3>
+            <table className="kv">
+              <tbody>
+                {secLines
+                  .filter((l) => all || !l.empty)
+                  .map((l, i) => (
+                    // The row's sentence is its tooltip, not a column.
+                    <tr key={`${l.key}-${i}`} title={l.desc || undefined}>
+                      <th scope="row">{l.label}</th>
+                      <td className="mono">{l.value}</td>
+                      <td className="muted">{l.n && l.n !== '-' && l.n !== n ? `of ${isNum(l.n) ? fmtInt(Number(l.n)) : l.n}` : ''}</td>
+                    </tr>
+                  ))}
+              </tbody>
+            </table>
+          </section>
+        )
+      })}
     </div>
   )
 }
@@ -224,6 +348,8 @@ function QcView({ tsv }: { tsv: Tsv }): JSX.Element {
 
 function ShortlistView({ tsv, files }: { tsv: Tsv; files: { label: string; path: string }[] }): JSX.Element {
   const columns = useMemo(() => columnsOf(tsv), [tsv])
+  // A file that cannot be revealed says why.
+  const [revealErr, setRevealErr] = useState<string | null>(null)
   const kept = tsv.columns.indexOf('kept')
   const nKept = kept >= 0 ? tsv.rows.filter((r) => r[kept] === '1').length : tsv.rows.length
   const ids = useMemo(() => Uint32Array.from(tsv.rows.map((_, i) => i)), [tsv])
@@ -244,11 +370,25 @@ function ShortlistView({ tsv, files }: { tsv: Tsv; files: { label: string; path:
       {files.length > 0 && (
         <div className="row tight">
           {files.map((f) => (
-            <button key={f.path} type="button" className="secondary small" title={f.path} onClick={() => void window.fastag.revealOutput(f.path, false).catch(() => {})}>
+            <button
+              key={f.path}
+              type="button"
+              className="secondary small"
+              title={f.path}
+              onClick={() => {
+                setRevealErr(null)
+                window.fastag.revealOutput(f.path, false).catch((e: unknown) => setRevealErr(`Cannot reveal ${baseName(f.path)}: ${e instanceof Error ? e.message : String(e)}`))
+              }}
+            >
               {revealLabel()}: {f.label} ({baseName(f.path)})
             </button>
           ))}
         </div>
+      )}
+      {revealErr && (
+        <p className="warn" role="alert">
+          {revealErr}
+        </p>
       )}
       <DataTable label="Protein shortlist" columns={columns} ids={ids} total={tsv.rows.length} keep={tsv} />
     </>
@@ -265,7 +405,7 @@ const FILTERS = [
 ] as const
 type Filter = (typeof FILTERS)[number]['id']
 
-function TriageView({ tsv }: { tsv: Tsv }): JSX.Element {
+function TriageView({ tsv, openSpectrum }: { tsv: Tsv; openSpectrum?: (spectrum: string) => void }): JSX.Element {
   // The ranking first: rank, score, identified, status, then what the spectrum is.
   const columns = useMemo(() => {
     const all = columnsOf(tsv)
@@ -275,6 +415,7 @@ function TriageView({ tsv }: { tsv: Tsv }): JSX.Element {
   }, [tsv])
   const st = tsv.columns.indexOf('status')
   const idc = tsv.columns.indexOf('identified')
+  const sp = tsv.columns.indexOf('spectrum')
   const [filter, setFilter] = useState<Filter>('all')
   const states = useMemo(() => (idc < 0 ? [] : tsv.rows.map((r) => idState(r[idc]))), [tsv, idc])
   const count = (f: Filter): number => (f === 'all' ? tsv.rows.length : states.filter((x) => x === f).length)
@@ -303,7 +444,15 @@ function TriageView({ tsv }: { tsv: Tsv }): JSX.Element {
         The score ranks spectra; it is not a quality call and not an error rate.
         {idc >= 0 && ' Unknown: the identifications neither name nor rule out the spectrum.'}
       </p>
-      <DataTable label="Spectra ranked by identifiability" columns={columns} ids={ids} total={tsv.rows.length} keep={tsv} />
+      <DataTable
+        label="Spectra ranked by identifiability"
+        columns={columns}
+        ids={ids}
+        total={tsv.rows.length}
+        keep={tsv}
+        onOpen={openSpectrum && sp >= 0 ? (i) => openSpectrum(tsv.rows[i][sp] ?? '') : undefined}
+        openLabel="Open in Spectrum"
+      />
     </>
   )
 }
@@ -319,9 +468,11 @@ export interface ReportTableProps {
   path: string
   /// Shortlist: the reduced FASTA and the engine configuration, when written.
   files?: { label: string; path: string }[]
+  /// Triage: open the spectrum of a row (its native ID) in the Spectrum tab.
+  openSpectrum?(spectrum: string): void
 }
 
-export default function ReportTable({ kind, path, files = [] }: ReportTableProps): JSX.Element {
+export default function ReportTable({ kind, path, files = [], openSpectrum }: ReportTableProps): JSX.Element {
   const { tsv, error } = useReport(path)
   return (
     <div className={`report-view report-${kind}`}>
@@ -339,7 +490,7 @@ export default function ReportTable({ kind, path, files = [] }: ReportTableProps
       ) : kind === 'shortlist' ? (
         <ShortlistView tsv={tsv} files={files} />
       ) : kind === 'triage' ? (
-        <TriageView tsv={tsv} />
+        <TriageView tsv={tsv} openSpectrum={openSpectrum} />
       ) : (
         <GenericView tsv={tsv} label={baseName(path)} />
       )}

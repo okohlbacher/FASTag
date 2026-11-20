@@ -169,6 +169,9 @@ export interface Cleanup {
 export interface OutputsCheck {
   outputs: string[]
   existing: string[]
+  // Outputs that name one of the run's inputs (the spectra, a database, the
+  // identification file): the backend refuses such a run.
+  clashes?: string[]
 }
 
 // One run as the backend records it (history.rs, history.jsonl in app data).
@@ -190,6 +193,9 @@ export interface RunRecord {
   params?: Record<string, unknown> | null
   // The tags it wrote (the CLI's summary line); absent when it printed none.
   tags?: number | null
+  // The Setup workflow it was started from (setup/tasks.ts TaskId); absent
+  // in records before 1.15.4.
+  workflow?: string | null
 }
 
 // The reply of `run` (fastag.rs RunStarted). The run's events come on the

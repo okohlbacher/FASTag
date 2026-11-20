@@ -191,6 +191,17 @@ function numericColumns(columns: string[], rows: string[][]): Set<string> {
 
 // An E-value below 10^-3 as a × 10^n: `4.2e-08` is read wrong at a glance.
 // The exponent is drawn with <sup>; the raw value stays the cell's name.
+const SUP: Record<string, string> = { '-': '⁻', '0': '⁰', '1': '¹', '2': '²', '3': '³', '4': '⁴', '5': '⁵', '6': '⁶', '7': '⁷', '8': '⁸', '9': '⁹' }
+
+/// An E-value as the Tags table shows it, as plain text (the report tables):
+/// below 0.001 as 3.2 × 10⁻⁵, else as written.
+export function evalueText(text: string): string {
+  const v = Number(text)
+  if (text.trim() === '' || !Number.isFinite(v) || v === 0 || Math.abs(v) >= 1e-3) return text
+  const [m, e] = v.toExponential(1).split('e')
+  return `${m} × 10${String(Number(e)).replace(/./g, (c) => SUP[c] ?? c)}`
+}
+
 export function EValue({ text }: { text: string }): JSX.Element {
   const v = Number(text)
   if (text.trim() === '' || !Number.isFinite(v) || v === 0 || Math.abs(v) >= 1e-3) return <>{text}</>

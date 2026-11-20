@@ -93,7 +93,7 @@ describe('lifecycle: failure banner', () => {
 })
 
 describe('lifecycle: stale state across runs', () => {
-  it('a run on sample B clears sample A species calls, and the pane names its input', async () => {
+  it('a run on sample B clears sample A species calls, and its missing report gets no tab', async () => {
     const mock = installMockBridge()
     mock.settings.lastUsed = { species: true, tag_length: '7' }
     mock.speciesResult = speciesA
@@ -110,9 +110,10 @@ describe('lifecycle: stale state across runs', () => {
     expect(screen.queryAllByText('Escherichia')).toHaveLength(0)
     await done(mock, 2, false, 6)
     await screen.findByRole('alert')
-    expect(screen.getByRole('tab', { name: /Species/ }).getAttribute('aria-selected')).toBe('true')
+    // B wrote no species report: no Species tab stands for it (the Overview
+    // names a missing report), and A's taxa are nowhere.
+    expect(screen.queryByRole('tab', { name: /Species/ })).toBeNull()
     expect(screen.queryAllByText('Escherichia')).toHaveLength(0)
-    expect(document.querySelector('.tabpanel')?.textContent).toContain('Species of /d/b.mzML')
     expect(document.querySelector('.path')?.getAttribute('title')).toBe('/d/b.mzML')
   })
 
@@ -135,7 +136,8 @@ describe('lifecycle: stale state across runs', () => {
     await waitFor(() => expect(document.querySelector('.log')?.textContent).toContain('permission denied'))
     expect(mock.reportCalls.length).toBe(reportReadsAfterA + 1)
     expect(mock.reportCalls[mock.reportCalls.length - 1]).toBe('/d/b.digest.tsv') // beside B's tags
-    await click(screen.getByRole('tab', { name: /Species/ }))
+    // The unreadable report gets no tab; A's taxa are gone.
+    expect(screen.queryByRole('tab', { name: /Species/ })).toBeNull()
     expect(screen.queryAllByText('Escherichia')).toHaveLength(0)
   })
 

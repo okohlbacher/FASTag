@@ -5,7 +5,7 @@
 // While a run is in flight, a locked summary of what it uses.
 
 import { useState, type JSX, type RefObject } from 'react'
-import { SECTIONS, PARAM_BY_NAME, type Section, UNIT_PARAMS, defaultText, humanName, inertDependency, masters, unknownParams, unitOf, unplacedParams } from '../paramLayout'
+import { SECTIONS, PARAM_BY_NAME, type Section, UNIT_PARAMS, defaultText, dependsOf, forcedValue, humanName, inertDependency, masters, unknownParams, unitOf, unplacedParams } from '../paramLayout'
 import ParamField from '../ParamField'
 import { disclosure } from '../disclosure'
 import { baseName } from '../digestReport'
@@ -91,9 +91,13 @@ export default function SetupForm({
   // Fields a batch cannot use, and why: one run's identifications are no
   // identifications of another (useRun sends none in a batch).
   const batchBlocked = (name: string): string | undefined =>
-    batch && name === 'census_ids'
-      ? 'Not in Batch mode: one file of identifications cannot belong to every input, so a batch marks no spectrum identified. Run each file on its own to use its identifications.'
-      : undefined
+    !batch
+      ? undefined
+      : name === 'census_ids'
+        ? 'Not in Batch mode: one file of identifications cannot belong to every input, so a batch marks no spectrum identified. Run each file on its own to use its identifications.'
+        : dependsOf(name).some((d) => masters(d).includes('census_ids'))
+          ? 'Not in Batch mode: only used with an identification file, which a batch does not use.'
+          : undefined
 
   const field = (name: string, opts: { brief?: string; required?: boolean } = {}): JSX.Element | null => {
     const spec = PARAM_BY_NAME.get(name)
@@ -101,17 +105,20 @@ export default function SetupForm({
     if (!spec || UNIT_PARAMS.has(name)) return null
     const unitName = unitOf(name)
     const unitSpec = unitName ? PARAM_BY_NAME.get(unitName) : undefined
+    // A value the CLI cannot be told (shortlist_gapped under the MSFragger
+    // recipe): shown as it runs, disabled, with the reason.
+    const forced = forcedValue(name, values)
     return (
       <ParamField
         key={name}
         spec={spec}
-        value={values[name]}
+        value={forced ? forced.value : values[name]}
         needs={inertDependency(name, values)}
         onChange={(v) => setValue(name, v)}
         onPickFile={session.pickFor}
         brief={opts.brief}
         required={opts.required}
-        blocked={batchBlocked(name)}
+        blocked={batchBlocked(name) ?? forced?.note}
         unit={unitSpec && unitName ? { spec: unitSpec, value: values[unitName], onChange: (v) => setValue(unitName, v) } : undefined}
       />
     )

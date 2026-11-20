@@ -79,6 +79,8 @@ describe('Setup: the task chooser', () => {
   it.each(['Species', 'Spectrum'])('an Export tags run returns to Tags after viewing %s', async (previousTab) => {
     const mock = installMockBridge()
     mock.spectrumSupportResult = { ...mock.spectrumSupportResult, supported: true }
+    // A Species tab only for a report that was read.
+    mock.speciesResult = { path: '/d/run01.tags.species.tsv', taxa: [{ rank: 'genus', taxid: 561, name: 'Escherichia', observed: 7, adjusted: 7, q: 1e-13 }] } as typeof mock.speciesResult
     await renderCharacterizeApp(mock)
     mock.nextPickInput = '/d/run01.mzML'
     await click(screen.getByRole('button', { name: 'Choose file…' }))

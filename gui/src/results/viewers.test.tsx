@@ -443,7 +443,8 @@ describe('result tabs: the P4c viewers', () => {
     const mock = installMockBridge()
     mock.reportFiles = { [P.glyco]: humanGlyco }
     render(<Harness reports={{ list: [human()], errors: [], tables: { glyco: P.glyco } }} />)
-    expect(screen.getAllByRole('tab').map((t) => t.textContent)).toEqual(['Tags', 'Mass shifts', 'Digest1', 'Glyco'])
+    // No tags table: no Tags tab.
+    expect(screen.getAllByRole('tab').map((t) => t.textContent)).toEqual(['Mass shifts', 'Digest1', 'Glyco'])
     await act(async () => void fireEvent.keyDown(screen.getByRole('tablist'), { key: 'End' }))
     await flush()
     expect(screen.getByRole('tab', { name: 'Glyco' }).getAttribute('aria-selected')).toBe('true')

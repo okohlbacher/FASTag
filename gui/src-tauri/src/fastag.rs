@@ -167,6 +167,10 @@ pub struct RunParams {
     // (outputs_check). Without it a run with an existing output is refused.
     #[serde(default)]
     overwrite: bool,
+    // The Setup workflow the run is started from: recorded only (history.rs
+    // RunRecord.workflow), never part of the argv.
+    #[serde(default)]
+    pub(crate) workflow: Option<String>,
 }
 
 pub struct Resolved {
@@ -544,6 +548,23 @@ fn value_to_scalar(v: &Value) -> Option<String> {
     }
 }
 
+/// The unit options the GUI draws inside a value's field, with that value:
+/// a unit is only ever sent with its value (gui/src/paramUi.ts `unit`).
+const UNIT_OF_VALUE: [(&str, &str); 4] = [
+    ("fragment_tolerance_unit", "fragment_tolerance"),
+    ("recon_sub_tolerance_unit", "recon_sub_tolerance"),
+    ("delta_name_tolerance_unit", "delta_name_tolerance"),
+    ("search_precursor_unit", "search_precursor_tolerance"),
+];
+
+/// @p name is a unit whose value is not sent (absent or empty): a lone
+/// "-fragment_tolerance_unit Da" would run the CLI's default 20 as 20 Da.
+fn unit_without_value(name: &str, params: &Map<String, Value>) -> bool {
+    UNIT_OF_VALUE.iter().find(|(u, _)| *u == name).is_some_and(|(_, v)| {
+        params.get(*v).and_then(value_to_scalar).is_none_or(|s| s.trim().is_empty())
+    })
+}
+
 // Build the argv from typed params. Only names the tool declares are emitted,
 // arrays only for list-typed options, and each value is its own argv element.
 pub(crate) fn build_args(p: &RunParams) -> Vec<String> {
@@ -557,7 +578,7 @@ pub(crate) fn build_args(p: &RunParams) -> Vec<String> {
     for (name, value) in &p.params {
         let Some(pt) = types.get(name) else { continue };
         let t = pt.ty.as_str();
-        if NOT_SETTABLE.contains(&name.as_str()) {
+        if NOT_SETTABLE.contains(&name.as_str()) || unit_without_value(name, &p.params) {
             continue;
         }
         if t == "bool" {
@@ -726,7 +747,17 @@ pub fn start_run(
         Some(d) if Path::new(files.input).is_relative() => d.join(files.input),
         _ => PathBuf::from(files.input),
     };
-    let existing = outputs::existing(&paths, &input_path);
+    // Every file the run reads (-in, the databases, the identification
+    // file, ...): no output may be one of them, and the cleanup of a failed
+    // run never removes one.
+    let argv: Vec<String> = cmd.get_args().map(|a| a.to_string_lossy().into_owned()).collect();
+    let mut inputs = vec![input_path];
+    inputs.extend(outputs::resolve(&outputs::inputs_of(&argv), files.cwd));
+    let clash = outputs::clashes(&paths, &inputs);
+    if !clash.is_empty() {
+        return Err(outputs::clash_reason(&clash));
+    }
+    let existing = outputs::existing(&paths, &inputs);
     if !files.overwrite && !existing.is_empty() {
         return Err(exists_reason(&existing));
     }
@@ -871,7 +902,7 @@ pub fn start_run(
         // A cancel that lost the race to a clean exit is not a cancellation.
         let was_cancelled = !ok && cancelled.load(Ordering::SeqCst);
         let message = if was_cancelled { Some("cancelled".to_string()) } else { message };
-        let cleanup = if ok { outputs::Cleanup::default() } else { outputs::cleanup(&paths, &input_path) };
+        let cleanup = if ok { outputs::Cleanup::default() } else { outputs::cleanup(&paths, &inputs) };
         let log: Vec<String> = tail.lock().map(|t| t.iter().cloned().collect()).unwrap_or_default();
         let end = RunEnd { pid, ok, code, message, cancelled: was_cancelled, cleanup, log };
         finish(&end);
@@ -914,6 +945,7 @@ pub fn record_of(
         cleanup: end.cleanup.clone(),
         params: None,
         tags: if end.ok { history::tags_of_log(&end.log) } else { None },
+        workflow: None,
     }
 }
 
@@ -935,6 +967,7 @@ pub fn marker_of(files: &RunFiles<'_>, argv: &[String], start: u64) -> history::
         cleanup: outputs::Cleanup::default(),
         params: None,
         tags: None,
+        workflow: None,
     }
 }
 
@@ -961,6 +994,8 @@ pub struct OutputsCheck {
     outputs: Vec<String>,
     // Those that already hold a file: the UI asks before overwriting them.
     existing: Vec<String>,
+    // Those that name one of the run's inputs: the run is refused.
+    clashes: Vec<String>,
 }
 
 /// What a run of @p params is, resolved once for `run` and `outputs_check`:
@@ -993,8 +1028,14 @@ pub fn outputs_check(params: RunParams) -> OutputsCheck {
         Some(d) if Path::new(&params.input).is_relative() => d.join(&params.input),
         _ => PathBuf::from(&params.input),
     };
+    let mut inputs = vec![input];
+    inputs.extend(outputs::resolve(&outputs::inputs_of(&pl.args), pl.cwd.as_deref()));
     let show = |v: &[PathBuf]| v.iter().map(|p| p.display().to_string()).collect();
-    OutputsCheck { existing: show(&outputs::existing(&paths, &input)), outputs: show(&paths) }
+    OutputsCheck {
+        existing: show(&outputs::existing(&paths, &inputs)),
+        clashes: show(&outputs::clashes(&paths, &inputs)),
+        outputs: show(&paths),
+    }
 }
 
 /// The command line of a run of @p params with the binary @p r, binary
@@ -1057,6 +1098,7 @@ pub fn launch(mgr: &RunManager, r: &Resolved, params: RunParams, sink: Sink, his
     // When the run has ended: record it (history.rs).
     let (rec_input, rec_outputs, rec_cwd, rec_argv) = (params.input.clone(), outputs.clone(), cwd.clone(), command.clone());
     let rec_params = params.params.clone();
+    let rec_workflow = params.workflow.clone();
     let run_marker = marker.clone();
     let finish = Box::new(move |end: &RunEnd| {
         // The marker first: a record next to a stale marker would be
@@ -1068,6 +1110,7 @@ pub fn launch(mgr: &RunManager, r: &Resolved, params: RunParams, sink: Sink, his
             let files = RunFiles { input: &rec_input, outputs: &rec_outputs, cwd: rec_cwd.as_deref(), overwrite: true };
             let mut rec = record_of(&files, &rec_argv, start, end);
             rec.params = Some(rec_params);
+            rec.workflow = rec_workflow;
             record_run(&d, &rec, &end.log);
         }
     });
@@ -1261,6 +1304,20 @@ mod tests {
         assert!(!a.iter().any(|s| s.contains("no_such_flag")));
         assert!(!a.contains(&"-version".to_string()));
         assert!(!a.contains(&"-force".to_string()));
+    }
+
+    // A unit is sent only with its value: a cleared tolerance with Da must
+    // not run the CLI's default 20 as 20 Da.
+    #[test]
+    fn build_args_drops_a_unit_without_its_value() {
+        for value in [r#""fragment_tolerance":"","#, ""] {
+            let a = build_args(&rp(&format!(
+                r#"{{"in":"i","out":"o","params":{{{value}"fragment_tolerance_unit":"Da","search_precursor_unit":"Da"}}}}"#
+            )));
+            assert!(!a.iter().any(|s| s.ends_with("_unit")), "{a:?}");
+        }
+        let a = build_args(&rp(r#"{"in":"i","out":"o","params":{"fragment_tolerance":"0.02","fragment_tolerance_unit":"Da"}}"#));
+        assert!(a.windows(2).any(|w| w == ["-fragment_tolerance_unit", "Da"]));
     }
 
     #[test]

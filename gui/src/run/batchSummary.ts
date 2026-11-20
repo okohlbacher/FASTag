@@ -16,8 +16,9 @@
 
 import { baseName, type Report } from '../digestReport'
 import type { SpeciesReport } from '../types'
-import { labelCall, proteaseCall, speciesCall, parseLog } from '../results/calls'
-import { buildOverview, type Tile } from '../results/overview'
+import { alkylationCall as alkylationReportCall } from '../digestReport'
+import { censusFacts, labelCall, proteaseCall, speciesCall, parseLog } from '../results/calls'
+import { buildOverview, keyValues, reportRank, shortlistFacts, topShift, type Tile } from '../results/overview'
 import { jobWords, type BatchJob } from './batch'
 
 /// A column has a majority only over at least this many calls.
@@ -28,13 +29,30 @@ export const SUMMARY_COLUMNS = ['genus', 'protease', 'label', 'alkylation'] as c
 /// The key figures of a Run QC batch, from each job's QC report: what a
 /// comparison across files needs (doc/GUI-WORKFLOWS.md 1, Batch).
 export const QC_COLUMNS = ['ms2', 'yield', 'charge', 'analyzer', 'instrument', 'kit'] as const
-export type SummaryColumn = (typeof SUMMARY_COLUMNS)[number] | (typeof QC_COLUMNS)[number]
+/// The key figures of the other workflows, each from its own report: the
+/// log's counts (Export tags), the mass-shift accounting and table, the
+/// shortlist, the identifiability summary.
+export const WORKFLOW_COLUMNS = ['spectra', 'tagRate', 'placed', 'topShift', 'kept', 'config', 'censusTagged'] as const
+export type SummaryColumn = (typeof SUMMARY_COLUMNS)[number] | (typeof QC_COLUMNS)[number] | (typeof WORKFLOW_COLUMNS)[number]
 
 /// The columns of a batch of @p workflow: its key columns.
 export function columnsFor(workflow?: string | null): readonly SummaryColumn[] {
-  if (workflow === 'run-qc') return QC_COLUMNS
-  if (workflow === 'species') return ['genus']
-  return SUMMARY_COLUMNS
+  switch (workflow) {
+    case 'run-qc':
+      return QC_COLUMNS
+    case 'species':
+      return ['genus']
+    case 'export-tags':
+      return ['spectra', 'tagRate']
+    case 'mass-shift':
+      return ['spectra', 'placed', 'topShift']
+    case 'db-reduction':
+      return ['kept', 'config']
+    case 'triage':
+      return ['spectra', 'censusTagged']
+    default:
+      return SUMMARY_COLUMNS
+  }
 }
 
 /// The column headers of the table, and the TSV's names for them.
@@ -48,7 +66,14 @@ export const COLUMN_LABEL: Record<SummaryColumn, string> = {
   charge: 'Charges 2+ / 3+ / 4+',
   analyzer: 'Analyzer, resolution',
   instrument: 'Instrument',
-  kit: 'Isobaric kit'
+  kit: 'Isobaric kit',
+  spectra: 'MS2 spectra',
+  tagRate: 'Tags per MS2 spectrum',
+  placed: 'Placed spectra',
+  topShift: 'Top mass shift',
+  kept: 'Proteins kept',
+  config: 'Engine configuration',
+  censusTagged: 'Tagged spectra'
 }
 const TSV_NAME: Record<SummaryColumn, string> = {
   genus: 'top_genus',
@@ -60,7 +85,20 @@ const TSV_NAME: Record<SummaryColumn, string> = {
   charge: 'charge_2_3_4',
   analyzer: 'analyzer_resolution',
   instrument: 'instrument',
-  kit: 'isobaric_kit'
+  kit: 'isobaric_kit',
+  spectra: 'ms2_processed',
+  tagRate: 'tags_per_ms2',
+  placed: 'placed_spectra',
+  topShift: 'top_mass_shift',
+  kept: 'proteins_kept',
+  config: 'engine_configuration',
+  censusTagged: 'tagged_spectra'
+}
+
+/// The header of column @p k for a batch whose species reports are at
+/// @p rank: Top family for a family-rank report.
+export function columnLabel(k: SummaryColumn, rank = 'genus'): string {
+  return k === 'genus' ? `Top ${rank}` : COLUMN_LABEL[k]
 }
 
 /// What one finished job wrote, as useRun read it.
@@ -75,6 +113,13 @@ export interface JobData {
   params: Record<string, unknown>
   /// The text of its QC report (qc_out), when it wrote one.
   qc?: string | null
+  /// The texts of its other workflow reports, when it wrote them: the
+  /// mass-shift accounting and table, the protein shortlist; config: its
+  /// engine configuration was written (null: none was asked for).
+  deltaCounts?: string | null
+  delta?: string | null
+  shortlist?: string | null
+  config?: boolean | null
   /// The reports the job was sent (a path in its resolved outputs) that
   /// could not be read or parsed, with why: their cells say so, not that
   /// the report was not written or the detection was off.
@@ -84,7 +129,17 @@ export interface JobData {
 }
 
 /// The reports a summary cell reads, by the output that names them.
-export type SentReport = 'digest_out' | 'label_out' | 'massgap_out' | 'alkylation_out' | 'qc_out' | 'species_out'
+export type SentReport =
+  | 'digest_out'
+  | 'label_out'
+  | 'massgap_out'
+  | 'alkylation_out'
+  | 'qc_out'
+  | 'species_out'
+  | 'delta_out'
+  | 'delta_counts_out'
+  | 'shortlist_out'
+  | 'census_summary_out'
 
 /// The QC cells of a job, from its QC report (section, key, value, n): the
 /// figures as the report states them; only the instrument and the isobaric
@@ -124,6 +179,49 @@ export function qcCells(text: string | null | undefined): Record<(typeof QC_COLU
     instrument: instrument && instrument !== 'n/a' ? { text: instrument, call: instrument, note: 'the instrument model the file names' } : none('instrument model'),
     kit: kit != null ? { text: kit === 'none' ? 'none' : kit, call: kit, note: 'isobaric kits whose reporters are present' } : none('isobaric kit row')
   }
+}
+
+const fmtN = (n: number): string => n.toLocaleString('en-US')
+
+/// The cells of the other workflows (WORKFLOW_COLUMNS), each from the
+/// report it reads; a report not written says so.
+export function workflowCells(d: JobData): Record<(typeof WORKFLOW_COLUMNS)[number], Cell> {
+  const log = parseLog(d.log)
+  const off = (what: string): Cell => ({ text: 'not written', call: null, note: `the job wrote no ${what}` })
+  const spectra: Cell = log.ms2 == null ? { text: '–', call: null, note: 'the log has no summary line' } : { text: fmtN(log.ms2), call: null, note: 'MS2 spectra processed by the tagger' }
+  const tagRate: Cell =
+    log.ms2 && log.tags != null
+      ? { text: (log.tags / log.ms2).toFixed(1), call: null, note: `${fmtN(log.tags)} tags over ${fmtN(log.ms2)} MS2 spectra` }
+      : { text: '–', call: null, note: 'the log has no tag count' }
+  const dc = keyValues(d.deltaCounts)
+  const placedN = dc.get('ms2_placed')
+  const placed: Cell = !d.deltaCounts
+    ? off('mass-shift accounting')
+    : placedN === undefined
+      ? { text: 'not in the report', call: null, note: 'the accounting has no ms2_placed row' }
+      : { text: `${fmtN(Number(placedN))} of ${fmtN(Number(dc.get('ms2_tagged') ?? 0))}`, call: null, note: 'MS2 spectra placed on the database, of those tagged' }
+  const shift = topShift(d.delta)
+  const topShiftCell: Cell = !d.delta
+    ? off('mass-shift table')
+    : shift
+      ? {
+          text: `${Number(shift.delta) > 0 ? '+' : ''}${shift.delta} Da${shift.name ? ` (${shift.name})` : ''}`,
+          // A category the majority can count: the name, else the shift.
+          call: shift.name ?? shift.delta,
+          note: `${fmtN(shift.spectra)} spectra; a candidate, not an identified modification`
+        }
+      : { text: 'none', call: null, note: 'the table has no shift away from 0' }
+  const sl = shortlistFacts(d.shortlist)
+  const kept: Cell = !d.shortlist ? off('protein shortlist') : sl ? { text: `${fmtN(sl.kept)} of ${fmtN(sl.of)}`, call: null, note: 'proteins kept of those with tag evidence; not an identification' } : { text: 'not in the report', call: null, note: 'the shortlist names no protein' }
+  const config: Cell =
+    d.config == null ? { text: 'not asked for', call: null, note: 'the job was not sent a search-engine configuration' } : d.config ? { text: 'written', call: null, note: 'the search-engine configuration exists' } : { text: 'not written', call: null, note: 'the search-engine configuration was asked for and not written; the log says why' }
+  const cf = d.census ? censusFacts(d.census) : null
+  const censusTagged: Cell = !d.census
+    ? off('identifiability summary')
+    : cf
+      ? { text: `${fmtN(cf.tagged)} of ${fmtN(cf.read)}${cf.taggedShare != null ? ` (${(cf.taggedShare * 100).toFixed(1)}%)` : ''}`, call: null, note: 'MS2 spectra with a reported tag (identifiability summary); a batch uses no identifications' }
+      : { text: 'not in the report', call: null, note: 'the summary has no census counts' }
+  return { spectra, tagRate, placed, topShift: topShiftCell, kept, config, censusTagged }
 }
 
 export interface Cell {
@@ -171,7 +269,7 @@ export function jobCells(d: JobData): { tags: number | null; cells: Record<Summa
 
   const p = proteaseCall(kind('digest'))
   const l = labelCall(kind('label'))
-  const sp = speciesCall(d.species)
+  const sp = speciesCall(d.species, reportRank(d.species, d.params['species_rank']))
   const g = tile('genus')
   const genus: Cell =
     sp.state === 'ranked'
@@ -187,16 +285,28 @@ export function jobCells(d: JobData): { tags: number | null; cells: Record<Summa
     return why.startsWith(NOT_READ) ? { text: 'not read', call: null, note: why.slice(NOT_READ.length) } : { text: 'unreadable', call: null, note: why }
   }
   const qc = qcCells(d.qc)
+  const w = workflowCells(d)
+  // The alkylation report's call when one was written (it counts for the
+  // majority); else the mass-gap counts, which are no call.
+  const alkReport = kind('alkylation')
+  const alk = alkReport ? alkylationReportCall(alkReport) : null
+  const alkylation: Cell = alkReport || d.unread?.alkylation_out
+    ? or('alkylation_out', { text: a.value, call: alk?.status === 'call' && a.tone === 'call' ? (alk.reagent ?? null) : null, note: a.note })
+    : or('massgap_out', { text: a.value, call: null, note: a.note })
   return {
     tags: parseLog(d.log).tags,
     cells: {
       ...qc,
+      ...w,
       ms2: or('qc_out', qc.ms2),
+      placed: or('delta_counts_out', w.placed),
+      topShift: or('delta_out', w.topShift),
+      kept: or('shortlist_out', w.kept),
+      censusTagged: or('census_summary_out', w.censusTagged),
       genus: or('species_out', genus),
       protease: or('digest_out', called(tile('protease'), p.state === 'call' ? p.enzyme : null)),
       label: or('label_out', called(tile('label'), l.state === 'call' ? l.label : null)),
-      // FASTag writes no alkylation call (calls.ts): never counted.
-      alkylation: or('massgap_out', { text: a.value, call: null, note: a.note })
+      alkylation
     }
   }
 }
@@ -224,11 +334,13 @@ export interface SummaryRow {
 export interface Summary {
   /// The columns shown and exported: the workflow's key columns.
   columns: readonly SummaryColumn[]
+  /// The rank of the species reports (the genus column's header).
+  rank?: string
   rows: SummaryRow[]
   majority: Record<SummaryColumn, Majority>
 }
 
-const ALL_COLUMNS: readonly SummaryColumn[] = [...SUMMARY_COLUMNS, ...QC_COLUMNS]
+const ALL_COLUMNS: readonly SummaryColumn[] = [...SUMMARY_COLUMNS, ...QC_COLUMNS, ...WORKFLOW_COLUMNS]
 const none = (text: string, note: string): Record<SummaryColumn, Cell> =>
   Object.fromEntries(ALL_COLUMNS.map((k) => [k, { text, call: null, note }])) as Record<SummaryColumn, Cell>
 
@@ -276,7 +388,10 @@ export function buildSummary(jobs: readonly BatchJob[], data: ReadonlyMap<string
       })
     ) as Record<SummaryColumn, boolean>
   }))
-  return { columns, rows, majority: maj }
+  // The rank of the first species report read (its own, or the asked one).
+  const first = [...data.values()].find((d) => d.species)
+  const rank = first ? reportRank(first.species, first.params['species_rank']) : 'genus'
+  return { columns, rows, majority: maj, rank }
 }
 
 /// The majority of a column in words, for the table's foot.
@@ -293,7 +408,8 @@ const tsvCell = (s: string): string => s.replace(/[\t\r\n]+/g, ' ')
 /// each call column is followed by "yes" where it differs from the majority.
 export function summaryTsv(s: Summary): string {
   const cols = s.columns ?? SUMMARY_COLUMNS
-  const head = ['file', 'input', 'status', 'duration_s', 'tags', ...cols.flatMap((k) => [TSV_NAME[k], `${TSV_NAME[k]}_differs`]), 'tags_tsv']
+  const name = (k: SummaryColumn): string => (k === 'genus' && s.rank && s.rank !== 'genus' ? `top_${s.rank}` : TSV_NAME[k])
+  const head = ['file', 'input', 'status', 'duration_s', 'tags', ...cols.flatMap((k) => [name(k), `${name(k)}_differs`]), 'tags_tsv']
   const lines = s.rows.map((r) =>
     [
       r.file,

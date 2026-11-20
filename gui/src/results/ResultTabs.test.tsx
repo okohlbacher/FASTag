@@ -40,6 +40,8 @@ function Harness(p: Partial<ResultTabsProps>): JSX.Element {
 const SPECIES = { path: '/d/a.species.tsv', taxa: [{ rank: 'genus', taxid: 561, name: 'Escherichia', observed: 7, adjusted: 7, q: 1e-13 }] }
 // A report that could not be read: the Digest tab shows it.
 const REPORTS = { list: [], errors: ['Cannot read /d/a.digest.tsv'] }
+// A tags table shown: the Tags tab is there only with one.
+const TAGS = { path: '/d/a.tags.tsv', gen: 1 }
 
 const selected = (): string | undefined =>
   screen.getAllByRole('tab').find((t) => t.getAttribute('aria-selected') === 'true')?.textContent ?? undefined
@@ -47,7 +49,7 @@ const selected = (): string | undefined =>
 describe('result tabs', () => {
   it('moves between the tabs with the arrow keys', async () => {
     installMockBridge()
-    render(<Harness species={SPECIES} />)
+    render(<Harness species={SPECIES} results={TAGS} />)
     const tags = screen.getByRole('tab', { name: 'Tags' })
     await act(async () => {
       fireEvent.keyDown(tags, { key: 'ArrowRight' })
@@ -58,7 +60,7 @@ describe('result tabs', () => {
 
   it('wraps with the arrows; Home and End go to the first and last tab, and focus follows', async () => {
     installMockBridge()
-    render(<Harness species={SPECIES} reports={REPORTS} />)
+    render(<Harness species={SPECIES} reports={REPORTS} results={TAGS} />)
     const list = screen.getByRole('tablist')
     await act(async () => void fireEvent.keyDown(list, { key: 'ArrowLeft' }))
     expect(selected()).toBe('Digest')
@@ -76,13 +78,30 @@ describe('result tabs', () => {
     const { rerender } = render(<Harness />)
     expect(screen.getAllByRole('tab').map((t) => t.textContent)).toEqual(['Tags'])
     const all = { ...REPORTS, workflow: { qc: '/d/a.qc.tsv', shortlist: '/d/a.shortlist.tsv', triage: '/d/a.census_sorted.tsv' } }
-    rerender(<Harness species={SPECIES} reports={all} />)
+    rerender(<Harness species={SPECIES} reports={all} results={TAGS} />)
     expect(screen.getAllByRole('tab').map((t) => t.textContent)).toEqual(['Tags', 'QC', 'Species1', 'Shortlist', 'Triage', 'Digest'])
-    // A workflow's own tabs first, in its order (doc/GUI-WORKFLOWS.md 1).
-    rerender(<Harness species={SPECIES} reports={all} workflow="characterize" />)
+    // Reports without a tags table: no Tags tab.
+    rerender(<Harness species={SPECIES} reports={all} />)
+    expect(screen.getAllByRole('tab').map((t) => t.textContent)).toEqual(['QC', 'Species1', 'Shortlist', 'Triage', 'Digest'])
+    // A workflow's own tabs first, in its order (doc/GUI-WORKFLOWS.md 1):
+    // the reports, then Tags.
+    rerender(<Harness species={SPECIES} reports={all} results={TAGS} workflow="characterize" />)
     expect(screen.getAllByRole('tab').map((t) => t.textContent)).toEqual(['Digest', 'Species1', 'Tags', 'QC', 'Shortlist', 'Triage'])
-    rerender(<Harness species={SPECIES} reports={all} workflow="db-reduction" />)
-    expect(screen.getAllByRole('tab').map((t) => t.textContent)[0]).toBe('Shortlist')
+    rerender(<Harness species={SPECIES} reports={all} results={TAGS} workflow="db-reduction" />)
+    expect(screen.getAllByRole('tab').map((t) => t.textContent).slice(0, 2)).toEqual(['Shortlist', 'Tags'])
+    rerender(<Harness species={SPECIES} reports={all} results={TAGS} workflow="triage" />)
+    expect(screen.getAllByRole('tab').map((t) => t.textContent).slice(0, 2)).toEqual(['Triage', 'Tags'])
+    rerender(<Harness species={SPECIES} reports={all} results={TAGS} workflow="run-qc" />)
+    expect(screen.getAllByRole('tab').map((t) => t.textContent).slice(0, 2)).toEqual(['QC', 'Tags'])
+  })
+
+  it('a species report not read gets no tab, and a census summary alone opens Triage', () => {
+    installMockBridge()
+    const { rerender } = render(<Harness speciesRun={{ input: '/d/a.mzML', enabled: true }} results={TAGS} />)
+    expect(screen.getAllByRole('tab').map((t) => t.textContent)).toEqual(['Tags'])
+    rerender(<Harness tab="triage" reports={{ list: [], errors: [], workflow: { censusSummary: '/d/a.census_summary.tsv' } }} />)
+    expect(screen.getAllByRole('tab').map((t) => t.textContent)).toEqual(['Triage'])
+    expect(screen.getByRole('tabpanel').textContent).toContain('a.census_summary.tsv')
   })
 
   it('the empty pane offers both opens, locked while busy', async () => {

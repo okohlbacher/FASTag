@@ -40,25 +40,29 @@ const TAB_LABEL: Record<Tab, string> = {
 // The order of every tab, after those a workflow puts first.
 const ORDER: Tab[] = ['overview', 'results', 'spectrum', 'qc', 'recon', 'species', 'shortlist', 'triage', 'digest', 'glyco']
 
-/// The tabs each workflow opens, in its order (doc/GUI-WORKFLOWS.md 1).
+/// The tabs each workflow opens, in its order (doc/GUI-WORKFLOWS.md 1): the
+/// Overview, the workflow's reports, then Tags and Spectrum, in every one.
 export const WORKFLOW_TABS: Record<string, Tab[]> = {
   'export-tags': ['overview', 'results', 'spectrum'],
-  'run-qc': ['overview', 'qc', 'results'],
+  'run-qc': ['overview', 'qc', 'results', 'spectrum'],
   'mass-shift': ['overview', 'recon', 'results', 'spectrum'],
-  species: ['overview', 'species'],
-  'db-reduction': ['overview', 'shortlist'],
-  triage: ['overview', 'triage', 'spectrum'],
-  characterize: ['overview', 'digest', 'species', 'glyco']
+  species: ['overview', 'species', 'results', 'spectrum'],
+  'db-reduction': ['overview', 'shortlist', 'results', 'spectrum'],
+  triage: ['overview', 'triage', 'results', 'spectrum'],
+  characterize: ['overview', 'digest', 'species', 'glyco', 'results', 'spectrum']
 }
 
 /// The tabs shown: only those whose report exists (the Overview while a
-/// run's results are shown, Tags always, the Spectrum tab (P4) only with a
-/// CLI that has -dump_spectrum), the workflow's own first, in its order
-/// (doc/GUI-WORKFLOWS.md 1), then the others.
+/// run's results are shown, Tags with a tags table, the Spectrum tab (P4)
+/// only with a CLI that has -dump_spectrum), the workflow's own first, in
+/// its order (doc/GUI-WORKFLOWS.md 1), then the others. With nothing to show,
+/// Tags alone: the empty landing with its Open buttons.
 export function tabsOf(has: Partial<Record<Tab, boolean>>, workflow?: string | null): Tab[] {
   const first = (workflow && WORKFLOW_TABS[workflow]) || []
   const order = [...first, ...ORDER.filter((t) => !first.includes(t))]
-  return order.filter((t) => t === 'results' || has[t])
+  const shown = order.filter((t) => has[t])
+  // The Spectrum tab alone is no result: it opens from a table.
+  return shown.some((t) => t !== 'spectrum') ? shown : ['results', ...shown]
 }
 
 export type { WorkflowReports }
@@ -123,25 +127,32 @@ export default function ResultTabs(p: ResultTabsProps): JSX.Element {
   const wr: WorkflowReports = reports.workflow ?? {}
   const tabs = tabsOf({
     overview: !!p.overview,
+    // A tags table, or what stands for it: a batch job without one, or a
+    // run writing it.
+    results: !!results || !!batchMiss || running,
     spectrum: spectrumOn,
     qc: !!wr.qc,
     recon: hasRecon || !!wr.deltaSpectra || !!wr.deltaCounts,
-    species: !!species || !!speciesRun?.enabled,
+    // Only a report that was read: a requested one that is missing is named
+    // in the Overview instead.
+    species: !!species,
     shortlist: !!wr.shortlist,
-    triage: !!wr.triage,
+    triage: !!wr.triage || !!wr.censusSummary,
     digest: reports.list.length > 0 || reports.errors.length > 0,
     glyco: !!tables.glyco
   }, p.workflow)
   // A tab whose content is gone (a new run started, or the Spectrum tab with
-  // a CLI that cannot dump spectra) shows the Tags.
-  const tab: Tab = tabs.includes(p.tab) ? p.tab : 'results'
+  // a CLI that cannot dump spectra) shows the first one left.
+  const tab: Tab = tabs.includes(p.tab) ? p.tab : tabs[0]
 
   // The Spectrum tab (P4): the spectrum opened from the Tags table, and
   // the input and parameters of the run that wrote the table shown.
   const [target, setTarget] = useState<SpectrumTarget | null>(null)
   const [located, setLocated] = useState<Record<string, string>>({})
   const [record, setRecord] = useState<{ path: string; input: string | null; params: Record<string, unknown> | null } | null>(null)
-  const path = results?.path ?? null
+  // The file the Spectrum tab reads tags and the run's record from: the
+  // tags table, or the identifiability ranking opened without one.
+  const path = results?.path ?? wr.triage ?? null
   const fromRun = !!(p.spectrumRun && results?.input && p.spectrumRun.input === results.input)
   useEffect(() => {
     if (!path || fromRun || !spectrumOn) return
@@ -246,13 +257,24 @@ export default function ResultTabs(p: ResultTabsProps): JSX.Element {
           </div>
         ) : (tab === 'qc' || tab === 'shortlist' || tab === 'triage') && wr[tab] ? (
           <div className="tablewrap">
-            <ReportTable key={`${tab}:${wr[tab]}`} kind={tab} path={wr[tab]!} files={tab === 'shortlist' ? wr.files : undefined} />
+            <ReportTable
+              key={`${tab}:${wr[tab]}`}
+              kind={tab}
+              path={wr[tab]!}
+              files={tab === 'shortlist' ? wr.files : undefined}
+              openSpectrum={tab === 'triage' && spectrumOn ? (sp) => openSpectrum(sp, null) : undefined}
+            />
             {tab === 'triage' && wr.censusSummary && (
               <details className="raw">
                 <summary>Run summary of the identifiability table</summary>
                 <ReportTable key={`sum:${wr.censusSummary}`} kind="generic" path={wr.censusSummary} />
               </details>
             )}
+          </div>
+        ) : tab === 'triage' && wr.censusSummary ? (
+          <div className="tablewrap">
+            <p className="hint">The run summary of the identifiability table; the ranking of the spectra is in a file of its own.</p>
+            <ReportTable key={`sum:${wr.censusSummary}`} kind="generic" path={wr.censusSummary} />
           </div>
         ) : tab === 'recon' ? (
           <div className="tablewrap">
@@ -294,8 +316,8 @@ export default function ResultTabs(p: ResultTabsProps): JSX.Element {
               <div className="empty-state">
                 <h2>No spectrum chosen</h2>
                 <p>
-                  In Tags, choose a row and press Enter (or Open in Spectrum) to see its spectrum with FASTag&apos;s
-                  processed peaks and the tag&apos;s ladder on them.
+                  In Tags or Triage, choose a row and press Enter (or Open in Spectrum) to see its spectrum with
+                  FASTag&apos;s processed peaks and, for a tagged spectrum, the tag&apos;s ladder on them.
                 </p>
               </div>
             )}

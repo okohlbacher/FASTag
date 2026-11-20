@@ -14,7 +14,10 @@ import {
   masters,
   speciesReach,
   unknownParams,
-  unplacedParams
+  unplacedParams,
+  choiceText,
+  dependsOf,
+  hintText
 } from './paramLayout'
 
 // The pre-P5 tables, as views of PARAM_UI.
@@ -85,7 +88,7 @@ describe('dependencies', () => {
   })
 
   it('needs both recon_out and massgap_out for the mass-gap knobs', () => {
-    expect(inertBecause('massgap_top', { massgap_out: '/r/m.tsv' })).toMatch(/reconciliation/)
+    expect(inertBecause('massgap_top', { massgap_out: '/r/m.tsv' })).toMatch(/placements/)
     expect(inertBecause('massgap_top', { recon_out: '/r/r.tsv' })).toMatch(/mass-gap/)
     expect(inertBecause('massgap_top', { recon_out: '/r/r.tsv', massgap_out: '/r/m.tsv' })).toBeNull()
   })
@@ -170,4 +173,24 @@ describe('labels', () => {
     expect(new Set(Object.values(LABEL)).size).toBe(Object.keys(LABEL).length)
     expect(humanName('tag_length')).toBe('Seed length')
   })
+})
+
+// Review round 3: no flag, CLI word or version note reaches a label, a
+// choice, the one line under a field or the note of an inert field.
+describe('the words of the form', () => {
+  const FLAG = /(^|[\s(])-[a-z]+_[a-z_]+\b/
+  const SNAKE = new RegExp(`\\b(${RENDERED.filter((n) => n.includes('_')).join('|')})\\b`)
+  const CLI_WORDS = /\breconcil|\bCLI\b|\bAssume2\b|\bheld-out\b/i
+  const VERSION = /\b1\.1\d(\.\d+)?\b/
+  for (const name of RENDERED) {
+    it(`${name}: label, choices, hint and inert note are in words`, () => {
+      const texts = [humanName(name), hintText(name, ''), ...(PARAM_BY_NAME.get(name)?.choices ?? []).map((c) => choiceText(name, c)), ...dependsOf(name).map((d) => d.note)]
+      for (const t of texts) {
+        expect(t, `${name}: ${t}`).not.toMatch(FLAG)
+        expect(t, `${name}: ${t}`).not.toMatch(SNAKE)
+        expect(t, `${name}: ${t}`).not.toMatch(CLI_WORDS)
+        expect(t, `${name}: ${t}`).not.toMatch(VERSION)
+      }
+    })
+  }
 })

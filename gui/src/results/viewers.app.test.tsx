@@ -61,8 +61,9 @@ describe('P4c viewers in the app', () => {
     await click(runButton())
     await emitDone(mock, 1, true)
     const tab = await screen.findByRole('tab', { name: 'Mass shifts' })
-    // Read only when shown: the run read its long-form report alone.
-    expect(mock.reportCalls).toEqual([paths.massgap_out])
+    // Read only when shown: the run read its long-form report, and the
+    // mass-shift table for the Overview's top shift; the placements wait.
+    expect(mock.reportCalls).toEqual([paths.massgap_out, paths.delta_out])
     await click(tab)
     expect((await screen.findByRole('grid', { name: 'Placements' })).getAttribute('aria-rowcount')).toBe('4707')
     expect(mock.reportCalls).toContain(paths.recon_out)
@@ -204,8 +205,10 @@ describe('P4c viewers in the app', () => {
     const count = document.querySelector('.dt-count')?.textContent
     const firstRow = within(grid).getAllByRole('row')[1].textContent
     expect(count).toMatch(/ of 4,706 rows/)
-    await click(screen.getByRole('tab', { name: 'Tags' }))
-    await click(screen.getByRole('tab', { name: 'Mass shifts' }))
+    // The table alone has no other tab to switch to (no tags were opened):
+    // leave Results and come back.
+    await goTo('setup')
+    await goTo('results')
     const again = screen.getByRole('grid', { name: 'Placements' })
     expect(mock.reportCalls).toEqual(['/r/run.recon.tsv'])
     expect((screen.getByRole('checkbox', { name: /One flank off/ }) as HTMLInputElement).checked).toBe(true)

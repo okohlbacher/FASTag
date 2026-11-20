@@ -241,6 +241,46 @@ describe('History', () => {
     expect(mock.history[0].input).toBe('/d/a.mzML')
   })
 
+  // Review round 3: the results of a Re-run are its record's workflow's,
+  // whatever the form is set to, and its species report is read because
+  // the record's parameters asked for one.
+  it('Re-run shows the results as the recorded workflow, not the form\'s', async () => {
+    const mock = installMockBridge()
+    mock.recordRuns = true
+    mock.speciesResult = { path: '/d/a.tags.species.tsv', taxa: [{ rank: 'genus', taxid: 561, name: 'Escherichia', observed: 7, adjusted: 7, q: 1e-13 }] } as typeof mock.speciesResult
+    await renderApp(mock)
+    // The form is on Export tags, without species.
+    const params = { species: true, extension: '2' }
+    mock.history = [rec('1', '/d/a.mzML', 'ok', { params, workflow: 'species' })]
+    const [row] = await history()
+    await click(btn(row, 'Re-run')!)
+    await flush()
+    expect(mock.runCalls[0]).toMatchObject({ in: '/d/a.mzML', params, workflow: 'species' })
+    await act(async () => mock.emitDone({ ok: true, code: 0, runId: mock.lastRunId }))
+    await flush()
+    const tabs = screen.getAllByRole('tab').map((t) => t.textContent ?? '')
+    expect(tabs.slice(0, 2)).toEqual(['Overview', 'Species1'])
+    await click(screen.getByRole('tab', { name: 'Overview' }))
+    expect(document.querySelector('.overview-sub strong')?.textContent).toBe('Species')
+    // The new record keeps the workflow too.
+    expect(mock.history[0].workflow).toBe('species')
+  })
+
+  it('Re-run of a record without a workflow shows no workflow name', async () => {
+    const mock = installMockBridge()
+    mock.recordRuns = true
+    await renderApp(mock)
+    mock.history = [rec('1', '/d/a.mzML', 'ok', { params: { tag_length: '3' } })]
+    const [row] = await history()
+    await click(btn(row, 'Re-run')!)
+    await flush()
+    expect('workflow' in mock.runCalls[0]).toBe(false)
+    await act(async () => mock.emitDone({ ok: true, code: 0, runId: mock.lastRunId }))
+    await flush()
+    await click(screen.getByRole('tab', { name: 'Overview' }))
+    expect(document.querySelector('.overview-sub strong')).toBeNull()
+  })
+
   it('Re-run is not offered for a record without its parameters, and is off while a run is busy', async () => {
     const mock = installMockBridge()
     const [row] = await showWith(mock, [rec('1', '/d/a.mzML', 'ok')])

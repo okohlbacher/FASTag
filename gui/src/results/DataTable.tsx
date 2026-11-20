@@ -43,6 +43,10 @@ export interface DataTableProps {
   /// The parsed table the rows come from: the sort is kept with it
   /// (tableStore.ts useSticky), so a tab switch does not reset it.
   keep?: object | null
+  /// Open row @p id (the Triage ranking: its spectrum): on Enter, on a
+  /// double-click, and from a button over the table named @p openLabel.
+  onOpen?(id: number): void
+  openLabel?: string
 }
 
 /// The ids of @p ids in the order of @p col (stable: ties keep file order).
@@ -73,7 +77,7 @@ export function sortIds(ids: ArrayLike<number>, col: Column | undefined, desc: b
   return order.map((j) => out[j])
 }
 
-export default function DataTable({ label, columns, ids, total, empty, sort: initial = null, keep }: DataTableProps): JSX.Element {
+export default function DataTable({ label, columns, ids, total, empty, sort: initial = null, keep, onOpen, openLabel = 'Open' }: DataTableProps): JSX.Element {
   const [sort, setSort] = useSticky(keep, `sort:${label}`, initial)
   const [active, setActive] = useState(0)
   const base = useId()
@@ -126,6 +130,11 @@ export default function DataTable({ label, columns, ids, total, empty, sort: ini
     setActive(j)
   }
   function onKey(e: KeyboardEvent<HTMLTableElement>): void {
+    if (e.key === 'Enter' && onOpen && n > 0) {
+      e.preventDefault()
+      onOpen(order[at])
+      return
+    }
     const to =
       e.key === 'ArrowDown' ? at + 1
       : e.key === 'ArrowUp' ? at - 1
@@ -149,6 +158,11 @@ export default function DataTable({ label, columns, ids, total, empty, sort: ini
           {n === total ? `${n.toLocaleString('en-US')} rows` : `${n.toLocaleString('en-US')} of ${total.toLocaleString('en-US')} rows`}
           {n > PAGE && ` · showing ${(start + 1).toLocaleString('en-US')}–${Math.min(n, start + PAGE).toLocaleString('en-US')}`}
         </span>
+        {onOpen && n > 0 && (
+          <button type="button" className="secondary small" onClick={() => onOpen(order[at])}>
+            {openLabel}
+          </button>
+        )}
         {n > PAGE && (
           <span className="dt-pages">
             <button type="button" className="secondary" disabled={start === 0} onClick={() => move(start - PAGE)}>
@@ -215,6 +229,7 @@ export default function DataTable({ label, columns, ids, total, empty, sort: ini
                       setActive(j)
                       gridRef.current?.focus({ preventScroll: true })
                     }}
+                    onDoubleClick={onOpen ? () => onOpen(id) : undefined}
                   >
                     {columns.map((c) => (
                       <td key={c.id} role="gridcell" className={[c.num ? 'num' : '', c.mono ? 'mono' : ''].join(' ').trim() || undefined} title={c.cellTitle?.(id)}>
@@ -230,7 +245,8 @@ export default function DataTable({ label, columns, ids, total, empty, sort: ini
       )}
       {n > 0 && (
         <p className="dt-help">
-          Click a column to sort; in the table ↑ ↓, Page Up/Down, Home and End move the active row.
+          Click a column to sort; in the table ↑ ↓, Page Up/Down, Home and End move the active row
+          {onOpen ? `; Enter or a double-click: ${openLabel.toLowerCase()}` : ''}.
         </p>
       )}
     </div>

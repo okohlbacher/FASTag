@@ -1074,6 +1074,9 @@ kbd { font-family: var(--font-mono); font-size: var(--text-xs); color: var(--mut
 .overview ul.checks li.flag { color: var(--flag-text); }
 .overview ul.checks li.flag::before { content: '⚠ '; }
 .overview ul.checks li.muted { color: var(--muted-foreground); }
+.overview ul.checks details.check-detail { display: inline; margin-left: var(--space-2); color: var(--muted-foreground); }
+.overview ul.checks details.check-detail summary { display: inline; cursor: pointer; text-decoration: underline; }
+.overview ul.checks details.check-detail[open] { display: block; margin: var(--space-1) 0 0 var(--space-4); }
 .overview .suggested-head { display: flex; align-items: center; gap: var(--space-3); }
 .overview .suggested-head h3 { margin: 0; font-size: var(--text-sm); }
 .overview .suggested table { border-collapse: collapse; width: 100%; font-size: var(--text-sm); }

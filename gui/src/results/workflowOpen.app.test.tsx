@@ -43,6 +43,29 @@ describe('opening a workflow report', () => {
     })
   }
 
+  it('a renamed mass-shift accounting is told by its keys', () => {
+    const counts = 'key\tvalue\nms2_read\t100\nms2_tagged\t80\nms2_placed\t40\ncheck_tagged_le_ms2\tok\n'
+    expect(sniffWorkflow(counts, '/x/my-counts.tsv')).toBe('deltaCounts')
+    expect(sniffWorkflow('key\tvalue\nfoo\t1\n', '/x/other.tsv')).toBeNull()
+  })
+
+  for (const [what, path, text, tab] of [
+    ['a QC report', '/old/whatever.tsv', qcTsv, 'QC'],
+    ['an identifiability ranking', '/old/ranking.tsv', censusSortedTsv, 'Triage']
+  ] as const) {
+    it(`Open earlier results… (Setup) shows ${what} under any name in its own view, with no Tags tab`, async () => {
+      const mock = installMockBridge()
+      mock.reportFiles[path] = text
+      mock.nextPickResults = path
+      await renderColdApp(mock)
+      await click(screen.getByRole('button', { name: 'Open earlier results…' }))
+      await goTo('results')
+      await waitFor(() => expect(selected()).toBe(tab))
+      expect(tabs()).not.toContain('Tags')
+      expect(mock.resultsQueryCalls).toHaveLength(0)
+    })
+  }
+
   it('a dropped QC report opens in the QC view, not as a tags table', async () => {
     const mock = installMockBridge()
     mock.reportFiles['/old/run07.qc.tsv'] = qcTsv
@@ -72,6 +95,21 @@ describe('the run shown and another result', () => {
     expect(tabs()).not.toContain('Overview')
   })
 
+  it("opening B's QC report after an Export tags run on A closes A's tags", async () => {
+    const mock = installMockBridge()
+    mock.reportFiles['/other/b.qc.tsv'] = qcTsv
+    await renderColdApp(mock)
+    await pickSingle(mock, '/d/a.mzML')
+    await click(runButton())
+    await act(async () => mock.emitDone({ ok: true, code: 0, runId: mock.lastRunId }))
+    await waitFor(() => expect(tabs()).toContain('Tags'))
+    mock.nextPickReport = '/other/b.qc.tsv'
+    await click(screen.getByRole('button', { name: 'Open report…' }))
+    await waitFor(() => expect(selected()).toBe('QC'))
+    expect(tabs()).not.toContain('Tags')
+    expect(tabs()).not.toContain('Overview')
+  })
+
   it('a requested report the run did not write gets no tab; the Overview names it', async () => {
     const mock = installMockBridge()
     // The run asked for the QC report, which is not on disk.
@@ -84,6 +122,30 @@ describe('the run shown and another result', () => {
     expect(tabs()).not.toContain('QC')
     await click(screen.getByRole('tab', { name: 'Overview' }))
     expect(screen.getByText(/Asked for, but not written: QC report/)).toBeDefined()
+  })
+})
+
+describe('a triage row opens its spectrum', () => {
+  it('Enter, a double-click or Open in Spectrum opens the row\'s spectrum, tagged or not', async () => {
+    const mock = installMockBridge()
+    mock.spectrumSupportResult = { ...mock.spectrumSupportResult, supported: true }
+    mock.reportFiles['/old/r.census_sorted.tsv'] = censusSortedTsv
+    mock.nextPickReport = '/old/r.census_sorted.tsv'
+    await renderColdApp(mock)
+    await goTo('results')
+    await click(screen.getByRole('button', { name: 'Open report…' }))
+    await waitFor(() => expect(selected()).toBe('Triage'))
+    const grid = screen.getByRole('grid', { name: 'Spectra ranked by identifiability' })
+    // The scan, not the whole native ID; E-values as the Tags table writes them.
+    expect(within(grid).getAllByRole('row')[1].textContent).toContain('scan=11518')
+    expect(grid.textContent).not.toContain('controllerType=0')
+    await act(async () => void fireEvent.keyDown(grid, { key: 'Enter' }))
+    await flush()
+    expect(selected()).toBe('Spectrum')
+    expect(screen.queryByText('No spectrum chosen')).toBeNull()
+    await click(screen.getByRole('tab', { name: 'Triage' }))
+    await click(screen.getByRole('button', { name: 'Open in Spectrum' }))
+    expect(selected()).toBe('Spectrum')
   })
 })
 

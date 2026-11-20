@@ -101,16 +101,24 @@ const REMOVED_1_14_HELP: ParamHelp = {
 
 const SPECIES_OFF: Dependency = { on: 'species', note: 'species detection is off' }
 const GLYCO_OFF: Dependency = { on: 'glyco', note: 'oxonium flagging is off' }
-const RECON_OFF: Dependency = { on: 'recon_out', note: 'reconciliation only runs when it has an output file' }
+const RECON_OFF: Dependency = { on: 'recon_out', note: 'tags are placed only when the placements are written' }
 const MASSGAP_OFF: Dependency = { on: 'massgap_out', note: 'only the mass-gap report uses it' }
 const DB_UNUSED: Dependency = {
   on: ['recon_out', 'shortlist_out', 'fasta_out', 'search_config_out', 'alkylation_out'],
   note: 'nothing places tags on the database: turn on the placements, the shortlist or the alkylation report'
 }
+/// Read wherever tags meet protein sequences: the database filter and every
+/// report that places tags (FASTag.cpp: the filter and TagReconciler take the
+/// orientation and the isobaric tolerance).
+const TAGS_ON_DB: Dependency = {
+  on: ['fasta', ...(DB_UNUSED.on as string[])],
+  note: 'only used when tags are matched against or placed on a protein database: keep only tags found in a database, or turn on the placements, the shortlist or the alkylation report'
+}
 const DELTA_OFF: Dependency = { on: 'delta_out', note: 'only the mass-shift table uses it' }
 const SHORTLIST_OFF: Dependency = { on: ['shortlist_out', 'fasta_out', 'search_config_out'], note: 'no shortlist is written' }
 const SEARCH_OFF: Dependency = { on: 'search_config_out', note: 'no search configuration is written' }
 const CENSUS_OFF: Dependency = { on: 'census', note: 'no identifiability table is written' }
+const IDS_OFF: Dependency = { on: 'census_ids', note: 'only used with an identification file' }
 const ALKYLATION_OFF: Dependency = { on: ['alkylation_out', 'alkylation_tags_out'], note: 'no alkylation report is written' }
 const DIGEST_OFF: Dependency = { on: 'digest_out', note: 'only the digest report uses it' }
 
@@ -183,7 +191,7 @@ export const PARAM_UI: Record<string, ParamUi> = {
     // The CLI warns "tag_length N is ignored: tag_lengths replaces it".
     section: 'Tagging',
     label: 'Seed length',
-    depends: [{ on: 'tag_lengths', replaced: true, note: 'tag_lengths replaces it' }],
+    depends: [{ on: 'tag_lengths', replaced: true, note: 'the seed lengths listed under Tagging, advanced replace it' }],
     help: {
       text: 'The length of the shortest tag FASTag looks for, in residues. Every tag starts as a seed of this length; extension can make it longer.',
       tip: '3 is the default. Species detection needs tags of 7 residues: set 7 here (see How species detection works).'
@@ -302,12 +310,10 @@ export const PARAM_UI: Record<string, ParamUi> = {
     // Read by the fasta filter AND by reconciliation (FASTag.cpp: TagReconciler
     // takes the orientation, the proteome index the isobaric tolerance).
     section: 'Tagging, advanced',
-    depends: [
-      { on: ['fasta', 'recon_out'], note: 'only affects matching against fasta and reconciliation' }
-    ],
+    depends: [TAGS_ON_DB],
     override: {
       description:
-        'Match tags as written, or also reversed, against fasta and recon_fasta. Tags are written N- to C-terminal, so tags read from the other ion series match only reversed.'
+        'Match tags as written, or also reversed, against the protein database. Tags are written N- to C-terminal, so tags read from the other ion series match only reversed.'
     },
     help: {
       text: 'Whether a tag is matched only as written, or also reversed. Tags are written N- to C-terminal as if read from y ions; a tag read from b ions matches only reversed.',
@@ -316,11 +322,9 @@ export const PARAM_UI: Record<string, ParamUi> = {
   },
   isobaric_tolerance: {
     section: 'Tagging, advanced',
-    depends: [
-      { on: ['fasta', 'recon_out'], note: 'only affects matching against fasta and reconciliation' }
-    ],
+    depends: [TAGS_ON_DB],
     help: {
-      text: 'When matching against the sequence database or reconciling, a residue may stand for a pair of residues of the same mass within this tolerance (for example N for GG). 0 asks for exact sequences.',
+      text: 'When tags are matched against or placed on a protein database, a residue may stand for a pair of residues of the same mass within this tolerance (for example N for GG). 0 asks for exact sequences.',
       tip: '0.04 Da is the default.'
     }
   },
@@ -535,7 +539,7 @@ export const PARAM_UI: Record<string, ParamUi> = {
     label: 'Tag placements',
     help: {
       text: 'Place each tag in the peptides of a protein database, using the masses on either side of it, and write one row per placement. When one side does not fit, the leftover mass is written with a guess at what it could be.',
-      tip: 'Needs a database: the reconciliation database, or else the sequence database. The rows are candidates, not identifications. Reconciliation uses tryptic peptides (cut after K and R, with up to 1 missed cleavage by default) whatever the protease call says, so for other proteases the placements and mass gaps are incomplete.'
+      tip: 'Needs a protein database: the placement database, or else the filter database. The rows are candidates, not identifications. Placement uses tryptic peptides (cut after K and R, with up to 1 missed cleavage by default) whatever the protease call says, so for other proteases the placements and mass gaps are incomplete.'
     }
   },
   recon_fasta: {
@@ -543,7 +547,7 @@ export const PARAM_UI: Record<string, ParamUi> = {
     label: 'Protein database',
     depends: [DB_UNUSED],
     help: {
-      text: 'The protein database for reconciliation. Empty: the sequence database (fasta) is used.',
+      text: 'The protein database tags are placed on. Empty: the database of Keep only tags found in a database is used.',
       tip: 'With a database here and none under Keep only tags found in a database (Advanced), every tag is placed, not only those that match a filter database.'
     }
   },
@@ -552,17 +556,17 @@ export const PARAM_UI: Record<string, ParamUi> = {
     label: 'Missed cleavages',
     depends: [DB_UNUSED],
     help: {
-      text: 'How many skipped trypsin cleavage sites a database peptide may contain, at most 10.',
-      tip: '1 is the default.'
+      text: 'How many skipped trypsin cleavage sites a database peptide may contain, at most 10. With Sage or Comet the same number goes into the search-engine configuration.',
+      tip: 'FASTag uses 1 by default. Database reduction sets 2 (the shortlist recipe), as FASTag does for MSFragger with trypsin.'
     }
   },
   recon_min_length: {
     section: 'Placement, advanced',
-    label: 'Reconciliation: minimum tag length',
+    label: 'Shortest tag placed',
     depends: [DB_UNUSED],
     help: {
-      text: 'Tags shorter than this are not reconciled. 0 lets FASTag choose the length at which chance matches fall below 5%.',
-      tip: 'Leave it at 0.'
+      text: 'Tags shorter than this are not placed. 0 lets FASTag choose the length at which chance matches fall below 5%.',
+      tip: 'FASTag uses 0 by default. Database reduction sets 6 (the shortlist recipe), as FASTag does for MSFragger with trypsin; keep 6 there.'
     }
   },
   recon_localize: {
@@ -576,7 +580,7 @@ export const PARAM_UI: Record<string, ParamUi> = {
   delta_out: {
     section: 'Mass-shift survey',
     label: 'Mass-shift table',
-    depends: [{ on: 'recon_out', note: 'the histogram is built from the reconciliation results' }],
+    depends: [{ on: 'recon_out', note: 'the histogram is built from the placements' }],
     help: {
       text: 'Write a histogram of the leftover masses, one count per spectrum.',
       tip: 'Read it as candidates: no peak here is an identified modification.'
@@ -584,8 +588,8 @@ export const PARAM_UI: Record<string, ParamUi> = {
   },
   recon_id_out: {
     section: 'Placement on the database',
-    label: 'Reconciliation as identifications',
-    depends: [{ on: 'recon_out', note: 'it writes the reconciliation results as identifications' }],
+    label: 'Placements as identifications',
+    depends: [{ on: 'recon_out', note: 'it writes the placements as identifications' }],
     help: {
       text: 'Write the placements as identifications in idXML, mzIdentML or mzTab, for tools that read those formats. The file extension chooses the format: .idXML, .mzid or .mzTab (.mzIdentML is not accepted).',
       tip: 'These are not filtered by a false discovery rate.'
@@ -594,7 +598,7 @@ export const PARAM_UI: Record<string, ParamUi> = {
   massgap_out: {
     section: 'Mass-shift survey',
     label: 'Mass-gap report',
-    depends: [{ on: 'recon_out', note: 'the mass gaps come from the reconciliation results' }],
+    depends: [{ on: 'recon_out', note: 'the mass gaps come from the placements' }],
     help: {
       text: 'Write the mass-gap report: the leftover masses, cysteine alkylation counts, frequent gaps explained as combinations of known modifications, and SILAC labels among them. Shown in the Digest tab.',
       tip: 'To see the cysteine alkylation, run it without fixed modifications.'
@@ -848,7 +852,7 @@ export const PARAM_UI: Record<string, ParamUi> = {
     section: 'Alkylation',
     depends: [ALKYLATION_OFF],
     help: {
-      text: 'The database the alkylation report uses when no reconciliation database is given: auto (the human proteome), human, mouse, yeast or ecoli for the UniProt reference proteomes shipped with FASTag (reviewed entries; the release is in the report), or a FASTA file. Tags place on the shipped proteomes from 8 residues (human, mouse) or 7 (yeast, E. coli): set the tag length to 8 or 7, otherwise no tag places and there is no call (reason tags_too_short).'
+      text: 'The database the alkylation report uses when no placement database is given: auto (the human proteome), human, mouse, yeast or ecoli for the UniProt reference proteomes shipped with FASTag (reviewed entries; the release is in the report), or a FASTA file. Tags place on the shipped proteomes from 8 residues (human, mouse) or 7 (yeast, E. coli): raise Extension to 3 (or choose a protein database), otherwise no tag places and there is no call (reason tags_too_short).'
     }
   },
   alkylation_tags_out: {
@@ -883,7 +887,7 @@ export const PARAM_UI: Record<string, ParamUi> = {
   census_ids_fdr: {
     section: 'Identifiability',
     label: 'ID q-value',
-    depends: [CENSUS_OFF],
+    depends: [CENSUS_OFF, IDS_OFF],
     help: {
       text: 'The q-value a target hit needs for its spectrum to count as identified in the census.'
     }
@@ -907,7 +911,7 @@ export const PARAM_UI: Record<string, ParamUi> = {
     experimental: true,
     depends: [DELTA_OFF],
     help: {
-      text: 'The reconciliation of the mass-shift survey: how many MS2 spectra reach each step, with sum checks.'
+      text: 'An accounting of the mass-shift survey: how many MS2 spectra reach each step, with sum checks.'
     }
   },
   delta_group: {
@@ -1015,14 +1019,14 @@ export const PARAM_UI: Record<string, ParamUi> = {
   },
   census_ids_accept: {
     section: 'Identifiability, advanced',
-    depends: [CENSUS_OFF],
+    depends: [CENSUS_OFF, IDS_OFF],
     help: {
       text: 'Which hits of the identification file mark a spectrum identified: those passing a q-value, those the file marks as passing its own threshold (Mascot), or every target hit.'
     }
   },
   census_ids_exact: {
     section: 'Identifiability, advanced',
-    depends: [CENSUS_OFF],
+    depends: [CENSUS_OFF, IDS_OFF],
     help: {
       text: 'Join the identifications one to one: exact spectrum ids only, and refuse a file that does not belong to this run.'
     }
@@ -1045,7 +1049,7 @@ export const PARAM_UI: Record<string, ParamUi> = {
   census_triage_evalue: {
     section: 'Identifiability',
     label: 'Triage E-value',
-    depends: [CENSUS_OFF],
+    depends: [CENSUS_OFF, IDS_OFF],
     help: {
       text: 'The E-value at or below which an unidentified spectrum with a tag is marked for a second look in the census. It is a threshold, not a quality call.'
     }
@@ -1123,7 +1127,8 @@ export const PARAM_UI: Record<string, ParamUi> = {
   complement_tolerance_unit: {
     section: 'Complement pairs',
     help: {
-      text: 'Whether the complement window is a fixed value in Da, follows the fragment tolerance, or (auto, validated: its third held-out test passed, +3.3 points of correct rank-1 tags on ion trap, not worse on timsTOF; the first, with an earlier estimator, failed, the second was inconclusive) is measured on the run from the complement pairs of confident tags.'
+      text: 'Whether the complement window is a fixed value in Da, follows the fragment tolerance, or is measured on the run from the complement pairs of confident tags (auto).',
+      tip: 'Auto is validated: its third held-out test passed (+3.3 points of correct rank-1 tags on ion trap, not worse on timsTOF); the first, with an earlier estimator, failed, and the second was inconclusive.'
     }
   },
   digest_calibration: {
@@ -1243,7 +1248,7 @@ export const PARAM_UI: Record<string, ParamUi> = {
     label: 'Search engine',
     depends: [SEARCH_OFF],
     help: {
-      text: 'The search engine the settings are written for: Sage, Comet or MSFragger (experimental; needs decoys in the database). With MSFragger the shortlist uses the configuration that passed its second held-out test (gapped placements, E-value 10, minimum tag length 6, 2 missed cleavages; each unless set); the first held-out test, with the 1.13 shortlist, failed. MSFragger mass calibration (calibrate_mass 2) failed its held-out test and is not exported.'
+      text: 'The search engine the settings are written for: Sage, Comet or MSFragger (experimental; needs decoys in the database). The shortlist recipe (gapped placements, E-value 10, shortest placed tag 6, 2 missed cleavages) is not validated: with MSFragger it passed the second held-out test and failed the third. With MSFragger and trypsin FASTag applies it to every setting you leave unchanged; the Database reduction workflow sets it for every engine, Sage and Comet included. MSFragger mass calibration (calibrate_mass 2) failed its held-out test and is not exported.'
     }
   },
   search_isotope_errors: {
@@ -1317,21 +1322,25 @@ export const PARAM_UI: Record<string, ParamUi> = {
     experimental: true,
     depends: [SHORTLIST_OFF],
     help: {
-      text: 'The cleavage rule the shortlist places tags with: trypsin (as in 1.12), the protease the run calls (auto), a named protease, or none (unspecific). Experimental; auto passed its held-out test (9 runs, 5 proteases: median protein recall 0.25 against the full search, +0.12 over the trypsin shortlist); a named rule and unspecific have no held-out test. The Asp-N call of auto and its semi-specific export are not validated: their held-out test failed on one criterion only, an empty trypsin comparison export (+0.37 protein recall over the trypsin shortlist, Asp-N called in 11 of 12 Asp-N runs). It has no second test: PRIDE has no unused eligible Asp-N project.'
+      text: 'The cleavage rule the shortlist places tags with: trypsin (as in 1.12), the protease the run calls (auto), a named protease, or none (unspecific). Experimental; auto passed its held-out test (9 runs, 5 proteases: median protein recall 0.25 against the full search, +0.12 over the trypsin shortlist); a named rule and unspecific have no held-out test. The Asp-N call of auto and its semi-specific export are not validated: their held-out test failed on one criterion only, an empty trypsin comparison export (+0.37 protein recall over the trypsin shortlist, Asp-N called in 11 of 12 Asp-N runs). It has no second test: PRIDE has no unused eligible Asp-N project. With a protease other than trypsin only exact placements count; gapped placements are ignored.'
     }
   },
   shortlist_specificity: {
     section: 'Shortlist, advanced',
     depends: [SHORTLIST_OFF],
+    // '' (Automatic) is not sent: the CLI then chooses (full, but semi for a
+    // run Auto calls Asp-N). An explicit full is sent, and the CLI keeps it.
+    choices: ['', 'full', 'semi', 'none'],
+    override: { default: '' },
     help: {
-      text: 'How many window ends must be cleavage sites of the -shortlist_protease rule: both (full), one (semi) or none. Left at full with auto, a run called Asp-N is still placed and exported semi-specific (not validated: its held-out test failed, see -shortlist_protease); a named asp-n stays full.'
+      text: 'How many window ends must be cleavage sites of the protease rule: both (full), one (semi) or none. Automatic is full, except that a run the Auto protease calls Asp-N is placed and exported semi-specific (not validated: its held-out test failed, see Protease). Choose Full to keep full specificity for such a run too.'
     }
   },
   shortlist_gapped: {
     section: 'Shortlist, advanced',
     depends: [SHORTLIST_OFF],
     help: {
-      text: 'Let placements with one mismatched flank count for the shortlist.'
+      text: 'Let placements with one mismatched flank count for the shortlist. Only with trypsin: with another protease gapped placements are ignored.'
     }
   },
   shortlist_exact_only: { hidden: REMOVED_1_14, help: REMOVED_1_14_HELP },

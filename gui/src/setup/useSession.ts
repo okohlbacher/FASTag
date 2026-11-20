@@ -351,6 +351,9 @@ export function useSession(start: Origin = DEFAULTS) {
     canUndo: undoSnapshot !== null,
     // What differs from where the form started (the footer).
     diff: diffNames(originValues, values),
+    // The values the form started from, which a run's command line is
+    // measured against (paramLayout sentValues).
+    originValues,
     presetBaseText: originText(presetBase === 'defaults' ? DEFAULTS : { kind: 'builtin', id: presetBase.slice('builtin:'.length) as TaskId }),
     // The input paths a preset saved now would leave out.
     droppedPaths: droppedPaths(baseValues(presetBase), values),

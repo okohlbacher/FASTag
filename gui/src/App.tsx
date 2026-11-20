@@ -42,7 +42,7 @@ import { reconExtend, reconRerun } from './results/ReconView'
 import { useInspector } from './inspector/useInspector'
 import { AfterRunPanel, PreStartPanel } from './inspector/InspectorPanel'
 import { postRunChecks } from './inspector/checks'
-import { INSTRUMENTS, matchesInstrument, presetText } from './setup/presets'
+import { INSTRUMENTS, matchesInstrument, presetText, shownInstrument } from './setup/presets'
 
 // The tab a workflow's run lands on (doc/GUI-WORKFLOWS.md 3): its own view.
 // Export tags and Species keep the Tags/Species rule of useRun.
@@ -97,7 +97,7 @@ export default function App({ start = LANDING }: { start?: Origin } = {}): JSX.E
   taskRef.current = session.task
   const run = useRun(session, viewStore, {
     onStart: () => setView('results'),
-    landing: () => (taskRef.current ? (LANDING_TAB[taskRef.current] ?? null) : null),
+    landing: (wf) => (wf ? (LANDING_TAB[wf as TaskId] ?? null) : null),
     workflow: () => taskRef.current ?? null
   })
   const { running, batchRunning, busy, jobs } = run
@@ -284,13 +284,24 @@ export default function App({ start = LANDING }: { start?: Origin } = {}): JSX.E
   const shown = run.shown
   // The Spectrum tab dumps peaks under the options of the run shown.
   const spectrumRun = useMemo(() => (shown ? { input: shown.input, params: shown.params } : null), [shown])
-  const preset = INSTRUMENTS.find((x) => x.id === session.instrument)
-  const presetLabel = shown && preset && matchesInstrument(shown.params, preset) ? presetText(preset) : null
+  // As Setup shows it: the preset chosen while its values hold, else the
+  // first whose values the run was sent (shownInstrument), so the default
+  // Orbitrap/TOF HCD 20 ppm counts though nobody picked it.
+  const preset = shown ? shownInstrument(shown.params, session.instrument) : null
+  const presetLabel = preset ? presetText(preset) : null
   const overview = useMemo(
     () =>
       shown
         ? {
-            model: buildOverview({ log: shown.log, reports: shown.reports, species: shown.species, census: shown.census ?? null, params: shown.params, instrument: presetLabel }),
+            model: buildOverview({
+              log: shown.log,
+              reports: shown.reports,
+              species: shown.species,
+              census: shown.census ?? null,
+              params: shown.params,
+              instrument: presetLabel,
+              ...(shown.texts ?? {})
+            }),
             input: shown.input,
             params: shown.params,
             workflow: shown.workflow ? (taskById(shown.workflow)?.label ?? null) : null,

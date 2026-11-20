@@ -873,7 +873,7 @@ export const DIGEST: HelpPage = {
             C-term side. The Chance column counts tag ends at a mass 0.5 Da above each label, where no label can
             sit. Share of tags is the label count over all counted tags. For example, 5,200 tag ends of 20,000
             counted tags at the TMT mass (a share of 0.26), against 9 at the chance mass, support a TMT hypothesis.
-            Read the CLI label call and its reason in Overview; counts alone do not identify a label.
+            Read the label call and its reason in Overview; counts alone do not identify a label.
           </p>
           <p>
             <G to="gloss-silac">SILAC</G> labels K and R with heavy isotopes (Lys8, Arg10). The report gives the share of
