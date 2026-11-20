@@ -104,13 +104,30 @@ describe('the comparison table of the gate batch against the fixture SDRF', () =
       'pxd003531-mzpeak.mzML': '✓ consistent',
       'pxd004541-tmt.mzML': '✓ consistent; ≠ run setting: fragment tolerance',
       'pxd006096-dia.mzML': 'not compared: the job failed',
-      'pxd006096-pseudo.mzML': '✓ consistent',
-      'pxd010783.mzML': '✓ consistent; ≠ run setting: fragment tolerance',
+      // A field not compared is said apart from the consistent ones.
+      'pxd006096-pseudo.mzML': '✓ consistent; not checked: instrument',
+      'pxd010783.mzML': '✓ consistent; ≠ run setting: fragment tolerance; not checked: organism, cleavage agent, label',
       'pxd014764.mzML': '✗ organism',
-      'pxd040407-chymo.mzML': '✗ instrument; ≠ run setting: modifications'
+      'pxd040407-chymo.mzML': '✗ instrument; ≠ run setting: modifications; not checked: organism, cleavage agent, label'
     })
     // A run setting is never among the verdict's mismatches.
     expect(c.jobs.flatMap((j) => j.verdict.mismatches)).toEqual(['organism', 'instrument'])
+  })
+
+  // Round 5, 3: a Run QC batch writes no digest or label report; the QC
+  // report names the instrument and states the tolerance.
+  it('a Run QC job is compared on the instrument and tolerance its QC report states', () => {
+    const qc = readFileSync('src/fixtures/cli-1.15/workflows/run-qc/run01.qc.tsv', 'utf8')
+    const job: SdrfJob = {
+      input: '/data/20130611_QE3_UPLC10_CFR_SA_OC_T_NO_03_01_01.mzML',
+      status: 'done',
+      data: { log: [], reports: [], species: null, census: null, params: { qc_out: '/data/run01.qc.tsv' }, qc }
+    }
+    const f = compareSdrf(SDRF, [job], tx).jobs[0].fields!
+    expect(f.instrument.fastag).toBe('LTQ Orbitrap XL')
+    expect(f.instrument.note).not.toMatch(/names no instrument/)
+    expect(f.tolerance.state).not.toBe('no_call')
+    expect(f.tolerance.evidence).toMatch(/qc\.tsv: run fragment_tolerance/)
   })
 
   it('a run setting that differs (tolerance, modifications) is no correction', () => {
@@ -366,7 +383,7 @@ describe('modification parameters', () => {
     const j: SdrfJob = { input: '/data/pxd040407-chymo.mzML', status: 'done', data: { ...d, log: [DROPPED_MARKER, ...d.log.filter((l) => !l.startsWith('Modifications:'))] } }
     const x = compareSdrf(SDRF, [j], tx).jobs[0]
     expect(x.fields!.modifications.state).toBe('no_call')
-    expect(x.verdict.text).toBe('✗ instrument')
+    expect(x.verdict.text).toBe('✗ instrument; not checked: organism, cleavage agent, label, modifications')
   })
 
   it('label, terminal and variable modifications are not compared', () => {

@@ -12,7 +12,7 @@ import DataTable, { type Column } from './DataTable'
 import { baseName } from '../digestReport'
 import { revealLabel } from '../app/paths'
 import { evalueText, spectrumHint } from '../ResultsTable'
-import { humanName } from '../paramLayout'
+import { PARAM_BY_NAME, choiceText, humanName } from '../paramLayout'
 import ReportHeader from './ReportHeader'
 
 export type ReportKind = 'qc' | 'shortlist' | 'triage' | 'generic'
@@ -269,7 +269,7 @@ export function qcSummary(rows: QcRow[]): { label: string; value: string; title?
   const get = (k: string): QcRow | undefined => rows.find((r) => r.key === k)
   const out: { label: string; value: string; title?: string }[] = []
   const ms2 = get('count_ms2')
-  if (ms2) out.push({ label: 'MS/MS spectra', value: isNum(ms2.value) ? fmtInt(Number(ms2.value)) : ms2.value, title: ms2.desc })
+  if (ms2) out.push({ label: 'MS2 spectra', value: isNum(ms2.value) ? fmtInt(Number(ms2.value)) : ms2.value, title: ms2.desc })
   const yieldRow = get('tag_yield')
   const tagged = get('ms2_tagged_e001')
   if (yieldRow && isNum(yieldRow.value))
@@ -291,9 +291,12 @@ export function qcSummary(rows: QcRow[]): { label: string; value: string; title?
   return out
 }
 
+/// The rows the summary strip shows: said there once, not again in the table.
+const SUMMARY_KEYS = new Set(['instrument_model', 'instrument_serial_number', 'start_timestamp'])
+
 function QcView({ tsv }: { tsv: Tsv }): JSX.Element {
   const rows = useMemo(() => qcRows(tsv), [tsv])
-  const lines = useMemo(() => qcLines(rows), [rows])
+  const lines = useMemo(() => qcLines(rows).filter((l) => !SUMMARY_KEYS.has(l.key)), [rows])
   const [all, setAll] = useState(false)
   const summary = qcSummary(rows)
   // The QC section first: the run settings are its context, not its result.
@@ -358,6 +361,19 @@ const SETTING_PARAM: Record<string, string> = {
   parsimony: 'shortlist_parsimony',
   top: 'shortlist_top'
 }
+/// A shortlist setting's CLI token in the form's words: 0 proteins kept at
+/// most is no limit, a switch is on or off, a choice its name (none: off).
+export function settingValue(param: string | undefined, v: string): string {
+  const t = v.trim()
+  if (!param) return t
+  const spec = PARAM_BY_NAME.get(param)
+  if (param === 'shortlist_top' && Number(t) === 0) return 'no limit'
+  if (t === 'none') return 'off'
+  if (spec?.type === 'bool' || /^(true|false)$/.test(t)) return t === 'true' || t === '1' || t === 'on' ? 'on' : t === 'false' || t === '0' || t === 'off' ? 'off' : t
+  if (spec?.choices?.includes(t)) return choiceText(param, t)
+  return t
+}
+
 export function shortlistNotes(notes: string[]): { caveat: string | null; rows: { label: string; value: string }[] } {
   let caveat: string | null = null
   const rows: { label: string; value: string }[] = []
@@ -376,7 +392,7 @@ export function shortlistNotes(notes: string[]): { caveat: string | null; rows: 
       for (const part of m[2].split(/,\s*/)) {
         const [k, ...v] = part.trim().split(/\s+/)
         const param = SETTING_PARAM[k]
-        rows.push({ label: param ? humanName(param) : headText(k), value: v.join(' ') })
+        rows.push({ label: param ? humanName(param) : headText(k), value: settingValue(param, v.join(' ')) })
       }
     } else if (key === 'input') {
       // "input: run01.mzML; database: ecoli.fasta"

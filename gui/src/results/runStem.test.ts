@@ -19,6 +19,10 @@ describe('runStem and sameRunFiles', () => {
     expect(sameRunFiles('/a/run.massgap.tsv', '/a/run.tags.glyco.tsv')).toBe(true)
     expect(sameRunFiles('/a/run.massgap.tsv', '/b/run.delta.tsv')).toBe(false)
     expect(sameRunFiles('/a/run.massgap.tsv', '/a/other.recon.tsv')).toBe(false)
-    expect(sameRunFiles('/a/run.massgap.tsv', '/a/recon.tsv')).toBe(true)
+    // A name without a kind part is its own stem, never any run's.
+    expect(sameRunFiles('/a/run.massgap.tsv', '/a/recon.tsv')).toBe(false)
+    expect(sameRunFiles('/results/A.tsv', '/results/B.qc.tsv')).toBe(false)
+    expect(sameRunFiles('/results/A.tsv', '/results/A.qc.tsv')).toBe(true)
+    expect(sameRunFiles('/results/A.tsv', '/results/A.tsv')).toBe(true)
   })
 })

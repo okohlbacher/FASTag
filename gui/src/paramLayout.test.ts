@@ -286,3 +286,46 @@ describe('the words of the form', () => {
     })
   }
 })
+
+// Round 5: dependencies and refusals the CLI applies that the form missed.
+describe('round 5 dependencies and conflicts', () => {
+  const base: Record<string, unknown> = {}
+  for (const [n, s] of PARAM_BY_NAME) base[n] = s.type === 'bool' ? s.default === 'true' : s.default
+
+  it('the alkylation proteome is replaced by a placement database or the placements', () => {
+    const on = { ...base, alkylation_out: '/d/a.alkylation.tsv' }
+    expect(inertBecause('alkylation_proteome', on)).toBeNull()
+    expect(inertBecause('alkylation_proteome', { ...on, recon_fasta: '/d/db.fasta' })).toMatch(/Protein database/)
+    expect(inertBecause('alkylation_proteome', { ...on, shortlist_out: '/d/a.shortlist.tsv' })).toMatch(/instead/)
+  })
+
+  it('the ranking needs the census as well as the score', () => {
+    expect(inertBecause('census_sorted_out', { ...base, census_score: true })).toMatch(/identifiability table/)
+    expect(inertBecause('census_sorted_out', { ...base, census: true, census_score: true })).toBeNull()
+  })
+
+  it('shortlist_force and shortlist_decoy_affix follow the outputs that read them', () => {
+    const only = { ...base, shortlist_out: '/d/a.shortlist.tsv' }
+    expect(inertBecause('shortlist_force', only)).not.toBeNull()
+    expect(inertBecause('shortlist_decoy_affix', only)).toBeNull()
+    const cfg = { ...base, search_config_out: '/d/a.search.json' }
+    expect(inertBecause('shortlist_force', cfg)).toBeNull()
+    expect(inertBecause('shortlist_decoy_affix', cfg)).not.toBeNull()
+  })
+
+  it('a custom digest models file replaces the models version', () => {
+    const on = { ...base, digest_out: '/d/a.digest.tsv' }
+    expect(inertBecause('digest_models_version', on)).toBeNull()
+    expect(inertBecause('digest_models_version', { ...on, digest_models: '/d/models.tsv' })).toMatch(/replaces/)
+  })
+
+  it('refuses isotope offsets at a low-resolution tolerance, and auto modes on mzPeak, each with its fix', () => {
+    const iso = conflicts({ ...base, isotope_error: ['0', '1'], fragment_tolerance: '0.3', fragment_tolerance_unit: 'Da' })
+    expect(iso.map((c) => c.params[0])).toContain('isotope_error')
+    expect(iso.find((c) => c.params[0] === 'isotope_error')!.fix!.values).toEqual({ isotope_error: ['0'] })
+    expect(conflicts({ ...base, isotope_error: ['1'], fragment_tolerance: '20', fragment_tolerance_unit: 'ppm' }).map((c) => c.params[0])).not.toContain('isotope_error')
+    const auto = { ...base, complement_tolerance_unit: 'auto', tmt_pseudo_filter: 'auto' }
+    expect(conflicts(auto, { input: '/d/run.mzML' }).map((c) => c.params[0])).toEqual([])
+    expect(conflicts(auto, { input: '/d/run.mzpeak' }).map((c) => c.params[0])).toEqual(['complement_tolerance_unit', 'tmt_pseudo_filter'])
+  })
+})

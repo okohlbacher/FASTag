@@ -93,7 +93,7 @@ test('filters commute: the order they are set in changes neither the view nor it
   type Step = (p: Page) => Promise<void>
   const steps: Step[] = [
     (p) => setBox(p, 'Min. length', '3'),
-    (p) => p.getByRole('button', { name: 'Not in database', exact: true }).click(),
+    (p) => p.getByRole('button', { name: 'No database hit', exact: true }).click(),
     (p) => setBox(p, 'Spectrum contains', 'SCAN=11'),
     (p) => p.getByLabel('Per spectrum', { exact: true }).selectOption({ label: 'Best 2' }),
     (p) => setBox(p, 'Max. E-value', '50')

@@ -9,7 +9,7 @@ import { SECTIONS, PARAM_BY_NAME, type Dependency, type Section, UNIT_PARAMS, de
 import ParamField from '../ParamField'
 import { disclosure } from '../disclosure'
 import { baseName } from '../digestReport'
-import { IconError, IconFile, IconLock, JobIcon } from '../icons'
+import { IconChevron, IconError, IconFile, IconLock, JobIcon } from '../icons'
 import { HelpButton, HelpLink } from '../help/HelpLink'
 import HelpPopover from '../help/HelpPopover'
 import { isMac, keyText } from './shortcuts'
@@ -229,10 +229,10 @@ export default function SetupForm({
     const products = names.filter((n) => PRODUCT_OF.has(n))
     const fields = names.filter((n) => !PRODUCT_OF.has(n))
     // Fields waiting for the same reports or switches, one or several:
-    // folded, with one short note per set of masters and the reason in its
-    // (?) (doc/GUI-WORKFLOWS.md 2.4). A field holding a value of its own
-    // stays in view (a dropped taxonomy), as does one replaced by another
-    // option (Turn on would not help).
+    // folded into ONE note per group, after its fields, with the reason
+    // in its (?) (doc/GUI-WORKFLOWS.md 2.4). A field holding a value of
+    // its own stays in view (a dropped taxonomy), as does one replaced by
+    // another option (Turn on would not help).
     const waiting = new Map<string, { dep: Dependency; names: string[] }>()
     for (const n of fields) {
       const d = inertDependency(n, values)
@@ -245,35 +245,49 @@ export default function SetupForm({
     const sets = [...waiting.values()]
     const folded = new Set(sets.flatMap((w) => w.names))
     const shown = fields.filter((n) => !folded.has(n))
-    const needs = sets.map((w) => {
+    const isProduct = (x: string): boolean => PRODUCT_OF.has(x) || PRODUCTS.some((q) => q.flag === x)
+    const productOf = (x: string): Product | undefined => PRODUCT_OF.get(x) ?? PRODUCTS.find((q) => q.flag === x)
+    const parts = sets.map((w) => {
       const ms = masters(w.dep)
       const what = w.dep.say ?? ms.map((m) => productLabel(m) ?? humanName(m)).join(' or ')
-      // One Turn on, for a report whose checkbox is not in this group.
-      const m = ms.find((x) => !sec.params.includes(x) && (PRODUCT_OF.has(x) || PRODUCTS.some((q) => q.flag === x)))
-      const prod = m ? (PRODUCT_OF.get(m) ?? PRODUCTS.find((q) => q.flag === m)) : undefined
-      const list = w.names.map(humanName).join(', ')
-      return (
-        <div className="group-needs" role="note" key={ms.join(',')}>
-          <span>Needs {what}.</span>
+      // A Turn on only where it is the way to go: never when a report of
+      // the set is a checkbox of this group (it is right above), and
+      // naming its target, the workflow's own report first.
+      const here = ms.some((x) => sec.params.includes(x) && isProduct(x))
+      const cands = here ? [] : ms.filter((x) => !sec.params.includes(x) && isProduct(x))
+      const m = cands.find((x) => task.outputs.includes(productOf(x)!.param)) ?? cands[0]
+      return { w, what, prod: m ? productOf(m) : undefined }
+    })
+    const targets = [...new Map(parts.flatMap((x) => (x.prod ? [[x.prod.param, x.prod] as [string, Product]] : []))).values()]
+    const waitingNames = sets.flatMap((w) => w.names)
+    const needs =
+      parts.length === 0 ? null : (
+        <div className="group-needs" role="note">
+          <span>
+            {parts.length === 1
+              ? `${waitingNames.length === 1 ? 'One more setting needs' : `${waitingNames.length} more settings need`} ${parts[0].what}.`
+              : `${waitingNames.length} more settings need: ${parts.map((x) => x.what).join('; ')}.`}
+          </span>
           <HelpPopover
-            name={w.names[0]}
-            label={`the settings waiting for ${what}`}
-            description={`${list} ${w.names.length === 1 ? 'is' : 'are'} not used yet (${w.dep.note}); ${w.names.length === 1 ? 'it shows' : 'they show'} once ${what} is on.`}
+            name={waitingNames[0]}
+            label={`the settings of ${sec.title} not used yet`}
+            description={parts
+              .map((x) => `${x.w.names.map(humanName).join(', ')}: not used yet (${x.w.dep.note}); ${x.w.names.length === 1 ? 'it shows' : 'they show'} once ${x.what} is on.`)
+              .join(' ')}
             deflt=""
           />
-          {prod && m && (
-            <button type="button" className="secondary small" onClick={() => toggle(prod, true)} aria-label={`Turn on ${productLabel(m) ?? humanName(m)}`}>
-              Turn on
+          {targets.map((prod) => (
+            <button type="button" key={prod.param} className="secondary small" onClick={() => toggle(prod, true)}>
+              Turn on {prod.label}
             </button>
-          )}
+          ))}
         </div>
       )
-    })
     return (
       <details className={`sec${open ? ' open' : ''}${changed ? ' active' : ''}`} key={sec.title} data-group={sec.title} {...d.details}>
         <summary className="disclosure" {...d.summary}>
           <span className={`chev ${open ? 'open' : ''}`} aria-hidden="true">
-            ▸
+            <IconChevron />
           </span>
           <span className="sec-title">{sec.title}</span>{' '}
           {sec.experimental && <span className="badge">experimental</span>}
@@ -285,8 +299,8 @@ export default function SetupForm({
           <div className="sec-body">
             <p className="blurb">{sec.blurb}</p>
             {products.length > 0 && <ul className="products">{products.map(productRow)}</ul>}
-            {needs}
             {shown.length > 0 && <div className="adv-fields">{shown.map((n) => field(n))}</div>}
+            {needs}
           </div>
         )}
       </details>
@@ -563,7 +577,7 @@ export default function SetupForm({
         </span>
         {/* The chevron before the title, as in the groups inside. */}
         <span className={`chev big ${session.advancedOpen ? 'open' : ''}`} aria-hidden="true">
-          ▸
+          <IconChevron size={14} />
         </span>
         <h2>Advanced ({advChanged} changed)</h2>
       </summary>
@@ -577,7 +591,7 @@ export default function SetupForm({
         <details className={`sec other${otherOpen ? ' open' : ''}`} {...otherD.details}>
           <summary className="disclosure" {...otherD.summary}>
             <span className={`chev ${otherOpen ? 'open' : ''}`} aria-hidden="true">
-              ▸
+              <IconChevron />
             </span>
             <span className="sec-title">Other analyses</span>{' '}
             {otherChanged > 0 ? <span className="chip accent">{otherChanged} changed</span> : <span className="defaults">add a report to this run</span>}

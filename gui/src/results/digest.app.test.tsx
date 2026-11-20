@@ -131,7 +131,7 @@ describe('digest tab', () => {
     await click(screen.getByRole('button', { name: 'Open another report…' }))
     expect((await screen.findByRole('alert')).textContent).toMatch(/o.digest.tsv is from another input \(other.mzML\)/)
     expect(screen.queryAllByText('TMTpro')).toHaveLength(0)
-    expect(screen.getByText('o.digest.tsv')).toBeDefined()
+    expect(screen.getAllByText('o.digest.tsv').length).toBeGreaterThan(0)
   })
 
   it('opens a report from the empty results pane', async () => {

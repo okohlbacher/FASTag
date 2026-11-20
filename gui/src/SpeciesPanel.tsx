@@ -4,6 +4,7 @@ import { baseName, fmtQ } from './digestReport'
 import { IconFlag } from './icons'
 import ReportHeader from './results/ReportHeader'
 import { HelpLink } from './help/HelpLink'
+import { tiedLeaders } from './results/calls'
 
 // Genera that turn up in almost any LC-MS/MS run regardless of the sample:
 // porcine trypsin, bovine serum, keratin from handling. Flagged so a user does
@@ -34,6 +35,19 @@ interface Props {
   formOn?: boolean
   /// The input of the run shown, for that message.
   runInput?: string
+  /// Tag rows read as c/z ions the report left out (it counts b/y only).
+  czExcluded?: number | null
+}
+
+/// Why a c/z run's species report is sparse: said on the tab.
+function CzNote({ n }: { n: number | null | undefined }): JSX.Element | null {
+  if (!n) return null
+  return (
+    <p className="caveat" role="note">
+      {n.toLocaleString('en-US')} tag rows read as c/z ions were left out: the species report counts b/y tags only,
+      so a run read as c/z (Ion series cz or auto) has fewer species tags.
+    </p>
+  )
 }
 
 export default function SpeciesPanel({
@@ -43,7 +57,8 @@ export default function SpeciesPanel({
   contributed,
   totalMs2,
   formOn,
-  runInput
+  runInput,
+  czExcluded
 }: Props): JSX.Element {
   if (!enabled && formOn) {
     return (
@@ -79,9 +94,16 @@ export default function SpeciesPanel({
   if (!report) return <div className="empty">Species results appear here after a run.</div>
   if (report.taxa.length === 0) {
     return (
-      <div className="empty">
-        No taxon met the report thresholds. The run completed; this does not establish that an organism
-        is absent. <HelpLink to="faq-species-none">Possible causes</HelpLink>
+      <div className="species">
+        <ReportHeader title="Species" paths={[report.path]} help={{ to: 'species-reading', label: 'About this tab' }} />
+        <CzNote n={czExcluded} />
+        <div className="empty-state">
+          <h2>No taxon in the report</h2>
+          <p>
+            No taxon met the report thresholds. The run completed; this does not establish that an organism is
+            absent. <HelpLink to="faq-species-none">Possible causes</HelpLink>
+          </p>
+        </div>
       </div>
     )
   }
@@ -93,7 +115,7 @@ export default function SpeciesPanel({
   const deconvolved = report.taxa.some((t) => t.adjusted !== t.observed)
   // An exact tie on both sort keys is not a call: the order inside the tied
   // block is only the CLI's taxid order (the digest call treats it the same).
-  const tied = report.taxa.filter((t) => t.adjusted === top.adjusted && t.observed === top.observed)
+  const tied = tiedLeaders(report.taxa)
   // rel. follows the ranking (adjusted), so the rank-1 taxon is 100%.
   const relBase = top.adjusted > 0 ? top.adjusted : 1
   const relOf = (t: Taxon): number => Math.min(100, Math.round((t.adjusted / relBase) * 100))
@@ -120,6 +142,7 @@ export default function SpeciesPanel({
           </>
         }
       />
+      <CzNote n={czExcluded} />
 
       <section className="cards" aria-label="Taxon ranking">
         <div className="card headline">

@@ -140,6 +140,13 @@ export default function RunBar(p: RunBarProps): JSX.Element {
                   <span>{c.note}</span>
                 </p>
               )}
+              {c.fix && (
+                <div className="row fixes">
+                  <button type="button" className="small" onClick={() => p.onFix(c.fix!.values)}>
+                    {c.fix.label}
+                  </button>
+                </div>
+              )}
               {/* The species reach conflict: one-click fixes. */}
               {c.params.includes('species') && c.params.includes('extension') && fixes.length > 0 && (
                 <div className="row fixes">

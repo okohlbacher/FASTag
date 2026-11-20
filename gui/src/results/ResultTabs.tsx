@@ -130,7 +130,8 @@ export default function ResultTabs(p: ResultTabsProps): JSX.Element {
     // A tags table, or what stands for it: a batch job without one, or a
     // run writing it.
     results: !!results || !!batchMiss || running,
-    spectrum: spectrumOn,
+    // Only beside a table it opens from: Tags or Triage.
+    spectrum: spectrumOn && (!!results || !!wr.triage),
     qc: !!wr.qc,
     recon: hasRecon || !!wr.deltaSpectra || !!wr.deltaCounts,
     // Only a report that was read: a requested one that is missing is named
@@ -216,7 +217,7 @@ export default function ResultTabs(p: ResultTabsProps): JSX.Element {
               onClick={() => setTab(t)}
             >
               {TAB_LABEL[t]}
-              {t === 'species' && species && species.taxa.length > 0 && <span className="count">{species.taxa.length}</span>}
+              {t === 'species' && species && <span className={`count${species.taxa.length === 0 ? ' zero' : ''}`}>{species.taxa.length}</span>}
               {t === 'digest' && reports.list.length > 0 && <span className="count">{reports.list.length}</span>}
             </button>
           ))}
@@ -339,6 +340,7 @@ export default function ResultTabs(p: ResultTabsProps): JSX.Element {
               tooShort={speciesRun ? null : p.tooShort}
               contributed={p.evidence.contributed}
               totalMs2={p.evidence.ms2}
+              czExcluded={p.evidence.czExcluded ?? null}
             />
           </div>
         ) : batchMiss ? (

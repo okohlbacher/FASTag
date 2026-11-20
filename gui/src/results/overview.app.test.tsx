@@ -69,7 +69,7 @@ describe('Overview in the app', () => {
     // The Overview names the workflow and shows no tile for a report nobody asked for.
     expect(document.querySelector('.overview-sub')!.textContent).toContain('Characterize a run')
     expect(screen.queryByRole('region', { name: 'Alkylation' })).toBeNull()
-    const row = within(screen.getByRole('table', { name: 'Suggested search settings' })).getByRole('row', { name: /Fixed modification \(C \+57\.021\)/ })
+    const row = within(screen.getByRole('table', { name: 'Suggested search settings' })).getByRole('row', { name: /Fixed cysteine modification/ })
     expect(within(row).getByText('default')).toBeDefined()
     expect(row.textContent).toMatch(/alkylation not assessed \(alkylation report not written\)/)
   })

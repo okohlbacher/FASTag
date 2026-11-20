@@ -120,7 +120,7 @@ const DB_UNUSED: Dependency = {
 /// orientation and the isobaric tolerance).
 const TAGS_ON_DB: Dependency = {
   on: ['fasta', ...(DB_UNUSED.on as string[])],
-  say: 'tags matched against or placed on a protein database',
+  say: 'a Filter database, or a report that places tags on a protein database',
   note: 'keep only tags found in a database, or turn on the placements, the shortlist or the alkylation report'
 }
 const DELTA_OFF: Dependency = { on: 'delta_out', note: 'only the mass-shift table uses it' }
@@ -131,31 +131,31 @@ const SHORTLIST_READ: Dependency = { on: ['shortlist_out', 'fasta_out'], note: '
 const TRYPSIN_ONLY: Dependency = {
   on: 'shortlist_protease',
   when: { shortlist_protease: { is: ['trypsin'] } },
-  say: 'the protease rule Trypsin',
+  say: 'Protease set to Trypsin',
   note: 'ignored with any other protease'
 }
 const NOT_TRYPSIN: Dependency = {
   on: 'shortlist_protease',
   when: { shortlist_protease: { isNot: ['trypsin'] } },
-  say: 'a protease rule other than Trypsin',
+  say: 'Protease set to a rule other than Trypsin',
   note: 'Trypsin always counts fully specific placements'
 }
 const HEADER_CHECK_OFF: Dependency = {
   on: 'check_header_charge',
   when: { check_header_charge: { isNot: ['off'] } },
-  say: 'the charge check (warn or both)',
+  say: 'Charge check mode set to warn or both',
   note: 'the charge check is off'
 }
 const CALL_OFF: Dependency = {
   on: 'species_call',
   when: { species_call: { is: ['decoy'] } },
-  say: 'the presence call Decoy',
+  say: 'Presence call set to Decoy',
   note: 'the presence call is None'
 }
 const CHARGES_TRIED: Dependency = {
   on: ['unknown_charge', 'check_header_charge'],
   when: { unknown_charge: { isNot: ['assume2'] }, check_header_charge: { isNot: ['off'] } },
-  say: 'unknown charges enumerated or inferred, or the charge check',
+  say: 'Precursors without a charge set to try each charge or infer it, or the Charge check mode on',
   note: 'charge 2 is assumed for spectra without a charge'
 }
 const SEARCH_OFF: Dependency = { on: 'search_config_out', note: 'no search configuration is written' }
@@ -180,7 +180,7 @@ export const PARAM_UI: Record<string, ParamUi> = {
     section: 'Peaks',
     label: 'Skip deisotoping',
     help: {
-      text: 'FASTag normally merges each isotope cluster into its first (monoisotopic) peak and moves fragments of charge 2 or 3 to the mass they would have at charge 1, before it picks peaks. This switch turns both steps off.',
+      text: 'Skips deisotoping and charge reduction. FASTag normally merges each isotope cluster into its first (monoisotopic) peak and moves fragments of charge 2 or 3 to the mass they would have at charge 1, before it picks peaks. This switch turns both steps off.',
       tip: 'Leave it off. Turn it on only for the fastest possible run, or to compare with a tool that has no such step.'
     }
   },
@@ -221,7 +221,7 @@ export const PARAM_UI: Record<string, ParamUi> = {
   },
   subsample_seed: {
     section: 'Sampling and checks',
-    depends: [{ on: ['subsample_fraction', 'subsample_spectra'], note: 'nothing is being subsampled', say: 'Spectra to read' }],
+    depends: [{ on: ['subsample_fraction', 'subsample_spectra'], note: 'nothing is being subsampled', say: 'Spectra to read set below all spectra' }],
     help: {
       text: 'The starting number of the random choice. The same seed picks the same spectra again.',
       tip: 'Change it to draw a different random subset.'
@@ -866,7 +866,7 @@ export const PARAM_UI: Record<string, ParamUi> = {
   // ---- Options added since 1.12, each in its workflow group
   acquisition_probe_spectra: {
     section: 'Sampling and checks',
-    depends: [{ on: 'acquisition_check', when: { acquisition_check: { isNot: ['off'] } }, say: 'the DIA check (refuse or warn)', note: 'the DIA check is off' }],
+    depends: [{ on: 'acquisition_check', when: { acquisition_check: { isNot: ['off'] } }, say: 'DIA input set to refuse or warn', note: 'the DIA check is off' }],
     help: {
       text: 'How many MS2 spectra at the start of the run the acquisition check reads (metadata only).'
     }
@@ -893,7 +893,18 @@ export const PARAM_UI: Record<string, ParamUi> = {
   },
   alkylation_proteome: {
     section: 'Alkylation',
-    depends: [{ on: 'alkylation_out', note: 'only the alkylation report uses it' }],
+    // FASTag.cpp alkylation_only_db: read only when the alkylation report
+    // is the one user of placements and no protein database is given;
+    // otherwise the CLI logs "-alkylation_proteome is ignored".
+    depends: [
+      { on: 'alkylation_out', note: 'only the alkylation report uses it' },
+      {
+        on: ['recon_fasta', 'recon_out', 'shortlist_out', 'fasta_out', 'search_config_out'],
+        replaced: true,
+        say: 'a protein database for the placements or the shortlist',
+        note: 'the alkylation report uses the Protein database of Placement on the database instead, which the placements or the shortlist read'
+      }
+    ],
     help: {
       text: 'The database the alkylation report uses when no placement database is given: auto (the human proteome), human, mouse, yeast or ecoli for the UniProt reference proteomes shipped with FASTag (reviewed entries; the release is in the report), or a FASTA file. Tags place on the shipped proteomes from 8 residues (human, mouse) or 7 (yeast, E. coli): raise Extension to 3 (or choose a protein database), otherwise no tag places and there is no call (reason tags_too_short).'
     }
@@ -930,7 +941,7 @@ export const PARAM_UI: Record<string, ParamUi> = {
   census_ids_fdr: {
     section: 'Identifiability',
     label: 'ID q-value',
-    depends: [CENSUS_OFF, IDS_OFF, { on: 'census_ids_accept', when: { census_ids_accept: { is: ['qvalue'] } }, say: 'hits accepted by q-value', note: 'only read when hits are accepted by q-value' }],
+    depends: [CENSUS_OFF, IDS_OFF, { on: 'census_ids_accept', when: { census_ids_accept: { is: ['qvalue'] } }, say: 'Accept hits set to q-value', note: 'only read when hits are accepted by q-value' }],
     help: {
       text: 'The q-value a target hit needs for its spectrum to count as identified in the census.'
     }
@@ -1084,7 +1095,7 @@ export const PARAM_UI: Record<string, ParamUi> = {
   },
   census_sorted_out: {
     section: 'Identifiability',
-    depends: [{ on: 'census_score', note: 'the table is ordered by the identifiability score' }],
+    depends: [CENSUS_OFF, { on: 'census_score', note: 'the table is ordered by the identifiability score' }],
     help: {
       text: 'The census rows ordered by the identifiability score, highest first.'
     }
@@ -1122,7 +1133,7 @@ export const PARAM_UI: Record<string, ParamUi> = {
     section: 'Sampling and checks',
     experimental: true,
     help: {
-      text: "Whether the charge the file gives for a precursor is checked against the isotope spacing of the precursor in the preceding MS1 scan and against its fragment pairs: off, warn (report disagreements only) or both (tag a disagreeing spectrum under the file's charge and under the charge the check found). Experimental."
+      text: "Checks the precursor charge the file gives. It is checked against the isotope spacing of the precursor in the preceding MS1 scan and against its fragment pairs: off, warn (report disagreements only) or both (tag a disagreeing spectrum under the file's charge and under the charge the check found). Experimental."
     }
   },
   check_header_margin: {
@@ -1163,7 +1174,7 @@ export const PARAM_UI: Record<string, ParamUi> = {
   complement_tol_factor: {
     section: 'Complement pairs',
     help: {
-      text: 'The factor on the fragment tolerance when the complement window follows it.'
+      text: 'Complement window in fragment tolerances. The factor on the fragment tolerance when the complement window follows it (unit fragment).'
     }
   },
   complement_tolerance: {
@@ -1217,7 +1228,9 @@ export const PARAM_UI: Record<string, ParamUi> = {
   },
   digest_models_version: {
     section: 'Digest and labels',
-    depends: [DIGEST_OFF],
+    // FASTag.cpp: a custom -digest_models file replaces the shipped and the
+    // v2 models (the CLI warns that the version is ignored).
+    depends: [DIGEST_OFF, { on: 'digest_models', replaced: true, note: 'the protease models file given replaces the shipped and the v2 models' }],
     help: {
       text: 'Which protease models the digest report uses: the shipped ones (as in 1.11) or v2. v2 is not validated on held-out data.'
     }
@@ -1245,7 +1258,7 @@ export const PARAM_UI: Record<string, ParamUi> = {
   ion_series_photo: { hidden: REMOVED_1_14, help: REMOVED_1_14_HELP },
   ion_series_hybrid: {
     section: 'Charge and ions',
-    depends: [{ on: 'ion_series', when: { ion_series: { is: ['auto'] } }, say: 'the ion series auto', note: 'only read when the ion series follows each spectrum\'s activation' }],
+    depends: [{ on: 'ion_series', when: { ion_series: { is: ['auto'] } }, say: 'Ion series set to auto', note: 'only read when the ion series follows each spectrum\'s activation' }],
     experimental: true,
     help: {
       text: 'Under ion series auto: read hybrid EThcD/ETciD spectra as b/y ions (the default) or tag them twice, as b/y and as c/z ions, and merge the rows (both). Experimental; passed its held-out test (5 projects: +43 points of identified spectra with a correct tag, 1.6x CPU time).'
@@ -1280,7 +1293,7 @@ export const PARAM_UI: Record<string, ParamUi> = {
   },
   search_config_template: {
     section: 'Search configuration',
-    depends: [SEARCH_OFF, { on: 'search_engine', when: { search_engine: { is: ['comet'] } }, say: 'the search engine Comet', note: 'a Sage or MSFragger configuration is written complete' }],
+    depends: [SEARCH_OFF, { on: 'search_engine', when: { search_engine: { is: ['comet'] } }, say: 'Search engine set to Comet', note: 'a Sage or MSFragger configuration is written complete' }],
     help: {
       text: 'For Comet only: a parameter file the written settings are merged into.'
     }
@@ -1353,14 +1366,15 @@ export const PARAM_UI: Record<string, ParamUi> = {
   },
   shortlist_decoy_affix: {
     section: 'Shortlist, advanced',
-    depends: [SHORTLIST_OFF],
+    depends: [SHORTLIST_READ],
     help: {
       text: 'The name prefixes and suffixes that mark a decoy entry; decoys never enter the shortlist.'
     }
   },
   shortlist_force: {
     section: 'Shortlist, advanced',
-    depends: [SHORTLIST_OFF],
+    // FASTag.cpp: read for the reduced FASTA and the search configuration only.
+    depends: [{ on: ['fasta_out', 'search_config_out'], note: 'only the reduced FASTA and the search configuration use it' }],
     help: {
       text: 'Write the smaller FASTA and the search settings even when the protease of the run does not fit tryptic placement.'
     }

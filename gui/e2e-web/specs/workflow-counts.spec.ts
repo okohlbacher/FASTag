@@ -37,7 +37,7 @@ for (const w of RUNS) {
     await expect(page.locator('.rt-title .muted')).toContainText(`${w.tags} tags`)
     if (w.qc) {
       await page.getByRole('tab', { name: 'QC' }).click()
-      await expect(page.locator('.qc-strip')).toContainText(`MS/MS spectra${ms2}`)
+      await expect(page.locator('.qc-strip')).toContainText(`MS2 spectra${ms2}`)
       expect(ms2).toBe(w.qc)
     }
     if (w.ranked) {

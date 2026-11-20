@@ -92,6 +92,22 @@ describe('Overview model: calls', () => {
     expect(o.suggestions.find((s) => s.setting === 'database')).toBeUndefined()
   })
 
+  // Round 5, 9: an exact tie at the top of the ranking is no single leader
+  // (the Species tab says the same) and suggests no proteome.
+  it('a tie at the top of the ranking names no leader and suggests no database', () => {
+    const o = buildOverview({
+      log: [], reports: [], census: null, params: {}, instrument: null,
+      species: { path: '/d/species.tsv', taxa: [
+        { rank: 'genus', taxid: 561, name: 'Escherichia', observed: 40, adjusted: 40, q: 0.01 },
+        { rank: 'genus', taxid: 590, name: 'Salmonella', observed: 40, adjusted: 40, q: 0.01 },
+        { rank: 'genus', taxid: 9605, name: 'Homo', observed: 3, adjusted: 3, q: 0.5 }
+      ] }
+    })
+    expect(tile(o, 'genus')).toMatchObject({ value: 'No single leader', tone: 'nocall' })
+    expect(tile(o, 'genus').note).toMatch(/Escherichia, Salmonella/)
+    expect(o.suggestions.find((s) => s.setting === 'database')).toBeUndefined()
+  })
+
   it('describes not_detected taxa as undetected rather than absent', () => {
     const o = buildOverview({
       log: [], reports: [], census: null, params: {}, instrument: null,
@@ -120,14 +136,14 @@ describe('Overview model: calls', () => {
     // raises it to 3, and the tile says so.
     expect(t.action).toEqual({ kind: 'enable', label: 'Add Alkylation report and run again', values: { alkylation_out: 'alkylation.tsv', extension: '3' } })
     expect(t.note).toMatch(/raises the extension from 2 to 3/)
-    expect(line(o, 'fixed C+57.021')).toMatchObject({ evidence: 'default' })
-    expect(line(o, 'fixed C+57.021').note).toBe('default, alkylation not assessed (alkylation report not written)')
+    expect(line(o, 'fixed C')).toMatchObject({ evidence: 'default' })
+    expect(line(o, 'fixed C').note).toBe('default, alkylation not assessed (alkylation report not written)')
   })
 
   it('also for FASTag 1.11', () => {
     const o = overviewOf(CLI_CASES.v111)
     expect(tile(o, 'alkylation').value).toBe('not assessed')
-    expect(line(o, 'fixed C+57.021').evidence).toBe('default')
+    expect(line(o, 'fixed C').evidence).toBe('default')
   })
 
   it('with a FASTA: the Cys gap counts, still no call, and C+57.021 stays a default', () => {
@@ -136,8 +152,8 @@ describe('Overview model: calls', () => {
     expect(t.value).toBe('no call (counts only)')
     expect(t.note).toMatch(/Carbamidomethyl \(C\) 11 of 475 placed spectra/)
     expect(t.action).toBeUndefined()
-    expect(line(o, 'fixed C+57.021').evidence).toBe('default')
-    expect(line(o, 'fixed C+57.021').note).toMatch(/no alkylation call/)
+    expect(line(o, 'fixed C').evidence).toBe('default')
+    expect(line(o, 'fixed C').note).toMatch(/no alkylation call/)
   })
 
   it('with a FASTA but tags too short for the recon index: not assessed, not an absence', () => {
@@ -149,7 +165,7 @@ describe('Overview model: calls', () => {
     expect(t.tone).toBe('off')
     expect(t.note).toBe('tags reach at most 7 residues (tag length 3 + 2 × extension 2); the recon index needs 8 (its log line)')
     expect(t.action).toEqual({ kind: 'enable', label: 'Run again with extension 3', values: { extension: '3' } })
-    expect(line(o, 'fixed C+57.021').note).toBe('default, alkylation not assessed (no tag placed in the FASTA)')
+    expect(line(o, 'fixed C').note).toBe('default, alkylation not assessed (no tag placed in the FASTA)')
   })
 
   it('what "Add FASTA and run again" sends now (extension 3, -recon_fasta) places tags: the Cys counts', () => {
@@ -198,7 +214,8 @@ describe('Overview model: calls', () => {
       expect(o.lowEvidence, c.name).toBe(false)
       expect(o.cutoffApplied, c.name).toBe(false)
       expect(o.checks, c.name).toContainEqual({ tone: 'muted', gates: true, text: expect.stringMatching(/^Evidence cutoff not applied: this run did not count tagged spectra/) })
-      for (const id of ['protease', 'genus', 'label']) expect(tile(o, id).note, `${c.name} ${id}`).toMatch(/[Ee]vidence cutoff \(1,000 tagged spectra\) not applied/)
+      // Said once, by the check line: not repeated in every call tile.
+      for (const id of ['protease', 'genus', 'label']) expect(tile(o, id).note, `${c.name} ${id}`).not.toMatch(/[Ee]vidence cutoff/)
     }
     // 686 MS2 spectra: the Da run's calls are what the CLI wrote.
     const da = overviewOf(CLI_CASES.v112Da)
@@ -295,7 +312,7 @@ describe('Overview model: suggested settings', () => {
 
   it('copies as plain text, one line per setting with its evidence', () => {
     const o = overviewOf(CLI_CASES.v112)
-    expect(o.copyText.split('\n')).toContain('Fixed modification (C +57.021): Carbamidomethyl (C) (default, alkylation not assessed (alkylation report not written))')
+    expect(o.copyText.split('\n')).toContain('Fixed cysteine modification: Carbamidomethyl (C, +57.021) (default, alkylation not assessed (alkylation report not written))')
   })
 })
 
@@ -323,7 +340,7 @@ describe('Overview card text: tiny numbers and punctuation', () => {
     const reports = [parseReport(c.digest, '/d/a.digest.tsv'), parseReport(c.label, '/d/a.label.tsv')]
     const o = buildOverview({ log: logLines(c), reports, species, census: null, params: c.params, instrument: null })
     const note = tile(o, 'genus').note
-    expect(note).toMatch(/^q = 3\.2e-119; ranked first of 50 taxa at genus rank by adjusted count, not a presence call\. Evidence cutoff/)
+    expect(note).toMatch(/^q = 3\.2e-119; ranked first of 50 taxa at genus rank by adjusted count, not a presence call\.$/)
     expect(note).not.toMatch(/0\.0{6,}/)
   })
 
@@ -366,8 +383,8 @@ describe('Overview model: the alkylation report', () => {
   })
 
   it('shows the call with its reagent, and suggests it for the search', () => {
-    const o = of(report('call', '-', 'alkylation_call\treagent\tPropionamide\t-\t-\nalkylation_call\tshare\t0.9\t42\t-'))
+    const o = of(report('call', '-', 'alkylation_call\treagent\tPropionamide\t-\t-\nalkylation_call\tmass\t71.0371\t-\t-\nalkylation_call\tshare\t0.9\t42\t-'))
     expect(tile(o, 'alkylation')).toMatchObject({ value: 'Propionamide', tone: 'call' })
-    expect(line(o, 'fixed C+57.021')).toMatchObject({ value: 'Propionamide (C)', evidence: 'call' })
+    expect(line(o, 'fixed C')).toMatchObject({ value: 'Propionamide (C, +71.037)', evidence: 'call' })
   })
 })

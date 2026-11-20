@@ -58,6 +58,6 @@ describe('round 4, 19: the shortlist header lines in the GUI words', () => {
 describe('round 4, 15: suggested settings in the form words', () => {
   it('names each setting in words, not an abbreviation', () => {
     expect(settingWords('fragment tol.')).toBe('Fragment tolerance')
-    expect(settingWords('fixed C+57.021')).toBe('Fixed modification (C +57.021)')
+    expect(settingWords('fixed C')).toBe('Fixed cysteine modification')
   })
 })

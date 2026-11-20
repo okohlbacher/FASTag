@@ -185,7 +185,7 @@ describe('Setup: hidden dependent fields', () => {
     await openGroup('Species')
     await openGroup('Species, advanced')
     const group = document.querySelector('[data-group="Species, advanced"]')!
-    expect(group.querySelector('.group-needs')!.textContent).toMatch(/^Needs Species report\./)
+    expect(group.querySelector('.group-needs')!.textContent).toMatch(/needs?:? (.*; )?Species report[.;]/)
     expect(group.querySelector('.group-needs [data-param-help]')).not.toBeNull()
     expect(field('species_min_len')).toBeNull()
     await click(within(group as HTMLElement).getByRole('button', { name: 'Turn on Species report' }))
@@ -200,7 +200,7 @@ describe('Setup: hidden dependent fields', () => {
     const group = document.querySelector('[data-group="Digest and labels"]')!
     const banners = group.querySelectorAll('.group-needs')
     expect(banners.length).toBeGreaterThan(0)
-    expect(banners[0].textContent).toMatch(/^Needs Digest report\./)
+    expect(banners[0].textContent).toMatch(/needs?:? (.*; )?Digest report[.;]/)
     // No waiting field is left in view, disabled.
     expect(group.querySelectorAll('.field.off')).toHaveLength(0)
     // The digest report's checkbox is in this group: no Turn on repeats it.
@@ -215,7 +215,7 @@ describe('Setup: hidden dependent fields', () => {
     await openGroup('Glycopeptides')
     const group = document.querySelector('[data-group="Glycopeptides"]')!
     expect(field('glyco_min_fraction')).toBeNull()
-    expect(group.querySelector('.group-needs')!.textContent).toMatch(/^Needs Glycopeptide report\./)
+    expect(group.querySelector('.group-needs')!.textContent).toMatch(/needs?:? (.*; )?Glycopeptide report[.;]/)
     // The report's checkbox is the switch.
     await click(field('glyco')!)
     expect(field('glyco_min_fraction')!.disabled).toBe(false)
@@ -239,7 +239,7 @@ describe('Setup: hidden dependent fields', () => {
     await openGroup('Digest and labels')
     const group = document.querySelector('[data-group="Digest and labels"]')!
     const notes = [...group.querySelectorAll('.group-needs')].map((n) => n.textContent ?? '')
-    expect(notes.some((t) => /^Needs Digest report or Label report\./.test(t))).toBe(true)
+    expect(notes.some((t) => /Digest report or Label report[.;]/.test(t))).toBe(true)
     expect(field('digest_window')).toBeNull()
   })
 

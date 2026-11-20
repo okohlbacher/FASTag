@@ -299,6 +299,7 @@ export default function App({ start = LANDING }: { start?: Origin } = {}): JSX.E
               species: shown.species,
               census: shown.census ?? null,
               params: shown.params,
+              input: shown.input,
               instrument: presetLabel,
               ...(shown.texts ?? {})
             }),
@@ -341,7 +342,9 @@ export default function App({ start = LANDING }: { start?: Origin } = {}): JSX.E
   const canRun = !!bin?.ok && !!input && !!out && !running && !batchRunning && !batchMode && !blocked && !inspector.held
 
   // The checks after a run, from its reports and FASTag's log lines.
-  const after = postRunChecks({ reports: run.reports.list, notes: run.shownNotes, species: values['species'] === true })
+  // The ion series of the run shown (its sent options: none is by), else the form's.
+  const afterIons = run.shown ? (run.shown.params['ion_series'] ?? 'by') : values['ion_series']
+  const after = postRunChecks({ reports: run.reports.list, notes: run.shownNotes, species: values['species'] === true, ionSeries: afterIons, input: run.results?.input ?? '' })
   const afterInput = run.results?.input ?? ''
   // A finished run names its red flags after the run too (the panel over
   // the result tabs shows them).
@@ -827,7 +830,7 @@ export default function App({ start = LANDING }: { start?: Origin } = {}): JSX.E
               version={historyVersion}
               busy={busy}
               onOpenResults={openResults}
-              onOpen={(p) => void run.openResultsPath(p).then(() => setView('results'))}
+              onOpen={(r, out) => void run.showRecord(r, out).then(() => setView('results'))}
               onSettings={session.takeRun}
               onRerun={run.rerun}
               onGoSetup={() => setView('setup')}

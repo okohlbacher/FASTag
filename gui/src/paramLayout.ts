@@ -15,6 +15,7 @@
 
 import manifest from './params.generated.json'
 import { DECIMAL } from './digestReport'
+import type { ParamValue } from './ParamField'
 import { PARAM_UI, type Dependency, type ParamHelp, type ParamUi } from './paramUi'
 
 export { PARAM_UI, type Dependency, type ParamHelp, type ParamUi }
@@ -472,12 +473,21 @@ export function hintText(name: string, fallback: string): string {
 /// grid: hintText up to its first clause break (a colon, a semicolon, a
 /// bracket, ", because ..."), as a sentence. The full text is the line's
 /// tooltip and the (?) popover's.
+/// Without a clause break, or still too long for the line, it is cut at a
+/// word boundary with an ellipsis (never mid-word by CSS).
+export const BRIEF_MAX = 46
 export function briefHint(text: string): string {
   const t = text.trim()
   const m = /(?:[:;]\s|\s\(|,\s(?:because|so|and|but|which|while|as|for|or)\s|\s(?:—|–)\s)/.exec(t.slice(20))
-  if (!m) return t
-  const cut = t.slice(0, 20 + m.index).replace(/[,\s]+$/, '')
-  return /[.!?]$/.test(cut) ? cut : `${cut}.`
+  let s = t
+  if (m) {
+    const cut = t.slice(0, 20 + m.index).replace(/[,\s]+$/, '')
+    s = /[.!?]$/.test(cut) ? cut : `${cut}.`
+  }
+  if (s.length <= BRIEF_MAX) return s
+  const head = s.slice(0, BRIEF_MAX - 1)
+  const sp = head.lastIndexOf(' ')
+  return `${(sp > 20 ? head.slice(0, sp) : head).replace(/[,;:\s]+$/, '')}…`
 }
 
 // The words a choice is shown as; the CLI token is what is sent.
@@ -661,6 +671,8 @@ export function invalidParams(values: Record<string, unknown>): Record<string, s
 /// index, read from its header (taxdb_info), null while unknown.
 export interface PreflightContext {
   taxdbK?: number | null
+  /// The input file (its format: the CLI refuses some options on mzPeak).
+  input?: string
 }
 
 export interface Conflict {
@@ -671,6 +683,8 @@ export interface Conflict {
   /// A required input not chosen yet, not a wrong value: shown in a
   /// neutral colour (a fresh form is no error).
   neutral?: true
+  /// The one-click change that resolves it.
+  fix?: { label: string; values: Record<string, ParamValue> }
 }
 
 const int = (v: unknown): number | null => (INT.test(String(v ?? '').trim()) ? Number(String(v).trim()) : null)
@@ -700,6 +714,16 @@ export function speciesReach(
   const reach = seed + 2 * ext
   return reach >= taxdbK ? null : { reach, k: taxdbK, option, seed, ext }
 }
+
+/// The fragment tolerance in Da as the CLI checks it for isotope offsets
+/// (PrecursorHypotheses.cpp: ppm at 1000 m/z).
+function fragmentDa(values: Record<string, unknown>): number | null {
+  const t = Number(textOf(values, 'fragment_tolerance'))
+  if (!Number.isFinite(t)) return null
+  return textOf(values, 'fragment_tolerance_unit') === 'ppm' ? t * 1000 * 1e-6 : t
+}
+const ISOTOPE_MAX_FRAGMENT_TOL_DA = 0.05
+const isMzPeak = (input: string | undefined): boolean => /\.mzpeak[\\/]?$/i.test(String(input ?? '').trim())
 
 export const CONFLICTS: ((values: Record<string, unknown>, ctx: PreflightContext) => Conflict | null)[] = [
   (values, { taxdbK }) => {
@@ -755,6 +779,39 @@ export const CONFLICTS: ((values: Record<string, unknown>, ctx: PreflightContext
   // "-search_config_template is a `comet -p` parameter file; it needs
   // -search_engine comet": no entry here, the template depends on Comet
   // (paramUi.ts), so a template left over from Comet is inert and not sent.
+  // "-isotope_error other than 0 needs a high-resolution fragment tolerance
+  // (below 0.05 Da, or the ppm equivalent at 1000 m/z)".
+  (values) => {
+    const raw = values['isotope_error']
+    const list = (Array.isArray(raw) ? raw : String(raw ?? '').split(/[\s,]+/)).map((x) => String(x).trim()).filter(Boolean)
+    if (!list.some((k) => Number(k) !== 0)) return null
+    const da = fragmentDa(values)
+    if (da === null || da < ISOTOPE_MAX_FRAGMENT_TOL_DA) return null
+    return {
+      params: ['isotope_error', 'fragment_tolerance'],
+      note: `Isotope offsets other than 0 need a high-resolution fragment tolerance, below 0.05 Da (50 ppm at 1000 m/z); this run's is ${Number(da.toPrecision(3))} Da. Set Isotope error to 0, or lower the fragment tolerance.`,
+      fix: { label: 'Set Isotope error to 0', values: { isotope_error: ['0'] } }
+    }
+  },
+  // "-complement_tolerance_unit auto needs mzML or MGF input; mzPeak input
+  // is read in one pass."
+  (values, { input }) =>
+    isMzPeak(input) && textOf(values, 'complement_tolerance_unit') === 'auto'
+      ? {
+          params: ['complement_tolerance_unit'],
+          note: 'Complement tolerance unit auto needs mzML or MGF input: an mzPeak file is read in one pass. Choose Da or fragment.',
+          fix: { label: 'Use Da', values: { complement_tolerance_unit: 'Da' } }
+        }
+      : null,
+  // "-tmt_pseudo_filter auto needs random-access mzML or MGF input".
+  (values, { input }) =>
+    isMzPeak(input) && textOf(values, 'tmt_pseudo_filter') === 'auto'
+      ? {
+          params: ['tmt_pseudo_filter'],
+          note: 'TMT pseudo-tag filter auto needs mzML or MGF input: an mzPeak file is read in one pass. Choose on for known TMT6/10 input, or off.',
+          fix: { label: 'Turn the TMT filter off', values: { tmt_pseudo_filter: 'off' } }
+        }
+      : null,
   // "-taxdb, -taxonomy_nodes and -taxonomy_names are one set: give all three, or none (to use the bundled taxonomy)."
   (values) => {
     if (!isActive('species', values)) return null

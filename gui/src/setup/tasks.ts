@@ -143,7 +143,6 @@ export const TASKS: readonly Task[] = [
       recon_fasta: 'The FASTA to shortlist from.',
       shortlist_background: 'Host and contaminant proteins, always kept in the reduced FASTA.',
       search_engine: 'The engine the configuration is for.',
-      shortlist_protease: 'Cleavage rule. Trypsin refuses clearly non-tryptic runs; Auto uses the protease FASTag detects. With another protease only exact placements count.',
       variable_modifications: 'Tagged as alternatives and written for the engine.'
     },
     outputs: ['out', 'shortlist_out', 'fasta_out', 'search_config_out'],
@@ -157,7 +156,7 @@ export const TASKS: readonly Task[] = [
     values: { ...ALL, census: true, census_score: true, census_sorted_out: 'census_sorted.tsv' },
     basic: ['census_ids', 'census_ids_fdr', 'census_triage_evalue'],
     help: {
-      census_ids: 'Optional: the idXML or mzIdentML of this run; its q-value and E-value show once chosen.',
+      census_ids: 'Optional: this run\'s idXML or mzIdentML, with q-values; it adds ID q-value and Triage E-value.',
       census_ids_fdr: 'The q-value a hit needs to count as identified.',
       census_triage_evalue: 'An unidentified spectrum this good is a candidate.'
     },
@@ -187,7 +186,7 @@ export const TASKS: readonly Task[] = [
       subsample_fraction: '10% gives stable calls in a tenth of the time.'
     },
     outputs: ['out', 'digest_out', 'label_out', 'alkylation_out', 'glyco_out', 'species_out'],
-    productNotes: { alkylation_out: 'needs tags of 8+ residues: Extension 3, or a protein database' },
+    productNotes: { alkylation_out: 'raises Extension to 3: the shipped proteome needs tags of 8+ residues' },
     docs: { to: 'digest', label: 'Digest, label and mass-gap reports' }
   }
 ]

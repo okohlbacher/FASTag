@@ -82,7 +82,7 @@ test('Overview figures and calls equal the oracles of the 1.12 gate output', asy
   await expect(page.getByRole('list', { name: 'Checks', exact: true })).toContainText('Acquisition: DDA')
 })
 
-test('no alkylation report asked for: no Alkylation tile, and C+57.021 a default', async ({ page }) => {
+test('no alkylation report asked for: no Alkylation tile, and the fixed cysteine line a default', async ({ page }) => {
   for (const fixture of ['gate', 'gate-1.11']) {
     await characterize(page, fixture)
     await expect(page.getByRole('tab', { name: 'Overview' })).toHaveAttribute('aria-selected', 'true')
@@ -90,7 +90,7 @@ test('no alkylation report asked for: no Alkylation tile, and C+57.021 a default
     expect(calls[0].params.alkylation_out ?? '').toBe('')
     expect(oracle(fixture === 'gate' ? 'v112-pxd003531' : 'v111-pxd003531').massgap).toBe(false)
     await expect(tile(page, 'Alkylation')).toHaveCount(0)
-    const row = page.getByRole('table', { name: 'Suggested search settings' }).getByRole('row', { name: /Fixed modification \(C \+57\.021\)/ })
+    const row = page.getByRole('table', { name: 'Suggested search settings' }).getByRole('row', { name: /Fixed cysteine modification/ })
     await expect(row.locator('.evidence')).toHaveText('default')
     await expect(row).toContainText('alkylation not assessed (alkylation report not written)')
   }

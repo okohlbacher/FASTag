@@ -630,6 +630,8 @@ button.offer { border-style: dashed; }
   font-size: var(--text-xs);
   font-weight: 500;
 }
+/* An empty report: its tab says 0, muted. */
+.tabs .count.zero { background: var(--panel); color: var(--muted-foreground); }
 
 /* Which run or file a pane shows. */
 .src { margin: 0; color: var(--muted-foreground); font-size: var(--text-xs); overflow-wrap: anywhere; }
@@ -1144,6 +1146,11 @@ kbd { font-family: var(--font-mono); font-size: var(--text-xs); color: var(--mut
 .sp-res { font: 600 var(--text-xs) var(--font-seq); color: var(--primary-text); }
 .sp-tags h3 { margin: 0 0 var(--space-2); font-size: var(--text-sm); font-weight: 600; }
 .sp-tags-wrap { max-height: 320px; overflow: auto; }
+table.history-table th.num { text-align: right; }
+/* The tags of one spectrum: its own columns, not History's widths. */
+table.history-table.sp-tags-table { table-layout: auto; }
+table.history-table.sp-tags-table th:nth-child(n) { width: auto; }
+table.sp-tags-table th.num, table.sp-tags-table td.num { text-align: right; font-variant-numeric: tabular-nums; }
 .sp-tags-table tbody tr { cursor: pointer; }
 .sp-tags-table tbody tr.on td { background: var(--primary-soft); }
 .sp-tags-table tbody tr:focus-visible { outline: 2px solid var(--ring); outline-offset: -2px; }
@@ -1244,7 +1251,8 @@ input::placeholder, textarea::placeholder { font-family: var(--font-sans); font-
 .path-input:placeholder-shown { font-family: var(--font-sans); }
 /* A group waiting for its report: said once, with its Turn on. */
 .group-needs { display: flex; align-items: center; gap: var(--space-2); flex-wrap: wrap; padding: var(--space-2) var(--space-3); border: 1px dashed var(--border); border-radius: var(--radius-sm); font-size: var(--text-xs); color: var(--muted-foreground); }
-.group-needs span { flex: 1 1 240px; }
+.group-needs span { flex: 0 1 auto; }
+.group-needs button { margin-left: auto; }
 /* The Preset select first in its row, in the same place for every workflow. */
 .preset-pick { display: inline-flex; align-items: center; gap: var(--space-2); }
 .preset-pick .sublabel { font-size: var(--text-xs); color: var(--muted-foreground); }
@@ -1318,5 +1326,10 @@ dl.qc-strip .stat dd { margin: 0; font-size: var(--text-md); font-weight: 600; }
 .report-head .report-sub { margin: 0; font-size: var(--text-sm); color: var(--muted-foreground); }
 .shortlist-notes { max-width: 640px; }
 
-/* The Advanced card's chevron: larger, before the title. */
-.chev.big { font-size: 18px; line-height: 1; width: 1em; text-align: center; color: var(--foreground); }
+/* The chevrons: an SVG, 12 px in the groups, 14 px on the Advanced card,
+   whose summary lines up with the headers of cards 1-4. */
+.chev { display: inline-grid; place-items: center; width: 14px; height: 14px; flex: none; }
+.chev.big { width: 16px; height: 16px; color: var(--foreground); }
+.view-setup details.advanced > summary.card-head { padding: 0; min-height: 0; }
+.view-setup details.advanced > .adv-body { padding: var(--space-2) 0 var(--space-2); }
+.view-setup details.advanced > summary.card-head h2 { margin: 0; }

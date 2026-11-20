@@ -6,6 +6,7 @@ import { useEffect, type JSX, type RefObject } from 'react'
 import { baseName } from '../digestReport'
 import { createLogStore, useLog, type LogStore } from './logStore'
 import { disclosure } from '../disclosure'
+import { IconChevron } from '../icons'
 
 // The log drawer renders only its last LOG_WINDOW lines (GUI-DESIGN P1):
 // with all 5,000 lines in the DOM, a log line with the drawer open cost
@@ -99,7 +100,7 @@ export default function LogDrawer({ log: logStore, live: liveStore, open, job, o
     <section className={`logdrawer${open ? ' open' : ''}`} aria-label="Run log">
       <details className="drawer" {...d.details}>
         <summary className="drawer-toggle" aria-controls="runlog" {...d.summary}>
-          <span className={`chev ${open ? 'open' : ''}`} aria-hidden="true">▸</span>
+          <span className={`chev ${open ? 'open' : ''}`} aria-hidden="true"><IconChevron /></span>
           <span className="lbl">{job ? `Log of ${baseName(job)}` : 'Log'}</span>
           <code className="last">{lastLog || 'Log output appears here.'}</code>
           <span className="n">

@@ -54,6 +54,19 @@ describe('preStartChecks (from the probe)', () => {
     expect(ids(pre(iontrapProbe, da).checks)).toEqual(['warn:stale-index', 'warn:electron'])
   })
 
+  // Round 5, 10: ETD spectra are unreliable only when read as b/y: Ion
+  // series by, or auto on a file without activation metadata.
+  it('electron activation warns only when the spectra are read as b/y ions', () => {
+    expect(ids(pre(iontrapProbe, { ...da, ion_series: 'auto' }).checks)).toEqual(['warn:stale-index'])
+    expect(ids(pre(iontrapProbe, { ...da, ion_series: 'cz' }).checks)).toEqual(['warn:stale-index'])
+    const e = pre(iontrapProbe, da).checks.find((c) => c.id === 'electron')!
+    expect(e.fix).toEqual({ label: 'Use the Orbitrap ETD preset', instrument: 'orbitrap-etd' })
+    expect(e.detail).toMatch(/Ion series/)
+    const mgf = preStartChecks({ input: '/data/run01.mgf', values: { ...da, ion_series: 'auto' }, supported: true, probe: parseProbe(iontrapProbe) })
+    expect(ids(mgf.checks)).toContain('warn:electron')
+    expect(ids(postRunChecks({ reports: [parseReport(it03Digest, '/d/a.digest.tsv')], notes: notes(it03Err), ionSeries: 'auto', input: '/d/a.mzML' }).checks)).toEqual([])
+  })
+
   it('the Orbitrap HCD gate input (its index stale, as FASTag 1.12 says): only a warning, and Orbitrap HCD proposed', () => {
     const r = pre(orbitrapProbe)
     expect(ids(r.checks)).toEqual(['warn:stale-index'])

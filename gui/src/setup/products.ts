@@ -63,6 +63,9 @@ export const PRODUCTS: readonly Product[] = [
   { param: 'check_header_out', label: 'Precursor charge check', what: 'Each precursor charge of the file against the MS1 isotope spacing.', also: { check_header_charge: 'warn' }, experimental: true }
 ]
 
+/// The tag length the shipped human proteome needs (alkylation report).
+export const ALKYLATION_TAG = 8
+
 /// The accession the CLI takes until a data set has one (usi_collection):
 /// checking USI column writes the column at once, never an empty option.
 export const USI_PLACEHOLDER = 'USI000000'
@@ -135,7 +138,24 @@ export function setProduct(p: Product, on: boolean, values: V, tagsOut: string):
       const need = PRODUCT_OF.get(n)
       if (need && !isOn(need, next)) turnOn(need)
     }
-    if (q.also) Object.assign(next, q.also)
+    // A value set with it fills an option still at its default only: the
+    // charge check in mode both stays both (warn would drop the tagging
+    // at the alternative charge).
+    for (const [k, v] of Object.entries(q.also ?? {})) {
+      const cur = text(next[k])
+      const d = PARAM_BY_NAME.get(k)?.default
+      if (typeof v === 'string' && cur !== '' && cur !== (typeof d === 'string' ? d : '')) continue
+      next[k] = v
+    }
+    // The alkylation report places tags on a shipped proteome when no
+    // protein database is given, which needs tags of 8 residues (human):
+    // the extension rises so that seed plus both ends reach them.
+    if (q.param === 'alkylation_out' && !isActive('recon_fasta', next)) {
+      const seed = Number(text(next['tag_length']) || PARAM_BY_NAME.get('tag_length')?.default || 3)
+      const ext = Number(text(next['extension']) || PARAM_BY_NAME.get('extension')?.default || 0)
+      const need = Math.ceil((ALKYLATION_TAG - seed) / 2)
+      if (Number.isFinite(seed) && Number.isFinite(ext) && ext < need) next['extension'] = String(need)
+    }
     if (q.flag) next[q.flag] = true
     else if (PARAM_BY_NAME.get(q.param)?.type === 'bool') next[q.param] = true
     else if (q.param === 'usi_collection' && !text(next[q.param])) next[q.param] = USI_PLACEHOLDER

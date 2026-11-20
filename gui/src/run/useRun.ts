@@ -6,7 +6,8 @@
 // React state, so a Log batch re-renders only the drawer.
 
 import { useCallback, useEffect, useMemo, useReducer, useRef, type Dispatch, type SetStateAction } from 'react'
-import type { LogLine, ResolvedOutputs, RunResult, SpeciesReport } from '../types'
+import type { LogLine, ResolvedOutputs, RunRecord, RunResult, SpeciesReport } from '../types'
+import { recordOutputs } from '../shell/HistoryView'
 import { newJobId, runJob, type Job as RunJob, type JobAction } from '../runJob'
 import { sentValues } from '../paramLayout'
 import type { ParamValue } from '../ParamField'
@@ -129,16 +130,22 @@ const workflowOf = (call: Record<string, unknown>): string | null => (typeof cal
 
 // What the log of a run says of its evidence: the MS2 count and the spectra
 // that gave taxon evidence (the CLI's summary lines).
-export function evidenceOfLog(lines: readonly string[]): { contributed: number | null; ms2: number | null } {
+/// The CLI's warning (IonSeries.h speciesExcludedWarning) that c/z tag rows
+/// were left out of -species: their count.
+export const CZ_EXCLUDED = /Ion series: (\d+) tag rows read as c\/z-dot ions were left out of -species/
+export function evidenceOfLog(lines: readonly string[]): { contributed: number | null; ms2: number | null; czExcluded: number | null } {
   let contributed: number | null = null
   let ms2: number | null = null
+  let czExcluded: number | null = null
   for (const line of lines) {
+    const cz = CZ_EXCLUDED.exec(line)
+    if (cz) czExcluded = Number(cz[1])
     const sp = /^Species:\s+(\d+) spectra contributed/.exec(line)
     if (sp) contributed = Number(sp[1])
     const m = /^(\d+) MS2 spectra,/.exec(line)
     if (m) ms2 = Number(m[1])
   }
-  return { contributed, ms2 }
+  return { contributed, ms2, czExcluded }
 }
 
 // The option behind each table and workflow report, for its name in words.
@@ -191,6 +198,11 @@ export function useRun(s: RunInputs, view: ViewStore, hooks: RunHooks = {}) {
   const batchCancel = useRef(false)
   // Cancel pressed during the current run: its failure is the user's doing.
   const cancelled = useRef(false)
+  // The results last asked for (a run, a batch job selected, a file
+  // opened): a slow read for an earlier one must not land beside them
+  // (job A's reports next to job B's tags). Bumped by each; showResults
+  // dispatches nothing once it has moved on.
+  const showGen = useRef(0)
   // A killed run's exit status says nothing (Windows reports code 1), so a
   // cancel is read off the backend flag or the Cancel the user pressed. A run
   // that finished ok despite the kill stays ok.
@@ -259,6 +271,8 @@ export function useRun(s: RunInputs, view: ViewStore, hooks: RunHooks = {}) {
     // "42092 MS2 spectra, 1130228 tags[ -> 5321 after filtering]"
     const ms2 = /^(\d+) MS2 spectra,(?: (\d+) tags)?(?: -> (\d+) after filtering)?/.exec(line)
     if (ms2) dispatch({ type: 'EVIDENCE', evidence: { ms2: Number(ms2[1]) } })
+    const cz = CZ_EXCLUDED.exec(line)
+    if (cz) dispatch({ type: 'EVIDENCE', evidence: { czExcluded: Number(cz[1]) } })
     const t = ms2?.[3] ?? ms2?.[2]
     if (t) lastTags.current = Number(t)
   }
@@ -434,6 +448,8 @@ export function useRun(s: RunInputs, view: ViewStore, hooks: RunHooks = {}) {
       pushLog('The run finished, but the app did not learn where it wrote its outputs; open them with Open a tags TSV….')
       return
     }
+    const g = ++showGen.current
+    const stale = (): boolean => g !== showGen.current
     dispatch({ type: 'RESULTS', update: (r) => ({ path: outFile, gen: (r?.gen ?? 0) + 1, input: inFile }) })
     dispatch({ type: 'BATCH_MISS', miss: null })
     let switched = false
@@ -445,11 +461,12 @@ export function useRun(s: RunInputs, view: ViewStore, hooks: RunHooks = {}) {
     // selected after a later one), from its own call and log; none are
     // left from the run shown before.
     dispatch({ type: 'SPECIES', species: null, speciesRun: { input: inFile, enabled: runSpecies } })
-    dispatch({ type: 'EVIDENCE', evidence: ran ? evidenceOfLog(ran.log.get()) : { contributed: null, ms2: null } })
+    dispatch({ type: 'EVIDENCE', evidence: ran ? evidenceOfLog(ran.log.get()) : { contributed: null, ms2: null, czExcluded: null } })
     if (runSpecies && outputs.species_out) {
       // An unreadable species report must not also cost the Digest reports.
       try {
         const sp = await window.fastag.species(outputs.species_out)
+        if (stale()) return
         species = sp
         dispatch({ type: 'SPECIES', species: sp })
         if (sp && sp.taxa.length > 0) {
@@ -457,6 +474,7 @@ export function useRun(s: RunInputs, view: ViewStore, hooks: RunHooks = {}) {
           switched = true
         }
       } catch (err) {
+        if (stale()) return
         logResultsError(err)
       }
     }
@@ -464,6 +482,7 @@ export function useRun(s: RunInputs, view: ViewStore, hooks: RunHooks = {}) {
     // path is not an output and may hold an old file.
     const sent = REPORT_PARAMS.map((n) => outputs[n]).filter((p): p is string => !!p)
     const rep = await loadReports(sent)
+    if (stale()) return
     // A view only for a file that exists (doc/GUI-WORKFLOWS.md 3): a report
     // the run was asked for and did not write gets no tab; the Overview
     // names it instead.
@@ -480,6 +499,7 @@ export function useRun(s: RunInputs, view: ViewStore, hooks: RunHooks = {}) {
       if (await exists(p)) tables[k] = p
       else if (k !== 'reconIds') missing.push(productLabel(TABLE_PARAM[k]) ?? k)
     }
+    if (stale()) return
     const all = workflowReportsOf(outputs)
     // The reduced FASTA and the engine configuration too: only those written.
     const wf = await workflowFiles(all, exists)
@@ -489,6 +509,7 @@ export function useRun(s: RunInputs, view: ViewStore, hooks: RunHooks = {}) {
       if (await exists(p)) workflow[k] = p
       else missing.push(productLabel(WORKFLOW_PARAM[k]) ?? k)
     }
+    if (stale()) return
     const read = (p: string | undefined): Promise<string | null> => (p ? window.fastag.report(p).catch(() => null) : Promise.resolve(null))
     const census = await read(workflow.censusSummary)
     // What the Overview's workflow figures read: small key/value reports and
@@ -500,6 +521,7 @@ export function useRun(s: RunInputs, view: ViewStore, hooks: RunHooks = {}) {
       delta: await read(tables.delta),
       config: wf.files.some((f) => f.path === outputs.search_config_out)
     }
+    if (stale()) return
     dispatch({
       type: 'REPORTS',
       update: (cur) => ({ list: rep.reports, errors: rep.errors, tables, gen: bumpGen(cur.gen, Object.keys(tables) as TableKind[]), workflow, missing })
@@ -751,6 +773,7 @@ export function useRun(s: RunInputs, view: ViewStore, hooks: RunHooks = {}) {
 
   // A tags table.
   async function openTagsPath(p: string): Promise<void> {
+    showGen.current++
     // Select before waiting: a mixed drop may open a report alongside the
     // tags, and that report's later selection should remain in front.
     setTab('results')
@@ -781,6 +804,19 @@ export function useRun(s: RunInputs, view: ViewStore, hooks: RunHooks = {}) {
     showResults(j.input, j.outputs, params && j.log ? { params, log: j.log } : undefined).catch(logResultsError)
   }
 
+  // A recorded run opened from History (use case 8): its tags, the reports
+  // it was sent and its workflow's views, as showJob does for a batch job.
+  // The record keeps no log: the Overview reads the files alone. A tags
+  // file a later run left incomplete (its record says so) opens as that,
+  // marked, without the finished run's reports.
+  async function showRecord(r: RunRecord, out: string): Promise<void> {
+    setTab('results')
+    const last = await window.fastag.historyOf(out).catch(() => null)
+    if (last && last.status !== 'ok') return openTagsPath(out)
+    const call: Record<string, unknown> = { params: r.params ?? {}, ...(r.workflow ? { workflow: r.workflow } : {}) }
+    return showResults(r.input, recordOutputs(r, out), { params: call, log: createLogStore() }).catch(logResultsError)
+  }
+
   // Add one report to those shown, replacing one of the same kind. A report
   // of another run replaces all of them: one run's call next to another
   // run's labels would read as one result.
@@ -798,6 +834,7 @@ export function useRun(s: RunInputs, view: ViewStore, hooks: RunHooks = {}) {
   // A species report, dropped or opened: shown in the Species tab, in
   // place of what another run left shown.
   async function openSpeciesPath(p: string): Promise<void> {
+    showGen.current++
     try {
       const sp = await window.fastag.species(p)
       // The run that wrote it, when the app recorded it; else the report.
@@ -807,7 +844,7 @@ export function useRun(s: RunInputs, view: ViewStore, hooks: RunHooks = {}) {
       // A report read is shown whatever Setup's species switch and reach
       // check say; the counts of the run shown before are not its own.
       dispatch({ type: 'SPECIES', species: sp, speciesRun: { input: baseName(rec?.input ?? p), enabled: true } })
-      dispatch({ type: 'EVIDENCE', evidence: { contributed: null, ms2: null } })
+      dispatch({ type: 'EVIDENCE', evidence: { contributed: null, ms2: null, czExcluded: null } })
       setTab('species')
     } catch (err) {
       logResultsError(err)
@@ -815,6 +852,7 @@ export function useRun(s: RunInputs, view: ViewStore, hooks: RunHooks = {}) {
   }
 
   async function openReportPath(p: string, known?: string | null): Promise<void> {
+    showGen.current++
     // A workflow report (QC, shortlist, identifiability, survey tables)
     // opens in its own view, told by its content: not the Digest parser.
     const head = known !== undefined ? known : await window.fastag.reportHead(p).catch(() => null)
@@ -994,6 +1032,7 @@ export function useRun(s: RunInputs, view: ViewStore, hooks: RunHooks = {}) {
     cancelRun,
     cancelForQuit,
     showJob,
+    showRecord,
     openResults,
     openResultsPath,
     openReport,

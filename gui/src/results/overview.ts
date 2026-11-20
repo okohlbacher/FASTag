@@ -15,6 +15,7 @@
 import { alkylationCall as alkylationReportCall, fmt, fmtQ, pct, type AlkylationCall as AlkylationReport, type Report } from '../digestReport'
 import type { ParamValue } from '../ParamField'
 import type { SpeciesReport } from '../types'
+import { electronReadAsBy } from '../inspector/checks'
 import {
   alkylationCall,
   censusFacts,
@@ -93,6 +94,9 @@ export interface OverviewInputs {
   census: string | null
   /// The parameters the run was sent.
   params: Record<string, unknown>
+  /// The input the run read (its format decides how Ion series auto reads
+  /// ETD spectra); left out, an mzML is assumed.
+  input?: string
   /// The instrument preset the run's tolerance came from (its label), if any.
   instrument: string | null
   /// The workflow reports' texts, when the run wrote them: the QC report,
@@ -129,6 +133,8 @@ export function qcFacts(text: string | null | undefined): {
   instrument: string | null
   serial: string | null
   started: string | null
+  /// The run rows' fragment tolerance.
+  tolerance: { value: number; unit: 'ppm' | 'Da' } | null
   tagYield: number | null
   tagged: number | null
   topCharge: { z: number; share: number | null } | null
@@ -147,6 +153,11 @@ export function qcFacts(text: string | null | undefined): {
     instrument: real(kv.get('instrument_model')),
     serial: real(kv.get('instrument_serial_number')),
     started: real(kv.get('start_timestamp')),
+    tolerance: ((): { value: number; unit: 'ppm' | 'Da' } | null => {
+      const v = numOf(kv.get('fragment_tolerance'))
+      const u = kv.get('fragment_tolerance_unit')
+      return v != null && (u === 'ppm' || u === 'Da') ? { value: v, unit: u } : null
+    })(),
     tagYield: numOf(kv.get('tag_yield')),
     tagged: numOf(kv.get('ms2_tagged_e001')),
     topCharge: top ? { z: top.z, share: top.share } : null
@@ -348,7 +359,7 @@ export function buildOverview(i: OverviewInputs): Overview {
   // ---- calls
   const calls: Tile[] = [
     proteaseTile(protease),
-    genusTile(sp, da, rank),
+    genusTile(sp, rank),
     labelTile(lab),
     alkCall ? alkylationReportTile(alkCall, i.params) : alkylationTile(alk, fasta, i.params, log.reconMinLength)
   ]
@@ -359,7 +370,8 @@ export function buildOverview(i: OverviewInputs): Overview {
     if (lowEvidence && t.tone === 'call')
       Object.assign(t, { value: 'too little evidence', tone: 'low', note: `${fewer}; CLI: ${t.value} (${t.note.replace(/\.$/, '')})` })
     else if (lowEvidence && t.tone === 'nocall') t.note = addNote(t.note, `also ${fewer}`)
-    else if (!cutoffApplied && (t.tone === 'call' || t.tone === 'nocall')) t.note = addNote(t.note, NOT_APPLIED)
+    // The cutoff not applied is said once, by the check line below, not
+    // in every call tile.
   }
 
   // ---- checks
@@ -379,10 +391,26 @@ export function buildOverview(i: OverviewInputs): Overview {
   else checks.push({ tone: 'muted', text: 'Acquisition not checked: this FASTag writes no acquisition check line (FASTag 1.12 does)' })
   if (da && (i.species != null || given(i.params['species'])))
     checks.push({ tone: 'flag', text: `The fragment tolerance is ${fmt(tol!.value)} Da: species calls are unreliable on ion-trap/Da data.` })
-  if (log.electron && log.electron.electron > 0)
+  // The species report counts b/y tags only: a c/z run's left-out rows
+  // explain a sparse or empty report (the CLI says so in its log only).
+  const czExcluded = ((): number | null => {
+    for (const l of i.log) {
+      const m = /Ion series: (\d+) tag rows read as c\/z-dot ions were left out of -species/.exec(l)
+      if (m) return Number(m[1])
+    }
+    return null
+  })()
+  if (czExcluded)
     checks.push({
       tone: 'flag',
-      text: `${fmt(log.electron.electron)} of ${fmt(log.electron.of)} MS2 spectra were electron-activated (ETD, ECD or hybrid); tags read as b/y ions from them are unreliable.`
+      text: `${fmt(czExcluded)} tag rows read as c/z ions were left out of the species report, which counts b/y tags only.`
+    })
+  // Only when they were read as b/y (Ion series by, or auto without
+  // activation metadata): under cz or auto on mzML they are c/z tags.
+  if (log.electron && log.electron.electron > 0 && electronReadAsBy(i.params['ion_series'], i.input ?? ''))
+    checks.push({
+      tone: 'flag',
+      text: `${fmt(log.electron.electron)} of ${fmt(log.electron.of)} MS2 spectra were electron-activated (ETD, ECD or hybrid) and read as b/y ions; their tags are unreliable. Choose the Orbitrap ETD preset or Ion series auto.`
     })
 
   // ---- suggested settings
@@ -407,14 +435,14 @@ export function buildOverview(i: OverviewInputs): Overview {
     { setting: 'missed cleavages', value: '2', evidence: 'default', note: 'default, not measured' },
     alkCall?.status === 'call' && alkCall.reagent && callOk
       ? {
-          setting: 'fixed C+57.021',
-          value: alkCall.reagent === 'none' ? 'none (cysteines not alkylated)' : `${alkCall.reagent} (C)`,
+          setting: 'fixed C',
+          value: alkCall.reagent === 'none' ? 'None (cysteines not alkylated)' : `${alkCall.reagent} (C${alkCall.mass != null ? `, +${fmt(alkCall.mass, 3)}` : ''})`,
           evidence: 'call',
           note: `from the alkylation call (not validated)${cutoffApplied ? '' : `; ${NOT_APPLIED}`}`
         }
       : {
-      setting: 'fixed C+57.021',
-      value: 'Carbamidomethyl (C)',
+      setting: 'fixed C',
+      value: 'Carbamidomethyl (C, +57.021)',
       evidence: 'default',
       note:
         alkCall
@@ -466,7 +494,8 @@ export function buildOverview(i: OverviewInputs): Overview {
       evidence: 'call',
       note: `from the CLI species call (not validated)${cutoffApplied ? '' : `; ${NOT_APPLIED}`}`
     })
-  else if (callOk && sp.state === 'ranked')
+  // A tie at the top names no proteome: which one would be arbitrary.
+  else if (callOk && sp.state === 'ranked' && sp.tied.length < 2)
     suggestions.push({
       setting: 'database',
       value: `${sp.top.name} proteome`,
@@ -513,9 +542,10 @@ function proteaseTile(c: ProteaseCall): Tile {
   return { ...base, value: 'not assessed', tone: 'off', note: 'the digest report was not written', action: enable('Digest report', { digest_out: 'digest.tsv' }) }
 }
 
-function genusTile(c: SpeciesCall, da: boolean, rank = 'genus'): Tile {
+function genusTile(c: SpeciesCall, rank = 'genus'): Tile {
   const base = { id: 'genus', label: `Top ${rank}` }
-  const caveat = da ? ' Species calls are unreliable on ion-trap/Da data.' : ''
+  // The Da caveat is the check line's (said once), not the tile's.
+  const caveat = ''
   if (c.state === 'called') {
     if (c.present.length === 0)
       return {
@@ -532,6 +562,13 @@ function genusTile(c: SpeciesCall, da: boolean, rank = 'genus'): Tile {
       note: `present by the CLI species call (decoy null)${others.length ? `; also present: ${others.join(', ')}` : ''}.${caveat}`
     }
   }
+  if (c.state === 'ranked' && c.tied.length > 1)
+    return {
+      ...base,
+      value: 'No single leader',
+      tone: 'nocall',
+      note: `tie between ${c.tied.length} taxa at ${rank} rank: ${c.tied.map((t) => t.name).join(', ')}; not a presence call.${caveat}`
+    }
   if (c.state === 'ranked')
     return {
       ...base,
@@ -679,7 +716,7 @@ export function shownTiles(o: Overview, params: Record<string, unknown>): { figu
 const SETTING_WORDS: Record<string, string> = {
   enzyme: 'Enzyme',
   'missed cleavages': 'Missed cleavages',
-  'fixed C+57.021': 'Fixed modification (C +57.021)',
+  'fixed C': 'Fixed cysteine modification',
   label: 'Label',
   'variable M+15.995': 'Variable modification (M +15.995)',
   'fragment tol.': 'Fragment tolerance',

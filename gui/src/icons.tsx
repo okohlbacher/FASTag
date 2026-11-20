@@ -12,6 +12,15 @@ export function IconError({ size = 12 }: { size?: number }): JSX.Element {
   )
 }
 
+/// A disclosure chevron, pointing right; .chev.open turns it down.
+export function IconChevron({ size = 12 }: { size?: number }): JSX.Element {
+  return (
+    <svg className="icon chev-icon" width={size} height={size} viewBox="0 0 12 12" aria-hidden="true">
+      <path d="M4.2 2.2L8 6l-3.8 3.8" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  )
+}
+
 export function IconCheck(): JSX.Element {
   return (
     <svg className="icon" width="12" height="12" viewBox="0 0 12 12" aria-hidden="true">

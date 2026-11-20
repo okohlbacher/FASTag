@@ -281,23 +281,23 @@ export function useSession(start: Origin = DEFAULTS) {
 
   // Settings into form (History, GUI-DESIGN 3 S9): the input, output and
   // parameters of a recorded run replace the form's; only parameters the
-  // form renders, with a value of a form type. A run recorded with its
-  // workflow (@p workflow, history.rs RunRecord.workflow) comes back as that
-  // workflow: its origin and base values, so its label, landing tab and
-  // views, and what a run sends (sentValues measures against the base), are
-  // the run's. A record without one (before 1.15.4) is over FASTag's
-  // defaults and stays unlabelled. Returns the Undo, which puts the form,
-  // its origin and base back as they were.
+  // form renders, with a value of a form type. The form is rebuilt from
+  // FASTag's defaults (params.generated.json), not from the workflow's
+  // values: a run sends only what differs from what the CLI would use
+  // (sentValues), so an option it was not sent ran at the CLI's default (a
+  // Database reduction with its E-value put back to 0.1 ran at 0.1, not at
+  // the workflow's 10), and a recipe field it was not sent at the recipe's
+  // value (fillRecipe). A run recorded with its workflow (@p workflow,
+  // history.rs RunRecord.workflow) keeps it as origin only: its label,
+  // landing tab and views. A record without one (before 1.15.4) is over
+  // FASTag's defaults and stays unlabelled. Returns the Undo, which puts
+  // the form, its origin and base back as they were.
   function takeRun(runInput: string, runOut: string, params: Record<string, unknown>, workflow?: string | null): () => void {
     const before = { input, out, values, origin, originValues, edited: new Set(edited.current) }
     const task = workflow ? taskById(workflow) : undefined
     const o: Origin = task ? { kind: 'builtin', id: task.id } : DEFAULTS
-    const base = baseOf(o)
-    const ov = startValues(base, runOut)
-    const v: Record<string, ParamValue> = { ...ov }
-    // A report of the workflow the run was not sent was off in it.
-    for (const n of Object.keys(task?.values ?? {}))
-      if (PARAM_BY_NAME.get(n)?.type === 'output-file' && !(n in params)) v[n] = ''
+    const ov = startValues(baseOf(o), runOut)
+    const v: Record<string, ParamValue> = initialValues()
     for (const [name, x] of Object.entries(params)) {
       if (!RENDERED.includes(name)) continue
       if (typeof x === 'string' || typeof x === 'boolean') v[name] = x
@@ -324,7 +324,7 @@ export function useSession(start: Origin = DEFAULTS) {
   // Values the CLI would refuse, field by field, and combinations it refuses
   // before reading a spectrum (rc 6): either keeps Run and Run batch disabled.
   const invalid = invalidParams(values)
-  const refused = conflicts(values, { taxdbK })
+  const refused = conflicts(values, { taxdbK, input: mode === 'one' ? input : undefined })
   const blocked = Object.keys(invalid).length > 0 || refused.length > 0
 
   // What a run writes, by file name: the tags, then each output it is sent.

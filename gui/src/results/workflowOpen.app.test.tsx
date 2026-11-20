@@ -75,7 +75,7 @@ describe('opening a workflow report', () => {
     await flush()
     await waitFor(() => expect(selected()).toBe('QC'))
     expect(mock.resultsQueryCalls).toHaveLength(0)
-    await waitFor(() => expect(document.querySelector('.qc-strip')!.textContent).toMatch(/MS\/MS spectra139/))
+    await waitFor(() => expect(document.querySelector('.qc-strip')!.textContent).toMatch(/MS2 spectra139/))
   })
 })
 

@@ -164,10 +164,21 @@ export type SpeciesCall =
   // runNoCall when every row is a no_call for one run-level reason
   // (few_spectra, low_resolution).
   | { state: 'called'; present: Taxon[]; noCall: number; notDetected: number; runNoCall: string | null }
-  // No call columns: the CLI's ranking, its first row at the rank.
-  | { state: 'ranked'; top: Taxon; genera: number }
+  // No call columns: the CLI's ranking, its first row at the rank; tied:
+  // the taxa level with it on both sort keys (more than one: no single
+  // leader, tiedLeaders).
+  | { state: 'ranked'; top: Taxon; genera: number; tied: Taxon[] }
   | { state: 'none' }
   | { state: 'absent' }
+
+/// The taxa of @p rows (the CLI's order) level with the first on both
+/// sort keys, the adjusted and the observed count: more than one is no
+/// single leader, since the order inside the tied block is only the CLI's
+/// taxid order. One helper for the Species tab and the Overview.
+export function tiedLeaders(rows: readonly Taxon[]): Taxon[] {
+  const top = rows[0]
+  return top ? rows.filter((t) => t.adjusted === top.adjusted && t.observed === top.observed) : []
+}
 
 export function speciesCall(sp: SpeciesReport | null | undefined, rank = 'genus'): SpeciesCall {
   if (!sp) return { state: 'absent' }
@@ -185,7 +196,7 @@ export function speciesCall(sp: SpeciesReport | null | undefined, rank = 'genus'
     }
   }
   // species.rs keeps the CLI's order (ranked by the adjusted count).
-  return { state: 'ranked', top: rows[0], genera: rows.length }
+  return { state: 'ranked', top: rows[0], genera: rows.length, tied: tiedLeaders(rows) }
 }
 
 // ---- run facts ------------------------------------------------------------------

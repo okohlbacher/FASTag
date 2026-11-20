@@ -469,8 +469,9 @@ export const TAGS: HelpPage = {
         <>
           <p>
             The GUI uses b/y ions, appropriate for <G to="gloss-activation">CID and HCD</G> fragmentation.
-            ETD and ECD produce mainly c/z• ions, with different end masses. A run with those spectra needs the
-            command-line <L to="param-ion_series">ion-series option</L>: <code>cz</code> reads all spectra as
+            ETD and ECD produce mainly c/z• ions, with different end masses. For a run with those spectra, choose the
+            Orbitrap ETD (or EThcD) preset under Instrument, or set the <L to="param-ion_series">Ion series</L> field
+            (Advanced, Charge and ions): <code>cz</code> reads all spectra as
             c/z•; <code>auto</code> reads ETD/ECD spectra as c/z• and other spectra as b/y. Automatic selection
             uses activation metadata from mzML only; MGF and mzPeak are read as b/y under <code>auto</code>.
           </p>
@@ -535,7 +536,7 @@ export const RESULTS: HelpPage = {
             <tr><td>Gapped</td><td>1 when the tag crosses a missing peak (<L to="tags-gapped">gapped tag</L>).</td></tr>
             <tr><td>E-value</td><td>The score; lower is better (<L to="results-evalue">E-value</L>).</td></tr>
             <tr><td>Min. conf., Mean conf.</td><td>The weakest and the average observed-step score, 0 to 1 (<L to="results-conf">residue confidence</L>).</td></tr>
-            <tr><td>Database hit</td><td>Without a sequence database: No match (-). With one: In database (fwd, as written; rev, reversed), or Entrapment (efwd, erev: found only in the entrapment database).</td></tr>
+            <tr><td>Database hit</td><td>Without a database filter: Not checked (-), the tags were not matched against a database. With one, only matching tags are written: In database (fwd, as written; rev, reversed), or Entrapment (efwd, erev: found only in the entrapment database).</td></tr>
             <tr><td>Database q-value</td><td>q_db, only with an <G to="gloss-entrapment">entrapment database</G> (<L to="results-nofdr">see below</L>).</td></tr>
             <tr><td>ProForma, Residue conf., USI</td><td>Optional columns (<L to="param-proforma">ProForma</L>, <L to="param-res_conf">per-residue confidence</L>, <L to="param-usi_collection">USI</L>), checked in the Outputs card of Export tags.</td></tr>
           </tbody>
@@ -548,7 +549,7 @@ export const RESULTS: HelpPage = {
       body: (
         <p>
           Above the table, &quot;Spectrum contains&quot;, &quot;Min. length&quot; and &quot;Max. E-value&quot; filter
-          the rows; Database hit picks All, In database, Entrapment or Not in database; &quot;Per spectrum&quot; keeps
+          the rows; Database hit picks All, In database, Entrapment or No database hit (Not checked and Entrapment rows); &quot;Per spectrum&quot; keeps
           only the best tag (or the best 2, 3 or 5) of each spectrum by E-value, among the rows the other filters
           leave. Click a column header to sort, drag its edge to resize, and use <strong>Columns…</strong> to hide
           columns. <strong>Export shown rows…</strong> writes the rows that pass the filters, in the table&apos;s

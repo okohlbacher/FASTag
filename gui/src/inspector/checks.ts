@@ -112,6 +112,21 @@ export function noTaxdbCheck(values: Record<string, ParamValue>, taxonomy: Taxon
   }
 }
 
+/// ETD/ECD spectra are read as b/y ions, so their tags are unreliable:
+/// under the ion series by (the default; ax, removed, reads by too), or
+/// under auto on an input without activation metadata (MGF and mzPeak are
+/// read as b/y). Under cz, or auto on mzML, the CLI reads them as c/z.
+export function electronReadAsBy(ionSeries: unknown, input: string): boolean {
+  const s = String(ionSeries ?? '').trim() || 'by'
+  if (s === 'auto') return /\.(mgf|mzpeak)$/i.test(input.trim())
+  return s !== 'cz'
+}
+
+/// The fix for ETD/ECD spectra read as b/y: the Orbitrap ETD preset
+/// (Ion series auto), on mzML.
+const ETD_FIX: CheckFix = { label: 'Use the Orbitrap ETD preset', instrument: 'orbitrap-etd' }
+const ETD_ADVICE = 'Choose the Orbitrap ETD preset under Instrument, or set Ion series (Advanced, Charge and ions) to auto or cz.'
+
 /// The checks before a run of @p input with @p values. @p probe: the probe's
 /// output, null when there is none (no -probe_input, or not run yet);
 /// @p probeError: why the probe failed; @p taxonomy: where the taxonomy index
@@ -139,6 +154,19 @@ export function preStartChecks(o: {
       level: 'flag',
       title: 'Species detection with a tolerance in Da',
       detail: `The fragment tolerance is ${tolOf(values)} Da. Species calls are not validated on ion-trap or other Da-tolerance data and are often wrong there.`,
+      faq: 'faq-inspector',
+      source: 'the settings'
+    })
+  }
+
+  // The species report counts b/y tags only (FASTag.cpp species_cz_excluded):
+  // under Ion series cz every tag is c/z, so the report stays empty.
+  if (values['species'] === true && String(values['ion_series'] ?? '').trim() === 'cz') {
+    checks.push({
+      id: 'cz-species',
+      level: 'warn',
+      title: 'Species detection with c/z ions',
+      detail: 'Ion series cz reads every spectrum as c/z ions, and the species report counts b/y tags only: it will be empty. Use Ion series auto (ETD spectra as c/z, the others as b/y), or run species detection separately with b/y ions.',
       faq: 'faq-inspector',
       source: 'the settings'
     })
@@ -248,14 +276,18 @@ export function preStartChecks(o: {
     })
   }
   const act = probe.activation
-  if (act && act.of > 0 && (act.electron + act.hybrid) * 100 > act.of) {
+  if (act && act.of > 0 && (act.electron + act.hybrid) * 100 > act.of && electronReadAsBy(values['ion_series'], o.input)) {
+    const auto = String(values['ion_series'] ?? '').trim() === 'auto'
     checks.push({
       id: 'electron',
       level: 'warn',
       title: 'Electron activation',
-      detail: `${(act.electron + act.hybrid).toLocaleString('en-US')} of ${act.of.toLocaleString('en-US')} MS2 spectra probed were activated by ETD, ECD or a hybrid method. FASTag reads b/y ions only, so tags from these spectra are unreliable.`,
+      detail: `${(act.electron + act.hybrid).toLocaleString('en-US')} of ${act.of.toLocaleString('en-US')} MS2 spectra probed were activated by ETD, ECD or a hybrid method. ${
+        auto ? 'This file carries no activation per spectrum, so Ion series auto reads them as b/y ions' : 'Ion series by reads them as b/y ions'
+      }, and their tags are unreliable. ${auto ? 'Set Ion series to cz, or convert the run to mzML.' : ETD_ADVICE}`,
       faq: 'faq-inspector',
-      source: 'the probe'
+      source: 'the probe',
+      ...(auto ? {} : { fix: ETD_FIX })
     })
   }
   const fa = probe.fasta
@@ -283,7 +315,9 @@ const LOWRES = /^No two peaks anywhere in this file are closer than ([\d.]+) Th/
 /// asks for the species report; a re-run in Da then leaves it out, as
 /// species calls are not validated with a tolerance in Da (the da-species
 /// check would hold that re-run otherwise).
-export function postRunChecks(o: { reports: Report[]; notes: string[]; species?: boolean }): { checks: Check[]; detected: Detected | null } {
+/// @p ionSeries and @p input: the run's (electronReadAsBy); left out, the
+/// default b/y reading.
+export function postRunChecks(o: { reports: Report[]; notes: string[]; species?: boolean; ionSeries?: unknown; input?: string }): { checks: Check[]; detected: Detected | null } {
   const checks: Check[] = []
   const inst = instrumentFromReports(o.reports)
   const runReport = o.reports.find((r) => value(r, 'run', 'fragment_tolerance_unit'))
@@ -328,14 +362,14 @@ export function postRunChecks(o: { reports: Report[]; notes: string[]; species?:
     if (detected && !detected.preset && lowres) detected.preset = IONTRAP.id
   }
   const electron = o.notes.find((l) => l.startsWith('Electron activation: '))
-  if (electron) {
+  if (electron && electronReadAsBy(o.ionSeries, o.input ?? '')) {
     const m = /^Electron activation: (\d+) of (\d+) MS2 spectra/.exec(electron)
     checks.push({
       id: 'electron',
       level: 'warn',
       title: 'Electron activation',
       detail: m
-        ? `${Number(m[1]).toLocaleString('en-US')} of ${Number(m[2]).toLocaleString('en-US')} tagged MS2 spectra were activated by ETD, ECD or a hybrid method; FASTag reads b/y ions only, so their tags and flanks are unreliable.`
+        ? `${Number(m[1]).toLocaleString('en-US')} of ${Number(m[2]).toLocaleString('en-US')} tagged MS2 spectra were activated by ETD, ECD or a hybrid method and read as b/y ions, so their tags and flanks are unreliable. ${ETD_ADVICE}`
         : electron,
       faq: 'faq-inspector',
       source: "FASTag's log"

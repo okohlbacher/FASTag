@@ -140,7 +140,8 @@ describe('docs: Digest tab vs doc/DESIGN-digest.md "GUI: Digest tab"', () => {
     await click(screen.getByRole('button', { name: 'Open another report…' }))
     // Another folder is another run: the label report is closed, with a note.
     const panel = screen.getByRole('tabpanel')
-    expect(within(panel).getAllByRole('heading', { level: 2 }).map((h) => h.textContent)).toEqual(['Protease'])
+    // The tab's title row, then the one report left.
+    expect(within(panel).getAllByRole('heading', { level: 2 }).map((h) => h.textContent)).toEqual(['Digest and labels', 'Protease'])
     expect(screen.getByText(/Ecoli_MS2_small\.digest\.tsv is from another run of Ecoli_MS2_small\.mzML; \/rep1\/Ecoli_MS2_small\.label\.tsv was closed/)).toBeTruthy()
   })
 })

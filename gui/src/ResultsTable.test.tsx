@@ -69,7 +69,7 @@ describe('ResultsTable', () => {
     await flush()
     expect(screen.getByRole('gridcell', { name: 'fwd' }).textContent).toBe('In database')
     expect(screen.getByRole('gridcell', { name: 'erev' }).textContent).toBe('Entrapment')
-    expect(screen.getByRole('gridcell', { name: '-' }).textContent).toBe('No match')
+    expect(screen.getByRole('gridcell', { name: '-' }).textContent).toBe('Not checked')
   })
 
   it('filters commit on Enter, not per keystroke', async () => {

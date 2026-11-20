@@ -1,7 +1,7 @@
 // Reading the reports a run wrote (moved from App.tsx, P1 PR c).
 
 import { baseName, parseReport, value, type Report } from '../digestReport'
-import { dirName } from '../app/paths'
+import { dirName, stripExt } from '../app/paths'
 import { parseTable, sniffTable, type TableKind } from './tables'
 
 // Two runs wrote the same report when the run rows they share agree and the
@@ -24,13 +24,16 @@ export function runStem(p: string): string | null {
   return parts.join('.')
 }
 
-/// Two files of one run: one folder (the folder half of sameRun) and, where
-/// both names carry one, the same stem.
+/// Two files of one run: one folder (the folder half of sameRun) and the
+/// same stem. A name without a kind part (A.tsv, recon.tsv) has its name
+/// without the extension as its stem: the tags A.tsv go with A.qc.tsv, and
+/// a stem that cannot be told is another run, never any run (A's tags
+/// beside B's QC would read as one run).
 export function sameRunFiles(a: string, b: string): boolean {
   if (dirName(a) !== dirName(b)) return false
-  const x = runStem(a)
-  const y = runStem(b)
-  return x == null || y == null || x === y
+  if (a === b) return true
+  const stem = (p: string): string => runStem(p) ?? stripExt(baseName(p))
+  return stem(a) === stem(b)
 }
 
 // Read and parse whichever reports exist; a report the run did not write is

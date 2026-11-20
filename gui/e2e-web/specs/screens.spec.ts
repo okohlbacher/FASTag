@@ -61,6 +61,8 @@ test('setup screens of every workflow', async ({ page, browserName }) => {
   for (const [i, w] of WORKFLOWS.entries()) {
     await workflow(page, w.name).check()
     await page.locator('.view-setup .controls-body').evaluate((e) => e.scrollTo(0, 0))
+    // The chevron of the Advanced card closed just before turns back.
+    await page.waitForTimeout(250)
     await page.screenshot({ path: shot(`10-setup-${i + 1}-${slug(w.name)}`) })
     await fullSetup(page, `11-setup-${i + 1}-${slug(w.name)}-full`)
     await openAdvanced(page)

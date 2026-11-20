@@ -77,6 +77,9 @@ export interface LastRun {
 export interface Evidence {
   contributed: number | null
   ms2: number | null
+  /// Tag rows read as c/z ions that the species report left out (it counts
+  /// b/y tags only): the CLI's "Ion series: N tag rows ..." warning.
+  czExcluded?: number | null
 }
 
 export interface Reports {
@@ -510,7 +513,7 @@ export function runReducer(s: RunState, a: RunAction): RunState {
       return s.shown === a.shown ? s : { ...s, shown: a.shown }
     case 'EVIDENCE': {
       const e = { ...s.evidence, ...a.evidence }
-      return e.contributed === s.evidence.contributed && e.ms2 === s.evidence.ms2 ? s : { ...s, evidence: e }
+      return e.contributed === s.evidence.contributed && e.ms2 === s.evidence.ms2 && e.czExcluded === s.evidence.czExcluded ? s : { ...s, evidence: e }
     }
   }
 }

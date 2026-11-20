@@ -63,6 +63,9 @@ describe('the workflows', () => {
       expect(t.products.length, `${t.id} products`).toBeLessThanOrEqual(14)
       for (const o of t.outputs) expect(PRODUCT_OF.has(o), o).toBe(true)
       expect(t.outputs[0]).toBe('out')
+      // Round 5, 23: a help line of a field the workflow does not show
+      // is never read and drifts.
+      for (const n of Object.keys(t.help)) expect(t.basic, `${t.id} help ${n}`).toContain(n)
     }
   })
   it('the database-reduction workflow sets the shortlist recipe (not validated)', () => {
@@ -94,6 +97,21 @@ describe('the products', () => {
     expect(fileName(PRODUCT_OF.get('fasta_out')!, setProduct(PRODUCT_OF.get('fasta_out')!, true, v, out), out)).toBe('run01.reduced.fasta')
     v = setProduct(species, false, v, out)
     expect([v.species, v.species_out]).toEqual([false, ''])
+  })
+  // Round 5, 8: the charge check report keeps the mode both.
+  it('the charge check report promotes off to warn and keeps both', () => {
+    const p = PRODUCT_OF.get('check_header_out')!
+    expect(setProduct(p, true, baseValues('defaults'), out).check_header_charge).toBe('warn')
+    expect(setProduct(p, true, { ...baseValues('defaults'), check_header_charge: 'both' }, out).check_header_charge).toBe('both')
+  })
+  // Round 5, 20: the alkylation report without a database raises the
+  // extension so tags reach the 8 residues of the shipped human proteome.
+  it('the alkylation report raises Extension to 3 without a protein database', () => {
+    const p = PRODUCT_OF.get('alkylation_out')!
+    const ch = startValues('builtin:characterize', out)
+    expect(setProduct(p, true, ch, out).extension).toBe('3')
+    expect(setProduct(p, true, { ...ch, recon_fasta: '/d/db.fasta' }, out).extension).toBe('2')
+    expect(setProduct(p, true, { ...ch, extension: '4' }, out).extension).toBe('4')
   })
 })
 

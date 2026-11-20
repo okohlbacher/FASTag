@@ -82,9 +82,11 @@ const LABEL: Record<string, string> = {
 export const columnLabel = (c: string): string => LABEL[c] ?? c
 
 // A fasta_hit value in the words of the Database hit filter; the raw value
-// stays the cell's name and tooltip.
+// stays the cell's name and tooltip. '-' is a run without a database filter
+// (-fasta): with one, only matching tags are written (README), so '-' is a
+// check that never ran, not a failed one.
 export function hitWords(v: string): string {
-  if (v === '-' || v === '') return 'No match'
+  if (v === '-' || v === '') return 'Not checked'
   if (v === 'efwd' || v === 'erev') return 'Entrapment'
   if (v === 'fwd' || v === 'rev') return 'In database'
   return v
@@ -154,7 +156,8 @@ function parseMaxEvalue(s: string): { value: number | null; invalid: boolean } {
 
 type FastaHitChoice = 'any' | 'only' | 'none' | 'entrapment'
 // The fasta_hit filter as a segmented control. In database: fwd/rev.
-// Entrapment: efwd/erev, only in the entrapment database. Not in database: '-' or efwd/erev (no -fasta hit).
+// Entrapment: efwd/erev, only in the entrapment database. No database hit:
+// '-' (Not checked: no -fasta) or efwd/erev (no hit in the target database).
 // The per-spectrum rule (browser.rs per_spectrum): every tag, or the best N
 // of each spectrum by E-value.
 const PER_SPECTRUM: [string, string][] = [
@@ -169,7 +172,7 @@ const HIT_CHOICES: [FastaHitChoice, string][] = [
   ['any', 'All'],
   ['only', 'In database'],
   ['entrapment', 'Entrapment'],
-  ['none', 'Not in database']
+  ['none', 'No database hit']
 ]
 
 // A column is numeric when every value of the first page is a number (or the

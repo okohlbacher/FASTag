@@ -33,6 +33,7 @@ import { DROPPED_MARKER } from '../run/logStore'
 import { jobCells, type JobData } from '../run/batchSummary'
 import type { BatchJob } from '../run/batch'
 import { runFacts, speciesCall } from '../results/calls'
+import { qcFacts } from '../results/overview'
 import { cellValue, columnsNamed, dataRows, type SdrfTable } from './sdrfTable'
 import { matchOrganism, NOT_STATED, type Taxonomy } from './taxonomy'
 
@@ -479,19 +480,27 @@ function compareJob(t: SdrfTable, rows: number[], d: JobData, tx: Taxonomy | nul
   const lab = pick('label')
   const mods = pick('modifications')
   const l = cells.label.call
-  // The digest report's run and meta rows, else the label report's.
+  // The digest report's run and meta rows, else the label report's, else
+  // (a Run QC batch) the QC report's: its run rows state the tolerance, its
+  // qc rows the instrument model.
+  const qf = qcFacts(d.qc)
+  const qcInst = qf?.instrument ?? null
+  const qcName = baseName(String(d.params['qc_out'] ?? 'qc.tsv'))
   const fd = runFacts(digest)
   const fl = runFacts(label)
-  const facts = fd.tolerance ? fd : fl
-  const factsOf = fd.tolerance ? digest : label
+  const facts = fd.tolerance ? fd : fl.tolerance ? fl : { tolerance: qf?.tolerance ?? null }
+  const factsName = fd.tolerance ? of(digest) : fl.tolerance ? of(label) : qcName
   // The instrument the input names: the meta instrument row, else (a
   // converter's generic term) its instrument_model row.
   const meta = (r: Report | undefined, k: string): string | null => {
     const v = r ? value(r, 'meta', k) : undefined
     return v && v !== '-' ? v : null
   }
-  const instOf = meta(digest, 'instrument') || meta(digest, 'instrument_model') ? digest : label
-  const instr = inputInstrument(meta(instOf, 'instrument'), meta(instOf, 'instrument_model'))
+  const named = (r: Report | undefined): boolean => !!(meta(r, 'instrument') || meta(r, 'instrument_model'))
+  const fromQc = !named(digest) && !named(label) && qcInst != null
+  const instOf = named(digest) ? digest : label
+  const instr = fromQc ? inputInstrument(null, qcInst) : inputInstrument(meta(instOf, 'instrument'), meta(instOf, 'instrument_model'))
+  const instName = fromQc ? qcName : of(instOf)
   const modLine = runFixed(d.log)?.line
   const inst = pick('instrument')
   const tol = pick('tolerance')
@@ -502,11 +511,11 @@ function compareJob(t: SdrfTable, rows: number[], d: JobData, tx: Taxonomy | nul
     cleavage: res(compareCleavage(cleav.values, p, cls), cleav.column, `${of(digest)}: call model ${p}`),
     label: res(compareLabel(lab.values, mods.values, l), lab.column, `${of(label)}: label_call label ${l}`),
     modifications: res(compareModifications(mods.values, d.log), mods.column, `log: ${modLine ?? '(no Modifications line: none)'}`),
-    instrument: res(compareInstrument(inst.values, instr.instrument, instr.generic), inst.column, `${of(instOf)}: meta ${instr.from} ${instr.instrument}`),
+    instrument: res(compareInstrument(inst.values, instr.instrument, instr.generic), inst.column, `${instName}: ${fromQc ? 'qc' : 'meta'} ${instr.from} ${instr.instrument}`),
     tolerance: res(
       compareTolerance(tol.values, facts.tolerance),
       tol.column,
-      facts.tolerance ? `${of(factsOf)}: run fragment_tolerance ${facts.tolerance.value} ${facts.tolerance.unit}` : ''
+      facts.tolerance ? `${factsName}: run fragment_tolerance ${facts.tolerance.value} ${facts.tolerance.unit}` : ''
     )
   }
 }
@@ -522,7 +531,12 @@ function verdict(fields: Record<FieldId, FieldResult>): Verdict {
   const mismatches = FIELDS.filter((f) => fields[f].state === 'mismatch')
   const settings = FIELDS.filter((f) => fields[f].state === 'setting_differs')
   const set = settings.length ? `≠ run setting: ${fieldWords(settings)}` : ''
-  const withSet = (t: string): string => (set ? `${t}; ${set}` : t)
+  // A field the SDRF names that could not be compared (no call, a value
+  // this app cannot read) is said apart: consistent covers only the fields
+  // that were compared.
+  const unchecked = FIELDS.filter((f) => fields[f].state === 'no_call' || fields[f].state === 'not_checkable')
+  const open = unchecked.length ? `not checked: ${fieldWords(unchecked)}` : ''
+  const withSet = (t: string): string => [t, set, open].filter(Boolean).join('; ')
   if (mismatches.length) return { state: 'checked', text: withSet(`✗ ${fieldWords(mismatches)}`), mismatches, settings }
   const checked = FIELDS.filter((f) => fields[f].state === 'match' || fields[f].state === 'genus')
   if (checked.length) return { state: 'checked', text: withSet('✓ consistent'), mismatches: [], settings }
