@@ -687,11 +687,10 @@ export const RESULTS: HelpPage = {
             column, which the <strong>Export tags</strong> task enables.
           </p>
           <p>
-            That task starts with tag length 3 and extension 0, so its tags are too short for the default
-            8-residue read export. Before running, choose a suitable <L to="param-tag_length">tag length</L> or{' '}
-            <L to="param-extension">extension</L>: for example, length 3 with extension 3 can reach 9 residues,
-            although not every tag will grow that far. Alternatively, lower the export&apos;s minimum length
-            if shorter reads suit your downstream tool. Check the exported read count before continuing.
+            That task starts with tag length 3 and <L to="param-extension">extension</L> 3, so tags can grow to 9
+            residues and pass the default 8-residue read export, although not every tag grows that far. With a
+            shorter extension, raise it or lower the export&apos;s minimum length if shorter reads suit your
+            downstream tool. Check the exported read count before continuing.
           </p>
         </>
       )

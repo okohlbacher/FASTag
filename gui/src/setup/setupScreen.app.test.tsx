@@ -39,7 +39,7 @@ describe('Setup: the task chooser', () => {
     const p = mock.runCalls[0].params
     expect(p.res_conf).toBe(true)
     expect(p.threads).toBe('0')
-    expect([p.tag_length, p.extension]).toEqual(['3', '0'])
+    expect([p.tag_length, p.extension]).toEqual(['3', '3']) // round 11: extension 3 for assembly reads
     expect([p.subsample_spectra, p.subsample_fraction]).toEqual(['0', '0.0'])
     expect(p.species).not.toBe(true)
     expect(p.glyco).not.toBe(true)

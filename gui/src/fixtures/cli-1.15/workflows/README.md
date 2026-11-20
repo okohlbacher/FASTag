@@ -13,7 +13,8 @@ stderr (run01.stderr) and stdout (run01.stdout). Common to every run:
   FASTag -in run01.mzML -out run01.tags.tsv -threads 0 \
     -fragment_tolerance 0.3 -fragment_tolerance_unit Da ...
 
-  export-tags   -res_conf
+  export-tags   -res_conf -extension 3 (re-recorded with FASTag 1.15.4 on
+                2026-11-20; same tags as mass-shift, 6,279)
   run-qc        -qc_out run01.qc.tsv
   mass-shift    -recon_fasta ecoli.fasta -recon_out run01.recon.tsv
                 -delta_out run01.delta.tsv -delta_spectra_out run01.delta_spectra.tsv

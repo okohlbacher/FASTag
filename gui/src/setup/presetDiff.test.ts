@@ -75,7 +75,7 @@ describe('presets as diffs', () => {
     expect(baseValues('builtin:export-tags')['res_conf']).toBe(true)
     expect(baseValues('defaults')).toEqual(defaults)
     expect(originText(LANDING)).toBe('Export tags')
-    expect(baseValues(baseOf(LANDING))).toEqual({ ...defaults, res_conf: true, threads: '0' })
+    expect(baseValues(baseOf(LANDING))).toEqual({ ...defaults, res_conf: true, threads: '0', extension: '3' })
     expect(baseOf({ kind: 'preset', name: 'x', base: 'builtin:export-tags' })).toBe('builtin:export-tags')
     expect(taskOf({ kind: 'preset', name: 'x', base: 'builtin:export-tags' })?.id).toBe('export-tags')
     // The ids of earlier versions: Batch QC is Characterize in Batch mode.

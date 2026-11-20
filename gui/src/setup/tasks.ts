@@ -54,11 +54,13 @@ export const TASKS: readonly Task[] = [
     label: 'Export tags',
     blurb: 'Sequence tags from every spectrum, with per-residue confidence, for de novo assembly and export.',
     products: 'tags table',
-    values: { ...ALL, res_conf: true },
+    // Extension 3 (round 11): a seed of 3 can grow to 9 residues, so the
+    // assembly reads (8 residues and more by default) are not empty.
+    values: { ...ALL, res_conf: true, extension: '3' },
     basic: ['tag_length', 'extension', 'max_evalue', 'max_tags', 'res_conf'],
     help: {
       tag_length: 'Residues in a seed tag; 3 suits most runs.',
-      extension: 'Read on past each end; 3 lets a seed of 3 grow to 9.',
+      extension: 'For assembly; 3 lets a seed of 3 grow to 9.',
       max_evalue: 'Keeps tags at or below this E-value; 0 keeps all.',
       max_tags: 'Most tags per spectrum; 0 sets no limit.',
       res_conf: 'Adds a confidence per residue for assembly.'
