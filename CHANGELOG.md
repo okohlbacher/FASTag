@@ -1,6 +1,8 @@
 # Changelog
 
-## Unreleased
+## 1.15.5 (2026-11-20)
+
+Ion-trap MS2 spectra are now tagged at their own tolerance (`-tolerance_by_analyzer`, default on; held-out PASS), and combined mass shifts such as Oxidation+Acetyl on a protein N-terminal Met are named. Orbitrap-only runs give the same tags as 1.15.4.
 
 - **Tolerance per MS2 analyzer (`-tolerance_by_analyzer`, default on; PREREG-lowres-defaults change B).**
   Each MS2 spectrum is tagged with the tolerance of its analyzer: ion-trap (ITMS) spectra at
