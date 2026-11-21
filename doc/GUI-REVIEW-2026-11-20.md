@@ -97,9 +97,11 @@ failed; the WebKit Playwright project was not run.
 | 12 | 11fc5c5d | typecheck OK; vitest 1431 passed, 17 skipped; Playwright chromium 117 passed, 9 skipped, 1 failed (test pinned the old table order; fixed in 3ca5eab9); screens 59 PNGs | 0 / 4 / 9 (2, and 1 in part) | 4 |
 | 13 | ae258271 | typecheck OK; vitest 1440 passed, 17 skipped; Playwright chromium 118 passed, 9 skipped; screens 59 PNGs | 0 / 2 / 7 (0, and 1 in part) | 2 |
 | 14 | 5884793d | typecheck OK; vitest 1444 passed, 17 skipped; Playwright chromium 117 passed, 9 skipped, 1 failed (pinned the hint text changed in round 13; fixed in ec2d3340); screens 59 PNGs | 0 / 2 / 8 (0) | 2 |
+| 15 | 6a00fa67 | typecheck OK; vitest 1448 passed, 17 skipped; Playwright chromium 118 passed, 9 skipped; screens 59 PNGs | 0 / 0 / 12 (0) | 0 |
 
-Blocking findings fell from 19 to 3; since round 4 no critical finding has
-been found.
+Blocking findings fell from 19 to 3 by round 10 and to 0 in round 15, the
+first round without a confirmed critical or major finding (stop rule met);
+since round 4 no critical finding has been found.
 
 ## 4. Findings of rounds 10 and later
 
@@ -247,9 +249,29 @@ ec2d3340; tests `gui/src/review/round14.test.tsx` and updated pins.
 | Minor | Help control names | Named "Turn on and run again", "Add…", "Choose output folder…", "Unimod marks" where Setup shows others. | Fixed. |
 | Minor | Tags per spectrum | "Most tags per spectrum" read as "the highest". | Fixed: "At most this many per spectrum". |
 
-### Continuation (state at the end of round 14)
+### Round 15 (at 6a00fa67)
 
-- Next: round 15 on ec2d3340 or later (screens `output/gui-workflows/screens/r15`). Stop at the first round with no confirmed critical or major finding; cap: round 16.
+Codex, Kimi and Vibe: no critical, no major. The 12 minors are fixed in
+8569d183 (tests `gui/src/review/round15.test.tsx` and updated pins):
+a Custom count selector stayed after Reset; a Filter database left the
+Protein database marked required; SDRF corrections could be exported while
+reports were read; a reopened delta table kept its sibling window; an
+unexplained shift was named "?"; the Glyco tab did not show the run's flag
+rule; History did not say it lists the latest 200 runs; Species
+instructions named CLI options; the taxonomy check quoted CLI text; help
+sent QC users to Characterize; "asks for 100" without unit; "10× faster"
+was unsupported.
+
+Also, from the first WebKit run (49272fc8): in WebKit the Mass-shift
+survey's "needed by …" note wrapped and Setup no longer fit 1280 x 800;
+two or more are now counted, named in the tooltip.
+
+Playwright at 49272fc8: chromium 118 passed, 9 skipped; webkit 118 passed,
+9 skipped.
+
+### Continuation (state at the end of round 15)
+
+- Review rounds are done (stop rule met in round 15).
 - Open: merge `origin/main` once v1.15.5 is tagged (new options `-tolerance_by_analyzer`, `-fragment_tolerance_itms` under Advanced; check the "Ion trap CID" preset); then vitest, tsc, Playwright chromium and webkit; push; PR against main (no version bump, no tag).
 
 Before merging: `origin/main` has moved on to 1.15.4 (regenerated
