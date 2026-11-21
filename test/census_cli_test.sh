@@ -37,7 +37,9 @@ fi
 TMP=$(mktemp -d "${TMPDIR:-/tmp}/fastag-census-cli.XXXXXX") || exit 1
 trap 'rm -rf "$TMP"' EXIT
 fail() { echo "FAIL: $*" >&2; exit 1; }
-ARGS=(-fragment_tolerance 0.3 -fragment_tolerance_unit Da -threads 2)
+# 0.3 Da for every spectrum: the Ecoli MS2 are ion trap (filter strings), which
+# -tolerance_by_analyzer would tag at 0.5 Da, and its MGF twin has no analyzer.
+ARGS=(-fragment_tolerance 0.3 -fragment_tolerance_unit Da -tolerance_by_analyzer off -threads 2)
 STATUSES="empty no_precursor no_signal bad_precursor too_few_peaks no_tags filtered placed tagged"
 run() { local log="$1"; shift; "$BIN" "$@" >"$log" 2>&1 || { cat "$log" >&2; fail "run failed: $*"; }; }
 ms2_in() { grep -c 'name="ms level" value="2"' "$1"; }

@@ -32,6 +32,9 @@ set -u
 BIN="$1"
 FIX="$2"
 IN="$FIX/Ecoli_MS2_small.mzML"   # real spectra: no confident tag, so auto falls back
+# Its MS2 are ion trap (filter strings); every run on it is -tolerance_by_analyzer off, so the
+# complement options are tested on one tolerance for all spectra.
+OFF="-tolerance_by_analyzer off"
 HI="$FIX/compltol_hires.mgf"     # fragment error sd 0.004 Da: pair 95% window 0.0111 Da
 LO="$FIX/compltol_lowres.mgf"    # fragment error sd 0.1 Da: pair 95% window 0.277 Da
 
@@ -49,19 +52,19 @@ measured() { sed -n 's/^Complement tolerance (auto): measured \([0-9.e-]*\) Da.*
 inforce() { sed -n 's/^Complement tolerance (auto): measured [0-9.e-]* Da, in force \([0-9.e-]*\) Da.*/\1/p' "$1"; }
 LB="-complement_tolerance 0.005"   # a lower bound below the hires window, so the measurement is in force
 
-run def "$IN"
+run def "$IN" $OFF
 [ "$(wc -l < "$TMP/def.tsv")" -gt 10 ] || fail "too few tags at defaults; the comparisons would prove nothing"
 grep -q 'Complement tolerance (auto)' "$TMP/def.log" && fail "the auto line is logged without auto"
-run probe_da "$IN" -complement_probe 3
+run probe_da "$IN" $OFF -complement_probe 3
 cmp -s "$TMP/def.tsv" "$TMP/probe_da.tsv" || fail "-complement_probe changed the tags under unit Da"
 
 # Fallback: the real fixture has no tag at E <= 0.01, so nothing is measured.
-run fb "$IN" -complement_tolerance_unit auto
+run fb "$IN" $OFF -complement_tolerance_unit auto
 grep -q '^Complement tolerance (auto): not measured, using -complement_tolerance 0.02 Da' "$TMP/fb.log" \
   || { grep 'Complement tolerance' "$TMP/fb.log" >&2; fail "auto did not fall back on $IN"; }
 cmp -s "$TMP/fb.tsv" "$TMP/def.tsv" || fail "the fallback is not the default window"
-run fb05 "$IN" -complement_tolerance_unit auto -complement_tolerance 0.05
-run da05 "$IN" -complement_tolerance 0.05
+run fb05 "$IN" $OFF -complement_tolerance_unit auto -complement_tolerance 0.05
+run da05 "$IN" $OFF -complement_tolerance 0.05
 cmp -s "$TMP/fb05.tsv" "$TMP/da05.tsv" || fail "the fallback is not -complement_tolerance"
 cmp -s "$TMP/fb05.tsv" "$TMP/def.tsv" && fail "-complement_tolerance 0.05 changed nothing; the fallback check proves nothing"
 
@@ -115,7 +118,7 @@ grep -q 'complement_tolerance_unit auto' "$TMP/s1.err" || { cat "$TMP/s1.err" >&
 "$BIN" -stream -complement_tolerance_unit fragment < /dev/null > "$TMP/s3.out" 2> "$TMP/s3.err" \
   || { cat "$TMP/s3.err" >&2; fail "-stream refused -complement_tolerance_unit fragment"; }
 
-"$BIN" -in "$IN" -out "$TMP/o.tsv" -out_spectra "$TMP/o.mzML" -threads 2 -complement_tolerance_unit auto \
+"$BIN" -in "$IN" $OFF -out "$TMP/o.tsv" -out_spectra "$TMP/o.mzML" -threads 2 -complement_tolerance_unit auto \
   > "$TMP/o.log" 2>&1 || { cat "$TMP/o.log" >&2; fail "auto with -out_spectra failed"; }
 grep -Eq 'name="parameter: complement_tolerance_unit"[^>]*value="auto"' "$TMP/o.mzML" \
   || { grep -o 'parameter: complement[^/]*' "$TMP/o.mzML" | head -3 >&2; fail "-out_spectra does not list unit auto"; }
@@ -154,7 +157,7 @@ awk -F'\t' '$1=="run" && $2=="complement_tolerance" { f=1; if ($3!="0.02") exit 
 awk -F'\t' -v t="$T" '$1=="run" && $2=="complement_tolerance_measured" { f=1; if ($3!=t) exit 1 } END { exit !f }' \
   "$TMP/hlbs.census_summary.tsv" || fail "census summary does not record the measured window $T"
 # The fallback is recorded as such.
-"$BIN" -in "$IN" -out "$TMP/fbs.tsv" -out_spectra "$TMP/fbs.mzML" -threads 2 -complement_tolerance_unit auto \
+"$BIN" -in "$IN" $OFF -out "$TMP/fbs.tsv" -out_spectra "$TMP/fbs.mzML" -threads 2 -complement_tolerance_unit auto \
   > "$TMP/fbs.log" 2>&1 || { cat "$TMP/fbs.log" >&2; fail "fallback with -out_spectra failed"; }
 grep -Eq 'name="complement_tolerance \(auto\) source"[^>]*value="fallback"' "$TMP/fbs.mzML" \
   || fail "-out_spectra does not record the fallback"

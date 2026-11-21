@@ -411,11 +411,12 @@ census_run() { # census_run <name> <file> [args]: a real run with -census, in $T
   [ $RC = 0 ] || { cat "$TMP/c_$n.err" >&2; fail "(d) census run $n"; }
 }
 # Every 7th MS2 of the Ecoli fixture (20 spectra), at the CLI default
-# (20 ppm, deisotoping) and at 0.3 Da.
+# (its MS2 are ion trap by their filter strings: 0.5 Da under
+# -tolerance_by_analyzer on, deisotoping) and at 0.3 Da for every spectrum.
 EIDS=(); while IFS= read -r _id; do EIDS+=("$_id"); done < <(ids "$IN" | awk 'NR % 7 == 1')  # no mapfile: bash 3.2 (macOS)
 [ ${#EIDS[@]} -ge 15 ] || fail "(d) found only ${#EIDS[@]} spectrum IDs in the fixture"
 for cfg in default da; do
-  A=(); [ $cfg = da ] && A=(-fragment_tolerance 0.3 -fragment_tolerance_unit Da)
+  A=(); [ $cfg = da ] && A=(-fragment_tolerance 0.3 -fragment_tolerance_unit Da -tolerance_by_analyzer off)
   census_run $cfg "$IN" -threads 2 ${A[@]+"${A[@]}"}
   mkdir -p "$TMP/d_$cfg"
   for k in "${!EIDS[@]}"; do dump "$IN" "${EIDS[$k]}" "$TMP/d_$cfg/$k.jsonl" ${A[@]+"${A[@]}"}; done
@@ -424,12 +425,15 @@ for cfg in default da; do
   t=$(J ladders "$TMP/d_$cfg" "$TMP/c_$cfg/tags.tsv") || fail "(d) $cfg: a tag ladder is not on the dumped peaks"
   [ "$t" -gt 20 ] || fail "(d) $cfg: only $t tags had their ladder checked"
 done
-[ "$(val "$TMP/d_default/0.jsonl.v" tolerance)" = "20 ppm" ] || fail "(d) default tolerance $(val "$TMP/d_default/0.jsonl.v" tolerance)"
+[ "$(val "$TMP/d_default/0.jsonl.v" tolerance)" = "0.5 Da" ] || fail "(d) default tolerance of an ion-trap MS2 $(val "$TMP/d_default/0.jsonl.v" tolerance)"
 [ "$(val "$TMP/d_da/0.jsonl.v" tolerance)" = "0.3 Da" ] || fail "(d) Da tolerance $(val "$TMP/d_da/0.jsonl.v" tolerance)"
 # The MGF twin (MGF IDs are index=<i>): the same peaks.
+# The MGF has no analyzer, so both at 20 ppm for every spectrum.
 eidx=$(val "$TMP/d_default/3.jsonl.v" index)
 dump "$MGF" "index=$eidx" "$TMP/mgf3.jsonl"
-cmp -s <(val "$TMP/mgf3.jsonl.v" peaks) <(val "$TMP/d_default/3.jsonl.v" peaks) || fail "(d) the MGF twin dumps other peaks"
+dump "$IN" "${EIDS[3]}" "$TMP/mz3off.jsonl" -tolerance_by_analyzer off
+[ "$(val "$TMP/mz3off.jsonl.v" tolerance)" = "20 ppm" ] || fail "(d) off: tolerance $(val "$TMP/mz3off.jsonl.v" tolerance)"
+cmp -s <(val "$TMP/mgf3.jsonl.v" peaks) <(val "$TMP/mz3off.jsonl.v" peaks) || fail "(d) the MGF twin dumps other peaks"
 # Threads: the same bytes.
 for th in 1 3 8; do dump "$IN" "${EIDS[5]}" "$TMP/th$th.jsonl" -threads $th; done
 cmp -s "$TMP/th1.jsonl" "$TMP/th3.jsonl" && cmp -s "$TMP/th1.jsonl" "$TMP/th8.jsonl" || fail "(d) threads change the dump"
@@ -492,8 +496,10 @@ fi
 # mzPeak: the export of the Ecoli fixture dumps the same peaks.
 run_in "$TMP/mzp" "$TMP/mzp.out" "$TMP/mzp.err" -in "$IN" -out tags.tsv -out_spectra e.mzpeak -threads 2
 if [ $RC = 0 ] && [ -s "$TMP/mzp/e.mzpeak" ]; then
-  dump "$TMP/mzp/e.mzpeak" "${EIDS[3]}" "$TMP/mzp3.jsonl"
-  cmp -s <(val "$TMP/mzp3.jsonl.v" peaks) <(val "$TMP/d_default/3.jsonl.v" peaks) || fail "(d) mzPeak dumps other peaks"
+  # One tolerance on both sides: an archive written at OPENMS_REF has no filter
+  # strings before OpenMS/OpenMS#10955, so it is not read as ion trap.
+  dump "$TMP/mzp/e.mzpeak" "${EIDS[3]}" "$TMP/mzp3.jsonl" -tolerance_by_analyzer off
+  cmp -s <(val "$TMP/mzp3.jsonl.v" peaks) <(val "$TMP/mz3off.jsonl.v" peaks) || fail "(d) mzPeak dumps other peaks"
   # -out_spectra keeps only the spectra that carry a reported tag.
   ntagged=$(tail -n +2 "$TMP/mzp/tags.tsv" | cut -f1 | sort -u | wc -l | tr -d ' ')
   probe mzpeak "$TMP/mzp/e.mzpeak"

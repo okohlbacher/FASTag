@@ -117,6 +117,7 @@ TOPPFASTag::ExitCodes TOPPFASTag::dumpSpectrumMode_(const std::string& in, const
   opt.mzpeak_threads = std::min(std::max(1, omp_get_max_threads()), 8);
   opt.param = p;
   opt.ion_mode = FASTag::IonSeries::modeFromString(stringOption_("ion_series"));
+  if (getStringOption_("tolerance_by_analyzer") == "on") opt.itms_tol = getDoubleOption_("fragment_tolerance_itms");
   const std::string id = getStringOption_("dump_spectrum");
   const P::DumpOutput r = P::dumpSpectrum(in, id, opt);
   if (r.status != P::Status::OK)

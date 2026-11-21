@@ -966,7 +966,10 @@ int main(int argc, char** argv)
     check(ms2 == 12 && same == 12, "sciex: 12 MS2 with the MS level and scan window from groups, as OpenMS reads them (" +
                                        std::to_string(same) + " of " + std::to_string(ms2) + ")");
   }
-  for (int a = 2; a < argc; ++a) metadata_vs_openms(argv[a], std::string("step 0: ") + argv[a]);
+  // Every fixture, the Ecoli one (argv[1], spectrum-level userParam filter
+  // strings) included: before 1.15.7 it was left out and the fast reader
+  // dropped its filter strings unnoticed.
+  for (int a = 1; a < argc; ++a) metadata_vs_openms(argv[a], std::string("step 0: ") + argv[a]);
 
   check(!reader.indexRebuilt(), "a valid index is used, not rebuilt");
 

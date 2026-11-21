@@ -1247,7 +1247,10 @@ namespace FASTag
     }
 
     // The filter string (step 0) of the first <scan>, as the meta value
-    // "filter string" OpenMS gives the spectrum.
+    // "filter string" OpenMS gives the spectrum; without one, the spectrum's
+    // own userParam "filter string" (as OpenMS writes it, e.g. the Ecoli
+    // example), which MzMLHandler turns into the same meta value (1.15.7).
+    bool filter_set = false;
     if ((fields & STEP0_FILTER_STRING) && has_scans)
     {
       std::size_t sc = find_before(xml, "<scan", slb + 9, sle);
@@ -1268,8 +1271,22 @@ namespace FASTag
         {
           static const UInt FILTER_IDX = MetaInfoInterface::metaRegistry().registerName("filter string");
           spec.setMetaValue(FILTER_IDX, DataValue(xml_unescape(gp ? std::string_view(gp->value) : tag_attr(xml, k, VALUE))));
+          filter_set = true;
         }
       }
+    }
+    if ((fields & STEP0_FILTER_STRING) && !filter_set)
+    {
+      // The spectrum's own params end at its first child list.
+      const std::size_t own = std::min({has_scans ? slb : n, plb, xml.find("<binaryDataArrayList")});
+      for (std::size_t k = find_before(xml, "<userParam", 0, own); k != std::string_view::npos;
+           k = find_before(xml, "<userParam", k + 10, own))
+        if (tag_attr(xml, k + 1, "name") == "filter string")
+        {
+          static const UInt FILTER_IDX = MetaInfoInterface::metaRegistry().registerName("filter string");
+          spec.setMetaValue(FILTER_IDX, DataValue(xml_unescape(tag_attr(xml, k + 1, VALUE))));
+          break;
+        }
     }
 
     // -qc_out (1.16): the first scan's instrumentConfigurationRef, as the

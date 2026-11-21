@@ -297,6 +297,9 @@ namespace FASTag::Probe
     /// cz, or auto on an electron-activated mzML spectrum, with the c/z-dot
     /// pair and its ETD precursor-window filter.
     IonSeries::Mode ion_mode = IonSeries::Mode::BY;
+    /// -tolerance_by_analyzer on (1.15.7): > 0 is -fragment_tolerance_itms
+    /// (Da), the tolerance an ion-trap MS2 is prepared at, as the run tags it.
+    double itms_tol = 0;
   };
 
   /**

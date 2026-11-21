@@ -12,6 +12,7 @@
 #include "MgfReader.h"
 #include "MzPeakStream.h"
 #include "NumFormat.h"
+#include "RunQC.h"
 #include "Shortlist.h"
 
 #include <OpenMS/CONCEPT/Exception.h>
@@ -876,6 +877,25 @@ namespace FASTag::Probe
                             || (opt.ion_mode == IS::Mode::AUTO && reads_act && act == IS::Activation::ELECTRON);
     const IS::Series sr = IS::seriesInRun(opt.ion_mode, act, run_column);
     if (spec.getMSLevel() == 2 && sr != IS::Series::BY) p.ion_pair = IS::ionPair(sr);
+    // -tolerance_by_analyzer: an ion-trap MS2 at -fragment_tolerance_itms, as
+    // the run classes it (RunQC::factsOf: filter string, then the mzML's
+    // instrument configurations).
+    // ponytail: mzPeak/MGF use the filter string only, no run-default analyzer.
+    if (opt.itms_tol > 0 && spec.getMSLevel() == 2)
+    {
+      RunQC::InstrumentMap imap;
+      if (kind == Kind::MZML)
+      {
+        const MzmlHeader h = readMzmlHeader(in);
+        for (const auto& [cid, name] : h.analyzer_of) imap.by_config[cid] = RunQC::analyzerFromName(name);
+        imap.default_config = h.default_config;
+      }
+      if (RunQC::factsOf(spec, imap).analyzer == RunQC::Analyzer::ITMS)
+      {
+        p.frag_tol = opt.itms_tol;
+        p.tol_ppm = false;
+      }
+    }
     out.jsonl = spectrumRecord(spec, index, pick_result > 0, p);
     out.jsonl += JsonObject("end").line();
     return out;
