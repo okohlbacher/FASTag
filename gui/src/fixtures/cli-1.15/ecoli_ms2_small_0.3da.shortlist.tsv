@@ -1,0 +1,9 @@
+# FASTag 1.15.2 protein shortlist: a search-space reduction from tag placements, NOT an identification, NOT protein inference and NOT FDR-controlled.
+# input: Ecoli_MS2_small.mzML; database: Ecoli_MS2_small.fasta
+# settings: max_evalue 0.1, min_spectra 2, gapped no, parsimony none, top 0
+# protease: inconclusive (the fragment tolerance is in Da, so the residue windows at the tag ends do not hold)
+# proteins: 3 with evidence, 1 kept; decoy entries in the database: 0
+rank	accession	spectra	peptides	exact_spectra	gapped_spectra	weighted	nsaf	best_evalue	length	kept	reason
+1	VIMSS17368	2	1	2	0	2.0000	0.0112994	1.1e-07	177	1	selected
+2	VIMSS17021	1	1	1	0	1.0000	0.00260417	1.67e-05	384	0	below_min_spectra
+3	VIMSS15329	1	1	1	0	1.0000	0.0031746	0.00582	315	0	below_min_spectra
