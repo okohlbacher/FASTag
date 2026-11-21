@@ -10,8 +10,14 @@ Ion-trap MS2 spectra are now tagged at their own tolerance (`-tolerance_by_analy
   Orbitrap, FT-ICR and TOF spectra at `-fragment_tolerance` as before. Ion-trap MS2 read at the 20 ppm
   default gave about 10 % correct rank-1 tags (CPTAC colon development data) against 54 % at 0.5 Da.
   Only the tags change; placement, mass-shift and other reports keep `-fragment_tolerance`. Not under
-  `-stream` or with mzPeak input. `off` restores 1.15.4 exactly; an Orbitrap-only run gives the same
-  tags either way.
+  `-stream`. `off` restores 1.15.4 exactly; an Orbitrap-only run gives the same tags either way.
+- **`-tolerance_by_analyzer` with mzPeak input.** An mzPeak archive (read in one pass) now draws the
+  ion-trap probe the mzML reader draws, in a pass of its own before tagging, so its ion-trap spectra get
+  the ion-trap tolerance and the same measured complement window: the tags equal those of the run read
+  as mzML. The analyzer comes from the archive's filter strings, which OpenMS keeps in mzPeak only with
+  OpenMS/OpenMS#10955; an archive without them (OpenMS at FASTag's current pin) finds no ion-trap
+  spectra and keeps its 1.15.5 tags. The pass reads the archive once more (2.2 s on a 47,692-spectrum
+  ion-trap run).
 - **Complement window `auto` under a Da fragment tolerance (change A).** With
   `-fragment_tolerance_unit Da` and no complement option given, the window is measured on the run
   instead of the fixed 0.02 Da (not under `-stream` or with mzPeak input).

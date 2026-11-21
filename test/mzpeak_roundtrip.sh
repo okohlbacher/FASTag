@@ -45,8 +45,10 @@ rm -rf "$OUT"; mkdir -p "$OUT"
 A=(-fragment_tolerance 20 -fragment_tolerance_unit ppm)
 fail=0
 ck() { if [ "$2" = "$3" ]; then echo "  ok   $1"; else echo "  FAIL $1: got '$2' want '$3'"; fail=1; fi; }
-# 1.15.5: mzPeak input keeps -fragment_tolerance for every spectrum (no per-analyzer probe), so the
-# mzML/mzPeak comparisons pin -tolerance_by_analyzer off.
+# -tolerance_by_analyzer off: the writing runs read the mzML's ITMS filter strings and so tag at 0.5 Da,
+# while an archive written by OpenMS without OpenMS/OpenMS#10955 (FASTag's current pin) has no filter
+# strings and tags at -fragment_tolerance. Lift the pin when OPENMS_REF includes #10955;
+# mzpeak_tolerance_by_analyzer tests the option on mzPeak input meanwhile.
 run() { local name="$1"; shift; "$BIN" "$@" -tolerance_by_analyzer off >"$OUT/$name.log" 2>&1; }
 ms2()   { grep -oE '[0-9]+ MS2 spectra' "$1" | head -1 | cut -d' ' -f1; }
 wrote() { grep -oE 'Wrote [0-9]+ spectra' "$1" | head -1 | cut -d' ' -f2; }
