@@ -6,7 +6,7 @@
 # 3.28: the floor .github/env/openms.yml (and so every CI and release build)
 # guarantees; README, BUILDING.md and BOM.md state the same.
 cmake_minimum_required(VERSION 3.28 FATAL_ERROR)
-project(FASTag VERSION 1.15.6 LANGUAGES CXX)
+project(FASTag VERSION 1.15.7 LANGUAGES CXX)
 # Policy CMP0155 (NEW from 3.28) would scan every C++23 source for module
 # imports, which needs clang-scan-deps beside clang; FASTag uses no modules.
 set(CMAKE_CXX_SCAN_FOR_MODULES OFF)
