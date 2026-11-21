@@ -18,6 +18,18 @@ const LINES = TSV.split('\n').filter(Boolean)
 const COLUMNS = LINES[0].split('\t')
 const ROWS = LINES.slice(1).map((l) => l.split('\t'))
 const SPECTRA = new Set(ROWS.map((r) => r[0]))
+// The run had no database filter: every fasta_hit cell is '-', and the
+// table leaves that column out (round 6, 13).
+const HIT = COLUMNS.indexOf('fasta_hit')
+// The table shows res_conf right after the length (ResultsTable
+// displayOrder, round 8, 11); a row is copied as shown.
+const RC = COLUMNS.indexOf('res_conf')
+const ORDER = ((): number[] => {
+  const rest = COLUMNS.map((_, j) => j).filter((j) => j !== RC)
+  rest.splice(rest.indexOf(COLUMNS.indexOf('length')) + 1, 0, RC)
+  return rest
+})()
+const shownCells = (r: string[], skip: number[] = []): string[] => ORDER.filter((j) => j !== HIT && !skip.includes(j)).map((j) => r[j])
 const TOTAL = ROWS.length.toLocaleString('en-US')
 
 async function openTags(page: Page): Promise<void> {
@@ -65,7 +77,7 @@ test('the active row moves by keyboard: arrows, PageDown/PageUp, Home/End, with 
   await page.keyboard.press('ArrowDown')
   await expect(active(page)).toBeFocused()
   expect(await activeIndex(page)).toBe(0)
-  expect(await activeCells(page)).toEqual(rows[0])
+  expect(await activeCells(page)).toEqual(shownCells(rows[0]))
   await page.keyboard.press('ArrowDown')
   await page.keyboard.press('ArrowDown')
   await page.keyboard.press('ArrowUp')
@@ -79,7 +91,7 @@ test('the active row moves by keyboard: arrows, PageDown/PageUp, Home/End, with 
   await expect(active(page)).toBeFocused()
   expect(await activeIndex(page)).toBe(ROWS.length - 1)
   await expect(active(page)).toBeInViewport()
-  expect(await activeCells(page)).toEqual(rows[ROWS.length - 1])
+  expect(await activeCells(page)).toEqual(shownCells(rows[ROWS.length - 1]))
   await page.keyboard.press('ArrowDown')
   expect(await activeIndex(page)).toBe(ROWS.length - 1)
   await page.keyboard.press('Home')
@@ -104,7 +116,7 @@ test('copy row copies the shown cells of the active row, and copy USI its USI, b
   await page.keyboard.press('ControlOrMeta+Shift+c')
   await expect(page.getByText('Copied the USI.')).toBeVisible()
   const usi = COLUMNS.indexOf('usi')
-  expect(await copied(page)).toEqual([rows[1].join('\t'), rows[1][usi]])
+  expect(await copied(page)).toEqual([shownCells(rows[1]).join('\t'), rows[1][usi]])
   expect(rows[1][usi]).toMatch(/^mzspec:USI000000:Ecoli_MS2_small:scan:\d+$/)
   // Hidden columns are not copied; the buttons copy the active row too.
   await page.getByRole('button', { name: 'Columns…' }).click()
@@ -112,8 +124,7 @@ test('copy row copies the shown cells of the active row, and copy USI its USI, b
   await page.locator('.rt-rows .rt-row').nth(4).click()
   await page.getByRole('button', { name: 'Copy row' }).click()
   await page.getByRole('button', { name: 'Copy USI' }).click()
-  const rc = COLUMNS.indexOf('res_conf')
-  expect((await copied(page)).slice(2)).toEqual([rows[4].filter((_, j) => j !== rc).join('\t'), rows[4][usi]])
+  expect((await copied(page)).slice(2)).toEqual([shownCells(rows[4], [RC]).join('\t'), rows[4][usi]])
 })
 
 test('the spectrum filter placeholder comes from the first spectrum ID of the file', async ({ page }) => {
@@ -151,7 +162,7 @@ test('Stitch and ALPS reads equal what tools/tags_to_denovo.py writes, and the b
   expect(new Set(best)).toEqual(SPECTRA)
   // The table export of the best tag per spectrum says the same.
   await format.selectOption('table')
-  await page.getByLabel('Per spectrum').selectOption({ label: 'Best tag' })
+  await page.getByLabel('Per spectrum', { exact: true }).selectOption({ label: 'Best tag' })
   await expect(page.getByText(`Showing ${SPECTRA.size.toLocaleString('en-US')} of ${TOTAL}`)).toBeVisible()
   await page.evaluate(() => {
     ;(window as unknown as { __fastagE2E: { mock: { nextPickOutput: string } } }).__fastagE2E.mock.nextPickOutput = '/data/run01.best.tsv'
@@ -174,5 +185,5 @@ test('a file without res_conf offers no reads export', async ({ page }) => {
   const format = page.getByLabel('Export as')
   await expect(format.locator('option[value="stitch"]')).toBeDisabled()
   await expect(format.locator('option[value="alps"]')).toBeDisabled()
-  await expect(format).toHaveAttribute('title', /-res_conf/)
+  await expect(format).toHaveAttribute('title', /Per-residue confidence on/)
 })

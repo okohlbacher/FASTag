@@ -39,7 +39,7 @@ test('the log drawer commits a line and a 500-line batch quickly with 5,000 line
   test.setTimeout(180_000)
   await openApp(page, 'slow')
   await page.getByRole('button', { name: 'Choose file…' }).click()
-  await page.getByRole('button', { name: 'Run on run01.mzML' }).click()
+  await page.getByRole('button', { name: 'Run', exact: true }).click()
   await expect(page.getByRole('button', { name: 'Cancel' })).toBeVisible()
   await page.locator('.logdrawer .drawer-toggle').click()
   await expect(page.locator('pre.log')).toBeVisible()

@@ -39,6 +39,9 @@
 export interface ParamHelp {
   text: string
   tip?: string
+  /// The text says all the CLI description does: the (?) leaves the
+  /// description out (HelpPopover popoverTexts).
+  cliCovered?: true
 }
 
 /// Parameters that do nothing unless another parameter is set.
@@ -55,6 +58,14 @@ export interface Dependency {
   /// Shown in place of the field's help when unmet. Phrased as the consequence,
   /// not the rule: a user wants to know what would happen, not what to obey.
   note: string
+  /// What the field says it needs, in place of the masters' names (two
+  /// masters that are one control: Spectra to read).
+  say?: string
+  /// A master that is a choice counts as set by its value, not by being
+  /// non-empty: `is` lists the values that set it, `isNot` those that do
+  /// not (an empty field reads as its default). A master without an entry
+  /// is set as paramLayout isActive says.
+  when?: Record<string, { is?: string[]; isNot?: string[] }>
 }
 
 export interface ParamUi {
@@ -83,19 +94,16 @@ export interface ParamUi {
   belowMax?: true
   /// The parameters it needs (paramLayout.ts inertDependency).
   depends?: Dependency[]
+  /// Experimental in the CLI (README): the form marks it so.
+  experimental?: true
+  /// Named values offered in a select, with Custom for any other: a bare
+  /// number would read wrong (0.0 spectra to read means all of them).
+  steps?: { label: string; value: string }[]
+  /// A value that stands for "not set" (-1: by engine): its field is shown
+  /// empty with this placeholder, and an emptied field goes back to it.
+  unset?: { value: string; placeholder: string }
   help?: ParamHelp
 }
-
-/// FASTag 1.12 options. Each is opt-in and leaves the output as 1.11 at its
-/// default. Not offered in the form until each has its GUI design; until then
-/// a GUI run uses the CLI defaults. The exception is acquisition_check (under
-/// Spectra).
-const OPT_IN_1_12 = '1.12 command-line option, not in the form yet (CLI default applies)'
-const OPT_IN_1_13_EXPERIMENTAL = '1.13 experimental command-line option, not in the form (CLI default applies)'
-
-/// FASTag 1.13 experimental options: opt-in, output unchanged at the default,
-/// not offered in the form.
-const EXPERIMENTAL_1_13 = '1.13 experimental command-line option, not in the form (CLI default applies)'
 
 /// FASTag 1.14 removed these options: they failed their held-out tests. The
 /// CLI still accepts each name, with a warning and no effect, so that saved
@@ -107,31 +115,83 @@ const REMOVED_1_14_HELP: ParamHelp = {
 
 const SPECIES_OFF: Dependency = { on: 'species', note: 'species detection is off' }
 const GLYCO_OFF: Dependency = { on: 'glyco', note: 'oxonium flagging is off' }
-const RECON_OFF: Dependency = { on: 'recon_out', note: 'reconciliation only runs when it has an output file' }
+const RECON_OFF: Dependency = { on: 'recon_out', note: 'tags are placed only when the placements are written' }
 const MASSGAP_OFF: Dependency = { on: 'massgap_out', note: 'only the mass-gap report uses it' }
+const DB_UNUSED: Dependency = {
+  on: ['recon_out', 'shortlist_out', 'fasta_out', 'search_config_out', 'alkylation_out'],
+  note: 'nothing places tags on the database: turn on the placements, the shortlist or the alkylation report'
+}
+/// Read wherever tags meet protein sequences: the database filter and every
+/// report that places tags (FASTag.cpp: the filter and TagReconciler take the
+/// orientation and the isobaric tolerance).
+const TAGS_ON_DB: Dependency = {
+  on: ['fasta', ...(DB_UNUSED.on as string[])],
+  say: 'a Filter database, or a report that places tags on a protein database',
+  note: 'keep only tags found in a database, or turn on the placements, the shortlist or the alkylation report'
+}
+const DELTA_OFF: Dependency = { on: 'delta_out', note: 'only the mass-shift table uses it' }
+const SHORTLIST_OFF: Dependency = { on: ['shortlist_out', 'fasta_out', 'search_config_out'], note: 'no shortlist is written' }
+/// Read for the shortlist and the reduced FASTA only, not for the search
+/// configuration alone (FASTag.cpp IgnoredOption: shortlist_on).
+const SHORTLIST_READ: Dependency = { on: ['shortlist_out', 'fasta_out'], note: 'only the shortlist and the reduced FASTA use it' }
+const TRYPSIN_ONLY: Dependency = {
+  on: 'shortlist_protease',
+  when: { shortlist_protease: { is: ['trypsin'] } },
+  say: 'Protease set to Trypsin',
+  note: 'ignored with any other protease'
+}
+const NOT_TRYPSIN: Dependency = {
+  on: 'shortlist_protease',
+  when: { shortlist_protease: { isNot: ['trypsin'] } },
+  say: 'Protease set to a rule other than Trypsin',
+  note: 'Trypsin always counts fully specific placements'
+}
+const HEADER_CHECK_OFF: Dependency = {
+  on: 'check_header_charge',
+  when: { check_header_charge: { isNot: ['off'] } },
+  say: 'Charge check mode set to warn or both',
+  note: 'the charge check is off'
+}
+const CALL_OFF: Dependency = {
+  on: 'species_call',
+  when: { species_call: { is: ['decoy'] } },
+  say: 'Presence call set to Decoy',
+  note: 'the presence call is None'
+}
+const CHARGES_TRIED: Dependency = {
+  on: ['unknown_charge', 'check_header_charge'],
+  when: { unknown_charge: { isNot: ['assume2'] }, check_header_charge: { isNot: ['off'] } },
+  say: 'Precursors without a charge set to try other charges, or the Charge check on',
+  note: 'charge 2 is assumed for spectra without a charge'
+}
+const SEARCH_OFF: Dependency = { on: 'search_config_out', note: 'no search configuration is written' }
+const CENSUS_OFF: Dependency = { on: 'census', note: 'no identifiability table is written' }
+const IDS_OFF: Dependency = { on: 'census_ids', note: 'only used with an identification file' }
+const ALKYLATION_OFF: Dependency = { on: ['alkylation_out', 'alkylation_tags_out'], note: 'no alkylation report is written' }
+const DIGEST_OFF: Dependency = { on: 'digest_out', note: 'only the digest report uses it' }
 
 export const PARAM_UI: Record<string, ParamUi> = {
   // ---- Spectra
   // 1.12: the one changed default (raw DIA is refused), so the form offers
   // warn and off, or a GUI user could not tag raw DIA at all.
   acquisition_check: {
-    section: 'Spectra',
-    label: 'Raw DIA check',
+    section: 'Sampling and checks',
+    label: 'DIA input',
     help: {
       text: 'Before tagging, FASTag checks whether the file is raw DIA data, whose MS2 spectra each mix several peptides. By default (refuse) a file classified as raw DIA is not tagged: the run stops with exit code 11 before any file is written. warn tags it anyway, with a warning in the log; off skips the check. The revised 1.13 check passed its second held-out test on Thermo files: 0 of 58 non-DIA files and 35 of 37 DIA files were refused. A third test on Astral, timsTOF and SCIEX files refused 0 of 75 non-DIA and 60 of 60 DIA files; it is inconclusive because it had only 3 Astral DDA files and no closed-window DIA file. A fourth test refused 0 of 86 non-DIA files (12 Astral DDA) and 70 of 71 DIA files; it is also inconclusive, with only 1 closed-window DIA file. If a known DDA file is refused, inspect the acquisition metadata before choosing warn or off.',
       tip: 'Better than warn: make pseudo-DDA spectra with DIAspeXtract (or diaTracer for timsTOF .d) first, and tag those. Tags of raw DIA spectra get wrong flanking masses and complement statistics.'
     }
   },
   no_deisotope: {
-    section: 'Spectra',
+    section: 'Peaks',
     label: 'Skip deisotoping',
     help: {
-      text: 'FASTag normally merges each isotope cluster into its first (monoisotopic) peak and moves fragments of charge 2 or 3 to the mass they would have at charge 1, before it picks peaks. This switch turns both steps off.',
+      text: 'Skips deisotoping and charge reduction. FASTag normally merges each isotope cluster into its first (monoisotopic) peak and moves fragments of charge 2 or 3 to the mass they would have at charge 1, before it picks peaks. This switch turns both steps off.',
       tip: 'Leave it off. Turn it on only for the fastest possible run, or to compare with a tool that has no such step.'
     }
   },
   max_peaks: {
-    section: 'Spectra',
+    section: 'Peaks',
     override: { description: 'Peaks kept per spectrum, at most 1024; 0 means 1024. More peaks need more memory.' },
     help: {
       text: 'How many peaks of each spectrum are kept, at most 1024. 0 also means 1024. More peaks need more memory.',
@@ -139,29 +199,35 @@ export const PARAM_UI: Record<string, ParamUi> = {
     }
   },
   peaks_per_window: {
-    section: 'Spectra',
+    section: 'Peaks',
     help: {
       text: 'Keep this many of the strongest peaks in every 100 Da window, instead of the strongest peaks of the whole spectrum. A wide spectrum then keeps more peaks than a narrow one. 0 turns it off.',
-      tip: '10 is the default. Set 0 to keep simply the strongest "Max peaks" peaks.'
+      tip: '10 is the default. Set 0 to keep simply the strongest "Peaks kept" peaks.'
     }
   },
   subsample_spectra: {
-    section: 'Spectra',
+    section: 'Sampling and checks',
     help: {
       text: 'Tag only this many spectra, chosen at random. 0 tags all of them. When both this and the fraction are set, this count wins.',
       tip: 'Useful for a quick look at a large run.'
     }
   },
   subsample_fraction: {
-    section: 'Spectra',
+    section: 'Sampling and checks',
+    label: 'Spectra to read',
+    steps: [
+      { label: 'All spectra', value: '0' },
+      { label: '10%', value: '0.1' },
+      { label: '25%', value: '0.25' }
+    ],
     help: {
       text: 'Tag only this share of the spectra (more than 0, up to 1), chosen at random. 0 tags all of them.',
       tip: '0.1 gives a fast species call on a large run.'
     }
   },
   subsample_seed: {
-    section: 'Spectra',
-    depends: [{ on: ['subsample_spectra', 'subsample_fraction'], note: 'nothing is being subsampled' }],
+    section: 'Sampling and checks',
+    depends: [{ on: ['subsample_fraction', 'subsample_spectra'], note: 'nothing is being subsampled', say: 'Spectra to read set below all spectra' }],
     help: {
       text: 'The starting number of the random choice. The same seed picks the same spectra again.',
       tip: 'Change it to draw a different random subset.'
@@ -172,23 +238,25 @@ export const PARAM_UI: Record<string, ParamUi> = {
   tag_length: {
     // The CLI warns "tag_length N is ignored: tag_lengths replaces it".
     section: 'Tagging',
-    depends: [{ on: 'tag_lengths', replaced: true, note: 'tag_lengths replaces it' }],
+    label: 'Seed length',
+    depends: [{ on: 'tag_lengths', replaced: true, note: 'the seed lengths listed under Tagging, advanced replace it' }],
     help: {
       text: 'The length of the shortest tag FASTag looks for, in residues. Every tag starts as a seed of this length; extension can make it longer.',
-      tip: '3 is the default. Species detection needs tags of 7 residues: set 7 here (see How species detection works).'
+      tip: '3 is the default. Species detection needs tags of 7 residues: seed 3 with extension 2 (the Species workflow) reaches them, or set 7 here.'
     }
   },
   tag_lengths: {
-    section: 'Tagging',
+    section: 'Tagging, advanced',
     help: {
-      text: 'Several seed lengths in one pass over the file, one per line, instead of tag length. Each length is tagged as if run on its own, with its own "Max tags" limit, and a spectrum\'s rows come in order of length. A tag that several lengths find is kept once, from the length that scores it best.',
+      text: 'Several seed lengths in one pass over the file, one per line, instead of tag length. Each length is tagged as if run on its own, with its own "Tags per spectrum" limit, and a spectrum\'s rows come in order of length. A tag that several lengths find is kept once, from the length that scores it best.',
       tip: 'Cannot be combined with the entrapment database.'
     }
   },
   fragment_tolerance: {
     // Its declared minimum (1e-9) stands for "greater than 0"; it carries its
     // unit inside its field.
-    section: 'Tagging',
+    section: 'Common',
+    label: 'Fragment tolerance',
     unit: 'fragment_tolerance_unit',
     positive: true,
     help: {
@@ -197,14 +265,14 @@ export const PARAM_UI: Record<string, ParamUi> = {
     }
   },
   fragment_tolerance_unit: {
-    section: 'Tagging',
+    section: 'Common',
     help: {
       text: 'The unit of the fragment tolerance: ppm or Da.',
       tip: 'ppm for high-resolution MS2, Da for an ion trap. With Da, the Digest tab makes no protease call.'
     }
   },
   gaps: {
-    section: 'Tagging',
+    section: 'Tagging, advanced',
     help: {
       text: 'With 1, a tag may cross one missing peak: two peaks whose distance is the mass of two residues are joined, and both residue orders are written as separate tags. 0 turns this off.',
       tip: 'Leave it at 1; it lets a tag continue past a fragment that was not measured.'
@@ -212,22 +280,26 @@ export const PARAM_UI: Record<string, ParamUi> = {
   },
   gap_penalty: {
     // -gaps 0 means no gapped tags exist, so nothing can be penalised.
-    section: 'Tagging',
+    section: 'Tagging, advanced',
     depends: [{ on: 'gaps', note: 'only applies when tags may cross a gap' }],
     help: {
-      text: 'Gapped tags are ranked as if their E-value were this many times worse, because they claim a peak nobody saw. The printed E-value of a gapped tag includes this factor. It never removes a tag at the E-value cutoff, but it decides which tags fill the "Max tags" places.',
+      text: 'Gapped tags are ranked as if their E-value were this many times worse, because they claim a peak nobody saw. The printed E-value of a gapped tag includes this factor. It never removes a tag at the E-value cutoff, but it decides which tags fill the "Tags per spectrum" places.',
       tip: '100 is the default. 1 turns the penalty off.'
     }
   },
   extension: {
     section: 'Tagging',
+    label: 'Extension',
     help: {
       text: 'After a seed is found, FASTag tries to read up to this many more residues at each end, and scores the longer tag again. 0 turns extension off; the maximum is 12.',
-      tip: 'Raise it for longer tags, for example 2 to let a seed of 3 grow to 7.'
+      tip: 'Raise it for longer tags, for example 3 to let a seed of 3 grow to 9.',
+      // The CLI line only repeats the text and the facts row (0 turns it off).
+      cliCovered: true
     }
   },
   max_tags: {
     section: 'Tagging',
+    label: 'Tags per spectrum',
     help: {
       text: 'How many tags are written per spectrum, best first; with several tag lengths, per length. 0 writes all of them.',
       tip: '50 is the default. Lower it for smaller files when only the best tags matter.'
@@ -235,46 +307,50 @@ export const PARAM_UI: Record<string, ParamUi> = {
   },
   max_evalue: {
     section: 'Tagging',
-    label: 'Maximum E-value',
+    label: 'E-value cutoff',
     help: {
       text: 'Tags with an E-value above this are not written; for a gapped tag the value before the gap penalty counts, so its printed E-value can be up to this times the gap penalty. 0 turns the cutoff off.',
       tip: '20 is the default. Lower it, for example to 1, to keep only the stronger tags.'
     }
   },
   diversity: {
-    section: 'Tagging',
+    section: 'Tagging, advanced',
     override: {
       description:
         'When a spectrum has more candidate tags than max_tags allows, prefer tags that read different peaks over near-copies of a tag already kept. The number of tags kept stays the same.'
     },
     help: {
-      text: 'When a spectrum has more tags than "Max tags" allows, prefer tags that read other peaks over near-copies of a tag already kept. The number of tags and the best tag stay the same.',
+      text: 'When a spectrum has more tags than "Tags per spectrum" allows, prefer tags that read other peaks over near-copies of a tag already kept. The number of tags and the best tag stay the same.',
       tip: 'Try it for spectra that hold two peptides at once (common in TMT runs).'
     }
   },
   tmt_pseudo_filter: {
-    hidden: EXPERIMENTAL_1_13,
+    section: 'Isobaric reporters',
+    experimental: true,
     help: {
       text: 'Experimental TMT6/10 filter for tags whose terminal G or A step is consistent with label fragmentation. Terminal K alone never triggers rejection. Auto first checks a sample for both N-terminal and lysine TMT evidence and abstains on conflicting label evidence. Off is the default; on is for known TMT6/10 input.'
     }
   },
   tmt_reporter_filter: {
-    hidden: EXPERIMENTAL_1_13,
+    section: 'Isobaric reporters',
+    experimental: true,
     help: {
-      text: 'Also reject singly charged tags that use a TMT reporter ion as their low endpoint. Requires an active TMT pseudo-tag filter; ordinary residue and a-ion endpoints are retained.'
+      text: 'Also reject b/y tags whose low end is a singly charged TMT6/10 reporter ion. Needs the TMT pseudo-tag filter on, or auto when auto detects TMT labelling.',
+      cliCovered: true
     }
   },
 
   // ---- Sequence matching
   fasta: {
-    section: 'Sequence matching',
+    section: 'Keep only tags found in a database',
+    label: 'Filter database',
     help: {
       text: 'A protein file (FASTA). Only tags that occur in these sequences are written (and, with an entrapment database, the entrapment-only matches, marked efwd/erev). I and L count as the same, tags are also tried reversed, and some residue pairs may stand in for a residue of the same mass.',
       tip: 'Very short tags occur in almost any protein by chance, so FASTag sets a minimum length from the size of the file: about 4 for one protein, 7 or 8 for a proteome. Set extension so that tag length + 2 × extension reaches it, or the run is refused. The log shows how many matches chance alone would give.'
     }
   },
   entrapment_fasta: {
-    section: 'Sequence matching',
+    section: 'Keep only tags found in a database',
     depends: [{ on: 'fasta', note: 'the entrapment database is only searched together with fasta' }],
     help: {
       text: 'A second protein file from organisms the sample cannot contain. Matches to it estimate how often a tag matches the database by chance, written as a q_db column. Needs a sequence database.',
@@ -284,13 +360,11 @@ export const PARAM_UI: Record<string, ParamUi> = {
   orientation: {
     // Read by the fasta filter AND by reconciliation (FASTag.cpp: TagReconciler
     // takes the orientation, the proteome index the isobaric tolerance).
-    section: 'Sequence matching',
-    depends: [
-      { on: ['fasta', 'recon_out'], note: 'only affects matching against fasta and reconciliation' }
-    ],
+    section: 'Tagging, advanced',
+    depends: [TAGS_ON_DB],
     override: {
       description:
-        'Match tags as written, or also reversed, against fasta and recon_fasta. Tags are written N- to C-terminal, so tags read from the other ion series match only reversed.'
+        'Match tags as written, or also reversed, against the protein database. Tags are written N- to C-terminal, so tags read from the other ion series match only reversed.'
     },
     help: {
       text: 'Whether a tag is matched only as written, or also reversed. Tags are written N- to C-terminal as if read from y ions; a tag read from b ions matches only reversed.',
@@ -298,17 +372,15 @@ export const PARAM_UI: Record<string, ParamUi> = {
     }
   },
   isobaric_tolerance: {
-    section: 'Sequence matching',
-    depends: [
-      { on: ['fasta', 'recon_out'], note: 'only affects matching against fasta and reconciliation' }
-    ],
+    section: 'Tagging, advanced',
+    depends: [TAGS_ON_DB],
     help: {
-      text: 'When matching against the sequence database or reconciling, a residue may stand for a pair of residues of the same mass within this tolerance (for example N for GG). 0 asks for exact sequences.',
+      text: 'When tags are matched against or placed on a protein database, a residue may stand for a pair of residues of the same mass within this tolerance (for example N for GG). 0 asks for exact sequences.',
       tip: '0.04 Da is the default.'
     }
   },
   min_filter_length: {
-    section: 'Sequence matching',
+    section: 'Keep only tags found in a database',
     depends: [{ on: 'fasta', note: 'only affects matching against a sequence database' }],
     help: {
       text: 'Tags shorter than this are not matched against the sequence database. 0 lets FASTag choose a length from the size of the database, where chance matches become rare.',
@@ -318,17 +390,19 @@ export const PARAM_UI: Record<string, ParamUi> = {
 
   // ---- Species detection
   species: {
-    section: 'Species detection',
+    section: 'Species',
+    label: 'Species report',
     help: {
       text: 'Work out which organisms the tags come from, using the species reference index bundled with FASTag. The result appears in the Species tab and in a report beside the tags.',
-      tip: 'Needs tags of 7 residues: set tag length 7 (extension alone lets few tags reach 7). Subsample a large run (fraction 0.1) for a fast answer.'
+      tip: 'Tags must reach 7 residues: tag length + 2 × extension. The Species and Characterize workflows use extension 2 (seed 3 + 2 × 2), the setting validated in the paper; tag length 7 also works. Subsample a large run (fraction 0.1) for a fast answer.'
     }
   },
   species_rank: {
     // The CLI accepts any rank and reports nothing for one the bundled taxonomy
     // lacks, so the list holds only ranks its nodes.dmp has: NCBI names the top
     // rank `domain` there, and `superkingdom` gives an empty report.
-    section: 'Species detection',
+    section: 'Species',
+    label: 'Report rank',
     choices: ['species', 'genus', 'family', 'order', 'class', 'phylum', 'kingdom', 'domain'],
     depends: [SPECIES_OFF],
     help: {
@@ -337,7 +411,7 @@ export const PARAM_UI: Record<string, ParamUi> = {
     }
   },
   species_evidence: {
-    section: 'Species detection',
+    section: 'Species, advanced',
     depends: [SPECIES_OFF],
     override: {
       description:
@@ -349,7 +423,7 @@ export const PARAM_UI: Record<string, ParamUi> = {
     }
   },
   species_min_len: {
-    section: 'Species detection',
+    section: 'Species, advanced',
     depends: [SPECIES_OFF],
     help: {
       text: 'Tags shorter than this are not used for species detection. Values below the index length (7 for the bundled index) use that length.',
@@ -358,7 +432,7 @@ export const PARAM_UI: Record<string, ParamUi> = {
   },
   species_use_gapped: {
     // Two masters: a gapped tag has to exist before it can be let into the index.
-    section: 'Species detection',
+    section: 'Species, advanced',
     depends: [SPECIES_OFF, { on: 'gaps', note: 'no gapped tags are produced' }],
     help: {
       text: 'Let gapped tags count as species evidence. Off by default, because the two residues across a gap are inferred, not seen, and an exact lookup cannot tell the difference.',
@@ -366,7 +440,7 @@ export const PARAM_UI: Record<string, ParamUi> = {
     }
   },
   species_deconvolve: {
-    section: 'Species detection',
+    section: 'Species, advanced',
     depends: [SPECIES_OFF],
     help: {
       text: 'Subtract the evidence an organism collects only because it shares protein sequence with a stronger one. Adds an Adjusted column to the Species tab.',
@@ -374,7 +448,7 @@ export const PARAM_UI: Record<string, ParamUi> = {
     }
   },
   species_max_kmer_share: {
-    section: 'Species detection',
+    section: 'Species, advanced',
     label: 'Maximum taxon share of a k-mer',
     depends: [SPECIES_OFF],
     help: {
@@ -383,7 +457,7 @@ export const PARAM_UI: Record<string, ParamUi> = {
     }
   },
   species_min_margin: {
-    section: 'Species detection',
+    section: 'Species, advanced',
     label: 'Minimum lead over runner-up taxon',
     depends: [SPECIES_OFF],
     help: {
@@ -392,14 +466,14 @@ export const PARAM_UI: Record<string, ParamUi> = {
     }
   },
   species_out: {
-    section: 'Species detection',
+    section: 'Species',
     depends: [SPECIES_OFF],
     help: {
       text: 'Where the species report is written. Empty: beside the tags file, named <name>.tags.species.tsv.'
     }
   },
   taxdb: {
-    section: 'Species detection',
+    section: 'Taxonomy',
     label: 'Species reference index',
     depends: [SPECIES_OFF],
     override: { description: 'Species reference index. Default: the one bundled with FASTag.' },
@@ -409,7 +483,7 @@ export const PARAM_UI: Record<string, ParamUi> = {
     }
   },
   taxonomy_nodes: {
-    section: 'Species detection',
+    section: 'Taxonomy',
     depends: [SPECIES_OFF],
     help: {
       text: 'The NCBI taxonomy tree (nodes.dmp) that goes with your own index. Empty: the bundled one.',
@@ -417,7 +491,7 @@ export const PARAM_UI: Record<string, ParamUi> = {
     }
   },
   taxonomy_names: {
-    section: 'Species detection',
+    section: 'Taxonomy',
     depends: [SPECIES_OFF],
     help: {
       text: 'The NCBI taxonomy names (names.dmp) that go with your own index. Empty: the bundled one.',
@@ -428,6 +502,7 @@ export const PARAM_UI: Record<string, ParamUi> = {
   // ---- Glycopeptides
   glyco: {
     section: 'Glycopeptides',
+    label: 'Oxonium flagging',
     help: {
       text: 'Write a report that flags spectra with oxonium ions, the small sugar fragments that glycopeptides and glycans give off. A spectrum is flagged when at least 2 different oxonium ions are found and their summed intensity reaches the minimum fraction of the base peak.',
       tip: 'A flag means a sugar broke apart in that spectrum; it does not identify a glycopeptide. On TMT data at 0.3 Da, a TMT reporter ion (126.128) overlaps a sugar fragment (126.055), so read the flags with care. Keep the tolerance that suits the MS2 analyzer.'
@@ -467,7 +542,7 @@ export const PARAM_UI: Record<string, ParamUi> = {
     section: 'Digest and labels',
     depends: [{ on: 'digest_out', note: 'only the digest report uses the models' }],
     help: {
-      text: 'A table of protease models of your own, replacing the shipped ones (Trypsin, Lys-C, Arg-C, Glu-C, Chymotrypsin, Asp-N, Lys-N and unspecific).',
+      text: 'A table of protease models of your own, replacing the shipped ones (Trypsin, Lys-C, Arg-C, Glu-C, Chymotrypsin, Asp-N, Lys-N and unspecific). Its columns: model, class, end, residue, freq.',
       tip: 'Needed only for other models, such as HLA ligands or the proteasome.'
     }
   },
@@ -511,42 +586,42 @@ export const PARAM_UI: Record<string, ParamUi> = {
 
   // ---- Reconciliation
   recon_out: {
-    section: 'Reconciliation',
-    label: 'Reconciliation table',
+    section: 'Placement on the database',
+    label: 'Tag placements',
     help: {
       text: 'Place each tag in the peptides of a protein database, using the masses on either side of it, and write one row per placement. When one side does not fit, the leftover mass is written with a guess at what it could be.',
-      tip: 'Needs a database: the reconciliation database, or else the sequence database. The rows are candidates, not identifications. Reconciliation uses tryptic peptides (cut after K and R, with up to 1 missed cleavage by default) whatever the protease call says, so for other proteases the placements and mass gaps are incomplete.'
+      tip: 'Needs a protein database: the placement database, or else the filter database. The rows are candidates, not identifications. Placement uses tryptic peptides (cut after K and R, with up to 1 missed cleavage by default) whatever the protease call says, so for other proteases the placements and mass gaps are incomplete.'
     }
   },
   recon_fasta: {
-    section: 'Reconciliation',
-    label: 'Reconciliation database',
-    depends: [RECON_OFF],
+    section: 'Placement on the database',
+    label: 'Protein database',
+    depends: [DB_UNUSED],
     help: {
-      text: 'The protein database for reconciliation. Empty: the sequence database (fasta) is used.',
-      tip: 'With a database here and none under Sequence matching, every tag is reconciled, not only those that match the sequence database.'
+      text: 'The protein database tags are placed on. Empty: the database of Keep only tags found in a database is used.',
+      tip: 'With a database here and none under Keep only tags found in a database (Advanced), every tag is placed, not only those that match a filter database.'
     }
   },
   recon_missed_cleavages: {
-    section: 'Reconciliation',
-    label: 'Reconciliation: missed cleavages',
-    depends: [RECON_OFF],
+    section: 'Placement on the database',
+    label: 'Missed cleavages',
+    depends: [DB_UNUSED],
     help: {
-      text: 'How many skipped trypsin cleavage sites a database peptide may contain, at most 10.',
-      tip: '1 is the default.'
+      text: 'How many skipped trypsin cleavage sites a database peptide may contain, at most 10. With Sage or Comet the same number goes into the search-engine configuration.',
+      tip: 'FASTag uses 1 by default. Database reduction sets 2 (the shortlist recipe), as FASTag does for MSFragger with trypsin.'
     }
   },
   recon_min_length: {
-    section: 'Reconciliation',
-    label: 'Reconciliation: minimum tag length',
-    depends: [RECON_OFF],
+    section: 'Placement, advanced',
+    label: 'Shortest tag placed',
+    depends: [DB_UNUSED],
     help: {
-      text: 'Tags shorter than this are not reconciled. 0 lets FASTag choose the length at which chance matches fall below 5%.',
-      tip: 'Leave it at 0.'
+      text: 'Tags shorter than this are not placed. 0 lets FASTag choose the length at which chance matches fall below 5%.',
+      tip: 'FASTag uses 0 by default. Database reduction sets 6 (the shortlist recipe), as FASTag does for MSFragger with trypsin; keep 6 there.'
     }
   },
   recon_localize: {
-    section: 'Reconciliation',
+    section: 'Placement, advanced',
     label: 'Localize mass gaps',
     depends: [RECON_OFF],
     help: {
@@ -554,34 +629,34 @@ export const PARAM_UI: Record<string, ParamUi> = {
     }
   },
   delta_out: {
-    section: 'Reconciliation',
-    label: 'Mass-shift histogram',
-    depends: [{ on: 'recon_out', note: 'the histogram is built from the reconciliation results' }],
+    section: 'Mass-shift survey',
+    label: 'Mass-shift table',
+    depends: [{ on: 'recon_out', note: 'the histogram is built from the placements' }],
     help: {
       text: 'Write a histogram of the leftover masses, one count per spectrum.',
       tip: 'Read it as candidates: no peak here is an identified modification.'
     }
   },
   recon_id_out: {
-    section: 'Reconciliation',
-    label: 'Reconciliation as identifications',
-    depends: [{ on: 'recon_out', note: 'it writes the reconciliation results as identifications' }],
+    section: 'Placement on the database',
+    label: 'Placements as identifications',
+    depends: [{ on: 'recon_out', note: 'it writes the placements as identifications' }],
     help: {
       text: 'Write the placements as identifications in idXML, mzIdentML or mzTab, for tools that read those formats. The file extension chooses the format: .idXML, .mzid or .mzTab (.mzIdentML is not accepted).',
       tip: 'These are not filtered by a false discovery rate.'
     }
   },
   massgap_out: {
-    section: 'Reconciliation',
+    section: 'Mass-shift survey',
     label: 'Mass-gap report',
-    depends: [{ on: 'recon_out', note: 'the mass gaps come from the reconciliation results' }],
+    depends: [{ on: 'recon_out', note: 'the mass gaps come from the placements' }],
     help: {
       text: 'Write the mass-gap report: the leftover masses, cysteine alkylation counts, frequent gaps explained as combinations of known modifications, and SILAC labels among them. Shown in the Digest tab.',
       tip: 'To see the cysteine alkylation, run it without fixed modifications.'
     }
   },
   massgap_window: {
-    section: 'Reconciliation',
+    section: 'Mass-gap report',
     label: 'Gap window (ppm runs)',
     depends: [RECON_OFF, MASSGAP_OFF],
     help: {
@@ -590,7 +665,7 @@ export const PARAM_UI: Record<string, ParamUi> = {
     }
   },
   massgap_window_da: {
-    section: 'Reconciliation',
+    section: 'Mass-gap report',
     label: 'Gap window (Da runs)',
     depends: [RECON_OFF, MASSGAP_OFF],
     help: {
@@ -599,7 +674,7 @@ export const PARAM_UI: Record<string, ParamUi> = {
     }
   },
   massgap_min_spectra: {
-    section: 'Reconciliation',
+    section: 'Mass-gap report',
     depends: [RECON_OFF, MASSGAP_OFF],
     help: {
       text: 'How many spectra a mass-gap peak needs.',
@@ -607,7 +682,7 @@ export const PARAM_UI: Record<string, ParamUi> = {
     }
   },
   massgap_min_share: {
-    section: 'Reconciliation',
+    section: 'Mass-gap report',
     depends: [RECON_OFF, MASSGAP_OFF],
     help: {
       text: 'The share of placed spectra a mass-gap peak needs.',
@@ -615,7 +690,7 @@ export const PARAM_UI: Record<string, ParamUi> = {
     }
   },
   massgap_min_bin: {
-    section: 'Reconciliation',
+    section: 'Mass-gap report',
     depends: [RECON_OFF, MASSGAP_OFF],
     help: {
       text: 'How many spectra a histogram row needs to take part in the peaks.',
@@ -623,7 +698,7 @@ export const PARAM_UI: Record<string, ParamUi> = {
     }
   },
   massgap_max_mods: {
-    section: 'Reconciliation',
+    section: 'Mass-gap report',
     depends: [RECON_OFF, MASSGAP_OFF],
     help: {
       text: 'How many modifications may be combined to explain one gap (1 to 4).',
@@ -631,7 +706,7 @@ export const PARAM_UI: Record<string, ParamUi> = {
     }
   },
   massgap_top: {
-    section: 'Reconciliation',
+    section: 'Mass-gap report',
     depends: [RECON_OFF, MASSGAP_OFF],
     help: {
       text: 'How many modifications are listed as the most frequent.',
@@ -639,7 +714,7 @@ export const PARAM_UI: Record<string, ParamUi> = {
     }
   },
   massgap_silac_share: {
-    section: 'Reconciliation',
+    section: 'Mass-gap report',
     label: 'SILAC: minimum share of shifted spectra',
     depends: [RECON_OFF, MASSGAP_OFF],
     help: {
@@ -648,7 +723,7 @@ export const PARAM_UI: Record<string, ParamUi> = {
     }
   },
   massgap_silac_min: {
-    section: 'Reconciliation',
+    section: 'Mass-gap report',
     label: 'SILAC: minimum shifted spectra',
     depends: [RECON_OFF, MASSGAP_OFF],
     help: {
@@ -659,7 +734,8 @@ export const PARAM_UI: Record<string, ParamUi> = {
 
   // ---- Modifications
   fixed_modifications: {
-    section: 'Modifications',
+    section: 'Common',
+    label: 'Fixed modifications',
     help: {
       text: "Modifications present on every residue of a kind, by their OpenMS (Unimod) name, one per line. They change that residue's mass and are not written in the tag.",
       tip: 'The default is Carbamidomethyl (C), for iodoacetamide alkylation. For a TMT sample add, for example, TMT6plex (K) and TMT6plex (N-term). A terminal one (N-term) appears in the mass-gap report as a peak at its mass.'
@@ -667,6 +743,7 @@ export const PARAM_UI: Record<string, ParamUi> = {
   },
   variable_modifications: {
     section: 'Modifications',
+    label: 'Variable modifications',
     help: {
       text: 'Modifications that may or may not be present, one per line. A modified residue is written in the tag as X[Name], for example S[Phospho].',
       tip: 'Each one adds candidate masses, so add only those you expect.'
@@ -675,15 +752,15 @@ export const PARAM_UI: Record<string, ParamUi> = {
 
   // ---- Output
   proforma: {
-    section: 'Output',
+    section: 'Tag columns and files',
     label: 'ProForma column',
     help: {
       text: 'Add a column with each tag in ProForma 2.0 notation, a standard way to write peptides that other tools can read. I and L are written as J.'
     }
   },
   res_conf: {
-    section: 'Output',
-    label: 'Per-residue confidence column',
+    section: 'Tagging',
+    label: 'Per-residue confidence',
     override: {
       description:
         'Add a res_conf column: a confidence from 0 to 100 for each residue, N- to C-terminal. De novo assembly tools can use it.'
@@ -693,16 +770,16 @@ export const PARAM_UI: Record<string, ParamUi> = {
     }
   },
   usi_collection: {
-    section: 'Output',
-    label: 'USI column (dataset ID)',
+    section: 'Tag columns and files',
+    label: 'USI column (PRIDE accession)',
     help: {
       text: "Add a column naming each tag's spectrum as a Universal Spectrum Identifier (USI) in this dataset, for example PXD000001.",
       tip: 'Use USI000000 until the dataset has an accession.'
     }
   },
   out_spectra: {
-    section: 'Output',
-    label: 'Spectra with tags (file)',
+    section: 'Tag columns and files',
+    label: 'Spectra with tags',
     help: {
       text: 'Also write the spectra that carry at least one reported tag that is not an entrapment match, as mzML or mzPeak (chosen by the extension).',
       tip: 'This needs memory in proportion to the size of the file. With a sequence database, it collects the spectra whose tags match.'
@@ -716,6 +793,7 @@ export const PARAM_UI: Record<string, ParamUi> = {
     // TOPPBase offers no hook to change a common option. The manifest is a dump
     // of -write_ini, so it carries TOPPBase's number and text; this is the tool's.
     section: 'Performance',
+    label: 'Threads',
     override: {
       default: '0',
       description: 'Threads to use. 0 (the default) means half the logical cores.'
@@ -794,299 +872,379 @@ export const PARAM_UI: Record<string, ParamUi> = {
     }
   },
 
-  // ---- Not in the form: FASTag 1.12 command-line options (see OPT_IN_1_12)
+  // ---- Options added since 1.12, each in its workflow group
   acquisition_probe_spectra: {
-    hidden: OPT_IN_1_12,
+    section: 'Sampling and checks',
+    depends: [{ on: 'acquisition_check', when: { acquisition_check: { isNot: ['off'] } }, say: 'DIA input set to refuse or warn', note: 'the DIA check is off' }],
     help: {
       text: 'How many MS2 spectra at the start of the run the acquisition check reads (metadata only).'
     }
   },
   alkylation_min_share: {
-    hidden: OPT_IN_1_12,
+    section: 'Alkylation',
+    depends: [ALKYLATION_OFF],
     help: {
       text: 'Which share of the counted spectra the alkylation call needs.'
     }
   },
   alkylation_min_spectra: {
-    hidden: OPT_IN_1_12,
+    section: 'Alkylation',
+    depends: [ALKYLATION_OFF],
     help: {
       text: 'How many spectra the alkylation call needs.'
     }
   },
   alkylation_out: {
-    hidden: OPT_IN_1_12,
+    section: 'Alkylation',
     help: {
       text: 'Write a report of which reagent alkylated the cysteines, or none, from the placements of peptides with one cysteine. Not validated on held-out data.'
     }
   },
   alkylation_proteome: {
-    hidden: OPT_IN_1_12,
+    section: 'Alkylation',
+    // FASTag.cpp alkylation_only_db: read only when the alkylation report
+    // is the one user of placements and no protein database is given;
+    // otherwise the CLI logs "-alkylation_proteome is ignored".
+    depends: [
+      { on: 'alkylation_out', note: 'only the alkylation report uses it' },
+      {
+        on: ['recon_fasta', 'recon_out', 'shortlist_out', 'fasta_out', 'search_config_out'],
+        replaced: true,
+        say: 'a protein database for the placements or the shortlist',
+        note: 'the alkylation report places on the Protein database, or on the Filter database when no Protein database is set'
+      }
+    ],
     help: {
-      text: 'The database the alkylation report uses when no reconciliation database is given: auto (the human proteome), human, mouse, yeast or ecoli for the UniProt reference proteomes shipped with FASTag (reviewed entries; the release is in the report), or a FASTA file. Tags place on the shipped proteomes from 8 residues (human, mouse) or 7 (yeast, E. coli): set the tag length to 8 or 7, otherwise no tag places and there is no call (reason tags_too_short).'
+      text: 'The database the alkylation report uses when no placement database is given: auto (the human proteome), human, mouse, yeast or ecoli for the UniProt reference proteomes shipped with FASTag (reviewed entries; the release is in the report), or a FASTA file (.gz allowed). Tags place on the shipped proteomes from 8 residues (human, mouse) or 7 (yeast, E. coli) (or Shortest tag placed, when set above 0), so tag length + 2 × Extension must reach that: at tag length 3, Extension 3 for human or mouse, 2 for yeast or E. coli; otherwise no tag places and there is no call (reason tags_too_short). A FASTA file, here or as Protein database, is indexed with a minimum length that grows with its size (8 for a human-sized one, 4 for a few proteins). Shortest tag placed sets that length; it is in Advanced, group “Placement, advanced”, which is under Other analyses in every workflow but Mass-shift survey. Extension is not raised for a FASTA file, and a run on it that places nothing gives no tags_too_short reason.'
     }
   },
   alkylation_tags_out: {
-    hidden: 'experimental 1.13 command-line option, not in the form (CLI default applies)',
+    section: 'Alkylation',
+    experimental: true,
     help: {
       text: 'Write a report of which reagent alkylated the cysteines, or none, without a database: every spectrum is tagged a second time with unmodified and alkylated cysteine as alternatives, and the cysteine forms inside the best tags vote. Experimental: its held-out test passed at the margin (40 of 57 runs called, 37 right); unalkylated runs are rarely called. Use it with tag extension; without it few spectra vote.'
     }
   },
   alkylation_window: {
-    hidden: OPT_IN_1_12,
+    section: 'Alkylation',
+    depends: [{ on: 'alkylation_out', note: 'only the alkylation report uses it' }],
     help: {
       text: 'The mass window around each cysteine form for the alkylation report. 0 means 0.02 Da on a ppm run and 0.5 Da on a Da run.'
     }
   },
   census: {
-    hidden: OPT_IN_1_12,
+    section: 'Identifiability',
+    label: 'Identifiability table',
     help: {
       text: 'Also write a census: one row for every MS2 spectrum read, tagged or not, and a run summary. A status in the census is not a quality call.'
     }
   },
   census_ids: {
-    hidden: OPT_IN_1_12,
+    section: 'Identifiability',
+    label: 'Identifications',
+    depends: [CENSUS_OFF],
     help: {
-      text: 'Identifications of the same run (idXML or mzid) for the census: each spectrum is then marked identified or not. The file needs q-values.'
+      text: 'Identifications of the same run (idXML or mzid) for the census: each spectrum is then marked identified, not identified or unknown. Needs q-values, unless Accept hits (Advanced) is threshold or all.'
     }
   },
   census_ids_fdr: {
-    hidden: OPT_IN_1_12,
+    section: 'Identifiability',
+    label: 'ID q-value',
+    depends: [CENSUS_OFF, IDS_OFF, { on: 'census_ids_accept', when: { census_ids_accept: { is: ['qvalue'] } }, say: 'Accept hits set to q-value', note: 'only read when hits are accepted by q-value' }],
     help: {
       text: 'The q-value a target hit needs for its spectrum to count as identified in the census.'
     }
   },
   census_out: {
-    hidden: OPT_IN_1_12,
+    section: 'Identifiability',
+    depends: [CENSUS_OFF],
     help: {
       text: 'Where the per-spectrum census goes. By default next to the tags file, ending in .census.tsv.'
     }
   },
   census_summary_out: {
-    hidden: OPT_IN_1_12,
+    section: 'Identifiability',
+    depends: [CENSUS_OFF],
     help: {
       text: 'Where the census run summary goes. By default next to the tags file, ending in .census_summary.tsv.'
     }
   },
   delta_counts_out: {
-    hidden: '1.15.2 experimental command-line option, not in the form (CLI default applies)',
+    section: 'Mass-shift survey',
+    experimental: true,
+    depends: [DELTA_OFF],
     help: {
-      text: 'The reconciliation of the mass-shift survey: how many MS2 spectra reach each step, with sum checks.'
+      text: 'An accounting of the mass-shift survey: how many MS2 spectra reach each step, with sum checks.'
     }
   },
   delta_group: {
-    hidden: '1.15.2 experimental command-line option, not in the form (CLI default applies)',
+    section: 'Mass-shift survey, advanced',
+    experimental: true,
+    depends: [DELTA_OFF],
     help: {
       text: 'How wide one row of the mass-shift survey may be, in Da: neighbouring bins within this distance of the most populated one form one row.'
     }
   },
   delta_isobar_tolerance: {
-    hidden: '1.15.2 experimental command-line option, not in the form (CLI default applies)',
+    section: 'Mass-shift survey, advanced',
+    experimental: true,
+    depends: [DELTA_OFF],
     help: {
       text: 'How close two explanations of a mass shift must be to be listed as exact isobars (oxidation and Ala to Ser, for example).'
     }
   },
   delta_isotope_flank: {
-    hidden: '1.15.2 experimental command-line option, not in the form (CLI default applies)',
+    section: 'Mass-shift survey, advanced',
+    experimental: true,
+    depends: [DELTA_OFF],
     help: {
       text: 'Which survey rows may be called an isotope error: only rows whose gaps mostly sit on the precursor-derived side, or any row.'
     }
   },
   delta_loc_min_evidence: {
-    hidden: '1.15.2 experimental command-line option, not in the form (CLI default applies)',
+    section: 'Mass-shift survey, advanced',
+    experimental: true,
+    depends: [DELTA_OFF],
     help: {
       text: 'How much more evidence the best site needs than the next one before a mass shift counts as localized by the fragments.'
     }
   },
   delta_loc_model: {
-    hidden: '1.15.2 experimental command-line option, not in the form (CLI default applies)',
+    section: 'Mass-shift survey, advanced',
+    experimental: true,
+    depends: [DELTA_OFF],
     help: {
       text: 'How the survey localizes a mass shift on the peptide: by every matched ion, by distinct peaks, or by distinct peaks without neutral-loss satellites (strict).'
     }
   },
   delta_loc_null: {
-    hidden: '1.15.2 experimental command-line option, not in the form (CLI default applies)',
+    section: 'Mass-shift survey, advanced',
+    experimental: true,
+    depends: [DELTA_OFF],
     help: {
       text: 'Repeat the localization on peaks moved by this many m/z units, to see how often a site is found by chance.'
     }
   },
   delta_name_tolerance: {
-    hidden: '1.15.2 experimental command-line option, not in the form (CLI default applies)',
+    section: 'Mass-shift survey, advanced',
+    unit: 'delta_name_tolerance_unit',
+    experimental: true,
+    depends: [DELTA_OFF],
     help: {
       text: 'How close a mass shift must be to a Unimod or PSI-MOD entry to be named after it.'
     }
   },
   delta_name_tolerance_unit: {
-    hidden: '1.15.2 experimental command-line option, not in the form (CLI default applies)',
+    section: 'Mass-shift survey, advanced',
+    experimental: true,
     help: {
       text: 'The unit of the naming tolerance: ppm of the median peptide mass, or Da.'
     }
   },
   delta_select: {
-    hidden: '1.15.2 experimental command-line option, not in the form (CLI default applies)',
+    section: 'Mass-shift survey, advanced',
+    experimental: true,
+    depends: [DELTA_OFF],
     help: {
       text: 'Which placement of a spectrum the survey counts: the one with the smallest shift of its best tag, or the one most of its tags agree on.'
     }
   },
   delta_spectra_out: {
-    hidden: '1.15.2 experimental command-line option, not in the form (CLI default applies)',
+    section: 'Mass-shift survey',
+    experimental: true,
+    depends: [DELTA_OFF],
     help: {
       text: 'One line per spectrum behind the mass-shift survey: the shift, its row, peptide, site and provenance, for comparison with a search engine.'
     }
   },
   qc_out: {
-    hidden: '1.15.2 experimental command-line option, not in the form (CLI default applies)',
+    section: 'Run QC',
+    label: 'QC report',
     help: {
       text: 'A run QC report: spectra per MS level and analyser, resolution, precursor charges, isobaric reporters, tag yield and redundancy.'
     }
   },
   recon_sub_tolerance: {
-    hidden: '1.15.2 experimental command-line option, not in the form (CLI default applies)',
+    section: 'Placement, advanced',
+    unit: 'recon_sub_tolerance_unit',
+    experimental: true,
+    depends: [RECON_OFF],
     help: {
       text: 'How close a leftover mass must be to an amino-acid substitution to be read as one.'
     }
   },
   recon_sub_tolerance_unit: {
-    hidden: '1.15.2 experimental command-line option, not in the form (CLI default applies)',
+    section: 'Placement, advanced',
+    experimental: true,
     help: {
       text: 'The unit of the substitution tolerance: ppm of the flanking mass, or Da.'
     }
   },
   census_ids_accept: {
-    hidden: '1.16 command-line option for identification files without q-values, not in the form (CLI default applies)',
+    section: 'Identifiability, advanced',
+    depends: [CENSUS_OFF, IDS_OFF],
     help: {
       text: 'Which hits of the identification file mark a spectrum identified: those passing a q-value, those the file marks as passing its own threshold (Mascot), or every target hit.'
     }
   },
   census_ids_exact: {
-    hidden: '1.16 command-line option for label joins, not in the form (CLI default applies)',
+    section: 'Identifiability, advanced',
+    depends: [CENSUS_OFF, IDS_OFF],
     help: {
       text: 'Join the identifications one to one: exact spectrum ids only, and refuse a file that does not belong to this run.'
     }
   },
   census_score: {
-    hidden: '1.16 experimental command-line option, not in the form (CLI default applies)',
+    section: 'Identifiability',
+    label: 'Identifiability score',
+    depends: [CENSUS_OFF],
     help: {
-      text: 'Add an identifiability score to the census: a ranking of the MS2 spectra by how likely a standard database search identifies them. Not a quality call.'
+      text: 'Add an identifiability score to the census: a ranking of the MS2 spectra by how likely a standard database search identifies them. Experimental: not validated on held-out data. Not a quality call.'
     }
   },
   census_sorted_out: {
-    hidden: '1.16 experimental command-line option, not in the form (CLI default applies)',
+    section: 'Identifiability',
+    depends: [CENSUS_OFF, { on: 'census_score', note: 'the table is ordered by the identifiability score' }],
     help: {
       text: 'The census rows ordered by the identifiability score, highest first.'
     }
   },
   census_triage_evalue: {
-    hidden: OPT_IN_1_12,
+    section: 'Identifiability',
+    label: 'Triage E-value',
+    depends: [CENSUS_OFF, IDS_OFF],
     help: {
       text: 'The E-value at or below which an unidentified spectrum with a tag is marked for a second look in the census. It is a threshold, not a quality call.'
     }
   },
   charge_infer_margin: {
-    hidden: OPT_IN_1_12,
+    section: 'Charge and ions',
+    depends: [CHARGES_TRIED],
     help: {
       text: 'By how much the supported charge must beat the next one to be tagged alone; when the two are closer, both are tagged.'
     }
   },
   charge_max: {
-    hidden: OPT_IN_1_12,
+    section: 'Charge and ions',
+    depends: [CHARGES_TRIED],
     help: {
       text: 'The highest charge tried for a precursor without a charge, when it is not tagged as 2+.'
     }
   },
   charge_min: {
-    hidden: OPT_IN_1_12,
+    section: 'Charge and ions',
+    depends: [CHARGES_TRIED],
     help: {
-      text: 'The lowest charge tried for a precursor without a charge, when it is not tagged as 2+.'
+      text: 'The lowest charge tried for a precursor without a charge, when it is not tagged as 2+ (each possible charge, or the one its fragment pairs support best). 1 lets the best-supported choice test 1+ too.'
     }
   },
   check_header_charge: {
-    hidden: EXPERIMENTAL_1_13,
+    section: 'Sampling and checks',
+    experimental: true,
     help: {
-      text: "Whether the charge the file gives for a precursor is checked against the isotope spacing of the precursor in the preceding MS1 scan and against its fragment pairs: off, warn (report disagreements only) or both (tag a disagreeing spectrum under the file's charge and under the charge the check found). Experimental."
+      text: "Checks the precursor charge the file gives. It is checked against the isotope spacing of the precursor in the preceding MS1 scan and against its fragment pairs: off, warn (report disagreements only) or both (tag a disagreeing spectrum under the file's charge and under the charge the check found). Experimental."
     }
   },
   check_header_margin: {
-    hidden: EXPERIMENTAL_1_13,
+    section: 'Sampling and checks',
+    depends: [HEADER_CHECK_OFF],
+    experimental: true,
     help: {
       text: 'By how much the supported charge must beat the given charge before the header charge check calls a disagreement.'
     }
   },
   check_header_out: {
-    hidden: EXPERIMENTAL_1_13,
+    section: 'Sampling and checks',
+    depends: [HEADER_CHECK_OFF],
+    experimental: true,
     help: {
       text: 'Where the header charge check writes one row per spectrum with a given charge: the given charge, the supported charge, the evidence and the verdict.'
     }
   },
   complement_midp: {
-    hidden: OPT_IN_1_12,
+    section: 'Complement pairs',
     help: {
       text: 'Score tags with no or one complement pair with the mid-p variant of the complement test.'
     }
   },
   complement_probe: {
-    hidden: OPT_IN_1_12,
+    section: 'Complement pairs',
+    experimental: true,
     help: {
       text: 'How many MS2 spectra the auto complement window is measured on (experimental).'
     }
   },
   complement_rule: {
-    hidden: OPT_IN_1_12,
+    section: 'Complement pairs',
     help: {
       text: 'Which fragment pairs count as complements when tags are scored: pairs at the same charge (the default), pairs that share the precursor charge, or either.'
     }
   },
   complement_tol_factor: {
-    hidden: OPT_IN_1_12,
+    section: 'Complement pairs',
     help: {
-      text: 'The factor on the fragment tolerance when the complement window follows it.'
+      text: 'Complement window in fragment tolerances. The factor on the fragment tolerance when the complement window follows it (unit fragment).'
     }
   },
   complement_tolerance: {
-    hidden: OPT_IN_1_12,
+    section: 'Complement pairs',
     help: {
       text: 'The mass window, in Da, for a complement partner.'
     }
   },
   complement_tolerance_unit: {
-    hidden: OPT_IN_1_12,
+    section: 'Complement pairs',
     help: {
-      text: 'Whether the complement window is a fixed value in Da, follows the fragment tolerance, or (auto, validated: its third held-out test passed, +3.3 points of correct rank-1 tags on ion trap, not worse on timsTOF; the first, with an earlier estimator, failed, the second was inconclusive) is measured on the run from the complement pairs of confident tags.'
+      text: 'Whether the complement window is a fixed value in Da, follows the fragment tolerance, or is measured on the run from the complement pairs of confident tags (auto).',
+      tip: 'Auto is validated: its third held-out test passed (+3.3 points of correct rank-1 tags on ion trap, not worse on timsTOF); the first, with an earlier estimator, failed, and the second was inconclusive.'
     }
   },
   digest_calibration: {
-    hidden: OPT_IN_1_12,
+    section: 'Digest and labels',
+    depends: [DIGEST_OFF],
     help: {
       text: 'A file that calibrates the confidence of the digest call. By default the shipped one.'
     }
   },
   digest_detection: {
-    hidden: OPT_IN_1_12,
+    section: 'Digest and labels',
+    depends: [DIGEST_OFF],
     help: {
       text: 'Apply per-instrument weights in the digest report, which also gives a call on timsTOF runs. Not validated on held-out data.'
     }
   },
   digest_flank2: {
-    hidden: OPT_IN_1_12,
+    section: 'Digest and labels',
+    depends: [DIGEST_OFF],
     help: {
       text: 'Let the digest report also use the two residues before each cut when the one-residue counts are too few. Not validated on held-out data.'
     }
   },
   digest_min_confidence: {
-    hidden: OPT_IN_1_12,
+    section: 'Digest and labels',
+    depends: [DIGEST_OFF],
     help: {
       text: 'Give no digest call when its calibrated confidence is below this value. 0 turns it off.'
     }
   },
   digest_quality: {
-    hidden: 'experimental (1.13): digestion-quality rows of -digest_out',
+    section: 'Digest and labels',
+    experimental: true,
+    depends: [DIGEST_OFF],
     help: {
       text: 'Add missed-cleavage and non-specific-end measurements for one enzyme (or the call: auto) to the digest report. Experimental.'
     }
   },
   digest_models_version: {
-    hidden: OPT_IN_1_12,
+    section: 'Digest and labels',
+    // FASTag.cpp: a custom -digest_models file decides the model table, but
+    // v2 still loads its calibration and writes the v2 rows (p_correct), so
+    // the value is sent with a models file too.
+    depends: [DIGEST_OFF],
     help: {
-      text: 'Which protease models the digest report uses: the shipped ones (as in 1.11) or v2. v2 is not validated on held-out data.'
+      text: 'Which protease models the digest report uses: the shipped ones (as in 1.11) or v2, which adds detection, LysargiNase and Asp-N (ammonium bicarbonate) rows and a pooled specificity. Version v2 is not validated on held-out data.',
+      cliCovered: true,
+      tip: "With a custom models file the file's models are used as given (the log says v2 is ignored for the table); v2 still loads the calibration and adds the p_correct rows."
     }
   },
   dump_spectrum: {
@@ -1096,13 +1254,13 @@ export const PARAM_UI: Record<string, ParamUi> = {
     }
   },
   fasta_out: {
-    hidden: OPT_IN_1_12,
+    section: 'Shortlist',
     help: {
-      text: 'Write a smaller FASTA with the proteins of the shortlist, for a database search. No decoys are added; let the search engine make them. When it would hold no protein, it is not written and the run fails with exit code 13.'
+      text: 'Write a smaller FASTA with the proteins of the shortlist, for a database search. For Sage and Comet no decoys are added (the engine makes them); for MSFragger, FASTag appends reversed rev_ decoys. When it would hold no protein, it is not written and the run fails with exit code 13.'
     }
   },
   ion_series: {
-    hidden: OPT_IN_1_12,
+    section: 'Charge and ions',
     // 1.14: ax (a/x ions) was removed; the CLI still accepts it and reads by.
     choices: ['by', 'cz', 'auto'],
     help: {
@@ -1111,19 +1269,21 @@ export const PARAM_UI: Record<string, ParamUi> = {
   },
   ion_series_photo: { hidden: REMOVED_1_14, help: REMOVED_1_14_HELP },
   ion_series_hybrid: {
-    hidden: OPT_IN_1_13_EXPERIMENTAL,
+    section: 'Charge and ions',
+    depends: [{ on: 'ion_series', when: { ion_series: { is: ['auto'] } }, say: 'Ion series set to auto', note: 'only read when the ion series follows each spectrum\'s activation' }],
+    experimental: true,
     help: {
       text: 'Under ion series auto: read hybrid EThcD/ETciD spectra as b/y ions (the default) or tag them twice, as b/y and as c/z ions, and merge the rows (both). Experimental; passed its held-out test (5 projects: +43 points of identified spectra with a correct tag, 1.6x CPU time).'
     }
   },
   isotope_error: {
-    hidden: OPT_IN_1_12,
+    section: 'Charge and ions',
     help: {
       text: 'Also consider precursor masses lowered by one or more isotope spacings (1.00336 Da each), for precursors picked on the wrong isotope peak. Needs a fragment tolerance below 0.05 Da.'
     }
   },
   pick_profile: {
-    hidden: OPT_IN_1_12,
+    section: 'Peaks',
     // 1.14: auto (centroid mzML too) was removed; the CLI still accepts it and reads legacy.
     choices: ['legacy', 'off'],
     help: {
@@ -1138,55 +1298,67 @@ export const PARAM_UI: Record<string, ParamUi> = {
     }
   },
   search_config_out: {
-    hidden: OPT_IN_1_12,
+    section: 'Shortlist',
     help: {
-      text: 'Write search-engine settings (Sage or Comet) for the smaller FASTA.'
+      text: 'Write search-engine settings (Sage, Comet, or MSFragger, experimental) for the smaller FASTA.'
     }
   },
   search_config_template: {
-    hidden: OPT_IN_1_12,
+    section: 'Search configuration',
+    depends: [SEARCH_OFF, { on: 'search_engine', when: { search_engine: { is: ['comet'] } }, say: 'Search engine set to Comet', note: 'a Sage or MSFragger configuration is written complete' }],
     help: {
-      text: 'For Comet only: a parameter file the written settings are merged into.'
+      text: 'For Comet only: your comet.params (comet -p writes one). The written settings are merged into it, giving a complete file; without it FASTag writes a fragment of the managed keys to merge by hand.'
     }
   },
   search_decoy_prefix: {
-    hidden: OPT_IN_1_12,
+    section: 'Search configuration',
+    depends: [SEARCH_OFF],
     help: {
       text: 'The decoy prefix the search engine uses. Empty means the engine default.'
     }
   },
   search_engine: {
-    hidden: OPT_IN_1_12,
+    section: 'Shortlist',
+    label: 'Search engine',
+    depends: [SEARCH_OFF],
     help: {
-      text: 'The search engine the settings are written for: Sage, Comet or MSFragger (experimental; needs decoys in the database). With MSFragger the shortlist uses the configuration that passed its second held-out test (gapped placements, E-value 10, minimum tag length 6, 2 missed cleavages; each unless set); the first held-out test, with the 1.13 shortlist, failed. MSFragger mass calibration (calibrate_mass 2) failed its held-out test and is not exported.'
+      text: 'The search engine the settings are written for: Sage, Comet or MSFragger (experimental; needs decoys in the database). The shortlist recipe (gapped placements, E-value 10, shortest placed tag 6, 2 missed cleavages) is not validated: with MSFragger it passed the second held-out test and failed the third. With MSFragger and trypsin FASTag applies it to every setting you leave unchanged; the Database reduction workflow sets it for every engine, Sage and Comet included. MSFragger mass calibration (calibrate_mass 2) failed its held-out test and is not exported.'
     }
   },
   search_isotope_errors: {
-    hidden: OPT_IN_1_12,
+    section: 'Search configuration',
+    unset: { value: '-1', placeholder: 'engine default' },
+    depends: [SEARCH_OFF],
     help: {
       text: 'How many precursor isotope errors the search engine should consider; -1 leaves it to the engine: none for Sage and Comet, up to 3 for MSFragger.'
     }
   },
   search_missed_cleavages: {
-    hidden: OPT_IN_1_12,
+    section: 'Search configuration',
+    unset: { value: '-1', placeholder: 'engine default' },
+    depends: [SEARCH_OFF],
     help: {
       text: 'How many missed cleavages the search engine should allow; -1 leaves it to the engine: the tag placement setting for Sage and Comet, 2 for MSFragger with trypsin.'
     }
   },
   search_nterm_acetyl: {
-    hidden: OPT_IN_1_12,
+    section: 'Search configuration',
+    depends: [SEARCH_OFF],
     help: {
       text: 'Whether protein N-terminal acetylation is written into the search settings as a variable modification; "engine" means yes for MSFragger and no for Sage and Comet.'
     }
   },
   search_precursor_tolerance: {
-    hidden: OPT_IN_1_12,
+    section: 'Search configuration',
+    unset: { value: '-1', placeholder: 'engine default' },
+    unit: 'search_precursor_unit',
+    depends: [SEARCH_OFF],
     help: {
       text: 'The precursor tolerance written into the search settings; -1 leaves it to the engine: 10, or 20 ppm for MSFragger.'
     }
   },
   search_precursor_unit: {
-    hidden: OPT_IN_1_12,
+    section: 'Search configuration',
     help: {
       text: 'The unit of that precursor tolerance.'
     }
@@ -1200,31 +1372,39 @@ export const PARAM_UI: Record<string, ParamUi> = {
   shift_site_min_ions: { hidden: REMOVED_1_14, help: REMOVED_1_14_HELP },
   shift_site_min_share: { hidden: REMOVED_1_14, help: REMOVED_1_14_HELP },
   shortlist_background: {
-    hidden: OPT_IN_1_12,
+    section: 'Shortlist',
+    label: 'Background proteins',
+    depends: [{ on: 'fasta_out', note: 'only the reduced FASTA uses it' }],
     help: {
       text: 'Proteins that are always added to the smaller FASTA, such as the host proteome or contaminants.'
     }
   },
   shortlist_decoy_affix: {
-    hidden: OPT_IN_1_12,
+    section: 'Shortlist, advanced',
+    depends: [SHORTLIST_READ],
     help: {
       text: 'The name prefixes and suffixes that mark a decoy entry; decoys never enter the shortlist.'
     }
   },
   shortlist_force: {
-    hidden: OPT_IN_1_12,
+    section: 'Shortlist, advanced',
+    // FASTag.cpp: read for the reduced FASTA and the search configuration only.
+    depends: [{ on: ['fasta_out', 'search_config_out'], note: 'only the reduced FASTA and the search configuration use it' }],
     help: {
       text: 'Write the smaller FASTA and the search settings even when the protease of the run does not fit tryptic placement.'
     }
   },
   tolerance_by_analyzer: {
-    hidden: '1.15.5 command-line option, not in the form (CLI default applies: on)',
+    section: 'Fragment tolerance by analyzer',
+    label: 'Tolerance by analyzer',
     help: {
       text: 'Tags each MS2 spectrum with the tolerance of its analyzer: ion-trap spectra with the ion-trap tolerance (0.5 Da) and a complement window measured on them, Orbitrap and TOF spectra with the fragment tolerance. Off tags every spectrum with the fragment tolerance, as before 1.15.5.'
     }
   },
   fragment_tolerance_itms: {
-    hidden: '1.15.5 command-line option, not in the form (CLI default applies)',
+    section: 'Fragment tolerance by analyzer',
+    label: 'Ion-trap fragment tolerance (Da)',
+    depends: [{ on: 'tolerance_by_analyzer', when: { tolerance_by_analyzer: { is: ['on'] } }, say: 'Tolerance by analyzer on', note: 'with it off every spectrum uses the fragment tolerance' }],
     help: {
       text: 'Fragment tolerance (Da) of ion-trap MS2 spectra when tolerances follow the analyzer.'
     }
@@ -1236,83 +1416,103 @@ export const PARAM_UI: Record<string, ParamUi> = {
     }
   },
   shortlist_protease: {
-    hidden: EXPERIMENTAL_1_13,
+    section: 'Shortlist',
+    label: 'Protease',
+    experimental: true,
+    depends: [SHORTLIST_OFF],
     help: {
-      text: 'The cleavage rule the shortlist places tags with: trypsin (as in 1.12), the protease the run calls (auto), a named protease, or none (unspecific). Experimental; auto passed its held-out test (9 runs, 5 proteases: median protein recall 0.25 against the full search, +0.12 over the trypsin shortlist); a named rule and unspecific have no held-out test. The Asp-N call of auto and its semi-specific export are not validated: their held-out test failed on one criterion only, an empty trypsin comparison export (+0.37 protein recall over the trypsin shortlist, Asp-N called in 11 of 12 Asp-N runs). It has no second test: PRIDE has no unused eligible Asp-N project.'
+      text: 'The cleavage rule the shortlist places tags with: trypsin (as in 1.12), the protease the run calls (auto), a named protease, or none (unspecific). Experimental; auto passed its held-out test (9 runs, 5 proteases: median protein recall 0.25 against the full search, +0.12 over the trypsin shortlist); a named rule and unspecific have no held-out test. The Asp-N call of auto and its semi-specific export are not validated: their held-out test failed on one criterion only, an empty trypsin comparison export (+0.37 protein recall over the trypsin shortlist, Asp-N called in 11 of 12 Asp-N runs). It has no second test: PRIDE has no unused eligible Asp-N project. With a protease other than trypsin only exact placements count; gapped placements are ignored.'
     }
   },
   shortlist_specificity: {
-    hidden: EXPERIMENTAL_1_13,
+    section: 'Shortlist, advanced',
+    depends: [SHORTLIST_OFF, NOT_TRYPSIN],
+    // '' (Automatic) is not sent: the CLI then chooses (full, but semi for a
+    // run Auto calls Asp-N). An explicit full is sent, and the CLI keeps it.
+    choices: ['', 'full', 'semi', 'none'],
+    override: { default: '' },
     help: {
-      text: 'How many window ends must be cleavage sites of the -shortlist_protease rule: both (full), one (semi) or none. Left at full with auto, a run called Asp-N is still placed and exported semi-specific (not validated: its held-out test failed, see -shortlist_protease); a named asp-n stays full.'
+      text: 'How many window ends must be cleavage sites of the protease rule: both (full), one (semi) or none. Automatic is full, except that a run the Auto protease calls Asp-N is placed and exported semi-specific (not validated: its held-out test failed, see Protease). Choose Full to keep full specificity for such a run too.'
     }
   },
   shortlist_gapped: {
-    hidden: OPT_IN_1_12,
+    section: 'Shortlist, advanced',
+    depends: [SHORTLIST_READ, TRYPSIN_ONLY],
     help: {
-      text: 'Let placements with one mismatched flank count for the shortlist.'
+      text: 'Let placements with one mismatched flank count for the shortlist. Only with trypsin: with another protease gapped placements are ignored.'
     }
   },
   shortlist_exact_only: { hidden: REMOVED_1_14, help: REMOVED_1_14_HELP },
   shortlist_max_evalue: {
-    hidden: OPT_IN_1_12,
+    section: 'Shortlist, advanced',
+    depends: [SHORTLIST_READ],
     help: {
       text: 'The E-value a tag needs for its placements to count for the shortlist. 10 by the shortlist recipe; for a metaproteome database use 100 (held-out test: 96% of the full-search peptides kept with 23% of an 870k-protein database).'
     }
   },
   shortlist_min_spectra: {
-    hidden: OPT_IN_1_12,
+    section: 'Shortlist, advanced',
+    depends: [SHORTLIST_READ],
     help: {
       text: 'How many spectra a protein needs to stay on the shortlist.'
     }
   },
   shortlist_out: {
-    hidden: OPT_IN_1_12,
+    section: 'Shortlist',
     help: {
       text: 'Write a ranked list of the proteins the tags were placed on. It narrows a later database search; it is not an identification and has no FDR control.'
     }
   },
   shortlist_parsimony: {
-    hidden: OPT_IN_1_12,
+    section: 'Shortlist, advanced',
+    depends: [SHORTLIST_READ],
     help: {
       text: 'Whether proteins whose spectra a higher-ranked protein already has are dropped from the shortlist.'
     }
   },
   shortlist_top: {
-    hidden: OPT_IN_1_12,
+    section: 'Shortlist, advanced',
+    depends: [SHORTLIST_READ],
     help: {
       text: 'Keep at most this many proteins on the shortlist. 0 means no limit.'
     }
   },
   species_call: {
-    hidden: OPT_IN_1_12,
+    section: 'Species',
+    label: 'Presence call',
+    experimental: true,
+    depends: [SPECIES_OFF],
     // 1.14: explain was removed; the CLI still accepts it and reads none.
     choices: ['none', 'decoy'],
     help: {
-      text: 'Add experimental organism calls to the species report. none leaves calls off; decoy compares evidence with decoy tags. The explain call was removed in 1.14: it failed its held-out test.',
+      text: 'Call each taxon of the species report present, no call or not detected (experimental). Decoy compares its evidence with decoy tags; None only ranks the taxa. The explain call was removed in 1.14: it failed its held-out test.',
       tip: 'The decision settings are provisional. These calls and their decoy q-values are not calibrated error guarantees; not detected never proves biological absence.'
     }
   },
   species_call_decoys: {
-    hidden: OPT_IN_1_12,
+    section: 'Species, advanced',
+    depends: [SPECIES_OFF, CALL_OFF],
     help: {
       text: 'How many decoy tags are made for each tag when organisms are called.'
     }
   },
   species_call_min_units: {
-    hidden: OPT_IN_1_12,
+    section: 'Species, advanced',
+    depends: [SPECIES_OFF, CALL_OFF],
     help: {
       text: 'Fewer spectra with organism evidence than this give no call for the whole run.'
     }
   },
   species_call_params: {
-    hidden: OPT_IN_1_12,
+    section: 'Species, advanced',
+    depends: [SPECIES_OFF, CALL_OFF],
     help: {
       text: 'A file with the decision settings of the organism call. By default the one in the taxonomy folder.'
     }
   },
   species_orientation: {
-    hidden: OPT_IN_1_12,
+    section: 'Species, advanced',
+    depends: [SPECIES_OFF],
     help: {
       text: 'Look up each tag in the species index as written (the default) or also reversed. When reversed readings are used, the log p-value and q-value columns are NA.',
       tip: 'The optional decoy-based calls and decoy q-values remain experimental and uncalibrated.'
@@ -1320,19 +1520,20 @@ export const PARAM_UI: Record<string, ParamUi> = {
   },
   species_reagents: { hidden: REMOVED_1_14, help: REMOVED_1_14_HELP },
   species_pi0: {
-    hidden: OPT_IN_1_12,
+    section: 'Species, advanced',
+    depends: [SPECIES_OFF, CALL_OFF],
     help: {
-      text: 'The share of absent organisms assumed for the q-values of the organism call. 1 is the standard (Benjamini-Hochberg) correction.'
+      text: 'The share of absent organisms assumed for the q-values of the organism call. 1 is the standard (Benjamini-Hochberg) correction; 0 estimates the share from the run (Storey).'
     }
   },
   unknown_charge: {
-    hidden: OPT_IN_1_12,
+    section: 'Charge and ions',
     help: {
       text: 'How a precursor whose charge the file does not give is tagged: as 2+ (the default, as before 1.12), at each possible charge, or at the charge its fragment pairs support best. A charge given in the file is never replaced (the experimental header charge check in both mode can add a second charge).'
     }
   },
 
-  // ---- Not in the form: FASTag 1.13 experimental options
+  // ---- FASTag 1.13 experimental options
   label_call_min_tags: { hidden: REMOVED_1_14, help: REMOVED_1_14_HELP },
 
   // ---- Not in the form: removed in 1.14 (see REMOVED_1_14)

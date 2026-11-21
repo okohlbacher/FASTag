@@ -36,8 +36,14 @@ import type {
   TaxonomyDump
 } from '../types'
 import runStartedFixture from './fixtures/run-started.json'
+import manifest from '../params.generated.json'
 import { tagsToDenovo } from '../export/denovo'
 import { forgetTables } from '../results/tableStore'
+
+// As outputs.rs is_proteome_file: -alkylation_proteome names a FASTA unless
+// it is a shipped proteome's name.
+const proteomeFile = (v: unknown): string[] =>
+  typeof v === 'string' && v.trim() !== '' && !['auto', 'human', 'mouse', 'yeast', 'ecoli'].includes(v.trim().toLowerCase()) ? [v] : []
 
 export interface RunCall {
   in: string
@@ -45,6 +51,8 @@ export interface RunCall {
   params: Record<string, unknown>
   // Set (true) only when the user confirmed overwriting existing outputs.
   overwrite?: boolean
+  // The inputs of the other jobs of a batch (fastag.rs RunParams.protect).
+  protect?: string[]
 }
 
 export interface ResultsQueryCall {
@@ -211,8 +219,11 @@ export interface MockBridge extends FastagApi {
 /// The reply of `run` exactly as fastag.rs serialises it (cargo test
 /// the_run_reply_names_every_output_by_its_option_name compares the two).
 export const RUN_STARTED_FIXTURE: RunStarted = runStartedFixture
-/// Every key of ResolvedOutputs on the wire.
-export const OUTPUT_KEYS = Object.keys(runStartedFixture.outputs) as (keyof ResolvedOutputs)[]
+/// Every key of ResolvedOutputs on the wire: the output-file options of the
+/// manifest (outputs.rs output_options), less the two removed in 1.14.
+export const OUTPUT_KEYS = (manifest.params as { name: string; type: string }[])
+  .filter((p) => p.type === 'output-file' && p.name !== 'label_discovery_out' && p.name !== 'search_shifts_out')
+  .map((p) => p.name) as (keyof ResolvedOutputs)[]
 
 const isAbs = (p: string): boolean => p.startsWith('/')
 const dirOf = (p: string): string => p.slice(0, p.lastIndexOf('/') + 1)
@@ -239,8 +250,11 @@ export function mockOutputs(call: RunCall): ResolvedOutputs {
   for (const n of OUTPUT_KEYS) {
     if (n !== 'out') o[n] = str(n) ? abs(str(n)) : null
   }
+  // outputs.rs DERIVED.
   if (params['species'] === true && !o.species_out) o.species_out = derive('.species.tsv')
   if (params['glyco'] === true && !o.glyco_out) o.glyco_out = derive('.glyco.tsv')
+  if (params['census'] === true && !o.census_out) o.census_out = derive('.census.tsv')
+  if (params['census'] === true && !o.census_summary_out) o.census_summary_out = derive('.census_summary.tsv')
   return o
 }
 
@@ -289,7 +303,8 @@ export function installMockBridge(): MockBridge {
       end: Date.now(),
       cleanup: r.cleanup ?? { removed: [], renamed: [], failed: [] },
       params: run.call.params,
-      tags: null
+      tags: null,
+      ...(typeof (run.call as { workflow?: unknown }).workflow === 'string' ? { workflow: (run.call as { workflow?: string }).workflow } : {})
     })
   }
   const closeListeners: ((what: 'close' | 'quit') => void)[] = []
@@ -640,12 +655,18 @@ export function installMockBridge(): MockBridge {
     outputsCheck: (params) => {
       const call = params as unknown as RunCall
       mock.outputsCheckCalls.push(call)
-      const dir = call.in.startsWith('/') ? call.in.slice(0, call.in.lastIndexOf('/') + 1) : ''
-      const abs = (p: string): string => (p.startsWith('/') || !dir ? p : `${dir}${p}`)
-      const outputs = [call.out, ...Object.entries(call.params ?? {})
-        .filter(([n, v]) => /_out$/.test(n) && typeof v === 'string' && v !== '')
-        .map(([, v]) => String(v))].filter((p) => p).map(abs)
-      return Promise.resolve({ outputs, existing: outputs.filter((p) => mock.existingOutputs.includes(p)) })
+      // As fastag.rs outputs_check: every output resolved like run() does.
+      const outputs = [...new Set(Object.values(mockOutputs(call)).filter((p): p is string => !!p))]
+      // As outputs.rs clashes: an output that is one of the run's inputs.
+      const inputs = new Set([call.in, ...(manifest.params as { name: string; type: string }[])
+        .filter((p) => p.type === 'input-file')
+        .map((p) => call.params?.[p.name])
+        .filter((v): v is string => typeof v === 'string' && v !== ''), ...proteomeFile(call.params?.['alkylation_proteome']), ...(call.protect ?? [])])
+      return Promise.resolve({
+        outputs,
+        existing: outputs.filter((p) => mock.existingOutputs.includes(p) && !inputs.has(p)),
+        clashes: outputs.filter((p) => inputs.has(p))
+      })
     },
     historyList: (limit) => Promise.resolve(mock.history.slice(0, limit ?? 50)),
     historyOf: (path) => Promise.resolve(mock.history.find((r) => r.outputs.includes(path)) ?? null),
@@ -676,7 +697,7 @@ export function installMockBridge(): MockBridge {
       const r = mock.history.find((h) => h.id === id)
       const i = r ? r.argv.indexOf('-out', 1) : -1
       if (!r?.params || i < 0 || i + 1 >= r.argv.length) return Promise.reject(new Error('no parameters'))
-      return Promise.resolve({ in: r.input, out: r.argv[i + 1], params: r.params })
+      return Promise.resolve({ in: r.input, out: r.argv[i + 1], params: r.params, ...(r.workflow ? { workflow: r.workflow } : {}) })
     },
     leftovers: () => Promise.resolve([...mock.leftoverFiles]),
     sweepLeftovers: (paths) => {

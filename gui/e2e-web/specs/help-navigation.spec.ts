@@ -111,7 +111,7 @@ test('a blocked input links to its FAQ and glossary, then returns without changi
   await page.keyboard.press('Escape')
   await expect(panel).toBeHidden()
   await expect(opener).toBeFocused()
-  await expect(page.getByRole('button', { name: 'Run on run01.mzML' })).toBeDisabled()
+  await expect(page.getByRole('button', { name: 'Run', exact: true })).toBeDisabled()
   expect(await mockState<unknown[]>(page, 'runCalls')).toEqual([])
 })
 

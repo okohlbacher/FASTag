@@ -26,6 +26,9 @@ const key = (el: Element, k: string, mods: { metaKey?: boolean; ctrlKey?: boolea
 const fixture = (name: string): string => readFileSync(`src/fixtures/denovo/${name}`, 'utf8')
 
 const COLUMNS = ['spectrum', 'tag', 'length', 'charge', 'nterm_mass', 'cterm_mass', 'evalue', 'res_conf', 'usi']
+// The table shows res_conf after the length (ResultsTable displayOrder):
+// a row is copied as shown.
+const SHOWN = (r: string[]): string[] => [r[0], r[1], r[2], r[7], r[3], r[4], r[5], r[6], r[8]]
 const N = 60
 const ROWS: string[][] = Array.from({ length: N }, (_, i) => [
   `frame=${100 + i} scan=${i}`,
@@ -221,7 +224,7 @@ describe('copy row and copy USI', () => {
     await key(table(), 'ArrowDown')
     await key(activeRow()!, 'ArrowDown')
     await key(activeRow()!, 'c', { metaKey: true })
-    expect(writeText).toHaveBeenCalledWith(ROWS[1].join('\t'))
+    expect(writeText).toHaveBeenCalledWith(SHOWN(ROWS[1]).join('\t'))
     expect(await screen.findByText('Copied the row.')).toBeDefined()
   })
 
@@ -232,8 +235,7 @@ describe('copy row and copy USI', () => {
     await click(screen.getByRole('checkbox', { name: 'Charge' }))
     await key(table(), 'ArrowDown')
     await key(activeRow()!, 'c', { ctrlKey: true })
-    const j = COLUMNS.indexOf('charge')
-    expect(writeText).toHaveBeenCalledWith(ROWS[0].filter((_, k) => k !== j).join('\t'))
+    expect(writeText).toHaveBeenCalledWith(SHOWN(ROWS[0]).filter((_, k) => k !== 4).join('\t'))
   })
 
   it('⇧⌘C copies the USI of the active row', async () => {
@@ -256,18 +258,18 @@ describe('copy row and copy USI', () => {
     await click(screen.getByRole('button', { name: 'Copy USI' }))
     expect(writeText).toHaveBeenLastCalledWith('mzspec:USI000000:run:scan:3')
     await click(screen.getByRole('button', { name: 'Copy row' }))
-    expect(writeText).toHaveBeenLastCalledWith(ROWS[3].join('\t'))
+    expect(writeText).toHaveBeenLastCalledWith(SHOWN(ROWS[3]).join('\t'))
   })
 
   it('without a usi column Copy USI says how to get one, and copies nothing', async () => {
     stubClipboard()
     const cols = COLUMNS.slice(0, -1)
     await renderTable({ columns: cols, rows: ROWS.map((r) => r.slice(0, -1)) })
-    expect(screen.getByRole('button', { name: 'Copy USI' }).getAttribute('title')).toMatch(/-usi_collection/)
+    expect(screen.getByRole('button', { name: 'Copy USI' }).getAttribute('title')).toMatch(/turn on USI column under Outputs/)
     await key(table(), 'ArrowDown')
     await key(activeRow()!, 'C', { metaKey: true, shiftKey: true })
     expect(writeText).not.toHaveBeenCalled()
-    expect(await screen.findByText(/no usi column.*-usi_collection/)).toBeDefined()
+    expect(await screen.findByText(/no USI column.*turn on USI column under Outputs/)).toBeDefined()
   })
 
   it('a refused clipboard is said, not swallowed', async () => {
@@ -372,7 +374,7 @@ describe('Stitch and ALPS export', () => {
     const opts = Array.from(format().options)
     expect(opts.find((o) => o.value === 'stitch')!.disabled).toBe(true)
     expect(opts.find((o) => o.value === 'alps')!.disabled).toBe(true)
-    expect(format().getAttribute('title')).toMatch(/-res_conf/)
+    expect(format().getAttribute('title')).toMatch(/Per-residue confidence on/)
   })
 
   it('reports a file the script refuses, and writes nothing', async () => {
@@ -450,18 +452,18 @@ describe('Stitch and ALPS export', () => {
     const run = vi.fn()
     const { rerender } = render(<ResultsTable path="/d/x.tags.tsv" rerunResConf={{ run, disabled: false }} />)
     await flush()
-    await click(screen.getByRole('button', { name: 'Re-run with per-residue confidence' }))
+    await click(screen.getByRole('button', { name: 'Re-run to add Residue conf. (%)' }))
     expect(run).toHaveBeenCalledTimes(1)
     rerender(<ResultsTable path="/d/x.tags.tsv" rerunResConf={{ run, disabled: true }} />)
-    expect(screen.getByRole('button', { name: 'Re-run with per-residue confidence' })).toHaveProperty('disabled', true)
+    expect(screen.getByRole('button', { name: 'Re-run to add Residue conf. (%)' })).toHaveProperty('disabled', true)
     // Not without a run to repeat, and not for a file that has res_conf.
     rerender(<ResultsTable path="/d/x.tags.tsv" rerunResConf={null} />)
-    expect(screen.queryByRole('button', { name: 'Re-run with per-residue confidence' })).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Re-run to add Residue conf. (%)' })).toBeNull()
   })
 
   it('has no re-run for a file with res_conf', async () => {
     await renderTable()
-    expect(screen.queryByRole('button', { name: 'Re-run with per-residue confidence' })).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Re-run to add Residue conf. (%)' })).toBeNull()
   })
 
   it('Cmd+E exports reads when reads are chosen', async () => {
@@ -476,19 +478,19 @@ describe('Stitch and ALPS export', () => {
   })
 })
 
-describe('Re-run with per-residue confidence (S8)', () => {
+describe('Re-run to add Residue conf. (%) (S8)', () => {
   it('runs the same input again with -res_conf on, from the Tags table of its output', async () => {
     const mock = installMockBridge()
     await renderApp(mock)
     await pickSingle(mock, '/d/a.mzML')
-    await click(screen.getByRole('button', { name: /^Run on a\.mzML$/ }))
+    await click(screen.getByRole('button', { name: 'Run' }))
     await waitFor(() => expect(mock.runCalls).toHaveLength(1))
     expect((mock.runCalls[0].params as Record<string, unknown>).res_conf).not.toBe(true)
     await act(async () => mock.emitDone({ ok: true, code: 0, runId: mock.lastRunId }))
     await goTo('results')
     await click(screen.getByRole('tab', { name: 'Tags' }))
     await flush()
-    const rerun = await screen.findByRole('button', { name: 'Re-run with per-residue confidence' })
+    const rerun = await screen.findByRole('button', { name: 'Re-run to add Residue conf. (%)' })
     await click(rerun)
     await waitFor(() => expect(mock.runCalls).toHaveLength(2))
     expect(mock.runCalls[1].in).toBe('/d/a.mzML')

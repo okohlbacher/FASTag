@@ -184,7 +184,7 @@ pub fn export_with(mut cmd: Command, params: &RunParams, dest: &Path, tmp_dir: &
     let files = items.iter().filter_map(|item| match (&item.value, item.ty) {
         (IniValue::Scalar(path), "input-file" | "output-file") => Some(path.clone()),
         _ => None,
-    }).chain(crate::outputs::resolved_outputs(&args));
+    }).chain(crate::outputs::inputs_of(&args)).chain(params.protect.iter().cloned()).chain(crate::outputs::resolved_outputs(&args));
     let dest_text = dest.to_string_lossy();
     if let Some(path) = files.into_iter().find(|path| crate::report::same_file(&dest_text, path)) {
         return Err(format!("cannot export INI to {}: it is a run input or output ({path}); choose another name", dest.display()));

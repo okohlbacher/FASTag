@@ -13,6 +13,7 @@ import { goTo, renderApp } from './testing/render'
 import { installMockBridge, type MockBridge } from './testing/mockBridge'
 import { MAX_WINDOW, viewIds } from './testing/e2eBridge'
 import { splitDumps } from './spectrum/dump'
+import { spectrumHint } from './ResultsTable'
 import type { RunRecord } from './types'
 
 const flush = (): Promise<void> => act(async () => {})
@@ -99,7 +100,9 @@ describe('P4a: open a row in the Spectrum tab', () => {
     await waitFor(() => expect(mock.spectrumCalls[0]).toEqual({ input: INPUT, nativeId: spectrum, params: { fragment_tolerance: '20' } }))
     const verdict = await screen.findByTestId('ladder-verdict')
     expect(verdict.textContent).toMatch(/^on \d+ of \d+ positions within the run's tolerance$/)
-    expect(screen.getByRole('heading', { level: 2, name: spectrum })).toBeTruthy()
+    // The heading is the scan, as Tags and Triage show it (round 4, 15); the
+    // native ID is its tooltip.
+    expect(screen.getByRole('heading', { level: 2, name: spectrumHint(spectrum) }).getAttribute('title')).toBe(spectrum)
     expect(screen.getByText(/FASTag's processed peaks/)).toBeTruthy()
     // The tags of the spectrum, all of them, each with its ladder.
     const n = ROWS.filter((r: string[]) => r[0] === spectrum).length
@@ -117,7 +120,7 @@ describe('P4a: open a row in the Spectrum tab', () => {
     await click(firstRow())
     await click(screen.getByRole('button', { name: 'Open in Spectrum' }))
     await screen.findByTestId('ladder-verdict')
-    const shown = screen.getByRole('heading', { level: 2 }).textContent
+    const shown = screen.getByRole('heading', { level: 2 }).getAttribute('title')
     const tags = screen.getByRole('region', { name: 'Tags of this spectrum' })
     const rows = within(tags).getAllByRole('row').slice(1)
     const second = rows[1]
@@ -149,7 +152,7 @@ describe('P4a: open a row in the Spectrum tab', () => {
     await click(next)
     await flush()
     const want = SPECTRA[SPECTRA.indexOf(shown!) + 1]
-    await waitFor(() => expect(screen.getByRole('heading', { level: 2 }).textContent).toBe(want))
+    await waitFor(() => expect(screen.getByRole('heading', { level: 2 }).getAttribute('title')).toBe(want))
     await screen.findByTestId('ladder-verdict')
     expect(mock.spectrumCalls.length).toBe(2)
   })
@@ -281,10 +284,10 @@ describe('P4a: a native ID that is a prefix of many others', () => {
     await waitFor(() => expect(next().disabled).toBe(false))
     expect(prev().disabled).toBe(true)
     await click(next())
-    await waitFor(() => expect(screen.getByRole('heading', { level: 2 }).textContent).toBe(`${S}0`))
+    await waitFor(() => expect(screen.getByRole('heading', { level: 2 }).getAttribute('title')).toBe(`${S}0`))
     await waitFor(() => expect(prev().disabled).toBe(false))
     await click(prev())
-    await waitFor(() => expect(screen.getByRole('heading', { level: 2 }).textContent).toBe(S))
+    await waitFor(() => expect(screen.getByRole('heading', { level: 2 }).getAttribute('title')).toBe(S))
     await waitFor(() => expect(within(screen.getByRole('region', { name: 'Tags of this spectrum' })).getByText(new RegExp(`\\(n=${own.length}\\)`))).toBeTruthy())
   })
 })

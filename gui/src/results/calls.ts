@@ -36,6 +36,13 @@ export interface LogFacts {
   speciesCall: { present: number; noCall: number; notDetected: number } | null
   /// FASTag 1.12 (E15A): "Electron activation: 328 of 686 MS2 spectra were activated ...".
   electron: { electron: number; of: number } | null
+  /// Under Ion series auto: "Hybrid activation: 12 of 686 MS2 spectra ...".
+  hybridAuto: { hybrid: number; of: number } | null
+  /// Under auto on MGF or mzPeak: "Ion series: 40 electron-activated MS2
+  /// spectra were tagged as b/y ions ...".
+  autoNoColumn: number | null
+  /// Under cz: "Collisional activation: 300 of 686 MS2 spectra ...".
+  collisionalCz: { collisional: number; of: number } | null
   /// "Recon index: ... min tag length 8 (derived)": the shortest tag the
   /// -recon_out index places.
   reconMinLength: number | null
@@ -57,6 +64,9 @@ export function parseLog(lines: readonly string[]): LogFacts {
     census: null,
     speciesCall: null,
     electron: null,
+    hybridAuto: null,
+    autoNoColumn: null,
+    collisionalCz: null,
     reconMinLength: null
   }
   for (const raw of lines) {
@@ -75,6 +85,9 @@ export function parseLog(lines: readonly string[]): LogFacts {
       f.speciesCall = { present: n(m[1]), noCall: n(m[2]), notDetected: n(m[3]) }
     else if ((m = /^Recon index: .*\bmin tag length (\d+)/.exec(l))) f.reconMinLength = n(m[1])
     else if ((m = /^Electron activation: (\d+) of (\d+) MS2 spectra were activated/.exec(l))) f.electron = { electron: n(m[1]), of: n(m[2]) }
+    else if ((m = /^Hybrid activation: (\d+) of (\d+) MS2 spectra/.exec(l))) f.hybridAuto = { hybrid: n(m[1]), of: n(m[2]) }
+    else if ((m = /^Ion series: (\d+) electron-activated MS2 spectra were tagged as b\/y/.exec(l))) f.autoNoColumn = n(m[1])
+    else if ((m = /^Collisional activation: (\d+) of (\d+) MS2 spectra/.exec(l))) f.collisionalCz = { collisional: n(m[1]), of: n(m[2]) }
   }
   return f
 }
@@ -164,10 +177,29 @@ export type SpeciesCall =
   // runNoCall when every row is a no_call for one run-level reason
   // (few_spectra, low_resolution).
   | { state: 'called'; present: Taxon[]; noCall: number; notDetected: number; runNoCall: string | null }
-  // No call columns: the CLI's ranking, its first row at the rank.
-  | { state: 'ranked'; top: Taxon; genera: number }
+  // No call columns: the CLI's ranking, its first row at the rank; tied:
+  // the taxa level with it on both sort keys (more than one: no single
+  // leader, tiedLeaders).
+  | { state: 'ranked'; top: Taxon; genera: number; tied: Taxon[]; counted: 'adjusted' | 'observed' }
   | { state: 'none' }
   | { state: 'absent' }
+
+/// The taxa of @p rows (the CLI's order) level with the first on both
+/// sort keys, the adjusted and the observed count: more than one is no
+/// single leader, since the order inside the tied block is only the CLI's
+/// taxid order. One helper for the Species tab and the Overview.
+export function tiedLeaders(rows: readonly Taxon[]): Taxon[] {
+  const top = rows[0]
+  return top ? rows.filter((t) => t.adjusted === top.adjusted && t.observed === top.observed) : []
+}
+
+/// The count the ranking is by, as the Species tab and the Overview say
+/// it: without -species_deconvolve the CLI writes adjusted = observed for
+/// every taxon, so nothing was subtracted and the ranking is by observed
+/// spectra.
+export function rankedBy(taxa: readonly Taxon[]): 'adjusted' | 'observed' {
+  return taxa.some((t) => t.adjusted !== t.observed) ? 'adjusted' : 'observed'
+}
 
 export function speciesCall(sp: SpeciesReport | null | undefined, rank = 'genus'): SpeciesCall {
   if (!sp) return { state: 'absent' }
@@ -185,7 +217,7 @@ export function speciesCall(sp: SpeciesReport | null | undefined, rank = 'genus'
     }
   }
   // species.rs keeps the CLI's order (ranked by the adjusted count).
-  return { state: 'ranked', top: rows[0], genera: rows.length }
+  return { state: 'ranked', top: rows[0], genera: rows.length, tied: tiedLeaders(rows), counted: rankedBy(sp.taxa) }
 }
 
 // ---- run facts ------------------------------------------------------------------
@@ -236,4 +268,20 @@ export function censusFacts(text: string): CensusFacts | null {
     taggedShare: share(get('census', 'share_tagged'), get('census', 'share_placed')),
     activation: act.every((v) => v != null) ? { collisional: act[0]!, electron: act[1]!, hybrid: act[2]!, unknown: act[3]! } : null
   }
+}
+
+// ---- isobaric kits (QC report) ---------------------------------------------------
+
+/// The states of a reporter_<kit> row (RunQC.cpp KitCall).
+export const KIT_STATES = ['present', 'absent', 'not_assessable']
+
+/// RunQC writes reporter_compatible_kits "none" whenever no kit is
+/// compatible, also when no kit could be assessed: the reporter_<kit> states
+/// tell the two apart. @p rows: the QC rows (key, value, description);
+/// null when @p kits is not such a "none", else why no kit was assessable.
+export function unassessedKits(kits: string | undefined, rows: Iterable<{ key: string; value: string; desc: string }>): string[] | null {
+  if (kits !== 'none') return null
+  const states = [...rows].filter((r) => /^reporter_/.test(r.key) && KIT_STATES.includes(r.value))
+  if (states.length === 0 || !states.every((r) => r.value === 'not_assessable')) return null
+  return [...new Set(states.map((r) => r.desc.replace(/^Not assessable: /, '').replace(/\.$/, '')).filter(Boolean))]
 }

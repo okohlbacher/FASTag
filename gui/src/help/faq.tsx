@@ -344,7 +344,7 @@ export const FAQ: FaqEntry[] = [
     symptoms: <>The run fails with exit code 1, 2, 3, 4 or 6, and the reason names the input.</>,
     causes: [
       <>The file was moved, renamed or deleted after it was chosen (&quot;File not found&quot;, exit code 1).</>,
-      <>The file is not mzML, mzPeak or MGF. Vendor files (Thermo .raw, Bruker .d) are not read.</>,
+      <>The file is not mzML, mzPeak, MGF, Thermo .raw or a Bruker timsTOF .d folder or .d.zip archive. A .raw needs a FASTag build with Thermo support (every download but the Linux AppImage); other vendor formats need conversion to mzML first.</>,
       <>The mzML or MGF file is compressed (.gz, .bz2, .zip); FASTag reads both only uncompressed.</>,
       <>The MGF file is cut short, or holds no BEGIN IONS block.</>,
       <>The mzPeak file uses an encoding OpenMS cannot decode.</>

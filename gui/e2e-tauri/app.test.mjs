@@ -90,19 +90,27 @@ async function view(s, id) {
   await until(`the ${id} view`, () => s.exec(`const v = document.querySelector('.view[data-view="' + arguments[0] + '"]'); return !!v && !v.hidden`, id), 5000)
 }
 
-/** Start the session from FASTag's defaults through Setup's "Starting
- *  from" select, as a user does (the app starts on "Export tags", which
- *  additionally enables per-residue confidence). The run
+/** Start the session from FASTag's defaults through the Workflow card's
+ *  Preset select ("Load FASTag defaults"), as a user does (the app starts on
+ *  "Export tags", which additionally enables per-residue confidence). The run
  *  and IPC specs check what a run from the defaults writes and shows, as the
  *  e2e-web smoke spec does with ?start=defaults. React's onChange on a select
  *  listens to the change event, so the value goes through the native setter
  *  and a bubbling change. */
 async function fromDefaults(s) {
-  await until('the Starting from select', () => s.exec("const e = document.getElementById('origin'); return !!e && e.getClientRects().length > 0"))
+  await until('the Preset select', () => s.exec("const e = document.getElementById('origin'); return !!e && e.getClientRects().length > 0"))
   await s.exec(`const e = document.getElementById('origin')
-    Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value').set.call(e, '')
+    Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value').set.call(e, '__defaults')
     e.dispatchEvent(new Event('change', { bubbles: true }))`)
-  await until('the session to start from FASTag defaults', () => s.exec("const e = document.getElementById('origin'); return !!e && e.value === '' && !document.getElementById('p-digest_out')?.value"), 5000)
+  await until('the session to start from FASTag defaults', () => s.exec("const e = document.querySelector('.origin-name strong'); return !!e && e.textContent === 'FASTag defaults' && !document.getElementById('p-res_conf')?.checked"), 5000)
+}
+
+/** Click Run once Setup holds @p input: the Outputs card names the run after
+ *  it (Run name = the input's stem), so Run starts this file, not another. */
+async function runOn(s, input) {
+  const stem = basename(input).replace(/\.[^.]+$/, '')
+  await until(`the run name ${stem}`, () => s.exec("const e = document.getElementById('out-name'); return !!e && e.value === arguments[0]", stem), 20000)
+  await s.click(await s.button('Run'))
 }
 
 const lastRun = (s) => s.exec("const e = document.querySelector('.last-run'); return e ? e.innerText : ''")
@@ -134,9 +142,11 @@ test('help: keyboard search opens a CLI entry and Escape restores focus without 
     const search = await until('Help search', () => s.find('//input[@aria-label="Search Help"]'))
     // W3C element send-keys drives WebKit's actual keyboard defaults. A
     // synthetic keydown would miss Enter toggling a newly focused summary.
-    await s.cmd('POST', `/element/${search}/value`, { text: 'decoy_expected\uE007' })
-    await until('the expanded species-call help entry', () => s.exec("return document.getElementById('param-species_call')?.open === true"))
-    assert.match(await s.exec("return document.getElementById('param-species_call').innerText"), /Not in the settings form/)
+    // An option the form does not show (species_call moved into Advanced
+    // with the workflow Setup): its entry says why.
+    await s.cmd('POST', `/element/${search}/value`, { text: 'probe_input\uE007' })
+    await until('the expanded probe-input help entry', () => s.exec("return document.getElementById('param-probe_input')?.open === true"))
+    assert.match(await s.exec("return document.getElementById('param-probe_input').innerText"), /Not in the settings form: metadata probe for programs/)
     await s.cmd('POST', `/element/${search}/value`, { text: 'no-such-help-entry' })
     await s.waitText(/Nothing in Help matches/)
     await s.cmd('POST', `/element/${search}/value`, { text: '\uE00C' })
@@ -154,7 +164,7 @@ test('run: Choose file, Run, and the table shows what the CLI wrote', { timeout:
     await fromDefaults(s)
     const input = spectra('run01.mzML')
     await chooseInput(s, input)
-    await s.click(await s.button('Run on run01.mzML'))
+    await runOn(s, input)
     const m = await s.waitText(/Showing ([\d,]+) of ([\d,]+)/, 240000)
     const out = tagsOf(input)
     assert.ok(existsSync(out), `${out} was not written`)
@@ -170,8 +180,10 @@ test('run: Choose file, Run, and the table shows what the CLI wrote', { timeout:
 const CLI_PATTERN = MODE === 'stub' ? 'testing/stub-fastag/FASTag' : 'resources/fastag/bin/FASTag'
 const cliAlive = () => spawnSync('pgrep', ['-f', '--', CLI_PATTERN]).status === 0
 
-/** Open the Performance section and set -threads to @p n through the form. */
+/** Open Advanced and its Performance group and set -threads to @p n through the form. */
 async function setThreads(s, n) {
+  await s.exec(`const adv = document.querySelector('details.advanced > summary.disclosure')
+    if (adv && adv.getAttribute('aria-expanded') !== 'true') adv.click()`)
   await s.exec(`for (const b of document.querySelectorAll('summary.disclosure')) {
       if ((b.querySelector('.sec-title') || {}).textContent === 'Performance' && b.getAttribute('aria-expanded') !== 'true') b.click()
     }`)
@@ -200,7 +212,7 @@ test('cancel: a Cancel mid-run ends the CLI and leaves no truncated output', { t
       await chooseInput(s, input)
       if (MODE === 'real') await setThreads(s, 1)
       assert.ok(!cliAlive(), `a ${CLI_PATTERN} process is running before the run`)
-      await s.click(await s.button(`Run on ${basename(input)}`))
+      await runOn(s, input)
       const cancel = await s.button('Cancel', 60000)
       // The CLI has opened -out (FASTag.cpp opens it before the first
       // spectrum): the cleanup then has something to remove.
@@ -313,7 +325,10 @@ test('spectrum: a row of the Tags table opens in the Spectrum tab with its ladde
       })
       gates.spectrumMs = Date.now() - t0
       assert.match(verdict, /^on \d+ of \d+ positions within the run's tolerance$/, verdict)
-      assert.equal(await s.exec("return document.querySelector('.sp-head h2').textContent"), spectrum)
+      // The heading shows the short scan hint; its title, and the dump
+      // (the LRU check below), keep the full native ID of the row.
+      assert.equal(await s.exec("return document.querySelector('.sp-head h2').getAttribute('title')"), spectrum)
+      assert.equal(await s.exec("return document.querySelector('.sp-head h2').textContent"), /\bscan=\d+/.exec(spectrum)[0])
       const on = Number(/^on (\d+)/.exec(verdict)[1])
       assert.equal(await s.exec("return document.querySelectorAll('.sp-svg [data-peak=ladder]').length"), on)
       // Every tag of the spectrum lies on its peaks.
@@ -369,7 +384,7 @@ test('IPC: every log line of a chatty run reaches the webview; message rate reco
     await fromDefaults(s)
     const input = spectra('run03.chatty.mzML')
     await chooseInput(s, input)
-    await s.click(await s.button('Run on run03.chatty.mzML'))
+    await runOn(s, input)
     await s.waitText(/Showing 1 of 1/, 120000)
     const w = await until('the log to settle', async () => {
       const a = await s.exec('return window.__wd')

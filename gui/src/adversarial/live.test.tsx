@@ -5,7 +5,7 @@ import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { describe, expect, it } from 'vitest'
 import ResultsTable from '../ResultsTable'
 import { installMockBridge, type MockBridge } from '../testing/mockBridge'
-import { click, goTo, renderApp, runButton, showView } from '../testing/render'
+import { batchAddButton, click, goTo, openGroup, renderApp, runButton, showView } from '../testing/render'
 
 const change = (el: Element, value: string): Promise<void> =>
   act(async () => {
@@ -13,10 +13,9 @@ const change = (el: Element, value: string): Promise<void> =>
   })
 const field = (c: HTMLElement, name: string): HTMLInputElement =>
   c.querySelector(`#p-${name}`) as HTMLInputElement
-const openSection = async (title: string): Promise<void> => {
-  const b = screen.getAllByRole('button').find((x) => x.classList.contains('disclosure') && x.textContent?.includes(title))!
-  if (b.getAttribute('aria-expanded') !== 'true') await click(b)
-}
+// The Advanced groups of the workflow setup (doc/GUI-WORKFLOWS.md 4).
+const GROUP: Record<string, string> = { Spectra: 'Peaks', 'Species detection': 'Species' }
+const openSection = (title: string): Promise<void> => openGroup(GROUP[title] ?? title)
 async function pick(mock: MockBridge, path: string): Promise<void> {
   showView('setup') // the input card (P2a: Setup is a view of its own)
   mock.nextPickInput = path
@@ -31,14 +30,16 @@ describe('live: run inputs', () => {
     const c = await renderApp(mock)
     await pick(mock, '/r/A.mzML')
     await openSection('Digest and labels')
-    await change(field(c, 'digest_out'), '/r/A.digest.tsv')
-    await click(screen.getByRole('button', { name: 'Save…' }))
-    await change(screen.getByLabelText('Preset name'), 'Lab default')
+    const digest = (): HTMLInputElement => c.querySelector('#out-digest_out') as HTMLInputElement
+    await click(digest())
+    expect(digest().dataset.value).toBe('/r/A.digest.tsv')
+    await change(c.querySelector('#origin')!, '__save')
+    await change(screen.getByRole('textbox', { name: 'Preset name' }), 'Lab default')
     await click(screen.getByRole('button', { name: 'Save' }))
     await pick(mock, '/r/B.mzML')
-    expect(field(c, 'digest_out').value).toBe('/r/B.digest.tsv') // rebased: fine
-    await change(screen.getByLabelText('Preset'), '')
-    await change(screen.getByLabelText('Preset'), 'Lab default')
+    expect(digest().dataset.value).toBe('/r/B.digest.tsv') // rebased: fine
+    await change(c.querySelector('#origin')!, '__defaults')
+    await change(c.querySelector('#origin')!, 'Lab default')
     await click(runButton())
     expect(mock.runCalls.at(-1)!.in).toBe('/r/B.mzML')
     // B's run writes B's report, not over A's.
@@ -50,8 +51,8 @@ describe('live: run inputs', () => {
     await renderApp(mock)
     await pick(mock, '/r2/sampleB.mzML')
     mock.nextPickInputs = ['/d/a.mzML', '/d/b.mzML']
-    await click(screen.getByRole('button', { name: /^(Add files for a batch|Add)…$/ }))
-    expect(screen.queryByLabelText(/Tags TSV/)).toBeNull()
+    await click(batchAddButton())
+    expect(document.getElementById('out-name')).toBeNull()
     expect(screen.queryByText('/r2/sampleB.mzML')).toBeNull()
     expect(screen.queryByText('sampleB.mzML')).toBeNull()
     // No single Run at all behind the queue.
@@ -82,9 +83,6 @@ describe('live: run inputs', () => {
     await click(field(c, 'species'))
     expect((runButton() as HTMLButtonElement).disabled).toBe(true)
     expect(c.querySelector('.controls .warn')!.textContent).toMatch(/cannot reach the species index k = 7/)
-    await goTo('results')
-    await click(screen.getByRole('tab', { name: /Species/ }))
-    expect(c.querySelector('.tabpanel')!.textContent).toContain('FASTag refuses the run')
   })
 })
 
@@ -107,7 +105,7 @@ describe('live: failure and stale results', () => {
     expect(screen.getByRole('alert').textContent).toContain('ConversionError')
   })
 
-  it('after B fails, the Species tab no longer shows A\'s taxa and names B; a species-off run has no badge', async () => {
+  it('after B fails, A\'s taxa are gone and no Species tab stands for a report B did not write; a species-off run has no tab', async () => {
     const mock = installMockBridge()
     mock.speciesResult = {
       path: '/s/A.tags.species.tsv',
@@ -125,13 +123,14 @@ describe('live: failure and stale results', () => {
     await pick(mock, '/s/B.mzML')
     await click(runButton())
     await done(mock, false)
-    await click(screen.getByRole('tab', { name: /Species/ }))
+    // B wrote no species report: no Species tab, and A's taxa are nowhere.
+    expect(screen.queryByRole('tab', { name: /Species/ })).toBeNull()
     expect(c.querySelector('.tabpanel')!.textContent).not.toContain('Escherichia')
-    expect(c.querySelector('.tabpanel')!.textContent).toContain('B.mzML')
     await click(field(c, 'species'))
     await click(runButton())
     await done(mock)
-    expect(screen.getByRole('tab', { name: /Species/ }).textContent).toBe('Species')
+    // A run without species has no Species tab (doc/GUI-WORKFLOWS.md 3).
+    expect(screen.queryByRole('tab', { name: /Species/ })).toBeNull()
   })
 
   it('after a run, permanent controls open another tags TSV or a report', async () => {
@@ -148,14 +147,13 @@ describe('live: failure and stale results', () => {
     await click(screen.getByRole('button', { name: 'Open tags…' }))
     await waitFor(() => expect(mock.resultsQueryCalls.at(-1)!.path).toBe('/r/other.tags.tsv'))
     expect(screen.getByRole('button', { name: 'Open report…' })).toBeTruthy()
-    expect(screen.getByRole('tab', { name: /Digest/ })).toBeTruthy()
   })
 
   it('a file picked twice in one batch dialog is queued once', async () => {
     const mock = installMockBridge()
     const c = await renderApp(mock)
     mock.nextPickInputs = ['/d/a.mzML', '/d/a.mzML']
-    await click(screen.getByRole('button', { name: /^(Add files for a batch|Add)…$/ }))
+    await click(batchAddButton())
     expect(c.querySelectorAll('li.job').length).toBe(1)
   })
 })

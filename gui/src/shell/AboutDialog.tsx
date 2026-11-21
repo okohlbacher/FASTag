@@ -2,7 +2,8 @@
 // where FASTag comes from. macOS has its own About panel in the app menu
 // too; this one is the same on every platform.
 
-import type { JSX } from 'react'
+import { useRef, type JSX } from 'react'
+import { useModal } from './useModal'
 import type { BinaryInfo } from '../types'
 
 // RawFileReader distribution licence, section 3.2: shown verbatim in the About
@@ -11,6 +12,8 @@ export const THERMO_NOTICE =
   'RawFileReader reading tool. Copyright \u00a9 2016 by Thermo Fisher Scientific, Inc. All rights reserved.'
 
 export default function AboutDialog({ bin, onClose }: { bin: BinaryInfo | null; onClose(): void }): JSX.Element {
+  const box = useRef<HTMLDivElement>(null)
+  const onKeyDown = useModal(box, onClose)
   return (
     <div className="modal-backdrop" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
       <div
@@ -18,12 +21,8 @@ export default function AboutDialog({ bin, onClose }: { bin: BinaryInfo | null; 
         role="dialog"
         aria-modal="true"
         aria-labelledby="about-h"
-        onKeyDown={(e) => {
-          if (e.key === 'Escape') {
-            e.stopPropagation()
-            onClose()
-          }
-        }}
+        ref={box}
+        onKeyDown={onKeyDown}
       >
         <h2 id="about-h">About FASTag</h2>
         <p>

@@ -8,13 +8,16 @@
 
 import type { ParamValue } from '../ParamField'
 import { PARAM_BY_NAME, RENDERED } from '../paramLayout'
-import { rebaseOutputs, stripExt } from '../app/paths'
-import { baseValues, type PresetBase } from './tasks'
+import { outputKind, rebaseOutputs, stripExt } from '../app/paths'
+import { baseValues, migrateTaskId, type PresetBase } from './tasks'
 
 export interface StoredPreset {
   v: 2
   base: PresetBase
   diff: Record<string, ParamValue>
+  /// Saved over Batch QC, which is Characterize in Batch mode now: the
+  /// preset opens the Input card in Batch mode.
+  batch?: true
 }
 
 const RESERVED = new Set(['__proto__', 'constructor', 'prototype'])
@@ -49,7 +52,7 @@ export function diffNames(base: Record<string, unknown>, values: Record<string, 
 /// no folder and no sample name (digest_out /d/run01.digest.tsv: digest.tsv).
 function outputName(name: string, v: string): string {
   const ext = v.slice(stripExt(v).length) || (name === 'out_spectra' ? '.mzML' : '.tsv')
-  return `${name.replace(/_out$/, '').replace(/^out_/, '')}${ext}`
+  return `${outputKind(name)}${ext}`
 }
 
 /// The diff a preset saved from @p values over @p base stores: no input
@@ -77,8 +80,14 @@ export function applyPreset(p: StoredPreset, tagsOut: string): Record<string, Pa
   return tagsOut ? { ...v, ...rebaseOutputs(v, tagsOut) } : v
 }
 
-const isBase = (b: unknown): b is PresetBase =>
-  b === 'defaults' || b === 'builtin:characterize' || b === 'builtin:batch-qc' || b === 'builtin:export-tags' || b === 'builtin:open-results'
+/// The base @p b names, an old workflow id read as its successor
+/// (tasks.ts migrateTaskId); null for no base at all.
+function baseOfStored(b: unknown): { base: PresetBase; batch?: true } | null {
+  if (b === 'defaults') return { base: 'defaults' }
+  if (typeof b !== 'string' || !b.startsWith('builtin:')) return null
+  const m = migrateTaskId(b.slice('builtin:'.length))
+  return m ? { base: `builtin:${m.id}`, ...(m.batch ? { batch: m.batch } : {}) } : null
+}
 
 function clean(m: Record<string, unknown>): Record<string, ParamValue> {
   const o: Record<string, ParamValue> = {}
@@ -99,7 +108,8 @@ export function normalizePreset(raw: unknown): StoredPreset | null {
   if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return null
   const r = raw as Record<string, unknown>
   if (r.v === 2 && r.diff && typeof r.diff === 'object' && !Array.isArray(r.diff)) {
-    return { v: 2, base: isBase(r.base) ? r.base : 'defaults', diff: clean(r.diff as Record<string, unknown>) }
+    const b = baseOfStored(r.base)
+    return { v: 2, base: b?.base ?? 'defaults', diff: clean(r.diff as Record<string, unknown>), ...(b?.batch ? { batch: b.batch } : {}) }
   }
   return { v: 2, base: 'defaults', diff: clean(r) }
 }

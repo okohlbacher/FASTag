@@ -153,7 +153,7 @@ function readRows(text: string, minLength: number): { rows: Row[]; read: number;
   header.forEach((name, i) => idx.set(name, i))
   const missing = REQUIRED.filter((c) => !idx.has(c))
   if (missing.length > 0) {
-    const hint = missing.includes('res_conf') ? ' (re-run FASTag with -res_conf)' : ''
+    const hint = missing.includes('res_conf') ? ' (run again with Per-residue confidence on)' : ''
     throw new DenovoError(`the tags file lacks column(s) ${missing.join(', ')}${hint}; its header has: ${header.join(', ')}`)
   }
   const at = (f: string[], c: string): string => f[idx.get(c)!]

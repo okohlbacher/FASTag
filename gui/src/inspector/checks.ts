@@ -82,8 +82,7 @@ export function pseudoPath(input: string): string {
 /// The DIAspeXtract call for a raw-DIA input.
 export const diaspextract = (input: string): string[] => ['DIAspeXtract', '-in', input, '-out', pseudoPath(input)]
 
-export const NOT_CHECKED_NO_PROBE =
-  'Not checked before the run: this FASTag has no metadata probe (-probe_input). The instrument and the checks come from the reports after the run.'
+export const NOT_CHECKED_NO_PROBE = 'The instrument and checks come from the reports after the run.'
 
 /// The release asset with the taxonomy k-mer index (versioned, see releaseAssets.ts).
 export { TAXONOMY_ASSET }
@@ -106,11 +105,69 @@ export function noTaxdbCheck(values: Record<string, ParamValue>, taxonomy: Taxon
     id: 'no-taxdb',
     level: 'block',
     title: 'The species report needs the taxonomy index',
-    detail: `The species report needs the taxonomy k-mer index (tax_k7.taxdb, about 1.1 GB), and it is not found ${where}. FASTag would stop with "-species: no taxdb". ${how} Or run without the species report.`,
+    detail: `The species report needs the taxonomy k-mer index (tax_k7.taxdb, about 1.1 GB), and it is not found ${where}. FASTag would stop before tagging. ${how} Or run without the species report.`,
     faq: 'faq-species-reference',
     source: 'the settings and the installed files',
     fix: { label: 'Run without the species report', params: { species: false } }
   }
+}
+
+/// ETD/ECD spectra are read as b/y ions, so their tags are unreliable:
+/// under the ion series by (the default; ax, removed, reads by too), or
+/// under auto on an input without activation metadata (MGF and mzPeak are
+/// read as b/y). Under cz, or auto on mzML, the CLI reads them as c/z.
+export function electronReadAsBy(ionSeries: unknown, input: string): boolean {
+  const s = String(ionSeries ?? '').trim() || 'by'
+  if (s === 'auto') return /\.(mgf|mzpeak)$/i.test(input.trim())
+  return s !== 'cz'
+}
+
+/// An input without activation per spectrum: MGF and mzPeak, read as b/y
+/// under Ion series auto, and without -ion_series_hybrid (mzML only).
+export const noActivationMeta = (input: string): boolean => /\.(mgf|mzpeak)$/i.test(input.trim())
+
+/// Hybrid-activated spectra (EThcD, ETciD) are read as b/y alone: under by,
+/// under auto with Hybrid ion series by (the default) on mzML, and under
+/// auto on MGF or mzPeak. Under cz, or auto with hybrid both on mzML, their
+/// c/z ions are read too.
+export function hybridReadAsByOnly(ionSeries: unknown, ionSeriesHybrid: unknown, input: string): boolean {
+  const s = String(ionSeries ?? '').trim() || 'by'
+  if (s === 'cz') return false
+  if (s !== 'auto') return true
+  if (noActivationMeta(input)) return true
+  return (String(ionSeriesHybrid ?? '').trim() || 'by') !== 'both'
+}
+
+/// Which activated spectra a run of @p input with @p values reads wrongly,
+/// from counts of electron- and hybrid-activated spectra.
+function misread(values: Record<string, unknown>, input: string, electron: number, hybrid: number): { electron: boolean; hybrid: boolean } {
+  return {
+    electron: electron > 0 && electronReadAsBy(values['ion_series'], input),
+    hybrid: hybrid > 0 && hybridReadAsByOnly(values['ion_series'], values['ion_series_hybrid'], input)
+  }
+}
+
+/// The fix for ETD/ECD or hybrid spectra read as b/y alone. It sets the ion
+/// settings only, never the tolerance. On mzML: Ion series auto (ETD/ECD
+/// as c/z), with Hybrid ion series both when hybrid spectra are there
+/// (the Orbitrap EThcD preset's reading). On MGF or mzPeak auto reads b/y,
+/// so the fix is cz, which reads every spectrum as c/z.
+function etdFix(input: string, hybrid: boolean): CheckFix {
+  if (noActivationMeta(input)) return { label: 'Read every spectrum as c/z (Ion series cz)', params: { ion_series: 'cz' } }
+  return hybrid
+    ? { label: 'Read ETD as c/z, EThcD as both (Ion series auto, Hybrid both)', params: { ion_series: 'auto', ion_series_hybrid: 'both' } }
+    : { label: 'Read ETD/ECD spectra as c/z (Ion series auto)', params: { ion_series: 'auto' } }
+}
+
+/// What to change, by input format. MGF and mzPeak carry no activation per
+/// spectrum: auto reads them as b/y, and cz reads the HCD spectra of a
+/// mixed run as c/z too.
+function etdAdvice(input: string, hybrid: boolean): string {
+  if (noActivationMeta(input))
+    return 'This format carries no activation per spectrum, so Ion series auto reads them as b/y too. Set Ion series to cz if the run is all electron-activated (cz reads every spectrum as c/z, collisional ones included), or convert the run to mzML and use auto.'
+  return hybrid
+    ? 'Choose the Orbitrap EThcD preset under Instrument, or set Ion series to auto and Hybrid ion series to both (Advanced, Charge and ions).'
+    : 'Choose the Orbitrap ETD preset under Instrument, or set Ion series to auto or cz (Advanced, Charge and ions).'
 }
 
 /// The checks before a run of @p input with @p values. @p probe: the probe's
@@ -145,6 +202,40 @@ export function preStartChecks(o: {
     })
   }
 
+  // The species report counts b/y tags only (FASTag.cpp species_cz_excluded):
+  // under Ion series cz every tag is c/z, so the report stays empty. Under
+  // auto on mzML the ETD/ECD spectra are read as c/z and left out too (the
+  // probe's counts say how many); on MGF and mzPeak auto stays b/y.
+  const series = String(values['ion_series'] ?? '').trim()
+  if (values['species'] === true && series === 'cz') {
+    checks.push({
+      id: 'cz-species',
+      level: 'warn',
+      title: 'Species detection with c/z ions',
+      detail: 'Ion series cz reads every spectrum as c/z ions, and the species report counts b/y tags only: it will be empty. Use Ion series auto (ETD spectra as c/z, the others as b/y), or run species detection separately with b/y ions.',
+      faq: 'faq-inspector',
+      source: 'the settings'
+    })
+  } else if (values['species'] === true && series === 'auto' && !noActivationMeta(o.input) && probe?.status === 'ok' && probe.activation) {
+    const a = probe.activation
+    // Hybrid spectra keep their b/y tags (under Hybrid both as well).
+    const cz = a.electron
+    // Over 1% of the MS2, as the electron check and the CLI judge.
+    if (a.of > 0 && cz * 100 > a.of) {
+      const all = cz >= a.of - a.unknown
+      checks.push({
+        id: 'cz-species',
+        level: 'warn',
+        title: all ? 'Species detection with c/z ions' : 'Species detection leaves the ETD spectra out',
+        detail: all
+          ? `All ${a.of.toLocaleString('en-US')} MS2 spectra probed were activated by ETD or ECD. Ion series auto reads them as c/z ions, and the species report counts b/y tags only: it will be empty. Run species detection on a collisionally activated run instead.`
+          : `${cz.toLocaleString('en-US')} of ${a.of.toLocaleString('en-US')} MS2 spectra probed were activated by ETD or ECD. Ion series auto reads them as c/z ions, and the species report counts b/y tags only, so it rests on the other ${pct(a.of - cz, a.of)}.`,
+        faq: 'faq-inspector',
+        source: 'the probe and the settings'
+      })
+    }
+  }
+
   let notChecked: string | null = null
   if (!o.supported) notChecked = NOT_CHECKED_NO_PROBE
   else if (o.probeError) notChecked = `Not checked before the run: the probe failed (${o.probeError}).`
@@ -165,7 +256,30 @@ export function preStartChecks(o: {
     })
   }
   const acq = probe.acquisition
-  if (acq?.refuse) {
+  // The probe judges under the default policy (refuse); the run uses the
+  // form's DIA input setting: refuse blocks, warn tags with a warning, off
+  // does not check.
+  const policy = String(values['acquisition_check'] ?? '').trim() || String(PARAM_BY_NAME.get('acquisition_check')?.default ?? 'refuse')
+  if (acq?.refuse && policy === 'warn') {
+    checks.push({
+      id: 'raw-dia',
+      level: 'warn',
+      title: 'Raw DIA: tagged with a warning',
+      detail: `The acquisition check calls it ${acq.mode} (${acq.why}). DIA input is set to Warn, so FASTag tags it anyway, but its MS2 "precursors" are isolation windows that mix several peptides: the tags get wrong flanks and complements. Generate pseudo-DDA spectra with DIAspeXtract first (diaTracer also works for .d).`,
+      faq: 'faq-raw-dia',
+      source: 'the probe and the settings',
+      command: diaspextract(probe.input ?? o.input)
+    })
+  } else if (acq?.refuse && policy === 'off') {
+    checks.push({
+      id: 'raw-dia',
+      level: 'info',
+      title: 'Raw DIA: not checked by the run',
+      detail: `The probe calls it ${acq.mode} (${acq.why}). DIA input is set to Off, so the run does not check the acquisition and tags the isolation windows as precursors.`,
+      faq: 'faq-raw-dia',
+      source: 'the probe and the settings'
+    })
+  } else if (acq?.refuse) {
     checks.push({
       id: 'raw-dia',
       level: 'block',
@@ -175,7 +289,7 @@ export function preStartChecks(o: {
       source: 'the probe',
       command: diaspextract(probe.input ?? o.input)
     })
-  } else if (acq?.warn) {
+  } else if (acq?.warn && policy !== 'off') {
     checks.push({
       id: 'dia-like',
       level: 'warn',
@@ -248,15 +362,28 @@ export function preStartChecks(o: {
       source: 'the probe'
     })
   }
+  // Electron (ETD, ECD) and hybrid (EThcD, ETciD) spectra are judged
+  // apart: Ion series auto reads the first as c/z on mzML, the second only
+  // with Hybrid ion series both. Over 1% of the MS2, as the CLI warns.
   const act = probe.activation
-  if (act && act.of > 0 && (act.electron + act.hybrid) * 100 > act.of) {
+  const wrong = act && act.of > 0 ? misread(values, o.input, act.electron, act.hybrid) : null
+  const n = act && wrong ? (wrong.electron ? act.electron : 0) + (wrong.hybrid ? act.hybrid : 0) : 0
+  if (act && wrong && n * 100 > act.of) {
+    const what = wrong.electron && wrong.hybrid ? 'ETD, ECD or a hybrid method (EThcD, ETciD)' : wrong.electron ? 'ETD or ECD' : 'a hybrid method (EThcD, ETciD)'
+    const how =
+      series === 'auto'
+        ? noActivationMeta(o.input)
+          ? 'This file carries no activation per spectrum, so Ion series auto reads them as b/y ions'
+          : 'Ion series auto with Hybrid ion series by reads the hybrid spectra as b/y ions only'
+        : 'Ion series by reads them as b/y ions'
     checks.push({
       id: 'electron',
       level: 'warn',
-      title: 'Electron activation',
-      detail: `${(act.electron + act.hybrid).toLocaleString('en-US')} of ${act.of.toLocaleString('en-US')} MS2 spectra probed were activated by ETD, ECD or a hybrid method. FASTag reads b/y ions only, so tags from these spectra are unreliable.`,
+      title: wrong.electron ? 'Electron activation' : 'Hybrid activation',
+      detail: `${n.toLocaleString('en-US')} of ${act.of.toLocaleString('en-US')} MS2 spectra probed were activated by ${what}. ${how}, and their tags are unreliable. ${etdAdvice(o.input, wrong.hybrid)}`,
       faq: 'faq-inspector',
-      source: 'the probe'
+      source: 'the probe',
+      fix: etdFix(o.input, wrong.hybrid)
     })
   }
   const fa = probe.fasta
@@ -275,7 +402,22 @@ export function preStartChecks(o: {
 
 // The log lines of a run the inspector keeps (useRun): FASTag's own words
 // on the acquisition, the tolerance, the activation and the index.
-export const NOTE_LINE = /^(Acquisition check: |FASTAG_REFUSED |No two peaks anywhere in this file|Electron activation: )|' is raw DIA[: ]|has no index, or one that no longer matches/
+export const NOTE_LINE =
+  /^(Acquisition check: |FASTAG_REFUSED |No two peaks anywhere in this file|Electron activation: |Hybrid activation: |Collisional activation: |Ion series: \d+ electron-activated MS2 spectra were tagged as b\/y)|' is raw DIA[: ]|has no index, or one that no longer matches/
+
+/// The CLI's activation warnings under Ion series auto and cz (IonSeries.h
+/// hybridAutoWarning, autoNoColumnWarning, collisionalCzWarning).
+export const HYBRID_AUTO_LINE = /^Hybrid activation: (\d+) of (\d+) MS2 spectra/
+export const AUTO_NO_COLUMN_LINE = /^Ion series: (\d+) electron-activated MS2 spectra were tagged as b\/y/
+export const COLLISIONAL_CZ_LINE = /^Collisional activation: (\d+) of (\d+) MS2 spectra/
+
+/// The fix for collisional spectra read as c/z under Ion series cz: auto on
+/// mzML (each spectrum by its activation), by on MGF or mzPeak.
+export function collisionalCzFix(input: string): CheckFix {
+  return noActivationMeta(input)
+    ? { label: 'Read every spectrum as b/y (Ion series by)', params: { ion_series: 'by' } }
+    : { label: 'Read each spectrum by its activation (Ion series auto)', params: { ion_series: 'auto' } }
+}
 
 const LOWRES = /^No two peaks anywhere in this file are closer than ([\d.]+) Th/
 
@@ -284,7 +426,19 @@ const LOWRES = /^No two peaks anywhere in this file are closer than ([\d.]+) Th/
 /// asks for the species report; a re-run in Da then leaves it out, as
 /// species calls are not validated with a tolerance in Da (the da-species
 /// check would hold that re-run otherwise).
-export function postRunChecks(o: { reports: Report[]; notes: string[]; species?: boolean }): { checks: Check[]; detected: Detected | null } {
+/// @p ionSeries and @p input: the run's (electronReadAsBy); left out, the
+/// default b/y reading.
+export function postRunChecks(o: {
+  reports: Report[]
+  notes: string[]
+  species?: boolean
+  ionSeries?: unknown
+  ionSeriesHybrid?: unknown
+  input?: string
+  /// The MS2 spectra the run tagged (its summary line), when known: Ion
+  /// series cz is offered as a re-run only for a run all electron-activated.
+  ms2?: number | null
+}): { checks: Check[]; detected: Detected | null } {
   const checks: Check[] = []
   const inst = instrumentFromReports(o.reports)
   const runReport = o.reports.find((r) => value(r, 'run', 'fragment_tolerance_unit'))
@@ -329,19 +483,70 @@ export function postRunChecks(o: { reports: Report[]; notes: string[]; species?:
     if (detected && !detected.preset && lowres) detected.preset = IONTRAP.id
   }
   const electron = o.notes.find((l) => l.startsWith('Electron activation: '))
-  if (electron) {
+  // The line names the counts per class (IonSeries.h byModeWarning):
+  // electron and hybrid spectra are judged apart, as before the run.
+  const per = electron ? /(\d+) collisional, (\d+) electron, (\d+) hybrid/.exec(electron) : null
+  const input = o.input ?? ''
+  const wrong = per
+    ? misread({ ion_series: o.ionSeries, ion_series_hybrid: o.ionSeriesHybrid }, input, Number(per[2]), Number(per[3]))
+    : { electron: electronReadAsBy(o.ionSeries, input), hybrid: false }
+  if (electron && (wrong.electron || wrong.hybrid)) {
     const m = /^Electron activation: (\d+) of (\d+) MS2 spectra/.exec(electron)
     checks.push({
       id: 'electron',
       level: 'warn',
       title: 'Electron activation',
       detail: m
-        ? `${Number(m[1]).toLocaleString('en-US')} of ${Number(m[2]).toLocaleString('en-US')} tagged MS2 spectra were activated by ETD, ECD or a hybrid method; FASTag reads b/y ions only, so their tags and flanks are unreliable.`
+        ? `${Number(m[1]).toLocaleString('en-US')} of ${Number(m[2]).toLocaleString('en-US')} tagged MS2 spectra were activated by ETD, ECD or a hybrid method and read as b/y ions, so their tags and flanks are unreliable. ${etdAdvice(input, wrong.hybrid)}`
         : electron,
       faq: 'faq-inspector',
-      source: "FASTag's log"
+      source: "FASTag's log",
+      fix: { ...etdFix(input, wrong.hybrid), rerun: true }
     })
   }
+  // Under Ion series auto and cz the CLI warns in lines of its own.
+  const find = (re: RegExp): RegExpExecArray | null => o.notes.map((l) => re.exec(l)).find((m) => m) ?? null
+  const of = (a: string, b: string): string => `${Number(a).toLocaleString('en-US')} of ${Number(b).toLocaleString('en-US')}`
+  const hyb = find(HYBRID_AUTO_LINE)
+  if (hyb)
+    checks.push({
+      id: 'hybrid-auto',
+      level: 'warn',
+      title: 'Hybrid activation',
+      detail: `${of(hyb[1], hyb[2])} MS2 spectra were activated by a hybrid method (EThcD, ETciD) and tagged as b/y ions only: under Ion series auto their c/z ions were not read. ${etdAdvice(input, true)}`,
+      faq: 'faq-inspector',
+      source: "FASTag's log",
+      fix: { ...etdFix(input, true), rerun: true }
+    })
+  const noCol = find(AUTO_NO_COLUMN_LINE)
+  // cz reads every spectrum as c/z: a fix only for a run that is all
+  // electron-activated; a mixed run would go to the collisional warning.
+  const allElectron = !!noCol && o.ms2 != null && Number(noCol[1]) === o.ms2
+  if (noCol)
+    checks.push({
+      id: 'auto-no-column',
+      level: 'warn',
+      title: 'Electron activation read as b/y',
+      detail: `${Number(noCol[1]).toLocaleString('en-US')} electron-activated MS2 spectra were tagged as b/y ions: Ion series auto reads the activation of mzML input only, so their tags are unreliable. Set Ion series to cz if the run is all electron-activated (cz reads every spectrum as c/z), or convert the run to mzML and use auto.`,
+      faq: 'faq-inspector',
+      source: "FASTag's log",
+      ...(allElectron ? { fix: { label: 'Read every spectrum as c/z (Ion series cz)', params: { ion_series: 'cz' }, rerun: true } } : {})
+    })
+  const coll = find(COLLISIONAL_CZ_LINE)
+  if (coll)
+    checks.push({
+      id: 'collisional-cz',
+      level: 'warn',
+      title: 'Collisional activation read as c/z',
+      detail: `${of(coll[1], coll[2])} MS2 spectra were activated by collision (CID, HCD), which yields b/y ions, but Ion series cz reads every spectrum as c/z ions, so their tags are unreliable. ${
+        noActivationMeta(input)
+          ? 'This format carries no activation per spectrum: use Ion series by, or convert the run to mzML and use auto.'
+          : 'Use Ion series auto, which reads each spectrum by its activation.'
+      }`,
+      faq: 'faq-inspector',
+      source: "FASTag's log",
+      fix: { ...collisionalCzFix(input), rerun: true }
+    })
   return { checks, detected }
 }
 

@@ -19,6 +19,8 @@ export interface Column {
   /// The sort key of row @p i; text() when absent.
   key?(i: number): number | string
   title?: string
+  /// A tooltip for the cell of row @p i (the full native ID behind a scan number).
+  cellTitle?(i: number): string | undefined
 }
 
 export const PAGE = 100
@@ -41,6 +43,12 @@ export interface DataTableProps {
   /// The parsed table the rows come from: the sort is kept with it
   /// (tableStore.ts useSticky), so a tab switch does not reset it.
   keep?: object | null
+  /// Open row @p id (the Triage ranking: its spectrum): on Enter, on a
+  /// double-click, and from a button over the table named @p openLabel.
+  onOpen?(id: number): void
+  openLabel?: string
+  /// Told the rows in the order shown (after the user's sort), for an export.
+  onOrder?(order: readonly number[]): void
 }
 
 /// The ids of @p ids in the order of @p col (stable: ties keep file order).
@@ -52,7 +60,8 @@ export function sortIds(ids: ArrayLike<number>, col: Column | undefined, desc: b
     const k = new Float64Array(out.length)
     out.forEach((id, j) => {
       const v = key(id)
-      k[j] = typeof v === 'number' ? v : Number(v)
+      // A blank cell is no value and sorts last (Number('') is 0).
+      k[j] = typeof v === 'number' ? v : String(v).trim() === '' ? NaN : Number(v)
     })
     const order = out.map((_, j) => j)
     order.sort((a, b) => {
@@ -71,7 +80,7 @@ export function sortIds(ids: ArrayLike<number>, col: Column | undefined, desc: b
   return order.map((j) => out[j])
 }
 
-export default function DataTable({ label, columns, ids, total, empty, sort: initial = null, keep }: DataTableProps): JSX.Element {
+export default function DataTable({ label, columns, ids, total, empty, sort: initial = null, keep, onOpen, openLabel = 'Open', onOrder }: DataTableProps): JSX.Element {
   const [sort, setSort] = useSticky(keep, `sort:${label}`, initial)
   const [active, setActive] = useState(0)
   const base = useId()
@@ -90,6 +99,11 @@ export default function DataTable({ label, columns, ids, total, empty, sort: ini
     () => sortIds(ids, columnsNow.current.find((c) => c.id === sortColumn), sortDesc),
     [ids, sortColumn, sortDesc]
   )
+  const onOrderNow = useRef(onOrder)
+  onOrderNow.current = onOrder
+  useEffect(() => {
+    onOrderNow.current?.(order)
+  }, [order])
   const n = order.length
   // A new filter or sort starts at the first row.
   useEffect(() => setActive(0), [ids, sort])
@@ -124,6 +138,14 @@ export default function DataTable({ label, columns, ids, total, empty, sort: ini
     setActive(j)
   }
   function onKey(e: KeyboardEvent<HTMLTableElement>): void {
+    // Keys of the grid itself only: Enter on a sortable column heading
+    // sorts, it does not open a row (round 4, 23).
+    if (e.target !== e.currentTarget) return
+    if (e.key === 'Enter' && onOpen && n > 0) {
+      e.preventDefault()
+      onOpen(order[at])
+      return
+    }
     const to =
       e.key === 'ArrowDown' ? at + 1
       : e.key === 'ArrowUp' ? at - 1
@@ -147,6 +169,11 @@ export default function DataTable({ label, columns, ids, total, empty, sort: ini
           {n === total ? `${n.toLocaleString('en-US')} rows` : `${n.toLocaleString('en-US')} of ${total.toLocaleString('en-US')} rows`}
           {n > PAGE && ` · showing ${(start + 1).toLocaleString('en-US')}–${Math.min(n, start + PAGE).toLocaleString('en-US')}`}
         </span>
+        {onOpen && n > 0 && (
+          <button type="button" className="secondary small" onClick={() => onOpen(order[at])}>
+            {openLabel}
+          </button>
+        )}
         {n > PAGE && (
           <span className="dt-pages">
             <button type="button" className="secondary" disabled={start === 0} onClick={() => move(start - PAGE)}>
@@ -213,9 +240,10 @@ export default function DataTable({ label, columns, ids, total, empty, sort: ini
                       setActive(j)
                       gridRef.current?.focus({ preventScroll: true })
                     }}
+                    onDoubleClick={onOpen ? () => onOpen(id) : undefined}
                   >
                     {columns.map((c) => (
-                      <td key={c.id} role="gridcell" className={[c.num ? 'num' : '', c.mono ? 'mono' : ''].join(' ').trim() || undefined}>
+                      <td key={c.id} role="gridcell" className={[c.num ? 'num' : '', c.mono ? 'mono' : ''].join(' ').trim() || undefined} title={c.cellTitle?.(id)}>
                         {c.text(id)}
                       </td>
                     ))}
@@ -228,7 +256,8 @@ export default function DataTable({ label, columns, ids, total, empty, sort: ini
       )}
       {n > 0 && (
         <p className="dt-help">
-          Click a column to sort; in the table ↑ ↓, Page Up/Down, Home and End move the active row.
+          Click a column to sort; in the table ↑ ↓, Page Up/Down, Home and End move the active row
+          {onOpen ? `; Enter or a double-click: ${openLabel.toLowerCase()}` : ''}.
         </p>
       )}
     </div>

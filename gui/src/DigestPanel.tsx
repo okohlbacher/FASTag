@@ -1,7 +1,11 @@
 import { useState, type JSX, type ReactNode } from 'react'
 import SequenceLogo, { LogoLegend } from './SequenceLogo'
 import { HelpButton, HelpLink } from './help/HelpLink'
+import ReportHeader from './results/ReportHeader'
+import { alkylationReason } from './results/overview'
+import { labelCall } from './results/calls'
 import {
+  alkylationCall,
   backgroundWords,
   baseName,
   digestCall,
@@ -68,13 +72,7 @@ function heavyValue(key: string, v: string): string {
 function Heading({ id, title, report, help }: { id: string; title: string; report: Report; help: string }): JSX.Element {
   return (
     <>
-      <div className="card-head">
-        <h2 id={id}>{title}</h2>
-        <HelpButton to={help} what={title} />
-        <code className="src" title={report.path}>
-          {baseName(report.path)}
-        </code>
-      </div>
+      <ReportHeader id={id} title={title} paths={[report.path]} helpButton={<HelpButton to={help} what={title} />} />
       {report.warnings.map((w) => (
         <div className="caveat" key={w}>
           {w}
@@ -94,18 +92,28 @@ interface Props {
   onOpen: () => void
 }
 
+/// The report's own sentences: the first few, which carry the call; the rest
+/// stay in All report rows below (each row's description is there too).
+const SAYS_SHOWN = 4
+
 function Sentences({ rows }: { rows: ReportRow[] }): JSX.Element | null {
   const seen = new Set<string>()
   const list = rows.map((r) => r.description).filter((d) => d && !seen.has(d) && seen.add(d))
   if (!list.length) return null
+  const more = list.length - SAYS_SHOWN
   return (
     <div className="says">
       <span className="card-label">FASTag says</span>
       <ul className="sentences">
-        {list.map((d) => (
+        {list.slice(0, SAYS_SHOWN).map((d) => (
           <li key={d}>{groupDigits(d)}</li>
         ))}
       </ul>
+      {more > 0 && (
+        <p className="hint">
+          {more} more {more === 1 ? 'sentence' : 'sentences'} in All report rows below.
+        </p>
+      )}
     </div>
   )
 }
@@ -170,13 +178,14 @@ function Digest({ report }: { report: Report }): JSX.Element {
   const nocall = section(report, 'nocall')
   const nC = num(value(report, 'count', 'n_c'))
   const nN = num(value(report, 'count', 'n_n'))
+  const filtered = report.rows.find((r) => r.section === 'count' && r.key === 'tags_filtered')?.n ?? null
   return (
     <section className="dg-block card" aria-labelledby="dg-digest">
       <Heading id="dg-digest" title="Protease" report={report} help="digest-protease" />
       <dl className="headline stats">
         {call.status === 'call' ? (
           <>
-            <Stat label="Called" big>
+            <Stat label="Protease call" big>
               {call.model}
               {call.cls && call.cls !== call.model && <span className="rank">{call.cls}</span>}
             </Stat>
@@ -190,7 +199,7 @@ function Digest({ report }: { report: Report }): JSX.Element {
           </>
         ) : call.status === 'no_call' ? (
           <>
-            <Stat label="Called" big>
+            <Stat label="Protease call" big>
               No call
             </Stat>
             <Stat label="Reason">
@@ -201,8 +210,11 @@ function Digest({ report }: { report: Report }): JSX.Element {
             </Stat>
           </>
         ) : (
-          <Stat label="Called">The report has no call rows.</Stat>
+          <Stat label="Protease call">The report has no call rows.</Stat>
         )}
+        {/* The digest filter's count: the tags the call reads (moved from
+            the Overview, round 10). */}
+        {filtered != null && <Stat label="Tags E ≤ 1">{fmt(filtered)}</Stat>}
         {(nC != null || nN != null || call.usesNterm != null) && (
           <Stat label="Tag ends used">
             {[nC != null && `${fmt(nC)} C`, nN != null && `${fmt(nN)} N`].filter(Boolean).join(' · ')}
@@ -242,8 +254,18 @@ function Digest({ report }: { report: Report }): JSX.Element {
         )}
         <Sentences
           rows={[
-            ...section(report, 'call'),
-            ...nocall.filter((r) => r.value !== 'no'),
+            // Not the lines that restate the call (its model, its class), nor
+            // those the Reason figure states already: the first rule's id
+            // ("The first no-call rule that applies is low_resolution.") and
+            // the sentences of the rules it names.
+            // The status sentence of a no call ("No protease is called: the
+            // fragment tolerance is in Da, ...") restates the Reason figure too.
+            ...section(report, 'call').filter(
+              (r) =>
+                !['model', 'class', 'runner_up_class', 'reason'].includes(r.key) &&
+                !(r.key === 'status' && call.status === 'no_call' && !!call.reason && !!REASON[call.reason])
+            ),
+            ...nocall.filter((r) => r.value !== 'no' && !(call.status === 'no_call' && call.fired.includes(r.key) && REASON[r.key])),
             ...section(report, 'count'),
             ...section(report, 'share')
           ]}
@@ -260,12 +282,36 @@ function Label({ report }: { report: Report }): JSX.Element {
   // Counts only, as the report gives them: a label with tag ends is named,
   // to be compared with the chance count 0.5 Da above it, in the column below.
   const seen = labels.filter((l) => (l.count ?? 0) > 0)
+  const lowRes = value(report, 'run', 'low_resolution') === 'yes'
+  // The CLI's label call leads (SILAC, a kit, label-free, or no call); the
+  // isobaric tag-end counts below are its evidence, not a call of their own.
+  const call = labelCall(report)
   return (
     <section className="dg-block card" aria-labelledby="dg-label">
       <Heading id="dg-label" title="Labels" report={report} help="digest-labels" />
+      {(call.state === 'call' || call.state === 'no_call') && (
+        <div className="chip-line label-call">
+          {call.state === 'call' ? (
+            <span className={`chip ${call.label === 'label-free' ? 'ok' : 'warn'}`}>
+              Label call: {call.label === 'label-free' ? 'none (label-free)' : call.label}
+            </span>
+          ) : (
+            <span className="chip">No label call</span>
+          )}
+          <span className="muted">{call.why}</span>
+        </div>
+      )}
+      {labels.length > 0 && (call.state === 'call' || call.state === 'no_call') && <h4 className="dg-sub">Isobaric tag ends</h4>}
       {labels.length > 0 && (
         <div className="chip-line">
-          {seen.length === 0 ? (
+          {seen.length === 0 && lowRes ? (
+            // At a tolerance in Da the label windows do not hold: no count
+            // of 0 reads as a verified "unlabelled".
+            <>
+              <span className="chip">Not assessable (tolerance in Da)</span>
+              <span className="muted">{labels.map((l) => l.label).join(', ')}: 0 tag ends each.</span>
+            </>
+          ) : seen.length === 0 ? (
             <>
               <span className="chip ok">No label tag ends</span>
               <span className="muted">{labels.map((l) => l.label).join(', ')}: 0 tag ends each.</span>
@@ -281,7 +327,8 @@ function Label({ report }: { report: Report }): JSX.Element {
           )}
         </div>
       )}
-      {value(report, 'run', 'low_resolution') === 'yes' && (
+      {/* Said once: the call line names the reason when there is one. */}
+      {lowRes && call.state !== 'call' && call.state !== 'no_call' && (
         <div className="caveat">The fragment tolerance is in Da, so the label windows do not hold.</div>
       )}
       {labels.length > 0 && (
@@ -541,32 +588,66 @@ function GapHistogram({ bins }: { bins: GapBin[] }): JSX.Element {
   )
 }
 
+/// The alkylation report (-alkylation_out): the reagent called, or why no
+/// call was made, from placements on a shipped proteome or the FASTA given.
+function Alkylation({ report }: { report: Report }): JSX.Element {
+  const c = alkylationCall(report)
+  const db = value(report, 'alk_run', 'database')
+  return (
+    <section className="dg-block card" aria-labelledby="dg-alk">
+      <Heading id="dg-alk" title="Alkylation" report={report} help="digest-gaps" />
+      <dl className="stats">
+        <Stat label={c.status === 'call' ? 'Reagent' : 'No call'} big>
+          {c.status === 'call' ? (c.reagent === 'none' ? 'none (not alkylated)' : c.reagent) : alkylationReason(c.reason)}
+        </Stat>
+        {c.binned != null && <Stat label="Spectra with one cysteine">{fmt(c.binned)}</Stat>}
+        {c.share != null && c.status === 'call' && <Stat label="Share">{pct(c.share)}</Stat>}
+        {db && <Stat label="Database">{db}</Stat>}
+      </dl>
+      <p className="hint">Not validated on held-out data: a call to check, not a setting to copy.</p>
+      <RawRows report={report} />
+    </section>
+  )
+}
+
 export default function DigestPanel({ reports, errors, onOpen }: Props): JSX.Element {
   const by = (k: Report['kind']): Report | undefined => reports.find((r) => r.kind === k)
   const d = by('digest')
   const l = by('label')
   const m = by('massgap')
+  const a = by('alkylation')
+  const shown = [d, l, a, m].filter((r): r is Report => !!r)
   return (
     <div className="digest">
+      {/* The tab's title row, as every report tab has (round 4, 19). */}
+      {shown.length > 0 && (
+        <ReportHeader title="Digest and labels" paths={shown.map((r) => r.path)} help={{ to: 'digest', label: 'How to read these reports' }} />
+      )}
       {errors.map((e) => (
         <p className="warn" key={e} role="alert">
           {e}
         </p>
       ))}
-      {!d && !l && !m && errors.length === 0 && (
-        <div className="empty">
-          The digest, label and mass-gap reports appear here after a run that writes them (<code className="cli">digest_out</code>,{' '}
-          <code className="cli">label_out</code>, <code className="cli">massgap_out</code>), or{' '}
-          <button className="link" onClick={onOpen}>
-            open a report TSV…
-          </button>{' '}
-          <HelpLink to="faq-digest-empty">How to write them</HelpLink>
+      {!d && !l && !m && !a && errors.length === 0 && (
+        <div className="empty-state">
+          <h2>No digest or label report</h2>
+          <p>
+            The Digest, Label, Mass-gap and Alkylation reports appear here after a run that writes them: check them in
+            the Outputs card of Characterize a run (or under Advanced, Other analyses).
+          </p>
+          <div className="row-actions">
+            <button className="secondary" onClick={onOpen}>
+              Open a report…
+            </button>
+            <HelpLink to="faq-digest-empty">How to write them</HelpLink>
+          </div>
         </div>
       )}
       {d && <Digest report={d} />}
       {l && <Label report={l} />}
+      {a && <Alkylation report={a} />}
       {m && <MassGap report={m} />}
-      {(d || l || m) && (
+      {(d || l || m || a) && (
         <button className="secondary" onClick={onOpen}>
           Open another report…
         </button>

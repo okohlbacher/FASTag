@@ -6,6 +6,7 @@
 import { act, fireEvent, screen } from '@testing-library/react'
 import { expect } from 'vitest'
 import { PARAM_BY_NAME, RENDERED, SECTIONS } from '../paramLayout'
+import { INSTRUMENTS } from '../setup/presets'
 import { showView } from './render'
 
 /// Click the offer chip. @p n is the number of settings it must offer.
@@ -33,19 +34,28 @@ export async function formValue(name: string): Promise<string | boolean> {
   }
   const now = read()
   if (now !== undefined) return now
+  // A report is a checkbox of Outputs or Advanced (setup/products.ts): its
+  // file is the checkbox's data-value.
+  const product = document.querySelector<HTMLInputElement>(`input[data-param="${name}"]`)
+  if (product) return product.dataset.value ?? ''
+  // The tolerance and its unit under a preset of Settings' Instrument
+  // select (doc/GUI-WORKFLOWS.md 2.1): the preset the select shows holds
+  // them; only Custom shows their fields.
+  showView('setup')
+  const inst = document.getElementById('instrument') as HTMLSelectElement | null
+  const preset = inst && inst.value !== 'custom' ? INSTRUMENTS.find((x) => x.id === inst.value) : undefined
+  if (preset && name === 'fragment_tolerance') return preset.tolerance
+  if (preset && name === 'fragment_tolerance_unit') return preset.unit
   const sec = SECTIONS.find((s) => s.params.includes(name))
   if (!sec) throw new Error(`${name} is in no section of the form`)
-  showView('setup')
   const toggle = (): Promise<void> =>
     act(async () => {
-      const b = screen
-        .getAllByRole('button')
-        .find((e) => e.className === 'disclosure' && (e.textContent ?? '').includes(sec.title))
+      const b = [...document.querySelectorAll<HTMLElement>('summary.disclosure')].find((e) => e.querySelector('.sec-title')?.textContent === sec.title)
       if (!b) throw new Error(`no disclosure for ${sec.title}`)
       fireEvent.click(b)
     })
   await toggle()
-  const v = read()
+  const v = read() ?? document.querySelector<HTMLInputElement>(`input[data-param="${name}"]`)?.dataset.value
   await toggle()
   if (v === undefined) throw new Error(`${name} is not in the form`)
   return v

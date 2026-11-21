@@ -2,25 +2,29 @@
 // input and output, the form's values, the last-used offer (D6), presets and
 // what a run with these values would send.
 
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState, type SetStateAction } from 'react'
 import {
-  SECTIONS,
   PARAM_BY_NAME,
   RENDERED,
+  RECIPE_FIELDS,
   conflicts,
+  fillRecipe,
   inertBecause,
   invalidParams,
   isChanged,
+  msfRecipeOn,
   speciesReach,
+  syncRecipe,
   type ParamSpec
 } from '../paramLayout'
 import type { ParamValue } from '../ParamField'
 import { baseName } from '../digestReport'
 import { applyInstrument, INSTRUMENTS, speciesFixes } from './presets'
-import { defaultSpeciesOut, rebaseOutputs, stripExt } from '../app/paths'
+import { renameSearchConfig } from './products'
+import { defaultSpeciesOut, dirName, rebaseOutputs, stripExt } from '../app/paths'
 import { cliText, sameValue } from '../app/format'
 import { focusLater } from '../app/focus'
-import { DEFAULTS, baseOf, baseValues, originText, taskById, taskOf, type Origin, type TaskId } from './tasks'
+import { DEFAULTS, LAST_WORKFLOW, baseOf, baseValues, originText, startValues, taskById, taskOf, type Origin, type TaskId } from './tasks'
 import { applyPreset as presetValues, diffNames, droppedPaths, normalizePreset, presetDiff } from './presetDiff'
 
 // Initial form state IS the tool's own defaults, straight from the manifest.
@@ -45,6 +49,8 @@ interface Snapshot {
   values: Record<string, ParamValue>
   origin: Origin
   originValues: Record<string, ParamValue>
+  // The recipe fields the user edited (fillRecipe keeps them).
+  edited: Set<string>
 }
 
 /// @p start: where the session's values come from (D1: the app passes the
@@ -52,19 +58,47 @@ interface Snapshot {
 export function useSession(start: Origin = DEFAULTS) {
   const [input, setInput] = useState('')
   const [out, setOut] = useState('')
+  // The Input card: one file, or a batch of files run in turn (doc/GUI-WORKFLOWS.md 1).
+  const [mode, setMode] = useState<'one' | 'batch'>('one')
+  // The inputs a batch has queued (App keeps them in step with the queue):
+  // the CLI refuses some options on each mzPeak file of a batch too.
+  const [batchInputs, setBatchInputs] = useState<readonly string[]>([])
+  // The Advanced disclosure of Setup is open.
+  const [advancedOpen, setAdvancedOpen] = useState(false)
   // Where the form's values came from, and the values that origin gives
   // (before reports are moved beside the input): the footer's diff is the
   // form against these.
   const [origin, setOrigin] = useState<Origin>(start)
   const [originValues, setOriginValues] = useState<Record<string, ParamValue>>(() => baseValues(baseOf(start)))
-  const [values, setValues] = useState<Record<string, ParamValue>>(() => baseValues(baseOf(start)))
+  const [values, setRawValues] = useState<Record<string, ParamValue>>(() => baseValues(baseOf(start)))
+  // The MSFragger recipe fields the user has edited since the form was last
+  // replaced: they keep their value when the recipe turns on or off
+  // (paramLayout syncRecipe); the others show what the CLI would use.
+  const edited = useRef<Set<string>>(new Set())
+  const originRef = useRef<Record<string, ParamValue>>({})
+  // Every edit of the form goes through here: a change that turns the
+  // recipe on or off updates the recipe fields not edited.
+  const setValues = (u: SetStateAction<Record<string, ParamValue>>): void =>
+    setRawValues((s) => syncRecipe(s, typeof u === 'function' ? u(s) : u, edited.current, originRef.current))
+  // A task, preset or run replaces the form: no field is the user's yet.
+  // formGen counts the replacements (workflow, preset, reset, undo, a run
+  // taken over): what the form remembered of the values before (the
+  // Extension the alkylation report raised) is forgotten with them.
+  const [formGen, setFormGen] = useState(0)
+  const replaceValues = (v: Record<string, ParamValue>): void => {
+    edited.current = new Set()
+    setFormGen((g) => g + 1)
+    setRawValues(v)
+  }
   const [undoSnapshot, setUndoSnapshot] = useState<Snapshot | null>(null)
-  const [openGroups, setOpenGroups] = useState<Record<string, boolean>>(() =>
-    Object.fromEntries(SECTIONS.map((s) => [s.title, s.open]))
-  )
+  // Only the user's own toggles: a group not toggled yet opens as its
+  // place says (a workflow's own groups open, SetupForm renderGroup).
+  const [openGroups, setOpenGroups] = useState<Record<string, boolean>>({})
   // The parameters of the last session's run (D6): offered with "Apply
   // last-used (n)", never applied on their own. null once applied.
   const [lastUsed, setLastUsed] = useState<Record<string, ParamValue> | null>(null)
+  // The workflow those values ran in, when the run recorded one.
+  const [lastWorkflow, setLastWorkflow] = useState<TaskId | null>(null)
   const [taxdbK, setTaxdbK] = useState<number | null>(null)
   // The instrument preset last chosen (read-only built-ins, presets.ts).
   const [instrument, setInstrument] = useState('')
@@ -85,6 +119,8 @@ export function useSession(start: Origin = DEFAULTS) {
       if (st.lastUsed) {
         const known = Object.entries(st.lastUsed).filter(([n]) => RENDERED.includes(n)) as [string, ParamValue][]
         if (known.length) setLastUsed(Object.fromEntries(known))
+        const wf = st.lastUsed[LAST_WORKFLOW]
+        if (typeof wf === 'string' && taskById(wf)) setLastWorkflow(taskById(wf)!.id)
       }
     })
   }, [])
@@ -102,19 +138,33 @@ export function useSession(start: Origin = DEFAULTS) {
   // Species tab why it is empty. The same rule as that conflict.
   const tooShort = speciesReach(values, taxdbK)
 
-  const setValue = (name: string, v: ParamValue): void => setValues((s) => ({ ...s, [name]: v }))
+  // A changed engine renames its unedited configuration file (.json for
+  // Sage, .params for Comet and MSFragger).
+  originRef.current = originValues
+  const setValue = (name: string, v: ParamValue): void => {
+    if (RECIPE_FIELDS.includes(name)) edited.current.add(name)
+    setValues((s) => (name === 'search_engine' ? renameSearchConfig({ ...s, [name]: v }, v) : { ...s, [name]: v }))
+  }
 
   // The last session's values that differ from the form's (D6).
   const lastUsedDiff = lastUsed ? Object.keys(lastUsed).filter((n) => !sameValue(lastUsed[n], values[n])) : []
-  // Apply the offer. Report paths go beside the current tags output, as a
-  // preset's do, or this run would overwrite the last session's reports.
+  // Apply the offer. It replaces the form as a preset does (Undo, formGen,
+  // no field the user's yet) and keeps the origin: the saved values are
+  // set as they ran, so a recipe field they hold is not overwritten by the
+  // MSFragger recipe (fillRecipe treats every saved key as given). A
+  // changed engine renames its unedited configuration file. Report paths go
+  // beside the current tags output, or this run would overwrite the last
+  // session's reports.
+  // The workflow the values ran in comes back with them: its label, the
+  // record and the Overview's lead tiles name it, not the form's.
   function applyLastUsed(): void {
     if (!lastUsed) return
     const lu = lastUsed
-    setValues((v) => {
-      const merged = { ...v, ...lu }
-      return out ? { ...merged, ...rebaseOutputs(merged, out) } : merged
-    })
+    let merged: Record<string, ParamValue> = { ...values, ...lu }
+    if ('search_engine' in lu && !('search_config_out' in lu)) merged = renameSearchConfig(merged, lu['search_engine'])
+    const o: Origin = lastWorkflow ? { kind: 'builtin', id: lastWorkflow } : origin
+    const ov = lastWorkflow ? baseValues(`builtin:${lastWorkflow}`) : originValues
+    replaceForm(o, ov, fillRecipe(merged, new Set(Object.keys(lu))), true)
     setLastUsed(null)
     focusLater(() => presetRef.current)
   }
@@ -137,18 +187,24 @@ export function useSession(start: Origin = DEFAULTS) {
   // keeps the snapshot taken before it: arrowing through the task radios
   // replaces the form once per task, and the edits made before the first
   // one must survive the second.
-  function replaceForm(o: Origin, ov: Record<string, ParamValue>): void {
-    if (diffNames(originValues, values).length > 0) setUndoSnapshot({ values, origin, originValues })
+  // @p v: the form's new values when they are not the origin's (the
+  // last-used offer); @p always: take the snapshot even over a form without
+  // edits of the user's, since @p v differs from the origin it keeps.
+  function replaceForm(o: Origin, ov: Record<string, ParamValue>, v: Record<string, ParamValue> = ov, always = false): void {
+    if (always || diffNames(originValues, values).length > 0) setUndoSnapshot({ values, origin, originValues, edited: new Set(edited.current) })
     setPresetError(null)
     setOrigin(o)
     setOriginValues(ov)
-    setValues(beside(ov))
+    replaceValues(beside(v))
   }
+  // The form as it was, unchanged: its output paths (custom ones too) and
+  // the recipe fields the user had edited.
   function undo(): void {
     if (!undoSnapshot) return
     setOrigin(undoSnapshot.origin)
     setOriginValues(undoSnapshot.originValues)
-    setValues(beside(undoSnapshot.values))
+    replaceValues(undoSnapshot.values)
+    edited.current = new Set(undoSnapshot.edited)
     setUndoSnapshot(null)
   }
   function chooseTask(id: TaskId): void {
@@ -160,7 +216,7 @@ export function useSession(start: Origin = DEFAULTS) {
   }
   // Back to where the form started: the task, preset or defaults.
   function resetToOrigin(): void {
-    setValues(beside(originValues))
+    replaceValues(beside(originValues))
     setUndoSnapshot(null)
   }
 
@@ -173,7 +229,10 @@ export function useSession(start: Origin = DEFAULTS) {
     // the current tags output, or this run overwrites that sample's reports.
     const p = normalizePreset(st.presets[name])
     if (!p) return
-    replaceForm({ kind: 'preset', name, base: p.base }, presetValues(p, ''))
+    // A recipe field the preset does not store ran at the recipe's value.
+    replaceForm({ kind: 'preset', name, base: p.base }, fillRecipe(presetValues(p, ''), new Set(Object.keys(p.diff))))
+    // Saved over Batch QC: Characterize on a batch.
+    if (p.batch) setMode('batch')
   }
   async function refreshPresets(): Promise<string[]> {
     const st = await window.fastag.loadSettings()
@@ -190,6 +249,10 @@ export function useSession(start: Origin = DEFAULTS) {
       return
     }
     const diff = presetDiff(baseValues(presetBase), values)
+    // Under the MSFragger recipe its fields are stored as shown, so a
+    // loaded preset runs what was saved (fillRecipe reads a missing one as
+    // the recipe's).
+    if (msfRecipeOn(values)) for (const n of RECIPE_FIELDS) diff[n] = values[n]
     setPresetError(null)
     const saved = await window.fastag.savePreset(name, { v: 2, base: presetBase, diff })
     await refreshPresets()
@@ -226,6 +289,16 @@ export function useSession(start: Origin = DEFAULTS) {
     focusLater(() => presetRef.current)
   }
 
+  // The tags output moved (Outputs: folder or run name): every report goes
+  // beside it.
+  function moveOut(next: string): void {
+    setOut(next)
+    if (next) setValues((v) => ({ ...v, ...rebaseOutputs(v, next) }))
+  }
+  // Outputs' folder and run name, from the tags output.
+  const outDir = out ? dirName(out) : ''
+  const runName = out ? baseName(out).replace(/\.tags\.tsv$/, '').replace(/\.tsv$/, '') : ''
+
   // A built-in instrument preset sets the tolerance and its unit.
   function chooseInstrument(id: string): void {
     const p = INSTRUMENTS.find((x) => x.id === id)
@@ -234,14 +307,24 @@ export function useSession(start: Origin = DEFAULTS) {
   }
 
   // Settings into form (History, GUI-DESIGN 3 S9): the input, output and
-  // parameters of a recorded run replace the form's, over the defaults;
-  // only parameters the form renders, with a value of a form type. Returns
-  // the Undo, which puts the form back as it was. The form then starts from
-  // FASTag's defaults (the values are over them), so the footer's diff and
-  // Reset to origin read against the defaults, not the task it left.
-  function takeRun(runInput: string, runOut: string, params: Record<string, unknown>): () => void {
-    const before = { input, out, values, origin, originValues }
-    const v = initialValues()
+  // parameters of a recorded run replace the form's; only parameters the
+  // form renders, with a value of a form type. The form is rebuilt from
+  // FASTag's defaults (params.generated.json), not from the workflow's
+  // values: a run sends only what differs from what the CLI would use
+  // (sentValues), so an option it was not sent ran at the CLI's default (a
+  // Database reduction with its E-value put back to 0.1 ran at 0.1, not at
+  // the workflow's 10), and a recipe field it was not sent at the recipe's
+  // value (fillRecipe). A run recorded with its workflow (@p workflow,
+  // history.rs RunRecord.workflow) keeps it as origin only: its label,
+  // landing tab and views. A record without one (before 1.15.4) is over
+  // FASTag's defaults and stays unlabelled. Returns the Undo, which puts
+  // the form, its origin and base back as they were.
+  function takeRun(runInput: string, runOut: string, params: Record<string, unknown>, workflow?: string | null): () => void {
+    const before = { input, out, values, origin, originValues, edited: new Set(edited.current) }
+    const task = workflow ? taskById(workflow) : undefined
+    const o: Origin = task ? { kind: 'builtin', id: task.id } : DEFAULTS
+    const ov = startValues(baseOf(o), runOut)
+    const v: Record<string, ParamValue> = initialValues()
     for (const [name, x] of Object.entries(params)) {
       if (!RENDERED.includes(name)) continue
       if (typeof x === 'string' || typeof x === 'boolean') v[name] = x
@@ -250,22 +333,26 @@ export function useSession(start: Origin = DEFAULTS) {
     }
     setInput(runInput)
     setOut(runOut)
-    setOrigin(DEFAULTS)
-    setOriginValues(initialValues())
-    setValues(v)
+    setOrigin(o)
+    setOriginValues(ov)
+    // A recipe field the run did not send ran at the recipe's value.
+    replaceValues(fillRecipe(v, new Set(Object.keys(params))))
+    setUndoSnapshot(null)
     return () => {
       setInput(before.input)
       setOut(before.out)
       setOrigin(before.origin)
       setOriginValues(before.originValues)
-      setValues(before.values)
+      setRawValues(before.values)
+      setFormGen((g) => g + 1)
+      edited.current = before.edited
     }
   }
 
   // Values the CLI would refuse, field by field, and combinations it refuses
   // before reading a spectrum (rc 6): either keeps Run and Run batch disabled.
   const invalid = invalidParams(values)
-  const refused = conflicts(values, { taxdbK })
+  const refused = conflicts(values, { taxdbK, input: mode === 'one' ? input : undefined, inputs: batchInputs })
   const blocked = Object.keys(invalid).length > 0 || refused.length > 0
 
   // What a run writes, by file name: the tags, then each output it is sent.
@@ -293,14 +380,22 @@ export function useSession(start: Origin = DEFAULTS) {
     setInput,
     out,
     setOut,
+    moveOut,
+    outDir,
+    runName,
+    mode,
+    setMode,
+    advancedOpen,
+    setAdvancedOpen,
     values,
     setValues,
     setValue,
+    formGen,
     // Reset… (RunBar): every parameter to FASTag's default.
     reset: (): void => {
       setOrigin(DEFAULTS)
       setOriginValues(initialValues())
-      setValues(initialValues())
+      replaceValues(initialValues())
       setUndoSnapshot(null)
     },
     takeRun,
@@ -324,6 +419,9 @@ export function useSession(start: Origin = DEFAULTS) {
     canUndo: undoSnapshot !== null,
     // What differs from where the form started (the footer).
     diff: diffNames(originValues, values),
+    // The values the form started from, which a run's command line is
+    // measured against (paramLayout sentValues).
+    originValues,
     presetBaseText: originText(presetBase === 'defaults' ? DEFAULTS : { kind: 'builtin', id: presetBase.slice('builtin:'.length) as TaskId }),
     // The input paths a preset saved now would leave out.
     droppedPaths: droppedPaths(baseValues(presetBase), values),
@@ -343,6 +441,7 @@ export function useSession(start: Origin = DEFAULTS) {
     pickFor,
     invalid,
     refused,
+    setBatchInputs,
     blocked,
     writingFiles,
     changedParams

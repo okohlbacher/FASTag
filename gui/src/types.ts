@@ -123,6 +123,20 @@ export interface ResolvedOutputs {
   recon_id_out?: string | null
   glyco_out?: string | null
   out_spectra?: string | null
+  // The reports of the workflows (doc/GUI-WORKFLOWS.md 1); census_out and
+  // census_summary_out are derived from -out under -census.
+  qc_out?: string | null
+  shortlist_out?: string | null
+  fasta_out?: string | null
+  search_config_out?: string | null
+  census_out?: string | null
+  census_summary_out?: string | null
+  census_sorted_out?: string | null
+  alkylation_out?: string | null
+  alkylation_tags_out?: string | null
+  delta_spectra_out?: string | null
+  delta_counts_out?: string | null
+  check_header_out?: string | null
 }
 
 export interface RunResult {
@@ -155,6 +169,9 @@ export interface Cleanup {
 export interface OutputsCheck {
   outputs: string[]
   existing: string[]
+  // Outputs that name one of the run's inputs (the spectra, a database, the
+  // identification file): the backend refuses such a run.
+  clashes?: string[]
 }
 
 // One run as the backend records it (history.rs, history.jsonl in app data).
@@ -176,6 +193,9 @@ export interface RunRecord {
   params?: Record<string, unknown> | null
   // The tags it wrote (the CLI's summary line); absent when it printed none.
   tags?: number | null
+  // The Setup workflow it was started from (setup/tasks.ts TaskId); absent
+  // in records before 1.15.4.
+  workflow?: string | null
 }
 
 // The reply of `run` (fastag.rs RunStarted). The run's events come on the

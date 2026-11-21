@@ -1,25 +1,10 @@
-// The Setup screen's four step cards and the plan footer (GUI-DESIGN 3 S1):
-// which form sections each card holds, the one-line summary a card shows,
-// and the plan line above Run. Pure text from the form's values.
+// The plan line of the run bar (doc/GUI-WORKFLOWS.md 3): what a run does in
+// one line, "Run QC on run01.mzML · 2 reports · 10% of spectra". Pure text
+// from the form's values.
 
-import { PARAM_BY_NAME, isActive, inertBecause } from '../paramLayout'
+import { PARAM_BY_NAME } from '../paramLayout'
 import { baseName } from '../digestReport'
-import { dirName } from '../app/paths'
-
-export interface Card {
-  n: number
-  id: 'spectra' | 'database' | 'tagging' | 'reports'
-  title: string
-  /// The form sections (paramLayout SECTIONS titles) the card holds, in order.
-  sections: string[]
-}
-
-export const CARDS: readonly Card[] = [
-  { n: 1, id: 'spectra', title: 'Spectra', sections: ['Spectra'] },
-  { n: 2, id: 'database', title: 'Database & taxonomy', sections: ['Sequence matching', 'Species detection'] },
-  { n: 3, id: 'tagging', title: 'Tagging', sections: ['Tagging', 'Modifications', 'Performance'] },
-  { n: 4, id: 'reports', title: 'Reports', sections: ['Glycopeptides', 'Digest and labels', 'Reconciliation', 'Output'] }
-]
+import { PRODUCTS, isOn } from './products'
 
 type V = Record<string, unknown>
 
@@ -38,59 +23,22 @@ export function samplingSummary(values: V): string {
   return 'all spectra'
 }
 
-/// The reports a run writes, by short name, in the order of card 4.
+/// The reports a run writes besides the tags table, by label, in the order
+/// of the products (setup/products.ts).
 export function reportsOn(values: V): string[] {
-  const on: string[] = []
-  if (isActive('digest_out', values)) on.push('digest')
-  if (isActive('label_out', values)) on.push('label')
-  if (isActive('glyco', values)) on.push('glyco')
-  if (isActive('recon_out', values)) on.push('recon')
-  if (isActive('massgap_out', values) && !inertBecause('massgap_out', values)) on.push('mass-gap')
-  return on
+  return PRODUCTS.filter((p) => p.param !== 'out' && !p.column && !p.follows && isOn(p, values as never)).map((p) => p.label)
 }
 
-/// The summary line of card @p id.
-export function cardSummary(id: Card['id'], values: V, ctx: { input: string; out: string; files: number }): string {
-  switch (id) {
-    case 'spectra': {
-      const what = ctx.files > 0 ? `${ctx.files} ${ctx.files === 1 ? 'file' : 'files'} in the batch` : ctx.input ? baseName(ctx.input) : 'no file yet'
-      return `${what} · ${samplingSummary(values)}`
-    }
-    case 'database': {
-      const species = isActive('species', values)
-        ? `Species on (${isActive('taxdb', values) ? baseName(String(values['taxdb'])) : 'bundled index'})`
-        : 'Species off'
-      const fasta = isActive('fasta', values) ? `FASTA ${baseName(String(values['fasta']))}` : 'no FASTA selected (optional)'
-      return `${species} · ${fasta}`
-    }
-    case 'tagging': {
-      const lens = Array.isArray(values['tag_lengths']) ? (values['tag_lengths'] as unknown[]).map((x) => String(x).trim()).filter(Boolean) : []
-      const len = lens.length ? `lengths ${lens.join(', ')}` : `length ${shown(values['tag_length'], 'tag_length')}`
-      const tol = `${shown(values['fragment_tolerance'], 'fragment_tolerance')} ${shown(values['fragment_tolerance_unit'], 'fragment_tolerance_unit')}`
-      return `${len} · extension ${shown(values['extension'], 'extension')} · ${tol} · max ${shown(values['max_tags'], 'max_tags')} tags`
-    }
-    case 'reports': {
-      const on = reportsOn(values)
-      // Mass gaps need reconciliation, which needs a database (GUI-DESIGN 1).
-      const massgap = on.includes('mass-gap') ? '' : isActive('fasta', values) || isActive('recon_fasta', values) ? '' : ' · mass-gap needs a FASTA'
-      return `${on.length ? on.join(', ') : 'tags only'}${massgap}`
-    }
-  }
-}
-
-/// The plan line of the footer: "1 file · species on · digest+label+glyco ·
-/// out: beside input".
-/// ctx.outDir: the batch's output folder (none: beside each input).
-export function planLine(values: V, ctx: { input: string; out: string; files: number; outDir?: string | null }): string {
-  const parts: string[] = []
-  parts.push(ctx.files > 0 ? `${ctx.files} ${ctx.files === 1 ? 'file' : 'files'}` : ctx.input ? '1 file' : 'no file')
-  parts.push(samplingSummary(values))
-  parts.push(isActive('species', values) ? 'species on' : 'species off')
-  const on = reportsOn(values)
-  parts.push(on.length ? on.join('+') : 'no reports')
-  if (ctx.files > 0) parts.push(ctx.outDir ? `out: ${ctx.outDir}` : 'out: beside each input')
-  else if (ctx.out) {
-    parts.push(ctx.input && dirName(ctx.input) === dirName(ctx.out) ? 'out: beside input' : `out: ${ctx.out}`)
-  }
+/// "Run QC on run01.mzML · 1 report · 10% of spectra"; a batch counts its
+/// files, and names its output folder when it has one.
+/// In Batch mode (@p ctx.batch) the queue is the input: "no files yet"
+/// until it holds one, never the single file.
+export function planLine(label: string, values: V, ctx: { input: string; files: number; outDir?: string | null; batch?: boolean }): string {
+  const batch = ctx.batch || ctx.files > 0
+  const what = ctx.files > 0 ? `${ctx.files} ${ctx.files === 1 ? 'file' : 'files'}` : batch ? 'no files yet' : ctx.input ? baseName(ctx.input) : 'no file yet'
+  const named = ctx.files > 0 || (!batch && !!ctx.input)
+  const n = reportsOn(values).length
+  const parts = [named ? `${label} on ${what}` : `${label} · ${what}`, n ? `${n} ${n === 1 ? 'report' : 'reports'}` : 'tags table only', samplingSummary(values)]
+  if (batch) parts.push(ctx.outDir ? `outputs in ${ctx.outDir}` : 'outputs beside each input')
   return parts.join(' · ')
 }

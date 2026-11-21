@@ -41,8 +41,13 @@ function colWidth(name: string): number {
   if (name === 'tag' || name === 'proforma') return 150
   return 90
 }
-// The system UI font at 13 px: an upper-case tag runs to about 9 px a character.
+// The system UI font at 13 px: an upper-case value runs to about 9 px a character.
 const CHAR_W = 9
+// Tags and ProForma are drawn in the bundled IBM Plex Mono at 13 px (.rt-cell.seq),
+// 0.6 em a character: their width is exact, W and M included.
+const SEQ_COLUMNS = new Set(['tag', 'proforma'])
+const SEQ_CHAR_W = 8
+const charW = (c: string): number => (SEQ_COLUMNS.has(c) ? SEQ_CHAR_W : CHAR_W)
 const CELL_PAD = 20
 const MIN_W = 48
 const MAX_AUTO_W = 480
@@ -57,6 +62,8 @@ const GLYPH_W = 16
 // out of an 840 px pane. Its cells are middle-truncated (fitMiddle), so the
 // scan number stays visible; dragging the edge widens it.
 const SPECTRUM_AUTO_W = 200
+// "Database hit" and "In database" / "Entrapment" whole.
+const HIT_MIN_W = 120
 
 // The tags file's column names in words, the optional ones (-proforma,
 // -res_conf, -usi_collection, -entrapment_fasta) included; any other column
@@ -71,20 +78,39 @@ const LABEL: Record<string, string> = {
   extended: 'Extended',
   gapped: 'Gapped',
   evalue: 'E-value',
-  min_conf: 'Min. conf.',
-  mean_conf: 'Mean conf.',
+  // Two scales, each named in its header: the step scores 0–1, the
+  // per-residue confidence (-res_conf) in percent.
+  min_conf: 'Min. conf. (0–1)',
+  mean_conf: 'Mean conf. (0–1)',
   fasta_hit: 'Database hit',
   proforma: 'ProForma',
-  res_conf: 'Residue conf.',
+  res_conf: 'Residue conf. (%)',
   usi: 'USI',
   q_db: 'Database q-value'
 }
 export const columnLabel = (c: string): string => LABEL[c] ?? c
 
+/// The columns' indices in the order the table shows them: the per-residue
+/// confidence (-res_conf, the headline of Export tags) right after the tag
+/// and its length, ahead of the flank masses, Extended and Gapped, so it is
+/// in view without scrolling; otherwise the file's order.
+export function displayOrder(columns: readonly string[]): number[] {
+  const idx = columns.map((_, j) => j)
+  const rc = columns.indexOf('res_conf')
+  if (rc < 0) return idx
+  const after = Math.max(columns.indexOf('length'), columns.indexOf('tag'))
+  if (after < 0 || after > rc) return idx
+  const rest = idx.filter((j) => j !== rc)
+  rest.splice(rest.indexOf(after) + 1, 0, rc)
+  return rest
+}
+
 // A fasta_hit value in the words of the Database hit filter; the raw value
-// stays the cell's name and tooltip.
-function hitWords(v: string): string {
-  if (v === '-' || v === '') return 'No match'
+// stays the cell's name and tooltip. '-' is a run without a database filter
+// (-fasta): with one, only matching tags are written (README), so '-' is a
+// check that never ran, not a failed one.
+export function hitWords(v: string): string {
+  if (v === '-' || v === '') return 'Not checked'
   if (v === 'efwd' || v === 'erev') return 'Entrapment'
   if (v === 'fwd' || v === 'rev') return 'In database'
   return v
@@ -96,9 +122,11 @@ export function autoWidths(columns: string[], rows: string[][]): Record<string, 
     let w = columnLabel(c).length * HEAD_CHAR_W + GLYPH_W + CELL_PAD
     for (const r of rows) {
       const v = r[j] ?? ''
-      w = Math.max(w, (c === 'fasta_hit' ? hitWords(v) : v).length * CHAR_W + CELL_PAD)
+      w = Math.max(w, (c === 'fasta_hit' ? hitWords(v) : v).length * charW(c) + CELL_PAD)
     }
-    out[c] = Math.round(Math.max(MIN_W, Math.min(c === 'spectrum' ? SPECTRUM_AUTO_W : MAX_AUTO_W, w)))
+    // The Database hit column is never narrower than its header and words.
+    const floor = c === 'fasta_hit' ? HIT_MIN_W : MIN_W
+    out[c] = Math.round(Math.max(floor, Math.min(c === 'spectrum' ? SPECTRUM_AUTO_W : MAX_AUTO_W, w)))
   })
   return out
 }
@@ -121,8 +149,8 @@ function growWidths(
 
 // Middle ellipsis: spectrum IDs differ at the end (`… scan=N`), so an
 // end-truncated cell hides exactly the part that tells rows apart.
-function fitMiddle(text: string, width: number): string {
-  const cap = Math.floor((width - CELL_PAD) / CHAR_W)
+function fitMiddle(text: string, width: number, cw = CHAR_W): string {
+  const cap = Math.floor((width - CELL_PAD) / cw)
   if (text.length <= cap || cap < 5) return text
   const keep = cap - 1
   const head = Math.floor(keep * 0.4)
@@ -154,7 +182,8 @@ function parseMaxEvalue(s: string): { value: number | null; invalid: boolean } {
 
 type FastaHitChoice = 'any' | 'only' | 'none' | 'entrapment'
 // The fasta_hit filter as a segmented control. In database: fwd/rev.
-// Entrapment: efwd/erev, only in the entrapment database. Not in database: '-' or efwd/erev (no -fasta hit).
+// Entrapment: efwd/erev, only in the entrapment database. No database hit:
+// '-' (Not checked: no -fasta) or efwd/erev (no hit in the target database).
 // The per-spectrum rule (browser.rs per_spectrum): every tag, or the best N
 // of each spectrum by E-value.
 const PER_SPECTRUM: [string, string][] = [
@@ -169,7 +198,7 @@ const HIT_CHOICES: [FastaHitChoice, string][] = [
   ['any', 'All'],
   ['only', 'In database'],
   ['entrapment', 'Entrapment'],
-  ['none', 'Not in database']
+  ['none', 'No database hit']
 ]
 
 // A column is numeric when every value of the first page is a number (or the
@@ -191,9 +220,29 @@ function numericColumns(columns: string[], rows: string[][]): Set<string> {
 
 // An E-value below 10^-3 as a × 10^n: `4.2e-08` is read wrong at a glance.
 // The exponent is drawn with <sup>; the raw value stays the cell's name.
+const SUP: Record<string, string> = { '-': '⁻', '0': '⁰', '1': '¹', '2': '²', '3': '³', '4': '⁴', '5': '⁵', '6': '⁶', '7': '⁷', '8': '⁸', '9': '⁹' }
+
+/// An E-value of 0.001 or more in 2 significant digits (3 from 100 on, so
+/// 123 stays 123), like the 2 of the scientific form below it.
+function plainEValue(v: number): string {
+  const a = Math.abs(v)
+  return String(Number(v.toPrecision(a >= 100 ? 3 : 2)))
+}
+
+/// An E-value as the Tags table shows it, as plain text (the report tables):
+/// below 0.001 as 3.2 × 10⁻⁵, else as written.
+export function evalueText(text: string): string {
+  const v = Number(text)
+  if (text.trim() === '' || !Number.isFinite(v) || v === 0) return text
+  if (Math.abs(v) >= 1e-3) return plainEValue(v)
+  const [m, e] = v.toExponential(1).split('e')
+  return `${m} × 10${String(Number(e)).replace(/./g, (c) => SUP[c] ?? c)}`
+}
+
 export function EValue({ text }: { text: string }): JSX.Element {
   const v = Number(text)
-  if (text.trim() === '' || !Number.isFinite(v) || v === 0 || Math.abs(v) >= 1e-3) return <>{text}</>
+  if (text.trim() === '' || !Number.isFinite(v) || v === 0) return <>{text}</>
+  if (Math.abs(v) >= 1e-3) return <>{plainEValue(v)}</>
   const [m, e] = v.toExponential(1).split('e')
   const exp = Number(e)
   return (
@@ -640,9 +689,17 @@ export default function ResultsTable({ path, source, rerunResConf, spectrum }: P
   }, [path, view, first, last])
 
   const columns = meta?.columns ?? head?.columns ?? []
-  const has = (c: string): boolean => columns.includes(c)
-  // The shown columns, as indices into each row.
-  const shown = columns.map((_, j) => j).filter((j) => !hidden.has(columns[j]))
+  // A run without a database filter writes '-' in every fasta_hit cell
+  // (with -fasta only matching tags are written, README): its head rows
+  // tell, and the column and its filter, which could only say Not checked
+  // or find 0 rows, are left out.
+  const noDb = ((): boolean => {
+    const j = columns.indexOf('fasta_hit')
+    return j >= 0 && !!head && head.rows.length > 0 && head.rows.every((r) => (r[j] ?? '-') === '-' || r[j] === '')
+  })()
+  const has = (c: string): boolean => columns.includes(c) && !(noDb && c === 'fasta_hit')
+  // The shown columns, as indices into each row, in display order.
+  const shown = displayOrder(columns).filter((j) => has(columns[j]) && !hidden.has(columns[j]))
   const width = (c: string): number => userW[c] ?? autoW?.[c] ?? colWidth(c)
   const grid = shown.map((j) => `${width(columns[j])}px`).join(' ')
   const totalW = shown.reduce((w, j) => w + width(columns[j]), 0)
@@ -849,7 +906,7 @@ export default function ResultsTable({ path, source, rerunResConf, spectrum }: P
     const row = activeRowCells()
     if (!row) return
     if (usiCol < 0) {
-      setCopyNote('This file has no usi column: run FASTag with -usi_collection to write one.')
+      setCopyNote('This file has no USI column: turn on USI column under Outputs and run again.')
       return
     }
     const usi = row[usiCol] ?? ''
@@ -967,8 +1024,17 @@ export default function ResultsTable({ path, source, rerunResConf, spectrum }: P
             const c = row[j] ?? ''
             const name = columns[j] ?? ''
             return (
-              <div className={`rt-cell${numeric.has(name) ? ' n' : ''}`} role="gridcell" key={j} title={c} aria-label={c}>
-                {name === 'evalue' ? <EValue text={c} /> : name === 'fasta_hit' ? hitWords(c) : fitMiddle(c, width(name))}
+              <div className={`rt-cell${numeric.has(name) ? ' n' : ''}${SEQ_COLUMNS.has(name) ? ' seq' : ''}`} role="gridcell" key={j} title={c} aria-label={c}>
+                {name === 'evalue' ? (
+                  <EValue text={c} />
+                ) : name === 'fasta_hit' ? (
+                  hitWords(c)
+                ) : name === 'spectrum' ? (
+                  // The scan number tells rows apart; the native ID is the tooltip.
+                  fitMiddle(spectrumHint(c) || c, width(name))
+                ) : (
+                  fitMiddle(c, width(name), charW(name))
+                )}
               </div>
             )
           })
@@ -1018,6 +1084,10 @@ export default function ResultsTable({ path, source, rerunResConf, spectrum }: P
         >
           Columns…
         </button>
+        <span className="rt-group" role="group" aria-label="Active row">
+        <span className="rt-group-label" aria-hidden="true">
+          Row
+        </span>
         <button
           type="button"
           className="secondary"
@@ -1031,7 +1101,7 @@ export default function ResultsTable({ path, source, rerunResConf, spectrum }: P
           type="button"
           className="secondary"
           disabled={currentPos() == null}
-          title={usiCol >= 0 ? "Copy the active row's USI (⇧⌘C)" : 'This file has no usi column: run FASTag with -usi_collection to write one'}
+          title={usiCol >= 0 ? "Copy the active row's USI (⇧⌘C)" : 'This file has no USI column: turn on USI column under Outputs and run again'}
           onClick={copyUsi}
         >
           Copy USI
@@ -1053,13 +1123,15 @@ export default function ResultsTable({ path, source, rerunResConf, spectrum }: P
             {spectrum.state === 'no' ? SPECTRUM_NEEDS : 'Open in Spectrum'}
           </button>
         )}
-        <span className="rt-exp">
+        </span>
+        {/* One export control: what to write, and the button that writes it. */}
+        <span className="rt-exp rt-group" role="group" aria-label="Export">
           <label htmlFor={`${id}-fmt`}>Export as</label>
           <select
             id={`${id}-fmt`}
             value={kind}
             disabled={!meta}
-            title={readsOk ? undefined : 'Stitch and ALPS reads need the res_conf column: run FASTag with -res_conf'}
+            title={readsOk ? undefined : 'Stitch and ALPS reads need the Residue conf. (%) column: run again with Per-residue confidence on'}
             onChange={(e) => setExportKind(e.target.value as 'table' | DenovoFormat)}
           >
             <option value="table">Table (TSV or CSV)</option>
@@ -1070,21 +1142,21 @@ export default function ResultsTable({ path, source, rerunResConf, spectrum }: P
               ALPS reads (CSV)
             </option>
           </select>
+          <button ref={exportBtnRef} type="button" className="secondary" disabled={!canExport} onClick={startExport}>
+            {kind === 'table' ? 'Export shown rows…' : 'Export reads…'}
+          </button>
         </span>
         {meta && !readsOk && rerunResConf && (
           <button
             type="button"
             className="secondary"
             disabled={rerunResConf.disabled}
-            title="Stitch and ALPS reads need the res_conf column: runs this input again with -res_conf on"
+            title="Runs this input again with Per-residue confidence on: it adds the Residue conf. (%) column, one confidence per residue, which Stitch and ALPS reads need. Min. and Mean conf. are step scores of the whole tag."
             onClick={rerunResConf.run}
           >
-            Re-run with per-residue confidence
+            Re-run to add Residue conf. (%)
           </button>
         )}
-        <button ref={exportBtnRef} type="button" className="secondary" disabled={!canExport} onClick={startExport}>
-          {kind === 'table' ? 'Export shown rows…' : 'Export reads…'}
-        </button>
         <span className="rt-copied" role="status" aria-live="polite">
           {copyNote}
         </span>
@@ -1136,7 +1208,7 @@ export default function ResultsTable({ path, source, rerunResConf, spectrum }: P
       {colsOpen && meta && (
         <fieldset className="rt-cols" id={`${id}-cols`}>
           <legend>Columns shown</legend>
-          {columns.map((c) => (
+          {columns.filter(has).map((c) => (
             <label key={c}>
               <input
                 type="checkbox"

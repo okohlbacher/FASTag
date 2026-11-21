@@ -347,10 +347,13 @@ describe('SpeciesPanel: edge values from species.rs', () => {
     expect(screen.queryByText('1.000')).toBeNull()
     expect(screen.queryByText(/NaN/)).toBeNull()
   })
-  it('fmtQ: 0 -> <1e-300, tiny -> exponential', () => {
-    render(<SpeciesPanel report={{ path: 'x', taxa: [taxon({ q: 0 }), taxon({ taxid: 2, q: 1.59964e-29 })] }} enabled tooShort={null} contributed={null} totalMs2={null} />)
+  it('q: 0 -> <1e-300, tiny -> × 10 with a superscript exponent, as the other tables', () => {
+    const { container } = render(<SpeciesPanel report={{ path: 'x', taxa: [taxon({ q: 0 }), taxon({ taxid: 2, q: 1.59964e-29 })] }} enabled tooShort={null} contributed={null} totalMs2={null} />)
     expect(screen.getByText('<1e-300')).toBeDefined()
-    expect(screen.getByText('1.6e-29')).toBeDefined()
+    const cells = [...container.querySelectorAll('table.taxa tbody td.num.dim')].map((c) => c.textContent)
+    expect(cells).toContain('1.6 × 10−29')
+    expect(container.querySelector('table.taxa tbody sup')!.textContent).toBe('−29')
+    expect(container.textContent).not.toMatch(/1\.6e-29/)
   })
 })
 

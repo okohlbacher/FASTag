@@ -2,14 +2,14 @@ import { test, expect, openApp } from './fixtures'
 
 test('parameter search contains focus, scrolls keyboard results and returns focus when closed', async ({ page }) => {
   await openApp(page)
-  const trigger = page.getByRole('button', { name: /Search…/ })
+  const trigger = page.getByRole('button', { name: /Search settings…/ })
   await trigger.click()
   const dialog = page.getByRole('dialog', { name: 'Search parameters' })
   const input = dialog.getByRole('combobox')
   await expect(input).toBeFocused()
   await expect(dialog).toHaveJSProperty('open', true)
   // Even a script cannot move focus into the inert form behind the modal.
-  await page.locator('#out').evaluate((el) => (el as HTMLInputElement).focus())
+  await page.locator('#p-tag_length').evaluate((el) => (el as HTMLInputElement).focus())
   await expect(input).toBeFocused()
   const close = dialog.getByRole('button', { name: 'Close parameter search' })
   // Safari's default tab order may skip buttons; either way Tab cannot

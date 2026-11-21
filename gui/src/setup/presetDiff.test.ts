@@ -64,18 +64,23 @@ describe('presets as diffs', () => {
     expect(again['recon_out']).toBe('/d/B.recon.tsv')
   })
 
-  it('every built-in task is a diff over the defaults that names only real parameters', () => {
+  it('every built-in workflow is a diff over the defaults that names only real parameters', () => {
     for (const t of TASKS) for (const n of Object.keys(t.values)) expect(RENDERED).toContain(n)
-    expect(TASKS.map((t) => t.label)).toEqual(['Export tags', 'Open results / inspect spectra', 'Characterize a run', 'Batch QC vs SDRF'])
+    expect(TASKS.map((t) => t.label)).toEqual(['Export tags', 'Run QC', 'Mass-shift survey', 'Species', 'Database reduction', 'Identifiability triage', 'Characterize a run'])
     const c = baseValues('builtin:characterize')
-    expect([c['species'], c['extension'], c['glyco'], c['subsample_fraction']]).toEqual([true, '2', true, '0.1'])
+    expect([c['species'], c['extension'], c['glyco'], c['subsample_fraction'], c['threads']]).toEqual([true, '2', true, '0.1', '0'])
     expect(Boolean(c['digest_out']) && Boolean(c['label_out'])).toBe(true)
+    // Off by default: the shipped proteome needs tags of 8+ residues.
+    expect(c['alkylation_out']).toBe('')
     expect(baseValues('builtin:export-tags')['res_conf']).toBe(true)
     expect(baseValues('defaults')).toEqual(defaults)
     expect(originText(LANDING)).toBe('Export tags')
-    expect(baseValues(baseOf(LANDING))).toEqual({ ...defaults, res_conf: true })
+    expect(baseValues(baseOf(LANDING))).toEqual({ ...defaults, res_conf: true, threads: '0', extension: '3' })
     expect(baseOf({ kind: 'preset', name: 'x', base: 'builtin:export-tags' })).toBe('builtin:export-tags')
     expect(taskOf({ kind: 'preset', name: 'x', base: 'builtin:export-tags' })?.id).toBe('export-tags')
+    // The ids of earlier versions: Batch QC is Characterize in Batch mode.
+    expect(normalizePreset({ v: 2, base: 'builtin:batch-qc', diff: {} })).toEqual({ v: 2, base: 'builtin:characterize', diff: {}, batch: true })
+    expect(normalizePreset({ v: 2, base: 'builtin:open-results', diff: {} })?.base).toBe('builtin:export-tags')
   })
 })
 

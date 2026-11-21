@@ -40,7 +40,7 @@ test('Copy command in History equals the argv the run was started with', async (
   await recordClipboard(page)
   await openApp(page)
   await page.getByRole('button', { name: 'Choose file…' }).click()
-  await page.getByRole('button', { name: 'Run on run01.mzML' }).click()
+  await page.getByRole('button', { name: 'Run', exact: true }).click()
   await expect(page.locator('.last-run')).toContainText('run01.mzML')
   await goTo(page, 'History')
   const row = historyRow(page, 'run01.mzML')
@@ -59,7 +59,8 @@ test('Copy command in History equals the argv the run was started with', async (
 test('a failed batch job: the failure banner and History copy the same command line', async ({ page }) => {
   await recordClipboard(page)
   await openApp(page, 'batch-fail')
-  await page.getByRole('button', { name: 'Add files for a batch…' }).click()
+  await page.getByRole('radio', { name: 'Batch' }).check()
+  await page.getByRole('button', { name: 'Add files…' }).click()
   await page.getByRole('button', { name: 'Run 3 remaining files' }).click()
   const alert = page.getByRole('alert')
   await expect(alert).toContainText('1 of 3 batch jobs failed')
@@ -83,7 +84,7 @@ test('a failed batch job: the failure banner and History copy the same command l
 test('a cancelled run is marked incomplete in History and never opens as if complete', async ({ page }) => {
   await openApp(page, 'slow')
   await page.getByRole('button', { name: 'Choose file…' }).click()
-  await page.getByRole('button', { name: 'Run on run01.mzML' }).click()
+  await page.getByRole('button', { name: 'Run', exact: true }).click()
   // P2b: Cancel is the Results running state's (GUI-DESIGN 3 S2; was the
   // pill's, safety.spec). Click it once the run is under way.
   const running = page.getByRole('region', { name: 'Running' })
@@ -105,21 +106,21 @@ test('a cancelled run is marked incomplete in History and never opens as if comp
 test('Settings into form puts a recorded run back into Setup, and Undo takes it out again', async ({ page }) => {
   await openApp(page)
   await page.getByRole('button', { name: 'Choose file…' }).click()
-  await page.getByRole('button', { name: 'Run on run01.mzML' }).click()
+  await page.getByRole('button', { name: 'Run', exact: true }).click()
   await expect(page.locator('.last-run')).toContainText('run01.mzML')
   // The form has moved on since that run.
   await goTo(page, 'Setup')
-  await page.locator('#out').fill('/data/elsewhere.tags.tsv')
+  await page.locator('#out-name').fill('elsewhere')
   await goTo(page, 'History')
   await historyRow(page, 'run01.mzML').getByRole('button', { name: 'Settings into form' }).click()
   const note = page.getByRole('status', { name: 'History' })
   await expect(note).toContainText('The settings of run01.mzML are in the form.')
   await note.getByRole('button', { name: 'Go to Setup' }).click()
-  await expect(page.locator('#out')).toHaveValue('/data/run01.tags.tsv')
+  await expect(page.locator('#out-name')).toHaveValue('run01')
   await goTo(page, 'History')
   await note.getByRole('button', { name: 'Undo' }).click()
   await goTo(page, 'Setup')
-  await expect(page.locator('#out')).toHaveValue('/data/elsewhere.tags.tsv')
+  await expect(page.locator('#out-name')).toHaveValue('elsewhere')
 })
 
 // Review of PR h (P0a): the record that alone marks a left-over tags file as
@@ -150,11 +151,11 @@ test('Delete record asks first, and keeps the record that marks a left-over tags
 test('Re-run records the same command line; Delete record keeps focus in the list', async ({ page }) => {
   await openApp(page)
   await page.getByRole('button', { name: 'Choose file…' }).click()
-  await page.getByRole('button', { name: 'Run on run01.mzML' }).click()
+  await page.getByRole('button', { name: 'Run', exact: true }).click()
   await expect(page.locator('.last-run')).toContainText('run01.mzML')
   // The form moves on; the Re-run does not use it.
   await goTo(page, 'Setup')
-  await page.locator('#out').fill('/data/elsewhere.tags.tsv')
+  await page.locator('#out-name').fill('elsewhere')
   await goTo(page, 'History')
   await historyRow(page, 'run01.mzML').getByRole('button', { name: 'Re-run' }).click()
   await expect(page.locator('nav[aria-label="Views"] [aria-current="page"]')).toHaveAttribute('data-view', 'results')

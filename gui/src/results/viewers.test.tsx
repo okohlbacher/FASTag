@@ -53,16 +53,22 @@ describe('MassGapChart', () => {
     expect(container.querySelectorAll('.mg-grid line').length).toBeGreaterThanOrEqual(3)
     const legend = screen.getByRole('list', { name: 'Legend' })
     expect(legend.textContent).toMatch(/Spectra per gap peak/)
-    expect(legend.textContent).toMatch(/Unimod delta at a gap peak \(\d+\)/)
+    expect(legend.textContent).toMatch(/UniMod delta at a gap peak \(\d+\)/)
   })
 
-  it('marks the bundled Unimod deltas, and hides them on request', async () => {
+  // Round 6, 27: only the marks near a gap peak by default; every bundled
+  // delta in range on request.
+  it('marks the UniMod deltas near gap peaks, and all of them on request', async () => {
     const { container } = render(<MassGapChart bins={deltaBins()} window={0.02} source="d" />)
-    const marks = container.querySelectorAll('.mg-mark')
-    expect(marks.length).toBeGreaterThan(0)
-    expect([...marks].map((m) => m.querySelector('title')?.textContent)).toContain('Oxidation (M) +15.9949 Da')
-    await click(screen.getByRole('checkbox', { name: 'Unimod marks' }))
-    expect(container.querySelectorAll('.mg-mark').length).toBe(0)
+    const near = container.querySelectorAll('.mg-mark')
+    expect(near.length).toBeGreaterThan(0)
+    expect([...near].every((m) => m.classList.contains('hit'))).toBe(true)
+    expect(screen.getByRole('list', { name: 'Legend' }).textContent).not.toMatch(/Other UniMod delta/)
+    await click(screen.getByRole('checkbox', { name: 'All UniMod marks' }))
+    const all = container.querySelectorAll('.mg-mark')
+    expect(all.length).toBeGreaterThan(near.length)
+    expect([...all].map((m) => m.querySelector('title')?.textContent)).toContain('Oxidation (M) +15.9949 Da')
+    expect(screen.getByRole('list', { name: 'Legend' }).textContent).toMatch(/Other UniMod delta \(\d+\)/)
   })
 
   it('labels the peak the CLI explains, with its explanation', () => {
@@ -90,7 +96,7 @@ describe('MassGapChart', () => {
 
   it('has a table view with every peak, the mark within the window and the CLI peak', async () => {
     render(<MassGapChart bins={deltaBins()} peaks={gapPeaksOf(human())} window={0.02} source="d" />)
-    await click(screen.getByRole('button', { name: 'Table' }))
+    await click(screen.getByRole('button', { name: 'Bins' }))
     const grid = screen.getByRole('grid', { name: 'Gap peaks' })
     expect(grid.getAttribute('aria-rowcount')).toBe('274')
     // Sorted by spectra, descending: the zero bin first.
@@ -128,6 +134,12 @@ describe('DataTable', () => {
     expect(sortIds([0, 1, 2, 3], cols[1], false)).toEqual([2, 3, 0, 1])
     expect(sortIds([0, 1, 2, 3], cols[1], true)).toEqual([0, 3, 2, 1])
   })
+  it('sorts blank numeric cells last, not as 0', () => {
+    const text = ['2', '', '-1', ' ']
+    const c: Column = { id: 't', label: 'T', num: true, text: (i) => text[i] }
+    expect(sortIds([0, 1, 2, 3], c, false)).toEqual([2, 0, 1, 3])
+    expect(sortIds([0, 1, 2, 3], c, true)).toEqual([0, 2, 1, 3])
+  })
 
   it('moves the active row with the keyboard and sorts from the header', async () => {
     const ids = Uint32Array.from({ length: 250 }, (_, i) => i)
@@ -154,6 +166,22 @@ describe('DataTable', () => {
     await click(screen.getByRole('button', { name: /^Row/ }))
     expect(screen.getByRole('columnheader').getAttribute('aria-sort')).toBe('descending')
     expect(sel()).toBe('r249')
+  })
+})
+
+describe('DataTable: Enter on a column heading (round 4, 23)', () => {
+  it('sorts by the heading and does not open the active row', async () => {
+    const onOpen = vi.fn()
+    const ids = Uint32Array.from({ length: 3 }, (_, i) => i)
+    const many: Column[] = [{ id: 'i', label: 'Row', num: true, text: (i) => `r${i}`, key: (i) => i }]
+    render(<DataTable label="Rows" columns={many} ids={ids} total={3} onOpen={onOpen} />)
+    const head = screen.getByRole('button', { name: /^Row/ })
+    // A real keyboard: Enter goes down to the heading's button, then
+    // bubbles to the grid; the button's own click sorts.
+    await act(async () => void fireEvent.keyDown(head, { key: 'Enter' }))
+    expect(onOpen).not.toHaveBeenCalled()
+    await act(async () => void fireEvent.keyDown(screen.getByRole('grid', { name: 'Rows' }), { key: 'Enter' }))
+    expect(onOpen).toHaveBeenCalledWith(0)
   })
 })
 
@@ -209,6 +237,7 @@ describe('DataTable: no re-sort and no page scroll on a move (review fixes)', ()
     try {
       render(<ReconView massgap={human()} tables={{ recon: P.recon, delta: P.delta }} onOpen={vi.fn()} />)
       await flush()
+      await click(screen.getByRole('button', { name: 'Placements' }))
       const grid = screen.getByRole('grid', { name: 'Placements' })
       const wrap = grid.closest('.dt-wrap') as HTMLElement
       expect(scroll).not.toHaveBeenCalled()
@@ -236,12 +265,19 @@ describe('ReconView', () => {
     render(<ReconView massgap={human()} tables={{ recon: P.recon, delta: P.delta }} onOpen={vi.fn()} />)
     await flush()
     const stat = (l: string): string | null | undefined => screen.getByText(l, { selector: 'dt' }).nextElementSibling?.textContent
+    // Round 9, 12: the spectra with a gap, and the gap peaks of 0.5 Da or
+    // more as the Overview counts shifts (3 of the 273 bins sit near 0).
     expect(stat('Placed spectra')).toBe('475')
+    // Round 10 minor: the spectra away from 0 Da (awk over the hist rows).
+    expect(stat('Shifted (≥ 0.5 Da)')).toBe('334')
     expect(stat('Placements')).toBe('4,706')
     expect(stat('Spectra with a placement')).toBe('482')
-    expect(stat('Gap peaks')).toBe('273')
+    expect(stat('Gap peaks (≥ 0.5 Da)')).toBe('270')
     expect(screen.queryByRole('status')).toBeNull() // 475 >= LOW_PLACED: no warning
     expect(screen.getByRole('group', { name: /^Mass-gap chart/ })).toBeTruthy()
+    // Round 11: the mass-shift table leads; the placements are one click away.
+    expect(screen.getByRole('grid', { name: 'Mass-shift table' }).getAttribute('aria-rowcount')).toBe('274')
+    await click(screen.getByRole('button', { name: 'Placements' }))
     const grid = screen.getByRole('grid', { name: 'Placements' })
     expect(grid.getAttribute('aria-rowcount')).toBe('4707')
     await click(screen.getByRole('checkbox', { name: /One flank off/ }))
@@ -254,14 +290,14 @@ describe('ReconView', () => {
     await act(async () => void fireEvent.change(screen.getByRole('searchbox', { name: 'Contains' }), { target: { value: 'UBB_HUMAN' } }))
     expect(screen.getByText(/^3 of 4,706 rows/)).toBeTruthy()
     // The shared table: the gap peaks.
-    await click(screen.getByRole('button', { name: 'Gap peaks' }))
-    expect(screen.getByRole('grid', { name: 'Gap peaks' }).getAttribute('aria-rowcount')).toBe('274')
+    await click(screen.getByRole('button', { name: 'Mass-shift table' }))
+    expect(screen.getByRole('grid', { name: 'Mass-shift table' }).getAttribute('aria-rowcount')).toBe('274')
   })
 
   it('warns when too few spectra are placed: 0 (ext2) and 8 (E. coli)', async () => {
     installMockBridge()
     const { unmount } = render(<ReconView massgap={parseReport(ext2Massgap, '/r/e2.massgap.tsv')} tables={{}} onOpen={vi.fn()} />)
-    expect(screen.getByRole('status').textContent).toMatch(/No spectrum is placed with a mass gap\..*too few for any conclusion/)
+    expect(screen.getByRole('status').textContent).toMatch(/No spectrum is placed on the database\..*too few for any conclusion/)
     unmount()
     render(<ReconView massgap={parseReport(ecoliMassgap, '/r/e.massgap.tsv')} tables={{}} onOpen={vi.fn()} />)
     expect(screen.getByRole('status').textContent).toMatch(new RegExp(`Only 8 spectra are placed.*asks for ${LOW_PLACED}`))
@@ -287,7 +323,7 @@ describe('ReconView', () => {
     render(<ReconView massgap={null} tables={{ recon: P.recon, delta: P.delta }} onOpen={vi.fn()} />)
     await flush()
     expect(screen.getByRole('alert').textContent).toMatch(/Cannot read \/r\/run\.recon\.tsv: .*idXML/)
-    expect(screen.getByRole('grid', { name: 'Gap peaks' })).toBeTruthy()
+    expect(screen.getByRole('grid', { name: 'Mass-shift table' })).toBeTruthy()
   })
 
   it('empty: offers the FASTA and the run, and opening a report', async () => {
@@ -295,11 +331,13 @@ describe('ReconView', () => {
     const run = vi.fn()
     const onOpen = vi.fn()
     const { rerender } = render(<ReconView massgap={null} tables={{}} action={{ label: 'Choose a FASTA and run again', run, disabled: false }} onOpen={onOpen} />)
-    expect(screen.getByRole('heading', { name: 'No mass gaps yet' })).toBeTruthy()
-    expect(screen.getByText(/choose a FASTA and write these reports/)).toBeTruthy()
+    expect(screen.getByRole('heading', { name: 'No mass shifts yet' })).toBeTruthy()
+    // Products in words, never a flag.
+    expect(screen.getByText(/choose a FASTA and write the Tag placements and the Mass-shift table \(the Mass-shift survey workflow does\); add the Mass-gap report/)).toBeTruthy()
+    expect(document.querySelector('code.cli')).toBeNull()
     await click(screen.getByRole('button', { name: 'Choose a FASTA and run again' }))
     expect(run).toHaveBeenCalledTimes(1)
-    await click(screen.getByRole('button', { name: 'Open a recon, delta or mass-gap report…' }))
+    await click(screen.getByRole('button', { name: 'Open a placements, mass-shift or mass-gap report…' }))
     expect(onOpen).toHaveBeenCalledTimes(1)
     rerender(<ReconView massgap={null} tables={{}} action={{ label: 'Choose a FASTA and run again', run, disabled: true }} onOpen={onOpen} />)
     expect(screen.getByRole('button', { name: 'Choose a FASTA and run again' }).hasAttribute('disabled')).toBe(true)
@@ -335,6 +373,37 @@ describe('ReconView', () => {
     expect(reconExtend({ extension: '2' })).toBeNull()
   })
 
+  // Round 10, 16: the extension follows the seed and an explicit shortest placed tag.
+  it('reconExtend: the extension the seed needs to reach recon_min_length; a longer seed past 12', () => {
+    // Seed 3, shortest placed 10: extension 4 (3 + 2 × 4 = 11), not 3 (9).
+    expect(reconExtend({ fasta: '/db/h.fasta', extension: '2', recon_min_length: '10' })).toEqual({ kind: 'enable', label: 'Run again with extension 4', values: { extension: '4' } })
+    // Extension 3 is still too short for 10: offered again.
+    expect(reconExtend({ fasta: '/db/h.fasta', extension: '3', recon_min_length: '10' })?.values).toEqual({ extension: '4' })
+    // The longest of several seeds counts: 5 + 2 × 3 reaches 10.
+    expect(reconExtend({ fasta: '/db/h.fasta', extension: '2', tag_lengths: ['3', '5'], recon_min_length: '10' })?.values).toEqual({ extension: '3' })
+    expect(reconExtend({ fasta: '/db/h.fasta', extension: '3', tag_lengths: ['3', '5'], recon_min_length: '10' })).toBeNull()
+    // Past 12 the seed grows instead.
+    expect(reconExtend({ fasta: '/db/h.fasta', extension: '2', tag_length: '3', recon_min_length: '30' })).toEqual({
+      kind: 'enable',
+      label: 'Run again with seed length 6 and extension 12',
+      values: { tag_length: '6', extension: '12' }
+    })
+    expect(reconRerun({ recon_fasta: '/db/h.fasta', recon_min_length: '10' }).values).toMatchObject({ extension: '4' })
+  })
+
+  // Round 10 minor: with -fasta the CLI checks the filter's floor with every seed.
+  it('reconExtend: with -fasta the shortest seed must reach the filter floor too', () => {
+    // Seeds 3 and 6, filter floor 12: 6 + 2 × 3 reaches the recon 8, but 3 needs 5 (3 + 10 = 13).
+    expect(reconExtend({ fasta: '/db/h.fasta', extension: '2', tag_lengths: ['3', '6'], min_filter_length: '12' })?.values).toEqual({ extension: '5' })
+    // Derived floor (not set): 8, so seed 3 needs 3.
+    expect(reconExtend({ fasta: '/db/h.fasta', extension: '2', tag_lengths: ['3', '6'] })?.values).toEqual({ extension: '3' })
+    // recon_fasta alone has no tag filter: the longest seed decides.
+    expect(reconExtend({ recon_fasta: '/db/h.fasta', extension: '1', tag_lengths: ['3', '6'], min_filter_length: '12', recon_min_length: '14' })?.values).toEqual({ extension: '4' })
+    expect(reconExtend({ fasta: '/db/h.fasta', extension: '1', tag_lengths: ['3', '6'], min_filter_length: '12', recon_min_length: '14' })?.values).toEqual({ extension: '5' })
+    // Past 12 the seed grows to reach the larger of both floors.
+    expect(reconExtend({ fasta: '/db/h.fasta', tag_length: '3', min_filter_length: '30' })?.values).toEqual({ tag_length: '6', extension: '12' })
+  })
+
   // Review fix: the 0-placed case (ext2) has a way forward in the banner.
   it('the low-placed banner offers the run with extension 3', async () => {
     installMockBridge()
@@ -361,7 +430,7 @@ describe('ReconView', () => {
     await flush()
     expect(mock.reportCalls).toContain('/e/run.massgap.tsv')
     expect(document.querySelector('figcaption')?.textContent).not.toMatch(/assumed/)
-    await click(screen.getAllByRole('button', { name: 'Table' })[0])
+    await click(screen.getAllByRole('button', { name: 'Bins' })[0])
     const grid = screen.getAllByRole('grid', { name: 'Gap peaks' })[0]
     // 15.80 is 0.19 Da off Oxidation: within the run's 0.5 Da, not 0.02.
     expect(within(grid).getAllByRole('row')[1].textContent).toMatch(/^15\.800030Oxidation \(M\)/)
@@ -404,7 +473,7 @@ describe('GlycoTable', () => {
     installMockBridge()
     render(<GlycoTable path="/r/none.glyco.tsv" />)
     await flush()
-    expect(screen.getByText(/The run named \/r\/none\.glyco\.tsv, but the file does not exist/)).toBeTruthy()
+    expect(screen.getByText(/none\.glyco\.tsv is not on disk/)).toBeTruthy()
   })
 })
 
@@ -437,23 +506,25 @@ function Harness(p: Partial<ResultTabsProps>): JSX.Element {
 }
 
 describe('result tabs: the P4c viewers', () => {
-  it('offers Mass gaps & recon with a mass-gap report and Glyco with a glyco table, last in the arrow order', async () => {
+  it('offers Mass shifts with a mass-gap report and Glyco with a glyco table, last in the arrow order', async () => {
     const mock = installMockBridge()
     mock.reportFiles = { [P.glyco]: humanGlyco }
     render(<Harness reports={{ list: [human()], errors: [], tables: { glyco: P.glyco } }} />)
-    expect(screen.getAllByRole('tab').map((t) => t.textContent)).toEqual(['Tags', 'Species', 'Digest1', 'Mass gaps & recon', 'Glyco'])
+    // No tags table: no Tags tab.
+    expect(screen.getAllByRole('tab').map((t) => t.textContent)).toEqual(['Mass shifts', 'Digest', 'Glyco'])
     await act(async () => void fireEvent.keyDown(screen.getByRole('tablist'), { key: 'End' }))
     await flush()
     expect(screen.getByRole('tab', { name: 'Glyco' }).getAttribute('aria-selected')).toBe('true')
-    expect(screen.getByRole('heading', { name: 'Glyco: oxonium ions per spectrum' })).toBeTruthy()
+    expect(screen.getByRole('heading', { name: 'Glycopeptides: oxonium ions per spectrum' })).toBeTruthy()
     await act(async () => void fireEvent.keyDown(screen.getByRole('tablist'), { key: 'ArrowLeft' }))
-    expect(screen.getByRole('heading', { name: 'Mass gaps and reconciliation' })).toBeTruthy()
+    await act(async () => void fireEvent.keyDown(screen.getByRole('tablist'), { key: 'ArrowLeft' }))
+    expect(screen.getByRole('heading', { name: 'Mass shifts' })).toBeTruthy()
   })
 
   it('no viewer tab without a run, a report or a table', () => {
     installMockBridge()
     render(<Harness />)
-    expect(screen.getAllByRole('tab').map((t) => t.textContent)).toEqual(['Tags', 'Species', 'Digest'])
+    expect(screen.getAllByRole('tab').map((t) => t.textContent)).toEqual(['Tags'])
   })
 
   it('a recon tab whose content went away shows the Tags', () => {

@@ -14,7 +14,7 @@ for (const [w, h] of [
       await page.emulateMedia({ colorScheme: scheme })
       await openApp(page, 'default', 'defaults')
       await page.getByRole('button', { name: 'Choose file…' }).click()
-      await page.getByRole('button', { name: 'Run on run01.mzML' }).click()
+      await page.getByRole('button', { name: 'Run', exact: true }).click()
       await expect(page.getByText('Showing 2,028 of 2,028')).toBeVisible()
       look[scheme] = {
         bg: await page.evaluate(() => getComputedStyle(document.body).backgroundColor),

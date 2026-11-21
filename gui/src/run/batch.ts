@@ -3,7 +3,8 @@
 
 import type { ResolvedOutputs } from '../types'
 import type { JobStatus } from '../icons'
-import { defaultOut, stripExt } from '../app/paths'
+import { defaultOut } from '../app/paths'
+import { baseName } from '../digestReport'
 import { duration } from '../app/format'
 import type { LogStore } from './logStore'
 
@@ -39,27 +40,48 @@ export function jobOut(input: string, outDir: string | null, n = 0): string {
   const cut = Math.max(input.lastIndexOf('/'), input.lastIndexOf('\\')) + 1
   const name = input.slice(cut)
   const dir = outDir ? folderPath(outDir) : input.slice(0, cut)
-  if (n === 0) return outDir ? `${dir}${stripExt(name)}.tags.tsv` : defaultOut(input)
+  if (n === 0) return outDir ? `${dir}${baseName(defaultOut(name))}` : defaultOut(input)
   return n === 1 ? `${dir}${name}.tags.tsv` : `${dir}${name}.${n}.tags.tsv`
 }
 
-// The first of @p input's names (jobOut) that no other job uses.
+// A path as a case-insensitive volume compares it (the default macOS and
+// Windows volumes): sample.tags.tsv and SAMPLE.tags.tsv are one file there.
+export const pathKey = (p: string): string => p.replace(/\\/g, '/').toLowerCase()
+
+// The first of @p input's names (jobOut) that no other job uses, compared
+// case-insensitively (@p used holds pathKey()s).
 function freeOut(input: string, outDir: string | null, used: Set<string>): string {
   // sample.mzML and sample.mzpeak both map to sample.tags.tsv — on a
   // collision keep the full input name, then number, so outputs stay
   // distinct even when the fallback collides too.
   let out = jobOut(input, outDir)
-  if (used.has(out)) out = jobOut(input, outDir, 1)
-  for (let n = 2; used.has(out); n++) out = jobOut(input, outDir, n)
-  used.add(out)
+  if (used.has(pathKey(out))) out = jobOut(input, outDir, 1)
+  for (let n = 2; used.has(pathKey(out)); n++) out = jobOut(input, outDir, n)
+  used.add(pathKey(out))
   return out
+}
+
+/// The outputs two or more jobs of a batch would write (compared as
+/// pathKey does), from each job's resolved outputs: the later job would
+/// overwrite the earlier one's results while both show Done.
+export function sharedOutputs(outputs: string[][]): string[] {
+  const first = new Map<string, number>()
+  const shared = new Set<string>()
+  outputs.forEach((os, i) => {
+    for (const o of new Set(os.map(pathKey))) {
+      const j = first.get(o)
+      if (j === undefined) first.set(o, i)
+      else if (j !== i) shared.add(o)
+    }
+  })
+  return outputs.flat().filter((o, k, all) => shared.has(pathKey(o)) && all.findIndex((x) => pathKey(x) === pathKey(o)) === k)
 }
 
 // The queue with @p files added: an input already queued is skipped. Their
 // outputs go to @p outDir when the batch has an output folder.
 export function addJobs(js: BatchJob[], files: string[], outDir: string | null = null): BatchJob[] {
   const have = new Set(js.map((j) => j.input))
-  const used = new Set(js.map((j) => j.out))
+  const used = new Set(js.map((j) => pathKey(j.out)))
   const add: BatchJob[] = []
   for (const f of files) {
     if (have.has(f)) continue
@@ -74,7 +96,7 @@ export function addJobs(js: BatchJob[], files: string[], outDir: string | null =
 // other job is named again, in queue order.
 export function renameJobs(js: BatchJob[], outDir: string | null): BatchJob[] {
   const keep = (j: BatchJob): boolean => j.status === 'done' || j.status === 'running'
-  const used = new Set(js.filter(keep).map((j) => j.out))
+  const used = new Set(js.filter(keep).map((j) => pathKey(j.out)))
   return js.map((j) => (keep(j) ? j : { ...j, out: freeOut(j.input, outDir, used) }))
 }
 

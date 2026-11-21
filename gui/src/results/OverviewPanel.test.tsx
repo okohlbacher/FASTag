@@ -29,7 +29,7 @@ describe('Overview panel', () => {
     expect(within(tile('Protease')).getByText('Trypsin')).toBeDefined()
     expect(within(tile('Top genus')).getByText('Homo')).toBeDefined()
     expect(within(tile('Label')).getByText('none (label-free)')).toBeDefined()
-    expect(within(tile('Alkylation')).getByText('not assessed (needs a FASTA)')).toBeDefined()
+    expect(within(tile('Alkylation')).getByText('not assessed')).toBeDefined()
     for (const t of screen.getAllByRole('region').filter((r) => r.classList.contains('tile')))
       expect(t.querySelector('.tile-note')?.textContent?.trim(), t.getAttribute('aria-label') ?? '').not.toBe('')
   })
@@ -37,19 +37,37 @@ describe('Overview panel', () => {
   it('lists the suggested settings with their evidence, the C+57.021 line a default', () => {
     render(<OverviewPanel overview={model(CLI_CASES.v112)} input="/d/run01.mzML" busy={false} onAction={vi.fn()} />)
     const table = screen.getByRole('table', { name: 'Suggested search settings' })
-    const row = within(table).getByRole('row', { name: /fixed C\+57\.021/ })
+    const row = within(table).getByRole('row', { name: /Fixed cysteine modification/ })
     expect(within(row).getByText('default')).toBeDefined()
-    expect(row.textContent).toMatch(/alkylation not assessed \(no FASTA\)/)
-    expect(within(within(table).getByRole('row', { name: /^enzyme/ })).getByText('call')).toBeDefined()
+    expect(row.textContent).toMatch(/alkylation not assessed \(alkylation report not written\)/)
+    expect(within(within(table).getByRole('row', { name: /^Enzyme/ })).getByText('call')).toBeDefined()
   })
 
-  it('a tile action asks to turn the option on and run again; locked while busy', async () => {
+  it('a tile action names the report it adds and runs again; locked while busy', async () => {
     const onAction = vi.fn()
     const { rerender } = render(<OverviewPanel overview={model(CLI_CASES.v112)} input="/d/a.mzML" busy={false} onAction={onAction} />)
-    await click(within(tile('Alkylation')).getByRole('button', { name: 'Add FASTA and run again' }))
-    expect(onAction).toHaveBeenCalledWith({ kind: 'add-fasta', label: 'Add FASTA and run again', values: { extension: '3' } })
+    await click(within(tile('Alkylation')).getByRole('button', { name: 'Add Alkylation report and run again' }))
+    expect(onAction).toHaveBeenCalledWith({ kind: 'enable', label: 'Add Alkylation report and run again', values: { alkylation_out: 'alkylation.tsv', extension: '3' } })
     rerender(<OverviewPanel overview={model(CLI_CASES.v112)} input="/d/a.mzML" busy onAction={onAction} />)
-    expect(within(tile('Alkylation')).getByRole('button', { name: 'Add FASTA and run again' }).hasAttribute('disabled')).toBe(true)
+    expect(within(tile('Alkylation')).getByRole('button', { name: 'Add Alkylation report and run again' }).hasAttribute('disabled')).toBe(true)
+  })
+
+  it('names the workflow, shows only the tiles of the reports asked for, and names a missing report', () => {
+    render(
+      <OverviewPanel
+        overview={model(CLI_CASES.v112)}
+        input="/d/a.mzML"
+        busy={false}
+        onAction={vi.fn()}
+        params={{ qc_out: '/d/a.qc.tsv', glyco: true }}
+        workflow="Run QC"
+        missing={['Glycopeptide report']}
+      />
+    )
+    expect(screen.getByText('Run QC')).toBeDefined()
+    expect(screen.getByRole('status').textContent).toMatch(/not written: Glycopeptide report/)
+    const names = screen.getAllByRole('region').filter((r) => r.classList.contains('tile')).map((r) => r.getAttribute('aria-label'))
+    expect(names).toEqual(['MS2 spectra', 'Instrument', 'Tags', 'Glyco'])
   })
 
   it('copies the suggested settings as text', async () => {
@@ -64,10 +82,11 @@ describe('Overview panel', () => {
   it('flags the checks: a Da run and electron activation', () => {
     render(<OverviewPanel overview={model(CLI_CASES.v112Da)} input="/d/a.mzML" busy={false} onAction={vi.fn()} />)
     const checks = within(screen.getByRole('list', { name: 'Checks' })).getAllByRole('listitem')
-    expect(checks.filter((c) => c.classList.contains('flag'))).toHaveLength(2)
-    // No census: the CLI's no call stands, with its reason.
+    expect(checks.filter((c) => c.classList.contains('flag'))).toHaveLength(1)
+    // Round 6, 26: the Da cause once, above the tiles; the tiles say no call.
+    expect(within(screen.getByRole('list', { name: 'Warning' })).getByRole('listitem').textContent).toMatch(/no protease or label call at a tolerance in Da/)
     expect(within(tile('Protease')).getByText('no call')).toBeDefined()
-    expect(tile('Protease').textContent).toMatch(/the fragment tolerance is in Da/)
+    expect(tile('Protease').textContent).toMatch(/in Da \(see above\)/)
   })
 
   it('clears copied feedback for another result and ignores an earlier pending copy', async () => {
@@ -78,7 +97,7 @@ describe('Overview panel', () => {
     const { rerender } = render(<OverviewPanel {...props} overview={model(CLI_CASES.v112)} />)
     await click(screen.getByRole('button', { name: 'Copy suggested settings' }))
     expect(screen.getByText('Copied.')).toBeDefined()
-    rerender(<OverviewPanel {...props} overview={model(CLI_CASES.v112Da)} />)
+    rerender(<OverviewPanel {...props} overview={model(CLI_CASES.v112Tmt)} />)
     expect(screen.queryByText('Copied.')).toBeNull()
     await click(screen.getByRole('button', { name: 'Copy suggested settings' }))
     rerender(<OverviewPanel {...props} input="/d/b.mzML" overview={model(CLI_CASES.v112)} />)

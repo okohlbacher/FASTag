@@ -20,6 +20,7 @@ import { addJobs, renameJobs, type BatchJob } from './batch'
 import type { Refusal } from '../inspector/checks'
 import { createLogStore, type LogStore } from './logStore'
 import type { TableGen, TablePaths } from '../results/tables'
+import type { WorkflowKind, WorkflowReports } from '../results/workflowReports'
 
 // A run that failed: what failed, and FASTag's own words for why (each failed
 // job of a batch has its own), plus the command line to reproduce it.
@@ -51,6 +52,16 @@ export interface Results {
   // Opened from disk, and the run record says the run that last wrote it
   // did not finish (history.rs): withheld as incomplete.
   recorded?: { status: 'cancelled' | 'failed'; end: number }
+  // Opened from History for the run of @p input, whose outputs a later
+  // run (of @p by, ended @p end) overwrote: that later run is shown.
+  replaced?: { input: string; by: string; end: number }
+  // Opened from History: reports of the run shown that a later run (of
+  // @p by, ended @p end) wrote over at @p path; they are withheld.
+  reportsReplaced?: { path: string; by: string; end: number }[]
+  // Opened from History: reports of the run shown that a later run which
+  // did not finish (@p status) named too. Shown, with a note: that run may
+  // have written part of the file, or nothing.
+  reportsTouched?: { path: string; by: string; end: number; status: 'cancelled' | 'failed' }[]
 }
 
 // The last run that finished, for the summary over the form, with the
@@ -76,6 +87,9 @@ export interface LastRun {
 export interface Evidence {
   contributed: number | null
   ms2: number | null
+  /// Tag rows read as c/z ions that the species report left out (it counts
+  /// b/y tags only): the CLI's "Ion series: N tag rows ..." warning.
+  czExcluded?: number | null
 }
 
 export interface Reports {
@@ -90,6 +104,19 @@ export interface Reports {
   // Why the tables or reports of another run were closed when a table
   // opened, shown above the viewers.
   notice?: string
+  // The workflow reports with a view of their own (QC, shortlist, triage,
+  // the survey tables), of the run shown or opened from disk.
+  workflow?: WorkflowReports
+  // How often each workflow report was opened or written by a run: its
+  // view reads the file again on each one, even at the same path.
+  workflowGen?: Partial<Record<WorkflowKind, number>>
+  // Reports the run shown was asked for that it did not write, in words
+  // (the Overview says so; they get no tab).
+  missing?: string[]
+  // Reports opened from disk whose run (the app's record of the run that
+  // last wrote them) was cancelled or failed: a file its cleanup could not
+  // remove may be partial (Results says so).
+  partial?: { path: string; status: 'cancelled' | 'failed'; end: number }[]
 }
 
 export type JobStatus = 'queued' | 'running' | 'ok' | 'failed' | 'cancelled'
@@ -160,6 +187,16 @@ export interface Shown {
   log: readonly string[]
   reports: Report[]
   species: SpeciesReport | null
+  /// Its tags table (ResolvedOutputs out): what it is shown with.
+  out?: string
+  /// The workflow the run was started from (its tab order and Overview).
+  workflow?: string
+  /// The census summary's text, when the run wrote one.
+  census?: string | null
+  /// The texts of the workflow reports the Overview reads (QC, shortlist,
+  /// mass-shift accounting and table), when the run wrote them; config: the
+  /// engine configuration was written.
+  texts?: { qc?: string | null; shortlist?: string | null; deltaCounts?: string | null; delta?: string | null; triage?: string | null; config?: boolean; reducedFasta?: boolean }
 }
 
 export interface RunState {
@@ -186,7 +223,9 @@ export interface RunState {
   // The run the Species tab describes, as it was submitted: unticking species
   // or lowering tag_length afterwards must not hide (or re-show) its report.
   // null until the first run; the tab then follows the form.
-  speciesRun: { input: string; enabled: boolean } | null
+  // params: the parameters of the run that wrote an opened species report
+  // (its History record), so the tab knows its tolerance (Da caveat).
+  speciesRun: { input: string; enabled: boolean; params?: Record<string, unknown> | null } | null
   reports: Reports
   // Why the last run failed, shown above the result tabs.
   failure: Failure | null
@@ -222,7 +261,8 @@ export type RunAction =
   | { type: 'BATCH_RUNNING'; on: boolean; ended?: BatchEnd }
   | { type: 'RESULTS'; update: Update<Results | null> }
   | { type: 'BATCH_MISS'; miss: RunState['batchMiss'] }
-  | { type: 'SPECIES'; species: SpeciesReport | null }
+  // speciesRun: replaced too when given (a report opened from another run).
+  | { type: 'SPECIES'; species: SpeciesReport | null; speciesRun?: RunState['speciesRun'] }
   | { type: 'REPORTS'; update: Update<Reports> }
   | { type: 'FAILURE'; failure: Failure | null }
   | { type: 'COPIED'; copied: RunState['copied'] }
@@ -232,6 +272,14 @@ export type RunAction =
   | { type: 'REVEAL_ERR'; error: string | null }
   | { type: 'EVIDENCE'; evidence: Partial<Evidence> }
   | { type: 'SHOWN'; shown: Shown | null }
+  // A file of @p path's run opened: what another run left shown goes,
+  // judged against the state as it is when the action applies (not a
+  // render's closure: B's tags that landed first must stay). keepTags: the
+  // tags stay (the file is a tags table itself). tagsOpened: a tags table
+  // opened; nothing changes when it is the tags of the run shown, else the
+  // run shown goes whatever its run (its counts are not this file's) and
+  // @p reports updates the reports.
+  | { type: 'CLOSE_OTHER_RUN'; path: string; same: (a: string, b: string) => boolean; keepTags?: boolean; tagsOpened?: boolean; reports?: Update<Reports> }
 
 const noProgress: JobProgress = { done: null, total: null, phase: null, ratePerSec: null, etaSec: null }
 const noEvidence: Evidence = { contributed: null, ms2: null }
@@ -475,7 +523,7 @@ export function runReducer(s: RunState, a: RunAction): RunState {
     case 'BATCH_MISS':
       return { ...s, batchMiss: a.miss }
     case 'SPECIES':
-      return { ...s, species: a.species }
+      return a.speciesRun === undefined ? { ...s, species: a.species } : { ...s, species: a.species, speciesRun: a.speciesRun }
     case 'REPORTS':
       return { ...s, reports: apply(a.update, s.reports) }
     case 'FAILURE':
@@ -490,9 +538,19 @@ export function runReducer(s: RunState, a: RunAction): RunState {
       return s.revealErr === a.error ? s : { ...s, revealErr: a.error }
     case 'SHOWN':
       return s.shown === a.shown ? s : { ...s, shown: a.shown }
+    case 'CLOSE_OTHER_RUN': {
+      if (a.tagsOpened && s.shown?.out === a.path) return s
+      const other = (q: string | null | undefined): boolean => !!q && !a.same(q, a.path)
+      let n = s
+      if (!a.keepTags && other(s.results?.path)) n = { ...n, results: null }
+      if (s.species ? other(s.species.path) : s.speciesRun) n = { ...n, species: null, speciesRun: null }
+      if (s.shown && (a.tagsOpened || other(s.shown.out))) n = { ...n, shown: null }
+      if (a.reports) n = { ...n, reports: apply(a.reports, n.reports) }
+      return n
+    }
     case 'EVIDENCE': {
       const e = { ...s.evidence, ...a.evidence }
-      return e.contributed === s.evidence.contributed && e.ms2 === s.evidence.ms2 ? s : { ...s, evidence: e }
+      return e.contributed === s.evidence.contributed && e.ms2 === s.evidence.ms2 && e.czExcluded === s.evidence.czExcluded ? s : { ...s, evidence: e }
     }
   }
 }

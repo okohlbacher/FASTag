@@ -12,9 +12,12 @@
 // no call is never overridden. The acquisition and tolerance checks repeat
 // what the CLI wrote or was given. Pure, for vitest.
 
-import { fmt, fmtQ, pct, type Report } from '../digestReport'
+import { alkylationCall as alkylationReportCall, fmt, fmtQ, pct, type AlkylationCall as AlkylationReport, type Report } from '../digestReport'
 import type { ParamValue } from '../ParamField'
 import type { SpeciesReport } from '../types'
+import { electronReadAsBy, noActivationMeta } from '../inspector/checks'
+import { alkylationExtension, alkylationShipped, alkylationShort, alkylationTarget } from '../setup/products'
+import { longestSeed } from '../paramLayout'
 import {
   alkylationCall,
   censusFacts,
@@ -23,6 +26,7 @@ import {
   proteaseCall,
   runFacts,
   speciesCall,
+  tiedLeaders,
   type AlkylationCall,
   type LabelCall,
   type ProteaseCall,
@@ -31,6 +35,12 @@ import {
 
 /// Calls over fewer tagged spectra than this read "too little evidence".
 export const MIN_TAGGED = 1000
+
+/// Below this many placed spectra the gap distribution supports no
+/// conclusion (provisional: the CLI's own gap peaks need 20 spectra, and a
+/// share of 0.005 of the placed; 100 is where one such peak can stand out).
+/// The Mass shifts tab and the Overview say so alike.
+export const LOW_PLACED = 100
 
 export type TileAction =
   | { kind: 'enable'; label: string; values: Record<string, ParamValue> }
@@ -48,11 +58,18 @@ export interface Tile {
   /// low: too little evidence.
   tone: 'figure' | 'call' | 'nocall' | 'off' | 'low'
   action?: TileAction
+  /// The value is shown, but muted, for this reason (a species call at a
+  /// tolerance in Da): its tooltip.
+  muted?: string
 }
 
 export interface Check {
   tone: 'ok' | 'flag' | 'muted'
   text: string
+  /// The CLI's reasoning behind a short text, shown on request.
+  detail?: string
+  /// Only said next to a call it gates (the evidence cutoff).
+  gates?: true
 }
 
 export interface Suggestion {
@@ -74,6 +91,12 @@ export interface Overview {
   cutoffApplied: boolean
   /// The suggested settings as plain text for Copy.
   copyText: string
+  /// At least one suggested setting comes from a measured call or ranking:
+  /// only then is the table worth showing.
+  measured: boolean
+  /// One warning above the tiles for a cause several calls share (a
+  /// fragment tolerance in Da): said once, the tiles say only "no call".
+  warning?: string
 }
 
 export interface OverviewInputs {
@@ -86,12 +109,165 @@ export interface OverviewInputs {
   census: string | null
   /// The parameters the run was sent.
   params: Record<string, unknown>
+  /// The input the run read (its format decides how Ion series auto reads
+  /// ETD spectra); left out, an mzML is assumed.
+  input?: string
   /// The instrument preset the run's tolerance came from (its label), if any.
   instrument: string | null
+  /// The workflow reports' texts, when the run wrote them: the QC report,
+  /// the protein shortlist, the mass-shift accounting and table.
+  qc?: string | null
+  shortlist?: string | null
+  deltaCounts?: string | null
+  delta?: string | null
+  /// The shortlist's engine configuration was written.
+  config?: boolean
+  /// The reduced FASTA was written (the shortlist's proteins are kept in
+  /// it); else they are kept on the shortlist only.
+  reducedFasta?: boolean
+  /// The identifiability table (-census_sorted_out): its ranking.
+  triage?: string | null
 }
 
-const ON = 'Turn on and run again'
-const enable = (values: Record<string, ParamValue>): TileAction => ({ kind: 'enable', label: ON, values })
+/// The value column of a key/value report (QC: section key value n ...;
+/// the mass-shift accounting: key value), by key.
+export function keyValues(text: string | null | undefined): Map<string, string> {
+  const m = new Map<string, string>()
+  if (!text) return m
+  const lines = text.split(/\r?\n/).filter((l) => l !== '' && !l.startsWith('#'))
+  const head = (lines[0] ?? '').split('\t')
+  const k = head.indexOf('key')
+  const v = head.indexOf('value')
+  if (k < 0 || v < 0) return m
+  for (const l of lines.slice(1)) {
+    const f = l.split('\t')
+    if (f[k] !== undefined && !m.has(f[k])) m.set(f[k], f[v] ?? '')
+  }
+  return m
+}
+
+const numOf = (s: string | undefined): number | null => (s !== undefined && s.trim() !== '' && Number.isFinite(Number(s)) ? Number(s) : null)
+
+/// What a QC report says: instrument, tag yield, the most frequent charge.
+export function qcFacts(text: string | null | undefined): {
+  instrument: string | null
+  serial: string | null
+  started: string | null
+  /// The run rows' fragment tolerance.
+  tolerance: { value: number; unit: 'ppm' | 'Da' } | null
+  tagYield: number | null
+  tagged: number | null
+  topCharge: { z: number; share: number | null } | null
+} | null {
+  const kv = keyValues(text)
+  if (kv.size === 0) return null
+  const real = (s: string | undefined): string | null => (s && s !== '-' && s !== 'n/a' && s !== 'unknown' ? s : null)
+  let top: { z: number; n: number; share: number | null } | null = null
+  for (const [key, val] of kv) {
+    const m = /^precursor_charge_(\d+)$/.exec(key)
+    const n = numOf(val)
+    if (!m || m[1] === '0' || n === null) continue
+    if (!top || n > top.n) top = { z: Number(m[1]), n, share: numOf(kv.get(`${key}_share`)) }
+  }
+  return {
+    instrument: real(kv.get('instrument_model')),
+    serial: real(kv.get('instrument_serial_number')),
+    started: real(kv.get('start_timestamp')),
+    tolerance: ((): { value: number; unit: 'ppm' | 'Da' } | null => {
+      const v = numOf(kv.get('fragment_tolerance'))
+      const u = kv.get('fragment_tolerance_unit')
+      return v != null && (u === 'ppm' || u === 'Da') ? { value: v, unit: u } : null
+    })(),
+    tagYield: numOf(kv.get('tag_yield')),
+    tagged: numOf(kv.get('ms2_tagged_e001')),
+    topCharge: top ? { z: top.z, share: top.share } : null
+  }
+}
+
+/// What a protein shortlist says: proteins kept of those with evidence.
+export function shortlistFacts(text: string | null | undefined): { kept: number; of: number } | null {
+  if (!text) return null
+  const m = /proteins:\s*(\d+) with evidence,\s*(\d+) kept/.exec(text)
+  if (m) return { kept: Number(m[2]), of: Number(m[1]) }
+  const lines = text.split(/\r?\n/).filter((l) => l !== '' && !l.startsWith('#'))
+  const head = (lines[0] ?? '').split('\t')
+  const k = head.indexOf('kept')
+  if (k < 0) return null
+  const rows = lines.slice(1).map((l) => l.split('\t'))
+  return { kept: rows.filter((r) => r[k] === '1').length, of: rows.length }
+}
+
+/// What an identifiability table says: the median score of the ranked
+/// spectra and, with identifications given (census_ids), how many each
+/// state has.
+export function triageFacts(text: string | null | undefined): {
+  ranked: number
+  median: number | null
+  ids: { identified: number; not: number; unknown: number } | null
+  /// Triage candidates (triage = 1), when the table has the column.
+  candidates?: number
+} | null {
+  if (!text) return null
+  const lines = text.split(/\r?\n/).filter((l) => l !== '' && !l.startsWith('#'))
+  const head = (lines[0] ?? '').split('\t').map((h) => h.trim())
+  const sc = head.indexOf('ident_score')
+  if (sc < 0) return null
+  const rows = lines.slice(1).map((l) => l.split('\t'))
+  const scores = rows.map((r) => Number(r[sc])).filter((x) => Number.isFinite(x)).sort((a, b) => a - b)
+  const mid = scores.length ? (scores.length % 2 ? scores[(scores.length - 1) / 2] : (scores[scores.length / 2 - 1] + scores[scores.length / 2]) / 2) : null
+  const idc = head.indexOf('identified')
+  let ids: { identified: number; not: number; unknown: number } | null = null
+  if (idc >= 0) {
+    ids = { identified: 0, not: 0, unknown: 0 }
+    for (const r of rows) {
+      const t = (r[idc] ?? '').trim().toLowerCase()
+      ids[t === '1' || t === 'true' || t === 'yes' ? 'identified' : t === '0' || t === 'false' || t === 'no' ? 'not' : 'unknown']++
+    }
+  }
+  const trc = head.indexOf('triage')
+  return { ranked: rows.length, median: mid, ids, ...(trc >= 0 ? { candidates: rows.filter((r) => (r[trc] ?? '').trim() === '1').length } : {}) }
+}
+
+/// The smallest mass shift counted as one (Da): nearer 0 is the
+/// unmodified bin (calibration spread), not a shift. The Mass shifts view
+/// counts its gap peaks the same way.
+export const SHIFT_MIN_DA = 0.5
+
+/// The most frequent mass shift of a mass-shift table (-delta_out) away
+/// from 0, with its UniMod name (or first interpretation) when it has one.
+export function topShift(text: string | null | undefined): { delta: string; spectra: number; name: string | null } | null {
+  if (!text) return null
+  const lines = text.split(/\r?\n/).filter((l) => l !== '' && !l.startsWith('#'))
+  const head = (lines[0] ?? '').split('\t').map((h) => h.trim())
+  const [d, sp, un, ti] = ['delta', 'spectra', 'unimod', 'top_interps'].map((c) => head.indexOf(c))
+  if (d < 0 || sp < 0) return null
+  let best: { delta: string; spectra: number; name: string | null } | null = null
+  for (const l of lines.slice(1)) {
+    const f = l.split('\t')
+    const delta = Number(f[d])
+    const n = Number(f[sp])
+    if (!Number.isFinite(delta) || !Number.isFinite(n) || Math.abs(delta) < SHIFT_MIN_DA) continue
+    if (best && n <= best.spectra) continue
+    const named = (un >= 0 ? f[un] : '')?.trim()
+    const interp = (ti >= 0 ? f[ti] : '')?.trim().split(/[;,]/)[0]?.replace(/:\d+$/, '').trim()
+    const none = (x: string | undefined): boolean => !x || x === '-' || x === '?'
+    const name = !none(named) ? named! : !none(interp) ? interp! : null
+    best = { delta: f[d].trim(), spectra: n, name }
+  }
+  return best
+}
+
+/// The rank a species report reports at: @p asked (the run's species_rank)
+/// when it has rows there, else the rank of its first row.
+export function reportRank(sp: SpeciesReport | null | undefined, asked?: unknown): string {
+  const want = typeof asked === 'string' && asked.trim() !== '' ? asked.trim() : 'genus'
+  if (!sp || sp.taxa.length === 0 || sp.taxa.some((t) => t.rank === want)) return want
+  return sp.taxa[0].rank
+}
+
+/// An action that turns a report on and runs again, named after it
+/// ("Add Digest report and run again").
+const enable = (what: string, values: Record<string, ParamValue>): TileAction => ({ kind: 'enable', label: `Add ${what} and run again`, values })
 const given = (v: unknown): boolean => (typeof v === 'string' ? v.trim() !== '' : v === true)
 const count = (v: number | null): string => (v == null ? '–' : fmt(v))
 
@@ -113,14 +289,19 @@ export function buildOverview(i: OverviewInputs): Overview {
   const massgap = kind('massgap')
   const census = i.census ? censusFacts(i.census) : null
   const facts = runFacts(digest ?? label ?? massgap)
-  const tol = facts.tolerance ?? paramTolerance(i.params)
+  const tol = runTolerance(i.reports, i.params)
   const da = tol?.unit === 'Da'
   const fasta = given(i.params['fasta']) || given(i.params['recon_fasta'])
 
   const protease = proteaseCall(digest)
   const lab = labelCall(label)
   const alk = alkylationCall(massgap)
-  const sp = speciesCall(i.species)
+  const alkReport = kind('alkylation')
+  const alkCall = alkReport ? alkylationReportCall(alkReport) : null
+  const rank = reportRank(i.species, i.params['species_rank'])
+  const sp = speciesCall(i.species, rank)
+  const qc = qcFacts(i.qc)
+  const instrument = facts.instrument ?? qc?.instrument ?? null
 
   // The evidence the calls rest on: spectra with a tag, as the census
   // counted them. Without a census the cutoff is not applied: the MS2
@@ -145,24 +326,33 @@ export function buildOverview(i: OverviewInputs): Overview {
             ? `processed by the tagger; subsampled: ${fmt(log.subsample.tagged)} of ${fmt(log.subsample.of)} input spectra`
             : 'processed by the tagger (peaks and a precursor)'
     },
-    facts.instrument
-      ? { id: 'instrument', label: 'Instrument', value: facts.instrument, tone: 'figure', note: 'as the input names it, from the report meta rows (no analyzer named)' }
-      : { id: 'instrument', label: 'Instrument', value: 'not named', tone: 'off', note: digest || label || massgap ? 'the report meta rows name no instrument' : 'no report with meta rows was written' },
+    instrument
+      ? {
+          id: 'instrument',
+          label: 'Instrument',
+          value: instrument,
+          tone: 'figure',
+          note:
+            !facts.instrument && qc
+              ? `as the input names it (QC report)${qc.serial ? `; serial ${qc.serial}` : ''}${qc.started ? `; started ${qc.started}` : ''}`
+              : 'as the input names it, from the report meta rows (no analyzer named)'
+        }
+      : { id: 'instrument', label: 'Instrument', value: 'not named', tone: 'off', note: digest || label || massgap || qc ? 'the input names no instrument' : 'no report with meta rows was written' },
     census || log.census
       ? {
           id: 'tagged',
-          label: 'With tags',
+          label: 'With any tag',
           value: `${fmt(tagged)}${census?.taggedShare != null ? ` (${pct(census.taggedShare)})` : ''}`,
           tone: 'figure',
-          note: 'spectra with a reported tag (census)'
+          note: 'MS2 spectra with any reported tag (identifiability table)'
         }
-      : { id: 'tagged', label: 'With tags', value: 'not counted', tone: 'off', note: 'counted by the census (-census, FASTag 1.12)' },
+      : { id: 'tagged', label: 'With any tag', value: 'not counted', tone: 'off', note: 'counted by the identifiability table (Identifiability triage)' },
     { id: 'tags', label: 'Tags', value: count(log.tags), tone: 'figure', note: 'every reported tag, gapped ones included' },
     (() => {
       const f = digest ? digest.rows.find((r) => r.section === 'count' && r.key === 'tags_filtered') : undefined
       return f
         ? { id: 'filtered', label: 'Tags E ≤ 1', value: count(f.n ?? null), tone: 'figure' as const, note: 'ungapped tags with an E-value ≤ 1 (the digest filter)' }
-        : { id: 'filtered', label: 'Tags E ≤ 1', value: 'not counted', tone: 'off' as const, note: 'counted by the digest report', action: enable({ digest_out: 'digest.tsv' }) }
+        : { id: 'filtered', label: 'Tags E ≤ 1', value: 'not counted', tone: 'off' as const, note: 'counted by the digest report', action: enable('Digest report', { digest_out: 'digest.tsv' }) }
     })(),
     log.glyco
       ? {
@@ -174,16 +364,130 @@ export function buildOverview(i: OverviewInputs): Overview {
         }
       : given(i.params['glyco'])
         ? { id: 'glyco', label: 'Glyco', value: '–', tone: 'off', note: 'the log has no glyco line' }
-        : { id: 'glyco', label: 'Glyco', value: 'off', tone: 'off', note: 'oxonium flagging was off', action: enable({ glyco: true }) }
+        : { id: 'glyco', label: 'Glyco', value: 'off', tone: 'off', note: 'oxonium flagging was off', action: enable('Glycopeptide report', { glyco: true }) }
   ]
+  // ---- the workflows' own figures
+  if (qc) {
+    figures.push({
+      id: 'qc-tagged',
+      label: 'Tagged (E ≤ 0.01)',
+      // To one decimal, as the QC view's summary strip writes it.
+      value: qc.tagYield != null ? `${(qc.tagYield * 100).toFixed(1)}%${qc.tagged != null ? ` (${fmt(qc.tagged)})` : ''}` : '–',
+      tone: qc.tagYield != null ? 'figure' : 'off',
+      note: 'MS2 spectra read with a tag at E ≤ 0.01 (QC report)'
+    })
+    figures.push({
+      id: 'qc-charge',
+      label: 'Top charge',
+      value: qc.topCharge ? `${qc.topCharge.z}+${qc.topCharge.share != null ? ` (${(qc.topCharge.share * 100).toFixed(1)}%)` : ''}` : 'none given',
+      tone: qc.topCharge ? 'figure' : 'off',
+      note: qc.topCharge ? 'the most frequent precursor charge of the MS2 spectra (QC report)' : 'no MS2 spectrum states its precursor charge'
+    })
+  }
+  const sl = shortlistFacts(i.shortlist)
+  if (sl)
+    figures.push({
+      id: 'shortlist',
+      label: 'Shortlist',
+      value: `${fmt(sl.kept)} of ${fmt(sl.of)} proteins kept`,
+      tone: 'figure',
+      note: `proteins with tag evidence kept ${i.reducedFasta ? 'for the reduced FASTA' : 'on the shortlist'}; ${i.config ? 'search-engine configuration written' : 'no search-engine configuration written'}. A search-space reduction, not an identification`
+    })
+  // The triage's own result: the ranking, and the identifications given.
+  const tf = triageFacts(i.triage)
+  if (tf)
+    figures.push({
+      id: 'ident-score',
+      label: 'Median identifiability',
+      value: tf.median != null ? tf.median.toFixed(3) : '–',
+      tone: tf.median != null ? 'figure' : 'off',
+      note: `the middle score of ${fmt(tf.ranked)} ranked MS2 spectra (0 to 1); an experimental ranking, not a quality call`
+    })
+  if (tf?.ids)
+    figures.push({
+      id: 'identified',
+      label: 'Identified',
+      value: `${fmt(tf.ids.identified)} of ${fmt(tf.ranked)}`,
+      tone: 'figure',
+      note: `by the identifications given; ${fmt(tf.ids.not)} not identified, ${fmt(tf.ids.unknown)} unknown`
+    })
+  if (tf?.candidates != null)
+    figures.push({
+      id: 'candidates',
+      label: 'Triage candidates',
+      value: fmt(tf.candidates),
+      tone: 'figure',
+      note: 'not identified, with a tag at or below the Triage E-value: for a second search (Triage tab)'
+    })
+  const dc = keyValues(i.deltaCounts)
+  const placed = numOf(dc.get('ms2_placed'))
+  if (placed != null)
+    figures.push({
+      id: 'placed',
+      label: 'Placed spectra',
+      value: fmt(placed),
+      tone: 'figure',
+      note: `of ${fmt(numOf(dc.get('ms2_tagged')))} MS2 spectra with any tag, placed on the database (mass-shift accounting)`
+    })
+  const shift = topShift(i.delta)
+  const fewPlaced = placed != null && placed < LOW_PLACED
+  if (shift)
+    figures.push({
+      id: 'topshift',
+      label: 'Top mass shift',
+      value: `${Number(shift.delta) > 0 ? '+' : ''}${shift.delta} Da${shift.name ? ` (${shift.name})` : ''}`,
+      tone: 'figure',
+      note: `${fmt(shift.spectra)} spectra, away from 0; a candidate, not an identified modification`
+    })
+  // The survey's main result has a tile whatever it found (shownTiles shows
+  // it when the mass-shift table was asked for): none is a result too.
+  else
+    figures.push({
+      id: 'topshift',
+      label: 'Top mass shift',
+      value: 'no shift peak',
+      tone: 'nocall',
+      note:
+        i.delta == null
+          ? 'the mass-shift table was not read'
+          : fewPlaced
+            ? `no shift of 0.5 Da or more; with ${fmt(placed)} placed spectra none could stand out (see below)`
+            : 'the mass-shift table has no shift of 0.5 Da or more away from 0'
+    })
 
   // ---- calls
   const calls: Tile[] = [
     proteaseTile(protease),
-    genusTile(sp, da),
+    genusTile(sp, rank),
     labelTile(lab),
-    alkylationTile(alk, fasta, i.params, log.reconMinLength)
+    alkCall ? alkylationReportTile(alkCall, i.params) : alkylationTile(alk, fasta, i.params, log.reconMinLength)
   ]
+  // A tolerance in Da: the protease and label no calls (rule
+  // low_resolution) and the species caveat share one cause, said once
+  // above the tiles; their tiles say only "no call".
+  const lowRes: string[] = []
+  if (da) {
+    for (const [t, c, what] of [
+      [calls[0], protease, 'protease'],
+      [calls[2], lab, 'label']
+    ] as const)
+      if (c.state === 'no_call' && c.reason === 'low_resolution') {
+        t.note = 'no call at a fragment tolerance in Da (see above)'
+        lowRes.push(what)
+      }
+  }
+  const daSpecies = da && (i.species != null || given(i.params['species']))
+  // The species name stays, muted, as the Species tab shows it.
+  if (daSpecies && calls[1].tone === 'call') calls[1].muted = `Unreliable: ${DA_SPECIES_CAVEAT}`
+  const warning =
+    lowRes.length || daSpecies
+      ? `The fragment tolerance is ${fmt(tol!.value)} Da: ${[
+          lowRes.length ? `FASTag makes no ${lowRes.join(' or ')} call at a tolerance in Da` : '',
+          daSpecies ? DA_SPECIES_CAVEAT : ''
+        ]
+          .filter(Boolean)
+          .join(', and ')}.`
+      : undefined
   for (const t of calls) {
     if (t.id === 'alkylation') continue
     // Only a call the CLI made is held back; its no call stands, with its
@@ -191,32 +495,89 @@ export function buildOverview(i: OverviewInputs): Overview {
     if (lowEvidence && t.tone === 'call')
       Object.assign(t, { value: 'too little evidence', tone: 'low', note: `${fewer}; CLI: ${t.value} (${t.note.replace(/\.$/, '')})` })
     else if (lowEvidence && t.tone === 'nocall') t.note = addNote(t.note, `also ${fewer}`)
-    else if (!cutoffApplied && (t.tone === 'call' || t.tone === 'nocall')) t.note = addNote(t.note, NOT_APPLIED)
+    // The cutoff not applied is said once, by the check line below, not
+    // in every call tile.
   }
 
   // ---- checks
   const checks: Check[] = []
+  // As the Mass shifts tab leads with it: a survey over so few placed
+  // spectra must not read as clean.
+  if (fewPlaced && (given(i.params['delta_out']) || given(i.params['delta_counts_out']) || given(i.params['recon_out'])))
+    checks.push({
+      tone: 'flag',
+      text: `${placed === 0 ? 'No spectrum is placed' : `Only ${fmt(placed)} spectra are placed`} on the database: too few for any conclusion about modifications or alkylation (the Mass shifts tab asks for ${LOW_PLACED} placed spectra).`
+    })
   if (!cutoffApplied)
     checks.push({
       tone: 'muted',
-      text: `Evidence cutoff not applied: this run did not count tagged spectra (the census, -census), so calls over fewer than ${fmt(MIN_TAGGED)} tagged spectra are not held back`
+      gates: true,
+      text: `Evidence cutoff not applied: this run did not count tagged spectra, so calls over fewer than ${fmt(MIN_TAGGED)} tagged spectra are not held back.`
     })
   if (log.acquisition)
     checks.push({
       tone: log.acquisition.mode === 'DDA' || log.acquisition.mode === 'pseudo-DDA' ? 'ok' : 'flag',
-      text: `Acquisition check: ${log.acquisition.mode} (${log.acquisition.why})`
+      text: `Acquisition: ${log.acquisition.mode}`,
+      detail: log.acquisition.why
     })
-  else checks.push({ tone: 'muted', text: 'Acquisition not checked: this FASTag writes no acquisition check line (FASTag 1.12 does)' })
-  if (da && (i.species != null || given(i.params['species'])))
-    checks.push({ tone: 'flag', text: `The fragment tolerance is ${fmt(tol!.value)} Da: species calls are unreliable on ion-trap/Da data.` })
-  if (log.electron && log.electron.electron > 0)
+  else checks.push({ tone: 'muted', text: 'Acquisition not checked: this run\'s log has no acquisition check line' })
+  // The species report counts b/y tags only: a c/z run's left-out rows
+  // explain a sparse or empty report (the CLI says so in its log only).
+  const czExcluded = ((): number | null => {
+    for (const l of i.log) {
+      const m = /Ion series: (\d+) tag rows read as c\/z-dot ions were left out of -species/.exec(l)
+      if (m) return Number(m[1])
+    }
+    return null
+  })()
+  if (czExcluded)
     checks.push({
       tone: 'flag',
-      text: `${fmt(log.electron.electron)} of ${fmt(log.electron.of)} MS2 spectra were electron-activated (ETD, ECD or hybrid); tags read as b/y ions from them are unreliable.`
+      text: `${fmt(czExcluded)} tag rows read as c/z ions were left out of the species report, which counts b/y tags only.`
+    })
+  // Only when they were read as b/y (Ion series by, or auto without
+  // activation metadata): under cz or auto on mzML they are c/z tags.
+  if (log.electron && log.electron.electron > 0 && electronReadAsBy(i.params['ion_series'], i.input ?? ''))
+    checks.push({
+      tone: 'flag',
+      text: `${fmt(log.electron.electron)} of ${fmt(log.electron.of)} MS2 spectra were electron-activated (ETD, ECD or hybrid) and read as b/y ions; their tags are unreliable. ${
+        noActivationMeta(i.input ?? '')
+          ? 'This format carries no activation per spectrum: set Ion series to cz, or convert the run to mzML and use auto.'
+          : 'Choose the Orbitrap ETD preset (Ion series auto), or the EThcD preset for hybrid spectra.'
+      }`
+    })
+  // Under auto and cz the CLI warns in lines of its own (IonSeries.h).
+  if (log.hybridAuto)
+    checks.push({
+      tone: 'flag',
+      text: `${fmt(log.hybridAuto.hybrid)} of ${fmt(log.hybridAuto.of)} MS2 spectra were activated by a hybrid method (EThcD, ETciD) and tagged as b/y ions only; their c/z ions were not read. ${
+        noActivationMeta(i.input ?? '')
+          ? 'This format carries no activation per spectrum: set Ion series to cz, or convert the run to mzML and use auto.'
+          : 'Set Hybrid ion series to both (or choose the Orbitrap EThcD preset).'
+      }`
+    })
+  if (log.autoNoColumn)
+    checks.push({
+      tone: 'flag',
+      text: `${fmt(log.autoNoColumn)} electron-activated MS2 spectra were tagged as b/y ions: Ion series auto reads the activation of mzML input only. Set Ion series to cz, or convert the run to mzML and use auto.`
+    })
+  if (log.collisionalCz)
+    checks.push({
+      tone: 'flag',
+      text: `${fmt(log.collisionalCz.collisional)} of ${fmt(log.collisionalCz.of)} MS2 spectra were activated by collision (CID, HCD) but read as c/z ions under Ion series cz; their tags are unreliable. ${
+        noActivationMeta(i.input ?? '') ? 'Use Ion series by, or convert the run to mzML and use auto.' : 'Use Ion series auto.'
+      }`
     })
 
   // ---- suggested settings
   const callOk = !lowEvidence
+  // The cysteine modification among the fixed modifications the run was
+  // sent, when it is not the default Carbamidomethyl: null when its list has
+  // no cysteine modification; undefined when it ran with Carbamidomethyl
+  // (or the list is not known).
+  const sentFixed = i.params['fixed_modifications']
+  const sentC = Array.isArray(sentFixed) ? (sentFixed.map(String).find((m) => /\([^)]*\bC\b[^)]*\)\s*$/.test(m)) ?? null) : undefined
+  const runFixedC: string | null | undefined = sentC !== undefined && sentC !== null && /^Carbamidomethyl\b/.test(sentC) ? undefined : sentC
   const suggestions: Suggestion[] = [
     protease.state === 'call' && callOk
       ? {
@@ -235,18 +596,36 @@ export function buildOverview(i: OverviewInputs): Overview {
               : `default; no digest call (${protease.state === 'no_call' ? protease.reason : 'too little evidence'})`
         },
     { setting: 'missed cleavages', value: '2', evidence: 'default', note: 'default, not measured' },
-    {
-      setting: 'fixed C+57.021',
-      value: 'Carbamidomethyl (C)',
+    alkCall?.status === 'call' && alkCall.reagent && callOk
+      ? {
+          setting: 'fixed C',
+          value: alkCall.reagent === 'none' ? 'None (cysteines not alkylated)' : `${alkCall.reagent} (C${alkCall.mass != null ? `, +${fmt(alkCall.mass, 3)}` : ''})`,
+          evidence: 'call',
+          note: `from the alkylation call (not validated)${cutoffApplied ? '' : `; ${NOT_APPLIED}`}`
+        }
+      : runFixedC !== undefined
+        ? {
+            // The run was sent its own fixed modifications (a run sends only
+            // what differs from the CLI's Carbamidomethyl): those, as run.
+            setting: 'fixed C',
+            value: runFixedC ?? 'None (no fixed cysteine modification)',
+            evidence: 'run',
+            note: 'as this run used; alkylation not called'
+          }
+        : {
+      setting: 'fixed C',
+      value: 'Carbamidomethyl (C, +57.021)',
       evidence: 'default',
       note:
-        alk.state === 'counts' && !alk.placed
+        alkCall
+          ? `default; no alkylation call (${alkylationReason(alkCall.reason)})`
+          : alk.state === 'counts' && !alk.placed
           ? 'default, alkylation not assessed (no tag placed in the FASTA)'
           : alk.state === 'counts'
           ? 'default; the mass-gap report has Cys gap counts, no alkylation call'
           : fasta
             ? 'default, alkylation not assessed (mass-gap report not written)'
-            : 'default, alkylation not assessed (no FASTA)'
+            : 'default, alkylation not assessed (alkylation report not written)'
     },
     lab.state === 'call' && callOk && !(lab.weak && lab.label === 'label-free')
       ? { setting: 'label', value: labelMods(lab.label), evidence: 'call', note: `from the label call (${lab.label})${cutoffApplied ? '' : `; ${NOT_APPLIED}`}` }
@@ -258,7 +637,7 @@ export function buildOverview(i: OverviewInputs): Overview {
             lab.state === 'absent'
               ? 'default; label report not written'
               : lab.state === 'not_called'
-                ? 'default; this FASTag makes no label call (FASTag 1.12 does)'
+                ? 'default; the label report makes no label call'
                 : lab.state === 'call' && lab.weak
                 ? `default; label-free from ${fmt(lab.ends)} C-terminal tag ends only (no label rule fired)`
                 : `default; no label call (${lab.state === 'no_call' ? lab.reason : 'too little evidence'})`
@@ -280,14 +659,26 @@ export function buildOverview(i: OverviewInputs): Overview {
         ? { setting: 'fragment tol.', value: `${fmt(tol.value)} ${tol.unit}`, evidence: 'preset', note: `from instrument preset ${i.instrument}` }
         : { setting: 'fragment tol.', value: `${fmt(tol.value)} ${tol.unit}`, evidence: 'run', note: 'as this run used; no instrument preset chosen' }
     )
-  if (callOk && sp.state === 'called' && sp.present.length > 0)
+  // A tie at the top names no proteome, called or ranked: which one would
+  // be arbitrary (the Species tab says No single leader).
+  // At a tolerance in Da no proteome is suggested: the Species tab says not
+  // to read the top taxon as the sample's organism.
+  const spSuggest = (sp.state === 'called' && sp.present.length > 0 && tiedLeaders(sp.present).length < 2) || (sp.state === 'ranked' && sp.tied.length < 2)
+  if (callOk && daSpecies && spSuggest)
+    suggestions.push({
+      setting: 'database',
+      value: 'not suggested',
+      evidence: 'default',
+      note: 'species calls are unreliable at a fragment tolerance in Da'
+    })
+  else if (callOk && sp.state === 'called' && sp.present.length > 0 && tiedLeaders(sp.present).length < 2)
     suggestions.push({
       setting: 'database',
       value: `${sp.present[0].name} proteome`,
       evidence: 'call',
       note: `from the CLI species call (not validated)${cutoffApplied ? '' : `; ${NOT_APPLIED}`}`
     })
-  else if (callOk && sp.state === 'ranked')
+  else if (callOk && sp.state === 'ranked' && sp.tied.length < 2)
     suggestions.push({
       setting: 'database',
       value: `${sp.top.name} proteome`,
@@ -298,13 +689,15 @@ export function buildOverview(i: OverviewInputs): Overview {
   const caveats = [
     'Not validated: these are what FASTag reports, not checked search settings.',
     ...(lab.state === 'call' ? ['The label call is FASTag’s label_call (prose-auto’s rule, ported into the CLI).'] : []),
-    'The species calls are unreliable on ion-trap/Da data.'
+    // Only where the check line says so: a tolerance in Da, or none known.
+    ...((da || !tol) && (i.species != null || given(i.params['species'])) ? ['The species calls are unreliable on ion-trap/Da data.'] : [])
   ]
   const copyText = [
-    ...suggestions.map((s) => `${s.setting}: ${s.value} (${s.note})`),
+    ...suggestions.map((s) => `${settingWords(s.setting)}: ${s.value} (${s.note})`),
     ...caveats.map((c) => `* ${c}`)
   ].join('\n')
-  return { figures, calls, checks, suggestions, caveats, lowEvidence, cutoffApplied, copyText }
+  const measured = suggestions.some((x) => x.evidence === 'call' || x.evidence === 'ranking')
+  return { figures, calls, checks, suggestions, caveats, lowEvidence, cutoffApplied, copyText, measured, ...(warning ? { warning } : {}) }
 }
 
 /// @p note with @p more after it: "a; more", or, when the note ends a
@@ -313,6 +706,23 @@ export function addNote(note: string, more: string): string {
   if (!/[.!?]$/.test(note)) return `${note}; ${more}`
   return `${note} ${more.charAt(0).toUpperCase()}${more.slice(1)}${/[.!?]$/.test(more) ? '' : '.'}`
 }
+
+/// The run's fragment tolerance: as a report states it (digest, label, mass
+/// gap), else as the run was sent.
+export function runTolerance(reports: readonly Report[], params: Record<string, unknown> | null | undefined): { value: number; unit: 'ppm' | 'Da' } | null {
+  const r = reports.find((x) => x.kind === 'digest') ?? reports.find((x) => x.kind === 'label') ?? reports.find((x) => x.kind === 'massgap')
+  return runFacts(r).tolerance ?? paramTolerance(params ?? {})
+}
+
+/// The species caveat of a run at a fragment tolerance in Da (the Overview's
+/// daSpecies): its tolerance in Da, else null. The Species tab says it too.
+export function daSpeciesTolerance(reports: readonly Report[], params: Record<string, unknown> | null | undefined): number | null {
+  const tol = runTolerance(reports, params)
+  return tol?.unit === 'Da' ? tol.value : null
+}
+
+/// The caveat's text, as the Overview and the Species tab say it.
+export const DA_SPECIES_CAVEAT = 'species calls are unreliable on ion-trap/Da data'
 
 function paramTolerance(p: Record<string, unknown>): { value: number; unit: 'ppm' | 'Da' } | null {
   const v = Number(p['fragment_tolerance'])
@@ -330,19 +740,31 @@ function proteaseTile(c: ProteaseCall): Tile {
       note: `digest call over ${fmt(c.ends)} C-terminal tag ends${c.margin != null && c.runnerUp ? `, margin ${fmt(c.margin, 2)} log-likelihood per end over ${c.runnerUp}` : ''}`
     }
   if (c.state === 'no_call') return { ...base, value: 'no call', tone: 'nocall', note: c.why || `no digest call (${c.reason})` }
-  return { ...base, value: 'not assessed', tone: 'off', note: 'the digest report was not written', action: enable({ digest_out: 'digest.tsv' }) }
+  return { ...base, value: 'not assessed', tone: 'off', note: 'the digest report was not written', action: enable('Digest report', { digest_out: 'digest.tsv' }) }
 }
 
-function genusTile(c: SpeciesCall, da: boolean): Tile {
-  const base = { id: 'genus', label: 'Top genus' }
-  const caveat = da ? ' Species calls are unreliable on ion-trap/Da data.' : ''
+function genusTile(c: SpeciesCall, rank = 'genus'): Tile {
+  const base = { id: 'genus', label: `Top ${rank}` }
+  // The Da caveat is the check line's (said once), not the tile's.
+  const caveat = ''
   if (c.state === 'called') {
     if (c.present.length === 0)
       return {
         ...base,
         value: c.noCall > 0 ? 'no presence call' : 'none detected',
         tone: 'nocall',
-        note: `${c.runNoCall ? `run-level no call (${c.runNoCall})` : `the CLI did not call any genus present; ${c.noCall} no call, ${c.notDetected} not detected`}. This does not establish absence.${caveat}`
+        note: `${c.runNoCall ? `run-level no call (${c.runNoCall})` : `the CLI did not call any ${rank} present; ${c.noCall} no call, ${c.notDetected} not detected`}. This does not establish absence.${caveat}`
+      }
+    // Present taxa level at the top: the calls stand, no single leader.
+    const tied = tiedLeaders(c.present)
+    if (tied.length > 1)
+      return {
+        ...base,
+        value: 'No single leader',
+        tone: 'call',
+        note: `present by the CLI species call (decoy null), tied at the top: ${tied.map((t) => t.name).join(', ')}${
+          c.present.length > tied.length ? `; also present: ${c.present.filter((t) => !tied.includes(t)).map((t) => t.name).join(', ')}` : ''
+        }.${caveat}`
       }
     const others = c.present.slice(1).map((t) => t.name)
     return {
@@ -352,25 +774,32 @@ function genusTile(c: SpeciesCall, da: boolean): Tile {
       note: `present by the CLI species call (decoy null)${others.length ? `; also present: ${others.join(', ')}` : ''}.${caveat}`
     }
   }
+  if (c.state === 'ranked' && c.tied.length > 1)
+    return {
+      ...base,
+      value: 'No single leader',
+      tone: 'nocall',
+      note: `tie between ${c.tied.length} taxa at ${rank} rank: ${c.tied.map((t) => t.name).join(', ')}; not a presence call.${caveat}`
+    }
   if (c.state === 'ranked')
     return {
       ...base,
       value: c.top.name,
       tone: 'call',
-      note: `q = ${c.top.q === null ? 'NA (uncalibrated under -species_orientation both)' : fmtQ(c.top.q)}; ranked first of ${c.genera} genera by adjusted count, not a presence call.${caveat}`
+      note: `q = ${c.top.q === null ? 'NA (uncalibrated with tag orientation both)' : fmtQ(c.top.q)}; ranked first of ${c.genera} taxa at ${rank} rank by ${c.counted === 'adjusted' ? 'adjusted count' : 'observed spectra'}, not a presence call.${caveat}`
     }
-  if (c.state === 'none') return { ...base, value: 'no genus', tone: 'nocall', note: `the species report lists no genus.${caveat}` }
-  return { ...base, value: 'not assessed', tone: 'off', note: 'species detection was off', action: enable({ species: true, extension: '2' }) }
+  if (c.state === 'none') return { ...base, value: `no ${rank}`, tone: 'nocall', note: `the species report lists no ${rank}.${caveat}` }
+  return { ...base, value: 'not assessed', tone: 'off', note: 'species detection was off', action: enable('Species report', { species: true, extension: '2' }) }
 }
 
 function labelTile(c: LabelCall): Tile {
   const base = { id: 'label', label: 'Label' }
   if (c.state === 'call')
-    return { ...base, value: c.label === 'label-free' ? 'none (label-free)' : c.label, tone: 'call', note: `CLI label call over ${fmt(c.ends)} C-terminal tag ends: ${c.why}` }
+    return { ...base, value: c.label === 'label-free' ? 'none (label-free)' : c.label, tone: 'call', note: `Label call over ${fmt(c.ends)} C-terminal tag ends: ${c.why}` }
   if (c.state === 'no_call') return { ...base, value: 'no call', tone: 'nocall', note: c.why || `no label call (${c.reason})` }
   if (c.state === 'not_called')
-    return { ...base, value: 'not called', tone: 'off', note: 'this FASTag writes the label counts but no label call (FASTag 1.12 does); the counts are in the Digest tab' }
-  return { ...base, value: 'not assessed', tone: 'off', note: 'the label report was not written', action: enable({ label_out: 'label.tsv' }) }
+    return { ...base, value: 'not called', tone: 'off', note: 'the label report has counts but no label call; the counts are in the Digest tab' }
+  return { ...base, value: 'not assessed', tone: 'off', note: 'the label report was not written', action: enable('Label report', { label_out: 'label.tsv' }) }
 }
 
 /// The extension "Add FASTA and run again" runs with: tags of tag_length +
@@ -388,7 +817,8 @@ const intParam = (v: unknown, dflt: number): number => {
 function alkylationTile(c: AlkylationCall, fasta: boolean, params: Record<string, unknown>, reconMin: number | null): Tile {
   const base = { id: 'alkylation', label: 'Alkylation' }
   const ext = intParam(params['extension'], 0)
-  const len = intParam(params['tag_length'], 3)
+  // The longest seed (tag_lengths replaces tag_length).
+  const len = longestSeed(params) ?? 3
   if (c.state === 'counts' && !c.placed) {
     // Nothing placed: no measurement, not an absence of alkylation.
     const longest = len + 2 * ext
@@ -411,25 +841,131 @@ function alkylationTile(c: AlkylationCall, fasta: boolean, params: Record<string
       ...base,
       value: 'no call (counts only)',
       tone: 'nocall',
-      note: `${hits.length ? hits.map((s) => `${s.name} ${fmt(s.spectra)} of ${placed} placed spectra`).join(', ') : `no Cys alkylation gap among ${placed} placed spectra`}; this mass-gap report contains counts, not an alkylation call. The separate CLI-only -alkylation_out report makes that call`
+      note: `${hits.length ? hits.map((s) => `${s.name} ${fmt(s.spectra)} of ${placed} placed spectra`).join(', ') : `no Cys alkylation gap among ${placed} placed spectra`}; this mass-gap report contains counts, not an alkylation call. The alkylation report (Characterize a run) makes that call`
     }
   }
-  if (fasta)
-    return {
-      ...base,
-      value: 'not assessed',
-      tone: 'off',
-      note: 'the mass-gap report was not written',
-      action: enable({ recon_out: 'recon.tsv', massgap_out: 'massgap.tsv' })
-    }
-  const raise = ext < FASTA_EXTENSION
+  // Asked for and not written: the log says why; no action to add it.
+  if (given(params['alkylation_out'])) return { ...base, value: 'not assessed', tone: 'off', note: 'the alkylation report was asked for but not written; the log says why' }
+  // The alkylation report places tags on a shipped proteome (or the FASTA
+  // given): the extension it needs follows the proteome and the tag length
+  // (products.ts alkylationExtension), as the Setup toggle raises it.
+  const withAlk = { ...(params as Record<string, ParamValue>), alkylation_out: 'alkylation.tsv' }
+  // On a FASTA of the user's nothing is raised (its length follows its
+  // size): the note says what a human-sized one needs.
+  const raise = alkylationExtension(withAlk)
+  const short = alkylationShipped(withAlk) ? null : alkylationShort(withAlk)
+  const target = alkylationTarget(withAlk)
   return {
     ...base,
-    value: 'not assessed (needs a FASTA)',
+    value: 'not assessed',
     tone: 'off',
-    note: `the Cys gaps come from placing the tags in a FASTA (the mass-gap report)${
-      raise ? `; adding one also sets the extension from ${ext} to ${FASTA_EXTENSION}, so tags reach the length a proteome database needs` : ''
-    }`,
-    action: { kind: 'add-fasta', label: 'Add FASTA and run again', ...(raise ? { values: { extension: String(FASTA_EXTENSION) } } : {}) }
+    note: `the alkylation report was not written${raise ? `; adding it raises the extension from ${ext} to ${raise}, so tags reach the ${target} residues the proteome needs` : short ? `; on this database it needs extension ${short}${Number(String(params['recon_min_length'] ?? '')) > 0 ? '' : ' for a human-sized one'}` : ''}`,
+    action: enable('Alkylation report', { alkylation_out: 'alkylation.tsv', ...(raise ? { extension: raise } : {}) })
   }
 }
+
+/// The reasons of an alkylation no call, in words.
+export function alkylationReason(reason: string | undefined): string {
+  switch (reason) {
+    case 'tags_too_short':
+      return 'no tag reaches the length the proteome needs (8 residues for human or mouse, 7 for yeast or E. coli)'
+    case 'few_cys_spectra':
+      return 'too few spectra with one cysteine'
+    case 'ambiguous':
+      return 'no reagent has a clear majority'
+    default:
+      return reason ? reason.replace(/_/g, ' ') : 'no reason given'
+  }
+}
+
+/// The tile of an alkylation report (-alkylation_out): its call or its no
+/// call with the reason; too short tags offer the run with extension 3.
+function alkylationReportTile(c: AlkylationReport, params: Record<string, unknown>): Tile {
+  const base = { id: 'alkylation', label: 'Alkylation' }
+  const db = c.databaseSource ? ` on ${c.databaseSource.replace(/^bundled:/, 'the shipped ').replace(/^proteome$/, 'the proteome given')}` : ''
+  if (c.status === 'call')
+    return {
+      ...base,
+      value: c.reagent === 'none' ? 'none (not alkylated)' : (c.reagent ?? 'call'),
+      tone: 'call',
+      note: `${c.share != null ? `${pct(c.share)} of ` : ''}${fmt(c.binned)} spectra with one cysteine${db}; not validated`
+    }
+  // The extension the run's proteome needs at its tag length; a FASTA of
+  // the user's needs about 8 residues (its index sets the length).
+  const need = c.reason === 'tags_too_short' ? alkylationShort(params as Record<string, ParamValue>) : null
+  const target = alkylationTarget(params as Record<string, ParamValue>)
+  return {
+    ...base,
+    value: 'no call',
+    tone: 'nocall',
+    note: c.reason === 'tags_too_short' ? `no tag reaches the ${target} residues the proteome needs` : alkylationReason(c.reason),
+    ...(need ? { action: { kind: 'enable' as const, label: `Run again with extension ${need}`, values: { extension: need } } } : {})
+  }
+}
+
+// ---- what the Overview shows of a workflow ---------------------------------
+
+/// The tiles of @p o worth showing for a run sent @p params: MS2 spectra and
+/// tags always, every other only when the run asked for its report
+/// (doc/GUI-WORKFLOWS.md 3: no "not assessed" tile for a report nobody
+/// asked for).
+export function shownTiles(o: Overview, params: Record<string, unknown>): { figures: Tile[]; calls: Tile[] } {
+  const on = (n: string): boolean => given(params[n])
+  const want: Record<string, boolean> = {
+    spectra: true,
+    tags: true,
+    instrument: on('digest_out') || on('label_out') || on('massgap_out') || on('qc_out'),
+    'qc-tagged': on('qc_out'),
+    'qc-charge': on('qc_out'),
+    shortlist: on('shortlist_out'),
+    placed: on('delta_counts_out'),
+    topshift: on('delta_out'),
+    tagged: on('census') || on('census_sorted_out'),
+    'ident-score': on('census_sorted_out'),
+    identified: on('census_sorted_out') && on('census_ids'),
+    candidates: on('census_sorted_out') && on('census_ids'),
+    // The digest filter's count is the Digest tab's (DigestPanel), not a
+    // figure of the run.
+    filtered: false,
+    glyco: on('glyco'),
+    protease: on('digest_out'),
+    genus: on('species'),
+    label: on('label_out'),
+    alkylation: on('alkylation_out') || on('massgap_out')
+  }
+  return { figures: o.figures.filter((t) => want[t.id]), calls: o.calls.filter((t) => want[t.id]) }
+}
+
+/// The tiles of each workflow's main result (doc/GUI-WORKFLOWS.md 1): shown
+/// first, in the grid of the counts, not on a row of their own below them.
+const LEAD_TILES: Record<string, string[]> = {
+  'run-qc': ['qc-tagged', 'instrument', 'qc-charge'],
+  'mass-shift': ['topshift', 'placed'],
+  species: ['genus'],
+  'db-reduction': ['shortlist'],
+  triage: ['ident-score', 'identified', 'candidates', 'tagged'],
+  characterize: ['protease', 'label', 'genus', 'glyco', 'alkylation']
+}
+
+/// @p tiles with the workflow's own (LEAD_TILES) first among the figures.
+export function leadTiles(tiles: { figures: Tile[]; calls: Tile[] }, workflowId?: string | null): { figures: Tile[]; calls: Tile[]; lead?: number } {
+  const ids = (workflowId && LEAD_TILES[workflowId]) || []
+  if (!ids.length) return tiles
+  const all = [...tiles.figures, ...tiles.calls]
+  const lead = ids.map((id) => all.find((t) => t.id === id)).filter((t): t is Tile => !!t)
+  const isLead = (t: Tile): boolean => lead.includes(t)
+  return { figures: [...lead, ...tiles.figures.filter((t) => !isLead(t))], calls: tiles.calls.filter((t) => !isLead(t)), lead: lead.length }
+}
+
+// A suggested setting in the words of the search engine forms (the key
+// stays the short token the tests and exports match on).
+const SETTING_WORDS: Record<string, string> = {
+  enzyme: 'Enzyme',
+  'missed cleavages': 'Missed cleavages',
+  'fixed C': 'Fixed cysteine modification',
+  label: 'Label',
+  'variable M+15.995': 'Variable modification (M +15.995)',
+  'fragment tol.': 'Fragment tolerance',
+  database: 'Database'
+}
+export const settingWords = (s: string): string => SETTING_WORDS[s] ?? s

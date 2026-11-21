@@ -228,7 +228,7 @@ header.topbar button.on { background: var(--primary-soft); border-color: var(--p
 /* Focused by a view switch (App.tsx), as a landmark: no ring round the view. */
 .view:focus { outline: none; }
 .view-setup { justify-content: center; background: var(--panel); }
-.view-setup aside.controls { width: min(860px, 100%); border-left: 1px solid var(--border); }
+.view-setup aside.controls { width: min(960px, 100%); border-left: 1px solid var(--border); }
 .view-results > .results { flex: 1; }
 .view-history { overflow: auto; }
 
@@ -495,6 +495,8 @@ summary.disclosure:hover { background: var(--panel); }
 .help[style] { display: block; -webkit-line-clamp: unset; }
 .help.invalid { color: var(--destructive-text); display: flex; gap: 6px; align-items: flex-start; -webkit-line-clamp: unset; }
 .help.invalid .icon { margin-top: 2px; }
+/* The changed note under a hint, on its own line (ParamField). */
+.help.changed { margin-top: 0; -webkit-line-clamp: 1; }
 .help .mark { color: var(--primary-text); }
 .help strong { font-weight: 600; color: var(--foreground); }
 button.link.help-more { font-size: var(--text-xs); align-self: flex-start; }
@@ -630,6 +632,8 @@ button.offer { border-style: dashed; }
   font-size: var(--text-xs);
   font-weight: 500;
 }
+/* An empty report: its tab says 0, muted. */
+.tabs .count.zero { background: var(--panel); color: var(--muted-foreground); }
 
 /* Which run or file a pane shows. */
 .src { margin: 0; color: var(--muted-foreground); font-size: var(--text-xs); overflow-wrap: anywhere; }
@@ -739,7 +743,7 @@ caption { text-align: left; caption-side: top; padding: var(--space-3) var(--spa
 .cards { display: flex; flex-wrap: wrap; gap: var(--space-4); }
 .cards .headline { flex: 2 1 320px; }
 .cards .evidence { flex: 1 1 220px; }
-.card-label { font-size: var(--text-xs); font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; color: var(--muted-foreground); }
+.card-label { font-size: var(--text-sm); font-weight: 600; color: var(--muted-foreground); }
 .card .big, .species .taxon { font-size: var(--text-2xl); font-weight: 600; font-variant-numeric: tabular-nums; }
 .species .call { display: flex; align-items: baseline; gap: var(--space-2); flex-wrap: wrap; }
 .rank {
@@ -753,7 +757,7 @@ caption { text-align: left; caption-side: top; padding: var(--space-3) var(--spa
   padding: 0 var(--space-2);
 }
 .species .sub { font-size: var(--text-sm); }
-.species .headline .muted { font-size: var(--text-sm); }
+.species .headline .muted:not(.taxon) { font-size: var(--text-sm); }
 /* The hedge sits WITH the number, not in a footnote -- a genus-level method
    must not read as a species identification. */
 .caveat { font-size: var(--text-xs); color: var(--muted-foreground); font-style: italic; }
@@ -806,6 +810,7 @@ ul.logo-legend .swatch.base { background: var(--aa-base); }
 ul.logo-legend .swatch.polar { background: var(--aa-polar); }
 ul.logo-legend .swatch.hydro { background: var(--aa-hydro); }
 .chip-line { display: flex; flex-wrap: wrap; gap: var(--space-2); align-items: center; }
+.dg-sub { margin: var(--space-2) 0 0; font-size: var(--text-xs); font-weight: 600; color: var(--muted-foreground); }
 .digest .sub { font-size: var(--text-sm); }
 table.taxa.narrow { width: auto; min-width: 320px; max-width: 100%; }
 table.taxa.narrow caption { font-weight: 400; font-size: var(--text-xs); color: var(--muted-foreground); padding: var(--space-1) 0; }
@@ -885,6 +890,8 @@ details.raw td.wrap { white-space: normal; min-width: 300px; }
 .rt-row { display: grid; height: 28px; align-items: center; border-bottom: 1px solid var(--row-rule); }
 .rt-cell { padding: 0 10px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-variant-numeric: tabular-nums; }
 .rt-cell.n { text-align: right; }
+/* Tags and ProForma in the mono font: their width is known (ResultsTable SEQ_CHAR_W). */
+.rt-cell.seq { font-family: var(--font-seq); font-size: 13px; }
 .rt-cell.dim { color: var(--muted-foreground); }
 .rt-cell sup { font-size: var(--text-xs); line-height: 0; }
 /* A narrow window (960-900 px wide and less in a browser): tighter margins. */
@@ -1061,6 +1068,7 @@ kbd { font-family: var(--font-mono); font-size: var(--text-xs); color: var(--mut
 .running .bar.indeterminate .fill { width: 35%; animation: slide 1.1s ease-in-out infinite; }
 .overview { padding: var(--space-4) var(--space-5); display: flex; flex-direction: column; gap: var(--space-4); max-width: 1200px; }
 .overview h2 { margin: 0; font-size: var(--text-lg); }
+.overview p.tiles-head { margin: var(--space-2) 0 calc(-1 * var(--space-1)); font-size: var(--text-xs); font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em; color: var(--muted-foreground); }
 .overview ul.tiles { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: var(--space-3); }
 .overview .tile { height: 100%; box-sizing: border-box; border: 1px solid var(--border); border-radius: var(--radius-md); background: var(--card); padding: var(--space-3); display: flex; flex-direction: column; gap: var(--space-1); }
 .overview .tile-label { margin: 0; font-size: var(--text-xs); font-weight: 600; color: var(--muted-foreground); text-transform: none; }
@@ -1068,12 +1076,16 @@ kbd { font-family: var(--font-mono); font-size: var(--text-xs); color: var(--mut
 .overview .tile-note { margin: 0; font-size: var(--text-xs); color: var(--muted-foreground); flex: 1; overflow-wrap: anywhere; }
 .overview .tile.tone-off .tile-value, .overview .tile.tone-nocall .tile-value { color: var(--muted-foreground); }
 .overview .tile.tone-low .tile-value { color: var(--flag-text); }
+.overview .tile .tile-value.muted { color: var(--muted-foreground); }
 .overview .tile button { align-self: flex-start; }
 .overview ul.checks { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: var(--space-1); font-size: var(--text-sm); }
 .overview ul.checks li.ok::before { content: '✓ '; color: var(--ok); }
 .overview ul.checks li.flag { color: var(--flag-text); }
 .overview ul.checks li.flag::before { content: '⚠ '; }
 .overview ul.checks li.muted { color: var(--muted-foreground); }
+.overview ul.checks details.check-detail { display: inline; margin-left: var(--space-2); color: var(--muted-foreground); }
+.overview ul.checks details.check-detail summary { display: inline; cursor: pointer; text-decoration: underline; }
+.overview ul.checks details.check-detail[open] { display: block; margin: var(--space-1) 0 0 var(--space-4); }
 .overview .suggested-head { display: flex; align-items: center; gap: var(--space-3); }
 .overview .suggested-head h3 { margin: 0; font-size: var(--text-sm); }
 .overview .suggested table { border-collapse: collapse; width: 100%; font-size: var(--text-sm); }
@@ -1141,6 +1153,205 @@ kbd { font-family: var(--font-mono); font-size: var(--text-xs); color: var(--mut
 .sp-res { font: 600 var(--text-xs) var(--font-seq); color: var(--primary-text); }
 .sp-tags h3 { margin: 0 0 var(--space-2); font-size: var(--text-sm); font-weight: 600; }
 .sp-tags-wrap { max-height: 320px; overflow: auto; }
+table.history-table th.num { text-align: right; }
+/* The tags of one spectrum: its own columns, not History's widths. */
+table.history-table.sp-tags-table { table-layout: auto; }
+table.history-table.sp-tags-table th:nth-child(n) { width: auto; }
+table.sp-tags-table th.num, table.sp-tags-table td.num { text-align: right; font-variant-numeric: tabular-nums; }
 .sp-tags-table tbody tr { cursor: pointer; }
 .sp-tags-table tbody tr.on td { background: var(--primary-soft); }
 .sp-tags-table tbody tr:focus-visible { outline: 2px solid var(--ring); outline-offset: -2px; }
+
+/* ---- Workflow setup (doc/GUI-WORKFLOWS.md 3) ------------------------------ */
+.step-card { gap: var(--space-3); }
+.card-head .help-q, .card-head > button { flex: none; }
+/* Seven workflow cards, 4 + 3 at the default width. */
+fieldset.tasks { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+@media (max-width: 760px) { fieldset.tasks { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+label.task { align-content: start; }
+.task-products { grid-column: 2; font-size: var(--text-xs); color: var(--muted-foreground); }
+.task-blurb-line { margin: 0; font-size: var(--text-sm); }
+.task.on .task-products { color: var(--primary-text); }
+.origin-name { font-size: var(--text-sm); }
+.starting .spacer { flex: 1; }
+/* One file | Batch */
+.seg { display: inline-flex; align-self: flex-start; border: 1px solid var(--control); border-radius: var(--radius-sm); overflow: hidden; }
+.seg-opt { display: inline-flex; align-items: center; gap: 6px; padding: 4px 12px; font-size: var(--text-sm); cursor: pointer; }
+.seg .seg-opt + .seg-opt { border-left: 1px solid var(--control); }
+.seg .seg-opt.on { background: var(--primary-soft); color: var(--primary-text); font-weight: 500; }
+.seg-opt input { margin: 0; }
+.seg-opt.small { padding: 2px 8px; font-size: var(--text-xs); }
+.batch-input { display: flex; flex-direction: column; gap: var(--space-2); }
+.grow { flex: 1; min-width: 0; }
+/* Settings: one column of fields, each with one line of help. */
+.settings { display: flex; flex-direction: column; gap: 14px; }
+.help.brief { -webkit-line-clamp: 2; }
+.instrument-field select { min-width: 240px; }
+.custom-tol { padding-left: var(--space-3); border-left: 2px solid var(--border); }
+.label-row { display: flex; align-items: center; gap: var(--space-2); flex-wrap: wrap; }
+.badge { display: inline-block; padding: 0 6px; border-radius: 999px; border: 1px solid var(--border); font-size: 11px; line-height: 18px; color: var(--muted-foreground); font-weight: 400; }
+.badge.warn { border-color: var(--destructive-text); color: var(--destructive-text); }
+/* The (?) popover of a field. */
+.help-pop-wrap { position: relative; display: inline-flex; }
+.help-pop {
+  position: absolute; z-index: 30; top: calc(100% + 6px); left: 0;
+  width: min(380px, 70vw); display: flex; flex-direction: column; gap: var(--space-2);
+  padding: var(--space-3); background: var(--card); color: var(--foreground);
+  border: 1px solid var(--border); border-radius: var(--radius-md); box-shadow: var(--shadow);
+  font-size: var(--text-xs); font-weight: 400; line-height: 1.45; white-space: normal;
+}
+.help-pop.right { left: auto; right: 0; }
+.help-pop-more { color: var(--muted-foreground); }
+/* The CLI description below the plain text: what it adds, at the help
+   text's size and contrast (12 px is the minimum), set apart by space. */
+.help-pop-cli { font-size: var(--text-xs); color: var(--foreground); margin-top: var(--space-1); padding-top: var(--space-2); border-top: 1px solid var(--border); }
+.help-pop-facts { display: flex; flex-wrap: wrap; gap: var(--space-1) var(--space-3); }
+.help-pop .help-link { align-self: flex-start; font-size: var(--text-xs); }
+/* Two lines in the grid, as a brief hint: most sentences end inside them;
+   the whole sentence is its tooltip and the (?) popover's. */
+.advanced .help:not(.brief):not(.invalid):not(.inert) { -webkit-line-clamp: 2; }
+details.advanced { padding: 0; }
+details.advanced > summary.card-head { padding: var(--space-3) var(--space-4); min-height: 0; }
+details.advanced > summary h2 { flex: 1; }
+.adv-body { display: flex; flex-direction: column; gap: var(--space-2); padding: 0 var(--space-4) var(--space-4); }
+.adv-h { margin: var(--space-2) 0 0; font-size: var(--text-xs); font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; color: var(--muted-foreground); }
+.sec.other > .sec-body { gap: var(--space-2); }
+/* Outputs: folder, run name and the product checklist. */
+.out-row { display: flex; align-items: center; gap: var(--space-2); flex-wrap: wrap; }
+.out-row .sublabel { min-width: 104px; }
+.out-row .mono { font-size: var(--text-sm); overflow-wrap: anywhere; }
+ul.products { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
+li.product { display: flex; align-items: center; gap: var(--space-2); flex-wrap: wrap; font-size: var(--text-sm); }
+li.product input[type='checkbox'] { margin: 0; }
+li.product.fixed label { color: var(--muted-foreground); }
+.product-file { color: var(--muted-foreground); font-size: var(--text-xs); }
+.product-note { font-size: var(--text-xs); color: var(--muted-foreground); }
+.product-note:empty { display: none; }
+.warn-text { color: var(--destructive-text); }
+.usi-acc { width: 130px; }
+/* The plan row at the top of the run bar. */
+.runbar .plan-footer { border: 0; padding: 0; background: none; flex-direction: row; align-items: center; flex-wrap: wrap; gap: var(--space-2); }
+.runbar .plan-line { flex: 1 1 260px; margin: 0; font-weight: 500; }
+.runbar .plan-footer > p:not(.plan-line) { flex-basis: 100%; }
+/* QC, Shortlist and Triage views. */
+.report-view { display: flex; flex-direction: column; gap: var(--space-3); padding: var(--space-4); }
+.report-sum { margin: 0; }
+.report-notes { margin: 0; padding-left: var(--space-4); font-size: var(--text-xs); }
+.qc-view { display: flex; flex-direction: column; gap: var(--space-4); max-width: 1100px; }
+.qc-section h3 { margin: 0 0 var(--space-2); font-size: var(--text-sm); }
+table.kv { border-collapse: collapse; width: 100%; font-size: var(--text-xs); }
+table.kv th { text-align: left; font-weight: 500; padding: 3px var(--space-2) 3px 0; white-space: nowrap; vertical-align: top; }
+table.kv td { padding: 3px var(--space-2) 3px 0; vertical-align: top; }
+table.kv td.mono { overflow-wrap: anywhere; }
+/* The QC value column: as wide as its values, not the rest of the row. */
+.qc-view table.kv { width: auto; max-width: 100%; }
+.qc-view table.kv td.mono { max-width: 48ch; }
+table.kv td.desc { width: 55%; }
+table.kv { table-layout: auto; }
+table.kv tr + tr { border-top: 1px solid var(--border); }
+.task-chooser { display: flex; flex-direction: column; gap: var(--space-2); }
+details.advanced:not([open]) { gap: 0; }
+
+/* ---- Round 2 of the workflow review ------------------------------------- */
+/* A flag written in full (the (?) popover): no dash drawn before it. */
+code.flag { color: var(--foreground); }
+/* Required, not filled in yet: neutral, a fresh form is no error. */
+.badge.todo { border-color: var(--primary-text); color: var(--primary-text); }
+/* Empty fields read as empty: proportional, muted, never like a value. */
+input::placeholder, textarea::placeholder { font-family: var(--font-sans); font-style: italic; color: var(--muted-foreground); opacity: 0.8; }
+.path-input:placeholder-shown { font-family: var(--font-sans); }
+/* A group waiting for its report: said once, with its Turn on. */
+.group-needs { display: flex; align-items: center; gap: var(--space-2); flex-wrap: wrap; padding: var(--space-2) var(--space-3); border: 1px dashed var(--border); border-radius: var(--radius-sm); font-size: var(--text-xs); color: var(--muted-foreground); }
+.group-needs span { flex: 0 1 auto; }
+.group-needs button { margin-left: 0; }
+/* A group waiting for a report: one line, the title then its note. */
+.sec.waiting-line { display: flex; align-items: center; gap: var(--space-2); flex-wrap: wrap; padding: 6px var(--space-3); font-weight: 500; }
+.sec.waiting-line .sec-title { flex: 0 1 auto; padding-left: 22px; }
+.sec.waiting-line .group-needs { flex: 1 1 auto; justify-content: flex-end; border: none; padding: 0; font-weight: 400; }
+/* The Preset select first in its row, in the same place for every workflow. */
+.preset-pick { display: inline-flex; align-items: center; gap: var(--space-2); }
+.preset-pick .sublabel { font-size: var(--text-xs); color: var(--muted-foreground); }
+/* The Overview: workflow line, two-line notes. */
+.overview-sub { margin: 0; display: flex; gap: 4px; align-items: baseline; flex-wrap: wrap; font-size: var(--text-sm); }
+.overview .tile-note { flex: 1; }
+/* The QC summary strip. */
+dl.qc-strip { display: flex; flex-wrap: wrap; gap: var(--space-2) var(--space-5); margin: 0; padding: var(--space-3) var(--space-4); border: 1px solid var(--border); border-radius: var(--radius-md); background: var(--card); }
+dl.qc-strip .stat dt { font-size: var(--text-xs); color: var(--muted-foreground); }
+dl.qc-strip .stat dd { margin: 0; font-size: var(--text-md); font-weight: 600; }
+.check-inline { display: inline-flex; align-items: center; gap: 6px; font-size: var(--text-xs); color: var(--muted-foreground); }
+.report-notes { padding-left: 0; display: flex; flex-direction: column; gap: 2px; }
+.seg-opt .count { margin-left: 4px; color: var(--muted-foreground); font-variant-numeric: tabular-nums; }
+/* Tags toolbar: the row actions and the export as two groups. */
+.rt-group { display: inline-flex; align-items: center; gap: 4px; padding-left: var(--space-2); border-left: 1px solid var(--border); }
+.rt-group-label { font-size: var(--text-xs); color: var(--muted-foreground); }
+/* Setup compact enough that cards 1 to 4 fit at 1280 x 800 (doc/GUI-WORKFLOWS.md 3). */
+.view-setup .controls-body { padding: var(--space-2) var(--space-4); gap: 8px; }
+.view-setup .step-card { padding: 6px var(--space-3); gap: 6px; }
+.view-setup .card-head h2 { font-size: var(--text-sm); }
+.view-setup .card-head .link.small { font-size: var(--text-xs); }
+/* Input: the mode switch and the file on one row. */
+.input-row { display: flex; align-items: center; gap: var(--space-3); flex-wrap: wrap; }
+.input-row .input-card { flex: 1 1 360px; padding-top: 2px; padding-bottom: 2px; min-height: 0; }
+/* Workflow cards: label and products on one line (the products in full as
+   the card's tooltip and its description). */
+.view-setup label.task { display: flex; align-items: baseline; gap: 6px; padding: 4px var(--space-2); min-width: 0; }
+.view-setup .task-label { white-space: nowrap; }
+/* Short enough to fit beside the label (tasks.ts products). */
+.view-setup .task-products { font-size: 11px; line-height: 1.3; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+.view-setup .task-blurb-line { font-size: var(--text-xs); color: var(--muted-foreground); }
+/* Settings: the fields in three columns; a path or list spans two. */
+.view-setup .settings { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px var(--space-4); align-items: start; }
+.view-setup .settings > .field:has(.path-input) { grid-column: span 2; }
+/* One line: each workflow's hints are short whole sentences (tasks.ts). */
+.view-setup .settings .help.brief { -webkit-line-clamp: 1; }
+/* Two lines when it says the CLI default too (it must not be cut). */
+.view-setup .settings .help.brief.with-default { -webkit-line-clamp: 2; }
+.view-setup .instrument-field select { min-width: 0; width: 100%; }
+.view-setup .settings > .settings-note { grid-column: 1 / -1; margin: 0; }
+@media (max-width: 900px) { .view-setup .settings { grid-template-columns: minmax(0, 1fr); } .view-setup .settings > .field { grid-column: auto !important; } }
+.view-setup .settings textarea { min-height: 0; }
+/* Advanced: the fields of a group in the Settings grid. */
+.adv-fields { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 8px var(--space-4); align-items: start; }
+.adv-fields > .field:has(textarea), .adv-fields > .field:has(.path-input) { grid-column: span 2; }
+@media (max-width: 900px) { .adv-fields { grid-template-columns: minmax(0, 1fr); } .adv-fields > .field { grid-column: auto !important; } }
+/* Outputs: the products in two columns. */
+#card-outputs ul.products { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); grid-auto-flow: row dense; gap: var(--space-1) var(--space-4); align-items: start; }
+/* Row by row: a cell holds its checkbox and its hint (beside the label,
+   wrapping under it in that cell), so a long hint grows its row, never
+   pushes the next checkbox out of line. */
+#card-outputs li.product { align-self: start; row-gap: 0; }
+#card-outputs li.product .product-note { min-width: 0; }
+#card-outputs li.product.wide { grid-column: 1 / -1; }
+li.product.wide .product-note { flex-basis: 100%; padding-left: calc(13px + var(--space-2)); }
+@media (max-width: 900px) { #card-outputs ul.products { grid-template-columns: minmax(0, 1fr); } }
+/* The run bar: plan line, its buttons and Run on one row. */
+.view-setup .runbar { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; column-gap: var(--space-4); row-gap: 4px; padding-top: var(--space-2); padding-bottom: var(--space-2); }
+.view-setup .runbar > * { grid-column: 1 / -1; }
+.view-setup .runbar > .plan-footer { grid-column: 1; grid-row: 1; }
+.view-setup .runbar > .row.actions { grid-column: 2; grid-row: 1; }
+.view-setup .runbar > .row.actions button.primary { min-width: 180px; height: 38px; }
+/* Outputs: the folder and the run name side by side. */
+.out-rows { display: flex; flex-wrap: wrap; gap: 6px var(--space-4); }
+.out-rows > .out-row { flex: 1 1 320px; }
+.out-rows > .warn { flex-basis: 100%; }
+/* The workflow row in the Workflow card's head. */
+.card-head .starting { flex: 0 1 auto; justify-content: flex-end; gap: var(--space-2); }
+.card-head .starting .spacer { display: none; }
+
+/* The header of every report tab (results/ReportHeader.tsx): title, help,
+   and the file(s) at the right; an optional line under it. */
+.report-head { display: flex; flex-direction: column; gap: 2px; }
+.report-head .card-head { align-items: baseline; }
+.report-head .report-files { margin-left: auto; display: flex; flex-wrap: wrap; gap: var(--space-2); }
+.report-head .report-sub { margin: 0; font-size: var(--text-sm); color: var(--muted-foreground); }
+.shortlist-notes { max-width: 640px; }
+
+/* The chevrons: an SVG, 12 px in the groups, 14 px on the Advanced card,
+   whose summary lines up with the headers of cards 1-4. */
+.chev { display: inline-grid; place-items: center; width: 14px; height: 14px; flex: none; }
+.chev.big { width: 16px; height: 16px; color: var(--foreground); }
+.view-setup details.advanced > summary.card-head { padding: 0; min-height: 0; }
+.view-setup details.advanced > .adv-body { padding: var(--space-2) 0 var(--space-2); }
+.view-setup details.advanced > summary.card-head h2 { margin: 0; }
+/* A filter that needs identifications the run was not given. */
+.seg-opt.off { opacity: 0.5; cursor: not-allowed; }

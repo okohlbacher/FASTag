@@ -48,7 +48,9 @@ describe('the batch summary', () => {
     await waitFor(() => expect(within(bodyRows()[2]).getByText('none (label-free)')).toBeDefined())
     const [a, b, c] = bodyRows().map(cells)
     expect(a.slice(0, 1)).toEqual(['a.mzML'])
-    expect(a).toEqual(expect.arrayContaining(['128,821', 'Homo', 'Trypsin', 'none (label-free)', 'not assessed (needs a FASTA)']))
+    expect(a).toEqual(expect.arrayContaining(['128,821', 'Homo', 'Trypsin', 'none (label-free)']))
+    // Round 12: no Alkylation column when no job asked for that report.
+    expect(screen.queryByRole('columnheader', { name: /^Alkylation/ })).toBeNull()
     expect(b).toEqual(expect.arrayContaining(['172,237', 'Homo', 'Trypsin', 'TMT']))
     expect(c).toEqual(expect.arrayContaining(['none (label-free)']))
     // TMT differs from label-free (2 of 3 calls); its cell says so, in words too.
@@ -160,7 +162,7 @@ describe('folder input and the output folder', () => {
     mock.nextPickFolder = '/empty'
     mock.folderFiles['/empty'] = []
     await click(screen.getByRole('button', { name: 'Add folder…' }))
-    expect(await screen.findByText('No spectra files (mzML, mzPeak, MGF) directly in /empty.')).toBeDefined()
+    expect(await screen.findByText('No spectra files (mzML, mzPeak, MGF, .raw, timsTOF .d) directly in /empty.')).toBeDefined()
     expect(screen.getByText('No batch yet')).toBeDefined()
   })
 
@@ -175,10 +177,10 @@ describe('folder input and the output folder', () => {
     await click(screen.getByRole('button', { name: 'Choose output folder…' }))
     expect(within(outdir()).getByText('/out')).toBeDefined()
     // The plan footer says so too.
-    expect(document.querySelector('.view[data-view="setup"]')!.textContent).toContain('out: /out')
+    expect(document.querySelector('.view[data-view="batch"] .runbar')!.textContent).toContain('outputs in /out')
     await click(screen.getByRole('button', { name: 'Beside inputs' }))
     expect(within(outdir()).getByText('beside each input')).toBeDefined()
-    expect(document.querySelector('.view[data-view="setup"]')!.textContent).toContain('out: beside each input')
+    expect(document.querySelector('.view[data-view="batch"] .runbar')!.textContent).toContain('outputs beside each input')
     await click(screen.getByRole('button', { name: 'Choose output folder…' }))
     serve(mock, 'a', BATCH_CASES.pxd003531, '/out')
     serve(mock, 'b', BATCH_CASES.pxd004541, '/out')
@@ -258,7 +260,7 @@ describe('what a summary cell says when a read goes wrong, and where notes show'
     // In the cell's text, so a screen reader reads it with the value; no
     // tooltip-only caveat.
     const label = within(bodyRows()[0]).getByText('none (label-free)').closest('td')!
-    expect(label.textContent).toMatch(/^none \(label-free\); CLI label call over/)
+    expect(label.textContent).toMatch(/^none \(label-free\); Label call over/)
     for (const td of bodyRows()[0].querySelectorAll<HTMLElement>('td.call-cell')) expect(td.getAttribute('title')).toBeNull()
     // Shown under each value by a keyboard-reachable toggle.
     expect(table().querySelectorAll('.cell-note')).toHaveLength(0)
@@ -269,23 +271,23 @@ describe('what a summary cell says when a read goes wrong, and where notes show'
     const notes = [...bodyRows()[0].querySelectorAll<HTMLElement>('td.call-cell .cell-note')]
     expect(notes).toHaveLength(4)
     for (const n of notes) expect(n.textContent!.replace(/^; /, '')).toBeTruthy()
-    expect(within(label).getByText(/^CLI label call over/).closest('.cell-note')).not.toBeNull()
+    expect(within(label).getByText(/^Label call over/).closest('.cell-note')).not.toBeNull()
   })
 
-  it('an empty folder picked from the Batch QC card on Setup says so there', async () => {
+  it('an empty folder picked from the Batch input of Setup says so there', async () => {
     const mock = installMockBridge()
     await renderColdApp(mock)
-    await click(screen.getByRole('radio', { name: /^Batch QC/ }))
+    await click(screen.getByRole('radio', { name: 'Batch' }))
     mock.nextPickFolder = '/empty'
     mock.folderFiles['/empty'] = []
-    await click(screen.getByRole('button', { name: 'Or add a folder…' }))
-    const note = await screen.findByText('No spectra files (mzML, mzPeak, MGF) directly in /empty.')
+    await click(screen.getByRole('button', { name: 'Add folder…' }))
+    const note = await screen.findByText('No spectra files (mzML, mzPeak, MGF, .raw, timsTOF .d) directly in /empty.')
     expect(note.closest('.view')!.getAttribute('data-view')).toBe('setup')
     expect(note.closest('.view')!.hasAttribute('hidden')).toBe(false)
     expect(note.getAttribute('role')).toBe('status')
     // A folder that cannot be listed, too.
     mock.nextPickFolder = '/nope'
-    await click(screen.getByRole('button', { name: 'Or add a folder…' }))
+    await click(screen.getByRole('button', { name: 'Add folder…' }))
     expect(await screen.findByText('Cannot read the folder: /nope is not a folder')).toBeDefined()
   })
 })

@@ -10,11 +10,20 @@
 // across one missing peak, so an inner position of its ladder may be off the
 // peaks. Whichever of the b and y ladders lies on the peaks is drawn (the
 // TSV does not say which).
+//
+// A row read as c/z-dot ions (ion_series cz, under -ion_series cz or auto,
+// also in a hybrid run's mixed rows) has the same residue-sum flanks with
+// the c/z-dot offsets (IonSeries.h ionPair): c at nterm_mass + NH3, z-dot at
+// cterm_mass + H2O - NH2.
 
 import type { SpectrumPeaks } from './dump'
 
 export const PROTON = 1.007276466812
 export const WATER = 18.0105646837
+// OpenMS Residue::getInternalToCIon (NH3) and getInternalToZp1Ion
+// (H2O - NH2, the z+1 radical of ETD/ECD).
+export const C_OFFSET = 17.0265491015
+export const Z_DOT_OFFSET = WATER - 16.0187240694
 
 // Monoisotopic residue masses (unmodified; C without Carbamidomethyl).
 const RESIDUE: Record<string, number> = {
@@ -112,6 +121,8 @@ export interface TagRow {
   ntermMass: number
   ctermMass: number
   gapped: boolean
+  // The series the row was read as (the ion_series column; by without it).
+  ionSeries: 'by' | 'cz'
 }
 
 /** The ladder fields of one row of a tags TSV; null without them. */
@@ -126,7 +137,15 @@ export function tagRowFrom(columns: string[], cells: string[]): TagRow | null {
   const ctermMass = num('cterm_mass')
   const tag = at('tag')
   if (!tag || !Number.isInteger(charge) || charge < 1 || !Number.isFinite(ntermMass) || !Number.isFinite(ctermMass)) return null
-  return { spectrum: at('spectrum') ?? '', tag, charge, ntermMass, ctermMass, gapped: (at('gapped') ?? '0') !== '0' }
+  return {
+    spectrum: at('spectrum') ?? '',
+    tag,
+    charge,
+    ntermMass,
+    ctermMass,
+    gapped: (at('gapped') ?? '0') !== '0',
+    ionSeries: (at('ion_series') ?? '').trim() === 'cz' ? 'cz' : 'by'
+  }
 }
 
 export interface LadderPosition {
@@ -142,7 +161,7 @@ export interface LadderPosition {
 }
 
 export interface Ladder {
-  series: 'b' | 'y'
+  series: 'b' | 'y' | 'c' | 'z'
   charge: number
   // In ascending m/z; residues[k] lies between positions k and k + 1.
   positions: LadderPosition[]
@@ -256,7 +275,7 @@ function chainFrom(x0: number, p0: number, steps: number[], s: SpectrumPeaks, ga
 // allows the same). Every peak in that window is tried; a chain to the last
 // position wins, then the one on most peaks, then the smaller error, then
 // the one nearest the flank.
-function walk(series: 'b' | 'y', start: number, residues: number[], labels: string[], z: number, s: SpectrumPeaks, gapped: boolean): Ladder {
+function walk(series: Ladder['series'], start: number, residues: number[], labels: string[], z: number, s: SpectrumPeaks, gapped: boolean): Ladder {
   const x0 = (start + z * PROTON) / z
   const steps = residues.map((m) => m / z)
   const window = (steps.length + 1) * tolAt(s, x0) + FLANK_SLACK / z
@@ -301,7 +320,8 @@ function walk(series: 'b' | 'y', start: number, residues: number[], labels: stri
 export function ladderFor(row: TagRow, s: SpectrumPeaks, residues: Residues): Ladder {
   const z = row.charge
   const parsed = parseTag(row.tag)
-  const none = (reason: string): Ladder => ({ series: 'b', charge: z, positions: [], residues: [], matched: 0, complete: false, reason })
+  const cz = row.ionSeries === 'cz'
+  const none = (reason: string): Ladder => ({ series: cz ? 'c' : 'b', charge: z, positions: [], residues: [], matched: 0, complete: false, reason })
   if (!parsed) return none(`${row.tag} is not a tag`)
   const masses: number[] = []
   const labels: string[] = []
@@ -317,8 +337,8 @@ export function ladderFor(row: TagRow, s: SpectrumPeaks, residues: Residues): La
     labels.push(r.mod != null ? `${r.residue}[${r.mod}]` : r.residue)
   }
   if (s.mz.length === 0) return none('the spectrum has no peaks')
-  const b = walk('b', row.ntermMass, masses, labels, z, s, row.gapped)
-  const y = walk('y', row.ctermMass + WATER, [...masses].reverse(), [...labels].reverse(), z, s, row.gapped)
+  const b = walk(cz ? 'c' : 'b', row.ntermMass + (cz ? C_OFFSET : 0), masses, labels, z, s, row.gapped)
+  const y = walk(cz ? 'z' : 'y', row.ctermMass + (cz ? Z_DOT_OFFSET : WATER), [...masses].reverse(), [...labels].reverse(), z, s, row.gapped)
   // The one on the peaks; with both (or neither), the one on more peaks.
   if (b.complete !== y.complete) return b.complete ? b : y
   return y.matched > b.matched ? y : b

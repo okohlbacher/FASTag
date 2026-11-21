@@ -1,7 +1,7 @@
 // Help: every link lands on a section that exists, every parameter has a
 // settings entry, the troubleshooting covers what the app can show, and the
 // view is reachable and usable from the keyboard.
-import { act, fireEvent, render, screen } from '@testing-library/react'
+import { act, fireEvent, render, screen, within } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import App from '../App'
 import DigestPanel, { REASON } from '../DigestPanel'
@@ -82,12 +82,11 @@ describe('help: settings reference', () => {
   })
 
   it('a deep link to a hidden option explains that it is unavailable in the form', () => {
-    act(() => openHelp('param-species_call'))
+    act(() => openHelp('param-probe_input'))
     const { container } = render(<HelpView />)
-    const entry = container.querySelector<HTMLDetailsElement>('#param-species_call')!
+    const entry = container.querySelector<HTMLDetailsElement>('#param-probe_input')!
     expect(entry.open).toBe(true)
-    expect(entry.textContent).toContain(`Not in the settings form: ${PARAM_UI.species_call.hidden}`)
-    expect(entry.textContent).toContain('Choices:')
+    expect(entry.textContent).toContain(`Not in the settings form: ${PARAM_UI.probe_input.hidden}`)
   })
 })
 
@@ -258,7 +257,7 @@ describe('help: in the app', () => {
 
   it('F1 opens Help, Esc closes it; ? typed in a field does not open it', async () => {
     const c = await renderApp()
-    const out = screen.getByLabelText(/Tags TSV/)
+    const out = document.getElementById('p-tag_length')!
     await act(async () => {
       fireEvent.keyDown(out, { key: '?' })
     })
@@ -295,13 +294,17 @@ describe('help: in the app', () => {
     expect(state.target?.id).toBe('tags-gapped')
   })
 
-  it('a field\'s ? opens its settings entry, open and focused; the form keeps its values', async () => {
+  it('a field\'s ? shows its CLI option and default, and More in Help opens its settings entry; the form keeps its values', async () => {
     await renderApp()
-    const tl = screen.getByLabelText('Tag length tag_length') as HTMLInputElement
+    const tl = document.getElementById('p-tag_length') as HTMLInputElement
     await act(async () => {
       fireEvent.change(tl, { target: { value: '5' } })
     })
-    await click(screen.getByRole('button', { name: 'Help on Tag length' }))
+    await click(screen.getByRole('button', { name: 'About Seed length' }))
+    const pop = screen.getByRole('dialog', { name: 'About Seed length' })
+    expect(pop.textContent).toContain('-tag_length')
+    expect(pop.textContent).toContain('Default: 3')
+    await click(within(pop).getByRole('button', { name: 'More in Help' }))
     const entry = document.getElementById('param-tag_length') as HTMLDetailsElement
     expect(entry.open).toBe(true)
     expect(document.activeElement).toBe(entry.querySelector('summary'))
@@ -313,7 +316,7 @@ describe('help: in the app', () => {
     expect(document.activeElement?.id).toBe('help-page-h')
     expect(document.activeElement?.textContent).toBe('Glossary')
     await click(screen.getByRole('button', { name: 'Close Help' }))
-    expect((screen.getByLabelText('Tag length tag_length') as HTMLInputElement).value).toBe('5')
+    expect((document.getElementById('p-tag_length') as HTMLInputElement).value).toBe('5')
   })
 
   it('scrolls smoothly, unless the system asks for reduced motion', async () => {

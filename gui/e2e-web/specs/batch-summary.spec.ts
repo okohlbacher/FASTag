@@ -61,7 +61,8 @@ async function shown(page: Page): Promise<string[][]> {
 
 async function runFolder(page: Page): Promise<void> {
   await openApp(page, 'gate-batch')
-  await page.getByRole('radio', { name: /^Batch QC/ }).check()
+  await page.getByRole('radio', { name: /^Characterize a run/ }).check()
+  await page.getByRole('radio', { name: 'Batch' }).check()
   await goTo(page, 'Batch')
   await page.getByRole('button', { name: 'Add folder…' }).click()
   await expect(bodyRows(page)).toHaveCount(NAMES.length)
@@ -94,8 +95,10 @@ test('Batch summary: one row per job, the CLI calls and the majority flags equal
     }
     expect(r[2]).toBe(x.tags.toLocaleString('en-US'))
     expect([r[3], r[4], r[5]]).toEqual([x.genus.text, x.protease.text, x.label.text])
-    // Alkylation: no FASTA in the batch, no call.
-    expect(r[6]).toBe('not assessed (needs a FASTA)')
+    // Round 12: Glyco flagged follows the label; no job asked for the
+    // alkylation report, so there is no Alkylation column.
+    expect(r[6]).toMatch(/^[\d,]+ of [\d,]+ \(\d+\.\d%\)$|^–$|^not written$/)
+    expect(r).toHaveLength(7)
   }
   // ≠ exactly where a call differs from its column's majority.
   const flagged = await bodyRows(page).evaluateAll((trs) =>
@@ -139,7 +142,8 @@ test('Export summary TSV writes the table, cell for cell', async ({ page }) => {
 
 test('an output folder takes every job output; fewer than 3 jobs flag nothing', async ({ page }) => {
   await openApp(page, 'gate-batch')
-  await page.getByRole('radio', { name: /^Batch QC/ }).check()
+  await page.getByRole('radio', { name: /^Characterize a run/ }).check()
+  await page.getByRole('radio', { name: 'Batch' }).check()
   await goTo(page, 'Batch')
   await page.evaluate(() => {
     const m = (window as unknown as { __fastagE2E: { mock: { folderFiles: Record<string, string[]>; nextPickFolder: string } } }).__fastagE2E.mock
@@ -166,7 +170,8 @@ test('an output folder takes every job output; fewer than 3 jobs flag nothing', 
 
 test('by keyboard, focus does not fall to the page body after Add folder… or a batch pass', async ({ page }) => {
   await openApp(page, 'gate-batch')
-  await page.getByRole('radio', { name: /^Batch QC/ }).check()
+  await page.getByRole('radio', { name: /^Characterize a run/ }).check()
+  await page.getByRole('radio', { name: 'Batch' }).check()
   await goTo(page, 'Batch')
   // The empty state's Add folder…: the queue replaces it, focus goes to its Add….
   await page.locator('.batch-empty').getByRole('button', { name: 'Add folder…' }).focus()

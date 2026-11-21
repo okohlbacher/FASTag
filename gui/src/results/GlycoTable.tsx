@@ -6,10 +6,12 @@
 import { useMemo, type JSX } from 'react'
 import { useSticky } from './tableStore'
 import { baseName, fmt, pct } from '../digestReport'
+import { spectrumHint } from '../ResultsTable'
 import DataTable, { type Column } from './DataTable'
 import type { GlycoTable as Glyco } from './tables'
 import { useTable } from './useTable'
 import { HelpLink } from '../help/HelpLink'
+import ReportHeader from './ReportHeader'
 import './viewers.css'
 
 export interface GlycoTableProps {
@@ -28,7 +30,16 @@ export default function GlycoTable({ path, gen, minFraction }: GlycoTableProps):
         {st.error}
       </p>
     )
-  if (st.missing) return <p className="muted">The run named {path}, but the file does not exist.</p>
+  if (st.missing)
+    return (
+      <div className="empty-state">
+        <h2>No glycopeptide report</h2>
+        <p>
+          {baseName(path)} is not on disk: the run did not write it, or it was moved. Check Glycopeptide report in the
+          Outputs card and run again.
+        </p>
+      </div>
+    )
   if (!st.table) return <p className="muted">Reading {baseName(path)}…</p>
   return <GlycoBody t={st.table} minFraction={minFraction ?? null} />
 }
@@ -50,7 +61,8 @@ function GlycoBody({ t, minFraction }: { t: Glyco; minFraction: number | null })
     return out.slice(0, k)
   }, [t, flaggedOnly, ion, text])
   const cols: Column[] = [
-    { id: 'spectrum', label: 'Spectrum', mono: true, text: (i) => t.spectrum[i] },
+    // The scan, as Tags and Triage show it; the native ID is the tooltip.
+    { id: 'spectrum', label: 'Spectrum', mono: true, text: (i) => spectrumHint(t.spectrum[i]) || t.spectrum[i], key: (i) => t.spectrum[i], cellTitle: (i) => t.spectrum[i] },
     { id: 'n', label: 'Oxonium ions', num: true, text: (i) => String(t.nOxonium[i]), key: (i) => t.nOxonium[i] },
     { id: 'frac', label: 'Oxonium / base peak', num: true, title: 'Summed oxonium intensity over the base peak (can exceed 1)', text: (i) => (Number.isNaN(t.frac[i]) ? '' : t.frac[i].toFixed(3)), key: (i) => t.frac[i] },
     { id: 'flag', label: 'Flagged', text: (i) => (t.flagged[i] ? 'yes' : '') },
@@ -65,13 +77,7 @@ function GlycoBody({ t, minFraction }: { t: Glyco; minFraction: number | null })
   const ionIds = useMemo(() => Uint32Array.from(t.ionCounts, (_, i) => i), [t])
   return (
     <div className="glyco-view">
-      <div className="card-head">
-        <h2>Glyco: oxonium ions per spectrum</h2>
-        <HelpLink to="files-glyco">How to read glyco flags</HelpLink>
-        <code className="src" title={t.path}>
-          {baseName(t.path)}
-        </code>
-      </div>
+      <ReportHeader title="Glycopeptides: oxonium ions per spectrum" paths={[t.path]} help={{ to: 'files-glyco', label: 'How to read glyco flags' }} />
       {t.warnings.map((w) => (
         <div className="caveat" key={w}>
           {w}
@@ -86,19 +92,21 @@ function GlycoBody({ t, minFraction }: { t: Glyco; minFraction: number | null })
         </div>
         {minFraction != null && (
           <div className="stat">
-            <dt>Flag rule (glyco_min_fraction)</dt>
+            <dt>Flag rule (minimum oxonium share)</dt>
             <dd>{fmt(minFraction, 3)}</dd>
           </div>
         )}
       </dl>
       <p className="caveat">Oxonium ions are evidence of a glycan, not an identification of a glycopeptide.</p>
-      <div className="dt-filters" role="group" aria-label="Glyco filters">
-        <label className="check">
-          <input type="checkbox" checked={flaggedOnly} onChange={(e) => setFlaggedOnly(e.target.checked)} /> Flagged only
-        </label>
-        <label>
-          With ion
-          <select value={ion} onChange={(e) => setIon(e.target.value)}>
+      {/* The Tags table's filter bar: the spectrum first, then the rest. */}
+      <div className="rt-bar" role="group" aria-label="Glyco filters">
+        <div className="rt-f">
+          <label htmlFor="glyco-sp">Spectrum contains</label>
+          <input id="glyco-sp" className="wide" type="search" placeholder={spectrumHint(t.spectrum[0])} value={text} onChange={(e) => setText(e.target.value)} />
+        </div>
+        <div className="rt-f">
+          <label htmlFor="glyco-ion">With ion</label>
+          <select id="glyco-ion" value={ion} onChange={(e) => setIon(e.target.value)}>
             <option value="">any</option>
             {t.ionCounts.map((c) => (
               <option key={c.ion} value={c.ion}>
@@ -106,11 +114,12 @@ function GlycoBody({ t, minFraction }: { t: Glyco; minFraction: number | null })
               </option>
             ))}
           </select>
-        </label>
-        <label>
-          Spectrum contains
-          <input type="search" value={text} onChange={(e) => setText(e.target.value)} />
-        </label>
+        </div>
+        <div className="rt-f">
+          <label className="check-inline">
+            <input type="checkbox" checked={flaggedOnly} onChange={(e) => setFlaggedOnly(e.target.checked)} /> Flagged only
+          </label>
+        </div>
       </div>
       <DataTable label="Glyco spectra" columns={cols} ids={rows} total={t.rows} sort={{ column: 'frac', desc: true }} empty="No spectrum matches these filters." keep={t} />
       {t.ionCounts.length > 0 && (

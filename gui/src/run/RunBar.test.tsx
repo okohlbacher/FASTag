@@ -1,5 +1,5 @@
-// The run bar as a component (P1 PR c): progress text, the actions and the
-// Reset confirmation. "names the phase and, once measured, the time left"
+// The run bar as a component (P1 PR c): progress text, the plan row and the
+// actions (Reset moved to the Workflow card, doc/GUI-WORKFLOWS.md 3). "names the phase and, once measured, the time left"
 // moved here from p1a.test.tsx ("the run bar"); the events that feed it are
 // tested on useRun (useRun.test.tsx). "Reset… asks first" moved here from
 // App.test.tsx, with the defaults it restores tested on useSession; the
@@ -8,7 +8,6 @@
 import { render, screen } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 import RunBar, { type RunBarProps } from './RunBar'
-import { initialValues } from '../setup/useSession'
 import { click } from '../testing/render'
 
 function bar(p: Partial<RunBarProps> = {}): { c: HTMLElement; props: RunBarProps; rerender: (q: Partial<RunBarProps>) => void } {
@@ -32,13 +31,9 @@ function bar(p: Partial<RunBarProps> = {}): { c: HTMLElement; props: RunBarProps
     failedJobs: 0,
     binOk: true,
     canRun: true,
-    instrument: '',
-    values: initialValues(),
-    onInstrument: vi.fn(),
     onRun: vi.fn(),
     onRunBatch: vi.fn(),
     onCancel: vi.fn(),
-    onReset: vi.fn(),
     ...p
   }
   const r = render(<RunBar {...base} />)
@@ -70,15 +65,12 @@ describe('the run bar', () => {
     expect(c.querySelector('.bar.indeterminate')?.getAttribute('aria-valuetext')).toBe('7 spectra')
   })
 
-  it('Reset… asks first; Keep calls nothing, Reset calls onReset', async () => {
-    const { props } = bar()
-    await click(screen.getByRole('button', { name: 'Reset…' }))
-    await click(screen.getByRole('button', { name: 'Keep' }))
-    expect(props.onReset).not.toHaveBeenCalled()
-    expect(screen.getByRole('button', { name: 'Reset…' })).toBeDefined()
-    await click(screen.getByRole('button', { name: 'Reset…' }))
-    await click(screen.getByRole('button', { name: 'Reset' }))
-    expect(props.onReset).toHaveBeenCalledTimes(1)
+  it('holds only the plan row, the reasons Run waits and Run: no tolerance preset, no Reset', () => {
+    bar({ plan: <p>the plan</p> })
+    expect(screen.getByText('the plan')).toBeDefined()
+    expect(screen.queryByRole('button', { name: 'Reset…' })).toBeNull()
+    expect(screen.queryByRole('combobox')).toBeNull()
+    expect(screen.getByRole('button', { name: 'Run' })).toBeDefined()
   })
 
   it('behind a batch queue: Run N remaining, and Retry failed only while idle with a failed job', async () => {
@@ -103,7 +95,7 @@ describe('the run bar', () => {
   it('a value to fix blocks Run and says why', () => {
     const { c } = bar({ invalid: { tag_length: 'below 1' }, canRun: false })
     expect(c.querySelector('.preflight .warn')?.textContent).toMatch(/^1 value to fix before running: .+ \(below 1\)\.$/)
-    expect(screen.getByRole('button', { name: 'Run on a.mzML' }).hasAttribute('disabled')).toBe(true)
+    expect(screen.getByRole('button', { name: 'Run' }).hasAttribute('disabled')).toBe(true)
   })
 
   it('the announcement is always in the page', () => {

@@ -13,6 +13,7 @@ import { click, goTo, renderApp, renderCharacterizeApp, runButton } from '../tes
 import { CLI_CASES, logLines, type CliCase } from '../testing/cliFixtures'
 import { applyLastUsed } from '../testing/lastUsed'
 import { speciesFromTsv } from '../testing/speciesTsv'
+import ALKYLATION from '../fixtures/alkylation.tsv?raw'
 
 function gate(mock: MockBridge, c: CliCase, stem = '/d/run01'): void {
   mock.nextPickInput = `${stem}.mzML`
@@ -56,7 +57,7 @@ describe('Overview in the app', () => {
     expect(within(tile('MS2 spectra')).getByText('2,738')).toBeDefined()
   })
 
-  it('without a FASTA: no alkylation call, and the C+57.021 line says "default"', async () => {
+  it('Characterize: no alkylation tile unless its report is asked for; the C+57.021 line says "default"', async () => {
     const mock = installMockBridge()
     gate(mock, CLI_CASES.v112)
     await renderCharacterizeApp(mock)
@@ -64,11 +65,13 @@ describe('Overview in the app', () => {
     await click(runButton())
     await finish(mock, CLI_CASES.v112)
     await waitFor(() => expect(selectedTab()).toBe('Overview'))
-    expect(mock.runCalls[0].params.fasta ?? '').toBe('') // guard: the run had no FASTA
-    expect(within(tile('Alkylation')).getByText('not assessed (needs a FASTA)')).toBeDefined()
-    const row = within(screen.getByRole('table', { name: 'Suggested search settings' })).getByRole('row', { name: /fixed C\+57\.021/ })
+    expect(mock.runCalls[0].params.alkylation_out ?? '').toBe('') // guard: off by default
+    // The Overview names the workflow and shows no tile for a report nobody asked for.
+    expect(document.querySelector('.overview-sub')!.textContent).toContain('Characterize a run')
+    expect(screen.queryByRole('region', { name: 'Alkylation' })).toBeNull()
+    const row = within(screen.getByRole('table', { name: 'Suggested search settings' })).getByRole('row', { name: /Fixed cysteine modification/ })
     expect(within(row).getByText('default')).toBeDefined()
-    expect(row.textContent).toMatch(/alkylation not assessed \(no FASTA\)/)
+    expect(row.textContent).toMatch(/alkylation not assessed \(alkylation report not written\)/)
   })
 
   it('the Results pane shows the running state, then the Overview', async () => {
@@ -92,34 +95,23 @@ describe('Overview in the app', () => {
     await waitFor(() => expect(selectedTab()).toBe('Overview'))
   })
 
-  it('"Add FASTA and run again" picks a FASTA, turns the mass-gap report on, raises the extension to 3 and runs again', async () => {
+  it('the alkylation report, asked for, is read: its no call and the reason in the tile and the Digest tab', async () => {
     const mock = installMockBridge()
     gate(mock, CLI_CASES.v112)
+    mock.reportFiles['/d/run01.alkylation.tsv'] = ALKYLATION
     await renderCharacterizeApp(mock)
     await click(screen.getByRole('button', { name: 'Choose file…' }))
+    await click(document.getElementById('out-alkylation_out')!)
     await click(runButton())
+    expect(mock.runCalls[0].params.alkylation_out).toBe('/d/run01.alkylation.tsv')
     await finish(mock, CLI_CASES.v112)
     await waitFor(() => expect(selectedTab()).toBe('Overview'))
-    // The CLI output of the exact command the action sends (cmd.txt).
-    gate(mock, CLI_CASES.v112ReconExt3)
-    mock.nextPickInput = '/db/human.fasta'
-    mock.existingOutputs = []
-    await click(within(tile('Alkylation')).getByRole('button', { name: 'Add FASTA and run again' }))
-    await waitFor(() => expect(mock.runCalls).toHaveLength(2))
-    expect(mock.pickFileCalls[mock.pickFileCalls.length - 1]).toEqual({ kind: 'open', formats: expect.arrayContaining(['fasta']) })
-    const p = mock.runCalls[1].params
-    expect([p.recon_fasta, p.recon_out, p.massgap_out]).toEqual(['/db/human.fasta', '/d/run01.recon.tsv', '/d/run01.massgap.tsv'])
-    // Characterize's extension 2 places nothing in a proteome (see the next test).
-    expect(mock.runCalls[0].params.extension).toBe('2')
-    expect(p.extension).toBe('3')
-    expect(p.fasta ?? '').toBe('')
-    await finish(mock, CLI_CASES.v112ReconExt3, 2)
-    await waitFor(() => expect(within(tile('Alkylation')).getByText('no call (counts only)')).toBeDefined())
-    expect(tile('Alkylation').textContent).toMatch(/Carbamidomethyl \(C\) 11 of 475 placed spectra/)
-    // The form holds what the run was given: a plain Run sends it again.
-    await click(runButton())
-    await waitFor(() => expect(mock.runCalls).toHaveLength(3))
-    expect(mock.runCalls[2].params.recon_fasta).toBe('/db/human.fasta')
+    expect(within(tile('Alkylation')).getByText('no call')).toBeDefined()
+    expect(tile('Alkylation').textContent).toMatch(/too few spectra with one cysteine/)
+    // No FASTA action: the report places tags on a shipped proteome.
+    expect(within(tile('Alkylation')).queryByRole('button', { name: /FASTA/ })).toBeNull()
+    await click(screen.getByRole('tab', { name: /^Digest/ }))
+    expect(screen.getByRole('region', { name: 'Alkylation' }).textContent).toMatch(/too few spectra with one cysteine/)
   })
 
   it('a FASTA run that placed no tag says "not assessed", never an absence of alkylation', async () => {
@@ -177,7 +169,7 @@ describe('Overview in the app', () => {
     await waitFor(() => expect(document.activeElement).toBe(document.querySelector('.view[data-view="results"]')))
   })
 
-  it('from the defaults: the Tags tab, the Overview offered, and "Turn on and run again"', async () => {
+  it('from the defaults: the Tags tab, an Overview of the spectra and tags only', async () => {
     const mock = installMockBridge()
     gate(mock, CLI_CASES.v112)
     await renderApp(mock) // FASTag's defaults: no label report
@@ -189,9 +181,9 @@ describe('Overview in the app', () => {
     await waitFor(() => expect(screen.getByRole('tab', { name: 'Overview' })).toBeDefined())
     expect(selectedTab()).not.toBe('Overview')
     await click(screen.getByRole('tab', { name: 'Overview' }))
-    expect(within(tile('Label')).getByText('not assessed')).toBeDefined()
-    await click(within(tile('Label')).getByRole('button', { name: 'Turn on and run again' }))
-    await waitFor(() => expect(mock.runCalls).toHaveLength(2))
-    expect(mock.runCalls[1].params.label_out).toBe('/d/run01.label.tsv')
+    // No "not assessed" tile for a report nobody asked for.
+    expect(screen.queryByRole('region', { name: 'Label' })).toBeNull()
+    expect(within(tile('MS2 spectra')).getByText('2,738')).toBeDefined()
+    expect(tile('Tags')).toBeDefined()
   })
 })

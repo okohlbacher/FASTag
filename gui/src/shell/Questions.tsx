@@ -2,7 +2,8 @@
 // the close guard's "Cancel run and quit" or "Keep running", and the
 // overwrite question asked before a run, never after.
 
-import type { JSX } from 'react'
+import { useRef, type JSX } from 'react'
+import { useModal } from './useModal'
 import type { OverwriteAsk } from '../run/runReducer'
 
 export interface CloseQuestionProps {
@@ -17,10 +18,13 @@ export interface CloseQuestionProps {
 
 /// The backend's close guard: closing or quitting would kill the run.
 export function CloseQuestion({ what, batch, batchRunning, onAnswer }: CloseQuestionProps): JSX.Element {
+  // Escape keeps running: the safe answer.
+  const box = useRef<HTMLDivElement>(null)
+  const onKeyDown = useModal(box, () => onAnswer(false))
   return (
       // The backend's close guard: closing or quitting would kill the run.
       <div className="modal-backdrop">
-        <div className="modal" role="alertdialog" aria-modal="true" aria-labelledby="close-ask-h" aria-describedby="close-ask-p">
+        <div ref={box} onKeyDown={onKeyDown} className="modal" role="alertdialog" aria-modal="true" aria-labelledby="close-ask-h" aria-describedby="close-ask-p">
           <h2 id="close-ask-h">{batch ? 'A batch is running' : 'FASTag is running'}</h2>
           <p id="close-ask-p">
             {what === 'quit' ? 'Quitting' : 'Closing the window'} stops the run
@@ -52,10 +56,15 @@ export function CloseQuestion({ what, batch, batchRunning, onAnswer }: CloseQues
 
 /// Outputs that already exist: asked before the run, never after.
 export function OverwriteQuestion({ ask, onAnswer }: { ask: OverwriteAsk; onAnswer(overwrite: boolean): void }): JSX.Element {
+  // Escape does not run: the safe answer.
+  const box = useRef<HTMLDivElement>(null)
+  const onKeyDown = useModal(box, () => onAnswer(false))
   return (
       // Outputs that already exist: asked before the run, never after.
       <div className="modal-backdrop">
         <div
+          ref={box}
+          onKeyDown={onKeyDown}
           className="modal"
           role="alertdialog"
           aria-modal="true"

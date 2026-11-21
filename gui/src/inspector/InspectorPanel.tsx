@@ -170,21 +170,25 @@ export function PreStartPanel(p: PreStartPanelProps): JSX.Element {
   const headingRef = useRef<HTMLHeadingElement>(null)
   const next = (): void => focusNext(sectionRef.current, headingRef.current)
   return (
-    <section className="inspector" aria-labelledby="inspector-h" ref={sectionRef}>
+    <section className="inspector" aria-labelledby={p.notChecked ? undefined : 'inspector-h'} aria-label={p.notChecked ? 'Checks before the run' : undefined} ref={sectionRef}>
       {/* Always in the page, so each new result of the checks is announced. */}
       <p className="sr-only" role="status" data-testid="checks-summary">
         {checksSummary(p)}
       </p>
-      <div className="block-head">
-        <h3 id="inspector-h" tabIndex={-1} ref={headingRef}>
-          Checks before the run
-        </h3>
-        {!p.pending && !p.notChecked && (
-          <button type="button" className="link" onClick={p.onRecheck}>
-            Check again
-          </button>
-        )}
-      </div>
+      {/* No heading over checks that did not run: one muted line says why
+          (round 4, 17). */}
+      {!p.notChecked && (
+        <div className="block-head">
+          <h3 id="inspector-h" tabIndex={-1} ref={headingRef}>
+            Checks before the run
+          </h3>
+          {!p.pending && (
+            <button type="button" className="link" onClick={p.onRecheck}>
+              Check again
+            </button>
+          )}
+        </div>
+      )}
       {p.pending && <p className="hint">Checking the file with FASTag…</p>}
       {p.notChecked && <p className="hint not-checked">{p.notChecked}</p>}
       {p.detected && (
@@ -258,7 +262,7 @@ export function AfterRunPanel(p: AfterRunPanelProps): JSX.Element | null {
           <CheckItem
             key={c.id}
             check={c}
-            onFix={c.fix?.instrument && c.fix.rerun ? () => p.onRerun?.(c.fix!) : undefined}
+            onFix={c.fix?.rerun && (c.fix.instrument || c.fix.params) ? () => p.onRerun?.(c.fix!) : undefined}
             fixDisabled={!p.onRerun}
           />
         ))}

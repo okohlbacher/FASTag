@@ -66,6 +66,11 @@ pub struct RunRecord {
     /// None when it printed none (a run that did not finish, an older CLI).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub tags: Option<u64>,
+    /// The Setup workflow the run was started from (gui/src/setup/tasks.ts
+    /// TaskId), so a Re-run shows its results as that workflow's. Absent in
+    /// records before 1.15.4 and for runs of no workflow.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub workflow: Option<String>,
 }
 
 impl RunRecord {
@@ -314,7 +319,11 @@ pub fn rerun_params(rec: &RunRecord) -> Option<Value> {
     let params = rec.params.clone()?;
     let i = rec.argv.iter().skip(1).position(|a| a == "-out")? + 1;
     let out = rec.argv.get(i + 1)?;
-    Some(serde_json::json!({ "in": rec.input, "out": out, "params": params }))
+    let mut call = serde_json::json!({ "in": rec.input, "out": out, "params": params });
+    if let Some(w) = &rec.workflow {
+        call["workflow"] = Value::String(w.clone());
+    }
+    Some(call)
 }
 
 /// The `run` parameters of a Re-run of the record @p id (rerun_params). The
@@ -342,6 +351,15 @@ mod tests {
         d
     }
 
+    #[test]
+    fn rerun_params_carry_the_workflow() {
+        let mut r = rec("1-2", "a.tags.tsv", Status::Ok);
+        r.params = Some(Map::new());
+        assert!(rerun_params(&r).unwrap().get("workflow").is_none());
+        r.workflow = Some("species".into());
+        assert_eq!(rerun_params(&r).unwrap()["workflow"], "species");
+    }
+
     fn rec(id: &str, out: &str, status: Status) -> RunRecord {
         RunRecord {
             id: id.into(),
@@ -357,6 +375,7 @@ mod tests {
             cleanup: Cleanup::default(),
             params: None,
             tags: None,
+            workflow: None,
         }
     }
 

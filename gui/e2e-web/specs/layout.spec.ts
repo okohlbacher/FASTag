@@ -171,16 +171,23 @@ for (const w of [1000, 1400]) {
     expect(m.itemsInside).toBe(true)
   })
 
-  test(`${w} px: the recon empty state shows its whole primary button label`, async ({ page }) => {
+  // Round 4, 14: a tile note is never cut mid-sentence (no line clamp); it
+  // is whole, inside its tile.
+  test(`${w} px: the Overview's tiles keep their text inside, notes whole`, async ({ page }) => {
     await page.setViewportSize({ width: w, height: 800 })
     await openApp(page, 'gate')
     await page.getByRole('radio', { name: /^Characterize a run/ }).check()
     await page.getByRole('button', { name: 'Choose file…' }).click()
-    await page.getByRole('button', { name: 'Run on run01.mzML' }).click()
-    await page.getByRole('tab', { name: 'Mass gaps & recon' }).click()
-    const btn = page.getByRole('button', { name: 'Choose a FASTA and run again' })
-    await expect(btn).toBeVisible()
-    const fits = await btn.evaluate((b) => b.scrollWidth <= b.clientWidth && b.getBoundingClientRect().right <= window.innerWidth)
+    await page.getByRole('button', { name: 'Run', exact: true }).click()
+    await page.getByRole('tab', { name: 'Overview' }).click()
+    await expect(page.locator('.tile').first()).toBeVisible()
+    const fits = await page.evaluate(() =>
+      [...document.querySelectorAll<HTMLElement>('.tile')].every((t) => t.scrollWidth <= t.clientWidth + 1 && t.getBoundingClientRect().right <= window.innerWidth)
+    )
     expect(fits).toBe(true)
+    const clipped = await page.evaluate(() =>
+      [...document.querySelectorAll<HTMLElement>('.tile-note')].filter((n) => n.scrollHeight > n.clientHeight + 1 || n.getBoundingClientRect().bottom > n.closest('.tile')!.getBoundingClientRect().bottom + 1).map((n) => n.textContent)
+    )
+    expect(clipped).toEqual([])
   })
 }

@@ -17,7 +17,7 @@ export interface DropInputs {
   jobs: number
   setInputPath(p: string): void
   session: Pick<Session, 'setValues' | 'setOpenGroups'>
-  run: Pick<RunState, 'addBatchPaths' | 'openResultsPath' | 'openReportPaths' | 'openSpeciesPath'>
+  run: Pick<RunState, 'addBatchPaths' | 'openDropped'>
   setView(v: View): void
   // A dropped SDRF is loaded for the Batch view's comparison (P4).
   loadSdrf(path: string): Promise<void>
@@ -39,9 +39,8 @@ export function useDrops(d: DropInputs): { dragOver: boolean; dropNote: string |
       const open = SECTIONS.filter((sec) => sec.params.some((n) => n in vals)).map((sec) => sec.title)
       d.session.setOpenGroups((g) => ({ ...g, ...Object.fromEntries(open.map((t) => [t, true])) }))
     }
-    if (plan.results) void d.run.openResultsPath(plan.results)
-    if (plan.reports.length) void d.run.openReportPaths(plan.reports)
-    if (plan.species) void d.run.openSpeciesPath(plan.species)
+    // One selection for the whole drop (useRun openDropped).
+    if (plan.results || plan.reports.length || plan.species) void d.run.openDropped({ results: plan.results, reports: plan.reports, species: plan.species })
     if (plan.sdrf) void d.loadSdrf(plan.sdrf)
     if (plan.view) d.setView(plan.view)
     setDropNote(plan.notes.length ? plan.notes.join(' ') : null)

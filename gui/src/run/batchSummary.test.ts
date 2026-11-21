@@ -72,7 +72,7 @@ describe('a job row, from the reports the CLI wrote', () => {
     // -species_call decoy: the first present genus.
     expect(c.cells.genus).toMatchObject({ text: 'Homo', call: 'Homo' })
     // 1.12 writes no alkylation call; without a FASTA it is not assessed.
-    expect(c.cells.alkylation).toMatchObject({ text: 'not assessed (needs a FASTA)', call: null })
+    expect(c.cells.alkylation).toMatchObject({ text: 'not assessed', call: null })
     for (const k of SUMMARY_COLUMNS) expect(c.cells[k].note.trim()).not.toBe('')
   })
 
@@ -191,8 +191,9 @@ describe('the summary of a batch', () => {
       'protease_differs',
       'label',
       'label_differs',
-      'alkylation',
-      'alkylation_differs',
+      'glyco_flagged',
+      'glyco_flagged_differs',
+      // No job asked for the alkylation or mass-gap report: no column (round 12).
       'tags_tsv'
     ])
     expect(body).toHaveLength(s.rows.length)
@@ -202,10 +203,8 @@ describe('the summary of a batch', () => {
       expect(b[1]).toBe(r.input)
       expect(b[2]).toBe(r.statusText)
       expect(b[4]).toBe(r.tags == null ? '' : String(r.tags))
-      expect([b[5], b[7], b[9], b[11]]).toEqual([r.cells.genus.text, r.cells.protease.text, r.cells.label.text, r.cells.alkylation.text])
-      expect([b[6], b[8], b[10], b[12]]).toEqual(
-        [r.differs.genus, r.differs.protease, r.differs.label, r.differs.alkylation].map((d) => (d ? 'yes' : ''))
-      )
+      expect([b[5], b[7], b[9], b[11]]).toEqual([r.cells.genus.text, r.cells.protease.text, r.cells.label.text, r.cells.glyco.text])
+      expect([b[6], b[8], b[10], b[12]]).toEqual([r.differs.genus, r.differs.protease, r.differs.label, r.differs.glyco].map((d) => (d ? 'yes' : '')))
     })
     expect(body[0][3]).toBe('2')
     expect(body[0][13]).toBe('/b/run01.tags.tsv')
@@ -243,5 +242,20 @@ describe('a report the job was sent but could not read', () => {
   it('a species report the backend gave nothing for is "not read", with the path', () => {
     const d: JobData = { ...dataOf(BATCH_CASES.pxd003531), species: null, unread: { species_out: `${NOT_READ}the species report /b/x.tags.species.tsv was not found or could not be parsed` } }
     expect(jobCells(d).cells.genus).toEqual({ text: 'not read', call: null, note: 'the species report /b/x.tags.species.tsv was not found or could not be parsed' })
+  })
+})
+
+describe('the key columns of a Run QC batch', () => {
+  it('reads each job QC report: MS/MS count, tag yield, charges, analyzer, instrument and kit', async () => {
+    const { qcCells, columnsFor } = await import('./batchSummary')
+    const text = (await import('../fixtures/cli-1.15/ecoli_ms2_small_0.3da.qc.tsv?raw')).default
+    expect(columnsFor('run-qc')).toEqual(['ms2', 'yield', 'charge', 'analyzer', 'instrument', 'kit'])
+    const c = qcCells(text)
+    expect(c.ms2.text).toBe('139')
+    expect(c.yield.text).toBe('18.7%')
+    expect(c.charge.text).toBe('70% / 24% / 6%')
+    expect(c.analyzer.text).toBe('FTMS')
+    expect(c.kit).toMatchObject({ text: 'none', call: 'none' })
+    expect(qcCells(null).ms2.text).toBe('not written')
   })
 })

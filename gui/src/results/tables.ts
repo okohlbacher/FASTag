@@ -56,6 +56,9 @@ export interface DeltaTable extends Base {
   delta: Float64Array
   spectra: Uint32Array
   interps: { name: string; n: number }[][]
+  /// Further columns of the survey (1.15.2 on: localized, residues,
+  /// unlocalized, unimod, ambiguous, isobars, ...), as printed, by name.
+  extra: Record<string, string[]>
 }
 
 export interface GlycoTable extends Base {
@@ -255,11 +258,15 @@ export function parseDelta(text: string, path: string): DeltaTable {
   const { idx, body, width } = columns(text, DELTA, 'delta histogram (-delta_out)')
   const n = body.length
   const [cd, cs, ci] = DELTA.map(idx)
-  const t: DeltaTable = { kind: 'delta', path, rows: n, warnings: [], keys: [], delta: new Float64Array(n), spectra: new Uint32Array(n), interps: [] }
+  const t: DeltaTable = { kind: 'delta', path, rows: n, warnings: [], keys: [], delta: new Float64Array(n), spectra: new Uint32Array(n), interps: [], extra: {} }
+  const head = header(text)
+  const more = head.map((h, j) => [h, j] as const).filter(([h]) => h !== '' && !(DELTA as readonly string[]).includes(h))
+  for (const [h] of more) t.extra[h] = new Array<string>(n)
   for (let i = 0; i < n; i++) {
     const f = body[i].split('\t')
     if (f.length < width && t.warnings.length < 5) t.warnings.push(shortRow(path, i, f.length, width))
     t.keys.push(f[cd] ?? '')
+    for (const [h, j] of more) t.extra[h][i] = (f[j] ?? '').trim()
     t.delta[i] = numOr(f[cd] ?? '')
     t.spectra[i] = Math.max(0, intOr(f[cs] ?? '', 0))
     const cell = f[ci] ?? ''

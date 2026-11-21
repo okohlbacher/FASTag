@@ -1,8 +1,12 @@
-import type { JSX } from 'react'
+import type { JSX, ReactNode } from 'react'
 import type { SpeciesReport, Taxon } from './types'
-import { baseName, fmtQ } from './digestReport'
-import { IconFlag } from './icons'
+import { baseName, fmt, fmtQ } from './digestReport'
+import { IconFlag, IconWarning } from './icons'
+import { DA_SPECIES_CAVEAT } from './results/overview'
+import { EValue } from './ResultsTable'
+import ReportHeader from './results/ReportHeader'
 import { HelpLink } from './help/HelpLink'
+import { rankedBy, tiedLeaders } from './results/calls'
 
 // Genera that turn up in almost any LC-MS/MS run regardless of the sample:
 // porcine trypsin, bovine serum, keratin from handling. Flagged so a user does
@@ -33,6 +37,35 @@ interface Props {
   formOn?: boolean
   /// The input of the run shown, for that message.
   runInput?: string
+  /// Tag rows read as c/z ions the report left out (it counts b/y only).
+  czExcluded?: number | null
+  /// The run's fragment tolerance when it is in Da (daSpeciesTolerance):
+  /// the ranking is shown under the Overview's caveat, its top name muted.
+  daTolerance?: number | null
+}
+
+/// Why a c/z run's species report is sparse: said on the tab.
+function CzNote({ n }: { n: number | null | undefined }): JSX.Element | null {
+  if (!n) return null
+  return (
+    <p className="caveat" role="note">
+      {n.toLocaleString('en-US')} tag rows read as c/z ions were left out: the species report counts b/y tags only,
+      so a run read as c/z (Ion series cz or auto) has fewer species tags.
+    </p>
+  )
+}
+
+/// The caveat of a fragment tolerance in Da: on the ranking and on an empty report.
+function DaBanner({ tol, children }: { tol: number | null | undefined; children: ReactNode }): JSX.Element | null {
+  if (tol == null) return null
+  return (
+    <p className="banner warn" role="note">
+      <IconWarning />
+      <span>
+        <strong>Unreliable here.</strong> The fragment tolerance is {fmt(tol)} Da: {DA_SPECIES_CAVEAT}. {children}
+      </span>
+    </p>
+  )
 }
 
 export default function SpeciesPanel({
@@ -42,7 +75,9 @@ export default function SpeciesPanel({
   contributed,
   totalMs2,
   formOn,
-  runInput
+  runInput,
+  czExcluded,
+  daTolerance
 }: Props): JSX.Element {
   if (!enabled && formOn) {
     return (
@@ -55,7 +90,7 @@ export default function SpeciesPanel({
   if (!enabled) {
     return (
       <div className="empty">
-        Species detection is off. Enable <code>species</code> under Species detection.{' '}
+        Species detection is off. Turn on <strong>Species report</strong> under Outputs (or choose the Species workflow).{' '}
         <HelpLink to="faq-species-off">How to use it</HelpLink>
       </div>
     )
@@ -68,7 +103,7 @@ export default function SpeciesPanel({
         <p>
           Tags are at most {tooShort.reach} residues long, but the species reference stores protein pieces of{' '}
           {tooShort.k} residues, so no tag can be looked up and FASTag refuses the run. Raise{' '}
-          <code>{tooShort.option}</code> to {tooShort.k}, or set <code>extension</code> so the tags grow to{' '}
+          <strong>{tooShort.option === 'tag_lengths' ? 'Tag lengths' : 'Seed length'}</strong> to {tooShort.k}, or set <strong>Extension</strong> so the tags grow to{' '}
           {tooShort.k}. <HelpLink to="faq-species-short">More</HelpLink>
         </p>
       </div>
@@ -78,9 +113,17 @@ export default function SpeciesPanel({
   if (!report) return <div className="empty">Species results appear here after a run.</div>
   if (report.taxa.length === 0) {
     return (
-      <div className="empty">
-        No taxon met the report thresholds. The run completed; this does not establish that an organism
-        is absent. <HelpLink to="faq-species-none">Possible causes</HelpLink>
+      <div className="species">
+        <ReportHeader title="Species" paths={[report.path]} help={{ to: 'species-reading', label: 'About this tab' }} />
+        <CzNote n={czExcluded} />
+        <DaBanner tol={daTolerance}>An empty report at this tolerance says nothing about the sample.</DaBanner>
+        <div className="empty-state">
+          <h2>No taxon in the report</h2>
+          <p>
+            No taxon met the report thresholds. The run completed; this does not establish that an organism is
+            absent. <HelpLink to="faq-species-none">Possible causes</HelpLink>
+          </p>
+        </div>
       </div>
     )
   }
@@ -89,10 +132,10 @@ export default function SpeciesPanel({
   const hasCalls = report.taxa.some((t) => t.call !== undefined)
   // Without -species_deconvolve the CLI writes adjusted = observed for every
   // taxon, so nothing was subtracted and the wording must not say so.
-  const deconvolved = report.taxa.some((t) => t.adjusted !== t.observed)
+  const deconvolved = rankedBy(report.taxa) === 'adjusted'
   // An exact tie on both sort keys is not a call: the order inside the tied
   // block is only the CLI's taxid order (the digest call treats it the same).
-  const tied = report.taxa.filter((t) => t.adjusted === top.adjusted && t.observed === top.observed)
+  const tied = tiedLeaders(report.taxa)
   // rel. follows the ranking (adjusted), so the rank-1 taxon is 100%.
   const relBase = top.adjusted > 0 ? top.adjusted : 1
   const relOf = (t: Taxon): number => Math.min(100, Math.round((t.adjusted / relBase) * 100))
@@ -100,25 +143,36 @@ export default function SpeciesPanel({
   const pctSpectra =
     contributed != null && totalMs2 ? Math.round((contributed / totalMs2) * 1000) / 10 : null
   const counted = deconvolved ? 'adjusted' : 'observed'
+  const da = daTolerance != null
 
   return (
     <div className="species">
-      <p className="src">
-        From <code title={report.path}>{baseName(report.path)}</code> ·{' '}
-        {top.rank && (
+      <ReportHeader
+        title="Species"
+        paths={[report.path]}
+        help={{ to: 'species-reading', label: 'About this tab' }}
+        sub={
           <>
-            rank <code>{top.rank}</code> ·{' '}
+            {runInput && enabled && (
+              <>
+                Of <span className="mono" title={runInput}>{baseName(runInput)}</span> ·{' '}
+              </>
+            )}
+            {top.rank && <>Rank {top.rank} · </>}
+            {deconvolved ? 'Shared sequence subtracted' : 'No deconvolution'}
           </>
-        )}
-        {deconvolved ? 'shared sequence subtracted' : 'no deconvolution'} ·{' '}
-        <HelpLink to="species-reading">About this tab</HelpLink>
-      </p>
+        }
+      />
+      <CzNote n={czExcluded} />
+      <DaBanner tol={daTolerance}>
+        The ranking is shown, but do not read the top taxon as the sample&apos;s organism.
+      </DaBanner>
 
       <section className="cards" aria-label="Taxon ranking">
         <div className="card headline">
           <span className="card-label">Top-ranked taxon</span>
           <div className="call">
-            <span className="taxon">{tied.length > 1 ? 'No single leader' : <TaxonName t={top} />}</span>
+            <span className={`taxon${da ? ' muted' : ''}`} title={da ? 'Unreliable at a fragment tolerance in Da' : undefined}>{tied.length > 1 ? 'No single leader' : <TaxonName t={top} />}</span>
             {top.rank && <span className="rank">{top.rank}</span>}
           </div>
           {tied.length > 1 && (
@@ -132,7 +186,7 @@ export default function SpeciesPanel({
           </div>
           <div className="muted">
             Ranked first by {counted} spectra ·{' '}
-            <span title={top.q === null ? Q_NA_TITLE : Q_TITLE}>q {fmtQ(top.q)}</span>
+            <span title={top.q === null ? Q_NA_TITLE : Q_TITLE}>q <QValue q={top.q} /></span>
             {next && (
               <>
                 {' '}· next: <TaxonName t={next} /> at {relOf(next)}% of its evidence
@@ -214,7 +268,7 @@ export default function SpeciesPanel({
                   </td>
                   <td className="num">{t.observed.toLocaleString('en-US')}</td>
                   {deconvolved && <td className="num">{t.adjusted.toLocaleString('en-US')}</td>}
-                  <td className="num dim" title={t.q === null ? Q_NA_TITLE : undefined}>{fmtQ(t.q)}</td>
+                  <td className="num dim" title={t.q === null ? Q_NA_TITLE : undefined}><QValue q={t.q} /></td>
                 </tr>
               )
             })}
@@ -231,8 +285,8 @@ export default function SpeciesPanel({
         ) : (
           <>
             Ranked by observed spectra. Shared sequence was not subtracted, so close relatives share evidence
-            with the top taxon; run with <code className="cli">species_deconvolve</code> to add an Adjusted
-            column.
+            with the top taxon; run again with <strong>Subtract shared evidence</strong> (Advanced › Species,
+            advanced) to add an Adjusted column.
           </>
         )}{' '}
         Ranking by significance instead would favour a near neighbour, whose borrowed count is
@@ -248,11 +302,18 @@ export default function SpeciesPanel({
 }
 
 const Q_NA_TITLE =
-  'Under -species_orientation both no analytic background applies, so the CLI writes the q-value as NA. The optional decoy_qvalue and call from -species_call decoy are experimental and also uncalibrated.'
+  'With Tag orientation set to both no analytic background applies, so the q-value is NA. The optional decoy q-value and call of Presence call Decoy are experimental and also uncalibrated.'
 
 const Q_TITLE = 'q-value: smaller means the evidence is less likely to be chance. Use it to rank taxa, not as an error rate.'
 
 /// Genus and species names are italic, as taxonomy writes them.
 function TaxonName({ t }: { t: Taxon }): JSX.Element {
   return t.rank === 'genus' || t.rank === 'species' ? <em>{t.name}</em> : <>{t.name}</>
+}
+
+/// A q-value as the other tables write small values: 2.4 × 10⁻⁵ below
+/// 0.001 (EValue), else as fmtQ writes it (uncalibrated, <1e-300, 0.012).
+function QValue({ q }: { q: number | null }): JSX.Element {
+  if (q === null || q === 0 || q >= 0.001) return <>{fmtQ(q)}</>
+  return <EValue text={String(q)} />
 }

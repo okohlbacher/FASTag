@@ -2,7 +2,8 @@ import { test, expect, openApp } from './fixtures'
 
 test('a three-file batch where run02 fails: its banner opens run02 own log after run03 finished', async ({ page }) => {
   await openApp(page, 'batch-fail')
-  await page.getByRole('button', { name: 'Add files for a batch…' }).click()
+  await page.getByRole('radio', { name: 'Batch' }).check()
+  await page.getByRole('button', { name: 'Add files…' }).click()
   await page.getByRole('button', { name: 'Run 3 remaining files' }).click()
   const alert = page.getByRole('alert')
   await expect(alert).toContainText('1 of 3 batch jobs failed')

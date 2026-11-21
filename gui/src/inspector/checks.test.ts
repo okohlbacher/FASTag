@@ -54,6 +54,79 @@ describe('preStartChecks (from the probe)', () => {
     expect(ids(pre(iontrapProbe, da).checks)).toEqual(['warn:stale-index', 'warn:electron'])
   })
 
+  // Round 5, 10 and round 6, 3: electron (ETD, ECD) and hybrid (EThcD,
+  // ETciD) spectra are judged apart, by input format, Ion series and Hybrid
+  // ion series; each fix sets the ion settings only, never the tolerance.
+  it('electron activation warns only when the spectra are read as b/y ions', () => {
+    expect(ids(pre(iontrapProbe, { ...da, ion_series: 'auto' }).checks)).toEqual(['warn:stale-index'])
+    expect(ids(pre(iontrapProbe, { ...da, ion_series: 'cz' }).checks)).toEqual(['warn:stale-index'])
+    const e = pre(iontrapProbe, da).checks.find((c) => c.id === 'electron')!
+    expect(e.fix).toEqual({ label: 'Read ETD/ECD spectra as c/z (Ion series auto)', params: { ion_series: 'auto' } })
+    expect(e.detail).toMatch(/Orbitrap ETD preset/)
+    // The fix's values clear the warning, and leave the tolerance alone.
+    expect(ids(pre(iontrapProbe, { ...da, ...e.fix!.params } as Record<string, string>).checks)).toEqual(['warn:stale-index'])
+    expect(Object.keys(e.fix!.params!)).not.toContain('fragment_tolerance')
+    expect(ids(postRunChecks({ reports: [parseReport(it03Digest, '/d/a.digest.tsv')], notes: notes(it03Err), ionSeries: 'auto', input: '/d/a.mzML' }).checks)).toEqual([])
+  })
+
+  it('hybrid spectra under auto need Hybrid ion series both; the fix sets both', () => {
+    const hybrid = iontrapProbe.replace('"electron":2000,"hybrid":0', '"electron":0,"hybrid":2000')
+    const auto = pre(hybrid, { ...da, ion_series: 'auto' }).checks.find((c) => c.id === 'electron')!
+    expect(auto.title).toBe('Hybrid activation')
+    expect(auto.detail).toMatch(/Hybrid ion series by reads the hybrid spectra as b\/y ions only/)
+    expect(auto.detail).toMatch(/EThcD preset/)
+    expect(auto.fix).toEqual({ label: 'Read ETD as c/z, EThcD as both (Ion series auto, Hybrid both)', params: { ion_series: 'auto', ion_series_hybrid: 'both' } })
+    expect(ids(pre(hybrid, { ...da, ...auto.fix!.params } as Record<string, string>).checks)).toEqual(['warn:stale-index'])
+    // Under by the hybrid spectra are flagged too, with the same fix.
+    expect(pre(hybrid, da).checks.find((c) => c.id === 'electron')!.fix?.params).toEqual({ ion_series: 'auto', ion_series_hybrid: 'both' })
+    // Electron and hybrid together: the ETD preset alone (auto, hybrid by)
+    // leaves the hybrid spectra b/y, so the warning stays.
+    const both = iontrapProbe.replace('"electron":2000,"hybrid":0', '"electron":1000,"hybrid":1000')
+    expect(ids(pre(both, { ...da, ion_series: 'auto' }).checks)).toContain('warn:electron')
+    expect(ids(pre(both, { ...da, ion_series: 'auto', ion_series_hybrid: 'both' }).checks)).not.toContain('warn:electron')
+  })
+
+  it('on MGF and mzPeak auto reads b/y: the fix is cz with a caution, not the ETD preset', () => {
+    for (const input of ['/data/run01.mgf', '/data/run01.mzpeak']) {
+      for (const series of ['by', 'auto']) {
+        const r = preStartChecks({ input, values: { ...da, ion_series: series }, supported: true, probe: parseProbe(iontrapProbe) })
+        const e = r.checks.find((c) => c.id === 'electron')!
+        expect(e.fix).toEqual({ label: 'Read every spectrum as c/z (Ion series cz)', params: { ion_series: 'cz' } })
+        expect(e.detail).toMatch(/collisional ones included/)
+        expect(e.detail).toMatch(/convert the run to mzML/)
+        expect(e.detail).not.toMatch(/Orbitrap ETD preset/)
+        const fixed = preStartChecks({ input, values: { ...da, ...e.fix!.params }, supported: true, probe: parseProbe(iontrapProbe) })
+        expect(ids(fixed.checks)).not.toContain('warn:electron')
+      }
+    }
+  })
+
+  it('the advice after a run follows the input format and the hybrid count', () => {
+    const line = notes(it03Err)
+    const mz = postRunChecks({ reports: [], notes: line, ionSeries: 'by', input: '/d/a.mzML' }).checks.find((c) => c.id === 'electron')!
+    expect(mz.detail).toMatch(/Orbitrap ETD preset/)
+    const mgf = postRunChecks({ reports: [], notes: line, ionSeries: 'auto', input: '/d/a.mgf' }).checks.find((c) => c.id === 'electron')!
+    expect(mgf.detail).toMatch(/set Ion series to cz|Set Ion series to cz/)
+    expect(mgf.detail).not.toMatch(/Orbitrap ETD preset/)
+    const hy = line.map((l) => l.replace('980 electron, 0 hybrid', '0 electron, 980 hybrid'))
+    expect(postRunChecks({ reports: [], notes: hy, ionSeries: 'auto', input: '/d/a.mzML' }).checks.map((c) => c.id)).toContain('electron')
+    expect(postRunChecks({ reports: [], notes: hy, ionSeries: 'auto', ionSeriesHybrid: 'both', input: '/d/a.mzML' }).checks.map((c) => c.id)).not.toContain('electron')
+  })
+
+  // Round 6, 10: under auto on mzML the ETD spectra are read as c/z and
+  // left out of the species report; on MGF and mzPeak auto stays b/y.
+  it('warns before the run when auto leaves ETD spectra out of the species report', () => {
+    const v = { ...da, species: true, ion_series: 'auto' }
+    const part = pre(iontrapProbe, v).checks.find((c) => c.id === 'cz-species')!
+    expect(part.title).toBe('Species detection leaves the ETD spectra out')
+    expect(part.detail).toMatch(/2,000 of 4,000/)
+    const all = iontrapProbe.replace('"collisional":2000,"electron":2000', '"collisional":0,"electron":4000')
+    expect(pre(all, v).checks.find((c) => c.id === 'cz-species')!.detail).toMatch(/it will be empty/)
+    const mgf = preStartChecks({ input: '/data/run01.mgf', values: v, supported: true, probe: parseProbe(iontrapProbe) })
+    expect(mgf.checks.map((c) => c.id)).not.toContain('cz-species')
+    expect(pre(iontrapProbe, { ...v, ion_series: 'by' }).checks.map((c) => c.id)).not.toContain('cz-species')
+  })
+
   it('the Orbitrap HCD gate input (its index stale, as FASTag 1.12 says): only a warning, and Orbitrap HCD proposed', () => {
     const r = pre(orbitrapProbe)
     expect(ids(r.checks)).toEqual(['warn:stale-index'])
@@ -138,7 +211,7 @@ describe('preStartChecks (from the probe)', () => {
     expect(c.detail).toContain(TAXONOMY_ASSET)
     expect(c.detail).toContain(`copy tax_k7.taxdb from its share-FASTag-taxonomy folder into ${dir} (writing there needs an administrator) and press Check again`)
     expect(c.detail).toContain('FASTAG_TAXONOMY_DIR')
-    expect(c.detail).toContain('"-species: no taxdb"')
+    expect(c.detail).toContain('FASTag would stop before tagging') // round 15: no CLI text on screen
     expect(c.fix).toEqual({ label: 'Run without the species report', params: { species: false } })
     expect(c.faq).toBe('faq-species-reference')
     // Found, unknown yet, or the species report off: nothing.

@@ -15,7 +15,7 @@ import { useEffect, useMemo, useRef, useState, type JSX, type KeyboardEvent, typ
 import { parseDump, type SpectrumPeaks } from './dump'
 import { ladderFor, residueMasses, tagRowFrom, type Ladder } from './ladder'
 import { baseName } from '../digestReport'
-import { EValue } from '../ResultsTable'
+import { EValue, columnLabel, hitWords, spectrumHint } from '../ResultsTable'
 import { HelpLink } from '../help/HelpLink'
 import type { ResultsView } from '../types'
 
@@ -39,6 +39,11 @@ export interface SpectrumSource {
 interface Props {
   target: SpectrumTarget
   source: SpectrumSource
+  // The tags table its tags are read from: the Tags tab's, or the tags
+  // output of the run that wrote the ranking it was opened from; null: no
+  // tags table is open (a ranking opened alone is not one). Left out, the
+  // target's own file.
+  tags?: string | null
   // Another spectrum of the file (◀ ▶).
   onTarget(t: SpectrumTarget): void
   // The input moved or is unknown: the user picks it.
@@ -116,7 +121,8 @@ async function neighbour(path: string, spectrum: string, rowId: number | null, d
   return { spectrum: page.rows[0][page.columns.indexOf('spectrum')] ?? '', rowId: page.rowIds?.[0] ?? null }
 }
 
-export default function SpectrumPanel({ target, source, onTarget, onLocate }: Props): JSX.Element {
+export default function SpectrumPanel({ target, source, tags: tagsFile, onTarget, onLocate }: Props): JSX.Element {
+  const tagsPath = tagsFile === undefined ? target.path : tagsFile
   const [peaks, setPeaks] = useState<Peaks>({ state: 'loading' })
   const [tags, setTags] = useState<TagsOf | null>(null)
   const [tagsError, setTagsError] = useState<string | null>(null)
@@ -157,7 +163,8 @@ export default function SpectrumPanel({ target, source, onTarget, onLocate }: Pr
     setNav({ prev: false, next: false })
     // The tags first, then where ◀ ▶ lead: one view build at a time, so the
     // panel's own queries do not cancel each other (see query()).
-    tagsOf(target.path, target.spectrum)
+    if (!tagsPath) return
+    tagsOf(tagsPath, target.spectrum)
       .then((t) => {
         if (!live) return
         setTags(t)
@@ -165,13 +172,13 @@ export default function SpectrumPanel({ target, source, onTarget, onLocate }: Pr
         setChosen(at >= 0 ? at : 0)
       })
       .catch((e: unknown) => live && setTagsError(e instanceof Error ? e.message : String(e)))
-      .then(() => Promise.all([neighbour(target.path, target.spectrum, target.rowId, -1), neighbour(target.path, target.spectrum, target.rowId, 1)]))
+      .then(() => Promise.all([neighbour(tagsPath, target.spectrum, target.rowId, -1), neighbour(tagsPath, target.spectrum, target.rowId, 1)]))
       .then(([p, n]) => live && setNav({ prev: !!p, next: !!n }))
       .catch(() => live && setNav({ prev: false, next: false }))
     return () => {
       live = false
     }
-  }, [target.path, target.spectrum, target.rowId])
+  }, [tagsPath, target.spectrum, target.rowId])
 
   const residues = useMemo(() => {
     const f = source.params?.['fixed_modifications']
@@ -183,7 +190,7 @@ export default function SpectrumPanel({ target, source, onTarget, onLocate }: Pr
   const ladder = spectrum && row ? ladderFor(row, spectrum, residues) : null
 
   async function go(dir: -1 | 1): Promise<void> {
-    const n = await neighbour(target.path, target.spectrum, target.rowId, dir).catch(() => null)
+    const n = tagsPath ? await neighbour(tagsPath, target.spectrum, target.rowId, dir).catch(() => null) : null
     if (!n) {
       setNavNote(dir < 0 ? 'This is the first tagged spectrum.' : 'This is the last tagged spectrum.')
       return
@@ -199,8 +206,8 @@ export default function SpectrumPanel({ target, source, onTarget, onLocate }: Pr
 
   const header = (
     <div className="sp-head">
-      <h2 className="mono" title={target.spectrum}>
-        {target.spectrum}
+      <h2 className="mono" title={target.spectrum} tabIndex={-1}>
+        {spectrumHint(target.spectrum) || target.spectrum}
       </h2>
       {spectrum && (
         <span className="muted">
@@ -284,7 +291,7 @@ export default function SpectrumPanel({ target, source, onTarget, onLocate }: Pr
     body = (
       <>
         <StickPlot spectrum={peaks.spectrum} ladder={ladder} />
-        {ladder && <LadderLine ladder={ladder} tag={row?.tag ?? ''} />}
+        {ladder && <LadderLine ladder={ladder} tag={row?.tag ?? ''} unit={peaks.spectrum.toleranceUnit} />}
         {!row && tags && tags.rows.length > 0 && <p className="hint">This file has no nterm_mass, cterm_mass or charge column: no ladder can be drawn.</p>}
       </>
     )
@@ -302,9 +309,11 @@ export default function SpectrumPanel({ target, source, onTarget, onLocate }: Pr
       <section className="sp-tags" aria-label="Tags of this spectrum">
         <h3>
           Tags of this spectrum{tags ? ` (n=${tags.rows.length.toLocaleString('en-US')})` : ''}
-          <span className="hint"> · choose one to draw its ladder · <HelpLink to="results-spectrum">the Spectrum tab</HelpLink></span>
+          {tagsPath && <span className="hint"> · choose one to draw its ladder</span>}
         </h3>
-        {tagsError ? (
+        {!tagsPath ? (
+          <p className="hint">Tags file not opened: open the run's tags table to see the tags of this spectrum.</p>
+        ) : tagsError ? (
           <p className="hint">Cannot read the tags: {tagsError}</p>
         ) : !tags ? (
           <p className="hint">Reading…</p>
@@ -316,6 +325,9 @@ export default function SpectrumPanel({ target, source, onTarget, onLocate }: Pr
   )
 }
 
+// The columns of the tags table that hold numbers: right-aligned, header too.
+const NUMERIC = new Set(['length', 'charge', 'evalue', 'gapped'])
+
 function TagsTable(p: {
   tags: TagsOf
   chosen: number
@@ -325,7 +337,9 @@ function TagsTable(p: {
 }): JSX.Element {
   const { tags, chosen } = p
   const col = (n: string): number => tags.columns.indexOf(n)
-  const show = ['tag', 'length', 'charge', 'evalue', 'gapped', 'fasta_hit'].filter((c) => col(c) >= 0)
+  // No Database column for a run without a database filter: every cell '-'.
+  const noDb = col('fasta_hit') >= 0 && tags.rows.every((r) => (r[col('fasta_hit')] ?? '-') === '-' || r[col('fasta_hit')] === '')
+  const show = ['tag', 'length', 'charge', 'evalue', 'gapped', 'fasta_hit'].filter((c) => col(c) >= 0 && !(c === 'fasta_hit' && noDb))
   const rows = tags.rows.slice(0, TAGS_SHOWN)
   function key(e: KeyboardEvent<HTMLTableRowElement>, i: number): void {
     const to = e.key === 'ArrowDown' ? i + 1 : e.key === 'ArrowUp' ? i - 1 : e.key === 'Enter' || e.key === ' ' ? i : -2
@@ -343,12 +357,12 @@ function TagsTable(p: {
         <thead>
           <tr>
             {show.map((c) => (
-              <th key={c} scope="col" role="columnheader">
-                {c}
+              <th key={c} scope="col" role="columnheader" className={NUMERIC.has(c) ? 'num' : undefined} title={c}>
+                {columnLabel(c)}
               </th>
             ))}
             <th scope="col" role="columnheader">
-              ladder
+              Ladder
             </th>
           </tr>
         </thead>
@@ -366,8 +380,8 @@ function TagsTable(p: {
                 onKeyDown={(e) => key(e, i)}
               >
                 {show.map((c) => (
-                  <td key={c} role="gridcell" className={c === 'tag' ? 'mono' : c === 'fasta_hit' ? undefined : 'num'}>
-                    {c === 'evalue' ? <EValue text={r[col(c)] ?? ''} /> : (r[col(c)] ?? '')}
+                  <td key={c} role="gridcell" className={c === 'tag' ? 'mono' : NUMERIC.has(c) ? 'num' : undefined}>
+                    {c === 'evalue' ? <EValue text={r[col(c)] ?? ''} /> : c === 'fasta_hit' ? hitWords(r[col(c)] ?? '') : (r[col(c)] ?? '')}
                   </td>
                 ))}
                 <td role="gridcell">{!l ? '–' : l.complete ? `${l.series} on ${l.matched}/${l.positions.length} peaks` : `not on the peaks (${l.matched}/${l.positions.length})`}</td>
@@ -381,7 +395,21 @@ function TagsTable(p: {
   )
 }
 
-function LadderLine({ ladder, tag }: { ladder: Ladder; tag: string }): JSX.Element {
+/// A step's distance from where it should be, in the run's tolerance unit
+/// (a Da run's +0.12 Da, not +160.8 ppm), the other unit in its tooltip.
+function StepDelta({ to, unit }: { to: Ladder['positions'][number]; unit: string }): JSX.Element {
+  const da = to.deltaMz == null ? '–' : `${to.deltaMz >= 0 ? '+' : '−'}${Math.abs(to.deltaMz).toFixed(3)}`
+  return unit === 'Da' ? (
+    <span className="muted" title={`${ppm(to.deltaPpm)} ppm`}> Δ {da} Da</span>
+  ) : (
+    <span className="muted" title={`${da} Da`}> Δ {ppm(to.deltaPpm)} ppm</span>
+  )
+}
+
+/// The tag's ladder and its verdict. A ladder that could not be built (a
+/// modification without a known mass, a tag that does not parse) has no
+/// positions: then only the verdict with its reason is shown.
+export function LadderLine({ ladder, tag, unit }: { ladder: Ladder; tag: string; unit: string }): JSX.Element {
   const steps = ladder.residues.map((res, k) => ({ res, to: ladder.positions[k + 1] }))
   return (
     <div className="sp-ladder" data-testid="ladder">
@@ -394,6 +422,10 @@ function LadderLine({ ladder, tag }: { ladder: Ladder; tag: string }): JSX.Eleme
           <span data-testid="ladder-verdict">
             on {ladder.matched} of {ladder.positions.length} positions within the run&apos;s tolerance
           </span>
+        ) : ladder.positions.length === 0 ? (
+          <span className="warn-text" data-testid="ladder-verdict">
+            no ladder: {ladder.reason}
+          </span>
         ) : (
           <span className="warn-text" data-testid="ladder-verdict">
             not on the peaks: {ladder.reason}
@@ -401,18 +433,20 @@ function LadderLine({ ladder, tag }: { ladder: Ladder; tag: string }): JSX.Eleme
         )}
         {ladder.charge > 1 ? ` · fragment charge ${ladder.charge}+` : ''}
       </p>
-      <ol className="sp-steps" aria-label="Ladder steps">
-        <li>
-          <span className="mono">{ladder.positions[0].mz != null ? fmt(ladder.positions[0].mz) : `(${fmt(ladder.positions[0].expected)})`}</span>
-        </li>
-        {steps.map((s, k) => (
-          <li key={k} className={s.to.peak == null ? 'off' : undefined}>
-            <span className="sp-res">—{s.res}—</span>
-            <span className="mono">{s.to.mz != null ? fmt(s.to.mz) : `(${fmt(s.to.expected)} missing)`}</span>
-            <span className="muted"> Δ {ppm(s.to.deltaPpm)} ppm</span>
+      {ladder.positions.length > 0 && (
+        <ol className="sp-steps" aria-label="Ladder steps">
+          <li>
+            <span className="mono">{ladder.positions[0].mz != null ? fmt(ladder.positions[0].mz) : `(${fmt(ladder.positions[0].expected)})`}</span>
           </li>
-        ))}
-      </ol>
+          {steps.map((s, k) => (
+            <li key={k} className={s.to.peak == null ? 'off' : undefined}>
+              <span className="sp-res">—{s.res}—</span>
+              <span className="mono">{s.to.mz != null ? fmt(s.to.mz) : `(${fmt(s.to.expected)} missing)`}</span>
+              <StepDelta to={s.to} unit={unit} />
+            </li>
+          ))}
+        </ol>
+      )}
     </div>
   )
 }

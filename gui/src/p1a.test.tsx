@@ -65,7 +65,11 @@ describe('the outputs of a run come from the backend', () => {
   it('the mock resolves outputs under the keys the backend sends', () => {
     const params = Object.fromEntries(OUTPUT_KEYS.filter((k) => k !== 'out').map((k) => [k, `${k}.tsv`]))
     const o = mockOutputs({ in: '/d/a.mzML', out: 'a.tags.tsv', params } satisfies RunCall)
-    expect(Object.keys(o).sort()).toEqual(Object.keys(RUN_STARTED_FIXTURE.outputs!).sort())
+    // The legacy keys the fixture pins (cargo the_run_reply_...), and every
+    // output-file option of the manifest (outputs.rs output_options).
+    for (const k of Object.keys(RUN_STARTED_FIXTURE.outputs!)) expect(Object.keys(o)).toContain(k)
+    for (const k of ['qc_out', 'shortlist_out', 'fasta_out', 'search_config_out', 'census_out', 'census_summary_out', 'census_sorted_out', 'alkylation_out', 'delta_spectra_out', 'delta_counts_out', 'check_header_out'])
+      expect(OUTPUT_KEYS, k).toContain(k)
     for (const k of OUTPUT_KEYS) expect(o[k], k).toMatch(/^\/d\//)
   })
 

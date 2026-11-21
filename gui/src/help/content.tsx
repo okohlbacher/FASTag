@@ -76,26 +76,25 @@ export const START: HelpPage = {
           <p>
             Start in <strong>Setup</strong> with <strong>Export tags</strong>, the default task. It generates sequence
             tags from all input spectra and includes per-residue confidence for downstream export. No FASTA file is
-            needed. To inspect an earlier analysis instead, choose <strong>Open results / inspect spectra</strong>.
+            needed. To inspect an earlier analysis instead, click <strong>Open earlier results…</strong> under the workflows.
           </p>
           <ol>
             <li>
-              Under Input, click <strong>Choose file…</strong> and pick a spectra file: mzML, mzPeak or MGF (see{' '}
+              Under Input, click <strong>Choose file…</strong> and pick a spectra file: mzML, mzPeak, MGF, Thermo .raw or timsTOF .d.zip (see{' '}
               <L to="files-inputs">Input files</L>).
             </li>
             <li>
-              Under Output, the tags file is already named <code>&lt;name&gt;.tags.tsv</code>, next to the input.
+              Under Outputs, the run name is the input&apos;s name: the tags file is <code>&lt;name&gt;.tags.tsv</code>, next to the input.
             </li>
             <li>
-              Check the instrument suggestion and the checks below the input. Under Tagging, confirm the{' '}
-              <L to="param-fragment_tolerance">fragment tolerance</L>, or use <strong>Fragment tolerance preset</strong>
-              beside Run: 20 <G to="gloss-ppm">ppm</G> is a starting
+              Check the instrument suggestion and the checks below the input. Under Settings, choose the
+              <strong> Instrument</strong>, which sets the <L to="param-fragment_tolerance">fragment tolerance</L>: 20 <G to="gloss-ppm">ppm</G> is a starting
               point for high-resolution MS2; 0.3 Da is a starting point for ion-trap MS2. Use the analyser that
               measured the fragments, not just the instrument name. Apply a suggested preset only when it fits
               your acquisition.
             </li>
             <li>
-              Click <strong>Run on &lt;file&gt;</strong>. The bar shows how many spectra are done; the Log at the bottom
+              Click <strong>Run</strong>. The bar shows how many spectra are done; the Log at the bottom
               shows FASTag&apos;s messages.
             </li>
             <li>
@@ -105,8 +104,8 @@ export const START: HelpPage = {
             </li>
           </ol>
           <p>
-            For a separate QC survey, choose <strong>Characterize a run</strong> or <strong>Batch QC vs SDRF</strong>.
-            These tasks sample 10% of the spectra and enable species, digest, label and glyco reports, opening on{' '}
+            For run metrics, choose <strong>Run QC</strong>. For protease, labels, glycopeptides and species, choose{' '}
+            <strong>Characterize a run</strong>; for many files, switch the Input card to <strong>Batch</strong>. Characterize samples 10% of the spectra and enables the species, digest, label and glyco reports (the alkylation report on request), opening on{' '}
             <L to="workflow-overview">Overview</L>. A report that says “not assessed” or “no call” is not evidence
             that a feature is absent.
           </p>
@@ -136,27 +135,27 @@ export const START: HelpPage = {
         <dl className="recipes">
           <dt>What is in this run?</dt>
           <dd>
-            Choose <strong>Characterize a run</strong>. It enables <L to="param-species">Species</L> with tag
-            length 3 and extension 2, so tags can reach the reference&apos;s required 7 residues, and samples
-            10% of the spectra. Read the evidence count in the <L to="species">Species tab</L>; a ranking alone
-            is not a presence call.
+            Choose <strong>Characterize a run</strong>. It turns on the <L to="param-species">Species report</L> with
+            tag length 3 and extension 2, so tags reach the 7 residues the bundled index needs, and reads 10% of the
+            spectra. Read the evidence count in the <L to="species">Species tab</L>; a ranking alone is not a
+            presence call. For the taxa alone, choose <strong>Species</strong>.
           </dd>
           <dt>Does my protein occur?</dt>
           <dd>
-            Under Sequence matching, choose a <L to="param-fasta">FASTA file</L> with your protein. Under Tagging, set{' '}
-            <L to="param-extension">extension</L> so that tag length + 2 × extension reaches the length the database
-            needs: about 4 residues for one protein, 7 or 8 for a proteome. With the default tag length 3, extension 1
-            suffices for one protein and 2 or 3 for a proteome. The run is refused if no tag can reach that length. Under Reports › Output, set a file for
-            &quot;<L to="param-out_spectra">Spectra with tags (file)</L>&quot; to collect the spectra whose tags match. Read the chance table in the
-            log before trusting a count (see <L to="results-fasta">Matching a sequence database</L>). To collect matches
-            from the full input, set Subsample fraction to 1 and Subsample spectra to 0; Characterize a run otherwise
-            keeps its 10% sample.
+            Choose <strong>Export tags</strong>, open <strong>Advanced</strong> and, under <strong>Keep only tags found
+            in a database</strong>, choose a <L to="param-fasta">FASTA file</L> with your protein. Set the{' '}
+            <L to="param-extension">Extension</L> in Settings so that tag length + 2 × extension reaches the length the
+            database needs: about 4 residues for one protein, 7 or 8 for a proteome. With the default tag length 3,
+            extension 1 suffices for one protein and 2 or 3 for a proteome. The run is refused if no tag can reach
+            that length. In the Outputs card, check <L to="param-out_spectra">Spectra with tags</L> to collect the
+            spectra whose tags match. Read the chance table in the log before trusting a count (see{' '}
+            <L to="results-fasta">Matching a sequence database</L>).
           </dd>
           <dt>How was the sample digested and labelled?</dt>
           <dd>
-            <strong>Characterize a run</strong> already enables the <L to="param-digest_out">digest report</L> and{' '}
-            <L to="param-label_out">label report</L>. Their paths are under Reports › Digest and labels. Leave Sequence matching
-            empty, so the database does not narrow down the tags that are counted. Run, then read the Digest tab (see{' '}
+            <strong>Characterize a run</strong> checks the <L to="param-digest_out">Digest report</L> and the{' '}
+            <L to="param-label_out">Label report</L> in its Outputs card. Leave the database filter under Advanced
+            empty, so it does not narrow down the tags that are counted. Run, then read the Digest tab (see{' '}
             <L to="digest-ends">Reading the peptide ends</L>).
           </dd>
         </dl>
@@ -168,7 +167,7 @@ export const START: HelpPage = {
       body: (
         <>
           <p>
-            Click <strong>Add files for a batch…</strong> under Input and pick several spectra files. The same
+            Switch the Input card to <strong>Batch</strong>, click <strong>Add files…</strong> and pick several spectra files. The same
             parameters are used for each file, one after the other.
           </p>
           <ul>
@@ -231,14 +230,20 @@ export const START: HelpPage = {
       body: (
         <>
           <p>
-            Setup starts with <strong>Export tags</strong> (all spectra, with per-residue confidence; see{' '}
-            <L to="results-export">read export settings</L>). Next is <strong>Open results / inspect spectra</strong>
-            for existing output. The QC tasks follow: <strong>Characterize a run</strong> (species with extension 2,
-            digest, label and glyco reports, a tenth of the spectra) and <strong>Batch QC vs SDRF</strong> (the same
-            reports for several files). <strong>Starting from</strong> also offers FASTag&apos;s
-            own defaults and your presets. Choosing one replaces the form; <strong>Undo</strong> brings back what it
-            replaced. The footer above Run counts what differs from where the form started, and its{' '}
-            <strong>Reset</strong> takes that back.
+            Setup reads top to bottom: <strong>Input</strong>, <strong>Workflow</strong>, <strong>Settings</strong>,{' '}
+            <strong>Outputs</strong> and <strong>Advanced</strong>. The seven workflows are Export tags (where the app
+            starts; all spectra, with per-residue confidence, see <L to="results-export">read export settings</L>), Run
+            QC, Mass-shift survey, Species, Database reduction, Identifiability triage and Characterize a run. Each
+            shows the few settings its question needs; every other option is under Advanced, the workflow&apos;s own
+            groups first, then the groups for every workflow, then Other analyses. The <strong>Outputs</strong> card
+            lists the workflow&apos;s files as checkboxes, named after the run. <strong>Batch</strong> in the Input
+            card runs the same workflow over several files, with an output folder and an optional SDRF. To look at
+            earlier results, use <strong>Open earlier results…</strong> in the Input card or the Results view.
+          </p>
+          <p>
+            A workflow replaces the form; <strong>Undo</strong> brings back what it replaced. The workflow row says
+            when the form differs from it (modified), and its <strong>Reset</strong> takes that back. The{' '}
+            <strong>Preset</strong> menu loads FASTag&apos;s own defaults or a preset of yours.
           </p>
           <p>
             <strong>Save…</strong> stores what differs from the task or defaults the form started from, under a name.
@@ -464,8 +469,9 @@ export const TAGS: HelpPage = {
         <>
           <p>
             The GUI uses b/y ions, appropriate for <G to="gloss-activation">CID and HCD</G> fragmentation.
-            ETD and ECD produce mainly c/z• ions, with different end masses. A run with those spectra needs the
-            command-line <L to="param-ion_series">ion-series option</L>: <code>cz</code> reads all spectra as
+            ETD and ECD produce mainly c/z• ions, with different end masses. For a run with those spectra, choose the
+            Orbitrap ETD (or EThcD) preset under Instrument, or set the <L to="param-ion_series">Ion series</L> field
+            (Advanced, Charge and ions): <code>cz</code> reads all spectra as
             c/z•; <code>auto</code> reads ETD/ECD spectra as c/z• and other spectra as b/y. Automatic selection
             uses activation metadata from mzML only; MGF and mzPeak are read as b/y under <code>auto</code>.
           </p>
@@ -530,9 +536,9 @@ export const RESULTS: HelpPage = {
             <tr><td>Gapped</td><td>1 when the tag crosses a missing peak (<L to="tags-gapped">gapped tag</L>).</td></tr>
             <tr><td>E-value</td><td>The score; lower is better (<L to="results-evalue">E-value</L>).</td></tr>
             <tr><td>Min. conf., Mean conf.</td><td>The weakest and the average observed-step score, 0 to 1 (<L to="results-conf">residue confidence</L>).</td></tr>
-            <tr><td>Database hit</td><td>Without a sequence database: No match (-). With one: In database (fwd, as written; rev, reversed), or Entrapment (efwd, erev: found only in the entrapment database).</td></tr>
+            <tr><td>Database hit</td><td>Without a database filter: Not checked (-), the tags were not matched against a database. With one, only matching tags are written: In database (fwd, as written; rev, reversed), or Entrapment (efwd, erev: found only in the entrapment database).</td></tr>
             <tr><td>Database q-value</td><td>q_db, only with an <G to="gloss-entrapment">entrapment database</G> (<L to="results-nofdr">see below</L>).</td></tr>
-            <tr><td>ProForma, Residue conf., USI</td><td>Optional columns (<L to="param-proforma">ProForma</L>, <L to="param-res_conf">per-residue confidence</L>, <L to="param-usi_collection">USI collection</L>), under Reports › Output.</td></tr>
+            <tr><td>ProForma, Residue conf., USI</td><td>Optional columns (<L to="param-proforma">ProForma</L>, <L to="param-res_conf">per-residue confidence</L>, <L to="param-usi_collection">USI</L>), checked in the Outputs card of Export tags.</td></tr>
           </tbody>
         </table>
       )
@@ -543,7 +549,7 @@ export const RESULTS: HelpPage = {
       body: (
         <p>
           Above the table, &quot;Spectrum contains&quot;, &quot;Min. length&quot; and &quot;Max. E-value&quot; filter
-          the rows; Database hit picks All, In database, Entrapment or Not in database; &quot;Per spectrum&quot; keeps
+          the rows; Database hit picks All, In database, Entrapment or No database hit (Not checked and Entrapment rows); &quot;Per spectrum&quot; keeps
           only the best tag (or the best 2, 3 or 5) of each spectrum by E-value, among the rows the other filters
           leave. Click a column header to sort, drag its edge to resize, and use <strong>Columns…</strong> to hide
           columns. <strong>Export shown rows…</strong> writes the rows that pass the filters, in the table&apos;s
@@ -681,11 +687,10 @@ export const RESULTS: HelpPage = {
             column, which the <strong>Export tags</strong> task enables.
           </p>
           <p>
-            That task starts with tag length 3 and extension 0, so its tags are too short for the default
-            8-residue read export. Before running, choose a suitable <L to="param-tag_length">tag length</L> or{' '}
-            <L to="param-extension">extension</L>: for example, length 3 with extension 3 can reach 9 residues,
-            although not every tag will grow that far. Alternatively, lower the export&apos;s minimum length
-            if shorter reads suit your downstream tool. Check the exported read count before continuing.
+            That task starts with tag length 3 and <L to="param-extension">extension</L> 3, so tags can grow to 9
+            residues and pass the default 8-residue read export, although not every tag grows that far. With a
+            shorter extension, raise it or lower the export&apos;s minimum length if shorter reads suit your
+            downstream tool. Check the exported read count before continuing.
           </p>
         </>
       )
@@ -868,7 +873,7 @@ export const DIGEST: HelpPage = {
             C-term side. The Chance column counts tag ends at a mass 0.5 Da above each label, where no label can
             sit. Share of tags is the label count over all counted tags. For example, 5,200 tag ends of 20,000
             counted tags at the TMT mass (a share of 0.26), against 9 at the chance mass, support a TMT hypothesis.
-            Read the CLI label call and its reason in Overview; counts alone do not identify a label.
+            Read the label call and its reason in Overview; counts alone do not identify a label.
           </p>
           <p>
             <G to="gloss-silac">SILAC</G> labels K and R with heavy isotopes (Lys8, Arg10). The report gives the share of
@@ -925,8 +930,9 @@ export const DIGEST: HelpPage = {
             names the simplest combination that fits, &quot;Alternatives&quot; others that fit as well, and
             &quot;Context&quot; says when an explanation was chosen because its parts also appear as peaks of their
             own. The chip below names the candidate cysteine modification with the most matching placed spectra;
-            these are counts, not an alkylation call. The separate command-line{' '}
-            <L to="param-alkylation_out">alkylation report</L> can make a call, but is not part of this GUI workflow.
+            these are counts, not an alkylation call. The{' '}
+            <L to="param-alkylation_out">alkylation report</L>, an optional report of Characterize a run, makes that
+            call; on a shipped proteome it needs tags of 8 residues (human, mouse) or 7 (yeast, E. coli), so turning it on raises Extension to 3 or 2 (not on a FASTA of your own, as the proteome or as Protein database, nor with another report that places tags).
           </p>
         </>
       )
@@ -977,8 +983,8 @@ export const SPECIES: HelpPage = {
           <p>
             Only tags without a gap count by default, because the two residues across a gap are inferred; letting them
             in moved the true genus from rank 1 to rank 20 on a public test run (<L to="param-species_use_gapped">use
-            gapped tags</L>). Tags need at least 7 residues. The <strong>Find organisms</strong> and{' '}
-            <strong>Characterize sample</strong> tasks use <L to="param-tag_length">tag length</L> 3 with{' '}
+            gapped tags</L>). Tags need at least 7 residues. The <strong>Species</strong> and{' '}
+            <strong>Characterize a run</strong> workflows use <L to="param-tag_length">tag length</L> 3 with{' '}
             <L to="param-extension">extension</L> 2, which can reach 7; only tags that actually grow that far
             count. You can also request 7-residue seeds directly. Check the Evidence card afterwards: choosing
             a reachable length does not guarantee that the spectra provide enough evidence.
@@ -1132,8 +1138,10 @@ export const FILES: HelpPage = {
             </li>
           </ul>
           <p>
-            Vendor files (Thermo .raw, Bruker .d) are not read: convert them first, for example with msconvert or
-            ThermoRawFileParser. MS2 spectra should be <G to="gloss-centroid">centroided</G> (one peak per ion); profile
+            The bundled FASTag also reads vendor files: a Bruker timsTOF <strong>.d</strong> folder (drop it on the
+            window) or its <strong>.d.zip</strong> archive, and a Thermo <strong>.raw</strong> file in every download
+            but the Linux AppImage (convert .raw there with ThermoRawFileParser). Other vendor formats need converting
+            first, for example with msconvert. MS2 spectra should be <G to="gloss-centroid">centroided</G> (one peak per ion); profile
             spectra in an mzML file are tagged as they are, which finds fewer tags.
           </p>
           <p>
@@ -1172,7 +1180,7 @@ export const FILES: HelpPage = {
               <tr><td>Mass-shift histogram</td><td><L to="param-delta_out">Reconciliation</L></td><td>Leftover masses, one count per spectrum.</td></tr>
               <tr><td>Reconciliation as identifications</td><td><L to="param-recon_id_out">Reconciliation</L></td><td>The placements as idXML, mzIdentML (.mzid) or mzTab, not filtered by a false discovery rate.</td></tr>
               <tr><td>Mass-gap report</td><td><L to="param-massgap_out">Reconciliation</L></td><td>Gap peaks, alkylation and SILAC (<L to="digest-gaps">Digest tab</L>).</td></tr>
-              <tr><td>Spectra with tags</td><td><L to="param-out_spectra">Reports › Output</L></td><td>The spectra that carry at least one reported tag that is not an entrapment match, as mzML or mzPeak.</td></tr>
+              <tr><td>Spectra with tags</td><td><L to="param-out_spectra">Outputs card</L></td><td>The spectra that carry at least one reported tag that is not an entrapment match, as mzML or mzPeak.</td></tr>
             </tbody>
           </table>
           <p>

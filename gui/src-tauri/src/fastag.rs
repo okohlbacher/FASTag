@@ -167,6 +167,14 @@ pub struct RunParams {
     // (outputs_check). Without it a run with an existing output is refused.
     #[serde(default)]
     overwrite: bool,
+    // The Setup workflow the run is started from: recorded only (history.rs
+    // RunRecord.workflow), never part of the argv.
+    #[serde(default)]
+    pub(crate) workflow: Option<String>,
+    // The inputs of the other jobs of a batch: no output of this run may be
+    // one of them, and its cleanup never removes one (outputs::run_inputs).
+    #[serde(default)]
+    pub(crate) protect: Vec<String>,
 }
 
 pub struct Resolved {
@@ -544,6 +552,23 @@ fn value_to_scalar(v: &Value) -> Option<String> {
     }
 }
 
+/// The unit options the GUI draws inside a value's field, with that value:
+/// a unit is only ever sent with its value (gui/src/paramUi.ts `unit`).
+const UNIT_OF_VALUE: [(&str, &str); 4] = [
+    ("fragment_tolerance_unit", "fragment_tolerance"),
+    ("recon_sub_tolerance_unit", "recon_sub_tolerance"),
+    ("delta_name_tolerance_unit", "delta_name_tolerance"),
+    ("search_precursor_unit", "search_precursor_tolerance"),
+];
+
+/// @p name is a unit whose value is not sent (absent or empty): a lone
+/// "-fragment_tolerance_unit Da" would run the CLI's default 20 as 20 Da.
+fn unit_without_value(name: &str, params: &Map<String, Value>) -> bool {
+    UNIT_OF_VALUE.iter().find(|(u, _)| *u == name).is_some_and(|(_, v)| {
+        params.get(*v).and_then(value_to_scalar).is_none_or(|s| s.trim().is_empty())
+    })
+}
+
 // Build the argv from typed params. Only names the tool declares are emitted,
 // arrays only for list-typed options, and each value is its own argv element.
 pub(crate) fn build_args(p: &RunParams) -> Vec<String> {
@@ -557,7 +582,7 @@ pub(crate) fn build_args(p: &RunParams) -> Vec<String> {
     for (name, value) in &p.params {
         let Some(pt) = types.get(name) else { continue };
         let t = pt.ty.as_str();
-        if NOT_SETTABLE.contains(&name.as_str()) {
+        if NOT_SETTABLE.contains(&name.as_str()) || unit_without_value(name, &p.params) {
             continue;
         }
         if t == "bool" {
@@ -597,7 +622,7 @@ pub(crate) fn build_args(p: &RunParams) -> Vec<String> {
         if s.is_empty() {
             continue; // unset optional (an empty path is not "no path")
         }
-        if is_file_type(t) {
+        if is_file_type(t) || (name == "alkylation_proteome" && outputs::is_proteome_file(&s)) {
             // A dash-leading file name is a real file name, not an option:
             // dropping it ran an unfiltered search for -fasta "-db.fasta".
             args.push(format!("-{name}"));
@@ -657,6 +682,8 @@ pub struct RunFiles<'a> {
     pub outputs: &'a [String],
     pub cwd: Option<&'a Path>,
     pub overwrite: bool,
+    /// The inputs of the other jobs of its batch (RunParams.protect).
+    pub protect: &'a [String],
 }
 
 /// How a run ended, for the done event and the run record.
@@ -722,11 +749,17 @@ pub fn start_run(
         return Err("a run is already in progress".into());
     }
     let paths = outputs::resolve(files.outputs, files.cwd);
-    let input_path = match files.cwd {
-        Some(d) if Path::new(files.input).is_relative() => d.join(files.input),
-        _ => PathBuf::from(files.input),
-    };
-    let existing = outputs::existing(&paths, &input_path);
+    // Every file the run reads (-in, the databases, the identification
+    // file, a proteome FASTA) and the inputs of the other jobs of its batch:
+    // no output may be one of them, and the cleanup of a failed run never
+    // removes one.
+    let argv: Vec<String> = cmd.get_args().map(|a| a.to_string_lossy().into_owned()).collect();
+    let inputs = outputs::run_inputs(files.input, &argv, files.protect, files.cwd);
+    let clash = outputs::clashes(&paths, &inputs);
+    if !clash.is_empty() {
+        return Err(outputs::clash_reason(&clash));
+    }
+    let existing = outputs::existing(&paths, &inputs);
     if !files.overwrite && !existing.is_empty() {
         return Err(exists_reason(&existing));
     }
@@ -871,7 +904,7 @@ pub fn start_run(
         // A cancel that lost the race to a clean exit is not a cancellation.
         let was_cancelled = !ok && cancelled.load(Ordering::SeqCst);
         let message = if was_cancelled { Some("cancelled".to_string()) } else { message };
-        let cleanup = if ok { outputs::Cleanup::default() } else { outputs::cleanup(&paths, &input_path) };
+        let cleanup = if ok { outputs::Cleanup::default() } else { outputs::cleanup(&paths, &inputs) };
         let log: Vec<String> = tail.lock().map(|t| t.iter().cloned().collect()).unwrap_or_default();
         let end = RunEnd { pid, ok, code, message, cancelled: was_cancelled, cleanup, log };
         finish(&end);
@@ -914,6 +947,7 @@ pub fn record_of(
         cleanup: end.cleanup.clone(),
         params: None,
         tags: if end.ok { history::tags_of_log(&end.log) } else { None },
+        workflow: None,
     }
 }
 
@@ -935,6 +969,7 @@ pub fn marker_of(files: &RunFiles<'_>, argv: &[String], start: u64) -> history::
         cleanup: outputs::Cleanup::default(),
         params: None,
         tags: None,
+        workflow: None,
     }
 }
 
@@ -961,6 +996,8 @@ pub struct OutputsCheck {
     outputs: Vec<String>,
     // Those that already hold a file: the UI asks before overwriting them.
     existing: Vec<String>,
+    // Those that name one of the run's inputs: the run is refused.
+    clashes: Vec<String>,
 }
 
 /// What a run of @p params is, resolved once for `run` and `outputs_check`:
@@ -989,12 +1026,13 @@ fn plan(params: &RunParams) -> Plan {
 pub fn outputs_check(params: RunParams) -> OutputsCheck {
     let pl = plan(&params);
     let paths = outputs::resolve(&pl.outputs, pl.cwd.as_deref());
-    let input = match &pl.cwd {
-        Some(d) if Path::new(&params.input).is_relative() => d.join(&params.input),
-        _ => PathBuf::from(&params.input),
-    };
+    let inputs = outputs::run_inputs(&params.input, &pl.args, &params.protect, pl.cwd.as_deref());
     let show = |v: &[PathBuf]| v.iter().map(|p| p.display().to_string()).collect();
-    OutputsCheck { existing: show(&outputs::existing(&paths, &input)), outputs: show(&paths) }
+    OutputsCheck {
+        existing: show(&outputs::existing(&paths, &inputs)),
+        clashes: show(&outputs::clashes(&paths, &inputs)),
+        outputs: show(&paths),
+    }
 }
 
 /// The command line of a run of @p params with the binary @p r, binary
@@ -1050,13 +1088,14 @@ pub fn launch(mgr: &RunManager, r: &Resolved, params: RunParams, sink: Sink, his
         cmd.env("FASTAG_TAXONOMY_DIR", t);
     }
     let start = history::now_ms();
-    let files = RunFiles { input: &params.input, outputs: &outputs, cwd: cwd.as_deref(), overwrite: params.overwrite };
+    let files = RunFiles { input: &params.input, outputs: &outputs, cwd: cwd.as_deref(), overwrite: params.overwrite, protect: &params.protect };
     // Before the CLI starts: if the app is killed while it runs, the next
     // start finds this run's marker and offers what it left (sweep.rs).
     let marker = history_dir.as_deref().and_then(|d| sweep::mark_running(d, &marker_of(&files, &command, start)).ok());
     // When the run has ended: record it (history.rs).
     let (rec_input, rec_outputs, rec_cwd, rec_argv) = (params.input.clone(), outputs.clone(), cwd.clone(), command.clone());
     let rec_params = params.params.clone();
+    let rec_workflow = params.workflow.clone();
     let run_marker = marker.clone();
     let finish = Box::new(move |end: &RunEnd| {
         // The marker first: a record next to a stale marker would be
@@ -1065,9 +1104,10 @@ pub fn launch(mgr: &RunManager, r: &Resolved, params: RunParams, sink: Sink, his
             sweep::clear_running(m);
         }
         if let Some(d) = history_dir {
-            let files = RunFiles { input: &rec_input, outputs: &rec_outputs, cwd: rec_cwd.as_deref(), overwrite: true };
+            let files = RunFiles { input: &rec_input, outputs: &rec_outputs, cwd: rec_cwd.as_deref(), overwrite: true, protect: &[] };
             let mut rec = record_of(&files, &rec_argv, start, end);
             rec.params = Some(rec_params);
+            rec.workflow = rec_workflow;
             record_run(&d, &rec, &end.log);
         }
     });
@@ -1263,6 +1303,20 @@ mod tests {
         assert!(!a.contains(&"-force".to_string()));
     }
 
+    // A unit is sent only with its value: a cleared tolerance with Da must
+    // not run the CLI's default 20 as 20 Da.
+    #[test]
+    fn build_args_drops_a_unit_without_its_value() {
+        for value in [r#""fragment_tolerance":"","#, ""] {
+            let a = build_args(&rp(&format!(
+                r#"{{"in":"i","out":"o","params":{{{value}"fragment_tolerance_unit":"Da","search_precursor_unit":"Da"}}}}"#
+            )));
+            assert!(!a.iter().any(|s| s.ends_with("_unit")), "{a:?}");
+        }
+        let a = build_args(&rp(r#"{"in":"i","out":"o","params":{"fragment_tolerance":"0.02","fragment_tolerance_unit":"Da"}}"#));
+        assert!(a.windows(2).any(|w| w == ["-fragment_tolerance_unit", "Da"]));
+    }
+
     #[test]
     fn build_args_bool_is_presence_only() {
         let a = build_args(&rp(r#"{"in":"i","out":"o","params":{"no_deisotope":true,"species":false}}"#));
@@ -1345,6 +1399,19 @@ mod tests {
         // An absolute out is left alone; an empty one stays empty.
         assert_eq!(build_args(&rp(r#"{"in":"/d/a.mzML","out":"/o/t.tsv"}"#))[3], "/o/t.tsv");
         assert_eq!(build_args(&rp(r#"{"in":"/d/a.mzML","out":""}"#))[3], "");
+    }
+
+    // A FASTA given as -alkylation_proteome is a file like -recon_fasta (made
+    // absolute against the input folder); a shipped proteome's name is not.
+    #[cfg(unix)]
+    #[test]
+    fn build_args_resolves_a_proteome_fasta_but_not_a_proteome_name() {
+        let a = build_args(&rp(r#"{"in":"/d/a.mzML","out":"t.tsv","params":{"alkylation_proteome":"db.fasta"}}"#));
+        let i = a.iter().position(|s| s == "-alkylation_proteome").unwrap();
+        assert_eq!(a[i + 1], "/d/db.fasta");
+        let a = build_args(&rp(r#"{"in":"/d/a.mzML","out":"t.tsv","params":{"alkylation_proteome":"yeast"}}"#));
+        let i = a.iter().position(|s| s == "-alkylation_proteome").unwrap();
+        assert_eq!(a[i + 1], "yeast");
     }
 
     #[test]
@@ -1484,6 +1551,7 @@ mod tests {
                 recon_id_out: at("a.ids.tsv"),
                 glyco_out: at("a.tags.glyco.tsv"),
                 out_spectra: at("a.spectra.mzML"),
+                ..Default::default()
             }
         );
         // The same files the cleanup removes.
@@ -1609,12 +1677,12 @@ mod tests {
             });
             let (input, outs, h) = (p.input.clone(), outputs.clone(), hist.clone());
             let argv: Vec<String> = std::iter::once("FASTag".to_string()).chain(args.iter().cloned()).collect();
-            let files = RunFiles { input: &p.input, outputs: &outputs, cwd: None, overwrite: p.overwrite };
+            let files = RunFiles { input: &p.input, outputs: &outputs, cwd: None, overwrite: p.overwrite, protect: &p.protect };
             let marker = sweep::mark_running(&hist, &marker_of(&files, &argv, 1)).unwrap();
             let run_marker = marker.clone();
             let finish = Box::new(move |end: &RunEnd| {
                 sweep::clear_running(&run_marker);
-                let files = RunFiles { input: &input, outputs: &outs, cwd: None, overwrite: true };
+                let files = RunFiles { input: &input, outputs: &outs, cwd: None, overwrite: true, protect: &[] };
                 record_run(&h, &record_of(&files, &argv, 1, end), &end.log);
             });
             if let Err(e) = start_run(&mgr, cmd, files, sink, finish) {
@@ -1908,7 +1976,7 @@ mod tests {
             let params = format!(r#"{{"in":"{}","out":"a.tags.tsv"}}"#, input.display());
             let r = start(&params, &[("STUB_SLEEP", "30")]).unwrap();
             let sink: Sink = Arc::new(|_| {});
-            let files = RunFiles { input: "x", outputs: &[], cwd: None, overwrite: false };
+            let files = RunFiles { input: "x", outputs: &[], cwd: None, overwrite: false, protect: &[] };
             let again = start_run(&r.mgr, Command::new("true"), files, sink, Box::new(|_| {}));
             assert_eq!(again.unwrap_err(), "a run is already in progress");
             kill_current_of(&r.mgr);
@@ -2436,6 +2504,7 @@ mod tests {
                 recon_id_out: s("/d/a.recon_id.tsv"),
                 glyco_out: s("/d/a.tags.glyco.tsv"),
                 out_spectra: s("/d/a.spectra.mzpeak"),
+                ..Default::default()
             }),
             command: Some(["/bin/FASTag", "-in", "/d/a.mzML", "-out", "/d/a.tags.tsv", "-progress"].map(String::from).to_vec()),
         };

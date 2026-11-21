@@ -1,4 +1,6 @@
 import { describe, expect, it } from 'vitest'
+// @ts-ignore -- node built-in; the app's tsconfig has no node types
+import { readFileSync } from 'node:fs'
 import {
   PARAM_BY_NAME,
   PARAM_UI,
@@ -14,7 +16,13 @@ import {
   masters,
   speciesReach,
   unknownParams,
-  unplacedParams
+  unplacedParams,
+  choiceText,
+  dependsOf,
+  hintText,
+  sentValues,
+  uiOf,
+  UNIT_PARAMS
 } from './paramLayout'
 
 // The pre-P5 tables, as views of PARAM_UI.
@@ -85,7 +93,7 @@ describe('dependencies', () => {
   })
 
   it('needs both recon_out and massgap_out for the mass-gap knobs', () => {
-    expect(inertBecause('massgap_top', { massgap_out: '/r/m.tsv' })).toMatch(/reconciliation/)
+    expect(inertBecause('massgap_top', { massgap_out: '/r/m.tsv' })).toMatch(/placements/)
     expect(inertBecause('massgap_top', { recon_out: '/r/r.tsv' })).toMatch(/mass-gap/)
     expect(inertBecause('massgap_top', { recon_out: '/r/r.tsv', massgap_out: '/r/m.tsv' })).toBeNull()
   })
@@ -158,6 +166,94 @@ describe('preflight conflicts', () => {
     expect(conflicts({ species: true, taxdb: '/a', taxonomy_nodes: '/b', taxonomy_names: '/c' })).toEqual([])
     expect(conflicts({ species: false, taxdb: '/d/x.taxdb' })).toEqual([])
   })
+
+  // Round 4, 4: the combinations FASTag refuses with ILLEGAL_PARAMETERS.
+  it('refuses the TMT reporter filter without the pseudo-tag filter', () => {
+    const c = conflicts({ tmt_reporter_filter: true })
+    expect(c.map((x) => x.params[0])).toEqual(['tmt_pseudo_filter'])
+    expect(c[0].note).toMatch(/^The TMT reporter filter needs the TMT pseudo-tag filter on auto or on\./)
+    expect(conflicts({ tmt_reporter_filter: true, tmt_pseudo_filter: 'auto' })).toEqual([])
+    expect(conflicts({ tmt_reporter_filter: false, tmt_pseudo_filter: 'off' })).toEqual([])
+  })
+
+  it('refuses exact identification matching with subsampling', () => {
+    const ids = { census: true, census_ids: '/d/a.idXML', census_ids_exact: true }
+    const c = conflicts({ ...ids, subsample_fraction: '0.1' })
+    expect(c.map((x) => x.params[0])).toEqual(['subsample_fraction'])
+    expect(c[0].note).toMatch(/^census_ids_exact needs every spectrum read/)
+    expect(conflicts({ ...ids, subsample_spectra: '5000' })).toHaveLength(1)
+    expect(conflicts({ ...ids, subsample_fraction: '0.0' })).toEqual([])
+    // Without identifications the switch is inert: nothing to refuse.
+    expect(conflicts({ census: true, census_ids_exact: true, subsample_fraction: '0.1' })).toEqual([])
+  })
+
+  it('never sends a Comet template left set after the engine changed', () => {
+    const v = { search_config_out: '/d/a.search.json', recon_fasta: '/d/h.fasta', search_config_template: '/d/comet.params', search_engine: 'sage' }
+    expect(inertBecause('search_config_template', v)).toMatch(/written complete/)
+    expect('search_config_template' in sentValues(v)).toBe(false)
+    expect(conflicts(v)).toEqual([])
+    expect(inertBecause('search_config_template', { ...v, search_engine: 'comet' })).toBeNull()
+    expect(sentValues({ ...v, search_engine: 'comet' })['search_config_template']).toBe('/d/comet.params')
+  })
+})
+
+// Round 4, 5: every dependency agrees with the reader column of the CLI's
+// IgnoredOption table (src/FASTag.cpp): the option is live with its reader
+// on and inert with it off.
+describe('dependencies follow the CLI reader table', () => {
+  const cpp = readFileSync('../src/FASTag.cpp', 'utf8')
+  const block = cpp.slice(cpp.indexOf('const IgnoredOption ignored[] = {'), cpp.indexOf('for (const IgnoredOption& r : ignored)'))
+  const rows = [...block.matchAll(/\{"(\w+)",\s*(?:\w+\s*\?\s*)?"([^"]+)"/g)].map((m) => ({ option: m[1], reader: m[2] }))
+  const ids = { census: true, census_ids: '/d/a.idXML' }
+  // Each reader: values that turn it on, and values that leave it off (the
+  // nearest that do not: a search configuration alone for the shortlist).
+  const READERS: Record<string, { on: Record<string, unknown>[]; off: Record<string, unknown>[] }> = {
+    '-digest_out': { on: [{ digest_out: 'd.tsv' }], off: [{}] },
+    '-digest_out or -label_out': { on: [{ digest_out: 'd.tsv' }, { label_out: 'l.tsv' }], off: [{}] },
+    '-label_out': { on: [{ label_out: 'l.tsv' }], off: [{ digest_out: 'd.tsv' }] },
+    '-glyco': { on: [{ glyco: true }], off: [{}] },
+    '-species': { on: [{ species: true }], off: [{}] },
+    '-acquisition_check refuse or warn': { on: [{ acquisition_check: 'warn' }, { acquisition_check: 'refuse' }], off: [{ acquisition_check: 'off' }] },
+    '-ion_series auto': { on: [{ ion_series: 'auto' }], off: [{ ion_series: 'by' }] },
+    '-unknown_charge enumerate or infer, or -check_header_charge': {
+      on: [{ unknown_charge: 'infer' }, { unknown_charge: 'enumerate' }, { check_header_charge: 'warn' }],
+      off: [{ unknown_charge: 'assume2', check_header_charge: 'off' }]
+    },
+    '-check_header_charge warn or both': { on: [{ check_header_charge: 'warn' }, { check_header_charge: 'both' }], off: [{ check_header_charge: 'off' }] },
+    '-fasta_out': { on: [{ fasta_out: 'r.fasta' }], off: [{ shortlist_out: 's.tsv', search_config_out: 'c.json' }] },
+    '-shortlist_out or -fasta_out': { on: [{ shortlist_out: 's.tsv' }, { fasta_out: 'r.fasta' }], off: [{ search_config_out: 'c.json' }] },
+    '-shortlist_out, -fasta_out or -search_config_out': { on: [{ search_config_out: 'c.json' }, { shortlist_out: 's.tsv' }], off: [{}] },
+    '-shortlist_protease other than trypsin': { on: [{ shortlist_out: 's.tsv', shortlist_protease: 'auto' }], off: [{ shortlist_out: 's.tsv', shortlist_protease: 'trypsin' }] },
+    '-search_config_out': { on: [{ search_config_out: 'c.json', search_engine: 'comet' }], off: [{ shortlist_out: 's.tsv' }] },
+    '-species_call decoy': { on: [{ species: true, species_call: 'decoy' }], off: [{ species: true, species_call: 'none' }] },
+    '-alkylation_out': { on: [{ alkylation_out: 'a.tsv' }], off: [{ alkylation_tags_out: 't.tsv' }] },
+    '-alkylation_out or -alkylation_tags_out': { on: [{ alkylation_out: 'a.tsv' }, { alkylation_tags_out: 't.tsv' }], off: [{}] },
+    '-census': { on: [{ census: true }], off: [{}] },
+    '-census_ids': { on: [ids], off: [{ census: true }] },
+    '-census_score': { on: [{ census: true, census_score: true }], off: [{ census: true }] }
+  }
+  // Read under a further condition of the table's `read` column.
+  const ALSO_OFF: Record<string, Record<string, unknown>[]> = {
+    census_ids_fdr: [{ ...ids, census_ids_accept: 'all' }]
+  }
+  // Switches a product checkbox drives, and options the CLI accepts without
+  // a reader of their own in the form: their reports are their switch.
+  const FORM_ONLY = new Set(['species_out', 'glyco_out', 'census_out', 'census_summary_out', 'census_sorted_out', 'census_score', 'census_ids', 'species_call'])
+
+  it('reads the table', () => {
+    expect(rows.length).toBeGreaterThan(60)
+    for (const r of rows) expect(READERS[r.reader], `${r.option}: reader ${r.reader}`).toBeDefined()
+  })
+
+  for (const r of rows) {
+    // A unit goes with its value (sentValues), so the value's dependency is its.
+    if (FORM_ONLY.has(r.option) || !RENDERED.includes(r.option) || UNIT_PARAMS.has(r.option)) continue
+    it(`${r.option} is read for ${r.reader}`, () => {
+      const rd = READERS[r.reader]
+      for (const on of rd.on) expect(inertBecause(r.option, on), `${r.option} with ${JSON.stringify(on)}`).toBeNull()
+      for (const off of [...rd.off, ...(ALSO_OFF[r.option] ?? [])]) expect(inertBecause(r.option, off), `${r.option} with ${JSON.stringify(off)}`).not.toBeNull()
+    })
+  }
 })
 
 describe('labels', () => {
@@ -168,6 +264,98 @@ describe('labels', () => {
       expect(RENDERED, name).toContain(name)
     }
     expect(new Set(Object.values(LABEL)).size).toBe(Object.keys(LABEL).length)
-    expect(humanName('tag_length')).toBe('Tag length')
+    expect(humanName('tag_length')).toBe('Seed length')
+  })
+})
+
+// Review round 3: no flag, CLI word or version note reaches a label, a
+// choice, the one line under a field or the note of an inert field.
+describe('the words of the form', () => {
+  const FLAG = /(^|[\s(])-[a-z]+_[a-z_]+\b/
+  const SNAKE = new RegExp(`\\b(${RENDERED.filter((n) => n.includes('_')).join('|')})\\b`)
+  const CLI_WORDS = /\breconcil|\bCLI\b|\bAssume2\b|\bheld-out\b/i
+  const VERSION = /\b1\.1\d(\.\d+)?\b/
+  for (const name of RENDERED) {
+    it(`${name}: label, choices, hint and inert note are in words`, () => {
+      const texts = [humanName(name), hintText(name, ''), ...(PARAM_BY_NAME.get(name)?.choices ?? []).map((c) => choiceText(name, c)), ...dependsOf(name).map((d) => d.note)]
+      for (const t of texts) {
+        expect(t, `${name}: ${t}`).not.toMatch(FLAG)
+        expect(t, `${name}: ${t}`).not.toMatch(SNAKE)
+        expect(t, `${name}: ${t}`).not.toMatch(CLI_WORDS)
+        expect(t, `${name}: ${t}`).not.toMatch(VERSION)
+      }
+    })
+  }
+})
+
+// Round 5: dependencies and refusals the CLI applies that the form missed.
+describe('round 5 dependencies and conflicts', () => {
+  const base: Record<string, unknown> = {}
+  for (const [n, s] of PARAM_BY_NAME) base[n] = s.type === 'bool' ? s.default === 'true' : s.default
+
+  it('the alkylation proteome is replaced by a placement database or the placements', () => {
+    const on = { ...base, alkylation_out: '/d/a.alkylation.tsv' }
+    expect(inertBecause('alkylation_proteome', on)).toBeNull()
+    expect(inertBecause('alkylation_proteome', { ...on, recon_fasta: '/d/db.fasta' })).toMatch(/Protein database/)
+    expect(inertBecause('alkylation_proteome', { ...on, shortlist_out: '/d/a.shortlist.tsv' })).toMatch(/or on the Filter database when no Protein database is set/)
+  })
+
+  it('the ranking needs the census as well as the score', () => {
+    expect(inertBecause('census_sorted_out', { ...base, census_score: true })).toMatch(/identifiability table/)
+    expect(inertBecause('census_sorted_out', { ...base, census: true, census_score: true })).toBeNull()
+  })
+
+  it('shortlist_force and shortlist_decoy_affix follow the outputs that read them', () => {
+    const only = { ...base, shortlist_out: '/d/a.shortlist.tsv' }
+    expect(inertBecause('shortlist_force', only)).not.toBeNull()
+    expect(inertBecause('shortlist_decoy_affix', only)).toBeNull()
+    const cfg = { ...base, search_config_out: '/d/a.search.json' }
+    expect(inertBecause('shortlist_force', cfg)).toBeNull()
+    expect(inertBecause('shortlist_decoy_affix', cfg)).not.toBeNull()
+  })
+
+  // Round 6, 5: with a custom models file v2 still loads its calibration
+  // and writes the v2 rows (FASTag.cpp), so the version is sent.
+  it('the models version is sent with a custom digest models file too', () => {
+    const on = { ...base, digest_out: '/d/a.digest.tsv' }
+    expect(inertBecause('digest_models_version', on)).toBeNull()
+    const custom = { ...on, digest_models: '/d/models.tsv', digest_models_version: 'v2' }
+    expect(inertBecause('digest_models_version', custom)).toBeNull()
+    expect(sentValues(custom)).toMatchObject({ digest_models: '/d/models.tsv', digest_models_version: 'v2' })
+    expect(uiOf('digest_models_version').help?.tip).toMatch(/v2 still loads the calibration and adds the p_correct rows/)
+  })
+
+  it('refuses isotope offsets at a low-resolution tolerance, and auto modes on mzPeak, each with its fix', () => {
+    const iso = conflicts({ ...base, isotope_error: ['0', '1'], fragment_tolerance: '0.3', fragment_tolerance_unit: 'Da' })
+    expect(iso.map((c) => c.params[0])).toContain('isotope_error')
+    expect(iso.find((c) => c.params[0] === 'isotope_error')!.fix!.values).toEqual({ isotope_error: ['0'] })
+    expect(conflicts({ ...base, isotope_error: ['1'], fragment_tolerance: '20', fragment_tolerance_unit: 'ppm' }).map((c) => c.params[0])).not.toContain('isotope_error')
+    const auto = { ...base, complement_tolerance_unit: 'auto', tmt_pseudo_filter: 'auto' }
+    expect(conflicts(auto, { input: '/d/run.mzML' }).map((c) => c.params[0])).toEqual([])
+    expect(conflicts(auto, { input: '/d/run.mzpeak' }).map((c) => c.params[0])).toEqual(['complement_tolerance_unit', 'tmt_pseudo_filter'])
+  })
+
+  // Round 6, 9: a batch's queued mzPeak files are checked as the one file is.
+  it('checks every queued input of a batch, naming the mzPeak files', () => {
+    const auto = { ...base, complement_tolerance_unit: 'auto' }
+    expect(conflicts(auto, { inputs: ['/d/a.mzML', '/d/b.mzML'] })).toEqual([])
+    const c = conflicts(auto, { inputs: ['/d/a.mzML', '/d/b.mzpeak', '/d/c.mzPeak'] })
+    expect(c.map((x) => x.params[0])).toEqual(['complement_tolerance_unit'])
+    expect(c[0].note).toMatch(/b\.mzpeak, c\.mzPeak in this batch/)
+    expect(c[0].fix?.values).toEqual({ complement_tolerance_unit: 'Da' })
+  })
+
+  // Round 6, 14: on mzPeak with the reporter filter on, the TMT fix must not
+  // raise the reporter-filter conflict: on, or both filters off.
+  it('the mzPeak TMT fix keeps the reporter filter satisfiable', () => {
+    const v = { ...base, tmt_pseudo_filter: 'auto', tmt_reporter_filter: true }
+    const c = conflicts(v, { input: '/d/run.mzpeak' }).find((x) => x.params[0] === 'tmt_pseudo_filter')!
+    expect(c.fix).toEqual({ label: 'Use on (known TMT6/10)', values: { tmt_pseudo_filter: 'on' } })
+    expect(c.alt).toEqual({ label: 'Turn both TMT filters off', values: { tmt_pseudo_filter: 'off', tmt_reporter_filter: false } })
+    expect(conflicts({ ...v, ...c.fix!.values }, { input: '/d/run.mzpeak' })).toEqual([])
+    expect(conflicts({ ...v, ...c.alt!.values }, { input: '/d/run.mzpeak' })).toEqual([])
+    const plain = conflicts({ ...base, tmt_pseudo_filter: 'auto' }, { input: '/d/run.mzpeak' })[0]
+    expect(plain.fix?.values).toEqual({ tmt_pseudo_filter: 'off' })
+    expect(plain.alt).toBeUndefined()
   })
 })

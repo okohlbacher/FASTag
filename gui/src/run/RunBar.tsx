@@ -1,17 +1,15 @@
-// The run bar under the setup form (moved from App.tsx, P1 PR c): what a
-// run is doing, why it cannot start, the instrument presets and the Run,
-// Cancel and Reset actions.
+// The run bar under the setup form (moved from App.tsx, P1 PR c;
+// doc/GUI-WORKFLOWS.md 3): the plan line with Copy command line and Export
+// INI…, what a run is doing, why it cannot start, and Run or Cancel.
 
-import { useEffect, useRef, useState, type JSX } from 'react'
+import { useEffect, useState, type JSX, type ReactNode } from 'react'
 import type { Progress } from '../runJob'
-import { humanName, PARAM_BY_NAME, type Conflict } from '../paramLayout'
+import { humanName, type Conflict } from '../paramLayout'
 import type { ParamValue } from '../ParamField'
-import { baseName } from '../digestReport'
 import { IconError } from '../icons'
-import { INSTRUMENTS, matchesInstrument, presetText, type SpeciesFix } from '../setup/presets'
+import type { SpeciesFix } from '../setup/presets'
 import { isMac, keyText } from '../setup/shortcuts'
 import { duration } from '../app/format'
-import { focusLater } from '../app/focus'
 
 export interface RunBarProps {
   // What a screen reader hears of a run.
@@ -35,33 +33,28 @@ export interface RunBarProps {
   onFix(values: Record<string, ParamValue>): void
   input: string
   out: string
+  // Batch input mode: the queue is the input, never the single file.
+  batchMode?: boolean
   // The number of queued batch jobs, those not run yet and the failed ones.
   jobs: number
   remaining: number
   failedJobs: number
   binOk: boolean
   canRun: boolean
-  // The instrument preset last chosen, and the values it is checked against.
-  instrument: string
-  // The preset the inspector proposes for the input (inspector/checks.ts).
-  detectedInstrument?: string | null
   // Run waits for the inspector: a block, or a red flag not yet answered.
   inspectorHeld?: boolean
   // ... because the checks are not known yet (--helphelp or the probe runs).
   inspectorChecking?: boolean
-  values: Record<string, ParamValue>
-  onInstrument(id: string): void
   onRun(): void
   onRunBatch(only?: 'failed'): void
   onCancel(): void
-  onReset(): void
+  /// The plan row (setup/PlanFooter.tsx): what a run does, Copy command
+  /// line and Export INI…; shown while no run goes.
+  plan?: ReactNode
 }
 
 export default function RunBar(p: RunBarProps): JSX.Element {
   const { running, busy, progress, invalid, refused, fixes, jobs, remaining } = p
-  // Reset… asks before it throws away every parameter.
-  const [resetAsk, setResetAsk] = useState(false)
-  const resetRef = useRef<HTMLButtonElement>(null)
   // Re-renders the run bar once a second, so the elapsed time runs on between
   // progress events (loading spectra and building the index print none).
   const [, setTick] = useState(0)
@@ -73,12 +66,8 @@ export default function RunBar(p: RunBarProps): JSX.Element {
 
   const nInvalid = Object.keys(invalid).length
   const blocked = nInvalid > 0 || refused.length > 0
-  const held = !busy && !blocked && jobs === 0 && !!p.input && !!p.inspectorHeld
-  const chosenInstrument = INSTRUMENTS.find((x) => x.id === p.instrument)
-  // A preset stays shown only while the values are still its own.
-  const shownInstrument = chosenInstrument && matchesInstrument(p.values, chosenInstrument) ? chosenInstrument.id : ''
-  const tolerance = p.values.fragment_tolerance || PARAM_BY_NAME.get('fragment_tolerance')?.default
-  const toleranceUnit = p.values.fragment_tolerance_unit || PARAM_BY_NAME.get('fragment_tolerance_unit')?.default
+  const single = jobs === 0 && !p.batchMode
+  const held = !busy && !blocked && single && !!p.input && !!p.inspectorHeld
 
   const pct = progress && progress.total > 0 ? Math.round((progress.done / progress.total) * 100) : null
   const elapsed = running && p.startedAt ? ` · ${duration(Date.now() - p.startedAt)} elapsed` : ''
@@ -143,10 +132,26 @@ export default function RunBar(p: RunBarProps): JSX.Element {
           )}
           {refused.map((c) => (
             <div key={c.params.join(',')}>
-              <p className="warn">
-                <IconError />
-                <span>{c.note}</span>
-              </p>
+              {c.neutral ? (
+                <p className="hint">{c.note}</p>
+              ) : (
+                <p className="warn">
+                  <IconError />
+                  <span>{c.note}</span>
+                </p>
+              )}
+              {c.fix && (
+                <div className="row fixes">
+                  <button type="button" className="small" onClick={() => p.onFix(c.fix!.values)}>
+                    {c.fix.label}
+                  </button>
+                  {c.alt && (
+                    <button type="button" className="secondary small" onClick={() => p.onFix(c.alt!.values)}>
+                      {c.alt.label}
+                    </button>
+                  )}
+                </div>
+              )}
               {/* The species reach conflict: one-click fixes. */}
               {c.params.includes('species') && c.params.includes('extension') && fixes.length > 0 && (
                 <div className="row fixes">
@@ -168,8 +173,10 @@ export default function RunBar(p: RunBarProps): JSX.Element {
           ))}
         </div>
       )}
-      {!busy && !blocked && jobs === 0 && !p.input && <p className="hint">Choose an input file to run.</p>}
-      {!busy && jobs === 0 && !!p.input && !p.out && <p className="warn" id="run-output-required">Choose where to save the tags TSV in Output before running.</p>}
+      {!busy && p.plan}
+      {!busy && !blocked && single && !p.input && <p className="hint">Choose an input file to run.</p>}
+      {!busy && !blocked && jobs === 0 && p.batchMode && <p className="hint">Add files or a folder to run.</p>}
+      {!busy && single && !!p.input && !p.out && <p className="warn" id="run-output-required">Choose a run name in Outputs before running.</p>}
       {/* No live region of its own: the checks' summary (InspectorPanel) is
           announced; Run's aria-describedby names this line. */}
       {held && p.inspectorChecking && (
@@ -184,56 +191,6 @@ export default function RunBar(p: RunBarProps): JSX.Element {
         </p>
       )}
 
-      {!busy && (
-        <div className="instrument">
-          <label htmlFor="instrument">Fragment tolerance preset</label>
-          <select
-            id="instrument"
-            className="small"
-            value={shownInstrument}
-            onChange={(e) => p.onInstrument(e.target.value)}
-            title="Sets the fragment tolerance and its unit, nothing else"
-          >
-            <option value="">Current: {String(tolerance)} {String(toleranceUnit)} (custom)</option>
-            {INSTRUMENTS.map((x) => (
-              <option key={x.id} value={x.id}>
-                {presetText(x)}
-                {p.detectedInstrument === x.id ? ' (detected)' : ''}
-              </option>
-            ))}
-          </select>
-          {chosenInstrument && shownInstrument && !chosenInstrument.validated && (
-            <span className="hint" role="note">
-              {chosenInstrument.label}: not validated against the paper's benchmark.
-            </span>
-          )}
-        </div>
-      )}
-      {resetAsk && !busy ? (
-        <div className="confirm" role="group" aria-label="Reset parameters">
-          <span>Reset every parameter to its default?</span>
-          <button
-            className="danger"
-            onClick={() => {
-              p.onReset()
-              setResetAsk(false)
-              focusLater(() => resetRef.current)
-            }}
-          >
-            Reset
-          </button>
-          <button
-            className="secondary"
-            onClick={() => {
-              setResetAsk(false)
-              focusLater(() => resetRef.current)
-            }}
-            autoFocus
-          >
-            Keep
-          </button>
-        </div>
-      ) : (
         <div className="row actions">
           {jobs > 0 ? (
             <>
@@ -256,11 +213,11 @@ export default function RunBar(p: RunBarProps): JSX.Element {
               onClick={p.onRun}
               disabled={!p.canRun}
               data-run=""
-              aria-describedby={[held ? 'run-held' : '', p.input && !p.out ? 'run-output-required' : ''].filter(Boolean).join(' ') || undefined}
+              aria-describedby={[held ? 'run-held' : '', single && p.input && !p.out ? 'run-output-required' : ''].filter(Boolean).join(' ') || undefined}
               aria-keyshortcuts={isMac() ? 'Meta+Enter' : 'Control+Enter'}
               title={`Run (${keyText(isMac() ? '⏎' : 'Enter')})`}
             >
-              {running ? 'Running…' : p.input ? `Run on ${baseName(p.input)}` : 'Run'}
+              {running ? 'Running…' : 'Run'}
             </button>
           )}
           {busy ? (
@@ -272,13 +229,8 @@ export default function RunBar(p: RunBarProps): JSX.Element {
             >
               Cancel
             </button>
-          ) : (
-            <button className="secondary" ref={resetRef} onClick={() => setResetAsk(true)}>
-              Reset…
-            </button>
-          )}
+          ) : null}
         </div>
-      )}
     </div>
   )
 }

@@ -14,7 +14,7 @@ import { parseReport } from '../digestReport'
 import { PARAM_BY_NAME, RENDERED, hiddenReason } from '../paramLayout'
 import manifest from '../params.generated.json'
 import { installMockBridge } from '../testing/mockBridge'
-import { click, goTo, pickSingle, renderApp, runButton } from '../testing/render'
+import { click, goTo, openGroup, pickSingle, renderApp, runButton } from '../testing/render'
 import { applyAndCheck } from '../testing/lastUsed'
 import type { SpeciesReport } from '../types'
 import digestTsv from '../fixtures/digest.tsv?raw'
@@ -67,10 +67,6 @@ describe('docs: species precondition (README "FASTag refuses the run up front")'
     await pickSingle(mock, '/d/a.mzML')
     expect((runButton() as HTMLButtonElement).disabled).toBe(true)
     expect(c.querySelector('.controls')!.textContent).toMatch(/cannot reach the species index k = 7/)
-    await goTo('results')
-    await click(screen.getByRole('tab', { name: /Species/ }))
-    expect(screen.getByText(/FASTag refuses the run/)).toBeDefined()
-    expect(screen.queryByText(/the report would be empty/)).toBeNull()
   })
 })
 
@@ -94,7 +90,7 @@ describe('docs: species headline and footnote vs SPECIES-DETECTOR.md / README', 
     // Without -species_deconvolve adjusted == observed: no second column of the same numbers.
     expect(heads).not.toContain('Adjusted')
     expect(heads).not.toContain('enrich.')
-    expect(container.querySelector('.footnote')?.textContent).toMatch(/species_deconvolve to add an Adjusted column/)
+    expect(container.querySelector('.footnote')?.textContent).toMatch(/Subtract shared evidence \(Advanced › Species, advanced\) to add an Adjusted column/)
     unmount()
     const dec = { ...rep, taxa: rep.taxa.map((t, i) => (i === 0 ? { ...t, adjusted: t.adjusted - 1 } : t)) }
     const r2 = render(<SpeciesPanel report={dec} enabled tooShort={null} contributed={null} totalMs2={null} />)
@@ -124,7 +120,7 @@ describe('docs: Digest tab vs doc/DESIGN-digest.md "GUI: Digest tab"', () => {
     const { container } = render(<DigestPanel reports={[r]} errors={[]} onOpen={() => {}} />)
     expect(container.querySelector('.headline .sub')?.textContent).toBe('N end not used')
     const stats = [...container.querySelectorAll('.headline dt')].map((d) => d.textContent)
-    expect(stats).toEqual(['Called', 'Tag ends used']) // no runner-up, no margin
+    expect(stats).toEqual(['Protease call', 'Tags E ≤ 1', 'Tag ends used']) // no runner-up, no margin
     const logos = [...container.querySelectorAll('svg[role="img"]')].map((l) => l.getAttribute('aria-label')?.split(':')[0])
     expect(logos).toEqual(['Observed', 'Called'])
   })
@@ -139,12 +135,13 @@ describe('docs: Digest tab vs doc/DESIGN-digest.md "GUI: Digest tab"', () => {
     await renderApp(mock)
     await goTo('results') // the report picker lives in the empty results pane
     mock.nextPickReport = '/rep1/Ecoli_MS2_small.label.tsv'
-    await click(screen.getByRole('button', { name: 'Open a digest, label or mass-gap report…' }))
+    await click(screen.getByRole('button', { name: 'Open a FASTag report…' }))
     mock.nextPickReport = '/rep2/Ecoli_MS2_small.digest.tsv'
     await click(screen.getByRole('button', { name: 'Open another report…' }))
     // Another folder is another run: the label report is closed, with a note.
     const panel = screen.getByRole('tabpanel')
-    expect(within(panel).getAllByRole('heading', { level: 2 }).map((h) => h.textContent)).toEqual(['Protease'])
+    // The tab's title row, then the one report left.
+    expect(within(panel).getAllByRole('heading', { level: 2 }).map((h) => h.textContent)).toEqual(['Digest and labels', 'Protease'])
     expect(screen.getByText(/Ecoli_MS2_small\.digest\.tsv is from another run of Ecoli_MS2_small\.mzML; \/rep1\/Ecoli_MS2_small\.label\.tsv was closed/)).toBeTruthy()
   })
 })
@@ -184,7 +181,7 @@ describe('docs: code comments that promise the CLI will not reject a GUI value',
   it('max_peaks 2000 is marked invalid and never sent', async () => {
     const mock = installMockBridge()
     await renderApp(mock)
-    await click(screen.getByRole('button', { name: /^Spectra/ }))
+    await openGroup('Peaks')
     const f = document.getElementById('p-max_peaks') as HTMLInputElement
     expect(f.type).toBe('text')
     await act(async () => {

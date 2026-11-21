@@ -253,3 +253,19 @@ describe('tables.ts: sniffing and the run outputs', () => {
     expect(tablePaths({ out: '/d/t.tsv' })).toEqual({})
   })
 })
+
+describe('the mass-shift survey columns of -delta_out', () => {
+  it('keeps localization, sites, UniMod names and ambiguity, as printed', () => {
+    const text = [
+      'delta\tspectra\ttop_interps\tlocalized\tresidues\tunlocalized\tunimod\tpsimod\tambiguous\tisobars',
+      '15.9949\t42\tmod:Oxidation@M:30\t28\tM:27,W:1\t14\tOxidation@M/W(+0.4ppm)\t-\t3\tOxidation=Ala->Ser'
+    ].join('\n')
+    const t = parseDelta(text, '/d/a.delta.tsv')
+    expect(t.spectra[0]).toBe(42)
+    expect(t.extra['localized']).toEqual(['28'])
+    expect(t.extra['residues']).toEqual(['M:27,W:1'])
+    expect(t.extra['unimod']).toEqual(['Oxidation@M/W(+0.4ppm)'])
+    expect(t.extra['ambiguous']).toEqual(['3'])
+    expect(t.extra['isobars']).toEqual(['Oxidation=Ala->Ser'])
+  })
+})

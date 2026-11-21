@@ -14,7 +14,7 @@ use std::io::{ErrorKind, Read};
 // opens only in a spreadsheet.
 const MAX_BYTES: u64 = 128 << 20;
 // The batch summary the app writes (a row per batch job).
-const SUMMARY_MAX_BYTES: u64 = 32 << 20;
+const SUMMARY_MAX_BYTES: u64 = MAX_BYTES;
 /// What report_head reads: enough for the header line of a wide table and
 /// the first lines of an mzTab or XML file (results/reports.ts sniffPath).
 pub(crate) const HEAD_BYTES: u64 = 64 << 10;

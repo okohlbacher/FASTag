@@ -28,16 +28,16 @@ afterEach(() => resetHelp())
 describe('help vs docs', () => {
   it('describes the actual first-run task and existing results views', () => {
     expect(LANDING_TASK).toBe('export-tags')
-    expect(taskById(LANDING_TASK)!.values).toEqual({ res_conf: true })
+    expect(taskById(LANDING_TASK)!.values).toEqual({ res_conf: true, threads: '0', extension: '3' })
     const start = pageText('start')
     expect(start).toContain('Export tags, the default task')
     expect(start).toContain('tags from all input spectra and includes per-residue confidence')
     expect(start).toContain('Results opens on Tags')
-    expect(start).toContain('Open results / inspect spectra')
+    expect(start).toContain('Open earlier results…')
     // QC remains available as an explicit optional workflow.
     expect(taskById('characterize')!.values).toMatchObject({ species: true, extension: '2', subsample_fraction: '0.1', digest_out: 'digest.tsv', label_out: 'label.tsv', glyco: true })
-    expect(start).toContain('For a separate QC survey, choose Characterize a run')
-    expect(start).toContain('These tasks sample 10% of the spectra')
+    expect(start).toContain('For run metrics, choose Run QC. For protease, labels, glycopeptides and species, choose Characterize a run')
+    expect(start).toContain('Characterize samples 10% of the spectra')
     expect(start).toContain('opening on Overview')
     expect(start).not.toContain('Every other setting starts at')
     const files = pageText('files')
@@ -94,4 +94,24 @@ describe('help vs docs', () => {
       expect(pageText(page)).toContain(inHelp)
     })
   }
+})
+
+describe('settings groups in Help', () => {
+  it('every topic link is keyed by a current group title and points at a Help section', async () => {
+    const { SECTION_TOPIC, PAGE_OF } = await import('./HelpView')
+    const { SECTIONS } = await import('../paramLayout')
+    const titles = new Set(SECTIONS.map((s) => s.title))
+    for (const [title, [to]] of Object.entries(SECTION_TOPIC)) {
+      expect(titles.has(title), title).toBe(true)
+      expect(PAGE_OF.has(to), `${title} -> ${to}`).toBe(true)
+    }
+  })
+
+  it('no Help text names the groups or tasks of the old Setup', async () => {
+    const { PAGES } = await import('./content')
+    const { renderToStaticMarkup } = await import('react-dom/server')
+    const text = PAGES.flatMap((p) => p.sections.map((s) => renderToStaticMarkup(<>{s.body}</>))).join('\n')
+    for (const old of ['Sequence matching', 'Reports › ', 'Open results / inspect spectra', 'Batch QC vs SDRF', 'Starting from'])
+      expect(text, old).not.toContain(old)
+  })
 })

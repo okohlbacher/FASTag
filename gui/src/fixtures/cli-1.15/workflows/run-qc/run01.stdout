@@ -1,0 +1,5 @@
+-threads 0: using 8 of 16 logical cores.
+Modifications: Carbamidomethyl (C, fixed)
+QC report -> run01.qc.tsv (0 s after the tagging loop)
+139 MS2 spectra, 5937 tags
+FASTag took 0.09 s (wall), 0.27 s (CPU), 0.01 s (system), 0.26 s (user); Peak Memory Usage: 93 MB.

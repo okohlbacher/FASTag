@@ -8,7 +8,7 @@ import { dirName } from '../app/paths'
 import { folderPath } from './batch'
 import type { SdrfComparison } from '../sdrf/compare'
 import { samePath } from '../sdrf/SdrfPanel'
-import { COLUMN_LABEL, majorityWords, MIN_CALLS, SUMMARY_COLUMNS, summaryTsv, type Summary } from './batchSummary'
+import { columnLabel, majorityWords, MIN_CALLS, summaryTsv, type Summary } from './batchSummary'
 
 export interface SummaryTableProps {
   summary: Summary
@@ -45,6 +45,8 @@ export default function SummaryTable({ summary, busy, outDir, onShow, sdrf, prot
   const [showNotes, setShowNotes] = useState(false)
   const { rows } = summary
   const verdict = new Map(sdrf?.jobs.map((j) => [j.input, j.verdict]) ?? [])
+  // A done job whose reports are still being read would export "reading…".
+  const reading = rows.some((r) => Object.values(r.cells).some((c) => c.text === 'reading…'))
 
   async function exportTsv(): Promise<void> {
     setNote(null)
@@ -73,7 +75,13 @@ export default function SummaryTable({ summary, busy, outDir, onShow, sdrf, prot
         <button type="button" className="secondary small" aria-pressed={showNotes} onClick={() => setShowNotes((v) => !v)}>
           Show cutoffs and caveats
         </button>
-        <button type="button" className="secondary small" onClick={() => void exportTsv()} disabled={rows.length === 0}>
+        <button
+          type="button"
+          className="secondary small"
+          onClick={() => void exportTsv()}
+          disabled={rows.length === 0 || reading}
+          title={reading ? 'Wait until the reports of every finished job are read' : undefined}
+        >
           Export summary TSV…
         </button>
       </div>
@@ -87,9 +95,9 @@ export default function SummaryTable({ summary, busy, outDir, onShow, sdrf, prot
               <th scope="col" className="num">
                 Tags
               </th>
-              {SUMMARY_COLUMNS.map((k) => (
+              {summary.columns.map((k) => (
                 <th scope="col" key={k}>
-                  {COLUMN_LABEL[k]}
+                  {columnLabel(k, summary.rank)}
                 </th>
               ))}
               {sdrf && <th scope="col">SDRF</th>}
@@ -113,7 +121,7 @@ export default function SummaryTable({ summary, busy, outDir, onShow, sdrf, prot
                 <td data-text={count(r.tags)} className="num">
                   {count(r.tags)}
                 </td>
-                {SUMMARY_COLUMNS.map((k) => {
+                {summary.columns.map((k) => {
                   const c = r.cells[k]
                   const differs = r.differs[k]
                   return (
@@ -146,7 +154,7 @@ export default function SummaryTable({ summary, busy, outDir, onShow, sdrf, prot
               <th scope="row" colSpan={3}>
                 Majority (n ≥ {MIN_CALLS} calls)
               </th>
-              {SUMMARY_COLUMNS.map((k) => (
+              {summary.columns.map((k) => (
                 <td key={k}>{majorityWords(summary.majority[k])}</td>
               ))}
               {sdrf && <td />}

@@ -22,14 +22,14 @@ describe('digest tab', () => {
     recon_out: '/r/a.recon.tsv'
   }
 
-  it('is always offered, and selected only when a run writes a report', async () => {
+  it('is offered only when a run writes a report', async () => {
     const mock = installMockBridge()
     await renderApp(mock)
     await pickSingle(mock, '/d/a.mzML')
     await click(runButton())
     await emitDone(mock, 1, true)
     await screen.findByText('Showing 3 of 3')
-    expect(screen.getByRole('tab', { name: /Digest/ }).getAttribute('aria-selected')).toBe('false')
+    expect(screen.queryByRole('tab', { name: /Digest/ })).toBeNull()
   })
 
   it('shows the call, the logos, the labels and the gaps after a run', async () => {
@@ -125,13 +125,13 @@ describe('digest tab', () => {
     mock.reportFiles = { '/r/b.label.tsv': labelTsv, '/r/o.digest.tsv': other }
     await renderApp(mock)
     await goTo('results') // the empty results pane
-    await click(screen.getByRole('button', { name: 'Open a digest, label or mass-gap report…' }))
+    await click(screen.getByRole('button', { name: 'Open a FASTag report…' }))
     await screen.findAllByText('TMTpro')
     mock.nextPickReport = '/r/o.digest.tsv'
     await click(screen.getByRole('button', { name: 'Open another report…' }))
     expect((await screen.findByRole('alert')).textContent).toMatch(/o.digest.tsv is from another input \(other.mzML\)/)
     expect(screen.queryAllByText('TMTpro')).toHaveLength(0)
-    expect(screen.getByText('o.digest.tsv')).toBeDefined()
+    expect(screen.getAllByText('o.digest.tsv').length).toBeGreaterThan(0)
   })
 
   it('opens a report from the empty results pane', async () => {
@@ -140,7 +140,7 @@ describe('digest tab', () => {
     mock.reportFiles = { '/r/b.label.tsv': labelTsv }
     await renderApp(mock)
     await goTo('results') // the empty results pane
-    await click(screen.getByRole('button', { name: 'Open a digest, label or mass-gap report…' }))
+    await click(screen.getByRole('button', { name: 'Open a FASTag report…' }))
     await screen.findAllByText('TMTpro')
     expect(screen.getByRole('tab', { name: /Digest/ }).getAttribute('aria-selected')).toBe('true')
   })

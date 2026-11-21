@@ -21,6 +21,23 @@ async function readJob(j: Job): Promise<JobData> {
     return r.reports
   })
   const sp = o.species_out
+  // A workflow report whose figures are the batch's columns (the QC
+  // report, the mass-shift accounting and table, the shortlist, the
+  // identifiability summary); one that cannot be read names its cell.
+  const text = (k: SentReport, path: string | null | undefined): Promise<string | null> =>
+    path
+      ? window.fastag.report(path).catch((e: unknown) => {
+          unread[k] = `Cannot read ${path}: ${message(e)}`
+          return null
+        })
+      : Promise.resolve(null)
+  const qc = await text('qc_out', o.qc_out)
+  const deltaCounts = await text('delta_counts_out', o.delta_counts_out)
+  const delta = await text('delta_out', o.delta_out)
+  const shortlist = await text('shortlist_out', o.shortlist_out)
+  const census = await text('census_summary_out', o.census_summary_out)
+  const triage = await text('census_sorted_out', o.census_sorted_out)
+  const config = o.search_config_out ? await window.fastag.reportHead(o.search_config_out).then((t) => t != null, () => false) : null
   const [reports, species] = await Promise.all([
     Promise.all(reads).then((rs) => rs.flat()),
     // An unreadable species report costs the genus cell only.
@@ -43,8 +60,14 @@ async function readJob(j: Job): Promise<JobData> {
     log: j.log?.get() ?? [],
     reports,
     species,
-    census: null,
+    census,
     params: (j.params?.['params'] ?? {}) as Record<string, unknown>,
+    qc,
+    deltaCounts,
+    delta,
+    shortlist,
+    triage,
+    config,
     unread
   }
 }

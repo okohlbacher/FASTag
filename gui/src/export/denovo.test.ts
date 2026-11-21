@@ -81,10 +81,10 @@ describe('what the script counts and refuses', () => {
     expect(all.unknownMods).toEqual({ Foo: 1, '': 1 })
   })
 
-  it('refuses a file without the res_conf column, naming the CLI option', () => {
+  it('refuses a file without the res_conf column, naming the setting', () => {
     const text = 'spectrum\ttag\tlength\tcharge\tnterm_mass\tcterm_mass\tevalue\n'
     expect(() => tagsToDenovo(text, { format: 'stitch', topN: 1, minLength: 1 })).toThrow(DenovoError)
-    expect(() => tagsToDenovo(text, { format: 'stitch', topN: 1, minLength: 1 })).toThrow(/res_conf.*-res_conf/)
+    expect(() => tagsToDenovo(text, { format: 'stitch', topN: 1, minLength: 1 })).toThrow(/res_conf.*Per-residue confidence/)
   })
 
   it('refuses an empty file and a top N below 1', () => {

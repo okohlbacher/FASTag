@@ -43,6 +43,33 @@ pub struct ResolvedOutputs {
     pub recon_id_out: Option<String>,
     pub glyco_out: Option<String>,
     pub out_spectra: Option<String>,
+    // The reports of the workflows (doc/GUI-WORKFLOWS.md 1), on the wire
+    // only when the run writes them, so the reply of a tags-only run reads
+    // as before.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub qc_out: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub shortlist_out: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub fasta_out: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub search_config_out: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub census_out: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub census_summary_out: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub census_sorted_out: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub alkylation_out: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub alkylation_tags_out: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub delta_spectra_out: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub delta_counts_out: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub check_header_out: Option<String>,
 }
 
 impl ResolvedOutputs {
@@ -58,6 +85,18 @@ impl ResolvedOutputs {
             "recon_id_out" => &mut self.recon_id_out,
             "glyco_out" => &mut self.glyco_out,
             "out_spectra" => &mut self.out_spectra,
+            "qc_out" => &mut self.qc_out,
+            "shortlist_out" => &mut self.shortlist_out,
+            "fasta_out" => &mut self.fasta_out,
+            "search_config_out" => &mut self.search_config_out,
+            "census_out" => &mut self.census_out,
+            "census_summary_out" => &mut self.census_summary_out,
+            "census_sorted_out" => &mut self.census_sorted_out,
+            "alkylation_out" => &mut self.alkylation_out,
+            "alkylation_tags_out" => &mut self.alkylation_tags_out,
+            "delta_spectra_out" => &mut self.delta_spectra_out,
+            "delta_counts_out" => &mut self.delta_counts_out,
+            "check_header_out" => &mut self.check_header_out,
             _ => return None,
         })
     }
@@ -75,6 +114,18 @@ impl ResolvedOutputs {
             &self.recon_id_out,
             &self.glyco_out,
             &self.out_spectra,
+            &self.qc_out,
+            &self.shortlist_out,
+            &self.fasta_out,
+            &self.search_config_out,
+            &self.census_out,
+            &self.census_summary_out,
+            &self.census_sorted_out,
+            &self.alkylation_out,
+            &self.alkylation_tags_out,
+            &self.delta_spectra_out,
+            &self.delta_counts_out,
+            &self.check_header_out,
         ]
         .into_iter()
         .filter_map(|p| p.as_deref())
@@ -156,6 +207,49 @@ mod tests {
         );
         assert_eq!(resolved(&rel, None).out.as_deref(), Some("a.tags.tsv"));
         assert_eq!(resolved(&s(&["-in", "a"]), None).out, None);
+    }
+
+    // Every output-file option of the manifest the CLI still has has its
+    // field: an output without one could not be revealed from Results.
+    #[test]
+    fn every_output_option_has_a_field() {
+        let mut r = ResolvedOutputs::default();
+        for o in crate::outputs::output_options() {
+            // Removed in 1.14 (hidden in the GUI, read by the CLI as nothing).
+            if o == "label_discovery_out" || o == "search_shifts_out" {
+                continue;
+            }
+            assert!(r.slot(o).is_some(), "{o} has no field in ResolvedOutputs");
+        }
+    }
+
+    // The reports of each workflow are revealable: they are among the
+    // resolved paths a run adds to the revealable set.
+    #[test]
+    fn workflow_reports_are_resolved_for_reveal() {
+        let a = s(&[
+            "-in", "/d/a.mzML", "-out", "/d/a.tags.tsv", "-qc_out", "/d/a.qc.tsv", "-shortlist_out", "/d/a.shortlist.tsv",
+            "-fasta_out", "/d/a.reduced.fasta", "-search_config_out", "/d/a.search.json", "-census", "-census_sorted_out",
+            "/d/a.census_sorted.tsv", "-alkylation_out", "/d/a.alkylation.tsv", "-delta_spectra_out", "/d/a.ds.tsv",
+            "-delta_counts_out", "/d/a.dc.tsv", "-check_header_out", "/d/a.ch.tsv",
+        ]);
+        let r = resolved(&a, Some(Path::new("/d")));
+        assert_eq!(r.qc_out.as_deref(), Some("/d/a.qc.tsv"));
+        assert_eq!(r.census_out.as_deref(), Some("/d/a.tags.census.tsv"));
+        assert_eq!(r.census_summary_out.as_deref(), Some("/d/a.tags.census_summary.tsv"));
+        let paths = r.paths();
+        for f in ["a.shortlist.tsv", "a.reduced.fasta", "a.search.json", "a.census_sorted.tsv", "a.alkylation.tsv", "a.ds.tsv", "a.dc.tsv", "a.ch.tsv"] {
+            assert!(paths.contains(&format!("/d/{f}").as_str()), "{f} not revealable");
+        }
+        // The reveal check itself on a real file of a workflow report.
+        let d = std::env::temp_dir().join(format!("fastag-reveal-wf-{}", std::process::id()));
+        std::fs::create_dir_all(&d).unwrap();
+        let qc = d.join("a.qc.tsv");
+        std::fs::write(&qc, "x").unwrap();
+        let a = s(&["-in", "a.mzML", "-out", "a.tags.tsv", "-qc_out", "a.qc.tsv"]);
+        let allowed: Vec<PathBuf> = resolved(&a, Some(&d)).paths().into_iter().map(PathBuf::from).collect();
+        assert!(is_revealable(&qc, &allowed));
+        std::fs::remove_dir_all(&d).ok();
     }
 
     #[test]

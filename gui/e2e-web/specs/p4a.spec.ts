@@ -24,6 +24,7 @@ async function openTags(page: Page, fixture: 'spectrum' | 'spectrum-1.11'): Prom
 }
 
 const firstRow = (page: Page) => page.locator('.rt-rows .rt-row').first()
+// The heading shows the scan (scan=…), its title the full native ID.
 const heading = (page: Page) => page.locator('.sp-head h2')
 
 test('Enter on a row opens its spectrum: FASTag\'s processed peaks with the tag\'s ladder on them', async ({ page }) => {
@@ -34,7 +35,7 @@ test('Enter on a row opens its spectrum: FASTag\'s processed peaks with the tag\
   await firstRow(page).click()
   await page.keyboard.press('Enter')
   await expect(page.getByRole('tab', { name: 'Spectrum' })).toHaveAttribute('aria-selected', 'true')
-  await expect(heading(page)).toHaveText(spectrum)
+  await expect(heading(page)).toHaveAttribute('title', spectrum)
   await expect(page.getByText(/FASTag's processed peaks/)).toBeVisible()
   // The dump of that spectrum on the recorded input, under the run's params.
   const calls = await mockState<{ input: string; nativeId: string; params: unknown }[]>(page, 'spectrumCalls')
@@ -58,7 +59,7 @@ test('another tag redraws the ladder; zoom; ◀ ▶ walk the tagged spectra in f
   await firstRow(page).click()
   await page.getByRole('button', { name: 'Open in Spectrum' }).click()
   await expect(page.getByTestId('ladder-verdict')).toBeVisible()
-  const shown = (await heading(page).textContent())!
+  const shown = (await heading(page).getAttribute('title'))!
   const tags = page.getByRole('region', { name: 'Tags of this spectrum' })
   const second = tags.locator('tbody tr').nth(1)
   const tag = (await second.locator('td').first().textContent())!
@@ -76,10 +77,10 @@ test('another tag redraws the ladder; zoom; ◀ ▶ walk the tagged spectra in f
   const i = SPECTRA.indexOf(shown)
   if (i + 1 < SPECTRA.length) {
     await page.getByRole('button', { name: 'Next tagged spectrum' }).click()
-    await expect(heading(page)).toHaveText(SPECTRA[i + 1])
+    await expect(heading(page)).toHaveAttribute('title', SPECTRA[i + 1])
     await expect(page.getByTestId('ladder-verdict')).toHaveText(/^on \d+ of/)
     await page.getByRole('button', { name: 'Previous tagged spectrum' }).click()
-    await expect(heading(page)).toHaveText(shown)
+    await expect(heading(page)).toHaveAttribute('title', shown)
   }
 })
 
@@ -88,12 +89,12 @@ test('five spectra in a row: every tag of each on its peaks, walking ◀ or ▶'
   await firstRow(page).click()
   await page.getByRole('button', { name: 'Open in Spectrum' }).click()
   // From wherever the best tag is, walk five spectra forward or back.
-  const start = SPECTRA.indexOf((await heading(page).textContent())!)
+  const start = SPECTRA.indexOf((await heading(page).getAttribute('title'))!)
   const dir = start + 5 < SPECTRA.length ? 1 : -1
   for (let k = 1; k <= 5; k++) {
     await page.getByRole('button', { name: dir > 0 ? 'Next tagged spectrum' : 'Previous tagged spectrum' }).click()
     const s = SPECTRA[start + dir * k]
-    await expect(heading(page)).toHaveText(s)
+    await expect(heading(page)).toHaveAttribute('title', s)
     const tags = page.getByRole('region', { name: 'Tags of this spectrum' })
     await expect(tags.locator('tbody tr')).toHaveCount(count(s))
     await expect(page.getByTestId('ladder-verdict')).toHaveText(/^on \d+ of/)

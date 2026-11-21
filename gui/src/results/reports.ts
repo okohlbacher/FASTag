@@ -1,15 +1,61 @@
 // Reading the reports a run wrote (moved from App.tsx, P1 PR c).
 
 import { baseName, parseReport, value, type Report } from '../digestReport'
-import { dirName } from '../app/paths'
+import { dirName, stripExt } from '../app/paths'
 import { parseTable, sniffTable, type TableKind } from './tables'
+
+/// The run that wrote a file, as the app recorded it (history.rs
+/// RunRecord): its id and every output it wrote.
+export interface RunOf {
+  id: string
+  outputs: readonly string[]
+}
+/// The runs the app knows the opened files by (a path's historyOf record).
+export type RunsOf = ReadonlyMap<string, RunOf>
+/// Two paths of one run (useRun keeps the record map behind it).
+export type SameRun = (a: string, b: string) => boolean
+
+/// Two files of one run, by the app's own record first: both recorded, the
+/// same run id (or one record lists the other file among its outputs: the
+/// run shown after a run is known by its outputs); one recorded, the other
+/// among its outputs; neither recorded, their folder and file stems
+/// (sameRunFiles).
+const isShownId = (id: string): boolean => id.startsWith('shown:')
+
+export function sameRunIn(runs: RunsOf, a: string, b: string): boolean {
+  if (a === b) return true
+  const ra = runs.get(a)
+  const rb = runs.get(b)
+  if (ra && rb) {
+    if (ra.id === rb.id) return true
+    // Two persisted run ids are two runs, whatever the outputs lists say: a
+    // later run that rewrote one shared path lists it too. Only the run
+    // just shown (a synthetic `shown:<out>` id, useRun) is known by its
+    // outputs.
+    if (!isShownId(ra.id) && !isShownId(rb.id)) return false
+    return ra.outputs.includes(b) || rb.outputs.includes(a)
+  }
+  if (ra) return ra.outputs.includes(b)
+  if (rb) return rb.outputs.includes(a)
+  return sameRunFiles(a, b)
+}
 
 // Two runs wrote the same report when the run rows they share agree and the
 // files sit in one folder. run.input is only a basename (sample.mzML from two
 // folders, or one file run with two tag lengths, would otherwise read as one).
+// Two runs of one input in one folder differ in their run name: both names
+// must have one (<stem>.<kind>.tsv) and the stems must agree. A custom name
+// (qc-final.tsv) has none: its run is unknown, and the run rows cannot tell
+// it (two runs that differ only in Extension write the same rows), so it is
+// another run. A file the app recorded is told by its record (@p runs,
+// sameRunIn) instead.
 const RUN_KEYS = ['input', 'version', 'fragment_tolerance', 'fragment_tolerance_unit', 'tag_length', 'subsample_fraction', 'subsample_spectra']
-export function sameRun(a: Report, b: Report): boolean {
-  return dirName(a.path) === dirName(b.path) && RUN_KEYS.every((k) => value(a, 'run', k) === value(b, 'run', k))
+export function sameRun(a: Report, b: Report, runs?: RunsOf): boolean {
+  if (runs && (runs.has(a.path) || runs.has(b.path))) return sameRunIn(runs, a.path, b.path)
+  if (dirName(a.path) !== dirName(b.path) || !RUN_KEYS.every((k) => value(a, 'run', k) === value(b, 'run', k))) return false
+  const sa = runStem(a.path)
+  const sb = runStem(b.path)
+  return sa != null && sa === sb
 }
 
 /// The run a file belongs to by its name, <stem>.<kind>.<ext> as the GUI
@@ -24,13 +70,16 @@ export function runStem(p: string): string | null {
   return parts.join('.')
 }
 
-/// Two files of one run: one folder (the folder half of sameRun) and, where
-/// both names carry one, the same stem.
+/// Two files of one run: one folder (the folder half of sameRun) and the
+/// same stem. A name without a kind part (A.tsv, recon.tsv) has its name
+/// without the extension as its stem: the tags A.tsv go with A.qc.tsv, and
+/// a stem that cannot be told is another run, never any run (A's tags
+/// beside B's QC would read as one run).
 export function sameRunFiles(a: string, b: string): boolean {
   if (dirName(a) !== dirName(b)) return false
-  const x = runStem(a)
-  const y = runStem(b)
-  return x == null || y == null || x === y
+  if (a === b) return true
+  const stem = (p: string): string => runStem(p) ?? stripExt(baseName(p))
+  return stem(a) === stem(b)
 }
 
 // Read and parse whichever reports exist; a report the run did not write is
@@ -53,16 +102,19 @@ export async function loadReports(paths: string[]): Promise<{ reports: Report[];
 /// (results/tables.ts): its kind, or why it cannot be shown (an idXML or
 /// mzIdentML -recon_id_out); null for anything else, which is read as a
 /// long-form report.
-export async function sniffPath(path: string): Promise<{ kind: TableKind } | { error: string } | null> {
+/// @p head: the head when the caller has read it already (one read per open).
+export async function sniffPath(path: string, head?: string | null): Promise<{ kind: TableKind } | { error: string } | null> {
   // The head only (report.rs HEAD_BYTES): the header line, the mzTab
   // prefixes and the XML root are at the start, and the file is read whole
   // once, by its viewer or loadReports.
   let text: string | null
-  try {
-    text = await window.fastag.reportHead(path)
-  } catch {
-    return null
-  }
+  if (head !== undefined) text = head
+  else
+    try {
+      text = await window.fastag.reportHead(path)
+    } catch {
+      return null
+    }
   if (text == null) return null
   const kind = sniffTable(text)
   if (kind) return { kind }

@@ -16,7 +16,9 @@ import MassGapChart, { type GapBin } from './MassGapChart'
 import { filterRecon, type DeltaTable, type ReconFilter, type ReconIdTable, type ReconTable, type TableGen, type TablePaths } from './tables'
 import { useTable } from './useTable'
 import { useSticky } from './tableStore'
-import { FASTA_EXTENSION, type TileAction } from './overview'
+import { FASTA_EXTENSION, SHIFT_MIN_DA, type TileAction } from './overview'
+import { longestSeed, shortestSeed } from '../paramLayout'
+import ReportHeader from './ReportHeader'
 import './viewers.css'
 
 /// Below this many placed spectra the gap distribution supports no
@@ -48,6 +50,39 @@ export interface ReconViewProps {
 
 const given = (v: unknown): boolean => (typeof v === 'string' ? v.trim() !== '' : v === true)
 
+/// The CLI's largest -extension.
+const MAX_EXTENSION = 12
+/// The shortest tag placed when -recon_min_length is 0 on a human-sized
+/// database (the index's minimum, products.ts alkylationTarget).
+const DEFAULT_MIN_PLACED = 8
+
+/// The extension a FASTA run of @p params needs so its longest seed
+/// (tag_lengths replaces tag_length) reaches the shortest tag placed: an
+/// explicit recon_min_length, else 8; never below FASTA_EXTENSION. With
+/// -fasta (the tag filter) every seed must also reach the filter's floor,
+/// min_filter_length when set, else 8 for a human-sized database: the CLI
+/// refuses the run otherwise (FASTag.cpp "Seed length ... reaches at most").
+/// Above the CLI's 12 the seed itself must grow (@p seed: the seed that
+/// would reach both at extension 12).
+export function fastaExtension(params: Record<string, unknown>): { ext: number; seed?: number } {
+  const seed = longestSeed(params) ?? 3
+  const target = positive(params['recon_min_length']) ?? DEFAULT_MIN_PLACED
+  let need = Math.max(FASTA_EXTENSION, Math.ceil((target - seed) / 2))
+  let reach = target
+  if (given(params['fasta'])) {
+    const floor = positive(params['min_filter_length']) ?? DEFAULT_MIN_PLACED
+    need = Math.max(need, Math.ceil((floor - (shortestSeed(params) ?? seed)) / 2))
+    reach = Math.max(reach, floor)
+  }
+  return need > MAX_EXTENSION ? { ext: MAX_EXTENSION, seed: reach - 2 * MAX_EXTENSION } : { ext: need }
+}
+
+/// A whole number above 0, else null.
+function positive(v: unknown): number | null {
+  const x = Number(String(v ?? '').trim() || '0')
+  return Number.isFinite(x) && x > 0 ? x : null
+}
+
 /// What the empty state's button does for a run sent @p params: without a
 /// FASTA, pick one and run with the recon, delta and mass-gap reports (and
 /// the extension the overview's "Add FASTA" uses, so tags reach the length a
@@ -56,19 +91,27 @@ export function reconRerun(params: Record<string, unknown>): TileAction {
   const reports = { recon_out: 'recon.tsv', delta_out: 'delta.tsv', massgap_out: 'massgap.tsv' }
   // Either way the extension the FASTA needs: with a FASTA and extension 2
   // the run places nothing (v112-pxd014764-recon-ext2).
-  const raise: Record<string, string> = extensionOf(params) < FASTA_EXTENSION ? { extension: String(FASTA_EXTENSION) } : {}
+  const need = fastaExtension(params).ext
+  const raise: Record<string, string> = extensionOf(params) < need ? { extension: String(need) } : {}
   if (given(params['fasta']) || given(params['recon_fasta']))
     return { kind: 'enable', label: 'Write these reports and run again', values: { ...reports, ...raise } }
   return { kind: 'add-fasta', label: 'Choose a FASTA and run again', values: { delta_out: 'delta.tsv', ...raise } }
 }
 
 /// The low-placed banner's action for a run sent @p params: the run again
-/// with extension 3, when it had a FASTA and a shorter extension; else null.
+/// with the extension its seed and shortest placed tag need (fastaExtension),
+/// when it had a FASTA and a shorter extension; a longer seed when even 12
+/// does not reach (a single tag_length only); else null.
 export function reconExtend(params: Record<string, unknown>): TileAction | null {
   if (!(given(params['fasta']) || given(params['recon_fasta']))) return null
   const ext = extensionOf(params)
-  if (ext >= FASTA_EXTENSION) return null
-  return { kind: 'enable', label: `Run again with extension ${FASTA_EXTENSION}`, values: { extension: String(FASTA_EXTENSION) } }
+  const need = fastaExtension(params)
+  if (need.seed != null) {
+    if (Array.isArray(params['tag_lengths']) && params['tag_lengths'].length) return null
+    return { kind: 'enable', label: `Run again with seed length ${need.seed} and extension ${need.ext}`, values: { tag_length: String(need.seed), extension: String(need.ext) } }
+  }
+  if (ext >= need.ext) return null
+  return { kind: 'enable', label: `Run again with extension ${need.ext}`, values: { extension: String(need.ext) } }
 }
 
 // The CLI's -extension default is 0.
@@ -80,25 +123,33 @@ function extensionOf(params: Record<string, unknown>): number {
 
 /// The gap window of the run whose delta.tsv is shown without its mass-gap
 /// report: run/window_da of the sibling <stem>.massgap.tsv (same folder and
-/// stem), read once; null while unknown.
-function useSiblingWindow(deltaPath: string | undefined, skip: boolean): number | null {
+/// stem), only when the app's records say one run wrote both (or neither is
+/// recorded: files opened from elsewhere). A mass-gap report a former run
+/// left there is another run's (round 14): the window stays assumed.
+/// null while unknown.
+function useSiblingWindow(deltaPath: string | undefined, skip: boolean, gen = 0): number | null {
   const [found, setFound] = useState<{ at: string; win: number | null } | null>(null)
   const sib = deltaPath && !skip ? siblingMassgap(deltaPath) : null
+  const key = sib && deltaPath ? `${deltaPath}\u0000${sib}\u0000${gen}` : null
   useEffect(() => {
-    if (!sib) return
+    if (!sib || !deltaPath || !key) return
     let live = true
-    window.fastag
-      .report(sib)
-      .then((text) => {
+    void (async () => {
+      try {
+        const [rd, rs] = await Promise.all([window.fastag.historyOf(deltaPath).catch(() => null), window.fastag.historyOf(sib).catch(() => null)])
+        const oneRun = rd && rs ? rd.id === rs.id : !rd && !rs
+        const text = oneRun ? await window.fastag.report(sib) : null
         const win = text == null ? null : num(value(parseReport(text, sib), 'run', 'window_da'))
-        if (live) setFound({ at: sib, win: win ?? null })
-      })
-      .catch(() => live && setFound({ at: sib, win: null }))
+        if (live) setFound({ at: key, win: win ?? null })
+      } catch {
+        if (live) setFound({ at: key, win: null })
+      }
+    })()
     return () => {
       live = false
     }
-  }, [sib])
-  return sib && found?.at === sib ? found.win : null
+  }, [key, sib, deltaPath])
+  return key && found?.at === key ? found.win : null
 }
 
 /// <dir>/<stem>.massgap.tsv beside @p deltaPath (massgap.tsv for a bare delta.tsv).
@@ -110,7 +161,7 @@ export function siblingMassgap(deltaPath: string): string {
 type Dataset = 'recon' | 'delta' | 'reconIds'
 const DATASET_LABEL: Record<Dataset, string> = {
   recon: 'Placements',
-  delta: 'Gap peaks',
+  delta: 'Mass-shift table',
   reconIds: 'Identifications (mzTab)'
 }
 
@@ -133,7 +184,7 @@ export default function ReconView({ massgap, tables, gen = {}, notice, action, e
   const peaks = useMemo(() => (massgap ? gapPeaks(massgap) : []), [massgap])
   // The window the CLI matched with: the report's; else the sibling
   // report's; else assumed (and said so).
-  const sibWin = useSiblingWindow(tables.delta, !!massgap)
+  const sibWin = useSiblingWindow(tables.delta, !!massgap, gen.delta ?? 0)
   const reportWin = (massgap && num(value(massgap, 'run', 'window_da'))) ?? sibWin
   const win = reportWin ?? ASSUMED_WINDOW
   const winAssumed = reportWin == null
@@ -144,11 +195,11 @@ export default function ReconView({ massgap, tables, gen = {}, notice, action, e
   if (!have) {
     return (
       <div className="empty-state recon-empty">
-        <h2>No mass gaps yet</h2>
+        <h2>No mass shifts yet</h2>
         <p>
-          Mass gaps and reconciliations come from placing the tags in a protein database: choose a FASTA and write
-          these reports (<code className="cli">recon_out</code>, <code className="cli">delta_out</code>,{' '}
-          <code className="cli">massgap_out</code>).
+          Mass shifts come from placing the tags on a protein database: choose a FASTA and write the Tag placements
+          and the Mass-shift table (the Mass-shift survey workflow does); add the Mass-gap report for explained
+          peaks.
         </p>
         <div className="row-actions">
           {action && (
@@ -157,7 +208,7 @@ export default function ReconView({ massgap, tables, gen = {}, notice, action, e
             </button>
           )}
           <button type="button" className="secondary big" onClick={onOpen}>
-            Open a recon, delta or mass-gap report…
+            Open a placements, mass-shift or mass-gap report…
           </button>
         </div>
         <p>
@@ -171,15 +222,7 @@ export default function ReconView({ massgap, tables, gen = {}, notice, action, e
   const sources = [...new Set(files)]
   return (
     <div className="recon-view">
-      <div className="card-head">
-        <h2 id="recon-title">Mass gaps and reconciliation</h2>
-        <HelpLink to="workflow-reconciliation">How to read these reports</HelpLink>
-        {sources.map((p) => (
-          <code className="src" key={p} title={p}>
-            {baseName(p)}
-          </code>
-        ))}
-      </div>
+      <ReportHeader id="recon-title" title="Mass shifts" paths={sources} help={{ to: 'workflow-reconciliation', label: 'How to read these reports' }} />
       {notice && (
         <p className="caveat" role="status">
           {notice}
@@ -200,10 +243,11 @@ export default function ReconView({ massgap, tables, gen = {}, notice, action, e
           <IconWarning />
           <span>
             <strong>
-              {placed === 0 ? 'No spectrum is placed' : `Only ${fmt(placed)} spectra are placed`} with a mass gap.
+              {placed === 0 ? 'No spectrum is placed' : `Only ${fmt(placed)} spectra are placed`} on the database.
             </strong>{' '}
-            That is too few for any conclusion about modifications or alkylation (this view asks for {LOW_PLACED}).
+            That is too few for any conclusion about modifications or alkylation (this view asks for {LOW_PLACED} placed spectra).
             {placed === 0 && ' Tags may be shorter than the recon index needs; its log line names the minimum length.'}
+            {' Placements use tryptic peptides: a run digested with another protease places fewer tags.'}
           </span>
           {extend && (
             <button type="button" className="secondary" disabled={extend.disabled} onClick={extend.run}>
@@ -213,10 +257,18 @@ export default function ReconView({ massgap, tables, gen = {}, notice, action, e
         </div>
       )}
       <dl className="headline stats">
-        <div className="stat">
+        <div className="stat" title="Spectra placed on the database; the gap of an unmodified one is near 0 Da">
           <dt>Placed spectra</dt>
           <dd>{fmt(placed)}</dd>
         </div>
+        {bins.length > 0 && (
+          // The spectra with a gap of 0.5 Da or more: the bin near 0 Da
+          // (unmodified) holds placed spectra without a shift.
+          <div className="stat" title={`Placed spectra with a gap at least ${SHIFT_MIN_DA} Da from 0`}>
+            <dt>Shifted (≥ {SHIFT_MIN_DA} Da)</dt>
+            <dd>{fmt(bins.reduce((n, b) => n + (Math.abs(b.gap) >= SHIFT_MIN_DA ? b.spectra : 0), 0))}</dd>
+          </div>
+        )}
         {recon.table && (
           <>
             <div className="stat">
@@ -230,14 +282,16 @@ export default function ReconView({ massgap, tables, gen = {}, notice, action, e
           </>
         )}
         {bins.length > 0 && (
-          <div className="stat">
-            <dt>Gap peaks</dt>
-            <dd>{fmt(bins.length)}</dd>
+          // As the Overview counts shifts: 0.5 Da or more away from 0 (the
+          // bin near 0 is the unmodified one).
+          <div className="stat" title={`Bins at least ${SHIFT_MIN_DA} Da from 0; the bin near 0 Da (unmodified) is not counted`}>
+            <dt>Gap peaks (≥ {SHIFT_MIN_DA} Da)</dt>
+            <dd>{fmt(bins.filter((b) => Math.abs(b.gap) >= SHIFT_MIN_DA).length)}</dd>
           </div>
         )}
         {massgap && section(massgap, 'top').length > 0 && (
           <div className="stat">
-            <dt>Largest explained shares (CLI)</dt>
+            <dt>Largest explained shares</dt>
             <dd>{section(massgap, 'top').map((t) => t.value).join(', ')}</dd>
           </div>
         )}
@@ -257,8 +311,10 @@ export default function ReconView({ massgap, tables, gen = {}, notice, action, e
 }
 
 function ReconTables({ recon, delta, ids, loading }: { recon: ReconTable | null; delta: DeltaTable | null; ids: ReconIdTable | null; loading: boolean }): JSX.Element | null {
-  const avail = (['recon', 'delta', 'reconIds'] as Dataset[]).filter((d) => (d === 'recon' ? recon : d === 'delta' ? delta : ids))
-  const [pick, setPick] = useSticky<Dataset | null>(recon ?? delta ?? ids, 'dataset', null)
+  // The survey's answer first: the mass-shift table with sites and UniMod
+  // names; the placements behind it are the detail.
+  const avail = (['delta', 'recon', 'reconIds'] as Dataset[]).filter((d) => (d === 'recon' ? recon : d === 'delta' ? delta : ids))
+  const [pick, setPick] = useSticky<Dataset | null>(delta ?? recon ?? ids, 'dataset', null)
   const ds = pick && avail.includes(pick) ? pick : avail[0]
   if (!ds) return loading ? <p className="muted">Reading the tables…</p> : null
   return (
@@ -354,6 +410,35 @@ function PlacementTable({ t }: { t: ReconTable }): JSX.Element {
   )
 }
 
+/// The survey columns of a mass-shift table, in words (README, -delta_out).
+const DELTA_EXTRA: { id: string; label: string; title: string; num?: true }[] = [
+  {
+    id: 'localized',
+    label: 'Localized',
+    title: 'Spectra whose shift is placed on one site class: fragment-localized plus sequence-constrained',
+    num: true
+  },
+  {
+    id: 'fragment_localized',
+    label: 'Fragment-localized',
+    title: 'Localized spectra whose site the fragments chose, with enough site-determining evidence',
+    num: true
+  },
+  {
+    id: 'sequence_constrained',
+    label: 'Sequence-constrained',
+    title: 'Localized spectra whose shift region is one residue: the placement, not a fragment, fixes the site',
+    num: true
+  },
+  { id: 'residues', label: 'Sites', title: 'Site:count pairs of the localized spectra, most frequent first' },
+  { id: 'unlocalized', label: 'Unlocalized', title: 'Spectra with a shift and no site-determining evidence', num: true },
+  { id: 'ambiguous', label: 'Ambiguous', title: 'Unlocalized spectra with some site evidence, below the localization margin', num: true },
+  { id: 'unimod', label: 'UniMod match', title: 'UniMod entries within the naming tolerance on a site of the row' },
+  { id: 'isotope_error', label: 'Isotope error', title: 'A precursor isotope error, when the shift is one' },
+  { id: 'isobars', label: 'Isobars', title: 'Exact isobars of the best name: mass cannot choose among them' },
+  { id: 'class', label: 'Observation class', title: 'The observation classes of the row, most frequent first' }
+]
+
 function DeltaPeaks({ t }: { t: DeltaTable }): JSX.Element {
   const [minSpectra, setMinSpectra] = useSticky(t, 'minSpectra', '')
   const min = minSpectra.trim() !== '' && Number.isFinite(Number(minSpectra)) ? Number(minSpectra) : 0
@@ -366,7 +451,22 @@ function DeltaPeaks({ t }: { t: DeltaTable }): JSX.Element {
   const cols: Column[] = [
     { id: 'delta', label: 'Gap (Da)', num: true, text: (i) => t.keys[i], key: (i) => t.delta[i] },
     { id: 'spectra', label: 'Spectra', num: true, text: (i) => fmt(t.spectra[i]), key: (i) => t.spectra[i] },
-    { id: 'interps', label: 'Top interpretations', mono: true, text: (i) => t.interps[i].map((x) => `${x.name} ${x.n}`).join(', ') }
+    { id: 'interps', label: 'Top interpretations', mono: true, text: (i) => t.interps[i].map((x) => `${x.name} ${x.n}`).join(', ') },
+    // The survey columns (1.15.2 on): localization, residues, UniMod names
+    // and ambiguity, shown when the file has them.
+    ...DELTA_EXTRA.filter((c) => t.extra[c.id]).map((c): Column => {
+      const v = t.extra[c.id]!
+      const numeric = c.num === true
+      return {
+        id: c.id,
+        label: c.label,
+        title: c.title,
+        num: numeric,
+        mono: !numeric,
+        text: (i) => (v[i] === '-' ? '' : v[i]),
+        key: numeric ? (i) => Number(v[i]) : undefined
+      }
+    })
   ]
   return (
     <>
@@ -376,7 +476,7 @@ function DeltaPeaks({ t }: { t: DeltaTable }): JSX.Element {
           <input type="number" min={0} step={1} value={minSpectra} onChange={(e) => setMinSpectra(e.target.value)} />
         </label>
       </div>
-      <DataTable label="Gap peaks" columns={cols} ids={rows} total={t.rows} sort={{ column: 'spectra', desc: true }} keep={t} />
+      <DataTable label="Mass-shift table" columns={cols} ids={rows} total={t.rows} sort={{ column: 'spectra', desc: true }} keep={t} />
     </>
   )
 }

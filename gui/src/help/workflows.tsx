@@ -19,8 +19,8 @@ export const WORKFLOWS: HelpPage = {
             the figures describe the processed subset, not the whole input.
           </p>
           <ul>
-            <li><strong>MS2 spectra</strong> counts spectra processed by the tagger. <strong>With tags</strong> counts spectra with a reported tag, when the run recorded that count.</li>
-            <li><strong>Tags</strong> is the tag count from FASTag&apos;s final log summary; one spectrum can contribute several tags. <strong>Tags E ≤ 1</strong> counts the ungapped tags used by the digest report.</li>
+            <li><strong>MS2 spectra</strong> counts spectra processed by the tagger. <strong>With any tag</strong> counts spectra with any reported tag, when the run recorded that count.</li>
+            <li><strong>Tags</strong> is the tag count from FASTag&apos;s final log summary; one spectrum can contribute several tags.</li>
             <li><strong>No call</strong> means the report did not support a classification; read its reason. <strong>Not assessed</strong> means the necessary analysis or report is missing. <strong>Not checked</strong> means the relevant check was unavailable. None establishes absence.</li>
             <li><strong>Too little evidence</strong> replaces protease, genus or label results when fewer than 1,000 tagged spectra were counted. If the run did not count tagged spectra, this extra GUI cutoff cannot be applied; the warning says so. Alkylation uses separate mass-gap counts.</li>
           </ul>
@@ -32,7 +32,7 @@ export const WORKFLOWS: HelpPage = {
             configure a search engine or change Setup. Check them before using them elsewhere.
           </p>
           <p>
-            A <strong>Turn on and run again</strong> button starts a new analysis with the missing report enabled.
+            An <strong>Add … and run again</strong> button starts a new analysis with the missing report enabled.
             Adding a FASTA for mass gaps can also raise the extension so tags can reach the database&apos;s required
             length. Review overwrite questions. For detail, open <L to="species">Species</L>,{' '}
             <L to="digest">Digest</L> or <L to="results">Tags</L>.
@@ -46,9 +46,9 @@ export const WORKFLOWS: HelpPage = {
       body: (
         <>
           <ol>
-            <li>Choose <strong>Batch QC vs SDRF</strong> for the Characterize survey of several files, or add files to a batch from Setup. An SDRF is optional.</li>
-            <li>Use <strong>Add…</strong> to select files or <strong>Add folder…</strong> for the spectra files directly inside a folder. Check the common settings in Setup; each file runs in turn with those settings.</li>
-            <li>Use <strong>Choose output folder…</strong> if results should go elsewhere, for example when the inputs are read-only. <strong>Beside inputs</strong> restores the usual location. Changing the folder affects pending or retried jobs; completed jobs keep their existing output paths.</li>
+            <li>In Setup, switch the Input card to <strong>Batch</strong> and add files or a folder. Every workflow runs on a batch; <strong>Characterize a run</strong> is the usual survey. An SDRF file is optional.</li>
+            <li>Use <strong>Add files…</strong> (in Setup; <strong>Add…</strong> in the Batch view) to select files or <strong>Add folder…</strong> for the spectra files directly inside a folder. Check the common settings in Setup; each file runs in turn with those settings.</li>
+            <li>Use <strong>Change…</strong> beside Output folder (Setup) or <strong>Choose output folder…</strong> (Batch view) if results should go elsewhere, for example when the inputs are read-only. <strong>Beside inputs</strong> restores the usual location. Changing the folder affects pending or retried jobs; completed jobs keep their existing output paths.</li>
             <li><strong>Run N remaining files</strong> continues the queue. <strong>Retry failed</strong> retries failed jobs. Cancel stops the active job and the queue; it does not remove results of completed jobs.</li>
             <li>After processing stops, click a completed file to open its results. Each file&apos;s <strong>Log</strong> opens its own messages.</li>
           </ol>
@@ -132,27 +132,94 @@ export const WORKFLOWS: HelpPage = {
       )
     },
     {
+      id: 'workflow-run-qc',
+      title: 'Run QC: describe one run',
+      body: (
+        <>
+          <p>
+            <strong>Run QC</strong> writes a QC report of one run and opens it in the <strong>QC</strong> tab: MS/MS
+            counts and stated resolution by analyzer (ion trap, Orbitrap, TOF), precursor charges, the isobaric kit,
+            tag yield and redundancy, and the instrument model, serial number and start time the file records.
+          </p>
+          <p>
+            <strong>Spectra to read</strong> below 1 reads a random share of the spectra; the counts then describe
+            that share only. Raw DIA files are refused by default; choose <strong>warn</strong> under DIA input to
+            run them anyway. For many files, switch the Input card to Batch.
+          </p>
+        </>
+      )
+    },
+    {
+      id: 'workflow-db-reduction',
+      title: 'Database reduction: a shortlist for your search',
+      body: (
+        <>
+          <p>
+            <strong>Database reduction</strong> places the tags on a protein FASTA and writes a ranked protein
+            shortlist, a reduced FASTA (the shortlisted proteins plus your background proteins) and a configuration
+            for Sage, Comet or MSFragger. The shortlist is a search-space reduction, not an identification and not
+            FDR-controlled: search the reduced FASTA with your engine. Sage and Comet make their own decoys; for
+            MSFragger, FASTag appends reversed <code>rev_</code> decoys to the reduced FASTA.
+          </p>
+          <p>
+            The workflow sets the shortlist recipe of doc/SHORTLIST.md (gapped placements, E-value 10, shortest placed
+            tag 6 residues, 2 missed cleavages) as its default recipe. It is <strong>not validated</strong>: with
+            MSFragger and the tryptic shortlist it passed its second held-out test and failed the third (8 new runs:
+            one run kept 53% of the full search, another had an entrapment FDP of 2.1%). From FASTag 1.15.4 the CLI
+            applies it by default only with MSFragger and the trypsin shortlist; the GUI also sets it for Sage, Comet
+            and other proteases, where it has no held-out test. With a protease other than trypsin only exact
+            placements count; gapped placements are ignored. With MSFragger and trypsin, Count gapped placements stays
+            on: FASTag cannot be told to leave them out. Change the rest under Advanced. Add the host proteome and
+            contaminants as <strong>Background proteins</strong>, so they are always searched. Details: doc/SHORTLIST.md
+            in the FASTag sources.
+          </p>
+        </>
+      )
+    },
+    {
+      id: 'workflow-triage',
+      title: 'Identifiability triage: which spectra could be identified',
+      body: (
+        <>
+          <p>
+            <strong>Identifiability triage</strong> writes one row per MS/MS spectrum, tagged or not, ranks the
+            spectra by an identifiability score, and opens the ranking in the <strong>Triage</strong> tab. Give the
+            identifications of the same run (idXML or mzIdentML with q-values) to mark which spectra your search
+            identified; an unidentified spectrum with a good tag is a triage candidate.
+          </p>
+          <p>
+            The score ranks spectra; it is not a quality call and not an error rate. It is experimental
+            (<code>-census_score</code>): not yet validated on held-out data.
+          </p>
+        </>
+      )
+    },
+    {
       id: 'workflow-reconciliation',
-      title: 'Mass gaps & recon: inspect database placements',
+      title: 'Mass shifts: inspect database placements',
       body: (
         <>
           <p>
             <L to="gloss-reconciliation">Reconciliation</L> places tags in database peptides and reports the mass
-            left over. In <strong>Mass gaps & recon</strong>, choose <strong>Choose a FASTA and run again</strong>,
+            left over. In <strong>Mass shifts</strong>, choose <strong>Choose a FASTA and run again</strong>,
             or enable the reports with <strong>Write these reports and run again</strong>. These actions enable
-            the reconciliation table, mass-shift histogram and mass-gap report, and raise extension to 3 if it
-            was lower. You can instead open a recon, delta or mass-gap report from an earlier run.
+            the reconciliation table, mass-shift histogram and mass-gap report, and raise the extension, if it
+            was lower, to what the seeds need to reach the shortest tag placed (8 residues unless set: 3 at seed
+            length 3). You can instead open a recon, delta or mass-gap report from an earlier run.
           </p>
           <p>
+            <strong>Placed spectra</strong> counts the spectra placed on the database, unmodified ones (gap near
+            0 Da) included; <strong>Shifted</strong> counts those with a gap of 0.5 Da or more.{' '}
             <strong>Placements</strong> counts table rows; one spectrum can have several placements.{' '}
             <strong>Spectra with a placement</strong> counts the distinct spectra in that table. The view warns
             below 100 placed spectra: too few for a conclusion about modifications. If none placed, check the
-            minimum tag length in the log; <strong>Run again with extension 3</strong> may help, but does not
-            guarantee a match.
+            minimum tag length in the log; <strong>Run again with extension N</strong> computes the extension the
+            seeds need (with a FASTA filter, every seed must reach its floor) and, past the largest extension of
+            12, suggests a longer seed instead. It may help, but does not guarantee a match.
           </p>
           <ul>
-            <li>Switch the gap plot between <strong>Chart</strong> and <strong>Table</strong>. Change the gap range to inspect outlying peaks; the chart reports peaks outside the shown range and any clipped zero peak. Arrow keys step through peaks when the chart is focused.</li>
-            <li><strong>Unimod marks</strong> show known mass changes near a peak. A nearby mark or a CLI explanation is a hypothesis, not an identified modification. Opening a delta table without its mass-gap report uses an explicitly labelled, assumed 0.5 Da matching window.</li>
+            <li>Switch the gap plot between <strong>Chart</strong> and <strong>Bins</strong> (a table of the plotted bins; the Mass-shift table below has sites and UniMod names). Change the gap range to inspect outlying peaks; the chart reports peaks outside the shown range and any clipped zero peak. Arrow keys step through peaks when the chart is focused.</li>
+            <li>UniMod marks (all of them with <strong>All UniMod marks</strong>) show known mass changes near a peak. A nearby mark or a CLI explanation is a hypothesis, not an identified modification. Opening a delta table without its mass-gap report uses an explicitly labelled, assumed 0.5 Da matching window.</li>
             <li>In the placement table, <strong>Contains</strong> searches spectrum, tag, protein or peptide. <strong>|Δ| at least (Da)</strong> filters by the size of the gap in either direction. <strong>Interpretation</strong> selects modification, substitution or unexplained rows; <strong>One flank off</strong> keeps placements with a gap localized to one side of the tag.</li>
           </ul>
           <p>

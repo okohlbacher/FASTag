@@ -11,8 +11,10 @@
 // incomplete wherever it is opened.
 
 import { useEffect, useRef, useState, type JSX } from 'react'
-import type { RunRecord } from '../types'
+import type { ResolvedOutputs, RunRecord } from '../types'
 import { baseName } from '../digestReport'
+import { PARAM_BY_NAME } from '../paramLayout'
+import { dirName, stripExt } from '../app/paths'
 import { duration, shellLine } from '../app/format'
 import { JobIcon } from '../icons'
 import { HelpLink } from '../help/HelpLink'
@@ -36,6 +38,40 @@ export function recordOut(r: RunRecord): string | null {
   return `${r.cwd.replace(/[\\/]+$/, '')}${sep}${p.replace(/^\.[\\/]/, '')}`
 }
 
+// The reports the CLI names from -out when on without a path of their own
+// (outputs.rs DERIVED): the switch and the suffix.
+const DERIVED: [keyof ResolvedOutputs, string, string][] = [
+  ['species_out', 'species', '.species.tsv'],
+  ['glyco_out', 'glyco', '.glyco.tsv'],
+  ['census_out', 'census', '.census.tsv'],
+  ['census_summary_out', 'census', '.census_summary.tsv']
+]
+
+/// Every output of the recorded run @p r by its option (ResolvedOutputs),
+/// its tags at @p out: each output option it was sent, a relative path as
+/// the record lists it (else beside the tags), and the reports the CLI
+/// derives from -out. A file gone since is named by Results (showResults).
+export function recordOutputs(r: RunRecord, out: string): ResolvedOutputs {
+  const params = r.params ?? {}
+  const o: ResolvedOutputs = { out }
+  const absolute = (p: string): boolean => p.startsWith('/') || p.startsWith('\\') || /^[A-Za-z]:[\\/]/.test(p)
+  const place = (p: string): string => {
+    if (absolute(p)) return p
+    const bare = p.replace(/^\.[\\/]/, '')
+    return r.outputs.find((x) => x.endsWith(`/${bare}`) || x.endsWith(`\\${bare}`)) ?? `${dirName(out)}${bare}`
+  }
+  for (const [name, spec] of PARAM_BY_NAME) {
+    if (spec.type !== 'output-file') continue
+    const v = params[name]
+    if (typeof v === 'string' && v.trim()) (o as unknown as Record<string, string>)[name] = place(v.trim())
+  }
+  for (const [key, on, suffix] of DERIVED) {
+    if (params[on] !== true || o[key]) continue
+    o[key] = r.outputs.find((x) => x.endsWith(suffix)) ?? `${stripExt(out)}${suffix}`
+  }
+  return o
+}
+
 // What the note under the heading says after an action.
 type Note =
   | { kind: 'settings'; input: string; undo: () => void }
@@ -49,11 +85,14 @@ export interface HistoryViewProps {
   version: number
   busy: boolean
   onOpenResults(): void
-  // Open a recorded run's tags file in Results.
-  onOpen(path: string): void
+  // Open a recorded run in Results: its tags, its reports and its
+  // workflow's views (@p out: its tags file).
+  onOpen(r: RunRecord, out: string): void
   // Put a recorded run's input, output and parameters into the form;
   // returns the Undo.
-  onSettings(input: string, out: string, params: Record<string, unknown>): () => void
+  // @p workflow: the run's own (RunRecord.workflow), null for a record
+  // made before workflows were recorded.
+  onSettings(input: string, out: string, params: Record<string, unknown>, workflow?: string | null): () => void
   // Start the recorded run @p id again (useRun.rerun).
   onRerun(id: string): Promise<unknown>
   onGoSetup(): void
@@ -79,6 +118,9 @@ function FileName({ path }: { path: string }): JSX.Element {
   )
 }
 
+/// The most runs the view lists (the newest first).
+const HISTORY_LIMIT = 200
+
 export default function HistoryView(p: HistoryViewProps): JSX.Element {
   const { active, version, busy } = p
   const [records, setRecords] = useState<RunRecord[] | null>(null)
@@ -100,7 +142,7 @@ export default function HistoryView(p: HistoryViewProps): JSX.Element {
     if (!active) return
     let live = true
     window.fastag
-      .historyList(200)
+      .historyList(HISTORY_LIMIT)
       .then((r) => {
         if (!live) return
         setRecords(r)
@@ -161,7 +203,7 @@ export default function HistoryView(p: HistoryViewProps): JSX.Element {
   }
 
   function settings(r: RunRecord, out: string): void {
-    const undo = p.onSettings(r.input, out, r.params ?? {})
+    const undo = p.onSettings(r.input, out, r.params ?? {}, r.workflow ?? null)
     setNote({ kind: 'settings', input: r.input, undo })
   }
 
@@ -205,6 +247,11 @@ export default function HistoryView(p: HistoryViewProps): JSX.Element {
             Open results…
           </button>
         </div>
+      )}
+      {records && records.length >= HISTORY_LIMIT && (
+        <p className="hint" role="note">
+          The latest {HISTORY_LIMIT} runs are listed; older ones stay in the history file.
+        </p>
       )}
       {records && records.length > 0 && (
         <table className="history-table" aria-label="Run history">
@@ -262,7 +309,7 @@ export default function HistoryView(p: HistoryViewProps): JSX.Element {
                     <div className="hist-actions-row">
                       {finished && out && (
                         <>
-                          <button type="button" className="secondary small" disabled={busy} onClick={() => p.onOpen(out)}>
+                          <button type="button" className="secondary small" disabled={busy} onClick={() => p.onOpen(r, out)}>
                             Open
                           </button>
                           <button

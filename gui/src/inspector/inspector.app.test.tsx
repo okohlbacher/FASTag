@@ -8,7 +8,7 @@ import { act, fireEvent, screen, within } from '@testing-library/react'
 import { describe, expect, it } from 'vitest'
 import { installMockBridge, type MockBridge } from '../testing/mockBridge'
 import { TAXONOMY_ASSET } from '../releaseAssets'
-import { click, flush, goTo, key, pickSingle, renderApp, renderCharacterizeApp, runButton, showView } from '../testing/render'
+import { click, flush, goTo, key, openGroup, pickSingle, renderApp, renderCharacterizeApp, runButton, showView } from '../testing/render'
 import diaPseudoProbe from '../fixtures/probe/dia_pseudo.probe.jsonl?raw'
 import { applyLastUsed, formValue } from '../testing/lastUsed'
 import iontrapProbe from '../fixtures/probe/iontrap.probe.jsonl?raw'
@@ -104,10 +104,12 @@ describe('inspector before a run', () => {
     const mock = installMockBridge()
     await renderApp(mock)
     await pickSingle(mock, IN)
-    notChecked(/Not checked before the run: this FASTag has no metadata probe/)
-    expect(summary()).toMatch(/^Not checked before the run: this FASTag has no metadata probe/)
+    notChecked(/^The instrument and checks come from the reports after the run\.$/)
+    expect(summary()).toMatch(/^The instrument and checks come from the reports after the run\./)
     expect(mock.probeCalls).toEqual([])
     expect(screen.queryByRole('list', { name: 'Checks before the run' })).toBeNull()
+    // Round 4, 17: no section heading over checks that did not run.
+    expect(screen.queryByRole('heading', { name: 'Checks before the run' })).toBeNull()
     expect((runButton() as HTMLButtonElement).disabled).toBe(false)
   })
 
@@ -151,7 +153,7 @@ describe('inspector before a run', () => {
     await flush()
     expect(within(checksBefore()).getAllByRole('listitem')).toHaveLength(1)
     checkItem(/^Warning: The mzML index does not match/)
-    expect(screen.getByRole('option', { name: 'Orbitrap HCD 20 ppm (detected)' })).toBeDefined()
+    expect(screen.getByRole('option', { name: 'Orbitrap/TOF HCD 20 ppm (detected)' })).toBeDefined()
     // Added file, then Run: two actions, as without the probe.
     expect((runButton() as HTMLButtonElement).disabled).toBe(false)
     await click(runButton())
@@ -235,7 +237,7 @@ describe('inspector before a run', () => {
     expect(mock.probeCalls).toEqual([{ input: IN, fasta: null }])
     // The FASTA probe's output (the gate FASTA, no decoys).
     mock.probeOutputs[IN] = fastaProbe
-    await click(screen.getByRole('button', { name: /Sequence matching/ }))
+    await openGroup('Keep only tags found in a database')
     const field = document.getElementById('p-fasta') as HTMLInputElement
     const path = '/data/db.fasta'
     await act(async () => {

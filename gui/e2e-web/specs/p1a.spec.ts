@@ -5,7 +5,7 @@ import { test, expect, openApp } from './fixtures'
 test('the run bar names the phase the run is in, and the time left once measured', async ({ page }) => {
   await openApp(page, 'slow')
   await page.getByRole('button', { name: 'Choose file…' }).click()
-  await page.getByRole('button', { name: 'Run on run01.mzML' }).click()
+  await page.getByRole('button', { name: 'Run', exact: true }).click()
   await expect(page.locator('.runbar .what')).toHaveText('Tagging spectra')
   await expect(page.locator('.runbar .pct')).toContainText('50% · 70 of 139 spectra')
   await expect(page.locator('.runbar .pct')).toContainText('left')
@@ -15,7 +15,8 @@ test('the run bar names the phase the run is in, and the time left once measured
 
 test('a batch keeps each job on its own Channel: run02 fails, run01 and run03 finish', async ({ page }) => {
   await openApp(page, 'batch-fail')
-  await page.getByRole('button', { name: 'Add files for a batch…' }).click()
+  await page.getByRole('radio', { name: 'Batch' }).check()
+  await page.getByRole('button', { name: 'Add files…' }).click()
   await page.getByRole('button', { name: /^Run 3 remaining files/ }).click()
   await expect(page.getByText('2/3 done')).toBeVisible()
   // The live log is the last job's alone.

@@ -111,11 +111,20 @@ interface Drawn {
   peak: GapPeak | null
 }
 
+/// The CLI's own name for a bin: its most frequent recon interpretation.
+function binName(b: GapBin): string | null {
+  // "?" (no interpretation) and "-" name nothing: the mass alone.
+  const it = b.interps?.filter((x) => !['?', '-', ''].includes(x.name.trim())).sort((x, y) => y.n - x.n)[0]
+  return it ? it.name : null
+}
+
 export default function MassGapChart({ bins, peaks = [], window, windowAssumed = false, source }: MassGapChartProps): JSX.Element {
   // The modification window first: where the bundled deltas lie.
   const [range, setRange] = useState<GapRange>('mods')
   const [view, setView] = useState<'chart' | 'table'>('chart')
-  const [showMarks, setShowMarks] = useState(true)
+  // Only the marks near a gap peak by default: every bundled delta over
+  // -150 to +400 Da would swamp a run's few bars.
+  const [allMarks, setAllMarks] = useState(false)
   const [active, setActive] = useState<number | null>(null)
   const [hover, setHover] = useState<number | null>(null)
   const id = useId()
@@ -144,10 +153,10 @@ export default function MassGapChart({ bins, peaks = [], window, windowAssumed =
     mark: nearestMark(b.gap, window),
     peak: peakOf(b)
   }))
-  const marks = showMarks ? marksIn(lo, hi) : []
   // A mark is drawn full when a gap peak of at least MIN_HIT spectra (the
   // CLI's min_bin default) lies within the window; single spectra do not.
   const hit = new Set(drawn.flatMap((d) => (d.mark && d.bin.spectra >= MIN_HIT ? [d.mark.name] : [])))
+  const marks = allMarks ? marksIn(lo, hi) : marksIn(lo, hi).filter((m) => hit.has(m.name))
 
   // Direct labels, sparingly: the CLI's explained peaks, then the fullest
   // shifted bins that sit on a mark; at most 5, never two within 70 px.
@@ -156,10 +165,16 @@ export default function MassGapChart({ bins, peaks = [], window, windowAssumed =
     ...peaks
       .filter((p) => p.delta != null && p.delta >= lo && p.delta <= hi && p.explainedBy !== 'none')
       .map((p) => ({ x: x(p.delta!), text: `${da(p.delta!, 3)} ${p.explainedBy}` })),
+    // A bin is named from the CLI's own assignment (its recon interpretations);
+    // a bundled delta names it only when the window is the CLI's (a mass-gap
+    // report); with an assumed window the label is the mass alone.
     ...drawn
-      .filter((d) => d.mark && d.h >= MIN_HIT && Math.abs(d.bin.gap) > shiftedAt)
+      .filter((d) => (d.mark || binName(d.bin)) && d.h >= MIN_HIT && Math.abs(d.bin.gap) > shiftedAt)
       .sort((a, b) => b.h - a.h)
-      .map((d) => ({ x: d.x, text: `${da(d.bin.gap, 3)} ${d.mark!.name}` }))
+      .map((d) => {
+        const name = binName(d.bin) ?? (windowAssumed ? null : d.mark!.name)
+        return { x: d.x, text: name ? `${da(d.bin.gap, 3)} ${name}` : da(d.bin.gap, 3) }
+      })
   ]
   for (const c of candidates) {
     if (labels.length >= 4) break
@@ -173,8 +188,13 @@ export default function MassGapChart({ bins, peaks = [], window, windowAssumed =
   function describe(d: Drawn): string {
     const parts = [`${da(d.bin.gap)} Da: ${fmt(d.bin.spectra)} spectra`]
     if (d.peak) parts.push(`peak ${d.peak.index}${d.peak.explainedBy !== 'none' ? `, explained by ${d.peak.explainedBy}` : ', not explained'}`)
-    if (d.mark) parts.push(`near ${d.mark.name} (${da(d.mark.mass)} Da, ${fmt(Math.abs(d.bin.gap - d.mark.mass) * 1000, 1)} mDa off)`)
-    if (d.bin.interps?.length) parts.push(`recon: ${d.bin.interps.map((i) => `${i.name} ${fmt(i.n)}`).join(', ')}`)
+    if (d.mark)
+      parts.push(
+        windowAssumed
+          ? `nearest known mass ${d.mark.name} (${da(d.mark.mass)} Da, ±${fmt(window, 1)} Da assumed; not a CLI assignment)`
+          : `near ${d.mark.name} (${da(d.mark.mass)} Da, ${fmt(Math.abs(d.bin.gap - d.mark.mass) * 1000, 1)} mDa off)`
+      )
+    if (d.bin.interps?.length) parts.push(`placements: ${d.bin.interps.map((i) => `${i.name} ${fmt(i.n)}`).join(', ')}`)
     return parts.join('; ')
   }
 
@@ -225,7 +245,7 @@ export default function MassGapChart({ bins, peaks = [], window, windowAssumed =
     { id: 'spectra', label: 'Spectra', num: true, text: (i) => fmt(sorted[i].spectra), key: (i) => sorted[i].spectra },
     {
       id: 'mark',
-      label: 'Unimod delta within window',
+      label: 'UniMod delta within window',
       text: (i) => {
         const m = nearestMark(sorted[i].gap, window)
         return m ? `${m.name} (${m.site})` : ''
@@ -252,7 +272,7 @@ export default function MassGapChart({ bins, peaks = [], window, windowAssumed =
         return p ? `${p.index}: ${p.explainedBy}` : ''
       }
     },
-    { id: 'interps', label: 'Recon interpretations', text: (i) => (sorted[i].interps ?? []).map((x) => `${x.name} ${x.n}`).join(', ') }
+    { id: 'interps', label: 'Placement interpretations', text: (i) => (sorted[i].interps ?? []).map((x) => `${x.name} ${x.n}`).join(', ') }
   ]
   const allIds = useMemo(() => Uint32Array.from(sorted, (_, i) => i), [sorted])
 
@@ -266,7 +286,7 @@ export default function MassGapChart({ bins, peaks = [], window, windowAssumed =
         <div className="seg" role="group" aria-label="View">
           {(['chart', 'table'] as const).map((v) => (
             <button key={v} type="button" aria-pressed={view === v} onClick={() => setView(v)}>
-              {v === 'chart' ? 'Chart' : 'Table'}
+              {v === 'chart' ? 'Chart' : 'Bins'}
             </button>
           ))}
         </div>
@@ -288,7 +308,7 @@ export default function MassGapChart({ bins, peaks = [], window, windowAssumed =
               ))}
             </div>
             <label className="mg-toggle">
-              <input type="checkbox" checked={showMarks} onChange={(e) => setShowMarks(e.target.checked)} /> Unimod marks
+              <input type="checkbox" checked={allMarks} onChange={(e) => setAllMarks(e.target.checked)} /> All UniMod marks
             </label>
           </>
         )}
@@ -301,15 +321,13 @@ export default function MassGapChart({ bins, peaks = [], window, windowAssumed =
             <li>
               <span className="key stick" aria-hidden="true" /> Spectra per gap peak
             </li>
-            {showMarks && (
-              <>
-                <li>
-                  <span className="key mark" aria-hidden="true" /> Unimod delta at a gap peak ({fmt(marks.filter((m) => hit.has(m.name)).length)})
-                </li>
-                <li>
-                  <span className="key mark faint" aria-hidden="true" /> Other Unimod delta ({fmt(marks.filter((m) => !hit.has(m.name)).length)})
-                </li>
-              </>
+            <li>
+              <span className="key mark" aria-hidden="true" /> UniMod delta at a gap peak ({fmt(marks.filter((m) => hit.has(m.name)).length)})
+            </li>
+            {allMarks && (
+              <li>
+                <span className="key mark faint" aria-hidden="true" /> Other UniMod delta ({fmt(marks.filter((m) => !hit.has(m.name)).length)})
+              </li>
             )}
           </ul>
           <div
@@ -401,7 +419,7 @@ export default function MassGapChart({ bins, peaks = [], window, windowAssumed =
                 )}
                 {windowAssumed && <span className="muted">window assumed {fmt(window, 1)} Da (no mass-gap report)</span>}
                 {cur.bin.interps && cur.bin.interps.length > 0 && (
-                  <span className="muted">recon: {cur.bin.interps.map((i) => `${i.name} ${fmt(i.n)}`).join(', ')}</span>
+                  <span className="muted">placements: {cur.bin.interps.map((i) => `${i.name} ${fmt(i.n)}`).join(', ')}</span>
                 )}
               </div>
             )}

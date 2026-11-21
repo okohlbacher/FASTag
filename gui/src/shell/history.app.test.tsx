@@ -12,6 +12,7 @@ import { click, flush, goTo, pickSingle, renderApp, runButton } from '../testing
 import { shellLine } from '../app/format'
 import { formValue } from '../testing/lastUsed'
 import type { RunRecord } from '../types'
+import qcTsv from '../fixtures/cli-1.15/ecoli_ms2_small_0.3da.qc.tsv?raw'
 
 afterEach(() => {
   vi.restoreAllMocks()
@@ -241,6 +242,46 @@ describe('History', () => {
     expect(mock.history[0].input).toBe('/d/a.mzML')
   })
 
+  // Review round 3: the results of a Re-run are its record's workflow's,
+  // whatever the form is set to, and its species report is read because
+  // the record's parameters asked for one.
+  it('Re-run shows the results as the recorded workflow, not the form\'s', async () => {
+    const mock = installMockBridge()
+    mock.recordRuns = true
+    mock.speciesResult = { path: '/d/a.tags.species.tsv', taxa: [{ rank: 'genus', taxid: 561, name: 'Escherichia', observed: 7, adjusted: 7, q: 1e-13 }] } as typeof mock.speciesResult
+    await renderApp(mock)
+    // The form is on Export tags, without species.
+    const params = { species: true, extension: '2' }
+    mock.history = [rec('1', '/d/a.mzML', 'ok', { params, workflow: 'species' })]
+    const [row] = await history()
+    await click(btn(row, 'Re-run')!)
+    await flush()
+    expect(mock.runCalls[0]).toMatchObject({ in: '/d/a.mzML', params, workflow: 'species' })
+    await act(async () => mock.emitDone({ ok: true, code: 0, runId: mock.lastRunId }))
+    await flush()
+    const tabs = screen.getAllByRole('tab').map((t) => t.textContent ?? '')
+    expect(tabs.slice(0, 2)).toEqual(['Overview', 'Species1'])
+    await click(screen.getByRole('tab', { name: 'Overview' }))
+    expect(document.querySelector('.overview-sub strong')?.textContent).toBe('Species')
+    // The new record keeps the workflow too.
+    expect(mock.history[0].workflow).toBe('species')
+  })
+
+  it('Re-run of a record without a workflow shows no workflow name', async () => {
+    const mock = installMockBridge()
+    mock.recordRuns = true
+    await renderApp(mock)
+    mock.history = [rec('1', '/d/a.mzML', 'ok', { params: { tag_length: '3' } })]
+    const [row] = await history()
+    await click(btn(row, 'Re-run')!)
+    await flush()
+    expect('workflow' in mock.runCalls[0]).toBe(false)
+    await act(async () => mock.emitDone({ ok: true, code: 0, runId: mock.lastRunId }))
+    await flush()
+    await click(screen.getByRole('tab', { name: 'Overview' }))
+    expect(document.querySelector('.overview-sub strong')).toBeNull()
+  })
+
   it('Re-run is not offered for a record without its parameters, and is off while a run is busy', async () => {
     const mock = installMockBridge()
     const [row] = await showWith(mock, [rec('1', '/d/a.mzML', 'ok')])
@@ -264,15 +305,121 @@ describe('History', () => {
     await goTo('setup')
     expect(await formValue('tag_length')).toBe('5')
     expect(await formValue('species')).toBe(true)
-    expect((document.getElementById('out') as HTMLInputElement).value).toBe('/d/a.tags.tsv')
+    expect((document.getElementById('out-name') as HTMLInputElement).value).toBe('a')
     expect(document.querySelector('.input-card .fname')?.textContent).toBe('a.mzML')
     await goTo('history')
     await click(within(note).getByRole('button', { name: 'Undo' }))
     await goTo('setup')
     expect(await formValue('tag_length')).toBe('3')
     expect(await formValue('species')).toBe(false)
-    expect((document.getElementById('out') as HTMLInputElement).value).toBe('/d/x.tags.tsv')
+    expect((document.getElementById('out-name') as HTMLInputElement).value).toBe('x')
     expect(document.querySelector('.input-card .fname')?.textContent).toBe('x.mzML')
+  })
+
+  // Round 4, 12: the run's workflow comes back with its settings, origin
+  // and base; Undo restores the workflow the form had.
+  it('Settings into form restores the run\'s workflow; Undo restores the form\'s', async () => {
+    const mock = installMockBridge()
+    await renderApp(mock)
+    await pickSingle(mock, '/d/x.mzML')
+    const wf = (id: string): HTMLInputElement => screen.getByRole('radio', { name: new RegExp(`^${id}`) }) as HTMLInputElement
+    const chosen = (): string | undefined => document.querySelector<HTMLInputElement>('input[name="task"]:checked')?.value
+    const before = chosen()
+    expect(before).not.toBe('run-qc')
+    mock.history = [rec('1', '/d/a.mzML', 'ok', { workflow: 'run-qc', params: { qc_out: '/d/a.qc.tsv', threads: '0', subsample_fraction: '0.1' } })]
+    const [row] = await history()
+    await click(btn(row, 'Settings into form')!)
+    await goTo('setup')
+    expect(wf('Run QC').checked).toBe(true)
+    expect(await formValue('subsample_fraction')).toBe('0.1')
+    // Its base is Run QC's: only the changed fraction differs from it.
+    await goTo('history')
+    await click(within(screen.getByRole('status', { name: 'History' })).getByRole('button', { name: 'Undo' }))
+    await goTo('setup')
+    expect(chosen()).toBe(before)
+  })
+
+  // Round 5, 2: an option the run was not sent ran at the CLI's default,
+  // not at the workflow's value. Database reduction with Sage, its
+  // E-value put back to 0.1 and gapped placements off: neither was sent.
+  it('Settings into form rebuilds the form from FASTag\'s defaults, not the workflow\'s values', async () => {
+    const mock = installMockBridge()
+    await renderApp(mock)
+    await pickSingle(mock, '/d/x.mzML')
+    const params = {
+      threads: '0',
+      extension: '3',
+      recon_fasta: '/d/db.fasta',
+      shortlist_out: '/d/a.shortlist.tsv',
+      fasta_out: '/d/a.reduced.fasta',
+      search_config_out: '/d/a.search.json',
+      search_engine: 'sage',
+      recon_min_length: '6',
+      recon_missed_cleavages: '2'
+    }
+    mock.history = [rec('1', '/d/a.mzML', 'ok', { workflow: 'db-reduction', params })]
+    const [row] = await history()
+    await click(btn(row, 'Settings into form')!)
+    await goTo('setup')
+    expect((screen.getByRole('radio', { name: /^Database reduction/ }) as HTMLInputElement).checked).toBe(true)
+    expect(await formValue('shortlist_max_evalue')).toBe('0.1')
+    expect(await formValue('shortlist_gapped')).toBe(false)
+    expect(await formValue('recon_min_length')).toBe('6')
+    expect(await formValue('recon_missed_cleavages')).toBe('2')
+    expect(await formValue('extension')).toBe('3')
+  })
+
+  // Round 5, 4: Open restores the run, not its tags alone: the reports it
+  // was sent and its workflow's views, and names a file gone since.
+  it('Open shows a recorded run with its workflow views and names a missing report', async () => {
+    const mock = installMockBridge()
+    mock.reportFiles['/d/a.qc.tsv'] = qcTsv
+    const r = rec('1', '/d/a.mzML', 'ok', {
+      workflow: 'run-qc',
+      outputs: ['/d/a.tags.tsv', '/d/a.qc.tsv', '/d/a.digest.tsv'],
+      params: { threads: '0', qc_out: '/d/a.qc.tsv', digest_out: '/d/a.digest.tsv' }
+    })
+    const [row] = await showWith(mock, [r])
+    await click(btn(row, 'Open')!)
+    await flush()
+    const tabs = screen.getAllByRole('tab').map((t) => t.textContent ?? '')
+    expect(tabs.some((t) => /^QC/.test(t))).toBe(true)
+    expect(screen.getAllByRole('tab').find((t) => t.getAttribute('aria-selected') === 'true')?.textContent).toMatch(/^QC/)
+    await click(screen.getByRole('tab', { name: /^Overview/ }))
+    expect(document.querySelector('.tabpanel')?.textContent).toMatch(/Digest report/)
+  })
+
+  // Round 5, 6: a slow read for the run opened first must not land beside
+  // the run opened after it (A's QC next to B's tags).
+  it('a run opened after another keeps its own views when the first one\'s reads finish last', async () => {
+    const mock = installMockBridge()
+    mock.reportFiles['/d/a.qc.tsv'] = qcTsv
+    const a = rec('1', '/d/a.mzML', 'ok', { workflow: 'run-qc', outputs: ['/d/a.tags.tsv', '/d/a.qc.tsv'], params: { threads: '0', qc_out: '/d/a.qc.tsv' } })
+    const b = rec('2', '/d/b.mzML', 'ok', { workflow: 'export-tags', params: { threads: '0', res_conf: true } })
+    const rows = await showWith(mock, [b, a])
+    let release: () => void = () => {}
+    const gate = new Promise<void>((res) => (release = res))
+    const head = window.fastag.reportHead
+    window.fastag.reportHead = (p: string) => (p === '/d/a.qc.tsv' ? gate.then(() => head(p)) : head(p))
+    await click(btn(rows[1], 'Open')!)
+    const again = await history()
+    await click(btn(again[0], 'Open')!)
+    await flush()
+    await act(async () => release())
+    await flush()
+    const tabs = screen.getAllByRole('tab').map((t) => t.textContent ?? '')
+    expect(tabs.some((t) => /^QC/.test(t))).toBe(false)
+    expect(document.querySelector('.tabpanel')?.textContent).toMatch(/b\.tags\.tsv/)
+  })
+
+  it('Settings into form leaves a record without a workflow unlabelled', async () => {
+    const mock = installMockBridge()
+    await renderApp(mock)
+    mock.history = [rec('1', '/d/a.mzML', 'ok', { params: { tag_length: '4' } })]
+    const [row] = await history()
+    await click(btn(row, 'Settings into form')!)
+    await goTo('setup')
+    expect(document.querySelector('input[name="task"]:checked')).toBeNull()
   })
 
   it('a record without the parameters (from 1.13) offers no Settings into form; Open is off while a run is busy', async () => {

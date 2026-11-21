@@ -42,3 +42,5 @@ e2e-web/playwright-report
 e2e-tauri/results
 # The committed real CLI outputs (the repository ignores *.tsv)
 !src/fixtures/real/**/*.tsv
+# ...and the recorded 1.15 CLI outputs (gui/src/fixtures/cli-1.15/)
+!src/fixtures/cli-1.15/**/*.tsv

@@ -6,7 +6,8 @@
 import { act, fireEvent, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { installMockBridge, type MockBridge } from '../testing/mockBridge'
-import { addBatch, click, flush, key, pickSingle, renderApp, runButton, startBatch } from '../testing/render'
+import { batchAddButton, addBatch, click, flush, key, pickSingle, renderApp, runButton, startBatch } from '../testing/render'
+import { formValue } from '../testing/lastUsed'
 import { closeHelp, resetHelp } from '../help/link'
 
 afterEach(() => {
@@ -184,7 +185,7 @@ describe('shell: views', () => {
     const mock = installMockBridge()
     const c = await renderApp(mock)
     mock.nextPickInputs = ['/d/a.mzML', '/d/b.mzML']
-    await click(screen.getByRole('button', { name: /^Add files for a batch…$/ }))
+    await click(batchAddButton())
     expect(shown(c)).toEqual(['batch'])
     const batch = c.querySelector<HTMLElement>('.view[data-view="batch"]')!
     expect(within(batch).getByRole('heading', { name: /Batch · 2 files/ })).toBeDefined()
@@ -245,7 +246,7 @@ describe('shell: Help panel', () => {
     const panel = screen.getByRole('complementary', { name: 'Help' })
     expect(within(panel).getByRole('navigation', { name: 'Help pages' })).toBeDefined()
     expect(shown(c)).toEqual(['setup'])
-    expect(screen.getByLabelText('Tag length tag_length')).toBeDefined()
+    expect(document.getElementById('p-tag_length')).not.toBeNull()
     expect(helpBtn.getAttribute('aria-expanded')).toBe('true')
     await click(within(panel).getByRole('button', { name: 'Close Help' }))
     await act(async () => {
@@ -261,12 +262,12 @@ describe('shell: Help panel', () => {
     await click(screen.getByRole('button', { name: 'Help' }))
     const box = screen.getByRole('searchbox', { name: 'Search Help' })
     await act(async () => {
-      fireEvent.change(box, { target: { value: 'tag length' } })
+      fireEvent.change(box, { target: { value: 'seed length' } })
     })
     const hits = screen.getByRole('list', { name: 'Search results' })
     const hit = within(hits)
       .getAllByRole('button')
-      .find((b) => b.querySelector('.hit-title')?.textContent === 'Tag length')
+      .find((b) => b.querySelector('.hit-title')?.textContent === 'Seed length')
     expect(hit).toBeDefined()
     await click(hit!)
     const entry = document.getElementById('param-tag_length') as HTMLDetailsElement
@@ -304,10 +305,10 @@ describe('shell: drop routing', () => {
     await act(async () => mock.emitDrop({ spectra: ['/d/drop.mzML'], fasta: '/d/h.fasta', taxdb: '/d/t.taxdb' }))
     await flush()
     expect(shown(c)).toEqual(['setup'])
-    expect(runButton().textContent).toBe('Run on drop.mzML')
-    expect((screen.getByLabelText(/Tags TSV/) as HTMLInputElement).value).toBe('/d/drop.tags.tsv')
-    expect((c.querySelector('#p-fasta') as HTMLInputElement).value).toBe('/d/h.fasta')
-    expect((c.querySelector('#p-taxdb') as HTMLInputElement).value).toBe('/d/t.taxdb')
+    expect(document.querySelector('.input-card .fname')?.textContent).toBe('drop.mzML')
+    expect((c.querySelector('#out-name') as HTMLInputElement).value).toBe('drop')
+    expect(await formValue('fasta')).toBe('/d/h.fasta')
+    expect(await formValue('taxdb')).toBe('/d/t.taxdb')
   })
 
   it('two spectra files go to the batch queue', async () => {

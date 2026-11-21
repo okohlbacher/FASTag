@@ -43,7 +43,7 @@ async function characterize(page: Page, fixture: string): Promise<void> {
   await openApp(page, fixture)
   await page.getByRole('radio', { name: /^Characterize a run/ }).check()
   await page.getByRole('button', { name: 'Choose file…' }).click()
-  await page.getByRole('button', { name: 'Run on run01.mzML' }).click()
+  await page.getByRole('button', { name: 'Run', exact: true }).click()
 }
 
 test('choosing Characterize, adding a file and running reaches Overview through its finished toast', async ({ page }) => {
@@ -71,7 +71,6 @@ test('Overview figures and calls equal the oracles of the 1.12 gate output', asy
   await expect(page.getByRole('tab', { name: 'Overview' })).toHaveAttribute('aria-selected', 'true')
   await expect(value(page, 'MS2 spectra')).toHaveText(en(o.ms2))
   await expect(value(page, 'Tags')).toHaveText(en(o.tags))
-  await expect(value(page, 'Tags E ≤ 1')).toHaveText(en(o.filtered))
   await expect(value(page, 'Glyco')).toHaveText(`${en(o.glyco)} flagged`)
   await expect(value(page, 'Protease')).toHaveText(o.protease!)
   await expect(value(page, 'Top genus')).toHaveText(o.topGenus)
@@ -79,23 +78,24 @@ test('Overview figures and calls equal the oracles of the 1.12 gate output', asy
   await expect(value(page, 'Label')).toHaveText('none (label-free)')
   // Every tile names its cutoff or caveat.
   for (const note of await page.locator('.tile .tile-note').allTextContents()) expect(note.trim()).not.toBe('')
-  await expect(page.getByRole('list', { name: 'Checks', exact: true })).toContainText('Acquisition check: DDA')
+  await expect(page.getByRole('list', { name: 'Checks', exact: true })).toContainText('Acquisition: DDA')
+  // The digest filter's count is the Digest tab's (round 10).
+  await expect(tile(page, 'Tags E ≤ 1')).toHaveCount(0)
+  await page.getByRole('tab', { name: /^Digest/ }).click()
+  await expect(page.locator('.stat', { has: page.locator('dt', { hasText: /^Tags E ≤ 1$/ }) }).locator('dd')).toHaveText(en(o.filtered))
 })
 
-test('no FASTA, no alkylation call: "not assessed (needs a FASTA)", and C+57.021 a default', async ({ page }) => {
+test('no alkylation report asked for: no Alkylation tile, and the fixed cysteine line a default', async ({ page }) => {
   for (const fixture of ['gate', 'gate-1.11']) {
     await characterize(page, fixture)
     await expect(page.getByRole('tab', { name: 'Overview' })).toHaveAttribute('aria-selected', 'true')
-    // Oracle: the run had no FASTA and no report has a Cys section.
     const calls = await mockState<{ params: Record<string, unknown> }[]>(page, 'runCalls')
-    expect(calls[0].params.fasta ?? '').toBe('')
-    expect(calls[0].params.recon_fasta ?? '').toBe('')
+    expect(calls[0].params.alkylation_out ?? '').toBe('')
     expect(oracle(fixture === 'gate' ? 'v112-pxd003531' : 'v111-pxd003531').massgap).toBe(false)
-    await expect(value(page, 'Alkylation')).toHaveText('not assessed (needs a FASTA)')
-    await expect(tile(page, 'Alkylation').getByRole('button', { name: 'Add FASTA and run again' })).toBeEnabled()
-    const row = page.getByRole('table', { name: 'Suggested search settings' }).getByRole('row', { name: /fixed C\+57\.021/ })
+    await expect(tile(page, 'Alkylation')).toHaveCount(0)
+    const row = page.getByRole('table', { name: 'Suggested search settings' }).getByRole('row', { name: /Fixed cysteine modification/ })
     await expect(row.locator('.evidence')).toHaveText('default')
-    await expect(row).toContainText('alkylation not assessed (no FASTA)')
+    await expect(row).toContainText('alkylation not assessed (alkylation report not written)')
   }
 })
 
@@ -121,13 +121,16 @@ test('a Da run without a census: the CLI no calls with their reason, the cutoff 
   await expect(value(page, 'MS2 spectra')).toHaveText(en(o.ms2))
   // The MS2 count is not a stand-in for tagged spectra: no GUI verdict.
   for (const t of ['Protease', 'Label']) await expect(value(page, t)).toHaveText('no call')
-  await expect(tile(page, 'Protease')).toContainText(why)
+  // The CLI's reason once, above the tiles (round 6, 26); the tiles say no call.
+  expect(why).toMatch(/fragment tolerance is in Da/)
+  await expect(page.getByRole('list', { name: 'Warning', exact: true })).toContainText('FASTag makes no protease or label call at a tolerance in Da')
+  await expect(tile(page, 'Protease')).toContainText('no call at a fragment tolerance in Da (see above)')
   for (const t of ['Protease', 'Top genus', 'Label']) await expect(value(page, t)).not.toHaveText('too little evidence')
   // The Overview's own checks: the Inspector's "Checks after the run" (#24)
   // is a second list beside it, so the name is matched exactly.
   const checks = page.getByRole('list', { name: 'Checks', exact: true })
   await expect(checks).toContainText('Evidence cutoff not applied: this run did not count tagged spectra')
-  await expect(checks).toContainText('species calls are unreliable on ion-trap/Da data')
+  await expect(page.getByRole('list', { name: 'Warning', exact: true })).toContainText('species calls are unreliable on ion-trap/Da data')
   await expect(checks).toContainText('electron-activated')
   // The instrument as the meta rows name it, no ion-trap inference.
   await expect(value(page, 'Instrument')).toHaveText(cell(digest, 'meta', 'instrument')!)
@@ -142,7 +145,7 @@ test('focus does not fall to the page body when the run ends or is cancelled', a
 
   await openApp(page, 'slow')
   await page.getByRole('button', { name: 'Choose file…' }).click()
-  await page.getByRole('button', { name: 'Run on run01.mzML' }).click()
+  await page.getByRole('button', { name: 'Run', exact: true }).click()
   const cancel = page.getByRole('region', { name: 'Running' }).getByRole('button', { name: 'Cancel' })
   await cancel.focus()
   await page.keyboard.press('Enter')

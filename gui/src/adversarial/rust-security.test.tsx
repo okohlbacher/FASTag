@@ -9,20 +9,23 @@ import { click, logText, renderApp, runButton } from '../testing/render'
 import manifest from '../params.generated.json'
 
 describe('rust-security: working directory', () => {
-  it('a bare Output name is resolved beside the input by fastag.rs, and the renderer reads the results there', async () => {
+  it('the run name names the outputs in the output folder, and the renderer reads the results there', async () => {
     const mock = installMockBridge()
     await renderApp(mock)
     mock.nextPickInput = '/d/a.mzML'
     await click(screen.getByRole('button', { name: /^(Choose file|Change)…$/ }))
-    const outField = screen.getByLabelText(/Tags TSV/) as HTMLInputElement
-    expect(outField.placeholder).toBe('Filled in when you choose spectra')
+    const name = document.getElementById('out-name') as HTMLInputElement
+    expect(name.value).toBe('a')
     await act(async () => {
-      fireEvent.change(outField, { target: { value: 'run.tags.tsv' } })
+      fireEvent.change(name, { target: { value: 'run/../x' } })
+    })
+    // A path separator is no part of a name: no way out of the folder.
+    expect(name.value).toBe('run..x')
+    await act(async () => {
+      fireEvent.change(name, { target: { value: 'run' } })
     })
     await click(runButton())
-    // Sent as typed; the backend resolves it against the input's folder (its
-    // cwd for the child) and hands back the resolved path as RunStarted.out.
-    expect(mock.runCalls.at(-1)?.out).toBe('run.tags.tsv')
+    expect(mock.runCalls.at(-1)?.out).toBe('/d/run.tags.tsv')
     await act(async () => mock.emitDone({ ok: true, code: 0, runId: mock.lastRunId }))
     await screen.findByText(/Showing \d+ of \d+/)
     expect(mock.resultsQueryCalls.at(-1)?.path).toBe('/d/run.tags.tsv')

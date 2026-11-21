@@ -9,7 +9,7 @@ import App from '../App'
 import { appendLog } from '../run/useRun'
 import { LOG_WINDOW } from '../run/LogDrawer'
 import { installMockBridge, type MockBridge } from '../testing/mockBridge'
-import { addBatch, click, goTo, logText, pickSingle, renderApp, runButton } from '../testing/render'
+import { addBatch, click, goTo, logText, openGroup, pickSingle, renderApp, runButton } from '../testing/render'
 import { applyAndCheck } from '../testing/lastUsed'
 import type { SpeciesReport } from '../types'
 
@@ -93,7 +93,7 @@ describe('lifecycle: failure banner', () => {
 })
 
 describe('lifecycle: stale state across runs', () => {
-  it('a run on sample B clears sample A species calls, and the pane names its input', async () => {
+  it('a run on sample B clears sample A species calls, and its missing report gets no tab', async () => {
     const mock = installMockBridge()
     mock.settings.lastUsed = { species: true, tag_length: '7' }
     mock.speciesResult = speciesA
@@ -110,9 +110,10 @@ describe('lifecycle: stale state across runs', () => {
     expect(screen.queryAllByText('Escherichia')).toHaveLength(0)
     await done(mock, 2, false, 6)
     await screen.findByRole('alert')
-    expect(screen.getByRole('tab', { name: /Species/ }).getAttribute('aria-selected')).toBe('true')
+    // B wrote no species report: no Species tab stands for it (the Overview
+    // names a missing report), and A's taxa are nowhere.
+    expect(screen.queryByRole('tab', { name: /Species/ })).toBeNull()
     expect(screen.queryAllByText('Escherichia')).toHaveLength(0)
-    expect(document.querySelector('.tabpanel')?.textContent).toContain('Species of /d/b.mzML')
     expect(document.querySelector('.path')?.getAttribute('title')).toBe('/d/b.mzML')
   })
 
@@ -135,7 +136,8 @@ describe('lifecycle: stale state across runs', () => {
     await waitFor(() => expect(document.querySelector('.log')?.textContent).toContain('permission denied'))
     expect(mock.reportCalls.length).toBe(reportReadsAfterA + 1)
     expect(mock.reportCalls[mock.reportCalls.length - 1]).toBe('/d/b.digest.tsv') // beside B's tags
-    await click(screen.getByRole('tab', { name: /Species/ }))
+    // The unreadable report gets no tab; A's taxa are gone.
+    expect(screen.queryByRole('tab', { name: /Species/ })).toBeNull()
     expect(screen.queryAllByText('Escherichia')).toHaveLength(0)
   })
 
@@ -151,7 +153,7 @@ describe('lifecycle: stale state across runs', () => {
     await waitFor(() => expect(screen.queryAllByText('Escherichia').length).toBeGreaterThan(0))
     // Unticking species after A's run keeps A's report: it is what A's run did.
     await goTo('setup')
-    await click(screen.getByRole('button', { name: /Species detection/ }))
+    await openGroup('Species')
     const speciesBox = document.getElementById('p-species') as HTMLInputElement
     await act(async () => {
       fireEvent.click(speciesBox)
@@ -164,17 +166,15 @@ describe('lifecycle: stale state across runs', () => {
     await pickSingle(mock, '/d/b.mzML')
     await click(runButton())
     await done(mock, 2, true)
-    expect(screen.getByRole('tab', { name: /Species/ }).textContent).toBe('Species')
+    expect(screen.queryByRole('tab', { name: /Species/ })).toBeNull()
+    await goTo('setup')
     await act(async () => {
       fireEvent.click(document.getElementById('p-species') as HTMLInputElement)
     })
     await goTo('results')
-    await click(screen.getByRole('tab', { name: /Species/ }))
-    expect(screen.queryAllByText('Escherichia')).toHaveLength(0) // no sample A call beside sample B's tags
-    // B's run had it off, but the switch is on now: the tab says to run
-    // again, not to enable what is already enabled.
-    expect(screen.queryByText(/Species detection is off/)).toBeNull()
-    expect(document.querySelector('.tabpanel')?.textContent).toContain('The last run (b.mzML) did not detect species; run again')
+    // B's run had it off: no Species tab, and no sample A call beside B's tags.
+    expect(screen.queryByRole('tab', { name: /Species/ })).toBeNull()
+    expect(screen.queryAllByText('Escherichia')).toHaveLength(0)
     expect(mock.speciesCalls).toEqual(['/d/a.tags.species.tsv'])
   })
 
@@ -203,14 +203,14 @@ describe('lifecycle: stale state across runs', () => {
     await click(runButton())
     // Locked: the input and output controls give way to a summary of the run.
     expect(screen.queryByRole('button', { name: /^(Choose file|Change)…$/ })).toBeNull()
-    expect(screen.queryByLabelText(/Tags TSV/)).toBeNull()
+    expect(document.getElementById('out-name')).toBeNull()
     expect(document.querySelector('.controls')?.textContent).toContain('locked while FASTag runs')
     mock.nextPickInput = '/d/b.mzML' // nothing can pick it now
     await done(mock, 1, true)
     await screen.findByText('Showing 3 of 3')
     expect(mock.resultsQueryCalls[0].path).toBe('/d/a.tags.tsv') // A's tags
     expect(document.querySelector('.path')?.getAttribute('title')).toBe('/d/a.mzML') // shown input: A
-    expect((screen.getByLabelText(/Tags TSV/) as HTMLInputElement).value).toBe('/d/a.tags.tsv')
+    expect((document.getElementById('out-name') as HTMLInputElement).value).toBe('a')
     expect(screen.getByRole('heading', { name: 'a.tags.tsv' })).toBeDefined()
     expect(document.querySelector('.tabpanel')?.textContent).toContain('from the run of /d/a.mzML')
   })
@@ -310,7 +310,7 @@ describe('lifecycle: run gating races', () => {
     await pickSingle(mock, '/d/hidden.mzML')
     await addBatch(mock, ['/d/b1.mzML', '/d/b2.mzML'])
     expect(document.querySelector('.path')).toBeNull() // the single input is no longer shown
-    expect(screen.queryByLabelText(/Tags TSV/)).toBeNull() // nor its output
+    expect(document.getElementById('out-name')).toBeNull() // nor its output
     // No single Run at all: the run bar runs the queue.
     expect(screen.queryByRole('button', { name: /^(Run( on .+)?|Running…)$/ })).toBeNull()
     expect(screen.getByRole('button', { name: /^Run \d+ remaining file/ })).toBeDefined()

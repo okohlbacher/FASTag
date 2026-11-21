@@ -32,7 +32,9 @@ import { baseName, value, type Report } from '../digestReport'
 import { DROPPED_MARKER } from '../run/logStore'
 import { jobCells, type JobData } from '../run/batchSummary'
 import type { BatchJob } from '../run/batch'
-import { runFacts, speciesCall } from '../results/calls'
+import { runFacts, speciesCall, tiedLeaders } from '../results/calls'
+import type { Taxon } from '../types'
+import { qcFacts } from '../results/overview'
 import { cellValue, columnsNamed, dataRows, type SdrfTable } from './sdrfTable'
 import { matchOrganism, NOT_STATED, type Taxonomy } from './taxonomy'
 
@@ -459,18 +461,26 @@ function compareJob(t: SdrfTable, rows: number[], d: JobData, tx: Taxonomy | nul
   const org = pick('organism')
   const orgVals = distinct(org.values)
   const sp = speciesCall(d.species)
-  const top = cells.genus.call != null && sp.state === 'called' ? sp.present[0] : null
+  // The top call: the leader, or every present taxon tied at the top (any
+  // of them counts as the top call; their order is only the CLI's taxid order).
+  const leaders = sp.state === 'called' ? tiedLeaders(sp.present) : []
+  const made = cells.genus.call != null || (!!cells.genus.tied && leaders.length > 1)
+  const tops = made && sp.state === 'called' ? (leaders.length > 1 ? leaders : sp.present.slice(0, 1)) : []
+  const taxonText = (t: Taxon): string => `${t.name} (taxid ${t.taxid})`
+  const topText = tops.length > 1 ? `${tops.map(taxonText).join(' or ')}, tied` : tops.length ? taxonText(tops[0]) : ''
   const spPath = d.species ? baseName(d.species.path) : ''
   let organism: Partial3
-  if (!orgVals.length) organism = { state: 'no_sdrf', sdrf: '', fastag: top ? `${top.name} (taxid ${top.taxid})` : '', note: 'the SDRF names no organism' }
-  else if (!top) organism = { state: 'no_call', sdrf: join(orgVals), fastag: '', note: `FASTag made no genus call (${cells.genus.text})` }
+  if (!orgVals.length) organism = { state: 'no_sdrf', sdrf: '', fastag: topText, note: 'the SDRF names no organism' }
+  else if (!tops.length) organism = { state: 'no_call', sdrf: join(orgVals), fastag: '', note: `FASTag made no genus call (${cells.genus.text})` }
   else if (!tx)
-    organism = { state: 'not_checkable', sdrf: join(orgVals), fastag: `${top.name} (taxid ${top.taxid})`, note: 'the taxonomy (nodes.dmp, names.dmp) was not read' }
+    organism = { state: 'not_checkable', sdrf: join(orgVals), fastag: topText, note: 'the taxonomy (nodes.dmp, names.dmp) was not read' }
   else {
     // Every genus the species report calls present, the top one first.
-    const present = sp.state === 'called' ? sp.present.map((g) => g.taxid) : [top.taxid]
-    const m = matchOrganism(tx, orgVals, top.taxid, present)
-    organism = { state: m.state, sdrf: join(orgVals), fastag: `${top.name} (taxid ${top.taxid})`, note: m.note }
+    const present = sp.state === 'called' ? sp.present.map((g) => g.taxid) : [tops[0].taxid]
+    // A tied leader that holds an SDRF organism is the top call.
+    const tries = tops.map((top) => matchOrganism(tx, orgVals, top.taxid, [top.taxid, ...present.filter((g) => !tops.some((x) => x.taxid === g))]))
+    const m = tries.find((x) => x.state === 'match' || x.state === 'genus') ?? matchOrganism(tx, orgVals, tops[0].taxid, present)
+    organism = { state: m.state, sdrf: join(orgVals), fastag: topText, note: tops.length > 1 ? `tied at the top: ${m.note}` : m.note }
   }
 
   const cleav = pick('cleavage')
@@ -479,34 +489,42 @@ function compareJob(t: SdrfTable, rows: number[], d: JobData, tx: Taxonomy | nul
   const lab = pick('label')
   const mods = pick('modifications')
   const l = cells.label.call
-  // The digest report's run and meta rows, else the label report's.
+  // The digest report's run and meta rows, else the label report's, else
+  // (a Run QC batch) the QC report's: its run rows state the tolerance, its
+  // qc rows the instrument model.
+  const qf = qcFacts(d.qc)
+  const qcInst = qf?.instrument ?? null
+  const qcName = baseName(String(d.params['qc_out'] ?? 'qc.tsv'))
   const fd = runFacts(digest)
   const fl = runFacts(label)
-  const facts = fd.tolerance ? fd : fl
-  const factsOf = fd.tolerance ? digest : label
+  const facts = fd.tolerance ? fd : fl.tolerance ? fl : { tolerance: qf?.tolerance ?? null }
+  const factsName = fd.tolerance ? of(digest) : fl.tolerance ? of(label) : qcName
   // The instrument the input names: the meta instrument row, else (a
   // converter's generic term) its instrument_model row.
   const meta = (r: Report | undefined, k: string): string | null => {
     const v = r ? value(r, 'meta', k) : undefined
     return v && v !== '-' ? v : null
   }
-  const instOf = meta(digest, 'instrument') || meta(digest, 'instrument_model') ? digest : label
-  const instr = inputInstrument(meta(instOf, 'instrument'), meta(instOf, 'instrument_model'))
+  const named = (r: Report | undefined): boolean => !!(meta(r, 'instrument') || meta(r, 'instrument_model'))
+  const fromQc = !named(digest) && !named(label) && qcInst != null
+  const instOf = named(digest) ? digest : label
+  const instr = fromQc ? inputInstrument(null, qcInst) : inputInstrument(meta(instOf, 'instrument'), meta(instOf, 'instrument_model'))
+  const instName = fromQc ? qcName : of(instOf)
   const modLine = runFixed(d.log)?.line
   const inst = pick('instrument')
   const tol = pick('tolerance')
 
   const res = (r: Partial3, column: string, evidence: string): FieldResult => ({ ...r, column, evidence: r.state === 'no_sdrf' || r.fastag === '' ? '' : evidence })
   return {
-    organism: res(organism, org.column, top ? `${spPath}: genus ${top.name} (taxid ${top.taxid}) present` : ''),
+    organism: res(organism, org.column, tops.length ? `${spPath}: genus ${tops.map(taxonText).join(' or ')} present${tops.length > 1 ? ', tied at the top' : ''}` : ''),
     cleavage: res(compareCleavage(cleav.values, p, cls), cleav.column, `${of(digest)}: call model ${p}`),
     label: res(compareLabel(lab.values, mods.values, l), lab.column, `${of(label)}: label_call label ${l}`),
     modifications: res(compareModifications(mods.values, d.log), mods.column, `log: ${modLine ?? '(no Modifications line: none)'}`),
-    instrument: res(compareInstrument(inst.values, instr.instrument, instr.generic), inst.column, `${of(instOf)}: meta ${instr.from} ${instr.instrument}`),
+    instrument: res(compareInstrument(inst.values, instr.instrument, instr.generic), inst.column, `${instName}: ${fromQc ? 'qc' : 'meta'} ${instr.from} ${instr.instrument}`),
     tolerance: res(
       compareTolerance(tol.values, facts.tolerance),
       tol.column,
-      facts.tolerance ? `${of(factsOf)}: run fragment_tolerance ${facts.tolerance.value} ${facts.tolerance.unit}` : ''
+      facts.tolerance ? `${factsName}: run fragment_tolerance ${facts.tolerance.value} ${facts.tolerance.unit}` : ''
     )
   }
 }
@@ -518,14 +536,26 @@ const fieldWords = (fs: readonly FieldId[]): string => fs.map((f) => FIELD_LABEL
 /// A job's verdict: the fields that differ (✗), else consistent (✓), and
 /// after either the run settings that differ from the SDRF (≠), which are
 /// never a mismatch.
-function verdict(fields: Record<FieldId, FieldResult>): Verdict {
+export function verdict(fields: Record<FieldId, FieldResult>): Verdict {
   const mismatches = FIELDS.filter((f) => fields[f].state === 'mismatch')
   const settings = FIELDS.filter((f) => fields[f].state === 'setting_differs')
   const set = settings.length ? `≠ run setting: ${fieldWords(settings)}` : ''
-  const withSet = (t: string): string => (set ? `${t}; ${set}` : t)
+  // A field the SDRF names that could not be compared (no call, a value
+  // this app cannot read) is said apart: consistent covers only the fields
+  // that were compared.
+  const unchecked = FIELDS.filter((f) => fields[f].state === 'no_call' || fields[f].state === 'not_checkable')
+  const open = unchecked.length ? `not checked: ${fieldWords(unchecked)}` : ''
+  const withSet = (t: string): string => [t, set, open].filter(Boolean).join('; ')
   if (mismatches.length) return { state: 'checked', text: withSet(`✗ ${fieldWords(mismatches)}`), mismatches, settings }
   const checked = FIELDS.filter((f) => fields[f].state === 'match' || fields[f].state === 'genus')
+  // An annotated organism called present below the top call: not wrong,
+  // and not the whole of a consistent verdict.
+  const below = FIELDS.filter((f) => fields[f].state === 'present_not_called')
+  const belowText = below.length ? `annotated ${fieldWords(below)} present but below the top call` : ''
+  if (checked.length && below.length)
+    return { state: 'checked', text: withSet(`✓ other fields consistent; ${belowText}`), mismatches: [], settings }
   if (checked.length) return { state: 'checked', text: withSet('✓ consistent'), mismatches: [], settings }
+  if (below.length) return { state: 'checked', text: withSet(belowText.charAt(0).toUpperCase() + belowText.slice(1)), mismatches: [], settings }
   return settings.length ? { state: 'checked', text: set, mismatches: [], settings } : { state: 'unchecked', text: '? nothing to compare', mismatches: [] }
 }
 
@@ -552,13 +582,21 @@ export function compareSdrf(t: SdrfTable, jobs: readonly SdrfJob[], tx: Taxonomy
       if (!f || !stated(f)) continue
       files.set(f, [...(files.get(f) ?? []), r.row])
     }
+  // The exact path first; then the basename, then the stem, each only when
+  // one data file has it (two runs named run.raw in two folders are not
+  // told apart by their name).
   const lookup = (name: string | null): string | null => {
     if (!name) return null
-    const b = baseName(name.replace(/\\/g, '/')).toLowerCase()
-    for (const f of files.keys()) if (baseName(f.replace(/\\/g, '/')).toLowerCase() === b) return f
+    const norm = (p: string): string => p.replace(/\\/g, '/').toLowerCase()
+    const keys = [...files.keys()]
+    const exact = keys.filter((f) => norm(f) === norm(name))
+    if (exact.length === 1) return exact[0]
+    const b = baseName(norm(name))
+    const byBase = keys.filter((f) => baseName(norm(f)) === b)
+    if (byBase.length) return byBase.length === 1 ? byBase[0] : null
     const s = fileStem(name)
-    for (const f of files.keys()) if (fileStem(f) === s) return f
-    return null
+    const byStem = keys.filter((f) => fileStem(f) === s)
+    return byStem.length === 1 ? byStem[0] : null
   }
   const used = new Set<string>()
   const out: JobComparison[] = jobs.map((j) => {

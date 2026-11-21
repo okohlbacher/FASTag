@@ -29,7 +29,8 @@ const sdrfTable = (page: Page) => page.getByRole('table', { name: /^SDRF compari
 
 async function runAndLoad(page: Page): Promise<void> {
   await openApp(page, 'gate-batch')
-  await page.getByRole('radio', { name: /^Batch QC/ }).check()
+  await page.getByRole('radio', { name: /^Characterize a run/ }).check()
+  await page.getByRole('radio', { name: 'Batch' }).check()
   await goTo(page, 'Batch')
   await page.getByRole('button', { name: 'Add folder…' }).click()
   await page.getByRole('button', { name: `Run ${NAMES.length} remaining files` }).click()
@@ -63,10 +64,10 @@ test('Batch SDRF: each job against its SDRF rows, field by field', async ({ page
     // A run setting (fragment tolerance, modifications) that differs is ≠, never ✗.
     { file: 'pxd004541-tmt.mzML', states: ['genus', 'match', 'match', 'match', 'match', 'setting_differs'], verdict: '✓ consistent; ≠ run setting: fragment tolerance' },
     { file: 'pxd006096-dia.mzML', states: [], verdict: 'not compared: the job failed' },
-    { file: 'pxd006096-pseudo.mzML', states: ['genus', 'match', 'match', 'match', 'no_call', 'match'], verdict: '✓ consistent' },
-    { file: 'pxd010783.mzML', states: ['no_call', 'no_call', 'no_call', 'match', 'match', 'setting_differs'], verdict: '✓ consistent; ≠ run setting: fragment tolerance' },
+    { file: 'pxd006096-pseudo.mzML', states: ['genus', 'match', 'match', 'match', 'no_call', 'match'], verdict: '✓ consistent; not checked: instrument' },
+    { file: 'pxd010783.mzML', states: ['no_call', 'no_call', 'no_call', 'match', 'match', 'setting_differs'], verdict: '✓ consistent; ≠ run setting: fragment tolerance; not checked: organism, cleavage agent, label' },
     { file: 'pxd014764.mzML', states: ['mismatch', 'match', 'match', 'match', 'match', 'match'], verdict: '✗ organism' },
-    { file: 'pxd040407-chymo.mzML', states: ['no_call', 'no_call', 'no_call', 'setting_differs', 'mismatch', 'match'], verdict: '✗ instrument; ≠ run setting: modifications' }
+    { file: 'pxd040407-chymo.mzML', states: ['no_call', 'no_call', 'no_call', 'setting_differs', 'mismatch', 'match'], verdict: '✗ instrument; ≠ run setting: modifications; not checked: organism, cleavage agent, label' }
   ])
   // The summary table carries the same verdicts in its SDRF column.
   const sum = page.getByRole('table', { name: /^Batch summary/ })
