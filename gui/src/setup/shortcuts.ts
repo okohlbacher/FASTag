@@ -21,6 +21,7 @@ export type Action =
   | 'theme-light'
   | 'theme-dark'
   | 'faq'
+  | 'feedback'
   | 'about'
 
 export const ACTIONS: readonly Action[] = [
@@ -41,6 +42,7 @@ export const ACTIONS: readonly Action[] = [
   'theme-light',
   'theme-dark',
   'faq',
+  'feedback',
   'about'
 ]
 
@@ -83,7 +85,8 @@ export function actionOfKey(
   if (e.altKey) return null
   const k = e.key.length === 1 ? e.key.toLowerCase() : e.key
   if (k === 'o') return e.shiftKey ? 'open-results' : 'open-spectra'
-  if (e.shiftKey) return k === '?' || k === '/' ? 'help' : null
+  // Cmd/Ctrl+Shift+F: Feedback (Help > Send Feedback…, menu.rs).
+  if (e.shiftKey) return k === '?' || k === '/' ? 'help' : k === 'f' ? 'feedback' : null
   if (k === 'Enter') return 'run'
   if (k === '.') return 'cancel'
   if (k === 'e') return 'export'
