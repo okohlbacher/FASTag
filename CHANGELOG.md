@@ -1,5 +1,15 @@
 # Changelog
 
+## Unreleased
+
+- **Ion-trap spectra in mzML with userParam filter strings.** OpenMS writes the Thermo filter string as a spectrum
+  `userParam`; the fast mzML reader read only the `cvParam` (MS:1000512), so `-tolerance_by_analyzer` tagged such ion-trap
+  MS2 at `-fragment_tolerance`. They now get `-fragment_tolerance_itms`, as OpenMS's own reader would class them. The
+  bundled E. coli example is such a file: its 139 MS2 are ion trap and are now tagged at 0.5 Da
+  (`-tolerance_by_analyzer off` gives the 1.15.6 tags).
+- **GUI Spectrum panel:** an ion-trap MS2 is shown with the peaks prepared at its analyzer's tolerance, the ones its tags
+  come from (`-dump_spectrum` ignored `-tolerance_by_analyzer`).
+
 ## 1.15.6 (2026-11-21)
 
 The desktop app's Setup is reorganised around the analysis workflows, and `-tolerance_by_analyzer` now also applies to mzPeak input. The CLI's tags are unchanged for mzML, MGF, Thermo and Bruker input.
