@@ -20,12 +20,13 @@ export default defineConfig({
   fullyParallel: true,
   forbidOnly: !!process.env.CI,
   retries: 0,
-  // Fail fast on a hang: 26 tests take well under a minute locally, so a test
-  // that runs 30 s or a suite that runs 5 min is stuck (a request the bridge
-  // never answers, a locator that never appears), and Playwright reports which
-  // test and which step instead of the CI job being cancelled without a word.
+  // Fail fast on a hang: a test that runs 30 s, or a suite that runs 10 min
+  // (about 4 min on CI for 236 tests, Chromium and WebKit), is stuck (a request
+  // the bridge never answers, a locator that never appears), and Playwright
+  // reports which test and which step instead of the CI job being cancelled
+  // without a word.
   timeout: 30_000,
-  globalTimeout: process.env.CI ? 5 * 60_000 : 0,
+  globalTimeout: process.env.CI ? 10 * 60_000 : 0,
   expect: { timeout: 5_000 },
   reporter: process.env.CI ? [['list'], ['html', { open: 'never', outputFolder: 'playwright-report' }]] : 'list',
   use: {
