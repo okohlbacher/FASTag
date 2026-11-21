@@ -113,7 +113,8 @@ interface Drawn {
 
 /// The CLI's own name for a bin: its most frequent recon interpretation.
 function binName(b: GapBin): string | null {
-  const it = b.interps?.slice().sort((x, y) => y.n - x.n)[0]
+  // "?" (no interpretation) and "-" name nothing: the mass alone.
+  const it = b.interps?.filter((x) => !['?', '-', ''].includes(x.name.trim())).sort((x, y) => y.n - x.n)[0]
   return it ? it.name : null
 }
 

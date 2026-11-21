@@ -119,7 +119,7 @@ export const TASKS: readonly Task[] = [
     basic: ['species_rank', 'subsample_fraction'],
     help: {
       species_rank: 'The taxonomic level of the report.',
-      subsample_fraction: 'All spectra; 10% ranks the main taxa 10× faster.'
+      subsample_fraction: 'All spectra by default; 10% is usually enough.'
     },
     outputs: ['out', 'species_out'],
     docs: { to: 'species-howto', label: 'Species detection' }

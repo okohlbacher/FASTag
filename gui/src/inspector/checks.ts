@@ -105,7 +105,7 @@ export function noTaxdbCheck(values: Record<string, ParamValue>, taxonomy: Taxon
     id: 'no-taxdb',
     level: 'block',
     title: 'The species report needs the taxonomy index',
-    detail: `The species report needs the taxonomy k-mer index (tax_k7.taxdb, about 1.1 GB), and it is not found ${where}. FASTag would stop with "-species: no taxdb". ${how} Or run without the species report.`,
+    detail: `The species report needs the taxonomy k-mer index (tax_k7.taxdb, about 1.1 GB), and it is not found ${where}. FASTag would stop before tagging. ${how} Or run without the species report.`,
     faq: 'faq-species-reference',
     source: 'the settings and the installed files',
     fix: { label: 'Run without the species report', params: { species: false } }

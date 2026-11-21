@@ -211,7 +211,7 @@ describe('preStartChecks (from the probe)', () => {
     expect(c.detail).toContain(TAXONOMY_ASSET)
     expect(c.detail).toContain(`copy tax_k7.taxdb from its share-FASTag-taxonomy folder into ${dir} (writing there needs an administrator) and press Check again`)
     expect(c.detail).toContain('FASTAG_TAXONOMY_DIR')
-    expect(c.detail).toContain('"-species: no taxdb"')
+    expect(c.detail).toContain('FASTag would stop before tagging') // round 15: no CLI text on screen
     expect(c.fix).toEqual({ label: 'Run without the species report', params: { species: false } })
     expect(c.faq).toBe('faq-species-reference')
     // Found, unknown yet, or the species report off: nothing.

@@ -36,8 +36,8 @@ describe('help vs docs', () => {
     expect(start).toContain('Open earlier results…')
     // QC remains available as an explicit optional workflow.
     expect(taskById('characterize')!.values).toMatchObject({ species: true, extension: '2', subsample_fraction: '0.1', digest_out: 'digest.tsv', label_out: 'label.tsv', glyco: true })
-    expect(start).toContain('For a QC survey, choose Characterize a run')
-    expect(start).toContain('It samples 10% of the spectra')
+    expect(start).toContain('For run metrics, choose Run QC. For protease, labels, glycopeptides and species, choose Characterize a run')
+    expect(start).toContain('Characterize samples 10% of the spectra')
     expect(start).toContain('opening on Overview')
     expect(start).not.toContain('Every other setting starts at')
     const files = pageText('files')

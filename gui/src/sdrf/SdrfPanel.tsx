@@ -149,7 +149,14 @@ export default function SdrfPanel({ sdrf, busy, outDir, onShow, protect }: SdrfP
         </button>
         {file && (
           <>
-            <button type="button" className="secondary small" onClick={() => void exportTsv()} disabled={!c}>
+            <button
+              type="button"
+              className="secondary small"
+              onClick={() => void exportTsv()}
+              // Jobs still being read have no comparison yet: wait for them.
+              disabled={!c || c.jobs.some((j) => j.verdict.state === 'pending')}
+              title={c?.jobs.some((j) => j.verdict.state === 'pending') ? 'Wait until the reports of every finished job are read' : undefined}
+            >
               Export SDRF corrections TSV…
             </button>
             <button type="button" className="secondary small" onClick={sdrf.clear}>

@@ -143,7 +143,7 @@ export default function SetupForm({
     const forced = forcedValue(name, values)
     return (
       <ParamField
-        key={name}
+        key={`${name}:${session.formGen}`}
         spec={spec}
         value={forced ? forced.value : values[name]}
         needs={inertDependency(name, values)}
@@ -684,7 +684,16 @@ export default function SetupForm({
     'settings',
     'Settings',
     <div className="settings">
-      {task.basic.filter((n) => isInputField(n) && !waitsOnShownFile(n)).map((n) => field(n, { brief: task.help[n], required: task.required?.includes(n) }))}
+      {task.basic
+        .filter((n) => isInputField(n) && !waitsOnShownFile(n))
+        .map((n) => {
+          // The Filter database (Advanced) stands in for the Protein database.
+          const viaFilter = n === 'recon_fasta' && String(values['fasta'] ?? '').trim() !== ''
+          return field(n, {
+            brief: viaFilter ? 'Uses the Filter database unless you choose a separate one here.' : task.help[n],
+            required: task.required?.includes(n) && !viaFilter
+          })
+        })}
       <div className="field instrument-field">
         <span className="label-row">
           <label htmlFor="instrument">

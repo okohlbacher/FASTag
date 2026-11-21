@@ -90,7 +90,7 @@ export default function SpeciesPanel({
   if (!enabled) {
     return (
       <div className="empty">
-        Species detection is off. Enable <code>species</code> under Species detection.{' '}
+        Species detection is off. Turn on <strong>Species report</strong> under Outputs (or choose the Species workflow).{' '}
         <HelpLink to="faq-species-off">How to use it</HelpLink>
       </div>
     )
@@ -103,7 +103,7 @@ export default function SpeciesPanel({
         <p>
           Tags are at most {tooShort.reach} residues long, but the species reference stores protein pieces of{' '}
           {tooShort.k} residues, so no tag can be looked up and FASTag refuses the run. Raise{' '}
-          <code>{tooShort.option}</code> to {tooShort.k}, or set <code>extension</code> so the tags grow to{' '}
+          <strong>{tooShort.option === 'tag_lengths' ? 'Tag lengths' : 'Seed length'}</strong> to {tooShort.k}, or set <strong>Extension</strong> so the tags grow to{' '}
           {tooShort.k}. <HelpLink to="faq-species-short">More</HelpLink>
         </p>
       </div>
@@ -302,7 +302,7 @@ export default function SpeciesPanel({
 }
 
 const Q_NA_TITLE =
-  'Under -species_orientation both no analytic background applies, so the CLI writes the q-value as NA. The optional decoy_qvalue and call from -species_call decoy are experimental and also uncalibrated.'
+  'With Tag orientation set to both no analytic background applies, so the q-value is NA. The optional decoy q-value and call of Presence call Decoy are experimental and also uncalibrated.'
 
 const Q_TITLE = 'q-value: smaller means the evidence is less likely to be chance. Use it to rank taxa, not as an error rate.'
 

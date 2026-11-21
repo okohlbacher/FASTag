@@ -391,7 +391,16 @@ export default function ResultTabs(p: ResultTabsProps): JSX.Element {
                 {reports.notice}
               </p>
             )}
-            <GlycoTable key={`${reports.gen?.glyco ?? 0}:${tables.glyco}`} path={tables.glyco} gen={reports.gen?.glyco} />
+            <GlycoTable
+              key={`${reports.gen?.glyco ?? 0}:${tables.glyco}`}
+              path={tables.glyco}
+              gen={reports.gen?.glyco}
+              // The shown run's own flag rule, when it was sent one.
+              minFraction={(() => {
+                const v = Number(String(p.overview?.params?.['glyco_min_fraction'] ?? '').trim() || NaN)
+                return Number.isFinite(v) ? v : null
+              })()}
+            />
           </div>
         ) : tab === 'spectrum' ? (
           <div className="tablewrap">

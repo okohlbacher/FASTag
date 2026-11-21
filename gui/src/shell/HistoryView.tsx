@@ -118,6 +118,9 @@ function FileName({ path }: { path: string }): JSX.Element {
   )
 }
 
+/// The most runs the view lists (the newest first).
+const HISTORY_LIMIT = 200
+
 export default function HistoryView(p: HistoryViewProps): JSX.Element {
   const { active, version, busy } = p
   const [records, setRecords] = useState<RunRecord[] | null>(null)
@@ -139,7 +142,7 @@ export default function HistoryView(p: HistoryViewProps): JSX.Element {
     if (!active) return
     let live = true
     window.fastag
-      .historyList(200)
+      .historyList(HISTORY_LIMIT)
       .then((r) => {
         if (!live) return
         setRecords(r)
@@ -244,6 +247,11 @@ export default function HistoryView(p: HistoryViewProps): JSX.Element {
             Open results…
           </button>
         </div>
+      )}
+      {records && records.length >= HISTORY_LIMIT && (
+        <p className="hint" role="note">
+          The latest {HISTORY_LIMIT} runs are listed; older ones stay in the history file.
+        </p>
       )}
       {records && records.length > 0 && (
         <table className="history-table" aria-label="Run history">

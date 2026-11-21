@@ -250,7 +250,8 @@ export function topShift(text: string | null | undefined): { delta: string; spec
     if (best && n <= best.spectra) continue
     const named = (un >= 0 ? f[un] : '')?.trim()
     const interp = (ti >= 0 ? f[ti] : '')?.trim().split(/[;,]/)[0]?.replace(/:\d+$/, '').trim()
-    const name = named && named !== '-' ? named : interp && interp !== '-' ? interp : null
+    const none = (x: string | undefined): boolean => !x || x === '-' || x === '?'
+    const name = !none(named) ? named! : !none(interp) ? interp! : null
     best = { delta: f[d].trim(), spectra: n, name }
   }
   return best
@@ -505,7 +506,7 @@ export function buildOverview(i: OverviewInputs): Overview {
   if (fewPlaced && (given(i.params['delta_out']) || given(i.params['delta_counts_out']) || given(i.params['recon_out'])))
     checks.push({
       tone: 'flag',
-      text: `${placed === 0 ? 'No spectrum is placed' : `Only ${fmt(placed)} spectra are placed`} on the database: too few for any conclusion about modifications or alkylation (the Mass shifts tab asks for ${LOW_PLACED}).`
+      text: `${placed === 0 ? 'No spectrum is placed' : `Only ${fmt(placed)} spectra are placed`} on the database: too few for any conclusion about modifications or alkylation (the Mass shifts tab asks for ${LOW_PLACED} placed spectra).`
     })
   if (!cutoffApplied)
     checks.push({

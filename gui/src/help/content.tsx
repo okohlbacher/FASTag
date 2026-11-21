@@ -80,7 +80,7 @@ export const START: HelpPage = {
           </p>
           <ol>
             <li>
-              Under Input, click <strong>Choose file…</strong> and pick a spectra file: mzML, mzPeak or MGF (see{' '}
+              Under Input, click <strong>Choose file…</strong> and pick a spectra file: mzML, mzPeak, MGF, Thermo .raw or timsTOF .d.zip (see{' '}
               <L to="files-inputs">Input files</L>).
             </li>
             <li>
@@ -104,8 +104,8 @@ export const START: HelpPage = {
             </li>
           </ol>
           <p>
-            For a QC survey, choose <strong>Characterize a run</strong>; for many files, switch the Input card to
-            <strong> Batch</strong>. It samples 10% of the spectra and enables the species, digest, label and glyco reports (the alkylation report on request), opening on{' '}
+            For run metrics, choose <strong>Run QC</strong>. For protease, labels, glycopeptides and species, choose{' '}
+            <strong>Characterize a run</strong>; for many files, switch the Input card to <strong>Batch</strong>. Characterize samples 10% of the spectra and enables the species, digest, label and glyco reports (the alkylation report on request), opening on{' '}
             <L to="workflow-overview">Overview</L>. A report that says “not assessed” or “no call” is not evidence
             that a feature is absent.
           </p>

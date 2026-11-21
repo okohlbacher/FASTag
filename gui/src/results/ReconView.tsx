@@ -127,10 +127,10 @@ function extensionOf(params: Record<string, unknown>): number {
 /// recorded: files opened from elsewhere). A mass-gap report a former run
 /// left there is another run's (round 14): the window stays assumed.
 /// null while unknown.
-function useSiblingWindow(deltaPath: string | undefined, skip: boolean): number | null {
+function useSiblingWindow(deltaPath: string | undefined, skip: boolean, gen = 0): number | null {
   const [found, setFound] = useState<{ at: string; win: number | null } | null>(null)
   const sib = deltaPath && !skip ? siblingMassgap(deltaPath) : null
-  const key = sib && deltaPath ? `${deltaPath}\u0000${sib}` : null
+  const key = sib && deltaPath ? `${deltaPath}\u0000${sib}\u0000${gen}` : null
   useEffect(() => {
     if (!sib || !deltaPath || !key) return
     let live = true
@@ -184,7 +184,7 @@ export default function ReconView({ massgap, tables, gen = {}, notice, action, e
   const peaks = useMemo(() => (massgap ? gapPeaks(massgap) : []), [massgap])
   // The window the CLI matched with: the report's; else the sibling
   // report's; else assumed (and said so).
-  const sibWin = useSiblingWindow(tables.delta, !!massgap)
+  const sibWin = useSiblingWindow(tables.delta, !!massgap, gen.delta ?? 0)
   const reportWin = (massgap && num(value(massgap, 'run', 'window_da'))) ?? sibWin
   const win = reportWin ?? ASSUMED_WINDOW
   const winAssumed = reportWin == null
@@ -245,7 +245,7 @@ export default function ReconView({ massgap, tables, gen = {}, notice, action, e
             <strong>
               {placed === 0 ? 'No spectrum is placed' : `Only ${fmt(placed)} spectra are placed`} on the database.
             </strong>{' '}
-            That is too few for any conclusion about modifications or alkylation (this view asks for {LOW_PLACED}).
+            That is too few for any conclusion about modifications or alkylation (this view asks for {LOW_PLACED} placed spectra).
             {placed === 0 && ' Tags may be shorter than the recon index needs; its log line names the minimum length.'}
             {' Placements use tryptic peptides: a run digested with another protease places fewer tags.'}
           </span>
