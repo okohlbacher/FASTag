@@ -1,6 +1,8 @@
 # Changelog
 
-## Unreleased
+## 1.15.7 (2026-11-21)
+
+Ion-trap spectra in mzML files written by OpenMS now get the ion-trap tolerance, and the GUI Spectrum panel shows the peaks their tags come from.
 
 - **Ion-trap spectra in mzML with userParam filter strings.** OpenMS writes the Thermo filter string as a spectrum
   `userParam`; the fast mzML reader read only the `cvParam` (MS:1000512), so `-tolerance_by_analyzer` tagged such ion-trap

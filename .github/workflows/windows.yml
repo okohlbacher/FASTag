@@ -968,13 +968,15 @@ jobs:
           # module: mi_is_redirected() via FASTAG_TIMING, and mimalloc's own
           # MIMALLOC_VERBOSE report.
           FASTAG_TIMING=1 MIMALLOC_VERBOSE=1 PATH="$CLEAN_PATH" "$GITHUB_WORKSPACE/dist/FASTag/FASTag.bat" \
-            -in "$MZ" -out "$BW/mi.tsv" -threads 2 > "$BW/mi.log" 2>&1 \
+            -in "$MZ" -out "$BW/mi.tsv" -threads 2 \
+            -fragment_tolerance 20 -fragment_tolerance_unit ppm -tolerance_by_analyzer off > "$BW/mi.log" 2>&1 \
             || { cat "$BW/mi.log"; echo "::error::the shipped bundle failed with MIMALLOC_VERBOSE=1"; exit 1; }
           grep -E "FASTAG_ALLOC|mimalloc: malloc" "$BW/mi.log"
           if ! grep -q "FASTAG_ALLOC allocator=mimalloc version=[0-9]* redirected=1" "$BW/mi.log" \
              || ! grep -q "mimalloc: malloc is redirected" "$BW/mi.log"; then
             cat "$BW/mi.log"; echo "::error::the shipped bundle does not redirect the CRT heap to mimalloc"; exit 1
           fi
+          # Same options as the ml.tsv run above (the example is ion trap since 1.15.7).
           cmp -s "$BW/ml.tsv" "$BW/mi.tsv" || { echo "::error::bundle tags differ between runs"; exit 1; }
           # The vendor readers through the shipped bundle, without the job's
           # DOTNET_ROOT: the bundle's own dotnet/ must serve.
