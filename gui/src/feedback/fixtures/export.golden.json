@@ -1,0 +1,79 @@
+{
+  "annotations": 2,
+  "app": {
+    "build_date": "2026-11-21T10:00:00Z",
+    "channel": "release",
+    "commit": "2f9777a2c0ffee00000000000000000000000000",
+    "dirty": false,
+    "version": "1.15.6"
+  },
+  "capture": {
+    "height": 20,
+    "method": "native",
+    "status": "ok",
+    "width": 40
+  },
+  "created_utc": "2026-11-18T09:46:40Z",
+  "engine": {
+    "source": "bundled",
+    "version": "1.15.6"
+  },
+  "id": "0f8e2a4c-1b3d-4e5f-9a7b-6c5d4e3f2a1b",
+  "kind": "bug",
+  "log": [
+    "species: no taxdb at <home>/taxonomy",
+    "TypeError: x is undefined\n    at SpeciesPanel (SpeciesPanel.tsx:12)"
+  ],
+  "params": {
+    "extension": 2,
+    "fragment_tolerance_unit": "ppm",
+    "in": {
+      "ext": "mzML",
+      "role": "input"
+    },
+    "out": {
+      "ext": "tsv",
+      "role": "output"
+    },
+    "species": true,
+    "subsample_fraction": 0.1,
+    "taxdb": null
+  },
+  "platform": {
+    "arch": "aarch64",
+    "locale": "en-US",
+    "os": "macos",
+    "os_version": "26.1",
+    "webview": "wkwebview",
+    "webview_version": "621.1.15.10.7"
+  },
+  "run": {
+    "argv": [
+      "FASTag",
+      "-in",
+      "<input.mzML>",
+      "-out",
+      "<output.tsv>",
+      "-species",
+      "-extension",
+      "2"
+    ],
+    "duration_s": 12.5,
+    "exit_code": 0,
+    "phase": "writing_reports",
+    "status": "succeeded"
+  },
+  "schema": "fastag-feedback-public/1",
+  "title": "Species tab stays empty after a Characterize run",
+  "view": {
+    "tab": "species",
+    "view": "results",
+    "workflow": "characterize"
+  },
+  "window": {
+    "dpr": 2.0,
+    "height": 800,
+    "theme": "dark",
+    "width": 1200
+  }
+}

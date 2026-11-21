@@ -1,0 +1,76 @@
+name: Feedback from the desktop app
+description: A report made with the Feedback button in the FASTag desktop app (bug, UI problem, idea or question).
+labels: [feedback, needs-triage]
+# The desktop app opens this form as
+#   /issues/new?template=feedback.yml&title=...&report-id=...&kind=...
+# and prefills only those text fields. The ids below are the contract with the
+# app (gui/) and with tools/feedback_triage.py: do not rename them.
+body:
+  - type: markdown
+    attributes:
+      value: |
+        **This issue is public.** Anyone can read it, and it is hard to delete completely once posted.
+        Attach only what the app's preview showed you. Do not post patient data, sample names or file paths.
+        Security problems go through SECURITY.md, not here.
+  - type: input
+    id: kind
+    attributes:
+      label: Kind
+      description: "One of: bug, ui, idea, question (the app fills this in)."
+      placeholder: bug
+    validations:
+      required: true
+  - type: input
+    id: report-id
+    attributes:
+      label: Report id
+      description: The id the app shows for this report (the app fills this in).
+      placeholder: 00000000-0000-4000-8000-000000000000
+    validations:
+      required: true
+  - type: textarea
+    id: summary
+    attributes:
+      label: Summary
+      description: What happened, or what you would like. Refer to numbered marks on the screenshot as "see 2".
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      description: For a bug. Leave empty otherwise.
+      placeholder: |
+        1. Open ...
+        2. Click ...
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected
+      description: For a bug. Leave empty otherwise.
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual
+      description: For a bug. Leave empty otherwise.
+  - type: textarea
+    id: diagnostics
+    attributes:
+      label: Diagnostics
+      description: In the app, click **Copy diagnostics** and paste here. Paste it unchanged; it is checked automatically.
+      render: json
+  - type: upload
+    id: attachment
+    attributes:
+      label: Report file
+      description: "Drop the `<report id>.feedback.zip` the app revealed (diagnostics and, if you kept it, the annotated screenshot)."
+    validations:
+      required: false
+      accept: ".zip"
+  - type: checkboxes
+    id: privacy
+    attributes:
+      label: Privacy
+      options:
+        - label: I reviewed what I attach and it holds no personal or patient data
+          required: true

@@ -5,6 +5,11 @@ import App from './App'
 import type { Origin } from './setup/tasks'
 import { applyTheme, loadTheme } from './app/theme'
 import './index.css'
+import './feedback/feedback.css'
+import { installConsoleRing } from './feedback/consoleRing'
+
+// The last errors and warnings, for a feedback report (feedback/).
+installConsoleRing()
 
 // The remembered theme before the first paint (no light flash in dark).
 applyTheme(loadTheme())

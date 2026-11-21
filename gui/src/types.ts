@@ -307,7 +307,10 @@ declare global {
   }
 }
 
-export interface FastagApi {
+// In-app feedback (feedback/types.ts FeedbackApi, src-tauri/src/feedback.rs).
+import type { FeedbackApi } from './feedback/types'
+
+export interface FastagApi extends FeedbackApi {
   loadSettings: () => Promise<Settings>
   saveLast: (values: Record<string, unknown>) => Promise<boolean>
   savePreset: (name: string, values: Record<string, unknown>) => Promise<boolean>

@@ -6,6 +6,8 @@ mod drop;
 mod events;
 mod examples;
 mod fastag;
+mod feedback;
+mod feedback_capture;
 mod history;
 mod ini;
 mod inspect;
@@ -104,6 +106,14 @@ pub fn run() {
                 window = window.additional_browser_args(&args);
             }
             window.build()?;
+            #[cfg(debug_assertions)]
+            if let Some(out) = std::env::var_os(feedback_capture::SELFTEST) {
+                let handle = app.handle().clone();
+                std::thread::spawn(move || {
+                    let code = feedback_capture::self_test(&handle, std::path::Path::new(&out));
+                    handle.exit(code);
+                });
+            }
             if let Some(out) = std::env::var_os(fastag::SELFTEST_OUT) {
                 let handle = app.handle().clone();
                 std::thread::spawn(move || {
@@ -157,6 +167,16 @@ pub fn run() {
             sweep::leftovers_list,
             sweep::leftovers_sweep,
             sweep::leftovers_keep,
+            feedback_capture::feedback_capture,
+            feedback_capture::feedback_platform,
+            feedback_capture::feedback_run,
+            feedback::feedback_save,
+            feedback::feedback_list,
+            feedback::feedback_delete,
+            feedback::feedback_delete_all,
+            feedback::feedback_reveal,
+            feedback::feedback_export,
+            feedback::feedback_set_status,
         ])
         .on_window_event(|window, event| match event {
             // Closing the window while a run or batch is active asks first
@@ -204,4 +224,50 @@ pub fn run() {
             }
             _ => {}
         });
+}
+
+#[cfg(test)]
+mod command_acl_tests {
+    include!("app_commands.rs");
+
+    fn handler_commands() -> Vec<String> {
+        let src = include_str!("lib.rs");
+        let start = src.find("generate_handler![").expect("generate_handler!");
+        let body = &src[start..src[start..].find("])").unwrap() + start];
+        body.lines().filter_map(|l| l.trim().strip_suffix(',')).filter_map(|l| l.rsplit("::").next()).map(str::to_string).collect()
+    }
+
+    fn granted(file: &str) -> Vec<serde_json::Value> {
+        let v: serde_json::Value = serde_json::from_str(file).unwrap();
+        v["permissions"].as_array().unwrap().clone()
+    }
+
+    /// Every command is registered, has a permission and is granted, once.
+    #[test]
+    fn commands_manifest_and_capabilities_agree() {
+        let listed: Vec<String> = APP_COMMANDS.iter().map(|s| s.to_string()).collect();
+        assert_eq!(handler_commands(), listed, "lib.rs generate_handler! vs src/app_commands.rs");
+        let mut perms: Vec<String> = granted(include_str!("../capabilities/default.json"))
+            .into_iter()
+            .chain(granted(include_str!("../capabilities/feedback.json")))
+            .filter_map(|p| p.as_str().and_then(|s| s.strip_prefix("allow-")).map(|s| s.replace('-', "_")))
+            .collect();
+        perms.sort();
+        let mut want = listed.clone();
+        want.sort();
+        assert_eq!(perms, want, "capabilities grant exactly the app's commands");
+    }
+
+    /// The feedback capability opens one URL pattern: the issue form.
+    #[test]
+    fn the_feedback_opener_is_scoped_to_the_issue_form() {
+        let fb = granted(include_str!("../capabilities/feedback.json"));
+        let opener: Vec<&serde_json::Value> = fb.iter().filter(|p| p.get("identifier").is_some()).collect();
+        assert_eq!(opener.len(), 1);
+        assert_eq!(opener[0]["identifier"], "opener:allow-open-url");
+        assert_eq!(opener[0]["allow"], serde_json::json!([{ "url": "https://github.com/okohlbacher/FASTag/issues/new*" }]));
+        for p in fb.iter().filter_map(|p| p.as_str()) {
+            assert!(p.starts_with("allow-feedback-"), "{p}");
+        }
+    }
 }

@@ -11,7 +11,7 @@ import type { BinaryInfo } from '../types'
 export const THERMO_NOTICE =
   'RawFileReader reading tool. Copyright \u00a9 2016 by Thermo Fisher Scientific, Inc. All rights reserved.'
 
-export default function AboutDialog({ bin, onClose }: { bin: BinaryInfo | null; onClose(): void }): JSX.Element {
+export default function AboutDialog({ bin, onClose, onFeedbackReports }: { bin: BinaryInfo | null; onClose(): void; onFeedbackReports?(): void }): JSX.Element {
   const box = useRef<HTMLDivElement>(null)
   const onKeyDown = useModal(box, onClose)
   return (
@@ -36,6 +36,11 @@ export default function AboutDialog({ bin, onClose }: { bin: BinaryInfo | null; 
           Thermo .raw input, in the builds that include it: {THERMO_NOTICE}
         </p>
         <div className="row actions">
+          {onFeedbackReports && (
+            <button type="button" className="secondary" onClick={onFeedbackReports}>
+              Feedback reports…
+            </button>
+          )}
           <button type="button" className="secondary" autoFocus onClick={onClose}>
             Close
           </button>

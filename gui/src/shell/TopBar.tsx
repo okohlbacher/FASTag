@@ -1,6 +1,6 @@
 // The top bar (GUI-DESIGN 2 "Persistent chrome", P2a PR s): the v6 logo,
 // the view switcher (Cmd+1..4), the progress pill, the theme, the Help
-// toggle (Cmd+?, F1) and the OpenMS mark.
+// toggle (Cmd+?, F1), Feedback (Cmd+Shift+F) and the OpenMS mark.
 
 import type { JSX } from 'react'
 import type { BinaryInfo } from '../types'
@@ -123,6 +123,10 @@ export interface TopBarProps {
   onTheme(t: Theme): void
   helpOpen: boolean
   onHelp(): void
+  // In-app feedback (feedback/): the one capture path; busy while the
+  // screenshot is taken.
+  onFeedback(): void
+  feedbackBusy: boolean
 }
 
 export default function TopBar(p: TopBarProps): JSX.Element {
@@ -170,6 +174,19 @@ export default function TopBar(p: TopBarProps): JSX.Element {
         onClick={() => p.onTheme(THEMES[(THEMES.findIndex((t) => t.id === p.theme) + 1) % THEMES.length].id)}
       >
         <span aria-hidden="true">{p.theme === 'dark' ? '☾' : p.theme === 'light' ? '☀' : '◐'}</span>
+      </button>
+      {/* Feedback sits in the top bar's fixed right-hand group, beside Help:
+          the persistent chrome every view shares (bottom right holds the
+          toasts and the log drawer). */}
+      <button
+        type="button"
+        className="secondary small feedback-btn"
+        aria-keyshortcuts={isMac() ? 'Meta+Shift+F' : 'Control+Shift+F'}
+        aria-busy={p.feedbackBusy || undefined}
+        title={`Send feedback: a report with a screenshot, kept on this computer (${isMac() ? '⌘⇧F' : 'Ctrl+Shift+F'})`}
+        onClick={p.onFeedback}
+      >
+        Feedback
       </button>
       <button
         type="button"

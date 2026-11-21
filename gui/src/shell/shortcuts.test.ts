@@ -53,8 +53,16 @@ describe('P2a shortcuts', () => {
       'theme-dark',
       'help',
       'faq',
+      'feedback',
       'about'
     ]
     expect([...ACTIONS].sort()).toEqual([...menu].sort())
+  })
+
+  it('Cmd+Shift+F (Ctrl+Shift+F) asks for feedback, clashing with no other shortcut', () => {
+    expect(actionOfKey(ev('F', { metaKey: true, shiftKey: true }), true)).toBe('feedback')
+    expect(actionOfKey(ev('F', { ctrlKey: true, shiftKey: true }), false)).toBe('feedback')
+    expect(actionOfKey(ev('f', { metaKey: true }), true)).toBeNull()
+    expect(actionOfKey(ev('F', { metaKey: true, shiftKey: true, altKey: true }), true)).toBeNull()
   })
 })

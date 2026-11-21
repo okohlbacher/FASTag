@@ -277,6 +277,36 @@ export const START: HelpPage = {
           </p>
         </>
       )
+    },
+    {
+      id: 'start-feedback',
+      title: 'Reporting a problem (Feedback)',
+      body: (
+        <>
+          <p>
+            <strong>Feedback</strong> in the top bar (also Help › Send Feedback…, Cmd/Ctrl+Shift+F) takes a screenshot
+            of the window, notes the app and engine versions, the system, the view and the settings, and opens a
+            short form. <strong>Mark up…</strong> draws numbered boxes, arrows, lines and labels on the screenshot;
+            a <strong>Redaction</strong> blacks out what must not be seen, for good. <strong>Remove screenshot</strong>{' '}
+            leaves it out.
+          </p>
+          <p>
+            <strong>Save</strong> keeps the report on this computer only, in the app&apos;s data folder under{' '}
+            <code>feedback</code> (a <code>report.json</code> and the marked-up <code>screenshot.png</code>);
+            nothing is sent. Reports are kept for 180 days or until you delete them (Saved reports…, or About ›
+            Feedback reports…). Settings are stored as values only: file paths become their role and extension,
+            and free text from the settings is left out.
+          </p>
+          <p>
+            Sharing is a separate step. It shows exactly what would be sent, field by field: the title, kind,
+            diagnostics (on by default), and only if you tick them the screenshot and the scrubbed log of recent
+            errors. <strong>Open issue draft</strong> opens a GitHub issue form (with the title, report id and kind)
+            and shows the report&apos;s <code>.feedback.zip</code> to attach; <strong>Copy diagnostics</strong> copies
+            the same data. A GitHub issue is public and hard to delete: never share screenshots or text that
+            identify a person, a patient or an unpublished sample.
+          </p>
+        </>
+      )
     }
   ]
 }

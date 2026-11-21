@@ -39,6 +39,20 @@ import runStartedFixture from './fixtures/run-started.json'
 import manifest from '../params.generated.json'
 import { tagsToDenovo } from '../export/denovo'
 import { forgetTables } from '../results/tableStore'
+import { publicExport } from '../feedback/publicExport'
+import { issueUrl } from '../feedback/issueUrl'
+import type { FeedbackPlatform, FeedbackReport, Include, NativeCapture, ReportStatus, RunInfo } from '../feedback/types'
+
+/// A UUID v4 for the mock's reports (the backend makes them in feedback.rs).
+function uuid4(): string {
+  const b = new Uint8Array(16)
+  if (globalThis.crypto?.getRandomValues) globalThis.crypto.getRandomValues(b)
+  else for (let i = 0; i < 16; i++) b[i] = Math.floor(Math.random() * 256)
+  b[6] = (b[6] & 0x0f) | 0x40
+  b[8] = (b[8] & 0x3f) | 0x80
+  const h = Array.from(b, (x) => x.toString(16).padStart(2, '0')).join('')
+  return `${h.slice(0, 8)}-${h.slice(8, 12)}-${h.slice(12, 16)}-${h.slice(16, 20)}-${h.slice(20)}`
+}
 
 // As outputs.rs is_proteome_file: -alkylation_proteome names a FASTA unless
 // it is a shipped proteome's name.
@@ -210,6 +224,20 @@ export interface MockBridge extends FastagApi {
   emitDrop(route: Partial<DropRoute>): void
   emitDragHover(over: boolean): void
   notifyCalls: { title: string; body: string }[]
+  // In-app feedback: what feedbackCapture answers (default: no native
+  // webview, as in a browser, so the DOM rasteriser draws the screenshot),
+  // the platform and run record, the saved reports (report.json as the
+  // backend would write it, and the PNG), every export (its JSON) and the
+  // issue drafts opened.
+  nativeCapture: NativeCapture
+  feedbackPlatformResult: FeedbackPlatform
+  feedbackRunResult: RunInfo | null
+  feedbackRunCalls: (string | null)[]
+  feedbackReports: { report: FeedbackReport; png: Uint8Array | null; folder: string; zip: string | null }[]
+  feedbackSaveError: string | null
+  feedbackExports: { id: string; include: Include; json: string }[]
+  feedbackIssues: { title: string; reportId: string; kind: string; url: string }[]
+  feedbackRevealCalls: string[]
   holdRun(): void
   // With @p error: the held invoke replies fail (an invoke that fails after
   // its Done: the job settles without outputs, runJob.ts).
@@ -452,6 +480,26 @@ export function installMockBridge(): MockBridge {
     },
     emitDragHover: (over) => hoverListeners.slice().forEach((cb) => cb(over)),
     notifyCalls: [],
+    nativeCapture: { status: 'failed', method: 'none', api: null, width: 0, height: 0, scale: 0, error: 'no native webview in the browser build', png: null },
+    feedbackPlatformResult: {
+      os: 'other',
+      os_version: '',
+      arch: 'x86_64',
+      webview: 'browser',
+      webview_version: '',
+      display_scale: 1,
+      engine_source: 'bundled',
+      engine_bin_size: 1234,
+      home: '/Users/tester',
+      user: 'tester'
+    },
+    feedbackRunResult: null,
+    feedbackRunCalls: [],
+    feedbackReports: [],
+    feedbackSaveError: null,
+    feedbackExports: [],
+    feedbackIssues: [],
+    feedbackRevealCalls: [],
     holdRun: () => {
       held = held ?? []
     },
@@ -756,6 +804,96 @@ export function installMockBridge(): MockBridge {
     notify: (title, body) => {
       mock.notifyCalls.push({ title, body })
       return Promise.resolve()
+    },
+
+    feedbackCapture: () => Promise.resolve({ ...mock.nativeCapture }),
+    feedbackPlatform: () => Promise.resolve({ ...mock.feedbackPlatformResult }),
+    feedbackRun: (out) => {
+      mock.feedbackRunCalls.push(out)
+      return Promise.resolve(mock.feedbackRunResult)
+    },
+    // As feedback.rs save: the backend's fields set here, never taken from
+    // the draft.
+    feedbackSave: (draft, png) => {
+      if (mock.feedbackSaveError) return Promise.reject(new Error(mock.feedbackSaveError))
+      if (!draft.title.trim()) return Promise.reject(new Error('the title is empty'))
+      const now = new Date()
+      const id = uuid4()
+      const stamp = now.toISOString().replace(/\.\d+Z$/, 'Z')
+      const report: FeedbackReport = {
+        ...JSON.parse(JSON.stringify(draft)),
+        schema: 'fastag-feedback/1',
+        id,
+        created_utc: stamp,
+        tz_offset_min: -now.getTimezoneOffset(),
+        status: 'saved',
+        issue_url: null
+      }
+      const folder = `/feedback/${stamp.replace(/[-:]/g, '')}_${id.slice(0, 8)}`
+      mock.feedbackReports.unshift({ report, png: png ? png.slice() : null, folder, zip: null })
+      return Promise.resolve({ id, folder, created_utc: stamp, status: 'saved' as ReportStatus })
+    },
+    feedbackList: () =>
+      Promise.resolve(
+        mock.feedbackReports.map((r) => ({
+          id: r.report.id,
+          folder: r.folder,
+          created_utc: r.report.created_utc,
+          kind: r.report.kind,
+          title: r.report.title,
+          status: r.report.status,
+          issue_url: r.report.issue_url,
+          screenshot: !!r.png,
+          zip: r.zip,
+          bytes: JSON.stringify(r.report).length + (r.png?.length ?? 0)
+        }))
+      ),
+    feedbackDelete: (id) => {
+      const i = mock.feedbackReports.findIndex((r) => r.report.id === id)
+      if (i < 0) return Promise.reject(new Error(`no feedback report ${id}`))
+      mock.feedbackReports.splice(i, 1)
+      return Promise.resolve()
+    },
+    feedbackDeleteAll: () => {
+      const n = mock.feedbackReports.length
+      mock.feedbackReports = []
+      return Promise.resolve(n)
+    },
+    feedbackReveal: (id) => {
+      mock.feedbackRevealCalls.push(id)
+      return Promise.resolve()
+    },
+    // As feedback.rs export (publicExport is its port).
+    feedbackExport: (id, include) => {
+      const r = mock.feedbackReports.find((x) => x.report.id === id)
+      if (!r) return Promise.reject(new Error(`no feedback report ${id}`))
+      const json = JSON.stringify(publicExport(r.report, include, !!r.png), null, 2)
+      r.zip = `${r.folder}/${id}.feedback.zip`
+      mock.feedbackExports.push({ id, include: { ...include }, json })
+      const size = (png: Uint8Array): { width: number; height: number } => {
+        const v = new DataView(png.buffer, png.byteOffset, png.byteLength)
+        return png.length >= 24 ? { width: v.getUint32(16), height: v.getUint32(20) } : { width: 0, height: 0 }
+      }
+      return Promise.resolve({ zip: r.zip, json, image: include.screenshot && r.png ? { bytes: r.png.length, ...size(r.png) } : null })
+    },
+    feedbackSetStatus: (id, status, url) => {
+      const r = mock.feedbackReports.find((x) => x.report.id === id)
+      if (!r) return Promise.reject(new Error(`no feedback report ${id}`))
+      const rank = ['saved', 'handoff_opened', 'submitted']
+      if (rank.indexOf(status) < rank.indexOf(r.report.status)) return Promise.reject(new Error('a report cannot go back'))
+      if (status === 'submitted') {
+        if (!url || !/^https:\/\/github\.com\/okohlbacher\/FASTag\/issues\/[0-9]{1,9}$/.test(url.trim()))
+          return Promise.reject(new Error('paste the issue’s address (https://github.com/okohlbacher/FASTag/issues/<number>)'))
+        r.report.issue_url = url.trim()
+      }
+      r.report.status = status
+      return Promise.resolve()
+    },
+    openFeedbackIssue: (d) => {
+      const url = issueUrl(d)
+      if (!url) return Promise.resolve(false)
+      mock.feedbackIssues.push({ ...d, url })
+      return Promise.resolve(true)
     }
   }
 

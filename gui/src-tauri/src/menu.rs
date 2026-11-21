@@ -13,7 +13,8 @@
 //   Run:  Run Cmd+Enter; Cancel Cmd+. (Esc in the webview)
 //   View: Setup, Results, Batch, History Cmd+1..4; Search parameters Cmd+K;
 //         Theme: System, Light, Dark
-//   Help: Help Cmd+? (F1 in the webview), FAQ, About
+//   Help: Help Cmd+? (F1 in the webview), FAQ, Send Feedback… Cmd+Shift+F,
+//         About
 
 use tauri::menu::{Menu, MenuItem, PredefinedMenuItem, Submenu};
 use tauri::{AppHandle, Runtime};
@@ -70,6 +71,9 @@ pub const HELP: &[Item] = &[
     // Cmd+? is Cmd+Shift+/ on a US layout.
     Item { id: "help", label: "FASTag Help", accel: Some("CmdOrCtrl+Shift+Slash") },
     Item { id: "faq", label: "FAQ and Troubleshooting", accel: None },
+    // In-app feedback (feedback.rs): the same capture path as the top
+    // bar's Feedback button and the webview's own Cmd+Shift+F.
+    Item { id: "feedback", label: "Send Feedback…", accel: Some("CmdOrCtrl+Shift+F") },
     Item { id: "about", label: "About FASTag", accel: None },
 ];
 
@@ -285,7 +289,8 @@ mod tests {
         assert_eq!(ids(VIEWS), ["view-setup", "view-results", "view-batch", "view-history"]);
         assert_eq!(ids(SEARCH), ["search-params"]);
         assert_eq!(ids(THEMES), ["theme-system", "theme-light", "theme-dark"]);
-        assert_eq!(ids(HELP), ["help", "faq", "about"]);
+        assert_eq!(ids(HELP), ["help", "faq", "feedback", "about"]);
+        assert_eq!(accel("feedback"), Some("CmdOrCtrl+Shift+F"));
         assert_eq!(accel("open-results"), Some("CmdOrCtrl+Shift+O"));
         for (i, v) in VIEWS.iter().enumerate() {
             assert_eq!(v.accel, Some(["CmdOrCtrl+1", "CmdOrCtrl+2", "CmdOrCtrl+3", "CmdOrCtrl+4"][i]));

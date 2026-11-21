@@ -27,6 +27,8 @@ import { useTheme, type Theme } from './app/theme'
 import TopBar from './shell/TopBar'
 import HistoryView from './shell/HistoryView'
 import AboutDialog from './shell/AboutDialog'
+import FeedbackDialog from './feedback/FeedbackDialog'
+import { useFeedback } from './feedback/useFeedback'
 import { useDrops } from './shell/useDrops'
 import { CloseQuestion, OverwriteQuestion } from './shell/Questions'
 import Notices, { type Toast } from './shell/Notices'
@@ -125,6 +127,28 @@ export default function App({ start = LANDING }: { start?: Origin } = {}): JSX.E
   const [rerunWith, setRerunWith] = useState<CheckFix | null>(null)
 
   const help = useHelp()
+  // In-app feedback (feedback/): the button, Help > Send Feedback… and
+  // Cmd/Ctrl+Shift+F share one capture path; the state is read the moment
+  // a report is asked for.
+  const feedback = useFeedback(
+    () => ({
+      view: viewRef.current,
+      tab: viewStore.get().tab,
+      workflow: taskRef.current ?? null,
+      mode: session.mode === 'batch' || jobs.length > 0 ? 'batch' : 'single',
+      dialog: closeAsk ? 'close-question' : run.overwriteAsk ? 'overwrite-question' : aboutOpen ? 'about' : searchOpen ? 'parameter_search' : null,
+      helpOpen: help.open,
+      values,
+      input,
+      out,
+      running: running || batchRunning,
+      phase: run.phase,
+      shownOut: run.shown?.out ?? run.lastRun?.out ?? null,
+      themeSetting: theme
+    }),
+    bin
+  )
+  const feedbackOpen = !!feedback.session || feedback.reportsOnly
   // F1, ?, Esc, the Cmd/Ctrl shortcuts and the native menus (shell/useKeys.ts).
   useKeys(help.open, (a) => actRef.current(a), () => escRef.current())
 
@@ -275,7 +299,7 @@ export default function App({ start = LANDING }: { start?: Origin } = {}): JSX.E
   // toast) first, so dismissing one never kills a run; else cancels a run
   // when no question or dialog is open.
   const escape = (): boolean => {
-    if (closeAsk || run.overwriteAsk || aboutOpen || searchOpen) return false
+    if (closeAsk || run.overwriteAsk || aboutOpen || searchOpen || feedbackOpen) return false
     if (dropNote) {
       dismissNote()
       return true
@@ -454,7 +478,7 @@ export default function App({ start = LANDING }: { start?: Origin } = {}): JSX.E
     // A question or About is open: shortcuts and native menu items reach
     // here past its inert background; only a view change goes through (Run
     // would ask the overwrite question again over the pending one).
-    if (!v && (closeAsk || run.overwriteAsk || aboutOpen)) return
+    if (!v && (closeAsk || run.overwriteAsk || aboutOpen || feedbackOpen)) return
     // The parameter search closes for any other action.
     if (searchOpen && a !== 'search-params') setSearchOpen(false)
     if (v) {
@@ -507,6 +531,9 @@ export default function App({ start = LANDING }: { start?: Origin } = {}): JSX.E
         break
       case 'about':
         setAboutOpen(true)
+        break
+      case 'feedback':
+        feedback.trigger()
         break
       case 'theme-system':
       case 'theme-light':
@@ -598,7 +625,19 @@ export default function App({ start = LANDING }: { start?: Origin } = {}): JSX.E
           }}
         />
       )}
-      {aboutOpen && <AboutDialog bin={bin} onClose={() => setAboutOpen(false)} />}
+      {aboutOpen && (
+        <AboutDialog
+          bin={bin}
+          onClose={() => setAboutOpen(false)}
+          onFeedbackReports={() => {
+            setAboutOpen(false)
+            feedback.openReports()
+          }}
+        />
+      )}
+      {feedbackOpen && (
+        <FeedbackDialog session={feedback.session} text={feedback.text} setText={feedback.setText} onSaved={feedback.saved} onClose={feedback.close} />
+      )}
       <TopBar
         bin={bin}
         view={view}
@@ -621,10 +660,15 @@ export default function App({ start = LANDING }: { start?: Origin } = {}): JSX.E
         onTheme={setTheme}
         helpOpen={help.open}
         onHelp={() => (help.open ? closeHelp() : openHelp())}
+        onFeedback={() => actRef.current('feedback')}
+        feedbackBusy={feedback.capturing}
       />
       {/* The run's live region: always in the page, whichever view is shown. */}
       <p className="sr-only" role="status">
         {announce}
+      </p>
+      <p className="sr-only feedback-status" role="status">
+        {feedback.capturing ? 'Taking a screenshot for the feedback report…' : ''}
       </p>
 
       <div className="shell">

@@ -1,0 +1,160 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/okohlbacher/FASTag/doc/feedback/feedback-public.schema.json",
+  "title": "FASTag feedback, public export (fastag-feedback-public/1)",
+  "description": "The export.json the desktop app writes into <id>.feedback.zip and copies for the issue form's Diagnostics field. Typed, allow-listed fields only: no paths (roles and extensions only), no file or sample names, no free text from settings, no environment. Every field except schema, id and kind may be missing; the app lists fields it shortened in 'truncated'. The local report (fastag-feedback/1) is a different, larger schema and never leaves the machine. tools/feedback_triage.py validates against this file with a built-in validator that supports only: type, enum, const, required, properties, additionalProperties, propertyNames, maxProperties, items, maxItems, minLength, maxLength, pattern, minimum, maximum, anyOf, $ref (local #/$defs/...).",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema", "id", "kind"],
+  "properties": {
+    "schema": { "const": "fastag-feedback-public/1" },
+    "id": { "$ref": "#/$defs/uuid" },
+    "created_utc": {
+      "type": "string",
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(\\.[0-9]{1,6})?Z$"
+    },
+    "kind": { "enum": ["bug", "ui", "idea", "question"] },
+    "title": { "type": "string", "maxLength": 120 },
+    "truncated": {
+      "description": "Top-level field names the app shortened or dropped to fit the export caps.",
+      "type": "array",
+      "maxItems": 20,
+      "items": { "$ref": "#/$defs/ident" }
+    },
+    "app": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "version": { "$ref": "#/$defs/semver" },
+        "commit": { "type": "string", "pattern": "^[0-9a-f]{7,40}$" },
+        "dirty": { "type": "boolean" },
+        "build_date": {
+          "type": "string",
+          "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}(T[0-9]{2}:[0-9]{2}:[0-9]{2}(\\.[0-9]{1,6})?Z)?$"
+        },
+        "channel": { "enum": ["release", "prerelease", "dev", "e2e"] }
+      }
+    },
+    "engine": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "version": { "$ref": "#/$defs/shortText" },
+        "source": { "enum": ["bundled", "override"] }
+      }
+    },
+    "platform": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "os": { "enum": ["macos", "windows", "linux"] },
+        "os_version": { "type": "string", "maxLength": 64, "pattern": "^[0-9A-Za-z ._()+-]*$" },
+        "arch": { "enum": ["aarch64", "x86_64", "arm", "x86"] },
+        "webview": { "enum": ["wkwebview", "webview2", "webkitgtk", "browser"] },
+        "webview_version": { "type": "string", "maxLength": 64, "pattern": "^[0-9A-Za-z ._()+-]*$" },
+        "locale": { "type": "string", "maxLength": 35, "pattern": "^[A-Za-z]{2,8}([_-][A-Za-z0-9]{1,8})*$" }
+      }
+    },
+    "window": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "width": { "type": "integer", "minimum": 0, "maximum": 100000 },
+        "height": { "type": "integer", "minimum": 0, "maximum": 100000 },
+        "dpr": { "type": "number", "minimum": 0, "maximum": 16 },
+        "theme": { "enum": ["light", "dark"] }
+      }
+    },
+    "view": {
+      "description": "Machine ids, never translated labels.",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "view": { "$ref": "#/$defs/ident" },
+        "workflow": { "$ref": "#/$defs/ident" },
+        "tab": { "$ref": "#/$defs/ident" },
+        "dialog": { "$ref": "#/$defs/ident" }
+      }
+    },
+    "params": {
+      "description": "Effective parameters from the app's allow-list, as typed scalars; paths as {role, ext}.",
+      "type": "object",
+      "maxProperties": 200,
+      "propertyNames": { "type": "string", "maxLength": 64, "pattern": "^[A-Za-z0-9_.-]+$" },
+      "additionalProperties": {
+        "anyOf": [
+          { "type": "null" },
+          { "type": "boolean" },
+          { "type": "number" },
+          { "$ref": "#/$defs/shortText" },
+          { "$ref": "#/$defs/pathRef" }
+        ]
+      }
+    },
+    "run": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "status": { "enum": ["none", "running", "succeeded", "failed", "cancelled"] },
+        "exit_code": { "type": ["integer", "null"], "minimum": -2147483648, "maximum": 4294967295 },
+        "phase": { "$ref": "#/$defs/ident" },
+        "message": { "type": "string", "maxLength": 2000 },
+        "duration_s": { "type": "number", "minimum": 0 },
+        "argv": {
+          "description": "The command line after redaction (paths replaced by <role.ext> placeholders).",
+          "type": "array",
+          "maxItems": 200,
+          "items": { "type": "string", "maxLength": 1000 }
+        }
+      }
+    },
+    "log": {
+      "description": "Opt-in: scrubbed errors and warnings, newest last.",
+      "type": "array",
+      "maxItems": 50,
+      "items": { "type": "string", "maxLength": 2000 }
+    },
+    "capture": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "status": { "enum": ["ok", "degraded", "failed", "removed", "none"] },
+        "method": { "enum": ["native", "dom", "none"] },
+        "width": { "type": "integer", "minimum": 0, "maximum": 2560 },
+        "height": { "type": "integer", "minimum": 0, "maximum": 2560 }
+      }
+    },
+    "annotations": {
+      "description": "Number of mark-up shapes on the attached screenshot.",
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 1000
+    }
+  },
+  "$defs": {
+    "uuid": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+    },
+    "semver": {
+      "type": "string",
+      "maxLength": 64,
+      "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+([-+][0-9A-Za-z.+-]+)?$"
+    },
+    "ident": {
+      "type": "string",
+      "maxLength": 64,
+      "pattern": "^[A-Za-z0-9_.:-]+$"
+    },
+    "shortText": { "type": "string", "maxLength": 200 },
+    "pathRef": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["role"],
+      "properties": {
+        "role": { "$ref": "#/$defs/ident" },
+        "ext": { "type": "string", "maxLength": 16, "pattern": "^[A-Za-z0-9.]*$" }
+      }
+    }
+  }
+}
