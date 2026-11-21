@@ -1,5 +1,57 @@
 # Changelog
 
+## 1.15.5 (2026-11-20)
+
+Ion-trap MS2 spectra are now tagged at their own tolerance (`-tolerance_by_analyzer`, default on; held-out PASS), and combined mass shifts such as Oxidation+Acetyl on a protein N-terminal Met are named. Orbitrap-only runs give the same tags as 1.15.4.
+
+- **Tolerance per MS2 analyzer (`-tolerance_by_analyzer`, default on; PREREG-lowres-defaults change B).**
+  Each MS2 spectrum is tagged with the tolerance of its analyzer: ion-trap (ITMS) spectra at
+  `-fragment_tolerance_itms` (0.5 Da) with a complement window measured on the run's ion-trap spectra,
+  Orbitrap, FT-ICR and TOF spectra at `-fragment_tolerance` as before. Ion-trap MS2 read at the 20 ppm
+  default gave about 10 % correct rank-1 tags (CPTAC colon development data) against 54 % at 0.5 Da.
+  Only the tags change; placement, mass-shift and other reports keep `-fragment_tolerance`. Not under
+  `-stream` or with mzPeak input. `off` restores 1.15.4 exactly; an Orbitrap-only run gives the same
+  tags either way.
+- **Complement window `auto` under a Da fragment tolerance (change A).** With
+  `-fragment_tolerance_unit Da` and no complement option given, the window is measured on the run
+  instead of the fixed 0.02 Da (not under `-stream` or with mzPeak input).
+- **Held-out test: PASS** (PREREG-lowres-defaults, frozen 2026-11-20, scored once): 61 runs from 4 PRIDE data sets (PXD000865 sub-projects and three new projects)
+  (35 ion trap, 16 mixed, 10 Orbitrap). Correct rank-1 tags on ion-trap spectra rise from 0.070 to 0.431. The new
+  defaults equal the best manual setting (+0.003, CI 0.000 to +0.019) and beat the best single global setting on
+  mixed runs (+0.049, CI +0.015 to +0.088). Orbitrap tags are byte-identical (10 of 10). Change A alone: +0.064.
+  The cost is the wider tolerance: 6.7 ms against 0.38 ms CPU per ion-trap MS2.
+- **Combined mass-shift names.** `-delta_out`'s `unimod` column now names a two-modification reading
+  first when it fits the row's most-supported localized site and the best single Unimod name does not
+  explain that site's residue. +58.005 on a protein N-terminal Met was named only
+  `Carboxymethyl@N-term`; it now reads `Oxidation+Acetyl@…` (sites M and Protein N-term) before `Carboxymethyl@N-term`
+  (seen in the PXD040281 FFPE survey). The `isobars` column, which already listed both, and rows
+  with a residue-specific best name (e.g. Dimethyl@K) are unchanged.
+
+## 1.15.4 (2026-11-20)
+
+Shortlist runs now use the tested shortlist recipe by default (`-shortlist_defaults plain` restores 1.15.3), and metaproteomes get a held-out-tested recommendation (`-shortlist_max_evalue 100`). Runs without a shortlist output are unchanged.
+
+- **The shortlist recipe is the default of every tryptic shortlist run.**
+  With `-shortlist_out`, `-fasta_out` or `-search_config_out` and
+  `-shortlist_protease trypsin` (the default), every option the user does not
+  give takes the value of doc/SHORTLIST.md's recipe: `-tag_length 4
+  -extension 6 -shortlist_gapped -shortlist_max_evalue 10
+  -shortlist_min_spectra 1 -recon_min_length 6 -recon_missed_cleavages 2`.
+  Before, only `-search_engine msfragger` took four of these. At the tagging
+  defaults (`-tag_length 3`, no extension) no tag reaches the reconciliation
+  length a real database derives (8 for 94k proteins, 9 for 870k), so
+  `-fasta_out` on a metaproteome database came out empty (exit 13). The log
+  line `Shortlist recipe defaults (...)` and the shortlist header name the
+  values applied; an option given on the command line or in an INI wins.
+  `-shortlist_defaults plain` restores the 1.15.3 defaults.
+- **Metaproteomes: `-shortlist_max_evalue 100`** with the recipe default. Held-out test on
+  PXD045390 (28 runs, three matrices): 96 % of the full-search peptides kept (lower 95 % bound 0.954),
+  every spiked organism >= 0.94, with 23 % of an 870k-protein database. The reduced search's FDR is
+  optimistic (more entrapment hits); see doc/SHORTLIST.md.
+  Runs without a shortlist output are unchanged. The recipe passed the
+  second MSFragger held-out test and failed the third, so it is a working
+  default, not a validated claim.
+
 ## 1.15.3 (2026-11-19)
 
 Reads SCIEX MS Data Converter mzML (before: every spectrum read as MS1), adds instrument model, serial number and start time to the run QC report, and lets `-census_ids` take identification files without q-values (`-census_ids_accept`). Default tag output on files that do not use mzML parameter groups is unchanged from 1.15.2.

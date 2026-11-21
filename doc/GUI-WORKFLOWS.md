@@ -2,7 +2,7 @@
 
 Status: design spec for branch `feat/gui-workflows`, 2026-11-19. GUI-only:
 no change to C++ sources or `gui/src/params.generated.json` (185 params,
-manifest of FASTag 1.15.3). It merges three proposals (workflows, peer tools,
+manifest of FASTag 1.15.3; the branch is merged with 1.15.5, see doc/GUI-REVIEW-2026-11-20.md). It merges three proposals (workflows, peer tools,
 adversarial critique). Decisions on conflicts are marked **Decision**.
 
 ## 0. Principles

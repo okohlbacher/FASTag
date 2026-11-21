@@ -213,6 +213,37 @@ TOPPFASTag::ExitCodes TOPPFASTag::main_(int, const char**)
   // stdout carries JSON lines only, sealed below as -stream seals its data
   // channel.
   const bool probe_mode = !getFlag_("stream") && !getStringOption_("probe_input").empty();
+
+  // 1.15.4: the shortlist recipe is the default of every tryptic shortlist run
+  // (before, only -search_engine msfragger with -search_config_out took part of
+  // it). At FASTag's tagging defaults (-tag_length 3, no extension) no tag
+  // reaches the reconciliation length a real database derives (8 for 94k
+  // proteins, 9 for 870k), so -fasta_out was empty (exit 13). The values are
+  // those of PREREG-msfragger2 (PASS; its repeat PREREG-exactonly FAILED, so
+  // they are a working default, not a validated claim). Another protease
+  // keeps the plain defaults. An option given on the command line or in an
+  // INI wins; the log and the shortlist header name what was applied.
+  {
+    const bool recipe_on = (!getStringOption_("shortlist_out").empty() || !getStringOption_("fasta_out").empty() ||
+                            !getStringOption_("search_config_out").empty()) &&
+                           getStringOption_("shortlist_protease") == "trypsin" &&
+                           getStringOption_("shortlist_defaults") == "recipe";
+    const auto take = [&](const char* name, const std::string& shown) {
+      const bool apply = recipe_on && !optionGiven_(name);
+      if (apply) recipe_defaults_ += std::string(recipe_defaults_.empty() ? "" : ", ") + "-" + name + " " + shown;
+      return apply;
+    };
+    if (!optionGiven_("tag_lengths") && take("tag_length", "4")) recipe_int_["tag_length"] = 4;
+    if (take("extension", "6")) recipe_int_["extension"] = 6;
+    if (take("shortlist_min_spectra", "1")) recipe_int_["shortlist_min_spectra"] = 1;
+    if (take("recon_min_length", "6")) recipe_int_["recon_min_length"] = 6;
+    if (take("recon_missed_cleavages", "2")) recipe_int_["recon_missed_cleavages"] = 2;
+    recipe_gapped_ = take("shortlist_gapped", "on");
+    recipe_evalue_ = take("shortlist_max_evalue", "10");
+    if (!recipe_defaults_.empty())
+      OPENMS_LOG_INFO << "Shortlist recipe defaults (doc/SHORTLIST.md): " << recipe_defaults_
+                      << "; an option given on the command line or in an INI wins." << std::endl;
+  }
   const bool dump_mode = !getFlag_("stream") && !getStringOption_("dump_spectrum").empty();
 
   if (getIntOption_("threads") == 0)
@@ -279,7 +310,7 @@ TOPPFASTag::ExitCodes TOPPFASTag::main_(int, const char**)
   const IntList tag_lengths = getIntList_("tag_lengths");
   const std::set<int> distinct_lengths(tag_lengths.begin(), tag_lengths.end());
   std::vector<int> lengths(distinct_lengths.begin(), distinct_lengths.end());
-  if (lengths.empty()) lengths.push_back(getIntOption_("tag_length"));
+  if (lengths.empty()) lengths.push_back(intOption_("tag_length"));
   else if (getIntOption_("tag_length") != static_cast<int>(findEntry_("tag_length").default_value)
            && !distinct_lengths.count(getIntOption_("tag_length")))
     OPENMS_LOG_WARN << "tag_length " << getIntOption_("tag_length")
@@ -339,11 +370,11 @@ TOPPFASTag::ExitCodes TOPPFASTag::main_(int, const char**)
     const int index_k = probe_taxdb.empty() ? -1 : peekTaxdbK_(probe_taxdb);
     if (index_k > 0)
     {
-      const int reach = lengths.back() + 2 * getIntOption_("extension");
+      const int reach = lengths.back() + 2 * intOption_("extension");
       if (reach < index_k)
       {
         OPENMS_LOG_ERROR << "-species: tag_length (" << lengths.back()
-                         << ") + 2*extension (" << getIntOption_("extension") << ") = "
+                         << ") + 2*extension (" << intOption_("extension") << ") = "
                          << reach << " cannot reach the index k = " << index_k
                          << ", so every tag would be too short to look up and the "
                          << "report would be empty. Set " << length_opt << index_k
@@ -563,7 +594,7 @@ TOPPFASTag::ExitCodes TOPPFASTag::main_(int, const char**)
     std::cerr << "TMT pseudo-filter: " << tmt_filter_rec_ << std::endl;
   }
   p.tag_length = lengths.front();
-  p.max_extension = getIntOption_("extension");
+  p.max_extension = intOption_("extension");
   p.max_gaps = getIntOption_("gaps");
   p.deisotope = !getFlag_("no_deisotope");
   p.peaks_per_window = getIntOption_("peaks_per_window");
@@ -576,9 +607,21 @@ TOPPFASTag::ExitCodes TOPPFASTag::main_(int, const char**)
   p.max_evalue = getDoubleOption_("max_evalue");
   p.gap_penalty = getDoubleOption_("gap_penalty");
   p.complement_rule = FASTag::Cli::complementRuleFromString(getStringOption_("complement_rule"));
+  // 1.15.5 (PREREG-lowres-defaults, change A): with the fragment tolerance in
+  // Da and no complement option given, the complement window is measured on
+  // the run (auto) instead of the 0.02 Da default; not under -stream (the
+  // probe needs random access) nor for mzPeak input (read in one pass; see
+  // the mzPeak check below).
+  // 1.15.5 change B: each MS2 spectrum's tolerance from its analyzer.
+  const bool by_analyzer = getStringOption_("tolerance_by_analyzer") == "on";
+  const double itms_tol = getDoubleOption_("fragment_tolerance_itms");
+  compl_auto_by_unit_ = getStringOption_("fragment_tolerance_unit") == "Da" && !optionGiven_("complement_tolerance_unit") &&
+                        !optionGiven_("complement_tolerance") && !optionGiven_("complement_tol_factor") &&
+                        !getFlag_("stream");
   FASTag::Cli::setComplementTolerance(p, getDoubleOption_("complement_tolerance"),
                                       getDoubleOption_("complement_tol_factor"),
-                                      getStringOption_("complement_tolerance_unit"));
+                                      compl_auto_by_unit_ ? std::string("auto")
+                                                          : getStringOption_("complement_tolerance_unit"));
   p.complement_midp = getFlag_("complement_midp");
   // 1.12 #6: the precursor hypotheses; at the defaults (assume2, isotope 0)
   // hyp_on is false and the tagging loop runs exactly as in 1.11.
@@ -669,14 +712,19 @@ TOPPFASTag::ExitCodes TOPPFASTag::main_(int, const char**)
     len_params_cz = len_params;
     for (FASTag::Param& lp : len_params_cz) lp.ion_pair = cz_pair;
   }
-  // The Params of series @p sr (b/y or c/z-dot).
-  const auto params_of = [&len_params, &len_params_cz](FASTag::IonSeries::Series sr)
-      -> const std::vector<FASTag::Param>& {
-    if (sr == FASTag::IonSeries::Series::CZ) return len_params_cz;
-    return len_params;
+  // 1.15.5 (change B, -tolerance_by_analyzer): the Params of ion-trap MS2
+  // spectra, filled after the probes (empty while the option is off or the
+  // run has no ion-trap spectra in its probe).
+  std::vector<FASTag::Param> len_params_it, len_params_cz_it;
+  // The Params of series @p sr (b/y or c/z-dot), of an ion-trap spectrum
+  // when @p itms.
+  const auto params_of = [&len_params, &len_params_cz, &len_params_it, &len_params_cz_it](
+                             FASTag::IonSeries::Series sr, bool itms = false) -> const std::vector<FASTag::Param>& {
+    if (sr == FASTag::IonSeries::Series::CZ) return itms ? len_params_cz_it : len_params_cz;
+    return itms ? len_params_it : len_params;
   };
-  auto build_tables = [&params_of](FASTag::IonSeries::Series sr = FASTag::IonSeries::Series::BY) {
-    const std::vector<FASTag::Param>& lps = params_of(sr);
+  auto build_tables = [&params_of](FASTag::IonSeries::Series sr = FASTag::IonSeries::Series::BY, bool itms = false) {
+    const std::vector<FASTag::Param>& lps = params_of(sr, itms);
     std::vector<FASTag::Tables> t;
     t.reserve(lps.size());
     for (const FASTag::Param& lp : lps) t.emplace_back(lp);
@@ -693,8 +741,8 @@ TOPPFASTag::ExitCodes TOPPFASTag::main_(int, const char**)
   auto tag_all = [&params_of](const MSSpectrum& s, double prec_mz, int charge,
                               const std::vector<FASTag::Tables>& tabs,
                               FASTag::SpectrumDiag* diag = nullptr, double multiplicity = 1.0,
-                              FASTag::IonSeries::Series sr = FASTag::IonSeries::Series::BY) {
-    const std::vector<FASTag::Param>& lps = params_of(sr);
+                              FASTag::IonSeries::Series sr = FASTag::IonSeries::Series::BY, bool itms = false) {
+    const std::vector<FASTag::Param>& lps = params_of(sr, itms);
     if (lps.size() == 1)
       return FASTag::tagSpectrum(s, prec_mz, charge, lps[0], tabs[0], diag, multiplicity);
     return FASTag::mergeLengths(FASTag::tagSpectrum(s, prec_mz, charge, lps, tabs, diag, multiplicity));
@@ -815,30 +863,15 @@ TOPPFASTag::ExitCodes TOPPFASTag::main_(int, const char**)
                         "(a Sage or MSFragger configuration is written complete)." << std::endl;
     return ILLEGAL_PARAMETERS;
   }
-  // post-1.13.1: with -search_engine msfragger (and -search_config_out) the
-  // shortlist options take the configuration of the second held-out test
-  // (PREREG-msfragger2.md, PASS; the third, PREREG-exactonly.md, FAILED, so
-  // the defaults are not validated) unless the user set them. Tested with the
-  // tryptic shortlist only, so a -shortlist_protease other than trypsin keeps
-  // 1.13.1's values. The help of the two -recon_* options is frozen (1.11
-  // interface, baseline_identity_test); -search_engine's help says it.
-  std::string msf_defaults;  // what was applied, for the log and the shortlist header
-  const bool msf_shortlist = !search_config_out.empty() && search_engine == "msfragger" &&
-                             getStringOption_("shortlist_protease") == "trypsin";
-  const auto msfDefault = [&](const char* name, const std::string& shown) {
-    const bool apply = msf_shortlist && !optionGiven_(name);
-    if (apply) msf_defaults += std::string(msf_defaults.empty() ? "" : ", ") + "-" + name + " " + shown;
-    return apply;
-  };
+  // The shortlist settings; the recipe defaults (set at the start of main_)
+  // replace the values the user did not give. The help of the two -recon_*
+  // options is frozen (1.11 interface, baseline_identity_test).
   FASTag::Shortlist::Settings sl_settings;
-  sl_settings.gapped = msfDefault("shortlist_gapped", "on") || getFlag_("shortlist_gapped");
-  sl_settings.max_evalue = msfDefault("shortlist_max_evalue", "10") ? 10.0 : getDoubleOption_("shortlist_max_evalue");
-  const int recon_min_length = msfDefault("recon_min_length", "6") ? 6 : getIntOption_("recon_min_length");
-  const int recon_mc = msfDefault("recon_missed_cleavages", "2") ? 2 : getIntOption_("recon_missed_cleavages");
-  if (!msf_defaults.empty())
-    OPENMS_LOG_INFO << "MSFragger defaults (the configuration of its second held-out test): " << msf_defaults
-                    << "; an option given on the command line or in an INI wins." << std::endl;
-  sl_settings.min_spectra = static_cast<std::uint64_t>(getIntOption_("shortlist_min_spectra"));
+  sl_settings.gapped = recipe_gapped_ || getFlag_("shortlist_gapped");
+  sl_settings.max_evalue = recipe_evalue_ ? 10.0 : getDoubleOption_("shortlist_max_evalue");
+  const int recon_min_length = intOption_("recon_min_length");
+  const int recon_mc = intOption_("recon_missed_cleavages");
+  sl_settings.min_spectra = static_cast<std::uint64_t>(intOption_("shortlist_min_spectra"));
   {
     const std::string pm = getStringOption_("shortlist_parsimony");
     sl_settings.parsimony = pm == "subset" ? FASTag::Shortlist::Parsimony::SUBSET
@@ -1142,7 +1175,7 @@ TOPPFASTag::ExitCodes TOPPFASTag::main_(int, const char**)
                     << pindex.collapseRuleCount() << " isobaric rules; min tag length "
                     << rmin
                     << (recon_min_length == 0 ? " (derived)"
-                        : optionGiven_("recon_min_length") || !msf_shortlist ? " (set)" : " (msfragger default)")
+                        : recipe_int_.count("recon_min_length") ? " (shortlist recipe default)" : " (set)")
                     << std::endl;
     // 1.13 (#24): a run whose tags cannot reach that length places nothing,
     // and -alkylation_out cannot call (the default -tag_length 3 on a
@@ -1303,6 +1336,7 @@ TOPPFASTag::ExitCodes TOPPFASTag::main_(int, const char**)
         {"shortlist_parsimony", "-shortlist_out or -fasta_out", shortlist_on},
         {"shortlist_top", "-shortlist_out or -fasta_out", shortlist_on},
         {"shortlist_protease", "-shortlist_out, -fasta_out or -search_config_out", handoff_on},
+        {"shortlist_defaults", "-shortlist_out, -fasta_out or -search_config_out", handoff_on},
         {"shortlist_specificity", "-shortlist_protease other than trypsin", sl_nontryptic},
         {"search_engine", "-search_config_out", !search_config_out.empty()},
         {"search_config_template", "-search_config_out", !search_config_out.empty()},
@@ -1908,7 +1942,13 @@ TOPPFASTag::ExitCodes TOPPFASTag::main_(int, const char**)
   const bool mgf_in = !bruker_in && !thermo_in && !mzpeak_in && is_mgf(in);
   // 1.13 item 15: the auto probe reads spectra by index before the tagging
   // pass; mzPeak input is read once, in file order.
-  const bool compl_auto = getStringOption_("complement_tolerance_unit") == "auto";
+  bool compl_auto = getStringOption_("complement_tolerance_unit") == "auto" || compl_auto_by_unit_;
+  if (compl_auto && mzpeak_in && compl_auto_by_unit_)
+  {
+    // change A is a default, not a request: mzPeak keeps the Da window.
+    compl_auto = false;
+    compl_auto_by_unit_ = false;
+  }
   if (compl_auto && mzpeak_in)
   {
     OPENMS_LOG_ERROR << "-complement_tolerance_unit auto needs mzML or MGF input; mzPeak input is "
@@ -2192,7 +2232,10 @@ TOPPFASTag::ExitCodes TOPPFASTag::main_(int, const char**)
   auto read_spectrum = [&](Size i) -> MSSpectrum {
     if (mgf) return mgf->getSpectrum(i);
     if (vra) return vra->getSpectrum(i);
-    if (fastmz) return fastmz->getSpectrum(i);
+    if (fastmz)
+      return fastmz->getSpectrum(i, by_analyzer ? FASTag::IndexedMzMLReader::ALL_FIELDS |
+                                                      FASTag::IndexedMzMLReader::STEP0_SCAN_EXTRAS
+                                                : FASTag::IndexedMzMLReader::ALL_FIELDS);
     return streaming ? ondisc->getSpectrum(i) : exp[i];
   };
   if (!streaming && !mzpeak_in && !mgf_in && !bruker_in && !vra && !fastmz)
@@ -2207,6 +2250,45 @@ TOPPFASTag::ExitCodes TOPPFASTag::main_(int, const char**)
   if (fastmz) n_total = fastmz->getNrSpectra();
   if (mgf) n_total = mgf->getNrSpectra();
   if (vra) n_total = vra->getNrSpectra();
+
+  // The analyzer of each spectrum (RunQC::factsOf): -qc_out counts MS2 per
+  // analyzer and, 1.15.5, -tolerance_by_analyzer picks each MS2 spectrum's
+  // tolerance from it. Built from the run's header once.
+  FASTag::RunQC::InstrumentMap run_imap;
+  if (by_analyzer || !getStringOption_("qc_out").empty())
+  {
+    namespace QC = FASTag::RunQC;
+    // The class of an instrument's last analyser (the one MS2 is read out in).
+    const auto last_analyzer = [](const Instrument& ins) {
+      QC::Analyzer a = QC::Analyzer::UNKNOWN;
+      Int order = std::numeric_limits<Int>::min();
+      for (const MassAnalyzer& m : ins.getMassAnalyzers())
+        if (m.getOrder() >= order)
+        {
+          order = m.getOrder();
+          a = QC::analyzerFromType(m.getType());
+        }
+      return a;
+    };
+    if (mzs) run_imap.run_default = last_analyzer(mzs->settings().getInstrument());
+    else if (vra)  // Thermo .raw: the reader's run settings (no mzML header to read)
+    {
+      if (auto rs = vra->getExperimentalSettings()) run_imap.run_default = last_analyzer(rs->getInstrument());
+    }
+    else if (bruker_in) run_imap.run_default = last_analyzer(exp.getInstrument());
+    else if (!mgf_in)
+    {
+      const FASTag::Probe::MzmlHeader h = FASTag::Probe::readMzmlHeader(in);
+      for (const auto& [id, name] : h.analyzer_of) run_imap.by_config[id] = QC::analyzerFromName(name);
+      run_imap.default_config = h.default_config;
+      if (!fastmz && !streaming) run_imap.run_default = last_analyzer(exp.getInstrument());
+    }
+  }
+  // Is MS2 spectrum @p s ion trap? (filter string, then the scan's or the
+  // run's instrument configuration; RunQC::factsOf)
+  const auto is_itms = [&run_imap](const MSSpectrum& s) {
+    return FASTag::RunQC::factsOf(s, run_imap).analyzer == FASTag::RunQC::Analyzer::ITMS;
+  };
 
   // ---- 1.12 E: acquisition check (#7) ------------------------------------
 
@@ -2364,7 +2446,9 @@ TOPPFASTag::ExitCodes TOPPFASTag::main_(int, const char**)
     if (at_mz > 0)
     {
       const double tol = p.tol_ppm ? at_mz * p.frag_tol * 1e-6 : p.frag_tol;
-      if (tol > 0 && tightest > 20.0 * tol)
+      // 1.15.5: under -tolerance_by_analyzer on, ion-trap spectra with
+      // analyzer information get their own tolerance; MGF carries none.
+      if (tol > 0 && tightest > 20.0 * tol && (!by_analyzer || mgf_in))
       {
         OPENMS_LOG_WARN
           << "No two peaks anywhere in this file are closer than " << tightest
@@ -2395,37 +2479,23 @@ TOPPFASTag::ExitCodes TOPPFASTag::main_(int, const char**)
   // complement errors, and their floor-corrected median and MAD give the
   // window (|median| + 1.96 x 1.4826 x MAD). Too few
   // pairs keep -complement_tolerance (Da). Not reached under Da or fragment.
-  if (compl_auto)
+  // The complement errors of a probe, tagged with ComplTol::probeParam of
+  // @p by_base (and @p cz_base for spectra the tagging pass reads as
+  // c/z-dot): the estimate and the number of confident probe spectra.
+  // Shared by the run's auto window and, 1.15.5, the ion-trap window of
+  // -tolerance_by_analyzer.
+  struct ComplProbe
   {
+    FASTag::ComplTol::Estimate est;
+    Size n_conf = 0;
+  };
+  const auto measure_complement = [&](const std::vector<MSSpectrum>& probe_specs, const FASTag::Param& by_base,
+                                      const FASTag::Param* cz_base, double window) {
     namespace CT = FASTag::ComplTol;
-    const Size want = static_cast<Size>(getIntOption_("complement_probe"));
-    const double window = CT::measurementWindow(p.frag_tol, p.tol_ppm);
-    // Candidates: a uniform draw of 4x the probe size over all spectra
-    // (MS1 included; the level is known only once read), every one read;
-    // of the MS2 among them, a second uniform draw keeps the probe size
-    // (ComplTol::pickProbe), so the probe spans the whole run.
-    const FASTag::SampleMask cand = FASTag::sampleByCount(n_total, std::min<Size>(n_total, 4 * want), 0x434F4D50u);
-    std::vector<Size> ms2_idx;
-    for (Size i = 0; i < n_total; ++i)
-    {
-      if (!cand[i]) continue;
-      const MSSpectrum s = read_spectrum(i);
-      if (s.getMSLevel() == 2 && !s.empty() && !s.getPrecursors().empty()) ms2_idx.push_back(i);
-    }
-    std::vector<MSSpectrum> probe_specs;
-    probe_specs.reserve(want);
-    for (const Size i : CT::pickProbe(ms2_idx, want, 0x50524F42u))
-    {
-      MSSpectrum s = read_spectrum(i);
-      s.sortByPosition();
-      probe_specs.push_back(std::move(s));
-    }
-    // The Params the probe tags with (ComplTol::probeParam of the run's b/y
-    // or c/z-dot Param, per spectrum as the tagging pass decides).
-    const FASTag::Param probe_by = CT::probeParam(len_params.front(), window);
+    const FASTag::Param probe_by = CT::probeParam(by_base, window);
     const FASTag::Tables probe_tab_by(probe_by);
-    const bool any_cz = !len_params_cz.empty();
-    const FASTag::Param probe_cz = any_cz ? CT::probeParam(len_params_cz.front(), window) : probe_by;
+    const bool any_cz = cz_base != nullptr;
+    const FASTag::Param probe_cz = any_cz ? CT::probeParam(*cz_base, window) : probe_by;
     const FASTag::Tables probe_tab_cz(probe_cz);
     std::vector<std::vector<double>> per_spec(probe_specs.size());
     std::vector<char> confident(probe_specs.size(), 0);
@@ -2461,8 +2531,46 @@ TOPPFASTag::ExitCodes TOPPFASTag::main_(int, const char**)
       if (e) std::rethrow_exception(e);
     std::vector<double> errors;
     for (const auto& v : per_spec) errors.insert(errors.end(), v.begin(), v.end());
-    const CT::Estimate est = CT::estimate(errors, window);
-    const Size n_conf = static_cast<Size>(std::count(confident.begin(), confident.end(), char(1)));
+    ComplProbe r;
+    r.est = CT::estimate(errors, window);
+    r.n_conf = static_cast<Size>(std::count(confident.begin(), confident.end(), char(1)));
+    return r;
+  };
+  // The probe draw: a uniform draw of 4x the probe size over all spectra
+  // (MS1 included; the level is known only once read), every one read; of
+  // the MS2 among them that @p keep accepts, a second uniform draw keeps the
+  // probe size (ComplTol::pickProbe), so the probe spans the whole run.
+  const auto draw_probe = [&](Size want, auto&& keep) {
+    namespace CT = FASTag::ComplTol;
+    const FASTag::SampleMask cand = FASTag::sampleByCount(n_total, std::min<Size>(n_total, 4 * want), 0x434F4D50u);
+    std::vector<Size> ms2_idx;
+    for (Size i = 0; i < n_total; ++i)
+    {
+      if (!cand[i]) continue;
+      const MSSpectrum s = read_spectrum(i);
+      if (s.getMSLevel() == 2 && !s.empty() && !s.getPrecursors().empty() && keep(s)) ms2_idx.push_back(i);
+    }
+    std::vector<MSSpectrum> probe_specs;
+    probe_specs.reserve(want);
+    for (const Size i : CT::pickProbe(ms2_idx, want, 0x50524F42u))
+    {
+      MSSpectrum s = read_spectrum(i);
+      s.sortByPosition();
+      probe_specs.push_back(std::move(s));
+    }
+    return probe_specs;
+  };
+  if (compl_auto)
+  {
+    namespace CT = FASTag::ComplTol;
+    const Size want = static_cast<Size>(getIntOption_("complement_probe"));
+    const double window = CT::measurementWindow(p.frag_tol, p.tol_ppm);
+    const std::vector<MSSpectrum> probe_specs = draw_probe(want, [](const MSSpectrum&) { return true; });
+    const ComplProbe cp =
+        measure_complement(probe_specs, len_params.front(), len_params_cz.empty() ? nullptr : &len_params_cz.front(),
+                           window);
+    const CT::Estimate& est = cp.est;
+    const Size n_conf = cp.n_conf;
     // -complement_tolerance is the fallback and the lower bound
     // (ComplTol::inForce): auto only widens the window.
     const double fallback = p.complement_tol;
@@ -2571,12 +2679,101 @@ TOPPFASTag::ExitCodes TOPPFASTag::main_(int, const char**)
     std::cerr << "TMT pseudo-filter (auto): " << tmt_filter_rec_ << std::endl;
   }
 
+  // 1.15.5 change B (-tolerance_by_analyzer on): ion-trap MS2 spectra are
+  // tagged with -fragment_tolerance_itms (Da). Their complement window
+  // follows change A: a complement option given on the command line is kept;
+  // otherwise the window is measured (auto) on a probe of the run's
+  // ion-trap spectra only, so a mixed run measures each analyzer class on
+  // its own spectra. A run whose probe draw has no ion-trap spectrum keeps
+  // every Param as before (byte-identical tags); an ion-trap spectrum found
+  // later in such a run still gets the ion-trap tolerance, with the
+  // -complement_tolerance window. Not under -stream or mzPeak input (read
+  // in one pass): there every spectrum keeps -fragment_tolerance.
+  itms_on_ = false;
+  if (by_analyzer && !mzs)
+  {
+    namespace CT = FASTag::ComplTol;
+    const Size want = static_cast<Size>(getIntOption_("complement_probe"));
+    const std::vector<MSSpectrum> it_specs = draw_probe(want, is_itms);
+    FASTag::Param base_it = len_params.front();
+    base_it.frag_tol = itms_tol;
+    base_it.tol_ppm = false;
+    const bool compl_given = optionGiven_("complement_tolerance_unit") || optionGiven_("complement_tolerance") ||
+                             optionGiven_("complement_tol_factor");
+    double it_compl = p.complement_tol;   // a given -complement_tolerance (Da) or the run's auto window
+    std::string it_source = compl_given ? "given" : "fallback";
+    if (!compl_given)
+    {
+      // As ComplTol::inForce: -complement_tolerance is the fallback and lower bound.
+      it_compl = getDoubleOption_("complement_tolerance");
+      base_it.complement_tol_mode = FASTag::ComplementTolMode::DA;
+      base_it.complement_tol = it_compl;
+      if (!it_specs.empty())
+      {
+        const double window = CT::measurementWindow(itms_tol, false);
+        FASTag::Param cz_it;
+        if (!len_params_cz.empty())
+        {
+          cz_it = len_params_cz.front();
+          cz_it.frag_tol = itms_tol;
+          cz_it.tol_ppm = false;
+        }
+        const ComplProbe cp = measure_complement(it_specs, base_it, len_params_cz.empty() ? nullptr : &cz_it, window);
+        it_compl = CT::inForce(cp.est, it_compl);
+        it_source = !cp.est.ok ? "fallback" : it_compl > cp.est.tol ? "lower_bound" : "measured";
+        itms_log_ = "probe " + std::to_string(it_specs.size()) + " ion-trap MS2, " + std::to_string(cp.n_conf) +
+                    " confident tags, " + std::to_string(cp.est.n) + " pairs";
+      }
+    }
+    {
+      len_params_it = len_params;
+      for (FASTag::Param& lp : len_params_it)
+      {
+        lp.frag_tol = itms_tol;
+        lp.tol_ppm = false;
+        if (!compl_given)
+        {
+          lp.complement_tol_mode = FASTag::ComplementTolMode::DA;
+          lp.complement_tol = it_compl;
+        }
+      }
+      len_params_cz_it = len_params_cz;
+      for (FASTag::Param& lp : len_params_cz_it)
+      {
+        lp.frag_tol = itms_tol;
+        lp.tol_ppm = false;
+        if (!compl_given)
+        {
+          lp.complement_tol_mode = FASTag::ComplementTolMode::DA;
+          lp.complement_tol = it_compl;
+        }
+      }
+      itms_on_ = true;
+    }
+    std::ostringstream o;
+    o << "Tolerance by analyzer: ion-trap MS2 at " << itms_tol << " Da, complement window " << it_compl << " Da ("
+      << it_source << (itms_log_.empty() ? "" : "; " + itms_log_) << "); other MS2 at " << p.frag_tol
+      << (p.tol_ppm ? " ppm" : " Da") << ". The probe draw found " << it_specs.size() << " ion-trap MS2.";
+    itms_log_ = o.str();
+    std::cerr << itms_log_ << std::endl;
+  }
+
   const auto t_tables_a = std::chrono::steady_clock::now();
   g_t_probe = std::chrono::duration<double>(t_tables_a - t_probe_a).count();
   const std::vector<FASTag::Tables> tables = build_tables();
   // #15 phase B: the c/z-dot tables (empty under by).
   const std::vector<FASTag::Tables> tables_cz =
       cz_tables ? build_tables(FASTag::IonSeries::Series::CZ) : std::vector<FASTag::Tables>();
+  // 1.15.5 change B: the tables of ion-trap spectra (empty when off), and
+  // the complement test their precursor hypotheses count with.
+  const std::vector<FASTag::Tables> tables_it =
+      itms_on_ ? build_tables(FASTag::IonSeries::Series::BY, true) : std::vector<FASTag::Tables>();
+  const std::vector<FASTag::Tables> tables_cz_it =
+      itms_on_ && cz_tables ? build_tables(FASTag::IonSeries::Series::CZ, true) : std::vector<FASTag::Tables>();
+  const FASTag::ComplementSpec hyp_cs_it = itms_on_ ? FASTag::ComplementSpec::fromParam(len_params_it.front()) : hyp_cs;
+  const FASTag::ComplementSpec hyp_cs_cz_it =
+      itms_on_ && !len_params_cz_it.empty() ? FASTag::ComplementSpec::fromParam(len_params_cz_it.front()) : hyp_cs_cz;
+  std::atomic<size_t> n_ms2_itms{0}, n_ms2_other{0};
   // 1.13 #22: -alkylation_tags_out's shadow pass, one Param and one set of
   // tables per seed length (AlkylationTags::shadowParam); empty when off.
   std::vector<FASTag::Alkylation::Form> alkt_cands;
@@ -2848,39 +3045,13 @@ TOPPFASTag::ExitCodes TOPPFASTag::main_(int, const char**)
   // spectrum read; resolution from a sample of profile spectra afterwards.
   const std::string qc_out = getStringOption_("qc_out");
   const bool qc_on = !qc_out.empty();
-  const unsigned qc_fields = qc_on ? FASTag::IndexedMzMLReader::STEP0_SCAN_EXTRAS : 0u;
+  const unsigned qc_fields = qc_on || by_analyzer ? FASTag::IndexedMzMLReader::STEP0_SCAN_EXTRAS : 0u;
   std::unique_ptr<FASTag::RunQC::Collector> qc;
   if (qc_on)
   {
     namespace QC = FASTag::RunQC;
-    QC::InstrumentMap imap;
-    // The class of an instrument's last analyser (the one MS2 is read out in).
-    const auto last_analyzer = [](const Instrument& ins) {
-      QC::Analyzer a = QC::Analyzer::UNKNOWN;
-      Int order = std::numeric_limits<Int>::min();
-      for (const MassAnalyzer& m : ins.getMassAnalyzers())
-        if (m.getOrder() >= order)
-        {
-          order = m.getOrder();
-          a = QC::analyzerFromType(m.getType());
-        }
-      return a;
-    };
-    if (mzs) imap.run_default = last_analyzer(mzs->settings().getInstrument());
-    else if (vra)  // Thermo .raw: the reader's run settings (no mzML header to read)
-    {
-      if (auto rs = vra->getExperimentalSettings()) imap.run_default = last_analyzer(rs->getInstrument());
-    }
-    else if (bruker_in) imap.run_default = last_analyzer(exp.getInstrument());
-    else if (!mgf_in)
-    {
-      const FASTag::Probe::MzmlHeader h = FASTag::Probe::readMzmlHeader(in);
-      for (const auto& [id, name] : h.analyzer_of) imap.by_config[id] = QC::analyzerFromName(name);
-      imap.default_config = h.default_config;
-      if (!fastmz && !streaming) imap.run_default = last_analyzer(exp.getInstrument());
-    }
-    qc = std::make_unique<QC::Collector>(n_total, std::move(imap), static_cast<size_t>(read_threads), p.frag_tol,
-                                         p.tol_ppm);
+    qc = std::make_unique<QC::Collector>(n_total, QC::InstrumentMap(run_imap), static_cast<size_t>(read_threads),
+                                         p.frag_tol, p.tol_ppm);
   }
 
   const std::string proforma_fixed =
@@ -3210,6 +3381,11 @@ TOPPFASTag::ExitCodes TOPPFASTag::main_(int, const char**)
     // decisions share (IonSeries::seriesInRun).
     const FASTag::IonSeries::Series read_series = FASTag::IonSeries::seriesInRun(ion_mode, act, ion_column);
     const bool read_cz = read_series == FASTag::IonSeries::Series::CZ;
+    // 1.15.5 change B: an ion-trap spectrum takes the ion-trap Params.
+    const bool spec_itms = itms_on_ && is_itms(spec);
+    (spec_itms ? n_ms2_itms : n_ms2_other).fetch_add(1, std::memory_order_relaxed);
+    const FASTag::ComplementSpec& cs_by = spec_itms ? hyp_cs_it : hyp_cs;
+    const FASTag::ComplementSpec& cs_cz = spec_itms ? hyp_cs_cz_it : hyp_cs_cz;
     // 1.13 item 10: a hybrid spectrum under auto + -ion_series_hybrid both
     // (read_series is b/y) gets a second, c/z-dot pass; its rows keep their
     // series (Tag::ion_series) in every consumer below.
@@ -3294,13 +3470,13 @@ TOPPFASTag::ExitCodes TOPPFASTag::main_(int, const char**)
     const bool hdr_this = hdr_check_on && prec.getCharge() > 0;
     if (hdr_this)
     {
-      hdr_res = FASTag::Hyp::checkHeaderCharge(spec, prec, hyp_param, read_cz ? hyp_cs_cz : hyp_cs,
+      hdr_res = FASTag::Hyp::checkHeaderCharge(spec, prec, hyp_param, read_cz ? cs_cz : cs_by,
                                                ms1_for(tid, index));
       pt.hdr.add(hdr_res, hyp_param.header_check == FASTag::Hyp::HeaderCheck::BOTH);
       if (!check_header_out.empty()) pt.hdr_rows.push_back({index, spec.getNativeID(), prec.getMZ(), hdr_res});
     }
     const std::vector<FASTag::Hyp::Hypothesis> hyps = FASTag::Hyp::precursorHypotheses(
-        spec, prec, hyp_param, read_cz ? hyp_cs_cz : hyp_cs, nullptr, hdr_this ? &hdr_res : nullptr);
+        spec, prec, hyp_param, read_cz ? cs_cz : cs_by, nullptr, hdr_this ? &hdr_res : nullptr);
     if (hyp_on) pt.acc.e.hyp.add(hyps);
     FASTag::SpectrumDiag cdiag;
     std::vector<FASTag::Tag> tags;
@@ -3319,11 +3495,15 @@ TOPPFASTag::ExitCodes TOPPFASTag::main_(int, const char**)
         const double Hh = H * FASTag::IonSeries::HYBRID_PASSES;
         const size_t cap = p.max_tag_count > 0 ? static_cast<size_t>(p.max_tag_count) * lengths.size() : 0;
         return FASTag::mergeSeriesPasses(
-            tag_all(spec, hy.mz, hy.charge, tables, diag, Hh, FASTag::IonSeries::Series::BY),
-            tag_all(spec, hy.mz, hy.charge, tables_cz, nullptr, Hh, FASTag::IonSeries::Series::CZ), cap);
+            tag_all(spec, hy.mz, hy.charge, spec_itms ? tables_it : tables, diag, Hh, FASTag::IonSeries::Series::BY,
+                    spec_itms),
+            tag_all(spec, hy.mz, hy.charge, spec_itms ? tables_cz_it : tables_cz, nullptr, Hh,
+                    FASTag::IonSeries::Series::CZ, spec_itms),
+            cap);
       }
-      return tag_all(spec, hy.mz, hy.charge, read_cz ? tables_cz : tables, diag, H,
-                     read_series);
+      return tag_all(spec, hy.mz, hy.charge,
+                     read_cz ? (spec_itms ? tables_cz_it : tables_cz) : (spec_itms ? tables_it : tables), diag, H,
+                     read_series, spec_itms);
     };
     if (hyps.size() == 1)
     {
@@ -5160,10 +5340,16 @@ TOPPFASTag::ExitCodes TOPPFASTag::main_(int, const char**)
           const std::string iso =
               iso_flank ? SS::isotopeError(row_delta, tol_da, um, nloc, survey_ppm ? ref : 0.0) : std::string("-");
           const std::string isobars = SS::isobarClass(row_delta, um, sites, survey_fixed, delta_isobar_tol);
+          // 1.15.5: a two-modification reading that fits the localized site goes first
+          // (Acetyl+Oxidation on a protein N-terminal Met, not Carboxymethyl@N-term).
+          const std::string combo = SS::siteCombination(row_delta, um, sites, &support, survey_unimod, survey_fixed,
+                                                        delta_isobar_tol, survey_ppm ? ref : 0.0);
           if (um.size() > NAME_CAP) um.resize(NAME_CAP);
           const auto pm = SS::match(survey_psimod, row_delta, tol_da, sites, survey_fixed, NAME_CAP, &support);
           dtsv << '\t' << nloc << '\t' << SS::formatSites(row_sites.sites) << '\t' << row_sites.unloc << '\t'
-               << SS::format(um, false, survey_ppm ? ref : 0.0) << '\t'
+               << (combo.empty() ? SS::format(um, false, survey_ppm ? ref : 0.0)
+                                 : um.empty() ? combo : combo + ";" + SS::format(um, false, survey_ppm ? ref : 0.0))
+               << '\t'
                << SS::format(pm, true, survey_ppm ? ref : 0.0) << '\t' << iso;
           // The observation classes, most frequent first (three at most).
           std::vector<std::pair<uint64_t, std::string>> cls;
@@ -5493,8 +5679,8 @@ TOPPFASTag::ExitCodes TOPPFASTag::main_(int, const char**)
                                    : "missed cleavages <= " + std::to_string(recon_mc)) +
                               ", windows by flank mass (" + sl_choice.reason + ")" +
                               (sl_withheld.empty() ? std::string() : "; " + sl_withheld + " withheld"));
-          if (!msf_defaults.empty())
-            header.push_back("msfragger defaults (the configuration of its second held-out test): " + msf_defaults);
+          if (!recipe_defaults_.empty())
+            header.push_back("shortlist recipe defaults (doc/SHORTLIST.md): " + recipe_defaults_);
           if (subsampling) header.push_back("counts are over the -subsample_* spectra only");
           if (filtering) header.push_back("-fasta filtered the tags before placement");
           std::string err;
@@ -5825,6 +6011,11 @@ TOPPFASTag::ExitCodes TOPPFASTag::main_(int, const char**)
   OPENMS_LOG_INFO << n_ms2 << " MS2 spectra, " << n_tags << " tags";
   if (filtering) OPENMS_LOG_INFO << " -> " << n_reported << " after filtering";
   OPENMS_LOG_INFO << std::endl;
+  // 1.15.5 change B: stderr only (stdout's summary line is read by gates).
+  if (itms_on_)
+    std::cerr << "Tolerance by analyzer: " << n_ms2_itms.load() << " ion-trap MS2 tagged at " << itms_tol
+              << " Da, " << n_ms2_other.load() << " other MS2 at " << p.frag_tol << (p.tol_ppm ? " ppm" : " Da")
+              << std::endl;
   // 1.16: a run with spectra but nothing to tag must not pass for a run
   // without tags. Spectra that are MS2, or carry a precursor, yet none could
   // be tagged mean the MS/MS was not read (SCIEX MS Data Converter mzML read

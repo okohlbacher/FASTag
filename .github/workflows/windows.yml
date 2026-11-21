@@ -918,16 +918,18 @@ jobs:
           # could read mzPeak and still fail every user who asks for
           # -out_spectra. Byte-identical tags, as ctest's mzpeak_roundtrip
           # demands of the unbundled binary; the archive is validated next.
+          # -tolerance_by_analyzer off: it does not apply to mzPeak input (README),
+          # and this example is ion trap, so its mzML would be tagged at 0.5 Da.
           BW=/tmp/bundle-mzpeak; rm -rf "$BW"; mkdir -p "$BW"
           MZ="$GITHUB_WORKSPACE/dist/FASTag/share-OpenMS/examples/ID/Ecoli_MS2_small.mzML"
           PATH="$CLEAN_PATH" "$GITHUB_WORKSPACE/dist/FASTag/FASTag.bat" \
             -in "$MZ" -out "$BW/ml.tsv" -out_spectra "$BW/bundle.mzpeak" -threads 2 \
-            -fragment_tolerance 20 -fragment_tolerance_unit ppm > "$BW/write.log" 2>&1 \
+            -fragment_tolerance 20 -fragment_tolerance_unit ppm -tolerance_by_analyzer off > "$BW/write.log" 2>&1 \
             || { cat "$BW/write.log"; echo "::error::the shipped bundle cannot WRITE mzPeak"; exit 1; }
           grep -q "Wrote [0-9]* spectra" "$BW/write.log" || { cat "$BW/write.log"; echo "::error::the bundle wrote no spectra"; exit 1; }
           PATH="$CLEAN_PATH" "$GITHUB_WORKSPACE/dist/FASTag/FASTag.bat" \
             -in "$BW/bundle.mzpeak" -out "$BW/mp.tsv" -threads 2 \
-            -fragment_tolerance 20 -fragment_tolerance_unit ppm > "$BW/read.log" 2>&1 \
+            -fragment_tolerance 20 -fragment_tolerance_unit ppm -tolerance_by_analyzer off > "$BW/read.log" 2>&1 \
             || { cat "$BW/read.log"; echo "::error::the shipped bundle cannot read the archive it just wrote"; exit 1; }
           cmp -s "$BW/ml.tsv" "$BW/mp.tsv" || { echo "::error::tags from the bundle-written archive differ from the mzML tags"; diff "$BW/ml.tsv" "$BW/mp.tsv" | head; exit 1; }
           [ "$(grep -c . "$BW/mp.tsv")" -gt 1 ] || { echo "::error::the bundle round trip produced no tags"; exit 1; }

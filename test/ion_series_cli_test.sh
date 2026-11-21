@@ -97,7 +97,7 @@ awk -v cid="$CID" "$OUT_FN"'
 # warning line(s) under $TMP/<name>.*
 run() {
   local name=$1 in=$2 th=$3; shift 3
-  "$BIN" -in "$in" -out "$TMP/$name.tsv" -threads "$th" -fragment_tolerance 0.3 -fragment_tolerance_unit Da "$@" > "$TMP/$name.out" 2> "$TMP/$name.err" \
+  "$BIN" -in "$in" -out "$TMP/$name.tsv" -threads "$th" -fragment_tolerance 0.3 -fragment_tolerance_unit Da -complement_tolerance_unit Da -tolerance_by_analyzer off "$@" > "$TMP/$name.out" 2> "$TMP/$name.err" \
     || { cat "$TMP/$name.err" >&2; fail "FASTag on $name exited non-zero"; }
   grep '^Electron activation' "$TMP/$name.err" > "$TMP/$name.warn" || true
   grep -v 'took .* (wall)' "$TMP/$name.out" > "$TMP/$name.stdout"
@@ -173,7 +173,7 @@ done
 # line phase B adds.
 runb() {
   local name=$1 in=$2 th=$3; shift 3
-  "$BIN" -in "$in" -out "$TMP/$name.tsv" -threads "$th" -fragment_tolerance 0.3 -fragment_tolerance_unit Da "$@" > "$TMP/$name.out" 2> "$TMP/$name.err" \
+  "$BIN" -in "$in" -out "$TMP/$name.tsv" -threads "$th" -fragment_tolerance 0.3 -fragment_tolerance_unit Da -complement_tolerance_unit Da -tolerance_by_analyzer off "$@" > "$TMP/$name.out" 2> "$TMP/$name.err" \
     || { cat "$TMP/$name.err" >&2; fail "FASTag on $name exited non-zero"; }
   grep -v 'took .* (wall)' "$TMP/$name.out" > "$TMP/$name.stdout"
   grep -E '^(Electron activation|Hybrid activation|Collisional activation|Ion series)' "$TMP/$name.err" > "$TMP/$name.lines" || true

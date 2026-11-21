@@ -93,14 +93,14 @@ std::optional<TOPPFASTag::ExitCodes> TOPPFASTag::detectSpecies_(bool want_specie
     // peek rejects legacy headers the loader still accepts, and then a run
     // whose tags are all shorter than k would write a header-only report
     // that reads as "nothing found" rather than "nothing could be found".
-    const int reach = lengths.back() + 2 * getIntOption_("extension");
+    const int reach = lengths.back() + 2 * intOption_("extension");
     if (reach < index_k)
     {
       OPENMS_LOG_WARN << "-species: no tag can reach the index k (this run was "
                       << "driven by -taxdb/-species_out rather than -species, which "
                       << "checks up front). tag_length ("
                       << lengths.back() << ") + 2*extension ("
-                      << getIntOption_("extension") << ") = " << reach << " < k = " << index_k
+                      << intOption_("extension") << ") = " << reach << " < k = " << index_k
                       << ", so every tag is too short to look up and the report WILL be empty. "
                       << "Raise " << length_opt << "to " << index_k << " (or use -extension to reach it)."
                       << std::endl;

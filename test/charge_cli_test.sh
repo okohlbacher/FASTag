@@ -59,7 +59,8 @@ tr -d '\r' < "$MGF" | sed -n 's/^CHARGE=\([0-9]*\)+$/\1/p' > "$TMP/truth.txt"
 grep -q '^CHARGE=' "$TMP/noz.mgf" && fail "CHARGE lines survived the strip"
 
 # All outputs at once: every report that reads the tags.
-COMMON=(-tag_length 4 -extension 1 -fragment_tolerance 0.3 -fragment_tolerance_unit Da -fasta "$DB")
+# 1.15.5: these checks pin the 1.15.4 tolerance defaults (PREREG-lowres-defaults changes A and B; tolerance_by_analyzer_cli_test tests them)
+COMMON=(-tag_length 4 -extension 1 -fragment_tolerance 0.3 -fragment_tolerance_unit Da -complement_tolerance_unit Da -tolerance_by_analyzer off -fasta "$DB")
 OUTS=(tsv recon.tsv delta.tsv digest.tsv label.tsv massgap.tsv)
 full() {  # dir input args...
   local d=$1 in=$2; shift 2; mkdir -p "$d"

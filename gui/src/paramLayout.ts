@@ -100,6 +100,7 @@ const SECTION_DEFS: Omit<Section, 'open'>[] = [
   { title: 'Alkylation', home: 'characterize', blurb: 'Which reagent alkylated the cysteines, from placements on a shipped proteome.', params: ['alkylation_out', 'alkylation_tags_out', 'alkylation_proteome', 'alkylation_min_share', 'alkylation_min_spectra', 'alkylation_window'] },
   { title: 'Glycopeptides', home: 'characterize', blurb: 'Flag spectra that carry oxonium ions.', params: ['glyco', 'glyco_out', 'glyco_min_fraction'] },
   { title: 'Performance', home: 'global', blurb: 'How much of the computer a run may use.', params: ['threads'] },
+  { title: 'Fragment tolerance by analyzer', home: 'global', blurb: 'Ion-trap spectra of a mixed run (for example Orbitrap MS1, ion-trap MS2) tagged at their own tolerance; the reports use the fragment tolerance.', params: ['tolerance_by_analyzer', 'fragment_tolerance_itms'] },
   { title: 'Peaks', home: 'global', blurb: 'Which peaks of a spectrum survive preprocessing.', params: ['no_deisotope', 'max_peaks', 'peaks_per_window', 'pick_profile'] },
   { title: 'Charge and ions', home: 'global', blurb: 'The ion series spectra are read as, and the precursor charges tried.', params: ['ion_series', 'ion_series_hybrid', 'unknown_charge', 'charge_min', 'charge_max', 'charge_infer_margin', 'isotope_error'] },
   { title: 'Complement pairs', home: 'global', blurb: 'How b/y complement pairs are found and scored.', params: ['complement_rule', 'complement_tolerance', 'complement_tolerance_unit', 'complement_tol_factor', 'complement_probe', 'complement_midp'] },

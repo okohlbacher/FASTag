@@ -1394,6 +1394,27 @@ export const PARAM_UI: Record<string, ParamUi> = {
       text: 'Write the smaller FASTA and the search settings even when the protease of the run does not fit tryptic placement.'
     }
   },
+  tolerance_by_analyzer: {
+    section: 'Fragment tolerance by analyzer',
+    label: 'Tolerance by analyzer',
+    help: {
+      text: 'Tags each MS2 spectrum with the tolerance of its analyzer: ion-trap spectra with the ion-trap tolerance (0.5 Da) and a complement window measured on them, Orbitrap and TOF spectra with the fragment tolerance. Off tags every spectrum with the fragment tolerance, as before 1.15.5.'
+    }
+  },
+  fragment_tolerance_itms: {
+    section: 'Fragment tolerance by analyzer',
+    label: 'Ion-trap fragment tolerance (Da)',
+    depends: [{ on: 'tolerance_by_analyzer', when: { tolerance_by_analyzer: { is: ['on'] } }, say: 'Tolerance by analyzer on', note: 'with it off every spectrum uses the fragment tolerance' }],
+    help: {
+      text: 'Fragment tolerance (Da) of ion-trap MS2 spectra when tolerances follow the analyzer.'
+    }
+  },
+  shortlist_defaults: {
+    hidden: '1.15.4 command-line option, not in the form (CLI default applies: the shortlist recipe)',
+    help: {
+      text: 'Defaults of a tryptic shortlist run (shortlist, reduced FASTA or search configuration): recipe (the default) sets tag length 4, extension 6, gapped placement, E-value 10, 1 spectrum per protein, reconciliation length 6 and 2 missed cleavages unless you set them; plain keeps every option at its own default, as before 1.15.4.'
+    }
+  },
   shortlist_protease: {
     section: 'Shortlist',
     label: 'Protease',
@@ -1426,7 +1447,7 @@ export const PARAM_UI: Record<string, ParamUi> = {
     section: 'Shortlist, advanced',
     depends: [SHORTLIST_READ],
     help: {
-      text: 'The E-value a tag needs for its placements to count for the shortlist.'
+      text: 'The E-value a tag needs for its placements to count for the shortlist. 10 by the shortlist recipe; for a metaproteome database use 100 (held-out test: 96% of the full-search peptides kept with 23% of an 870k-protein database).'
     }
   },
   shortlist_min_spectra: {

@@ -55,6 +55,9 @@ export function searchParams(query: string, limit = 20): ParamHit[] {
     } else return
     // A unit is found with its value (fragment_tolerance before its unit).
     if (UNIT_PARAMS.has(name)) score -= 5
+    // A setting every workflow shows (Common: the fragment tolerance) comes
+    // before an advanced one of a like name (tolerance_by_analyzer).
+    if (SECTION_OF.get(name) === 'Common' && where !== 'help') score += 15
     hits.push({ name, section: SECTION_OF.get(name) ?? '', where, score: score - order / 1000 })
   })
   hits.sort((a, b) => b.score - a.score)

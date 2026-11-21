@@ -416,9 +416,13 @@ runs the tested configuration: `-shortlist_gapped` on, `-shortlist_max_evalue 10
 `-recon_missed_cleavages 2`. Each applies unless the option is given on the
 command line, or set in an INI to a value other than its 1.13.1 default (an
 INI value equal to that default cannot be told from it, as for
-`-shortlist_specificity`). The log line `MSFragger defaults (...)` and the
-shortlist header line `# msfragger defaults (...)` name the values applied;
-the reconciler's line says `min tag length 6 (msfragger default)`. On the
+`-shortlist_specificity`). Since 1.15.4 the recipe, with `-tag_length 4
+-extension 6 -shortlist_min_spectra 1` of the tested command, is the default
+of every tryptic shortlist run (`-shortlist_out`, `-fasta_out` or
+`-search_config_out`, any engine). The log line `Shortlist recipe defaults
+(...)` and the shortlist header line `# shortlist recipe defaults (...)` name
+the values applied; the reconciler's line says `min tag length 6 (shortlist
+recipe default)`. On the
 development run PXD003531 the export without these options is
 byte-identical to the one with them. Sage, Comet, a run without
 `-search_config_out` and a `-shortlist_protease` other than trypsin (not
@@ -531,6 +535,55 @@ modification must be modelled on the site OpenMS gives it. With
 fixture (20 target PSMs in the first run, prsA/metK/rplF found) and checks
 the echoed parameters again. `msfragger_cli_test` covers the decoys and the
 refusals.
+
+## Metaproteomes: `-shortlist_max_evalue 100` (1.15.4, held-out PASS)
+
+For a large metaproteomic database use the recipe default with one change:
+
+```
+FASTag -in run.mzML -recon_fasta metaproteome.fasta -out tags.tsv -shortlist_out sl.tsv -fasta_out reduced.fasta \
+       -shortlist_max_evalue 100
+```
+
+Run it once per file and search each file against its own `reduced.fasta`. The recipe default (`-tag_length 4 -extension 6 -recon_min_length 6
+-shortlist_min_spectra 1 -shortlist_gapped -recon_missed_cleavages 2`) supplies the rest.
+
+**Held-out test: PASS.** PREREG-shortlist (frozen 2026-11-20, scored once) on PXD045390, Orbitrap Exploris 480. 28
+held-out runs; the development runs were never reused. Three matrices with five spiked organisms:
+
+| Matrix | Database | Proteins |
+|---|---|---|
+| M1 | mouse gut | 870,594 |
+| M2 | corn root | 94,031 |
+| M3 | gnotobiotic mouse | 294,318 |
+
+Reference: Sage 0.14.7 on the full database per run (1 % peptide FDR, entrapment *P. furiosus* + *P. falciparum*).
+Reduced: the same search on `-fasta_out`.
+
+| | M1 | M2 | M3 |
+|---|---|---|---|
+| peptides of the full search also found (95 % CI) | 0.960 (0.954-0.964) | 0.964 (0.961-0.970) | 0.962 |
+| lowest spiked organism | 0.961 | 0.939 | 0.940 |
+| proteins kept | 23 % | 33 % | 20 % |
+| time per run, FASTag + reduced search vs full search | 254 s vs 304 s | 77 s vs 45 s | 97 s vs 112 s |
+
+Gates: recovery lower bound >= 0.95 in M1 and M2; every spiked organism >= 0.90; <= 25 % of the M1 proteins.
+
+At the plain recipe default (`-shortlist_max_evalue 10`) the development runs kept 17 % of the M1 proteins at
+0.952 recovery. That is too close to the gate, so the default stays 10 (validated with MSFragger) and metaproteomes
+take 100.
+
+**Limits.**
+- The reduced search reports 2-4 times as many entrapment hits per entrapment residue as the full search, and
+  800-1,700 peptides per run the full search does not find. Target-decoy FDR on a database the data themselves
+  selected is optimistic. Use the reduced database to make a search affordable, not to gain identifications; control
+  FDR with an entrapment or the full search when you report identifications.
+- The time saving needs a large database: -17 % on 870k proteins; slower than the full search on 94k proteins.
+- If the full search is affordable, a two-step search (proteins with a PSM at 5 % protein FDR, then a second search)
+  keeps 0.99 of the peptides with 3-13 % of the proteins. FASTag's shortlist is the option without a full search.
+- At FASTag's own tagging defaults (`-shortlist_defaults plain`: tags of 3, no extension) no tag reaches the
+  reconciliation length these databases derive (8 for 94k, 9 for 870k proteins), and `-fasta_out` is empty (exit 13).
+- `-fasta` cannot hold an 870k-protein database (its index refuses more than 4 GB projected); give it as `-recon_fasta`.
 
 ## Mass shifts as engine configuration (1.12, #17): removed in 1.14
 

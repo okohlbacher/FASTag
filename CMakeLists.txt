@@ -6,7 +6,7 @@
 # 3.28: the floor .github/env/openms.yml (and so every CI and release build)
 # guarantees; README, BUILDING.md and BOM.md state the same.
 cmake_minimum_required(VERSION 3.28 FATAL_ERROR)
-project(FASTag VERSION 1.15.3 LANGUAGES CXX)
+project(FASTag VERSION 1.15.5 LANGUAGES CXX)
 # Policy CMP0155 (NEW from 3.28) would scan every C++23 source for module
 # imports, which needs clang-scan-deps beside clang; FASTag uses no modules.
 set(CMAKE_CXX_SCAN_FOR_MODULES OFF)
@@ -532,6 +532,10 @@ if(FASTAG_BUILD_TESTS)
            COMMAND bash ${CMAKE_CURRENT_SOURCE_DIR}/test/complement_cli_test.sh $<TARGET_FILE:FASTag>
                    ${CMAKE_CURRENT_SOURCE_DIR}/test/fixtures/Ecoli_MS2_small.mzML)
   set_tests_properties(complement_cli_test PROPERTIES SKIP_RETURN_CODE 77)
+  # 1.15.5 (PREREG-lowres-defaults): -tolerance_by_analyzer and the complement window under Da.
+  add_test(NAME tolerance_by_analyzer_cli_test
+           COMMAND bash ${CMAKE_CURRENT_SOURCE_DIR}/test/tolerance_by_analyzer_cli_test.sh $<TARGET_FILE:FASTag>
+                   ${CMAKE_CURRENT_SOURCE_DIR}/test/fixtures/Ecoli_MS2_small.mzML)
   # 1.13 item 15: -complement_tolerance_unit auto measures the window on the
   # run and reaches the tags exactly as that window given in Da would.
   add_test(NAME complement_tol_cli_test

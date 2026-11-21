@@ -271,13 +271,17 @@ Playwright at 49272fc8: chromium 118 passed, 9 skipped; webkit 118 passed,
 
 ### Continuation (state at the end of round 15)
 
-- Review rounds are done (stop rule met in round 15).
-- Open: merge `origin/main` once v1.15.5 is tagged (new options `-tolerance_by_analyzer`, `-fragment_tolerance_itms` under Advanced; check the "Ion trap CID" preset); then vitest, tsc, Playwright chromium and webkit; push; PR against main (no version bump, no tag).
+- Review rounds are done (stop rule met in round 15); origin/main merged at v1.15.5.
 
-Before merging: `origin/main` has moved on to 1.15.4 (regenerated
-`params.generated.json`, `-shortlist_defaults`, `-shortlist_max_evalue`
-help, metaproteome recommendation `-shortlist_max_evalue 100`); rebase and
-rerun the tests. The spec still names the 1.15.3 manifest.
+Merged `origin/main` at v1.15.5 (0db1d6a1): the manifest is 1.15.5;
+`-tolerance_by_analyzer` and `-fragment_tolerance_itms` are under Advanced
+(Fragment tolerance by analyzer, for every workflow); `-shortlist_defaults`
+stays hidden, as Database reduction sets the recipe values itself. The
+Ion trap CID preset is unchanged (0.3 Da): with Tolerance by analyzer on
+(the CLI default) ion-trap spectra the file marks as such are tagged at
+0.5 Da whatever the preset, which the Instrument popover says. One
+conflict, in `gui/src/adversarial/map.test.tsx` (pinned parameter counts):
+resolved to the branch's layout with the 1.15.5 counts.
 
 The review notes per round are in
 `/Users/kohlbach/Claude/OpenMS/New Tools/FASTag/output/gui-workflows/r<N>-*.md`.

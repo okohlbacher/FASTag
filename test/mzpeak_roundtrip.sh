@@ -45,7 +45,9 @@ rm -rf "$OUT"; mkdir -p "$OUT"
 A=(-fragment_tolerance 20 -fragment_tolerance_unit ppm)
 fail=0
 ck() { if [ "$2" = "$3" ]; then echo "  ok   $1"; else echo "  FAIL $1: got '$2' want '$3'"; fail=1; fi; }
-run() { local name="$1"; shift; "$BIN" "$@" >"$OUT/$name.log" 2>&1; }
+# 1.15.5: mzPeak input keeps -fragment_tolerance for every spectrum (no per-analyzer probe), so the
+# mzML/mzPeak comparisons pin -tolerance_by_analyzer off.
+run() { local name="$1"; shift; "$BIN" "$@" -tolerance_by_analyzer off >"$OUT/$name.log" 2>&1; }
 ms2()   { grep -oE '[0-9]+ MS2 spectra' "$1" | head -1 | cut -d' ' -f1; }
 wrote() { grep -oE 'Wrote [0-9]+ spectra' "$1" | head -1 | cut -d' ' -f2; }
 rows()  { [ -s "$1" ] || { echo MISSING; return; }; echo $(( $(grep -c . "$1") - 1 )); }
