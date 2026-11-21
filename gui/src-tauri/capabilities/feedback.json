@@ -1,0 +1,28 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "feedback",
+  "description": "In-app feedback (src/feedback.rs, feedback_capture.rs): its commands, and the URL opener for the GitHub issue form only",
+  "windows": [
+    "main"
+  ],
+  "permissions": [
+    "allow-feedback-capture",
+    "allow-feedback-platform",
+    "allow-feedback-run",
+    "allow-feedback-save",
+    "allow-feedback-list",
+    "allow-feedback-delete",
+    "allow-feedback-delete-all",
+    "allow-feedback-reveal",
+    "allow-feedback-export",
+    "allow-feedback-set-status",
+    {
+      "identifier": "opener:allow-open-url",
+      "allow": [
+        {
+          "url": "https://github.com/okohlbacher/FASTag/issues/new*"
+        }
+      ]
+    }
+  ]
+}

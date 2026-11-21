@@ -32,6 +32,9 @@ import type {
   TaxonomyDump
 } from './types'
 import { parseSpecies } from './results/species'
+import { frame, unframe } from './feedback/frame'
+import { issueUrl } from './feedback/issueUrl'
+import type { FeedbackPlatform, FeedbackSaved, FeedbackSummary, FeedbackExported, NativeCapture, RunInfo } from './feedback/types'
 
 // The spectra the CLI reads as -in (its input-format check is by extension):
 // mzML, mzPeak, MGF and the vendor input of the bundled CLI, Thermo .raw and
@@ -188,7 +191,33 @@ const api: FastagApi = {
   setBusy: (busy: boolean) => invoke<void>('set_ui_busy', { busy }),
   onDrop: (cb) => subscribe<DropRoute>('fastag:drop', cb),
   onDragHover: (cb) => subscribe<boolean>('fastag:drag', cb),
-  notify: (title: string, body: string) => invoke<void>('notify_finished', { title, body })
+  notify: (title: string, body: string) => invoke<void>('notify_finished', { title, body }),
+
+  // In-app feedback (src-tauri/src/feedback.rs, feedback_capture.rs). The
+  // screenshot crosses the IPC as raw bytes in one binary frame each way
+  // (feedback/frame.ts), not as JSON numbers or base64.
+  feedbackCapture: async () => {
+    const buf = await invoke<ArrayBuffer>('feedback_capture')
+    const { json, png } = unframe<Omit<NativeCapture, 'png'>>(buf)
+    return { ...json, png }
+  },
+  feedbackPlatform: () => invoke<FeedbackPlatform>('feedback_platform'),
+  feedbackRun: (out) => invoke<RunInfo | null>('feedback_run', { out }),
+  feedbackSave: (draft, png) => invoke<FeedbackSaved>('feedback_save', frame(draft, png)),
+  feedbackList: () => invoke<FeedbackSummary[]>('feedback_list'),
+  feedbackDelete: (id) => invoke<void>('feedback_delete', { id }),
+  feedbackDeleteAll: () => invoke<number>('feedback_delete_all'),
+  feedbackReveal: (id) => invoke<void>('feedback_reveal', { id }),
+  feedbackExport: (id, include) => invoke<FeedbackExported>('feedback_export', { id, include }),
+  feedbackSetStatus: (id, status, issueUrl) => invoke<void>('feedback_set_status', { id, status, issueUrl: issueUrl ?? null }),
+  // Built from a fixed template here (as openTaxon): the renderer passes
+  // the title, id and kind, never a URL (the opener is scoped to it too).
+  openFeedbackIssue: async (d) => {
+    const url = issueUrl(d)
+    if (!url) return false
+    await openUrl(url)
+    return true
+  }
 }
 
 export default api

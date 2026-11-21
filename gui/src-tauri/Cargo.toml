@@ -27,6 +27,30 @@ tauri-plugin-single-instance = "2"
 # release on the tauri 2.11 line this lock pins; 2.5 pulls a tauri update.
 tauri-plugin-notification = "~2.4.0"
 tauri-plugin-store = "~2.4.0"
+# Feedback report ids (feedback.rs uuid_v4): the OS generator, already in the
+# lock through rand (tauri-plugin-notification).
+getrandom = "0.3"
+
+# The native feedback screenshot (feedback_capture.rs), with the platform
+# crates tauri itself uses at the versions the lock pins; only features are
+# added.
+[target.'cfg(target_os = "macos")'.dependencies]
+objc2 = "0.6"
+block2 = "0.6"
+objc2-foundation = { version = "0.3", default-features = false, features = ["std", "NSData", "NSDictionary", "NSError", "NSString"] }
+objc2-app-kit = { version = "0.3", default-features = false, features = ["std", "NSImage", "NSImageRep", "NSBitmapImageRep"] }
+objc2-web-kit = { version = "0.3", default-features = false, features = ["std", "block2", "objc2-app-kit", "WKWebView", "WKSnapshotConfiguration"] }
+
+[target.'cfg(target_os = "linux")'.dependencies]
+webkit2gtk = "=2.0.2"
+cairo-rs = { version = "0.18", features = ["png"] }
+
+[target.'cfg(windows)'.dependencies.webview2-com]
+version = "0.38"
+
+[target.'cfg(windows)'.dependencies.windows]
+version = "0.61"
+features = ["Win32_Foundation", "Win32_System_Com", "Win32_System_Com_StructuredStorage", "Win32_System_Memory"]
 
 # Process lifetime (lifetime.rs): prctl/getppid on Linux, the per-run job
 # object on Windows. Both already in the lock file through tauri.
@@ -34,7 +58,7 @@ tauri-plugin-store = "~2.4.0"
 libc = "0.2"
 
 [target.'cfg(windows)'.dependencies]
-windows-sys = { version = "0.61", features = ["Win32_Foundation", "Win32_Security", "Win32_System_Diagnostics_ToolHelp", "Win32_System_JobObjects", "Win32_System_SystemInformation", "Win32_System_Threading"] }
+windows-sys = { version = "0.61", features = ["Win32_Foundation", "Win32_Security", "Win32_System_Diagnostics_ToolHelp", "Win32_System_JobObjects", "Win32_System_SystemInformation", "Win32_System_Threading", "Win32_System_Time"] }
 
 [dev-dependencies]
 # tauri::test (MockRuntime): settings.rs opens its store in a mock app.

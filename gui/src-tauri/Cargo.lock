@@ -989,9 +989,16 @@ dependencies = [
 name = "fastag"
 version = "1.15.7"
 dependencies = [
+ "block2",
+ "cairo-rs",
  "dunce",
+ "getrandom 0.3.4",
  "libc",
  "muda",
+ "objc2",
+ "objc2-app-kit",
+ "objc2-foundation",
+ "objc2-web-kit",
  "proptest",
  "serde",
  "serde_json",
@@ -1002,6 +1009,9 @@ dependencies = [
  "tauri-plugin-opener",
  "tauri-plugin-single-instance",
  "tauri-plugin-store",
+ "webkit2gtk",
+ "webview2-com",
+ "windows 0.61.3",
  "windows-sys 0.61.2",
 ]
 

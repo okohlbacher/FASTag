@@ -136,6 +136,10 @@ gui/
                        presets as diffs and the v1 preset reader (presetDiff.ts), card and plan
                        text (plan.ts), parameter search (Cmd+K, "/"), instrument presets and the
                        species fixes (presets.ts), shortcuts and menu actions (shortcuts.ts)
+    feedback/          in-app Feedback (see Feedback): the one capture path (capture.ts, domCapture.ts),
+                       the frozen state (snapshot.ts, consoleRing.ts, scrub.ts), the dialog and the
+                       mark-up editor (FeedbackDialog.tsx, MarkupEditor.tsx, shapes.ts, redact.ts), the
+                       issue URL (issueUrl.ts), the schemas (schema/) and their validator (schemaCheck.ts)
     help/              the Help side panel (F1, Cmd+?): pages as data (content.tsx, faq.tsx, params.ts),
                        HelpView.tsx with its search (search.ts, over every page, the FAQ, the
                        glossary and the settings), the link store (link.ts) and the "?" links (HelpLink.tsx)
@@ -163,6 +167,11 @@ gui/
     src/ini.rs         Export INI: the run's argv as a temporary INI, merged by `FASTag -ini <tmp> -write_ini <out>`
     src/browser.rs     indexed million-row results browser: head read on open, index and
                        E-value order built in the background and swapped in (D5)
+    src/feedback.rs    the feedback report store (report.json + screenshot.png per report), its caps and
+                       the public export (<id>.feedback.zip); feedback_capture.rs: the native webview
+                       snapshot, the platform and the run on screen
+    src/app_commands.rs every command, the app manifest build.rs gives tauri-build: each needs a permission
+                       in capabilities/default.json or capabilities/feedback.json
     src/menu.rs        File, Run, View and Help menus with their CmdOrCtrl shortcuts, and the
                        dispatch of a menu click (Quit and Close through the close guard)
     src/drop.rs        the window-wide drop zone: dropped paths sorted by type into one route
@@ -490,6 +499,59 @@ fixtures are `src/fixtures/probe/`):
   "not checked". A probe of a higher format, or one without its `end`
   record, is not used.
 
+## Feedback
+
+**Feedback** at the right of the top bar (beside Help: the persistent chrome every view shares, while the
+bottom right holds the toasts and the log drawer), Help › Send Feedback… and Cmd/Ctrl+Shift+F share one
+capture path (`src/feedback/capture.ts`): one capture per window at a time, taken before the dialog opens,
+with the state frozen at that moment. The screenshot is the webview's own snapshot of the visible
+viewport (`feedback_capture`: WKWebView `takeSnapshotWithConfiguration`, WebView2 `CapturePreview`,
+WebKitGTK `webkit_web_view_get_snapshot`; no OS permission, no other window), awaited off the UI
+thread with a 5 s timeout. When it fails, the DOM rasteriser `@zumer/snapdom` (pinned) draws the
+viewport (no web fonts or network fetches, password fields hidden) and the capture is marked
+`degraded` with the reason; when both fail, or after 5 s, the report is text-only and says why. The
+PNG crosses the IPC as raw bytes in one binary frame each way (`feedback/frame.ts`), not as JSON numbers
+or base64. Images are scaled to at most 2,560 px on the long side and 8 M pixels before they are
+shown; the backend refuses larger ones.
+
+The dialog takes kind, title, description (and steps, expected and actual for a bug); **Mark up…**
+draws numbered rectangles, arrows, pen lines, text labels and redactions, each also in a list with
+x/y/w/h fields, Add and Delete, so every shape can be made and moved by keyboard; "Click two corners"
+draws a box without dragging; undo/redo. Redactions are mapped to image pixels, rounded outward and
+filled opaque after every other shape, and the image is encoded afresh; the raw capture and the undo
+history stay in memory and are gone on Done (a failed flatten drops the screenshot).
+
+**Save** writes `<app_local_data_dir>/feedback/<YYYYMMDDTHHMMSSZ>_<id8>/report.json` (schema
+`fastag-feedback/1`, `src/feedback/schema/report.schema.json`, enforced by `src-tauri/src/feedback.rs`)
+and `screenshot.png`, through a temporary folder renamed into place, never over a report. The id
+(UUID v4) and the time are the backend's. Nothing is sent. The report holds the app version, full
+commit, dirty flag and build date (from git at build time, `scripts/build-info.mjs`; "unknown"
+without git), the engine (version, bundled or `FASTAG_BIN` override, size), the platform, the window,
+the view as machine ids, the settings from the manifest's allow-list as typed values (a path becomes
+`{role, ext}`, free text is dropped), the run on screen with its command line redacted, and the
+last 50 errors and warnings, scrubbed (home folder, user name, e-mail, URL credentials and tokens,
+`ghp_`/Bearer tokens, UNC and OneDrive paths). The store holds at most 200 MB; reports older than 180
+days are removed when it is listed; Saved reports… (and About › Feedback reports…) reveal and delete
+them.
+
+Sharing is the second step. The backend builds the public export (`export.json`,
+`fastag-feedback-public/1`, `src/feedback/schema/feedback-public.schema.json`, which must stay identical
+to the intake's `doc/feedback/feedback-public.schema.json`) fresh from typed fields, zips it with the
+screenshot if included into `<id>.feedback.zip`, and the dialog shows it field by field. Screenshot
+and log are off by default, diagnostics on. After the confirmation that it becomes a public GitHub
+issue, **Open issue draft** opens
+`https://github.com/okohlbacher/FASTag/issues/new?template=feedback.yml&title=…&report-id=…&kind=…`
+(text fields only, under 2 KB; the opener is scoped to that endpoint in
+`capabilities/feedback.json`) and reveals the zip; **Copy diagnostics** copies `export.json`;
+**Mark as submitted** takes the issue's address. No token is in the app.
+
+Tests: `src/feedback/*.test.ts(x)` (the scrubber corpus, the allow-list, the capture path, the
+redaction at DPR 1, 1.5 and 2 and fractional display scales, the schemas, the issue URL, the dialog),
+`e2e-web/specs/feedback.spec.ts` (Chromium and WebKit: mark up, redact, save, the saved PNG's
+redacted pixels, the preview against the export), and `cargo test feedback` (store, caps, ids,
+symlinks, status, zip, the golden export `src/feedback/fixtures/export.golden.json` that the
+TypeScript port in the test bridges must match).
+
 ## Shortcuts
 
 Cmd on macOS, Ctrl on Windows and Linux; the same items are in the native
@@ -506,6 +568,7 @@ File, Run, View and Help menus.
 | Cmd+1 .. Cmd+4 | Setup, Results, Batch, History |
 | Cmd+? (F1, ?) | Help |
 | Cmd+K or / | Search parameters by name, flag or help text |
+| Cmd+Shift+F | Feedback (Help › Send Feedback…) |
 | Cmd+W / Cmd+Q | Close the window / quit (both ask first while a run is active) |
 
 ## Browser bench

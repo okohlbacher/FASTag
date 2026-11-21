@@ -1,0 +1,61 @@
+/* In-app feedback (feedback/): the dialog, the mark-up editor and the share
+   preview, on the D9 tokens (light, dark and system follow them). */
+
+.modal.fb-dialog {
+  max-width: min(1180px, calc(100vw - 2 * var(--space-4)));
+  width: 100%;
+  max-height: calc(100vh - 2 * var(--space-4));
+  overflow: auto;
+}
+.fb-dialog h3 { margin: 0 0 var(--space-2); font-size: var(--text-md, 1rem); }
+.fb-dialog h3:focus { outline: none; }
+.fb-error:empty { display: none; }
+.fb-error { color: var(--destructive-text); background: var(--destructive-bg); border: 1px solid var(--destructive-border); border-radius: var(--radius); padding: var(--space-2) var(--space-3); }
+.fb-cols { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 300px); gap: var(--space-4); }
+.fb-text label, .fb-submitted label { display: flex; flex-direction: column; gap: var(--space-1); margin-bottom: var(--space-3); }
+.fb-text input, .fb-text textarea, .fb-text select { width: 100%; box-sizing: border-box; }
+.fb-text textarea { resize: vertical; font: inherit; }
+.fb-shot { display: flex; flex-direction: column; gap: var(--space-2); }
+.fb-thumb { border: 1px solid var(--border); border-radius: var(--radius); background: var(--panel); max-width: 100%; }
+.fb-include { border: 1px solid var(--border); border-radius: var(--radius); padding: var(--space-2) var(--space-3); margin: 0; }
+.fb-include legend { padding: 0 var(--space-1); }
+.fb-check { display: flex; gap: var(--space-2); align-items: flex-start; margin: var(--space-1) 0; }
+.fb-check .hint { display: block; }
+.fb-confirm { margin: var(--space-3) 0; font-weight: 600; }
+.fb-privacy summary { cursor: pointer; }
+.fb-privacy p { font-size: 0.9em; margin: var(--space-2) 0; }
+.fb-dialog .row .spacer { flex: 1; }
+.fb-submitted { align-items: flex-end; margin-top: var(--space-3); }
+.fb-submitted label { flex: 1; margin-bottom: 0; }
+
+.fb-preview { margin: var(--space-3) 0; border: 1px solid var(--border); border-radius: var(--radius); max-height: 40vh; overflow: auto; }
+.fb-field { display: grid; grid-template-columns: 9em minmax(0, 1fr); gap: var(--space-2); padding: var(--space-1) var(--space-2); border-bottom: 1px solid var(--row-rule); }
+.fb-field:last-child { border-bottom: 0; }
+.fb-field dt { font-family: var(--font-mono, monospace); color: var(--muted-foreground); }
+.fb-field dd { margin: 0; overflow-wrap: anywhere; }
+.fb-kv, .fb-log { margin: 0; padding-left: var(--space-4); }
+.fb-log li { white-space: pre-wrap; font-family: var(--font-mono, monospace); font-size: 0.85em; }
+.fb-preview mark { background: var(--flag-bg); color: var(--flag-text); border-radius: 3px; padding: 0 2px; }
+
+.fb-markup-body { display: flex; gap: var(--space-3); align-items: flex-start; }
+.fb-canvas { border: 1px solid var(--border); touch-action: none; flex: none; }
+.fb-toolbar { display: flex; flex-wrap: wrap; gap: var(--space-2); align-items: center; margin-bottom: var(--space-2); }
+.fb-toolbar button.on, .fb-toolbar button[aria-pressed='true'] { background: var(--primary-soft); color: var(--primary-text); border-color: var(--primary); }
+.fb-inline { display: inline-flex; gap: var(--space-1); align-items: center; }
+.fb-shapes { min-width: 260px; flex: 1; max-height: 470px; overflow: auto; }
+.fb-shapes h4 { margin: 0 0 var(--space-2); }
+.fb-shapes ol { list-style: none; margin: 0; padding: 0; }
+.fb-shapes li { display: flex; flex-wrap: wrap; gap: var(--space-1) var(--space-2); align-items: center; padding: var(--space-1); border: 1px solid transparent; border-radius: var(--radius); }
+.fb-shapes li.on { border-color: var(--primary); background: var(--primary-soft); }
+.fb-shapes li:focus-visible { outline: 2px solid var(--ring); }
+.fb-shape-fields { display: flex; flex-wrap: wrap; gap: var(--space-1); }
+.fb-xy { display: inline-flex; gap: 2px; align-items: center; font-size: 0.85em; }
+.fb-xy input[type='number'] { width: 4.5em; }
+.fb-xy input[type='text'] { width: 9em; }
+.fb-report-list { list-style: none; margin: 0 0 var(--space-3); padding: 0; }
+.fb-report-list li { display: flex; justify-content: space-between; gap: var(--space-2); padding: var(--space-1) 0; border-bottom: 1px solid var(--row-rule); }
+
+@media (max-width: 1000px) {
+  .fb-cols { grid-template-columns: minmax(0, 1fr); }
+  .fb-markup-body { flex-direction: column; }
+}
