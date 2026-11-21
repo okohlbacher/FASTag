@@ -238,11 +238,27 @@ export default function FeedbackDialog({ session, text, setText, onSaved, onClos
   const [note, setNote] = useState('')
   const [submitted, setSubmitted] = useState(false)
 
-  const onKeyDown = useModal(box, () => {
+  const escape = (): void => {
     if (step === 'markup') setStep('compose')
     else if (step === 'reports' && session) setStep(prev)
     else onClose()
-  })
+  }
+  const onKeyDown = useModal(box, escape)
+  // Escape with focus on nothing (a step's control that had it is gone, or
+  // WebKit, which does not focus a clicked button) still reaches the dialog.
+  const escapeRef = useRef(escape)
+  escapeRef.current = escape
+  useEffect(() => {
+    const onKey = (e: globalThis.KeyboardEvent): void => {
+      if (e.key !== 'Escape' || e.defaultPrevented) return
+      const a = document.activeElement
+      if (a && a !== document.body && box.current?.contains(a)) return
+      e.preventDefault()
+      escapeRef.current()
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [])
 
   // A new step gets focus on its heading (the compose step on its title field).
   const firstStep = useRef(true)

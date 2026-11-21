@@ -211,7 +211,9 @@ export default function MarkupEditor({ image, numberBase, onDone, onCancel }: Pr
 
   return (
     <div className="fb-markup" onKeyDown={onKeyDown}>
-      <h3 id="fb-markup-h">Mark up the screenshot</h3>
+      <h3 id="fb-markup-h" tabIndex={-1}>
+        Mark up the screenshot
+      </h3>
       <div className="fb-toolbar" role="toolbar" aria-label="Mark-up tools">
         {TOOLS.map((t) => (
           <button key={t} type="button" className={`secondary small${tool === t ? ' on' : ''}`} aria-pressed={tool === t} onClick={() => setTool(t)}>

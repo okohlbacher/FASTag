@@ -82,6 +82,20 @@ export function useFeedback(getState: () => AppState, bin: BinaryInfo | null): F
     []
   )
   const cancelled = useRef(false)
+  // Where focus goes back to: the control that had it, else the top bar's
+  // Feedback button (WebKit does not focus a clicked button; the menu and
+  // the shortcut have no control of their own).
+  const returnTo = useRef<HTMLElement | null>(null)
+  const remember = (): void => {
+    const a = document.activeElement
+    returnTo.current = a instanceof HTMLElement && a !== document.body ? a : document.querySelector<HTMLElement>('.feedback-btn')
+  }
+  const restore = (): void => {
+    const el = returnTo.current
+    setTimeout(() => {
+      if (el?.isConnected && !el.closest('[hidden], [inert]')) el.focus()
+    })
+  }
 
   // Esc while the screenshot is taken: no dialog, the result is dropped.
   useEffect(() => {
@@ -103,6 +117,7 @@ export function useFeedback(getState: () => AppState, bin: BinaryInfo | null): F
     // and the log as they are at this moment.
     const state = stateRef.current()
     const raw = recent()
+    remember()
     cancelled.current = false
     setCapturing(true)
     const platform = window.fastag.feedbackPlatform().catch(() => null)
@@ -131,10 +146,13 @@ export function useFeedback(getState: () => AppState, bin: BinaryInfo | null): F
     close: () => {
       setSession(null)
       setReportsOnly(false)
+      restore()
     },
     saved: () => setTextState(emptyText()),
     openReports: () => {
-      if (!openRef.current) setReportsOnly(true)
+      if (openRef.current) return
+      remember()
+      setReportsOnly(true)
     },
     reportsOnly
   }
