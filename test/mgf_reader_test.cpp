@@ -61,7 +61,10 @@ namespace
   {
     // temp_directory_path honours TMPDIR on POSIX and TEMP/TMP on Windows,
     // where a literal "/tmp" does not exist.
-    return (std::filesystem::temp_directory_path() / ("fastag-mgf-test-" + name)).string();
+    // A per-process tag: two ctest runs on one machine (e.g. two build trees)
+    // otherwise share, and delete, each other's files.
+    static const std::string tag = std::to_string(std::random_device{}());
+    return (std::filesystem::temp_directory_path() / ("fastag-mgf-test-" + tag + "-" + name)).string();
   }
 
   void write_file(const std::string& path, const std::string& bytes)
