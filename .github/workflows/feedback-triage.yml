@@ -1,0 +1,124 @@
+name: feedback-triage
+
+# Automatic first look at issues filed through the desktop app's Feedback
+# button (.github/ISSUE_TEMPLATE/feedback.yml). It validates the pasted
+# diagnostics against doc/feedback/feedback-public.schema.json, applies labels
+# from a fixed allow-list, and keeps ONE bot comment up to date. See
+# doc/feedback/README.md.
+#
+# Security model: the issue body is untrusted input from anyone with a GitHub
+# account. It reaches the job only as a file written from the event payload
+# by jq; no ${{ }} expression carries issue text into a shell. The code that
+# runs is tools/feedback_triage.py from the default branch (issues events
+# always check out the default branch). The token can write issues and read
+# contents, nothing else. No third-party action: parsing the form is done by
+# feedback_triage.py itself (it needs the raw fenced block and bounded,
+# fence-aware section splitting anyway), and labels/comments go through the
+# preinstalled gh CLI.
+
+on:
+  issues:
+    types: [opened, edited, labeled]
+
+permissions:
+  contents: read
+  issues: write
+
+concurrency:
+  group: feedback-triage-${{ github.event.issue.number }}
+  cancel-in-progress: false
+
+jobs:
+  triage:
+    # Only feedback issues; on `labeled`, only when the label added is
+    # `feedback` itself (other labels, including the ones this job adds, do
+    # not re-run it; GITHUB_TOKEN events never trigger workflows anyway).
+    if: >-
+      contains(github.event.issue.labels.*.name, 'feedback') &&
+      (github.event.action != 'labeled' || github.event.label.name == 'feedback')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    defaults:
+      run:
+        shell: bash
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+      ISSUE_NUMBER: ${{ github.event.issue.number }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          sparse-checkout: |
+            tools/feedback_triage.py
+            doc/feedback
+          sparse-checkout-cone-mode: false
+
+      - name: Validate the report
+        run: |
+          jq -r '.issue.body // ""' "$GITHUB_EVENT_PATH" > "$RUNNER_TEMP/body.md"
+          python3 tools/feedback_triage.py --body-file "$RUNNER_TEMP/body.md" > "$RUNNER_TEMP/result.json"
+          jq '{ok, report_id, errors, warnings, labels, fingerprint}' "$RUNNER_TEMP/result.json"
+
+      - name: Apply allow-listed labels
+        run: |
+          allow='^(kind:(bug|ui|idea|question)|os:(macos|windows|linux)|v:[0-9]{1,4}\.[0-9]{1,4})$'
+          gh label list --limit 1000 --json name --jq '.[].name' | sort -u > "$RUNNER_TEMP/existing.txt"
+          jq -r '.labels[]' "$RUNNER_TEMP/result.json" | grep -E "$allow" | sort -u > "$RUNNER_TEMP/wanted.txt" || true
+          # Labels must be created by a maintainer first; unknown ones are skipped.
+          comm -12 "$RUNNER_TEMP/wanted.txt" "$RUNNER_TEMP/existing.txt" > "$RUNNER_TEMP/add.txt"
+          comm -23 "$RUNNER_TEMP/wanted.txt" "$RUNNER_TEMP/existing.txt" | sed 's/^/::notice::label not in the repository, skipped: /'
+          # Managed labels from an earlier version of the body that no longer
+          # apply. Only when the diagnostics are valid, so a maintainer's manual
+          # kind:/os:/v: labels on a report without diagnostics stay.
+          : > "$RUNNER_TEMP/current.txt"
+          [ "$(jq -r '.ok' "$RUNNER_TEMP/result.json")" = true ] && gh issue view "$ISSUE_NUMBER" --json labels --jq '.labels[].name' \
+            | grep -E "$allow" | sort -u > "$RUNNER_TEMP/current.txt" || true
+          comm -23 "$RUNNER_TEMP/current.txt" "$RUNNER_TEMP/wanted.txt" > "$RUNNER_TEMP/remove.txt"
+          args=()
+          while IFS= read -r l; do args+=(--add-label "$l"); done < "$RUNNER_TEMP/add.txt"
+          while IFS= read -r l; do args+=(--remove-label "$l"); done < "$RUNNER_TEMP/remove.txt"
+          if [ "${#args[@]}" -gt 0 ]; then
+            gh issue edit "$ISSUE_NUMBER" "${args[@]}"
+          fi
+
+      - name: Upsert the triage comment
+        run: |
+          marker='<!-- fastag-feedback-triage -->'
+          jq -r '.comment' "$RUNNER_TEMP/result.json" > "$RUNNER_TEMP/comment.md"
+          head -n 1 "$RUNNER_TEMP/comment.md" | grep -qxF "$marker"
+          gh api --paginate "repos/$GH_REPO/issues/$ISSUE_NUMBER/comments" \
+            --jq ".[] | select(.user.login == \"github-actions[bot]\" and (.body | startswith(\"$marker\"))) | .id" \
+            > "$RUNNER_TEMP/ids.txt"
+          id=$(head -n 1 "$RUNNER_TEMP/ids.txt")
+          jq -n --rawfile body "$RUNNER_TEMP/comment.md" '{body: $body}' > "$RUNNER_TEMP/comment.json"
+          if [ -n "$id" ]; then
+            gh api -X PATCH "repos/$GH_REPO/issues/comments/$id" --input "$RUNNER_TEMP/comment.json" > /dev/null
+          else
+            gh api -X POST "repos/$GH_REPO/issues/$ISSUE_NUMBER/comments" --input "$RUNNER_TEMP/comment.json" > /dev/null
+          fi
+
+  # Optional LLM pass (gui-feedback spec, section 5). NOT enabled in this
+  # version. Conditions before enabling it:
+  #   - runs only when a maintainer adds the `llm-triage` label (triage
+  #     permission is needed to add labels, so outsiders cannot start it);
+  #   - its input is the bounded, schema-validated public fields from
+  #     result.json (never the raw body), passed as delimited data, not as
+  #     instructions; screenshots and logs are not sent;
+  #   - the model runs with tools disabled and no repository token;
+  #   - it only suggests: one separate comment with its own marker, no labels,
+  #     no closing, no edits; a maintainer acts on it;
+  #   - the provider key is an environment secret scoped to this job.
+  #
+  # llm-suggest:
+  #   if: github.event.action == 'labeled' && github.event.label.name == 'llm-triage'
+  #   # (no `needs: triage`: that job is skipped on this label; run
+  #   #  tools/feedback_triage.py again here to get the validated fields)
+  #   runs-on: ubuntu-24.04
+  #   timeout-minutes: 5
+  #   environment: llm-triage
+  #   permissions:
+  #     contents: read
+  #     issues: write
+  #   steps:
+  #     - run: echo "not implemented"
