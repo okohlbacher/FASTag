@@ -1147,6 +1147,11 @@ kbd { font-family: var(--font-mono); font-size: var(--text-xs); color: var(--mut
 .sp-missing { stroke: var(--plot-flag); stroke-width: 1.5; stroke-dasharray: 4 3; vector-effect: non-scaling-stroke; }
 .sp-step { stroke: var(--plot-accent); stroke-width: 1.5; vector-effect: non-scaling-stroke; }
 .sp-res-label { fill: var(--plot-foreground); font: 600 12px var(--font-seq); }
+.sp-peak.on.alt { stroke: var(--plot-accent-2); }
+.sp-step.alt { stroke: var(--plot-accent-2); stroke-dasharray: 6 3; }
+.sp-drop { stroke: var(--plot-accent); stroke-width: 1; stroke-dasharray: 3 2; vector-effect: non-scaling-stroke; }
+.sp-drop.alt { stroke: var(--plot-accent-2); }
+.sp-series { fill: var(--plot-muted); font: 600 12px var(--font-seq); }
 .sp-ladder p { margin: 0 0 var(--space-1); }
 .sp-steps { display: flex; flex-wrap: wrap; gap: var(--space-1) var(--space-2); margin: 0; padding: 0; list-style: none; font-size: var(--text-xs); }
 .sp-steps li.off .mono { color: var(--flag-text); }

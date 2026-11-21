@@ -318,10 +318,23 @@ function walk(series: Ladder['series'], start: number, residues: number[], label
 
 /** The ladder of @p row on the peaks of @p s, under @p residues. */
 export function ladderFor(row: TagRow, s: SpectrumPeaks, residues: Residues): Ladder {
+  return laddersFor(row, s, residues).best
+}
+
+/** At least one residue step joins two peaks. */
+export const hasStep = (l: Ladder): boolean => l.positions.some((p, k) => k > 0 && p.peak != null && l.positions[k - 1].peak != null)
+
+/** Both ladders of @p row (N-terminal series first) and the one on the
+ *  peaks (ladderFor). The plot draws each series with a step on the peaks
+ *  on its own line (#127); `both` is empty when no ladder can be built. */
+export function laddersFor(row: TagRow, s: SpectrumPeaks, residues: Residues): { best: Ladder; both: Ladder[] } {
   const z = row.charge
   const parsed = parseTag(row.tag)
   const cz = row.ionSeries === 'cz'
-  const none = (reason: string): Ladder => ({ series: cz ? 'c' : 'b', charge: z, positions: [], residues: [], matched: 0, complete: false, reason })
+  const none = (reason: string): { best: Ladder; both: Ladder[] } => ({
+    best: { series: cz ? 'c' : 'b', charge: z, positions: [], residues: [], matched: 0, complete: false, reason },
+    both: []
+  })
   if (!parsed) return none(`${row.tag} is not a tag`)
   const masses: number[] = []
   const labels: string[] = []
@@ -340,6 +353,6 @@ export function ladderFor(row: TagRow, s: SpectrumPeaks, residues: Residues): La
   const b = walk(cz ? 'c' : 'b', row.ntermMass + (cz ? C_OFFSET : 0), masses, labels, z, s, row.gapped)
   const y = walk(cz ? 'z' : 'y', row.ctermMass + (cz ? Z_DOT_OFFSET : WATER), [...masses].reverse(), [...labels].reverse(), z, s, row.gapped)
   // The one on the peaks; with both (or neither), the one on more peaks.
-  if (b.complete !== y.complete) return b.complete ? b : y
-  return y.matched > b.matched ? y : b
+  const best = b.complete !== y.complete ? (b.complete ? b : y) : y.matched > b.matched ? y : b
+  return { best, both: [b, y] }
 }

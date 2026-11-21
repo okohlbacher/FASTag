@@ -13,7 +13,7 @@
 
 import { useEffect, useMemo, useRef, useState, type JSX, type KeyboardEvent, type PointerEvent, type WheelEvent } from 'react'
 import { parseDump, type SpectrumPeaks } from './dump'
-import { ladderFor, residueMasses, tagRowFrom, type Ladder } from './ladder'
+import { hasStep, ladderFor, laddersFor, residueMasses, tagRowFrom, type Ladder } from './ladder'
 import { baseName } from '../digestReport'
 import { EValue, columnLabel, hitWords, spectrumHint } from '../ResultsTable'
 import { HelpLink } from '../help/HelpLink'
@@ -187,7 +187,10 @@ export default function SpectrumPanel({ target, source, tags: tagsFile, onTarget
 
   const spectrum = peaks.state === 'ok' ? peaks.spectrum : null
   const row = tags && tags.rows[chosen] ? tagRowFrom(tags.columns, tags.rows[chosen]) : null
-  const ladder = spectrum && row ? ladderFor(row, spectrum, residues) : null
+  const lads = spectrum && row ? laddersFor(row, spectrum, residues) : null
+  const ladder = lads?.best ?? null
+  // Each series with a step on the peaks gets its own line (#127).
+  const lines = lads ? lads.both.filter((l) => l === lads.best || hasStep(l)) : []
 
   async function go(dir: -1 | 1): Promise<void> {
     const n = tagsPath ? await neighbour(tagsPath, target.spectrum, target.rowId, dir).catch(() => null) : null
@@ -290,7 +293,7 @@ export default function SpectrumPanel({ target, source, tags: tagsFile, onTarget
   } else {
     body = (
       <>
-        <StickPlot spectrum={peaks.spectrum} ladder={ladder} />
+        <StickPlot spectrum={peaks.spectrum} ladder={ladder} lines={lines} />
         {ladder && <LadderLine ladder={ladder} tag={row?.tag ?? ''} unit={peaks.spectrum.toleranceUnit} />}
         {!row && tags && tags.rows.length > 0 && <p className="hint">This file has no nterm_mass, cterm_mass or charge column: no ladder can be drawn.</p>}
       </>
@@ -454,9 +457,12 @@ export function LadderLine({ ladder, tag, unit }: { ladder: Ladder; tag: string;
 // The plot's frame (SVG user units; the element scales to its box).
 const W = 1000
 const H = 260
-const PAD = { l: 48, r: 12, t: 28, b: 28 }
+const PAD = { l: 48, r: 12, t: 56, b: 28 }
+// The tag lines above the peaks: the N-terminal series (b, c) on the upper,
+// the C-terminal one (y, z) on the lower.
+const LINE_Y = (series: Ladder['series']): number => (series === 'b' || series === 'c' ? 18 : 42)
 
-function StickPlot({ spectrum, ladder }: { spectrum: SpectrumPeaks; ladder: Ladder | null }): JSX.Element {
+export function StickPlot({ spectrum, ladder, lines = ladder ? [ladder] : [] }: { spectrum: SpectrumPeaks; ladder: Ladder | null; lines?: Ladder[] }): JSX.Element {
   const { mz, int } = spectrum
   const full = useMemo((): [number, number] => {
     if (mz.length === 0) return [0, 1]
@@ -475,7 +481,10 @@ function StickPlot({ spectrum, ladder }: { spectrum: SpectrumPeaks; ladder: Ladd
   if (top <= 0) top = 1
   const X = (x: number): number => PAD.l + ((x - lo) / (hi - lo)) * (W - PAD.l - PAD.r)
   const Y = (y: number): number => H - PAD.b - (y / top) * (H - PAD.t - PAD.b)
-  const onLadder = new Set(ladder?.positions.map((p) => p.peak).filter((p): p is number => p != null))
+  const peaksOf = (l: Ladder | null | undefined): Set<number> => new Set(l?.positions.map((p) => p.peak).filter((p): p is number => p != null))
+  const onLadder = peaksOf(ladder)
+  // Peaks only the other series' line lies on.
+  const onOther = new Set([...lines.filter((l) => l !== ladder).flatMap((l) => [...peaksOf(l)])].filter((i) => !onLadder.has(i)))
 
   const zoom = (factor: number, at = (lo + hi) / 2): void => {
     const span = Math.min(full[1] - full[0], Math.max(0.5, (hi - lo) * factor))
@@ -591,8 +600,8 @@ function StickPlot({ spectrum, ladder }: { spectrum: SpectrumPeaks; ladder: Ladd
               x2={X(x)}
               y1={H - PAD.b}
               y2={Y(int[i])}
-              className={onLadder.has(i) ? 'sp-peak on' : 'sp-peak'}
-              data-peak={onLadder.has(i) ? 'ladder' : undefined}
+              className={onLadder.has(i) ? 'sp-peak on' : onOther.has(i) ? 'sp-peak on alt' : 'sp-peak'}
+              data-peak={onLadder.has(i) ? 'ladder' : onOther.has(i) ? 'other' : undefined}
             />
           ) : null
         )}
@@ -600,27 +609,49 @@ function StickPlot({ spectrum, ladder }: { spectrum: SpectrumPeaks; ladder: Ladd
           const x = p.mz ?? p.expected
           if (!inView(x)) return null
           return p.peak == null ? (
-            <line key={`m${k}`} x1={X(x)} x2={X(x)} y1={H - PAD.b} y2={PAD.t} className="sp-missing" />
+            <line key={`m${k}`} x1={X(x)} x2={X(x)} y1={H - PAD.b} y2={ladder ? LINE_Y(ladder.series) : PAD.t} className="sp-missing" />
           ) : null
         })}
-        {ladder &&
-          ladder.residues.map((res, k) => {
-            const a = lp[k]
-            const b = lp[k + 1]
-            if (!a || !b) return null
-            const xa = X(a.mz ?? a.expected)
-            const xb = X(b.mz ?? b.expected)
-            if (Math.max(xa, xb) < PAD.l || Math.min(xa, xb) > W - PAD.r) return null
-            const y = PAD.t - 12
-            return (
-              <g key={`r${k}`}>
-                <line x1={xa} x2={xb} y1={y} y2={y} className="sp-step" />
-                <text x={(xa + xb) / 2} y={y - 4} className="sp-res-label" textAnchor="middle">
-                  {res}
+        {lines.map((l) => {
+          const y = LINE_Y(l.series)
+          const alt = l !== ladder ? ' alt' : ''
+          const q = l.positions
+          const shown = q.some((p) => inView(p.mz ?? p.expected))
+          return (
+            <g key={l.series} data-series={l.series} className={`sp-line${alt}`}>
+              {shown && (
+                <text x={PAD.l - 6} y={y + 4} className="sp-series" textAnchor="end">
+                  {l.series}
                 </text>
-              </g>
-            )
-          })}
+              )}
+              {/* A dashed line from the tag line down to each peak it lies on. */}
+              {q.map((p, k) =>
+                p.peak != null && inView(p.mz ?? p.expected) ? (
+                  <line key={`d${k}`} x1={X(p.mz ?? p.expected)} x2={X(p.mz ?? p.expected)} y1={y} y2={Y(int[p.peak])} className={`sp-drop${alt}`} data-drop={l.series} />
+                ) : null
+              )}
+              {/* Each residue spans the two peaks whose difference it is. */}
+              {l.residues.map((res, k) => {
+                const a = q[k]
+                const b = q[k + 1]
+                if (!a || !b) return null
+                const xa = X(a.mz ?? a.expected)
+                const xb = X(b.mz ?? b.expected)
+                if (Math.max(xa, xb) < PAD.l || Math.min(xa, xb) > W - PAD.r) return null
+                return (
+                  <g key={`r${k}`}>
+                    <line x1={xa} x2={xb} y1={y} y2={y} className={`sp-step${alt}`} />
+                    <line x1={xa} x2={xa} y1={y - 4} y2={y + 4} className={`sp-step${alt}`} />
+                    <line x1={xb} x2={xb} y1={y - 4} y2={y + 4} className={`sp-step${alt}`} />
+                    <text x={(xa + xb) / 2} y={y - 5} className="sp-res-label" textAnchor="middle">
+                      {res}
+                    </text>
+                  </g>
+                )
+              })}
+            </g>
+          )
+        })}
       </svg>
     </div>
   )
