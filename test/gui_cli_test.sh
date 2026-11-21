@@ -496,8 +496,10 @@ fi
 # mzPeak: the export of the Ecoli fixture dumps the same peaks.
 run_in "$TMP/mzp" "$TMP/mzp.out" "$TMP/mzp.err" -in "$IN" -out tags.tsv -out_spectra e.mzpeak -threads 2
 if [ $RC = 0 ] && [ -s "$TMP/mzp/e.mzpeak" ]; then
-  dump "$TMP/mzp/e.mzpeak" "${EIDS[3]}" "$TMP/mzp3.jsonl"
-  cmp -s <(val "$TMP/mzp3.jsonl.v" peaks) <(val "$TMP/d_default/3.jsonl.v" peaks) || fail "(d) mzPeak dumps other peaks"
+  # One tolerance on both sides: an archive written at OPENMS_REF has no filter
+  # strings before OpenMS/OpenMS#10955, so it is not read as ion trap.
+  dump "$TMP/mzp/e.mzpeak" "${EIDS[3]}" "$TMP/mzp3.jsonl" -tolerance_by_analyzer off
+  cmp -s <(val "$TMP/mzp3.jsonl.v" peaks) <(val "$TMP/mz3off.jsonl.v" peaks) || fail "(d) mzPeak dumps other peaks"
   # -out_spectra keeps only the spectra that carry a reported tag.
   ntagged=$(tail -n +2 "$TMP/mzp/tags.tsv" | cut -f1 | sort -u | wc -l | tr -d ' ')
   probe mzpeak "$TMP/mzp/e.mzpeak"
