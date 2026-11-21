@@ -106,6 +106,14 @@ pub fn run() {
                 window = window.additional_browser_args(&args);
             }
             window.build()?;
+            #[cfg(debug_assertions)]
+            if let Some(out) = std::env::var_os(feedback_capture::SELFTEST) {
+                let handle = app.handle().clone();
+                std::thread::spawn(move || {
+                    let code = feedback_capture::self_test(&handle, std::path::Path::new(&out));
+                    handle.exit(code);
+                });
+            }
             if let Some(out) = std::env::var_os(fastag::SELFTEST_OUT) {
                 let handle = app.handle().clone();
                 std::thread::spawn(move || {

@@ -226,6 +226,30 @@ pub async fn feedback_capture(window: WebviewWindow) -> tauri::ipc::Response {
     tauri::ipc::Response::new(feedback::frame(&meta, png.as_deref()))
 }
 
+/// Debug builds only: with FASTAG_FEEDBACK_SELFTEST=<file.png> set, the app
+/// takes the native snapshot of its main window once the page has loaded,
+/// through the same path as feedback_capture, writes the PNG to <file.png>
+/// and its CaptureReply to <file.png>.json, and exits (0: ok). A check of
+/// the real webview where the window cannot be driven (a locked screen, CI).
+#[cfg(debug_assertions)]
+pub(crate) const SELFTEST: &str = "FASTAG_FEEDBACK_SELFTEST";
+
+#[cfg(debug_assertions)]
+pub(crate) fn self_test(app: &AppHandle, out: &Path) -> i32 {
+    use tauri::Manager;
+    std::thread::sleep(Duration::from_secs(4));
+    let Some(w) = app.get_webview_window("main") else { return 2 };
+    let logical = w.inner_size().ok().zip(w.scale_factor().ok()).map_or(0.0, |(s, f)| s.width as f64 / f.max(0.01));
+    let (tx, rx) = channel();
+    let png = native::start(&w, tx).and_then(|()| rx.recv_timeout(TIMEOUT).unwrap_or_else(|_| Err("timeout".into())));
+    let (meta, png) = reply(png, logical);
+    let _ = std::fs::write(out.with_extension("png.json"), serde_json::to_vec_pretty(&meta).unwrap_or_default());
+    match png {
+        Some(p) if std::fs::write(out, &p).is_ok() => 0,
+        _ => 1,
+    }
+}
+
 // ---------------------------------------------------------------- platform
 
 #[derive(Debug, Clone, Serialize, PartialEq)]
