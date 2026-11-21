@@ -319,7 +319,10 @@ export default function SetupForm({
       p.param === 'out'
         ? 'always written'
         : on && needed.length > 0
-          ? `needed by ${needed.join(', ')}`
+          ? // One line: two or more are counted, and named in the row's tooltip.
+            needed.length > 1
+            ? `needed by ${needed.length} reports`
+            : `needed by ${needed.join(', ')}`
           : follows
             ? `written with the ${follows.label.toLowerCase()}`
             : p.param === 'alkylation_out'
@@ -350,7 +353,7 @@ export default function SetupForm({
           data-param={p.param}
           data-value={typeof values[p.param] === 'string' ? String(values[p.param]) : undefined}
         />
-        <label htmlFor={id} title={p.what}>
+        <label htmlFor={id} title={on && needed.length > 1 ? `${p.what} Needed by ${needed.join(', ')}.` : p.what}>
           {p.label}
         </label>
         {detail && <HelpPopover name={p.param} label={p.label} description={detail} deflt="not written" />}

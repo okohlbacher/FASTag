@@ -101,7 +101,7 @@ export const TASKS: readonly Task[] = [
     required: ['recon_fasta'],
     help: {
       recon_fasta: 'The FASTA the tags are placed on (tryptic peptides); shifts are measured against it.',
-      extension: 'Longer tags place more uniquely.',
+      extension: 'Longer tags place better.',
       recon_missed_cleavages: 'Missed trypsin cleavages per placement, 0 to 10.'
     },
     outputs: ['out', 'recon_out', 'delta_out', 'delta_spectra_out', 'delta_counts_out', 'massgap_out', 'recon_id_out'],

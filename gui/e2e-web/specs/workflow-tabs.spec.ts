@@ -41,6 +41,6 @@ test('Setup cards 1 to 4 fit 1280 x 800 for every workflow but Database reductio
     if (w.name === 'Database reduction') continue
     const bottom = await page.locator('#card-outputs').evaluate((e) => e.getBoundingClientRect().bottom)
     const pane = await page.locator('.view-setup .controls-body').evaluate((e) => e.getBoundingClientRect().bottom)
-    expect(bottom, w.name).toBeLessThanOrEqual(pane + 1)
+    expect(bottom, `${w.name}: ${bottom} > ${pane}`).toBeLessThanOrEqual(pane + 1)
   }
 })
