@@ -1,0 +1,217 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/okohlbacher/FASTag/gui/src/feedback/schema/report.schema.json",
+  "title": "FASTag feedback, local report (fastag-feedback/1)",
+  "description": "report.json of one saved feedback report, <app_local_data_dir>/feedback/<YYYYMMDDTHHMMSSZ>_<id8>/. It stays on the machine; the public export (feedback-public.schema.json) is built fresh from these typed fields. The backend (src-tauri/src/feedback.rs) enforces it on save with serde types and explicit checks; gui/src/feedback/schemaCheck.ts validates against this file in the tests. Keywords used: type, enum, const, required, properties, additionalProperties, propertyNames, maxProperties, items, maxItems, minLength, maxLength, pattern, minimum, maximum, anyOf, $ref.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema", "id", "created_utc", "tz_offset_min", "status", "issue_url", "kind", "title", "description",
+    "steps", "expected", "actual", "app", "engine", "platform", "window", "view", "params", "run", "log",
+    "capture", "annotations", "share", "consent_text_version"
+  ],
+  "properties": {
+    "schema": { "const": "fastag-feedback/1" },
+    "id": { "$ref": "#/$defs/uuid" },
+    "created_utc": { "type": "string", "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$" },
+    "tz_offset_min": { "type": "integer", "minimum": -840, "maximum": 840 },
+    "status": { "enum": ["saved", "handoff_opened", "submitted"] },
+    "issue_url": {
+      "anyOf": [
+        { "type": "null" },
+        { "type": "string", "maxLength": 200, "pattern": "^https://github\\.com/okohlbacher/FASTag/issues/[0-9]{1,9}$" }
+      ]
+    },
+    "kind": { "enum": ["bug", "ui", "idea", "question"] },
+    "title": { "type": "string", "minLength": 1, "maxLength": 120 },
+    "description": { "type": "string", "maxLength": 4000 },
+    "steps": { "type": "string", "maxLength": 2000 },
+    "expected": { "type": "string", "maxLength": 2000 },
+    "actual": { "type": "string", "maxLength": 2000 },
+    "app": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["version", "commit", "dirty", "build_date", "channel"],
+      "properties": {
+        "version": { "type": "string", "maxLength": 64 },
+        "commit": { "type": "string", "pattern": "^([0-9a-f]{7,40}|unknown)$" },
+        "dirty": { "type": ["boolean", "null"] },
+        "build_date": { "type": ["string", "null"], "maxLength": 40 },
+        "channel": { "enum": ["release", "prerelease", "dev", "e2e"] }
+      }
+    },
+    "engine": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["version", "source", "bin_size", "ok"],
+      "properties": {
+        "version": { "type": ["string", "null"], "maxLength": 200 },
+        "source": { "enum": ["env", "bundled", "path", "missing", "unknown"] },
+        "bin_size": { "type": ["integer", "null"], "minimum": 0 },
+        "ok": { "type": "boolean" }
+      }
+    },
+    "platform": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["os", "os_version", "arch", "webview", "webview_version", "locale", "display_scale"],
+      "properties": {
+        "os": { "enum": ["macos", "windows", "linux", "other"] },
+        "os_version": { "type": "string", "maxLength": 64 },
+        "arch": { "type": "string", "maxLength": 16 },
+        "webview": { "enum": ["wkwebview", "webview2", "webkitgtk", "browser"] },
+        "webview_version": { "type": "string", "maxLength": 64 },
+        "locale": { "type": "string", "maxLength": 35 },
+        "display_scale": { "type": "number", "minimum": 0, "maximum": 16 }
+      }
+    },
+    "window": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["width", "height", "dpr", "theme", "theme_setting", "zoom"],
+      "properties": {
+        "width": { "type": "integer", "minimum": 0, "maximum": 100000 },
+        "height": { "type": "integer", "minimum": 0, "maximum": 100000 },
+        "dpr": { "type": "number", "minimum": 0, "maximum": 16 },
+        "theme": { "enum": ["light", "dark"] },
+        "theme_setting": { "enum": ["system", "light", "dark"] },
+        "zoom": { "type": "number", "minimum": 0, "maximum": 16 }
+      }
+    },
+    "view": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["view", "workflow", "tab", "dialog", "mode", "help_open"],
+      "properties": {
+        "view": { "$ref": "#/$defs/ident" },
+        "workflow": { "$ref": "#/$defs/identOrNull" },
+        "tab": { "$ref": "#/$defs/identOrNull" },
+        "dialog": { "$ref": "#/$defs/identOrNull" },
+        "mode": { "enum": ["single", "batch"] },
+        "help_open": { "type": "boolean" }
+      }
+    },
+    "params": {
+      "type": "object",
+      "maxProperties": 200,
+      "propertyNames": { "type": "string", "maxLength": 64, "pattern": "^[a-z][a-z0-9_]*$" },
+      "additionalProperties": {
+        "anyOf": [
+          { "type": "null" },
+          { "type": "boolean" },
+          { "type": "number" },
+          { "type": "string", "maxLength": 200 },
+          { "$ref": "#/$defs/pathRef" }
+        ]
+      }
+    },
+    "run": {
+      "anyOf": [
+        { "type": "null" },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["id", "status", "exit_code", "phase", "message", "duration_ms", "argv", "workflow", "input"],
+          "properties": {
+            "id": { "type": ["string", "null"], "maxLength": 64, "pattern": "^[A-Za-z0-9_.:-]*$" },
+            "status": { "enum": ["none", "running", "succeeded", "failed", "cancelled"] },
+            "exit_code": { "type": ["integer", "null"], "minimum": -2147483648, "maximum": 4294967295 },
+            "phase": { "type": ["string", "null"], "maxLength": 120 },
+            "message": { "type": ["string", "null"], "maxLength": 2000 },
+            "duration_ms": { "type": ["integer", "null"], "minimum": 0 },
+            "argv": { "type": "array", "maxItems": 200, "items": { "type": "string", "maxLength": 1000 } },
+            "workflow": { "$ref": "#/$defs/identOrNull" },
+            "input": {
+              "anyOf": [
+                { "type": "null" },
+                {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": ["ext", "size", "mtime_utc"],
+                  "properties": {
+                    "ext": { "type": "string", "maxLength": 16, "pattern": "^[A-Za-z0-9.]*$" },
+                    "size": { "type": ["integer", "null"], "minimum": 0 },
+                    "mtime_utc": { "type": ["string", "null"], "maxLength": 40 }
+                  }
+                }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    "log": {
+      "type": "array",
+      "maxItems": 50,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["level", "text", "t"],
+        "properties": {
+          "level": { "enum": ["error", "warn"] },
+          "text": { "type": "string", "maxLength": 2000 },
+          "t": { "type": "integer", "minimum": 0 }
+        }
+      }
+    },
+    "capture": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["status", "method", "api", "error", "width", "height", "scale", "attempt_id", "captured_utc"],
+      "properties": {
+        "status": { "enum": ["ok", "degraded", "failed", "removed", "none"] },
+        "method": { "enum": ["native", "dom", "none"] },
+        "api": { "type": ["string", "null"], "maxLength": 64 },
+        "error": { "type": ["string", "null"], "maxLength": 500 },
+        "width": { "type": "integer", "minimum": 0, "maximum": 2560 },
+        "height": { "type": "integer", "minimum": 0, "maximum": 2560 },
+        "scale": { "type": "number", "minimum": 0, "maximum": 16 },
+        "attempt_id": { "$ref": "#/$defs/ident" },
+        "captured_utc": { "type": "string", "maxLength": 40 }
+      }
+    },
+    "annotations": {
+      "type": "array",
+      "maxItems": 100,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["n", "type", "px", "text"],
+        "properties": {
+          "n": { "type": "integer", "minimum": 1, "maximum": 1000 },
+          "type": { "enum": ["rect", "arrow", "pen", "text", "redact"] },
+          "px": { "type": "array", "maxItems": 4000, "items": { "type": "number", "minimum": -100000, "maximum": 100000 } },
+          "text": { "type": ["string", "null"], "maxLength": 200 }
+        }
+      }
+    },
+    "share": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["screenshot", "diagnostics", "log"],
+      "properties": {
+        "screenshot": { "type": "boolean" },
+        "diagnostics": { "type": "boolean" },
+        "log": { "type": "boolean" }
+      }
+    },
+    "consent_text_version": { "$ref": "#/$defs/ident" }
+  },
+  "$defs": {
+    "uuid": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+    },
+    "ident": { "type": "string", "maxLength": 64, "pattern": "^[A-Za-z0-9_.:-]+$" },
+    "identOrNull": { "anyOf": [{ "type": "null" }, { "$ref": "#/$defs/ident" }] },
+    "pathRef": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["role"],
+      "properties": {
+        "role": { "$ref": "#/$defs/ident" },
+        "ext": { "type": "string", "maxLength": 16, "pattern": "^[A-Za-z0-9.]*$" }
+      }
+    }
+  }
+}

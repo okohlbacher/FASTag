@@ -1,0 +1,68 @@
+{
+  "kind": "bug",
+  "title": "Species tab stays empty after a Characterize run",
+  "description": "The Species tab shows no ranking (see 1).",
+  "steps": "1. Characterize a run\n2. Open Species",
+  "expected": "A ranking",
+  "actual": "An empty table",
+  "app": {
+    "version": "1.15.6",
+    "commit": "2f9777a2c0ffee00000000000000000000000000",
+    "dirty": false,
+    "build_date": "2026-11-21T10:00:00Z",
+    "channel": "release"
+  },
+  "engine": { "version": "1.15.6", "source": "bundled", "bin_size": 12345678, "ok": true },
+  "platform": {
+    "os": "macos",
+    "os_version": "26.1",
+    "arch": "aarch64",
+    "webview": "wkwebview",
+    "webview_version": "621.1.15.10.7",
+    "locale": "en-US",
+    "display_scale": 2
+  },
+  "window": { "width": 1200, "height": 800, "dpr": 2, "theme": "dark", "theme_setting": "system", "zoom": 1 },
+  "view": { "view": "results", "workflow": "characterize", "tab": "species", "dialog": null, "mode": "single", "help_open": false },
+  "params": {
+    "in": { "role": "input", "ext": "mzML" },
+    "out": { "role": "output", "ext": "tsv" },
+    "species": true,
+    "extension": 2,
+    "subsample_fraction": 0.1,
+    "fragment_tolerance_unit": "ppm",
+    "taxdb": null
+  },
+  "run": {
+    "id": "1795000000000-4242",
+    "status": "succeeded",
+    "exit_code": 0,
+    "phase": "Writing reports",
+    "message": null,
+    "duration_ms": 12500,
+    "argv": ["FASTag", "-in", "<input.mzML>", "-out", "<output.tsv>", "-species", "-extension", "2"],
+    "workflow": "characterize",
+    "input": { "ext": "mzML", "size": 1048576, "mtime_utc": "2026-11-17T08:00:00Z" }
+  },
+  "log": [
+    { "level": "warn", "text": "species: no taxdb at <home>/taxonomy", "t": 1795000000000 },
+    { "level": "error", "text": "TypeError: x is undefined\n    at SpeciesPanel (SpeciesPanel.tsx:12)", "t": 1795000001000 }
+  ],
+  "capture": {
+    "status": "ok",
+    "method": "native",
+    "api": "WKWebView.takeSnapshot",
+    "error": null,
+    "width": 40,
+    "height": 20,
+    "scale": 2,
+    "attempt_id": "cap-1",
+    "captured_utc": "2026-11-18T09:46:39Z"
+  },
+  "annotations": [
+    { "n": 1, "type": "rect", "px": [2, 2, 10, 8], "text": null },
+    { "n": 2, "type": "redact", "px": [20, 4, 8, 6], "text": null }
+  ],
+  "share": { "screenshot": false, "diagnostics": true, "log": false },
+  "consent_text_version": "fastag-feedback-privacy-1"
+}
