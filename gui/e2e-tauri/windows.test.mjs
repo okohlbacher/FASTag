@@ -192,7 +192,11 @@ for (const [kind, env, name] of [
           return v.verdict
         }, 90000, 200).catch((e) => { throw new Error(`${e.message}; the panel shows: ${last}`) })
         assert.match(verdict, /^on \d+ of \d+ positions within the run's tolerance$/, verdict)
-        assert.equal(await s.exec("return document.querySelector('.sp-head h2').textContent"), spectrum)
+        // The heading shows a short hint (e.g. scan=N of a Thermo native ID);
+        // its title keeps the row's full spectrum ID.
+        assert.equal(await s.exec("return document.querySelector('.sp-head h2').getAttribute('title')"), spectrum)
+        const head = await s.exec("return document.querySelector('.sp-head h2').textContent")
+        assert.ok(head && spectrum.includes(head), `the heading "${head}" is not part of the spectrum ID ${spectrum}`)
         record.steps.spectrum = { spectrum, verdict }
         await shot(s, '03-spectrum-inspector')
       }
