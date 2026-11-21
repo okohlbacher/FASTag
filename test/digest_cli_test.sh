@@ -134,7 +134,8 @@ tr -d '\r' < "$TMP/label.tsv" | awk -F'\t' -v n="$(tr -d '\r' < "$TMP/label.tsv"
 [ "$(val "$TMP/label.tsv" label_call status) $(val "$TMP/label.tsv" label_call reason)" = "no_call low_resolution" ] \
   || fail "label_call: a Da run is not no_call low_resolution"
 # a ppm run: few_tags below 175 C-terminal tag ends (the 1.12 rule; -label_call_min_tags was removed in 1.14)
-run -in "$IN" -tag_length 4 -out "$TMP/p.tsv" -digest_out "$TMP/pdigest.tsv" -label_out "$TMP/plabel.tsv"
+# 20 ppm for every spectrum, as in 1.12.0 (the Ecoli MS2 are ion trap: -tolerance_by_analyzer off)
+run -in "$IN" -tag_length 4 -tolerance_by_analyzer off -out "$TMP/p.tsv" -digest_out "$TMP/pdigest.tsv" -label_out "$TMP/plabel.tsv"
 ptot=$(val "$TMP/pdigest.tsv" count tot)
 case "$ptot" in ''|*[!0-9]*) fail "label_call: no count tot in the digest report ('$ptot')" ;; esac
 # The fixture must stay below 175 ends (it has 0 at 20 ppm), so that it sees the minimum.

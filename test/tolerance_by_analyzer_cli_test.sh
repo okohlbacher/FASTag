@@ -1,9 +1,10 @@
 #!/usr/bin/env bash
 # 1.15.5 (PREREG-lowres-defaults): -tolerance_by_analyzer (change B) and the complement window under a Da
 # fragment tolerance (change A), on the E. coli fixture (139 MS2; its only instrument configuration names an
-# Orbitrap analyzer, and its filter strings are userParams, which the fast reader does not read, so FASTag
-# classes it FTMS) and two copies of it: the configuration's analyzer rewritten to "ion trap" (ion trap only),
-# and a second ion-trap configuration referenced by every second scan (mixed).
+# Orbitrap analyzer, but its spectrum-level userParam filter strings say ITMS, and the filter string decides;
+# the fast reader reads them since 1.15.7) and copies of it: the filter strings rewritten to FTMS (Orbitrap
+# only), the configuration's analyzer rewritten to "ion trap" (ion trap only), and, without filter strings, a
+# second ion-trap configuration referenced by every second scan (mixed: the configurations decide).
 #   - Orbitrap only: on and off give byte-identical tags (the guard of the held-out test, H3).
 #   - ion trap only: on gives the tags of a manual 0.5 Da + complement auto run (same probe, same window).
 #   - mixed: both classes counted; the Orbitrap spectra keep the tags they get with the option off.
@@ -15,7 +16,9 @@ TMP=$(mktemp -d); trap 'rm -rf "$TMP"' EXIT
 fail() { echo "FAIL: $*" >&2; exit 1; }
 run() { local name=$1 in=$2; shift 2; "$BIN" -in "$in" -out "$TMP/$name.tsv" -threads 2 "$@" > "$TMP/$name.out" 2> "$TMP/$name.err" \
           || { cat "$TMP/$name.err" >&2; fail "FASTag $name exited non-zero"; }; }
-cp "$IN" "$TMP/ftms.mzML"
+sed 's/name="filter string" type="xsd:string" value="ITMS /name="filter string" type="xsd:string" value="FTMS /' "$IN" > "$TMP/ftms.mzML"
+grep -q 'value="ITMS ' "$TMP/ftms.mzML" && fail "Orbitrap copy keeps ITMS filter strings"
+grep -v '<userParam name="filter string"' "$IN" > "$TMP/nofilter.mzML"
 sed 's/accession="MS:1000484" name="orbitrap"/accession="MS:1000264" name="ion trap"/' "$IN" > "$TMP/itms.mzML"
 grep -q 'name="ion trap"' "$TMP/itms.mzML" || fail "ion-trap copy"
 # mixed: a copy of ic_0 as ic_1 with an ion-trap analyzer; every second <scan > refers to it
@@ -28,7 +31,7 @@ awk 'BEGIN { inic = 0 }
                                              printf "%s", b2; next }
      inic { next }
      /<scan >/ { n++; if (n % 2 == 1) sub(/<scan >/, "<scan instrumentConfigurationRef=\"ic_1\">") }
-     { print }' "$IN" > "$TMP/mixed.mzML"
+     { print }' "$TMP/nofilter.mzML" > "$TMP/mixed.mzML"
 [ "$(grep -c 'instrumentConfigurationRef="ic_1"' "$TMP/mixed.mzML")" -ge 69 ] || fail "mixed copy"
 
 # Orbitrap only: identical with the option on and off.
@@ -36,6 +39,11 @@ run ftms_on "$TMP/ftms.mzML"
 run ftms_off "$TMP/ftms.mzML" -tolerance_by_analyzer off
 cmp -s "$TMP/ftms_on.tsv" "$TMP/ftms_off.tsv" || fail "Orbitrap-only run: tags differ between on and off"
 grep -q 'The probe draw found 0 ion-trap MS2' "$TMP/ftms_on.err" || fail "Orbitrap-only run: no probe line"
+
+# The fixture itself: its ITMS filter strings make every MS2 ion trap, the Orbitrap configuration aside.
+run fx_on "$IN"
+grep -q 'Tolerance by analyzer: 139 ion-trap MS2 tagged at 0.5 Da, 0 other MS2' "$TMP/fx_on.err" \
+  || { grep 'Tolerance by analyzer' "$TMP/fx_on.err" >&2; fail "fixture: its ITMS filter strings are not read"; }
 
 # Ion trap only: on == manual 0.5 Da + complement auto.
 run it_on "$TMP/itms.mzML"
