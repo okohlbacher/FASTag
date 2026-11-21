@@ -23,7 +23,7 @@ import { join } from 'node:path'
 import App from '../App'
 import { installMockBridge, type MockBridge } from '../testing/mockBridge'
 import { DEFAULTS, LANDING, type Origin } from '../setup/tasks'
-import { click, showView } from '../testing/render'
+import { click, openGroup, showView } from '../testing/render'
 import { applyAndCheck } from '../testing/lastUsed'
 import { PARAM_BY_NAME, invalidBecause, invalidParams } from '../paramLayout'
 import { FASTAG_BIN, ORDER_RS, REPO_FIXTURES_DIR, SRC_TAURI_DIR } from './external'
@@ -72,8 +72,9 @@ function runCli(argv: string[]): Promise<{ rc: number | null; lines: Outcome['li
 
 async function guiRun(opts: {
   lastUsed?: Record<string, unknown>
-  out?: string
-  ui?: () => Promise<void>
+  ui?: (mock: MockBridge) => Promise<void>
+  /// The run name (Outputs card): the tags table is <S>/<name>.tags.tsv and
+  /// every report is named after it in the same folder.
   name: string
   /// Where the session starts. FASTag's defaults unless a test asks for the
   /// landing task: the app lands on "Export tags", which adds per-residue
@@ -89,13 +90,17 @@ async function guiRun(opts: {
   if (opts.lastUsed) await applyAndCheck(opts.lastUsed) // D6: the offer, clicked; guards the form
   mock.nextPickInput = IN
   await click(screen.getByRole('button', { name: /^(Choose file|Change)…$/ }))
-  const outField = screen.getByLabelText(/Tags TSV/) as HTMLInputElement
+  // Choose file names the run after the input, beside it.
+  const runName = screen.getByLabelText('Run name') as HTMLInputElement
+  expect(runName.value).toBe('ecoli')
   await act(async () => {
-    fireEvent.change(outField, { target: { value: opts.out ?? `${S}/${opts.name}.tags.tsv` } })
+    fireEvent.change(runName, { target: { value: opts.name } })
   })
-  if (opts.ui) await opts.ui()
+  expect(runName.value).toBe(opts.name)
+  if (opts.ui) await opts.ui(mock)
   await click(screen.getByRole('button', { name: /^Run( on .+)?$/ }))
   const call = mock.runCalls[0]
+  expect(call.out).toBe(`${S}/${opts.name}.tags.tsv`)
   const argv = JSON.parse(
     execFileSync(BA, { input: JSON.stringify({ in: call.in, out: call.out, params: call.params }) }).toString()
   ) as string[]
@@ -122,10 +127,26 @@ async function guiBlocked(lastUsed: Record<string, unknown>): Promise<{ mock: Mo
   await click(run)
   return { mock, run, controls: container.querySelector('.controls')?.textContent ?? '' }
 }
-// Setup's section, which is hidden while a finished run shows its Results.
-const openMatching = (): Promise<void> => {
+// The Advanced group of orientation and isobaric_tolerance (Setup is
+// hidden while a finished run shows its Results).
+const openMatching = (): Promise<void> => openGroup('Tagging, advanced')
+// The Instrument select's Custom entry, which shows the tolerance and its unit.
+const customTolerance = (): Promise<void> =>
+  act(async () => {
+    fireEvent.change(document.getElementById('instrument')!, { target: { value: 'custom' } })
+  })
+/// Point the report @p param (a product row of Outputs or Advanced) at
+/// @p path through its Change… button and the save dialog, checking it first.
+async function changeReport(mock: MockBridge, param: string, label: string, path: string, group?: string): Promise<void> {
   showView('setup')
-  return click(screen.getAllByRole('button').find((b) => b.className === 'disclosure' && /Sequence matching/.test(b.textContent ?? ''))!)
+  if (group && !document.querySelector(`input[data-param="${param}"]`)) await openGroup(group)
+  const box = document.querySelector<HTMLInputElement>(`input[data-param="${param}"]`)!
+  expect(box, param).not.toBeNull()
+  if (!box.checked) await click(box)
+  expect(box.checked).toBe(true)
+  mock.nextPickOutput = path
+  await click(screen.getByRole('button', { name: `Change the file of ${label}` }))
+  expect(document.querySelector<HTMLInputElement>(`input[data-param="${param}"]`)?.dataset.value).toBe(path)
 }
 // The CLI on its own, with defaults plus @p extra.
 const cliDirect = (name: string, extra: string[]) =>
@@ -167,10 +188,11 @@ describe.skipIf(!ready)('GUI-built argv against the FASTag CLI (FASTAG_BIN)', ()
     expect(argOf(o.argv, 'extension')).toBe('2')
     expect(o.argv).toContain('-glyco')
     expect(argOf(o.argv, 'subsample_fraction')).toBe('0.1')
-    // The task's reports, on the input's stem beside it (rebaseOutputs on Choose file).
+    // The task's reports, named after the run beside its tags table
+    // (rebaseOutputs on Choose file and on the Run name).
     for (const r of ['digest', 'label']) {
-      expect(argOf(o.argv, `${r}_out`)).toBe(`${S}/ecoli.${r}.tsv`)
-      expect(existsSync(`${S}/ecoli.${r}.tsv`)).toBe(true)
+      expect(argOf(o.argv, `${r}_out`)).toBe(`${S}/characterize.${r}.tsv`)
+      expect(existsSync(`${S}/characterize.${r}.tsv`)).toBe(true)
     }
   }, 120000)
 
@@ -186,6 +208,8 @@ describe.skipIf(!ready)('GUI-built argv against the FASTag CLI (FASTAG_BIN)', ()
       name: 'da',
       lastUsed: { tag_length: '4', digest_out: `${S}/da.digest.tsv` },
       ui: async () => {
+        // Instrument: Custom shows the tolerance and its unit dropdown.
+        await customTolerance()
         await act(async () => {
           fireEvent.change(document.getElementById('p-fragment_tolerance')!, { target: { value: '0.3' } })
           fireEvent.change(document.getElementById('p-fragment_tolerance_unit')!, { target: { value: 'Da' } })
@@ -194,9 +218,9 @@ describe.skipIf(!ready)('GUI-built argv against the FASTag CLI (FASTAG_BIN)', ()
     })
     expect(argOf(o.argv, 'fragment_tolerance_unit')).toBe('Da')
     expect(o.rc).toBe(0)
-    // Choose file rebased the configured digest_out onto the input's stem.
-    expect(argOf(o.argv, 'digest_out')).toBe(`${S}/ecoli.digest.tsv`)
-    expect(readFileSync(`${S}/ecoli.digest.tsv`, 'utf8')).toMatch(/^call\treason\tlow_resolution/m)
+    // The configured digest_out was rebased onto the run's name.
+    expect(argOf(o.argv, 'digest_out')).toBe(`${S}/da.digest.tsv`)
+    expect(readFileSync(`${S}/da.digest.tsv`, 'utf8')).toMatch(/^call\treason\tlow_resolution/m)
   }, 30000)
 
   it('inactive options are not sent (gap_penalty with gaps 0, massgap/delta without recon, species_out with species off)', async () => {
@@ -232,30 +256,43 @@ describe.skipIf(!ready)('GUI-built argv against the FASTag CLI (FASTAG_BIN)', ()
   }, 30000)
 
   it('outputs aliasing each other are refused, and the banner says so', async () => {
-    // digest_out is rebased to <dir>/ecoli.digest.tsv on Choose file; the user then types that as Output.
-    const o = await guiRun({ name: 'alias', lastUsed: { digest_out: `${S}/x.tsv` }, out: `${S}/ecoli.digest.tsv` })
+    // digest_out is rebased to <dir>/alias.digest.tsv with the run name; the
+    // user then saves the digest report as the run's tags table.
+    const o = await guiRun({
+      name: 'alias',
+      lastUsed: { digest_out: `${S}/x.tsv` },
+      ui: (mock) => changeReport(mock, 'digest_out', 'Digest report', `${S}/alias.tags.tsv`, 'Digest and labels')
+    })
     expect(argOf(o.argv, 'digest_out')).toBe(argOf(o.argv, 'out'))
     expect(o.rc).toBe(6)
     expect(o.lines.some((l) => /-digest_out and -out name the same file/.test(l.line))).toBe(true)
     expect(o.banner).toMatch(/-digest_out and -out name the same file/)
   }, 30000)
 
-  it('out_spectra = the input is refused (input survives) and the banner says why', async () => {
+  it('out_spectra = the input is refused before the start (input survives), the banner says why, and the CLI refuses it too', async () => {
     const before = readFileSync(IN).length
-    const o = await guiRun({
-      name: 'aliasin',
-      ui: async () => {
-        await click(screen.getByRole('button', { name: /^Output (defaults|\d+ changed)$/ }))
-        await act(async () => {
-          fireEvent.change(document.getElementById('p-out_spectra')!, { target: { value: IN } })
-        })
-      }
-    })
-    expect(o.rc).toBe(6)
-    expect(argOf(o.argv, 'out_spectra')).toBe(IN) // a single run does not rebase an output typed AFTER the pick
-    expect(o.lines.some((l) => /is the input file; writing it would destroy the input/.test(l.line))).toBe(true)
+    const mock = installMockBridge()
+    render(<App start={DEFAULTS} />)
+    await screen.findByText('FASTag ready')
+    await act(async () => {})
+    mock.nextPickInput = IN
+    await click(screen.getByRole('button', { name: /^(Choose file|Change)…$/ }))
+    // Spectra with tags, saved over the input (a single run does not rebase
+    // an output chosen AFTER the pick).
+    await changeReport(mock, 'out_spectra', 'Spectra with tags', IN, 'Tag columns and files')
+    await click(screen.getByRole('button', { name: /^Run( on .+)?$/ }))
+    // The GUI checks the outputs against the inputs before it starts
+    // (outputs.rs clashes): nothing is sent, and the banner names the file.
+    expect(mock.runCalls).toHaveLength(0)
+    const banner = screen.queryByRole('alert')?.textContent ?? ''
+    expect(banner).toMatch(/^Not started: an output is also an input of this run/)
+    expect(banner).toContain(`${IN} is read by this run; writing it would destroy it.`)
     expect(readFileSync(IN).length).toBe(before)
-    expect(o.banner).toMatch(/is the input file; writing it would destroy the input/)
+    // The CLI, given the same option, refuses it as well and keeps the input.
+    const d = await cliDirect('aliasin', ['-out_spectra', IN])
+    expect(d.rc).toBe(6)
+    expect(d.lines.some((l) => /is the input file; writing it would destroy the input/.test(l.line))).toBe(true)
+    expect(readFileSync(IN).length).toBe(before)
   }, 30000)
 
   it('-entrapment_fasta + -species, which the CLI refuses, is refused beside Run', async () => {
