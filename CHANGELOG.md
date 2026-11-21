@@ -1,5 +1,15 @@
 # Changelog
 
+## Unreleased
+
+- **GUI: in-app Feedback.** A **Feedback** button in the top bar (also Help › Send Feedback…, Cmd/Ctrl+Shift+F)
+  takes a screenshot of the window (the webview's own snapshot: WKWebView, WebView2, WebKitGTK; no screen-recording
+  permission), records the app and engine versions, the system, the view and the settings as typed values (paths only as
+  role and extension), and opens a form with a mark-up editor (boxes, arrows, pen, labels, redactions, keyboard-operable).
+  **Save** keeps the report on this computer only (`<app data>/feedback/`, 180 days); sharing is a separate, reviewed
+  step that writes `<id>.feedback.zip` and opens a prefilled GitHub issue form. Screenshot and log are off for sharing by
+  default.
+
 ## 1.15.7 (2026-11-21)
 
 Ion-trap spectra in mzML files written by OpenMS now get the ion-trap tolerance, and the GUI Spectrum panel shows the peaks their tags come from.
@@ -9,13 +19,6 @@ Ion-trap spectra in mzML files written by OpenMS now get the ion-trap tolerance,
   MS2 at `-fragment_tolerance`. They now get `-fragment_tolerance_itms`, as OpenMS's own reader would class them. The
   bundled E. coli example is such a file: its 139 MS2 are ion trap and are now tagged at 0.5 Da
   (`-tolerance_by_analyzer off` gives the 1.15.6 tags).
-- **GUI: in-app Feedback.** A **Feedback** button in the top bar (also Help › Send Feedback…, Cmd/Ctrl+Shift+F)
-  takes a screenshot of the window (the webview's own snapshot: WKWebView, WebView2, WebKitGTK; no screen-recording
-  permission), records the app and engine versions, the system, the view and the settings as typed values (paths only as
-  role and extension), and opens a form with a mark-up editor (boxes, arrows, pen, labels, redactions, keyboard-operable).
-  **Save** keeps the report on this computer only (`<app data>/feedback/`, 180 days); sharing is a separate, reviewed
-  step that writes `<id>.feedback.zip` and opens a prefilled GitHub issue form. Screenshot and log are off for sharing by
-  default.
 - **GUI Spectrum panel:** an ion-trap MS2 is shown with the peaks prepared at its analyzer's tolerance, the ones its tags
   come from (`-dump_spectrum` ignored `-tolerance_by_analyzer`).
 
