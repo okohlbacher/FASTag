@@ -74,7 +74,7 @@ jobs:
       - name: Playwright (Chromium, WebKit)
         # Backstop only: globalTimeout in playwright.config.ts ends a hung run
         # first, with a report naming the test.
-        timeout-minutes: 8
+        timeout-minutes: 14
         env:
           CI: '1'
         run: npm run e2e

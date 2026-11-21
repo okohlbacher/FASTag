@@ -43,6 +43,14 @@ const cliEnv = () => ({
 })
 
 const tagsOf = (input) => join(dirname(input), basename(input).replace(/\.[^.]+$/, '') + '.tags.tsv')
+
+/** Click Run once Setup holds @p input: the Outputs card names the run after
+ *  it (Run name = the input's stem), so Run starts this file, not another. */
+async function runOn(s, input, timeoutMs = 20000) {
+  const stem = basename(input).replace(/\.[^.]+$/, '')
+  await until(`the run name ${stem}`, () => s.exec("const e = document.getElementById('out-name'); return !!e && e.value === arguments[0]", stem), timeoutMs)
+  await s.click(await s.button('Run', timeoutMs))
+}
 const count = (s) => Number(s.replace(/,/g, ''))
 
 /** Processes whose executable is @p exe (a full path), by path: the app and
@@ -153,7 +161,7 @@ for (const [kind, env, name] of [
       await task(s, 'Export tags')
       const input = copyIn(process.env[env], name)
       await chooseInput(s, input)
-      await s.click(await s.button(`Run on ${name}`))
+      await runOn(s, input)
       const m = await s.waitText(/Showing ([\d,]+) of ([\d,]+)/, 480000)
       const out = tagsOf(input)
       assert.ok(existsSync(out), `${out} was not written`)
@@ -184,7 +192,11 @@ for (const [kind, env, name] of [
           return v.verdict
         }, 90000, 200).catch((e) => { throw new Error(`${e.message}; the panel shows: ${last}`) })
         assert.match(verdict, /^on \d+ of \d+ positions within the run's tolerance$/, verdict)
-        assert.equal(await s.exec("return document.querySelector('.sp-head h2').textContent"), spectrum)
+        // The heading shows a short hint (e.g. scan=N of a Thermo native ID);
+        // its title keeps the row's full spectrum ID.
+        assert.equal(await s.exec("return document.querySelector('.sp-head h2').getAttribute('title')"), spectrum)
+        const head = await s.exec("return document.querySelector('.sp-head h2').textContent")
+        assert.ok(head && spectrum.includes(head), `the heading "${head}" is not part of the spectrum ID ${spectrum}`)
         record.steps.spectrum = { spectrum, verdict }
         await shot(s, '03-spectrum-inspector')
       }
@@ -213,13 +225,13 @@ test('characterize: species, digest, label reports and the Overview', { timeout:
       assert.match(check, /FASTag-\d+\.\d+\.\d+-taxonomy-k7\.tar\.gz/, check)
       const want = join(taxDir, 'tax_k7.taxdb').toLowerCase()
       assert.ok(check.toLowerCase().includes(want), `the check does not name ${want}: ${check}`)
-      const runBlocked = await s.exec("const b = [...document.querySelectorAll('button[data-run]')].find((b) => b.textContent.includes('char.mzML')); return !b || b.disabled")
+      const runBlocked = await s.exec("const b = document.querySelector('button[data-run]'); return !b || b.disabled")
       assert.equal(runBlocked, true, 'Run is not blocked without the taxonomy index')
       copyFileSync(taxdb, join(taxDir, basename(taxdb)))
       await s.exec("window.dispatchEvent(new Event('focus'))")
       await until('the check to clear', () => s.exec("return !document.querySelector('li.check[data-check=no-taxdb]')"), 60000, 300)
     }
-    await s.click(await s.button('Run on char.mzML', 120000))
+    await runOn(s, input, 120000)
     await until('the Overview', () => s.exec(`const t = [...document.querySelectorAll('[role=tab]')].find((t) => t.textContent.trim() === 'Overview');
       return !!t && t.getAttribute('aria-selected') === 'true' && !!document.querySelector('.view[data-view="results"]:not([hidden])')`), 600000, 500)
       .catch(async (e) => {
@@ -266,7 +278,7 @@ test('refusal: a file FASTag refuses is blocked before the run, with its reason'
     const block = await until('the raw-DIA check', () => s.exec(`const f = document.querySelector('li.check-block[data-check="raw-dia"]');
       return f ? f.innerText : ''`), 120000, 300)
     await shot(s, '08-refusal')
-    const runEnabled = !!(await s.buttonNow('Run on dia_like.mzML'))
+    const runEnabled = !!(await s.buttonNow('Run'))
     const reason = cliText.split(/\r?\n/).map((l) => l.trim()).filter((l) => / is raw DIA/.test(l)).pop() || ''
     record.steps.refusal = { cliExit: r.status, reason, block: block.slice(0, 1500), runEnabled }
     assert.equal(r.status, 11, `the CLI exited ${r.status}, not 11 (refused): ${cliText.slice(-800)}`)
