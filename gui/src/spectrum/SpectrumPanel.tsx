@@ -234,8 +234,10 @@ export default function SpectrumPanel({ target, source, tags: tagsFile, placemen
       .then(() => Promise.all([neighbour(tagsPath, target.spectrum, target.rowId, -1), neighbour(tagsPath, target.spectrum, target.rowId, 1)]))
       .then(([p, n]) => live && setNav({ prev: !!p, next: !!n }))
       .catch(() => live && setNav({ prev: false, next: false }))
-      // Last, the peptide the run placed this spectrum's tags on (first page).
-      .then(() => (placements ? query(placements, { spectrum: target.spectrum, spectrumExact: true }, 0, PAGE) : null))
+      // Last, the peptide the run placed this spectrum's tags on (first
+      // page). No Results table has -recon_out open while the Spectrum tab
+      // shows: resultsQuery would refuse it ("cancelled"), tableQuery reads it.
+      .then(() => (placements ? window.fastag.tableQuery(placements, { spectrum: target.spectrum, spectrumExact: true }, 0, PAGE) : null))
       .then((pg) => live && pg && setCand(likelyPeptide(pg.columns, pg.rows)))
       .catch(() => undefined)
     return () => {

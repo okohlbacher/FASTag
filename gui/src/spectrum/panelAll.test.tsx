@@ -37,7 +37,10 @@ describe('Spectrum, all tags', () => {
   it('ruler of the placed peptide, steps against the selected tag, error strip and pileup', async () => {
     const mock = installMockBridge()
     mock.spectrumDumps['scan=1'] = dump
-    window.fastag.resultsQuery = (path) => Promise.resolve(path.endsWith('recon.tsv') ? page(recCols, recRows) : page(tagCols, tagRows))
+    // As browser.rs in the app: no Results table has -recon_out open, so an
+    // Interactive resultsQuery refuses it ("cancelled"); tableQuery reads it.
+    window.fastag.resultsQuery = (path) => (path.endsWith('recon.tsv') ? Promise.reject('cancelled') : Promise.resolve(page(tagCols, tagRows)))
+    mock.tables['/d/recon.tsv'] = { columns: recCols, rows: recRows }
     const { container } = render(
       <SpectrumPanel
         target={{ path: '/d/a.tags.tsv', spectrum: 'scan=1', rowId: 0 }}
@@ -49,6 +52,7 @@ describe('Spectrum, all tags', () => {
     )
     const peptide = await screen.findByTestId('peptide')
     expect(peptide.textContent).toMatch(/Tags placed on PEPTIDEK \(sp\|P1\|TEST_ECOLI\): 2 tags, 2 exactly\. A candidate/)
+    expect(mock.tableQueryCalls.map((c) => [c.path, c.view.spectrum, c.view.spectrumExact])).toEqual([['/d/recon.tsv', 'scan=1', true]])
     // One tag drawn: the ruler is there already.
     expect(container.querySelectorAll('[data-ruler]').length).toBe(1)
     fireEvent.click(screen.getByLabelText('All tags, resolved'))
