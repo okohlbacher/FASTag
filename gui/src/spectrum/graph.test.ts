@@ -164,6 +164,26 @@ describe('tag graph', () => {
     expect(g2.paths.every((p) => p.sameAs.length === 0)).toBe(true)
   })
 
+  it('arcs: each continuation once, touching ones only with join, those that build a chain used', () => {
+    // PEP, PTI and TID: PEP and PTI share a step, PTI and TID two; PEP and TID only touch.
+    const tags = [tag(0, 0, 3, 0.01), tag(1, 2, 3, 0.5), tag(2, 3, 3, 0.02)]
+    const g = buildGraph(tags, spec(b), RES)
+    expect(seqs(g)).toEqual(['PEPTID'])
+    expect(g.arcs).toEqual([
+      { from: 0, to: 1, touch: false, used: true },
+      { from: 1, to: 2, touch: false, used: true }
+    ])
+    const j = buildGraph(tags, spec(b), RES, { join: true })
+    expect(j.arcs).toContainEqual({ from: 0, to: 2, touch: true, used: false })
+    // Each used arc links two consecutive members of a chain.
+    for (const x of [g, j]) expect(x.arcs.filter((a) => a.used).length).toBe(x.paths.reduce((n, p) => n + p.chain.length - 1, 0))
+    // A fork: no arc between the two, none used.
+    const one = ions(N, 'PPPAG')
+    const start2 = N + sum('PPP') - R.V
+    const f = buildGraph([at(0, N, 'PPPAG', 0.01), at(1, start2, 'VASSS', 0.02)], spec([...one, ...ions(start2, 'VASSS')]), RES)
+    expect(f.arcs).toEqual([])
+  })
+
   it('unscored and off-peak tags: counted apart, never the best evidence (Astra 9)', () => {
     const off = tag(0, 0, 3, 0.01)
     off.row.ntermMass += 3

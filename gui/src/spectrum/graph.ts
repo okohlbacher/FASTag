@@ -102,11 +102,22 @@ export interface GPath {
   sameAs: { path: number; steps: number }[]
 }
 
+/** One placement continuing another (placement indices, from < to). */
+export interface Arc {
+  from: number
+  to: number
+  // They share one peak only (joined under `join`).
+  touch: boolean
+  // It links two consecutive placements of a resolved tag's chain.
+  used: boolean
+}
+
 export interface TagGraph {
   placements: Placement[]
   paths: GPath[]
   // Tags whose ladder is not on the peaks.
   offPeaks: number[]
+  arcs: Arc[]
 }
 
 const il = (s: string): string => s.replace(/I/g, 'L')
@@ -114,7 +125,7 @@ const il = (s: string): string => s.replace(/I/g, 'L')
 // a tag does not say which series it was read from, and its steps are in
 // ascending m/z either way, so tags on the same peaks meet whatever series
 // their flank suggested.
-const layerOf = (e: { series: string; charge: number }): string => `${e.series === 'c' || e.series === 'z' ? 'cz' : 'by'}${e.charge}`
+export const layerOf = (e: { series: string; charge: number }): string => `${e.series === 'c' || e.series === 'z' ? 'cz' : 'by'}${e.charge}`
 const nTerminal = (s: Ladder['series']): boolean => s === 'b' || s === 'c'
 const tolAt = (s: SpectrumPeaks, x: number): number => (s.toleranceUnit === 'ppm' ? (x * s.tolerance) / 1e6 : s.tolerance)
 const byE = (a: number | null, b: number | null): number => (a ?? Infinity) - (b ?? Infinity)
@@ -247,7 +258,14 @@ export function buildGraph(tags: TagIn[], s: SpectrumPeaks, residues: Residues, 
   const n = placements.length
   // arcs[b]: the placements b continues (they come before b in canonical order).
   const arcs: number[][] = placements.map(() => [])
-  for (let a = 0; a < n; a++) for (let b = a + 1; b < n && layerOf(placements[b]) === layerOf(placements[a]); b++) if (continues(placements[a], placements[b], opts.join, opts.minOverlap ?? 1) > 0) arcs[b].push(a)
+  const out: Arc[] = []
+  for (let a = 0; a < n; a++)
+    for (let b = a + 1; b < n && layerOf(placements[b]) === layerOf(placements[a]); b++) {
+      const i = continues(placements[a], placements[b], opts.join, opts.minOverlap ?? 1)
+      if (i <= 0) continue
+      arcs[b].push(a)
+      out.push({ from: a, to: b, touch: placements[a].peaks.length - i === 1, used: false })
+    }
 
   const alive = new Array<boolean>(n).fill(true)
   const paths: GPath[] = []
@@ -379,7 +397,9 @@ export function buildGraph(tags: TagIn[], s: SpectrumPeaks, residues: Residues, 
       B.relations.push({ path: a, kind, shared })
     }
 
-  const g = { placements, paths, offPeaks }
+  const links = new Set(paths.flatMap((p) => p.chain.slice(1).map((b, k) => `${p.chain[k]}>${b}`)))
+  for (const a of out) a.used = links.has(`${a.from}>${a.to}`)
+  const g = { placements, paths, offPeaks, arcs: out }
   settleSeries(g, s)
   return g
 }
