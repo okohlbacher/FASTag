@@ -1141,6 +1141,36 @@ kbd { font-family: var(--font-mono); font-size: var(--text-xs); color: var(--mut
 .sp-faint { opacity: 0.45; }
 .sp-link { stroke: var(--plot-muted); stroke-width: 1; vector-effect: non-scaling-stroke; }
 .sp-joined { fill: var(--plot-background); stroke: var(--plot-flag); stroke-width: 1.5; vector-effect: non-scaling-stroke; }
+/* All tags: another tag's step against the selected tag. */
+.sp-step.alt.same { stroke: var(--plot-accent); stroke-dasharray: none; stroke-width: 1; }
+.sp-step.alt.differs { stroke: var(--plot-flag); stroke-dasharray: 3 3; }
+.sp-step.strong { stroke-width: 3; }
+.sp-res-label.differs { fill: var(--flag-text); }
+.sp-res-label.ambig { font-style: italic; }
+.sp-ruler-tick { stroke: var(--plot-muted); stroke-width: 1; vector-effect: non-scaling-stroke; }
+.sp-ruler-res { fill: var(--plot-muted); font: 12px var(--font-seq); }
+.sp-ruler-res.on { fill: var(--plot-foreground); font-weight: 700; }
+.sp-strip-band { fill: var(--plot-grid); opacity: 0.45; }
+.sp-strip-drift { fill: none; stroke: var(--plot-accent); stroke-width: 1.5; vector-effect: non-scaling-stroke; }
+.sp-strip-step { fill: var(--plot-accent); }
+.sp-strip-other { fill: var(--plot-background); stroke: var(--plot-flag); stroke-width: 1.5; vector-effect: non-scaling-stroke; }
+.sp-strip-pep line { stroke: var(--plot-foreground); stroke-width: 1.5; vector-effect: non-scaling-stroke; }
+.sp-legend, .sp-peptide { margin: 0; }
+.sp-key { display: inline-block; width: 22px; height: 0; vertical-align: middle; border-top: 2px solid var(--plot-accent); }
+.sp-key.differs { border-top: 2px dashed var(--plot-flag); }
+.sp-key.other { border-top: 2px dashed var(--plot-accent-2); }
+.sp-pile-wrap { margin-top: var(--space-3); overflow-x: auto; }
+.sp-pile { display: grid; gap: 2px 0; align-items: center; font-size: var(--text-xs); width: max-content; }
+.sp-pile-label { margin-right: var(--space-3); text-align: left; white-space: nowrap; }
+.sp-pile-e { padding-right: var(--space-2); white-space: nowrap; text-align: right; font-variant-numeric: tabular-nums; }
+.sp-pile-mz { text-align: right; color: var(--muted-foreground); font-size: 10px; padding: 0 2px; font-variant-numeric: tabular-nums; }
+.sp-pile-step { text-align: center; font: 600 var(--text-xs) var(--font-seq); padding: 1px 3px; margin: 0 1px; border-bottom: 2px solid var(--plot-accent-2); white-space: nowrap; }
+.sp-pile-step.same, .sp-pile-step.resolved { border-bottom: 2px solid var(--plot-accent); }
+.sp-pile-step.resolved { background: var(--primary-soft); }
+.sp-pile-step.differs { border-bottom: 2px dashed var(--plot-flag); color: var(--flag-text); }
+.sp-pile-step.other { border-bottom-style: dashed; }
+.sp-pile-step.pep { border-bottom: 1px solid var(--plot-muted); font-weight: 400; }
+.sp-pile-step.ambig { font-style: italic; }
 .sp-member { margin-right: 6px; }
 .sp-mode { display: flex; flex-wrap: wrap; gap: 4px 16px; align-items: center; margin: 4px 0 6px; }
 .sp-mode input[type=text] { width: 7em; }

@@ -14,7 +14,8 @@
 import { useEffect, useMemo, useRef, useState, type JSX, type KeyboardEvent, type PointerEvent, type WheelEvent } from 'react'
 import { parseDump, type SpectrumPeaks } from './dump'
 import { hasStep, ladderFor, laddersFor, residueMasses, tagRowFrom, type Ladder } from './ladder'
-import { buildGraph, ladderOf, packRows, sequenceOf, type TagGraph, type TagIn } from './graph'
+import { buildGraph, kindOf, ladderOf, packRows, sequenceOf, stepLabel, type StepKind, type TagGraph, type TagIn } from './graph'
+import { likelyPeptide, rulerOf, stepOnRuler, stepsOnRuler, ticksOf, type Candidate, type Ruler } from './peptide'
 import { baseName } from '../digestReport'
 import { EValue, columnLabel, hitWords, spectrumHint } from '../ResultsTable'
 import { HelpLink } from '../help/HelpLink'
@@ -45,6 +46,9 @@ interface Props {
   // tags table is open (a ranking opened alone is not one). Left out, the
   // target's own file.
   tags?: string | null
+  // The run's tag placements (-recon_out), when it wrote them: the peptide
+  // most tags of the spectrum were placed on is drawn as a ruler.
+  placements?: string | null
   // Another spectrum of the file (◀ ▶).
   onTarget(t: SpectrumTarget): void
   // The input moved or is unknown: the user picks it.
@@ -122,7 +126,7 @@ async function neighbour(path: string, spectrum: string, rowId: number | null, d
   return { spectrum: page.rows[0][page.columns.indexOf('spectrum')] ?? '', rowId: page.rowIds?.[0] ?? null }
 }
 
-export default function SpectrumPanel({ target, source, tags: tagsFile, onTarget, onLocate }: Props): JSX.Element {
+export default function SpectrumPanel({ target, source, tags: tagsFile, placements, onTarget, onLocate }: Props): JSX.Element {
   const tagsPath = tagsFile === undefined ? target.path : tagsFile
   const [peaks, setPeaks] = useState<Peaks>({ state: 'loading' })
   const [tags, setTags] = useState<TagsOf | null>(null)
@@ -137,6 +141,7 @@ export default function SpectrumPanel({ target, source, tags: tagsFile, onTarget
   const [maxE, setMaxE] = useState('1')
   const [join, setJoin] = useState(false)
   const [chosenContig, setChosenContig] = useState(0)
+  const [cand, setCand] = useState<Candidate | null>(null)
 
   // The dump.
   useEffect(() => {
@@ -167,6 +172,7 @@ export default function SpectrumPanel({ target, source, tags: tagsFile, onTarget
     setTags(null)
     setTagsError(null)
     setNav({ prev: false, next: false })
+    setCand(null)
     // The tags first, then where ◀ ▶ lead: one view build at a time, so the
     // panel's own queries do not cancel each other (see query()).
     if (!tagsPath) return
@@ -181,10 +187,14 @@ export default function SpectrumPanel({ target, source, tags: tagsFile, onTarget
       .then(() => Promise.all([neighbour(tagsPath, target.spectrum, target.rowId, -1), neighbour(tagsPath, target.spectrum, target.rowId, 1)]))
       .then(([p, n]) => live && setNav({ prev: !!p, next: !!n }))
       .catch(() => live && setNav({ prev: false, next: false }))
+      // Last, the peptide the run placed this spectrum's tags on (first page).
+      .then(() => (placements ? query(placements, { spectrum: target.spectrum, spectrumExact: true }, 0, PAGE) : null))
+      .then((pg) => live && pg && setCand(likelyPeptide(pg.columns, pg.rows)))
+      .catch(() => undefined)
     return () => {
       live = false
     }
-  }, [tagsPath, target.spectrum, target.rowId])
+  }, [tagsPath, placements, target.spectrum, target.rowId])
 
   const residues = useMemo(() => {
     const f = source.params?.['fixed_modifications']
@@ -220,26 +230,93 @@ export default function SpectrumPanel({ target, source, tags: tagsFile, onTarget
     return { graph, all, allRows: packRows(graph, spectrum, span * 0.01).rows, above, used: ins.length }
   }, [allTags, spectrum, tags, cutoff, badCutoff, residues, join])
   const contigAt = merged && chosenContig < merged.graph.paths.length ? chosenContig : 0
+  const sel = merged ? (merged.graph.paths[contigAt] ?? null) : null
+  // The peptide's fragments in the layer of the tag drawn.
+  const ruler = useMemo(() => {
+    const of = sel ?? ladder
+    return cand && of && of.charge > 0 ? rulerOf(cand, of.series, of.charge, residues) : null
+  }, [cand, sel, ladder, residues])
   // The plot draws the paths of the first MAX_ROWS rows, and the chosen one.
   const view = useMemo(() => {
-    if (!merged || !spectrum) return null
+    if (!merged || !spectrum || !sel) return null
     const { graph, all, allRows } = merged
     const idx = all.map((_, i) => i).filter((i) => allRows[i] < MAX_ROWS || i === contigAt)
     const dots: PlotDot[] = []
     idx.forEach((i, k) => {
       for (const j of graph.paths[i].joined) dots.push({ mz: spectrum.mz[j], line: k })
     })
+    const base = Math.max(1, ...spectrum.int)
+    const pct = (i: number): string => `${((100 * spectrum.int[i]) / base).toFixed(0)}%`
+    const kinds = idx.map((i) => graph.paths[i].steps.map((st): StepKind => (i === contigAt ? 'same' : kindOf(st, graph.paths[i], sel, spectrum))))
     return {
       lines: idx.map((i) => all[i]),
       rows: idx.map((i) => Math.min(allRows[i], MAX_ROWS)),
       dots,
+      kinds,
       faint: idx.map((i) => graph.paths[i].steps.map((st) => (st.readings[0].evalue ?? Infinity) > 1)),
-      titles: idx.map((i) => graph.paths[i].steps.map((st) => st.readings.map((r) => `${r.label}: E-value ${r.evalue ?? 'none'}, ${r.deltaPpm.toFixed(1)} ppm`).join(' · '))),
+      strong: idx.map((i) => graph.paths[i].steps.map((st) => (st.readings[0].evalue ?? Infinity) <= 0.01)),
+      titles: idx.map((i, k) =>
+        graph.paths[i].steps.map(
+          (st, j) =>
+            `#${i + 1} ${graph.paths[i].series}${graph.paths[i].charge > 1 ? ` ${graph.paths[i].charge}+` : ''}: ` +
+            st.readings.map((r) => `${r.label}: E-value ${r.evalue ?? 'none'}, ${r.deltaPpm.toFixed(1)} ppm`).join(' · ') +
+            ` · peaks ${fmt(spectrum.mz[st.u])} (${pct(st.u)} of the base peak) and ${fmt(spectrum.mz[st.v])} (${pct(st.v)})` +
+            (i === contigAt ? '' : kinds[k][j] === 'same' ? ` · as #${contigAt + 1} reads it` : kinds[k][j] === 'differs' ? ` · differs from #${contigAt + 1}` : '') +
+            (ruler && graph.paths[i].series === ruler.series && graph.paths[i].charge === ruler.charge ? (stepOnRuler(st, ruler, spectrum) ? ' · as on the peptide' : ' · not on the peptide') : '')
+        )
+      ),
       hidden: all.length - idx.length
     }
-  }, [merged, spectrum, contigAt])
+  }, [merged, spectrum, contigAt, sel, ruler])
   const lines = view ? view.lines : one
   const shownLadder = merged ? (merged.all[contigAt] ?? null) : ladder
+  // Mass errors of the tag drawn, and of the steps that differ from it.
+  const strip = useMemo((): ErrorStrip | null => {
+    if (!spectrum || !shownLadder || !shownLadder.complete) return null
+    const ppmUnit = spectrum.toleranceUnit === 'ppm'
+    const mzOf = (p: Ladder['positions'][number]): number => p.mz ?? p.expected
+    const steps: StripPoint[] = []
+    const drift: StripPoint[] = [{ mz: mzOf(shownLadder.positions[0]), value: 0 }]
+    let cum = 0
+    let from = shownLadder.positions[0]
+    for (const p of shownLadder.positions.slice(1)) {
+      if (p.peak == null || p.deltaMz == null) continue
+      cum += p.deltaMz
+      steps.push({ mz: (mzOf(from) + mzOf(p)) / 2, value: ppmUnit ? (p.deltaPpm ?? 0) : p.deltaMz })
+      drift.push({ mz: mzOf(p), value: ppmUnit ? (cum / mzOf(p)) * 1e6 : cum })
+      from = p
+    }
+    const others: StripPoint[] = []
+    if (view && merged)
+      view.lines.forEach((l, k) =>
+        view.kinds[k].forEach((kind, j) => {
+          const p = l.positions[j + 1]
+          if (kind === 'differs' && p.deltaMz != null) others.push({ mz: (mzOf(l.positions[j]) + mzOf(p)) / 2, value: ppmUnit ? (p.deltaPpm ?? 0) : p.deltaMz })
+        })
+      )
+    const onPeptide: StripPoint[] = []
+    if (ruler && ruler.series === shownLadder.series && ruler.charge === shownLadder.charge) {
+      const peaks = shownLadder.positions.map((p) => p.peak).filter((p): p is number => p != null)
+      ticksOf(ruler, peaks, spectrum).forEach((t, k) => {
+        if (t < 0) return
+        const x = spectrum.mz[peaks[k]]
+        const d = x - (ruler.ticks[t] as number)
+        onPeptide.push({ mz: x, value: ppmUnit ? (d / x) * 1e6 : d })
+      })
+    }
+    return { unit: spectrum.toleranceUnit, tolerance: spectrum.tolerance, steps, drift, others, onPeptide }
+  }, [spectrum, shownLadder, view, merged, ruler])
+  const plotRuler = useMemo((): PlotRuler | null => {
+    if (!ruler || !spectrum) return null
+    const on = ruler.residues.map(() => false)
+    const steps = sel ? sel.steps : []
+    for (const st of steps) {
+      if (!stepOnRuler(st, ruler, spectrum)) continue
+      const [a, b] = ticksOf(ruler, [st.u, st.v], spectrum)
+      for (let k = a; k < b; k++) on[k] = true
+    }
+    return { label: `${ruler.series}${ruler.charge > 1 ? ` ${ruler.charge}+` : ''} DB`, ticks: ruler.ticks, residues: ruler.residues, on }
+  }, [ruler, spectrum, sel])
 
   async function go(dir: -1 | 1): Promise<void> {
     const n = tagsPath ? await neighbour(tagsPath, target.spectrum, target.rowId, dir).catch(() => null) : null
@@ -379,7 +456,34 @@ export default function SpectrumPanel({ target, source, tags: tagsFile, onTarget
             </span>
           )}
         </div>
-        <StickPlot spectrum={peaks.spectrum} ladder={shownLadder} lines={lines} rows={view?.rows} dots={view?.dots} faint={view?.faint} titles={view?.titles} />
+        <StickPlot
+          spectrum={peaks.spectrum}
+          ladder={shownLadder}
+          lines={lines}
+          rows={view?.rows}
+          dots={view?.dots}
+          faint={view?.faint}
+          strong={view?.strong}
+          kinds={view?.kinds}
+          titles={view?.titles}
+          ruler={plotRuler}
+          strip={strip}
+        />
+        {merged && (
+          <p className="hint sp-legend">
+            <span className="sp-key same" /> the selected tag, and steps other tags read the same way · <span className="sp-key differs" /> steps that differ from it (at most one
+            of the two is right) · <span className="sp-key other" /> elsewhere · <em>italic</em>: readings not told apart · thick: E-value ≤ 0.01, faint: &gt; 1
+          </p>
+        )}
+        {cand && (
+          <p className="hint sp-peptide" data-testid="peptide">
+            Tags placed on <strong className="mono">{cand.peptide}</strong>
+            {cand.protein ? ` (${cand.protein.split(' ')[0]})` : ''}: {cand.tags} tag{cand.tags === 1 ? '' : 's'}, {cand.exact} exactly
+            {cand.delta !== 0 ? `; mass left over ${cand.delta >= 0 ? '+' : '−'}${Math.abs(cand.delta).toFixed(4)} Da${cand.region ? ` in residues ${cand.region[0] + 1}–${cand.region[1] + 1}` : ''}` : ''}
+            {cand.of > 1 ? ` · ${cand.of - 1} other peptide${cand.of === 2 ? '' : 's'} with fewer tags` : ''}. A candidate from the database placement, not an identification
+            {plotRuler ? '; its fragments are the top row of the plot' : ''}.
+          </p>
+        )}
         {shownLadder && (
           <LadderLine
             ladder={shownLadder}
@@ -404,7 +508,7 @@ export default function SpectrumPanel({ target, source, tags: tagsFile, onTarget
       <section className="sp-tags" aria-label="Tags of this spectrum">
         <h3>
           Tags of this spectrum{tags ? ` (n=${tags.rows.length.toLocaleString('en-US')})` : ''}
-          {tagsPath && <span className="hint">{allTags ? ' · resolved into the largest supported tags; choose a tag to draw it alone' : ' · choose one to draw its ladder'}</span>}
+          {tagsPath && <span className="hint">{allTags ? ' · resolved into the largest supported tags; choose one to see the tags behind it' : ' · choose one to draw its ladder'}</span>}
         </h3>
         {!tagsPath ? (
           <p className="hint">Tags file not opened: open the run's tags table to see the tags of this spectrum.</p>
@@ -413,16 +517,21 @@ export default function SpectrumPanel({ target, source, tags: tagsFile, onTarget
         ) : !tags ? (
           <p className="hint">Reading…</p>
         ) : merged ? (
-          <PathTable
-            graph={merged.graph}
-            tags={tags}
-            chosen={contigAt}
-            onChoose={setChosenContig}
-            onTag={(i) => {
-              setChosen(i)
-              setAllTags(false)
-            }}
-          />
+          <>
+            <PathTable graph={merged.graph} chosen={contigAt} onChoose={setChosenContig} ruler={ruler} spectrum={spectrum} />
+            {sel && spectrum && (
+              <Pileup
+                graph={merged.graph}
+                at={contigAt}
+                spectrum={spectrum}
+                ruler={ruler}
+                onTag={(i) => {
+                  setChosen(i)
+                  setAllTags(false)
+                }}
+              />
+            )}
+          </>
         ) : (
           <TagsTable tags={tags} chosen={chosen} onChoose={setChosen} spectrum={spectrum} residues={residues} />
         )}
@@ -432,27 +541,9 @@ export default function SpectrumPanel({ target, source, tags: tagsFile, onTarget
 }
 
 /// The resolved tags of a spectrum (the paths of its tag graph), best
-/// evidence first; a member tag leads back to the one-tag view of it.
-function PathTable(p: { graph: TagGraph; tags: TagsOf; chosen: number; onChoose(i: number): void; onTag(i: number): void }): JSX.Element {
+/// evidence first.
+function PathTable(p: { graph: TagGraph; chosen: number; onChoose(i: number): void; ruler: Ruler | null; spectrum: SpectrumPeaks | null }): JSX.Element {
   const g = p.graph
-  const tagCol = p.tags.columns.indexOf('tag')
-  const members = (ids: number[], inside: boolean): JSX.Element[] =>
-    ids.flatMap((o) =>
-      g.placements[o].rows.map((m) => (
-        <button
-          key={`${o}:${m}`}
-          type="button"
-          className={`link mono sp-member${inside ? ' muted' : ''}`}
-          title={inside ? 'Lies inside this resolved tag; draw it alone' : 'A link of this resolved tag; draw it alone'}
-          onClick={(e) => {
-            e.stopPropagation()
-            p.onTag(m)
-          }}
-        >
-          {p.tags.rows[m]?.[tagCol] ?? '?'}
-        </button>
-      ))
-    )
   return (
     <div className="sp-tags-wrap">
       <table className="history-table sp-tags-table" role="grid" aria-readonly="true" aria-label="Resolved tags of this spectrum">
@@ -462,8 +553,9 @@ function PathTable(p: { graph: TagGraph; tags: TagsOf; chosen: number; onChoose(
             <th scope="col">Series</th>
             <th scope="col" className="num">Steps</th>
             <th scope="col" className="num" title="Best E-value on any step, and the weakest step or junction of the tag (– when a junction has no tag over it)">E-value best – weakest</th>
+            {p.ruler && <th scope="col" className="num" title="Steps the database peptide of this spectrum confirms: both peaks on its fragments, the same residue between them">On peptide</th>}
+            <th scope="col" className="num" title="Distinct tags that build it, and those lying inside it">Tags</th>
             <th scope="col">Notes</th>
-            <th scope="col">Tags</th>
           </tr>
         </thead>
         <tbody>
@@ -475,6 +567,7 @@ function PathTable(p: { graph: TagGraph; tags: TagsOf; chosen: number; onChoose(
             if (touch.length > 0) notes.push(`touches ${touch.join(', ')}`)
             if (c.joined.length > 0) notes.push(`${c.joined.length} joined`)
             if (c.sameAs.length > 0) notes.push(`also on ${c.sameAs.map((q) => `${g.paths[q.path].series} ions: #${q.path + 1} (${q.steps} of ${c.steps.length} steps)`).join(', ')}`)
+            const layer = p.ruler && p.spectrum && c.series === p.ruler.series && c.charge === p.ruler.charge
             return (
               <tr key={i} tabIndex={i === p.chosen ? 0 : -1} aria-selected={i === p.chosen} className={i === p.chosen ? 'on' : undefined} onClick={() => p.onChoose(i)}>
                 <td role="gridcell" className="mono">
@@ -495,17 +588,124 @@ function PathTable(p: { graph: TagGraph; tags: TagsOf; chosen: number; onChoose(
                     </>
                   )}
                 </td>
-                <td role="gridcell">{notes.join(' · ')}</td>
-                <td role="gridcell">
-                  {members(c.chain, false)}
-                  {members(c.inside, true)}
+                {p.ruler && (
+                  <td role="gridcell" className="num" title={layer ? undefined : 'Choose this tag to compare it with the peptide in its own ion series'}>
+                    {layer && p.ruler && p.spectrum ? `${stepsOnRuler(c, p.ruler, p.spectrum)} of ${c.steps.length}` : '·'}
+                  </td>
+                )}
+                <td role="gridcell" className="num">
+                  {c.chain.length}
+                  {c.inside.length > 0 ? ` + ${c.inside.length}` : ''}
                 </td>
+                <td role="gridcell">{notes.join(' · ')}</td>
               </tr>
             )
           })}
         </tbody>
       </table>
       {g.paths.length === 0 && <p className="hint">No tag lies on the peaks under this cutoff.</p>}
+    </div>
+  )
+}
+
+// The most tags that differ from the chosen one listed in the pileup.
+const PILE_DIFFER = 12
+
+/// The tags behind one resolved tag, aligned peak by peak: one column per
+/// stretch between two neighbouring peaks any of them lies on, in m/z order
+/// (as in the plot), a tag's step spanning the columns between its two peaks.
+function Pileup(p: { graph: TagGraph; at: number; spectrum: SpectrumPeaks; ruler: Ruler | null; onTag(row: number): void }): JSX.Element {
+  const { graph: g, spectrum: s } = p
+  const sel = g.paths[p.at]
+  const members = [...sel.chain.map((i) => ({ i, role: 'builds it' })), ...sel.inside.map((i) => ({ i, role: 'inside it' }))]
+  const mine = new Set(members.map((m) => m.i))
+  const differing = g.placements
+    .map((pl, i) => ({ i, pl }))
+    .filter(({ i, pl }) => !mine.has(i) && pl.steps.some((st) => kindOf(st, pl, sel, s) === 'differs'))
+    .sort((a, b) => (a.pl.evalue ?? Infinity) - (b.pl.evalue ?? Infinity))
+  const shown = [...members, ...differing.slice(0, PILE_DIFFER).map(({ i }) => ({ i, role: 'differs' }))]
+  const peaks = [...new Set([...sel.peaks, ...shown.flatMap((m) => g.placements[m.i].peaks)])].sort((a, b) => a - b)
+  // Grid line of a peak: two label columns come first.
+  const line = (peak: number): number => peaks.indexOf(peak) + 3
+  const cell = (row: number, u: number, v: number, text: string, cls: string, title: string): JSX.Element => (
+    <span key={`${row}:${u}:${v}`} className={`sp-pile-step ${cls}`} style={{ gridRow: row, gridColumn: `${line(u)} / ${line(v)}` }} title={title}>
+      {text}
+    </span>
+  )
+  const out: JSX.Element[] = []
+  // Row 1: the m/z of each peak, at the right end of the column that ends there.
+  out.push(
+    <span key="h" className="sp-pile-label muted" style={{ gridRow: 1, gridColumn: 1 }}>
+      m/z
+    </span>,
+    <span key="h0" className="sp-pile-mz" style={{ gridRow: 1, gridColumn: 2 }}>
+      {s.mz[peaks[0]].toFixed(1)}
+    </span>,
+    ...peaks.slice(1).map((pk, k) => (
+      <span key={`h${pk}`} className="sp-pile-mz" style={{ gridRow: 1, gridColumn: k + 3 }} title={`m/z ${fmt(s.mz[pk])}`}>
+        {s.mz[pk].toFixed(1)}
+      </span>
+    ))
+  )
+  let row = 2
+  const ruler = p.ruler && p.ruler.series === sel.series && p.ruler.charge === sel.charge ? p.ruler : null
+  if (ruler) {
+    out.push(
+      <span key="pl" className="sp-pile-label" style={{ gridRow: row, gridColumn: '1 / 3' }} title="The database peptide the run placed this spectrum's tags on: its residues between the peaks that lie on its fragments">
+        Peptide (database)
+      </span>
+    )
+    const t = ticksOf(ruler, peaks, s)
+    let from = -1
+    peaks.forEach((pk, k) => {
+      if (t[k] < 0) return
+      if (from >= 0 && t[k] > t[from]) out.push(cell(row, peaks[from], pk, ruler.residues.slice(t[from], t[k]).join(''), 'pep', `Peptide residues between m/z ${fmt(s.mz[peaks[from]])} and ${fmt(s.mz[pk])}`))
+      from = k
+    })
+    row++
+  }
+  out.push(
+    <span key="rl" className="sp-pile-label" style={{ gridRow: row, gridColumn: '1 / 3' }}>
+      <strong>
+        Resolved #{p.at + 1} ({sel.series}
+        {sel.charge > 1 ? ` ${sel.charge}+` : ''})
+      </strong>
+    </span>,
+    ...sel.steps.map((st) => cell(row, st.u, st.v, stepLabel(st), `resolved${st.readings.length > 1 ? ' ambig' : ''}`, st.readings.map((r) => `${r.label}: E-value ${r.evalue ?? 'none'}`).join(' · ')))
+  )
+  row++
+  for (const m of shown) {
+    const pl = g.placements[m.i]
+    out.push(
+      <button key={`b${m.i}`} type="button" className="link mono sp-pile-label" style={{ gridRow: row, gridColumn: 1 }} title={`${pl.tags.join(', ')}: draw it alone`} onClick={() => p.onTag(pl.rows[0])}>
+        {pl.tags[0]}
+        {pl.rows.length > 1 ? ` ×${pl.rows.length}` : ''}
+      </button>,
+      <span key={`e${m.i}`} className="sp-pile-e" style={{ gridRow: row, gridColumn: 2 }} title={m.role}>
+        {pl.evalue == null ? '–' : <EValue text={String(pl.evalue)} />} <span className="muted">{m.role}</span>
+      </span>,
+      ...pl.steps.map((st) => {
+        const kind = kindOf(st, pl, sel, s)
+        const resolved = sel.steps.find((x) => x.u === st.u && x.v === st.v)
+        const ambig = st.readings.length > 1 || (kind === 'same' && (resolved?.readings.length ?? 1) > 1)
+        return cell(row, st.u, st.v, stepLabel(st), `${kind}${ambig ? ' ambig' : ''}`, `${st.readings.map((r) => `${r.label}: E-value ${r.evalue ?? 'none'}, ${r.deltaPpm.toFixed(1)} ppm`).join(' · ')} · m/z ${fmt(s.mz[st.u])} to ${fmt(s.mz[st.v])}${kind === 'differs' ? ' · differs from the resolved tag' : ''}`)
+      })
+    )
+    row++
+  }
+  return (
+    <div className="sp-pile-wrap" data-testid="pileup">
+      <h3>
+        Tags behind resolved tag #{p.at + 1}
+        <span className="hint">
+          {' '}
+          · left to right by m/z{sel.series === 'y' || sel.series === 'z' ? ` (for ${sel.series} ions that is C→N)` : ''}; a tag opens alone
+        </span>
+      </h3>
+      <div className="sp-pile" role="group" aria-label={`Tags behind resolved tag ${p.at + 1}`} style={{ gridTemplateColumns: `max-content max-content repeat(${Math.max(1, peaks.length - 1)}, minmax(2.4em, max-content))` }}>
+        {out}
+      </div>
+      {differing.length > PILE_DIFFER && <p className="hint">The {PILE_DIFFER} best of {differing.length} tags that differ from it.</p>}
     </div>
   )
 }
@@ -655,6 +855,32 @@ export interface PlotDot {
   mz: number
   line: number
 }
+/// The database peptide's fragments in one layer, drawn as the top row.
+export interface PlotRuler {
+  label: string
+  ticks: (number | null)[]
+  residues: string[]
+  // Residues the tag drawn reads as the peptide has them.
+  on: boolean[]
+}
+export interface StripPoint {
+  mz: number
+  value: number
+}
+/// Mass errors under the plot, in the run's tolerance unit.
+export interface ErrorStrip {
+  unit: string
+  tolerance: number
+  // Each step of the tag drawn: observed minus expected distance of its peaks.
+  steps: StripPoint[]
+  // The same, summed from the tag's first peak.
+  drift: StripPoint[]
+  // Steps of other tags that differ from the tag drawn.
+  others: StripPoint[]
+  // Its peaks against the peptide's fragments.
+  onPeptide: StripPoint[]
+}
+const STRIP_H = 64
 
 export function StickPlot({
   spectrum,
@@ -664,7 +890,11 @@ export function StickPlot({
   links = [],
   dots = [],
   faint,
-  titles
+  strong,
+  kinds,
+  titles,
+  ruler = null,
+  strip = null
 }: {
   spectrum: SpectrumPeaks
   ladder: Ladder | null
@@ -677,14 +907,22 @@ export function StickPlot({
   links?: PlotLink[]
   dots?: PlotDot[]
   faint?: boolean[][]
+  strong?: boolean[][]
+  kinds?: StepKind[][]
   titles?: string[][]
+  ruler?: PlotRuler | null
+  strip?: ErrorStrip | null
 }): JSX.Element {
   const { mz, int } = spectrum
   const rowOf = (i: number): number => rows?.[i] ?? (LINE_Y(lines[i].series) === 18 ? 0 : 1)
   const nRows = Math.max(2, ...lines.map((_, i) => rowOf(i) + 1))
-  const lineY = (i: number): number => 18 + rowOf(i) * ROW_H
-  const padT = 18 + (nRows - 1) * ROW_H + 14
-  const H = 260 - PAD.t + padT
+  // The peptide ruler takes the first row.
+  const top0 = 18 + (ruler ? ROW_H : 0)
+  const lineY = (i: number): number => top0 + rowOf(i) * ROW_H
+  const padT = top0 + (nRows - 1) * ROW_H + 14
+  // The plot's own height; the error strip hangs below the axis.
+  const HP = 260 - PAD.t + padT
+  const H = HP + (strip ? STRIP_H : 0)
   const full = useMemo((): [number, number] => {
     if (mz.length === 0) return [0, 1]
     const pad = Math.max(1, (mz[mz.length - 1] - mz[0]) * 0.03)
@@ -701,7 +939,7 @@ export function StickPlot({
   for (let i = 0; i < mz.length; i++) if (inView(mz[i]) && int[i] > top) top = int[i]
   if (top <= 0) top = 1
   const X = (x: number): number => PAD.l + ((x - lo) / (hi - lo)) * (W - PAD.l - PAD.r)
-  const Y = (y: number): number => H - PAD.b - (y / top) * (H - padT - PAD.b)
+  const Y = (y: number): number => HP - PAD.b - (y / top) * (HP - padT - PAD.b)
   const peaksOf = (l: Ladder | null | undefined): Set<number> => new Set(l?.positions.map((p) => p.peak).filter((p): p is number => p != null))
   const onLadder = peaksOf(ladder)
   // Peaks only the other series' line lies on.
@@ -770,6 +1008,16 @@ export function StickPlot({
   for (let t = Math.ceil(lo / step) * step; t <= hi; t += step) ticks.push(t)
 
   const lp = ladder?.positions ?? []
+  // Another line's step against the tag drawn (all tags): same, differs or elsewhere.
+  const kindCls = (li: number, k: number): string => (kinds && lines[li] !== ladder ? ` ${kinds[li]?.[k] ?? 'other'}` : '')
+  // The error strip: zero in the middle, the scale wide enough for every value.
+  const sTop = HP + 6
+  const sH = STRIP_H - 14
+  const sMid = sTop + sH / 2
+  const sMax = strip ? Math.max(strip.tolerance, ...[...strip.steps, ...strip.drift, ...strip.others, ...strip.onPeptide].map((q) => Math.abs(q.value))) * 1.1 || 1 : 1
+  const SY = (v: number): number => sMid - (v / sMax) * (sH / 2)
+  const num = (v: number): string => (strip?.unit === 'Da' ? v.toFixed(3) : v.toFixed(1))
+  const tip = (what: string, q: StripPoint): string => `${what}: ${q.value >= 0 ? '+' : '−'}${num(Math.abs(q.value))} ${strip?.unit ?? ''} at m/z ${fmt(q.mz, 2)}`
   return (
     <div className="sp-plot">
       <div className="sp-plot-tools">
@@ -805,11 +1053,11 @@ export function StickPlot({
         onPointerCancel={() => (drag.current = null)}
         onKeyDown={onKey}
       >
-        <line x1={PAD.l} x2={W - PAD.r} y1={H - PAD.b} y2={H - PAD.b} className="sp-axis" />
+        <line x1={PAD.l} x2={W - PAD.r} y1={HP - PAD.b} y2={HP - PAD.b} className="sp-axis" />
         {ticks.map((t) => (
           <g key={t}>
-            <line x1={X(t)} x2={X(t)} y1={H - PAD.b} y2={H - PAD.b + 4} className="sp-axis" />
-            <text x={X(t)} y={H - PAD.b + 16} className="sp-tick" textAnchor="middle">
+            <line x1={X(t)} x2={X(t)} y1={HP - PAD.b} y2={HP - PAD.b + 4} className="sp-axis" />
+            <text x={X(t)} y={HP - PAD.b + 16} className="sp-tick" textAnchor="middle">
               {Number(t.toFixed(6))}
             </text>
           </g>
@@ -820,7 +1068,7 @@ export function StickPlot({
               key={i}
               x1={X(x)}
               x2={X(x)}
-              y1={H - PAD.b}
+              y1={HP - PAD.b}
               y2={Y(int[i])}
               className={onLadder.has(i) ? 'sp-peak on' : onOther.has(i) ? 'sp-peak on alt' : 'sp-peak'}
               data-peak={onLadder.has(i) ? 'ladder' : onOther.has(i) ? 'other' : undefined}
@@ -831,7 +1079,7 @@ export function StickPlot({
           const x = p.mz ?? p.expected
           if (!inView(x)) return null
           return p.peak == null ? (
-            <line key={`m${k}`} x1={X(x)} x2={X(x)} y1={H - PAD.b} y2={ladder ? lineY(Math.max(0, lines.indexOf(ladder))) : padT} className="sp-missing" />
+            <line key={`m${k}`} x1={X(x)} x2={X(x)} y1={HP - PAD.b} y2={ladder ? lineY(Math.max(0, lines.indexOf(ladder))) : padT} className="sp-missing" />
           ) : null
         })}
         {lines.map((l, li) => {
@@ -862,12 +1110,12 @@ export function StickPlot({
                 const xb = X(b.mz ?? b.expected)
                 if (Math.max(xa, xb) < PAD.l || Math.min(xa, xb) > W - PAD.r) return null
                 return (
-                  <g key={`r${k}`} className={faint?.[li]?.[k] ? 'sp-faint' : undefined}>
+                  <g key={`r${k}`} className={faint?.[li]?.[k] ? 'sp-faint' : undefined} data-kind={kinds && l !== ladder ? kinds[li]?.[k] : undefined}>
                     {titles?.[li]?.[k] && <title>{titles[li][k]}</title>}
-                    <line x1={xa} x2={xb} y1={y} y2={y} className={`sp-step${alt}`} />
-                    <line x1={xa} x2={xa} y1={y - 4} y2={y + 4} className={`sp-step${alt}`} />
-                    <line x1={xb} x2={xb} y1={y - 4} y2={y + 4} className={`sp-step${alt}`} />
-                    <text x={(xa + xb) / 2} y={y - 5} className="sp-res-label" textAnchor="middle">
+                    <line x1={xa} x2={xb} y1={y} y2={y} className={`sp-step${alt}${kindCls(li, k)}${strong?.[li]?.[k] ? ' strong' : ''}`} />
+                    <line x1={xa} x2={xa} y1={y - 4} y2={y + 4} className={`sp-step${alt}${kindCls(li, k)}`} />
+                    <line x1={xb} x2={xb} y1={y - 4} y2={y + 4} className={`sp-step${alt}${kindCls(li, k)}`} />
+                    <text x={(xa + xb) / 2} y={y - 5} className={`sp-res-label${kindCls(li, k)}${res.startsWith('{') ? ' ambig' : ''}`} textAnchor="middle">
                       {res}
                     </text>
                   </g>
@@ -876,6 +1124,73 @@ export function StickPlot({
             </g>
           )
         })}
+        {ruler && (
+          <g className="sp-ruler" data-ruler="">
+            <title>The database peptide the run placed this spectrum&apos;s tags on: where its fragments fall (a candidate, not an identification)</title>
+            <text x={PAD.l - 6} y={22} className="sp-series" textAnchor="end">
+              {ruler.label}
+            </text>
+            {ruler.ticks.map((t, k) => (t != null && inView(t) ? <line key={`t${k}`} x1={X(t)} x2={X(t)} y1={12} y2={24} className="sp-ruler-tick" /> : null))}
+            {ruler.residues.map((r, k) => {
+              const a = ruler.ticks[k]
+              const b = ruler.ticks[k + 1]
+              if (a == null || b == null || !inView((a + b) / 2)) return null
+              return (
+                <text key={`p${k}`} x={X((a + b) / 2)} y={22} className={ruler.on[k] ? 'sp-ruler-res on' : 'sp-ruler-res'} textAnchor="middle">
+                  {r}
+                </text>
+              )
+            })}
+          </g>
+        )}
+        {strip && (
+          <g className="sp-strip" data-strip="">
+            <rect x={PAD.l} y={SY(strip.tolerance)} width={W - PAD.l - PAD.r} height={SY(-strip.tolerance) - SY(strip.tolerance)} className="sp-strip-band" />
+            <line x1={PAD.l} x2={W - PAD.r} y1={sMid} y2={sMid} className="sp-axis" />
+            <text x={PAD.l - 6} y={sTop + 8} className="sp-tick" textAnchor="end">
+              +{num(sMax)}
+            </text>
+            <text x={PAD.l - 6} y={sTop + sH} className="sp-tick" textAnchor="end">
+              −{num(sMax)}
+            </text>
+            <text x={W - PAD.r} y={H - 2} className="sp-tick" textAnchor="end">
+              mass error ({strip.unit}; band: the run&apos;s tolerance) ● each step · line: summed from the first peak{strip.others.length > 0 ? ' · ○ steps that differ' : ''}
+              {strip.onPeptide.length > 0 ? ' · × peak against the peptide' : ''}
+            </text>
+            {strip.drift.length > 1 && (
+              <polyline
+                points={strip.drift
+                  .filter((q) => inView(q.mz))
+                  .map((q) => `${X(q.mz)},${SY(q.value)}`)
+                  .join(' ')}
+                className="sp-strip-drift"
+              />
+            )}
+            {strip.others.map((q, k) =>
+              inView(q.mz) ? (
+                <circle key={`o${k}`} cx={X(q.mz)} cy={SY(q.value)} r={3} className="sp-strip-other">
+                  <title>{tip('A step that differs', q)}</title>
+                </circle>
+              ) : null
+            )}
+            {strip.onPeptide.map((q, k) =>
+              inView(q.mz) ? (
+                <g key={`x${k}`} className="sp-strip-pep">
+                  <title>{tip('Peak against the peptide’s fragment', q)}</title>
+                  <line x1={X(q.mz) - 3} x2={X(q.mz) + 3} y1={SY(q.value) - 3} y2={SY(q.value) + 3} />
+                  <line x1={X(q.mz) - 3} x2={X(q.mz) + 3} y1={SY(q.value) + 3} y2={SY(q.value) - 3} />
+                </g>
+              ) : null
+            )}
+            {strip.steps.map((q, k) =>
+              inView(q.mz) ? (
+                <circle key={`s${k}`} cx={X(q.mz)} cy={SY(q.value)} r={3} className="sp-strip-step" data-step-error="">
+                  <title>{tip('Step', q)}</title>
+                </circle>
+              ) : null
+            )}
+          </g>
+        )}
         {links.map((l, k) => (inView(l.mz) ? <line key={`k${k}`} x1={X(l.mz)} x2={X(l.mz)} y1={lineY(l.a)} y2={lineY(l.b)} className="sp-link" data-link="" /> : null))}
         {dots.map((d, k) => (inView(d.mz) ? <circle key={`j${k}`} cx={X(d.mz)} cy={lineY(d.line)} r={4} className="sp-joined" data-joined="" /> : null))}
       </svg>

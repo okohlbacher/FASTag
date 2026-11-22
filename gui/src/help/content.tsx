@@ -744,12 +744,33 @@ export const RESULTS: HelpPage = {
             land on the same peaks are one tag (FASTag writes a gapped tag once per order of its gap residues). Tags
             of one ion series that overlap by at least one step and agree are assembled into one longer resolved tag,
             and a tag inside another is not listed on its own. Resolved tags are ranked by the evidence of the tags
-            they are assembled from; the table gives the E-value of the best and of the weakest of them, the tags
-            themselves (choose one to draw it alone) and which other resolved tags conflict with it (they share a
-            peak and continue differently) or read the same residues in the other ion series. A step two readings
-            cannot be told apart on is written {"{Q|[AG]}"}. E-value ≤ leaves out weaker tags (1 by default); Join
+            they are assembled from; the table gives the E-value of the best and of the weakest of them, how many
+            tags build it and which other resolved tags conflict with it (they share a peak and continue
+            differently) or read the same residues in the other ion series. A step two readings cannot be told
+            apart on is written {"{Q|[AG]}"}, in italics. E-value ≤ leaves out weaker tags (1 by default); Join
             tags that only touch also continues a tag with one that starts at its last peak, marked with a hollow
             dot. A resolved tag is a hypothesis: it is right only where all the tags it is assembled from are.
+          </p>
+          <p>
+            Choosing a resolved tag in the table selects it. On the plot the other tags are then drawn against it:
+            solid where they read a step as it does, red and dashed where they read another step over part of its
+            m/z range (at most one of the two is right there), dashed elsewhere; thick steps have an E-value of at
+            most 0.01, faint ones above 1. Hover over a step for its readings, E-values, mass error and the
+            intensity of its two peaks. The strip under the axis shows the mass error of the selected tag: a dot
+            for each step (the distance of its two peaks against the residue mass), a line for the errors summed
+            from its first peak, hollow dots for the steps that differ from it, and the band of the run&apos;s
+            tolerance; its scale widens to hold every value. Under the table, Tags behind resolved tag lists the
+            tags it is assembled from, those inside it and those that differ from it, aligned peak by peak in m/z
+            order; a tag there opens alone.
+          </p>
+          <p>
+            When the run wrote tag placements (a protein database and Tag placements), the peptide most tags of the
+            spectrum were placed on is named under the plot, and its fragments in the ion series and charge of the
+            tag drawn are the top row of the plot (DB), with the residues the tag confirms in bold; the table counts
+            the steps of each resolved tag on the peptide, the pileup shows its residues between the peaks, and the
+            strip marks each peak against the peptide&apos;s fragment with ×. A mass the placement leaves over is
+            added from the end of its region on; inside the region no fragment is drawn. The peptide is a candidate
+            from the placement of the tags, not an identification: FASTag does not score it.
           </p>
           <p>
             The tab needs a FASTag that has -dump_spectrum; with an older one it is not there, and the row action says

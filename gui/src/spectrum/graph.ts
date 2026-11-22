@@ -431,3 +431,14 @@ export function packRows(g: TagGraph, s: SpectrumPeaks, gap: number): { rows: nu
   }
   return { rows, count: base }
 }
+
+/** How a step stands to the resolved tag @p sel: `same` (sel has the step
+ *  with a common reading), `differs` (same layer, another step over part of
+ *  sel's m/z span: at most one of the two is right there), else `other`. */
+export type StepKind = 'same' | 'differs' | 'other'
+export function kindOf(st: Step, layer: { series: string; charge: number }, sel: GPath, s: SpectrumPeaks): StepKind {
+  if (layerOf(layer) !== layerOf(sel)) return 'other'
+  const mine = sel.steps.find((x) => x.u === st.u && x.v === st.v)
+  if (mine && compatible(mine, st)) return 'same'
+  return s.mz[st.v] > s.mz[sel.peaks[0]] && s.mz[st.u] < s.mz[sel.peaks[sel.peaks.length - 1]] ? 'differs' : 'other'
+}

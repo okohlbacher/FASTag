@@ -6,7 +6,11 @@
   on its peaks and assembles the tags of one ion series that overlap and agree into longer resolved tags (a tag graph:
   ions as nodes, steps of tags as edges). Row orders of one gapped tag count once, isobaric readings of a step stay
   apart ({Q|[AG]}), conflicting and same-series readings are named, with an E-value cutoff (default 1). A double-click
-  on a row in Tags opens its spectrum.
+  on a row in Tags opens its spectrum. Choosing a resolved tag draws the others against it (same step, differing
+  step, elsewhere), shows its mass errors under the axis (each step, summed from the first peak, and the steps that
+  differ) and lists the tags behind it aligned peak by peak. With the run's tag placements (`-recon_out`), the peptide
+  most tags of the spectrum were placed on is named and its fragments are drawn as a ruler; a candidate, not an
+  identification.
 
 - **GUI: in-app Feedback.** A **Feedback** button in the top bar (also Help › Send Feedback…, Cmd/Ctrl+Shift+F)
   takes a screenshot of the window (the webview's own snapshot: WKWebView, WebView2, WebKitGTK; no screen-recording
