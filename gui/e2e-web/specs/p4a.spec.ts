@@ -193,4 +193,21 @@ test('with the run\'s resolved tags and tag graph, all tags are resolved as FAST
   await graph.getByRole('button', { name: /builds resolved tag 1\b/ }).first().focus()
   await page.keyboard.press('Enter')
   await expect(table.locator('tbody tr').first()).toHaveAttribute('aria-selected', 'true')
+  // ▶ to a tagged spectrum FASTag resolved nothing of: resolved in the GUI, and why; ◀ back selects #1 again, not the rank chosen before.
+  await graph.getByRole('button', { name: new RegExp(`builds resolved tag ${n}\\b`) }).first().click()
+  await expect(table.locator('tbody tr').nth(n - 1)).toHaveAttribute('aria-selected', 'true')
+  const resolvedIds = await mockState<string[]>(page, 'resolvedSpectra')
+  const next = SPECTRA[SPECTRA.indexOf(id) + 1]
+  expect(resolvedIds).not.toContain(next)
+  await page.getByRole('button', { name: 'Next tagged spectrum' }).click()
+  await expect(heading(page)).toHaveAttribute('title', next)
+  await expect(page.getByTestId('merge-source')).toHaveText(new RegExp(`^Resolved in the GUI: FASTag resolved none of the ${count(next)} tags`))
+  await expect(page.getByLabel('Largest E-value of the tags used')).toBeVisible()
+  // The tags above the GUI's cutoff are counted (FASTag's -resolve_max_evalue 1 kept none of them).
+  await expect(page.getByTestId('merge-summary')).toContainText('above the cutoff')
+  await page.getByRole('button', { name: 'Previous tagged spectrum' }).click()
+  await expect(heading(page)).toHaveAttribute('title', id)
+  await expect(page.getByTestId('merge-source')).toHaveText(/^Resolved by FASTag/)
+  await expect(table.locator('tbody tr').first()).toHaveAttribute('aria-selected', 'true')
+  await expect(graph.getByRole('button', { name: /builds resolved tag 1\b/ }).first()).toHaveAttribute('aria-pressed', 'true')
 })

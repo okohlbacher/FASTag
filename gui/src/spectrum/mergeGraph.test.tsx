@@ -3,11 +3,12 @@
 
 import { act, fireEvent, render, screen, within } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
+import type { JSX } from 'react'
 import SpectrumPanel from './SpectrumPanel'
 import { MergeGraph } from './MergeGraph'
 import { buildGraph, sequenceOf, type TagIn } from './graph'
 import { parseDump } from './dump'
-import { PROTON, WATER, residueMasses, tagRowFrom } from './ladder'
+import { PROTON, WATER, residueMasses, seriesText, tagRowFrom } from './ladder'
 import { stepWeight } from './stepScore'
 import { PAD, W } from './plotScale'
 import { swapRanks, toCli } from '../testing/cliGraphTsv'
@@ -46,6 +47,8 @@ const graph = buildGraph(ins, S, RES, { join: false, weight: stepWeight(S) })
 const byE = tagRows.map((_, i) => i).sort((a, b) => Number(tagRows[a][8]) - Number(tagRows[b][8]))
 const tagsPage: ResultsPage = { columns: tagCols, totalRows: 20, matchedRows: 4, rows: byE.map((i) => tagRows[i]), rowIds: byE.map((i) => FIRST_ROW + i), ranked: true, pending: false }
 
+const SOURCE = { input: '/d/a.mzML', params: {}, from: 'run' as const }
+let rerenderTo: (spectrum: string, rowId: number) => void = () => undefined
 function panel(cli: { resolved: CliRows; nodes: CliRows }): { container: HTMLElement; mock: ReturnType<typeof installMockBridge> } {
   const mock = installMockBridge()
   mock.spectrumDumps['scan=1'] = dump
@@ -57,16 +60,18 @@ function panel(cli: { resolved: CliRows; nodes: CliRows }): { container: HTMLEle
   mock.tables['/d/a.taggraph.tsv'] = cli.nodes
   const query = window.fastag.resultsQuery
   window.fastag.resultsQuery = (path, ...a) => (path === '/d/a.tags.tsv' ? Promise.resolve(tagsPage) : query(path, ...a))
-  const { container } = render(
+  const at = (spectrum: string, rowId: number): JSX.Element => (
     <SpectrumPanel
-      target={{ path: '/d/a.tags.tsv', spectrum: 'scan=1', rowId: FIRST_ROW + 2 }}
-      source={{ input: '/d/a.mzML', params: {}, from: 'run' }}
+      target={{ path: '/d/a.tags.tsv', spectrum, rowId }}
+      source={SOURCE}
       resolved="/d/a.resolved.tsv"
       tagGraph="/d/a.taggraph.tsv"
       onTarget={vi.fn()}
       onLocate={vi.fn()}
     />
   )
+  const { container, rerender } = render(at('scan=1', FIRST_ROW + 2))
+  rerenderTo = (spectrum, rowId) => rerender(at(spectrum, rowId))
   return { container, mock }
 }
 const selected = (c: HTMLElement): string | null | undefined => c.querySelector('table[aria-label="Resolved tags of this spectrum"] tr[aria-selected=true] td')?.textContent
@@ -189,6 +194,77 @@ describe('merge graph', () => {
     expect(selected(container)).toMatch(/^#2 EPTIDE/)
     // The plot draws the ladder of the tag selected.
     expect(screen.getByTestId('ladder').textContent).toMatch(/: EPTIDE N→C/)
+  })
+
+  it('a node reads as its resolved tag reads the same peaks, and says how it reads on its own', () => {
+    // Complement pairing (settleSeries) or the peptide can settle a resolved tag on the other series of the pair than its placements' own call.
+    const k = 0
+    const p0 = graph.paths[k]
+    const other = p0.series === 'b' ? 'y' : 'b'
+    const settled = { ...graph, paths: graph.paths.map((p, i) => (i === k ? { ...p, series: other as typeof p.series, call: { series: other as typeof p.series, level: 'sure' as const, why: 'complement' } } : p)) }
+    const at = p0.chain[0]
+    const own = graph.placements[at]
+    expect(own.series).toBe(p0.series)
+    const { container } = render(<MergeGraph graph={settled} spectrum={S} chosen={0} onChoose={vi.fn()} />)
+    const node = container.querySelector(`[data-node="${at}"]`) as Element
+    const read = sequenceOf({ series: other as typeof p0.series, steps: own.steps })
+    expect(read).not.toBe(sequenceOf(own))
+    expect(node.getAttribute('aria-label')).toMatch(new RegExp(`^${read}, builds resolved tag 1`))
+    expect(node.querySelector('title')?.textContent).toContain(`${read} (${other} 1+; on its own peaks ${seriesText(own.series, own.call)}, ${sequenceOf(own)})`)
+    // A node that reads as its resolved tag says nothing more.
+    const { container: c2 } = render(<MergeGraph graph={graph} spectrum={S} chosen={0} onChoose={vi.fn()} />)
+    expect(c2.querySelector(`[data-node="${at}"] title`)?.textContent).not.toContain('on its own peaks')
+  })
+
+  it('an empty graph says so, not a blank box', () => {
+    render(<MergeGraph graph={{ ...graph, placements: [], paths: [], arcs: [], offPeaks: [] }} spectrum={S} chosen={0} onChoose={vi.fn()} />)
+    expect(screen.getByTestId('merge-graph-empty').textContent).toBe('No resolved tags for this spectrum.')
+    expect(screen.getByTestId('merge-graph').querySelector('svg')).toBeNull()
+  })
+
+  it('a spectrum with tags but no rows in FASTag\'s tables is resolved in the GUI, with its cutoff, and says why', async () => {
+    const empty = toCli({ ...graph, placements: [], paths: [], arcs: [], offPeaks: [] }, S, 'scan=1')
+    expect(empty.resolved.rows.length + empty.nodes.rows.length).toBe(0)
+    const { container } = panel(empty)
+    await screen.findByTestId('ladder')
+    fireEvent.click(screen.getByLabelText('Merge graph'))
+    expect((await screen.findByTestId('merge-source')).textContent).toBe(
+      'Resolved in the GUI: FASTag resolved none of the 4 tags (E-value above -resolve_max_evalue 1, or not on the peaks)'
+    )
+    // The GUI's cutoff, which can let them in.
+    const cut = screen.getByLabelText('Largest E-value of the tags used')
+    expect(screen.getByTestId('merge-summary').textContent).toMatch(/^4 tags \(4 distinct\) → 2 resolved/)
+    // A cutoff that keeps none: no ladder at all, not the chosen tag's.
+    fireEvent.change(cut, { target: { value: '1e-12' } })
+    expect(screen.getByTestId('merge-summary').textContent).toMatch(/^0 tags \(0 distinct\) → 0 resolved · 4 above the cutoff/)
+    expect(screen.getByTestId('merge-graph-empty')).toBeTruthy()
+    expect(screen.queryByTestId('ladder')).toBeNull()
+    expect(container.querySelectorAll('.sp-step').length).toBe(0)
+  })
+
+  it('a resolved tag chosen on one spectrum is not carried to the next: the next selects its best', async () => {
+    // Two spectra alike, FASTag's tables for both.
+    const one = swapRanks(toCli(graph, S, 'scan=1'), 1, 2)
+    const two = swapRanks(toCli(graph, S, 'scan=2'), 1, 2)
+    const both = { resolved: { ...one.resolved, rows: [...one.resolved.rows, ...two.resolved.rows] }, nodes: { ...one.nodes, rows: [...one.nodes.rows, ...two.nodes.rows] } }
+    const { container, mock } = panel(both)
+    mock.spectrumDumps['scan=2'] = dump.replace('"native_id":"scan=1"', '"native_id":"scan=2"')
+    const query = window.fastag.resultsQuery
+    window.fastag.resultsQuery = (path, view, ...a) =>
+      path === '/d/a.tags.tsv' && view.spectrum === 'scan=2'
+        ? Promise.resolve({ ...tagsPage, rows: tagsPage.rows.map((r) => ['scan=2', ...r.slice(1)]), rowIds: tagsPage.rowIds?.map((i) => i + 4) })
+        : query(path, view, ...a)
+    await screen.findByTestId('ladder')
+    fireEvent.click(screen.getByLabelText('Merge graph'))
+    await screen.findByTestId('merge-source')
+    fireEvent.click(within(screen.getByTestId('merge-graph')).getByRole('button', { name: /^EPT, builds resolved tag 2/ }))
+    expect(selected(container)).toMatch(/^#2 EPTIDE/)
+    // ▶: the panel shows the next spectrum (as ResultTabs does, the same panel).
+    rerenderTo('scan=2', FIRST_ROW + 4 + 2)
+    await screen.findByText(/scan=2/)
+    await screen.findByTestId('merge-graph')
+    await vi.waitFor(() => expect(selected(container)).toMatch(/^#1 W/))
+    expect(within(screen.getByTestId('merge-graph')).getAllByRole('button', { pressed: true }).every((n) => /resolved tag 1\b/.test(n.getAttribute('aria-label') ?? ''))).toBe(true)
   })
 
   it('resolves in the GUI, and says why, when FASTag\'s tables do not fit the peaks', async () => {

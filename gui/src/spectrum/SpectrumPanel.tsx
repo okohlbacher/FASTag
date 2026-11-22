@@ -178,7 +178,9 @@ export default function SpectrumPanel({ target, source, tags: tagsFile, placemen
   const allTags = mode !== 'one'
   const [maxE, setMaxE] = useState('1')
   const [join, setJoin] = useState(false)
-  const [chosenContig, setChosenContig] = useState(0)
+  // The resolved tag selected, of the graph it was chosen in: a graph built
+  // anew (another spectrum, cutoff, Join, the peptide read) selects its best.
+  const [chosenContig, setChosenContig] = useState<{ g: TagGraph; i: number } | null>(null)
   const [cand, setCand] = useState<Candidate | null>(null)
   // The spectrum's rows of the run's -resolved_out and -tag_graph_out.
   const [cli, setCli] = useState<{ resolved: CliRows; nodes: CliRows } | { error: string } | null>(null)
@@ -278,9 +280,21 @@ export default function SpectrumPanel({ target, source, tags: tagsFile, placemen
     // name the spectrum's tags in -out (file) order.
     const order = tags.rows.map((_, i) => i).sort((a, b) => (tags.rowIds[a] ?? a) - (tags.rowIds[b] ?? b))
     const tg = tags.columns.indexOf('tag')
-    const run = cli && !('error' in cli) ? fromCli(cli.resolved, cli.nodes, spectrum, residues, order.map((i) => ({ index: i, tag: tags.rows[i][tg] ?? '' }))) : null
+    const fit = cli && !('error' in cli) ? fromCli(cli.resolved, cli.nodes, spectrum, residues, order.map((i) => ({ index: i, tag: tags.rows[i][tg] ?? '' }))) : null
+    // FASTag wrote no row for a spectrum with tags: it resolved none of them
+    // (all above -resolve_max_evalue, or off the peaks). Not a resolution to
+    // show as FASTag's: the GUI resolves them, with its cutoff to change.
+    const none = !!fit?.ok && fit.graph.paths.length === 0 && fit.graph.placements.length === 0 && tags.rows.length > 0
+    const run = none ? null : fit
     // Why the GUI resolves although the run wrote FASTag's graph.
-    const why = cli && 'error' in cli ? `FASTag's tag graph could not be read (${cli.error})` : run && !run.ok ? `FASTag's tag graph does not fit the peaks (${run.error})` : null
+    const why =
+      cli && 'error' in cli
+        ? `FASTag's tag graph could not be read (${cli.error})`
+        : fit && !fit.ok
+          ? `FASTag's tag graph does not fit the peaks (${fit.error})`
+          : none
+            ? `FASTag resolved none of the ${tags.rows.length.toLocaleString('en-US')} tags (E-value above -resolve_max_evalue ${String(source.params?.['resolve_max_evalue'] ?? 1)}, or not on the peaks)`
+            : null
     const ev = tags.columns.indexOf('evalue')
     const ins: TagIn[] = []
     let above = 0
@@ -303,10 +317,11 @@ export default function SpectrumPanel({ target, source, tags: tagsFile, placemen
     const byRun = !!run?.ok
     const used = byRun ? new Set(graph.placements.flatMap((p) => p.rows)).size : ins.length
     return { graph, all, allRows: packRows(graph, spectrum, span * 0.01).rows, above: byRun ? 0 : above, used, byRun, why }
-  }, [allTags, spectrum, tags, cutoff, badCutoff, residues, join, cand, cli, cliPending])
+  }, [allTags, spectrum, tags, cutoff, badCutoff, residues, join, cand, cli, cliPending, source.params])
   // The ranking FASTag used (-resolve_score; steplogodds by default).
   const scheme = String(source.params?.['resolve_score'] ?? 'steplogodds')
-  const contigAt = merged && chosenContig < merged.graph.paths.length ? chosenContig : 0
+  const contigAt = merged && chosenContig?.g === merged.graph && chosenContig.i < merged.graph.paths.length ? chosenContig.i : 0
+  const choose = useCallback((i: number): void => setChosenContig(merged ? { g: merged.graph, i } : null), [merged])
   const sel = merged ? (merged.graph.paths[contigAt] ?? null) : null
   // The peptide's fragments in the layer of the tag drawn.
   const ruler = useMemo(() => {
@@ -345,7 +360,8 @@ export default function SpectrumPanel({ target, source, tags: tagsFile, placemen
       hidden: all.length - idx.length
     }
   }, [merged, spectrum, contigAt, sel, ruler])
-  const lines = view ? view.lines : one
+  // Resolving, no path is no ladder: never the chosen tag's, as if it were resolved.
+  const lines = view ? view.lines : merged ? [] : one
   const shownLadder = merged ? (merged.all[contigAt] ?? null) : ladder
   // Mass errors of the tag drawn, and of the steps that differ from it.
   const strip = useMemo((): ErrorStrip | null => {
@@ -562,7 +578,7 @@ export default function SpectrumPanel({ target, source, tags: tagsFile, placemen
             of the two is right) · <span className="sp-key other" /> elsewhere · <em>italic</em>: readings not told apart · thick: E-value ≤ 0.01, faint: &gt; 1
           </p>
         )}
-        {merged && mode === 'graph' && spectrum && <MergeGraph graph={merged.graph} spectrum={spectrum} range={plotRange ?? undefined} chosen={contigAt} onChoose={setChosenContig} />}
+        {merged && mode === 'graph' && spectrum && <MergeGraph graph={merged.graph} spectrum={spectrum} range={plotRange ?? undefined} chosen={contigAt} onChoose={choose} />}
         {cand && (
           <p className="hint sp-peptide" data-testid="peptide">
             Tags placed on <strong className="mono">{cand.peptide}</strong>
@@ -607,7 +623,7 @@ export default function SpectrumPanel({ target, source, tags: tagsFile, placemen
           <p className="hint">Reading…</p>
         ) : merged ? (
           <>
-            <PathTable graph={merged.graph} chosen={contigAt} onChoose={setChosenContig} ruler={ruler} spectrum={spectrum} />
+            <PathTable graph={merged.graph} chosen={contigAt} onChoose={choose} ruler={ruler} spectrum={spectrum} />
             {sel && spectrum && (
               <Pileup
                 graph={merged.graph}

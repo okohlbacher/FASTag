@@ -16,8 +16,8 @@
 
 import { useId, useMemo, useRef, useState, type JSX, type KeyboardEvent } from 'react'
 import type { SpectrumPeaks } from './dump'
-import { layerOf, sequenceOf, type TagGraph } from './graph'
-import { seriesText } from './ladder'
+import { layerOf, sequenceOf, type Placement, type TagGraph } from './graph'
+import { seriesText, type Ladder, type SeriesCall } from './ladder'
 import { PAD, W, fullRange } from './plotScale'
 
 const BAND_TOP = 18
@@ -28,6 +28,17 @@ const BAR_H = 9
 const GAP = 8
 // About the width of a label character (12px mono in a 1000-unit box).
 const CHAR = 7.4
+
+const pairOf = (s: Ladder['series']): string => (s === 'b' || s === 'y' ? 'by' : 'cz')
+
+/** How a node reads: as its resolved tag reads the same peaks (the series
+ *  settled by complement pairing or the peptide), else as judged on its own
+ *  peaks. The two can be opposite series of one pair, reading the steps the
+ *  other way round. */
+function readingOf(pl: Placement, path: { series: Ladder['series']; call: SeriesCall; charge: number } | undefined): { series: Ladder['series']; call: SeriesCall; own: boolean } {
+  if (path && path.charge === pl.charge && pairOf(path.series) === pairOf(pl.series)) return { series: path.series, call: path.call, own: path.series === pl.series }
+  return { series: pl.series, call: pl.call, own: true }
+}
 
 // The colour of a rank: the first three apart, the rest alike (the rank is written on the node).
 const rankCls = (path: number): string => `r${Math.min(path + 1, 4)}`
@@ -59,7 +70,9 @@ export function MergeGraph({
     const layers = [...new Set(g.placements.map(layerOf))].sort()
     const nodes = g.placements.map((pl, i) => {
       const x1 = X(s.mz[pl.peaks[0]])
-      return { i, x1, x2: Math.max(x1 + 3, X(s.mz[pl.peaks[pl.peaks.length - 1]])), y: 0, seq: sequenceOf(pl) }
+      const o = owner[i]
+      const read = readingOf(pl, o ? g.paths[o.path] : undefined)
+      return { i, x1, x2: Math.max(x1 + 3, X(s.mz[pl.peaks[pl.peaks.length - 1]])), y: 0, seq: sequenceOf({ series: read.series, steps: pl.steps }), read }
     })
     const bands: { label: string; top: number; height: number }[] = []
     let top = 0
@@ -122,6 +135,14 @@ export function MergeGraph({
     if (to != null) refs.current.get(to)?.focus()
   }
 
+  if (g.placements.length === 0)
+    return (
+      <div className="sp-graph" data-testid="merge-graph">
+        <p className="hint" data-testid="merge-graph-empty">
+          No resolved tags for this spectrum.
+        </p>
+      </div>
+    )
   return (
     <div className="sp-graph" data-testid="merge-graph">
       <svg viewBox={`0 0 ${W} ${height}`} preserveAspectRatio="none" className="sp-graph-svg" style={{ height }} role="group" aria-label={`Merge graph: ${g.placements.length} distinct tags, ${g.arcs.length} joins, ${g.paths.length} resolved tags${outside ? `; ${outside} outside m/z ${lo.toFixed(1)}–${hi.toFixed(1)}` : ''}`}>
@@ -173,7 +194,8 @@ export function MergeGraph({
             const lx = Math.max(n.x1, PAD.l)
             const fits = label.length * CHAR <= Math.max(n.x2 - lx, 0) + 24
             const role = o ? `${o.inside ? 'inside' : 'builds'} resolved tag ${o.path + 1}` : 'in no resolved tag'
-            const title = `${n.seq} (${seriesText(pl.series, pl.call)} ${pl.charge}+) · E-value ${pl.evalue ?? 'none'} · ${pl.rows.length} tag${pl.rows.length === 1 ? '' : 's'}${pl.tags.length ? `: ${pl.tags.join(', ')}` : ''} · ${role}`
+            const own = n.read.own ? '' : `; on its own peaks ${seriesText(pl.series, pl.call)}, ${sequenceOf(pl)}`
+            const title = `${n.seq} (${seriesText(n.read.series, n.read.call)} ${pl.charge}+${own}) · E-value ${pl.evalue ?? 'none'} · ${pl.rows.length} tag${pl.rows.length === 1 ? '' : 's'}${pl.tags.length ? `: ${pl.tags.join(', ')}` : ''} · ${role}`
             const cls = `sp-graph-node${o ? ` ${rankCls(o.path)}${o.inside ? ' inside' : ''}` : ' none'}${o && o.path === chosen ? ' sel' : ''}`
             return (
               <g
