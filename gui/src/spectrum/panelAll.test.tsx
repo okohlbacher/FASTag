@@ -4,26 +4,31 @@
 import { fireEvent, render, screen } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 import SpectrumPanel from './SpectrumPanel'
-import { PROTON, residueMasses } from './ladder'
+import { PROTON, WATER, residueMasses } from './ladder'
 import { installMockBridge } from '../testing/mockBridge'
 import type { ResultsPage } from '../types'
 
 const R = residueMasses(undefined).masses
 const PEP = 'PEPTIDEK'
-// b ions of PEPTIDEK at 1+ (b1..b7), and a peak a W above b2 for a tag that differs.
+// b ions of PEPTIDEK at 1+ (b1..b7) with their complementary y ions, as intense
+// peaks, and a weak peak a W above b2 for a tag that differs.
 const b: number[] = []
 let m = PROTON
 for (const r of PEP.slice(0, 7)) b.push((m += R[r]))
-const mz = [...b, b[1] + R.W].sort((x, y) => x - y)
+const MASS = [...PEP].reduce((a, r) => a + R[r], 0) + WATER
+const yc = b.map((x) => MASS - (x - PROTON) + PROTON)
+const peaks = [...b.map((x) => [x, 1000]), ...yc.map((x) => [x, 800]), [b[1] + R.W, 10]].sort((p, q) => p[0] - q[0])
+const mz = peaks.map((p) => p[0])
 const dump =
   JSON.stringify({
-    record: 'spectrum', format: 1, native_id: 'scan=1', index: 0, ms_level: 2, rt: 1, precursor: 500, charge: 2, charge_given: 2,
-    tolerance: 20, tolerance_unit: 'ppm', picked: false, deisotoped: true, tagged: true, n_read: mz.length, n: mz.length, mz, int: mz.map((_, i) => 100 + i)
+    record: 'spectrum', format: 1, native_id: 'scan=1', index: 0, ms_level: 2, rt: 1, precursor: (MASS + 2 * PROTON) / 2, charge: 2, charge_given: 2,
+    tolerance: 20, tolerance_unit: 'ppm', picked: false, deisotoped: true, tagged: true, n_read: mz.length, n: mz.length, mz, int: peaks.map((p) => p[1])
   }) + '\n{"record":"end"}\n'
 const sum = (t: string): number => [...t].reduce((a, r) => a + R[r], 0)
 const tagCols = ['spectrum', 'tag', 'length', 'charge', 'nterm_mass', 'cterm_mass', 'extended', 'gapped', 'evalue', 'fasta_hit']
 const tag = (t: string, nterm: number, e: string): string[] => ['scan=1', t, String(t.length), '1', String(nterm), '5000', '0', '0', e, 'fwd']
-const tagRows = [tag('EPT', sum('P'), '0.001'), tag('PTID', sum('PE'), '0.01'), tag('IDE', sum('PEPT'), '0.5'), tag('W', sum('PE'), '0.9')]
+// Strong tags assemble under the step ranking (stepScore.ts); the W tag is weak.
+const tagRows = [tag('EPT', sum('P'), '1e-9'), tag('PTID', sum('PE'), '1e-8'), tag('IDE', sum('PEPT'), '1e-7'), tag('W', sum('PE'), '0.9')]
 const recCols = ['spectrum', 'tag', 'protein', 'peptide', 'pos', 'reversed', 'nterm_match', 'cterm_match', 'delta_mass', 'region', 'delta_interp']
 const recRows = [['scan=1', 'EPT', 'sp|P1|TEST_ECOLI test', PEP, '1', '1', '1', '1', '0.0000', '', ''], ['scan=1', 'PTID', 'sp|P1|TEST_ECOLI test', PEP, '2', '1', '1', '1', '0.0000', '', '']]
 const page = (columns: string[], rows: string[][]): ResultsPage => ({ columns, totalRows: rows.length, matchedRows: rows.length, rows, rowIds: rows.map((_, i) => i), ranked: true, pending: false })

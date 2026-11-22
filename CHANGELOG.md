@@ -12,6 +12,12 @@
   most tags of the spectrum were placed on is named and its fragments are drawn as a ruler; a candidate, not an
   identification.
 
+- **GUI: resolved tags ranked by step evidence.** All tags, resolved now ranks the resolved tags by the log-odds of
+  their steps (E-value, mass error, intensity of both peaks, complement ions, gap steps), less a threshold, instead of
+  by summed E-values. Preregistered held-out test on PXD076528 (Orbitrap Astral, 4,464 scans): the first resolved tag
+  right in 58.7% of scans (best single tag 58.2%, summed E-values 40.3%), with 11% more correct residues than the best
+  single tag.
+
 - **GUI: b or y, judged on the peaks.** A tag does not say whether it was read from b or y ions, and the
   Spectrum tab used to call the ladder walked from nterm_mass "b" and the one from cterm_mass "y", which was wrong for
   about a quarter to half of correct tags and showed their sequence reversed. It now judges the series on the peaks
