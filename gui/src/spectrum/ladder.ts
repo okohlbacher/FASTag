@@ -193,9 +193,10 @@ export interface SeriesCall {
 }
 
 const CO = 27.9949146
-// The rules were measured at 20 ppm; a wider window (a Da run, an ion trap)
-// matches a ions and K/R by chance too often to be believed.
-const SERIES_MAX_WINDOW = 0.05
+// The rules were measured at 20 ppm; a wider tolerance (a Da run, an ion
+// trap) matches a ions and K/R by chance too often to be believed.
+const SERIES_MAX_PPM = 25
+const SERIES_MAX_DA = 0.02
 // The complement of a peak lies within this of the precursor less the peak.
 export const complementTol = (s: SpectrumPeaks, x: number): number => tolAt(s, x) + (s.precursor != null ? tolAt(s, s.precursor) : 0)
 /** The neutral mass of the complement of peak @p k at charge @p z, or null without a precursor. */
@@ -206,8 +207,7 @@ export function complementOf(s: SpectrumPeaks, k: number, z: number): number | n
 export function seriesCall(peaks: number[], z: number, flankSeries: Ladder['series'], s: SpectrumPeaks, residues: Residues): SeriesCall {
   // c/z-dot: no rule measured; the flank the ladder was walked from decides.
   if (flankSeries === 'c' || flankSeries === 'z') return { series: flankSeries, level: 'open', why: 'c and z ions are not told apart here' }
-  const top = s.mz.length ? s.mz[s.mz.length - 1] : 0
-  if (2 * tolAt(s, top) > SERIES_MAX_WINDOW)
+  if (s.toleranceUnit === 'ppm' ? s.tolerance > SERIES_MAX_PPM : s.tolerance > SERIES_MAX_DA)
     return { series: flankSeries, level: 'open', why: `at this tolerance (${s.tolerance} ${s.toleranceUnit}) a ions match by chance too often to tell b from y` }
   const neutral = (k: number): number => s.mz[k] * z - z * PROTON
   const at = (m: number): number => {

@@ -104,6 +104,11 @@ describe('series: review findings', () => {
     expect(seriesCall(idx(s, [b(2), b(3), b(4)]), 1, 'b', s, RES)).toMatchObject({ series: 'b', level: 'open' })
   })
 
+  it('at 20 ppm with peaks up to 2000 m/z the rules still apply', () => {
+    const s = { ...spec([b(2), b(3), b(4), b(2) - CO, b(3) - CO, 1999.9]), tolerance: 20 }
+    expect(seriesCall(idx(s, [b(2), b(3), b(4)]), 1, 'y', s, RES)).toMatchObject({ series: 'b', level: 'sure' })
+  })
+
   it('the K/R rule uses the run\'s K (TMT6plex on K) and no charge-widened window', () => {
     const tmt = residueMasses(['TMT6plex (K)'])
     const yK = tmt.masses.K + WATER + PROTON
