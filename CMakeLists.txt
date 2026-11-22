@@ -537,6 +537,12 @@ if(FASTAG_BUILD_TESTS)
            COMMAND bash ${CMAKE_CURRENT_SOURCE_DIR}/test/complement_cli_test.sh $<TARGET_FILE:FASTag>
                    ${CMAKE_CURRENT_SOURCE_DIR}/test/fixtures/Ecoli_MS2_small.mzML)
   set_tests_properties(complement_cli_test PROPERTIES SKIP_RETURN_CODE 77)
+  # Tag merging: -resolved_out and -tag_graph_out (header, ranks, member
+  # rows, -stream refusal, threads).
+  add_test(NAME resolved_cli_test
+           COMMAND bash ${CMAKE_CURRENT_SOURCE_DIR}/test/resolved_cli_test.sh $<TARGET_FILE:FASTag>
+                   ${CMAKE_CURRENT_SOURCE_DIR}/test/fixtures/Ecoli_MS2_small.mzML)
+  set_tests_properties(resolved_cli_test PROPERTIES SKIP_RETURN_CODE 77)
   # 1.15.5 (PREREG-lowres-defaults): -tolerance_by_analyzer and the complement window under Da.
   add_test(NAME tolerance_by_analyzer_cli_test
            COMMAND bash ${CMAKE_CURRENT_SOURCE_DIR}/test/tolerance_by_analyzer_cli_test.sh $<TARGET_FILE:FASTag>

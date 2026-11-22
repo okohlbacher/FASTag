@@ -783,6 +783,12 @@ vendored.
 | `-res_conf` | off | Append per-residue confidences 0..100, N→C, space-separated (see Assembly export) |
 | `-usi_collection <id>` | none | Append a `usi` column naming each tag's spectrum as a Universal Spectrum Identifier in this collection (`PXDnnnnnn`, …, or `USI000000`; see Output) |
 | `-diversity` | off | Under `-max_tags`, demote near-duplicate re-reads of an already-kept tag's peak set behind non-duplicates, then backfill. Reorders which tags occupy the capped slots; never changes output size or rank 1 (see Tag diversity) |
+| `-resolved_out <file>` | none | Merge each spectrum's tags (E-value <= `-resolve_max_evalue`) on its peaks into resolved tags, best first, one row each (see Tag merging). Not under `-stream` |
+| `-tag_graph_out <file>` | none | Advanced: the merge graph, one row per placement of a spectrum's tags on its peaks (see Tag merging). Not under `-stream` |
+| `-resolve_score <scheme>` | steplogodds | Advanced: how resolved tags are ranked: `steplogodds` (each step a chain adds is worth its log-odds of being right less `-resolve_threshold`), `evidence` (summed E-value evidence of its tags) or `anchor` (the best single tag first, then `steplogodds`) |
+| `-resolve_threshold <t>` | 3 | Advanced: the log-odds a step must exceed to lengthen a resolved tag |
+| `-resolve_max_evalue <E>` | 1 | Advanced: largest E-value of the tags merged |
+| `-resolve_join` | off | Advanced: also join tags that only touch at a peak |
 | `-recon_out <file>` | none | Reconcile reported tags against a protein database: one row per placement with protein, peptide, position, flank agreement, localized mass gap and its interpretation (see Reconciliation). Requires `-recon_fasta` or `-fasta` |
 | `-recon_fasta <file>` | `-fasta` | Database for `-recon_out`; independent of the membership filter, so a proteome-scale reconciliation never forces the filter's per-length index build |
 | `-recon_missed_cleavages <n>` | 1 | Missed tryptic cleavages in reconciliation windows; 2 by the shortlist recipe default (with `-shortlist_out`, `-fasta_out` or `-search_config_out` and a tryptic shortlist, unless given; 1.15.4) |
@@ -1809,6 +1815,49 @@ spectra with at least one database hit **rose** from 8,547 to 8,695 under a
 10-tag cap. What it does not do: surface a co-isolated peptide whose tags rank
 far below the cap — deferral reorders families near the head; it is not
 per-peptide clustering. Off by default.
+
+## Tag merging
+
+`-resolved_out` merges the tags of each spectrum into resolved tags, as the
+desktop app's Spectrum tab does (All tags, resolved): every written tag of the
+spectrum with E-value <= `-resolve_max_evalue` (1) is walked onto the peaks it
+was tagged on (the list `-dump_spectrum` prints) from both flanks; rows on the
+same chain of peaks of one layer (b and y of one fragment charge, c and z apart)
+are one placement, a step's isobaric readings kept apart (`{Q|[AG]}`). A
+resolved tag is a chain of whole placements, each overlapping the one before by
+at least one step and agreeing with it on every shared step (with
+`-resolve_join`, touching at a peak); placements wholly inside it are
+subsumed. Chains are taken best first by `-resolve_score`: by default each new
+step is worth its log-odds of being right (a logistic model of E-value, mass
+error, peak intensity ranks, complement ions, gap and ambiguity, fitted on
+PXD003531 and PXD000001 against Sage) less `-resolve_threshold` (3), the scheme
+that passed the preregistered held-out test on PXD076528 (first resolved tag
+right in 58.7% of scans against 58.2% for the best single tag, 11% more correct
+residues). Residue masses are the tagger's (OpenMS, with the run's
+modifications). Under several precursor hypotheses the selected one's rows are
+merged.
+
+`-resolved_out` columns, one row per resolved tag in rank order: `spectrum`,
+`rank` (1-based), `sequence` (N→C in the called series; a step with several
+readings `{Q|[AG]}`, a gap `[AG]`), `length` (residues, a gap 2), `series`
+(b, y, c, z) and `call` (`sure`, `likely`, `open`: not told apart, shown as its
+best tag was walked), `charge` (fragment), `nterm_mass` and `cterm_mass` (the
+flanks in the tag convention, low peak read as the C-terminal ion, from the
+observed peaks: nterm + residues + cterm + H2O = M), `score` (the chain weight),
+`best_e` and `weakest_e` (the best step and the weakest step or junction; empty
+when a step has no evidence), `n_tags`, `peaks` (m/z ascending, `;`, 6
+decimals), `steps` (`label:E` readings `|`-separated per step, steps `;`),
+`members` and `inside` (0-based row indices of the spectrum's rows in `-out`,
+of the tags that build it and of those subsumed), `joined` (m/z of junctions
+joined under `-resolve_join`) and `relations` (`rank:fork|touch:shared steps`).
+
+`-tag_graph_out` columns, one row per placement in canonical order (layer,
+first peak): `spectrum`, `node` (0-based), `layer` (`by2`, `cz1`), `charge`,
+`series`, `peaks`, `steps`, `evalue`, `rows` (in `-out`), `path` (the rank of
+the resolved tag using it, empty if none), `role` (`chain`, `inside`, `none`)
+and `next` (nodes continuing it; `~` an arc that only touches, `*` an arc on a
+resolved tag). Both tables are written in input order and are computed only
+when asked for.
 
 ## Assembly export
 

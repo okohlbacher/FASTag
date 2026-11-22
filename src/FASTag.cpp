@@ -7,6 +7,7 @@
 // --------------------------------------------------------------------------
 
 #include "FASTagTool.h"
+#include "TagGraph.h"
 
 #ifdef FASTAG_MIMALLOC
 #include <mimalloc.h> // Windows: mimalloc with CRT redirection (CMakeLists.txt)
@@ -466,6 +467,9 @@ TOPPFASTag::ExitCodes TOPPFASTag::main_(int, const char**)
         // ---- 1.12 G: -stream refusals ----
         {"probe_input", nullptr},
         {"dump_spectrum", nullptr},
+        // ---- tag merging: -stream refusals ----
+        {"resolved_out", nullptr},
+        {"tag_graph_out", nullptr},
     };
     // 1.13 item 15: the probe needs random access to the run.
     if (getStringOption_("complement_tolerance_unit") == "auto")
@@ -790,6 +794,18 @@ TOPPFASTag::ExitCodes TOPPFASTag::main_(int, const char**)
   }
 
   const std::string recon_out = getStringOption_("recon_out");
+  // Tag merging (src/TagGraph.h): the spectrum's tags merged into resolved
+  // tags and ranked, computed only when one of the two tables is written.
+  const std::string resolved_out = getStringOption_("resolved_out");
+  const std::string tag_graph_out = getStringOption_("tag_graph_out");
+  const bool resolved_on = !resolved_out.empty();
+  const bool tag_graph_on = !tag_graph_out.empty();
+  const bool graph_on = resolved_on || tag_graph_on;
+  FASTag::TagGraph::Options graph_opt;
+  graph_opt.scheme = FASTag::TagGraph::schemeFromString(getStringOption_("resolve_score"));
+  graph_opt.threshold = getDoubleOption_("resolve_threshold");
+  graph_opt.join = getFlag_("resolve_join");
+  const double resolve_max_e = getDoubleOption_("resolve_max_evalue");
   const std::string delta_out = getStringOption_("delta_out");
   const std::string delta_spectra_out = getStringOption_("delta_spectra_out");
   // recon_on: -recon_out is written. place_on: tags are placed on the
@@ -2901,6 +2917,8 @@ TOPPFASTag::ExitCodes TOPPFASTag::main_(int, const char**)
     guard.output("out", out);
     guard.output("out_spectra", out_spectra);
     guard.output("recon_out", recon_out);
+    guard.output("resolved_out", resolved_out);
+    guard.output("tag_graph_out", tag_graph_out);
     guard.output("delta_out", delta_out);
     guard.output("delta_spectra_out", delta_spectra_out);
     guard.output("delta_counts_out", delta_counts_out);
@@ -3034,6 +3052,30 @@ TOPPFASTag::ExitCodes TOPPFASTag::main_(int, const char**)
             "\tdelta_mass\tregion\tdelta_interp"
          << (recon_loc ? "\tloc_site\tloc_score\tloc_ties" : "") << "\n";
   }
+  std::ofstream vtsv, ttsv;  // -resolved_out, -tag_graph_out
+  if (resolved_on)
+  {
+    vtsv.open(resolved_out.c_str());
+    if (!vtsv)
+    {
+      OPENMS_LOG_ERROR << "Cannot open output file " << resolved_out << " for writing." << std::endl;
+      return CANNOT_WRITE_OUTPUT_FILE;
+    }
+    vtsv << FASTag::TagGraph::resolvedHeader();
+  }
+  if (tag_graph_on)
+  {
+    ttsv.open(tag_graph_out.c_str());
+    if (!ttsv)
+    {
+      OPENMS_LOG_ERROR << "Cannot open output file " << tag_graph_out << " for writing." << std::endl;
+      return CANNOT_WRITE_OUTPUT_FILE;
+    }
+    ttsv << FASTag::TagGraph::graphHeader();
+  }
+  // The residue masses of the tagger's alphabet, for walking tags onto peaks.
+  const FASTag::TagGraph::Residues graph_res =
+      graph_on ? FASTag::TagGraph::residuesFrom(p.mods) : FASTag::TagGraph::Residues();
 
 
   const bool glyco_on = getFlag_("glyco");
@@ -3157,6 +3199,7 @@ TOPPFASTag::ExitCodes TOPPFASTag::main_(int, const char**)
     size_t base = 0;                 ///< input index of slot 0
     std::vector<std::string> rows;
     std::vector<std::string> recon_rows;  ///< recon rows (recon_on only)
+    std::vector<std::string> resolved_rows, graph_rows;  ///< (resolved_on, tag_graph_on only)
     std::vector<std::vector<PeptideIdentification>> recon_id_lists;  ///< (recon_ids_on only)
     std::vector<std::string> glyco_rows;  ///< glyco rows (glyco_on only)
     std::vector<std::vector<std::pair<double, bool>>> row_meta;  ///< (entrap_on only)
@@ -3317,6 +3360,7 @@ TOPPFASTag::ExitCodes TOPPFASTag::main_(int, const char**)
   struct SpecResult
   {
     std::string buf, rbuf;
+    std::string vbuf, gbuf;  ///< -resolved_out, -tag_graph_out rows
     /// Per reported row, in row order: (evalue, is_entrapment) -- the
     /// material the q_db post-pass consumes without ever reparsing a
     /// serialized %g evalue back off the TSV.
@@ -3661,6 +3705,18 @@ TOPPFASTag::ExitCodes TOPPFASTag::main_(int, const char**)
       loc_peaks.sortByPosition();
     }
 
+    // Tag merging: the written rows of the selected hypothesis with
+    // E <= -resolve_max_evalue, with the values as written (the GUI reads
+    // them off -out), indexed by their position among the spectrum's rows.
+    std::vector<FASTag::TagGraph::TagIn> graph_in;
+    size_t row_no = 0;
+    const auto as_written = [](double v, bool mass) {
+      std::string b;
+      if (g_full_precision) FASTag::appendShortest(b, v);
+      else if (mass) FASTag::appendNum(b, v, std::chars_format::fixed, 4);
+      else FASTag::appendNum(b, v, std::chars_format::general, 6);
+      return std::strtod(b.c_str(), nullptr);  // C locale: FASTag never calls setlocale
+    };
     for (size_t ti = 0; ti < tags.size(); ++ti)
     {
       const FASTag::Tag& t = tags[ti];
@@ -3706,6 +3762,24 @@ TOPPFASTag::ExitCodes TOPPFASTag::main_(int, const char**)
 
       appendTagRow_(buf, t, spec.getNativeID(), hit, want_proforma, proforma_fixed,
                    p.per_residue_conf, usi, hyp_on ? &hy : nullptr, ion_column);
+      if (graph_on)
+      {
+        const double e = as_written(t.evalue, false);
+        if (sel && e <= resolve_max_e)
+        {
+          FASTag::TagGraph::TagIn ti_in;
+          ti_in.seq = t.seq;
+          ti_in.charge = t.charge;
+          ti_in.nterm_mass = as_written(t.nterm_mass, true);
+          ti_in.cterm_mass = as_written(t.cterm_mass, true);
+          ti_in.gapped = t.gapped;
+          ti_in.cz = t.ion_series == FASTag::IonSeries::Series::CZ;
+          ti_in.evalue = e;
+          ti_in.index = row_no;
+          graph_in.push_back(std::move(ti_in));
+        }
+        ++row_no;
+      }
       if (species_sel_on) res.row_species.push_back(sel ? 1 : 0);
       // 1.13 item 10: a two-pass hybrid spectrum's rows differ in series.
       if (read_hybrid) res.row_series.push_back(t.ion_series == FASTag::IonSeries::Series::CZ ? 1 : 0);
@@ -3852,6 +3926,20 @@ TOPPFASTag::ExitCodes TOPPFASTag::main_(int, const char**)
           delta_have = true;
         }
       }
+    }
+    if (graph_on && !graph_in.empty())
+    {
+      // The peaks of the selected hypothesis, prepared as for its tags
+      // (-dump_spectrum's list at the defaults). ponytail: a two-pass hybrid
+      // spectrum's c/z-dot rows are walked on its b/y preparation.
+      const FASTag::Hyp::Hypothesis* hs = &hyps[0];
+      for (const auto& hy : hyps) if (hy.selected) { hs = &hy; break; }
+      const FASTag::Param& gp = params_of(read_series, spec_itms).front();
+      const FASTag::TagGraph::Peaks gpk = FASTag::TagGraph::peaksFrom(
+          FASTag::preparedPeaks(spec, hs->mz, hs->charge, gp), hs->mz, hs->charge, gp);
+      const FASTag::TagGraph::Graph g = FASTag::TagGraph::buildGraph(graph_in, gpk, graph_res, graph_opt);
+      if (resolved_on) FASTag::TagGraph::appendResolvedRows(res.vbuf, g, gpk, spec.getNativeID(), g_full_precision);
+      if (tag_graph_on) FASTag::TagGraph::appendGraphRows(res.gbuf, g, gpk, spec.getNativeID(), g_full_precision);
     }
     if (delta_tagged) ++pt.delta_tagged;
     if (delta_have)
@@ -4146,6 +4234,8 @@ TOPPFASTag::ExitCodes TOPPFASTag::main_(int, const char**)
     if (r.buf.empty()) return;  // rbuf is only ever non-empty alongside buf
     b.rows[idx].swap(r.buf);
     if (recon_on) b.recon_rows[idx].swap(r.rbuf);
+    if (resolved_on) b.resolved_rows[idx].swap(r.vbuf);
+    if (tag_graph_on) b.graph_rows[idx].swap(r.gbuf);
     if (recon_ids_on) b.recon_id_lists[idx].swap(r.ids);
     if (entrap_on) b.row_meta[idx].swap(r.meta);
     if (species_sel_on) b.row_species[idx].swap(r.row_species);
@@ -4167,6 +4257,8 @@ TOPPFASTag::ExitCodes TOPPFASTag::main_(int, const char**)
     {
       b.rows.resize(n_used);
       if (recon_on) b.recon_rows.resize(n_used);
+      if (resolved_on) b.resolved_rows.resize(n_used);
+      if (tag_graph_on) b.graph_rows.resize(n_used);
       if (recon_ids_on) b.recon_id_lists.resize(n_used);
       if (glyco_on) b.glyco_rows.resize(n_used);
       if (entrap_on) b.row_meta.resize(n_used);
@@ -4204,7 +4296,7 @@ TOPPFASTag::ExitCodes TOPPFASTag::main_(int, const char**)
   // thread counts. 4 MB, emptied at the end of every block; larger only
   // holds more memory.
   constexpr size_t WRITE_CHUNK = size_t(4) << 20;
-  std::string tsv_pending, rtsv_pending, ctsv_pending;
+  std::string tsv_pending, rtsv_pending, ctsv_pending, vtsv_pending, ttsv_pending;
   auto drain = [](std::ofstream& os, std::string& pending)
   {
     if (pending.empty()) return;
@@ -4239,6 +4331,8 @@ TOPPFASTag::ExitCodes TOPPFASTag::main_(int, const char**)
       if (!b.keep[i]) continue;
       put_rows(tsv, tsv_pending, b.rows[i]);
       if (recon_on && !b.recon_rows[i].empty()) { put_rows(rtsv, rtsv_pending, b.recon_rows[i]); b.recon_rows[i].clear(); }
+      if (resolved_on && !b.resolved_rows[i].empty()) { put_rows(vtsv, vtsv_pending, b.resolved_rows[i]); b.resolved_rows[i].clear(); }
+      if (tag_graph_on && !b.graph_rows[i].empty()) { put_rows(ttsv, ttsv_pending, b.graph_rows[i]); b.graph_rows[i].clear(); }
       if (recon_ids_on)
       {
         for (PeptideIdentification& id : b.recon_id_lists[i]) recon_ids.push_back(std::move(id));
@@ -4290,6 +4384,8 @@ TOPPFASTag::ExitCodes TOPPFASTag::main_(int, const char**)
     }
     drain(tsv, tsv_pending);
     if (recon_on) drain(rtsv, rtsv_pending);
+    if (resolved_on) drain(vtsv, vtsv_pending);
+    if (tag_graph_on) drain(ttsv, ttsv_pending);
     if (census_on) drain(ctsv, ctsv_pending);
   };
 
@@ -4625,6 +4721,8 @@ TOPPFASTag::ExitCodes TOPPFASTag::main_(int, const char**)
     };
     drop(tsv, out);
     if (recon_on) drop(rtsv, recon_out);
+    if (resolved_on) drop(vtsv, resolved_out);
+    if (tag_graph_on) drop(ttsv, tag_graph_out);
     if (glyco_on) drop(gtsv, glyco_out);
     if (census_on)
     {
@@ -5177,6 +5275,17 @@ TOPPFASTag::ExitCodes TOPPFASTag::main_(int, const char**)
     if (rtsv.fail())
     {
       OPENMS_LOG_ERROR << "Failed writing " << recon_out << " (disk full?)." << std::endl;
+      return CANNOT_WRITE_OUTPUT_FILE;
+    }
+  }
+  for (auto [os, on, path] : {std::make_tuple(&vtsv, resolved_on, &resolved_out),
+                              std::make_tuple(&ttsv, tag_graph_on, &tag_graph_out)})
+  {
+    if (!on) continue;
+    os->close();
+    if (os->fail())
+    {
+      OPENMS_LOG_ERROR << "Failed writing " << *path << " (disk full?)." << std::endl;
       return CANNOT_WRITE_OUTPUT_FILE;
     }
   }
