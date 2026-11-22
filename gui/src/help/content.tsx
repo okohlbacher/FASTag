@@ -740,12 +740,17 @@ export const RESULTS: HelpPage = {
             go to the previous and next tagged spectrum. The wheel or + and − zoom, dragging or the arrow keys pan.
           </p>
           <p>
-            All tags, merged draws every tag of the spectrum at once. Tags that lie on the same peaks of the same ion
-            series and share at least one residue step are merged into one longer tag, and a tag that lies wholly
-            inside another is not drawn on its own. Each merged tag gets its own line; the table lists its sequence
-            (N- to C-terminus), its best E-value and the tags it merges (choose one to draw it alone). E-value ≤
-            leaves out the tags above that value before merging. Tags whose ladder is not on the peaks are counted,
-            not drawn.
+            All tags, resolved draws every tag of the spectrum at once. Each tag is placed on its peaks; rows that
+            land on the same peaks are one tag (FASTag writes a gapped tag once per order of its gap residues). Tags
+            of one ion series that overlap by at least one step and agree are assembled into one longer resolved tag,
+            and a tag inside another is not listed on its own. Resolved tags are ranked by the evidence of the tags
+            they are assembled from; the table gives the E-value of the best and of the weakest of them, the tags
+            themselves (choose one to draw it alone) and which other resolved tags conflict with it (they share a
+            peak and continue differently) or read the same residues in the other ion series. A step two readings
+            cannot be told apart on is written {"{Q|[AG]}"}. E-value ≤ leaves out weaker tags (1 by default); Join
+            tags that only touch also continues a tag with one that starts at its last peak, marked with a hollow
+            dot. A resolved tag is a hypothesis: on identified spectra about two thirds of the steps of the
+            first-ranked one lie on fragment ions of the identified peptide.
           </p>
           <p>
             The tab needs a FASTag that has -dump_spectrum; with an older one it is not there, and the row action says

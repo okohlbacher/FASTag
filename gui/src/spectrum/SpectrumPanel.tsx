@@ -14,7 +14,7 @@
 import { useEffect, useMemo, useRef, useState, type JSX, type KeyboardEvent, type PointerEvent, type WheelEvent } from 'react'
 import { parseDump, type SpectrumPeaks } from './dump'
 import { hasStep, ladderFor, laddersFor, residueMasses, tagRowFrom, type Ladder } from './ladder'
-import { consolidate, ladderOf, packRows, sequenceOf, type Contig, type TagIn } from './consolidate'
+import { buildGraph, ladderOf, packRows, sequenceOf, type TagGraph, type TagIn } from './graph'
 import { baseName } from '../digestReport'
 import { EValue, columnLabel, hitWords, spectrumHint } from '../ResultsTable'
 import { HelpLink } from '../help/HelpLink'
@@ -132,9 +132,10 @@ export default function SpectrumPanel({ target, source, tags: tagsFile, onTarget
   const [nav, setNav] = useState<{ prev: boolean; next: boolean }>({ prev: false, next: false })
   const [navNote, setNavNote] = useState('')
   const [retry, setRetry] = useState(0)
-  // every tag at once, overlapping ones merged; a cutoff on E-value.
+  // Every tag at once, resolved by the tag graph (graph.ts); a cutoff on E-value.
   const [allTags, setAllTags] = useState(false)
-  const [maxE, setMaxE] = useState('')
+  const [maxE, setMaxE] = useState('1')
+  const [join, setJoin] = useState(false)
   const [chosenContig, setChosenContig] = useState(0)
 
   // The dump.
@@ -207,19 +208,38 @@ export default function SpectrumPanel({ target, source, tags: tagsFile, onTarget
     tags.rows.forEach((r, i) => {
       const tr = tagRowFrom(tags.columns, r)
       if (!tr) return
-      const e = ev >= 0 ? Number(r[ev]) : NaN
-      const evalue = Number.isFinite(e) ? e : Infinity
-      if (!badCutoff && evalue > cutoff) return void above++
+      // A blank, missing or invalid E-value is no evidence (not zero).
+      const cell = ev >= 0 ? (r[ev] ?? '').trim() : ''
+      const evalue = cell !== '' && Number.isFinite(Number(cell)) && Number(cell) >= 0 ? Number(cell) : null
+      if (!badCutoff && cutoff !== Infinity && (evalue == null || evalue > cutoff)) return void above++
       ins.push({ row: tr, evalue, index: i })
     })
-    const c = consolidate(ins, spectrum, residues)
-    const lines = c.contigs.map(ladderOf)
+    const graph = buildGraph(ins, spectrum, residues, { join })
+    const all = graph.paths.map((p) => ladderOf(p, spectrum))
     const span = spectrum.mz.length ? spectrum.mz[spectrum.mz.length - 1] - spectrum.mz[0] : 1
-    return { ...c, lines, rows: packRows(lines, span * 0.01).rows, above, used: ins.length }
-  }, [allTags, spectrum, tags, cutoff, badCutoff, residues])
-  const contigAt = merged && chosenContig < merged.contigs.length ? chosenContig : 0
-  const lines = merged ? merged.lines : one
-  const shownLadder = merged ? (merged.lines[contigAt] ?? null) : ladder
+    return { graph, all, allRows: packRows(graph, spectrum, span * 0.01).rows, above, used: ins.length }
+  }, [allTags, spectrum, tags, cutoff, badCutoff, residues, join])
+  const contigAt = merged && chosenContig < merged.graph.paths.length ? chosenContig : 0
+  // The plot draws the paths of the first MAX_ROWS rows, and the chosen one.
+  const view = useMemo(() => {
+    if (!merged || !spectrum) return null
+    const { graph, all, allRows } = merged
+    const idx = all.map((_, i) => i).filter((i) => allRows[i] < MAX_ROWS || i === contigAt)
+    const dots: PlotDot[] = []
+    idx.forEach((i, k) => {
+      for (const j of graph.paths[i].joined) dots.push({ mz: spectrum.mz[j], line: k })
+    })
+    return {
+      lines: idx.map((i) => all[i]),
+      rows: idx.map((i) => Math.min(allRows[i], MAX_ROWS)),
+      dots,
+      faint: idx.map((i) => graph.paths[i].steps.map((st) => (st.readings[0].evalue ?? Infinity) > 1)),
+      titles: idx.map((i) => graph.paths[i].steps.map((st) => st.readings.map((r) => `${r.label}: E-value ${r.evalue ?? 'none'}, ${r.deltaPpm.toFixed(1)} ppm`).join(' · '))),
+      hidden: all.length - idx.length
+    }
+  }, [merged, spectrum, contigAt])
+  const lines = view ? view.lines : one
+  const shownLadder = merged ? (merged.all[contigAt] ?? null) : ladder
 
   async function go(dir: -1 | 1): Promise<void> {
     const n = tagsPath ? await neighbour(tagsPath, target.spectrum, target.rowId, dir).catch(() => null) : null
@@ -327,7 +347,7 @@ export default function SpectrumPanel({ target, source, tags: tagsFile, onTarget
             <input type="radio" name="sp-mode" checked={!allTags} onChange={() => setAllTags(false)} /> Chosen tag
           </label>
           <label>
-            <input type="radio" name="sp-mode" checked={allTags} onChange={() => setAllTags(true)} /> All tags, merged
+            <input type="radio" name="sp-mode" checked={allTags} onChange={() => setAllTags(true)} /> All tags, resolved
           </label>
           {allTags && (
             <label>
@@ -339,25 +359,31 @@ export default function SpectrumPanel({ target, source, tags: tagsFile, onTarget
                 placeholder="any"
                 value={maxE}
                 aria-invalid={badCutoff || undefined}
-                aria-label="Largest E-value of the tags merged"
+                aria-label="Largest E-value of the tags used"
                 onChange={(e) => setMaxE(e.target.value)}
               />
             </label>
           )}
+          {allTags && (
+            <label title="Also continue a tag with another that only touches it at a peak (no single tag spans the junction; marked with a hollow dot)">
+              <input type="checkbox" checked={join} onChange={(e) => setJoin(e.target.checked)} /> Join tags that only touch
+            </label>
+          )}
           {merged && (
             <span className="hint" data-testid="merge-summary">
-              {merged.used} tags → {merged.contigs.length} merged
-              {merged.offPeaks.length > 0 ? ` · ${merged.offPeaks.length} not on the peaks (not drawn)` : ''}
+              {merged.used} tags ({merged.graph.placements.length} distinct) → {merged.graph.paths.length} resolved
+              {view && view.hidden > 0 ? ` · ${view.hidden} only in the table` : ''}
+              {merged.graph.offPeaks.length > 0 ? ` · ${merged.graph.offPeaks.length} not on the peaks (not drawn)` : ''}
               {merged.above > 0 ? ` · ${merged.above} above the cutoff` : ''}
               {badCutoff ? ' · the cutoff is not a number' : ''}
             </span>
           )}
         </div>
-        <StickPlot spectrum={peaks.spectrum} ladder={shownLadder} lines={lines} rows={merged?.rows} />
+        <StickPlot spectrum={peaks.spectrum} ladder={shownLadder} lines={lines} rows={view?.rows} dots={view?.dots} faint={view?.faint} titles={view?.titles} />
         {shownLadder && (
           <LadderLine
             ladder={shownLadder}
-            tag={merged ? sequenceOf(merged.contigs[contigAt]) : (row?.tag ?? '')}
+            tag={merged ? sequenceOf(merged.graph.paths[contigAt]) : (row?.tag ?? '')}
             unit={peaks.spectrum.toleranceUnit}
           />
         )}
@@ -378,7 +404,7 @@ export default function SpectrumPanel({ target, source, tags: tagsFile, onTarget
       <section className="sp-tags" aria-label="Tags of this spectrum">
         <h3>
           Tags of this spectrum{tags ? ` (n=${tags.rows.length.toLocaleString('en-US')})` : ''}
-          {tagsPath && <span className="hint">{allTags ? ' · merged where they share peaks; choose a tag to draw it alone' : ' · choose one to draw its ladder'}</span>}
+          {tagsPath && <span className="hint">{allTags ? ' · resolved into the largest supported tags; choose a tag to draw it alone' : ' · choose one to draw its ladder'}</span>}
         </h3>
         {!tagsPath ? (
           <p className="hint">Tags file not opened: open the run's tags table to see the tags of this spectrum.</p>
@@ -387,8 +413,8 @@ export default function SpectrumPanel({ target, source, tags: tagsFile, onTarget
         ) : !tags ? (
           <p className="hint">Reading…</p>
         ) : merged ? (
-          <ContigTable
-            merged={merged}
+          <PathTable
+            graph={merged.graph}
             tags={tags}
             chosen={contigAt}
             onChoose={setChosenContig}
@@ -405,64 +431,81 @@ export default function SpectrumPanel({ target, source, tags: tagsFile, onTarget
   )
 }
 
-/// The merged tags of a spectrum, best E-value first; a member tag
-/// leads back to the one-tag view of it.
-function ContigTable(p: {
-  merged: { contigs: Contig[] }
-  tags: TagsOf
-  chosen: number
-  onChoose(i: number): void
-  onTag(i: number): void
-}): JSX.Element {
+/// The resolved tags of a spectrum (the paths of its tag graph), best
+/// evidence first; a member tag leads back to the one-tag view of it.
+function PathTable(p: { graph: TagGraph; tags: TagsOf; chosen: number; onChoose(i: number): void; onTag(i: number): void }): JSX.Element {
+  const g = p.graph
   const tagCol = p.tags.columns.indexOf('tag')
+  const members = (ids: number[], inside: boolean): JSX.Element[] =>
+    ids.flatMap((o) =>
+      g.placements[o].rows.map((m) => (
+        <button
+          key={`${o}:${m}`}
+          type="button"
+          className={`link mono sp-member${inside ? ' muted' : ''}`}
+          title={inside ? 'Lies inside this resolved tag; draw it alone' : 'A link of this resolved tag; draw it alone'}
+          onClick={(e) => {
+            e.stopPropagation()
+            p.onTag(m)
+          }}
+        >
+          {p.tags.rows[m]?.[tagCol] ?? '?'}
+        </button>
+      ))
+    )
   return (
     <div className="sp-tags-wrap">
-      <table className="history-table sp-tags-table" role="grid" aria-readonly="true" aria-label="Merged tags of this spectrum">
+      <table className="history-table sp-tags-table" role="grid" aria-readonly="true" aria-label="Resolved tags of this spectrum">
         <thead>
           <tr>
-            <th scope="col">Merged tag (N→C)</th>
+            <th scope="col">Resolved tag (N→C)</th>
             <th scope="col">Series</th>
-            <th scope="col" className="num">Length</th>
-            <th scope="col" className="num">Best E-value</th>
-            <th scope="col">Tags merged</th>
+            <th scope="col" className="num">Steps</th>
+            <th scope="col" className="num" title="E-value of the best and of the weakest tag it is assembled from">E-value best – weakest</th>
+            <th scope="col">Notes</th>
+            <th scope="col">Tags</th>
           </tr>
         </thead>
         <tbody>
-          {p.merged.contigs.map((c, i) => (
-            <tr key={i} tabIndex={i === p.chosen ? 0 : -1} aria-selected={i === p.chosen} className={i === p.chosen ? 'on' : undefined} onClick={() => p.onChoose(i)}>
-              <td role="gridcell" className="mono">{sequenceOf(c)}</td>
-              <td role="gridcell">
-                {c.series}
-                {c.charge > 1 ? ` ${c.charge}+` : ''}
-              </td>
-              <td role="gridcell" className="num">{c.residues.length}</td>
-              <td role="gridcell" className="num">
-                <EValue text={String(c.evalue)} />
-              </td>
-              <td role="gridcell">
-                {c.members.length}:{' '}
-                {c.members.map((m, k) => (
-                  <span key={m}>
-                    {k > 0 ? ', ' : ''}
-                    <button
-                      type="button"
-                      className="link mono"
-                      title="Draw this tag alone"
-                      onClick={(e) => {
-                        e.stopPropagation()
-                        p.onTag(m)
-                      }}
-                    >
-                      {p.tags.rows[m]?.[tagCol] ?? '?'}
-                    </button>
-                  </span>
-                ))}
-              </td>
-            </tr>
-          ))}
+          {g.paths.map((c, i) => {
+            const notes: string[] = []
+            const forks = c.relations.filter((r) => r.kind === 'fork').map((r) => `#${r.path + 1}`)
+            if (forks.length > 0) notes.push(`conflicts with ${forks.join(', ')}`)
+            const touch = c.relations.filter((r) => r.kind === 'touch').map((r) => `#${r.path + 1}`)
+            if (touch.length > 0) notes.push(`touches ${touch.join(', ')}`)
+            if (c.joined.length > 0) notes.push(`${c.joined.length} joined`)
+            if (c.sameAs.length > 0) notes.push(`same reading as ${c.sameAs.map((q) => `#${q.path + 1} (${g.paths[q.path].series})`).join(', ')}`)
+            return (
+              <tr key={i} tabIndex={i === p.chosen ? 0 : -1} aria-selected={i === p.chosen} className={i === p.chosen ? 'on' : undefined} onClick={() => p.onChoose(i)}>
+                <td role="gridcell" className="mono">
+                  <span className="muted">#{i + 1} </span>
+                  {sequenceOf(c)}
+                </td>
+                <td role="gridcell">
+                  {c.series}
+                  {c.charge > 1 ? ` ${c.charge}+` : ''}
+                </td>
+                <td role="gridcell" className="num">{c.steps.length}</td>
+                <td role="gridcell" className="num">
+                  {c.best == null ? '–' : <EValue text={String(c.best)} />}
+                  {c.weakest != null && c.weakest !== c.best && (
+                    <>
+                      {' – '}
+                      <EValue text={String(c.weakest)} />
+                    </>
+                  )}
+                </td>
+                <td role="gridcell">{notes.join(' · ')}</td>
+                <td role="gridcell">
+                  {members(c.chain, false)}
+                  {members(c.inside, true)}
+                </td>
+              </tr>
+            )
+          })}
         </tbody>
       </table>
-      {p.merged.contigs.length === 0 && <p className="hint">No tag lies on the peaks under this cutoff.</p>}
+      {g.paths.length === 0 && <p className="hint">No tag lies on the peaks under this cutoff.</p>}
     </div>
   )
 }
@@ -600,18 +643,41 @@ const PAD = { l: 48, r: 12, t: 56, b: 28 }
 // the C-terminal one (y, z) on the lower.
 const LINE_Y = (series: Ladder['series']): number => (series === 'b' || series === 'c' ? 18 : 42)
 const ROW_H = 24
+// The most rows of resolved tags drawn above the peaks.
+const MAX_ROWS = 8
+export interface PlotLink {
+  mz: number
+  // Indices into lines.
+  a: number
+  b: number
+}
+export interface PlotDot {
+  mz: number
+  line: number
+}
 
 export function StickPlot({
   spectrum,
   ladder,
   lines = ladder ? [ladder] : [],
-  rows
+  rows,
+  links = [],
+  dots = [],
+  faint,
+  titles
 }: {
   spectrum: SpectrumPeaks
   ladder: Ladder | null
   lines?: Ladder[]
   // The plot row of each line (all tags); by default b/c on the upper, y/z on the lower.
   rows?: number[]
+  // The tag graph's extras: a connector where an alternative leaves or rejoins
+  // another line, a hollow dot at a joined junction, faint steps (E > 1),
+  // a tooltip per step.
+  links?: PlotLink[]
+  dots?: PlotDot[]
+  faint?: boolean[][]
+  titles?: string[][]
 }): JSX.Element {
   const { mz, int } = spectrum
   const rowOf = (i: number): number => rows?.[i] ?? (LINE_Y(lines[i].series) === 18 ? 0 : 1)
@@ -796,7 +862,8 @@ export function StickPlot({
                 const xb = X(b.mz ?? b.expected)
                 if (Math.max(xa, xb) < PAD.l || Math.min(xa, xb) > W - PAD.r) return null
                 return (
-                  <g key={`r${k}`}>
+                  <g key={`r${k}`} className={faint?.[li]?.[k] ? 'sp-faint' : undefined}>
+                    {titles?.[li]?.[k] && <title>{titles[li][k]}</title>}
                     <line x1={xa} x2={xb} y1={y} y2={y} className={`sp-step${alt}`} />
                     <line x1={xa} x2={xa} y1={y - 4} y2={y + 4} className={`sp-step${alt}`} />
                     <line x1={xb} x2={xb} y1={y - 4} y2={y + 4} className={`sp-step${alt}`} />
@@ -809,6 +876,8 @@ export function StickPlot({
             </g>
           )
         })}
+        {links.map((l, k) => (inView(l.mz) ? <line key={`k${k}`} x1={X(l.mz)} x2={X(l.mz)} y1={lineY(l.a)} y2={lineY(l.b)} className="sp-link" data-link="" /> : null))}
+        {dots.map((d, k) => (inView(d.mz) ? <circle key={`j${k}`} cx={X(d.mz)} cy={lineY(d.line)} r={4} className="sp-joined" data-joined="" /> : null))}
       </svg>
     </div>
   )

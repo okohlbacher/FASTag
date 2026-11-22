@@ -2,9 +2,11 @@
 
 ## Unreleased
 
-- **GUI: all tags of a spectrum, merged.** The Spectrum tab's **All tags, merged** draws every tag of the spectrum at
-  once: tags on the same peaks of one ion series that share a residue step become one longer tag, tags inside another
-  are not drawn on their own, with an E-value cutoff. A double-click on a row in Tags opens its spectrum.
+- **GUI: all tags of a spectrum, resolved.** The Spectrum tab's **All tags, resolved** places every tag of the spectrum
+  on its peaks and assembles the tags of one ion series that overlap and agree into longer resolved tags (a tag graph:
+  ions as nodes, steps of tags as edges). Row orders of one gapped tag count once, isobaric readings of a step stay
+  apart ({Q|[AG]}), conflicting and same-series readings are named, with an E-value cutoff (default 1). A double-click
+  on a row in Tags opens its spectrum.
 
 - **GUI: in-app Feedback.** A **Feedback** button in the top bar (also Help › Send Feedback…, Cmd/Ctrl+Shift+F)
   takes a screenshot of the window (the webview's own snapshot: WKWebView, WebView2, WebKitGTK; no screen-recording
