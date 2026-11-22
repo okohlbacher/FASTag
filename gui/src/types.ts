@@ -137,6 +137,10 @@ export interface ResolvedOutputs {
   delta_spectra_out?: string | null
   delta_counts_out?: string | null
   check_header_out?: string | null
+  // The resolved tags and the tag graph of each spectrum, which the
+  // backend adds beside the tags when the CLI has the options (fastag.rs).
+  resolved_out?: string | null
+  tag_graph_out?: string | null
 }
 
 export interface RunResult {

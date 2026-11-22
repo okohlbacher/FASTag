@@ -6,6 +6,9 @@
 // cterm_match delta_mass region delta_interp" plus "loc_site loc_score
 // loc_ties" with -recon_localize; delta: "delta spectra top_interps"; glyco:
 // "spectrum n_oxonium oxonium_frac glyco ions"). Columns are found by name.
+// The resolved tags and the tag graph (-resolved_out, -tag_graph_out) are
+// registered here too, but read per spectrum through resultsQuery by the
+// Spectrum tab (spectrum/cliGraph.ts), not parsed whole.
 //
 // Numbers go into typed arrays and the filters run over them, returning row
 // ids as a Uint32Array in file order: a proteome-scale recon table keeps one
@@ -14,8 +17,9 @@
 
 import type { ResolvedOutputs } from '../types'
 import { baseName } from '../digestReport'
+import { RESOLVED_COLUMNS, TAG_GRAPH_COLUMNS } from '../spectrum/cliGraph'
 
-export type TableKind = 'recon' | 'delta' | 'glyco' | 'reconIds'
+export type TableKind = 'recon' | 'delta' | 'glyco' | 'reconIds' | 'resolved' | 'tagGraph'
 
 /// The table files of one run (or opened by the user), by kind.
 export type TablePaths = Partial<Record<TableKind, string>>
@@ -124,6 +128,8 @@ export function sniffTable(text: string): TableKind | null {
   // reads the first three by name either way.
   if (has(head, DELTA) && (head.length === 3 || has(head, DELTA_SURVEY))) return 'delta'
   if (has(head, GLYCO)) return 'glyco'
+  if (has(head, RESOLVED_COLUMNS)) return 'resolved'
+  if (has(head, TAG_GRAPH_COLUMNS)) return 'tagGraph'
   return null
 }
 
@@ -142,6 +148,9 @@ export function parseTable(text: string, path: string): AnyTable {
       return parseGlyco(text, path)
     case 'reconIds':
       return parseReconIds(text, path)
+    case 'resolved':
+    case 'tagGraph':
+      throw new Error(`${baseName(path)} is read per spectrum by the Spectrum tab`)
     default:
       throw new Error(`${baseName(path)} is not a recon, delta, glyco or mzTab table: its header names none of their columns`)
   }
@@ -406,5 +415,7 @@ export function tablePaths(o: ResolvedOutputs): TablePaths {
   if (o.delta_out) p.delta = o.delta_out
   if (o.recon_id_out) p.reconIds = o.recon_id_out
   if (o.glyco_out) p.glyco = o.glyco_out
+  if (o.resolved_out) p.resolved = o.resolved_out
+  if (o.tag_graph_out) p.tagGraph = o.tag_graph_out
   return p
 }

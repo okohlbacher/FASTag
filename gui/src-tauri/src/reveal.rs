@@ -70,6 +70,11 @@ pub struct ResolvedOutputs {
     pub delta_counts_out: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub check_header_out: Option<String>,
+    // The resolved tags and the tag graph (fastag.rs with_tag_graph).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub resolved_out: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub tag_graph_out: Option<String>,
 }
 
 impl ResolvedOutputs {
@@ -97,6 +102,8 @@ impl ResolvedOutputs {
             "delta_spectra_out" => &mut self.delta_spectra_out,
             "delta_counts_out" => &mut self.delta_counts_out,
             "check_header_out" => &mut self.check_header_out,
+            "resolved_out" => &mut self.resolved_out,
+            "tag_graph_out" => &mut self.tag_graph_out,
             _ => return None,
         })
     }
@@ -126,6 +133,8 @@ impl ResolvedOutputs {
             &self.delta_spectra_out,
             &self.delta_counts_out,
             &self.check_header_out,
+            &self.resolved_out,
+            &self.tag_graph_out,
         ]
         .into_iter()
         .filter_map(|p| p.as_deref())

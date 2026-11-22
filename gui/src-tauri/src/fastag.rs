@@ -1010,8 +1010,40 @@ struct Plan {
     resolved: ResolvedOutputs,
 }
 
-fn plan(params: &RunParams) -> Plan {
-    let args = build_args(params);
+/// @p args (build_args) with -resolved_out and -tag_graph_out beside the
+/// tags output (<stem>.resolved.tsv, <stem>.taggraph.tsv, as rebaseOutputs
+/// names a report) when the CLI lists both in @p options (its --helphelp)
+/// and the run names neither. -progress stays last.
+pub(crate) fn with_tag_graph(mut args: Vec<String>, options: &[String]) -> Vec<String> {
+    let has = |o: &str| options.iter().any(|x| x == o);
+    let given = |o: &str| args.iter().any(|a| a.strip_prefix('-') == Some(o));
+    let out = args.iter().position(|a| a == "-out").and_then(|i| args.get(i + 1)).cloned().unwrap_or_default();
+    if out.is_empty() || !outputs::TAG_GRAPH_OUTPUTS.iter().all(|(o, _)| has(o) && !given(o)) {
+        return args;
+    }
+    let slash = out.rfind(['/', '\\']).map_or(0, |s| s + 1);
+    let stem = match out.strip_suffix(".tags.tsv") {
+        Some(s) if s.len() >= slash => s.to_string(),
+        _ => match out.rfind('.') {
+            Some(dot) if dot > slash => out[..dot].to_string(),
+            _ => out.clone(),
+        },
+    };
+    let at = args.iter().position(|a| a == "-progress").unwrap_or(args.len());
+    for (k, (o, suffix)) in outputs::TAG_GRAPH_OUTPUTS.iter().enumerate() {
+        args.insert(at + 2 * k, format!("-{o}"));
+        args.insert(at + 2 * k + 1, format!("{stem}{suffix}"));
+    }
+    args
+}
+
+/// The options the CLI of @p r lists (inspect.rs, cached per binary).
+fn cli_options(r: &Resolved) -> Vec<String> {
+    crate::inspect::cached_capabilities(r).options
+}
+
+fn plan(params: &RunParams, options: &[String]) -> Plan {
+    let args = with_tag_graph(build_args(params), options);
     // Anything still relative (e.g. a path the CLI derives itself) lands next
     // to the input, not in the app's cwd ("/" for a Finder launch).
     let cwd = base_dir(&params.input).filter(|d| d.is_dir());
@@ -1023,8 +1055,8 @@ fn plan(params: &RunParams) -> Plan {
 /// The outputs a run of @p params would write, and those already on disk,
 /// resolved exactly as `run` resolves them (build_args, the input's folder).
 #[tauri::command]
-pub fn outputs_check(params: RunParams) -> OutputsCheck {
-    let pl = plan(&params);
+pub fn outputs_check(app: AppHandle, params: RunParams) -> OutputsCheck {
+    let pl = plan(&params, &cli_options(&resolve_binary(&app)));
     let paths = outputs::resolve(&pl.outputs, pl.cwd.as_deref());
     let inputs = outputs::run_inputs(&params.input, &pl.args, &params.protect, pl.cwd.as_deref());
     let show = |v: &[PathBuf]| v.iter().map(|p| p.display().to_string()).collect();
@@ -1041,7 +1073,7 @@ pub fn outputs_check(params: RunParams) -> OutputsCheck {
 /// run, with no binary path that is gone once the app quits
 /// (history::argv_as_run).
 pub(crate) fn command_of(r: &Resolved, params: &RunParams) -> Vec<String> {
-    argv_of(r, &build_args(params))
+    argv_of(r, &with_tag_graph(build_args(params), &cli_options(r)))
 }
 
 fn argv_of(r: &Resolved, args: &[String]) -> Vec<String> {
@@ -1067,7 +1099,7 @@ pub fn launch(mgr: &RunManager, r: &Resolved, params: RunParams, sink: Sink, his
     if mgr.current.lock().map(|c| c.is_some()).unwrap_or(true) {
         return refused("a run is already in progress".into());
     }
-    let Plan { args, cwd, outputs, resolved } = plan(&params);
+    let Plan { args, cwd, outputs, resolved } = plan(&params, &cli_options(r));
     let command = argv_of(r, &args);
     let mut cmd = Command::new(&r.bin);
     // stdin is null: the CLI never reads it, and an inherited one could block.
@@ -1259,6 +1291,33 @@ mod tests {
 
     fn rp(json: &str) -> RunParams {
         serde_json::from_str(json).unwrap()
+    }
+
+    // A plan with a CLI that has no tag graph options.
+    fn plan_of(p: &RunParams) -> Plan {
+        plan(p, &[])
+    }
+
+    #[test]
+    fn the_tag_graph_tables_go_beside_the_tags_when_the_cli_has_them() {
+        let v = |a: &[&str]| a.iter().map(|s| s.to_string()).collect::<Vec<_>>();
+        let both = v(&["resolved_out", "tag_graph_out"]);
+        let args = v(&["-in", "/d/a.mzML", "-out", "/d/a.tags.tsv", "-progress"]);
+        assert_eq!(
+            with_tag_graph(args.clone(), &both),
+            v(&["-in", "/d/a.mzML", "-out", "/d/a.tags.tsv", "-resolved_out", "/d/a.resolved.tsv", "-tag_graph_out", "/d/a.taggraph.tsv", "-progress"])
+        );
+        // Another name loses its extension only; a dotted folder keeps its name.
+        assert_eq!(with_tag_graph(v(&["-out", "/r.1/x.tsv"]), &both)[3], "/r.1/x.resolved.tsv");
+        assert_eq!(with_tag_graph(v(&["-out", "/r.1/x"]), &both)[3], "/r.1/x.resolved.tsv");
+        // A CLI with one of them, or none: nothing added.
+        assert_eq!(with_tag_graph(args.clone(), &both[..1]), args);
+        assert_eq!(with_tag_graph(args.clone(), &[]), args);
+        // The outputs of the run, revealed and cleaned up like the others.
+        let pl = plan(&rp(r#"{"in":"/d/a.mzML","out":"/d/a.tags.tsv"}"#), &both);
+        assert_eq!(pl.resolved.resolved_out.as_deref(), Some("/d/a.resolved.tsv"));
+        assert_eq!(pl.resolved.tag_graph_out.as_deref(), Some("/d/a.taggraph.tsv"));
+        assert!(pl.outputs.iter().any(|o| o == "/d/a.taggraph.tsv"));
     }
 
     // P5: the manifest is parsed once and every reader shares that parse.
@@ -1535,7 +1594,7 @@ mod tests {
                "recon_id_out":"a.ids.tsv","out_spectra":"a.spectra.mzML"}}}}"#,
             inp
         );
-        let pl = plan(&rp(&params));
+        let pl = plan_of(&rp(&params));
         assert_eq!(pl.cwd.as_deref(), Some(d.as_path()));
         let at = |n: &str| Some(d.join(n).display().to_string());
         assert_eq!(
@@ -1562,7 +1621,7 @@ mod tests {
         b.sort();
         assert_eq!(a, b);
         // Explicit report paths win over derived ones; an unset option is None.
-        let pl = plan(&rp(&format!(
+        let pl = plan_of(&rp(&format!(
             r#"{{"in":"{}","out":"a.tags.tsv","params":{{"species":true,"species_out":"s.tsv"}}}}"#,
             inp
         )));
@@ -1579,7 +1638,7 @@ mod tests {
     fn resolved_outputs_of_windows_paths_are_the_argv_values() {
         let params = r#"{"in":"\\data\\a.mzML","out":"C:\\r.1\\x","params":{"species":true,"digest_out":"\\data\\d.tsv",
                         "label_out":"D:\\l.tsv","out_spectra":"\\\\srv\\share\\s.mzML","glyco_out":"-g.tsv"}}"#;
-        let pl = plan(&rp(params));
+        let pl = plan_of(&rp(params));
         for (option, value) in argv_outputs(&pl.args) {
             let want = outputs::resolve(&[value], pl.cwd.as_deref()).remove(0).display().to_string();
             let got = pl.resolved.paths();
@@ -1600,7 +1659,7 @@ mod tests {
             // An absolute input: relative outputs land in its folder, and a
             // root-relative path joins its drive (the renderer's own guess
             // read it from \data on whatever drive it ran on).
-            let pl = plan(&rp(r#"{"in":"C:\\d\\a.mzML","out":"a.tags.tsv","params":{"species":true,"digest_out":"\\data\\x.tsv"}}"#));
+            let pl = plan_of(&rp(r#"{"in":"C:\\d\\a.mzML","out":"a.tags.tsv","params":{"species":true,"digest_out":"\\data\\x.tsv"}}"#));
             assert_eq!(pl.resolved.out.as_deref(), Some(r"C:\d\a.tags.tsv"));
             assert_eq!(pl.resolved.species_out.as_deref(), Some(r"C:\d\a.tags.species.tsv"));
             assert_eq!(pl.resolved.digest_out.as_deref(), Some(r"C:\data\x.tsv"));
