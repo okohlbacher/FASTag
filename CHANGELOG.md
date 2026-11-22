@@ -9,6 +9,10 @@
   **Save** keeps the report on this computer only (`<app data>/feedback/`, 180 days); sharing is a separate, reviewed
   step that writes `<id>.feedback.zip` and opens a prefilled GitHub issue form. Screenshot and log are off for sharing by
   default.
+- **GUI: tag ladders tied to their peaks** ([#127](https://github.com/okohlbacher/FASTag/issues/127)). In the Spectrum
+  tab each residue of the tag now spans the two peaks whose mass difference it is, with a dashed line from the tag line
+  down to each of those peaks. The b (or c) and y (or z) ladders get separate lines, labelled and in different colours,
+  whenever both lie on the peaks; before, only one ladder was drawn.
 
 ## 1.15.7 (2026-11-21)
 
