@@ -18,7 +18,7 @@ describe('map: param overlay vs CLI manifest', () => {
     expect(c).toContain('domain')
     expect(c).not.toContain('superkingdom')
   })
-  it('renders 153 parameters and hides 35: boilerplate, options the GUI drives itself, those removed in 1.14 and shortlist_defaults of 1.15.4', () => {
+  it('renders 157 parameters and hides 37: boilerplate, options the GUI drives itself, those removed in 1.14, shortlist_defaults of 1.15.4 and the tag-graph outputs of 1.15.7', () => {
     // 1.10.0 added species_evidence (rendered) to the 1.9.0 set; 1.12.0 adds
     // 64 options (8 of them #17 -search_shifts), hidden until each has its GUI design, except
     // acquisition_check: its default refuses raw DIA, so the form offers warn/off.
@@ -39,7 +39,10 @@ describe('map: param overlay vs CLI manifest', () => {
     // 1.15.4 adds shortlist_defaults, hidden: Database reduction sets the
     // recipe values itself. 1.15.5 adds tolerance_by_analyzer and
     // fragment_tolerance_itms, rendered under Advanced (Fragment tolerance by analyzer).
-    expect(RENDERED.length).toBe(153)
+    // 1.15.7 adds the resolved tags: resolve_score, resolve_threshold,
+    // resolve_max_evalue and resolve_join rendered (Resolved tags, advanced);
+    // -resolved_out and -tag_graph_out hidden, the app writes them itself.
+    expect(RENDERED.length).toBe(157)
     // 1.13 digqual adds digest_quality, hidden as experimental.
     // TMT pseudo-residue and reporter filtering add two hidden experimental options.
     // post-1.13.1 adds search_missed_cleavages and search_nterm_acetyl (by engine), hidden.
@@ -47,7 +50,9 @@ describe('map: param overlay vs CLI manifest', () => {
     // post-1.13.1 adds shortlist_exact_only (msfragger gapped default off), hidden as experimental.
     // 1.14 removes shortlist_exact_only (failed its held-out test): the name stays, hidden, advanced since.
     // 1.16 adds census_ids_accept (command-line only), hidden.
-    expect(HIDDEN_PARAMS.length).toBe(35)
+    expect(HIDDEN_PARAMS.length).toBe(37)
+    for (const n of ['resolved_out', 'tag_graph_out']) expect(HIDDEN_PARAMS).toContain(n)
+    for (const n of ['resolve_score', 'resolve_threshold', 'resolve_max_evalue', 'resolve_join']) expect(RENDERED).toContain(n)
     expect(HIDDEN_PARAMS).toContain('shortlist_defaults')
     for (const n of ['tolerance_by_analyzer', 'fragment_tolerance_itms']) expect(RENDERED).toContain(n)
     for (const n of ['qc_out', 'census_score', 'census_sorted_out', 'delta_spectra_out', 'census_ids_accept', 'search_missed_cleavages', 'tmt_pseudo_filter', 'digest_quality', 'alkylation_tags_out', 'ion_series_hybrid', 'complement_probe', 'shortlist_protease', 'check_header_out'])
@@ -56,7 +61,7 @@ describe('map: param overlay vs CLI manifest', () => {
     for (const n of manifest.params.map((p) => p.name).filter((n) => n.startsWith('label_discovery_'))) expect(HIDDEN_PARAMS).toContain(n)
     expect(RENDERED).toContain('acquisition_check')
     expect(PARAM_BY_NAME.get('acquisition_check')?.choices).toEqual(['refuse', 'warn', 'off'])
-    expect(manifest.params.length).toBe(188) // 1.15.5: 185 + shortlist_defaults, tolerance_by_analyzer, fragment_tolerance_itms
+    expect(manifest.params.length).toBe(194) // 1.15.5: 185 + shortlist_defaults, tolerance_by_analyzer, fragment_tolerance_itms; 1.15.7: + resolved_out, tag_graph_out and four resolve_*
   })
   it('renders or hides every parameter of the manifest once (mzpeak_read_memory hidden)', () => {
     // In addition to the pinned counts above: every manifest parameter is
