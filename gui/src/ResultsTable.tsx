@@ -96,9 +96,8 @@ export const columnLabel = (c: string): string => LABEL[c] ?? c
 // Not shown until ticked under Columns: the tag says its length, the two
 // confidence columns sum up the per-residue ones.
 const DEFAULT_HIDDEN = ['length', 'extended', 'gapped', 'res_conf']
-// Most confident tags first; a file without mean_conf is ranked by E-value.
-const DEFAULT_SORT: ResultsSort = { column: 'mean_conf', desc: true }
-const EVALUE_SORT: ResultsSort = { column: 'evalue', desc: false }
+// Best tags first, as the CLI ranks them.
+const DEFAULT_SORT: ResultsSort = { column: 'evalue', desc: false }
 
 /// The columns' indices in the order the table shows them: the per-residue
 /// confidence (-res_conf, the headline of Export tags) right after the tag
@@ -349,9 +348,9 @@ interface Props {
 export default function ResultsTable({ path, source, rerunResConf, spectrum }: Props): JSX.Element {
   const [meta, setMeta] = useState<Meta | null>(null)
   const [error, setError] = useState<string | null>(null)
-  // Most confident tags first. A file without the sort's column ignores the
-  // sort (browser.rs drops a sort on a missing column).
-  const [sortWanted, setSort] = useState<ResultsSort | null>(DEFAULT_SORT)
+  // Best tags first, as the CLI ranks them. A file without an evalue column
+  // ignores the sort (browser.rs drops a sort on a missing column).
+  const [sort, setSort] = useState<ResultsSort | null>(DEFAULT_SORT)
   // Text/number filters commit on Enter or blur (each distinct view costs the
   // backend a full-file scan; per-keystroke would burn one per character).
   const [draft, setDraft] = useState({ spectrum: '', minLength: '', maxEvalue: '' })
@@ -379,9 +378,6 @@ export default function ResultsTable({ path, source, rerunResConf, spectrum }: P
   // D5: the head rows of the open (file order), shown until a page arrives.
   const [head, setHead] = useState<ResultsHead | null>(null)
   const [rank, setRank] = useState<RankState>(null)
-  // A table without mean_conf (an older FASTag, another report): by E-value.
-  const knownColumns = meta?.columns ?? head?.columns
-  const sort = sortWanted?.column === 'mean_conf' && knownColumns && !knownColumns.includes('mean_conf') ? EVALUE_SORT : sortWanted
   // A loaded page is in file order (ranked: false): the ranked order is
   // swapped in when it is ready.
   const fileOrderShown = useRef(false)
@@ -498,8 +494,7 @@ export default function ResultsTable({ path, source, rerunResConf, spectrum }: P
         }
         early.splice(0).forEach(onEvent)
         openedRef.current = path
-        // Without mean_conf the view changes to the E-value order first (see sort).
-        if (h.columns.includes('mean_conf') || wantRef.current.view.sort?.column !== 'mean_conf') pump()
+        pump()
       },
       // The page query reports the same error.
       () => {
@@ -745,8 +740,9 @@ export default function ResultsTable({ path, source, rerunResConf, spectrum }: P
     })
 
   const clickSort = (column: string): void =>
-    // From the sort in effect (a file without mean_conf is shown by E-value).
-    setSort(sort?.column !== column ? { column, desc: false } : sort.desc ? null : { column, desc: true })
+    setSort((s) =>
+      s?.column !== column ? { column, desc: false } : s.desc ? null : { column, desc: true }
+    )
 
   const commit = (): void => setFilters(draft)
   const onEnter = (e: KeyboardEvent): void => {

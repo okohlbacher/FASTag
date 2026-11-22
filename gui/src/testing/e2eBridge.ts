@@ -610,8 +610,6 @@ export function installE2EBridge(): Origin | undefined {
   let ranked = fixture !== 'rank'
   let rankCb: ((e: BrowserEvent) => void) | null = null
   if (fixture === 'rank') {
-    // A table without mean_conf opens by E-value: the order whose build D5 shows.
-    tags.columns = tags.columns.map((c) => (c === 'mean_conf' ? 'mean_score' : c))
     const ev = tags.columns.indexOf('evalue')
     const order = (desc: boolean): number[] => rankOrder(tags.rows.map((r) => r[ev] ?? ''), desc)
     mock.resultsOpen = (path, onEvent) => {

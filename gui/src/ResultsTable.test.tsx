@@ -41,7 +41,7 @@ describe('ResultsTable', () => {
     expect(mock.resultsQueryCalls[0]).toMatchObject({ path: '/d/x.tags.tsv', offset: 0 })
   })
 
-  it('without mean_conf it opens sorted by E-value ascending; header clicks cycle sort desc, off, asc', async () => {
+  it('opens sorted by E-value ascending; header clicks cycle sort desc, off, asc', async () => {
     const mock = await renderTable()
     await screen.findByText('Showing 3 of 3')
     expect(mock.resultsQueryCalls[0].view.sort).toEqual({ column: 'evalue', desc: false })
@@ -57,13 +57,13 @@ describe('ResultsTable', () => {
     expect(lastCall(mock)?.view.sort).toEqual({ column: 'evalue', desc: false })
   })
 
-  it('opens with the most confident tags first: mean_conf descending, one query', async () => {
+  it('shows the two overall confidences, not the per-residue ones, length, extended or gapped', async () => {
     const mock = installMockBridge()
     mock.resultsColumns = ['spectrum', 'tag', 'length', 'extended', 'gapped', 'evalue', 'min_conf', 'mean_conf', 'res_conf']
     mock.resultsRows = [['scan=1', 'PEP', '3', '0', '0', '0.1', '0.5', '0.7', '50 70 90']]
     render(<ResultsTable path="/d/x.tags.tsv" />)
     await screen.findByText('Showing 1 of 1')
-    expect(mock.resultsQueryCalls.map((c) => c.view.sort)).toEqual([{ column: 'mean_conf', desc: true }])
+    expect(mock.resultsQueryCalls.map((c) => c.view.sort)).toEqual([{ column: 'evalue', desc: false }])
     expect(screen.getAllByRole('columnheader').map((h) => h.getAttribute('aria-label'))).toEqual(['Spectrum', 'Tag', 'E-value', 'Min. conf. (0–1)', 'Mean conf. (0–1)'])
   })
 
