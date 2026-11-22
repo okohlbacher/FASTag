@@ -115,6 +115,28 @@ export function parseTag(tag: string): TagResidue[] | null {
   return out.length > 0 ? out : null
 }
 
+/** The mass of one residue under @p residues; undefined when it or its
+ *  modification has no mass here. */
+const massOf = (r: TagResidue, residues: Residues): number | undefined => {
+  const m = residues.masses[r.residue]
+  const d = r.mod == null ? 0 : MOD_DELTA[r.mod.toLowerCase()]
+  return m === undefined || d === undefined ? undefined : m + d
+}
+
+/** The mass of a step reading as graph.ts labels it (A, M[Oxidation], a
+ *  gap's residues [AG]); null when it does not parse or has no mass here. */
+export function readingMass(label: string, residues: Residues): number | null {
+  const parsed = parseTag(label.startsWith('[') && label.endsWith(']') ? label.slice(1, -1) : label)
+  if (!parsed) return null
+  let sum = 0
+  for (const r of parsed) {
+    const m = massOf(r, residues)
+    if (m === undefined) return null
+    sum += m
+  }
+  return sum
+}
+
 export interface TagRow {
   spectrum: string
   tag: string
@@ -276,7 +298,7 @@ export function seriesText(series: Ladder['series'], call?: SeriesCall): string 
 const tolAt = (s: SpectrumPeaks, x: number): number => (s.toleranceUnit === 'ppm' ? (x * s.tolerance) / 1e6 : s.tolerance)
 
 /** The peak nearest @p x within @p tol, or -1. */
-function nearest(mz: number[], x: number, tol: number): number {
+export function nearest(mz: number[], x: number, tol: number): number {
   let lo = 0
   let hi = mz.length
   while (lo < hi) {
@@ -438,13 +460,9 @@ export function laddersFor(row: TagRow, s: SpectrumPeaks, residues: Residues): {
   const masses: number[] = []
   const labels: string[] = []
   for (const r of parsed) {
-    let m = residues.masses[r.residue]
-    if (m === undefined) return none(`no mass for the residue ${r.residue}`)
-    if (r.mod != null) {
-      const d = MOD_DELTA[r.mod.toLowerCase()]
-      if (d === undefined) return none(`no mass for the modification ${r.mod}`)
-      m += d
-    }
+    if (residues.masses[r.residue] === undefined) return none(`no mass for the residue ${r.residue}`)
+    const m = massOf(r, residues)
+    if (m === undefined) return none(`no mass for the modification ${r.mod}`)
     masses.push(m)
     labels.push(r.mod != null ? `${r.residue}[${r.mod}]` : r.residue)
   }
