@@ -1842,8 +1842,11 @@ merged.
 readings `{Q|[AG]}`, a gap `[AG]`), `length` (residues, a gap 2), `series`
 (b, y, c, z) and `call` (`sure`, `likely`, `open`: not told apart, shown as its
 best tag was walked), `charge` (fragment), `nterm_mass` and `cterm_mass` (the
-flanks in the tag convention, low peak read as the C-terminal ion, from the
-observed peaks: nterm + residues + cterm + H2O = M), `score` (the chain weight),
+flanks of the called reading, from the observed peaks, so that `sequence` and
+the flanks form a tag row: the low peak is the first ion of the b/c ladder
+walked from `nterm_mass` over the sequence, or of the y/z ladder walked from
+`cterm_mass` over it reversed; nterm + residues + cterm + H2O = M), `score`
+(the chain weight),
 `best_e` and `weakest_e` (the best step and the weakest step or junction; empty
 when a step has no evidence), `n_tags`, `peaks` (m/z ascending, `;`, 6
 decimals), `steps` (`label:E` readings `|`-separated per step, steps `;`),

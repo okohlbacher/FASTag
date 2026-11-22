@@ -652,20 +652,67 @@ namespace FASTag::TagGraph
     {
       auto& paths = g.paths;
       for (Path& p : paths) p.same_as.clear();
-      for (size_t a = 0; a < paths.size(); ++a)
-        for (size_t b = a + 1; b < paths.size(); ++b)
+      // layerOf(A) == layerOf(B), without building the strings.
+      const auto cz = [](char x) { return x == 'c' || x == 'z'; };
+      const auto sameLayer = [&](const Path& A, const Path& B) { return cz(A.series) == cz(B.series) && A.charge == B.charge; };
+      // The GUI tries every pair. Only a pair where some peak of A is the
+      // complement of a peak of B can be complementary, so the pairs are
+      // found through the peaks that complement each path, in the same
+      // (a, b) order: the calls change pair by pair.
+      const auto settle = [&](size_t a, size_t b) {
+        Path& A = paths[a];
+        Path& B = paths[b];
+        if (!sameLayer(A, B) || A.charge != B.charge || !isComplement(A.peaks, B.peaks, A.charge, s)) return;
+        const auto [ca, cb] = pairCalls(A.call, B.call);
+        A.series = ca.series;
+        A.call = ca;
+        B.series = cb.series;
+        B.call = cb;
+      };
+      if (!std::is_sorted(s.mz.begin(), s.mz.end()))
+      {
+        for (size_t a = 0; a < paths.size(); ++a)
+          for (size_t b = a + 1; b < paths.size(); ++b) settle(a, b);
+      }
+      else
+      {
+        double widest = 0;
+        for (double x : s.mz) widest = std::max(widest, complementTol(s, x));
+        widest += 1e-6;
+        // comp_of[j]: the paths with a peak whose complement peak j may be.
+        std::vector<std::vector<size_t>> comp_of(s.mz.size());
+        std::vector<size_t> always;  // no peaks: isComplement holds for any A
+        for (size_t b = 0; b < paths.size(); ++b)
         {
-          Path& A = paths[a];
-          Path& B = paths[b];
-          if (layerOf(A.series, A.charge) != layerOf(B.series, B.charge) || A.charge != B.charge
-              || !isComplement(A.peaks, B.peaks, A.charge, s))
-            continue;
-          const auto [ca, cb] = pairCalls(A.call, B.call);
-          A.series = ca.series;
-          A.call = ca;
-          B.series = cb.series;
-          B.call = cb;
+          const Path& B = paths[b];
+          if (B.peaks.empty()) always.push_back(b);
+          const int z = B.charge;
+          for (int k : B.peaks)
+          {
+            const E m = complementOf(s, k, z);
+            if (!m) continue;
+            const double x = (*m + z * PROTON) / z;
+            for (auto it = std::lower_bound(s.mz.begin(), s.mz.end(), x - widest); it != s.mz.end() && *it <= x + widest; ++it)
+            {
+              const size_t j = static_cast<size_t>(it - s.mz.begin());
+              if (std::fabs(s.mz[j] * z - z * PROTON - *m) <= complementTol(s, s.mz[j]) * z
+                  && (comp_of[j].empty() || comp_of[j].back() != b))
+                comp_of[j].push_back(b);
+            }
+          }
         }
+        std::vector<size_t> partners;
+        for (size_t a = 0; a < paths.size(); ++a)
+        {
+          partners.clear();
+          for (size_t b : always) if (b > a) partners.push_back(b);
+          for (int j : paths[a].peaks)
+            for (size_t b : comp_of[static_cast<size_t>(j)]) if (b > a) partners.push_back(b);
+          std::sort(partners.begin(), partners.end());
+          partners.erase(std::unique(partners.begin(), partners.end()), partners.end());
+          for (size_t b : partners) settle(a, b);
+        }
+      }
       const E M = s.precursor && s.charge > 0 ? E(*s.precursor * s.charge - s.charge * PROTON) : std::nullopt;
       struct Cl { double m, tol; };
       struct Or { Cl a, b; const Step* step; };
@@ -698,8 +745,7 @@ namespace FASTag::TagGraph
           const auto& A = ors[a];
           const auto& B = ors[b];
           if (!A || !B
-              || (layerOf(paths[a].series, paths[a].charge) == layerOf(paths[b].series, paths[b].charge)
-                  && paths[a].series == paths[b].series))
+              || (sameLayer(paths[a], paths[b]) && paths[a].series == paths[b].series))
             continue;
           int same = 0;
           for (const Or& x : *A)
@@ -909,9 +955,11 @@ namespace FASTag::TagGraph
     place(tags, s, res, g);
     auto& placements = g.placements;
     const size_t n = placements.size();
+    std::vector<std::string> layer(n);
+    for (size_t i = 0; i < n; ++i) layer[i] = layerOfP(placements[i]);
     std::vector<std::vector<size_t>> arcs(n);
     for (size_t a = 0; a < n; ++a)
-      for (size_t b = a + 1; b < n && layerOfP(placements[b]) == layerOfP(placements[a]); ++b)
+      for (size_t b = a + 1; b < n && layer[b] == layer[a]; ++b)
       {
         const long i = continues(placements[a], placements[b], opt.join, opt.min_overlap);
         if (i <= 0) continue;
@@ -921,30 +969,62 @@ namespace FASTag::TagGraph
     const Weight weigh = weightOf(g, s, opt);
 
     std::vector<char> alive(n, 1);
-    struct F { double score; size_t first; long prev; };
+    // The order in which placements are tried as members inside a path: by
+    // E-value, then index. It does not change between rounds.
+    std::vector<size_t> byEvalue(n);
+    for (size_t i = 0; i < n; ++i) byEvalue[i] = i;
+    std::stable_sort(byEvalue.begin(), byEvalue.end(), [&](size_t x, size_t y) {
+      int c = byE(placements[x].evalue, placements[y].evalue);
+      if (c == 0) c = x < y ? -1 : x > y ? 1 : 0;
+      return c < 0;
+    });
+    // The best chain ending at each placement (the GUI reruns this longest
+    // path over all placements each round). Arcs only run a -> b with a < b,
+    // and a round only removes placements, so only a placement whose chain
+    // runs through a removed or changed one can change: every other
+    // candidate of it only got worse or went, and the first best one stays
+    // the first best. Those are recomputed, in index order; the rest keep f.
+    struct F
+    {
+      double score;
+      size_t first;
+      long prev;
+      bool operator==(const F& o) const { return score == o.score && first == o.first && prev == o.prev; }
+    };
+    std::vector<std::optional<F>> f(n);
+    std::vector<char> gone(n, 0), changed(n, 0);
+    bool first_round = true;
     for (;;)
     {
-      std::vector<std::optional<F>> f(n);
       long end = -1;
       const auto reach = [&](size_t i) {
         return s.mz[placements[i].peaks.back()] - s.mz[placements[f[i]->first].peaks[0]];
       };
       for (size_t i = 0; i < n; ++i)
       {
+        changed[i] = 0;
         if (!alive[i]) continue;
-        F best{weigh(g, i, -1), i, -1};
-        for (size_t a : arcs[i])
+        const long prev = f[i] ? f[i]->prev : -1;
+        if (first_round || (prev >= 0 && (gone[static_cast<size_t>(prev)] || changed[static_cast<size_t>(prev)])))
         {
-          if (!alive[a] || !f[a]) continue;
-          const F c{f[a]->score + weigh(g, i, static_cast<long>(a)), f[a]->first, static_cast<long>(a)};
-          if (c.score > best.score || (c.score == best.score && placements[c.first].peaks[0] < placements[best.first].peaks[0]))
-            best = c;
+          F best{weigh(g, i, -1), i, -1};
+          for (size_t a : arcs[i])
+          {
+            if (!alive[a] || !f[a]) continue;
+            const F c{f[a]->score + weigh(g, i, static_cast<long>(a)), f[a]->first, static_cast<long>(a)};
+            if (c.score > best.score || (c.score == best.score && placements[c.first].peaks[0] < placements[best.first].peaks[0]))
+              best = c;
+          }
+          changed[i] = !f[i] || !(*f[i] == best);
+          f[i] = best;
         }
-        f[i] = best;
+        const F& best = *f[i];
         if (end < 0 || best.score > f[static_cast<size_t>(end)]->score
             || (best.score == f[static_cast<size_t>(end)]->score && reach(i) > reach(static_cast<size_t>(end))))
           end = static_cast<long>(i);
       }
+      first_round = false;
+      std::fill(gone.begin(), gone.end(), 0);
       if (end < 0) break;
       std::vector<size_t> chain;
       for (long i = end; i >= 0; i = f[static_cast<size_t>(i)]->prev) chain.insert(chain.begin(), static_cast<size_t>(i));
@@ -995,18 +1075,12 @@ namespace FASTag::TagGraph
         }
         if (touching) joined.push_back(p.peaks[0]);
       }
-      for (size_t i : chain) alive[i] = 0;
+      for (size_t i : chain) alive[i] = 0, gone[i] = 1;
       std::vector<size_t> inside;
-      std::vector<size_t> cands;
-      const std::string head_layer = layerOfP(head);
-      for (size_t i = 0; i < n; ++i) if (alive[i] && layerOfP(placements[i]) == head_layer) cands.push_back(i);
-      std::stable_sort(cands.begin(), cands.end(), [&](size_t x, size_t y) {
-        int c = byE(placements[x].evalue, placements[y].evalue);
-        if (c == 0) c = x < y ? -1 : x > y ? 1 : 0;
-        return c < 0;
-      });
-      for (size_t i : cands)
+      const std::string& head_layer = layer[chain[0]];
+      for (size_t i : byEvalue)
       {
+        if (!alive[i] || layer[i] != head_layer) continue;
         const Placement& p = placements[i];
         const long at = indexOf(peaks, p.peaks[0]);
         if (at < 0) continue;
@@ -1016,6 +1090,7 @@ namespace FASTag::TagGraph
         if (!contained || !absorb(p)) continue;
         inside.push_back(i);
         alive[i] = 0;
+        gone[i] = 1;
       }
       // Evidence per step and per junction, from the members' readings that survived.
       std::vector<E> stepE(steps.size());
@@ -1087,31 +1162,71 @@ namespace FASTag::TagGraph
       g.paths.push_back(std::move(path));
     }
 
-    // How the resolved tags of a layer meet.
+    // How the resolved tags of a layer meet. Only paths that share a peak
+    // can meet; they are found through the peaks, in the order of the GUI's
+    // all-pairs loop.
+    std::vector<std::vector<size_t>> paths_at(s.mz.size());
+    for (size_t r = 0; r < g.paths.size(); ++r)
+      for (int p : g.paths[r].peaks) paths_at[static_cast<size_t>(p)].push_back(r);
+    std::vector<std::string> path_layer(g.paths.size());
+    for (size_t r = 0; r < g.paths.size(); ++r) path_layer[r] = layerOf(g.paths[r].series, g.paths[r].charge);
+    // Per pair, the GUI's indexOf scans become lookups: where a peak first
+    // stands in A, whether B has shown it already, which step leaves a peak in B.
+    std::vector<long> pos_a(s.mz.size(), -1);
+    std::vector<size_t> seen_b(s.mz.size(), 0), step_b(s.mz.size(), 0);
+    std::vector<int> v_b(s.mz.size(), -1);
+    size_t stamp = 0;
+    std::vector<size_t> meet;
     for (size_t a = 0; a < g.paths.size(); ++a)
-      for (size_t b = a + 1; b < g.paths.size(); ++b)
+    {
+      Path& A = g.paths[a];
+      for (size_t k = A.peaks.size(); k-- > 0;) pos_a[static_cast<size_t>(A.peaks[k])] = static_cast<long>(k);
+      meet.clear();
+      for (int p : A.peaks)
+        for (size_t b : paths_at[static_cast<size_t>(p)]) if (b > a) meet.push_back(b);
+      std::sort(meet.begin(), meet.end());
+      meet.erase(std::unique(meet.begin(), meet.end()), meet.end());
+      for (size_t b : meet)
       {
-        Path& A = g.paths[a];
         Path& B = g.paths[b];
-        if (layerOf(A.series, A.charge) != layerOf(B.series, B.charge)) continue;
+        if (path_layer[a] != path_layer[b]) continue;
+        ++stamp;
         bool fork = false, touch = false;
-        for (int p : A.peaks)
+        const auto at = [](const std::vector<int>& v, long k) { return k >= 0 && k < static_cast<long>(v.size()) ? v[k] : -1; };
+        const auto differ = [](int x, int y) { return x >= 0 && y >= 0 && x != y; };
+        // Each peak both share, at its first place in A and in B.
+        for (size_t jj = 0; jj < B.peaks.size(); ++jj)
         {
-          const long j = indexOf(B.peaks, p);
-          if (j < 0) continue;
-          const long i = indexOf(A.peaks, p);
-          const auto at = [](const std::vector<int>& v, long k) { return k >= 0 && k < static_cast<long>(v.size()) ? v[k] : -1; };
-          const auto differ = [](int x, int y) { return x >= 0 && y >= 0 && x != y; };
+          const size_t p = static_cast<size_t>(B.peaks[jj]);
+          if (seen_b[p] == stamp) continue;
+          seen_b[p] = stamp;
+          const long i = pos_a[p];
+          if (i < 0) continue;
+          const long j = static_cast<long>(jj);
           if (differ(at(A.peaks, i + 1), at(B.peaks, j + 1)) || differ(at(A.peaks, i - 1), at(B.peaks, j - 1))) fork = true;
           else touch = true;
         }
+        if (!fork && !touch) continue;
+        // A's steps that B has too.
+        bool unique_u = true;
+        for (const Step& y : B.steps)
+        {
+          const size_t u = static_cast<size_t>(y.u);
+          if (step_b[u] == stamp && v_b[u] != y.v) unique_u = false;
+          step_b[u] = stamp;
+          v_b[u] = y.v;
+        }
         int shared = 0;
         for (const Step& x : A.steps)
-          if (std::any_of(B.steps.begin(), B.steps.end(), [&](const Step& y) { return x.u == y.u && x.v == y.v; })) ++shared;
-        if (!fork && !touch) continue;
+        {
+          if (unique_u) shared += step_b[static_cast<size_t>(x.u)] == stamp && v_b[static_cast<size_t>(x.u)] == x.v;
+          else if (std::any_of(B.steps.begin(), B.steps.end(), [&](const Step& y) { return x.u == y.u && x.v == y.v; })) ++shared;
+        }
         A.relations.push_back({b, fork, shared});
         B.relations.push_back({a, fork, shared});
       }
+      for (int p : A.peaks) pos_a[static_cast<size_t>(p)] = -1;
+    }
 
     std::set<std::pair<size_t, size_t>> links;
     for (const Path& p : g.paths)
@@ -1230,14 +1345,28 @@ namespace FASTag::TagGraph
       buf += p.series; buf += '\t';
       buf += levelName(p.call.level); buf += '\t';
       appendNum(buf, p.charge); buf += '\t';
-      // FASTag's tag convention: the low peak read as the C-terminal ion
-      // (FASTagger.cpp scorePath), so nterm + residues + cterm + H2O = M.
+      // The flanks of the called reading, so (sequence, nterm, cterm) is a tag
+      // row that lands on its own peaks: a b/c row's ladder walks from nterm
+      // (+ C_OFFSET for c) over the sequence, a y/z row's from cterm (+ H2O,
+      // or the z-dot offset) over it reversed, as place() reads a row. The
+      // low peak is the first ion of that walk; nterm + residues + cterm +
+      // H2O = M either way.
       const int z = p.charge;
       const double low = s.mz[static_cast<size_t>(p.peaks.front())];
-      const bool cz = p.series == 'c' || p.series == 'z';
-      const double offC = cz ? Z_DOT_OFFSET : WATER;
-      const double cterm = std::max(0.0, low * z - PROTON * z - offC);
-      const double nterm = M ? std::max(0.0, *M - ((low + cum / z) * z - PROTON * z) - (WATER - offC)) : 0.0;
+      double nterm = 0, cterm = 0;
+      if (nTerminal(p.series))
+      {
+        const double n_raw = low * z - PROTON * z - (p.series == 'c' ? C_OFFSET : 0.0);
+        nterm = std::max(0.0, n_raw);
+        cterm = M ? std::max(0.0, *M - n_raw - cum - WATER) : 0.0;
+      }
+      else
+      {
+        // FASTag's own -out convention (FASTagger.cpp scorePath).
+        const double offC = p.series == 'z' ? Z_DOT_OFFSET : WATER;
+        cterm = std::max(0.0, low * z - PROTON * z - offC);
+        nterm = M ? std::max(0.0, *M - ((low + cum / z) * z - PROTON * z) - (WATER - offC)) : 0.0;
+      }
       massField(buf, nterm, full); buf += '\t';
       massField(buf, cterm, full); buf += '\t';
       appendShortest(buf, p.score); buf += '\t';

@@ -2,7 +2,8 @@
 # Tag merging against the real binary (-resolved_out, -tag_graph_out):
 #   - the headers; ranks 1..n per spectrum in order, spectra in -out order
 #   - members and inside are rows of the spectrum in -out with E <= the cut,
-#     every peak list is ascending with 6 decimals, graph path ranks exist
+#     every peak list is ascending with 6 decimals, graph path ranks exist,
+#     the flanks start the row's own ladder at its low peak
 #   - -threads 1 and 4 write the same files; the tags are unchanged by the options
 #   - the schemes and -resolve_max_evalue reach the output; -stream refuses
 # Exits 77 (ctest SKIP) when the binary cannot start.
@@ -76,8 +77,16 @@ awk -F'\t' -v OUT="$TMP/t1.tsv" -v GRAPH="$TMP/t1.graph.tsv" '
     }
     if (split($15, st, ";") != p - 1) { print "steps and peaks disagree in " s " rank " $2; bad = 1 }
     if ($5 !~ /^[bycz]$/ || $6 !~ /^(sure|likely|open)$/) { print "series/call " $5 " " $6; bad = 1 }
+    # The flanks are those of the called reading, as in a tag row: the first
+    # ion of the series ladder, walked from nterm (b, c) or cterm (y, z), is
+    # the low peak.
+    z = $7 + 0
+    first = ($5 == "b") ? $8 : ($5 == "c") ? $8 + 17.0265491015 : ($5 == "y") ? $9 + 18.0105646837 : $9 + 1.9918406143
+    first = (first + z * 1.007276466812) / z
+    d = first - pk[1]; if (d < 0) d = -d
+    if (d > 0.001) { print "flanks of " s " rank " $2 " (" $5 ") do not start the ladder at " pk[1] ": " $8 " " $9; nflank++; bad = 1 }
   }
-  END { exit bad }' "$TMP/t1.res.tsv" || fail "-resolved_out rows are inconsistent"
+  END { if (nflank) print nflank " rows with flanks off their ladder"; exit bad }' "$TMP/t1.res.tsv" || fail "-resolved_out rows are inconsistent"
 
 # The options reach the output.
 run ev -threads 2 -resolved_out "$TMP/ev.res.tsv" -resolve_score evidence

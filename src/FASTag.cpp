@@ -3938,8 +3938,22 @@ TOPPFASTag::ExitCodes TOPPFASTag::main_(int, const char**)
       const FASTag::TagGraph::Peaks gpk = FASTag::TagGraph::peaksFrom(
           FASTag::preparedPeaks(spec, hs->mz, hs->charge, gp), hs->mz, hs->charge, gp);
       const FASTag::TagGraph::Graph g = FASTag::TagGraph::buildGraph(graph_in, gpk, graph_res, graph_opt);
-      if (resolved_on) FASTag::TagGraph::appendResolvedRows(res.vbuf, g, gpk, spec.getNativeID(), g_full_precision);
-      if (tag_graph_on) FASTag::TagGraph::appendGraphRows(res.gbuf, g, gpk, spec.getNativeID(), g_full_precision);
+      // A block holds its spectra's rows until it is written. The rows are
+      // built in a per-thread scratch and copied at their size, so the slack
+      // of a string grown by appends is not held along with them.
+      static thread_local std::string gscratch;
+      if (resolved_on)
+      {
+        gscratch.clear();
+        FASTag::TagGraph::appendResolvedRows(gscratch, g, gpk, spec.getNativeID(), g_full_precision);
+        res.vbuf = std::string(gscratch.data(), gscratch.size());
+      }
+      if (tag_graph_on)
+      {
+        gscratch.clear();
+        FASTag::TagGraph::appendGraphRows(gscratch, g, gpk, spec.getNativeID(), g_full_precision);
+        res.gbuf = std::string(gscratch.data(), gscratch.size());
+      }
     }
     if (delta_tagged) ++pt.delta_tagged;
     if (delta_have)
@@ -4331,8 +4345,10 @@ TOPPFASTag::ExitCodes TOPPFASTag::main_(int, const char**)
       if (!b.keep[i]) continue;
       put_rows(tsv, tsv_pending, b.rows[i]);
       if (recon_on && !b.recon_rows[i].empty()) { put_rows(rtsv, rtsv_pending, b.recon_rows[i]); b.recon_rows[i].clear(); }
-      if (resolved_on && !b.resolved_rows[i].empty()) { put_rows(vtsv, vtsv_pending, b.resolved_rows[i]); b.resolved_rows[i].clear(); }
-      if (tag_graph_on && !b.graph_rows[i].empty()) { put_rows(ttsv, ttsv_pending, b.graph_rows[i]); b.graph_rows[i].clear(); }
+      // Freed, not cleared: these rows are copied at their size, so a kept
+      // capacity would only be held until the slot's next swap.
+      if (resolved_on && !b.resolved_rows[i].empty()) { put_rows(vtsv, vtsv_pending, b.resolved_rows[i]); std::string().swap(b.resolved_rows[i]); }
+      if (tag_graph_on && !b.graph_rows[i].empty()) { put_rows(ttsv, ttsv_pending, b.graph_rows[i]); std::string().swap(b.graph_rows[i]); }
       if (recon_ids_on)
       {
         for (PeptideIdentification& id : b.recon_id_lists[i]) recon_ids.push_back(std::move(id));

@@ -8,6 +8,7 @@
 #include "TagGraph.h"
 
 #include <algorithm>
+#include <chrono>
 #include <cmath>
 #include <iostream>
 #include <set>
@@ -296,42 +297,201 @@ namespace
     check(evidence(1e-3) == 6000 && evidence(std::nullopt) == 0 && evidence(1e9) == 1, "evidence");
   }
 
-  void ranking()
+  std::vector<std::string> fields(const std::string& line)
   {
-    // The default scheme (steplogodds, t = 3) on the nested case still
-    // resolves one tag; its rows carry every member.
-    const Peaks s = spec(b);
-    const Graph g = buildGraph({tag(0, 0, 3, 0.01), tag(1, 2, 3, 0.5), tag(2, 1, 2, 0.1), tag(3, 3, 3, 0.02)}, s, RES);
-    check(!g.paths.empty(), "steplogodds: a path");
-    std::string rows;
-    appendResolvedRows(rows, g, s, "scan=1");
-    check(!rows.empty() && rows.back() == '\n', "resolved rows");
-    const std::string first = rows.substr(0, rows.find('\n'));
     std::vector<std::string> f;
     size_t at = 0;
     for (;;)
     {
-      const size_t tab = first.find('\t', at);
-      f.push_back(first.substr(at, tab == std::string::npos ? std::string::npos : tab - at));
+      const size_t tab = line.find('\t', at);
+      f.push_back(line.substr(at, tab == std::string::npos ? std::string::npos : tab - at));
       if (tab == std::string::npos) break;
       at = tab + 1;
     }
-    size_t cols = 1;
-    for (char c : resolvedHeader()) if (c == '\t') ++cols;
-    check(f.size() == cols, "resolved row has every column: " + std::to_string(f.size()));
-    if (f.size() == cols)
+    return f;
+  }
+  std::vector<std::vector<std::string>> resolvedRows(const Graph& g, const Peaks& s)
+  {
+    std::string buf;
+    appendResolvedRows(buf, g, s, "scan=1");
+    std::vector<std::vector<std::string>> out;
+    std::istringstream in(buf);
+    for (std::string line; std::getline(in, line);) out.push_back(fields(line));
+    return out;
+  }
+  std::vector<double> numbers(const std::string& list)
+  {
+    std::vector<double> out;
+    std::istringstream in(list);
+    for (std::string x; std::getline(in, x, ';');) out.push_back(std::stod(x));
+    return out;
+  }
+  // A resolved row read as a tag row, the way place() reads one: the b/c
+  // ladder walks from nterm (+ C_OFFSET) over the sequence, the y/z ladder
+  // from cterm (+ H2O or the z-dot offset) over it reversed. The walk of the
+  // row's own series must land on its peaks, in order.
+  void landsOnItsPeaks(const std::vector<std::string>& f, const std::string& what)
+  {
+    const std::string seq = f[2];
+    const char series = f[4][0];
+    const int z = std::stoi(f[6]);
+    const double nterm = std::stod(f[7]), cterm = std::stod(f[8]);
+    const std::vector<double> peaks = numbers(f[13]);
+    const bool nt = series == 'b' || series == 'c';
+    double at = nt ? nterm + (series == 'c' ? C_OFFSET : 0) : cterm + (series == 'z' ? Z_DOT_OFFSET : WATER);
+    const std::string walk = nt ? seq : rev(seq);
+    bool ok = peaks.size() == walk.size() + 1;
+    for (size_t k = 0; ok && k < peaks.size(); ++k)
     {
-      check(f[0] == "scan=1" && f[1] == "1", "spectrum, rank");
-      check(f[13].find(';') != std::string::npos && f[13].find('.') == f[13].find(';') - 7, "peaks with 6 decimals: " + f[13]);
-      // nterm + residues + cterm + H2O = M.
-      const double nterm = std::stod(f[7]), cterm = std::stod(f[8]);
-      double res = 0;
-      for (const Step& st : g.paths[0].steps) res += st.readings[0].mass;
-      check(std::fabs(nterm + res + cterm + WATER - M) < 0.01, "flanks add up: " + f[7] + " " + f[8]);
+      ok = std::fabs((at + z * PROTON) / z - peaks[k]) < 0.005;
+      if (k < walk.size()) at += R(walk[k]);
     }
-    std::string nodes;
-    appendGraphRows(nodes, g, s, "scan=1");
-    check(std::count(nodes.begin(), nodes.end(), '\n') == static_cast<long>(g.placements.size()), "one node row per placement");
+    check(ok, what + ": [" + f[7] + "]" + seq + "[" + f[8] + "] (" + series + ") does not land on " + f[13]);
+  }
+
+  void ranking()
+  {
+    // The default scheme (steplogodds, t = 3) on the nested case: no step
+    // clears the threshold, so nothing chains and each tag is its own
+    // resolved tag, shortest (least negative) first. Sequences, members and
+    // scores as the GUI's buildGraph(..., {weight: stepWeight(s, 3)}) at
+    // 38b5da63 with OpenMS residue masses (tag-merge-cli/parity/gui-openms).
+    {
+      const Peaks s = spec(b);
+      const Graph g = buildGraph({tag(0, 0, 3, 0.01), tag(1, 2, 3, 0.5), tag(2, 1, 2, 0.1), tag(3, 3, 3, 0.02)}, s, RES);
+      check(seqs(g) == SV{"EP", "PEP", "PTI", "TID"}, "steplogodds nested: " + str(seqs(g)));
+      const std::vector<double> score{-6.8371284389768539, -9.0198907011653819, -12.895701140519153, -13.792873793904240};
+      const std::vector<size_t> row{2, 0, 1, 3};
+      for (size_t r = 0; r < g.paths.size() && r < score.size(); ++r)
+      {
+        const Path& p = g.paths[r];
+        check(std::fabs(p.score - score[r]) < 1e-9, "steplogodds nested score " + std::to_string(r) + ": " + std::to_string(p.score));
+        check(p.chain.size() == 1 && g.placements[p.chain[0]].rows == std::vector<size_t>{row[r]} && p.inside.empty(),
+              "steplogodds nested members " + std::to_string(r));
+        check(p.series == 'b', "steplogodds nested series");
+      }
+      const auto rows = resolvedRows(g, s);
+      size_t cols = 1;
+      for (char c : resolvedHeader()) if (c == '\t') ++cols;
+      check(rows.size() == g.paths.size(), "one resolved row per path");
+      for (const auto& f : rows)
+      {
+        check(f.size() == cols, "resolved row has every column: " + std::to_string(f.size()));
+        if (f.size() != cols) continue;
+        check(f[13].find(';') != std::string::npos && f[13].find('.') == f[13].find(';') - 7, "peaks with 6 decimals: " + f[13]);
+        // nterm + residues + cterm + H2O = M.
+        double res = 0;
+        for (char c : f[2]) res += R(c);
+        check(std::fabs(std::stod(f[7]) + res + std::stod(f[8]) + WATER - M) < 0.01, "flanks add up: " + f[7] + " " + f[8]);
+        landsOnItsPeaks(f, "nested rank " + f[1]);
+      }
+      if (!rows.empty() && rows[0].size() == cols) check(rows[0][0] == "scan=1" && rows[0][1] == "1", "spectrum, rank");
+      // EP = SEQ[1, 3): the flanks are the tag's own, N + P and C + TIDE.
+      if (!rows.empty() && rows[0].size() == cols)
+        check(std::fabs(std::stod(rows[0][7]) - (N + R('P'))) < 0.001 && std::fabs(std::stod(rows[0][8]) - (C + sum("TIDE"))) < 0.001,
+              "a b row keeps its tag's flanks: " + rows[0][7] + " " + rows[0][8]);
+      std::string nodes;
+      appendGraphRows(nodes, g, s, "scan=1");
+      check(std::count(nodes.begin(), nodes.end(), '\n') == static_cast<long>(g.placements.size()), "one node row per placement");
+    }
+    // Steps that clear the threshold: b and y ions with complements, the b
+    // ions intense. PEP and PTI chain into PEPTI and absorb EP; the y
+    // readings of the same tags stay apart. Expected as above (GUI, OpenMS masses).
+    {
+      Peaks s = spec(cat(b, y));
+      std::set<double> bs;
+      for (double x : b) bs.insert(std::round(x * 1e6) / 1e6);
+      for (size_t k = 0; k < s.mz.size(); ++k) s.intensity[k] = bs.count(s.mz[k]) ? 1000 : 10;
+      const Graph g = buildGraph({tag(0, 0, 3, 1e-4), tag(1, 2, 3, 1e-4), tag(2, 1, 2, 1e-4), tag(3, 3, 3, 1e-4), tag(4, 3, 4, 1e-4)}, s, RES);
+      check(seqs(g) == SV{"PEPTI", "TID", "TIDE", "EP", "TID", "PTI", "TIDE", "PEP"}, "steplogodds chain: " + str(seqs(g)));
+      const std::string series = "bbbyyyyy";
+      const std::vector<double> score{1.8576127815131969, -0.32725502458656042, -0.91685039221451703, -4.3019684639441920,
+                                      -4.6510570457490745, -5.3720482472967035, -5.7210191736021425, -6.8133620750023827};
+      for (size_t r = 0; r < g.paths.size() && r < score.size(); ++r)
+      {
+        check(g.paths[r].series == series[r], "steplogodds chain series " + std::to_string(r));
+        check(std::fabs(g.paths[r].score - score[r]) < 1e-9, "steplogodds chain score " + std::to_string(r) + ": " + std::to_string(g.paths[r].score));
+      }
+      if (!g.paths.empty())
+      {
+        const Path& p = g.paths[0];
+        std::vector<size_t> chain, inside;
+        for (size_t i : p.chain) for (size_t r : g.placements[i].rows) chain.push_back(r);
+        for (size_t i : p.inside) for (size_t r : g.placements[i].rows) inside.push_back(r);
+        check(chain == std::vector<size_t>{0, 1} && inside == std::vector<size_t>{2}, "steplogodds chain members " + str(chain) + " " + str(inside));
+        check(g.arcs.end() != std::find_if(g.arcs.begin(), g.arcs.end(), [&](const Arc& a) { return a.from == p.chain[0] && a.to == p.chain[1] && a.used; }),
+              "steplogodds chain arc used");
+      }
+      const auto rows = resolvedRows(g, s);
+      for (const auto& f : rows) if (f.size() > 13) landsOnItsPeaks(f, "chain rank " + f[1]);
+      // PEPTI = SEQ[0, 5) read as b: N and C + DE.
+      if (!rows.empty() && rows[0].size() > 13)
+        check(std::fabs(std::stod(rows[0][7]) - N) < 0.001 && std::fabs(std::stod(rows[0][8]) - (C + sum("DE"))) < 0.001,
+              "chained b row flanks: " + rows[0][7] + " " + rows[0][8]);
+    }
+    // One tag on a b ladder, and on a y ladder: the row keeps the tag's flanks.
+    for (const bool yl : {false, true})
+    {
+      const Peaks s = spec(yl ? y : b);
+      const Graph g = buildGraph({tag(0, 0, 4, 0.01)}, s, RES);
+      const auto rows = resolvedRows(g, s);
+      check(rows.size() == 1 && rows[0].size() > 13 && rows[0][2] == "PEPT" && rows[0][4] == (yl ? "y" : "b"),
+            std::string("single ") + (yl ? "y" : "b") + " tag resolved");
+      if (rows.size() != 1 || rows[0].size() <= 13) continue;
+      check(std::fabs(std::stod(rows[0][7]) - N) < 0.001 && std::fabs(std::stod(rows[0][8]) - (C + sum("IDE"))) < 0.001,
+            std::string("single ") + (yl ? "y" : "b") + " tag flanks: " + rows[0][7] + " " + rows[0][8]);
+      landsOnItsPeaks(rows[0], std::string("single ") + (yl ? "y" : "b"));
+    }
+    // c and z-dot: the same tag read as cz ions.
+    for (const bool zl : {false, true})
+    {
+      std::vector<double> mz;
+      if (!zl) for (double x : ions(N + C_OFFSET, SEQ)) mz.push_back(x);
+      else for (double x : ions(C + Z_DOT_OFFSET, rev(SEQ))) mz.push_back(x);
+      const Peaks s = spec(mz);
+      TagIn t = tag(0, 0, 4, 0.01);
+      t.cz = true;
+      const Graph g = buildGraph({t}, s, RES);
+      const auto rows = resolvedRows(g, s);
+      check(rows.size() == 1 && rows[0].size() > 13 && rows[0][4] == (zl ? "z" : "c"), std::string("single ") + (zl ? "z" : "c") + " tag resolved");
+      if (rows.size() != 1 || rows[0].size() <= 13) continue;
+      check(std::fabs(std::stod(rows[0][7]) - N) < 0.001 && std::fabs(std::stod(rows[0][8]) - (C + sum("IDE"))) < 0.001,
+            std::string("single ") + (zl ? "z" : "c") + " tag flanks: " + rows[0][7] + " " + rows[0][8]);
+      landsOnItsPeaks(rows[0], std::string("single ") + (zl ? "z" : "c"));
+    }
+  }
+  // Every sub-tag of a 74-residue b ladder on one layer: 2775 placements.
+  // Under steplogodds nearly every round extracts one placement; rerunning
+  // the longest path over all of them each round, and comparing every pair
+  // of resolved tags, took 90 s here. The rounds now recompute only what a
+  // round can change, and pairs are found through shared peaks.
+  void largeLayer()
+  {
+    const std::string alpha = "ADEFGHKLMNPRSTVWY";
+    std::string seq;
+    for (size_t i = 0; i < 74; ++i) seq += alpha[(i * 7) % alpha.size()];
+    std::vector<double> mz = ions(N, seq);
+    Peaks s = spec(mz);
+    double tot = 0;
+    for (char c : seq) tot += R(c);
+    s.precursor = (N + tot + C + WATER + 2 * PROTON) / 2;
+    std::vector<TagIn> tags;
+    for (size_t from = 0; from < seq.size(); ++from)
+      for (size_t len = 1; from + len <= seq.size(); ++len)
+      {
+        double pre = 0, post = 0;
+        for (size_t k = 0; k < from; ++k) pre += R(seq[k]);
+        for (size_t k = from + len; k < seq.size(); ++k) post += R(seq[k]);
+        tags.push_back(at(tags.size(), N + pre, seq.substr(from, len), 1e-3 * static_cast<double>(1 + tags.size() % 7), false, C + post));
+      }
+    const auto t0 = std::chrono::steady_clock::now();
+    const Graph g = buildGraph(tags, s, RES);
+    const double sec = std::chrono::duration<double>(std::chrono::steady_clock::now() - t0).count();
+    check(g.placements.size() == 2775, "large layer placements: " + std::to_string(g.placements.size()));
+    size_t members = 0;
+    for (const Path& p : g.paths) members += p.chain.size() + p.inside.size();
+    check(members == g.placements.size(), "large layer: every placement in one resolved tag");
+    check(sec < 20, "large layer took " + std::to_string(sec) + " s");
   }
 }
 
@@ -340,6 +500,7 @@ int main()
   graphCases();
   stepCases();
   ranking();
+  largeLayer();
   if (failures) { std::cerr << failures << " failure(s)\n"; return 1; }
   std::cout << "taggraph_test: all passed\n";
   return 0;
