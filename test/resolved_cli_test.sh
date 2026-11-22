@@ -5,7 +5,8 @@
 #     every peak list is ascending with 6 decimals, graph path ranks exist,
 #     the flanks start the row's own ladder at its low peak
 #   - -threads 1 and 4 write the same files; the tags are unchanged by the options
-#   - the schemes and -resolve_max_evalue reach the output; -stream refuses
+#   - cstar is the default; the schemes, -resolve_threshold and -resolve_max_evalue
+#     reach the output; -stream refuses
 # Exits 77 (ctest SKIP) when the binary cannot start.
 set -u
 BIN="$1"
@@ -106,7 +107,13 @@ grep -q "steps (both in ascending m/z order: for y and z the steps run C->N, the
 grep -q "series (as judged on its own peaks, before complement pairing" "$TMP/help1.txt" \
   || fail "-tag_graph_out help does not say a node's series is its own call"
 
-# The options reach the output.
+# The options reach the output; cstar is the default.
+run cs -threads 2 -resolved_out "$TMP/cs.res.tsv" -resolve_score cstar
+cmp -s "$TMP/t1.res.tsv" "$TMP/cs.res.tsv" || fail "the default is not -resolve_score cstar"
+run sl -threads 2 -resolved_out "$TMP/sl.res.tsv" -resolve_score steplogodds
+cmp -s "$TMP/t1.res.tsv" "$TMP/sl.res.tsv" && fail "-resolve_score steplogodds changed nothing"
+run t4c -threads 2 -resolved_out "$TMP/t4c.res.tsv" -resolve_threshold 4
+cmp -s "$TMP/t1.res.tsv" "$TMP/t4c.res.tsv" && fail "-resolve_threshold 4 changed nothing under cstar"
 run ev -threads 2 -resolved_out "$TMP/ev.res.tsv" -resolve_score evidence
 cmp -s "$TMP/t1.res.tsv" "$TMP/ev.res.tsv" && fail "-resolve_score evidence changed nothing"
 run an -threads 2 -resolved_out "$TMP/an.res.tsv" -resolve_score anchor

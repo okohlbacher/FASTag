@@ -1068,14 +1068,17 @@ void TOPPFASTag::registerOptionsAndFlags_()
                       "placements that continue it",
                       false, true);
   setValidFormats_("tag_graph_out", ListUtils::create<std::string>("tsv"));
-  registerStringOption_("resolve_score", "<scheme>", "steplogodds",
-                        "How resolved tags are ranked: steplogodds (each step a chain adds is worth its "
-                        "log-odds of being right less -resolve_threshold), evidence (summed E-value "
-                        "evidence of its tags) or anchor (the best single tag first, then steplogodds)",
+  registerStringOption_("resolve_score", "<scheme>", "cstar",
+                        "How resolved tags are ranked: cstar (each step a chain adds is worth its C* "
+                        "log-odds of being right, from its peaks, mass error, rivals and support, less "
+                        "-resolve_threshold; rank 1 is the best resolved tag that holds no peak together "
+                        "with its own complement), steplogodds (the same with the simpler 1.15 step model "
+                        "and no complement rule), evidence (summed E-value evidence of its tags) or anchor "
+                        "(the best single tag first, then steplogodds)",
                         false, true);
-  setValidStrings_("resolve_score", ListUtils::create<std::string>("steplogodds,evidence,anchor"));
+  setValidStrings_("resolve_score", ListUtils::create<std::string>("cstar,steplogodds,evidence,anchor"));
   registerDoubleOption_("resolve_threshold", "<t>", 3.0,
-                        "The log-odds a step must exceed to lengthen a resolved tag (steplogodds, anchor)",
+                        "The log-odds a step must exceed to lengthen a resolved tag (cstar, steplogodds, anchor)",
                         false, true);
   registerDoubleOption_("resolve_max_evalue", "<E>", 1.0,
                         "Largest E-value of the tags merged into resolved tags",

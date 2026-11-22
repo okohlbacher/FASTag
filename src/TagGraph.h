@@ -26,9 +26,11 @@
 //   wholly inside a chain are subsumed, and what is left forms the
 //   alternatives.
 //
-// The chain weight is a Scheme (steplogodds by default: each new step's
-// log-odds of being right less a threshold, the preregistered scheme of
-// work/tag-score/PREREG-tag-scoring.md), or any Weight function.
+// The chain weight is a Scheme (cstar by default: each new step's C* log-odds
+// of being right less a threshold, and rank 1 the first resolved tag that
+// holds no peak together with its own complement; scheme X1 adopted by the
+// preregistered held-out test of work/tag-score/PREREG-tag-scoring.md,
+// amendment 3), or any Weight function.
 #pragma once
 
 #include "FASTagger.h"
@@ -207,6 +209,9 @@ namespace FASTag::TagGraph
   /// The chain weight (-resolve_score).
   enum class Scheme
   {
+    /// X1 = CstarNS_t3 (PREREG-tag-scoring.md amendment 3): sum over the new
+    /// steps of (C* logit - threshold), rank 1 by noself.
+    CSTAR,
     STEPLOGODDS,  ///< sum over the new steps of (logit - threshold); S2_t<t>
     EVIDENCE,     ///< the placement's summed E-value evidence; S0
     ANCHOR,       ///< the best single placement by E +1e6, then steplogodds; S4_anchor_t<t>
@@ -221,7 +226,7 @@ namespace FASTag::TagGraph
   {
     bool join = false;
     int min_overlap = 1;
-    Scheme scheme = Scheme::STEPLOGODDS;
+    Scheme scheme = Scheme::CSTAR;
     double threshold = STEP_THRESHOLD;
     /// When set, replaces the scheme (a scoring study's own weight).
     Weight weight;
@@ -253,6 +258,46 @@ namespace FASTag::TagGraph
     std::optional<double> M_;
     bool comp(int p, int z) const;
   };
+
+  /**
+    @brief The signed mass error of a step as the cstar features read it.
+
+    The first reading's delta_ppm at a ppm tolerance <= STEP_MAX_PPM (as the
+    model was fitted); otherwise the error in tolerance units scaled to 20,
+    ad_n = 20 * delta_mz / tol(x), x = mz[v] - delta_mz the expected m/z.
+  */
+  double stepMassError(const Peaks& s, const Step& st);
+
+  /// The C* features of one placement step (work/tag-score/study2/C/featC.ts,
+  /// the features of the final model), in the model's order.
+  struct CstarFeatures
+  {
+    double lE = 0, abs_dppm = 0, dppm2 = 0, rank_max = 0, rank_min = 0;
+    double comp_any = 0, comp_both = 0, gap = 0, amb = 0, log_np = 0;
+    double compz_any = 0, compz_both = 0, lrank_max = 0, lrank_min = 0, amb_margin = 0;
+    double rival_n = 0, rival_margin = 0, sup_n = 0, sup_rows = 0;
+    double rel_dppm = 0, rel_dppm2 = 0, lE_gap = 0, in_best = 0;
+    char residue = 0;  ///< first letter of the first reading (I as L); 0 for a gap
+  };
+
+  /// The C* features of every step of every placement of @p g, per placement.
+  std::vector<std::vector<CstarFeatures>> cstarFeatures(const Graph& g, const Peaks& s);
+  /// The C* log-odds of a step being right.
+  double cstarLogit(const CstarFeatures& f);
+  /**
+    @brief The C* logit of every placement step of @p g, per placement.
+
+    Keyed as the reference harness keys them (layer, peaks, step), a later
+    placement with the same key giving the logits of an earlier one.
+  */
+  std::vector<std::vector<double>> cstarLogits(const Graph& g, const Peaks& s);
+
+  /// noself: the first resolved tag of @p g none of whose peaks has its own
+  /// complement among its other peaks (0 when every one has; -1 without paths).
+  long noselfPick(const Graph& g, const Peaks& s);
+  /// Move resolved tag @p r to rank 1, the others after it in their order;
+  /// relations and same_as follow the new ranks.
+  void promote(Graph& g, std::size_t r);
 
   /// A placement's evidence against the fixed reference: 0 when unscored.
   double evidence(std::optional<double> e);

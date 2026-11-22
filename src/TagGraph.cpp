@@ -824,6 +824,7 @@ namespace FASTag::TagGraph
 
   Scheme schemeFromString(const std::string& s)
   {
+    if (s == "cstar") return Scheme::CSTAR;
     if (s == "steplogodds") return Scheme::STEPLOGODDS;
     if (s == "evidence") return Scheme::EVIDENCE;
     if (s == "anchor") return Scheme::ANCHOR;
@@ -911,19 +912,307 @@ namespace FASTag::TagGraph
 
   double StepModel::logit(const Step& st, int z) const { return logit(features(st, z)); }
 
+  // ---- cstar: scheme X1 = CstarNS_t3 ----
+  // PREREG-tag-scoring.md amendment 3 (work/tag-score) and its Result adopted
+  // X1; the definition is heldout3/defs.md, the reference implementation the
+  // frozen heldout3/bench3.ts (cstarLogits, s2weight, noself, massErr), whose
+  // arithmetic this follows in its operation order.
+  namespace
+  {
+    // heldout3/models/M2-ion+pos+null_rall-E1.json
+    // (sha256 3e6bf4332accaba38c222539a14fe314261fdb31f518fa59358feaf2db395706),
+    // the final C* step model: logistic regression on the steps of tags with
+    // E <= 1 of PXD003531, PXD000001 and PXD076528 against Sage (n = 542562).
+    // Coefficients verbatim, in the model's feature order.
+    constexpr double CSTAR_INTERCEPT = 2.624971630586346;
+    constexpr double CSTAR_COEF[23] = {
+      0.29314535526904445,   // lE
+      0.255380932702539,     // abs_dppm
+      -2.6530101991215,      // dppm2
+      -0.7334382823740151,   // rank_max
+      -0.8663784249333464,   // rank_min
+      -0.0760433001260223,   // comp_any
+      -0.5121913582724096,   // comp_both
+      -4.0929839693475,      // gap
+      3.872419687178933,     // amb
+      -0.7248894057781843,   // log_np
+      1.3698254813148254,    // compz_any
+      1.7517145952673776,    // compz_both
+      -0.9492200398515636,   // lrank_max
+      -1.0860957725554623,   // lrank_min
+      -1.6576078886914931,   // amb_margin
+      -1.7482378187560106,   // rival_n
+      0.5647160598218061,    // rival_margin
+      0.0918835754862662,    // sup_n
+      0.36985287641826486,   // sup_rows
+      0.033797717560883137,  // rel_dppm
+      0.5004740239225409,    // rel_dppm2
+      0.14384158683831655,   // lE_gap
+      0.36146696035713544,   // in_best
+    };
+    // r_X: one-hot of the first reading's residue.
+    constexpr char CSTAR_RES[19] = {'A', 'C', 'D', 'E', 'F', 'G', 'H', 'K', 'L', 'M',
+                                    'N', 'P', 'Q', 'R', 'S', 'T', 'V', 'W', 'Y'};
+    constexpr double CSTAR_RES_COEF[19] = {
+      0.1950523857590289, -0.1104590443727135, 0.07877687696480704, 0.2873957611772344, -0.05149089626793415,
+      0.6334022489205966, -0.20306296579046457, -1.472225211656916, 0.06256551062616417, -0.07214764437941619,
+      -0.13361209475690652, 0.3199279891348483, -0.291629339181768, -2.3168136955216543, 0.263460527811237,
+      0.15761272187231753, -0.07961890822310448, -1.3111811122063246, -0.15678063142555532,
+    };
+
+    double lEof(const E& e) { return jsMin(12, -std::log10(jsMax(e.value_or(1e3), 1e-300))); }
+    std::string peakKey(const std::vector<int>& peaks)
+    {
+      std::string k;
+      for (size_t i = 0; i < peaks.size(); ++i)
+      {
+        if (i) k += ',';
+        k += std::to_string(peaks[i]);
+      }
+      return k;
+    }
+  }
+
+  double stepMassError(const Peaks& s, const Step& st)
+  {
+    const Reading& r = st.readings[0];
+    if (s.ppm && s.tolerance <= STEP_MAX_PPM) return r.delta_ppm;
+    const double x = s.mz[static_cast<size_t>(st.v)] - r.delta_mz;
+    return (20 * r.delta_mz) / tolAt(s, x);
+  }
+
+  std::vector<std::vector<CstarFeatures>> cstarFeatures(const Graph& g, const Peaks& s)
+  {
+    const auto& placements = g.placements;
+    const size_t n = s.mz.size();
+    std::vector<size_t> order(n);
+    for (size_t i = 0; i < n; ++i) order[i] = i;
+    std::stable_sort(order.begin(), order.end(), [&](size_t a, size_t b) { return s.intensity[b] - s.intensity[a] < 0; });
+    std::vector<double> rank(n, 0);
+    for (size_t r = 0; r < n; ++r) rank[order[r]] = static_cast<double>(r) / std::max<double>(1, static_cast<double>(n) - 1);
+    // Local rank: the fraction of the peaks within +-50 Th that are more intense.
+    std::vector<double> lrank(n, 0);
+    for (size_t i = 0; i < n; ++i)
+    {
+      double more = 0, cnt = 0;
+      for (long j = static_cast<long>(i); j >= 0 && s.mz[i] - s.mz[static_cast<size_t>(j)] <= 50; --j)
+      {
+        ++cnt;
+        if (s.intensity[static_cast<size_t>(j)] > s.intensity[i]) ++more;
+      }
+      for (size_t j = i + 1; j < n && s.mz[j] - s.mz[i] <= 50; ++j)
+      {
+        ++cnt;
+        if (s.intensity[j] > s.intensity[i]) ++more;
+      }
+      lrank[i] = cnt > 1 ? more / (cnt - 1) : 0;
+    }
+    const auto has = [&](double x) {
+      if (!(x > 0)) return 0.0;
+      const long lo = static_cast<long>(std::lower_bound(s.mz.begin(), s.mz.end(), x) - s.mz.begin());
+      for (long k : {lo - 1, lo})
+        if (k >= 0 && k < static_cast<long>(n) && std::fabs(s.mz[static_cast<size_t>(k)] - x) <= tolAt(s, x)) return 1.0;
+      return 0.0;
+    };
+    const E M = s.precursor ? E(*s.precursor * s.charge - s.charge * PROTON) : std::nullopt;
+    const auto comp1 = [&](int p, int z) { return !M ? 0.0 : has(*M - (s.mz[static_cast<size_t>(p)] * z - z * PROTON) + PROTON); };
+    const int cmax = std::max(1, s.charge - 1);
+    const auto compz = [&](int p, int z) {
+      if (!M) return 0.0;
+      const double m = *M - (s.mz[static_cast<size_t>(p)] * z - z * PROTON);
+      for (int c = 1; c <= cmax; ++c)
+        if (has((m + c * PROTON) / c) > 0) return 1.0;
+      return 0.0;
+    };
+    // The unique steps of each layer (layer|u|v): support, rivals, first-seen mass error.
+    struct U
+    {
+      double lE = -INF;
+      double nplac = 0, nrows = 0;
+      double d = 0;
+    };
+    std::vector<std::string> layer(placements.size());
+    std::unordered_map<std::string, size_t> uid;
+    std::vector<U> uniq;
+    std::unordered_map<std::string, std::vector<size_t>> byU, byV;
+    std::vector<std::vector<size_t>> stepU(placements.size());
+    for (size_t i = 0; i < placements.size(); ++i)
+    {
+      const Placement& p = placements[i];
+      layer[i] = layerOfP(p);
+      const std::string& L = layer[i];
+      for (const Step& st : p.steps)
+      {
+        const std::string key = L + "|" + std::to_string(st.u) + "|" + std::to_string(st.v);
+        auto it = uid.find(key);
+        if (it == uid.end())
+        {
+          it = uid.emplace(key, uniq.size()).first;
+          U e;
+          e.d = stepMassError(s, st);
+          uniq.push_back(e);
+          byU[L + "|" + std::to_string(st.u)].push_back(it->second);
+          byV[L + "|" + std::to_string(st.v)].push_back(it->second);
+        }
+        U& e = uniq[it->second];
+        e.lE = jsMax(e.lE, lEof(st.readings[0].evalue));
+        ++e.nplac;
+        e.nrows += static_cast<double>(p.rows.size());
+        stepU[i].push_back(it->second);
+      }
+    }
+    // The best placement by E-value (the first on a tie) and its steps.
+    long bestP = -1;
+    for (size_t i = 0; i < placements.size(); ++i)
+      if (bestP < 0 || placements[i].evalue.value_or(INF) < placements[static_cast<size_t>(bestP)].evalue.value_or(INF))
+        bestP = static_cast<long>(i);
+    std::vector<char> inBest(uniq.size(), 0);
+    if (bestP >= 0) for (size_t u : stepU[static_cast<size_t>(bestP)]) inBest[u] = 1;
+    double maxLE = -INF;
+    for (const U& e : uniq) maxLE = jsMax(maxLE, e.lE);
+    std::vector<double> dp;
+    for (const U& e : uniq) dp.push_back(e.d);
+    std::sort(dp.begin(), dp.end());
+    const double med = dp.size() >= 3 ? dp[dp.size() >> 1] : 0;
+    const double log_np = std::log(static_cast<double>(n));
+
+    std::vector<std::vector<CstarFeatures>> out(placements.size());
+    for (size_t i = 0; i < placements.size(); ++i)
+    {
+      const Placement& p = placements[i];
+      const int z = p.charge;
+      const std::string& L = layer[i];
+      for (size_t k = 0; k < p.steps.size(); ++k)
+      {
+        const Step& st = p.steps[k];
+        const Reading& r = st.readings[0];
+        const size_t me = stepU[i][k];
+        const U& u = uniq[me];
+        const double lE = lEof(r.evalue);
+        const double d = stepMassError(s, st);
+        const double ad = std::fabs(d);
+        double rivals = 0, rivalBest = -INF;
+        for (const auto* list : {&byU[L + "|" + std::to_string(st.u)], &byV[L + "|" + std::to_string(st.v)]})
+          for (size_t kk : *list)
+          {
+            if (kk == me) continue;
+            ++rivals;
+            rivalBest = jsMax(rivalBest, uniq[kk].lE);
+          }
+        const double cu = comp1(st.u, z), cv = comp1(st.v, z), zu = compz(st.u, z), zv = compz(st.v, z);
+        const double rel = std::fabs(d - med);
+        CstarFeatures f;
+        f.lE = lE;
+        f.abs_dppm = ad;
+        const double q = ad / 10;
+        f.dppm2 = q * q;
+        f.rank_max = std::max(rank[static_cast<size_t>(st.u)], rank[static_cast<size_t>(st.v)]);
+        f.rank_min = std::min(rank[static_cast<size_t>(st.u)], rank[static_cast<size_t>(st.v)]);
+        f.comp_any = std::max(cu, cv);
+        f.comp_both = std::min(cu, cv);
+        f.gap = r.gap ? 1 : 0;
+        f.amb = st.readings.size() > 1 ? 1 : 0;
+        f.log_np = log_np;
+        f.compz_any = std::max(zu, zv);
+        f.compz_both = std::min(zu, zv);
+        f.lrank_max = std::max(lrank[static_cast<size_t>(st.u)], lrank[static_cast<size_t>(st.v)]);
+        f.lrank_min = std::min(lrank[static_cast<size_t>(st.u)], lrank[static_cast<size_t>(st.v)]);
+        f.amb_margin = st.readings.size() > 1 ? jsMin(3, lE - lEof(st.readings[1].evalue)) : 0;
+        f.rival_n = std::log1p(rivals);
+        f.rival_margin = rivals > 0 ? jsMax(-6, jsMin(6, lE - rivalBest)) : 0;
+        f.sup_n = std::log(u.nplac);
+        f.sup_rows = std::log(u.nrows);
+        f.rel_dppm = rel;
+        const double q2 = rel / 10;
+        f.rel_dppm2 = q2 * q2;
+        f.lE_gap = jsMin(12, maxLE - lE);
+        f.in_best = inBest[me] ? 1 : 0;
+        f.residue = r.gap || r.label.empty() ? 0 : (r.label[0] == 'I' ? 'L' : r.label[0]);
+        out[i].push_back(f);
+      }
+    }
+    return out;
+  }
+
+  double cstarLogit(const CstarFeatures& f)
+  {
+    const double x[23] = {f.lE, f.abs_dppm, f.dppm2, f.rank_max, f.rank_min, f.comp_any, f.comp_both, f.gap,
+                          f.amb, f.log_np, f.compz_any, f.compz_both, f.lrank_max, f.lrank_min, f.amb_margin,
+                          f.rival_n, f.rival_margin, f.sup_n, f.sup_rows, f.rel_dppm, f.rel_dppm2, f.lE_gap, f.in_best};
+    double v = CSTAR_INTERCEPT;
+    for (size_t i = 0; i < 23; ++i) v = v + CSTAR_COEF[i] * x[i];
+    for (size_t i = 0; i < 19; ++i) v = v + CSTAR_RES_COEF[i] * (f.residue == CSTAR_RES[i] ? 1.0 : 0.0);
+    return v;
+  }
+
+  std::vector<std::vector<double>> cstarLogits(const Graph& g, const Peaks& s)
+  {
+    const auto feats = cstarFeatures(g, s);
+    std::vector<std::vector<double>> v(feats.size());
+    for (size_t i = 0; i < feats.size(); ++i)
+      for (const CstarFeatures& f : feats[i]) v[i].push_back(cstarLogit(f));
+    // bench3 keys the logits by layer|peaks|k: a later placement with the same key wins.
+    std::unordered_map<std::string, size_t> last;
+    for (size_t i = 0; i < g.placements.size(); ++i) last[layerOfP(g.placements[i]) + "|" + peakKey(g.placements[i].peaks)] = i;
+    std::vector<std::vector<double>> out(v.size());
+    for (size_t i = 0; i < g.placements.size(); ++i)
+    {
+      const size_t j = last[layerOfP(g.placements[i]) + "|" + peakKey(g.placements[i].peaks)];
+      out[i] = v[j];
+    }
+    return out;
+  }
+
+  long noselfPick(const Graph& g, const Peaks& s)
+  {
+    if (g.paths.empty()) return -1;
+    const auto selfAnti = [&](const Path& P) {
+      const int z = P.charge;
+      for (int a : P.peaks)
+      {
+        const E m = complementOf(s, a, z);
+        if (!m) continue;
+        for (int b : P.peaks)
+          if (b != a && std::fabs(s.mz[static_cast<size_t>(b)] * z - z * PROTON - *m) <= complementTol(s, s.mz[static_cast<size_t>(b)]) * z)
+            return true;
+      }
+      return false;
+    };
+    for (size_t i = 0; i < g.paths.size(); ++i)
+      if (!selfAnti(g.paths[i])) return static_cast<long>(i);
+    return 0;
+  }
+
+  void promote(Graph& g, std::size_t r)
+  {
+    if (r == 0 || r >= g.paths.size()) return;
+    const auto to = [r](std::size_t i) { return i == r ? 0 : i < r ? i + 1 : i; };
+    for (Path& p : g.paths)
+    {
+      for (Relation& x : p.relations) x.path = to(x.path);
+      for (auto& x : p.same_as) x.first = to(x.first);
+    }
+    std::rotate(g.paths.begin(), g.paths.begin() + static_cast<long>(r), g.paths.begin() + static_cast<long>(r) + 1);
+  }
+
   Weight weightOf(const Graph& g, const Peaks& s, const Options& opt)
   {
     if (opt.weight) return opt.weight;
     if (opt.scheme == Scheme::EVIDENCE)
       return [](const Graph& gr, std::size_t p, long) { return evidence(gr.placements[p].evalue); };
-    // Each placement step's logit, once (stepScore.ts caches by step).
-    auto model = std::make_shared<StepModel>(s);
+    // Each placement step's logit, once (stepScore.ts caches by step; cstar
+    // computes them over all placements, as bench3 does).
     auto logits = std::make_shared<std::vector<std::vector<double>>>();
-    for (const Placement& p : g.placements)
+    if (opt.scheme == Scheme::CSTAR) *logits = cstarLogits(g, s);
+    else
     {
-      std::vector<double> v;
-      for (const Step& st : p.steps) v.push_back(model->logit(st, p.charge));
-      logits->push_back(std::move(v));
+      const StepModel model(s);
+      for (const Placement& p : g.placements)
+      {
+        std::vector<double> v;
+        for (const Step& st : p.steps) v.push_back(model.logit(st, p.charge));
+        logits->push_back(std::move(v));
+      }
     }
     const double t = opt.threshold;
     const auto steps = [logits, t](const Graph& gr, std::size_t p, long prev) {
@@ -938,7 +1227,7 @@ namespace FASTag::TagGraph
       for (size_t k = shared; k < P.steps.size(); ++k) a = a + (*logits)[p][k] - t;
       return a;
     };
-    if (opt.scheme == Scheme::STEPLOGODDS) return steps;
+    if (opt.scheme == Scheme::STEPLOGODDS || opt.scheme == Scheme::CSTAR) return steps;
     // ANCHOR: the placement with the lowest E-value (the first on a tie).
     std::optional<size_t> anchor;
     for (size_t i = 0; i < g.placements.size(); ++i)
@@ -1233,6 +1522,13 @@ namespace FASTag::TagGraph
       for (size_t k = 1; k < p.chain.size(); ++k) links.emplace(p.chain[k - 1], p.chain[k]);
     for (Arc& a : g.arcs) a.used = links.count({a.from, a.to}) > 0;
     settleSeries(g, s);
+    // cstar: rank 1 is the first resolved tag without a peak and its own
+    // complement (noself), the others after it in their order.
+    if (!opt.weight && opt.scheme == Scheme::CSTAR)
+    {
+      const long r = noselfPick(g, s);
+      if (r > 0) promote(g, static_cast<size_t>(r));
+    }
     return g;
   }
 

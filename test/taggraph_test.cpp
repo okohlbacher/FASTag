@@ -97,6 +97,12 @@ namespace
     o.join = join;
     return o;
   }
+  Options sl()
+  {
+    Options o;
+    o.scheme = Scheme::STEPLOGODDS;  // the 1.15 default, GUI stepWeight(s, 3)
+    return o;
+  }
   std::vector<std::string> seqs(const Graph& g)
   {
     std::vector<std::string> out;
@@ -285,7 +291,7 @@ namespace
     bb.steps = {a.steps[1], step(2, 3, 1, 0.001)};
     bb.charge = 1;
     g.placements = {a, bb};
-    Options o;
+    Options o = sl();
     const Weight w = weightOf(g, s, o);
     check(std::fabs(w(g, 1, 0) - (m.logit(bb.steps[1], 1) - STEP_THRESHOLD)) < 1e-9, "continuing weight");
     check(std::fabs(w(g, 0, -1) - (m.logit(a.steps[0], 1) + m.logit(a.steps[1], 1) - 2 * STEP_THRESHOLD)) < 1e-9, "fresh weight");
@@ -351,14 +357,14 @@ namespace
 
   void ranking()
   {
-    // The default scheme (steplogodds, t = 3) on the nested case: no step
+    // steplogodds (t = 3, the 1.15 default) on the nested case: no step
     // clears the threshold, so nothing chains and each tag is its own
     // resolved tag, shortest (least negative) first. Sequences, members and
     // scores as the GUI's buildGraph(..., {weight: stepWeight(s, 3)}) at
     // 38b5da63 with OpenMS residue masses (tag-merge-cli/parity/gui-openms).
     {
       const Peaks s = spec(b);
-      const Graph g = buildGraph({tag(0, 0, 3, 0.01), tag(1, 2, 3, 0.5), tag(2, 1, 2, 0.1), tag(3, 3, 3, 0.02)}, s, RES);
+      const Graph g = buildGraph({tag(0, 0, 3, 0.01), tag(1, 2, 3, 0.5), tag(2, 1, 2, 0.1), tag(3, 3, 3, 0.02)}, s, RES, sl());
       check(seqs(g) == SV{"EP", "PEP", "PTI", "TID"}, "steplogodds nested: " + str(seqs(g)));
       const std::vector<double> score{-6.8371284389768539, -9.0198907011653819, -12.895701140519153, -13.792873793904240};
       const std::vector<size_t> row{2, 0, 1, 3};
@@ -402,7 +408,7 @@ namespace
       std::set<double> bs;
       for (double x : b) bs.insert(std::round(x * 1e6) / 1e6);
       for (size_t k = 0; k < s.mz.size(); ++k) s.intensity[k] = bs.count(s.mz[k]) ? 1000 : 10;
-      const Graph g = buildGraph({tag(0, 0, 3, 1e-4), tag(1, 2, 3, 1e-4), tag(2, 1, 2, 1e-4), tag(3, 3, 3, 1e-4), tag(4, 3, 4, 1e-4)}, s, RES);
+      const Graph g = buildGraph({tag(0, 0, 3, 1e-4), tag(1, 2, 3, 1e-4), tag(2, 1, 2, 1e-4), tag(3, 3, 3, 1e-4), tag(4, 3, 4, 1e-4)}, s, RES, sl());
       check(seqs(g) == SV{"PEPTI", "TID", "TIDE", "EP", "TID", "PTI", "TIDE", "PEP"}, "steplogodds chain: " + str(seqs(g)));
       const std::string series = "bbbyyyyy";
       const std::vector<double> score{1.8576127815131969, -0.32725502458656042, -0.91685039221451703, -4.3019684639441920,
@@ -460,6 +466,229 @@ namespace
       landsOnItsPeaks(rows[0], std::string("single ") + (zl ? "z" : "c"));
     }
   }
+  // ---- cstar (scheme X1 = CstarNS_t3) ----
+  // Synthetic cases with the logits, mass errors, path order and noself pick
+  // that the frozen reference (work/tag-score/heldout3/bench3.ts: massErr,
+  // cstarLogits, s2weight, noself) computes on them with OpenMS residue
+  // masses (tag-merge-cli/parity/x1: cases.json, ref-cases.ts -> ref-cases.om.json).
+  struct XPlacement
+  {
+    std::string layer;
+    std::vector<int> peaks;
+    std::vector<double> logits, d;
+  };
+  struct XCase
+  {
+    std::string name;
+    std::vector<double> mz, intensity;
+    double precursor;
+    int charge;
+    double tolerance;
+    bool ppm;
+    std::vector<TagIn> tags;
+    std::vector<XPlacement> placements;
+    std::vector<std::string> paths;  // X1 graph order, before noself
+    long pick;
+  };
+  TagIn xtag(size_t i, const std::string& t, int z, double n, double c, bool gap, std::optional<double> e)
+  {
+    TagIn x;
+    x.seq = t; x.charge = z; x.nterm_mass = n; x.cterm_mass = c; x.gapped = gap; x.evalue = e; x.index = i;
+    return x;
+  }
+  std::vector<XCase> xcases()
+  {
+    std::vector<XCase> v;
+    {
+      XCase x;
+      x.name = "ppm";
+      x.mz = {99.533659, 101.007125, 164.054956, 198.060041, 212.581338, 219.017677, 230.049871, 263.105177, 319.64721, 327.102635, 327.103126, 347.113065, 400.0, 424.154763, 476.155042, 525.203078, 591.182786, 638.2881, 704.265879, 753.312957, 805.31469, 882.356681, 902.366174, 1010.45316, 1031.410218, 1128.461363};
+      x.intensity = {200.0, 1000.0, 200.0, 2000.0, 200.0, 400.0, 300.0, 200.0, 200.0, 250.0, 1000.0, 800.0, 5000.0, 2000.0, 1200.0, 1000.0, 400.0, 2000.0, 800.0, 1000.0, 1200.0, 2000.0, 400.0, 1000.0, 800.0, 1200.0};
+      x.precursor = 410.15892069794535;
+      x.charge = 3;
+      x.tolerance = 10.0;
+      x.ppm = true;
+      x.tags.push_back(xtag(0, "PEP", 1, 100.0, 786.2962453398, false, 0.0001));
+      x.tags.push_back(xtag(1, "PTI", 1, 326.0953584466, 572.1645017656, false, 0.001));
+      x.tags.push_back(xtag(2, "EP", 1, 197.0527642233, 786.2962453398, false, 0.05));
+      x.tags.push_back(xtag(3, "TIDE", 1, 423.1481226699, 328.0949633828, false, 0.2));
+      x.tags.push_back(xtag(4, "EPP", 1, 100.0, 786.2962453398, false, 0.5));
+      x.tags.push_back(xtag(5, "EPTI", 2, 197.0527642233, 572.1645017656, false, 0.01));
+      x.tags.push_back(xtag(6, "PIT", 1, 326.0953584466, 572.1645017656, true, 0.3));
+      x.tags.push_back(xtag(7, "IDEK", 1, 524.1958018932, 200.0, false, 0.02));
+      x.tags.push_back(xtag(8, "TID", 1, 423.1481226699, 457.1375576061, false, std::nullopt));
+      x.placements.push_back({"by1", {1, 3, 9, 13}, {5.459119780769466, 4.568005552391727, 3.4595381759029884}, {0.7663172014157376, -0.0006826603267140731, -1.49997689808871}});
+      x.placements.push_back({"by1", {1, 6, 9, 13}, {-1.9716488036484716, -3.2173497824868456, 2.907268014943395}, {0.6597560758010098, -0.0006826603267140731, -1.49997689808871}});
+      x.placements.push_back({"by1", {3, 9, 13}, {2.6408874534369824, 3.056571783374123}, {-0.0006826603267140731, -1.49997689808871}});
+      x.placements.push_back({"by1", {5, 11, 14, 16, 18}, {0.9580363031004409, 3.7101220332018263, 2.9329698376158286, 1.1289401460743425}, {1.223283599031062, -1.2962637071928937, 1.3529514070684747, -1.379237002916143}});
+      x.placements.push_back({"by1", {9, 13, 15, 17}, {3.3102344074722607, 2.583329825822929, 3.738873375080238}, {-1.49997689808871, 1.210536449994045, 1.5003421445186391}});
+      x.placements.push_back({"by1", {9, 13, 17}, {2.940390869282762, -4.492831721651645}, {-1.49997689808871, 2.4964115385468917}});
+      x.placements.push_back({"by1", {11, 14, 16, 18, 20}, {3.5608182647710978, 2.7836660691851, 0.4149203178218085, 1.8154600511380437}, {-1.2962637071928937, 1.3529514070684747, -1.379237002916143, 1.4053863720268431}});
+      x.placements.push_back({"by1", {13, 15, 17, 19}, {-1.7007891436922744, -0.5452455944349661, 3.7317668471429846}, {1.210536449994045, 1.5003421445186391, -2.770632972434089}});
+      x.placements.push_back({"by1", {13, 15, 17, 19, 21}, {0.940348783515004, 2.095892332772313, 4.284037008102578, 3.948246413561578}, {1.210536449994045, 1.5003421445186391, -2.770632972434089, 1.2804098058746078}});
+      x.placements.push_back({"by1", {14, 16, 18, 20}, {2.2313959082255064, -2.2262176093854706, -0.8256778760692345}, {1.3529514070684747, -1.379237002916143, 1.4053863720268431}});
+      x.placements.push_back({"by1", {15, 17, 19, 21, 23}, {2.809912161024847, 4.433340776533306, 4.097550181992307, 2.038447693685721}, {1.5003421445186391, -2.770632972434089, 1.2804098058746078, 1.4999403568788}});
+      x.placements.push_back({"by1", {16, 18, 20, 22}, {2.0579013601297333, 3.458441093445969, 3.4713017792329994}, {-1.379237002916143, 1.4053863720268431, -1.4187383354845728}});
+      x.placements.push_back({"by1", {16, 20, 22}, {-5.568605746592121, 3.1014582410435008}, {0.19920887333650195, -1.4187383354845728}});
+      x.placements.push_back({"by1", {20, 22, 24}, {3.2176391551348624, 1.4449720136765312}, {-1.4187383354845728, 1.4056276663478295}});
+      x.placements.push_back({"by1", {20, 22, 24, 25}, {3.620605547663727, 1.8479384062053965, 3.0375717857283293}, {-1.4187383354845728, 1.4056276663478295, -1.434892704213751}});
+      x.placements.push_back({"by2", {0, 2, 4, 7, 8}, {1.0995651052240492, 1.3053644440840229, 0.5707514174162432, 0.14007711262767594}, {-0.0006805646020184912, -0.0005252107118483108, -0.0023247355745085684, 0.002579562465498741}});
+      x.paths = {"PEPTIDE/b/1,3,9,13,15,17,19,21", "IDEK/b/15,17,19,21,23", "PTI/y/16,18,20,22", "PEP/y/20,22,24,25", "IDEK/y/5,11,14,16,18", "TIDE/y/11,14,16,18,20", "P[IT]/b/9,13,17", "P[IT]/y/16,20,22", "EPTI/b/0,2,4,7,8", "EPP/b/1,6,9,13"};
+      x.pick = 0;
+      v.push_back(x);
+    }
+    {
+      XCase x;
+      x.name = "da";
+      x.mz = {99.533659, 100.967276, 164.054956, 198.060041, 212.581338, 219.007841, 230.099871, 263.105177, 319.64721, 327.122635, 327.142635, 347.122805, 424.115399, 476.145399, 525.203078, 591.192343, 638.327143, 704.256407, 753.274087, 805.324086, 882.356681, 902.356851, 1010.491644, 1031.419445, 1128.452209};
+      x.intensity = {100.0, 800.0, 100.0, 1600.0, 100.0, 500.0, 300.0, 100.0, 100.0, 250.0, 800.0, 1000.0, 1600.0, 1500.0, 800.0, 500.0, 1600.0, 1000.0, 800.0, 1500.0, 1600.0, 500.0, 800.0, 1000.0, 1500.0};
+      x.precursor = 614.734742813512;
+      x.charge = 2;
+      x.tolerance = 0.3;
+      x.ppm = false;
+      x.tags.push_back(xtag(0, "PEP", 1, 100.0, 786.2962453398, false, 0.0001));
+      x.tags.push_back(xtag(1, "PTI", 1, 326.0953584466, 572.1645017656, false, 0.001));
+      x.tags.push_back(xtag(2, "EP", 1, 197.0527642233, 786.2962453398, false, 0.05));
+      x.tags.push_back(xtag(3, "TIDE", 1, 423.1481226699, 328.0949633828, false, 0.2));
+      x.tags.push_back(xtag(4, "EPP", 1, 100.0, 786.2962453398, false, 0.5));
+      x.tags.push_back(xtag(5, "EPTI", 2, 197.0527642233, 572.1645017656, false, 0.01));
+      x.tags.push_back(xtag(6, "PIT", 1, 326.0953584466, 572.1645017656, true, 0.3));
+      x.tags.push_back(xtag(7, "IDEK", 1, 524.1958018932, 200.0, false, 0.02));
+      x.tags.push_back(xtag(8, "TID", 1, 423.1481226699, 457.1375576061, false, std::nullopt));
+      x.placements.push_back({"by1", {1, 3, 9, 12}, {5.868486334565002, 4.100289709139713, 5.758872238214823}, {2.6667184466684075, 1.3333184466659986, -4.000014886666274}});
+      x.placements.push_back({"by1", {1, 6, 10, 12}, {-1.2330464563328254, 0.9250783514862096, 0.7058832965469133}, {6.000051780000604, -0.6666815533321824, -5.333348219998395}});
+      x.placements.push_back({"by1", {3, 9, 12}, {3.697323316610847, 3.8317541392600782}, {1.3333184466659986, -4.000014886666274}});
+      x.placements.push_back({"by1", {5, 11, 13, 15, 17}, {1.580665350132689, 4.2504184798623035, 3.0047471223540962, 2.4293572276531417}, {1.3333744799979286, -1.3333482200020323, 1.3333227000051315, -1.3333567266727187}});
+      x.placements.push_back({"by1", {9, 12, 14, 16}, {5.044852409962289, 3.96622144434004, 3.967918573148565}, {-4.000014886666274, 2.66665177999433, 2.666709939997721}});
+      x.placements.push_back({"by1", {9, 12, 16}, {3.2761387171066554, -3.1013203768774265}, {-4.000014886666274, 5.333361719992051}});
+      x.placements.push_back({"by1", {11, 13, 15, 17, 19}, {4.101114711431575, 2.8554433539233677, 1.715337399400608, 2.979534026237327}, {-1.3333482200020323, 1.3333227000051315, -1.3333567266727187, 1.3333184466697883}});
+      x.placements.push_back({"by1", {12, 14, 16, 18}, {-0.317897525175165, -0.3162003963666387, 3.0497666165803783}, {2.66665177999433, 2.666709939997721, -5.333343966663051}});
+      x.placements.push_back({"by1", {12, 14, 16, 18, 20}, {2.3232404020321145, 2.324937530840641, 3.6020367775399724, 3.275391843474064}, {2.66665177999433, 2.666709939997721, -5.333343966663051, 2.66665177999433}});
+      x.placements.push_back({"by1", {13, 15, 17, 19}, {2.303173192963775, -0.925800527806671, 0.33839609903004875}, {1.3333227000051315, -1.3333567266727187, 1.3333184466697883}});
+      x.placements.push_back({"by1", {14, 16, 18, 20, 22}, {3.038957359093175, 3.7513405459707005, 3.4246956119047915, 1.31446153663092}, {2.666709939997721, -5.333343966663051, 2.66665177999433, 2.6666411466673408}});
+      x.placements.push_back({"by1", {15, 17, 19, 21}, {3.3583184417085326, 4.622515068545252, 3.5063168316633337}, {-1.3333567266727187, 1.3333184466697883, -1.333281553327955}});
+      x.placements.push_back({"by1", {15, 19, 21}, {-5.5527689682871175, 3.136473293473835}, {-3.8280002930453826e-05, -1.333281553327955}});
+      x.placements.push_back({"by1", {19, 21, 23}, {3.2526542075651967, 2.7556776238168084}, {-1.333281553327955, 1.3333184466622092}});
+      x.placements.push_back({"by1", {19, 21, 23, 24}, {3.6556206000940614, 3.158644016345674, 4.173133778703032}, {-1.333281553327955, 1.3333184466622092, -1.3333482200020323}});
+      x.placements.push_back({"by2", {0, 2, 4, 7, 8}, {1.130313276546694, 1.3334914849960582, 0.5956978744321435, 0.1624680791817666}, {-7.443333061019075e-06, -7.443333061019075e-06, -4.077666441541321e-05, 5.496999619936105e-05}});
+      x.paths = {"PEPTIDE/b/1,3,9,12,14,16,18,20", "PEPTI/y/15,17,19,21,23,24", "TIDE/y/11,13,15,17,19", "IDEK/b/14,16,18,20,22", "IDEK/y/5,11,13,15,17", "P[IT]/b/9,12,16", "P[IT]/y/15,19,21", "EPP/b/1,6,10,12", "EPTI/b/0,2,4,7,8"};
+      x.pick = 0;
+      v.push_back(x);
+    }
+    {
+      XCase x;
+      x.name = "noself";
+      x.mz = {101.007276, 198.060041, 327.102635, 424.155399, 525.203078, 638.287143, 753.314087, 882.356681, 1501.007276, 1558.028741, 1615.050205, 1672.071669};
+      x.intensity = {1000.0, 1000.0, 1000.0, 1000.0, 1000.0, 1000.0, 1000.0, 1000.0, 200.0, 200.0, 200.0, 200.0};
+      x.precursor = 361.631559525062;
+      x.charge = 2;
+      x.tolerance = 10.0;
+      x.ppm = true;
+      x.tags.push_back(xtag(0, "PEPT", 1, 100.0, 5000.0, false, 1e-06));
+      x.tags.push_back(xtag(1, "EPTI", 1, 197.0527642233, 5000.0, false, 1e-06));
+      x.tags.push_back(xtag(2, "GGG", 1, 1500.0, 5000.0, false, 0.01));
+      x.placements.push_back({"by1", {0, 1, 2, 3, 4}, {4.49219781135326, 4.633338855967391, 3.226605854061652, 4.212605596980548}, {0.003921538159686279, -0.0006826603267140731, -0.0005264581072948525, -0.00042516896403080654}});
+      x.placements.push_back({"by1", {1, 2, 3, 4, 5}, {4.633338855967391, 3.226605854061652, 4.212605596980548, 3.290777202009106}, {-0.0006826603267140731, -0.0005264581072948525, -0.00042516896403080654, 0.0010169404318590865}});
+      x.placements.push_back({"by1", {8, 9, 10, 11}, {1.388738935805344, 1.243146483618347, 1.0977080167887057}, {0.0005804129920788281, -5.925511669939546e-05, -5.7234381843264725e-05}});
+      x.paths = {"PEPTI/b/0,1,2,3,4,5", "GGG/b/8,9,10,11"};
+      x.pick = 1;
+      v.push_back(x);
+    }
+    return v;
+  }
+
+  std::string pathKey(const Path& p)
+  {
+    std::string k = sequenceOf(p.series, p.steps) + "/" + std::string(1, p.series) + "/";
+    for (size_t i = 0; i < p.peaks.size(); ++i) k += (i ? "," : "") + std::to_string(p.peaks[i]);
+    return k;
+  }
+
+  void cstarCases()
+  {
+    for (const XCase& x : xcases())
+    {
+      Peaks s;
+      s.mz = x.mz;
+      s.intensity = x.intensity;
+      s.precursor = x.precursor;
+      s.charge = x.charge;
+      s.tolerance = x.tolerance;
+      s.ppm = x.ppm;
+      const Graph g = buildGraph(x.tags, s, RES);  // the default: cstar, t = 3
+      // The C* logits and mass errors of every placement step, as bench3 has them.
+      check(g.placements.size() == x.placements.size(), x.name + ": placements " + std::to_string(g.placements.size()));
+      const auto logits = cstarLogits(g, s);
+      for (size_t i = 0; i < g.placements.size() && i < x.placements.size(); ++i)
+      {
+        const Placement& p = g.placements[i];
+        const XPlacement& want = x.placements[i];
+        check(layerOf(p.series, p.charge) == want.layer && p.peaks == want.peaks, x.name + ": placement " + std::to_string(i) + " " + str(p.peaks));
+        if (p.steps.size() != want.logits.size()) { check(false, x.name + ": steps of placement " + std::to_string(i)); continue; }
+        for (size_t k = 0; k < p.steps.size(); ++k)
+        {
+          check(std::fabs(logits[i][k] - want.logits[k]) <= 1e-12 * std::max(1.0, std::fabs(want.logits[k])),
+                x.name + ": logit " + std::to_string(i) + "/" + std::to_string(k) + " " + std::to_string(logits[i][k]) + " vs " + std::to_string(want.logits[k]));
+          check(std::fabs(stepMassError(s, p.steps[k]) - want.d[k]) <= 1e-12 * std::max(1.0, std::fabs(want.d[k])),
+                x.name + ": mass error " + std::to_string(i) + "/" + std::to_string(k));
+        }
+      }
+      // The ranking: bench3's X1 graph order, its noself pick moved to rank 1.
+      std::vector<std::string> want;
+      if (x.pick >= 0) want.push_back(x.paths[static_cast<size_t>(x.pick)]);
+      for (size_t r = 0; r < x.paths.size(); ++r) if (static_cast<long>(r) != x.pick) want.push_back(x.paths[r]);
+      std::vector<std::string> got;
+      for (const Path& p : g.paths) got.push_back(pathKey(p));
+      check(got == want, x.name + ": X1 ranking " + str(got) + " vs " + str(want));
+      // Relations and same_as name the paths they did before the move.
+      Options o;
+      o.weight = weightOf(g, s, o);  // the same weight, without noself
+      const Graph raw = buildGraph(x.tags, s, RES, o);
+      check(noselfPick(raw, s) == x.pick, x.name + ": noself pick " + std::to_string(noselfPick(raw, s)));
+      std::vector<std::string> rawKeys;
+      for (const Path& p : raw.paths) rawKeys.push_back(pathKey(p));
+      check(rawKeys == x.paths, x.name + ": X1 graph order " + str(rawKeys));
+      for (size_t r = 0; r < raw.paths.size() && raw.paths.size() == g.paths.size(); ++r)
+      {
+        const size_t to = static_cast<long>(r) == x.pick ? 0 : static_cast<long>(r) < x.pick ? r + 1 : r;
+        const Path& a = raw.paths[r];
+        const Path& b = g.paths[to];
+        bool same = a.relations.size() == b.relations.size() && a.same_as.size() == b.same_as.size();
+        for (size_t k = 0; same && k < a.relations.size(); ++k)
+          same = pathKey(raw.paths[a.relations[k].path]) == pathKey(g.paths[b.relations[k].path]) && a.relations[k].fork == b.relations[k].fork;
+        for (size_t k = 0; same && k < a.same_as.size(); ++k)
+          same = pathKey(raw.paths[a.same_as[k].first]) == pathKey(g.paths[b.same_as[k].first]);
+        check(same, x.name + ": relations of " + pathKey(a) + " follow the move");
+      }
+      if (x.name == "da")
+      {
+        // ad_n at a Da tolerance: 20 * delta_mz / tol, not the ppm error.
+        const Step& st = g.placements[0].steps[0];
+        check(std::fabs(stepMassError(s, st) - 20 * st.readings[0].delta_mz / 0.3) < 1e-12, "da: ad_n");
+        check(std::fabs(stepMassError(s, st) - st.readings[0].delta_ppm) > 1e-3, "da: not the ppm error");
+      }
+      if (x.name == "noself")
+      {
+        check(x.pick == 1 && !g.paths.empty() && sequenceOf(g.paths[0].series, g.paths[0].steps) == "GGG",
+              "noself: the tag holding b1 and its complement b4 is not rank 1");
+        check(g.paths.size() > 1 && sequenceOf(g.paths[1].series, g.paths[1].steps) == "PEPTI", "noself: the others after it");
+      }
+    }
+    // A threshold reaches the weight: at t = 4 every step is worth one less.
+    {
+      const XCase x = xcases()[0];
+      Peaks s;
+      s.mz = x.mz; s.intensity = x.intensity; s.precursor = x.precursor; s.charge = x.charge; s.tolerance = x.tolerance; s.ppm = x.ppm;
+      Graph g;
+      g.placements = buildGraph(x.tags, s, RES).placements;
+      Options o3, o4;
+      o4.threshold = 4;
+      const Weight w3 = weightOf(g, s, o3), w4 = weightOf(g, s, o4);
+      check(std::fabs(w3(g, 0, -1) - w4(g, 0, -1) - static_cast<double>(g.placements[0].steps.size())) < 1e-9, "cstar threshold");
+    }
+    check(schemeFromString("cstar") == Scheme::CSTAR && Options().scheme == Scheme::CSTAR, "cstar is the default scheme");
+  }
+
   // Every sub-tag of a 74-residue b ladder on one layer: 2775 placements.
   // Under steplogodds nearly every round extracts one placement; rerunning
   // the longest path over all of them each round, and comparing every pair
@@ -485,13 +714,21 @@ namespace
         tags.push_back(at(tags.size(), N + pre, seq.substr(from, len), 1e-3 * static_cast<double>(1 + tags.size() % 7), false, C + post));
       }
     const auto t0 = std::chrono::steady_clock::now();
-    const Graph g = buildGraph(tags, s, RES);
+    const Graph g = buildGraph(tags, s, RES, sl());
     const double sec = std::chrono::duration<double>(std::chrono::steady_clock::now() - t0).count();
     check(g.placements.size() == 2775, "large layer placements: " + std::to_string(g.placements.size()));
     size_t members = 0;
     for (const Path& p : g.paths) members += p.chain.size() + p.inside.size();
     check(members == g.placements.size(), "large layer: every placement in one resolved tag");
     check(sec < 20, "large layer took " + std::to_string(sec) + " s");
+    // cstar: its features look at every placement's steps (rivals, support).
+    const auto t1 = std::chrono::steady_clock::now();
+    const Graph gc = buildGraph(tags, s, RES);
+    const double secc = std::chrono::duration<double>(std::chrono::steady_clock::now() - t1).count();
+    size_t membersc = 0;
+    for (const Path& p : gc.paths) membersc += p.chain.size() + p.inside.size();
+    check(membersc == gc.placements.size(), "large layer cstar: every placement in one resolved tag");
+    check(secc < 20, "large layer cstar took " + std::to_string(secc) + " s");
   }
 }
 
@@ -501,6 +738,7 @@ int main()
   stepCases();
   ranking();
   largeLayer();
+  cstarCases();
   if (failures) { std::cerr << failures << " failure(s)\n"; return 1; }
   std::cout << "taggraph_test: all passed\n";
   return 0;
