@@ -1056,13 +1056,16 @@ void TOPPFASTag::registerOptionsAndFlags_()
   registerOutputFile_("resolved_out", "<file>", "",
                       "Merge each spectrum's tags (of -out, E-value <= -resolve_max_evalue) on its peaks into "
                       "resolved tags and write one row per resolved tag, best first: sequence N->C, series "
-                      "call, flanks, score, evidence, peaks, steps and the member rows of -out",
+                      "call, flanks, score, evidence, peaks and steps (both in ascending m/z order: for y "
+                      "and z the steps run C->N, the reverse of sequence) and the member rows of -out",
                       false);
   setValidFormats_("resolved_out", ListUtils::create<std::string>("tsv"));
   registerOutputFile_("tag_graph_out", "<file>", "",
                       "The merge graph of each spectrum: one row per placement of its tags on the peaks, "
-                      "with its layer, steps, rows, the resolved tag that uses it and the placements that "
-                      "continue it",
+                      "with its layer, series (as judged on its own peaks, before complement pairing: it can "
+                      "be the other series of the pair than the resolved tag's in -resolved_out, which is "
+                      "authoritative), steps (ascending m/z), rows, the resolved tag that uses it and the "
+                      "placements that continue it",
                       false, true);
   setValidFormats_("tag_graph_out", ListUtils::create<std::string>("tsv"));
   registerStringOption_("resolve_score", "<scheme>", "steplogodds",

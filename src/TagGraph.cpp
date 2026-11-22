@@ -1377,6 +1377,7 @@ namespace FASTag::TagGraph
       for (size_t i : p.inside) for (size_t row : g.placements[i].rows) { inside.insert(row); all.insert(row); }
       appendNum(buf, all.size()); buf += '\t';
       mzList(buf, s, p.peaks); buf += '\t';
+      // Ascending m/z, as the peaks: for y/z the reverse of the sequence (README).
       stepList(buf, p.steps, full); buf += '\t';
       indexList(buf, members); buf += '\t';
       indexList(buf, inside); buf += '\t';
@@ -1411,8 +1412,12 @@ namespace FASTag::TagGraph
       appendNum(buf, i); buf += '\t';
       buf += layerOf(p.series, p.charge); buf += '\t';
       appendNum(buf, p.charge); buf += '\t';
+      // The placement's own call, judged on its peaks: settleSeries/pairCalls
+      // settle only the paths, so a chain node can read as the other series of
+      // the pair than its resolved tag (documented; -resolved_out decides).
       buf += p.series; buf += '\t';
       mzList(buf, s, p.peaks); buf += '\t';
+      // Ascending m/z, as the peaks (for y/z the reverse of the sequence).
       stepList(buf, p.steps, full); buf += '\t';
       evalueField(buf, p.evalue, full); buf += '\t';
       indexList(buf, p.rows); buf += '\t';

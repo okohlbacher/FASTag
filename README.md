@@ -1849,14 +1849,21 @@ walked from `nterm_mass` over the sequence, or of the y/z ladder walked from
 (the chain weight),
 `best_e` and `weakest_e` (the best step and the weakest step or junction; empty
 when a step has no evidence), `n_tags`, `peaks` (m/z ascending, `;`, 6
-decimals), `steps` (`label:E` readings `|`-separated per step, steps `;`),
+decimals), `steps` (`label:E` readings `|`-separated per step, steps `;`, in
+ascending m/z order like `peaks`: step *i* lies between peaks *i* and *i*+1, so
+for y and z rows the steps run C→N, the reverse of `sequence`; match a step to
+its residue by position from the right, or by its label),
 `members` and `inside` (0-based row indices of the spectrum's rows in `-out`,
 of the tags that build it and of those subsumed), `joined` (m/z of junctions
 joined under `-resolve_join`) and `relations` (`rank:fork|touch:shared steps`).
 
 `-tag_graph_out` columns, one row per placement in canonical order (layer,
 first peak): `spectrum`, `node` (0-based), `layer` (`by2`, `cz1`), `charge`,
-`series`, `peaks`, `steps`, `evalue`, `rows` (in `-out`), `path` (the rank of
+`series` (the series judged on the placement's own peaks, before complement
+pairing; the resolved tag's `series` in `-resolved_out` is authoritative, and
+for about 2% of chain nodes it is the other series of the pair, reading the
+same steps the other way round), `peaks` and `steps` (both in ascending m/z
+order, as in `-resolved_out`), `evalue`, `rows` (in `-out`), `path` (the rank of
 the resolved tag using it, empty if none), `role` (`chain`, `inside`, `none`)
 and `next` (nodes continuing it; `~` an arc that only touches, `*` an arc on a
 resolved tag). Both tables are written in input order and are computed only

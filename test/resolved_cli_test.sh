@@ -88,6 +88,24 @@ awk -F'\t' -v OUT="$TMP/t1.tsv" -v GRAPH="$TMP/t1.graph.tsv" '
   }
   END { if (nflank) print nflank " rows with flanks off their ladder"; exit bad }' "$TMP/t1.res.tsv" || fail "-resolved_out rows are inconsistent"
 
+# steps run in ascending m/z order, as peaks: for b/c rows their labels read
+# as sequence, for y/z the reverse of it (rows with plain one-residue steps).
+awk -F'\t' 'NR > 1 && $3 ~ /^[A-Z]+$/ {
+    n = split($15, st, ";"); lab = ""
+    for (k = 1; k <= n; k++) { sub(/:.*/, "", st[k]); lab = ($5 == "b" || $5 == "c") ? lab st[k] : st[k] lab }
+    if (lab != $3) { print "steps " $15 " of " $1 " rank " $2 " (" $5 ") do not read as " $3; bad = 1 }
+    if ($5 == "y" || $5 == "z") ny++; else nb++
+  }
+  END { if (!ny || !nb) { print "no y/z or no b/c rows to check the step order on"; bad = 1 }; exit bad }' "$TMP/t1.res.tsv" \
+  || fail "-resolved_out steps are not in ascending m/z order"
+# The help says so, and that a node's series is its own call (not the resolved tag's).
+"$BIN" --helphelp >"$TMP/help.txt" 2>&1
+tr -s ' \n' ' ' <"$TMP/help.txt" >"$TMP/help1.txt"
+grep -q "steps (both in ascending m/z order: for y and z the steps run C->N, the reverse of sequence)" "$TMP/help1.txt" \
+  || fail "-resolved_out help does not give the order of steps"
+grep -q "series (as judged on its own peaks, before complement pairing" "$TMP/help1.txt" \
+  || fail "-tag_graph_out help does not say a node's series is its own call"
+
 # The options reach the output.
 run ev -threads 2 -resolved_out "$TMP/ev.res.tsv" -resolve_score evidence
 cmp -s "$TMP/t1.res.tsv" "$TMP/ev.res.tsv" && fail "-resolve_score evidence changed nothing"
