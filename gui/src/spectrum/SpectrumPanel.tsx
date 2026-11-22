@@ -11,7 +11,7 @@
 // A file with neither is dumped at FASTag's defaults, and the tab says so.
 // No other reader: without the input there is "Locate input…".
 
-import { useEffect, useMemo, useRef, useState, type JSX, type KeyboardEvent, type PointerEvent, type WheelEvent } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type JSX, type KeyboardEvent, type PointerEvent, type WheelEvent } from 'react'
 import { parseDump, type SpectrumPeaks } from './dump'
 import { hasStep, ladderFor, laddersFor, residueMasses, seriesText, tagRowFrom, type Ladder, type SeriesCall } from './ladder'
 import { buildGraph, kindOf, ladderOf, packRows, sequenceOf, settleSeries, stepLabel, type GPath, type StepKind, type TagGraph, type TagIn } from './graph'
@@ -182,6 +182,9 @@ export default function SpectrumPanel({ target, source, tags: tagsFile, placemen
   const [cand, setCand] = useState<Candidate | null>(null)
   // The spectrum's rows of the run's -resolved_out and -tag_graph_out.
   const [cli, setCli] = useState<{ resolved: CliRows; nodes: CliRows } | { error: string } | null>(null)
+  // The m/z range of the stick plot, which the merge graph follows; of
+  // another spectrum's peaks, the whole spectrum.
+  const [zoomed, setZoomed] = useState<{ of: SpectrumPeaks; range: [number, number] } | null>(null)
 
   // The dump.
   useEffect(() => {
@@ -251,6 +254,13 @@ export default function SpectrumPanel({ target, source, tags: tagsFile, placemen
   }, [source.params])
 
   const spectrum = peaks.state === 'ok' ? peaks.spectrum : null
+  const plotRange = useMemo((): [number, number] | null => (spectrum ? (zoomed?.of === spectrum ? zoomed.range : fullRange(spectrum.mz)) : null), [spectrum, zoomed])
+  const onRange = useCallback(
+    (r: [number, number]): void => {
+      if (spectrum) setZoomed({ of: spectrum, range: r })
+    },
+    [spectrum]
+  )
   const row = tags && tags.rows[chosen] ? tagRowFrom(tags.columns, tags.rows[chosen]) : null
   const lads = spectrum && row ? laddersFor(row, spectrum, residues) : null
   const byDb = (l: Ladder): Ladder => withDb(l, cand, spectrum, residues)
@@ -543,6 +553,8 @@ export default function SpectrumPanel({ target, source, tags: tagsFile, placemen
           titles={view?.titles}
           ruler={plotRuler}
           strip={strip}
+          range={plotRange ?? undefined}
+          onRange={onRange}
         />
         {merged && (
           <p className="hint sp-legend">
@@ -550,7 +562,7 @@ export default function SpectrumPanel({ target, source, tags: tagsFile, placemen
             of the two is right) · <span className="sp-key other" /> elsewhere · <em>italic</em>: readings not told apart · thick: E-value ≤ 0.01, faint: &gt; 1
           </p>
         )}
-        {merged && mode === 'graph' && spectrum && <MergeGraph graph={merged.graph} spectrum={spectrum} chosen={contigAt} onChoose={setChosenContig} />}
+        {merged && mode === 'graph' && spectrum && <MergeGraph graph={merged.graph} spectrum={spectrum} range={plotRange ?? undefined} chosen={contigAt} onChoose={setChosenContig} />}
         {cand && (
           <p className="hint sp-peptide" data-testid="peptide">
             Tags placed on <strong className="mono">{cand.peptide}</strong>
@@ -974,7 +986,9 @@ export function StickPlot({
   kinds,
   titles,
   ruler = null,
-  strip = null
+  strip = null,
+  range: rangeIn,
+  onRange
 }: {
   spectrum: SpectrumPeaks
   ladder: Ladder | null
@@ -992,6 +1006,10 @@ export function StickPlot({
   titles?: string[][]
   ruler?: PlotRuler | null
   strip?: ErrorStrip | null
+  // The m/z range shown, when the caller holds it (the merge graph follows
+  // it): every zoom and pan goes to onRange. Left out, the plot holds it.
+  range?: [number, number]
+  onRange?(r: [number, number]): void
 }): JSX.Element {
   const { mz, int } = spectrum
   // By default b/c on the upper line, y/z on the lower; two ladders judged the same series (or not told apart) one above the other.
@@ -1007,8 +1025,10 @@ export function StickPlot({
   const HP = 260 - PAD.t + padT
   const H = HP + (strip ? STRIP_H : 0)
   const full = useMemo(() => fullRange(mz), [mz])
-  const [range, setRange] = useState<[number, number]>(full)
-  useEffect(() => setRange(full), [full])
+  const [own, setOwn] = useState<[number, number]>(full)
+  useEffect(() => setOwn(full), [full])
+  const range = rangeIn ?? own
+  const setRange = onRange ?? setOwn
   const drag = useRef<{ x: number; range: [number, number] } | null>(null)
   const svgRef = useRef<SVGSVGElement>(null)
 

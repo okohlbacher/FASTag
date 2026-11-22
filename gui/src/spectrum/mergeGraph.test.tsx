@@ -9,6 +9,7 @@ import { buildGraph, sequenceOf, type TagIn } from './graph'
 import { parseDump } from './dump'
 import { PROTON, WATER, residueMasses, tagRowFrom } from './ladder'
 import { stepWeight } from './stepScore'
+import { PAD, W } from './plotScale'
 import { swapRanks, toCli } from '../testing/cliGraphTsv'
 import { installMockBridge } from '../testing/mockBridge'
 import type { CliRows } from './cliGraph'
@@ -114,6 +115,51 @@ describe('merge graph', () => {
     expect(none.getAttribute('role')).toBe('img')
     expect(none.hasAttribute('tabindex')).toBe(false)
     expect(c2.querySelectorAll('[tabindex="0"]').length).toBe(1)
+  })
+
+  it("follows the plot's m/z range: bars outside are not drawn nor a tab stop, arcs run to the edge, the lanes stay", () => {
+    const whole = render(<MergeGraph graph={graph} spectrum={S} chosen={0} onChoose={vi.fn()} />)
+    const lanes = (c: HTMLElement): Record<string, string | null> =>
+      Object.fromEntries([...c.querySelectorAll('[data-node]')].map((n) => [n.getAttribute('data-node') ?? '', n.querySelector('.sp-graph-bar')?.getAttribute('y') ?? null]))
+    const all = lanes(whole.container)
+    whole.unmount()
+    // From below the first peak to between b2 and b3: the tags that start above it are out of view.
+    const range: [number, number] = [mz[0] - 5, (b[1] + b[2]) / 2]
+    const seen = graph.placements.map((p, i) => ({ i, on: S.mz[p.peaks[p.peaks.length - 1]] >= range[0] && S.mz[p.peaks[0]] <= range[1] }))
+    const out = seen.filter((x) => !x.on).map((x) => String(x.i))
+    expect(out.length).toBeGreaterThan(0)
+    expect(seen.some((x) => x.on)).toBe(true)
+    const { container } = render(<MergeGraph graph={graph} spectrum={S} range={range} chosen={0} onChoose={vi.fn()} />)
+    const drawn = lanes(container)
+    expect(Object.keys(drawn).sort()).toEqual(seen.filter((x) => x.on).map((x) => String(x.i)).sort())
+    // A drawn bar keeps its lane.
+    for (const [i, y] of Object.entries(drawn)) expect(y, i).toBe(all[i])
+    // Every arc is still drawn, clipped to the plot's width (an arc to a bar out of view runs to the edge).
+    expect(container.querySelectorAll('[data-arc]').length).toBe(graph.arcs.length)
+    const clip = container.querySelector('clipPath rect') as Element
+    expect([clip.getAttribute('x'), clip.getAttribute('width')]).toEqual([String(PAD.l), String(W - PAD.l - PAD.r)])
+    expect(container.querySelector('[data-arc]')?.closest('g[clip-path]')).not.toBeNull()
+    // One tab stop, in view.
+    const stops = [...container.querySelectorAll('[data-node][tabindex="0"]')].map((n) => n.getAttribute('data-node'))
+    expect(stops.length).toBe(1)
+    expect(out).not.toContain(stops[0])
+    expect(screen.getByRole('group', { name: /Merge graph/ }).getAttribute('aria-label')).toContain(`; ${out.length} outside m/z`)
+  })
+
+  it('zooms with the stick plot of the Spectrum tab', async () => {
+    panel(swapRanks(toCli(graph, S, 'scan=1'), 1, 2))
+    await screen.findByTestId('ladder')
+    fireEvent.click(screen.getByLabelText('Merge graph'))
+    await screen.findByTestId('merge-source')
+    const g = screen.getByTestId('merge-graph')
+    const bar = (): number => Number(g.querySelector(`[data-node="${graph.paths[0].chain[0]}"] .sp-graph-bar`)?.getAttribute('width'))
+    const before = bar()
+    fireEvent.click(screen.getByRole('button', { name: 'Zoom in' }))
+    expect(bar()).toBeCloseTo(before / 0.8, 6)
+    fireEvent.click(screen.getByRole('button', { name: 'Zoom in' }))
+    expect(bar()).toBeCloseTo(before / 0.64, 6)
+    fireEvent.click(screen.getByRole('button', { name: 'Whole spectrum' }))
+    expect(bar()).toBeCloseTo(before, 6)
   })
 
   it('the Spectrum tab resolves as FASTag did when the run wrote its tag graph, and its nodes select', async () => {
