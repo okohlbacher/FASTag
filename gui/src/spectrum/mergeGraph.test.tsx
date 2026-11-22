@@ -6,10 +6,10 @@ import { describe, expect, it, vi } from 'vitest'
 import type { JSX } from 'react'
 import SpectrumPanel from './SpectrumPanel'
 import { MergeGraph } from './MergeGraph'
-import { buildGraph, sequenceOf, type TagIn } from './graph'
+import { sequenceOf, type TagIn } from './graph'
 import { parseDump } from './dump'
 import { PROTON, WATER, residueMasses, seriesText, tagRowFrom } from './ladder'
-import { stepWeight } from './stepScore'
+import { cstarGraph } from './stepScore'
 import { PAD, W } from './plotScale'
 import { swapRanks, toCli } from '../testing/cliGraphTsv'
 import { installMockBridge } from '../testing/mockBridge'
@@ -42,7 +42,8 @@ const tag = (t: string, nterm: number, e: string): string[] => ['scan=1', t, Str
 const tagRows = [tag('W', sum('PE'), '0.9'), tag('IDE', sum('PEPT'), '1e-7'), tag('EPT', sum('P'), '1e-9'), tag('PTID', sum('PE'), '1e-8')]
 const FIRST_ROW = 7
 const ins: TagIn[] = tagRows.map((r, i) => ({ row: tagRowFrom(tagCols, r)!, evalue: Number(r[8]), index: i }))
-const graph = buildGraph(ins, S, RES, { join: false, weight: stepWeight(S) })
+// Ranked as the GUI ranks it when it resolves itself (FASTag's default, cstar).
+const graph = cstarGraph(ins, S, RES, false)
 // The panel asks for the spectrum's tags best E-value first, as browser.rs serves them.
 const byE = tagRows.map((_, i) => i).sort((a, b) => Number(tagRows[a][8]) - Number(tagRows[b][8]))
 const tagsPage: ResultsPage = { columns: tagCols, totalRows: 20, matchedRows: 4, rows: byE.map((i) => tagRows[i]), rowIds: byE.map((i) => FIRST_ROW + i), ranked: true, pending: false }
@@ -173,7 +174,7 @@ describe('merge graph', () => {
     const { container, mock } = panel(swapRanks(toCli(graph, S, 'scan=1'), 1, 2))
     await screen.findByTestId('ladder')
     fireEvent.click(screen.getByLabelText('Merge graph'))
-    expect((await screen.findByTestId('merge-source')).textContent).toBe('Resolved by FASTag (ranking steplogodds)')
+    expect((await screen.findByTestId('merge-source')).textContent).toBe('Resolved by FASTag (ranking cstar)')
     expect(screen.getByTestId('merge-summary').textContent).toMatch(/^4 tags \(4 distinct\) → 2 resolved/)
     // Read without an open, and not through resultsQuery (browser.rs refuses a file not open).
     expect(mock.tableQueryCalls.map((c) => c.path)).toEqual(['/d/a.resolved.tsv', '/d/a.taggraph.tsv'])

@@ -245,6 +245,13 @@ function continues(a: Placement, b: Placement, join: boolean, minOverlap: number
 }
 
 /** The graph of @p tags on the peaks of @p s, resolved. */
+/** The placements (graph nodes) buildGraph makes of @p tags on @p s, in
+ *  canonical order, before any chain is taken: what a weight that looks at
+ *  all of them (stepScore.ts cstarWeight) is computed from. */
+export function placementsOf(tags: TagIn[], s: SpectrumPeaks, residues: Residues): Placement[] {
+  return place(tags, s, residues).placements
+}
+
 export interface GraphOpts {
   join: boolean
   minOverlap?: number

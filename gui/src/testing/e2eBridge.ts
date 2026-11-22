@@ -105,7 +105,7 @@ import ecoliDumpsDa from '../fixtures/cli/v112-ecoli-dump/dumps.da.jsonl?raw'
 import { parseDump, splitDumps } from '../spectrum/dump'
 import { buildGraph, type TagGraph, type TagIn } from '../spectrum/graph'
 import { residueMasses, tagRowFrom } from '../spectrum/ladder'
-import { stepWeight } from '../spectrum/stepScore'
+import { cstarGraph } from '../spectrum/stepScore'
 import type { CliRows } from '../spectrum/cliGraph'
 import { swapRanks, toCli, tsv } from './cliGraphTsv'
 import digestTsv from '../fixtures/digest.tsv?raw'
@@ -586,7 +586,7 @@ export function installE2EBridge(): Origin | undefined {
           const e = Number(r[ev])
           if (row) ins.push({ row, evalue: r[ev] !== '' && e >= 0 ? e : null, index: k })
         })
-      const g = buildGraph(ins, d.spectrum, residueMasses(undefined), { join: false, weight: stepWeight(d.spectrum) })
+      const g = cstarGraph(ins, d.spectrum, residueMasses(undefined), false)
       return [{ id, g, t: toCli(g, d.spectrum, id) }]
     })
     const rank = (g: TagGraph): number => 100 * g.arcs.filter((a) => a.used).length + g.paths.length

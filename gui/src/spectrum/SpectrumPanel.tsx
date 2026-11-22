@@ -14,11 +14,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type JSX, type KeyboardEvent, type PointerEvent, type WheelEvent } from 'react'
 import { parseDump, type SpectrumPeaks } from './dump'
 import { hasStep, ladderFor, laddersFor, residueMasses, seriesText, tagRowFrom, type Ladder, type SeriesCall } from './ladder'
-import { buildGraph, kindOf, ladderOf, packRows, sequenceOf, settleSeries, stepLabel, type GPath, type StepKind, type TagGraph, type TagIn } from './graph'
+import { kindOf, ladderOf, packRows, sequenceOf, settleSeries, stepLabel, type GPath, type StepKind, type TagGraph, type TagIn } from './graph'
 import { fromCli, type CliRows } from './cliGraph'
 import { MergeGraph } from './MergeGraph'
 import { PAD, W, fullRange } from './plotScale'
-import { stepWeight } from './stepScore'
+import { cstarGraph } from './stepScore'
 import { dbCall, ladderSteps, likelyPeptide, rulerOf, stepOnRuler, stepsOnRuler, ticksOf, type Candidate, type Ruler } from './peptide'
 import { baseName } from '../digestReport'
 import { EValue, columnLabel, hitWords, spectrumHint } from '../ResultsTable'
@@ -307,8 +307,9 @@ export default function SpectrumPanel({ target, source, tags: tagsFile, placemen
       if (!badCutoff && cutoff !== Infinity && (evalue == null || evalue > cutoff)) return void above++
       ins.push({ row: tr, evalue, index: i })
     })
-    // Ranked by the log-odds of their steps (stepScore.ts), not by summed E-values.
-    const graph = run?.ok ? run.graph : buildGraph(ins, spectrum, residues, { join, weight: stepWeight(spectrum) })
+    // Ranked as FASTag ranks them by default (-resolve_score cstar,
+    // stepScore.ts): the C* log-odds of their steps, rank 1 by noself.
+    const graph = run?.ok ? run.graph : cstarGraph(ins, spectrum, residues, join)
     // The database peptide, when the run placed this spectrum's tags, decides the series
     // (and with it its complements and which tags read the same residues).
     if (cand) settleSeries(graph, spectrum, (p: GPath) => dbCall(cand, p.steps, p.charge, p.series, residues, spectrum))
@@ -318,8 +319,8 @@ export default function SpectrumPanel({ target, source, tags: tagsFile, placemen
     const used = byRun ? new Set(graph.placements.flatMap((p) => p.rows)).size : ins.length
     return { graph, all, allRows: packRows(graph, spectrum, span * 0.01).rows, above: byRun ? 0 : above, used, byRun, why }
   }, [allTags, spectrum, tags, cutoff, badCutoff, residues, join, cand, cli, cliPending, source.params])
-  // The ranking FASTag used (-resolve_score; steplogodds by default).
-  const scheme = String(source.params?.['resolve_score'] ?? 'steplogodds')
+  // The ranking FASTag used (-resolve_score; cstar by default).
+  const scheme = String(source.params?.['resolve_score'] ?? 'cstar')
   const contigAt = merged && chosenContig?.g === merged.graph && chosenContig.i < merged.graph.paths.length ? chosenContig.i : 0
   const choose = useCallback((i: number): void => setChosenContig(merged ? { g: merged.graph, i } : null), [merged])
   const sel = merged ? (merged.graph.paths[contigAt] ?? null) : null
