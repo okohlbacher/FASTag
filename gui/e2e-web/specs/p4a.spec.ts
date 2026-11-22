@@ -16,7 +16,7 @@ const TOTAL = ROWS.length.toLocaleString('en-US')
 const SPECTRA = [...new Set(ROWS.map((r) => r[0]))]
 const count = (s: string): number => ROWS.filter((r) => r[0] === s).length
 
-async function openTags(page: Page, fixture: 'spectrum' | 'spectrum-1.11'): Promise<void> {
+async function openTags(page: Page, fixture: 'spectrum' | 'spectrum-1.11' | 'spectrum-resolved'): Promise<void> {
   await openApp(page, fixture)
   await goTo(page, 'Results')
   await page.getByRole('button', { name: 'Open tags…' }).click()
@@ -143,4 +143,47 @@ test('a double-click on a row opens its spectrum; all tags resolved by the tag g
   await member.click()
   await expect(page.getByLabel('Chosen tag')).toBeChecked()
   await expect(page.getByTestId('ladder')).toContainText(tag)
+})
+
+test('with the run\'s resolved tags and tag graph, all tags are resolved as FASTag did; the merge graph selects a resolved tag', async ({ page }) => {
+  await openTags(page, 'spectrum-resolved')
+  // The two tables of the run, dropped beside its tags.
+  await page.evaluate(() => {
+    ;(window as unknown as { __fastagE2E: { drop(r: unknown): void } }).__fastagE2E.drop({
+      spectra: [], batch: false, fasta: null, taxdb: null, results: null, sdrf: null, ignored: [],
+      reports: [
+        { kind: 'resolved', path: '/data/run01.resolved.tsv' },
+        { kind: 'taggraph', path: '/data/run01.taggraph.tsv' }
+      ]
+    })
+  })
+  await expect(page.getByText(/No tab shows|Not a file FASTag opens/)).toHaveCount(0)
+  await expect(page.getByText(`Showing ${TOTAL} of ${TOTAL}`)).toBeVisible()
+  // A spectrum the fixture wrote the tables for.
+  const [id] = await mockState<string[]>(page, 'resolvedSpectra')
+  const box = page.getByLabel('Spectrum contains', { exact: true })
+  await box.fill(id)
+  await box.press('Enter')
+  await page.locator('.rt-rows .rt-row').filter({ has: page.locator(`[role=gridcell][title="${id}"]`) }).first().dblclick()
+  await expect(heading(page)).toHaveAttribute('title', id)
+  await expect(page.getByRole('tab', { name: 'Spectrum' })).toHaveAttribute('aria-selected', 'true')
+  await page.getByLabel('Merge graph').check()
+  await expect(page.getByTestId('merge-source')).toHaveText(/^Resolved by FASTag/)
+  // FASTag's own resolution: the GUI's cutoff does not apply.
+  await expect(page.getByLabel('Largest E-value of the tags used')).toHaveCount(0)
+  const graph = page.getByTestId('merge-graph')
+  await expect(graph.locator('[data-node]').first()).toBeVisible()
+  const table = page.getByRole('grid', { name: 'Resolved tags of this spectrum' })
+  const n = await table.locator('tbody tr').count()
+  // A node of the last resolved tag selects it, and the ladder drawn is its.
+  const node = graph.getByRole('button', { name: new RegExp(`builds resolved tag ${n}\\b`) }).first()
+  await node.click()
+  await expect(table.locator('tbody tr').nth(n - 1)).toHaveAttribute('aria-selected', 'true')
+  await expect(node).toHaveAttribute('aria-pressed', 'true')
+  const seq = ((await table.locator('tbody tr').nth(n - 1).locator('td').first().textContent()) ?? '').replace(/^#\d+ /, '').split(' ')[0]
+  await expect(page.getByTestId('ladder')).toContainText(seq)
+  // From the keyboard too.
+  await graph.getByRole('button', { name: /builds resolved tag 1\b/ }).first().focus()
+  await page.keyboard.press('Enter')
+  await expect(table.locator('tbody tr').first()).toHaveAttribute('aria-selected', 'true')
 })

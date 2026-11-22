@@ -1,0 +1,141 @@
+// The merge graph of one spectrum: its tag graph as a node-link drawing on
+// the stick plot's m/z axis. A node is a placement (the tags on one chain of
+// peaks), a bar from its first to its last peak, in the band of its layer
+// (ion series pair and fragment charge), in lanes so bars do not overlap.
+// An arc is one placement continuing another (solid: they share a step,
+// dashed: they only touch); arcs that build a resolved tag are bold in the
+// colour of its rank, the tags inside it hang from it. A node selects its
+// resolved tag, as a row of the resolved tags table does.
+
+import { useMemo, type JSX, type KeyboardEvent } from 'react'
+import type { SpectrumPeaks } from './dump'
+import { layerOf, sequenceOf, type TagGraph } from './graph'
+import { seriesText } from './ladder'
+import { PAD, W, fullRange } from './plotScale'
+
+const BAND_TOP = 18
+const LANE_H = 28
+const BAR_Y = 13
+const BAR_H = 9
+// Least room between two bars of a lane (user units).
+const GAP = 8
+// About the width of a label character (12px mono in a 1000-unit box).
+const CHAR = 7.4
+
+// The colour of a rank: the first three apart, the rest alike (the rank is written on the node).
+const rankCls = (path: number): string => `r${Math.min(path + 1, 4)}`
+
+export function MergeGraph({ graph: g, spectrum: s, chosen, onChoose }: { graph: TagGraph; spectrum: SpectrumPeaks; chosen: number; onChoose(path: number): void }): JSX.Element {
+  const layout = useMemo(() => {
+    const [lo, hi] = fullRange(s.mz)
+    const X = (x: number): number => PAD.l + ((x - lo) / (hi - lo)) * (W - PAD.l - PAD.r)
+    const owner = g.placements.map((): { path: number; inside: boolean } | null => null)
+    g.paths.forEach((p, k) => {
+      for (const i of p.chain) owner[i] = { path: k, inside: false }
+      for (const i of p.inside) owner[i] = { path: k, inside: true }
+    })
+    const layers = [...new Set(g.placements.map(layerOf))].sort()
+    const nodes = g.placements.map((pl, i) => {
+      const x1 = X(s.mz[pl.peaks[0]])
+      return { i, x1, x2: Math.max(x1 + 3, X(s.mz[pl.peaks[pl.peaks.length - 1]])), y: 0, seq: sequenceOf(pl) }
+    })
+    const bands: { label: string; top: number; height: number }[] = []
+    let top = 0
+    for (const layer of layers) {
+      const mine = nodes.filter((n) => layerOf(g.placements[n.i]) === layer).sort((a, b) => a.x1 - b.x1 || a.i - b.i)
+      const ends: number[] = []
+      for (const n of mine) {
+        let lane = ends.findIndex((e) => e + GAP < n.x1)
+        if (lane < 0) lane = ends.push(0) - 1
+        ends[lane] = n.x2
+        n.y = top + BAND_TOP + lane * LANE_H + BAR_Y
+      }
+      const pl = g.placements[mine[0].i]
+      bands.push({ label: `${layer.startsWith('cz') ? 'c/z' : 'b/y'} ${pl.charge}+`, top, height: BAND_TOP + ends.length * LANE_H })
+      top += BAND_TOP + ends.length * LANE_H
+    }
+    return { nodes, owner, bands, height: Math.max(top, 40) + 4 }
+  }, [g, s])
+  const { nodes, owner, bands, height } = layout
+  const mid = (i: number): number => nodes[i].y + BAR_H / 2
+
+  function key(e: KeyboardEvent<SVGGElement>, path: number | undefined): void {
+    if (path == null || (e.key !== 'Enter' && e.key !== ' ')) return
+    e.preventDefault()
+    onChoose(path)
+  }
+
+  return (
+    <div className="sp-graph" data-testid="merge-graph">
+      <svg viewBox={`0 0 ${W} ${height}`} preserveAspectRatio="none" className="sp-graph-svg" style={{ height }} role="group" aria-label={`Merge graph: ${g.placements.length} distinct tags, ${g.arcs.length} joins, ${g.paths.length} resolved tags`}>
+        {bands.map((b, k) => (
+          <g key={b.label} className="sp-graph-band">
+            {k > 0 && <line x1={PAD.l} x2={W - PAD.r} y1={b.top} y2={b.top} className="sp-axis" />}
+            <text x={4} y={b.top + 14} className="sp-series">
+              {b.label}
+            </text>
+          </g>
+        ))}
+        {/* Arcs under the nodes: from the end of one to the start of the next. */}
+        {g.arcs.map((a) => {
+          const from = nodes[a.from]
+          const to = nodes[a.to]
+          const on = a.used ? owner[a.from] : null
+          const d = `M ${from.x2} ${mid(a.from)} C ${from.x2 + 28} ${mid(a.from)}, ${to.x1 - 28} ${mid(a.to)}, ${to.x1} ${mid(a.to)}`
+          return (
+            <path
+              key={`${a.from}>${a.to}`}
+              d={d}
+              className={`sp-graph-arc${a.touch ? ' touch' : ''}${on ? ` on ${rankCls(on.path)}` : ''}`}
+              data-arc={a.used ? 'used' : 'other'}
+            />
+          )
+        })}
+        {/* A tag inside a resolved tag hangs from the chain tag that holds its first peak. */}
+        {g.placements.map((pl, i) => {
+          const o = owner[i]
+          if (!o?.inside) return null
+          const holder = g.paths[o.path].chain.find((c) => g.placements[c].peaks.includes(pl.peaks[0]))
+          if (holder == null) return null
+          const x = Math.min(nodes[i].x1 + 4, nodes[i].x2)
+          return <line key={`in${i}`} x1={x} x2={x} y1={mid(holder)} y2={mid(i)} className={`sp-graph-attach ${rankCls(o.path)}`} />
+        })}
+        {nodes.map((n) => {
+          const pl = g.placements[n.i]
+          const o = owner[n.i]
+          const rank = o ? `#${o.path + 1}` : ''
+          const label = [o && !o.inside ? rank : '', n.seq].filter(Boolean).join(' ')
+          const fits = label.length * CHAR <= Math.max(n.x2 - n.x1, 0) + 24
+          const role = o ? `${o.inside ? 'inside' : 'builds'} resolved tag ${o.path + 1}` : 'in no resolved tag'
+          const title = `${n.seq} (${seriesText(pl.series, pl.call)} ${pl.charge}+) · E-value ${pl.evalue ?? 'none'} · ${pl.rows.length} tag${pl.rows.length === 1 ? '' : 's'}${pl.tags.length ? `: ${pl.tags.join(', ')}` : ''} · ${role}`
+          const cls = `sp-graph-node${o ? ` ${rankCls(o.path)}${o.inside ? ' inside' : ''}` : ' none'}${o && o.path === chosen ? ' sel' : ''}`
+          return (
+            <g
+              key={n.i}
+              className={cls}
+              data-node={n.i}
+              tabIndex={0}
+              role={o ? 'button' : undefined}
+              aria-label={`${n.seq}, ${role}${pl.evalue != null ? `, E-value ${pl.evalue}` : ''}`}
+              aria-pressed={o ? o.path === chosen : undefined}
+              onClick={o ? () => onChoose(o.path) : undefined}
+              onKeyDown={(e) => key(e, o?.path)}
+            >
+              <title>{title}</title>
+              {/* What a pointer hits: the bar and its label. */}
+              <rect x={n.x1 - 3} y={n.y - 13} width={Math.max(n.x2 - n.x1, (fits ? label : rank).length * CHAR) + 6} height={BAR_H + 15} className="sp-graph-hit" />
+              <rect x={n.x1} y={n.y} width={n.x2 - n.x1} height={BAR_H} rx={2} className="sp-graph-bar" />
+              <text x={n.x1} y={n.y - 3} className="sp-graph-label">
+                {fits ? label : rank}
+              </text>
+            </g>
+          )
+        })}
+      </svg>
+      <p className="hint sp-legend">
+        Each bar is a distinct tag from its first to its last peak (m/z as in the plot, whole spectrum), one band per ion layer · solid: it continues the tag before over a
+        shared step, dashed: they only touch · bold: joins that build resolved tag #n (its colour); thin bars hang inside it · choose a tag to select its resolved tag
+      </p>
+    </div>
+  )
+}

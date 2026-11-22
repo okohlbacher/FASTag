@@ -2,6 +2,21 @@
 
 ## Unreleased
 
+- **CLI: tag merging, `-resolved_out` and `-tag_graph_out`.** FASTag merges the tags of each spectrum into resolved
+  tags itself, as the desktop app's Spectrum tab did (src/TagGraph.h, a port of its graph with the same tie-breaks):
+  one row per resolved tag in rank order (sequence N→C, series call, flanks, score, evidence, peaks, steps, the member
+  rows of `-out`), and the merge graph, one row per placement. Ranked by the preregistered step log-odds less 3
+  (`-resolve_score steplogodds`, `-resolve_threshold`); `evidence` and `anchor` for comparison; tags with E <= 1
+  (`-resolve_max_evalue`); `-resolve_join` joins tags that only touch. Off unless asked for; not under `-stream`.
+  On PXD003531, PXD000001 and PXD076528 the resolved tags equal the GUI's on every scan and rank when both use the
+  tagger's residue masses.
+
+- **GUI: FASTag's own resolved tags, and the merge graph.** When the CLI has `-resolved_out` and `-tag_graph_out`,
+  the app writes them beside the tags (`<stem>.resolved.tsv`, `<stem>.taggraph.tsv`) and the Spectrum tab's All tags,
+  resolved shows FASTag's resolution (it says which one is used, and falls back to the GUI's when the tables do not
+  fit the peaks). The new Merge graph view draws the tag graph: tags as bars on the m/z axis, one band per ion layer,
+  joins as arcs, those of a resolved tag in the colour of its rank; a tag selects its resolved tag.
+
 - **GUI: all tags of a spectrum, resolved.** The Spectrum tab's **All tags, resolved** places every tag of the spectrum
   on its peaks and assembles the tags of one ion series that overlap and agree into longer resolved tags (a tag graph:
   ions as nodes, steps of tags as edges). Row orders of one gapped tag count once, isobaric readings of a step stay

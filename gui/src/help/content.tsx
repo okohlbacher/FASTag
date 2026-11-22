@@ -768,6 +768,17 @@ export const RESULTS: HelpPage = {
             order; a tag there opens alone.
           </p>
           <p>
+            When the run wrote its resolved tags and tag graph (FASTag with -resolved_out and -tag_graph_out, which
+            the app passes beside the tags when the CLI has them), the tags are resolved as FASTag resolved them and
+            the line beside the summary says Resolved by FASTag; the E-value cutoff and Join are then FASTag&apos;s own.
+            Otherwise, or when those tables do not fit the spectrum&apos;s peaks, it says Resolved in the GUI (and why).
+            Merge graph draws the tag graph itself: each distinct tag is a bar from its first to its last peak on the
+            plot&apos;s m/z axis, one band per ion layer; a line joins a tag to one that continues it (solid over a shared
+            step, dashed where they only touch), bold in the colour of the resolved tag it builds, whose rank is written
+            on the bar. Tags inside a resolved tag hang from it. Choosing a bar, by click or Enter, selects its
+            resolved tag as the table does.
+          </p>
+          <p>
             When the run wrote tag placements (a protein database and Tag placements), the peptide most tags of the
             spectrum were placed on is named under the plot, and its fragments in the ion series and charge of the
             tag drawn are the top row of the plot (DB), with the residues the tag confirms in bold; the table counts

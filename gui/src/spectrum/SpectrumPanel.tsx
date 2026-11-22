@@ -15,6 +15,9 @@ import { useEffect, useMemo, useRef, useState, type JSX, type KeyboardEvent, typ
 import { parseDump, type SpectrumPeaks } from './dump'
 import { hasStep, ladderFor, laddersFor, residueMasses, seriesText, tagRowFrom, type Ladder, type SeriesCall } from './ladder'
 import { buildGraph, kindOf, ladderOf, packRows, sequenceOf, settleSeries, stepLabel, type GPath, type StepKind, type TagGraph, type TagIn } from './graph'
+import { fromCli, type CliRows } from './cliGraph'
+import { MergeGraph } from './MergeGraph'
+import { PAD, W, fullRange } from './plotScale'
 import { stepWeight } from './stepScore'
 import { dbCall, ladderSteps, likelyPeptide, rulerOf, stepOnRuler, stepsOnRuler, ticksOf, type Candidate, type Ruler } from './peptide'
 import { baseName } from '../digestReport'
@@ -50,6 +53,10 @@ interface Props {
   // The run's tag placements (-recon_out), when it wrote them: the peptide
   // most tags of the spectrum were placed on is drawn as a ruler.
   placements?: string | null
+  // The run's resolved tags and tag graph (-resolved_out, -tag_graph_out),
+  // when it wrote both: all tags are resolved as FASTag resolved them.
+  resolved?: string | null
+  tagGraph?: string | null
   // Another spectrum of the file (◀ ▶).
   onTarget(t: SpectrumTarget): void
   // The input moved or is unknown: the user picks it.
@@ -110,11 +117,12 @@ async function query(...a: Parameters<typeof window.fastag.resultsQuery>): Retur
   }
 }
 
-/** The tags of @p spectrum in @p path, best E-value first: the exact ID
- *  (as a substring, scan=1 would also match scan=10..19, 100..199, ...),
- *  every page of them (a page holds at most PAGE rows). */
-async function tagsOf(path: string, spectrum: string): Promise<TagsOf> {
-  const view: ResultsView = { sort: { column: 'evalue', desc: false }, spectrum, spectrumExact: true }
+/** The rows of @p spectrum in @p path, best E-value first (@p sort) or in
+ *  file order: the exact ID (as a substring, scan=1 would also match
+ *  scan=10..19, 100..199, ...), every page of them (a page holds at most
+ *  PAGE rows). */
+async function tagsOf(path: string, spectrum: string, sort: ResultsView['sort'] = { column: 'evalue', desc: false }): Promise<TagsOf> {
+  const view: ResultsView = { sort, spectrum, spectrumExact: true }
   const out: TagsOf = { columns: [], rows: [], rowIds: [] }
   for (;;) {
     const page = await query(path, view, out.rows.length, PAGE)
@@ -145,7 +153,14 @@ async function neighbour(path: string, spectrum: string, rowId: number | null, d
   return { spectrum: page.rows[0][page.columns.indexOf('spectrum')] ?? '', rowId: page.rowIds?.[0] ?? null }
 }
 
-export default function SpectrumPanel({ target, source, tags: tagsFile, placements, onTarget, onLocate }: Props): JSX.Element {
+/** The spectrum's rows of the run's resolved tags and tag graph, in file order. */
+async function cliOf(resolved: string, tagGraph: string, spectrum: string): Promise<{ resolved: CliRows; nodes: CliRows }> {
+  const r = await tagsOf(resolved, spectrum, null)
+  const n = await tagsOf(tagGraph, spectrum, null)
+  return { resolved: r, nodes: n }
+}
+
+export default function SpectrumPanel({ target, source, tags: tagsFile, placements, resolved, tagGraph, onTarget, onLocate }: Props): JSX.Element {
   const tagsPath = tagsFile === undefined ? target.path : tagsFile
   const [peaks, setPeaks] = useState<Peaks>({ state: 'loading' })
   const [tags, setTags] = useState<TagsOf | null>(null)
@@ -155,12 +170,16 @@ export default function SpectrumPanel({ target, source, tags: tagsFile, placemen
   const [nav, setNav] = useState<{ prev: boolean; next: boolean }>({ prev: false, next: false })
   const [navNote, setNavNote] = useState('')
   const [retry, setRetry] = useState(0)
-  // Every tag at once, resolved by the tag graph (graph.ts); a cutoff on E-value.
-  const [allTags, setAllTags] = useState(false)
+  // Every tag at once, resolved by the tag graph (graph.ts or FASTag's,
+  // cliGraph.ts), as tables or as the merge graph; a cutoff on E-value.
+  const [mode, setMode] = useState<'one' | 'all' | 'graph'>('one')
+  const allTags = mode !== 'one'
   const [maxE, setMaxE] = useState('1')
   const [join, setJoin] = useState(false)
   const [chosenContig, setChosenContig] = useState(0)
   const [cand, setCand] = useState<Candidate | null>(null)
+  // The spectrum's rows of the run's -resolved_out and -tag_graph_out.
+  const [cli, setCli] = useState<{ resolved: CliRows; nodes: CliRows } | { error: string } | null>(null)
 
   // The dump.
   useEffect(() => {
@@ -192,8 +211,10 @@ export default function SpectrumPanel({ target, source, tags: tagsFile, placemen
     setTagsError(null)
     setNav({ prev: false, next: false })
     setCand(null)
-    // The tags first, then where ◀ ▶ lead: one view build at a time, so the
-    // panel's own queries do not cancel each other (see query()).
+    setCli(null)
+    // The tags first, then FASTag's tag graph, then where ◀ ▶ lead: one
+    // view build at a time, so the panel's own queries do not cancel each
+    // other (see query()).
     if (!tagsPath) return
     tagsOf(tagsPath, target.spectrum)
       .then((t) => {
@@ -203,6 +224,11 @@ export default function SpectrumPanel({ target, source, tags: tagsFile, placemen
         setChosen(at >= 0 ? at : 0)
       })
       .catch((e: unknown) => live && setTagsError(e instanceof Error ? e.message : String(e)))
+      .then(() => (resolved && tagGraph ? cliOf(resolved, tagGraph, target.spectrum) : null))
+      .then(
+        (c) => live && setCli(c),
+        (e: unknown) => live && setCli({ error: e instanceof Error ? e.message : String(e) })
+      )
       .then(() => Promise.all([neighbour(tagsPath, target.spectrum, target.rowId, -1), neighbour(tagsPath, target.spectrum, target.rowId, 1)]))
       .then(([p, n]) => live && setNav({ prev: !!p, next: !!n }))
       .catch(() => live && setNav({ prev: false, next: false }))
@@ -213,7 +239,7 @@ export default function SpectrumPanel({ target, source, tags: tagsFile, placemen
     return () => {
       live = false
     }
-  }, [tagsPath, placements, target.spectrum, target.rowId])
+  }, [tagsPath, placements, resolved, tagGraph, target.spectrum, target.rowId])
 
   const residues = useMemo(() => {
     const f = source.params?.['fixed_modifications']
@@ -230,8 +256,17 @@ export default function SpectrumPanel({ target, source, tags: tagsFile, placemen
 
   const cutoff = maxE.trim() === '' ? Infinity : Number(maxE)
   const badCutoff = !Number.isFinite(cutoff) && cutoff !== Infinity
+  // FASTag's tag graph is still being read: nothing resolved meanwhile.
+  const cliPending = !!(resolved && tagGraph) && cli === null
   const merged = useMemo(() => {
-    if (!allTags || !spectrum || !tags) return null
+    if (!allTags || !spectrum || !tags || cliPending) return null
+    // FASTag's graph when the run wrote it and it fits the peaks; its rows
+    // name the spectrum's tags in -out (file) order.
+    const order = tags.rows.map((_, i) => i).sort((a, b) => (tags.rowIds[a] ?? a) - (tags.rowIds[b] ?? b))
+    const tg = tags.columns.indexOf('tag')
+    const run = cli && !('error' in cli) ? fromCli(cli.resolved, cli.nodes, spectrum, residues, order.map((i) => ({ index: i, tag: tags.rows[i][tg] ?? '' }))) : null
+    // Why the GUI resolves although the run wrote FASTag's graph.
+    const why = cli && 'error' in cli ? `FASTag's tag graph could not be read (${cli.error})` : run && !run.ok ? `FASTag's tag graph does not fit the peaks (${run.error})` : null
     const ev = tags.columns.indexOf('evalue')
     const ins: TagIn[] = []
     let above = 0
@@ -245,14 +280,18 @@ export default function SpectrumPanel({ target, source, tags: tagsFile, placemen
       ins.push({ row: tr, evalue, index: i })
     })
     // Ranked by the log-odds of their steps (stepScore.ts), not by summed E-values.
-    const graph = buildGraph(ins, spectrum, residues, { join, weight: stepWeight(spectrum) })
+    const graph = run?.ok ? run.graph : buildGraph(ins, spectrum, residues, { join, weight: stepWeight(spectrum) })
     // The database peptide, when the run placed this spectrum's tags, decides the series
     // (and with it its complements and which tags read the same residues).
     if (cand) settleSeries(graph, spectrum, (p: GPath) => dbCall(cand, p.steps, p.charge, p.series, residues, spectrum))
     const all = graph.paths.map((p) => ladderOf(p, spectrum))
     const span = spectrum.mz.length ? spectrum.mz[spectrum.mz.length - 1] - spectrum.mz[0] : 1
-    return { graph, all, allRows: packRows(graph, spectrum, span * 0.01).rows, above, used: ins.length }
-  }, [allTags, spectrum, tags, cutoff, badCutoff, residues, join, cand])
+    const byRun = !!run?.ok
+    const used = byRun ? new Set(graph.placements.flatMap((p) => p.rows)).size : ins.length
+    return { graph, all, allRows: packRows(graph, spectrum, span * 0.01).rows, above: byRun ? 0 : above, used, byRun, why }
+  }, [allTags, spectrum, tags, cutoff, badCutoff, residues, join, cand, cli, cliPending])
+  // The ranking FASTag used (-resolve_score; steplogodds by default).
+  const scheme = String(source.params?.['resolve_score'] ?? 'steplogodds')
   const contigAt = merged && chosenContig < merged.graph.paths.length ? chosenContig : 0
   const sel = merged ? (merged.graph.paths[contigAt] ?? null) : null
   // The peptide's fragments in the layer of the tag drawn.
@@ -445,12 +484,15 @@ export default function SpectrumPanel({ target, source, tags: tagsFile, placemen
       <>
         <div className="sp-mode" role="group" aria-label="Tags drawn">
           <label>
-            <input type="radio" name="sp-mode" checked={!allTags} onChange={() => setAllTags(false)} /> Chosen tag
+            <input type="radio" name="sp-mode" checked={mode === 'one'} onChange={() => setMode('one')} /> Chosen tag
           </label>
           <label>
-            <input type="radio" name="sp-mode" checked={allTags} onChange={() => setAllTags(true)} /> All tags, resolved
+            <input type="radio" name="sp-mode" checked={mode === 'all'} onChange={() => setMode('all')} /> All tags, resolved
           </label>
-          {allTags && (
+          <label>
+            <input type="radio" name="sp-mode" checked={mode === 'graph'} onChange={() => setMode('graph')} /> Merge graph
+          </label>
+          {allTags && !merged?.byRun && (
             <label>
               E-value ≤{' '}
               <input
@@ -465,7 +507,7 @@ export default function SpectrumPanel({ target, source, tags: tagsFile, placemen
               />
             </label>
           )}
-          {allTags && (
+          {allTags && !merged?.byRun && (
             <label title="Also continue a tag with another that only touches it at a peak (no single tag spans the junction; marked with a hollow dot)">
               <input type="checkbox" checked={join} onChange={(e) => setJoin(e.target.checked)} /> Join tags that only touch
             </label>
@@ -476,7 +518,12 @@ export default function SpectrumPanel({ target, source, tags: tagsFile, placemen
               {view && view.hidden > 0 ? ` · ${view.hidden} only in the table` : ''}
               {merged.graph.offPeaks.length > 0 ? ` · ${merged.graph.offPeaks.length} not on the peaks (not drawn)` : ''}
               {merged.above > 0 ? ` · ${merged.above} above the cutoff` : ''}
-              {badCutoff ? ' · the cutoff is not a number' : ''}
+              {badCutoff && !merged.byRun ? ' · the cutoff is not a number' : ''}
+            </span>
+          )}
+          {merged && (
+            <span className="hint" data-testid="merge-source">
+              {merged.byRun ? `Resolved by FASTag (ranking ${scheme})` : `Resolved in the GUI${merged.why ? `: ${merged.why}` : ''}`}
             </span>
           )}
         </div>
@@ -499,6 +546,7 @@ export default function SpectrumPanel({ target, source, tags: tagsFile, placemen
             of the two is right) · <span className="sp-key other" /> elsewhere · <em>italic</em>: readings not told apart · thick: E-value ≤ 0.01, faint: &gt; 1
           </p>
         )}
+        {merged && mode === 'graph' && spectrum && <MergeGraph graph={merged.graph} spectrum={spectrum} chosen={contigAt} onChoose={setChosenContig} />}
         {cand && (
           <p className="hint sp-peptide" data-testid="peptide">
             Tags placed on <strong className="mono">{cand.peptide}</strong>
@@ -539,7 +587,7 @@ export default function SpectrumPanel({ target, source, tags: tagsFile, placemen
           <p className="hint">Tags file not opened: open the run's tags table to see the tags of this spectrum.</p>
         ) : tagsError ? (
           <p className="hint">Cannot read the tags: {tagsError}</p>
-        ) : !tags ? (
+        ) : !tags || (allTags && cliPending) ? (
           <p className="hint">Reading…</p>
         ) : merged ? (
           <>
@@ -552,7 +600,7 @@ export default function SpectrumPanel({ target, source, tags: tagsFile, placemen
                 ruler={ruler}
                 onTag={(i) => {
                   setChosen(i)
-                  setAllTags(false)
+                  setMode('one')
                 }}
               />
             )}
@@ -867,9 +915,6 @@ export function LadderLine({ ladder, tag, unit, written }: { ladder: Ladder; tag
   )
 }
 
-// The plot's frame (SVG user units; the element scales to its box).
-const W = 1000
-const PAD = { l: 48, r: 12, t: 56, b: 28 }
 // The tag lines above the peaks: the N-terminal series (b, c) on the upper,
 // the C-terminal one (y, z) on the lower.
 const LINE_Y = (series: Ladder['series']): number => (series === 'b' || series === 'c' ? 18 : 42)
@@ -957,11 +1002,7 @@ export function StickPlot({
   // The plot's own height; the error strip hangs below the axis.
   const HP = 260 - PAD.t + padT
   const H = HP + (strip ? STRIP_H : 0)
-  const full = useMemo((): [number, number] => {
-    if (mz.length === 0) return [0, 1]
-    const pad = Math.max(1, (mz[mz.length - 1] - mz[0]) * 0.03)
-    return [Math.max(0, mz[0] - pad), mz[mz.length - 1] + pad]
-  }, [mz])
+  const full = useMemo(() => fullRange(mz), [mz])
   const [range, setRange] = useState<[number, number]>(full)
   useEffect(() => setRange(full), [full])
   const drag = useRef<{ x: number; range: [number, number] } | null>(null)

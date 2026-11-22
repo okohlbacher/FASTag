@@ -49,6 +49,11 @@
 //               /data/run01.tags.tsv names its input and parameters
 //   spectrum-1.11  the same with a CLI without -dump_spectrum (FASTag 1.11):
 //               no Spectrum tab, and the row action says so
+//   spectrum-resolved  the spectrum fixture with /data/run01.resolved.tsv and
+//               /data/run01.taggraph.tsv (-resolved_out, -tag_graph_out) for
+//               the two spectra of the best tags, written from the GUI's own
+//               tag graph until the CLI writes them (testing/cliGraphTsv.ts);
+//               every resultsQuery is served from the file it names
 //   gate-batch  P2b Batch summary: Add folder… on /data lists eight spectra
 //               files, one per job of a real batch (src/fixtures/cli/batch,
 //               testing/batchFixtures.ts): each prints that job's log and
@@ -97,7 +102,12 @@ import ecoliTags from '../../e2e-web/fixtures/ecoli.tags.tsv?raw'
 import ecoliResConf from '../fixtures/denovo/ecoli.res_conf.tags.tsv?raw'
 import ecoliDumps from '../fixtures/cli/v112-ecoli-dump/dumps.ppm.jsonl?raw'
 import ecoliDumpsDa from '../fixtures/cli/v112-ecoli-dump/dumps.da.jsonl?raw'
-import { splitDumps } from '../spectrum/dump'
+import { parseDump, splitDumps } from '../spectrum/dump'
+import { buildGraph, type TagGraph, type TagIn } from '../spectrum/graph'
+import { residueMasses, tagRowFrom } from '../spectrum/ladder'
+import { stepWeight } from '../spectrum/stepScore'
+import type { CliRows } from '../spectrum/cliGraph'
+import { toCli, tsv } from './cliGraphTsv'
 import digestTsv from '../fixtures/digest.tsv?raw'
 import labelTsv from '../fixtures/label.tsv?raw'
 import massgapTsv from '../fixtures/massgap.tsv?raw'
@@ -530,8 +540,10 @@ export function installE2EBridge(): Origin | undefined {
     }
     mock.resultsPosition = (_path, view, row) => Promise.resolve(ids(view).indexOf(row))
   }
-  if (fixture === 'spectrum' || fixture === 'spectrum-1.11') {
-    const has = fixture === 'spectrum'
+  // The tables each resultsQuery reads, by path (the tags elsewhere).
+  const tables: Record<string, CliRows> = {}
+  if (fixture === 'spectrum' || fixture === 'spectrum-1.11' || fixture === 'spectrum-resolved') {
+    const has = fixture !== 'spectrum-1.11'
     mock.spectrumSupportResult = has
       ? { supported: true, probed: true, detail: 'the CLI has -dump_spectrum' }
       : { supported: false, probed: true, detail: 'the CLI has no -dump_spectrum' }
@@ -557,17 +569,50 @@ export function installE2EBridge(): Origin | undefined {
       }
     ]
   }
-  if (fixture === 'view' || fixture === 'denovo' || fixture === 'spectrum' || fixture === 'spectrum-1.11') {
+  if (fixture === 'spectrum-resolved') {
+    // The GUI's graph of each dumped spectrum (all its tags, in -out order:
+    // 8 of the 2028 have E <= 1, so as with a large -resolve_max_evalue),
+    // as the CLI would write it; the two with the most joins on a resolved
+    // tag, then the most resolved tags, are kept.
+    const [sp, ev] = [tags.columns.indexOf('spectrum'), tags.columns.indexOf('evalue')]
+    const made = Object.keys(mock.spectrumDumps).flatMap((id) => {
+      const d = parseDump(mock.spectrumDumps[id])
+      if (!d.ok) return []
+      const ins: TagIn[] = []
+      tags.rows
+        .filter((r) => r[sp] === id)
+        .forEach((r, k) => {
+          const row = tagRowFrom(tags.columns, r)
+          const e = Number(r[ev])
+          if (row) ins.push({ row, evalue: r[ev] !== '' && e >= 0 ? e : null, index: k })
+        })
+      const g = buildGraph(ins, d.spectrum, residueMasses(undefined), { join: false, weight: stepWeight(d.spectrum) })
+      return [{ id, g, t: toCli(g, d.spectrum, id) }]
+    })
+    const rank = (g: TagGraph): number => 100 * g.arcs.filter((a) => a.used).length + g.paths.length
+    const kept = made.sort((a, b) => rank(b.g) - rank(a.g) || (a.id < b.id ? -1 : 1)).slice(0, 2)
+    ;(mock as unknown as Record<string, unknown>).resolvedSpectra = kept.map((k) => k.id)
+    const out = { resolved: kept.flatMap((k) => k.t.resolved.rows), nodes: kept.flatMap((k) => k.t.nodes.rows), columns: { resolved: kept[0].t.resolved.columns, nodes: kept[0].t.nodes.columns } }
+    tables['/data/run01.resolved.tsv'] = { columns: out.columns.resolved, rows: out.resolved }
+    tables['/data/run01.taggraph.tsv'] = { columns: out.columns.nodes, rows: out.nodes }
+    for (const [path, t] of Object.entries(tables)) mock.reportFiles[path] = tsv(t)
+    // The run wrote them beside its tags (fastag.rs with_tag_graph): its record says so.
+    const rec = mock.history[0]
+    rec.outputs = ['/data/run01.tags.tsv', '/data/run01.resolved.tsv', '/data/run01.taggraph.tsv']
+    rec.argv = [...rec.argv.slice(0, -1), '-resolved_out', '/data/run01.resolved.tsv', '-tag_graph_out', '/data/run01.taggraph.tsv', '-progress']
+  }
+  if (fixture === 'view' || fixture === 'denovo' || fixture === 'spectrum' || fixture === 'spectrum-1.11' || fixture === 'spectrum-resolved') {
     const ids = (view: ResultsView): number[] => viewIds(tags.columns, tags.rows, view)
     mock.resultsQuery = (path, view, offset, limit): Promise<ResultsPage> => {
       mock.resultsQueryCalls.push({ path, view, offset, limit })
-      const all = ids(view)
+      const t = tables[path] ?? tags
+      const all = viewIds(t.columns, t.rows, view)
       const sel = all.slice(offset, offset + Math.min(limit, MAX_WINDOW))
       return Promise.resolve({
-        columns: tags.columns,
-        totalRows: tags.rows.length,
+        columns: t.columns,
+        totalRows: t.rows.length,
         matchedRows: all.length,
-        rows: sel.map((i) => tags.rows[i]),
+        rows: sel.map((i) => t.rows[i]),
         rowIds: sel,
         ranked: true,
         pending: false

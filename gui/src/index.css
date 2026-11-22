@@ -1174,6 +1174,32 @@ kbd { font-family: var(--font-mono); font-size: var(--text-xs); color: var(--mut
 .sp-pile-step.pep { border-bottom: 1px solid var(--plot-muted); font-weight: 400; }
 .sp-pile-step.ambig { font-style: italic; }
 .sp-member { margin-right: 6px; }
+/* The merge graph: the tag graph's placements as bars on the plot's m/z axis,
+   arcs where one continues another, coloured by the rank of the resolved tag
+   they build (the rank is written on the node too). */
+.sp-graph { display: flex; flex-direction: column; gap: var(--space-1); }
+.sp-graph-svg { width: 100%; background: var(--plot-background); border: 1px solid var(--border); border-radius: var(--radius-md); }
+.sp-graph-node { cursor: pointer; --rank: var(--plot-foreground); }
+.sp-graph-hit { fill: transparent; stroke: none; }
+.sp-graph-bar { fill: var(--rank); stroke: var(--rank); stroke-width: 1; vector-effect: non-scaling-stroke; }
+.sp-graph-node.inside .sp-graph-bar { fill: var(--plot-background); }
+.sp-graph-node.none { cursor: default; --rank: var(--plot-muted); }
+.sp-graph-node.none .sp-graph-bar { fill: var(--plot-background); stroke-dasharray: 3 2; }
+.sp-graph-node.sel .sp-graph-bar { stroke-width: 3; }
+.sp-graph-node:focus { outline: none; }
+.sp-graph-node:focus-visible .sp-graph-bar { stroke: var(--ring); stroke-width: 3; }
+.sp-graph-label { fill: var(--plot-foreground); font: 600 11px var(--font-seq); pointer-events: none; }
+.sp-graph-arc { fill: none; stroke: var(--plot-muted); stroke-width: 1; opacity: 0.6; vector-effect: non-scaling-stroke; }
+.sp-graph-arc.touch { stroke-dasharray: 4 3; }
+.sp-graph-arc.on { stroke: var(--rank); stroke-width: 3; opacity: 1; }
+.sp-graph-attach { stroke: var(--rank); stroke-width: 1; vector-effect: non-scaling-stroke; }
+.sp-graph-node.r1, .sp-graph-arc.r1, .sp-graph-attach.r1 { --rank: var(--plot-accent); }
+.sp-graph-node.r2, .sp-graph-arc.r2, .sp-graph-attach.r2 { --rank: var(--plot-accent-2); }
+.sp-graph-node.r3, .sp-graph-arc.r3, .sp-graph-attach.r3 { --rank: var(--plot-flag); }
+.sp-graph-node.r4, .sp-graph-arc.r4, .sp-graph-attach.r4 { --rank: var(--plot-muted); }
+/* Below the third rank a tag is drawn hollow: the first three stand out. */
+.sp-graph-node.r4 .sp-graph-bar { fill: var(--plot-background); }
+.sp-graph-node.r4.sel { --rank: var(--plot-foreground); }
 .sp-mode { display: flex; flex-wrap: wrap; gap: 4px 16px; align-items: center; margin: 4px 0 6px; }
 .sp-mode input[type=text] { width: 7em; }
 .sp-svg { width: 100%; height: 260px; background: var(--plot-background); border: 1px solid var(--border); border-radius: var(--radius-md); touch-action: none; cursor: grab; }
