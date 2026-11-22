@@ -731,13 +731,21 @@ export const RESULTS: HelpPage = {
       body: (
         <>
           <p>
-            In Tags, choose a row and press Enter (or Open in Spectrum). The Spectrum tab shows that spectrum with the
+            In Tags, double-click a row, or choose it and press Enter (or Open in Spectrum). The Spectrum tab shows that spectrum with the
             peaks FASTag tagged: after centroiding, the precursor cut, deisotoping and the peak budget, as the run
             prepared them (FASTag prints them with -dump_spectrum, under the options of the run that wrote the
             table). The chosen tag&apos;s ladder is drawn on them: its b or y ions one residue apart (the residue
             divided by the fragment charge), each step with its error in ppm. A <L to="tags-gapped">gapped tag</L>{' '}
             crossed a missing peak, shown dashed. Choose another tag of the spectrum below to draw its ladder; ◀ and ▶
             go to the previous and next tagged spectrum. The wheel or + and − zoom, dragging or the arrow keys pan.
+          </p>
+          <p>
+            All tags, merged draws every tag of the spectrum at once. Tags that lie on the same peaks of the same ion
+            series and share at least one residue step are merged into one longer tag, and a tag that lies wholly
+            inside another is not drawn on its own. Each merged tag gets its own line; the table lists its sequence
+            (N- to C-terminus), its best E-value and the tags it merges (choose one to draw it alone). E-value ≤
+            leaves out the tags above that value before merging. Tags whose ladder is not on the peaks are counted,
+            not drawn.
           </p>
           <p>
             The tab needs a FASTag that has -dump_spectrum; with an older one it is not there, and the row action says

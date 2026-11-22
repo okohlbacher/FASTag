@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- **GUI: all tags of a spectrum, merged.** The Spectrum tab's **All tags, merged** draws every tag of the spectrum at
+  once: tags on the same peaks of one ion series that share a residue step become one longer tag, tags inside another
+  are not drawn on their own, with an E-value cutoff. A double-click on a row in Tags opens its spectrum.
+
 - **GUI: in-app Feedback.** A **Feedback** button in the top bar (also Help › Send Feedback…, Cmd/Ctrl+Shift+F)
   takes a screenshot of the window (the webview's own snapshot: WKWebView, WebView2, WebKitGTK; no screen-recording
   permission), records the app and engine versions, the system, the view and the settings as typed values (paths only as

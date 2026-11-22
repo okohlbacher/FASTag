@@ -1138,6 +1138,8 @@ kbd { font-family: var(--font-mono); font-size: var(--text-xs); color: var(--mut
 .sp-caveat { margin: 0; }
 .sp-plot { display: flex; flex-direction: column; gap: var(--space-2); }
 .sp-plot-tools { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); }
+.sp-mode { display: flex; flex-wrap: wrap; gap: 4px 16px; align-items: center; margin: 4px 0 6px; }
+.sp-mode input[type=text] { width: 7em; }
 .sp-svg { width: 100%; height: 260px; background: var(--plot-background); border: 1px solid var(--border); border-radius: var(--radius-md); touch-action: none; cursor: grab; }
 .sp-svg:focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; }
 .sp-axis { stroke: var(--plot-grid); stroke-width: 1; vector-effect: non-scaling-stroke; }

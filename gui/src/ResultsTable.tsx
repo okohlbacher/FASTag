@@ -919,8 +919,8 @@ export default function ResultsTable({ path, source, rerunResConf, spectrum }: P
 
   // The active row's spectrum in the Spectrum tab (P4).
   const spectrumCol = columns.indexOf('spectrum')
-  const openSpectrum = (): void => {
-    const pos = currentPos()
+  const openSpectrum = (at?: number): void => {
+    const pos = at ?? currentPos()
     if (pos == null || !spectrum) return
     if (spectrum.state !== 'yes') {
       setCopyNote(spectrum.state === 'no' ? `${SPECTRUM_NEEDS}.` : 'Still asking FASTag whether it can show spectra.')
@@ -1007,8 +1007,9 @@ export default function ResultsTable({ path, source, rerunResConf, spectrum }: P
         tabIndex={row != null ? (selected ? 0 : -1) : undefined}
         key={i}
         style={{ gridTemplateColumns: grid }}
-        onClick={() => {
-          if (row == null) return
+        onClick={(e) => {
+          // The second click of a double-click keeps the row chosen.
+          if (row == null || e.detail > 1) return
           if (selected) {
             setActive(null)
             setActivePos(null)
@@ -1017,6 +1018,13 @@ export default function ResultsTable({ path, source, rerunResConf, spectrum }: P
             setActivePos(i)
           }
           idPending.current = false
+        }}
+        // A double-click opens the row's spectrum in the Spectrum tab.
+        onDoubleClick={() => {
+          if (row == null || !spectrum) return
+          setActive(rowId ?? null)
+          setActivePos(i)
+          openSpectrum(i)
         }}
       >
         {row ? (
@@ -1118,7 +1126,7 @@ export default function ResultsTable({ path, source, rerunResConf, spectrum }: P
                   ? 'Asking FASTag whether it can show spectra…'
                   : "The active row's spectrum, with FASTag's processed peaks and the tag's ladder (Enter)"
             }
-            onClick={openSpectrum}
+            onClick={() => openSpectrum()}
           >
             {spectrum.state === 'no' ? SPECTRUM_NEEDS : 'Open in Spectrum'}
           </button>

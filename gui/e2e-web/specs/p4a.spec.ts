@@ -115,3 +115,19 @@ test('with FASTag 1.11 (no -dump_spectrum): no Spectrum tab, and the row action 
   await expect(page.getByRole('tab', { name: 'Tags' })).toHaveAttribute('aria-selected', 'true')
   expect(await mockState<unknown[]>(page, 'spectrumCalls')).toEqual([])
 })
+
+test('a double-click on a row opens its spectrum; all tags merge, a cutoff on E-value', async ({ page }) => {
+  await openTags(page, 'spectrum')
+  const spectrum = (await firstRow(page).locator('[role=gridcell]').first().getAttribute('title'))!
+  await firstRow(page).dblclick()
+  await expect(page.getByRole('tab', { name: 'Spectrum' })).toHaveAttribute('aria-selected', 'true')
+  await expect(heading(page)).toHaveAttribute('title', spectrum)
+  await page.getByLabel('All tags, merged').check()
+  await expect(page.getByTestId('merge-summary')).toContainText(/\d+ tags → \d+ merged/)
+  await page.getByLabel('Largest E-value of the tags merged').fill('10')
+  await expect(page.getByTestId('merge-summary')).toContainText('above the cutoff')
+  // A member tag leads back to the one-tag view.
+  await page.getByRole('button', { name: 'PGV' }).click()
+  await expect(page.getByLabel('Chosen tag')).toBeChecked()
+  await expect(page.getByTestId('ladder')).toContainText('PGV')
+})
