@@ -126,6 +126,8 @@ const api: FastagApi = {
   cancel: () => invoke<{ cancelled: boolean }>('cancel'),
   resultsQuery: (path: string, view: ResultsView, offset: number, limit: number) =>
     invoke<ResultsPage>('results_query', { path, view, offset, limit }),
+  tableQuery: (path: string, view: ResultsView, offset: number, limit: number) =>
+    invoke<ResultsPage>('table_query', { path, view, offset, limit }),
   resultsOpen: (path: string, onEvent: (e: BrowserEvent) => void) => {
     const ch = new Channel<BrowserEvent>()
     ch.onmessage = onEvent

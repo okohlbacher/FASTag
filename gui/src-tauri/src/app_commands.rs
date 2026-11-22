@@ -27,6 +27,7 @@ pub const APP_COMMANDS: &[&str] = &[
     "results_position",
     "results_export",
     "results_cancel",
+    "table_query",
     "report_text",
     "report_head",
     "summary_write",

@@ -5,9 +5,11 @@
 // An arc is one placement continuing another (solid: they share a step,
 // dashed: they only touch); arcs that build a resolved tag are bold in the
 // colour of its rank, the tags inside it hang from it. A node selects its
-// resolved tag, as a row of the resolved tags table does.
+// resolved tag, as a row of the resolved tags table does. The nodes that
+// select one are a single tab stop (roving tabindex): the arrows move along
+// a lane (left, right) and between lanes (up, down).
 
-import { useMemo, type JSX, type KeyboardEvent } from 'react'
+import { useMemo, useRef, useState, type JSX, type KeyboardEvent } from 'react'
 import type { SpectrumPeaks } from './dump'
 import { layerOf, sequenceOf, type TagGraph } from './graph'
 import { seriesText } from './ladder'
@@ -58,11 +60,32 @@ export function MergeGraph({ graph: g, spectrum: s, chosen, onChoose }: { graph:
   }, [g, s])
   const { nodes, owner, bands, height } = layout
   const mid = (i: number): number => nodes[i].y + BAR_H / 2
+  // The tab stop: the node of this graph focused last, else the first of the chosen chain.
+  const [focus, setFocus] = useState<{ g: TagGraph; i: number } | null>(null)
+  const refs = useRef(new Map<number, SVGGElement>())
+  const stop = focus?.g === g ? focus.i : (g.paths[chosen]?.chain[0] ?? owner.findIndex((o) => o != null))
 
-  function key(e: KeyboardEvent<SVGGElement>, path: number | undefined): void {
-    if (path == null || (e.key !== 'Enter' && e.key !== ' ')) return
+  // The nearest node that selects something along the lane (left, right) or in the nearest lane above or below.
+  function move(from: number, key: string): number | null {
+    const at = nodes[from]
+    const dir = key === 'ArrowRight' || key === 'ArrowDown' ? 1 : -1
+    const lane = key === 'ArrowLeft' || key === 'ArrowRight'
+    const next = nodes
+      .filter((n) => owner[n.i] && (lane ? n.y === at.y && dir * (n.x1 - at.x1) > 0 : dir * (n.y - at.y) > 0))
+      .sort((a, b) => Math.abs(a.y - at.y) - Math.abs(b.y - at.y) || Math.abs(a.x1 - at.x1) - Math.abs(b.x1 - at.x1) || a.i - b.i)
+    return next[0]?.i ?? null
+  }
+
+  function key(e: KeyboardEvent<SVGGElement>, i: number, path: number): void {
+    if (e.key === 'Enter' || e.key === ' ') {
+      e.preventDefault()
+      return onChoose(path)
+    }
+    if (!['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].includes(e.key)) return
     e.preventDefault()
-    onChoose(path)
+    const to = move(i, e.key)
+    // Its onFocus makes it the tab stop.
+    if (to != null) refs.current.get(to)?.focus()
   }
 
   return (
@@ -112,14 +135,20 @@ export function MergeGraph({ graph: g, spectrum: s, chosen, onChoose }: { graph:
           return (
             <g
               key={n.i}
+              ref={(el) => {
+                if (el) refs.current.set(n.i, el)
+                else refs.current.delete(n.i)
+              }}
               className={cls}
               data-node={n.i}
-              tabIndex={0}
-              role={o ? 'button' : undefined}
+              // A node in no resolved tag selects nothing: not a tab stop, an image with its label.
+              tabIndex={o ? (n.i === stop ? 0 : -1) : undefined}
+              role={o ? 'button' : 'img'}
               aria-label={`${n.seq}, ${role}${pl.evalue != null ? `, E-value ${pl.evalue}` : ''}`}
               aria-pressed={o ? o.path === chosen : undefined}
               onClick={o ? () => onChoose(o.path) : undefined}
-              onKeyDown={(e) => key(e, o?.path)}
+              onFocus={o ? () => setFocus({ g, i: n.i }) : undefined}
+              onKeyDown={o ? (e) => key(e, n.i, o.path) : undefined}
             >
               <title>{title}</title>
               {/* What a pointer hits: the bar and its label. */}

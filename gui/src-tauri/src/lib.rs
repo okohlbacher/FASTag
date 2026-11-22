@@ -125,6 +125,7 @@ pub fn run() {
         })
         .manage(RunManager::default())
         .manage(browser::BrowserCache::default())
+        .manage(browser::SideTables::default())
         .manage(spectrum::SpectrumCache::default())
         .invoke_handler(tauri::generate_handler![
             fastag::probe,
@@ -149,6 +150,7 @@ pub fn run() {
             browser::results_position,
             browser::results_export,
             browser::results_cancel,
+            browser::table_query,
             report::report_text,
             report::report_head,
             report::summary_write,

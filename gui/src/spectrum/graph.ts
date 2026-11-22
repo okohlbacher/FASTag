@@ -414,7 +414,6 @@ export function settleSeries(g: TagGraph, s: SpectrumPeaks, decide?: (p: GPath) 
   for (const p of paths) {
     const c = decide?.(p)
     if (c) Object.assign(p, { series: c.series, call: c })
-    p.sameAs = []
   }
   for (let a = 0; a < paths.length; a++)
     for (let b = a + 1; b < paths.length; b++) {
@@ -424,6 +423,15 @@ export function settleSeries(g: TagGraph, s: SpectrumPeaks, decide?: (p: GPath) 
       Object.assign(A, { series: ca.series, call: ca })
       Object.assign(B, { series: cb.series, call: cb })
     }
+  sameAsOf(g, s)
+}
+
+/** Which resolved tags of @p g read the same residues as another under
+ *  their series (sameAs), the calls left as they are. pairCalls is not
+ *  idempotent, so a graph whose calls are settled (FASTag's) gets only this. */
+export function sameAsOf(g: TagGraph, s: SpectrumPeaks): void {
+  const paths = g.paths
+  for (const p of paths) p.sameAs = []
   // The same reading in another layer (b and y, or two charges): consecutive
   // cleavages at the same prefix masses with a common reading between them.
   const M = s.precursor != null && s.charge > 0 ? s.precursor * s.charge - s.charge * PROTON : null
@@ -460,7 +468,6 @@ export function settleSeries(g: TagGraph, s: SpectrumPeaks, decide?: (p: GPath) 
         paths[b].sameAs.push({ path: a, steps: same })
       }
     }
-
 }
 
 

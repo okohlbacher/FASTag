@@ -121,11 +121,11 @@ async function query(...a: Parameters<typeof window.fastag.resultsQuery>): Retur
  *  file order: the exact ID (as a substring, scan=1 would also match
  *  scan=10..19, 100..199, ...), every page of them (a page holds at most
  *  PAGE rows). */
-async function tagsOf(path: string, spectrum: string, sort: ResultsView['sort'] = { column: 'evalue', desc: false }): Promise<TagsOf> {
+async function tagsOf(path: string, spectrum: string, sort: ResultsView['sort'] = { column: 'evalue', desc: false }, read: typeof query = query): Promise<TagsOf> {
   const view: ResultsView = { sort, spectrum, spectrumExact: true }
   const out: TagsOf = { columns: [], rows: [], rowIds: [] }
   for (;;) {
-    const page = await query(path, view, out.rows.length, PAGE)
+    const page = await read(path, view, out.rows.length, PAGE)
     out.columns = page.columns
     page.rows.forEach((r, i) => {
       out.rows.push(r)
@@ -153,10 +153,12 @@ async function neighbour(path: string, spectrum: string, rowId: number | null, d
   return { spectrum: page.rows[0][page.columns.indexOf('spectrum')] ?? '', rowId: page.rowIds?.[0] ?? null }
 }
 
-/** The spectrum's rows of the run's resolved tags and tag graph, in file order. */
+/** The spectrum's rows of the run's resolved tags and tag graph, in file
+ *  order. No Results table opens these two (an open would close the tags
+ *  file's): tableQuery reads them without one. */
 async function cliOf(resolved: string, tagGraph: string, spectrum: string): Promise<{ resolved: CliRows; nodes: CliRows }> {
-  const r = await tagsOf(resolved, spectrum, null)
-  const n = await tagsOf(tagGraph, spectrum, null)
+  const r = await tagsOf(resolved, spectrum, null, window.fastag.tableQuery)
+  const n = await tagsOf(tagGraph, spectrum, null, window.fastag.tableQuery)
   return { resolved: r, nodes: n }
 }
 

@@ -776,7 +776,7 @@ export const RESULTS: HelpPage = {
             plot&apos;s m/z axis, one band per ion layer; a line joins a tag to one that continues it (solid over a shared
             step, dashed where they only touch), bold in the colour of the resolved tag it builds, whose rank is written
             on the bar. Tags inside a resolved tag hang from it. Choosing a bar, by click or Enter, selects its
-            resolved tag as the table does.
+            resolved tag as the table does; the graph is one Tab stop, and the arrow keys move between its bars.
           </p>
           <p>
             When the run wrote tag placements (a protein database and Tag placements), the peptide most tags of the

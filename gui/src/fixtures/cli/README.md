@@ -161,3 +161,21 @@ sha256 of each file:
     575a8cc771bfb6275163bcbb0995d008eec00f2d423b5aee1793bc283dcb7c3d  v112-ecoli-dump/helphelp-1.11.0.txt
     6e898e629a0085b33534d5d37f6c2eb395839db89ca7b2aa794afc2ad3774893  v112-ecoli-dump/helphelp.txt
     1aff50da904ee24e42c3bd35ce1d22bd7bd989d44d397ff8ad3341a75a21d9c9  v112-ecoli-dump/unknown.err
+
+## v115-ecoli-resolved: -resolved_out and -tag_graph_out
+
+The cliGraph.ts adapter checked against the C++ writer (`cliGraph.test.ts`).
+The binary is the local macOS arm64 dev build of `feat/tag-consolidation` at
+2ebb2d23 (FASTag 1.15.7, OpenMS 3.7.0-pre; sha256 0f2995c7...), the input
+the repository's public `test/fixtures/Ecoli_MS2_small.mzML` at 0.3 Da
+(`cmd.txt`). One spectrum is kept, scan=11586 (48 placements, 41 resolved
+tags of both series, two with tags inside them): its rows of the tags, the
+resolved tags and the tag graph, and its `-dump_spectrum`. Over all 85
+spectra with resolved tags the adapter reads every one, and its ranking
+equals the GUI's (`buildGraph` with `stepWeight`).
+
+    705f18112b537cbf45895f02e830f95b62f9a3c58185d3247fd1c672d57f50f9  v115-ecoli-resolved/cmd.txt
+    ab4b350be6e49c7bc430008cdc54eaced26e27e81f7cc1cee55341776a7a0faa  v115-ecoli-resolved/dump.jsonl
+    db10baaebfc50d46019631501bcac49a31c5d26ec1789a986afe12cb9cf8d6b8  v115-ecoli-resolved/run.resolved.tsv
+    5746144e8bf77948977e04f20b3cf3fdbcb5381a2f811813941298fce70c0a40  v115-ecoli-resolved/run.taggraph.tsv
+    3b5fda429f3c432ff7d7be6eba4c0ad6cdae2010a8dc73f13e0b6c0a25d84902  v115-ecoli-resolved/run.tags.tsv

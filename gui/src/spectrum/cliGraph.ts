@@ -6,7 +6,7 @@
 // tables and the dump disagree, and the caller resolves in the GUI instead.
 
 import type { SpectrumPeaks } from './dump'
-import { settleSeries, type Arc, type GPath, type Placement, type Reading, type Step, type TagGraph } from './graph'
+import { sameAsOf, type Arc, type GPath, type Placement, type Reading, type Step, type TagGraph } from './graph'
 import { nearest, readingMass, seriesCall, type Ladder, type Residues, type SeriesCall } from './ladder'
 
 /** The rows of one spectrum in one of the two tables, with its header. */
@@ -138,7 +138,7 @@ export function fromCli(resolved: CliRows, nodes: CliRows, s: SpectrumPeaks, res
   if (paths.some((p) => p.relations.some((x) => x.path >= paths.length))) return fail('a relation names a resolved tag that is not there')
   const graph: TagGraph = { placements, paths, offPeaks: [], arcs }
   // Which tags read the same residues in another layer (not in the tables);
-  // the calls FASTag settled stay as they are.
-  settleSeries(graph, s)
+  // the calls FASTag settled stay as they are (no second pairCalls pass).
+  sameAsOf(graph, s)
   return { ok: true, graph }
 }

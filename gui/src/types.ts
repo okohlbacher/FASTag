@@ -402,6 +402,10 @@ export interface FastagApi extends FeedbackApi {
   keepLeftovers: (paths: string[]) => Promise<void>
   cancel: () => Promise<{ cancelled: boolean }>
   resultsQuery: (path: string, view: ResultsView, offset: number, limit: number) => Promise<ResultsPage>
+  // A page of a table no Results table opens (the Spectrum tab's resolved
+  // tags and tag graph): read in full order, with snapshots of its own
+  // (browser.rs SideTables), never refused as not open.
+  tableQuery: (path: string, view: ResultsView, offset: number, limit: number) => Promise<ResultsPage>
   // D5: the head rows now; index and E-value order announced through onEvent.
   resultsOpen: (path: string, onEvent: (e: BrowserEvent) => void) => Promise<ResultsHead>
   // Where file row @p row sits in a built view (null: not built).

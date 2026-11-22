@@ -52,8 +52,8 @@
 //   spectrum-resolved  the spectrum fixture with /data/run01.resolved.tsv and
 //               /data/run01.taggraph.tsv (-resolved_out, -tag_graph_out) for
 //               the two spectra of the best tags, written from the GUI's own
-//               tag graph until the CLI writes them (testing/cliGraphTsv.ts);
-//               every resultsQuery is served from the file it names
+//               tag graph with ranks 1 and 2 swapped (testing/cliGraphTsv.ts);
+//               tableQuery serves them, resultsQuery refuses them (not open)
 //   gate-batch  P2b Batch summary: Add folder… on /data lists eight spectra
 //               files, one per job of a real batch (src/fixtures/cli/batch,
 //               testing/batchFixtures.ts): each prints that job's log and
@@ -107,7 +107,7 @@ import { buildGraph, type TagGraph, type TagIn } from '../spectrum/graph'
 import { residueMasses, tagRowFrom } from '../spectrum/ladder'
 import { stepWeight } from '../spectrum/stepScore'
 import type { CliRows } from '../spectrum/cliGraph'
-import { toCli, tsv } from './cliGraphTsv'
+import { swapRanks, toCli, tsv } from './cliGraphTsv'
 import digestTsv from '../fixtures/digest.tsv?raw'
 import labelTsv from '../fixtures/label.tsv?raw'
 import massgapTsv from '../fixtures/massgap.tsv?raw'
@@ -591,7 +591,11 @@ export function installE2EBridge(): Origin | undefined {
     })
     const rank = (g: TagGraph): number => 100 * g.arcs.filter((a) => a.used).length + g.paths.length
     const kept = made.sort((a, b) => rank(b.g) - rank(a.g) || (a.id < b.id ? -1 : 1)).slice(0, 2)
+    // FASTag ranks the first two the other way round than the GUI would: the
+    // tab must show its ranking, not the GUI's.
+    for (const k of kept) k.t = swapRanks(k.t, 1, 2)
     ;(mock as unknown as Record<string, unknown>).resolvedSpectra = kept.map((k) => k.id)
+    ;(mock as unknown as Record<string, unknown>).resolvedFirst = kept.map((k) => k.t.resolved.rows[0][k.t.resolved.columns.indexOf('sequence')])
     const out = { resolved: kept.flatMap((k) => k.t.resolved.rows), nodes: kept.flatMap((k) => k.t.nodes.rows), columns: { resolved: kept[0].t.resolved.columns, nodes: kept[0].t.nodes.columns } }
     tables['/data/run01.resolved.tsv'] = { columns: out.columns.resolved, rows: out.resolved }
     tables['/data/run01.taggraph.tsv'] = { columns: out.columns.nodes, rows: out.nodes }
@@ -603,9 +607,9 @@ export function installE2EBridge(): Origin | undefined {
   }
   if (fixture === 'view' || fixture === 'denovo' || fixture === 'spectrum' || fixture === 'spectrum-1.11' || fixture === 'spectrum-resolved') {
     const ids = (view: ResultsView): number[] => viewIds(tags.columns, tags.rows, view)
-    mock.resultsQuery = (path, view, offset, limit): Promise<ResultsPage> => {
-      mock.resultsQueryCalls.push({ path, view, offset, limit })
-      const t = tables[path] ?? tags
+    // The run's other tables are not open in a Results table: browser.rs
+    // refuses them to resultsQuery, and tableQuery reads them.
+    const serve = (t: CliRows, view: ResultsView, offset: number, limit: number): Promise<ResultsPage> => {
       const all = viewIds(t.columns, t.rows, view)
       const sel = all.slice(offset, offset + Math.min(limit, MAX_WINDOW))
       return Promise.resolve({
@@ -617,6 +621,14 @@ export function installE2EBridge(): Origin | undefined {
         ranked: true,
         pending: false
       })
+    }
+    mock.resultsQuery = (path, view, offset, limit): Promise<ResultsPage> => {
+      mock.resultsQueryCalls.push({ path, view, offset, limit })
+      return path in tables ? Promise.reject('cancelled') : serve(tags, view, offset, limit)
+    }
+    mock.tableQuery = (path, view, offset, limit): Promise<ResultsPage> => {
+      mock.tableQueryCalls.push({ path, view, offset, limit })
+      return path in tables ? serve(tables[path], view, offset, limit) : Promise.reject(`cannot open ${path}`)
     }
     mock.resultsPosition = (_path, view, row) => Promise.resolve(ids(view).indexOf(row))
     // A job: progress, then the file, as browser.rs start_export.

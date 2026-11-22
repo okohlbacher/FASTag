@@ -6,7 +6,11 @@ import { fromCli } from './cliGraph'
 import { PROTON, WATER, residueMasses, tagRowFrom } from './ladder'
 import { stepWeight } from './stepScore'
 import { g6, toCli } from '../testing/cliGraphTsv'
-import type { SpectrumPeaks } from './dump'
+import { parseDump, type SpectrumPeaks } from './dump'
+import realDump from '../fixtures/cli/v115-ecoli-resolved/dump.jsonl?raw'
+import realTags from '../fixtures/cli/v115-ecoli-resolved/run.tags.tsv?raw'
+import realResolved from '../fixtures/cli/v115-ecoli-resolved/run.resolved.tsv?raw'
+import realGraph from '../fixtures/cli/v115-ecoli-resolved/run.taggraph.tsv?raw'
 
 const RES = residueMasses([])
 const R = RES.masses
@@ -102,6 +106,60 @@ describe('FASTag tag graph tables', () => {
     expect(fromCli({ columns: ['spectrum'], rows: [] }, nodes, s, RES)).toMatchObject({ ok: false, error: expect.stringContaining('no rank') })
     // No rows for the spectrum: nothing resolved.
     expect(fromCli({ ...resolved, rows: [] }, { ...nodes, rows: [] }, s, RES)).toMatchObject({ ok: true, graph: { paths: [], placements: [], arcs: [] } })
+  })
+
+  it('keeps the series calls FASTag settled', () => {
+    // A b ladder and the y ladder on its complements. FASTag called the first
+    // b sure and left the second open (as a fork of the first with a third
+    // judged y does); pairing them again would make the second y sure.
+    const s = spec([...b, ...y])
+    const t = toCli(buildGraph([tag(0, 0, 3, 0.01), tag(1, 4, 3, 0.02)], s, RES), s, 'scan=1')
+    const [rank, series, call] = ['rank', 'series', 'call'].map((c) => t.resolved.columns.indexOf(c))
+    const set = (r: string[], se: string, c: string): string[] => r.map((x, i) => (i === series ? se : i === call ? c : x))
+    t.resolved.rows = t.resolved.rows.map((r) => (r[rank] === '1' ? set(r, 'b', 'sure') : r[rank] === '2' ? set(r, 'y', 'open') : r))
+    const r = fromCli(t.resolved, t.nodes, s, RES)
+    if (!r.ok) throw new Error(r.error)
+    expect(r.graph.paths.slice(0, 2).map((p) => [p.series, p.call.level])).toEqual([['b', 'sure'], ['y', 'open']])
+  })
+
+  it('reads what FASTag wrote for a spectrum', () => {
+    const d = parseDump(realDump)
+    if (!d.ok) throw new Error(d.error)
+    const table = (text: string): { columns: string[]; rows: string[][] } => {
+      const [columns, ...rows] = text.replace(/\n$/, '').split('\n').map((l) => l.split('\t'))
+      return { columns, rows }
+    }
+    const [tags, resolved, nodes] = [realTags, realResolved, realGraph].map(table)
+    const res = residueMasses(undefined)
+    // The caller holds the tags best E-value first; the CLI names them in -out order.
+    const ev = tags.columns.indexOf('evalue')
+    const byE = tags.rows.map((_, i) => i).sort((a, b) => Number(tags.rows[a][ev]) - Number(tags.rows[b][ev]) || a - b)
+    const r = fromCli(resolved, nodes, d.spectrum, res, tags.rows.map((x, k) => ({ index: byE.indexOf(k), tag: x[1] })))
+    if (!r.ok) throw new Error(r.error)
+    const g = r.graph
+    const col = (c: string): number => resolved.columns.indexOf(c)
+    const ids = (c: string): number[] => [...new Set(c.split(',').filter(Boolean).map(Number))].sort((a, b) => a - b)
+    const rowsOf = (of: number[]): number[] => [...new Set(of.flatMap((i) => g.placements[i].rows.map((k) => byE[k])))].sort((a, b) => a - b)
+    expect(g.paths.length).toBe(resolved.rows.length)
+    expect(g.placements.length).toBe(nodes.rows.length)
+    expect(g.paths.some((p) => p.inside.length) && g.paths.some((p) => p.series === 'b') && g.paths.some((p) => p.series === 'y')).toBe(true)
+    g.paths.forEach((p, k) => {
+      const row = resolved.rows[k]
+      expect([sequenceOf(p), p.series, p.call.level, String(p.charge)]).toEqual([row[col('sequence')], row[col('series')], row[col('call')], row[col('charge')]])
+      expect(p.peaks.map((i) => d.spectrum.mz[i].toFixed(6)).join(';')).toBe(row[col('peaks')])
+      expect(rowsOf(p.chain)).toEqual(ids(row[col('members')]))
+      expect(rowsOf(p.inside)).toEqual(ids(row[col('inside')]))
+      expect(p.relations.map((x) => `${x.path + 1}:${x.kind}:${x.shared}`).join(';')).toBe(row[col('relations')])
+    })
+    // A placement names its tags by the caller's rows.
+    for (const [i, pl] of g.placements.entries()) {
+      const cli = ids(nodes.rows[i][nodes.columns.indexOf('rows')])
+      expect(pl.tags).toEqual(cli.map((k) => tags.rows[k][1]))
+    }
+    expect(g.arcs.length).toBe(nodes.rows.reduce((a, n) => a + n[nodes.columns.indexOf('next')].split(',').filter(Boolean).length, 0))
+    // The GUI's own graph of these tags ranks them alike (the same model).
+    const ins: TagIn[] = tags.rows.flatMap((x, k) => (Number(x[ev]) <= 1 ? [{ row: tagRowFrom(tags.columns, x)!, evalue: Number(x[ev]), index: k }] : []))
+    expect(buildGraph(ins, d.spectrum, res, { join: false, weight: stepWeight(d.spectrum) }).paths.map(sequenceOf)).toEqual(g.paths.map(sequenceOf))
   })
 
   it('writes E-values as printf %g does', () => {

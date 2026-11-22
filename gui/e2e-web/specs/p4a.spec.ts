@@ -174,6 +174,13 @@ test('with the run\'s resolved tags and tag graph, all tags are resolved as FAST
   const graph = page.getByTestId('merge-graph')
   await expect(graph.locator('[data-node]').first()).toBeVisible()
   const table = page.getByRole('grid', { name: 'Resolved tags of this spectrum' })
+  // FASTag's ranking (the fixture swapped the GUI's first two), read without
+  // a Results table open on its tables.
+  const [first] = await mockState<string[]>(page, 'resolvedFirst')
+  await expect(table.locator('tbody tr').first().locator('td').first()).toContainText(`#1 ${first}`)
+  expect((await mockState<{ path: string }[]>(page, 'tableQueryCalls')).map((c) => c.path)).toContain('/data/run01.taggraph.tsv')
+  // One tab stop in the graph.
+  await expect(graph.locator('[tabindex="0"]')).toHaveCount(1)
   const n = await table.locator('tbody tr').count()
   // A node of the last resolved tag selects it, and the ladder drawn is its.
   const node = graph.getByRole('button', { name: new RegExp(`builds resolved tag ${n}\\b`) }).first()

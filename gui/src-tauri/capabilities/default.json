@@ -29,6 +29,7 @@
     "allow-results-position",
     "allow-results-export",
     "allow-results-cancel",
+    "allow-table-query",
     "allow-report-text",
     "allow-report-head",
     "allow-summary-write",

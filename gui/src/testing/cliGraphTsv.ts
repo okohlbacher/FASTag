@@ -87,3 +87,17 @@ export function toCli(g: TagGraph, s: SpectrumPeaks, spectrum: string): { resolv
 
 /** @p t as a TSV file. */
 export const tsv = (t: CliRows): string => [t.columns, ...t.rows].map((r) => r.join('\t')).join('\n') + '\n'
+
+/** The tables of one spectrum with the resolved tags of ranks @p a and @p b
+ *  (1-based) trading places, as a CLI that ranks them otherwise writes them:
+ *  so a test tells FASTag's ranking from the GUI's. */
+export function swapRanks(t: { resolved: CliRows; nodes: CliRows }, a: number, b: number): { resolved: CliRows; nodes: CliRows } {
+  const to = (r: string): string => (r === String(a) ? String(b) : r === String(b) ? String(a) : r)
+  const [rank, rel] = [t.resolved.columns.indexOf('rank'), t.resolved.columns.indexOf('relations')]
+  const path = t.nodes.columns.indexOf('path')
+  const rows = t.resolved.rows.map((r) =>
+    r.map((c, i) => (i === rank ? to(c) : i === rel ? c.split(';').filter(Boolean).map((x) => x.replace(/^\d+/, to)).join(';') : c))
+  )
+  rows.sort((x, y) => Number(x[rank]) - Number(y[rank]))
+  return { resolved: { ...t.resolved, rows }, nodes: { ...t.nodes, rows: t.nodes.rows.map((r) => r.map((c, i) => (i === path ? to(c) : c))) } }
+}
