@@ -100,9 +100,12 @@ set(FASTAG_CORE_SOURCES_113 src/Cleavage.cpp)
 set(FASTAG_CORE_SOURCES_116 src/BrukerInput.cpp)
 # ---- 1.16 QC: core sources ----
 set(FASTAG_CORE_SOURCES_QC src/RunQC.cpp)
+# ---- tag merging: core sources ----
+set(FASTAG_CORE_SOURCES_MERGE src/TagGraph.cpp)
 add_library(fastag_core STATIC ${FASTAG_CORE_SOURCES}
             ${FASTAG_CORE_SOURCES_E} ${FASTAG_CORE_SOURCES_A} ${FASTAG_CORE_SOURCES_D} ${FASTAG_CORE_SOURCES_F}
-            ${FASTAG_CORE_SOURCES_113} ${FASTAG_CORE_SOURCES_116} ${FASTAG_CORE_SOURCES_QC})
+            ${FASTAG_CORE_SOURCES_113} ${FASTAG_CORE_SOURCES_116} ${FASTAG_CORE_SOURCES_QC}
+            ${FASTAG_CORE_SOURCES_MERGE})
 target_include_directories(fastag_core PUBLIC
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/src>)
@@ -306,8 +309,10 @@ if(FASTAG_BUILD_TESTS)
   set(FASTAG_UNIT_TESTS_B113_MSFRAGGER msfragger_config_test)
   # ---- 1.13: unit tests ----
   set(FASTAG_UNIT_TESTS_113 complement_tol_test cleavage_test tmt_pseudo_test)
+  # ---- tag merging: unit tests ----
+  set(FASTAG_UNIT_TESTS_MERGE taggraph_test)
   foreach(t ${FASTAG_UNIT_TESTS} ${FASTAG_UNIT_TESTS_E} ${FASTAG_UNIT_TESTS_A} ${FASTAG_UNIT_TESTS_D} ${FASTAG_UNIT_TESTS_F} ${FASTAG_UNIT_TESTS_113}
-            ${FASTAG_UNIT_TESTS_B113_MSFRAGGER} ${FASTAG_UNIT_TESTS_DIGQUAL})
+            ${FASTAG_UNIT_TESTS_B113_MSFRAGGER} ${FASTAG_UNIT_TESTS_DIGQUAL} ${FASTAG_UNIT_TESTS_MERGE})
     add_executable(${t} test/${t}.cpp)
     target_link_libraries(${t} PRIVATE fastag_core)
     add_test(NAME ${t} COMMAND ${t})
