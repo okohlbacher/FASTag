@@ -12,6 +12,14 @@
   most tags of the spectrum were placed on is named and its fragments are drawn as a ruler; a candidate, not an
   identification.
 
+- **GUI: b or y, judged on the peaks.** A tag does not say whether it was read from b or y ions, and the
+  Spectrum tab used to call the ladder walked from nterm_mass "b" and the one from cterm_mass "y", which was wrong for
+  about a quarter to half of correct tags and showed their sequence reversed. It now judges the series on the peaks
+  (a ions beside b ions, a ions beside the complement, a tryptic C-terminal K/R; the database peptide when the run
+  placed the tags), shows the tag N→C under that series, marks likely calls with ? and says "b or y" when the
+  spectrum does not tell; a ladder and its complement are opposite series. Tags on the same peaks are assembled
+  whichever flank they were walked from.
+
 - **GUI: Tags table.** Each row has a spectrum icon that opens it in the Spectrum tab. Length, Extended, Gapped and
   Residue conf. are not shown until ticked under Columns…; Min. conf. and Mean conf. stay.
 

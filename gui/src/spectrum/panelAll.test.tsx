@@ -51,6 +51,9 @@ describe('Spectrum, all tags', () => {
     // EPT, PTID and IDE assemble; W from b2 differs from them.
     const rows = Array.from(container.querySelectorAll('table[aria-label="Resolved tags of this spectrum"] tbody tr')).map((r) => Array.from(r.querySelectorAll('td')).map((c) => c.textContent))
     expect(rows[0][0]).toBe('#1 EPTIDE')
+    // No a ions on these b peaks: the database peptide decides the series (b, sure).
+    const cell = container.querySelector('table[aria-label="Resolved tags of this spectrum"] tbody tr td[data-series-level]')!
+    expect([cell.textContent, cell.getAttribute('data-series-level')]).toEqual(['b', 'sure'])
     expect(rows[0][4]).toBe('6 of 6')
     expect(rows[1][0]).toBe('#2 W')
     expect(rows[1][4]).toBe('0 of 1')

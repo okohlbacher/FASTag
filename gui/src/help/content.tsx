@@ -773,6 +773,17 @@ export const RESULTS: HelpPage = {
             from the placement of the tags, not an identification: FASTag does not score it.
           </p>
           <p>
+            FASTag writes a tag in ascending m/z and does not say whether it read b or y ions, and the series
+            decides which way the tag reads from N to C. The tab judges the series on the peaks: a ions (b − CO)
+            beside at least two of its peaks make it b; a ions beside its complement peaks, or a start right after
+            a C-terminal K or R, make it y; one a ion makes it likely (b? or y?); otherwise it says b or y and shows
+            the tag as FASTag wrote it, with the other reading beside it in the table. When the run placed the
+            spectrum&apos;s tags on a database peptide, the peptide&apos;s ions decide. A ladder and its complement
+            are always opposite series. At a tolerance wider than about 0.05 m/z (a Da run) nothing is judged.
+            Hover over a series for its evidence. On the development data the judged series was right in at least
+            99% of correct tags, the likely one in 86–99%.
+          </p>
+          <p>
             The tab needs a FASTag that has -dump_spectrum; with an older one it is not there, and the row action says
             &quot;Spectrum view needs FASTag 1.12 or later&quot;. A table no run of this app wrote asks for its input
             (Locate input…) and is shown at FASTag&apos;s default settings, which it says. No other reader is used:

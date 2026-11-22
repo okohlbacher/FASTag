@@ -5,7 +5,7 @@
 
 import type { SpectrumPeaks } from './dump'
 import type { GPath, Step } from './graph'
-import { C_OFFSET, PROTON, WATER, Z_DOT_OFFSET, type Ladder, type Residues } from './ladder'
+import { C_OFFSET, PROTON, WATER, Z_DOT_OFFSET, type Ladder, type Residues, type SeriesCall } from './ladder'
 
 export interface Candidate {
   peptide: string
@@ -135,3 +135,28 @@ export function stepOnRuler(st: Step, ruler: Ruler, s: SpectrumPeaks): boolean {
 
 /** Steps of @p p the peptide confirms. */
 export const stepsOnRuler = (p: GPath, ruler: Ruler, s: SpectrumPeaks): number => p.steps.filter((st) => stepOnRuler(st, ruler, s)).length
+
+/** A ladder's steps between the peaks it lies on (a gap step across a missing position). */
+export function ladderSteps(l: Ladder): Step[] {
+  const out: Step[] = []
+  let from = -1
+  l.positions.forEach((p, k) => {
+    if (p.peak == null) return
+    if (from >= 0) {
+      const res = l.residues.slice(from, k)
+      out.push({ u: l.positions[from].peak as number, v: p.peak, readings: [{ label: res.length > 1 ? `[${res.join('')}]` : res[0], gap: res.length > 1, evalue: null, deltaMz: 0, deltaPpm: 0 }] })
+    }
+    from = k
+  })
+  return out
+}
+
+/** The series the database peptide confirms for these steps: the one whose
+ *  fragments more of them lie on (at least one), else null. */
+export function dbCall(c: Candidate, steps: Step[], charge: number, series: Ladder['series'], residues: Residues, s: SpectrumPeaks): SeriesCall | null {
+  const pair: Ladder['series'][] = series === 'c' || series === 'z' ? ['c', 'z'] : ['b', 'y']
+  const on = pair.map((x) => steps.filter((st) => stepOnRuler(st, rulerOf(c, x, charge, residues), s)).length)
+  if (on[0] === on[1]) return null
+  const k = on[0] > on[1] ? 0 : 1
+  return { series: pair[k], level: 'sure', why: `${on[k]} of its steps lie on the database peptide's ${pair[k]} ions` }
+}

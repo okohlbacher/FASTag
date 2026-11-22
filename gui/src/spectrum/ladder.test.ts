@@ -45,7 +45,7 @@ const tolAt = (s: SpectrumPeaks, x: number): number => (s.toleranceUnit === 'ppm
 /** Fails with a reason when @p lad is not on @p s's peaks for @p tag. */
 function oracle(lad: Ladder, tag: string, z: number, flank: number, s: SpectrumPeaks, gapped: boolean): string | null {
   // In ascending m/z: the residues between the ladder's positions.
-  const res = lad.series === 'b' ? [...tag] : [...tag].reverse()
+  const res = (lad.walked ?? lad.series) === 'b' ? [...tag] : [...tag].reverse()
   if (lad.positions.length !== res.length + 1) return `${lad.positions.length} positions for ${res.length} residues`
   let missing = 0
   let prev: number | null = null
@@ -93,7 +93,7 @@ function checkRun(tsv: string, dumps: string): { checked: number; series: Record
     const row = tagRowFrom(columns, cells)
     if (!row) throw new Error(`not a tag row: ${cells.join(' ')}`)
     const lad = ladderFor(row, s, residues)
-    const why = lad.complete ? oracle(lad, row.tag, row.charge, lad.series === 'b' ? row.ntermMass : row.ctermMass + 18.0105646837, s, row.gapped) : lad.reason ?? 'incomplete'
+    const why = lad.complete ? oracle(lad, row.tag, row.charge, (lad.walked ?? lad.series) === 'b' ? row.ntermMass : row.ctermMass + 18.0105646837, s, row.gapped) : lad.reason ?? 'incomplete'
     if (why) failures.push(`${cells[0]} ${row.tag} z=${row.charge}: ${why}`)
     else {
       checked++

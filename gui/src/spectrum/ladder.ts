@@ -43,6 +43,7 @@ const MOD_DELTA: Record<string, number> = {
   acetyl: 42.010565,
   deamidated: 0.984016,
   methyl: 14.01565,
+  methylthio: 45.987721,
   dimethyl: 28.0313,
   formyl: 27.994915,
   carbamyl: 43.005814,
@@ -172,6 +173,104 @@ export interface Ladder {
   complete: boolean
   // Why there is no ladder or it is not complete.
   reason?: string
+  // Which ion series the peaks are, as far as the spectrum tells (seriesCall):
+  // series above is call.series. Missing: not judged (no peaks).
+  call?: SeriesCall
+  // The flank it was walked from: b/c from nterm_mass, y/z from cterm_mass.
+  walked?: Ladder['series']
+}
+
+/** Which ion series a ladder lies on. FASTag writes a tag in ascending m/z
+ *  and does not say whether it read b or y ions; the series decides which way
+ *  the tag reads N to C. sure: the evidence held in at least 99.4% of correct
+ *  ladders of the development data (PXD003531, PXD000001; work/tag-score,
+ *  series.ts); likely: 86-99%; open: not told apart (there 64-86% y, too
+ *  unstable across datasets to call), shown as walked. */
+export interface SeriesCall {
+  series: Ladder['series']
+  level: 'sure' | 'likely' | 'open'
+  why: string
+}
+
+const CO = 27.9949146
+// The rules were measured at 20 ppm; a wider window (a Da run, an ion trap)
+// matches a ions and K/R by chance too often to be believed.
+const SERIES_MAX_WINDOW = 0.05
+// The complement of a peak lies within this of the precursor less the peak.
+export const complementTol = (s: SpectrumPeaks, x: number): number => tolAt(s, x) + (s.precursor != null ? tolAt(s, s.precursor) : 0)
+/** The neutral mass of the complement of peak @p k at charge @p z, or null without a precursor. */
+export function complementOf(s: SpectrumPeaks, k: number, z: number): number | null {
+  if (s.precursor == null || !(s.charge > 0)) return null
+  return s.precursor * s.charge - s.charge * PROTON - (s.mz[k] * z - z * PROTON)
+}
+export function seriesCall(peaks: number[], z: number, flankSeries: Ladder['series'], s: SpectrumPeaks, residues: Residues): SeriesCall {
+  // c/z-dot: no rule measured; the flank the ladder was walked from decides.
+  if (flankSeries === 'c' || flankSeries === 'z') return { series: flankSeries, level: 'open', why: 'c and z ions are not told apart here' }
+  const top = s.mz.length ? s.mz[s.mz.length - 1] : 0
+  if (2 * tolAt(s, top) > SERIES_MAX_WINDOW)
+    return { series: flankSeries, level: 'open', why: `at this tolerance (${s.tolerance} ${s.toleranceUnit}) a ions match by chance too often to tell b from y` }
+  const neutral = (k: number): number => s.mz[k] * z - z * PROTON
+  const at = (m: number): number => {
+    const x = (m + z * PROTON) / z
+    return nearest(s.mz, x, tolAt(s, x))
+  }
+  const aSelf = peaks.filter((k) => at(neutral(k) - CO) >= 0).length
+  // The complement of each peak (b <-> y at the same charge), and an a ion beside it.
+  const mirror = peaks.map((k) => complementOf(s, k, z)).map((m) => (m == null ? -1 : at(m))).filter((k) => k >= 0)
+  const aMirror = mirror.filter((k) => at(neutral(k) - CO) >= 0).length
+  // Read as y, the mass below its lowest peak is a suffix plus water: K or R alone is a tryptic C terminus.
+  const below = neutral(peaks[0]) - WATER
+  const kr = [['K', residues.masses.K], ['R', residues.masses.R]].find(([, m]) => Math.abs(below - (m as number)) <= 2 * tolAt(s, below))?.[0]
+  const n = (k: number, what: string): string => `${k} ${what}${k === 1 ? '' : 's'}`
+  if (aSelf >= 2 && aMirror < 2) return { series: 'b', level: 'sure', why: `a ions (b − CO) beside ${n(aSelf, 'peak')}` }
+  if (aSelf === 0 && aMirror >= 2) return { series: 'y', level: 'sure', why: `a ions beside ${n(aMirror, 'complement peak')} (its b ions)` }
+  if (aSelf === 0 && kr) return { series: 'y', level: 'sure', why: `read as y ions it starts right after a C-terminal ${kr}` }
+  if (aSelf === 1 && aMirror === 0) return { series: 'b', level: 'likely', why: 'an a ion (b − CO) beside 1 peak' }
+  if (aMirror === 1 && aSelf === 0) return { series: 'y', level: 'likely', why: 'an a ion beside 1 complement peak (its b ions)' }
+  // Not told apart: the reading the ladder was walked as (FASTag's written order for b).
+  return {
+    series: flankSeries,
+    level: 'open',
+    why: aSelf > 0 && aMirror > 0 ? 'a ions beside its peaks and beside its complement: b or y is not told apart' : 'no a ion beside its peaks or its complement: b or y is not told apart'
+  }
+}
+
+/** Whether @p b lies on the complements of @p a (at least two of its peaks). */
+export function isComplement(a: number[], b: number[], z: number, s: SpectrumPeaks): boolean {
+  let n = 0
+  for (const k of b) {
+    const m = complementOf(s, k, z)
+    if (m != null && a.some((j) => Math.abs(s.mz[j] * z - z * PROTON - m) <= complementTol(s, s.mz[j]) * z)) n++
+  }
+  return n >= Math.min(2, b.length)
+}
+
+/** A ladder and its complement are opposite series: a judged one settles an
+ *  open one; two judged the same way contradict each other and are both open. */
+export function pairCalls(a: SeriesCall, b: SeriesCall): [SeriesCall, SeriesCall] {
+  const flip = (c: SeriesCall): Ladder['series'] => (c.series === 'b' ? 'y' : c.series === 'y' ? 'b' : c.series === 'c' ? 'z' : 'c')
+  if (a.level !== 'open' && b.level === 'open') return [a, { series: flip(a), level: a.level, why: `the complement of a ladder judged ${a.series}: ${a.why}` }]
+  if (b.level !== 'open' && a.level === 'open') return [{ series: flip(b), level: b.level, why: `the complement of a ladder judged ${b.series}: ${b.why}` }, b]
+  if (a.level !== 'open' && b.level !== 'open' && a.series === b.series) {
+    const why = `it and its complement are both judged ${a.series}: b or y is not told apart`
+    return [{ ...a, level: 'open', why }, { ...b, level: 'open', why }]
+  }
+  return [a, b]
+}
+
+/** The ladder relabelled with the series its peaks are judged to be. */
+export function called(l: Ladder, s: SpectrumPeaks, residues: Residues): Ladder {
+  const peaks = l.positions.map((p) => p.peak).filter((p): p is number => p != null)
+  if (peaks.length === 0) return l
+  const call = seriesCall(peaks, l.charge, l.series, s, residues)
+  return { ...l, series: call.series, call, walked: l.series }
+}
+
+/** The series as shown: b, y, with ? when likely, "b or y" when open. */
+export function seriesText(series: Ladder['series'], call?: SeriesCall): string {
+  if (!call || call.level === 'sure') return series
+  if (call.level === 'likely') return `${series}?`
+  return series === 'c' || series === 'z' ? 'c or z' : 'b or y'
 }
 
 const tolAt = (s: SpectrumPeaks, x: number): number => (s.toleranceUnit === 'ppm' ? (x * s.tolerance) / 1e6 : s.tolerance)
@@ -350,8 +449,16 @@ export function laddersFor(row: TagRow, s: SpectrumPeaks, residues: Residues): {
     labels.push(r.mod != null ? `${r.residue}[${r.mod}]` : r.residue)
   }
   if (s.mz.length === 0) return none('the spectrum has no peaks')
-  const b = walk(cz ? 'c' : 'b', row.ntermMass + (cz ? C_OFFSET : 0), masses, labels, z, s, row.gapped)
-  const y = walk(cz ? 'z' : 'y', row.ctermMass + (cz ? Z_DOT_OFFSET : WATER), [...masses].reverse(), [...labels].reverse(), z, s, row.gapped)
+  // Walked from either flank; each is then judged b or y on its own peaks.
+  let b = called(walk(cz ? 'c' : 'b', row.ntermMass + (cz ? C_OFFSET : 0), masses, labels, z, s, row.gapped), s, residues)
+  let y = called(walk(cz ? 'z' : 'y', row.ctermMass + (cz ? Z_DOT_OFFSET : WATER), [...masses].reverse(), [...labels].reverse(), z, s, row.gapped), s, residues)
+  // The two walks of one tag usually land on complementary peaks: judge them together.
+  const onPeaks = (l: Ladder): number[] => l.positions.map((p) => p.peak).filter((p): p is number => p != null)
+  if (b.call && y.call && isComplement(onPeaks(b), onPeaks(y), z, s)) {
+    const [cb, cy] = pairCalls(b.call, y.call)
+    b = { ...b, series: cb.series, call: cb }
+    y = { ...y, series: cy.series, call: cy }
+  }
   // The one on the peaks; with both (or neither), the one on more peaks.
   const best = b.complete !== y.complete ? (b.complete ? b : y) : y.matched > b.matched ? y : b
   return { best, both: [b, y] }

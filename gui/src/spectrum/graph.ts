@@ -22,7 +22,7 @@
 //   alternatives, each again a whole assembly with its shared steps.
 
 import type { SpectrumPeaks } from './dump'
-import { C_OFFSET, PROTON, WATER, Z_DOT_OFFSET, laddersFor, parseTag, type Ladder, type Residues, type TagRow } from './ladder'
+import { C_OFFSET, PROTON, WATER, Z_DOT_OFFSET, isComplement, laddersFor, pairCalls, parseTag, seriesCall, type Ladder, type Residues, type SeriesCall, type TagRow } from './ladder'
 
 export interface TagIn {
   row: TagRow
@@ -53,7 +53,13 @@ export interface Step {
 
 /** The rows that lie on one chain of peaks of one layer. */
 export interface Placement {
+  // As judged on its peaks (seriesCall); call says how sure.
   series: Ladder['series']
+  call: SeriesCall
+  // The flank its best row (E-value, then row order) was walked from: the
+  // reading shown when the series is not told apart.
+  flank: Ladder['series']
+  flankE: [number, number]
   charge: number
   peaks: number[]
   steps: Step[]
@@ -75,7 +81,9 @@ export interface Relation {
 }
 
 export interface GPath {
+  // Judged on all its peaks, after assembly.
   series: Ladder['series']
+  call: SeriesCall
   charge: number
   peaks: number[]
   steps: Step[]
@@ -102,7 +110,11 @@ export interface TagGraph {
 }
 
 const il = (s: string): string => s.replace(/I/g, 'L')
-const layerOf = (e: { series: string; charge: number }): string => `${e.series}${e.charge}`
+// A layer is the ions of one fragment charge, b and y together (c and z apart):
+// a tag does not say which series it was read from, and its steps are in
+// ascending m/z either way, so tags on the same peaks meet whatever series
+// their flank suggested.
+const layerOf = (e: { series: string; charge: number }): string => `${e.series === 'c' || e.series === 'z' ? 'cz' : 'by'}${e.charge}`
 const nTerminal = (s: Ladder['series']): boolean => s === 'b' || s === 'c'
 const tolAt = (s: SpectrumPeaks, x: number): number => (s.toleranceUnit === 'ppm' ? (x * s.tolerance) / 1e6 : s.tolerance)
 const byE = (a: number | null, b: number | null): number => (a ?? Infinity) - (b ?? Infinity)
@@ -130,7 +142,7 @@ function place(tags: TagIn[], s: SpectrumPeaks, residues: Residues): { placement
     const family = [t.row.charge, t.row.ntermMass, t.row.ctermMass, t.row.ionSeries, t.evalue, comp].join('|')
     const ls = laddersFor(t.row, s, residues).both.filter((l) => l.complete)
     if (ls.length === 0) offPeaks.push(t.index)
-    for (const l of ls) cands.push({ t, l, family: `${family}|${l.series}`, full: l.positions.every((p) => p.peak != null) })
+    for (const l of ls) cands.push({ t, l, family: `${family}|${l.walked ?? l.series}`, full: l.positions.every((p) => p.peak != null) })
   }
   // A gapped tag read across a missing peak. If one row order of it found a
   // peak at every position while another has the gap, the gap is the reading.
@@ -162,8 +174,16 @@ function place(tags: TagIn[], s: SpectrumPeaks, residues: Residues): { placement
     if (t.row.gapped && !c.full && !gapOf.has(c.family)) gapOf.set(c.family, key)
     const have = byChain.get(key)
     if (!have) {
-      byChain.set(key, { series: l.series, charge: l.charge, peaks, steps, rows: [t.index], tags: [t.row.tag], evalue: t.evalue, gapUnresolved: t.row.gapped && c.full })
+      const call = l.call ?? seriesCall(peaks, l.charge, l.series, s, residues)
+      byChain.set(key, { series: call.series, call, flank: l.walked ?? l.series, flankE: [t.evalue ?? Infinity, t.index], charge: l.charge, peaks, steps, rows: [t.index], tags: [t.row.tag], evalue: t.evalue, gapUnresolved: t.row.gapped && c.full })
       continue
+    }
+    // The shown reading of an open placement: its best row's walk, whatever the row order.
+    const e: [number, number] = [t.evalue ?? Infinity, t.index]
+    if (e[0] < have.flankE[0] || (e[0] === have.flankE[0] && e[1] < have.flankE[1])) {
+      have.flank = l.walked ?? l.series
+      have.flankE = e
+      if (l.call) Object.assign(have, { call: l.call, series: l.call.series })
     }
     if (!have.rows.includes(t.index)) {
       have.rows.push(t.index)
@@ -214,7 +234,15 @@ function continues(a: Placement, b: Placement, join: boolean, minOverlap: number
 }
 
 /** The graph of @p tags on the peaks of @p s, resolved. */
-export function buildGraph(tags: TagIn[], s: SpectrumPeaks, residues: Residues, opts: { join: boolean; minOverlap?: number } = { join: false }): TagGraph {
+export interface GraphOpts {
+  join: boolean
+  minOverlap?: number
+  // What a placement adds to a chain: started fresh (prev null) or continuing
+  // prev. Default: its evidence. A negative weight ends chains before it.
+  weight?: (p: Placement, prev: Placement | null) => number
+}
+
+export function buildGraph(tags: TagIn[], s: SpectrumPeaks, residues: Residues, opts: GraphOpts = { join: false }): TagGraph {
   const { placements, offPeaks } = place(tags, s, residues)
   const n = placements.length
   // arcs[b]: the placements b continues (they come before b in canonical order).
@@ -232,12 +260,12 @@ export function buildGraph(tags: TagIn[], s: SpectrumPeaks, residues: Residues, 
     const reach = (i: number): number => s.mz[placements[i].peaks[placements[i].peaks.length - 1]] - s.mz[placements[(f[i] as { first: number }).first].peaks[0]]
     for (let i = 0; i < n; i++) {
       if (!alive[i]) continue
-      const w = evidence(placements[i].evalue)
-      let best = { score: w, first: i, prev: -1 }
+      const weigh = opts.weight ?? ((p: Placement) => evidence(p.evalue))
+      let best = { score: weigh(placements[i], null), first: i, prev: -1 }
       for (const a of arcs[i]) {
         const fa = f[a]
         if (!alive[a] || !fa) continue
-        const c = { score: fa.score + w, first: fa.first, prev: a }
+        const c = { score: fa.score + weigh(placements[i], placements[a]), first: fa.first, prev: a }
         if (c.score > best.score || (c.score === best.score && placements[c.first].peaks[0] < placements[best.first].peaks[0])) best = c
       }
       f[i] = best
@@ -309,8 +337,12 @@ export function buildGraph(tags: TagIn[], s: SpectrumPeaks, residues: Residues, 
       })
     }
     const all = [...stepE, ...junctionE.filter((x) => x !== undefined)] as (number | null)[]
+    // Open: shown as its best placement (E-value, then row order) was walked.
+    const lead = [...chain, ...inside].map((i) => placements[i]).sort((a, b) => a.flankE[0] - b.flankE[0] || a.flankE[1] - b.flankE[1])[0]
+    const call = seriesCall(peaks, head.charge, lead.flank, s, residues)
     paths.push({
-      series: head.series,
+      series: call.series,
+      call,
       charge: head.charge,
       peaks,
       steps,
@@ -347,6 +379,31 @@ export function buildGraph(tags: TagIn[], s: SpectrumPeaks, residues: Residues, 
       B.relations.push({ path: a, kind, shared })
     }
 
+  const g = { placements, paths, offPeaks }
+  settleSeries(g, s)
+  return g
+}
+
+/** After the series of the resolved tags are judged (or a database decided
+ *  some): an open tag that lies on the complements of a judged one is the
+ *  opposite series (two judged the same way are both open), then which tags
+ *  read the same residues in another layer or series. @p decide, when given,
+ *  settles a tag first (its call, or null to keep the spectrum's). */
+export function settleSeries(g: TagGraph, s: SpectrumPeaks, decide?: (p: GPath) => SeriesCall | null): void {
+  const paths = g.paths
+  for (const p of paths) {
+    const c = decide?.(p)
+    if (c) Object.assign(p, { series: c.series, call: c })
+    p.sameAs = []
+  }
+  for (let a = 0; a < paths.length; a++)
+    for (let b = a + 1; b < paths.length; b++) {
+      const A = paths[a], B = paths[b]
+      if (layerOf(A) !== layerOf(B) || A.charge !== B.charge || !isComplement(A.peaks, B.peaks, A.charge, s)) continue
+      const [ca, cb] = pairCalls(A.call, B.call)
+      Object.assign(A, { series: ca.series, call: ca })
+      Object.assign(B, { series: cb.series, call: cb })
+    }
   // The same reading in another layer (b and y, or two charges): consecutive
   // cleavages at the same prefix masses with a common reading between them.
   const M = s.precursor != null && s.charge > 0 ? s.precursor * s.charge - s.charge * PROTON : null
@@ -375,7 +432,8 @@ export function buildGraph(tags: TagIn[], s: SpectrumPeaks, residues: Residues, 
     for (let b = a + 1; b < paths.length; b++) {
       const A = or[a]
       const B = or[b]
-      if (!A || !B || layerOf(paths[a]) === layerOf(paths[b])) continue
+      // Within a layer only a b reading against a y one (a ladder and its complement).
+      if (!A || !B || (layerOf(paths[a]) === layerOf(paths[b]) && paths[a].series === paths[b].series)) continue
       const same = A.filter((x) => B.some((y) => near(x.a, y.a) && near(x.b, y.b) && compatible(x.step, y.step))).length
       if (same > 0) {
         paths[a].sameAs.push({ path: b, steps: same })
@@ -383,8 +441,8 @@ export function buildGraph(tags: TagIn[], s: SpectrumPeaks, residues: Residues, 
       }
     }
 
-  return { placements, paths, offPeaks }
 }
+
 
 /** A step as text: its reading, or its readings when they are not told apart: {Q|[AG]}. */
 export const stepLabel = (st: Step): string => (st.readings.length > 1 ? `{${st.readings.map((r) => r.label).join('|')}}` : st.readings[0].label)
@@ -403,6 +461,7 @@ export function ladderOf(p: GPath, s: SpectrumPeaks): Ladder {
   }
   return {
     series: p.series,
+    call: p.call,
     charge: p.charge,
     positions: [pos(p.peaks[0]), ...p.steps.map((st) => pos(st.v, st))],
     residues: p.steps.map(stepLabel),
@@ -436,9 +495,15 @@ export function packRows(g: TagGraph, s: SpectrumPeaks, gap: number): { rows: nu
  *  with a common reading), `differs` (same layer, another step over part of
  *  sel's m/z span: at most one of the two is right there), else `other`. */
 export type StepKind = 'same' | 'differs' | 'other'
-export function kindOf(st: Step, layer: { series: string; charge: number }, sel: GPath, s: SpectrumPeaks): StepKind {
+export function kindOf(st: Step, layer: { series: string; charge: number; call?: SeriesCall }, sel: GPath, s: SpectrumPeaks): StepKind {
   if (layerOf(layer) !== layerOf(sel)) return 'other'
   const mine = sel.steps.find((x) => x.u === st.u && x.v === st.v)
   if (mine && compatible(mine, st)) return 'same'
-  return s.mz[st.v] > s.mz[sel.peaks[0]] && s.mz[st.u] < s.mz[sel.peaks[sel.peaks.length - 1]] ? 'differs' : 'other'
+  if (!(s.mz[st.v] > s.mz[sel.peaks[0]] && s.mz[st.u] < s.mz[sel.peaks[sel.peaks.length - 1]])) return 'other'
+  // On a peak of sel, or another step between two of its peaks: they contradict each other.
+  if (sel.peaks.includes(st.u) || sel.peaks.includes(st.v)) return 'differs'
+  // Elsewhere in its m/z span: only a ladder of the same series competes with it (b and y
+  // ladders of one peptide overlap in m/z and are both right); when either is not judged, unknown.
+  const judged = (c?: SeriesCall): boolean => !!c && c.level !== 'open'
+  return judged(layer.call) && judged(sel.call) && layer.series === sel.series ? 'differs' : 'other'
 }

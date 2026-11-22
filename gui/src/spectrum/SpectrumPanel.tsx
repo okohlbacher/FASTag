@@ -13,9 +13,9 @@
 
 import { useEffect, useMemo, useRef, useState, type JSX, type KeyboardEvent, type PointerEvent, type WheelEvent } from 'react'
 import { parseDump, type SpectrumPeaks } from './dump'
-import { hasStep, ladderFor, laddersFor, residueMasses, tagRowFrom, type Ladder } from './ladder'
-import { buildGraph, kindOf, ladderOf, packRows, sequenceOf, stepLabel, type StepKind, type TagGraph, type TagIn } from './graph'
-import { likelyPeptide, rulerOf, stepOnRuler, stepsOnRuler, ticksOf, type Candidate, type Ruler } from './peptide'
+import { hasStep, ladderFor, laddersFor, residueMasses, seriesText, tagRowFrom, type Ladder, type SeriesCall } from './ladder'
+import { buildGraph, kindOf, ladderOf, packRows, sequenceOf, settleSeries, stepLabel, type GPath, type StepKind, type TagGraph, type TagIn } from './graph'
+import { dbCall, ladderSteps, likelyPeptide, rulerOf, stepOnRuler, stepsOnRuler, ticksOf, type Candidate, type Ruler } from './peptide'
 import { baseName } from '../digestReport'
 import { EValue, columnLabel, hitWords, spectrumHint } from '../ResultsTable'
 import { HelpLink } from '../help/HelpLink'
@@ -75,6 +75,24 @@ const PAGE = 1000
 
 const fmt = (x: number, d = 4): string => x.toFixed(d)
 const ppm = (x: number | null): string => (x == null ? '–' : `${x >= 0 ? '+' : '−'}${Math.abs(x).toFixed(1)}`)
+
+/// The other series of a pair: b <-> y, c <-> z.
+const other = (x: Ladder['series']): Ladder['series'] => (x === 'b' ? 'y' : x === 'y' ? 'b' : x === 'c' ? 'z' : 'c')
+
+/// The ladder with the series the database peptide decides, when the run
+/// placed this spectrum's tags on one (and more of its steps lie on one series).
+function withDb(l: Ladder, cand: Candidate | null, s: SpectrumPeaks | null, residues: ReturnType<typeof residueMasses>): Ladder {
+  const c = cand && s && l.positions.some((q) => q.peak != null) ? dbCall(cand, ladderSteps(l), l.charge, l.series, residues, s) : null
+  return c ? { ...l, series: c.series, call: c } : l
+}
+
+/// A tag's residues from N to C terminus under @p series (b and c read up the
+/// m/z axis, y and z down it); @p asc in ascending m/z.
+export const nToC = (series: Ladder['series'], asc: string[]): string => (series === 'b' || series === 'c' ? asc : [...asc].reverse()).join('')
+/// The series as shown, with the charge: "y", "b? 2+", "b or y".
+const seriesCell = (series: Ladder['series'], call: SeriesCall | undefined, charge: number): string => `${seriesText(series, call)}${charge > 1 ? ` ${charge}+` : ''}`
+const callTitle = (call: SeriesCall | undefined): string | undefined =>
+  call ? `${call.level === 'sure' ? 'Ion series' : call.level === 'likely' ? 'Ion series, likely' : 'Ion series not told apart'}: ${call.why}. FASTag writes a tag in ascending m/z without saying whether it read b or y ions; the series decides which way it reads N→C.` : undefined
 
 /** One resultsQuery of this panel. The browser backend lets a query of a
  *  new view spec cancel the view build in flight (browser.rs view_token: the
@@ -204,9 +222,10 @@ export default function SpectrumPanel({ target, source, tags: tagsFile, placemen
   const spectrum = peaks.state === 'ok' ? peaks.spectrum : null
   const row = tags && tags.rows[chosen] ? tagRowFrom(tags.columns, tags.rows[chosen]) : null
   const lads = spectrum && row ? laddersFor(row, spectrum, residues) : null
-  const ladder = lads?.best ?? null
-  // Each series with a step on the peaks gets its own line (#127).
-  const one = lads ? lads.both.filter((l) => l === lads.best || hasStep(l)) : []
+  const byDb = (l: Ladder): Ladder => withDb(l, cand, spectrum, residues)
+  const ladder = lads ? byDb(lads.best) : null
+  // Each ladder with a step on the peaks gets its own line (#127).
+  const one = lads ? lads.both.filter((l) => l === lads.best || hasStep(l)).map((l) => (l === lads.best ? (ladder as Ladder) : byDb(l))) : []
 
   const cutoff = maxE.trim() === '' ? Infinity : Number(maxE)
   const badCutoff = !Number.isFinite(cutoff) && cutoff !== Infinity
@@ -225,10 +244,13 @@ export default function SpectrumPanel({ target, source, tags: tagsFile, placemen
       ins.push({ row: tr, evalue, index: i })
     })
     const graph = buildGraph(ins, spectrum, residues, { join })
+    // The database peptide, when the run placed this spectrum's tags, decides the series
+    // (and with it its complements and which tags read the same residues).
+    if (cand) settleSeries(graph, spectrum, (p: GPath) => dbCall(cand, p.steps, p.charge, p.series, residues, spectrum))
     const all = graph.paths.map((p) => ladderOf(p, spectrum))
     const span = spectrum.mz.length ? spectrum.mz[spectrum.mz.length - 1] - spectrum.mz[0] : 1
     return { graph, all, allRows: packRows(graph, spectrum, span * 0.01).rows, above, used: ins.length }
-  }, [allTags, spectrum, tags, cutoff, badCutoff, residues, join])
+  }, [allTags, spectrum, tags, cutoff, badCutoff, residues, join, cand])
   const contigAt = merged && chosenContig < merged.graph.paths.length ? chosenContig : 0
   const sel = merged ? (merged.graph.paths[contigAt] ?? null) : null
   // The peptide's fragments in the layer of the tag drawn.
@@ -258,7 +280,7 @@ export default function SpectrumPanel({ target, source, tags: tagsFile, placemen
       titles: idx.map((i, k) =>
         graph.paths[i].steps.map(
           (st, j) =>
-            `#${i + 1} ${graph.paths[i].series}${graph.paths[i].charge > 1 ? ` ${graph.paths[i].charge}+` : ''}: ` +
+            `#${i + 1} ${seriesCell(graph.paths[i].series, graph.paths[i].call, graph.paths[i].charge)}: ` +
             st.readings.map((r) => `${r.label}: E-value ${r.evalue ?? 'none'}, ${r.deltaPpm.toFixed(1)} ppm`).join(' · ') +
             ` · peaks ${fmt(spectrum.mz[st.u])} (${pct(st.u)} of the base peak) and ${fmt(spectrum.mz[st.v])} (${pct(st.v)})` +
             (i === contigAt ? '' : kinds[k][j] === 'same' ? ` · as #${contigAt + 1} reads it` : kinds[k][j] === 'differs' ? ` · differs from #${contigAt + 1}` : '') +
@@ -487,7 +509,8 @@ export default function SpectrumPanel({ target, source, tags: tagsFile, placemen
         {shownLadder && (
           <LadderLine
             ladder={shownLadder}
-            tag={merged ? sequenceOf(merged.graph.paths[contigAt]) : (row?.tag ?? '')}
+            tag={merged ? sequenceOf(merged.graph.paths[contigAt]) : nToC(shownLadder.series, shownLadder.residues)}
+            written={merged ? undefined : row?.tag}
             unit={peaks.spectrum.toleranceUnit}
           />
         )}
@@ -533,7 +556,7 @@ export default function SpectrumPanel({ target, source, tags: tagsFile, placemen
             )}
           </>
         ) : (
-          <TagsTable tags={tags} chosen={chosen} onChoose={setChosen} spectrum={spectrum} residues={residues} />
+          <TagsTable tags={tags} chosen={chosen} onChoose={setChosen} spectrum={spectrum} residues={residues} cand={cand} />
         )}
       </section>
     </div>
@@ -566,17 +589,22 @@ function PathTable(p: { graph: TagGraph; chosen: number; onChoose(i: number): vo
             const touch = c.relations.filter((r) => r.kind === 'touch').map((r) => `#${r.path + 1}`)
             if (touch.length > 0) notes.push(`touches ${touch.join(', ')}`)
             if (c.joined.length > 0) notes.push(`${c.joined.length} joined`)
-            if (c.sameAs.length > 0) notes.push(`also on ${c.sameAs.map((q) => `${g.paths[q.path].series} ions: #${q.path + 1} (${q.steps} of ${c.steps.length} steps)`).join(', ')}`)
+            if (c.sameAs.length > 0) notes.push(`the same residues as ${c.sameAs.map((q) => `#${q.path + 1} (${seriesCell(g.paths[q.path].series, g.paths[q.path].call, g.paths[q.path].charge)}; ${q.steps} of ${c.steps.length} steps)`).join(', ')}`)
             const layer = p.ruler && p.spectrum && c.series === p.ruler.series && c.charge === p.ruler.charge
             return (
               <tr key={i} tabIndex={i === p.chosen ? 0 : -1} aria-selected={i === p.chosen} className={i === p.chosen ? 'on' : undefined} onClick={() => p.onChoose(i)}>
                 <td role="gridcell" className="mono">
                   <span className="muted">#{i + 1} </span>
                   {sequenceOf(c)}
+                  {c.call.level === 'open' && sequenceOf({ ...c, series: other(c.series) }) !== sequenceOf(c) && (
+                    <span className="muted sp-as" title="b or y is not told apart: the other series reads the other way">
+                      {' '}
+                      as {c.series}; as {other(c.series)}: {sequenceOf({ ...c, series: other(c.series) })}
+                    </span>
+                  )}
                 </td>
-                <td role="gridcell">
-                  {c.series}
-                  {c.charge > 1 ? ` ${c.charge}+` : ''}
+                <td role="gridcell" title={callTitle(c.call)} data-series-level={c.call.level}>
+                  {seriesCell(c.series, c.call, c.charge)}
                 </td>
                 <td role="gridcell" className="num">{c.steps.length}</td>
                 <td role="gridcell" className="num">
@@ -667,8 +695,7 @@ function Pileup(p: { graph: TagGraph; at: number; spectrum: SpectrumPeaks; ruler
   out.push(
     <span key="rl" className="sp-pile-label" style={{ gridRow: row, gridColumn: '1 / 3' }}>
       <strong>
-        Resolved #{p.at + 1} ({sel.series}
-        {sel.charge > 1 ? ` ${sel.charge}+` : ''})
+        Resolved #{p.at + 1} ({seriesCell(sel.series, sel.call, sel.charge)})
       </strong>
     </span>,
     ...sel.steps.map((st) => cell(row, st.u, st.v, stepLabel(st), `resolved${st.readings.length > 1 ? ' ambig' : ''}`, st.readings.map((r) => `${r.label}: E-value ${r.evalue ?? 'none'}`).join(' · ')))
@@ -699,7 +726,7 @@ function Pileup(p: { graph: TagGraph; at: number; spectrum: SpectrumPeaks; ruler
         Tags behind resolved tag #{p.at + 1}
         <span className="hint">
           {' '}
-          · left to right by m/z{sel.series === 'y' || sel.series === 'z' ? ` (for ${sel.series} ions that is C→N)` : ''}; a tag opens alone
+          · left to right by m/z{sel.call.level === 'open' ? ' (C→N if y ions, N→C if b ions: not told apart)' : sel.series === 'y' || sel.series === 'z' ? ` (as ${sel.series} ions that is C→N)` : ''}; a tag opens alone
         </span>
       </h3>
       <div className="sp-pile" role="group" aria-label={`Tags behind resolved tag ${p.at + 1}`} style={{ gridTemplateColumns: `max-content max-content repeat(${Math.max(1, peaks.length - 1)}, minmax(2.4em, max-content))` }}>
@@ -719,6 +746,7 @@ function TagsTable(p: {
   onChoose(i: number): void
   spectrum: SpectrumPeaks | null
   residues: ReturnType<typeof residueMasses>
+  cand?: Candidate | null
 }): JSX.Element {
   const { tags, chosen } = p
   const col = (n: string): number => tags.columns.indexOf(n)
@@ -754,7 +782,7 @@ function TagsTable(p: {
         <tbody>
           {rows.map((r, i) => {
             const tr = tagRowFrom(tags.columns, r)
-            const l = tr && p.spectrum ? ladderFor(tr, p.spectrum, p.residues) : null
+            const l = tr && p.spectrum ? withDb(ladderFor(tr, p.spectrum, p.residues), p.cand ?? null, p.spectrum, p.residues) : null
             return (
               <tr
                 key={i}
@@ -769,7 +797,7 @@ function TagsTable(p: {
                     {c === 'evalue' ? <EValue text={r[col(c)] ?? ''} /> : c === 'fasta_hit' ? hitWords(r[col(c)] ?? '') : (r[col(c)] ?? '')}
                   </td>
                 ))}
-                <td role="gridcell">{!l ? '–' : l.complete ? `${l.series} on ${l.matched}/${l.positions.length} peaks` : `not on the peaks (${l.matched}/${l.positions.length})`}</td>
+                <td role="gridcell">{!l ? '–' : l.complete ? `${seriesText(l.series, l.call)} on ${l.matched}/${l.positions.length} peaks` : `not on the peaks (${l.matched}/${l.positions.length})`}</td>
               </tr>
             )
           })}
@@ -794,15 +822,16 @@ function StepDelta({ to, unit }: { to: Ladder['positions'][number]; unit: string
 /// The tag's ladder and its verdict. A ladder that could not be built (a
 /// modification without a known mass, a tag that does not parse) has no
 /// positions: then only the verdict with its reason is shown.
-export function LadderLine({ ladder, tag, unit }: { ladder: Ladder; tag: string; unit: string }): JSX.Element {
+export function LadderLine({ ladder, tag, unit, written }: { ladder: Ladder; tag: string; unit: string; written?: string }): JSX.Element {
   const steps = ladder.residues.map((res, k) => ({ res, to: ladder.positions[k + 1] }))
   return (
     <div className="sp-ladder" data-testid="ladder">
       {/* Polite: choosing another tag redraws the ladder and its verdict. */}
       <p aria-live="polite" aria-atomic="true">
-        <strong>
-          {ladder.series}-ladder <span className="mono">{tag}</span>
-        </strong>{' '}
+        <strong title={callTitle(ladder.call)}>
+          {seriesText(ladder.series, ladder.call)} ions{ladder.call?.level === 'open' ? ` (read as ${ladder.series})` : ''}: <span className="mono">{tag}</span> N→C
+        </strong>
+        {written && written !== tag && <span className="muted"> (written {written})</span>}{' '}
         {ladder.complete ? (
           <span data-testid="ladder-verdict">
             on {ladder.matched} of {ladder.positions.length} positions within the run&apos;s tolerance
@@ -914,7 +943,10 @@ export function StickPlot({
   strip?: ErrorStrip | null
 }): JSX.Element {
   const { mz, int } = spectrum
-  const rowOf = (i: number): number => rows?.[i] ?? (LINE_Y(lines[i].series) === 18 ? 0 : 1)
+  // By default b/c on the upper line, y/z on the lower; two ladders judged the same series (or not told apart) one above the other.
+  const byRow = lines.map((l) => (LINE_Y(l.series) === 18 ? 0 : 1))
+  if (lines.length === 2 && byRow[0] === byRow[1]) byRow.splice(0, 2, 0, 1)
+  const rowOf = (i: number): number => rows?.[i] ?? byRow[i]
   const nRows = Math.max(2, ...lines.map((_, i) => rowOf(i) + 1))
   // The peptide ruler takes the first row.
   const top0 = 18 + (ruler ? ROW_H : 0)
@@ -1091,7 +1123,8 @@ export function StickPlot({
             <g key={li} data-series={l.series} className={`sp-line${alt}`}>
               {shown && (
                 <text x={PAD.l - 6} y={y + 4} className="sp-series" textAnchor="end">
-                  {l.series}
+                  {seriesText(l.series, l.call).replace(' or ', '/')}
+                  {l.call && <title>{callTitle(l.call)}</title>}
                 </text>
               )}
               {/* A dashed line from the tag line down to each peak it lies on;

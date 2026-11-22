@@ -65,7 +65,10 @@ test('another tag redraws the ladder; zoom; ◀ ▶ walk the tagged spectra in f
   const tag = (await second.locator('td').first().textContent())!
   await second.click()
   await expect(second).toHaveAttribute('aria-selected', 'true')
-  await expect(page.getByTestId('ladder')).toContainText(`-ladder ${tag}`)
+  // Either as written, or (judged the other series) reversed with the written tag beside it.
+  const esc = (x: string): string => x.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+  const rev = [...tag.matchAll(/[A-Z](?:\[[^\]]*\])?/g)].map((m) => m[0]).reverse().join('')
+  await expect(page.getByTestId('ladder')).toContainText(new RegExp(`: ${esc(tag)} N→C on|: ${esc(rev)} N→C \\(written ${esc(tag)}\\)`))
   // Zoom to the ladder narrows the m/z range; the whole spectrum restores it.
   const range = page.locator('.sp-plot-tools .hint')
   const whole = await range.textContent()
