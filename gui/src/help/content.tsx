@@ -749,8 +749,7 @@ export const RESULTS: HelpPage = {
             peak and continue differently) or read the same residues in the other ion series. A step two readings
             cannot be told apart on is written {"{Q|[AG]}"}. E-value ≤ leaves out weaker tags (1 by default); Join
             tags that only touch also continues a tag with one that starts at its last peak, marked with a hollow
-            dot. A resolved tag is a hypothesis: on identified spectra about two thirds of the steps of the
-            first-ranked one lie on fragment ions of the identified peptide.
+            dot. A resolved tag is a hypothesis: it is right only where all the tags it is assembled from are.
           </p>
           <p>
             The tab needs a FASTag that has -dump_spectrum; with an older one it is not there, and the row action says

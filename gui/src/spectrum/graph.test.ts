@@ -46,6 +46,7 @@ describe('tag graph', () => {
     const p = g.paths[0]
     expect([...p.chain, ...p.inside].flatMap((i) => g.placements[i].rows).sort()).toEqual([0, 1, 2, 3])
     expect(p.best).toBe(0.01)
+    // The junction from P to T is spanned only by the 0.5 tag.
     expect(p.weakest).toBe(0.5)
   })
 
@@ -92,6 +93,36 @@ describe('tag graph', () => {
     const g = buildGraph([tag(0, 2, 3, 0.3, 'PTI', 1), tag(1, 2, 3, 0.3, 'PIT', 1)], spec(b), RES)
     expect(seqs(g)).toEqual(['P[IT]'])
     expect(g.placements[0].rows).toEqual([0, 1])
+  })
+
+  it('a link that contradicts what the chain left open is not assembled (Astra, pass 3)', () => {
+    // PPQP, then P{Q|[AG]}PP on the same peaks, then [AG]PPP: the last needs [AG] where the first fixed Q.
+    const peaks = ions(N, 'PPQPPP')
+    const n1 = N + R.P
+    const n2 = n1 + R.P
+    const g = buildGraph(
+      [at(0, N, 'PPQP', 0.01), at(1, n1, 'PQPP', 0.02), at(2, n1, 'PAGPP', 0.02, 1), at(3, n1, 'PGAPP', 0.02, 1), at(4, n2, 'AGPPP', 0.03, 1), at(5, n2, 'GAPPP', 0.03, 1)],
+      spec(peaks),
+      RES
+    )
+    for (const p of g.paths)
+      for (const i of [...p.chain, ...p.inside]) {
+        const pl = g.placements[i]
+        const k0 = p.peaks.indexOf(pl.peaks[0])
+        // Every member has a reading of each of its steps that the path still shows.
+        pl.steps.forEach((st, k) => expect(st.readings.some((r) => p.steps[k0 + k].readings.some((x) => x.label === r.label))).toBe(true))
+      }
+    expect(seqs(g)[0]).toBe('PPQPP')
+    expect(seqs(g)).toContain('[AG]PPP')
+  })
+
+  it('evidence counts only for the reading it supports (Astra, pass 3)', () => {
+    // P{[AG]|Q}P at 0.001 for [AG] and 300 for Q, continued by QPP (300): the path reads Q.
+    const peaks = ions(N, 'PQPP')
+    const g = buildGraph([at(0, N, 'PAGP', 0.001, 1), at(1, N, 'PGAP', 0.001, 1), at(2, N, 'PQP', 300), at(3, N + R.P, 'QPP', 300)], spec(peaks), RES)
+    expect(seqs(g)[0]).toBe('PQPP')
+    expect(g.paths[0].steps[1].readings.map((r) => r.label)).toEqual(['Q'])
+    expect(g.paths[0].weakest).toBe(300)
   })
 
   it('a bubble: the better reading leads, the other is a whole alternative that forks from it', () => {
@@ -141,6 +172,8 @@ describe('tag graph', () => {
     expect(g.offPeaks).toEqual([0])
     expect(seqs(g)).toEqual(['TID', 'PEP'])
     expect(g.paths[1].best).toBeNull()
+    // An invalid E-value is no evidence either.
+    expect(seqs(buildGraph([tag(0, 0, 3, NaN), tag(1, 3, 3, 0.5)], spec(b), RES))[0]).toBe('TID')
     expect(buildGraph([], spec(b), RES).paths).toEqual([])
   })
 })

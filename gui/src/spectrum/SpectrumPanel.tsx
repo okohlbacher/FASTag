@@ -461,7 +461,7 @@ function PathTable(p: { graph: TagGraph; tags: TagsOf; chosen: number; onChoose(
             <th scope="col">Resolved tag (N→C)</th>
             <th scope="col">Series</th>
             <th scope="col" className="num">Steps</th>
-            <th scope="col" className="num" title="E-value of the best and of the weakest tag it is assembled from">E-value best – weakest</th>
+            <th scope="col" className="num" title="Best E-value on any step, and the weakest step or junction of the tag (– when a junction has no tag over it)">E-value best – weakest</th>
             <th scope="col">Notes</th>
             <th scope="col">Tags</th>
           </tr>
@@ -474,7 +474,7 @@ function PathTable(p: { graph: TagGraph; tags: TagsOf; chosen: number; onChoose(
             const touch = c.relations.filter((r) => r.kind === 'touch').map((r) => `#${r.path + 1}`)
             if (touch.length > 0) notes.push(`touches ${touch.join(', ')}`)
             if (c.joined.length > 0) notes.push(`${c.joined.length} joined`)
-            if (c.sameAs.length > 0) notes.push(`same reading as ${c.sameAs.map((q) => `#${q.path + 1} (${g.paths[q.path].series})`).join(', ')}`)
+            if (c.sameAs.length > 0) notes.push(`also on ${c.sameAs.map((q) => `${g.paths[q.path].series} ions: #${q.path + 1} (${q.steps} of ${c.steps.length} steps)`).join(', ')}`)
             return (
               <tr key={i} tabIndex={i === p.chosen ? 0 : -1} aria-selected={i === p.chosen} className={i === p.chosen ? 'on' : undefined} onClick={() => p.onChoose(i)}>
                 <td role="gridcell" className="mono">

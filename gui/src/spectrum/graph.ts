@@ -68,7 +68,7 @@ export interface Placement {
 export interface Relation {
   path: number
   // fork: the two share a peak and continue differently from it (at most one
-  // is right there). touch: one ends where the other starts.
+  // is right there). touch: they meet without contradicting each other.
   kind: 'fork' | 'touch'
   // Steps the two have in common.
   shared: number
@@ -82,7 +82,9 @@ export interface GPath {
   // Placements: the chain that builds it (in m/z order) and those inside it.
   chain: number[]
   inside: number[]
-  // E-value of the best and of the weakest link of the chain.
+  // Evidence along it, from the tags that read it as it is reported: the
+  // best E-value on any step, and the weakest step or junction (a junction's
+  // evidence is the best tag spanning its two steps; a joined one has none).
   best: number | null
   weakest: number | null
   // Peaks at which two tags that only touch were joined.
@@ -107,9 +109,9 @@ const byE = (a: number | null, b: number | null): number => (a ?? Infinity) - (b
 const minE = (a: number | null, b: number | null): number | null => (a == null ? b : b == null ? a : Math.min(a, b))
 
 // A placement's evidence against a fixed reference (E = 1000): at least 1,
-// 1000 per decade below it; an unscored one counts 1.
+// 1000 per decade below it; an unscored (or invalid) one counts nothing.
 const EVIDENCE_REF = 3
-export const evidence = (e: number | null): number => (e == null ? 1 : Math.max(1, Math.round(1000 * (EVIDENCE_REF - Math.log10(Math.max(e, 1e-300))))))
+export const evidence = (e: number | null): number => (e == null || !(e >= 0) ? 0 : Math.max(1, Math.round(1000 * (EVIDENCE_REF - Math.log10(Math.max(e, 1e-300))))))
 
 const compatible = (a: Step, b: Step): boolean => a.readings.some((x) => b.readings.some((y) => il(x.label) === il(y.label)))
 
@@ -250,8 +252,11 @@ export function buildGraph(tags: TagIn[], s: SpectrumPeaks, residues: Residues, 
     const peaks = [...head.peaks]
     const steps: Step[] = head.steps.map((st) => ({ ...st, readings: st.readings.map((r) => ({ ...r })) }))
     const joined: number[] = []
-    const absorb = (p: Placement): void => {
+    // Take p into the path: false (and nothing changed) when p reads a
+    // shared step in a way no longer open on the path.
+    const absorb = (p: Placement): boolean => {
       const at = peaks.indexOf(p.peaks[0])
+      if (p.steps.some((st, k) => steps[at + k] && !compatible(st, steps[at + k]))) return false
       p.steps.forEach((st, k) => {
         const mine = steps[at + k]
         if (!mine) {
@@ -260,30 +265,50 @@ export function buildGraph(tags: TagIn[], s: SpectrumPeaks, residues: Residues, 
           return
         }
         // A shared step keeps the readings both have, each with its better evidence.
-        const both = mine.readings.filter((r) => st.readings.some((x) => il(x.label) === il(r.label)))
-        for (const r of both) r.evalue = minE(r.evalue, (st.readings.find((x) => il(x.label) === il(r.label)) as Reading).evalue)
-        mine.readings = both.length > 0 ? both : mine.readings
+        mine.readings = mine.readings.filter((r) => st.readings.some((x) => il(x.label) === il(r.label)))
+        for (const r of mine.readings) r.evalue = minE(r.evalue, (st.readings.find((x) => il(x.label) === il(r.label)) as Reading).evalue)
         mine.readings.sort((a, b) => byE(a.evalue, b.evalue) || il(a.label).localeCompare(il(b.label)))
       })
+      return true
     }
+    // ponytail: the DP checks each link against its predecessor only; a link
+    // that contradicts what earlier links left open ends the chain here (it
+    // stays for a later resolved tag). Carry reading sets in the DP state if
+    // the cut ever costs good assemblies.
     for (let k = 1; k < chain.length; k++) {
       const p = placements[chain[k]]
-      if (peaks[peaks.length - 1] === p.peaks[0]) joined.push(p.peaks[0])
-      absorb(p)
+      const touching = peaks[peaks.length - 1] === p.peaks[0]
+      if (!absorb(p)) {
+        chain.length = k
+        break
+      }
+      if (touching) joined.push(p.peaks[0])
     }
     for (const i of chain) alive[i] = false
-    // Placements wholly inside it, agreeing with it, are subsumed.
+    // Placements wholly inside it that agree with it are subsumed, best evidence first.
     const inside: number[] = []
-    for (let i = 0; i < n; i++) {
+    const cands = placements.map((_, i) => i).filter((i) => alive[i] && layerOf(placements[i]) === layerOf(head))
+    cands.sort((x, y) => byE(placements[x].evalue, placements[y].evalue) || x - y)
+    for (const i of cands) {
       const p = placements[i]
-      if (!alive[i] || layerOf(p) !== layerOf(head)) continue
       const at = peaks.indexOf(p.peaks[0])
-      if (at < 0 || !p.peaks.every((x, k) => peaks[at + k] === x) || !p.steps.every((st, k) => compatible(st, steps[at + k]))) continue
+      if (at < 0 || !p.peaks.every((x, k) => peaks[at + k] === x) || !absorb(p)) continue
       inside.push(i)
       alive[i] = false
-      absorb(p)
     }
-    const ev = chain.map((i) => placements[i].evalue)
+    // Evidence per step and per junction, from the members' readings that survived.
+    const stepE: (number | null)[] = steps.map(() => null)
+    const junctionE: (number | null | undefined)[] = steps.slice(1).map(() => undefined)
+    for (const i of [...chain, ...inside]) {
+      const p = placements[i]
+      const at = peaks.indexOf(p.peaks[0])
+      const e = p.steps.map((st, k) => st.readings.filter((r) => steps[at + k].readings.some((x) => il(x.label) === il(r.label))).reduce((m: number | null, r) => minE(m, r.evalue), null))
+      e.forEach((x, k) => {
+        stepE[at + k] = minE(stepE[at + k], x)
+        if (k > 0) junctionE[at + k - 1] = minE(junctionE[at + k - 1] ?? null, x == null || e[k - 1] == null ? null : Math.max(x, e[k - 1] as number))
+      })
+    }
+    const all = [...stepE, ...junctionE.filter((x) => x !== undefined)] as (number | null)[]
     paths.push({
       series: head.series,
       charge: head.charge,
@@ -291,8 +316,8 @@ export function buildGraph(tags: TagIn[], s: SpectrumPeaks, residues: Residues, 
       steps,
       chain,
       inside,
-      best: ev.reduce(minE, null),
-      weakest: ev.some((e) => e == null) ? null : Math.max(...(ev as number[])),
+      best: stepE.reduce(minE, null),
+      weakest: all.some((e) => e == null) ? null : Math.max(...(all as number[])),
       joined,
       relations: [],
       sameAs: []
@@ -317,7 +342,7 @@ export function buildGraph(tags: TagIn[], s: SpectrumPeaks, residues: Residues, 
       }
       const shared = A.steps.filter((x) => B.steps.some((y) => x.u === y.u && x.v === y.v)).length
       if (!fork && !touch) continue
-      const kind = fork || shared > 0 ? 'fork' : 'touch'
+      const kind = fork ? 'fork' : 'touch'
       A.relations.push({ path: b, kind, shared })
       B.relations.push({ path: a, kind, shared })
     }
