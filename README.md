@@ -785,7 +785,7 @@ vendored.
 | `-diversity` | off | Under `-max_tags`, demote near-duplicate re-reads of an already-kept tag's peak set behind non-duplicates, then backfill. Reorders which tags occupy the capped slots; never changes output size or rank 1 (see Tag diversity) |
 | `-resolved_out <file>` | none | Merge each spectrum's tags (E-value <= `-resolve_max_evalue`) on its peaks into resolved tags, best first, one row each (see Tag merging). Not under `-stream` |
 | `-tag_graph_out <file>` | none | Advanced: the merge graph, one row per placement of a spectrum's tags on its peaks (see Tag merging). Not under `-stream` |
-| `-resolve_score <scheme>` | steplogodds | Advanced: how resolved tags are ranked: `steplogodds` (each step a chain adds is worth its log-odds of being right less `-resolve_threshold`), `evidence` (summed E-value evidence of its tags) or `anchor` (the best single tag first, then `steplogodds`) |
+| `-resolve_score <scheme>` | cstar | Advanced: how resolved tags are ranked: `cstar` (each step a chain adds is worth its C* log-odds of being right less `-resolve_threshold`; rank 1 is the first resolved tag that holds no peak together with its own complement), `steplogodds` (the 1.15 step model, no complement rule), `evidence` (summed E-value evidence of its tags) or `anchor` (the best single tag first, then `steplogodds`) |
 | `-resolve_threshold <t>` | 3 | Advanced: the log-odds a step must exceed to lengthen a resolved tag |
 | `-resolve_max_evalue <E>` | 1 | Advanced: largest E-value of the tags merged |
 | `-resolve_join` | off | Advanced: also join tags that only touch at a peak |
@@ -1827,15 +1827,23 @@ are one placement, a step's isobaric readings kept apart (`{Q|[AG]}`). A
 resolved tag is a chain of whole placements, each overlapping the one before by
 at least one step and agreeing with it on every shared step (with
 `-resolve_join`, touching at a peak); placements wholly inside it are
-subsumed. Chains are taken best first by `-resolve_score`: by default each new
-step is worth its log-odds of being right (a logistic model of E-value, mass
-error, peak intensity ranks, complement ions, gap and ambiguity, fitted on
-PXD003531 and PXD000001 against Sage) less `-resolve_threshold` (3), the scheme
-that passed the preregistered held-out test on PXD076528 (first resolved tag
-right in 58.7% of scans against 58.2% for the best single tag, 11% more correct
-residues). Residue masses are the tagger's (OpenMS, with the run's
-modifications). Under several precursor hypotheses the selected one's rows are
-merged.
+subsumed. Chains are taken best first by `-resolve_score`. By default
+(`cstar`) each new step is worth its C* log-odds of being right less
+`-resolve_threshold` (3): a logistic model fitted on PXD003531, PXD000001 and
+PXD076528 against Sage, of the step's E-value, mass error (at a Da tolerance or
+above 25 ppm in tolerance units, 20·Δm/z/tol), peak intensity ranks (global and
+within ±50 Th), complement ions at any charge, gap, ambiguity, rival steps and
+the support of the tags. Rank 1 is then the first resolved tag that holds no
+peak together with its own complement; the others follow in their order (the
+`score` of rank 1 can be lower than that of rank 2). The scheme (X1) won a
+preregistered held-out test: on PXD020401 (Orbitrap HCD, 20 ppm) the first
+resolved tag was right in 84.9% of scans against 81.5% for `steplogodds` and
+81.7% for the best single tag, and on PXD031975 (ion trap, 0.5 Da) in 59.8%
+against 48.0% and 56.1%. `steplogodds`, the 1.15 default, uses a simpler step
+model (E-value, mass error, intensity ranks, complements, gap and ambiguity;
+without the mass error at a Da tolerance or above 25 ppm). Residue masses are
+the tagger's (OpenMS, with the run's modifications). Under several precursor
+hypotheses the selected one's rows are merged.
 
 `-resolved_out` columns, one row per resolved tag in rank order: `spectrum`,
 `rank` (1-based), `sequence` (N→C in the called series; a step with several

@@ -384,8 +384,8 @@ export const PARAM_UI: Record<string, ParamUi> = {
     section: 'Resolved tags, advanced',
     label: 'Ranking',
     help: {
-      text: "How the resolved tags of a spectrum are ranked, the tags merged on its peaks that the Spectrum tab shows under All tags. steplogodds adds, for each step a chain gains, the step's log-odds of being right less the step threshold; evidence sums the E-value evidence of a resolved tag's tags; anchor puts the resolved tag of the best single tag first and ranks the rest by steplogodds.",
-      tip: 'Keep steplogodds, the default.'
+      text: "How the resolved tags of a spectrum are ranked, the tags merged on its peaks that the Spectrum tab shows under All tags. cstar adds, for each step a chain gains, the step's C* log-odds of being right (its peaks, mass error, rival steps and the support of the tags) less the step threshold, and ranks first the best resolved tag that holds no peak together with its own complement; steplogodds is the same with the simpler 1.15 step model and without that rule; evidence sums the E-value evidence of a resolved tag's tags; anchor puts the resolved tag of the best single tag first and ranks the rest by steplogodds.",
+      tip: 'Keep cstar, the default: it won the preregistered held-out test, at 20 ppm and at 0.5 Da.'
     }
   },
   resolve_threshold: {
@@ -393,8 +393,8 @@ export const PARAM_UI: Record<string, ParamUi> = {
     label: 'Step threshold',
     depends: [{ on: 'resolve_score', note: 'the evidence ranking uses no step threshold', when: { resolve_score: { isNot: ['evidence'] } } }],
     help: {
-      text: 'The log-odds a step must exceed to lengthen a resolved tag, under the steplogodds and anchor rankings. Higher keeps resolved tags shorter and surer.',
-      tip: '3, the default, is the threshold the ranking was fitted with.'
+      text: 'The log-odds a step must exceed to lengthen a resolved tag, under the cstar, steplogodds and anchor rankings. Higher keeps resolved tags shorter and surer.',
+      tip: '3, the default, is the threshold the held-out tests adopted.'
     }
   },
   resolve_max_evalue: {

@@ -1240,11 +1240,12 @@
     {
       "name": "resolve_score",
       "type": "string",
-      "default": "steplogodds",
-      "description": "How resolved tags are ranked: steplogodds (each step a chain adds is worth its log-odds of being right less -resolve_threshold), evidence (summed E-value evidence of its tags) or anchor (the best single tag first, then steplogodds)",
+      "default": "cstar",
+      "description": "How resolved tags are ranked: cstar (each step a chain adds is worth its C* log-odds of being right, from its peaks, mass error, rivals and support, less -resolve_threshold; rank 1 is the best resolved tag that holds no peak together with its own complement), steplogodds (the same with the simpler 1.15 step model and no complement rule), evidence (summed E-value evidence of its tags) or anchor (the best single tag first, then steplogodds)",
       "required": false,
       "toppAdvanced": true,
       "choices": [
+        "cstar",
         "steplogodds",
         "evidence",
         "anchor"
@@ -1254,7 +1255,7 @@
       "name": "resolve_threshold",
       "type": "double",
       "default": "3.0",
-      "description": "The log-odds a step must exceed to lengthen a resolved tag (steplogodds, anchor)",
+      "description": "The log-odds a step must exceed to lengthen a resolved tag (cstar, steplogodds, anchor)",
       "required": false,
       "toppAdvanced": true
     },

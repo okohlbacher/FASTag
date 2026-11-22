@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- **Resolved tags: a new default ranking, `-resolve_score cstar`.** Each step a resolved tag adds is worth its C*
+  log-odds (mass error in tolerance units at a Da tolerance, rivals, support, complements at any charge) less 3, and
+  rank 1 is the first resolved tag without a peak and its own complement; the GUI ranks the same when it resolves
+  itself, and `steplogodds` stays selectable.
+- **Held-out result behind it (preregistration amendment 3):** the first resolved tag was right in 84.9% of scans
+  against 81.5% under `steplogodds` on PXD020401 (20 ppm), and in 59.8% against 48.0% on PXD031975 (0.5 Da).
+
 - **CLI: tag merging, `-resolved_out` and `-tag_graph_out`.** FASTag merges the tags of each spectrum into resolved
   tags itself, as the desktop app's Spectrum tab did (src/TagGraph.h, a port of its graph with the same tie-breaks):
   one row per resolved tag in rank order (sequence N→C, series call, flanks, score, evidence, peaks, steps, the member

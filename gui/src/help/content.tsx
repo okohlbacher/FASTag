@@ -745,10 +745,12 @@ export const RESULTS: HelpPage = {
             of one ion series that overlap by at least one step and agree are assembled into one longer resolved tag,
             and a tag inside another is not listed on its own. Resolved tags are ranked by the evidence of their
             steps: each step&apos;s chance of being right, from its E-value, mass error, the intensity of its two
-            peaks, their complement ions and whether it is a gap step, less a threshold, so a tag grows only by
-            steps that are probably right. (Fitted on two datasets against database search, and tested on a third:
-            the first resolved tag was right as often as the best single tag, with 11% more correct residues;
-            summing the tags&apos; E-values instead was right 18 points less often.) the table gives the E-value of the best and of the weakest of them, how many
+            peaks, their complement ions at any charge, whether it is a gap step, the steps that compete with it
+            and how many tags support it, less a threshold, so a tag grows only by steps that are probably right.
+            The first is then the best resolved tag that does not hold a peak together with its own complement.
+            This is FASTag&apos;s default (Ranking cstar). (Fitted on three datasets against database search and
+            tested on two others: the first resolved tag was right in 84.9% of scans at 20 ppm and in 59.8% at
+            0.5 Da, against 81.5% and 48.0% for the earlier step ranking.) The table gives the E-value of the best and of the weakest of them, how many
             tags build it and which other resolved tags conflict with it (they share a peak and continue
             differently) or read the same residues in the other ion series. A step two readings cannot be told
             apart on is written {"{Q|[AG]}"}, in italics. E-value ≤ leaves out weaker tags (1 by default); Join
