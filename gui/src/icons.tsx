@@ -55,6 +55,15 @@ export function IconFile(): JSX.Element {
   )
 }
 
+/// A small stick spectrum: opens a row's spectrum.
+export function IconSpectrum({ size = 14 }: { size?: number }): JSX.Element {
+  return (
+    <svg width={size} height={size} viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" aria-hidden="true">
+      <path d="M1.5 14h13M3.5 14V9M6.5 14V3M9.5 14V7M12.5 14v-3.5" />
+    </svg>
+  )
+}
+
 export function IconClose(): JSX.Element {
   return (
     <svg className="icon" width="12" height="12" viewBox="0 0 12 12" aria-hidden="true">

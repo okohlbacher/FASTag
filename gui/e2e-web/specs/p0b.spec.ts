@@ -27,12 +27,14 @@ const ctl = (page: Page, f: keyof Ctl, ...a: number[]): Promise<void> =>
     [f, a] as const
   )
 
-/// The raw cells of column @p j of the rows in the DOM, top to bottom.
+/// The raw cells of file column @p j of the rows in the DOM, top to bottom.
+/// Length, Extended and Gapped start unticked: the DOM has no cell for them.
+const UNTICKED = ['length', 'extended', 'gapped', 'res_conf'].map((c) => HEAD.split('\t').indexOf(c)).filter((k) => k >= 0)
 const column = (page: Page, j: number): Promise<string[]> =>
   page.$$eval(
     '.rt-rows .rt-row',
     (rows, jj) => rows.map((r) => r.querySelectorAll('[role="gridcell"]')[jj as number]?.getAttribute('aria-label') ?? ''),
-    j
+    j - UNTICKED.filter((k) => k < j).length
   )
 
 async function openTags(page: Page): Promise<void> {

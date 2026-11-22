@@ -135,8 +135,9 @@ test('an export equals the view: its rows, its order, the shown columns, as TSV 
   await page.getByRole('checkbox', { name: 'Charge' }).uncheck()
   const view = await lastView(page)
   const { rows, columns } = await viewRows(page, view)
-  // Not charge (unchecked), nor fasta_hit (no database filter: not shown).
-  const shown = columns.filter((c) => c !== 'charge' && c !== 'fasta_hit')
+  // Not charge (unchecked), nor fasta_hit (no database filter: not shown),
+  // nor the columns that start unticked.
+  const shown = columns.filter((c) => !['charge', 'fasta_hit', 'length', 'extended', 'gapped', 'res_conf'].includes(c))
   const pick = shown.map((c) => columns.indexOf(c))
   const n = rows.length.toLocaleString('en-US')
   for (const [dest, format] of [

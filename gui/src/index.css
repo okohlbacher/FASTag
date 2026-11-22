@@ -890,6 +890,8 @@ details.raw td.wrap { white-space: normal; min-width: 300px; }
 .rt-row { display: grid; height: 28px; align-items: center; border-bottom: 1px solid var(--row-rule); }
 .rt-cell { padding: 0 10px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-variant-numeric: tabular-nums; }
 .rt-cell.n { text-align: right; }
+.rt-spec { display: inline-flex; vertical-align: middle; height: 14px; margin: 0 6px 0 0; padding: 0; border: 0; background: none; color: var(--primary-text); cursor: pointer; border-radius: 3px; }
+.rt-spec:hover { color: var(--foreground); background: var(--primary-soft); }
 /* Tags and ProForma in the mono font: their width is known (ResultsTable SEQ_CHAR_W). */
 .rt-cell.seq { font-family: var(--font-seq); font-size: 13px; }
 .rt-cell.dim { color: var(--muted-foreground); }

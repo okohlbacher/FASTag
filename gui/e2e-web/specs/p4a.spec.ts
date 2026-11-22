@@ -129,11 +129,15 @@ test('a double-click on a row opens its spectrum; all tags resolved by the tag g
   await expect(summary).toContainText('above the cutoff')
   // Without a cutoff the row orders of a gapped tag are one distinct tag.
   await page.getByLabel('Largest E-value of the tags used').fill('')
-  await expect(summary).toContainText(/28 tags \(1[0-9] distinct\)/)
+  await expect(summary).toContainText(/\d+ tags \(\d+ distinct\)/)
+  const [, n, distinct] = /(\d+) tags \((\d+) distinct\)/.exec((await summary.textContent()) ?? '')!
+  expect(Number(distinct)).toBeLessThan(Number(n))
   await page.getByLabel('Join tags that only touch').check()
   await expect(summary).toContainText('resolved')
   // A member tag leads back to the one-tag view.
-  await page.getByRole('button', { name: 'PGV', exact: true }).click()
+  const member = page.getByTestId('pileup').getByRole('button').first()
+  const tag = ((await member.textContent()) ?? '').replace(/ ×\d+$/, '')
+  await member.click()
   await expect(page.getByLabel('Chosen tag')).toBeChecked()
-  await expect(page.getByTestId('ladder')).toContainText('PGV')
+  await expect(page.getByTestId('ladder')).toContainText(tag)
 })

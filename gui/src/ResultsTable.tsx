@@ -1,3 +1,4 @@
+import { IconSpectrum } from './icons'
 import { useEffect, useId, useMemo, useRef, useState, type JSX, type KeyboardEvent, type PointerEvent as ReactPointerEvent } from 'react'
 import { SPECTRUM_NEEDS } from './spectrum/support'
 import type { BrowserEvent, ResultsHead, ResultsPage, ResultsSort, ResultsView } from './types'
@@ -62,6 +63,8 @@ const GLYPH_W = 16
 // out of an 840 px pane. Its cells are middle-truncated (fitMiddle), so the
 // scan number stays visible; dragging the edge widens it.
 const SPECTRUM_AUTO_W = 200
+// The spectrum cell's button and its gap.
+const SPEC_ICON_W = 22
 // "Database hit" and "In database" / "Entrapment" whole.
 const HIT_MIN_W = 120
 
@@ -89,6 +92,13 @@ const LABEL: Record<string, string> = {
   q_db: 'Database q-value'
 }
 export const columnLabel = (c: string): string => LABEL[c] ?? c
+
+// Not shown until ticked under Columns: the tag says its length, the two
+// confidence columns sum up the per-residue ones.
+const DEFAULT_HIDDEN = ['length', 'extended', 'gapped', 'res_conf']
+// Most confident tags first; a file without mean_conf is ranked by E-value.
+const DEFAULT_SORT: ResultsSort = { column: 'mean_conf', desc: true }
+const EVALUE_SORT: ResultsSort = { column: 'evalue', desc: false }
 
 /// The columns' indices in the order the table shows them: the per-residue
 /// confidence (-res_conf, the headline of Export tags) right after the tag
@@ -339,9 +349,9 @@ interface Props {
 export default function ResultsTable({ path, source, rerunResConf, spectrum }: Props): JSX.Element {
   const [meta, setMeta] = useState<Meta | null>(null)
   const [error, setError] = useState<string | null>(null)
-  // Best tags first, as the CLI ranks them. A file without an evalue column
-  // ignores the sort (browser.rs drops a sort on a missing column).
-  const [sort, setSort] = useState<ResultsSort | null>({ column: 'evalue', desc: false })
+  // Most confident tags first. A file without the sort's column ignores the
+  // sort (browser.rs drops a sort on a missing column).
+  const [sortWanted, setSort] = useState<ResultsSort | null>(DEFAULT_SORT)
   // Text/number filters commit on Enter or blur (each distinct view costs the
   // backend a full-file scan; per-keystroke would burn one per character).
   const [draft, setDraft] = useState({ spectrum: '', minLength: '', maxEvalue: '' })
@@ -354,7 +364,7 @@ export default function ResultsTable({ path, source, rerunResConf, spectrum }: P
   const [userW, setUserW] = useState<Record<string, number>>({})
   const [numeric, setNumeric] = useState<Set<string>>(new Set())
   // Columns the user hid with Columns…; Export writes the shown ones.
-  const [hidden, setHidden] = useState<Set<string>>(new Set())
+  const [hidden, setHidden] = useState<Set<string>>(new Set(DEFAULT_HIDDEN))
   const [colsOpen, setColsOpen] = useState(false)
   // This file's export job (GUI-DESIGN 6.1 item 11), kept by the App's
   // store across tab switches and re-opens (results/exportJobs.ts).
@@ -369,6 +379,9 @@ export default function ResultsTable({ path, source, rerunResConf, spectrum }: P
   // D5: the head rows of the open (file order), shown until a page arrives.
   const [head, setHead] = useState<ResultsHead | null>(null)
   const [rank, setRank] = useState<RankState>(null)
+  // A table without mean_conf (an older FASTag, another report): by E-value.
+  const knownColumns = meta?.columns ?? head?.columns
+  const sort = sortWanted?.column === 'mean_conf' && knownColumns && !knownColumns.includes('mean_conf') ? EVALUE_SORT : sortWanted
   // A loaded page is in file order (ranked: false): the ranked order is
   // swapped in when it is ready.
   const fileOrderShown = useRef(false)
@@ -441,7 +454,8 @@ export default function ResultsTable({ path, source, rerunResConf, spectrum }: P
     setAutoW(null)
     setUserW({})
     setNumeric(new Set())
-    setHidden(new Set())
+    setHidden(new Set(DEFAULT_HIDDEN))
+    setSort(DEFAULT_SORT)
     setHead(null)
     setRank(null)
     setActive(null)
@@ -484,7 +498,8 @@ export default function ResultsTable({ path, source, rerunResConf, spectrum }: P
         }
         early.splice(0).forEach(onEvent)
         openedRef.current = path
-        pump()
+        // Without mean_conf the view changes to the E-value order first (see sort).
+        if (h.columns.includes('mean_conf') || wantRef.current.view.sort?.column !== 'mean_conf') pump()
       },
       // The page query reports the same error.
       () => {
@@ -730,9 +745,8 @@ export default function ResultsTable({ path, source, rerunResConf, spectrum }: P
     })
 
   const clickSort = (column: string): void =>
-    setSort((s) =>
-      s?.column !== column ? { column, desc: false } : s.desc ? null : { column, desc: true }
-    )
+    // From the sort in effect (a file without mean_conf is shown by E-value).
+    setSort(sort?.column !== column ? { column, desc: false } : sort.desc ? null : { column, desc: true })
 
   const commit = (): void => setFilters(draft)
   const onEnter = (e: KeyboardEvent): void => {
@@ -1039,7 +1053,27 @@ export default function ResultsTable({ path, source, rerunResConf, spectrum }: P
                   hitWords(c)
                 ) : name === 'spectrum' ? (
                   // The scan number tells rows apart; the native ID is the tooltip.
-                  fitMiddle(spectrumHint(c) || c, width(name))
+                  <>
+                    {spectrum && c !== '' && (
+                      <button
+                        type="button"
+                        className="rt-spec"
+                        tabIndex={-1}
+                        title="Show this spectrum with the tag on its peaks"
+                        aria-label={`Open spectrum ${spectrumHint(c) || c}`}
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          setActive(rowId ?? null)
+                          setActivePos(i)
+                          openSpectrum(i)
+                        }}
+                        onDoubleClick={(e) => e.stopPropagation()}
+                      >
+                        <IconSpectrum />
+                      </button>
+                    )}
+                    {fitMiddle(spectrumHint(c) || c, width(name) - (spectrum ? SPEC_ICON_W : 0))}
+                  </>
                 ) : (
                   fitMiddle(c, width(name), charW(name))
                 )}

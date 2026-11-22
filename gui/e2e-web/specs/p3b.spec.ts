@@ -21,15 +21,14 @@ const SPECTRA = new Set(ROWS.map((r) => r[0]))
 // The run had no database filter: every fasta_hit cell is '-', and the
 // table leaves that column out (round 6, 13).
 const HIT = COLUMNS.indexOf('fasta_hit')
-// The table shows res_conf right after the length (ResultsTable
-// displayOrder, round 8, 11); a row is copied as shown.
-const RC = COLUMNS.indexOf('res_conf')
-const ORDER = ((): number[] => {
-  const rest = COLUMNS.map((_, j) => j).filter((j) => j !== RC)
-  rest.splice(rest.indexOf(COLUMNS.indexOf('length')) + 1, 0, RC)
-  return rest
-})()
-const shownCells = (r: string[], skip: number[] = []): string[] => ORDER.filter((j) => j !== HIT && !skip.includes(j)).map((j) => r[j])
+// Length, Extended, Gapped and Residue conf. start unticked under Columns;
+// a row is copied as shown.
+const UNTICKED = ['length', 'extended', 'gapped', 'res_conf'].map((c) => COLUMNS.indexOf(c))
+const CHARGE = COLUMNS.indexOf('charge')
+const shownCells = (r: string[], skip: number[] = []): string[] =>
+  COLUMNS.map((_, j) => j)
+    .filter((j) => j !== HIT && !UNTICKED.includes(j) && !skip.includes(j))
+    .map((j) => r[j])
 const TOTAL = ROWS.length.toLocaleString('en-US')
 
 async function openTags(page: Page): Promise<void> {
@@ -120,11 +119,11 @@ test('copy row copies the shown cells of the active row, and copy USI its USI, b
   expect(rows[1][usi]).toMatch(/^mzspec:USI000000:Ecoli_MS2_small:scan:\d+$/)
   // Hidden columns are not copied; the buttons copy the active row too.
   await page.getByRole('button', { name: 'Columns…' }).click()
-  await page.getByRole('checkbox', { name: 'Residue conf.' }).uncheck()
+  await page.getByRole('checkbox', { name: 'Charge' }).uncheck()
   await page.locator('.rt-rows .rt-row').nth(4).click()
   await page.getByRole('button', { name: 'Copy row' }).click()
   await page.getByRole('button', { name: 'Copy USI' }).click()
-  expect((await copied(page)).slice(2)).toEqual([shownCells(rows[4], [RC]).join('\t'), rows[4][usi]])
+  expect((await copied(page)).slice(2)).toEqual([shownCells(rows[4], [CHARGE]).join('\t'), rows[4][usi]])
 })
 
 test('the spectrum filter placeholder comes from the first spectrum ID of the file', async ({ page }) => {

@@ -12,6 +12,10 @@
   most tags of the spectrum were placed on is named and its fragments are drawn as a ruler; a candidate, not an
   identification.
 
+- **GUI: Tags table.** Each row has a spectrum icon that opens it in the Spectrum tab. The table opens with the most
+  confident tags first (Mean conf., descending; a table without that column by E-value as before). Length, Extended,
+  Gapped and Residue conf. are not shown until ticked under Columns….
+
 - **GUI: in-app Feedback.** A **Feedback** button in the top bar (also Help › Send Feedback…, Cmd/Ctrl+Shift+F)
   takes a screenshot of the window (the webview's own snapshot: WKWebView, WebView2, WebKitGTK; no screen-recording
   permission), records the app and engine versions, the system, the view and the settings as typed values (paths only as

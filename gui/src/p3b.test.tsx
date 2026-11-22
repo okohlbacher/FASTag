@@ -26,9 +26,9 @@ const key = (el: Element, k: string, mods: { metaKey?: boolean; ctrlKey?: boolea
 const fixture = (name: string): string => readFileSync(`src/fixtures/denovo/${name}`, 'utf8')
 
 const COLUMNS = ['spectrum', 'tag', 'length', 'charge', 'nterm_mass', 'cterm_mass', 'evalue', 'res_conf', 'usi']
-// The table shows res_conf after the length (ResultsTable displayOrder):
-// a row is copied as shown.
-const SHOWN = (r: string[]): string[] => [r[0], r[1], r[2], r[7], r[3], r[4], r[5], r[6], r[8]]
+// Length and res_conf are not shown until ticked under Columns: a row is
+// copied as shown.
+const SHOWN = (r: string[]): string[] => [r[0], r[1], r[3], r[4], r[5], r[6], r[8]]
 const N = 60
 const ROWS: string[][] = Array.from({ length: N }, (_, i) => [
   `frame=${100 + i} scan=${i}`,
@@ -235,7 +235,7 @@ describe('copy row and copy USI', () => {
     await click(screen.getByRole('checkbox', { name: 'Charge' }))
     await key(table(), 'ArrowDown')
     await key(activeRow()!, 'c', { ctrlKey: true })
-    expect(writeText).toHaveBeenCalledWith(SHOWN(ROWS[0]).filter((_, k) => k !== 4).join('\t'))
+    expect(writeText).toHaveBeenCalledWith(SHOWN(ROWS[0]).filter((_, k) => k !== 2).join('\t'))
   })
 
   it('⇧⌘C copies the USI of the active row', async () => {
