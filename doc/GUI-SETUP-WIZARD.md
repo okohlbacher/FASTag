@@ -579,7 +579,7 @@ Rust: `cargo test` in gui/src-tauri for `path_status`.
 
 ## 10. Review decisions
 
-The design review of the first draft (21 issues). Each adopted or rejected:
+The design review of the first draft (23 issues). Each adopted or rejected:
 
 1. Step 1 suggests FASTag identifies proteins — **adopted**: group "Learn
    about the sample", the fixed not-a-search-engine line, Database reduction's

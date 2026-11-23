@@ -35,8 +35,8 @@ export default function GlycoTable({ path, gen, minFraction }: GlycoTableProps):
       <div className="empty-state">
         <h2>No glycopeptide report</h2>
         <p>
-          {baseName(path)} is not on disk: the run did not write it, or it was moved. Check Glycopeptide report in the
-          Outputs card and run again.
+          {baseName(path)} is not on disk: the run did not write it, or it was moved. Check Glycopeptide report in
+          Outputs &amp; run and run again.
         </p>
       </div>
     )

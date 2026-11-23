@@ -46,9 +46,9 @@ export const WORKFLOWS: HelpPage = {
       body: (
         <>
           <ol>
-            <li>In Setup, switch the Input card to <strong>Batch</strong> and add files or a folder. Every workflow runs on a batch; <strong>Characterize a run</strong> is the usual survey. An SDRF file is optional.</li>
-            <li>Use <strong>Add files…</strong> (in Setup; <strong>Add…</strong> in the Batch view) to select files or <strong>Add folder…</strong> for the spectra files directly inside a folder. Check the common settings in Setup; each file runs in turn with those settings.</li>
-            <li>Use <strong>Change…</strong> beside Output folder (Setup) or <strong>Choose output folder…</strong> (Batch view) if results should go elsewhere, for example when the inputs are read-only. <strong>Beside inputs</strong> restores the usual location. Changing the folder affects pending or retried jobs; completed jobs keep their existing output paths.</li>
+            <li>In Setup, choose the task, then switch Inputs (step 2) to <strong>Batch</strong> and add files or a folder. Every workflow runs on a batch; <strong>Characterize a run</strong> is the usual survey. An SDRF file is optional.</li>
+            <li>Use <strong>Add files…</strong> (in Inputs; <strong>Add…</strong> in the Batch view) to select files or <strong>Add folder…</strong> for the spectra files directly inside a folder. Check the common settings in Setup; each file runs in turn with those settings.</li>
+            <li>Use <strong>Change…</strong> beside Output folder (Inputs) or <strong>Choose output folder…</strong> (Batch view) if results should go elsewhere, for example when the inputs are read-only. <strong>Beside inputs</strong> restores the usual location. Changing the folder affects pending or retried jobs; completed jobs keep their existing output paths.</li>
             <li><strong>Run N remaining files</strong> continues the queue. <strong>Retry failed</strong> retries failed jobs. Cancel stops the active job and the queue; it does not remove results of completed jobs.</li>
             <li>After processing stops, click a completed file to open its results. Each file&apos;s <strong>Log</strong> opens its own messages.</li>
           </ol>
@@ -144,7 +144,7 @@ export const WORKFLOWS: HelpPage = {
           <p>
             <strong>Spectra to read</strong> below 1 reads a random share of the spectra; the counts then describe
             that share only. Raw DIA files are refused by default; choose <strong>warn</strong> under DIA input to
-            run them anyway. For many files, switch the Input card to Batch.
+            run them anyway. For many files, switch Inputs (step 2) to Batch.
           </p>
         </>
       )

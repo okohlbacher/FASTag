@@ -180,6 +180,13 @@ does not duplicate any of these.
 
 ## 3. Screen flow, layout, help
 
+> **Superseded by the Setup wizard (2026-11-23):** the five stacked cards
+> described here are now four steps (Task, Inputs, Settings, Outputs & run);
+> see doc/GUI-SETUP-WIZARD.md for the layout, the inputs each task asks for
+> and where every control of this section went (its section 7). The
+> workflows, their values, the product wiring and Advanced below are
+> unchanged.
+
 ```
 [Header: Setup | Run | Results | Batch | History      Open… | ? Help]
 1 Input        file chip + probe line (instrument, MS2 count, DIA check)  [One file | Batch]

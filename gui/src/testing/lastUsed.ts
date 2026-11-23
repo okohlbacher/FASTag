@@ -1,6 +1,6 @@
 // Test helpers for the last-used offer (D6, GUI-DESIGN P0a). The last
 // session's parameters are no longer applied on start: a test that starts
-// from them clicks "Apply last-used (n)" as a user would, and then checks
+// from them clicks "Continue last run (n)" as a user would, and then checks
 // that the form really holds them, so it cannot pass vacuously on defaults.
 
 import { act, fireEvent, screen } from '@testing-library/react'
@@ -61,7 +61,7 @@ export async function formValue(name: string): Promise<string | boolean> {
   return v
 }
 
-/// The number of settings "Apply last-used" offers for @p lastUsed on a fresh
+/// The number of settings "Continue last run" offers for @p lastUsed on a fresh
 /// form: the rendered ones whose value differs from FASTag's default.
 export function offerCount(lastUsed: Record<string, unknown>): number {
   return Object.entries(lastUsed).filter(([name, v]) => {

@@ -67,7 +67,7 @@ export interface CarryNote {
 export function useSession(start: Origin = DEFAULTS, opts: { confirmed?: boolean } = {}) {
   const [input, setInput] = useState('')
   const [out, setOut] = useState('')
-  // The Input card: one file, or a batch of files run in turn (doc/GUI-WORKFLOWS.md 1).
+  // Inputs (step 2): one file, or a batch of files run in turn (doc/GUI-WORKFLOWS.md 1).
   const [mode, setMode] = useState<'one' | 'batch'>('one')
   // The inputs a batch has queued (App keeps them in step with the queue):
   // the CLI refuses some options on each mzPeak file of a batch too.
@@ -139,7 +139,7 @@ export function useSession(start: Origin = DEFAULTS, opts: { confirmed?: boolean
     window.fastag.loadSettings().then((st) => {
       setPresets(Object.keys(st.presets).sort())
       // The last session's parameters are an offer (D6): a fresh start runs
-      // with FASTag's defaults unless "Apply last-used" is clicked. Only
+      // with FASTag's defaults unless "Continue last run" is clicked. Only
       // parameters the form renders count; in/out paths are never stored.
       if (st.lastUsed) {
         const known = Object.entries(st.lastUsed).filter(([n]) => RENDERED.includes(n)) as [string, ParamValue][]

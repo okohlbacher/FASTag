@@ -131,7 +131,7 @@ export async function addBatch(mock: MockBridge, files: string[]): Promise<void>
   await click(screen.getByRole('button', { name: /^(Add files|Add)…$/ }))
 }
 
-/// The button that adds files to the batch: Setup's Input card in Batch
+/// The button that adds files to the batch: Setup's Inputs step in Batch
 /// mode (switched to, synchronously) until there is a queue, then the
 /// queue's own "Add…" on the Batch view.
 export function batchAddButton(): HTMLElement {

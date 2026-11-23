@@ -493,7 +493,7 @@ export function briefHint(text: string): string {
 }
 
 /// Curated one-line hints, the same in Settings and in Advanced (a
-/// workflow's own hint, tasks.ts help, comes first in its Settings card and
+/// workflow's own hint, tasks.ts help, comes first in its Settings step and
 /// in its Advanced groups alike).
 export const BRIEF_HINT: Record<string, string> = {
   // Tagging
