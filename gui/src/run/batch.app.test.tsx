@@ -9,7 +9,7 @@ import App from '../App'
 import { perJobOutputs } from '../app/paths'
 import { SPECTRA } from '../api'
 import { installMockBridge, type MockBridge } from '../testing/mockBridge'
-import { addBatch, click, goTo, logText, openGroup, pickSingle, renderApp, runButton, showView, startBatch } from '../testing/render'
+import { addBatch, click, goTo, logText, openGroup, pickSingle, renderApp, runButton, showView, startBatch, fileButton } from '../testing/render'
 import { applyLastUsed, formValue } from '../testing/lastUsed'
 
 // fireEvent wraps only the synchronous handler in act; the async continuations
@@ -307,7 +307,7 @@ describe('run/batch orchestration', () => {
     await screen.findByText(/FASTag cannot start/)
     await act(async () => {})
     mock.nextPickInput = '/d/a.mzML'
-    await click(screen.getByRole('button', { name: /^(Choose file|Change)…$/ }))
+    await click(fileButton())
     expect(runButton()).toHaveProperty('disabled', true)
     void container
   })
@@ -436,7 +436,7 @@ describe('run/batch orchestration', () => {
     expect(await formValue('recon_out')).toBe('/res/old.recon.tsv')
     await pickSingle(mock, '/d/b.mzML')
     expect((runButton() as HTMLButtonElement).disabled).toBe(true)
-    expect(screen.getByText('The placements need a protein database: choose one under Protein database.')).toBeDefined()
+    expect(screen.getByText('The placements need a protein database: choose one in Inputs.')).toBeDefined()
     expect(screen.getByText(/1 value to fix before running: Peaks kept \(must be at most 1024\)/)).toBeDefined()
     await click(runButton())
     expect(mock.runCalls).toHaveLength(0)
@@ -466,12 +466,15 @@ describe('run/batch orchestration', () => {
       if (!b) throw new Error(`no Browse button for ${name}`)
       return b
     }
-    await openGroup('Keep only tags found in a database')
-    await openGroup('Placement on the database')
+    // FASTag defaults: the Filter database is an optional input of step 2.
+    await act(async () => {
+      fireEvent.change(screen.getByRole('combobox', { name: 'Add optional input' }), { target: { value: 'fasta' } })
+    })
     mock.nextPickInput = '/db/human.fasta'
     await click(browse('fasta'))
     expect(mock.pickFileCalls[mock.pickFileCalls.length - 1]).toEqual({ kind: 'open', formats: ['fasta', 'fa', 'faa'] })
     expect((document.getElementById('p-fasta') as HTMLInputElement).value).toBe('/db/human.fasta')
+    await openGroup('Placement on the database')
     // A report is a checkbox; its file is changed with its own formats.
     await click(document.getElementById('out-recon_out')!)
     mock.nextPickOutput = '/r/a.recon.tsv'

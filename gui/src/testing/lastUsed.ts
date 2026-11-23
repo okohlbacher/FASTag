@@ -7,19 +7,19 @@ import { act, fireEvent, screen } from '@testing-library/react'
 import { expect } from 'vitest'
 import { PARAM_BY_NAME, RENDERED, SECTIONS } from '../paramLayout'
 import { INSTRUMENTS } from '../setup/presets'
-import { showView } from './render'
+import { showStep, showView } from './render'
 
 /// Click the offer chip. @p n is the number of settings it must offer.
 export async function applyLastUsed(n: number): Promise<void> {
-  // The chip is on the Setup view (P2a shell).
-  showView('setup')
-  const chip = await screen.findByRole('button', { name: /^Apply last-used \(\d+\)$/ })
-  expect(chip.textContent).toBe(`Apply last-used (${n})`)
+  // The offer is on step 1 of Setup (doc/GUI-SETUP-WIZARD.md 3).
+  showStep(1)
+  const chip = await screen.findByRole('button', { name: /^Continue last run \(\d+\)$/ })
+  expect(chip.textContent).toBe(`Continue last run (${n})`)
   await act(async () => {
     fireEvent.click(chip)
   })
   // The offer is used up.
-  expect(screen.queryByRole('button', { name: /^Apply last-used/ })).toBeNull()
+  expect(document.querySelector('button.offer')).toBeNull()
 }
 
 /// What the form holds for parameter @p name: a checkbox's state, a field's

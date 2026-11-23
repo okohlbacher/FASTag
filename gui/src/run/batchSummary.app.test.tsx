@@ -6,7 +6,7 @@
 import { act, screen, waitFor, within } from '@testing-library/react'
 import { describe, expect, it } from 'vitest'
 import { installMockBridge, type MockBridge } from '../testing/mockBridge'
-import { addBatch, click, goTo, renderColdApp, renderCharacterizeApp, startBatch } from '../testing/render'
+import { addBatch, click, goTo, renderColdApp, renderCharacterizeApp, startBatch, showStep } from '../testing/render'
 import { BATCH_CASES, DIA_REFUSAL, type BatchCase } from '../testing/batchFixtures'
 import { speciesFromTsv } from '../testing/speciesTsv'
 
@@ -277,6 +277,7 @@ describe('what a summary cell says when a read goes wrong, and where notes show'
   it('an empty folder picked from the Batch input of Setup says so there', async () => {
     const mock = installMockBridge()
     await renderColdApp(mock)
+    showStep(2)
     await click(screen.getByRole('radio', { name: 'Batch' }))
     mock.nextPickFolder = '/empty'
     mock.folderFiles['/empty'] = []

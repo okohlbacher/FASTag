@@ -9,7 +9,7 @@ import { parseReport } from '../digestReport'
 import { PARAM_BY_NAME, RENDERED, SECTIONS, defaultText } from '../paramLayout'
 import manifest from '../params.generated.json'
 import { installMockBridge } from '../testing/mockBridge'
-import { click, flush } from '../testing/render'
+import { click, flush, showStep } from '../testing/render'
 import nocallTsv from '../fixtures/digest_nocall.tsv?raw'
 import digestTsv from '../fixtures/digest.tsv?raw'
 import labelTsv from '../fixtures/label.tsv?raw'
@@ -300,6 +300,7 @@ describe('help: in the app', () => {
     await act(async () => {
       fireEvent.change(tl, { target: { value: '5' } })
     })
+    showStep(3)
     await click(screen.getByRole('button', { name: 'About Seed length' }))
     const pop = screen.getByRole('dialog', { name: 'About Seed length' })
     expect(pop.textContent).toContain('-tag_length')

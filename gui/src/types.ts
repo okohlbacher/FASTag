@@ -310,6 +310,13 @@ declare global {
 // In-app feedback (feedback/types.ts FeedbackApi, src-tauri/src/feedback.rs).
 import type { FeedbackApi } from './feedback/types'
 
+/// One path of pathStatus: whether it exists, and a file or a folder.
+export interface PathStatus {
+  path: string
+  exists: boolean
+  kind: 'file' | 'dir' | null
+}
+
 export interface FastagApi extends FeedbackApi {
   loadSettings: () => Promise<Settings>
   saveLast: (values: Record<string, unknown>) => Promise<boolean>
@@ -371,6 +378,8 @@ export interface FastagApi extends FeedbackApi {
   // The command line a run of these params is, binary first (fastag.rs
   // command_line: the argv `run` replies and History records).
   commandLine: (params: Record<string, unknown>) => Promise<string[]>
+  // Whether each path exists, and what it is (Setup step 2's "Not found").
+  pathStatus: (paths: string[]) => Promise<PathStatus[]>
   // Export INI (ini.rs): the request a run would be given, through
   // `FASTag -ini <tmp> -write_ini <dest>`. Rejects with the CLI's reason.
   exportIni: (params: Record<string, unknown>, dest: string) => Promise<IniExport>

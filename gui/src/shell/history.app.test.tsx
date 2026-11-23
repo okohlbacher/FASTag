@@ -322,15 +322,16 @@ describe('History', () => {
     const mock = installMockBridge()
     await renderApp(mock)
     await pickSingle(mock, '/d/x.mzML')
-    const wf = (id: string): HTMLInputElement => screen.getByRole('radio', { name: new RegExp(`^${id}`) }) as HTMLInputElement
-    const chosen = (): string | undefined => document.querySelector<HTMLInputElement>('input[name="task"]:checked')?.value
+    const chosen = (): string | undefined => document.querySelector<HTMLElement>('button.tile[aria-current="true"]')?.dataset.task
     const before = chosen()
     expect(before).not.toBe('run-qc')
     mock.history = [rec('1', '/d/a.mzML', 'ok', { workflow: 'run-qc', params: { qc_out: '/d/a.qc.tsv', threads: '0', subsample_fraction: '0.1' } })]
     const [row] = await history()
     await click(btn(row, 'Settings into form')!)
     await goTo('setup')
-    expect(wf('Run QC').checked).toBe(true)
+    expect(chosen()).toBe('run-qc')
+    // A run with its input lands on Outputs & run.
+    expect(document.querySelector('nav[aria-label="Setup steps"] [aria-current="step"]')?.getAttribute('data-step-btn')).toBe('4')
     expect(await formValue('subsample_fraction')).toBe('0.1')
     // Its base is Run QC's: only the changed fraction differs from it.
     await goTo('history')
@@ -361,7 +362,7 @@ describe('History', () => {
     const [row] = await history()
     await click(btn(row, 'Settings into form')!)
     await goTo('setup')
-    expect((screen.getByRole('radio', { name: /^Database reduction/ }) as HTMLInputElement).checked).toBe(true)
+    expect(document.querySelector<HTMLElement>('button.tile[aria-current="true"]')?.dataset.task).toBe('db-reduction')
     expect(await formValue('shortlist_max_evalue')).toBe('0.1')
     expect(await formValue('shortlist_gapped')).toBe(false)
     expect(await formValue('recon_min_length')).toBe('6')

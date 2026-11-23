@@ -26,6 +26,8 @@ import { cliText, sameValue } from '../app/format'
 import { focusLater } from '../app/focus'
 import { DEFAULTS, LAST_WORKFLOW, baseOf, baseValues, originText, startValues, taskById, taskOf, type Origin, type TaskId } from './tasks'
 import { applyPreset as presetValues, diffNames, droppedPaths, normalizePreset, presetDiff } from './presetDiff'
+import { carryInputs, carriedText, missingInputs, setOf, type Step } from './inputs'
+import { LANDING_TASK } from './tasks'
 
 // Initial form state IS the tool's own defaults, straight from the manifest.
 export function initialValues(): Record<string, ParamValue> {
@@ -55,7 +57,14 @@ interface Snapshot {
 
 /// @p start: where the session's values come from (D1: the app passes the
 /// task "Export tags"; the hook alone starts from the defaults).
-export function useSession(start: Origin = DEFAULTS) {
+/// What the last form replacement kept and dropped (step 2's status line).
+export interface CarryNote {
+  text: string
+  /// A gen of the form: the note goes with the next replacement.
+  gen: number
+}
+
+export function useSession(start: Origin = DEFAULTS, opts: { confirmed?: boolean } = {}) {
   const [input, setInput] = useState('')
   const [out, setOut] = useState('')
   // The Input card: one file, or a batch of files run in turn (doc/GUI-WORKFLOWS.md 1).
@@ -65,6 +74,22 @@ export function useSession(start: Origin = DEFAULTS) {
   const [batchInputs, setBatchInputs] = useState<readonly string[]>([])
   // The Advanced disclosure of Setup is open.
   const [advancedOpen, setAdvancedOpen] = useState(false)
+  // The Setup wizard (doc/GUI-SETUP-WIZARD.md 5.3): the step shown, whether
+  // a task was confirmed on this launch (a launch that names its origin
+  // counts), the tile selected in step 1, the optional inputs opened but
+  // still empty, and the step the task was changed from.
+  const [step, setRawStep] = useState<Step>(opts.confirmed ? 2 : 1)
+  const [taskConfirmed, setTaskConfirmed] = useState(!!opts.confirmed)
+  const [tile, setTile] = useState<TaskId>(() => taskOf(start)?.id ?? LANDING_TASK)
+  const [revealed, setRevealed] = useState<ReadonlySet<string>>(new Set())
+  const cameFrom = useRef<Step>(2)
+  const setStep = (n: Step): void => {
+    setRawStep((cur) => {
+      if (n === 1 && cur !== 1) cameFrom.current = cur
+      return n
+    })
+  }
+  const [carried, setCarried] = useState<CarryNote | null>(null)
   // Where the form's values came from, and the values that origin gives
   // (before reports are moved beside the input): the footer's diff is the
   // form against these.
@@ -165,6 +190,8 @@ export function useSession(start: Origin = DEFAULTS) {
     const o: Origin = lastWorkflow ? { kind: 'builtin', id: lastWorkflow } : origin
     const ov = lastWorkflow ? baseValues(`builtin:${lastWorkflow}`) : originValues
     replaceForm(o, ov, fillRecipe(merged, new Set(Object.keys(lu))), true)
+    setTaskConfirmed(true)
+    if (lastWorkflow) setTile(lastWorkflow)
     setLastUsed(null)
     focusLater(() => presetRef.current)
   }
@@ -190,12 +217,19 @@ export function useSession(start: Origin = DEFAULTS) {
   // @p v: the form's new values when they are not the origin's (the
   // last-used offer); @p always: take the snapshot even over a form without
   // edits of the user's, since @p v differs from the origin it keeps.
-  function replaceForm(o: Origin, ov: Record<string, ParamValue>, v: Record<string, ParamValue> = ov, always = false): void {
+  // Every replacement keeps the input files the new workflow uses and the
+  // common block the user changed (setup/inputs.ts carryInputs), and says
+  // so in step 2's status line.
+  function replaceForm(o: Origin, ov: Record<string, ParamValue>, v: Record<string, ParamValue> = ov, always = false, common = true): void {
     if (always || diffNames(originValues, values).length > 0) setUndoSnapshot({ values, origin, originValues, edited: new Set(edited.current) })
     setPresetError(null)
+    const c = carryInputs(values, v, taskOf(o) ?? null, originValues, common)
+    const text = carriedText(c, originText(o), originText(origin)) || `Now ${originText(o)}.`
+    setCarried(text ? { text, gen: formGen + 1 } : null)
+    setRevealed(new Set())
     setOrigin(o)
     setOriginValues(ov)
-    replaceValues(beside(v))
+    replaceValues(beside(c.values))
   }
   // The form as it was, unchanged: its output paths (custom ones too) and
   // the recipe fields the user had edited.
@@ -206,23 +240,44 @@ export function useSession(start: Origin = DEFAULTS) {
     replaceValues(undoSnapshot.values)
     edited.current = new Set(undoSnapshot.edited)
     setUndoSnapshot(null)
+    setCarried(null)
   }
+  // The task already chosen keeps the form as it is, edits and all.
   function chooseTask(id: TaskId): void {
     if (!taskById(id)) return
+    setTile(id)
+    if (origin.kind === 'builtin' && origin.id === id) return
     replaceForm({ kind: 'builtin', id }, baseValues(`builtin:${id}`))
   }
   function chooseDefaults(): void {
     replaceForm(DEFAULTS, baseValues('defaults'))
   }
-  // Back to where the form started: the task, preset or defaults.
+  // Back to where the form started: the task, preset or defaults. The input
+  // files stay; the instrument goes back too.
   function resetToOrigin(): void {
-    replaceValues(beside(originValues))
+    const c = carryInputs(values, originValues, taskOf(origin) ?? null, originValues, false)
+    setCarried(null)
+    replaceValues(beside(c.values))
     setUndoSnapshot(null)
+  }
+  // An optional input of step 2: opened, or removed with its set.
+  function revealInput(name: string): void {
+    setRevealed((r) => new Set([...r, name]))
+  }
+  function removeInput(name: string): void {
+    setRevealed((r) => new Set([...r].filter((n) => n !== name)))
+    setValues((v) => ({ ...v, ...Object.fromEntries(setOf(name).map((n) => [n, initialValues()[n]])) }))
   }
 
   async function applyPreset(name: string): Promise<void> {
-    if (!name) return chooseDefaults()
-    if (name.startsWith('builtin:')) return chooseTask(name.slice('builtin:'.length) as TaskId)
+    if (!name) {
+      setTaskConfirmed(true)
+      return chooseDefaults()
+    }
+    if (name.startsWith('builtin:')) {
+      setTaskConfirmed(true)
+      return chooseTask(name.slice('builtin:'.length) as TaskId)
+    }
     const st = await window.fastag.loadSettings()
     // A v1 preset is the full record of the form's values, a v2 one a diff
     // over its base (presetDiff.ts); either way its report paths go beside
@@ -231,6 +286,9 @@ export function useSession(start: Origin = DEFAULTS) {
     if (!p) return
     // A recipe field the preset does not store ran at the recipe's value.
     replaceForm({ kind: 'preset', name, base: p.base }, fillRecipe(presetValues(p, ''), new Set(Object.keys(p.diff))))
+    setTaskConfirmed(true)
+    const t = taskOf({ kind: 'preset', name, base: p.base })
+    if (t) setTile(t.id)
     // Saved over Batch QC: Characterize on a batch.
     if (p.batch) setMode('batch')
   }
@@ -338,6 +396,12 @@ export function useSession(start: Origin = DEFAULTS) {
     // A recipe field the run did not send ran at the recipe's value.
     replaceValues(fillRecipe(v, new Set(Object.keys(params))))
     setUndoSnapshot(null)
+    setCarried(null)
+    setRevealed(new Set())
+    setTaskConfirmed(true)
+    if (task) setTile(task.id)
+    // Outputs & run, unless an input of the run is missing (step 2).
+    setRawStep(missingInputs(task ?? null, v, { input: runInput, jobs: 0, mode: 'one' }).length ? 2 : 4)
     return () => {
       setInput(before.input)
       setOut(before.out)
@@ -387,6 +451,20 @@ export function useSession(start: Origin = DEFAULTS) {
     setMode,
     advancedOpen,
     setAdvancedOpen,
+    step,
+    setStep,
+    // The step the task was changed from (step 1 returns there).
+    cameFrom: (): Step => cameFrom.current,
+    taskConfirmed,
+    setTaskConfirmed,
+    tile,
+    setTile,
+    revealed,
+    revealInput,
+    removeInput,
+    // The status line of the last replacement, while the form is still it.
+    carried: carried && carried.gen === formGen ? carried.text : null,
+    lastWorkflow,
     values,
     setValues,
     setValue,

@@ -350,7 +350,7 @@ Heading: **Outputs and run**.
    Batch mode with the same settings; the Batch view opens as it does for the
    first queued file. Disabled while Identifications are set ("Not used in
    Batch mode: one ID file cannot belong to every input").
-5. The **Last run** block shows here after a run, and on step 1.
+5. The **Last run** block shows under the stepper on every step after a run, as it showed above the cards.
 
 ## 4. Changing the task from any step
 
@@ -503,7 +503,7 @@ Nothing is dropped. Every control of the audit (section 0):
 | Taxonomy group for Species / Characterize | Advanced | Step 2 optional input (one entry); Advanced for others |
 | Filter / entrapment database, Shortest tag matched for Export tags | Advanced | Step 2; Advanced for others |
 | Protein database of Characterize (alkylation) | Advanced | Advanced, unchanged (review decision 5) |
-| Last run block | above the cards | Steps 1 and 4 |
+| Last run block | above the cards | under the stepper, every step |
 | Leftovers warning | above the cards | under the stepper, every step |
 | Locked summary while running | replaces the form | unchanged, replaces the step bodies; stepper hidden |
 | Unplaced/unknown parameter warning | under the cards | under the step body, every step |

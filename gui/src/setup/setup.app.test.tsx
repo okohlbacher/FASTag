@@ -5,7 +5,7 @@
 import { act, fireEvent, screen, waitFor, within } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 import { installMockBridge, type MockBridge } from '../testing/mockBridge'
-import { addBatch, click, openGroup, pickSingle, renderApp, runButton, startBatch } from '../testing/render'
+import { addBatch, click, openGroup, pickSingle, renderApp, runButton, startBatch, showStep } from '../testing/render'
 import { applyLastUsed, formValue } from '../testing/lastUsed'
 
 const emitDone = (mock: MockBridge, runId: number | undefined, ok: boolean): Promise<void> =>
@@ -110,13 +110,14 @@ describe('redesign: setup and run bar', () => {
   // The App-level guard of the Reset wiring (App.tsx onReset={session.reset}):
   // RunBar.test checks the confirmation with a stub, useSession.test the
   // defaults reset restores; only this test sees the two joined.
-  it('Reset in the Workflow card restores the values the form started from', async () => {
+  it('Reset in Settings restores the values the form started from', async () => {
     const mock = installMockBridge()
     await renderApp(mock)
     const tl = (): HTMLInputElement => document.getElementById('p-tag_length') as HTMLInputElement
     await act(async () => {
       fireEvent.change(tl(), { target: { value: '6' } })
     })
+    showStep(3)
     expect(screen.getByText('(modified)')).toBeDefined()
     await click(screen.getByRole('button', { name: 'Reset to FASTag defaults' }))
     expect(tl().value).toBe('3')

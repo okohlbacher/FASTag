@@ -2,7 +2,7 @@
 
 import { render, screen, within } from '@testing-library/react'
 import { installMockBridge } from '../testing/mockBridge'
-import { click, openGroup, pickSingle, renderApp, renderCharacterizeApp, runButton } from '../testing/render'
+import { click, openGroup, pickSingle, renderApp, renderCharacterizeApp, runButton, showStep } from '../testing/render'
 import { act, waitFor } from '@testing-library/react'
 import { describe, expect, it } from 'vitest'
 import SpeciesPanel from '../SpeciesPanel'
@@ -44,6 +44,7 @@ describe('round 10 minor: the alkylation note says where Extension is', () => {
     const mock = installMockBridge()
     await renderApp(mock)
     if (!document.getElementById('out-alkylation_out')) {
+      showStep(3)
       await click(screen.getByRole('button', { name: /^Advanced/ }))
       await openGroup('Other analyses')
       await openGroup('Alkylation')

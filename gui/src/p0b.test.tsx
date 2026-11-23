@@ -8,7 +8,7 @@ import App from './App'
 import { closeHelp } from './help/link'
 import ResultsTable, { headServes, scrollTopFor } from './ResultsTable'
 import { installMockBridge, type MockBridge } from './testing/mockBridge'
-import { click, flush, goTo, key, pickSingle, renderApp } from './testing/render'
+import { click, flush, goTo, key, pickSingle, renderApp, showStep } from './testing/render'
 import { searchParams } from './setup/searchRank'
 import { applyInstrument, INSTRUMENTS, matchesInstrument, presetText, speciesFixes } from './setup/presets'
 import { actionOfKey, deduper } from './setup/shortcuts'
@@ -183,7 +183,8 @@ describe('App wiring', () => {
     mock.taxdbInfoResult = { path: '/t/tax.taxdb', k: 7 }
     mock.settings.lastUsed = { species: true }
     await renderApp(mock)
-    await click(screen.getByRole('button', { name: /Apply last-used/ }))
+    showStep(1)
+    await click(screen.getByRole('button', { name: /Continue last run/ }))
     await pickSingle(mock, '/d/a.mzML')
     const fix = await screen.findByRole('button', { name: 'Use extension 2' })
     expect((screen.getByRole('button', { name: 'Run' }) as HTMLButtonElement).disabled).toBe(true)
