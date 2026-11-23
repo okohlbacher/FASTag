@@ -17,7 +17,7 @@ test('the e2e build starts on its fixture bridge with nothing run yet', async ({
 
 test('first result in two clicks: choose the file, run it', async ({ page }) => {
   // FASTag's unmodified defaults also open the tags table. setup.spec.ts
-  // covers the Export tags landing task, which adds per-residue confidence.
+  // covers the Generate tags landing task, which adds per-residue confidence.
   await openApp(page, 'default', 'defaults')
   await toStep(page, 'Inputs')
   await page.getByRole('button', { name: 'Choose file…' }).click()

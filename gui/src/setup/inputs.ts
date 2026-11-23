@@ -323,7 +323,7 @@ export function carryInputs(
 }
 
 /// The status line of a replacement: "Kept: … Dropped for Species: …
-/// Replaced: 3 settings of Export tags."
+/// Replaced: 3 settings of Generate tags."
 export function carriedText(c: Omit<Carried, 'values'>, to: string, from: string): string {
   const parts: string[] = []
   if (c.kept.length) parts.push(`Kept: ${c.kept.join(', ')}.`)

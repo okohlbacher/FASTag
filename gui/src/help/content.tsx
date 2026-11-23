@@ -75,9 +75,9 @@ export const START: HelpPage = {
         <>
           <p>
             Setup asks one question at a time: <strong>Task</strong>, <strong>Inputs</strong>,{' '}
-            <strong>Settings</strong>, <strong>Outputs &amp; run</strong>. Step 1 selects <strong>Export tags</strong>, the
+            <strong>Settings</strong>, <strong>Outputs &amp; run</strong>. Step 1 selects <strong>Generate tags</strong>, the
             default task: it generates sequence tags from all input spectra and includes per-residue confidence for
-            downstream export. No FASTA file is needed. Click <strong>Continue with Export tags</strong>. To inspect an
+            downstream export. No FASTA file is needed. Click <strong>Continue with Generate tags</strong>. To inspect an
             earlier analysis instead, click <strong>Open earlier results…</strong> in step 1.
           </p>
           <ol>
@@ -144,7 +144,7 @@ export const START: HelpPage = {
           </dd>
           <dt>Does my protein occur?</dt>
           <dd>
-            Choose <strong>Export tags</strong>, open <strong>Advanced</strong> and, under <strong>Keep only tags found
+            Choose <strong>Generate tags</strong>, open <strong>Advanced</strong> and, under <strong>Keep only tags found
             in a database</strong>, choose a <L to="param-fasta">FASTA file</L> with your protein. Set the{' '}
             <L to="param-extension">Extension</L> in Settings so that tag length + 2 × extension reaches the length the
             database needs: about 4 residues for one protein, 7 or 8 for a proteome. With the default tag length 3,
@@ -233,7 +233,7 @@ export const START: HelpPage = {
         <>
           <p>
             Setup is four steps: <strong>Task</strong>, <strong>Inputs</strong>, <strong>Settings</strong> and{' '}
-            <strong>Outputs &amp; run</strong>. Step 1 shows the seven tasks as tiles: Export tags (selected at start;
+            <strong>Outputs &amp; run</strong>. Step 1 shows the seven tasks as tiles: Generate tags (selected at start;
             all spectra, with per-residue confidence, see <L to="results-export">read export settings</L>), Characterize
             a run, Species, Mass-shift survey, Database reduction, Run QC and Identifiability triage. Selecting a tile
             explains it; <strong>Continue</strong> chooses it. The task decides what Inputs asks for: a protein FASTA
@@ -573,7 +573,7 @@ export const RESULTS: HelpPage = {
             <tr><td>Min. conf., Mean conf.</td><td>The weakest and the average observed-step score, 0 to 1 (<L to="results-conf">residue confidence</L>).</td></tr>
             <tr><td>Database hit</td><td>Without a database filter: Not checked (-), the tags were not matched against a database. With one, only matching tags are written: In database (fwd, as written; rev, reversed), or Entrapment (efwd, erev: found only in the entrapment database).</td></tr>
             <tr><td>Database q-value</td><td>q_db, only with an <G to="gloss-entrapment">entrapment database</G> (<L to="results-nofdr">see below</L>).</td></tr>
-            <tr><td>ProForma, Residue conf., USI</td><td>Optional columns (<L to="param-proforma">ProForma</L>, <L to="param-res_conf">per-residue confidence</L>, <L to="param-usi_collection">USI</L>), checked in Outputs &amp; run of Export tags.</td></tr>
+            <tr><td>ProForma, Residue conf., USI</td><td>Optional columns (<L to="param-proforma">ProForma</L>, <L to="param-res_conf">per-residue confidence</L>, <L to="param-usi_collection">USI</L>), checked in Outputs &amp; run of Generate tags.</td></tr>
           </tbody>
         </table>
       )
@@ -719,7 +719,7 @@ export const RESULTS: HelpPage = {
             Stitch and ALPS. A table export keeps the current filters, columns and sort order. The read exports
             use the whole tags file and their own settings, not the table filters; by default they keep the best
             tag per spectrum with at least 8 residues. Reads need the <L to="param-res_conf">per-residue confidence</L>
-            column, which the <strong>Export tags</strong> task enables.
+            column, which the <strong>Generate tags</strong> task enables.
           </p>
           <p>
             That task starts with tag length 3 and <L to="param-extension">extension</L> 3, so tags can grow to 9
@@ -1342,7 +1342,7 @@ export const FILES: HelpPage = {
 export const SETTINGS_INTRO: ReactNode = (
   <>
     <p>
-      Settings start from your task or preset. The default <strong>Export tags</strong> task processes all spectra
+      Settings start from your task or preset. The default <strong>Generate tags</strong> task processes all spectra
       and adds per-residue confidence. <strong>Characterize a run</strong> enables species, digest,
       label and glyco reports and samples 10% of the input spectra. The reference below shows the CLI defaults,
       which can differ from the task&apos;s values. First check the{' '}

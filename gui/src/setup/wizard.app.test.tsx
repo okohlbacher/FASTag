@@ -87,10 +87,10 @@ describe('wizard: step 1', () => {
 })
 
 describe('wizard: inputs per task', () => {
-  it('Export tags asks for no FASTA; the Filter database is one click away, with its effect', async () => {
+  it('Generate tags asks for no FASTA; the Filter database is one click away, with its effect', async () => {
     const mock = installMockBridge()
     await renderColdApp(mock)
-    await chooseTask('Export tags')
+    await chooseTask('Generate tags')
     expect(field('recon_fasta')).toBeNull()
     expect(field('fasta')).toBeNull()
     const menu = screen.getByRole('combobox', { name: 'Add optional input' })
@@ -296,7 +296,7 @@ describe('wizard: short paths', () => {
   it('run, back to Setup, Change spectra…, Run: two actions in Setup', async () => {
     const mock = installMockBridge()
     await renderColdApp(mock)
-    await chooseTask('Export tags')
+    await chooseTask('Generate tags')
     mock.nextPickInput = '/d/run01.mzML'
     await click(screen.getByRole('button', { name: 'Choose file…' }))
     showStep(4)

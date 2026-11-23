@@ -24,17 +24,17 @@ const setMock = (page: Page, key: string, value: unknown): Promise<void> =>
 const plan = (page: Page) => page.getByRole('region', { name: 'Plan' })
 const section = (page: Page, title: string) => page.locator('summary.disclosure', { has: page.locator('.sec-title', { hasText: new RegExp(`^${title}$`) }) })
 
-test('a cold start selects Export tags and reaches all-spectra Tags results in three actions', async ({ page }) => {
+test('a cold start selects Generate tags and reaches all-spectra Tags results in three actions', async ({ page }) => {
   await openApp(page)
   await expect(page.locator('button.task-tile .task-tile-label')).toHaveText([
-    'Export tags', 'Characterize a run', 'Species', 'Mass-shift survey', 'Database reduction', 'Run QC', 'Identifiability triage'
+    'Generate tags', 'Characterize a run', 'Species', 'Mass-shift survey', 'Database reduction', 'Run QC', 'Identifiability triage'
   ])
   await expect(page.locator('button.task-tile[data-task="export-tags"]')).toHaveAttribute('aria-pressed', 'true')
   await expect(page.locator('#task-detail')).toContainText('confidence per residue')
   await expect(page.getByRole('navigation', { name: 'Setup steps' }).getByRole('button')).toHaveText(['1Task', '2Inputs', '3Settings', '4Outputs & run'])
   await expect(page.locator('details.advanced')).not.toHaveAttribute('open', '')
   // 1: Continue (a deliberate design change from two actions). 2: the input. 3: Run.
-  await page.getByRole('button', { name: 'Continue with Export tags ›' }).click()
+  await page.getByRole('button', { name: 'Continue with Generate tags ›' }).click()
   await expect(plan(page)).toContainText('all spectra')
   await page.getByRole('button', { name: 'Choose file…' }).click()
   await page.getByRole('button', { name: 'Run', exact: true }).click()
@@ -49,7 +49,7 @@ test('a cold start selects Export tags and reaches all-spectra Tags results in t
   expect([p.species, p.glyco, p.digest_out, p.label_out]).toEqual([false, false, '', ''])
 })
 
-test('Export tags after Characterize leaves the Species tab for the requested tags; Open earlier results… opens a table', async ({ page }) => {
+test('Generate tags after Characterize leaves the Species tab for the requested tags; Open earlier results… opens a table', async ({ page }) => {
   await openApp(page, 'gate')
   await chooseTask(page, 'Characterize a run')
   await toStep(page, 'Inputs')
@@ -59,7 +59,7 @@ test('Export tags after Characterize leaves the Species tab for the requested ta
   await page.getByRole('tab', { name: /^Species/ }).click()
 
   await goTo(page, 'Setup')
-  await chooseTask(page, 'Export tags')
+  await chooseTask(page, 'Generate tags')
   await page.getByRole('button', { name: 'Run', exact: true }).click()
   await expect(page.getByRole('tab', { name: 'Tags' })).toHaveAttribute('aria-selected', 'true')
   await expect(page.getByRole('heading', { name: 'run01.tags.tsv' })).toBeVisible()
@@ -183,7 +183,7 @@ test('arrowing through the tiles by keyboard browses them; only Continue replace
   await expect(page.locator('button.task-tile[data-task="export-tags"]')).toHaveAttribute('aria-current', 'true')
   await page.keyboard.press('Enter')
   await expect(page.locator('button.task-tile[data-task="species"]')).toHaveAttribute('aria-current', 'true')
-  await expect(page.locator('.carried')).toContainText('Replaced: 1 setting of Export tags.')
+  await expect(page.locator('.carried')).toContainText('Replaced: 1 setting of Generate tags.')
   await page.locator('.carried').getByRole('button', { name: 'Undo' }).click()
   await expect(page.locator('#p-tag_length')).toHaveValue('5')
   await expect(page.locator('button.task-tile[data-task="export-tags"]')).toHaveAttribute('aria-current', 'true')

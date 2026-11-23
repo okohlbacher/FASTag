@@ -298,7 +298,7 @@ export default function SetupForm({
   // The Extension field is under Advanced: the note's link opens its group
   // and focuses it, as the parameter search does.
   const extGroup = SECTION_OF.get('extension')?.title ?? 'Tagging'
-  // Export tags and Mass-shift survey show Extension in Settings.
+  // Generate tags and Mass-shift survey show Extension in Settings.
   const extInSettings = task.basic.includes('extension')
   const extWhere = extInSettings ? 'Settings' : `Advanced › ${extGroup}`
   const goToExtension = (): void => {
@@ -586,7 +586,7 @@ export default function SetupForm({
   const leads = new Set(task.leadGroups ?? [])
   const ownGroups = [...SECTIONS.filter((s) => s.home === task.id), ...SECTIONS.filter((s) => leads.has(s.title))]
   const globalGroups = SECTIONS.filter((s) => s.home === 'global')
-  // A group of its own with something to show in Advanced (Export tags'
+  // A group of its own with something to show in Advanced (Generate tags'
   // one lives in Outputs).
   const ownShown = ownGroups.some((s) => s.params.some((n) => ADV.has(n)))
   const otherGroups = SECTIONS.filter((s) => s.home !== task.id && s.home !== 'global' && s.home !== 'common' && !leads.has(s.title))

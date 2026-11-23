@@ -77,7 +77,7 @@ async function guiRun(opts: {
   /// every report is named after it in the same folder.
   name: string
   /// Where the session starts. FASTag's defaults unless a test asks for the
-  /// landing task: the app lands on "Export tags", which adds per-residue
+  /// landing task: the app lands on "Generate tags", which adds per-residue
   /// confidence, and each test here states its options as a
   /// diff over the CLI's defaults (as renderApp in testing/render.tsx does).
   start?: Origin
@@ -167,7 +167,7 @@ describe.skipIf(!ready)('GUI-built argv against the FASTag CLI (FASTAG_BIN)', ()
     expect(o.argv).not.toContain('-species')
   }, 30000)
 
-  it('the landing Export tags task processes all spectra with confidence and no survey reports', async () => {
+  it('the landing Generate tags task processes all spectra with confidence and no survey reports', async () => {
     const o = await guiRun({ name: 'landing', start: LANDING })
     expect(o.rc).toBe(0)
     expect(o.banner).toBeNull()

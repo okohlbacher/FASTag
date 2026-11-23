@@ -85,7 +85,7 @@
 // __fastagE2E.mock.releaseProbes() (a probe still in flight).
 //
 // &start=defaults starts the session from FASTag's defaults instead of the
-// task the app lands on ("Export tags"): the specs written
+// task the app lands on ("Generate tags"): the specs written
 // before P2a PR u check what a run from the defaults sends.
 //
 // Every scenario records each run that ends in the mock's run record, as

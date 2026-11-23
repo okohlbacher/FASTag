@@ -49,7 +49,7 @@ import { postRunChecks, type CheckFix } from './inspector/checks'
 import { INSTRUMENTS, matchesInstrument, presetText, shownInstrument } from './setup/presets'
 
 // The tab a workflow's run lands on (doc/GUI-WORKFLOWS.md 3): its own view.
-// Export tags and Species keep the Tags/Species rule of useRun.
+// Generate tags and Species keep the Tags/Species rule of useRun.
 const LANDING_TAB: Partial<Record<TaskId, Tab>> = { 'run-qc': 'qc', 'mass-shift': 'recon', 'db-reduction': 'shortlist', triage: 'triage', characterize: 'overview' }
 // A .zip the picker let through that is not a timsTOF .d.zip.
 const notSpectraZip = (p: string): boolean => /\.zip$/i.test(p) && !/\.d\.zip$/i.test(p)
@@ -81,7 +81,7 @@ function stepOfParam(name: string, task: import('./setup/tasks').Task | null, va
 // view store (tab and log drawer); the views render it.
 ///
 /// @p start: where the session's values come from; the app lands on the
-/// built-in task "Export tags".
+/// built-in task "Generate tags".
 export default function App({ start }: { start?: Origin } = {}): JSX.Element {
   const [bin, setBin] = useState<BinaryInfo | null>(null)
   // The view shown (Cmd+1..4, the top bar, the View menu).

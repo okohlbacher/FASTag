@@ -5,7 +5,7 @@
 import { test, expect, openApp, chooseTask, toStep } from './fixtures'
 
 const RUNS = [
-  { name: 'Export tags', fixture: 'gate', tabs: ['Overview', 'Tags', 'Spectrum'] },
+  { name: 'Generate tags', fixture: 'gate', tabs: ['Overview', 'Tags', 'Spectrum'] },
   { name: 'Run QC', fixture: 'gate', tabs: ['Overview', 'QC', 'Tags', 'Spectrum'] },
   { name: 'Mass-shift survey', fixture: 'gate-recon', fasta: '/data/human.fasta', tabs: ['Overview', 'Mass shifts', 'Tags', 'Spectrum'] },
   { name: 'Species', fixture: 'gate', tabs: ['Overview', 'Species', 'Tags', 'Spectrum'] },

@@ -97,7 +97,7 @@ describe('the run shown and another result', () => {
     expect(tabs()).not.toContain('Overview')
   })
 
-  it("opening B's QC report after an Export tags run on A closes A's tags", async () => {
+  it("opening B's QC report after a Generate tags run on A closes A's tags", async () => {
     const mock = installMockBridge()
     mock.reportFiles['/other/b.qc.tsv'] = qcTsv
     await renderColdApp(mock)

@@ -6,7 +6,7 @@
 import { test, expect, openApp, goTo, chooseTask, toStep } from './fixtures'
 
 const RUNS = [
-  { name: 'Export tags', tags: '6,279' },
+  { name: 'Generate tags', tags: '6,279' },
   { name: 'Run QC', tags: '5,937', qc: '139' },
   { name: 'Mass-shift survey', tags: '6,279', fasta: '/data/ecoli.fasta' },
   { name: 'Species', tags: '6,301' },

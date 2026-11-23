@@ -15,7 +15,7 @@ backend has to satisfy.
 
 ## First run
 
-1. Keep **Export tags** selected in **Setup**. This default task generates
+1. Keep **Generate tags** selected in **Setup**. This default task generates
    sequence tags from **all input spectra**, with per-residue confidence
    for downstream export. No FASTA is needed. To inspect existing output
    instead, choose the second task, **Open results / inspect spectra**.
@@ -38,7 +38,7 @@ backend has to satisfy.
    reusable preset.
 
 For **Stitch/ALPS reads**, choose a tag length or extension that can reach
-the export's default minimum of 8 residues. **Export tags** initially uses
+the export's default minimum of 8 residues. **Generate tags** initially uses
 tag length 3 and extension 0, so its tags are too short for that export.
 For example, length 3 with extension 3 allows tags of up to 9 residues;
 only tags that actually reach the export minimum will be kept. Lower the
@@ -331,7 +331,7 @@ rewritten: both exports of the Batch view (the corrections and the batch
 summary) refuse the SDRF's own path, in the panel and in the backend (`summary_write`'s protect list, which also catches another spelling
 or a link to the same file).
 
-Setup presents tasks in this order: **Export tags** (the default: all spectra
+Setup presents tasks in this order: **Generate tags** (the default: all spectra
 with the per-residue confidence column), **Open results / inspect spectra**
 (no run), **Characterize a run** (species with extension 2, digest, label and
 glyco reports, a tenth of the spectra), then **Batch QC vs SDRF**. "Starting from" also
@@ -680,7 +680,7 @@ removed and no CLI process left. `E2E_ONLY` picks specs by name. Results go to
 `e2e-tauri/results/`.
 
 Setup (P2a): `setup/setupScreen.app.test.tsx` renders the window as it starts
-(`renderColdApp`: the task "Export tags") and checks the two-action
+(`renderColdApp`: the task "Generate tags") and checks the two-action
 cold start, the task chooser and Undo, hidden dependent fields, the plan
 footer, Copy command line, Export INI and presets saved as diffs; the older
 App-level tests start from FASTag's defaults (`renderApp`).

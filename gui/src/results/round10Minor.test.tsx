@@ -40,7 +40,7 @@ describe('round 10 minor: the identifiability score is experimental', () => {
 })
 
 describe('round 10 minor: the alkylation note says where Extension is', () => {
-  it('in Export tags: Settings, and no species/digest clause when neither report is on', async () => {
+  it('in Generate tags: Settings, and no species/digest clause when neither report is on', async () => {
     const mock = installMockBridge()
     await renderApp(mock)
     if (!document.getElementById('out-alkylation_out')) {

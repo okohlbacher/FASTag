@@ -100,7 +100,7 @@ const DEFAULT_HIDDEN = ['length', 'extended', 'gapped', 'res_conf']
 const DEFAULT_SORT: ResultsSort = { column: 'evalue', desc: false }
 
 /// The columns' indices in the order the table shows them: the per-residue
-/// confidence (-res_conf, the headline of Export tags) right after the tag
+/// confidence (-res_conf, the headline of Generate tags) right after the tag
 /// and its length, ahead of the flank masses, Extended and Gapped, so it is
 /// in view without scrolling; otherwise the file's order.
 export function displayOrder(columns: readonly string[]): number[] {

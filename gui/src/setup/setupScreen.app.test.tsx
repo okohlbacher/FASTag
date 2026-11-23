@@ -1,7 +1,7 @@
 // The Setup screen (doc/GUI-SETUP-WIZARD.md): the task tiles of step 1,
 // the steps with hidden dependent fields, the plan footer with Copy command
 // and Export INI, and presets saved as diffs. Rendered as the app starts
-// (renderColdApp: step 1, Export tags selected). Survey-specific tests select
+// (renderColdApp: step 1, Generate tags selected). Survey-specific tests select
 // Characterize explicitly; renderApp starts from FASTag's own defaults.
 
 import { act, fireEvent, screen, waitFor, within } from '@testing-library/react'
@@ -31,19 +31,19 @@ const chooseFile = async (mock: { nextPickInput: string | null }, path: string):
 }
 
 describe('Setup: the task chooser', () => {
-  it('a cold start selects Export tags, runs all spectra in 3 actions, and lands on Tags', async () => {
+  it('a cold start selects Generate tags, runs all spectra in 3 actions, and lands on Tags', async () => {
     const mock = installMockBridge()
     await renderColdApp(mock)
     // Step 1 is the only question: the tiles, grouped, no run bar yet.
     expect([...document.querySelectorAll<HTMLElement>('button.task-tile')].map((b) => b.dataset.task))
       .toEqual(['export-tags', 'characterize', 'species', 'mass-shift', 'db-reduction', 'run-qc', 'triage'])
-    expect(tile('Export tags').getAttribute('aria-pressed')).toBe('true')
+    expect(tile('Generate tags').getAttribute('aria-pressed')).toBe('true')
     expect(screen.queryByRole('region', { name: 'Plan' })).toBeNull()
     // Action 1: Continue. Action 2: the input. Action 3: Run (a design change from 2).
-    await click(screen.getByRole('button', { name: 'Continue with Export tags ›' }))
-    expect(footer().textContent).toContain('Export tags · no file yet · tags table only · all spectra')
+    await click(screen.getByRole('button', { name: 'Continue with Generate tags ›' }))
+    expect(footer().textContent).toContain('Generate tags · no file yet · tags table only · all spectra')
     await chooseFile(mock, '/d/run01.mzML')
-    expect(footer().textContent).toContain('Export tags on run01.mzML · tags table only · all spectra')
+    expect(footer().textContent).toContain('Generate tags on run01.mzML · tags table only · all spectra')
     await click(runButton())
     expect(mock.runCalls).toHaveLength(1)
     const p = mock.runCalls[0].params
@@ -70,8 +70,8 @@ describe('Setup: the task chooser', () => {
     await renderCharacterizeApp(mock)
     await openGroup('Tagging')
     await change(field('tag_length')!, '5')
-    await chooseTask('Export tags')
-    expect(isCurrent('Export tags')).toBe(true)
+    await chooseTask('Generate tags')
+    expect(isCurrent('Generate tags')).toBe(true)
     expect(field('tag_length')!.value).toBe('3')
     expect(field('res_conf')!.checked).toBe(true)
     // The status line of step 2 says what was replaced, with its Undo.
@@ -84,12 +84,12 @@ describe('Setup: the task chooser', () => {
     showStep(3)
     await click(screen.getByRole('button', { name: /^Reset to Characterize a run/ }))
     expect(screen.queryByRole('button', { name: 'Undo' })).toBeNull()
-    await chooseTask('Export tags')
+    await chooseTask('Generate tags')
     await chooseTask('Characterize a run')
     expect(screen.queryByRole('button', { name: 'Undo' })).toBeNull()
   })
 
-  it.each(['Species', 'Spectrum'])('an Export tags run returns to Tags after viewing %s', async (previousTab) => {
+  it.each(['Species', 'Spectrum'])('a Generate tags run returns to Tags after viewing %s', async (previousTab) => {
     const mock = installMockBridge()
     mock.spectrumSupportResult = { ...mock.spectrumSupportResult, supported: true }
     // A Species tab only for a report that was read.
@@ -102,7 +102,7 @@ describe('Setup: the task chooser', () => {
     await goTo('results')
     await click(await screen.findByRole('tab', { name: new RegExp(`^${previousTab}`) }))
     await goTo('setup')
-    await chooseTask('Export tags')
+    await chooseTask('Generate tags')
     await click(runButton())
     expect(mock.runCalls[1].params.species).not.toBe(true)
     await act(async () => mock.emitDone({ ok: true, code: 0, runId: mock.lastRunId }))
@@ -117,7 +117,7 @@ describe('Setup: the task chooser', () => {
     await change(field('tag_length')!, '5')
     // Each switch replaces the form but preserves the original edits.
     await chooseTask('Run QC')
-    await chooseTask('Export tags')
+    await chooseTask('Generate tags')
     expect(field('tag_length')!.value).toBe('3')
     await click(screen.getByRole('button', { name: 'Undo' }))
     expect(field('tag_length')!.value).toBe('5')
@@ -175,7 +175,7 @@ describe('Setup: the task chooser', () => {
     const detail = screen.getByRole('region', { name: /Run QC/ })
     expect(detail.textContent).toMatch(/You get.*QC report/)
     expect(detail.textContent).toMatch(/Not for.*Characterize a run/)
-    // Selecting is not choosing: the form is still Export tags', nothing to undo.
+    // Selecting is not choosing: the form is still Generate tags', nothing to undo.
     expect(tile('Run QC').getAttribute('aria-pressed')).toBe('true')
     expect(document.querySelector('nav[aria-label="Setup steps"] button[data-step-btn="2"]')!.getAttribute('aria-disabled')).toBe('true')
     await click(screen.getByRole('button', { name: 'Continue with Run QC ›' }))
@@ -198,7 +198,7 @@ describe('Setup: the task chooser', () => {
     await openGroup('Tagging, advanced')
     await change(field('gaps')!, '0')
     expect(adv.querySelector('summary')!.textContent).toContain('Advanced (1 changed)')
-    // Export tags shows no species, glyco, digest or database field in Settings.
+    // Generate tags shows no species, glyco, digest or database field in Settings.
     const settings = cards[2]
     for (const n of ['species_rank', 'glyco_min_fraction', 'digest_models', 'recon_fasta']) expect(within(settings).queryByLabelText(new RegExp(n))).toBeNull()
     expect(settings.querySelector('#p-recon_fasta')).toBeNull()
@@ -512,7 +512,7 @@ describe('Setup: presets as diffs', () => {
     await click(screen.getByRole('button', { name: 'Save' }))
     expect(mock.settings.presets['Mine']).toEqual({ v: 2, base: 'builtin:characterize', diff: { tag_length: '4' } })
     // Applied on another input, it is the workflow plus the diff, beside that input.
-    await chooseTask('Export tags')
+    await chooseTask('Generate tags')
     await chooseFile(mock, '/data/run02.mzML')
     showStep(3)
     await change(document.getElementById('origin')!, 'Mine')
@@ -540,7 +540,7 @@ describe('Setup: presets as diffs', () => {
     expect(screen.getByRole('textbox', { name: 'Preset name' })).toBeDefined()
     await click(screen.getByRole('button', { name: 'Cancel' }))
     expect(screen.queryByRole('alert')).toBeNull()
-    expect(screen.getByText('Export tags', { selector: 'strong' })).toBeDefined()
+    expect(screen.getByText('Generate tags', { selector: 'strong' })).toBeDefined()
     expect(screen.queryByRole('option', { name: /^Delete preset/ })).toBeNull()
   })
 

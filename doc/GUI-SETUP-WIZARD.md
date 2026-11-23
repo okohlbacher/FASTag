@@ -38,9 +38,9 @@ run bar, all visible at once, whatever the task:
 | (above cards) | Leftovers warning; **Last run** block (status, duration, changed params, Reveal, Open folder) | shown after a run |
 | 1 Input | One file / Batch switch; file chip with Choose file… / Change…; inspector (PreStartPanel: detected instrument, DIA check, Run anyway); head: **Open earlier results…**, (?) | Batch mode: Add files…, Add folder…, **Output folder** + Change…/Beside inputs, **SDRF file (optional)** Choose…/Replace…/Remove |
 | 2 Workflow | 7 radio tiles (label + "→ product"); blurb line; head: **Preset** select (Choose…, Save as preset…, Load ›, Load FASTag defaults, Delete preset), origin name "(modified)", Reset, Apply last-used (n), Undo, Learn more | Save as preset opens an inline name field + Save/Cancel |
-| 3 Settings | head: Search settings… ⌘K; the task's required inputs (Protein database + Browse… for Mass-shift, Database reduction); **Instrument** select (+ Custom tolerance); **Fixed modifications**; the task's basic fields; settings note (Database reduction) | Species: Report rank, Spectra to read. Export tags: Seed length, Extension, E-value cutoff, Tags per spectrum, Per-residue confidence. Mass-shift: Extension, Missed cleavages |
+| 3 Settings | head: Search settings… ⌘K; the task's required inputs (Protein database + Browse… for Mass-shift, Database reduction); **Instrument** select (+ Custom tolerance); **Fixed modifications**; the task's basic fields; settings note (Database reduction) | Species: Report rank, Spectra to read. Generate tags: Seed length, Extension, E-value cutoff, Tags per spectrum, Per-residue confidence. Mass-shift: Extension, Missed cleavages |
 | 4 Outputs | Output folder + Change…, Run name; "Some of these need the protein database" hint; products checklist (file names, "needed by", Change… per file, USI accession field, Set Extension to n) | Mass-shift lists 7 products; batch: one line instead of folder/name |
-| 5 Advanced (n changed) | the task's own groups (open), "For every workflow" groups, **Other analyses** (closed; "add a report to this run"), each group: products, fields, "n more settings need X" + Turn on X | ~25 disclosures on Export tags |
+| 5 Advanced (n changed) | the task's own groups (open), "For every workflow" groups, **Other analyses** (closed; "add a report to this run"), each group: products, fields, "n more settings need X" + Turn on X | ~25 disclosures on Generate tags |
 | Run bar | plan line ("Mass-shift survey on run01.mzML · 4 reports · all spectra"), Copy command line, Export INI…, Run; refusals with Fix buttons | |
 
 What makes it convoluted (from the screenshots):
@@ -185,7 +185,7 @@ Tiles, in three groups, each a `<ul>` under an `h3`:
 
 | Group | Tiles |
 |---|---|
-| **Look at the tags** | Export tags |
+| **Look at the tags** | Generate tags |
 | **Learn about the sample** | Characterize a run (Recommended to start) · Species · Mass-shift survey · Database reduction |
 | **Check run quality** | Run QC · Identifiability triage |
 
@@ -202,7 +202,7 @@ format names; the blurb stays for the plan line, History and the Overview):
 
 | Task | Question | You get | Use when | Not for | Run time |
 |---|---|---|---|---|---|
-| Export tags | Which sequence tags do my spectra carry? | a table of tags per spectrum with a confidence per residue, for assembly or other tools | de novo assembly, export of tags to other tools | identifying peptides: these are tags, not identifications | short: tagging only |
+| Generate tags | Which sequence tags do my spectra carry? | a table of tags per spectrum with a confidence per residue, for assembly or other tools | de novo assembly, export of tags to other tools | identifying peptides: these are tags, not identifications | short: tagging only |
 | Characterize a run | What was done to this sample before it was measured? | the protease, labels, glycopeptides and species, from 10% of the spectra | an unknown or legacy data set, before choosing search settings | a final call on very few spectra: the calls then say "too little evidence" | short: 10% of the spectra |
 | Species | Which organisms does my sample contain? | only the species, ranked at a rank you choose (Characterize a run includes this) | contamination checks, mixed or unknown samples | ion-trap data: the calls are unreliable at the wide tolerances it needs | short; 10% of the spectra is usually enough |
 | Mass-shift survey | Which modifications does my sample carry, without guessing them first? | the mass shifts between tags and your proteins, with sites and modification names | unexpected or unknown modifications | confirmed identifications: shifts and placements are candidates without FDR control | longer: places every tag on the FASTA |
@@ -228,7 +228,7 @@ tile) confirms it: `chooseTask` runs only then, so browsing never takes Undo
 snapshots or shows drop messages. Learn more is a sibling button in the
 detail panel (`docs.to`), never inside a tile.
 
-- On a fresh launch the current task is Export tags (LANDING, values
+- On a fresh launch the current task is Generate tags (LANDING, values
   unchanged) and it is the selected tile; nothing is confirmed. Continuing
   with the current, unmodified task does not replace the form.
 - After Continue the wizard opens step 2 when an input of the task is missing
@@ -300,7 +300,7 @@ and SECTIONS blurbs):
 
 | Task | Required | Optional |
 |---|---|---|
-| Export tags | | Filter database (`fasta`); Entrapment database (`entrapment_fasta`), offered once a Filter database is set |
+| Generate tags | | Filter database (`fasta`); Entrapment database (`entrapment_fasta`), offered once a Filter database is set |
 | Mass-shift survey | Protein database (`recon_fasta`, or `fasta`) | Filter database (`fasta`; its menu entry says it also stands in for the Protein database); Entrapment database, offered once a Filter database is set |
 | Species | | Your taxonomy (`taxdb` + `taxonomy_nodes` + `taxonomy_names`, one entry) |
 | Characterize a run | | Your taxonomy (one entry, as above) |
@@ -379,7 +379,7 @@ Heading: **Outputs and run**.
   - `takeRun` is the exception: it brings its own paths.
 - One status line (role="status") under the stepper says what happened, with
   Undo: "Kept: instrument, Protein database. Dropped for Species: Background
-  proteins. Replaced: 3 settings of Export tags. Undo".
+  proteins. Replaced: 3 settings of Generate tags. Undo".
 - After choosing, the wizard goes to step 2 only if an input of the new task
   is missing; otherwise it returns to the step the user came from.
 
@@ -459,7 +459,7 @@ preset saved over the defaults, History "Settings into form" of a record
 without a workflow, `?start=defaults` (e2e fixtures) and `fromDefaults()` in
 app.test.mjs. Stepper label "Task: FASTag defaults (no workflow)"; no
 required inputs; step 2 `shown` = every step-2 input with a value, `addable`
-= every other step-2 input; steps 3 and 4 show the layout of Export tags (the
+= every other step-2 input; steps 3 and 4 show the layout of Generate tags (the
 landing task) as today, with all of Advanced. `taskInputs`, `inputParams` and
 `stepState` take `Task | null`.
 
@@ -511,7 +511,7 @@ Nothing is dropped. Every control of the audit (section 0):
 | "Some of these need the protein database" | 4 Outputs | Step 4, as a link to step 2 |
 | Advanced (n changed), all groups, Turn on buttons | 5 Advanced | Step 3, collapsed; minus the task's step-2 controls (5.4) |
 | Taxonomy group for Species / Characterize | Advanced | Step 2 optional input (one entry); Advanced for others |
-| Filter / entrapment database, Shortest tag matched for Export tags | Advanced | Step 2; Advanced for others |
+| Filter / entrapment database, Shortest tag matched for Generate tags | Advanced | Step 2; Advanced for others |
 | Protein database of Characterize (alkylation) | Advanced | Advanced, unchanged (review decision 5) |
 | Last run block | above the cards | under the stepper, every step |
 | Leftovers warning | above the cards | under the stepper, every step |
@@ -572,11 +572,11 @@ workflow-counts, p0b, p1a, p4c, safety, inspector, history, overview,
 perf-log, help-navigation, batch, batch-summary, sdrf, parameter-search);
 fixtures.ts `start=defaults` opens confirmed. New wizard.spec: the
 not-a-search-engine line on step 1; step 1 without vertical scroll at
-1280x800; Export tags has no FASTA field in step 2; Mass-shift: FASTA
+1280x800; Generate tags has no FASTA field in step 2; Mass-shift: FASTA
 required, wrong-extension warning, not-found error from the mock; Species:
 Add optional input offers taxonomy only; Mass-shift with no file → step 3 →
 Save as preset; batch: Add folder then Run in at most 2 actions after the
-tile; screenshots of all steps for Export tags, Mass-shift survey and Species
+tile; screenshots of all steps for Generate tags, Mass-shift survey and Species
 at 1280x800, light, and one in dark (`after-*.png`).
 
 Installed-app suites (`gui/e2e-tauri/app.test.mjs`, `windows.test.mjs`):

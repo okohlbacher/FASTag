@@ -154,7 +154,7 @@ test('probe: the installed app runs its bundled CLI', { timeout: 180000 }, () =>
 test('cold start: Continue, Choose file…, Run', { timeout: 600000 }, () =>
   withApp(async (s) => {
     await until('step 1 of Setup', () => s.exec("return document.querySelector('nav[aria-label=\"Setup steps\"] [aria-current=\"step\"]')?.getAttribute('data-step-btn') === '1'"), 10000)
-    await s.click(await s.button('Continue with Export tags ›'))
+    await s.click(await s.button('Continue with Generate tags ›'))
     const input = copyIn(process.env.E2E_MZML, 'cold.mzML')
     await s.exec('const p = arguments[0]; window.fastag.pickInput = async () => p', input)
     await s.click(await s.button('Choose file…'))
@@ -169,7 +169,7 @@ for (const [kind, env, name] of [
 ]) {
   test(`export tags (${kind}): run with defaults, the Tags table, the CLI's own output`, { timeout: 600000 }, () =>
     withApp(async (s) => {
-      await task(s, 'Export tags')
+      await task(s, 'Generate tags')
       const input = copyIn(process.env[env], name)
       await chooseInput(s, input)
       await runOn(s, input)
@@ -275,7 +275,7 @@ test('characterize: species, digest, label reports and the Overview', { timeout:
 
 test('refusal: a file FASTag refuses is blocked before the run, with its reason', { timeout: 300000 }, () =>
   withApp(async (s) => {
-    await task(s, 'Export tags')
+    await task(s, 'Generate tags')
     // DIA spectra: FASTag refuses them (exit 11) and says why.
     const input = copyIn(process.env.E2E_REFUSED, 'dia_like.mzML')
     const d = dirname(input)

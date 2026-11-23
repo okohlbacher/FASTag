@@ -33,7 +33,7 @@ describe('help vs docs', () => {
     expect(LANDING_TASK).toBe('export-tags')
     expect(taskById(LANDING_TASK)!.values).toEqual({ res_conf: true, threads: '0', extension: '3' })
     const start = pageText('start')
-    expect(start).toContain('Export tags, the default task')
+    expect(start).toContain('Generate tags, the default task')
     expect(start).toContain('tags from all input spectra and includes per-residue confidence')
     expect(start).toContain('Results opens on Tags')
     expect(start).toContain('Open earlier results…')

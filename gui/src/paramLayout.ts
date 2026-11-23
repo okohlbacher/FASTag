@@ -257,7 +257,7 @@ function differsFromCli(name: string, value: unknown, values: Record<string, unk
 ///   recipe, or differs from the manifest default or from
 ///   @p base, the values the session started from (the workflow's): a
 ///   field left at the manifest default by both is the CLI's to decide, so
-///   Export tags with MSFragger names no recipe option, while Database
+///   Generate tags with MSFragger names no recipe option, while Database
 ///   reduction with its E-value put back to 0.1 sends it;
 /// - a value and its unit as one: both when either differs from its
 ///   default (5 with Da is not 5 ppm), neither when the value is empty (a

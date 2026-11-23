@@ -63,7 +63,7 @@ describe('round 12: Shortlist counts proteins with evidence as the CLI does', ()
 })
 
 describe('round 12: a Settings value the workflow set off the CLI default says so', () => {
-  it('Export tags: Extension 3, FASTag default 0', async () => {
+  it('Generate tags: Extension 3, FASTag default 0', async () => {
     const mock = installMockBridge()
     await renderColdApp(mock)
     expect(document.getElementById('h-extension')?.textContent).toBe('3 lets a seed of 3 grow to 9. FASTag default 0.')

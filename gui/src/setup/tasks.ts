@@ -1,7 +1,7 @@
 // The workflows of the Setup screen (doc/GUI-WORKFLOWS.md section 1): named,
 // read-only presets a session starts from. Each is a diff over FASTag's own
 // defaults; a user preset is a diff over one of them or over the defaults
-// (presetDiff.ts). "Export tags" is where the app lands.
+// (presetDiff.ts). "Generate tags" is where the app lands.
 //
 // A workflow shows only the fields a typical user changes for its question
 // (`basic`, Settings) and its products (`outputs`, the Outputs checklist).
@@ -83,7 +83,7 @@ const ALL: Record<string, ParamValue> = { threads: '0' }
 export const TASKS: readonly Task[] = [
   {
     id: 'export-tags',
-    label: 'Export tags',
+    label: 'Generate tags',
     question: 'Which sequence tags do my spectra carry?',
     gets: 'A table of tags per spectrum with a confidence per residue, for assembly or other tools.',
     use: 'De novo assembly, or export of tags to other tools.',

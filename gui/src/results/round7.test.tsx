@@ -320,7 +320,7 @@ describe('round 7, 23: the workflow\'s own tiles come first, in the grid of the 
     expect(t.figures[0].id).toBe('genus')
     expect(t.figures.map((x) => x.id)).toContain('spectra')
     expect(t.calls.map((x) => x.id)).not.toContain('genus')
-    // Export tags has no lead tiles: unchanged.
+    // Generate tags has no lead tiles: unchanged.
     expect(leadTiles(shownTiles(o, { species: true }), 'export-tags')).toEqual(shownTiles(o, { species: true }))
   })
 })

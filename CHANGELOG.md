@@ -71,6 +71,7 @@
 - **GUI: Tags table.** Each row has a spectrum icon that opens it in the Spectrum tab. Length, Extended, Gapped and
   Residue conf. are not shown until ticked under Columns…; Min. conf. and Mean conf. stay.
 
+- **GUI: the task Export tags is now called Generate tags.**
 - **GUI: Setup is a task-first wizard.** Setup asks one thing at a time in four steps, **Task**, **Inputs**,
   **Settings** and **Outputs & run**, instead of five cards on one page. Step 1 shows the seven tasks as tiles in three
   groups, each with the question it answers; the selected tile explains what you get, what you need, when to use it and

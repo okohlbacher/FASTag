@@ -165,11 +165,11 @@ test('help: keyboard search opens a CLI entry and Escape restores focus without 
   }))
 
 // The wizard's cold start (doc/GUI-SETUP-WIZARD.md): Continue, Choose
-// file…, Run, as the app opens; Export tags writes its tags.
+// file…, Run, as the app opens; Generate tags writes its tags.
 test('cold start: Continue, Choose file…, Run', { timeout: 300000 }, () =>
   withApp(async (s) => {
     await until('step 1 of Setup', () => s.exec("return document.querySelector('nav[aria-label=\"Setup steps\"] [aria-current=\"step\"]')?.getAttribute('data-step-btn') === '1'"), 10000)
-    await s.click(await s.button('Continue with Export tags ›'))
+    await s.click(await s.button('Continue with Generate tags ›'))
     const input = spectra('run01.mzML')
     await s.exec('const p = arguments[0]; window.fastag.pickInput = async () => p', input)
     await s.click(await s.button('Choose file…'))

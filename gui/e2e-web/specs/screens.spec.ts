@@ -18,7 +18,7 @@ const slug = (s: string): string => s.toLowerCase().replace(/[^a-z0-9]+/g, '-').
 // `workflows` scenario: src/fixtures/cli-1.15/workflows, the E. coli example
 // with the Ion trap CID preset), so the Overview and the tabs agree.
 const WORKFLOWS = [
-  { name: 'Export tags', fixture: 'workflows' },
+  { name: 'Generate tags', fixture: 'workflows' },
   { name: 'Run QC', fixture: 'workflows' },
   { name: 'Mass-shift survey', fixture: 'workflows', fasta: '/data/ecoli.fasta' },
   { name: 'Species', fixture: 'workflows' },

@@ -56,7 +56,7 @@ interface Snapshot {
 }
 
 /// @p start: where the session's values come from (D1: the app passes the
-/// task "Export tags"; the hook alone starts from the defaults).
+/// task "Generate tags"; the hook alone starts from the defaults).
 /// What the last form replacement kept and dropped (step 2's status line).
 export interface CarryNote {
   text: string

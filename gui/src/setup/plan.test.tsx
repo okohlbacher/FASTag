@@ -25,7 +25,7 @@ describe('the plan line', () => {
     expect(reportsOn(v)).toEqual(['Species report', 'Digest report', 'Label report', 'Glycopeptide report'])
     expect(planLine('Characterize a run', v, ctx)).toBe('Characterize a run on run01.mzML · 4 reports · 10% of spectra')
     expect(planLine('Run QC', startValues('builtin:run-qc', '/d/run01.tags.tsv'), ctx)).toBe('Run QC on run01.mzML · 1 report · all spectra')
-    expect(planLine('Export tags', baseValues('builtin:export-tags'), { input: '', files: 0 })).toBe('Export tags · no file yet · tags table only · all spectra')
+    expect(planLine('Generate tags', baseValues('builtin:export-tags'), { input: '', files: 0 })).toBe('Generate tags · no file yet · tags table only · all spectra')
     expect(planLine('Run QC', v, { input: '', files: 3, outDir: '/share/out' })).toBe('Run QC on 3 files · 4 reports · 10% of spectra · outputs in /share/out')
     expect(planLine('Run QC', v, { input: '', files: 3 })).toBe('Run QC on 3 files · 4 reports · 10% of spectra · outputs beside each input')
   })

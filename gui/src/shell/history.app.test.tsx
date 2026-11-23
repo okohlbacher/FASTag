@@ -250,7 +250,7 @@ describe('History', () => {
     mock.recordRuns = true
     mock.speciesResult = { path: '/d/a.tags.species.tsv', taxa: [{ rank: 'genus', taxid: 561, name: 'Escherichia', observed: 7, adjusted: 7, q: 1e-13 }] } as typeof mock.speciesResult
     await renderApp(mock)
-    // The form is on Export tags, without species.
+    // The form is on Generate tags, without species.
     const params = { species: true, extension: '2' }
     mock.history = [rec('1', '/d/a.mzML', 'ok', { params, workflow: 'species' })]
     const [row] = await history()

@@ -66,7 +66,7 @@ describe('presets as diffs', () => {
 
   it('every built-in workflow is a diff over the defaults that names only real parameters', () => {
     for (const t of TASKS) for (const n of Object.keys(t.values)) expect(RENDERED).toContain(n)
-    expect(TASKS.map((t) => t.label)).toEqual(['Export tags', 'Run QC', 'Mass-shift survey', 'Species', 'Database reduction', 'Identifiability triage', 'Characterize a run'])
+    expect(TASKS.map((t) => t.label)).toEqual(['Generate tags', 'Run QC', 'Mass-shift survey', 'Species', 'Database reduction', 'Identifiability triage', 'Characterize a run'])
     const c = baseValues('builtin:characterize')
     expect([c['species'], c['extension'], c['glyco'], c['subsample_fraction'], c['threads']]).toEqual([true, '2', true, '0.1', '0'])
     expect(Boolean(c['digest_out']) && Boolean(c['label_out'])).toBe(true)
@@ -74,7 +74,7 @@ describe('presets as diffs', () => {
     expect(c['alkylation_out']).toBe('')
     expect(baseValues('builtin:export-tags')['res_conf']).toBe(true)
     expect(baseValues('defaults')).toEqual(defaults)
-    expect(originText(LANDING)).toBe('Export tags')
+    expect(originText(LANDING)).toBe('Generate tags')
     expect(baseValues(baseOf(LANDING))).toEqual({ ...defaults, res_conf: true, threads: '0', extension: '3' })
     expect(baseOf({ kind: 'preset', name: 'x', base: 'builtin:export-tags' })).toBe('builtin:export-tags')
     expect(taskOf({ kind: 'preset', name: 'x', base: 'builtin:export-tags' })?.id).toBe('export-tags')

@@ -25,9 +25,9 @@ test('step 1 says FASTag is no search engine, recommends a start, and fits 1280 
     await expect(page.locator(`button.task-tile[data-task="${id}"]`)).toBeInViewport()
 })
 
-test('Export tags: no FASTA field in Inputs; the Filter database is an optional input', async ({ page }) => {
+test('Generate tags: no FASTA field in Inputs; the Filter database is an optional input', async ({ page }) => {
   await openApp(page)
-  await chooseTask(page, 'Export tags')
+  await chooseTask(page, 'Generate tags')
   await expect(page.locator('#step-2 #p-recon_fasta')).toHaveCount(0)
   await expect(page.locator('#step-2 #p-fasta')).toHaveCount(0)
   await addInput(page, 'fasta')
@@ -113,7 +113,7 @@ test('a batch: after Continue, Batch, Add folder… and Run', async ({ page }) =
 
 const STEPS = ['Task', 'Inputs', 'Settings', 'Outputs & run'] as const
 for (const [label, slug] of [
-  ['Export tags', 'export-tags'],
+  ['Generate tags', 'export-tags'],
   ['Mass-shift survey', 'mass-shift'],
   ['Species', 'species'],
   ['Database reduction', 'db-reduction']

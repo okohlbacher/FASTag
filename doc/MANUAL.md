@@ -18,7 +18,7 @@ write to and selects it as input. Any mzML, mzPeak or MGF file works the same wa
 
 ![Setup with the example run selected](images/manual-01-setup.png)
 
-1. **What do you want to do?** Keep **Export tags**: tags for all spectra. The other tasks open
+1. **What do you want to do?** Keep **Generate tags**: tags for all spectra. The other tasks open
    earlier results, survey a run (species, digestion, labels) or check a batch against an SDRF file.
 2. **Checks before the run** reads the file's metadata. Here the instrument is an LTQ Orbitrap XL,
    which can read MS2 in either analyser; the file does not say which, so the app does not guess and
