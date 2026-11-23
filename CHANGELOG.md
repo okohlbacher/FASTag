@@ -71,6 +71,16 @@
 - **GUI: Tags table.** Each row has a spectrum icon that opens it in the Spectrum tab. Length, Extended, Gapped and
   Residue conf. are not shown until ticked under Columns…; Min. conf. and Mean conf. stay.
 
+- **GUI: Setup is a task-first wizard.** Setup asks one thing at a time in four steps, **Task**, **Inputs**,
+  **Settings** and **Outputs & run**, instead of five cards on one page. Step 1 shows the seven tasks as tiles in three
+  groups, each with the question it answers; the selected tile explains what you get, what you need, when to use it and
+  when not, and Continue chooses it. FASTag says up front that it reads tags and does not identify proteins with FDR
+  control. The task decides what Inputs asks for: a protein FASTA only for Mass-shift survey and Database reduction,
+  optional inputs (Filter database, taxonomy, background proteins, identifications) one click away with their effect,
+  and the instrument and fixed modifications as "About these spectra". Changing the task keeps the input files it uses
+  and the instrument you chose and says what it kept and dropped, with Undo. Outputs & run shows the command line. An
+  input file that is not on disk is named and blocks Run. Every option stays reachable (Advanced, the parameter search);
+  presets, last-used (now **Continue last run**), batch runs and the command preview are kept. No CLI default changed.
 - **GUI: in-app Feedback.** A **Feedback** button in the top bar (also Help › Send Feedback…, Cmd/Ctrl+Shift+F)
   takes a screenshot of the window (the webview's own snapshot: WKWebView, WebView2, WebKitGTK; no screen-recording
   permission), records the app and engine versions, the system, the view and the settings as typed values (paths only as

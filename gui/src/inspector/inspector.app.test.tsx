@@ -237,7 +237,10 @@ describe('inspector before a run', () => {
     expect(mock.probeCalls).toEqual([{ input: IN, fasta: null }])
     // The FASTA probe's output (the gate FASTA, no decoys).
     mock.probeOutputs[IN] = fastaProbe
-    await openGroup('Keep only tags found in a database')
+    // FASTag defaults: the Filter database is an optional input of step 2.
+    await act(async () => {
+      fireEvent.change(screen.getByRole('combobox', { name: 'Add optional input' }), { target: { value: 'fasta' } })
+    })
     const field = document.getElementById('p-fasta') as HTMLInputElement
     const path = '/data/db.fasta'
     await act(async () => {

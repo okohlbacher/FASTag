@@ -23,7 +23,7 @@ import { join } from 'node:path'
 import App from '../App'
 import { installMockBridge, type MockBridge } from '../testing/mockBridge'
 import { DEFAULTS, LANDING, type Origin } from '../setup/tasks'
-import { click, openGroup, showView } from '../testing/render'
+import { click, openGroup, showView, fileButton } from '../testing/render'
 import { applyAndCheck } from '../testing/lastUsed'
 import { PARAM_BY_NAME, invalidBecause, invalidParams } from '../paramLayout'
 import { FASTAG_BIN, ORDER_RS, REPO_FIXTURES_DIR, SRC_TAURI_DIR } from './external'
@@ -89,7 +89,7 @@ async function guiRun(opts: {
   await act(async () => {})
   if (opts.lastUsed) await applyAndCheck(opts.lastUsed) // D6: the offer, clicked; guards the form
   mock.nextPickInput = IN
-  await click(screen.getByRole('button', { name: /^(Choose file|Change)…$/ }))
+  await click(fileButton())
   // Choose file names the run after the input, beside it.
   const runName = screen.getByLabelText('Run name') as HTMLInputElement
   expect(runName.value).toBe('ecoli')
@@ -122,7 +122,7 @@ async function guiBlocked(lastUsed: Record<string, unknown>): Promise<{ mock: Mo
   await act(async () => {})
   await applyAndCheck(lastUsed) // D6: the offer, clicked; guards the form
   mock.nextPickInput = IN
-  await click(screen.getByRole('button', { name: /^(Choose file|Change)…$/ }))
+  await click(fileButton())
   const run = screen.getByRole('button', { name: /^Run( on .+)?$/ }) as HTMLButtonElement
   await click(run)
   return { mock, run, controls: container.querySelector('.controls')?.textContent ?? '' }
@@ -276,7 +276,7 @@ describe.skipIf(!ready)('GUI-built argv against the FASTag CLI (FASTAG_BIN)', ()
     await screen.findByText('FASTag ready')
     await act(async () => {})
     mock.nextPickInput = IN
-    await click(screen.getByRole('button', { name: /^(Choose file|Change)…$/ }))
+    await click(fileButton())
     // Spectra with tags, saved over the input (a single run does not rebase
     // an output chosen AFTER the pick).
     await changeReport(mock, 'out_spectra', 'Spectra with tags', IN, 'Tag columns and files')

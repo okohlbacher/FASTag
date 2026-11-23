@@ -1,7 +1,8 @@
-import { test, expect, openApp } from './fixtures'
+import { test, expect, openApp, toStep } from './fixtures'
 
 test('a three-file batch where run02 fails: its banner opens run02 own log after run03 finished', async ({ page }) => {
   await openApp(page, 'batch-fail')
+  await toStep(page, 'Inputs')
   await page.getByRole('radio', { name: 'Batch' }).check()
   await page.getByRole('button', { name: 'Add files…' }).click()
   await page.getByRole('button', { name: 'Run 3 remaining files' }).click()

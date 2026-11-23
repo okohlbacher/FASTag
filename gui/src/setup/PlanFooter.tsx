@@ -10,6 +10,16 @@ import { planLine } from './plan'
 import { shellLine } from '../app/format'
 import { baseName } from '../digestReport'
 import { stripExt } from '../app/paths'
+import { presetText, shownInstrument } from './presets'
+
+/// What the run assumes about the sample (doc/GUI-SETUP-WIZARD.md 2.3): the
+/// instrument preset and the fixed modifications, visible from every step.
+export function assumptions(values: Record<string, unknown>, chosen: string): string {
+  const inst = shownInstrument(values, chosen)
+  const tol = inst ? presetText(inst) : `Custom ${String(values['fragment_tolerance'] ?? '')} ${String(values['fragment_tolerance_unit'] ?? '')}`.trim()
+  const fixed = (Array.isArray(values['fixed_modifications']) ? (values['fixed_modifications'] as unknown[]) : []).map(String).filter((x) => x.trim())
+  return `${tol} · ${fixed.length ? fixed.join(', ') : 'no fixed modifications'}`
+}
 
 /// Where Export INI offers to write: beside the tags output, named after it.
 export function iniName(out: string): string {
@@ -62,6 +72,7 @@ export default function PlanFooter({ session, run }: { session: Session; run: Ru
   return (
     <div className="plan-footer" role="region" aria-label="Plan">
       <p className="plan-line">{planLine(label === 'FASTag defaults' ? 'FASTag' : label, values, { input, files: run.jobs.length, outDir: run.outDir, batch: session.mode === 'batch' })}</p>
+      <p className="plan-assume muted">Assumes: {assumptions(values, session.instrument)}</p>
       <div className="row tight plan-actions">
         <button type="button" className="secondary small" onClick={copy} disabled={!input || run.jobs.length > 0 || session.mode === 'batch'}>
           {copied === 'yes' ? 'Copied' : 'Copy command line'}

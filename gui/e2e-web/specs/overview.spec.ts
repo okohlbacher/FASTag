@@ -5,7 +5,7 @@
 import { existsSync, readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import type { Page } from '@playwright/test'
-import { test, expect, goTo, mockState, openApp } from './fixtures'
+import { test, expect, goTo, mockState, openApp, chooseTask, toStep } from './fixtures'
 
 const CLI = fileURLToPath(new URL('../../src/fixtures/cli/', import.meta.url))
 const read = (c: string, f: string): string => readFileSync(`${CLI}${c}/${f}`, 'utf8')
@@ -41,7 +41,8 @@ const value = (page: Page, name: string) => tile(page, name).locator('.tile-valu
 
 async function characterize(page: Page, fixture: string): Promise<void> {
   await openApp(page, fixture)
-  await page.getByRole('radio', { name: /^Characterize a run/ }).check()
+  await chooseTask(page, 'Characterize a run')
+  await toStep(page, 'Inputs')
   await page.getByRole('button', { name: 'Choose file…' }).click()
   await page.getByRole('button', { name: 'Run', exact: true }).click()
 }
@@ -144,6 +145,7 @@ test('focus does not fall to the page body when the run ends or is cancelled', a
   await expect(page.getByRole('tab', { name: 'Overview' })).toBeFocused()
 
   await openApp(page, 'slow')
+  await toStep(page, 'Inputs')
   await page.getByRole('button', { name: 'Choose file…' }).click()
   await page.getByRole('button', { name: 'Run', exact: true }).click()
   const cancel = page.getByRole('region', { name: 'Running' }).getByRole('button', { name: 'Cancel' })

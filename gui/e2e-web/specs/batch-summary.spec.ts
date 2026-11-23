@@ -7,7 +7,7 @@
 import { readdirSync, readFileSync, existsSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import type { Page } from '@playwright/test'
-import { test, expect, goTo, mockState, openApp } from './fixtures'
+import { test, expect, goTo, mockState, openApp, chooseTask, toStep } from './fixtures'
 
 const DIR = fileURLToPath(new URL('../../src/fixtures/cli/batch/', import.meta.url))
 const read = (c: string, f: string): string => readFileSync(`${DIR}${c}/${f}`, 'utf8')
@@ -61,7 +61,8 @@ async function shown(page: Page): Promise<string[][]> {
 
 async function runFolder(page: Page): Promise<void> {
   await openApp(page, 'gate-batch')
-  await page.getByRole('radio', { name: /^Characterize a run/ }).check()
+  await chooseTask(page, 'Characterize a run')
+  await toStep(page, 'Inputs')
   await page.getByRole('radio', { name: 'Batch' }).check()
   await goTo(page, 'Batch')
   await page.getByRole('button', { name: 'Add folder…' }).click()
@@ -142,7 +143,8 @@ test('Export summary TSV writes the table, cell for cell', async ({ page }) => {
 
 test('an output folder takes every job output; fewer than 3 jobs flag nothing', async ({ page }) => {
   await openApp(page, 'gate-batch')
-  await page.getByRole('radio', { name: /^Characterize a run/ }).check()
+  await chooseTask(page, 'Characterize a run')
+  await toStep(page, 'Inputs')
   await page.getByRole('radio', { name: 'Batch' }).check()
   await goTo(page, 'Batch')
   await page.evaluate(() => {
@@ -170,7 +172,8 @@ test('an output folder takes every job output; fewer than 3 jobs flag nothing', 
 
 test('by keyboard, focus does not fall to the page body after Add folder… or a batch pass', async ({ page }) => {
   await openApp(page, 'gate-batch')
-  await page.getByRole('radio', { name: /^Characterize a run/ }).check()
+  await chooseTask(page, 'Characterize a run')
+  await toStep(page, 'Inputs')
   await page.getByRole('radio', { name: 'Batch' }).check()
   await goTo(page, 'Batch')
   // The empty state's Add folder…: the queue replaces it, focus goes to its Add….

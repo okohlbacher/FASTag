@@ -74,20 +74,22 @@ export const START: HelpPage = {
       body: (
         <>
           <p>
-            Start in <strong>Setup</strong> with <strong>Export tags</strong>, the default task. It generates sequence
-            tags from all input spectra and includes per-residue confidence for downstream export. No FASTA file is
-            needed. To inspect an earlier analysis instead, click <strong>Open earlier results…</strong> under the workflows.
+            Setup asks one question at a time: <strong>Task</strong>, <strong>Inputs</strong>,{' '}
+            <strong>Settings</strong>, <strong>Outputs &amp; run</strong>. Step 1 selects <strong>Export tags</strong>, the
+            default task: it generates sequence tags from all input spectra and includes per-residue confidence for
+            downstream export. No FASTA file is needed. Click <strong>Continue with Export tags</strong>. To inspect an
+            earlier analysis instead, click <strong>Open earlier results…</strong> in step 1.
           </p>
           <ol>
             <li>
-              Under Input, click <strong>Choose file…</strong> and pick a spectra file: mzML, mzPeak, MGF, Thermo .raw or timsTOF .d.zip (see{' '}
+              In Inputs (step 2), click <strong>Choose file…</strong> and pick a spectra file: mzML, mzPeak, MGF, Thermo .raw or timsTOF .d.zip (see{' '}
               <L to="files-inputs">Input files</L>).
             </li>
             <li>
-              Under Outputs, the run name is the input&apos;s name: the tags file is <code>&lt;name&gt;.tags.tsv</code>, next to the input.
+              In Outputs &amp; run (step 4), the run name is the input&apos;s name: the tags file is <code>&lt;name&gt;.tags.tsv</code>, next to the input.
             </li>
             <li>
-              Check the instrument suggestion and the checks below the input. Under Settings, choose the
+              Check the instrument suggestion and the checks below the input. Under About these spectra (step 2), choose the
               <strong> Instrument</strong>, which sets the <L to="param-fragment_tolerance">fragment tolerance</L>: 20 <G to="gloss-ppm">ppm</G> is a starting
               point for high-resolution MS2; 0.3 Da is a starting point for ion-trap MS2. Use the analyser that
               measured the fragments, not just the instrument name. Apply a suggested preset only when it fits
@@ -105,7 +107,7 @@ export const START: HelpPage = {
           </ol>
           <p>
             For run metrics, choose <strong>Run QC</strong>. For protease, labels, glycopeptides and species, choose{' '}
-            <strong>Characterize a run</strong>; for many files, switch the Input card to <strong>Batch</strong>. Characterize samples 10% of the spectra and enables the species, digest, label and glyco reports (the alkylation report on request), opening on{' '}
+            <strong>Characterize a run</strong>; for many files, switch Inputs (step 2) to <strong>Batch</strong>. Characterize samples 10% of the spectra and enables the species, digest, label and glyco reports (the alkylation report on request), opening on{' '}
             <L to="workflow-overview">Overview</L>. A report that says “not assessed” or “no call” is not evidence
             that a feature is absent.
           </p>
@@ -147,15 +149,15 @@ export const START: HelpPage = {
             <L to="param-extension">Extension</L> in Settings so that tag length + 2 × extension reaches the length the
             database needs: about 4 residues for one protein, 7 or 8 for a proteome. With the default tag length 3,
             extension 1 suffices for one protein and 2 or 3 for a proteome. The run is refused if no tag can reach
-            that length. In the Outputs card, check <L to="param-out_spectra">Spectra with tags</L> to collect the
+            that length. In Outputs &amp; run, check <L to="param-out_spectra">Spectra with tags</L> to collect the
             spectra whose tags match. Read the chance table in the log before trusting a count (see{' '}
             <L to="results-fasta">Matching a sequence database</L>).
           </dd>
           <dt>How was the sample digested and labelled?</dt>
           <dd>
             <strong>Characterize a run</strong> checks the <L to="param-digest_out">Digest report</L> and the{' '}
-            <L to="param-label_out">Label report</L> in its Outputs card. Leave the database filter under Advanced
-            empty, so it does not narrow down the tags that are counted. Run, then read the Digest tab (see{' '}
+            <L to="param-label_out">Label report</L> in Outputs &amp; run. Leave the Filter database
+            out, so it does not narrow down the tags that are counted. Run, then read the Digest tab (see{' '}
             <L to="digest-ends">Reading the peptide ends</L>).
           </dd>
         </dl>
@@ -167,7 +169,7 @@ export const START: HelpPage = {
       body: (
         <>
           <p>
-            Switch the Input card to <strong>Batch</strong>, click <strong>Add files…</strong> and pick several spectra files. The same
+            In Inputs (step 2), switch to <strong>Batch</strong>, click <strong>Add files…</strong> and pick several spectra files. The same
             parameters are used for each file, one after the other.
           </p>
           <ul>
@@ -230,26 +232,29 @@ export const START: HelpPage = {
       body: (
         <>
           <p>
-            Setup reads top to bottom: <strong>Input</strong>, <strong>Workflow</strong>, <strong>Settings</strong>,{' '}
-            <strong>Outputs</strong> and <strong>Advanced</strong>. The seven workflows are Export tags (where the app
-            starts; all spectra, with per-residue confidence, see <L to="results-export">read export settings</L>), Run
-            QC, Mass-shift survey, Species, Database reduction, Identifiability triage and Characterize a run. Each
-            shows the few settings its question needs; every other option is under Advanced, the workflow&apos;s own
-            groups first, then the groups for every workflow, then Other analyses. The <strong>Outputs</strong> card
-            lists the workflow&apos;s files as checkboxes, named after the run. <strong>Batch</strong> in the Input
-            card runs the same workflow over several files, with an output folder and an optional SDRF. To look at
-            earlier results, use <strong>Open earlier results…</strong> in the Input card or the Results view.
+            Setup is four steps: <strong>Task</strong>, <strong>Inputs</strong>, <strong>Settings</strong> and{' '}
+            <strong>Outputs &amp; run</strong>. Step 1 shows the seven tasks as tiles: Export tags (selected at start;
+            all spectra, with per-residue confidence, see <L to="results-export">read export settings</L>), Characterize
+            a run, Species, Mass-shift survey, Database reduction, Run QC and Identifiability triage. Selecting a tile
+            explains it; <strong>Continue</strong> chooses it. The task decides what Inputs asks for: a protein FASTA
+            only for Mass-shift survey and Database reduction; optional inputs are one click away under{' '}
+            <strong>Add optional input</strong>. Settings shows the few settings the task needs; every other option is
+            under Advanced, the task&apos;s own groups first. Outputs &amp; run lists the task&apos;s files as
+            checkboxes, named after the run, and the command line. <strong>Batch</strong> in Inputs runs the same
+            task over several files, with an output folder and an optional SDRF. To look at earlier results, use{' '}
+            <strong>Open earlier results…</strong> in step 1 or the Results view.
           </p>
           <p>
-            A workflow replaces the form; <strong>Undo</strong> brings back what it replaced. The workflow row says
-            when the form differs from it (modified), and its <strong>Reset</strong> takes that back. The{' '}
-            <strong>Preset</strong> menu loads FASTag&apos;s own defaults or a preset of yours.
+            A task replaces the settings but keeps the input files it uses and the instrument you chose; a line in
+            Inputs says what it kept and dropped, and <strong>Undo</strong> brings back what it replaced. The head of
+            Settings says when the form differs from the task (modified), and its <strong>Reset</strong> takes that
+            back. <strong>Presets</strong> (in steps 1 and 3) loads FASTag&apos;s own defaults or a preset of yours.
           </p>
           <p>
             <strong>Save…</strong> stores what differs from the task or defaults the form started from, under a name.
             No paths are stored: input files such as a FASTA are left out, and a report is stored by its name and
             written next to the current tags file. The app also remembers the parameters of the last run, but they
-            are never used on their own: <strong>Apply last-used (n)</strong> offers the n settings of the last run,
+            are never used on their own: <strong>Continue last run (n)</strong> in step 1 offers the n settings of the last run,
             and nothing of them is used until you click it. <strong>Reset…</strong> beside Run sets every parameter
             back to FASTag&apos;s default.
           </p>
@@ -568,7 +573,7 @@ export const RESULTS: HelpPage = {
             <tr><td>Min. conf., Mean conf.</td><td>The weakest and the average observed-step score, 0 to 1 (<L to="results-conf">residue confidence</L>).</td></tr>
             <tr><td>Database hit</td><td>Without a database filter: Not checked (-), the tags were not matched against a database. With one, only matching tags are written: In database (fwd, as written; rev, reversed), or Entrapment (efwd, erev: found only in the entrapment database).</td></tr>
             <tr><td>Database q-value</td><td>q_db, only with an <G to="gloss-entrapment">entrapment database</G> (<L to="results-nofdr">see below</L>).</td></tr>
-            <tr><td>ProForma, Residue conf., USI</td><td>Optional columns (<L to="param-proforma">ProForma</L>, <L to="param-res_conf">per-residue confidence</L>, <L to="param-usi_collection">USI</L>), checked in the Outputs card of Export tags.</td></tr>
+            <tr><td>ProForma, Residue conf., USI</td><td>Optional columns (<L to="param-proforma">ProForma</L>, <L to="param-res_conf">per-residue confidence</L>, <L to="param-usi_collection">USI</L>), checked in Outputs &amp; run of Export tags.</td></tr>
           </tbody>
         </table>
       )
@@ -1286,7 +1291,7 @@ export const FILES: HelpPage = {
               <tr><td>Mass-shift histogram</td><td><L to="param-delta_out">Reconciliation</L></td><td>Leftover masses, one count per spectrum.</td></tr>
               <tr><td>Reconciliation as identifications</td><td><L to="param-recon_id_out">Reconciliation</L></td><td>The placements as idXML, mzIdentML (.mzid) or mzTab, not filtered by a false discovery rate.</td></tr>
               <tr><td>Mass-gap report</td><td><L to="param-massgap_out">Reconciliation</L></td><td>Gap peaks, alkylation and SILAC (<L to="digest-gaps">Digest tab</L>).</td></tr>
-              <tr><td>Spectra with tags</td><td><L to="param-out_spectra">Outputs card</L></td><td>The spectra that carry at least one reported tag that is not an entrapment match, as mzML or mzPeak.</td></tr>
+              <tr><td>Spectra with tags</td><td><L to="param-out_spectra">Outputs &amp; run</L></td><td>The spectra that carry at least one reported tag that is not an entrapment match, as mzML or mzPeak.</td></tr>
             </tbody>
           </table>
           <p>

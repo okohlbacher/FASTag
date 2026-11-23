@@ -1,5 +1,5 @@
 import type { Locator, Page } from '@playwright/test'
-import { test, expect, goTo, mockState, openApp } from './fixtures'
+import { test, expect, goTo, mockState, openApp, toStep } from './fixtures'
 
 const helpPanel = (page: Page) => page.getByRole('complementary', { name: 'Help' })
 
@@ -95,6 +95,7 @@ test('a blocked input links to its FAQ and glossary, then returns without changi
   await page.setViewportSize({ width: 960, height: 600 })
   await page.emulateMedia({ reducedMotion: 'reduce' })
   await openApp(page, 'dia-probe', 'defaults')
+  await toStep(page, 'Inputs')
   await page.getByRole('button', { name: 'Choose file…' }).click()
   const block = page.locator('li.check').filter({ hasText: 'Blocks the run: Raw DIA' })
   const opener = block.getByRole('button', { name: 'What this means' })

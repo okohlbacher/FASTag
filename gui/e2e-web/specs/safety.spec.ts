@@ -1,20 +1,24 @@
-import { test, expect, goTo, openApp, mockState } from './fixtures'
+import { test, expect, goTo, openApp, mockState, toStep } from './fixtures'
 
 test('last-used is an offer: a fresh start runs with defaults until the chip is clicked', async ({ page }) => {
   await openApp(page, 'lastused', 'defaults')
-  const chip = page.getByRole('button', { name: 'Apply last-used (2)' })
+  const chip = page.getByRole('button', { name: 'Continue last run (2)' })
+  await toStep(page, 'Task')
   await expect(chip).toBeVisible()
   await expect(page.locator('#p-tag_length')).toHaveValue('3')
+  await toStep(page, 'Inputs')
   await page.getByRole('button', { name: 'Choose file…' }).click()
   await page.getByRole('button', { name: 'Run', exact: true }).click()
   await expect(page.getByText('Showing 2,028 of 2,028')).toBeVisible()
   let calls = await mockState<{ params: Record<string, unknown> }[]>(page, 'runCalls')
   expect(calls[0].params['tag_length']).toBe('3')
   expect(calls[0].params['species']).toBe(false)
-  await goTo(page, 'Setup') // the run moved to Results; the chip is on Setup
+  await goTo(page, 'Setup') // the run moved to Results; the chip is on step 1 of Setup
+  await toStep(page, 'Task')
   await chip.click()
   await expect(chip).toBeHidden()
   await expect(page.locator('#p-tag_length')).toHaveValue('7')
+  await toStep(page, 'Outputs & run')
   await page.getByRole('button', { name: 'Run', exact: true }).click()
   await expect(page.getByText('Showing 2,028 of 2,028')).toBeVisible()
   calls = await mockState(page, 'runCalls')
@@ -24,6 +28,7 @@ test('last-used is an offer: a fresh start runs with defaults until the chip is 
 
 test('while a run goes the open buttons are locked; the close guard asks, and Keep running keeps it', async ({ page }) => {
   await openApp(page, 'slow')
+  await toStep(page, 'Inputs')
   await page.getByRole('button', { name: 'Choose file…' }).click()
   await page.getByRole('button', { name: 'Run', exact: true }).click()
   // P2a: the run moved to Results. P2b: its Cancel is the running state's
@@ -49,6 +54,7 @@ test('while a run goes the open buttons are locked; the close guard asks, and Ke
 
 test('a cancelled run says its partial outputs were removed', async ({ page }) => {
   await openApp(page, 'slow')
+  await toStep(page, 'Inputs')
   await page.getByRole('button', { name: 'Choose file…' }).click()
   await page.getByRole('button', { name: 'Run', exact: true }).click()
   await page.getByRole('button', { name: 'Cancel' }).click()
@@ -65,6 +71,7 @@ test('an existing output is confirmed before the run; a cancelled run of an earl
   await page.getByRole('button', { name: 'Open a tags TSV…' }).click()
   await expect(page.locator('.tabpanel')).toContainText('The run that wrote /data/run01.tags.tsv was cancelled')
   await goTo(page, 'Setup')
+  await toStep(page, 'Inputs')
   await page.getByRole('button', { name: 'Choose file…' }).click()
   await page.getByRole('button', { name: 'Run', exact: true }).click()
   const dlg = page.getByRole('alertdialog')

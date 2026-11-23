@@ -633,7 +633,7 @@ export default function DigestPanel({ reports, errors, onOpen }: Props): JSX.Ele
           <h2>No digest or label report</h2>
           <p>
             The Digest, Label, Mass-gap and Alkylation reports appear here after a run that writes them: check them in
-            the Outputs card of Characterize a run (or under Advanced, Other analyses).
+            Outputs &amp; run of Characterize a run (or under Settings › Advanced, Other analyses).
           </p>
           <div className="row-actions">
             <button className="secondary" onClick={onOpen}>

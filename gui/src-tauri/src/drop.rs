@@ -154,6 +154,34 @@ pub fn folder_spectra_list(dir: String) -> Result<Vec<String>, String> {
     folder_spectra_cmd(dir)
 }
 
+/// One path of path_status: whether it exists, and a file or a folder.
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
+pub struct PathStatus {
+    pub path: String,
+    pub exists: bool,
+    /// "file", "dir", or None when it does not exist.
+    pub kind: Option<&'static str>,
+}
+
+/// Whether each of @p paths exists (Setup's step 2 says "Not found" for an
+/// input file that does not): reads metadata only, never the file. An empty
+/// path is reported as not existing.
+pub(crate) fn path_status_cmd(paths: Vec<String>) -> Vec<PathStatus> {
+    paths
+        .into_iter()
+        .map(|path| {
+            let m = if path.trim().is_empty() { None } else { std::fs::metadata(&path).ok() };
+            let kind = m.as_ref().map(|m| if m.is_dir() { "dir" } else { "file" });
+            PathStatus { exists: kind.is_some(), kind, path }
+        })
+        .collect()
+}
+
+#[tauri::command]
+pub fn path_status(paths: Vec<String>) -> Vec<PathStatus> {
+    path_status_cmd(paths)
+}
+
 /// Sort the dropped @p paths by kind. The first file of a kind that takes
 /// one file (FASTA, taxonomy, tags, SDRF) wins; the others are ignored.
 pub fn route(paths: &[PathBuf]) -> DropRoute {
@@ -397,6 +425,22 @@ mod tests {
         assert_eq!(routes[0].spectra, vec!["/d/a.mzML", "/d/b.mzML"]);
         assert!(routes[0].batch);
         assert_eq!(routes[0].fasta.as_deref(), Some("/d/h.fasta"));
+    }
+
+    #[test]
+    fn path_status_says_whether_each_path_exists_and_what_it_is() {
+        let dir = std::env::temp_dir().join(format!("fastag-path-status-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let file = dir.join("db.fasta");
+        std::fs::write(&file, ">p\nPEPTIDE\n").unwrap();
+        let gone = dir.join("missing.fasta");
+        let st = path_status_cmd(vec![text(&file), text(&dir), text(&gone), String::new()]);
+        assert_eq!(st.iter().map(|s| (s.exists, s.kind)).collect::<Vec<_>>(), vec![(true, Some("file")), (true, Some("dir")), (false, None), (false, None)]);
+        assert_eq!(st[2].path, text(&gone));
+        let json = serde_json::to_value(&st[0]).unwrap();
+        assert_eq!(json["kind"], "file");
+        assert_eq!(json["exists"], true);
+        std::fs::remove_dir_all(&dir).unwrap();
     }
 
     #[test]

@@ -5,7 +5,7 @@ import ReportTable from '../results/ReportTable'
 import { describe, expect, it, vi } from 'vitest'
 import ReconView from '../results/ReconView'
 import { installMockBridge } from '../testing/mockBridge'
-import { addBatch, click, flush, renderColdApp, showView } from '../testing/render'
+import { addBatch, click, flush, renderColdApp, showView, chooseTask } from '../testing/render'
 import { screen } from '@testing-library/react'
 import type { RunRecord } from '../types'
 import ecoliMassgap from '../fixtures/cli/v1111-ecoli-recon-loc/run.massgap.tsv?raw'
@@ -41,12 +41,12 @@ describe('round 14: batch Outputs name each output as the job writes it', () => 
   it('CLI-derived names keep .tags; database reduction keeps .fasta and .json', async () => {
     const mock = installMockBridge()
     await renderColdApp(mock)
-    await click(screen.getByRole('radio', { name: /^Characterize a run/ }))
+    await chooseTask('Characterize a run')
     await addBatch(mock, ['/d/a.mzML', '/d/b.mzML'])
-    const names = (): string[] => [...document.querySelectorAll('#card-outputs .product-file')].map((e) => e.textContent ?? '')
+    const names = (): string[] => [...document.querySelectorAll('[data-step="4"] .product-file')].map((e) => e.textContent ?? '')
     expect(names()).toEqual(expect.arrayContaining(['→ <input>.tags.tsv', '→ <input>.tags.glyco.tsv', '→ <input>.tags.species.tsv', '→ <input>.digest.tsv']))
     showView('setup')
-    await click(screen.getByRole('radio', { name: /^Database reduction/ }))
+    await chooseTask('Database reduction')
     expect(names()).toEqual(expect.arrayContaining(['→ <input>.reduced.fasta', '→ <input>.search.json']))
   })
 })

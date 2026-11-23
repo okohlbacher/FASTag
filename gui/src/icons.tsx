@@ -112,3 +112,30 @@ export function JobIcon({ status }: { status: JobStatus }): JSX.Element {
     </svg>
   )
 }
+
+/// The icon of a workflow tile in step 1 of Setup (16 px, decorative).
+const TASK_PATHS: Record<string, JSX.Element> = {
+  // A tag: a label with a hole.
+  'export-tags': <><path d="M2 3h6l5.5 5-5.5 5H2z" /><circle cx="5" cy="8" r="1.2" /></>,
+  // A gauge.
+  'run-qc': <><path d="M2.5 11.5a5.5 5.5 0 1 1 11 0" /><path d="M8 11.5l2.6-3.6" /></>,
+  // A delta.
+  'mass-shift': <path d="M8 2.5l5.5 10.5h-11z" />,
+  // A leaf.
+  species: <><path d="M3 13c0-6 4-10 10-10 0 6-4 10-10 10z" /><path d="M3 13l6-6" /></>,
+  // A funnel.
+  'db-reduction': <path d="M2 3h12l-4.5 5.5V13l-3 1.5V8.5z" />,
+  // Ranked bars.
+  triage: <><path d="M3 13V9M6.5 13V6M10 13V8M13.5 13V3" /></>,
+  // A magnifier.
+  characterize: <><circle cx="7" cy="7" r="4.2" /><path d="M10.2 10.2L14 14" /></>,
+  // No workflow: a slider.
+  defaults: <><path d="M2 5h12M2 11h12" /><circle cx="6" cy="5" r="1.6" /><circle cx="10" cy="11" r="1.6" /></>
+}
+export function TaskIcon({ id }: { id: string }): JSX.Element {
+  return (
+    <svg className="icon task-icon" width="16" height="16" viewBox="0 0 16 16" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+      {TASK_PATHS[id] ?? TASK_PATHS.defaults}
+    </svg>
+  )
+}

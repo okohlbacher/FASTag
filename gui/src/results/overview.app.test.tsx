@@ -9,7 +9,7 @@
 import { act, fireEvent, screen, waitFor, within } from '@testing-library/react'
 import { describe, expect, it } from 'vitest'
 import { installMockBridge, type MockBridge } from '../testing/mockBridge'
-import { click, goTo, renderApp, renderCharacterizeApp, runButton } from '../testing/render'
+import { click, goTo, renderApp, renderCharacterizeApp, runButton, fileButton } from '../testing/render'
 import { CLI_CASES, logLines, type CliCase } from '../testing/cliFixtures'
 import { applyLastUsed } from '../testing/lastUsed'
 import { speciesFromTsv } from '../testing/speciesTsv'
@@ -40,7 +40,7 @@ describe('Overview in the app', () => {
     gate(mock, CLI_CASES.v112)
     await renderCharacterizeApp(mock)
     // 1: select Characterize (in the helper). 2: add the file.
-    await click(screen.getByRole('button', { name: 'Choose file…' }))
+    await click(fileButton('Choose file…'))
     // 3: Run.
     await click(runButton())
     expect(mock.runCalls).toHaveLength(1)
@@ -61,7 +61,7 @@ describe('Overview in the app', () => {
     const mock = installMockBridge()
     gate(mock, CLI_CASES.v112)
     await renderCharacterizeApp(mock)
-    await click(screen.getByRole('button', { name: 'Choose file…' }))
+    await click(fileButton('Choose file…'))
     await click(runButton())
     await finish(mock, CLI_CASES.v112)
     await waitFor(() => expect(selectedTab()).toBe('Overview'))
@@ -78,7 +78,7 @@ describe('Overview in the app', () => {
     const mock = installMockBridge()
     gate(mock, CLI_CASES.v112)
     await renderCharacterizeApp(mock)
-    await click(screen.getByRole('button', { name: 'Choose file…' }))
+    await click(fileButton('Choose file…'))
     await click(runButton())
     expect(shownView()).toBe('results')
     await act(async () => {
@@ -100,7 +100,7 @@ describe('Overview in the app', () => {
     gate(mock, CLI_CASES.v112)
     mock.reportFiles['/d/run01.alkylation.tsv'] = ALKYLATION
     await renderCharacterizeApp(mock)
-    await click(screen.getByRole('button', { name: 'Choose file…' }))
+    await click(fileButton('Choose file…'))
     await click(document.getElementById('out-alkylation_out')!)
     await click(runButton())
     expect(mock.runCalls[0].params.alkylation_out).toBe('/d/run01.alkylation.tsv')
@@ -123,7 +123,7 @@ describe('Overview in the app', () => {
     mock.settings.lastUsed = { ...c.params, recon_fasta: '/db/human.fasta' }
     gate(mock, c)
     await renderApp(mock)
-    await click(screen.getByRole('button', { name: /^(Choose file|Change)…$/ }))
+    await click(fileButton())
     await applyLastUsed(9)
     await goTo('setup')
     await click(runButton())
@@ -143,7 +143,7 @@ describe('Overview in the app', () => {
     const mock = installMockBridge()
     gate(mock, CLI_CASES.v112)
     await renderCharacterizeApp(mock)
-    await click(screen.getByRole('button', { name: 'Choose file…' }))
+    await click(fileButton('Choose file…'))
     await click(runButton())
     const showLog = within(screen.getByRole('region', { name: 'Running' })).getByRole('button', { name: 'Show log' })
     showLog.focus()
@@ -157,7 +157,7 @@ describe('Overview in the app', () => {
     const mock = installMockBridge()
     gate(mock, CLI_CASES.v112)
     await renderCharacterizeApp(mock)
-    await click(screen.getByRole('button', { name: 'Choose file…' }))
+    await click(fileButton('Choose file…'))
     await click(runButton())
     const cancel = within(screen.getByRole('region', { name: 'Running' })).getByRole('button', { name: 'Cancel' })
     cancel.focus()
@@ -173,7 +173,7 @@ describe('Overview in the app', () => {
     const mock = installMockBridge()
     gate(mock, CLI_CASES.v112)
     await renderApp(mock) // FASTag's defaults: no label report
-    await click(screen.getByRole('button', { name: /^(Choose file|Change)…$/ }))
+    await click(fileButton())
     await click(runButton())
     expect(mock.runCalls[0].params.label_out ?? '').toBe('') // guard
     await finish(mock, CLI_CASES.v112)

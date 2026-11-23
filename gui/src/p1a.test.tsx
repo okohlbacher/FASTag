@@ -7,7 +7,7 @@ import { act, screen, waitFor } from '@testing-library/react'
 import { describe, expect, it } from 'vitest'
 import App from './App'
 import { installMockBridge, mockOutputs, OUTPUT_KEYS, RUN_STARTED_FIXTURE, type RunCall } from './testing/mockBridge'
-import { click, pickSingle, renderApp } from './testing/render'
+import { click, pickSingle, renderApp, showStep } from './testing/render'
 import type { ResolvedOutputs } from './types'
 
 const runButton = (): HTMLElement => screen.getByRole('button', { name: /^Run( on .+)?$/ })
@@ -27,7 +27,8 @@ describe('the outputs of a run come from the backend', () => {
     mock.run = async (params, onEvent) => ({ ...(await run(params, onEvent)), out: outputs.out, outputs })
     mock.settings.lastUsed = { species: true }
     await renderApp()
-    await click(await screen.findByRole('button', { name: 'Apply last-used (1)' }))
+    showStep(1)
+    await click(await screen.findByRole('button', { name: 'Continue last run (1)' }))
     await pickSingle(mock, 'C:\\d\\a.mzML')
     await click(runButton())
     await act(async () => mock.emitDone({ ok: true, code: 0, runId: mock.lastRunId }))
@@ -51,7 +52,8 @@ describe('the outputs of a run come from the backend', () => {
     }
     mock.settings.lastUsed = { species: true }
     await renderApp()
-    await click(await screen.findByRole('button', { name: 'Apply last-used (1)' }))
+    showStep(1)
+    await click(await screen.findByRole('button', { name: 'Continue last run (1)' }))
     await pickSingle(mock, '/d/a.mzML')
     await click(runButton())
     await act(async () => mock.emitDone({ ok: true, code: 0, runId: mock.lastRunId }))

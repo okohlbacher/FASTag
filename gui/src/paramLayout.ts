@@ -494,7 +494,7 @@ export function briefHint(text: string): string {
 }
 
 /// Curated one-line hints, the same in Settings and in Advanced (a
-/// workflow's own hint, tasks.ts help, comes first in its Settings card and
+/// workflow's own hint, tasks.ts help, comes first in its Settings step and
 /// in its Advanced groups alike).
 export const BRIEF_HINT: Record<string, string> = {
   // Tagging
@@ -866,12 +866,12 @@ export const CONFLICTS: ((values: Record<string, unknown>, ctx: PreflightContext
   // "-recon_out needs a database: give -recon_fasta (or -fasta)."
   (values) =>
     isActive('recon_out', values) && !isActive('recon_fasta', values) && !isActive('fasta', values)
-      ? { params: ['recon_fasta', 'recon_out', 'fasta'], note: 'The placements need a protein database: choose one under Protein database.', neutral: true }
+      ? { params: ['recon_fasta', 'recon_out', 'fasta'], note: 'The placements need a protein database: choose one in Inputs.', neutral: true }
       : null,
   // "-shortlist_out needs a database: give -recon_fasta (or -fasta)."
   (values) =>
     ['shortlist_out', 'fasta_out', 'search_config_out'].some((n) => isActive(n, values)) && !isActive('recon_fasta', values) && !isActive('fasta', values)
-      ? { params: ['recon_fasta', 'shortlist_out', 'fasta'], note: 'The shortlist needs a protein database: choose one under Protein database.', neutral: true }
+      ? { params: ['recon_fasta', 'shortlist_out', 'fasta'], note: 'The shortlist needs a protein database: choose one in Inputs.', neutral: true }
       : null,
   // "-tmt_reporter_filter requires -tmt_pseudo_filter auto or on."
   (values) =>

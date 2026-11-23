@@ -420,6 +420,8 @@ export function installMockBridge(): MockBridge {
     exportIniCalls: [],
     exportIniError: null,
     commandOf: (call) => [mock.binaryInfo.bin, ...mockArgv(call)],
+    // Every path exists but one whose name says it is missing.
+    pathStatus: (paths) => Promise.resolve(paths.map((path) => ({ path, exists: !/missing/i.test(path), kind: /missing/i.test(path) ? null : ('file' as const) }))),
     commandLine: (params) => {
       const call = params as unknown as RunCall
       mock.commandLineCalls.push(call)

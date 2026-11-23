@@ -5,7 +5,7 @@ import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { describe, expect, it } from 'vitest'
 import ResultsTable from '../ResultsTable'
 import { installMockBridge, type MockBridge } from '../testing/mockBridge'
-import { batchAddButton, click, goTo, openGroup, renderApp, runButton, showView } from '../testing/render'
+import { batchAddButton, click, goTo, openGroup, renderApp, runButton, showView, fileButton, showStep } from '../testing/render'
 
 const change = (el: Element, value: string): Promise<void> =>
   act(async () => {
@@ -19,7 +19,7 @@ const openSection = (title: string): Promise<void> => openGroup(GROUP[title] ?? 
 async function pick(mock: MockBridge, path: string): Promise<void> {
   showView('setup') // the input card (P2a: Setup is a view of its own)
   mock.nextPickInput = path
-  await click(screen.getByRole('button', { name: /^(Choose file|Change)…$/ }))
+  await click(fileButton())
 }
 const done = (mock: MockBridge, ok = true, code: number | null = ok ? 0 : 1): Promise<void> =>
   act(async () => mock.emitDone({ runId: mock.lastRunId, ok, code, message: null }))
@@ -38,6 +38,7 @@ describe('live: run inputs', () => {
     await click(screen.getByRole('button', { name: 'Save' }))
     await pick(mock, '/r/B.mzML')
     expect(digest().dataset.value).toBe('/r/B.digest.tsv') // rebased: fine
+    showStep(3)
     await change(c.querySelector('#origin')!, '__defaults')
     await change(c.querySelector('#origin')!, 'Lab default')
     await click(runButton())

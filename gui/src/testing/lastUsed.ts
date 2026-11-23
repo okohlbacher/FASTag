@@ -1,25 +1,25 @@
 // Test helpers for the last-used offer (D6, GUI-DESIGN P0a). The last
 // session's parameters are no longer applied on start: a test that starts
-// from them clicks "Apply last-used (n)" as a user would, and then checks
+// from them clicks "Continue last run (n)" as a user would, and then checks
 // that the form really holds them, so it cannot pass vacuously on defaults.
 
 import { act, fireEvent, screen } from '@testing-library/react'
 import { expect } from 'vitest'
 import { PARAM_BY_NAME, RENDERED, SECTIONS } from '../paramLayout'
 import { INSTRUMENTS } from '../setup/presets'
-import { showView } from './render'
+import { showStep, showView } from './render'
 
 /// Click the offer chip. @p n is the number of settings it must offer.
 export async function applyLastUsed(n: number): Promise<void> {
-  // The chip is on the Setup view (P2a shell).
-  showView('setup')
-  const chip = await screen.findByRole('button', { name: /^Apply last-used \(\d+\)$/ })
-  expect(chip.textContent).toBe(`Apply last-used (${n})`)
+  // The offer is on step 1 of Setup (doc/GUI-SETUP-WIZARD.md 3).
+  showStep(1)
+  const chip = await screen.findByRole('button', { name: /^Continue last run \(\d+\)$/ })
+  expect(chip.textContent).toBe(`Continue last run (${n})`)
   await act(async () => {
     fireEvent.click(chip)
   })
   // The offer is used up.
-  expect(screen.queryByRole('button', { name: /^Apply last-used/ })).toBeNull()
+  expect(document.querySelector('button.offer')).toBeNull()
 }
 
 /// What the form holds for parameter @p name: a checkbox's state, a field's
@@ -61,7 +61,7 @@ export async function formValue(name: string): Promise<string | boolean> {
   return v
 }
 
-/// The number of settings "Apply last-used" offers for @p lastUsed on a fresh
+/// The number of settings "Continue last run" offers for @p lastUsed on a fresh
 /// form: the rendered ones whose value differs from FASTag's default.
 export function offerCount(lastUsed: Record<string, unknown>): number {
   return Object.entries(lastUsed).filter(([name, v]) => {

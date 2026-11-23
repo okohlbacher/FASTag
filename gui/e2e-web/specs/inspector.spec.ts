@@ -2,13 +2,14 @@
 // a CLI that lists -probe_input), the red flags and their fixes, the checks
 // after a run from FASTag 1.12's real reports and log of the ion-trap gate
 // input with the re-run offer, and the exit-11 raw-DIA refusal.
-import { test, expect, goTo, openApp, mockState } from './fixtures'
+import { test, expect, goTo, openApp, mockState, chooseTask, toStep } from './fixtures'
 
 const checkNamed = (page: import('@playwright/test').Page, title: RegExp) =>
   page.locator('li.check').filter({ has: page.locator('strong', { hasText: title }) })
 
 test('ion-trap probe: the 0.3 Da red flag before the run, fixed in one click (focus moves on to Run); the stale index is a warning', async ({ page }) => {
   await openApp(page, 'iontrap-probe', 'defaults')
+  await toStep(page, 'Inputs')
   await page.getByRole('button', { name: 'Choose file…' }).click()
   const flag = checkNamed(page, /^Red flag: Ion-trap MS2 with a 20 ppm tolerance/)
   await expect(flag).toBeVisible()
@@ -36,6 +37,7 @@ test('ion-trap probe: the 0.3 Da red flag before the run, fixed in one click (fo
 
 test('raw-DIA probe: Run is blocked, with the DIAspeXtract command and no Run anyway', async ({ page }) => {
   await openApp(page, 'dia-probe', 'defaults')
+  await toStep(page, 'Inputs')
   await page.getByRole('button', { name: 'Choose file…' }).click()
   const block = checkNamed(page, /^Blocks the run: Raw DIA/)
   await expect(block).toBeVisible()
@@ -47,7 +49,8 @@ test('raw-DIA probe: Run is blocked, with the DIAspeXtract command and no Run an
 
 test('without the probe: "not checked" before the run; after it the ion-trap red flag and the re-run at 0.3 Da', async ({ page }) => {
   await openApp(page, 'iontrap')
-  await page.getByRole('radio', { name: /^Characterize a run/ }).check()
+  await chooseTask(page, 'Characterize a run')
+  await toStep(page, 'Inputs')
   await page.getByRole('button', { name: 'Choose file…' }).click()
   await expect(page.locator('p.not-checked', { hasText: /^The instrument and checks come from the reports after the run\.$/ })).toBeVisible()
   await page.getByRole('button', { name: 'Run', exact: true }).click()
@@ -69,6 +72,7 @@ test('without the probe: "not checked" before the run; after it the ion-trap red
 
 test('FASTag 1.12 refuses raw DIA (exit 11): a clear block naming DIAspeXtract, not a generic failure', async ({ page }) => {
   await openApp(page, 'dia-refusal', 'defaults')
+  await toStep(page, 'Inputs')
   await page.getByRole('button', { name: 'Choose file…' }).click()
   await page.getByRole('button', { name: 'Run', exact: true }).click()
   await goTo(page, 'Results')
@@ -83,6 +87,7 @@ test('FASTag 1.12 refuses raw DIA (exit 11): a clear block naming DIAspeXtract, 
 test('a probe in flight holds Run (no 0.3 Da run slips through before the red flag); its answer then decides', async ({ page }) => {
   await page.goto('/?fixture=iontrap-probe&start=defaults&hold=probes')
   await expect(page.getByText('FASTag ready')).toBeVisible()
+  await toStep(page, 'Inputs')
   await page.getByRole('button', { name: 'Choose file…' }).click()
   const run = page.getByRole('button', { name: 'Run', exact: true })
   await expect(page.locator('.inspector p.hint', { hasText: 'Checking the file with FASTag…' })).toBeVisible()
@@ -99,6 +104,7 @@ test('a probe in flight holds Run (no 0.3 Da run slips through before the red fl
 test('the Orbitrap gate input with the probe (stale index, as FASTag 1.12 says): Run in two actions to the results', async ({ page }) => {
   await openApp(page, 'orbitrap-probe', 'defaults')
   // 1: add the file.
+  await toStep(page, 'Inputs')
   await page.getByRole('button', { name: 'Choose file…' }).click()
   await expect(checkNamed(page, /^Warning: The mzML index does not match/)).toBeVisible()
   await expect(page.locator('li.check[data-check]').filter({ hasText: /^Red flag|^Blocks the run/ })).toHaveCount(0)

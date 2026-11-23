@@ -8,7 +8,7 @@ import { defaultOut } from '../app/paths'
 import { jobOut } from '../run/batch'
 import { buildOverview, leadTiles, shownTiles, triageFacts } from '../results/overview'
 import { installMockBridge } from '../testing/mockBridge'
-import { click, renderColdApp } from '../testing/render'
+import { click, renderColdApp, chooseTask } from '../testing/render'
 import { describe, expect, it } from 'vitest'
 import DigestPanel from '../DigestPanel'
 import { parseReport } from '../digestReport'
@@ -24,11 +24,11 @@ describe('round 11: the Labels panel leads with the CLI label call', () => {
 })
 
 describe('round 11: Database reduction shows the protease and, with Comet, its template', () => {
-  it('Protease in Settings; the Comet template only with Comet, and the fragment said', async () => {
+  it('Protease beside the instrument (About these spectra); the Comet template only with Comet, and the fragment said', async () => {
     const mock = installMockBridge()
     await renderColdApp(mock)
-    await click(screen.getByRole('radio', { name: /^Database reduction/ }))
-    const settings = screen.getByRole('region', { name: '3 Settings' })
+    await chooseTask('Database reduction')
+    const settings = screen.getByRole('region', { name: 'About these spectra' })
     expect(within(settings).queryByLabelText(/^Protease/)).not.toBeNull()
     expect(document.getElementById('p-search_config_template')).toBeNull()
     await act(async () => void fireEvent.change(document.getElementById('p-search_engine')!, { target: { value: 'comet' } }))

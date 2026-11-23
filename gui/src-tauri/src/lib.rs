@@ -158,6 +158,7 @@ pub fn run() {
             sdrf::taxonomy_dump,
             denovo::denovo_export,
             drop::folder_spectra_list,
+            drop::path_status,
             species::taxdb_info,
             species::taxonomy_status,
             spectrum::spectrum_support,

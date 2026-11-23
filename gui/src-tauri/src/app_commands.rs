@@ -35,6 +35,7 @@ pub const APP_COMMANDS: &[&str] = &[
     "taxonomy_dump",
     "denovo_export",
     "folder_spectra_list",
+    "path_status",
     "taxdb_info",
     "taxonomy_status",
     "spectrum_support",

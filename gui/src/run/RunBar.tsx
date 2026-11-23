@@ -31,6 +31,8 @@ export interface RunBarProps {
   // One-click fixes of the species reach conflict.
   fixes: SpeciesFix[]
   onFix(values: Record<string, ParamValue>): void
+  /// The Setup step that fixes a refusal (Go to Inputs, Go to Settings).
+  goTo?(c: Conflict): { label: string; go(): void } | null
   input: string
   out: string
   // Batch input mode: the queue is the input, never the single file.
@@ -130,14 +132,28 @@ export default function RunBar(p: RunBarProps): JSX.Element {
               </span>
             </p>
           )}
-          {refused.map((c) => (
-            <div key={c.params.join(',')}>
+          {refused.map((c) => {
+            const to = p.goTo?.(c)
+            const link = to ? (
+              <>
+                {' '}
+                <button type="button" className="link small" onClick={to.go}>
+                  {to.label}
+                </button>
+              </>
+            ) : null
+            return (
+            <div key={c.params.join(',') + c.note}>
               {c.neutral ? (
-                <p className="hint">{c.note}</p>
+                <p className="hint">
+                  <span>{c.note}</span>
+                  {link}
+                </p>
               ) : (
                 <p className="warn">
                   <IconError />
                   <span>{c.note}</span>
+                  {link}
                 </p>
               )}
               {c.fix && (
@@ -170,7 +186,8 @@ export default function RunBar(p: RunBarProps): JSX.Element {
                 </div>
               )}
             </div>
-          ))}
+            )
+          })}
         </div>
       )}
       {!busy && p.plan}
