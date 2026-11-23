@@ -189,7 +189,7 @@ describe('wizard: inputs per task', () => {
     await click(document.getElementById('out-recon_out')!)
     expect(Number(field('recon_fasta')!.closest<HTMLElement>('[data-step]')!.dataset.step)).toBe(3)
     expect(field('recon_fasta')!.value).toBe('/d/human.fasta')
-  })
+  }, 30000) // opens Advanced and renders every step; vitest's 5 s default is too short on loaded CI runners
 
   it('a refusal leads to the step where its field is for the task: the entrapment database under Advanced in Species', async () => {
     const mock = installMockBridge()

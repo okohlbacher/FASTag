@@ -1263,7 +1263,7 @@
       "name": "resolved_out",
       "type": "output-file",
       "default": "",
-      "description": "Merge each spectrum's tags (of -out, E-value <= -resolve_max_evalue) on its peaks into resolved tags and write one row per resolved tag, best first: sequence N->C, series call, flanks, score, evidence, peaks and steps (both in ascending m/z order: for y and z the steps run C->N, the reverse of sequence) and the member rows of -out",
+      "description": "Merge each spectrum's tags (of -out, E-value <= -resolve_max_evalue) on its peaks into resolved tags and write one row per resolved tag, best first: sequence N->C, series call, flanks, score, evidence, peaks and steps (both in ascending m/z order: for y and z the steps run C->N, the reverse of sequence), the member rows of -out and the ranking it was made with (scheme, threshold: -resolve_score, -resolve_threshold), and whether it lies at a peptide terminus (terminus: N, C, N,C, or one residue away as N+K or C+[KQ]; empty if neither)",
       "required": false,
       "toppAdvanced": false,
       "formats": [
