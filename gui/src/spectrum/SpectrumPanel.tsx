@@ -18,7 +18,7 @@ import { kindOf, ladderOf, packRows, sequenceOf, settleSeries, stepLabel, type G
 import { fromCli, type CliRows } from './cliGraph'
 import { MergeGraph } from './MergeGraph'
 import { PAD, W, fullRange } from './plotScale'
-import { cstarGraph } from './stepScore'
+import { schemeGraph } from './stepScore'
 import { dbCall, ladderSteps, likelyPeptide, rulerOf, stepOnRuler, stepsOnRuler, ticksOf, type Candidate, type Ruler } from './peptide'
 import { baseName } from '../digestReport'
 import { EValue, columnLabel, hitWords, spectrumHint } from '../ResultsTable'
@@ -83,6 +83,8 @@ const PAGE = 1000
 
 const fmt = (x: number, d = 4): string => x.toFixed(d)
 const ppm = (x: number | null): string => (x == null ? '–' : `${x >= 0 ? '+' : '−'}${Math.abs(x).toFixed(1)}`)
+// A run parameter as the text it was given (undefined: not given).
+const paramStr = (v: unknown): string | undefined => (v == null ? undefined : String(v))
 
 /// The other series of a pair: b <-> y, c <-> z.
 const other = (x: Ladder['series']): Ladder['series'] => (x === 'b' ? 'y' : x === 'y' ? 'b' : x === 'c' ? 'z' : 'c')
@@ -307,9 +309,10 @@ export default function SpectrumPanel({ target, source, tags: tagsFile, placemen
       if (!badCutoff && cutoff !== Infinity && (evalue == null || evalue > cutoff)) return void above++
       ins.push({ row: tr, evalue, index: i })
     })
-    // Ranked as FASTag ranks them by default (-resolve_score cstar,
-    // stepScore.ts): the C* log-odds of their steps, rank 1 by noself.
-    const graph = run?.ok ? run.graph : cstarGraph(ins, spectrum, residues, join)
+    // Ranked as the run ranked them (its -resolve_score and -resolve_threshold;
+    // FASTag's default cstar, stepScore.ts, when the run does not say).
+    const gui = run?.ok ? null : schemeGraph(ins, spectrum, residues, join, paramStr(source.params?.['resolve_score']), paramStr(source.params?.['resolve_threshold']))
+    const graph = run?.ok ? run.graph : (gui as NonNullable<typeof gui>).graph
     // The database peptide, when the run placed this spectrum's tags, decides the series
     // (and with it its complements and which tags read the same residues).
     if (cand) settleSeries(graph, spectrum, (p: GPath) => dbCall(cand, p.steps, p.charge, p.series, residues, spectrum))
@@ -317,7 +320,9 @@ export default function SpectrumPanel({ target, source, tags: tagsFile, placemen
     const span = spectrum.mz.length ? spectrum.mz[spectrum.mz.length - 1] - spectrum.mz[0] : 1
     const byRun = !!run?.ok
     const used = byRun ? new Set(graph.placements.flatMap((p) => p.rows)).size : ins.length
-    return { graph, all, allRows: packRows(graph, spectrum, span * 0.01).rows, above: byRun ? 0 : above, used, byRun, why }
+    // The ranking the GUI took, for the source line.
+    const ranking = gui ? `ranking ${gui.scheme}${gui.threshold == null ? '' : `, threshold ${gui.threshold}`}${gui.note ? `; ${gui.note}, so ${gui.scheme}` : ''}` : null
+    return { graph, all, allRows: packRows(graph, spectrum, span * 0.01).rows, above: byRun ? 0 : above, used, byRun, why, ranking }
   }, [allTags, spectrum, tags, cutoff, badCutoff, residues, join, cand, cli, cliPending, source.params])
   // The ranking FASTag used (-resolve_score; cstar by default).
   const scheme = String(source.params?.['resolve_score'] ?? 'cstar')
@@ -554,7 +559,7 @@ export default function SpectrumPanel({ target, source, tags: tagsFile, placemen
           )}
           {merged && (
             <span className="hint" data-testid="merge-source">
-              {merged.byRun ? `Resolved by FASTag (ranking ${scheme})` : `Resolved in the GUI${merged.why ? `: ${merged.why}` : ''}`}
+              {merged.byRun ? `Resolved by FASTag (ranking ${scheme})` : `Resolved in the GUI (${merged.ranking})${merged.why ? `: ${merged.why}` : ''}`}
             </span>
           )}
         </div>

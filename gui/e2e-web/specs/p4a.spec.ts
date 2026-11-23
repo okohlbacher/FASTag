@@ -201,7 +201,7 @@ test('with the run\'s resolved tags and tag graph, all tags are resolved as FAST
   expect(resolvedIds).not.toContain(next)
   await page.getByRole('button', { name: 'Next tagged spectrum' }).click()
   await expect(heading(page)).toHaveAttribute('title', next)
-  await expect(page.getByTestId('merge-source')).toHaveText(new RegExp(`^Resolved in the GUI: FASTag resolved none of the ${count(next)} tags`))
+  await expect(page.getByTestId('merge-source')).toHaveText(new RegExp(`^Resolved in the GUI \\(ranking cstar, threshold 3\\): FASTag resolved none of the ${count(next)} tags`))
   await expect(page.getByLabel('Largest E-value of the tags used')).toBeVisible()
   // The tags above the GUI's cutoff are counted (FASTag's -resolve_max_evalue 1 kept none of them).
   await expect(page.getByTestId('merge-summary')).toContainText('above the cutoff')

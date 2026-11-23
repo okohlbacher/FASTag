@@ -342,3 +342,47 @@ export function cstarGraph(tags: TagIn[], s: SpectrumPeaks, residues: Residues, 
   const weight = cstarWeight(s, placementsOf(tags, s, residues), t)
   return noselfFirst(s, buildGraph(tags, s, residues, { join, weight }))
 }
+
+/** The rankings of resolved tags (-resolve_score) the GUI implements: all of FASTag's. */
+export const SCHEMES = ['cstar', 'steplogodds', 'evidence', 'anchor'] as const
+export type Scheme = (typeof SCHEMES)[number]
+
+export interface SchemeGraph {
+  graph: TagGraph
+  scheme: Scheme
+  // The step threshold (-resolve_threshold); null under evidence, which takes none.
+  threshold: number | null
+  // Why the run's -resolve_score or -resolve_threshold was not taken (null: they were).
+  note: string | null
+}
+
+/** The tag graph of @p tags ranked as the run ranked them, @p scheme and @p threshold
+ *  being its -resolve_score and -resolve_threshold (undefined: not in the run's
+ *  parameters; FASTag's defaults cstar and 3 then). As src/TagGraph.cpp weightOf:
+ *  cstar is cstarGraph; steplogodds sums each added step's 1.15 log-odds less the
+ *  threshold (stepWeight); evidence sums the E-value evidence; anchor is steplogodds
+ *  with the placement of the lowest E-value (the first on a tie) worth 1e6 more,
+ *  so the resolved tag of the best single tag comes first. */
+export function schemeGraph(tags: TagIn[], s: SpectrumPeaks, residues: Residues, join: boolean, scheme?: string, threshold?: string | number): SchemeGraph {
+  const notes: string[] = []
+  const asked = scheme == null ? '' : String(scheme).trim()
+  let sc: Scheme = 'cstar'
+  if ((SCHEMES as readonly string[]).includes(asked)) sc = asked as Scheme
+  else if (asked !== '') notes.push(`-resolve_score ${asked} is not a ranking the GUI knows`)
+  const tRaw = threshold == null ? '' : String(threshold).trim()
+  let t = CSTAR_THRESHOLD
+  if (tRaw !== '') {
+    if (Number.isFinite(Number(tRaw))) t = Number(tRaw)
+    else notes.push(`-resolve_threshold ${tRaw} is not a number`)
+  }
+  const note = notes.length ? notes.join('; ') : null
+  if (sc === 'cstar') return { graph: cstarGraph(tags, s, residues, join, t), scheme: sc, threshold: t, note }
+  if (sc === 'evidence') return { graph: buildGraph(tags, s, residues, { join }), scheme: sc, threshold: null, note }
+  const steps = stepWeight(s, t)
+  if (sc === 'steplogodds') return { graph: buildGraph(tags, s, residues, { join, weight: steps }), scheme: sc, threshold: t, note }
+  let anchor: Placement | null = null
+  for (const p of placementsOf(tags, s, residues)) if (!anchor || (p.evalue ?? Infinity) < (anchor.evalue ?? Infinity)) anchor = p
+  const at = anchor ? anchor.peaks.join(',') : null
+  const weight = (p: Placement, prev: Placement | null): number => (at != null && p.peaks.join(',') === at ? 1e6 : 0) + steps(p, prev)
+  return { graph: buildGraph(tags, s, residues, { join, weight }), scheme: sc, threshold: t, note }
+}

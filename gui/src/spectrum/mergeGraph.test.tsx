@@ -50,7 +50,7 @@ const tagsPage: ResultsPage = { columns: tagCols, totalRows: 20, matchedRows: 4,
 
 const SOURCE = { input: '/d/a.mzML', params: {}, from: 'run' as const }
 let rerenderTo: (spectrum: string, rowId: number) => void = () => undefined
-function panel(cli: { resolved: CliRows; nodes: CliRows }): { container: HTMLElement; mock: ReturnType<typeof installMockBridge> } {
+function panel(cli: { resolved: CliRows; nodes: CliRows }, params: Record<string, unknown> = {}): { container: HTMLElement; mock: ReturnType<typeof installMockBridge>; unmount: () => void } {
   const mock = installMockBridge()
   mock.spectrumDumps['scan=1'] = dump
   // As browser.rs: only the open tags file answers resultsQuery; the run's
@@ -64,16 +64,16 @@ function panel(cli: { resolved: CliRows; nodes: CliRows }): { container: HTMLEle
   const at = (spectrum: string, rowId: number): JSX.Element => (
     <SpectrumPanel
       target={{ path: '/d/a.tags.tsv', spectrum, rowId }}
-      source={SOURCE}
+      source={{ ...SOURCE, params }}
       resolved="/d/a.resolved.tsv"
       tagGraph="/d/a.taggraph.tsv"
       onTarget={vi.fn()}
       onLocate={vi.fn()}
     />
   )
-  const { container, rerender } = render(at('scan=1', FIRST_ROW + 2))
+  const { container, rerender, unmount } = render(at('scan=1', FIRST_ROW + 2))
   rerenderTo = (spectrum, rowId) => rerender(at(spectrum, rowId))
-  return { container, mock }
+  return { container, mock, unmount }
 }
 const selected = (c: HTMLElement): string | null | undefined => c.querySelector('table[aria-label="Resolved tags of this spectrum"] tr[aria-selected=true] td')?.textContent
 
@@ -230,7 +230,7 @@ describe('merge graph', () => {
     await screen.findByTestId('ladder')
     fireEvent.click(screen.getByLabelText('Merge graph'))
     expect((await screen.findByTestId('merge-source')).textContent).toBe(
-      'Resolved in the GUI: FASTag resolved none of the 4 tags (E-value above -resolve_max_evalue 1, or not on the peaks)'
+      'Resolved in the GUI (ranking cstar, threshold 3): FASTag resolved none of the 4 tags (E-value above -resolve_max_evalue 1, or not on the peaks)'
     )
     // The GUI's cutoff, which can let them in.
     const cut = screen.getByLabelText('Largest E-value of the tags used')
@@ -275,8 +275,28 @@ describe('merge graph', () => {
     panel(cli)
     await screen.findByTestId('ladder')
     fireEvent.click(screen.getByLabelText('All tags, resolved'))
-    expect((await screen.findByTestId('merge-source')).textContent).toBe("Resolved in the GUI: FASTag's tag graph does not fit the peaks (node 0: m/z 50.000000 is not a peak of the spectrum)")
+    expect((await screen.findByTestId('merge-source')).textContent).toBe("Resolved in the GUI (ranking cstar, threshold 3): FASTag's tag graph does not fit the peaks (node 0: m/z 50.000000 is not a peak of the spectrum)")
     expect(screen.getByLabelText('Largest E-value of the tags used')).toBeTruthy()
     expect(screen.queryByTestId('merge-graph')).toBeNull()
+  })
+
+  it("resolves in the GUI by the run's -resolve_score and -resolve_threshold, and says which", async () => {
+    const cli = toCli(graph, S, 'scan=1')
+    const pk = cli.nodes.columns.indexOf('peaks')
+    cli.nodes.rows[0] = cli.nodes.rows[0].map((c, i) => (i === pk ? c.replace(/^[^;]+/, '50.000000') : c))
+    const source = async (params: Record<string, unknown>): Promise<string | null> => {
+      const { unmount } = panel(cli, params)
+      await screen.findByTestId('ladder')
+      fireEvent.click(screen.getByLabelText('All tags, resolved'))
+      const t = (await screen.findByTestId('merge-source')).textContent
+      unmount()
+      return t
+    }
+    const why = ": FASTag's tag graph does not fit the peaks (node 0: m/z 50.000000 is not a peak of the spectrum)"
+    expect(await source({ resolve_score: 'steplogodds', resolve_threshold: 2 })).toBe(`Resolved in the GUI (ranking steplogodds, threshold 2)${why}`)
+    expect(await source({ resolve_score: 'evidence', resolve_threshold: '2' })).toBe(`Resolved in the GUI (ranking evidence)${why}`)
+    expect(await source({ resolve_score: 'anchor' })).toBe(`Resolved in the GUI (ranking anchor, threshold 3)${why}`)
+    expect(await source({ resolve_score: 'cstar', resolve_threshold: '4.5' })).toBe(`Resolved in the GUI (ranking cstar, threshold 4.5)${why}`)
+    expect(await source({ resolve_score: 'bogus' })).toBe(`Resolved in the GUI (ranking cstar, threshold 3; -resolve_score bogus is not a ranking the GUI knows, so cstar)${why}`)
   })
 })

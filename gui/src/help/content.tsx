@@ -773,7 +773,9 @@ export const RESULTS: HelpPage = {
             When the run wrote its resolved tags and tag graph (FASTag with -resolved_out and -tag_graph_out, which
             the app passes beside the tags when the CLI has them), the tags are resolved as FASTag resolved them and
             the line beside the summary says Resolved by FASTag; the E-value cutoff and Join are then FASTag&apos;s own.
-            Otherwise, or when those tables do not fit the spectrum&apos;s peaks, it says Resolved in the GUI (and why).
+            Otherwise, or when those tables do not fit the spectrum&apos;s peaks, it says Resolved in the GUI (and why):
+            the GUI then ranks the resolved tags as the run did, by its -resolve_score and -resolve_threshold (cstar and 3
+            when the run does not say), and the line names the ranking it took.
             Merge graph draws the tag graph itself: each distinct tag is a bar from its first to its last peak on the
             plot&apos;s m/z axis, one band per ion layer; a line joins a tag to one that continues it (solid over a shared
             step, dashed where they only touch), bold in the colour of the resolved tag it builds, whose rank is written
