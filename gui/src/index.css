@@ -411,6 +411,8 @@ button.task-tile.selected { border-color: var(--primary); box-shadow: inset 0 0 
 .task-detail dt { color: var(--muted-foreground); font-weight: 600; }
 .task-detail dd { margin: 0; }
 .spectra-block, .task-inputs, .about-spectra, .also-set { display: flex; flex-direction: column; gap: var(--space-2); }
+/* The Add folder… note is a live region that stays mounted: empty, it takes no gap. */
+.spectra-block > .folder-note:empty { margin-top: calc(-1 * var(--space-2)); }
 .about-spectra, .also-set { border-top: 1px solid var(--border); padding-top: var(--space-3); }
 .about-spectra h3, .also-set h3, .command-preview h3 { font-size: var(--text-sm); font-weight: 600; }
 .also-set ul { margin: 0; padding-left: var(--space-4); }
