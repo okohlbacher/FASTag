@@ -9,7 +9,7 @@
 import { readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import type { Page } from '@playwright/test'
-import { test, expect, goTo, mockState, openApp } from './fixtures'
+import { test, expect, goTo, mockState, openApp, chooseTask, toStep } from './fixtures'
 
 const SDRF_DIR = fileURLToPath(new URL('../../src/fixtures/sdrf/', import.meta.url))
 const GOLDEN = readFileSync(`${SDRF_DIR}gate-batch.corrections.tsv`, 'utf8')
@@ -29,7 +29,8 @@ const sdrfTable = (page: Page) => page.getByRole('table', { name: /^SDRF compari
 
 async function runAndLoad(page: Page): Promise<void> {
   await openApp(page, 'gate-batch')
-  await page.getByRole('radio', { name: /^Characterize a run/ }).check()
+  await chooseTask(page, 'Characterize a run')
+  await toStep(page, 'Inputs')
   await page.getByRole('radio', { name: 'Batch' }).check()
   await goTo(page, 'Batch')
   await page.getByRole('button', { name: 'Add folder…' }).click()

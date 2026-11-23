@@ -221,10 +221,13 @@ export function useSession(start: Origin = DEFAULTS, opts: { confirmed?: boolean
   // common block the user changed (setup/inputs.ts carryInputs), and says
   // so in step 2's status line.
   function replaceForm(o: Origin, ov: Record<string, ParamValue>, v: Record<string, ParamValue> = ov, always = false, common = true): void {
-    if (always || diffNames(originValues, values).length > 0) setUndoSnapshot({ values, origin, originValues, edited: new Set(edited.current) })
+    const snap = always || diffNames(originValues, values).length > 0
+    if (snap) setUndoSnapshot({ values, origin, originValues, edited: new Set(edited.current) })
     setPresetError(null)
     const c = carryInputs(values, v, taskOf(o) ?? null, originValues, common)
-    const text = carriedText(c, originText(o), originText(origin)) || `Now ${originText(o)}.`
+    // Said when something was kept, dropped or replaced, or when Undo can
+    // bring back an earlier form.
+    const text = carriedText(c, originText(o), originText(origin)) || (snap || undoSnapshot ? `Now ${originText(o)}.` : '')
     setCarried(text ? { text, gen: formGen + 1 } : null)
     setRevealed(new Set())
     setOrigin(o)

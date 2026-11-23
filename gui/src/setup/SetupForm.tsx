@@ -954,6 +954,7 @@ export default function SetupForm({
   const aboutBlock = (
     <section className="about-spectra" aria-labelledby="about-h">
       <h3 id="about-h">About these spectra</h3>
+      <div className="about-fields">
       <div className="field instrument-field">
         <span className="label-row">
           <label htmlFor="instrument">
@@ -996,6 +997,7 @@ export default function SetupForm({
       {aboutParams(owner)
         .filter((n) => !waitsOnShownFile(n))
         .map((n) => field(n, { brief: task.help[n] }))}
+      </div>
     </section>
   )
 

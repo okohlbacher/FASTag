@@ -21,7 +21,7 @@ const openSection = async (title: string): Promise<void> => {
 }
 const footer = (): HTMLElement => screen.getByRole('region', { name: 'Plan' })
 // The tile of a workflow, and whether it is the form's task.
-const tile = (label: string): HTMLElement => [...document.querySelectorAll<HTMLElement>('button.tile')].find((b) => b.querySelector('.tile-label')?.textContent === label)!
+const tile = (label: string): HTMLElement => [...document.querySelectorAll<HTMLElement>('button.task-tile')].find((b) => b.querySelector('.task-tile-label')?.textContent === label)!
 const isCurrent = (label: string): boolean => tile(label).getAttribute('aria-current') === 'true'
 // Choose the spectra file on step 2 (confirming the selected task first).
 const chooseFile = async (mock: { nextPickInput: string | null }, path: string): Promise<void> => {
@@ -35,7 +35,7 @@ describe('Setup: the task chooser', () => {
     const mock = installMockBridge()
     await renderColdApp(mock)
     // Step 1 is the only question: the tiles, grouped, no run bar yet.
-    expect([...document.querySelectorAll<HTMLElement>('button.tile')].map((b) => b.dataset.task))
+    expect([...document.querySelectorAll<HTMLElement>('button.task-tile')].map((b) => b.dataset.task))
       .toEqual(['export-tags', 'characterize', 'species', 'mass-shift', 'db-reduction', 'run-qc', 'triage'])
     expect(tile('Export tags').getAttribute('aria-pressed')).toBe('true')
     expect(screen.queryByRole('region', { name: 'Plan' })).toBeNull()
@@ -157,7 +157,7 @@ describe('Setup: the task chooser', () => {
   it('Open results is not a workflow: Open earlier results… opens a tags table', async () => {
     const mock = installMockBridge()
     await renderColdApp(mock)
-    expect(document.querySelector('button.tile[data-task="open-results"]')).toBeNull()
+    expect(document.querySelector('button.task-tile[data-task="open-results"]')).toBeNull()
     mock.nextPickResults = '/d/old.tags.tsv'
     await click(screen.getByRole('button', { name: 'Open earlier results…' }))
     expect(screen.getByRole('tab', { selected: true }).textContent).toBe('Tags')

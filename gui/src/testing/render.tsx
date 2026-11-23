@@ -69,7 +69,7 @@ export const goToStep = (step: SetupStep): Promise<void> => act(async () => show
 /// Choose workflow @p label on step 1: its tile, then Continue.
 export async function chooseTask(label: string): Promise<void> {
   showStep(1)
-  const tile = [...document.querySelectorAll<HTMLElement>('button.tile')].find((b) => b.querySelector('.tile-label')?.textContent === label)
+  const tile = [...document.querySelectorAll<HTMLElement>('button.task-tile')].find((b) => b.querySelector('.task-tile-label')?.textContent === label)
   if (!tile) throw new Error(`no tile ${label}`)
   await click(tile)
   await click(screen.getByRole('button', { name: /^Continue with / }))

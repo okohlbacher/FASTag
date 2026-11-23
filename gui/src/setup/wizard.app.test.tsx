@@ -11,7 +11,7 @@ import { chooseTask, click, currentStep, flush, goTo, key, renderApp, renderCold
 
 const field = (n: string): HTMLInputElement | null => document.getElementById(`p-${n}`) as HTMLInputElement | null
 const change = (el: Element, value: string): Promise<void> => act(async () => void fireEvent.change(el, { target: { value } }))
-const tile = (id: string): HTMLElement => document.querySelector<HTMLElement>(`button.tile[data-task="${id}"]`)!
+const tile = (id: string): HTMLElement => document.querySelector<HTMLElement>(`button.task-tile[data-task="${id}"]`)!
 const stepBtn = (n: number): HTMLElement => document.querySelector<HTMLElement>(`nav[aria-label="Setup steps"] button[data-step-btn="${n}"]`)!
 const addInput = (name: string): Promise<void> => change(screen.getByRole('combobox', { name: 'Add optional input' }), name)
 

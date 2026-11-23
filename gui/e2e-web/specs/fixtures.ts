@@ -39,3 +39,29 @@ export function mockState<T>(page: Page, pick: string): Promise<T> {
 export async function goTo(page: Page, view: 'Setup' | 'Results' | 'Batch' | 'History'): Promise<void> {
   await page.getByRole('navigation', { name: 'Views' }).getByRole('button', { name: new RegExp(`^${view}`) }).click()
 }
+
+/// The Setup wizard (doc/GUI-SETUP-WIZARD.md): its stepper.
+const steps = (page: Page) => page.getByRole('navigation', { name: 'Setup steps' })
+
+/// Confirm the selected task (Continue) when none is confirmed yet.
+export async function confirmTask(page: Page): Promise<void> {
+  const locked = await steps(page).locator('button[data-step-btn="2"]').getAttribute('aria-disabled')
+  if (locked === 'true') await page.locator('.wizard-foot button.continue').click()
+}
+
+/// Go to Setup step @p name, confirming the selected task first.
+export async function toStep(page: Page, name: 'Task' | 'Inputs' | 'Settings' | 'Outputs & run'): Promise<void> {
+  const n = { Task: 1, Inputs: 2, Settings: 3, 'Outputs & run': 4 }[name]
+  if (n > 1) await confirmTask(page)
+  const b = steps(page).locator(`button[data-step-btn="${n}"]`)
+  if ((await b.getAttribute('aria-current')) !== 'step') await b.click()
+  await expect(page.locator(`#step-${n}`)).toBeVisible()
+}
+
+/// Choose workflow @p label on step 1: its tile, then Continue.
+export async function chooseTask(page: Page, label: string): Promise<void> {
+  await toStep(page, 'Task')
+  await page.locator('button.task-tile', { has: page.locator('.task-tile-label', { hasText: new RegExp(`^${label}$`) }) }).click()
+  await page.getByRole('button', { name: `Continue with ${label} ›` }).click()
+  await expect(page.getByRole('heading', { name: /^(Inputs|Settings) for |^Outputs and run$/ })).toBeVisible()
+}

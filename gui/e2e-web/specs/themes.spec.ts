@@ -1,4 +1,4 @@
-import { test, expect, openApp } from './fixtures'
+import { test, expect, openApp, toStep } from './fixtures'
 
 // Screenshots at both window sizes in both themes, kept as test artifacts
 // (e2e-web/test-results) for review; the assertion is that the theme
@@ -13,6 +13,7 @@ for (const [w, h] of [
     for (const scheme of ['light', 'dark'] as const) {
       await page.emulateMedia({ colorScheme: scheme })
       await openApp(page, 'default', 'defaults')
+      await toStep(page, 'Inputs')
       await page.getByRole('button', { name: 'Choose file…' }).click()
       await page.getByRole('button', { name: 'Run', exact: true }).click()
       await expect(page.getByText('Showing 2,028 of 2,028')).toBeVisible()

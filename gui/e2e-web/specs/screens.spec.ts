@@ -5,7 +5,7 @@
 // run of each workflow. Not a check: it only runs with SCREENS_DIR set, for
 // design reviews by people and models.
 import type { Page } from '@playwright/test'
-import { test, expect, openApp, goTo } from './fixtures'
+import { test, expect, openApp, goTo, toStep, chooseTask } from './fixtures'
 
 const DIR = process.env.SCREENS_DIR
 test.skip(!DIR, 'set SCREENS_DIR to write review screenshots')
@@ -61,7 +61,6 @@ async function expectPopoverInPane(page: Page): Promise<void> {
   expect(pop!.x + pop!.width).toBeLessThanOrEqual(pane!.x + pane!.width + 1)
 }
 
-const workflow = (page: Page, name: string) => page.getByRole('radio', { name: new RegExp(`^${name}`) })
 
 test('setup screens of every workflow', async ({ page, browserName }) => {
   test.skip(browserName !== 'chromium')
@@ -69,19 +68,21 @@ test('setup screens of every workflow', async ({ page, browserName }) => {
   await openApp(page, 'gate')
   await page.screenshot({ path: shot('00-landing') })
   for (const [i, w] of WORKFLOWS.entries()) {
-    await workflow(page, w.name).check()
+    await chooseTask(page, w.name)
     await page.locator('.view-setup .controls-body').evaluate((e) => e.scrollTo(0, 0))
     // The chevron of the Advanced card closed just before turns back.
     await page.waitForTimeout(250)
     await page.screenshot({ path: shot(`10-setup-${i + 1}-${slug(w.name)}`) })
     await fullSetup(page, `11-setup-${i + 1}-${slug(w.name)}-full`)
+    await toStep(page, 'Settings')
     await openAdvanced(page)
     await fullSetup(page, `12-setup-${i + 1}-${slug(w.name)}-advanced`)
     await page.locator('details.advanced > summary').click()
   }
   // Characterize with the alkylation report on: the Extension it raises,
   // said beside the report (round 9), at full page (round 10).
-  await workflow(page, 'Characterize a run').check()
+  await chooseTask(page, 'Characterize a run')
+  await toStep(page, 'Outputs & run')
   const alk = page.locator('#out-alkylation_out')
   if ((await alk.count()) > 0) {
     await alk.scrollIntoViewIfNeeded()
@@ -93,8 +94,9 @@ test('setup screens of every workflow', async ({ page, browserName }) => {
     await fullSetup(page, '14-setup-characterize-alkylation-on')
     await alk.uncheck()
   }
-  // Batch mode of the Input card.
-  await workflow(page, 'Characterize a run').check()
+  // Batch mode of Inputs.
+  await chooseTask(page, 'Characterize a run')
+  await toStep(page, 'Inputs')
   await page.getByRole('radio', { name: 'Batch' }).check()
   await page.locator('.view-setup .controls-body').evaluate((e) => e.scrollTo(0, 0))
   await page.screenshot({ path: shot('13-setup-batch-mode') })
@@ -104,6 +106,7 @@ test('setup screens of every workflow', async ({ page, browserName }) => {
 test('help popovers and the run bar', async ({ page, browserName }) => {
   test.skip(browserName !== 'chromium')
   await openApp(page, 'gate')
+  await toStep(page, 'Inputs')
   await page.getByRole('button', { name: 'Choose file…' }).click()
   // tag_length sits in the third column of Settings: its popover opens to
   // the left of its (?).
@@ -141,6 +144,7 @@ for (const [i, w] of WORKFLOWS.entries()) {
     test.setTimeout(90_000)
     await openApp(page, w.fixture)
     await workflow(page, w.name).check()
+    await toStep(page, 'Inputs')
     await page.getByRole('button', { name: 'Choose file…' }).click()
     // The example's MS2 are ion trap CID, as the recorded runs were.
     await page.locator('#instrument').selectOption('iontrap-cid')

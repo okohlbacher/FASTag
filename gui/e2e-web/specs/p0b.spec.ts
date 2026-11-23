@@ -5,7 +5,7 @@
 import { readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import type { Page } from '@playwright/test'
-import { test, expect, goTo, openApp, mockState } from './fixtures'
+import { test, expect, goTo, openApp, mockState, toStep } from './fixtures'
 
 const TSV = readFileSync(fileURLToPath(new URL('../fixtures/ecoli.tags.tsv', import.meta.url)), 'utf8')
 const [HEAD, ...LINES] = TSV.split('\n').filter((l) => l !== '')
@@ -102,6 +102,7 @@ test('search to field: "tolerance" focuses fragment_tolerance', async ({ page })
 
 test('presets: "Ion trap CID" sets 0.3 Da and nothing else', async ({ page }) => {
   await openApp(page, 'default', 'defaults')
+  await toStep(page, 'Inputs')
   await page.getByRole('button', { name: 'Choose file…' }).click()
   await expect(page.locator('#instrument').locator('option')).toHaveText([
     'Orbitrap/TOF HCD 20 ppm',

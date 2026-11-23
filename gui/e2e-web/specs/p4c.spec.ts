@@ -6,7 +6,7 @@
 import { readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import type { Page } from '@playwright/test'
-import { test, expect, goTo, mockState, openApp } from './fixtures'
+import { test, expect, goTo, mockState, openApp, chooseTask, toStep } from './fixtures'
 
 const CLI = fileURLToPath(new URL('../../src/fixtures/cli/', import.meta.url))
 const read = (c: string, f: string): string => readFileSync(`${CLI}${c}/${f}`, 'utf8')
@@ -40,11 +40,14 @@ function oracle(c: string) {
 // the glyco report, all of which the recorded run wrote.
 async function runOn(page: Page, fixture: string): Promise<void> {
   await openApp(page, fixture)
-  await page.getByRole('radio', { name: /^Mass-shift survey/ }).check()
+  await chooseTask(page, 'Mass-shift survey')
+  await toStep(page, 'Inputs')
   await page.getByRole('button', { name: 'Choose file…' }).click()
   await page.locator('#p-recon_fasta').fill('/data/human.fasta')
+  await toStep(page, 'Outputs & run')
   await page.locator('#out-massgap_out').check()
   await page.locator('#out-recon_id_out').check()
+  await toStep(page, 'Settings')
   await page.locator('details.advanced > summary').click()
   await page.locator('summary', { hasText: 'Other analyses' }).click()
   await page.locator('summary', { has: page.locator('.sec-title', { hasText: /^Glycopeptides$/ }) }).click()
@@ -181,7 +184,8 @@ test('E. coli recon run: -recon_localize columns, the mzTab identifications, and
 
 test('Characterize: no Mass shifts tab, and no FASTA action in the Overview', async ({ page }) => {
   await openApp(page, 'gate')
-  await page.getByRole('radio', { name: /^Characterize a run/ }).check()
+  await chooseTask(page, 'Characterize a run')
+  await toStep(page, 'Inputs')
   await page.getByRole('button', { name: 'Choose file…' }).click()
   await page.getByRole('button', { name: 'Run', exact: true }).click()
   await expect(page.getByRole('tab', { name: 'Overview' })).toHaveAttribute('aria-selected', 'true')

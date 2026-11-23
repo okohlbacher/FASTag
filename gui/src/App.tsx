@@ -468,6 +468,12 @@ export default function App({ start }: { start?: Origin } = {}): JSX.Element {
   // while the field is inert, the switch it waits for).
   function chooseParam(hit: ParamHit): void {
     setSearchOpen(false)
+    // A hit on a fresh launch confirms the selected tile: the user is
+    // about to set something for it.
+    if (!session.taskConfirmed) {
+      session.chooseTask(session.tile)
+      session.setTaskConfirmed(true)
+    }
     // An optional input of step 2 not opened yet: opened first.
     const primary = INPUTS[hit.name]?.partOf ?? hit.name
     const owner = session.task ? (taskById(session.task) ?? null) : null
@@ -518,7 +524,7 @@ export default function App({ start }: { start?: Origin } = {}): JSX.Element {
       }
       // The step whose body holds the control (all four are mounted).
       const at = Number(el?.closest<HTMLElement>('[data-step]')?.dataset.step ?? 0)
-      if (at >= 1 && at <= 4 && session.taskConfirmed) session.setStep(at as Step)
+      if (at >= 1 && at <= 4) session.setStep(at as Step)
       setTimeout(() => {
         el?.scrollIntoView?.({ block: 'center' })
         el?.focus()

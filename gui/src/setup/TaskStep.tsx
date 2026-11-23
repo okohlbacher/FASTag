@@ -162,14 +162,13 @@ export default function TaskStep({ session, onContinue, onOpenResults }: TaskSte
     const d = { ArrowRight: 1, ArrowDown: 1, ArrowLeft: -1, ArrowUp: -1 }[e.key]
     if (!d) return
     e.preventDefault()
-    const tiles = [...(grid.current?.querySelectorAll<HTMLButtonElement>('button.tile') ?? [])]
+    const tiles = [...(grid.current?.querySelectorAll<HTMLButtonElement>('button.task-tile') ?? [])]
     const i = tiles.indexOf(e.currentTarget)
     tiles[(i + d + tiles.length) % tiles.length]?.focus()
   }
   const current = session.taskConfirmed ? session.task : null
   return (
     <div className="task-step">
-      <p className="lead">Pick a task. It decides which files FASTag needs and what it writes. You can change it later.</p>
       <p className="hint not-search" id="not-search-engine">
         FASTag reads short amino-acid stretches (tags) from each MS/MS spectrum. It does not identify proteins with FDR control: use a
         search engine for that. Database reduction prepares the database and the settings for one.
@@ -200,8 +199,9 @@ export default function TaskStep({ session, onContinue, onOpenResults }: TaskSte
         </p>
       )}
       <p className="hint recommend">
-        Not sure? Start with <strong>Characterize a run</strong>: it reports protease, labels, glycopeptides and species from 10% of the
-        spectra in a few minutes.
+        Pick a task: it decides which files FASTag needs and what it writes; you can change it later. Not sure? Start with{' '}
+        <strong>Characterize a run</strong>: it reports protease, labels, glycopeptides and species from 10% of the spectra in a few
+        minutes.
       </p>
       <div className="task-pick">
         <div className="task-grid" ref={grid}>
@@ -216,7 +216,7 @@ export default function TaskStep({ session, onContinue, onOpenResults }: TaskSte
                     <li key={t.id}>
                       <button
                         type="button"
-                        className={`tile${on ? ' selected' : ''}${current === t.id ? ' current' : ''}`}
+                        className={`task-tile${on ? ' selected' : ''}${current === t.id ? ' current' : ''}`}
                         data-task={t.id}
                         aria-pressed={on}
                         aria-current={current === t.id ? 'true' : undefined}
@@ -226,15 +226,16 @@ export default function TaskStep({ session, onContinue, onOpenResults }: TaskSte
                         onFocus={() => session.setTile(t.id)}
                         onKeyDown={(e) => onKey(e, t.id)}
                       >
-                        <span className="tile-head">
+                        <span className="task-tile-head">
                           <TaskIcon id={t.id} />
-                          <span className="tile-label">{t.label}</span>
+                          <span className="task-tile-label">{t.label}</span>
                           {current === t.id && <span className="chip">Current</span>}
+                        </span>
+                        {/* The badges flow after the question: no line of their own. */}
+                        <span className="task-tile-q" id={`tile-${t.id}-q`}>
+                          {t.question}
                           {t.recommended && <span className="chip accent">Recommended to start</span>}
                           {badge && <span className="badge">{badge}</span>}
-                        </span>
-                        <span className="tile-q" id={`tile-${t.id}-q`}>
-                          {t.question}
                         </span>
                       </button>
                     </li>

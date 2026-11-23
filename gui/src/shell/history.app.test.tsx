@@ -322,7 +322,7 @@ describe('History', () => {
     const mock = installMockBridge()
     await renderApp(mock)
     await pickSingle(mock, '/d/x.mzML')
-    const chosen = (): string | undefined => document.querySelector<HTMLElement>('button.tile[aria-current="true"]')?.dataset.task
+    const chosen = (): string | undefined => document.querySelector<HTMLElement>('button.task-tile[aria-current="true"]')?.dataset.task
     const before = chosen()
     expect(before).not.toBe('run-qc')
     mock.history = [rec('1', '/d/a.mzML', 'ok', { workflow: 'run-qc', params: { qc_out: '/d/a.qc.tsv', threads: '0', subsample_fraction: '0.1' } })]
@@ -362,7 +362,7 @@ describe('History', () => {
     const [row] = await history()
     await click(btn(row, 'Settings into form')!)
     await goTo('setup')
-    expect(document.querySelector<HTMLElement>('button.tile[aria-current="true"]')?.dataset.task).toBe('db-reduction')
+    expect(document.querySelector<HTMLElement>('button.task-tile[aria-current="true"]')?.dataset.task).toBe('db-reduction')
     expect(await formValue('shortlist_max_evalue')).toBe('0.1')
     expect(await formValue('shortlist_gapped')).toBe(false)
     expect(await formValue('recon_min_length')).toBe('6')

@@ -1,4 +1,4 @@
-import { test, expect, goTo, openApp } from './fixtures'
+import { test, expect, goTo, openApp, chooseTask, toStep } from './fixtures'
 
 // The narrow-window freeze (P0a): a 10 M-row file in a small window drew
 // every row. The window is at least 960 x 600 (tauri.conf.json); 800 x 600
@@ -176,7 +176,8 @@ for (const w of [1000, 1400]) {
   test(`${w} px: the Overview's tiles keep their text inside, notes whole`, async ({ page }) => {
     await page.setViewportSize({ width: w, height: 800 })
     await openApp(page, 'gate')
-    await page.getByRole('radio', { name: /^Characterize a run/ }).check()
+    await chooseTask(page, 'Characterize a run')
+    await toStep(page, 'Inputs')
     await page.getByRole('button', { name: 'Choose file…' }).click()
     await page.getByRole('button', { name: 'Run', exact: true }).click()
     await page.getByRole('tab', { name: 'Overview' }).click()

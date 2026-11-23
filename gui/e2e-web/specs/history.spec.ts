@@ -4,7 +4,7 @@
 // marked incomplete and never opens as if complete. The e2e bridge records
 // each run as fastag.rs does (src/testing/e2eBridge.ts).
 import type { Page } from '@playwright/test'
-import { test, expect, openApp, goTo, mockState } from './fixtures'
+import { test, expect, openApp, goTo, mockState, toStep } from './fixtures'
 import type { RunRecord } from '../../src/types'
 
 // The clipboard as the page writes it: every text, in order.
@@ -39,6 +39,7 @@ const historyRow = (page: Page, input: string) =>
 test('Copy command in History equals the argv the run was started with', async ({ page }) => {
   await recordClipboard(page)
   await openApp(page)
+  await toStep(page, 'Inputs')
   await page.getByRole('button', { name: 'Choose file…' }).click()
   await page.getByRole('button', { name: 'Run', exact: true }).click()
   await expect(page.locator('.last-run')).toContainText('run01.mzML')
@@ -59,6 +60,7 @@ test('Copy command in History equals the argv the run was started with', async (
 test('a failed batch job: the failure banner and History copy the same command line', async ({ page }) => {
   await recordClipboard(page)
   await openApp(page, 'batch-fail')
+  await toStep(page, 'Inputs')
   await page.getByRole('radio', { name: 'Batch' }).check()
   await page.getByRole('button', { name: 'Add files…' }).click()
   await page.getByRole('button', { name: 'Run 3 remaining files' }).click()
@@ -83,6 +85,7 @@ test('a failed batch job: the failure banner and History copy the same command l
 
 test('a cancelled run is marked incomplete in History and never opens as if complete', async ({ page }) => {
   await openApp(page, 'slow')
+  await toStep(page, 'Inputs')
   await page.getByRole('button', { name: 'Choose file…' }).click()
   await page.getByRole('button', { name: 'Run', exact: true }).click()
   // P2b: Cancel is the Results running state's (GUI-DESIGN 3 S2; was the
@@ -105,11 +108,13 @@ test('a cancelled run is marked incomplete in History and never opens as if comp
 
 test('Settings into form puts a recorded run back into Setup, and Undo takes it out again', async ({ page }) => {
   await openApp(page)
+  await toStep(page, 'Inputs')
   await page.getByRole('button', { name: 'Choose file…' }).click()
   await page.getByRole('button', { name: 'Run', exact: true }).click()
   await expect(page.locator('.last-run')).toContainText('run01.mzML')
   // The form has moved on since that run.
   await goTo(page, 'Setup')
+  await toStep(page, 'Outputs & run')
   await page.locator('#out-name').fill('elsewhere')
   await goTo(page, 'History')
   await historyRow(page, 'run01.mzML').getByRole('button', { name: 'Settings into form' }).click()
@@ -150,11 +155,13 @@ test('Delete record asks first, and keeps the record that marks a left-over tags
 // and a deleted record hands keyboard focus to the row that takes its place.
 test('Re-run records the same command line; Delete record keeps focus in the list', async ({ page }) => {
   await openApp(page)
+  await toStep(page, 'Inputs')
   await page.getByRole('button', { name: 'Choose file…' }).click()
   await page.getByRole('button', { name: 'Run', exact: true }).click()
   await expect(page.locator('.last-run')).toContainText('run01.mzML')
   // The form moves on; the Re-run does not use it.
   await goTo(page, 'Setup')
+  await toStep(page, 'Outputs & run')
   await page.locator('#out-name').fill('elsewhere')
   await goTo(page, 'History')
   await historyRow(page, 'run01.mzML').getByRole('button', { name: 'Re-run' }).click()
