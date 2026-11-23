@@ -36,6 +36,7 @@
     "allow-taxonomy-dump",
     "allow-denovo-export",
     "allow-folder-spectra-list",
+    "allow-path-status",
     "allow-taxdb-info",
     "allow-taxonomy-status",
     "allow-spectrum-support",
