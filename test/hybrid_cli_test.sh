@@ -8,7 +8,8 @@
 #               sites, c/z-dot ions for the N-terminal half; ETD + EThcD;
 #   syn_splitf  the same peaks, no activation term, filter @etd..@hcd..;
 #   syn_etd     c and z-dot ions, ETD;
-#   syn_cid     b and y ions, CID.
+#   syn_cid     b and y ions, CID;
+#   syn_prec    syn_split plus intense precursor and charge-reduced peaks.
 # Checks:
 #   - the option off: -ion_series_hybrid by explicitly equals it absent under
 #     auto, and auto on the hybrid run equals by (1.12: hybrid read as b/y,
@@ -26,7 +27,10 @@
 #   - -ion_series_hybrid both without auto warns that it is ignored and
 #     changes nothing; -stream refuses it;
 #   - threads 1/3/8 identical; OnDisc (-out_spectra) equals the fast reader;
-#   - -species leaves the c/z rows of hybrid spectra out and counts them.
+#   - -species leaves the c/z rows of hybrid spectra out and counts them;
+#   - tag merging (-tag_graph_out) places every row with E <= 1 of a hybrid
+#     run whose precursor peaks crowd the b/y preparation (syn_prec), and
+#     -dump_spectrum prints the union of both preparations it walks on.
 # Exits 77 (ctest SKIP) when the binary cannot start.
 set -u
 export LC_ALL=C  # sort and comm agree on the order
@@ -152,6 +156,57 @@ echo "synthetic digest call: CID by [$dc], mixed both [$dh], mixed by [$(dcall "
 sruns hf_both "$TMP/syn_splitf.mzML" -ion_series auto -ion_series_hybrid both
 cmp -s "$TMP/h_both.tsv" "$TMP/hf_both.tsv" || fail "the @etd@hcd filter token is not read as hybrid"
 cmp -s "$TMP/h_both.recon.tsv" "$TMP/hf_both.recon.tsv" || fail "filter run: recon differs"
+
+# ---- tag merging on a hybrid spectrum: each row on the peaks it was tagged on ----
+# syn_prec adds the unreacted precursor and its charge-reduced species at 20x
+# the base peak: the c/z preparation drops them, the b/y one keeps them, and
+# under a tight -max_peaks they push out peaks the c/z ladders use. Every row
+# with E <= 1 (-resolve_max_evalue) must be in some -tag_graph_out rows cell
+# (0-based per-spectrum row indices of -out), c/z rows as well as b/y.
+"$GEN" --write-mzml "$DB" "$TMP/syn_prec.mzML" split_prec > /dev/null || fail "writing the synthetic split_prec run"
+covered() {  # <name>: "<kind> <rows E<=1> <rows in no node>" per series
+  awk -F'\t' -v G="$TMP/$1.graph.tsv" '
+    BEGIN { while ((getline l < G) > 0) { split(l, c, "\t"); if (c[1] == "spectrum") continue
+              n = split(c[9], r, ","); for (i = 1; i <= n; i++) if (r[i] != "") in_g[c[1], r[i]] = 1 } }
+    NR == 1 { for (i = 1; i <= NF; i++) col[$i] = i; next }
+    { k = $1; i = idx[k]++; if ($col["evalue"] + 0 > 1) next
+      s = $col["ion_series"]; ++tot[s]; if (!((k, i) in in_g)) { ++miss[s]; if (!ex[s]) ex[s] = k " row " i " " $col["tag"] } }
+    END { for (s in tot) print s, tot[s], miss[s] + 0, ex[s] }' "$TMP/$1.tsv" | sort
+}
+for mp in 20 30; do
+  runb gp$mp "$TMP/syn_prec.mzML" 2 -ion_series auto -ion_series_hybrid both -max_peaks $mp \
+    -resolved_out "$TMP/gp$mp.res.tsv" -tag_graph_out "$TMP/gp$mp.graph.tsv"
+  covered gp$mp > "$TMP/gp$mp.cov"
+  echo "hybrid merge coverage at -max_peaks $mp (series, rows E<=1, rows in no node): $(tr '\n' ';' < "$TMP/gp$mp.cov")"
+  [ "$(awk '$1 == "cz" && $2 > 20' "$TMP/gp$mp.cov" | wc -l)" -eq 1 ] || fail "-max_peaks $mp: too few c/z rows to check"
+  [ "$(awk '$1 == "by" && $2 > 20' "$TMP/gp$mp.cov" | wc -l)" -eq 1 ] || fail "-max_peaks $mp: too few b/y rows to check"
+  awk '$3 != 0 { bad = 1 } END { exit bad }' "$TMP/gp$mp.cov" \
+    || fail "-max_peaks $mp: rows with E <= 1 left out of -tag_graph_out: $(tr '\n' ';' < "$TMP/gp$mp.cov")"
+done
+
+# -dump_spectrum (the GUI's peaks) under the same options prints the union
+# the graph walks on: every peak of a node is a dumped peak, and the union
+# holds more peaks than the b/y preparation alone somewhere.
+nodes_off=0; grew=0
+for id in $(awk -F'\t' 'NR > 1 { print $1 }' "$TMP/gp30.graph.tsv" | sort -u | tr ' ' '~'); do
+  sid=${id//\~/ }
+  "$BIN" -in "$TMP/syn_prec.mzML" -ion_series auto -ion_series_hybrid both -max_peaks 30 -dump_spectrum "$sid" \
+    2> /dev/null | grep '"record":"spectrum"' | sed 's/.*"mz":\[\([^]]*\)\].*/\1/' | tr ',' '\n' > "$TMP/dump.mz" \
+    || fail "-dump_spectrum $sid"
+  nb=$("$BIN" -in "$TMP/syn_prec.mzML" -ion_series auto -max_peaks 30 -dump_spectrum "$sid" 2> /dev/null \
+       | grep -o '"n":[0-9]*' | cut -d: -f2)
+  [ "$(wc -l < "$TMP/dump.mz" | tr -d ' ')" -gt "$nb" ] && grew=$((grew + 1))
+  n=$(awk -F'\t' -v s="$sid" -v D="$TMP/dump.mz" '
+        BEGIN { while ((getline l < D) > 0) mz[++m] = l + 0 }
+        $1 == s { k = split($6, x, /[;,]/)
+                  for (i = 1; i <= k; i++) { f = 0; for (j = 1; j <= m; j++) if (mz[j] - x[i] < 1e-3 && x[i] - mz[j] < 1e-3) f = 1
+                                             if (!f) ++bad } }
+        END { print bad + 0 }' "$TMP/gp30.graph.tsv")
+  nodes_off=$((nodes_off + n))
+done
+echo "hybrid -dump_spectrum: node peaks not dumped $nodes_off; spectra whose union exceeds the b/y list $grew"
+[ "$nodes_off" -eq 0 ] || fail "-dump_spectrum under -ion_series_hybrid both misses $nodes_off peaks of -tag_graph_out"
+[ "$grew" -gt 0 ] || fail "-dump_spectrum under -ion_series_hybrid both prints only the b/y preparation"
 
 # ---- no hybrid spectrum: nothing changes ----
 sruns c_auto "$TMP/syn_cid.mzML" -ion_series auto

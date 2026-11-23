@@ -297,6 +297,10 @@ namespace FASTag::Probe
     /// cz, or auto on an electron-activated mzML spectrum, with the c/z-dot
     /// pair and its ETD precursor-window filter.
     IonSeries::Mode ion_mode = IonSeries::Mode::BY;
+    /// -ion_series_hybrid both (1.13 item 10): under auto a hybrid spectrum
+    /// is tagged as b/y and as c/z-dot, and dumped as the union of both
+    /// preparations (preparedPeaksHybrid), the peaks tag merging walks on.
+    bool hybrid_both = false;
     /// -tolerance_by_analyzer on (1.15.7): > 0 is -fragment_tolerance_itms
     /// (Da), the tolerance an ion-trap MS2 is prepared at, as the run tags it.
     double itms_tol = 0;
@@ -341,7 +345,10 @@ namespace FASTag::Probe
     @param[in] index its input position
     @param[in] picked whether the reader centroided it
     @param[in] p the tagging parameters; carry the ion pair the spectrum is read as (dumpSpectrum() sets it)
+    @param[in] p_cz a two-pass hybrid spectrum's c/z-dot parameters (@p p then the b/y ones): the peaks are
+               the union of both preparations (preparedPeaksHybrid); nullptr: one preparation
     @return one JSON line
   */
-  std::string spectrumRecord(const OpenMS::MSSpectrum& spec, std::size_t index, bool picked, const Param& p);
+  std::string spectrumRecord(const OpenMS::MSSpectrum& spec, std::size_t index, bool picked, const Param& p,
+                             const Param* p_cz = nullptr);
 }

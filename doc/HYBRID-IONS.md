@@ -75,8 +75,12 @@ Under `both` these steps read a hybrid spectrum once, as b/y (their 1.12 reading
   complement pairs only);
 - `-check_header_charge` (b/y complement pairs);
 - the `-complement_tolerance_unit auto` probe (probes the spectrum with the b/y parameters);
-- `-dump_spectrum` (dumps the b/y preparation of the peaks);
 - the census diagnostics `n_kept`, `n_edges` and `n_compl` (from the b/y pass; the c/z• pass has none).
+
+`-dump_spectrum` and tag merging (`-resolved_out`, `-tag_graph_out`) take both preparations: a hybrid
+spectrum's peaks are the union of its b/y and its c/z• preparation (the c/z• one drops the unreacted and
+charge-reduced precursor peaks before the peak budget, the b/y one keeps them), so each row is walked on the
+peaks it was tagged on.
 
 ## Validation
 

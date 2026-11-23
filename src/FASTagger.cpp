@@ -16,6 +16,7 @@
 #include <boost/math/distributions/hypergeometric.hpp>
 
 #include <algorithm>
+#include <iterator>
 #include <cassert>
 #include <cmath>
 #include <numeric>
@@ -1334,6 +1335,20 @@ namespace FASTag
     if (in.empty() || !(precursor_mz > 0) || !std::isfinite(precursor_mz)) return {};
     if (charge <= 0) charge = 2;
     return prepare(in, precursor_mz, charge, p, ComplementSpec::fromParam(p)).spec;
+  }
+
+  MSSpectrum preparedPeaksHybrid(const MSSpectrum& in, double precursor_mz, int charge, const Param& p_by,
+                                 const Param& p_cz)
+  {
+    const MSSpectrum a = preparedPeaks(in, precursor_mz, charge, p_by);
+    const MSSpectrum b = preparedPeaks(in, precursor_mz, charge, p_cz);
+    MSSpectrum u;
+    u.reserve(a.size() + b.size());
+    const auto by_mz = [](const Peak1D& x, const Peak1D& y) { return x.getMZ() < y.getMZ(); };
+    std::merge(a.begin(), a.end(), b.begin(), b.end(), std::back_inserter(u), by_mz);
+    u.erase(std::unique(u.begin(), u.end(), [](const Peak1D& x, const Peak1D& y) { return x.getMZ() == y.getMZ(); }),
+            u.end());
+    return u;
   }
 
   namespace

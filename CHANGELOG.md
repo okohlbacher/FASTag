@@ -17,6 +17,9 @@
   rows of `-out`, and the ranking it was made with, `scheme` and `threshold`), and the merge graph, one row per
   placement. Ranked by `-resolve_score` (cstar by default, above) and `-resolve_threshold`; tags with E <= 1
   (`-resolve_max_evalue`); `-resolve_join` joins tags that only touch. Off unless asked for; not under `-stream`.
+  A two-pass hybrid spectrum (`-ion_series_hybrid both`) is merged on the union of its b/y and c/z• preparations,
+  which `-dump_spectrum` now prints for it, so its c/z rows are no longer left out when the precursor peaks the b/y
+  preparation keeps crowd the peak budget.
   The GUI takes OpenMS's residue masses, as the CLI does: on PXD003531, PXD000001, PXD076528, PXD020401 and PXD031975
   the GUI's resolved tags equal the CLI's on every scan and rank, under each of the four rankings.
 

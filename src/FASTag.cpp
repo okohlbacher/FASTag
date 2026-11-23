@@ -3930,13 +3930,19 @@ TOPPFASTag::ExitCodes TOPPFASTag::main_(int, const char**)
     if (graph_on && !graph_in.empty())
     {
       // The peaks of the selected hypothesis, prepared as for its tags
-      // (-dump_spectrum's list at the defaults). ponytail: a two-pass hybrid
-      // spectrum's c/z-dot rows are walked on its b/y preparation.
+      // (-dump_spectrum's list at the defaults). A two-pass hybrid spectrum
+      // was tagged on two preparations: the c/z one drops the unreacted and
+      // charge-reduced precursor peaks before the peak budget, the b/y one
+      // keeps them. The graph takes the union of both (preparedPeaksHybrid,
+      // the list -dump_spectrum prints for it), so every row's ladder is on it.
       const FASTag::Hyp::Hypothesis* hs = &hyps[0];
       for (const auto& hy : hyps) if (hy.selected) { hs = &hy; break; }
       const FASTag::Param& gp = params_of(read_series, spec_itms).front();
-      const FASTag::TagGraph::Peaks gpk = FASTag::TagGraph::peaksFrom(
-          FASTag::preparedPeaks(spec, hs->mz, hs->charge, gp), hs->mz, hs->charge, gp);
+      const OpenMS::MSSpectrum gprep =
+          read_hybrid ? FASTag::preparedPeaksHybrid(spec, hs->mz, hs->charge, gp,
+                                                    params_of(FASTag::IonSeries::Series::CZ, spec_itms).front())
+                      : FASTag::preparedPeaks(spec, hs->mz, hs->charge, gp);
+      const FASTag::TagGraph::Peaks gpk = FASTag::TagGraph::peaksFrom(gprep, hs->mz, hs->charge, gp);
       const FASTag::TagGraph::Graph g = FASTag::TagGraph::buildGraph(graph_in, gpk, graph_res, graph_opt);
       // A block holds its spectra's rows until it is written. The rows are
       // built in a per-thread scratch and copied at their size, so the slack
