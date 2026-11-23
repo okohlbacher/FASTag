@@ -232,7 +232,7 @@ export function MergeGraph({
             {' · '}
           </>
         )}
-        #{at + 1} N→C by residue: its tags under the ruler, bold joins · above: conflicting · below: inside, touching, the rest · {pair}: read again, not drawn · choose one to re-anchor
+        #{at + 1} N→C by residue: its tags under the ruler, bold joins · above: conflicting · below: inside, touching, the rest · C→N: the other series, reversed · {pair}: read again, not drawn · choose one to re-anchor
       </p>
     </div>
   )
@@ -346,17 +346,30 @@ function lay(g: TagGraph, s: SpectrumPeaks, at: number, termini: Terminus[], sho
     const own = read.own ? '' : `; on its own peaks ${seriesText(pl.series, pl.call)}, ${sequenceOf(pl)}`
     return { seq, title: `${seq} (${seriesText(read.series, read.call)} ${pl.charge}+${own}) · E-value ${pl.evalue ?? 'none'} · ${pl.rows.length} tag${pl.rows.length === 1 ? '' : 's'}${pl.tags.length ? `: ${pl.tags.join(', ')}` : ''} · ${role}` }
   }
+  // A resolved tag of the other series than the anchor's, aligned by its
+  // peaks, runs against its own N to C here: its residues in the ruler's
+  // order (left to right), its C side first, marked C→N.
+  const flipped = (k: number): boolean => nTerminal(g.paths[k].series) !== nc
+  const ruledSeqOf = (k: number): string => {
+    const t = termini[k] ?? NO_TERMINUS
+    const pre = t.c === 'at' ? 'C–' : t.c ? `C–(${t.c.away})` : ''
+    const post = t.n === 'at' ? '–N' : t.n ? `(${t.n.away})–N` : ''
+    return `${pre}${sequenceOf({ series: A.series, steps: g.paths[k].steps })}${post} C→N`
+  }
   // Resolved tags aligned to the anchor, one bar each with its rank and sequence; lane 0 nearest the anchor.
   const pathBars = (ks: number[], kind: 'fork' | 'touch', how: string): Bar[] => {
     const items = ks
       .filter((k) => spans.has(k))
       .map((k) => {
         const [a, b] = spans.get(k) as [number, number]
-        const label = `#${k + 1} ${seqOf(k)}`
+        const label = `#${k + 1} ${flipped(k) ? ruledSeqOf(k) : seqOf(k)}`
         return { k, x1: X(a), x2: X(b), label }
       })
     const lanes = pack(items.map((it) => ({ x1: it.x1, x2: it.x2 + 4 + it.label.length * CHAR })), GAP)
-    return items.map((it, n) => ({ key: `p${it.k}`, kind, path: it.k, node: null, x1: it.x1, x2: it.x2, y: lanes[n], label: it.label, title: pathTitle(it.k, how), aria: `${sequenceOf(g.paths[it.k])}, resolved tag ${it.k + 1}, ${how}` }))
+    return items.map((it, n) => {
+      const h = flipped(it.k) ? `${how}, drawn C→N on this ruler` : how
+      return { key: `p${it.k}`, kind, path: it.k, node: null, x1: it.x1, x2: it.x2, y: lanes[n], label: it.label, title: pathTitle(it.k, h), aria: `${sequenceOf(g.paths[it.k])}, resolved tag ${it.k + 1}, ${h}` }
+    })
   }
   let y = 4
   const forks = pathBars([...rel].filter(([, v]) => v === 'fork').map(([k]) => k), 'fork', `conflicts with #${at + 1}`)

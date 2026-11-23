@@ -161,6 +161,27 @@ describe('merge graph', () => {
     expect(container.querySelector(`[data-path="${tid}"]`)?.textContent).toContain(`#${tid + 1} TID`)
   })
 
+  it('writes a related resolved tag of the other series in the ruler\'s direction, marked C→N', () => {
+    // EPT (b) and EW, which shares its E step and forks with W; read as y, EW is WE N to C.
+    const s = specL([...bL.slice(1, 5), bL[2] + RM.W])
+    const g0 = buildGraph([atL(0, NF + sumL('P'), 'EPT', 0.01, CF + sumL('IDE')), atL(1, NF + sumL('P'), 'EW', 0.02)], s, RL)
+    expect(g0.paths.map((p) => [p.series, sequenceOf(p), p.relations[0]?.kind])).toEqual([['b', 'EPT', 'fork'], ['b', 'EW', 'fork']])
+    const g = { ...g0, paths: g0.paths.map((p, k) => (k === 1 ? { ...p, series: 'y' as const } : p)) }
+    expect(sequenceOf(g.paths[1])).toBe('WE')
+    const { container } = render(<MergeGraph graph={g} spectrum={s} chosen={0} onChoose={vi.fn()} />)
+    const bar = container.querySelector('[data-path="1"]') as Element
+    // Its first residue lies under the ruler's E: the label starts with E.
+    const ruler = screen.getByTestId('merge-graph-ruler')
+    const under = [...ruler.querySelectorAll('[data-res]')].find((t) => Math.abs(Number(t.getAttribute('x')) - (barX(container, '[data-path="1"]') + 0.5 * (Number(ruler.querySelectorAll('[data-res]')[1].getAttribute('x')) - Number(ruler.querySelectorAll('[data-res]')[0].getAttribute('x'))))) < 1e-6)
+    expect(under?.textContent).toBe('E')
+    expect(bar.querySelector('.sp-graph-label')?.textContent).toBe('#2 EW C→N')
+    expect(bar.querySelector('title')?.textContent).toContain('#2 WE (')
+    expect(bar.querySelector('title')?.textContent).toContain('drawn C→N on this ruler')
+    // The same series is not marked.
+    const { container: c2 } = render(<MergeGraph graph={g0} spectrum={s} chosen={0} onChoose={vi.fn()} />)
+    expect(c2.querySelector('[data-path="1"] .sp-graph-label')?.textContent).toBe('#2 EW')
+  })
+
   it('places the other resolved tags around the anchor: conflicting above, the rest listed below in rank order', () => {
     // EPTIDE, and W (one weak peak a W above b2): W forks from EPTIDE at b2.
     const { container } = render(<MergeGraph graph={graph} spectrum={S} chosen={0} onChoose={vi.fn()} />)

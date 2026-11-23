@@ -38,7 +38,7 @@
   ranking not recorded, and the GUI takes the default. The new Merge graph view draws the tag graph around the
   resolved tag selected, on its residues N to C: its tags as a staircase of bars under a residue ruler with bold
   joins, conflicting resolved tags above, tags inside it, touching ones and the rest below; a resolved tag that reads
-  it again on its complement peaks (every peak, not just two) is a b+y badge, not a second bar; unused tags behind a toggle; choosing a bar
+  it again on its complement peaks (every peak, not just two) is a b+y badge, not a second bar; a related one of the other series is written in the ruler's direction, marked C→N; unused tags behind a toggle; choosing a bar
   re-anchors on its resolved tag.
 - **GUI: termini of resolved tags.** The resolved tags table, the tag line and the merge graph write N–EPTIDE,
   EPTIDE–C, and N–(K)… / …(K)–C muted one residue away, from `-resolved_out`'s `terminus` column, or computed alike
