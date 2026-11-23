@@ -25,17 +25,21 @@ export const WATER = 18.0105646837
 export const C_OFFSET = 17.0265491015
 export const Z_DOT_OFFSET = WATER - 16.0187240694
 
-// Monoisotopic residue masses (unmodified; C without Carbamidomethyl).
+// Monoisotopic residue masses (unmodified; C without Carbamidomethyl): OpenMS
+// ResidueDB's internal masses (Residue::getMonoWeight(Internal) over
+// Natural19WithoutI, I = L), as FASTag's TagGraph takes them, so that the GUI
+// resolves and ranks a spectrum's tags exactly as the CLI does.
 const RESIDUE: Record<string, number> = {
-  G: 57.02146372057, A: 71.03711378471, S: 87.03202840427, P: 97.05276384885, V: 99.06841391299,
-  T: 101.04767846841, C: 103.00918478471, L: 113.08406397713, I: 113.08406397713, N: 114.04292744114,
-  D: 115.02694302383, Q: 128.05857750527, K: 128.09496301399, E: 129.04259308797, M: 131.04048491299,
-  H: 137.05891185845, F: 147.06841391299, R: 156.10111102359, Y: 163.06332853255, W: 186.07931294986
+  G: 57.0214640957, A: 71.03711415949999, S: 87.0320291595, P: 97.05276422329999, V: 99.0684142871,
+  T: 101.04767922330001, C: 103.00918488949999, L: 113.08406435089999, I: 113.08406435089999, N: 114.04292819140001,
+  D: 115.02694415949999, Q: 128.05857825520002, K: 128.09496338280002, E: 129.0425942233, M: 131.04048501709997,
+  H: 137.05891222330001, F: 147.06841428710004, R: 156.1011113828, Y: 163.06332928710003, W: 186.07931331899999
 }
 
-// Unimod monoisotopic deltas of the modifications a run commonly carries,
-// by their OpenMS name (case does not matter). A name not here is named in
-// the Spectrum tab rather than guessed.
+// Unimod monoisotopic deltas of the modifications a run commonly carries, by
+// their OpenMS name (case does not matter); OpenMS ModificationsDB's
+// getDiffMonoMass gives the same values. A name not here is named in the
+// Spectrum tab rather than guessed.
 const MOD_DELTA: Record<string, number> = {
   carbamidomethyl: 57.021464,
   oxidation: 15.994915,
