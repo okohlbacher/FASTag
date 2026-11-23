@@ -1,9 +1,13 @@
-import { test, expect, goTo, openApp } from './fixtures'
+import { test, expect, goTo, openApp, toStep } from './fixtures'
 
 test('the e2e build starts on its fixture bridge with nothing run yet', async ({ page }) => {
   await openApp(page)
   await expect(page).toHaveTitle(/FASTag/)
-  // P2a: the app lands on Setup; the empty Results is its own view.
+  // P2a: the app lands on Setup, on its first step (the task); the empty
+  // Results is its own view. No Run before a task and a file are chosen.
+  await expect(page.getByRole('heading', { name: 'What do you want to do?' })).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Run', exact: true })).toHaveCount(0)
+  await toStep(page, 'Inputs')
   await expect(page.getByRole('button', { name: 'Run', exact: true })).toBeDisabled()
   await goTo(page, 'Results')
   await expect(page.getByRole('heading', { name: 'No results yet' })).toBeVisible()
@@ -13,8 +17,9 @@ test('the e2e build starts on its fixture bridge with nothing run yet', async ({
 
 test('first result in two clicks: choose the file, run it', async ({ page }) => {
   // FASTag's unmodified defaults also open the tags table. setup.spec.ts
-  // covers the Export tags landing task, which adds per-residue confidence.
+  // covers the Generate tags landing task, which adds per-residue confidence.
   await openApp(page, 'default', 'defaults')
+  await toStep(page, 'Inputs')
   await page.getByRole('button', { name: 'Choose file…' }).click()
   await page.getByRole('button', { name: 'Run', exact: true }).click()
   // The real FASTag 1.11.0 tags of the public E. coli fixture.

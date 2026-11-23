@@ -5,6 +5,7 @@
 // them skip when it is unset (see ./external.ts).
 // @ts-ignore -- the GUI's tsconfig carries no node types; vitest runs on node.
 import { readFileSync } from 'node:fs'
+import { fileButton } from '../testing/render'
 import { act, fireEvent, render, screen } from '@testing-library/react'
 import { describe, expect, it } from 'vitest'
 import App from '../App'
@@ -91,7 +92,7 @@ async function renderWith(lastUsed: Record<string, unknown>): Promise<MockBridge
   await applyAndCheck(lastUsed) // D6: the offer, clicked; guards the form
   mock.nextPickInput = '/d/a.mzML'
   await act(async () => {
-    fireEvent.click(screen.getByRole('button', { name: /^(Choose file|Change)…$/ }))
+    fireEvent.click(fileButton())
   })
   return mock
 }
@@ -128,7 +129,7 @@ describe('critic: CLI up-front refusals the form never anticipates', () => {
     expect(inertBecause('recon_out', { recon_out: '/d/a.recon.tsv' })).toBeNull()
     expect(conflicts({ recon_out: '/d/a.recon.tsv' })).not.toHaveLength(0)
     expect((runBtn() as HTMLButtonElement).disabled).toBe(true)
-    expect(screen.getByText('The placements need a protein database: choose one under Protein database.')).toBeDefined()
+    expect(screen.getByText('The placements need a protein database: choose one in Inputs.')).toBeDefined()
     await act(async () => {
       fireEvent.click(runBtn())
     })

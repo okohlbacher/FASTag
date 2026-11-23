@@ -383,6 +383,25 @@ namespace FASTag
                                    const Param& p);
 
   /**
+    @brief The peaks a two-pass hybrid spectrum was tagged on: the m/z-sorted
+    union of its b/y and its c/z-dot preparation, a peak both keep once.
+
+    The c/z preparation drops the unreacted and charge-reduced precursor
+    peaks before the peak budget and the b/y one keeps them, so each keeps
+    peaks the other cuts. Both are cut from the same peaks, so a peak both
+    keep has the same m/z and intensity in each.
+
+    @param[in] spec fragment spectrum
+    @param[in] precursor_mz precursor m/z
+    @param[in] charge precursor charge; <= 0 is treated as 2
+    @param[in] p_by the b/y tagging parameters
+    @param[in] p_cz the c/z-dot tagging parameters
+    @return the union, m/z strictly ascending
+  */
+  OpenMS::MSSpectrum preparedPeaksHybrid(const OpenMS::MSSpectrum& spec, double precursor_mz, int charge,
+                                         const Param& p_by, const Param& p_cz);
+
+  /**
     @brief Precomputed nulls, built once and shared read-only.
 
     Eager construction is what lets several spectra be tagged concurrently: a

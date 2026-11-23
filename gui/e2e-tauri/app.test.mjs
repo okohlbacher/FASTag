@@ -28,7 +28,7 @@ import { basename, dirname, join } from 'node:path'
 import { once } from 'node:events'
 import { spawnSync } from 'node:child_process'
 import { fileURLToPath } from 'node:url'
-import { ELEMENT, Session, until } from './wd.mjs'
+import { ELEMENT, Session, toStep, until } from './wd.mjs'
 import { repeatMzML } from './mzml.mjs'
 
 const APP = process.env.FASTAG_APP
@@ -73,8 +73,11 @@ async function withApp(fn) {
   }
 }
 
+/** Choose @p path as the one spectra file in Inputs (step 2), confirming
+ *  the selected task first on a fresh launch. */
 async function chooseInput(s, path) {
   await s.exec('const p = arguments[0]; window.fastag.pickInput = async () => p', path)
+  await toStep(s, 'Inputs')
   await s.click(await s.button('Choose file…'))
 }
 
@@ -90,25 +93,27 @@ async function view(s, id) {
   await until(`the ${id} view`, () => s.exec(`const v = document.querySelector('.view[data-view="' + arguments[0] + '"]'); return !!v && !v.hidden`, id), 5000)
 }
 
-/** Start the session from FASTag's defaults through the Workflow card's
- *  Preset select ("Load FASTag defaults"), as a user does (the app starts on
- *  "Export tags", which additionally enables per-residue confidence). The run
+/** Start the session from FASTag's defaults through Presets › Load FASTag
+ *  defaults on step 1 of Setup, as a user does (the app starts on "Export
+ *  tags", which additionally enables per-residue confidence). The run
  *  and IPC specs check what a run from the defaults writes and shows, as the
  *  e2e-web smoke spec does with ?start=defaults. React's onChange on a select
  *  listens to the change event, so the value goes through the native setter
  *  and a bubbling change. */
 async function fromDefaults(s) {
-  await until('the Preset select', () => s.exec("const e = document.getElementById('origin'); return !!e && e.getClientRects().length > 0"))
+  await toStep(s, 'Task')
+  await until('the Presets menu', () => s.exec("const e = document.getElementById('origin'); return !!e && e.getClientRects().length > 0"))
   await s.exec(`const e = document.getElementById('origin')
     Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value').set.call(e, '__defaults')
     e.dispatchEvent(new Event('change', { bubbles: true }))`)
   await until('the session to start from FASTag defaults', () => s.exec("const e = document.querySelector('.origin-name strong'); return !!e && e.textContent === 'FASTag defaults' && !document.getElementById('p-res_conf')?.checked"), 5000)
 }
 
-/** Click Run once Setup holds @p input: the Outputs card names the run after
+/** Click Run once Setup holds @p input: Outputs & run names the run after
  *  it (Run name = the input's stem), so Run starts this file, not another. */
 async function runOn(s, input) {
   const stem = basename(input).replace(/\.[^.]+$/, '')
+  await toStep(s, 'Outputs & run')
   await until(`the run name ${stem}`, () => s.exec("const e = document.getElementById('out-name'); return !!e && e.value === arguments[0]", stem), 20000)
   await s.click(await s.button('Run'))
 }
@@ -135,6 +140,7 @@ test('probe: the app finds its CLI and reads its version', { timeout: 120000 }, 
 test('help: keyboard search opens a CLI entry and Escape restores focus without changing Setup', { timeout: 120000 }, () =>
   withApp(async (s) => {
     await view(s, 'setup')
+    await toStep(s, 'Settings')
     const before = await s.exec("return document.getElementById('p-tag_length').value")
     const help = await s.button('Help')
     await s.exec('arguments[0].focus()', { [ELEMENT]: help })
@@ -156,6 +162,20 @@ test('help: keyboard search opens a CLI entry and Escape restores focus without 
     await until('Help to close and focus to return', () => s.exec("return !document.getElementById('help-panel') && document.activeElement?.textContent === 'Help'"))
     assert.equal(await s.exec("return document.getElementById('p-tag_length').value"), before)
     gates.helpKeyboard = true
+  }))
+
+// The wizard's cold start (doc/GUI-SETUP-WIZARD.md): Continue, Choose
+// file…, Run, as the app opens; Generate tags writes its tags.
+test('cold start: Continue, Choose file…, Run', { timeout: 300000 }, () =>
+  withApp(async (s) => {
+    await until('step 1 of Setup', () => s.exec("return document.querySelector('nav[aria-label=\"Setup steps\"] [aria-current=\"step\"]')?.getAttribute('data-step-btn') === '1'"), 10000)
+    await s.click(await s.button('Continue with Generate tags ›'))
+    const input = spectra('run01.mzML')
+    await s.exec('const p = arguments[0]; window.fastag.pickInput = async () => p', input)
+    await s.click(await s.button('Choose file…'))
+    await s.click(await s.button('Run'))
+    await s.waitText(/Showing ([\d,]+) of ([\d,]+)/, 240000)
+    assert.ok(existsSync(tagsOf(input)), `${tagsOf(input)} was not written`)
   }))
 
 let fullRows = -1
@@ -182,6 +202,7 @@ const cliAlive = () => spawnSync('pgrep', ['-f', '--', CLI_PATTERN]).status === 
 
 /** Open Advanced and its Performance group and set -threads to @p n through the form. */
 async function setThreads(s, n) {
+  await toStep(s, 'Settings')
   await s.exec(`const adv = document.querySelector('details.advanced > summary.disclosure')
     if (adv && adv.getAttribute('aria-expanded') !== 'true') adv.click()`)
   await s.exec(`for (const b of document.querySelectorAll('summary.disclosure')) {

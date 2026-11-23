@@ -1,10 +1,11 @@
-// The Setup screen (doc/GUI-WORKFLOWS.md section 3): five numbered cards that
-// read top to bottom, Input -> Workflow -> Settings -> Outputs -> Advanced,
-// then the run bar. A workflow shows only the fields a typical user changes
-// for its question; every other option is under Advanced, in its group.
+// The Setup screen as a wizard (doc/GUI-SETUP-WIZARD.md): a stepper with
+// four steps, Task -> Inputs -> Settings -> Outputs & run, one visible at a
+// time (all four mounted, the others hidden, so every field keeps its id and
+// state), Back/Next, and the run bar below steps 2-4. The task decides which
+// inputs step 2 shows; every other option stays under Advanced in step 3.
 // While a run is in flight, a locked summary of what it uses.
 
-import { useEffect, useRef, useState, type JSX, type RefObject } from 'react'
+import { useEffect, useRef, useState, type JSX, type KeyboardEvent, type RefObject } from 'react'
 import { BRIEF_HINT, SECTIONS, SECTION_OF, PARAM_BY_NAME, type Dependency, type Section, UNIT_PARAMS, defaultText, dependsOf, forcedValue, humanName, inertDependency, masters, recipeNote, unknownParams, unitOf, unplacedParams } from '../paramLayout'
 import ParamField, { type ParamValue } from '../ParamField'
 import { disclosure } from '../disclosure'
@@ -18,9 +19,29 @@ import type { RunState } from '../run/useRun'
 import type { SdrfState } from '../sdrf/useSdrf'
 import { Leftovers } from '../Leftovers'
 import { dirName, perJobOutputs, revealLabel } from '../app/paths'
-import { clock, duration } from '../app/format'
-import TaskChooser, { PresetRow } from './TaskChooser'
-import { LANDING_TASK, taskById, type Task } from './tasks'
+import { clock, duration, shellLine } from '../app/format'
+import TaskStep, { OriginRow, youNeed } from './TaskStep'
+import { LANDING_TASK, taskById, type Task, type TaskId } from './tasks'
+import {
+  ALL_SECTION_PARAMS,
+  INPUTS,
+  STANDS_IN,
+  STEPS,
+  aboutParams,
+  extensionWarning,
+  hasValue,
+  inputLabel,
+  inputParams,
+  missingInputs,
+  requiredBy,
+  satisfied,
+  missingText,
+  stepState,
+  stepTwoDependents,
+  taskInputs,
+  type Step
+} from './inputs'
+import { IconCheck, TaskIcon } from '../icons'
 import { INSTRUMENTS, presetText, shownInstrument } from './presets'
 import { PRODUCT_OF, PRODUCTS, USI_PLACEHOLDER, fileName, isOn, missingDatabase, neededBy, productLabel, alkylationExtension, alkylationRaise, alkylationShipped, alkylationShort, toggleProduct, type Product } from './products'
 
@@ -69,9 +90,38 @@ function sageCantRead(values: Record<string, unknown>, input: string): boolean {
 /// The tags output a batch job is shown with in Outputs: the naming rule.
 const BATCH_OUT = '<input>.tags.tsv'
 
-export function advancedParams(task: Task): string[] {
-  const shown = new Set([...task.basic, ...task.outputs, ...SECTIONS.filter((s) => s.home === 'common').flatMap((s) => s.params)])
-  return SECTIONS.flatMap((s) => s.params).filter((n) => !shown.has(n) && !WIRED.has(n) && !UNIT_PARAMS.has(n) && !FOLDED.has(n))
+/// The params Advanced shows for @p task (its layout), less the controls
+/// step 2 shows for @p owner (the task, or null for the FASTag defaults):
+/// its inputs, its about fields and the settings that wait on an input only.
+/// With @p values, an input step 2 requires for the reports that are on
+/// (the Protein database of Characterize's placements) leaves Advanced.
+export function advancedParams(task: Task, owner: Task | null = task, values?: Record<string, unknown>): string[] {
+  const shown = new Set([
+    ...task.basic,
+    ...task.outputs,
+    ...SECTIONS.filter((s) => s.home === 'common').flatMap((s) => s.params),
+    ...inputParams(owner, values),
+    ...aboutParams(owner)
+  ])
+  const base = SECTIONS.flatMap((s) => s.params).filter((n) => !shown.has(n) && !WIRED.has(n) && !UNIT_PARAMS.has(n) && !FOLDED.has(n))
+  const deps = new Set([...stepTwoDependents(owner, base, values).values()].flat())
+  return base.filter((n) => !deps.has(n))
+}
+
+/// The settings step 2 shows under an input of @p owner once it is set.
+export function inputDependents(task: Task, owner: Task | null, values?: Record<string, unknown>): Map<string, string[]> {
+  const shown = new Set([
+    ...task.basic,
+    ...task.outputs,
+    ...SECTIONS.filter((s) => s.home === 'common').flatMap((s) => s.params),
+    ...inputParams(owner, values),
+    ...aboutParams(owner)
+  ])
+  return stepTwoDependents(
+    owner,
+    ALL_SECTION_PARAMS.filter((n) => !shown.has(n) && !WIRED.has(n) && !UNIT_PARAMS.has(n) && !FOLDED.has(n)),
+    values
+  )
 }
 
 export interface SetupFormProps {
@@ -97,6 +147,11 @@ export interface SetupFormProps {
   sdrf?: SdrfState
   // The instrument preset the input checks propose.
   detectedInstrument?: string | null
+  // The step-2 input files not found on disk (pathStatus).
+  notFound?: readonly string[]
+  // Run the queued batch from step 2 (null: not possible now, and why).
+  onRunBatch?(): void
+  runBatchDisabled?: boolean
 }
 
 export default function SetupForm({
@@ -112,11 +167,18 @@ export default function SetupForm({
   onOpenResults,
   inspector,
   sdrf,
-  detectedInstrument
+  detectedInstrument,
+  notFound = [],
+  onRunBatch,
+  runBatchDisabled
 }: SetupFormProps): JSX.Element {
   const { input, out, values, setValue, openGroups, setOpenGroups, writingFiles, changedParams } = session
   const { busy, jobs, lastRun, evidence, revealErr, reveal } = run
+  // The layout of steps 3 and 4: the task's, the landing task's for the
+  // FASTag defaults (5.5). @p owner: the task step 2 is for (null: none).
   const task = taskById(session.task ?? LANDING_TASK)!
+  const owner = session.task ? task : null
+  const taskLabel = owner ? owner.label : 'FASTag defaults (no workflow)'
   const batch = jobs.length > 0 || session.mode === 'batch'
   // The USI accession is being typed: its row stays checked while empty.
   const [usiEditing, setUsiEditing] = useState(false)
@@ -236,10 +298,11 @@ export default function SetupForm({
   // The Extension field is under Advanced: the note's link opens its group
   // and focuses it, as the parameter search does.
   const extGroup = SECTION_OF.get('extension')?.title ?? 'Tagging'
-  // Export tags and Mass-shift survey show Extension in Settings.
+  // Generate tags and Mass-shift survey show Extension in Settings.
   const extInSettings = task.basic.includes('extension')
   const extWhere = extInSettings ? 'Settings' : `Advanced › ${extGroup}`
   const goToExtension = (): void => {
+    session.setStep(3)
     if (!extInSettings) {
       session.setAdvancedOpen(true)
       setOpenGroups((g) => ({ ...g, [extGroup]: true, 'Other analyses': true }))
@@ -398,7 +461,7 @@ export default function SetupForm({
   }
 
   // A group of Advanced: its products as checkboxes, then its fields.
-  const ADV = new Set(advancedParams(task))
+  const ADV = new Set(advancedParams(task, owner, values))
   const renderGroup = (sec: Section, defaultOpen: boolean): JSX.Element | null => {
     const names = sec.params.filter((n) => ADV.has(n))
     if (names.length === 0) return null
@@ -523,7 +586,7 @@ export default function SetupForm({
   const leads = new Set(task.leadGroups ?? [])
   const ownGroups = [...SECTIONS.filter((s) => s.home === task.id), ...SECTIONS.filter((s) => leads.has(s.title))]
   const globalGroups = SECTIONS.filter((s) => s.home === 'global')
-  // A group of its own with something to show in Advanced (Export tags'
+  // A group of its own with something to show in Advanced (Generate tags'
   // one lives in Outputs).
   const ownShown = ownGroups.some((s) => s.params.some((n) => ADV.has(n)))
   const otherGroups = SECTIONS.filter((s) => s.home !== task.id && s.home !== 'global' && s.home !== 'common' && !leads.has(s.title))
@@ -535,76 +598,297 @@ export default function SetupForm({
 
   const instrument = shownInstrument(values, session.instrument)
   const custom = session.instrument === 'custom' || !instrument
+  const step = session.step
 
-  const card = (n: number, id: string, title: string, body: JSX.Element, extra?: JSX.Element): JSX.Element => (
-    <section className="block step-card" role="region" aria-label={`${n} ${title}`} id={`card-${id}`}>
-      <div className="card-head">
-        <span className="card-n" aria-hidden="true">
-          {n}
-        </span>
-        <h2>{title}</h2>
+  // A setting waiting for a control of steps 2 or 3 (Triage's ID q-value
+  // and E-value, waiting for Identifications; the Comet template, until
+  // Search engine is Comet): hidden until it is set, not a disabled field
+  // with a note (round 4, 18).
+  const ownInputs = inputParams(owner, values)
+  const shownHere = new Set([...task.basic, ...aboutParams(owner), ...ownInputs])
+  const waitsOnShownFile = (n: string): boolean => {
+    const d = inertDependency(n, values)
+    return !!d && !d.replaced && masters(d).some((m) => shownHere.has(m))
+  }
+
+  // Step 2: the inputs of the task (setup/inputs.ts).
+  const ti = taskInputs(owner, values, batch ? 'batch' : 'one', session.revealed, ADV)
+  const missing = missingInputs(owner, values, { input, jobs: jobs.length, mode: batch ? 'batch' : 'one' })
+  const deps = inputDependents(task, owner, values)
+  // Errors are shown once the user tried to move on or run, never on an
+  // untouched step.
+  const [tried, setTried] = useState(false)
+  const notFoundOf = (n: string): string[] => [n, ...(INPUTS[n]?.also ?? [])].map((m) => String(values[m] ?? '')).filter((p) => p && notFound.includes(p))
+  const inputErrors = missing.filter((n) => n !== 'in').length + (missing.includes('in') ? 1 : 0) + ti.extraneous.length + notFound.length
+  const states = stepState({
+    confirmed: session.taskConfirmed,
+    step,
+    inputErrors,
+    settingErrors: Object.keys(session.invalid).length,
+    outputErrors: !batch && !!input && !out ? 1 : 0
+  })
+
+  // Moving between steps: focus goes to the step's heading, and a live
+  // region says where the user is.
+  const focusHeading = useRef(false)
+  const [said, setSaid] = useState('')
+  const go = (n: Step): void => {
+    if (n > 1 && !session.taskConfirmed) return
+    if (step === 2 && n > 2) setTried(true)
+    focusHeading.current = true
+    setSaid(`Step ${n} of 4: ${STEPS[n - 1].name}`)
+    session.setStep(n)
+  }
+  useEffect(() => {
+    if (!focusHeading.current) return
+    focusHeading.current = false
+    document.getElementById(`step-h-${step}`)?.focus()
+  }, [step])
+  // Continue with @p id (step 1): the task is confirmed, the form replaced
+  // when it is another task, and the wizard moves on to Inputs when one is
+  // missing, else back to the step the task was changed from.
+  const confirm = (id: TaskId): void => {
+    const t = taskById(id) ?? null
+    const back = session.cameFrom()
+    session.chooseTask(id)
+    session.setTaskConfirmed(true)
+    const miss = missingInputs(t, values, { input, jobs: jobs.length, mode: batch ? 'batch' : 'one' })
+    focusHeading.current = true
+    const n: Step = miss.length || back === 1 || !session.taskConfirmed ? 2 : back
+    setSaid(`Step ${n} of 4: ${STEPS[n - 1].name}`)
+    session.setStep(n)
+  }
+  // Alt+Left/Right: the previous and next step, not while typing.
+  const onKey = (e: KeyboardEvent<HTMLDivElement>): void => {
+    if (!e.altKey || (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight')) return
+    const t = e.target as HTMLElement
+    if (t.closest('input, textarea, select, [contenteditable="true"]')) return
+    const n = step + (e.key === 'ArrowRight' ? 1 : -1)
+    if (n < 1 || n > 4) return
+    e.preventDefault()
+    go(n as Step)
+  }
+
+  const spectraName = batch ? (jobs.length ? `${jobs.length} ${jobs.length === 1 ? 'file' : 'files'}` : '') : input ? baseName(input) : ''
+  const stepper = (
+    <div className="stepper-row">
+      <nav aria-label="Setup steps" className="stepper">
+        <ol>
+          {STEPS.map(({ n, name }) => {
+            const st = states[n]
+            const locked = st === 'locked'
+            const why =
+              locked ? 'Choose a task first' : st === 'blocked' && n === 2 ? (missing.length ? `${missingText(missing)} missing` : 'An input needs attention') : st === 'blocked' ? 'A value needs attention' : ''
+            const label =
+              n === 1 ? (session.taskConfirmed ? `Task: ${taskLabel}` : 'Task') : n === 2 && spectraName && session.taskConfirmed ? `Inputs: ${spectraName}` : name
+            return (
+              <li key={n} className={`step-item ${st}`}>
+                <button
+                  type="button"
+                  data-step-btn={n}
+                  aria-current={step === n ? 'step' : undefined}
+                  aria-disabled={locked || undefined}
+                  aria-describedby={why ? `step-why-${n}` : undefined}
+                  onClick={() => go(n)}
+                >
+                  <span className="step-n" aria-hidden="true">
+                    {st === 'done' ? <IconCheck /> : st === 'blocked' ? '!' : n}
+                  </span>
+                  <span className="step-name">{label}</span>
+                  {n === 1 && session.taskConfirmed && (
+                    <span className="pencil" aria-hidden="true">
+                      ✎
+                    </span>
+                  )}
+                </button>
+                {why && (
+                  <span id={`step-why-${n}`} className="sr-only">
+                    {why}
+                  </span>
+                )}
+              </li>
+            )
+          })}
+        </ol>
+      </nav>
+      {!batch && !!input && session.taskConfirmed && (
+        <button type="button" className="link small" onClick={onPickInput}>
+          Change spectra…
+        </button>
+      )}
+      <span className="spacer" />
+      <button
+        type="button"
+        className="secondary small"
+        ref={searchBtnRef}
+        aria-keyshortcuts={isMac() ? 'Meta+K /' : 'Control+K /'}
+        title={`Search all settings (${keyText('K')} or /)`}
+        onClick={onSearch}
+      >
+        Search settings… <kbd>{keyText('K')}</kbd>
+      </button>
+    </div>
+  )
+
+  const body = (n: Step, title: string, content: JSX.Element, extra?: JSX.Element): JSX.Element => (
+    <section className="wizard-step" id={`step-${n}`} data-step={n} hidden={step !== n} aria-labelledby={`step-h-${n}`}>
+      <div className="step-head">
+        <h2 id={`step-h-${n}`} tabIndex={-1}>
+          {title}
+        </h2>
         {extra}
       </div>
-      {body}
+      {content}
     </section>
   )
 
-  const isInputField = (n: string): boolean => !!task.required?.includes(n) || PARAM_BY_NAME.get(n)?.type === 'input-file'
-  // A setting of an optional file that Settings itself shows (Triage's ID
-  // q-value and E-value, waiting for Identifications): hidden until the file
-  // is chosen, not a disabled field with a note (round 4, 18).
-  // Likewise a setting waiting for another Settings field (the Comet
-  // template, until Search engine is Comet).
-  const waitsOnShownFile = (n: string): boolean => {
-    const d = inertDependency(n, values)
-    return !!d && !d.replaced && masters(d).some((m) => task.basic.includes(m))
-  }
+  const lastRunBlock = lastRun && jobs.length === 0 && (
+    <section className="block last-run" aria-labelledby="last-run-h">
+      <h2 id="last-run-h">Last run</h2>
+      <div className={`last-run-name ${lastRun.ok ? 'ok' : lastRun.cancelled ? 'cancelled' : 'bad'}`}>
+        <JobIcon status={lastRun.ok ? 'done' : lastRun.cancelled ? 'cancelled' : 'failed'} />
+        <span>{baseName(lastRun.input)}</span>
+      </div>
+      <div className="muted">
+        {lastRun.ok ? 'Finished' : lastRun.cancelled ? 'Cancelled' : 'Failed'}{' '}
+        {lastRun.earlier ? `in an earlier session, ${new Date(lastRun.at).toLocaleString()}` : clock(lastRun.at)} · {duration(lastRun.ms)}
+        {lastRun.cleaned > 0 && ' · partial outputs removed'}
+        {lastRun.ok && evidence.ms2 != null && ` · ${evidence.ms2.toLocaleString('en-US')} MS2 spectra`}
+      </div>
+      {/* The form may be edited since: what this run was given. */}
+      {lastRun.changed && <code className="last-run-params">{lastRun.changed.length ? lastRun.changed.join(' ') : 'all defaults'}</code>}
+      {lastRun.ok && lastRun.out && (
+        <div className="row reveal">
+          <button type="button" className="secondary small" onClick={() => reveal(false)} title={lastRun.out}>
+            {revealLabel()}
+          </button>
+          <button type="button" className="secondary small" onClick={() => reveal(true)}>
+            Open folder
+          </button>
+        </div>
+      )}
+      {revealErr && (
+        <p className="warn" role="alert">
+          <IconError />
+          <span>{revealErr}</span>
+        </p>
+      )}
+    </section>
+  )
 
-  const inputCard = card(
-    1,
-    'input',
-    'Input',
-    <>
+  // An input's errors, under its field: missing, wrong extension, not found.
+  const inputNotes = (n: string, required = false): JSX.Element | null => {
+    const notes: { warn: boolean; text: string }[] = []
+    if (required && tried && !satisfied(values, n)) notes.push({ warn: true, text: `Required for ${requiredBy(owner, values, n)}: choose a protein FASTA.` })
+    for (const m of [n, ...(INPUTS[n]?.also ?? [])]) {
+      const w = extensionWarning(m, String(values[m] ?? ''))
+      if (w) notes.push({ warn: false, text: w })
+    }
+    for (const p of notFoundOf(n)) notes.push({ warn: true, text: `Not found: ${p}` })
+    if (!notes.length) return null
+    return (
+      <div className="input-notes" id={`p-${n}-notes`}>
+        {notes.map((x) => (
+          <p key={x.text} className={x.warn ? 'warn' : 'hint note-flag'}>
+            {x.warn && <IconError />}
+            <span>{x.text}</span>
+          </p>
+        ))}
+      </div>
+    )
+  }
+  // The settings that wait on nothing but this input, under it once set.
+  const dependentsOf = (n: string): JSX.Element | null => {
+    const d = deps.get(n)
+    if (!d?.length || !hasValue(values, n)) return null
+    return <div className="input-deps">{d.map((x) => field(x))}</div>
+  }
+  const requiredInput = (n: string): JSX.Element => {
+    const alt = STANDS_IN[n]
+    const spec = PARAM_BY_NAME.get(n)
+    // The Filter database stands in (the CLI's own rule): said, not empty.
+    if (alt && !hasValue(values, n) && hasValue(values, alt))
+      return (
+        <div className="field standin" key={n}>
+          <span className="label-row">
+            <span className="pname">{humanName(n)}</span>
+          </span>
+          <p className="help">
+            Using your Filter database: <span className="mono">{baseName(String(values[alt]))}</span>{' '}
+            {spec && (
+              <button type="button" className="link small" onClick={() => void session.pickFor(spec)}>
+                Choose another
+              </button>
+            )}
+          </p>
+        </div>
+      )
+    return (
+      <div key={n} className="input-block">
+        {field(n, { brief: task.help[n] ?? INPUTS[n]?.why, required: true })}
+        {inputNotes(n, true)}
+      </div>
+    )
+  }
+  const optionalInput = (n: string): JSX.Element => (
+    <div key={n} className="input-block optional">
+      {[n, ...(INPUTS[n]?.also ?? [])].map((m) => field(m, { brief: m === n ? (INPUTS[n]?.why ?? task.help[n]) : undefined }))}
+      {inputNotes(n)}
+      {dependentsOf(n)}
+      <button type="button" className="link small" aria-label={`Remove ${inputLabel(n)}`} onClick={() => session.removeInput(n)}>
+        Remove
+      </button>
+    </div>
+  )
+
+  const spectraBlock = (
+    <div className="spectra-block">
       <div className={batch ? 'input-row batch' : 'input-row'}>
-      <div className="seg" role="radiogroup" aria-label="Input mode">
-        {(['one', 'batch'] as const).map((m) => (
-          <label
-            key={m}
-            className={`seg-opt${(m === 'batch') === batch ? ' on' : ''}`}
-            title={m === 'one' && jobs.length > 0 ? 'Clear the batch (Open the batch, then Clear) to use one file' : undefined}
-          >
-            <input
-              type="radio"
-              name="input-mode"
-              value={m}
-              checked={(m === 'batch') === batch}
-              disabled={m === 'one' && jobs.length > 0}
-              onChange={() => session.setMode(m)}
-            />
-            {m === 'one' ? 'One file' : 'Batch'}
-          </label>
-        ))}
-      </div>
-      {!batch &&
-        (input ? (
-          <div className="input-card">
-            <IconFile />
-            <div className="path" title={input}>
-              <span className="fname">{baseName(input)}</span>
-              <span className="dir">{dirName(input)}</span>
+        <div className="seg" role="radiogroup" aria-label="Input mode">
+          {(['one', 'batch'] as const).map((m) => (
+            <label
+              key={m}
+              className={`seg-opt${(m === 'batch') === batch ? ' on' : ''}`}
+              title={m === 'one' && jobs.length > 0 ? 'Clear the batch (Open the batch, then Clear) to use one file' : undefined}
+            >
+              <input
+                type="radio"
+                name="input-mode"
+                value={m}
+                checked={(m === 'batch') === batch}
+                disabled={m === 'one' && jobs.length > 0}
+                onChange={() => session.setMode(m)}
+              />
+              {m === 'one' ? 'One file' : 'Batch'}
+            </label>
+          ))}
+        </div>
+        {!batch &&
+          (input ? (
+            <div className="input-card">
+              <IconFile />
+              <div className="path" title={input}>
+                <span className="fname">{baseName(input)}</span>
+                <span className="dir">{dirName(input)}</span>
+              </div>
+              <button className="secondary" onClick={onPickInput}>
+                Change…
+              </button>
             </div>
-            <button className="secondary" onClick={onPickInput}>
-              Change…
-            </button>
-          </div>
-        ) : (
-          <div className="input-card empty-input">
-            <IconFile />
-            <span className="muted">Spectra: mzML, mzPeak, MGF, Thermo .raw or timsTOF .d.zip (drop a .d folder)</span>
-            <button onClick={onPickInput}>Choose file…</button>
-          </div>
-        ))}
+          ) : (
+            <div className="input-card empty-input">
+              <IconFile />
+              <span className="muted">Spectra: mzML, mzPeak, MGF, Thermo .raw or timsTOF .d.zip (drop a .d folder)</span>
+              <button onClick={onPickInput}>Choose file…</button>
+            </div>
+          ))}
       </div>
+      {tried && missing.includes('in') && (
+        <p className="warn">
+          <IconError />
+          <span>{batch ? 'Add the spectra files of the batch.' : `Required for ${taskLabel}: choose a spectra file.`}</span>
+        </p>
+      )}
       {/* One file: why a picked file was not taken (a .zip that is no .d.zip). */}
       {!batch && folderNote}
       {batch ? (
@@ -613,9 +897,14 @@ export default function SetupForm({
             <div className="input-card">
               <IconFile />
               <span className="grow">
-                {jobs.length} {jobs.length === 1 ? 'file' : 'files'} in the batch; each runs with these settings. To use one
-                file, clear the batch.
+                {jobs.length} {jobs.length === 1 ? 'file' : 'files'} in the batch; each runs with these settings. To use one file, clear the
+                batch.
               </span>
+              {onRunBatch && run.remaining > 0 && (
+                <button type="button" className="small" onClick={onRunBatch} disabled={runBatchDisabled}>
+                  Run {run.remaining} {run.remaining === 1 ? 'file' : 'files'}
+                </button>
+              )}
               <button type="button" className="secondary small" onClick={onOpenBatch}>
                 Open the batch
               </button>
@@ -667,36 +956,19 @@ export default function SetupForm({
           {sdrf?.error && <p className="warn">{sdrf.error}</p>}
         </div>
       ) : (
-        input && inspector
+        <>
+          {input && inspector}
+          {sdrf?.file && <p className="hint">SDRF {baseName(sdrf.file.path)}: used only in Batch mode.</p>}
+        </>
       )}
-    </>,
-    <>
-      {!batch && (
-        <button type="button" className="link small" onClick={onOpenResults}>
-          Open earlier results…
-        </button>
-      )}
-      <HelpButton to="files-inputs" what="input files" />
-    </>
+    </div>
   )
 
-  const workflowCard = card(2, 'workflow', 'Workflow', <TaskChooser session={session} rowInHead />, <PresetRow session={session} />)
-
-  const settingsCard = card(
-    3,
-    'settings',
-    'Settings',
-    <div className="settings">
-      {task.basic
-        .filter((n) => isInputField(n) && !waitsOnShownFile(n))
-        .map((n) => {
-          // The Filter database (Advanced) stands in for the Protein database.
-          const viaFilter = n === 'recon_fasta' && String(values['fasta'] ?? '').trim() !== ''
-          return field(n, {
-            brief: viaFilter ? 'Uses the Filter database unless you choose a separate one here.' : task.help[n],
-            required: task.required?.includes(n) && !viaFilter
-          })
-        })}
+  const ionTrap = (instrument?.id === 'iontrap-cid' || detectedInstrument === 'iontrap-cid') && (owner?.id === 'species' || owner?.id === 'characterize')
+  const aboutBlock = (
+    <section className="about-spectra" aria-labelledby="about-h">
+      <h3 id="about-h">About these spectra</h3>
+      <div className="about-fields">
       <div className="field instrument-field">
         <span className="label-row">
           <label htmlFor="instrument">
@@ -722,39 +994,159 @@ export default function SetupForm({
         </select>
         <p id="instrument-h" className="help brief">
           Sets the fragment tolerance and ion series.
+          {input && !batch && !detectedInstrument ? ' Not detected from the file: choose yours.' : ''}
           {instrument && !instrument.validated && !custom ? ` ${instrument.label} is not validated against the paper's benchmark.` : ''}
         </p>
         {custom && <div className="custom-tol">{field('fragment_tolerance', { brief: 'The tolerance and its unit, for a custom analyzer.' })}</div>}
+        {ionTrap && (
+          <p className="warn" role="note">
+            <IconError />
+            <span>Species calls are unreliable on ion-trap spectra at Da tolerances: treat them as a hint.</span>
+          </p>
+        )}
       </div>
       {field('fixed_modifications', {
-        brief: 'Drop it if the sample was not alkylated.'
+        brief: 'Was the sample alkylated? Carbamidomethyl (C) is for alkylated samples; remove it if not.'
       })}
-      {task.basic.filter((n) => !isInputField(n) && !waitsOnShownFile(n)).map((n) => field(n, { brief: task.help[n] }))}
-      {task.settingsNote && (
-        <p className="hint settings-note" role="note">
-          {task.settingsNote} <HelpLink to={task.docs.to}>Learn more</HelpLink>
-        </p>
-      )}
-    </div>,
-    <button
-      type="button"
-      className="secondary small"
-      ref={searchBtnRef}
-      aria-keyshortcuts={isMac() ? 'Meta+K /' : 'Control+K /'}
-      title={`Search all settings (${keyText('K')} or /)`}
-      onClick={onSearch}
-    >
-      Search settings… <kbd>{keyText('K')}</kbd>
-    </button>
+      {aboutParams(owner)
+        .filter((n) => !waitsOnShownFile(n))
+        .map((n) => field(n, { brief: task.help[n] }))}
+      </div>
+    </section>
   )
 
-  const outputsCard = card(
+  const inputsStep = body(
+    2,
+    `Inputs for ${taskLabel}`,
+    <>
+      {session.carried && (
+        <p className="hint carried" role="status">
+          {session.carried}{' '}
+          {session.canUndo && (
+            <button type="button" className="link small" onClick={session.undo}>
+              Undo
+            </button>
+          )}
+        </p>
+      )}
+      <p className="lead">
+        {taskLabel} needs {youNeed(owner)}.
+        {ti.required
+          .filter((n) => !(owner?.required ?? []).includes(n))
+          .map((n) => (
+            <span key={n}> Also required for {requiredBy(owner, values, n)}: a protein FASTA.</span>
+          ))}
+      </p>
+      {spectraBlock}
+      {(ti.required.length > 0 || ti.shown.length > 0 || ti.addable.length > 0) && (
+        <section className="task-inputs" aria-label="Files of the task">
+          {ti.required.map(requiredInput)}
+          {ti.shown.map(optionalInput)}
+          {ti.addable.length > 0 && (
+            <label className="add-input">
+              <span className="sublabel">Add optional input</span>
+              <select
+                className="small"
+                value=""
+                aria-label="Add optional input"
+                onChange={(e) => {
+                  const n = e.target.value
+                  if (!n) return
+                  session.revealInput(n)
+                  setTimeout(() => document.getElementById(`p-${n}`)?.focus())
+                }}
+              >
+                <option value="">Choose…</option>
+                {ti.addable.map((n) => (
+                  <option key={n} value={n} title={INPUTS[n]?.why}>
+                    {inputLabel(n, owner)}: {INPUTS[n]?.why ?? task.help[n] ?? ''}
+                  </option>
+                ))}
+              </select>
+            </label>
+          )}
+        </section>
+      )}
+      {ti.extraneous.length > 0 && (
+        <section className="also-set" aria-labelledby="also-set-h">
+          <h3 id="also-set-h">Also set</h3>
+          <ul>
+            {ti.extraneous.map((x) => (
+              <li key={x.name}>
+                <strong>{inputLabel(x.name)}</strong> <span className="mono">{baseName(String(values[x.name] ?? ''))}</span>
+                <span className="muted"> {x.why}</span>{' '}
+                <button type="button" className="link small" aria-label={`Remove ${inputLabel(x.name)}`} onClick={() => session.removeInput(x.name)}>
+                  Remove
+                </button>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
+      {aboutBlock}
+    </>,
+    <HelpButton to="files-inputs" what="input files" />
+  )
+
+  const settingsStep = body(
+    3,
+    `Settings for ${taskLabel}`,
+    <>
+      <OriginRow session={session} learnMore={<HelpLink to={task.docs.to}>Learn more</HelpLink>} />
+      {session.presetError && (
+        <p className="warn" role="alert">
+          {session.presetError}
+        </p>
+      )}
+      <div className="settings">
+        {task.basic.filter((n) => !waitsOnShownFile(n)).map((n) => field(n, { brief: task.help[n] }))}
+        {task.settingsNote && (
+          <p className="hint settings-note" role="note">
+            {task.settingsNote} <HelpLink to={task.docs.to}>Learn more</HelpLink>
+          </p>
+        )}
+      </div>
+      <details className="block advanced" data-card="advanced" {...advD.details}>
+        <summary className="disclosure card-head" {...advD.summary}>
+          <span className={`chev big ${session.advancedOpen ? 'open' : ''}`} aria-hidden="true">
+            <IconChevron size={14} />
+          </span>
+          <h3>Advanced ({advChanged} changed)</h3>
+        </summary>
+        <div className="adv-body">
+          <p className="hint">
+            Every other option of FASTag, by topic{ownShown ? `; the groups of ${task.label} first` : ''}. <HelpLink to={task.docs.to}>Learn more</HelpLink>
+          </p>
+          {ownGroups.map((s) => renderGroup(s, true))}
+          <h3 className="adv-h">For every workflow</h3>
+          {globalGroups.map((s) => renderGroup(s, false))}
+          <details className={`sec other${otherOpen ? ' open' : ''}`} {...otherD.details}>
+            <summary className="disclosure" {...otherD.summary}>
+              <span className={`chev ${otherOpen ? 'open' : ''}`} aria-hidden="true">
+                <IconChevron />
+              </span>
+              <span className="sec-title">Other analyses</span>{' '}
+              {otherChanged > 0 ? <span className="chip accent">{otherChanged} changed</span> : <span className="defaults">add a report to this run</span>}
+            </summary>
+            <div className="sec-body">{otherGroups.map((s) => renderGroup(s, false))}</div>
+          </details>
+        </div>
+      </details>
+    </>
+  )
+
+  const idsSet = hasValue(values, 'census_ids')
+  const outputsStep = body(
     4,
-    'outputs',
-    'Outputs',
+    'Outputs and run',
     <>
       {batch ? (
-        <p className="hint">Each file's outputs are named after it, in the output folder of the Input card.</p>
+        <p className="hint">
+          Each file's outputs are named after it, in {run.outDir ? <span className="mono">{run.outDir}</span> : 'the folder of each input file'}.{' '}
+          <button type="button" className="link small" onClick={() => go(2)}>
+            Change in Inputs
+          </button>
+        </p>
       ) : (
         <div className="out-rows">
           <div className="out-row">
@@ -801,45 +1193,64 @@ export default function SetupForm({
           )}
         </div>
       )}
-      {missingDatabase(values) && <p className="hint">Some of these need the protein database: choose it in Settings.</p>}
+      {missingDatabase(values) && (
+        <p className="hint">
+          Some of these need the protein database:{' '}
+          <button type="button" className="link small" onClick={() => go(2)}>
+            choose it in Inputs
+          </button>
+          .
+        </p>
+      )}
       <ul className="products" aria-label="Products">
         {task.outputs.map(productRow)}
       </ul>
+      {step === 4 && <CommandPreview session={session} run={run} batch={batch} />}
+      {!batch && (
+        <div className="row tight add-batch">
+          <button
+            type="button"
+            className="secondary small"
+            disabled={!input || idsSet}
+            title={idsSet ? 'Not used in Batch mode: one ID file cannot belong to every input. Remove Identifications in Inputs first.' : 'Queue this file and add more, with the same settings'}
+            onClick={() => {
+              run.addBatchPaths([input])
+              session.setMode('batch')
+            }}
+          >
+            Add to batch
+          </button>
+          {idsSet && <span className="hint">Not used in Batch mode: one ID file cannot belong to every input.</span>}
+        </div>
+      )}
     </>,
     <HelpButton to="files-outputs" what="output files" />
   )
 
-  const advancedCard = (
-    <details className="block step-card advanced" data-card="advanced" {...advD.details}>
-      <summary className="disclosure card-head" {...advD.summary}>
-        <span className="card-n" aria-hidden="true">
-          5
-        </span>
-        {/* The chevron before the title, as in the groups inside. */}
-        <span className={`chev big ${session.advancedOpen ? 'open' : ''}`} aria-hidden="true">
-          <IconChevron size={14} />
-        </span>
-        <h2>Advanced ({advChanged} changed)</h2>
-      </summary>
-      <div className="adv-body">
-        <p className="hint">
-          Every other option of FASTag, by topic{ownShown ? `; the groups of ${task.label} first` : ''}. <HelpLink to={task.docs.to}>Learn more</HelpLink>
-        </p>
-        {ownGroups.map((s) => renderGroup(s, true))}
-        <h3 className="adv-h">For every workflow</h3>
-        {globalGroups.map((s) => renderGroup(s, false))}
-        <details className={`sec other${otherOpen ? ' open' : ''}`} {...otherD.details}>
-          <summary className="disclosure" {...otherD.summary}>
-            <span className={`chev ${otherOpen ? 'open' : ''}`} aria-hidden="true">
-              <IconChevron />
-            </span>
-            <span className="sec-title">Other analyses</span>{' '}
-            {otherChanged > 0 ? <span className="chip accent">{otherChanged} changed</span> : <span className="defaults">add a report to this run</span>}
-          </summary>
-          <div className="sec-body">{otherGroups.map((s) => renderGroup(s, false))}</div>
-        </details>
-      </div>
-    </details>
+  const tile = taskById(session.tile)
+  const footer = (
+    <div className="wizard-foot">
+      {step > 1 && (
+        <button type="button" className="secondary" onClick={() => go((step - 1) as Step)}>
+          ‹ Back
+        </button>
+      )}
+      <span className="spacer" />
+      {step === 1 ? (
+        <button type="button" className="continue" onClick={() => confirm(session.tile)}>
+          Continue with {tile?.label ?? 'this task'} ›
+        </button>
+      ) : (
+        step < 4 && (
+          <>
+            {missing.length > 0 && <span className="hint still-missing">Still missing: {missingText(missing)}</span>}
+            <button type="button" onClick={() => go((step + 1) as Step)}>
+              Next: {STEPS[step].name} ›
+            </button>
+          </>
+        )
+      )}
+    </div>
   )
 
   return (
@@ -884,46 +1295,22 @@ export default function SetupForm({
           </section>
         </>
       ) : (
-        <>
+        <div className="wizard" onKeyDown={onKey}>
+          {stepper}
+          <p className="sr-only" role="status">
+            {said}
+          </p>
           <Leftovers />
-          {lastRun && jobs.length === 0 && (
-            <section className="block last-run" aria-labelledby="last-run-h">
-              <h2 id="last-run-h">Last run</h2>
-              <div className={`last-run-name ${lastRun.ok ? 'ok' : lastRun.cancelled ? 'cancelled' : 'bad'}`}>
-                <JobIcon status={lastRun.ok ? 'done' : lastRun.cancelled ? 'cancelled' : 'failed'} />
-                <span>{baseName(lastRun.input)}</span>
-              </div>
-              <div className="muted">
-                {lastRun.ok ? 'Finished' : lastRun.cancelled ? 'Cancelled' : 'Failed'}{' '}
-                {lastRun.earlier ? `in an earlier session, ${new Date(lastRun.at).toLocaleString()}` : clock(lastRun.at)} · {duration(lastRun.ms)}
-                {lastRun.cleaned > 0 && ' · partial outputs removed'}
-                {lastRun.ok && evidence.ms2 != null && ` · ${evidence.ms2.toLocaleString('en-US')} MS2 spectra`}
-              </div>
-              {/* The form may be edited since: what this run was given. */}
-              {lastRun.changed && <code className="last-run-params">{lastRun.changed.length ? lastRun.changed.join(' ') : 'all defaults'}</code>}
-              {lastRun.ok && lastRun.out && (
-                <div className="row reveal">
-                  <button type="button" className="secondary small" onClick={() => reveal(false)} title={lastRun.out}>
-                    {revealLabel()}
-                  </button>
-                  <button type="button" className="secondary small" onClick={() => reveal(true)}>
-                    Open folder
-                  </button>
-                </div>
-              )}
-              {revealErr && (
-                <p className="warn" role="alert">
-                  <IconError />
-                  <span>{revealErr}</span>
-                </p>
-              )}
-            </section>
+          {lastRunBlock}
+          {body(
+            1,
+            'What do you want to do?',
+            <TaskStep session={session} onContinue={confirm} onOpenResults={onOpenResults} />
           )}
-          {inputCard}
-          {workflowCard}
-          {settingsCard}
-          {outputsCard}
-          {advancedCard}
+          {inputsStep}
+          {settingsStep}
+          {outputsStep}
+          {footer}
           {(UNPLACED.length > 0 || UNKNOWN.length > 0) && (
             <p className="warn">
               {UNPLACED.length > 0 && (
@@ -939,8 +1326,45 @@ export default function SetupForm({
               )}
             </p>
           )}
-        </>
+        </div>
       )}
     </div>
+  )
+}
+
+/// Step 4's command preview: the command line Run would start, as text,
+/// refreshed (debounced) while the form changes. Copy and Export INI stay in
+/// the run bar.
+function CommandPreview({ session, run, batch }: { session: Session; run: RunState; batch: boolean }): JSX.Element | null {
+  const [line, setLine] = useState<string | null>(null)
+  const { values, input, out } = session
+  const paramsFor = useRef(run.paramsFor)
+  paramsFor.current = run.paramsFor
+  useEffect(() => {
+    if (batch || !input) {
+      setLine(null)
+      return
+    }
+    let gone = false
+    const t = setTimeout(() => {
+      window.fastag
+        .commandLine(paramsFor.current())
+        .then((argv) => !gone && setLine(shellLine(argv)))
+        .catch(() => !gone && setLine(null))
+    }, 250)
+    return () => {
+      gone = true
+      clearTimeout(t)
+    }
+  }, [values, input, out, batch])
+  if (batch) return <p className="hint">Each file of the batch runs this command line with its own input and outputs; the Batch view logs each one.</p>
+  if (!input) return null
+  return (
+    <section className="command-preview" aria-labelledby="cmd-h">
+      <h3 id="cmd-h">Command line</h3>
+      <pre className="mono cmd" tabIndex={0} aria-label="The command line Run starts">
+        {line ?? '…'}
+      </pre>
+    </section>
   )
 }

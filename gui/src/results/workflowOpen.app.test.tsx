@@ -6,7 +6,7 @@ import { act, fireEvent, screen, waitFor, within } from '@testing-library/react'
 import { describe, expect, it } from 'vitest'
 import { installMockBridge } from '../testing/mockBridge'
 import type { RunRecord } from '../types'
-import { click, flush, goTo, pickSingle, renderColdApp, runButton } from '../testing/render'
+import { click, flush, goTo, pickSingle, renderColdApp, runButton, chooseTask } from '../testing/render'
 import qcTsv from '../fixtures/cli-1.15/ecoli_ms2_small_0.3da.qc.tsv?raw'
 import shortlistTsv from '../fixtures/cli-1.15/ecoli_ms2_small_0.3da.shortlist.tsv?raw'
 import censusSortedTsv from '../fixtures/cli-1.15/ecoli_ms2_small_0.3da.census_sorted.tsv?raw'
@@ -85,7 +85,7 @@ describe('the run shown and another result', () => {
     const mock = installMockBridge()
     mock.reportFiles['/d/a.qc.tsv'] = qcTsv
     await renderColdApp(mock)
-    await click(screen.getByRole('radio', { name: /^Run QC/ }))
+    await chooseTask('Run QC')
     await pickSingle(mock, '/d/a.mzML')
     await click(runButton())
     await act(async () => mock.emitDone({ ok: true, code: 0, runId: mock.lastRunId }))
@@ -97,7 +97,7 @@ describe('the run shown and another result', () => {
     expect(tabs()).not.toContain('Overview')
   })
 
-  it("opening B's QC report after an Export tags run on A closes A's tags", async () => {
+  it("opening B's QC report after a Generate tags run on A closes A's tags", async () => {
     const mock = installMockBridge()
     mock.reportFiles['/other/b.qc.tsv'] = qcTsv
     await renderColdApp(mock)
@@ -116,7 +116,7 @@ describe('the run shown and another result', () => {
     const mock = installMockBridge()
     // The run asked for the QC report, which is not on disk.
     await renderColdApp(mock)
-    await click(screen.getByRole('radio', { name: /^Run QC/ }))
+    await chooseTask('Run QC')
     await pickSingle(mock, '/d/a.mzML')
     await click(runButton())
     await act(async () => mock.emitDone({ ok: true, code: 0, runId: mock.lastRunId }))

@@ -25,12 +25,15 @@ function pageText(page: string): string {
 
 afterEach(() => resetHelp())
 
+/// Words of the five-card Setup the wizard replaced.
+const CARD_TERMS = ['Input card', 'Outputs card', 'Workflow card', 'Settings card', 'Apply last-used', 'Preset select']
+
 describe('help vs docs', () => {
   it('describes the actual first-run task and existing results views', () => {
     expect(LANDING_TASK).toBe('export-tags')
     expect(taskById(LANDING_TASK)!.values).toEqual({ res_conf: true, threads: '0', extension: '3' })
     const start = pageText('start')
-    expect(start).toContain('Export tags, the default task')
+    expect(start).toContain('Generate tags, the default task')
     expect(start).toContain('tags from all input spectra and includes per-residue confidence')
     expect(start).toContain('Results opens on Tags')
     expect(start).toContain('Open earlier results…')
@@ -111,7 +114,16 @@ describe('settings groups in Help', () => {
     const { PAGES } = await import('./content')
     const { renderToStaticMarkup } = await import('react-dom/server')
     const text = PAGES.flatMap((p) => p.sections.map((s) => renderToStaticMarkup(<>{s.body}</>))).join('\n')
-    for (const old of ['Sequence matching', 'Reports › ', 'Open results / inspect spectra', 'Batch QC vs SDRF', 'Starting from'])
+    for (const old of ['Sequence matching', 'Reports › ', 'Open results / inspect spectra', 'Batch QC vs SDRF', 'Starting from', ...CARD_TERMS])
       expect(text, old).not.toContain(old)
+  })
+
+  // The Setup wizard (doc/GUI-SETUP-WIZARD.md) has steps, not cards: no
+  // source file of the app may name the cards again.
+  it('no source file names a card of the old Setup', async () => {
+    const files = import.meta.glob(['../**/*.tsx', '../**/*.ts', '!../**/*.test.ts', '!../**/*.test.tsx'], { query: '?raw', import: 'default', eager: true }) as Record<string, string>
+    expect(Object.keys(files).length).toBeGreaterThan(50)
+    const hits = Object.entries(files).flatMap(([f, src]) => CARD_TERMS.filter((t) => src.includes(t)).map((t) => `${f}: ${t}`))
+    expect(hits).toEqual([])
   })
 })

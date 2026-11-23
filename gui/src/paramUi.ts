@@ -379,6 +379,40 @@ export const PARAM_UI: Record<string, ParamUi> = {
       tip: '0.04 Da is the default.'
     }
   },
+  // ---- Resolved tags (-resolved_out, -tag_graph_out: the Spectrum tab)
+  resolve_score: {
+    section: 'Resolved tags, advanced',
+    label: 'Ranking',
+    help: {
+      text: "How the resolved tags of a spectrum are ranked, the tags merged on its peaks that the Spectrum tab shows under All tags. cstar adds, for each step a chain gains, the step's C* log-odds of being right (its peaks, mass error, rival steps and the support of the tags) less the step threshold, and ranks first the best resolved tag that holds no peak together with its own complement; steplogodds is the same with the simpler 1.15 step model and without that rule; evidence sums the E-value evidence of a resolved tag's tags; anchor puts the resolved tag of the best single tag first and ranks the rest by steplogodds.",
+      tip: 'Keep cstar, the default: it won the preregistered held-out test, at 20 ppm and at 0.5 Da.'
+    }
+  },
+  resolve_threshold: {
+    section: 'Resolved tags, advanced',
+    label: 'Step threshold',
+    depends: [{ on: 'resolve_score', note: 'the evidence ranking uses no step threshold', when: { resolve_score: { isNot: ['evidence'] } } }],
+    help: {
+      text: 'The log-odds a step must exceed to lengthen a resolved tag, under the cstar, steplogodds and anchor rankings. Higher keeps resolved tags shorter and surer.',
+      tip: '3, the default, is the threshold the held-out tests adopted.'
+    }
+  },
+  resolve_max_evalue: {
+    section: 'Resolved tags, advanced',
+    label: 'Largest E-value merged',
+    help: {
+      text: 'Only tags with an E-value up to this are merged into resolved tags; the tags table itself is not filtered by it.',
+      tip: '1 is the default. Raise it to let weaker tags lengthen resolved tags.'
+    }
+  },
+  resolve_join: {
+    section: 'Resolved tags, advanced',
+    label: 'Join tags that touch',
+    help: {
+      text: 'Also join two tags that only meet at a shared peak, without a step in common, into one resolved tag.',
+      tip: 'Off by default: a join at one peak is weaker evidence than a shared step.'
+    }
+  },
   min_filter_length: {
     section: 'Keep only tags found in a database',
     depends: [{ on: 'fasta', note: 'only affects matching against a sequence database' }],
@@ -815,6 +849,18 @@ export const PARAM_UI: Record<string, ParamUi> = {
     hidden: 'dedicated output field',
     help: {
       text: 'The tags file. Set under Output as "Tags TSV".'
+    }
+  },
+  resolved_out: {
+    hidden: 'derived: the app writes it beside the tags output when the CLI has it',
+    help: {
+      text: 'The resolved tags of each spectrum, best first: the tags merged on its peaks into longer reads. The app writes it beside the tags (run.resolved.tsv) and the Spectrum tab shows it under All tags.'
+    }
+  },
+  tag_graph_out: {
+    hidden: 'derived: the app writes it beside the tags output when the CLI has it',
+    help: {
+      text: "The merge graph of each spectrum: where its tags sit on the peaks and which continue which. The app writes it beside the tags (run.taggraph.tsv) and the Spectrum tab draws it as the merge graph."
     }
   },
   progress: {

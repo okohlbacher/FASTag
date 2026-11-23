@@ -9,7 +9,7 @@ import { useRun, type RunInputs } from './useRun'
 import { createViewStore } from '../app/viewStore'
 import { initialValues } from '../setup/useSession'
 import { installMockBridge, type MockBridge } from '../testing/mockBridge'
-import { click, pickSingle, renderCharacterizeApp, runButton } from '../testing/render'
+import { click, pickSingle, renderCharacterizeApp, runButton, chooseTask } from '../testing/render'
 import { daSpeciesTolerance } from '../results/overview'
 import type { RunRecord } from '../types'
 
@@ -104,7 +104,7 @@ describe('round 8, 7: the raise belongs to the values it was raised in', () => {
     const ext = (): string => (document.getElementById('p-extension') as HTMLInputElement | null)?.value ?? ''
     await click(document.getElementById('out-alkylation_out')!)
     expect(document.getElementById('out-alkylation_out-d')!.textContent).toMatch(/Extension 2 → 3 \(Advanced › Tagging\); changes every tag/)
-    await click(screen.getByRole('radio', { name: /^Mass-shift survey/ }))
+    await chooseTask('Mass-shift survey')
     const db = document.getElementById('p-recon_fasta') as HTMLInputElement
     await act(async () => {
       fireEvent.change(db, { target: { value: '/d/human.fasta' } })

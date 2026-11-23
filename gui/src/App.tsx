@@ -35,6 +35,8 @@ import Notices, { type Toast } from './shell/Notices'
 import { useFinish } from './shell/useFinish'
 import { LANDING, taskById, type Origin, type TaskId } from './setup/tasks'
 import PlanFooter from './setup/PlanFooter'
+import { INPUTS, aboutParams, inputParams, taskInputs, type Step } from './setup/inputs'
+import { usePathStatus } from './setup/usePathStatus'
 import { SECTION_OF } from './paramLayout'
 import type { Tab } from './app/viewStore'
 import type { ParamValue } from './ParamField'
@@ -47,12 +49,30 @@ import { postRunChecks, type CheckFix } from './inspector/checks'
 import { INSTRUMENTS, matchesInstrument, presetText, shownInstrument } from './setup/presets'
 
 // The tab a workflow's run lands on (doc/GUI-WORKFLOWS.md 3): its own view.
-// Export tags and Species keep the Tags/Species rule of useRun.
+// Generate tags and Species keep the Tags/Species rule of useRun.
 const LANDING_TAB: Partial<Record<TaskId, Tab>> = { 'run-qc': 'qc', 'mass-shift': 'recon', 'db-reduction': 'shortlist', triage: 'triage', characterize: 'overview' }
 // A .zip the picker let through that is not a timsTOF .d.zip.
 const notSpectraZip = (p: string): boolean => /\.zip$/i.test(p) && !/\.d\.zip$/i.test(p)
 // The FASTA formats the recon_fasta field takes.
 const FASTA_FORMATS = ['fasta', 'fa', 'faa']
+
+/// The input files step 2 shows that hold a path: the ones checked on disk.
+function stepTwoPaths(task: import('./setup/tasks').Task | null, values: Record<string, ParamValue>): string[] {
+  return [...inputParams(task, values)].map((n) => String(values[n] ?? '').trim()).filter(Boolean)
+}
+/// The step whose control a refusal names first, for @p task: the step
+/// whose body holds its field (all four are mounted), else, for a field not
+/// built (a closed group), 2 for an input or about field step 2 shows for
+/// the task (or a file not found) and 3 for the rest; null for a product.
+/// Never INPUTS.place alone: most tasks keep the databases under Advanced.
+function stepOfParam(name: string, task: import('./setup/tasks').Task | null, values: Record<string, ParamValue>): Step | null {
+  if (name === 'in_file') return 2
+  if (name === 'in' || name === 'out') return null
+  const at = Number(document.getElementById(`p-${name}`)?.closest<HTMLElement>('[data-step]')?.dataset.step ?? 0)
+  if (at >= 2 && at <= 4) return at as Step
+  if (inputParams(task, values).has(name) || aboutParams(task).includes(name)) return 2
+  return 3
+}
 
 // The app shell (P1 PR c; the P2a shell, PR s): the top bar with the four
 // views and the progress pill, the Help side panel, the close and overwrite
@@ -61,8 +81,8 @@ const FASTA_FORMATS = ['fasta', 'fa', 'faa']
 // view store (tab and log drawer); the views render it.
 ///
 /// @p start: where the session's values come from; the app lands on the
-/// built-in task "Export tags".
-export default function App({ start = LANDING }: { start?: Origin } = {}): JSX.Element {
+/// built-in task "Generate tags".
+export default function App({ start }: { start?: Origin } = {}): JSX.Element {
   const [bin, setBin] = useState<BinaryInfo | null>(null)
   // The view shown (Cmd+1..4, the top bar, the View menu).
   const [view, setView] = useState<View>('setup')
@@ -95,7 +115,10 @@ export default function App({ start = LANDING }: { start?: Origin } = {}): JSX.E
   // Export jobs outlive the tags table (it unmounts on a tab switch).
   const [exportJobs] = useState(createExportJobs)
   const { tab, logOpen, logJob } = useView(viewStore)
-  const session = useSession(start)
+  // A launch that names its origin (the e2e `?start=`, the component
+  // harness) has chosen it: the wizard opens on Inputs. A plain launch
+  // opens on step 1 with the landing task selected.
+  const session = useSession(start ?? LANDING, { confirmed: start !== undefined })
   const { input, out, values, blocked } = session
   const taskRef = useRef(session.task)
   taskRef.current = session.task
@@ -239,7 +262,14 @@ export default function App({ start = LANDING }: { start?: Origin } = {}): JSX.E
   }
 
   // The single input, picked or dropped, with its outputs beside it.
+  // On a launch with no task confirmed yet, a file (picked, dropped, the
+  // example) confirms the selected tile and opens Inputs.
   function setInputPath(p: string): void {
+    if (!session.taskConfirmed) {
+      session.chooseTask(session.tile)
+      session.setTaskConfirmed(true)
+      session.setStep(2)
+    }
     session.setInput(p)
     session.setOut(defaultOut(p))
     session.setValues((v) => ({ ...v, ...rebaseOutputs(v, defaultOut(p)) }))
@@ -379,7 +409,15 @@ export default function App({ start = LANDING }: { start?: Origin } = {}): JSX.E
   // single-file controls are hidden there, so neither Run nor a shortcut
   // may start that hidden single-file setup.
   const batchMode = session.mode === 'batch' || jobs.length > 0
-  const canRun = !!bin?.ok && !!input && !!out && !running && !batchRunning && !batchMode && !blocked && !inspector.held
+  // The step-2 input files of the form that are not on disk (pathStatus):
+  // they block Run as a missing input does.
+  const notFound = usePathStatus(stepTwoPaths(session.task ? (taskById(session.task) ?? null) : null, values))
+  const canRun = !!bin?.ok && !!input && !!out && !running && !batchRunning && !batchMode && !blocked && !inspector.held && notFound.length === 0
+  // A file not found is refused in the run bar too, with its field's step.
+  const refused = useMemo(
+    () => [...session.refused, ...notFound.map((p) => ({ params: ['in_file'], note: `Not found: ${p}. Choose it again in Inputs.` }))],
+    [session.refused, notFound]
+  )
 
   // The checks after a run, from its reports and FASTag's log lines.
   // The ion series of the run shown (its sent options: none is by), else the form's.
@@ -414,8 +452,21 @@ export default function App({ start = LANDING }: { start?: Origin } = {}): JSX.E
     // Another check holds the run (species with a Da tolerance): Setup
     // shows it, with its Run anyway.
     if (canRun) void run.run()
-    else setView('setup')
+    else {
+      // Setup at the step that holds the run: the input checks, else Settings.
+      session.setStep(inspector.held ? 2 : 3)
+      setView('setup')
+    }
   }, [rerunWith, values, canRun])
+  // Cmd+Enter on step 1: the selected tile confirmed, then run once the
+  // form holds it, or Inputs when something is missing.
+  const [runOnConfirm, setRunOnConfirm] = useState(false)
+  useEffect(() => {
+    if (!runOnConfirm || session.task !== session.tile) return
+    setRunOnConfirm(false)
+    if (canRun) void run.run()
+    else session.setStep(2)
+  }, [runOnConfirm, session.task, session.tile, canRun])
   const detectedPreset = inspector.pre.detected?.preset ?? null
   const chosenInstrument = INSTRUMENTS.find((x) => x.id === detectedPreset && matchesInstrument(values, x))?.id ?? ''
 
@@ -423,6 +474,16 @@ export default function App({ start = LANDING }: { start?: Origin } = {}): JSX.E
   // while the field is inert, the switch it waits for).
   function chooseParam(hit: ParamHit): void {
     setSearchOpen(false)
+    // A hit on a fresh launch confirms the selected tile: the user is
+    // about to set something for it.
+    if (!session.taskConfirmed) {
+      session.chooseTask(session.tile)
+      session.setTaskConfirmed(true)
+    }
+    // An optional input of step 2 not opened yet: opened first.
+    const primary = INPUTS[hit.name]?.partOf ?? hit.name
+    const owner = session.task ? (taskById(session.task) ?? null) : null
+    if (taskInputs(owner, values, batchMode ? 'batch' : 'one', session.revealed).addable.includes(primary)) session.revealInput(primary)
     // A field under Advanced: the disclosure, its group and, for another
     // workflow's group, Other analyses open (doc/GUI-WORKFLOWS.md 2.4).
     if (hit.section) {
@@ -467,8 +528,13 @@ export default function App({ start = LANDING }: { start?: Origin } = {}): JSX.E
         const master = on ? (document.getElementById(`p-${on}`) as HTMLInputElement | null) : null
         if (master && !master.disabled) el = master
       }
-      el?.scrollIntoView?.({ block: 'center' })
-      el?.focus()
+      // The step whose body holds the control (all four are mounted).
+      const at = Number(el?.closest<HTMLElement>('[data-step]')?.dataset.step ?? 0)
+      if (at >= 1 && at <= 4) session.setStep(at as Step)
+      setTimeout(() => {
+        el?.scrollIntoView?.({ block: 'center' })
+        el?.focus()
+      })
     })
   }
 
@@ -502,7 +568,11 @@ export default function App({ start = LANDING }: { start?: Origin } = {}): JSX.E
         }
         break
       case 'run':
-        if (jobs.length > 0) {
+        if (viewRef.current === 'setup' && session.step === 1 && jobs.length === 0) {
+          session.chooseTask(session.tile)
+          session.setTaskConfirmed(true)
+          setRunOnConfirm(true)
+        } else if (jobs.length > 0) {
           if (!batchRunning && !running && bin?.ok && !blocked && run.remaining > 0) void run.runBatch()
         } else if (canRun) void run.run()
         break
@@ -582,7 +652,11 @@ export default function App({ start = LANDING }: { start?: Origin } = {}): JSX.E
       phase={run.phase}
       startedAt={run.startedAt}
       invalid={session.invalid}
-      refused={session.refused}
+      refused={refused}
+      goTo={(c) => {
+        const st = stepOfParam(c.params[0], session.task ? (taskById(session.task) ?? null) : null, values)
+        return st ? { label: st === 2 ? 'Go to Inputs' : 'Go to Settings', go: () => session.setStep(st) } : null
+      }}
       fixes={session.fixes}
       onFix={session.applyFix}
       input={input}
@@ -698,6 +772,9 @@ export default function App({ start = LANDING }: { start?: Origin } = {}): JSX.E
                 onOpenResults={openResults}
                 sdrf={sdrf}
                 detectedInstrument={detectedPreset}
+                notFound={notFound}
+                onRunBatch={() => void run.runBatch()}
+                runBatchDisabled={batchRunning || running || !bin?.ok || blocked || notFound.length > 0}
                 inspector={
                   <PreStartPanel
                     checks={inspector.pre.checks}
@@ -715,7 +792,7 @@ export default function App({ start = LANDING }: { start?: Origin } = {}): JSX.E
                   />
                 }
               />
-              {runBarView === 'setup' && runBar}
+              {runBarView === 'setup' && session.step !== 1 && runBar}
             </aside>
           </section>
 

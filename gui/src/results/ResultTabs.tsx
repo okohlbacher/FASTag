@@ -409,6 +409,9 @@ export default function ResultTabs(p: ResultTabsProps): JSX.Element {
                 target={shownTarget}
                 source={source}
                 tags={tagsPath}
+                placements={tables.recon ?? null}
+                resolved={tables.resolved ?? null}
+                tagGraph={tables.tagGraph ?? null}
                 onTarget={setTarget}
                 onLocate={(input) => path && setLocated((l) => ({ ...l, [path]: input }))}
               />

@@ -29,7 +29,7 @@ grid; see the Decision at the end of this section.
 
 | # | Workflow (label) | Purpose (blurb, shown under the chooser) | Required inputs | Outputs, on by default (off) | Results tabs opened |
 |---|---|---|---|---|---|
-| W1 | **Export tags** (landing) | Sequence tags from every spectrum, with per-residue confidence, for de novo assembly and export. | spectra | tags.tsv (spectra with tags .mzML) | Overview, Tags, Spectrum |
+| W1 | **Generate tags** (landing) | Sequence tags from every spectrum, with per-residue confidence, for de novo assembly and export. | spectra | tags.tsv (spectra with tags .mzML) | Overview, Tags, Spectrum |
 | W2 | **Run QC** | QC of one run: MS/MS counts and resolution by analyzer, charges, isobaric kit, tag yield, instrument, serial and start time. | spectra | qc.tsv; tags.tsv (always) | Overview, QC, Tags, Spectrum |
 | W3 | **Mass-shift survey** (blind modification search) | Mass shifts between tags and the database: a frequency table, sites and UniMod names. | spectra, protein FASTA | recon.tsv, delta.tsv, delta_spectra.tsv, delta_counts.tsv (massgap.tsv, recon_id.tsv) | Overview, Mass shifts, Tags, Spectrum |
 | W4 | **Species** | Which taxa the sample contains, from the bundled taxonomy index. No FASTA needed. | spectra | species.tsv | Overview, Species, Tags, Spectrum |
@@ -180,11 +180,18 @@ does not duplicate any of these.
 
 ## 3. Screen flow, layout, help
 
+> **Superseded by the Setup wizard (2026-11-23):** the five stacked cards
+> described here are now four steps (Task, Inputs, Settings, Outputs & run);
+> see doc/GUI-SETUP-WIZARD.md for the layout, the inputs each task asks for
+> and where every control of this section went (its section 7). The
+> workflows, their values, the product wiring and Advanced below are
+> unchanged.
+
 ```
 [Header: Setup | Run | Results | Batch | History      Open… | ? Help]
 1 Input        file chip + probe line (instrument, MS2 count, DIA check)  [One file | Batch]
 2 Workflow     7 cards in a 4+3 grid, each: label, one-line blurb, "-> products"
-               row: "Export tags (modified)"  Reset | Presets ▾ (Save as…, Load, Delete)
+               row: "Generate tags (modified)"  Reset | Presets ▾ (Save as…, Load, Delete)
 3 Settings     required inputs of the workflow, then Common (Instrument, Fixed mods),
                then the 2 to 5 workflow fields
 4 Outputs      folder, run name, product checklist
@@ -316,7 +323,7 @@ every results tab.
    Outputs, Advanced. The Run bar holds only the plan line, Copy command
    line, Export INI… and Run.
 3. Per workflow, Settings shows the Common block plus exactly the fields of
-   section 2.2 (at most 6 incl. inputs) and nothing else. Export tags shows
+   section 2.2 (at most 6 incl. inputs) and nothing else. Generate tags shows
    no Species, Glyco, Digest or Reconciliation field.
 4. Every basic field has a one-line help under it and a (?) control. The
    (?) popover shows the CLI flag and default.

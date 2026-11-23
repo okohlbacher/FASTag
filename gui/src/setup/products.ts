@@ -1,4 +1,4 @@
-// The products of a run as the Outputs card lists them (doc/GUI-WORKFLOWS.md
+// The products of a run as Outputs & run (step 4) lists them (doc/GUI-WORKFLOWS.md
 // 2.3): one checkbox per report or tags-table column, with the file name it
 // gets beside the tags table. A checkbox is the only control of its report:
 // it sets the path, or the switch, and whatever else that report needs
@@ -220,7 +220,7 @@ export function alkylationRaise(
 /// extension the alkylation report raises (@p raised remembers it); off,
 /// the extension restored when it is still the raised one (not edited
 /// since). Another product that places tags makes the raise unneeded, and
-/// restores it too. Used by the Outputs card's toggle.
+/// restores it too. Used by the toggle of Outputs & run.
 export function toggleProduct(
   p: Product,
   on: boolean,

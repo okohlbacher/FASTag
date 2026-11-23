@@ -137,6 +137,10 @@ export interface ResolvedOutputs {
   delta_spectra_out?: string | null
   delta_counts_out?: string | null
   check_header_out?: string | null
+  // The resolved tags and the tag graph of each spectrum, which the
+  // backend adds beside the tags when the CLI has the options (fastag.rs).
+  resolved_out?: string | null
+  tag_graph_out?: string | null
 }
 
 export interface RunResult {
@@ -310,6 +314,13 @@ declare global {
 // In-app feedback (feedback/types.ts FeedbackApi, src-tauri/src/feedback.rs).
 import type { FeedbackApi } from './feedback/types'
 
+/// One path of pathStatus: whether it exists, and a file or a folder.
+export interface PathStatus {
+  path: string
+  exists: boolean
+  kind: 'file' | 'dir' | null
+}
+
 export interface FastagApi extends FeedbackApi {
   loadSettings: () => Promise<Settings>
   saveLast: (values: Record<string, unknown>) => Promise<boolean>
@@ -371,6 +382,8 @@ export interface FastagApi extends FeedbackApi {
   // The command line a run of these params is, binary first (fastag.rs
   // command_line: the argv `run` replies and History records).
   commandLine: (params: Record<string, unknown>) => Promise<string[]>
+  // Whether each path exists, and what it is (Setup step 2's "Not found").
+  pathStatus: (paths: string[]) => Promise<PathStatus[]>
   // Export INI (ini.rs): the request a run would be given, through
   // `FASTag -ini <tmp> -write_ini <dest>`. Rejects with the CLI's reason.
   exportIni: (params: Record<string, unknown>, dest: string) => Promise<IniExport>
@@ -398,6 +411,10 @@ export interface FastagApi extends FeedbackApi {
   keepLeftovers: (paths: string[]) => Promise<void>
   cancel: () => Promise<{ cancelled: boolean }>
   resultsQuery: (path: string, view: ResultsView, offset: number, limit: number) => Promise<ResultsPage>
+  // A page of a table no Results table opens (the Spectrum tab's resolved
+  // tags and tag graph): read in full order, with snapshots of its own
+  // (browser.rs SideTables), never refused as not open.
+  tableQuery: (path: string, view: ResultsView, offset: number, limit: number) => Promise<ResultsPage>
   // D5: the head rows now; index and E-value order announced through onEvent.
   resultsOpen: (path: string, onEvent: (e: BrowserEvent) => void) => Promise<ResultsHead>
   // Where file row @p row sits in a built view (null: not built).

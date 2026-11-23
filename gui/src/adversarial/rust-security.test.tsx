@@ -5,7 +5,7 @@
 import { act, fireEvent, screen } from '@testing-library/react'
 import { describe, expect, it } from 'vitest'
 import { installMockBridge } from '../testing/mockBridge'
-import { click, logText, renderApp, runButton } from '../testing/render'
+import { click, logText, renderApp, runButton, fileButton } from '../testing/render'
 import manifest from '../params.generated.json'
 
 describe('rust-security: working directory', () => {
@@ -13,7 +13,7 @@ describe('rust-security: working directory', () => {
     const mock = installMockBridge()
     await renderApp(mock)
     mock.nextPickInput = '/d/a.mzML'
-    await click(screen.getByRole('button', { name: /^(Choose file|Change)…$/ }))
+    await click(fileButton())
     const name = document.getElementById('out-name') as HTMLInputElement
     expect(name.value).toBe('a')
     await act(async () => {
@@ -37,7 +37,7 @@ describe('rust-security: cancel exit status', () => {
     const mock = installMockBridge()
     const c = await renderApp(mock)
     mock.nextPickInput = '/d/a.mzML'
-    await click(screen.getByRole('button', { name: /^(Choose file|Change)…$/ }))
+    await click(fileButton())
     await click(runButton())
     await click(screen.getByRole('button', { name: /Cancel/ }))
     expect(mock.cancelCalls).toBe(1)
@@ -51,7 +51,7 @@ describe('rust-security: cancel exit status', () => {
     const mock = installMockBridge()
     const c = await renderApp(mock)
     mock.nextPickInput = '/d/a.mzML'
-    await click(screen.getByRole('button', { name: /^(Choose file|Change)…$/ }))
+    await click(fileButton())
     await click(runButton())
     await act(async () => mock.emitDone({ ok: false, code: null, runId: mock.lastRunId }))
     expect(logText(c)).toContain('stopped before it finished')
@@ -64,7 +64,7 @@ describe('rust-security: crash cause', () => {
     const mock = installMockBridge()
     const c = await renderApp(mock)
     mock.nextPickInput = '/d/a.mzML'
-    await click(screen.getByRole('button', { name: /^(Choose file|Change)…$/ }))
+    await click(fileButton())
     await click(runButton())
     await act(async () =>
       mock.emitDone({ ok: false, code: null, message: 'killed by signal 11 (SIGSEGV; the program crashed)', runId: mock.lastRunId })

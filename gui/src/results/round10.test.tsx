@@ -20,7 +20,7 @@ import { BRIEF_HINT, PARAM_BY_NAME } from '../paramLayout'
 import { OverwriteQuestion } from '../shell/Questions'
 import SpectrumPanel from '../spectrum/SpectrumPanel'
 import { installMockBridge } from '../testing/mockBridge'
-import { click, flush, openGroup, renderCharacterizeApp } from '../testing/render'
+import { click, flush, openGroup, renderCharacterizeApp, showStep } from '../testing/render'
 import triageTsv from '../fixtures/cli-1.15/workflows/triage/run01.census_sorted.tsv?raw'
 import shortlistTsv from '../fixtures/cli-1.15/ecoli_ms2_small_0.3da.shortlist.tsv?raw'
 
@@ -38,6 +38,7 @@ describe('round 10, 4: the alkylation note says where Extension is and what the 
   it('before and after the tick, with a link to the field', async () => {
     const mock = installMockBridge()
     await renderCharacterizeApp(mock)
+    showStep(4)
     const note = (): HTMLElement => document.getElementById('out-alkylation_out-d')!
     // Off: nothing is raised yet, so the note says what turning it on would do (round 10 major 1).
     expect(note().textContent).toBe('Turning it on raises Extension 2 → 3 (Advanced › Tagging); that changes every tag; species and digest are validated at 2.')

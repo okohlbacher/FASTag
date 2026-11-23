@@ -1,7 +1,7 @@
 // The workflows of the Setup screen (doc/GUI-WORKFLOWS.md section 1): named,
 // read-only presets a session starts from. Each is a diff over FASTag's own
 // defaults; a user preset is a diff over one of them or over the defaults
-// (presetDiff.ts). "Export tags" is where the app lands.
+// (presetDiff.ts). "Generate tags" is where the app lands.
 //
 // A workflow shows only the fields a typical user changes for its question
 // (`basic`, Settings) and its products (`outputs`, the Outputs checklist).
@@ -12,6 +12,14 @@ import { initialValues } from './useSession'
 import { rebaseOutputs } from '../app/paths'
 
 export type TaskId = 'export-tags' | 'run-qc' | 'mass-shift' | 'species' | 'db-reduction' | 'triage' | 'characterize'
+
+/// The three groups of step 1.
+export type TaskGroup = 'tags' | 'sample' | 'quality'
+export const TASK_GROUPS: readonly { id: TaskGroup; title: string }[] = [
+  { id: 'tags', title: 'Look at the tags' },
+  { id: 'sample', title: 'Learn about the sample' },
+  { id: 'quality', title: 'Check run quality' }
+]
 
 export interface Task {
   id: TaskId
@@ -25,10 +33,32 @@ export interface Task {
   /// on by its output name (qc.tsv), which goes beside the tags output once
   /// there is one (rebaseOutputs).
   values: Record<string, ParamValue>
-  /// The fields Settings shows, in order: the workflow's own inputs first.
+  /// The settings step 3 shows, in order (no input files: those are
+  /// `required` and `optionalInputs`, step 2).
   basic: string[]
-  /// Inputs of `basic` the run cannot do without.
+  /// Input files the run cannot do without (step 2). The Filter database
+  /// stands in for the Protein database (setup/inputs.ts STANDS_IN).
   required?: string[]
+  /// Input files the workflow can use but does not need, by name, in the
+  /// order of step 2's Add optional input menu (setup/inputs.ts INPUTS has
+  /// each one's effect line).
+  optionalInputs?: string[]
+  /// Settings that describe the sample rather than tune the workflow:
+  /// step 2's "About these spectra", beside Instrument and Fixed
+  /// modifications.
+  about?: string[]
+  /// Step 1's tile and its detail panel (doc/GUI-SETUP-WIZARD.md 3): the
+  /// question it answers, what it gives, when to use it and when not, and a
+  /// run-time class (never a number: only tagging speed is measured).
+  question: string
+  gets: string
+  use: string
+  notFor: string
+  time: 'short' | 'longer'
+  timeNote: string
+  group: TaskGroup
+  /// "Recommended to start" on its tile.
+  recommended?: true
   /// One gray line under each basic field, for this workflow.
   help: Record<string, string>
   /// Its products in the Outputs checklist (setup/products.ts), in order.
@@ -53,13 +83,21 @@ const ALL: Record<string, ParamValue> = { threads: '0' }
 export const TASKS: readonly Task[] = [
   {
     id: 'export-tags',
-    label: 'Export tags',
+    label: 'Generate tags',
+    question: 'Which sequence tags do my spectra carry?',
+    gets: 'A table of tags per spectrum with a confidence per residue, for assembly or other tools.',
+    use: 'De novo assembly, or export of tags to other tools.',
+    notFor: 'Identifying peptides: these are tags, not identifications.',
+    time: 'short',
+    timeNote: 'tagging only',
+    group: 'tags',
     blurb: 'Sequence tags from every spectrum, with per-residue confidence, for de novo assembly and export.',
     products: 'tags table',
     // Extension 3 (round 11): a seed of 3 can grow to 9 residues, so the
     // assembly reads (8 residues and more by default) are not empty.
     values: { ...ALL, res_conf: true, extension: '3' },
     basic: ['tag_length', 'extension', 'max_evalue', 'max_tags', 'res_conf'],
+    optionalInputs: ['fasta', 'entrapment_fasta'],
     help: {
       tag_length: 'Residues in a seed tag; 3 suits most runs.',
       extension: '3 lets a seed of 3 grow to 9.',
@@ -73,6 +111,13 @@ export const TASKS: readonly Task[] = [
   {
     id: 'run-qc',
     label: 'Run QC',
+    question: 'Is this run usable, and how was it measured?',
+    gets: 'A QC report: spectra counts and resolution per analyzer, charges, labels, tag yield and the instrument.',
+    use: 'Checking a run before analysis, or comparing the runs of a batch.',
+    notFor: 'What the sample contains: use Characterize a run.',
+    time: 'short',
+    timeNote: 'tagging only',
+    group: 'quality',
     blurb: 'QC of one run: MS/MS counts and resolution by analyzer, charges, isobaric kit, tag yield and instrument.',
     products: 'QC report',
     values: { ...ALL, qc_out: 'qc.tsv' },
@@ -87,6 +132,13 @@ export const TASKS: readonly Task[] = [
   {
     id: 'mass-shift',
     label: 'Mass-shift survey',
+    question: 'Which modifications does my sample carry, without guessing them first?',
+    gets: 'The mass shifts between tags and your proteins, with sites and modification names.',
+    use: 'Unexpected or unknown modifications.',
+    notFor: 'Confirmed identifications: shifts and placements are candidates without FDR control.',
+    time: 'longer',
+    timeNote: 'places every tag on the FASTA',
+    group: 'sample',
     blurb: 'Blind modification search: mass shifts between tags and the database, with sites and UniMod names.',
     products: 'shift table',
     values: {
@@ -97,7 +149,7 @@ export const TASKS: readonly Task[] = [
       delta_counts_out: 'delta_counts.tsv',
       extension: '3'
     },
-    basic: ['recon_fasta', 'extension', 'recon_missed_cleavages'],
+    basic: ['extension', 'recon_missed_cleavages'],
     required: ['recon_fasta'],
     help: {
       recon_fasta: 'The FASTA the tags are placed on (tryptic peptides); shifts are measured against it.',
@@ -110,6 +162,13 @@ export const TASKS: readonly Task[] = [
   {
     id: 'species',
     label: 'Species',
+    question: 'Which organisms does my sample contain?',
+    gets: 'Only the species, ranked at a rank you choose. Characterize a run includes this.',
+    use: 'Contamination checks, mixed or unknown samples.',
+    notFor: 'Ion-trap data: the calls are unreliable at the wide tolerances it needs.',
+    time: 'short',
+    timeNote: '10% of the spectra is usually enough',
+    group: 'sample',
     blurb: 'Which taxa the sample contains, from the bundled taxonomy index. No FASTA needed.',
     products: 'species report',
     // Extension 2 is the paper-validated setting (Q1): seed 3 plus 2 x 2
@@ -117,6 +176,7 @@ export const TASKS: readonly Task[] = [
     values: { ...ALL, species: true, extension: '2' },
     // The presence call is experimental: under Advanced (Species).
     basic: ['species_rank', 'subsample_fraction'],
+    optionalInputs: ['taxdb'],
     help: {
       species_rank: 'The taxonomic level of the report.',
       subsample_fraction: 'All spectra by default; 10% is usually enough.'
@@ -127,6 +187,13 @@ export const TASKS: readonly Task[] = [
   {
     id: 'db-reduction',
     label: 'Database reduction',
+    question: 'Can my search use a smaller database?',
+    gets: 'Files to run your own Sage, Comet or MSFragger search with: a protein shortlist, a reduced FASTA and its settings.',
+    use: 'Large or multi-species databases, before a search.',
+    notFor: 'A final result: it may drop proteins your full search would find. Compare with a full search before relying on it.',
+    time: 'longer',
+    timeNote: 'places every tag on the FASTA',
+    group: 'sample',
     blurb: 'A protein shortlist, a reduced FASTA and a Sage, Comet or MSFragger configuration for your search.',
     products: 'shortlist',
     // The shortlist recipe of doc/SHORTLIST.md. It is not validated: it
@@ -147,11 +214,13 @@ export const TASKS: readonly Task[] = [
     },
     // The protease is a search setting as in any search tool (round 11);
     // the Comet template shows only with Comet (it waits on Search engine).
-    basic: ['recon_fasta', 'shortlist_background', 'search_config_template', 'shortlist_protease', 'search_engine', 'variable_modifications'],
+    basic: ['variable_modifications'],
+    // What the search will be: step 2, About these spectra.
+    about: ['search_engine', 'search_config_template', 'shortlist_protease'],
     required: ['recon_fasta'],
+    optionalInputs: ['shortlist_background'],
     help: {
       recon_fasta: 'The FASTA to shortlist from.',
-      shortlist_background: 'Host and contaminant proteins, always kept in the reduced FASTA.',
       search_config_template: 'Your comet.params (from comet -p); without it a fragment to merge by hand.',
       shortlist_protease: 'Trypsin; Auto for another or unknown digest.',
       search_engine: 'The engine the configuration is for.',
@@ -165,12 +234,19 @@ export const TASKS: readonly Task[] = [
   {
     id: 'triage',
     label: 'Identifiability triage',
+    question: 'Which spectra could be identified but were not?',
+    gets: 'Every spectrum ranked by how identifiable it is, and marked when your search found it.',
+    use: 'Finding missed identifications after a search.',
+    notFor: 'Batch mode with identifications: one ID file cannot belong to every input.',
+    time: 'short',
+    timeNote: 'tagging plus one row per spectrum',
+    group: 'quality',
     blurb: 'Rank MS/MS spectra by how identifiable they are (experimental score), and mark those your search identified.',
     products: 'ranking',
     values: { ...ALL, census: true, census_score: true, census_sorted_out: 'census_sorted.tsv' },
-    basic: ['census_ids', 'census_ids_fdr', 'census_triage_evalue'],
+    basic: ['census_ids_fdr', 'census_triage_evalue'],
+    optionalInputs: ['census_ids'],
     help: {
-      census_ids: 'Optional: this run\'s idXML or mzIdentML, with q-values; it adds ID q-value and Triage E-value.',
       census_ids_fdr: 'The q-value a hit needs to count as identified.',
       census_triage_evalue: 'An unidentified spectrum this good is a candidate.'
     },
@@ -180,6 +256,14 @@ export const TASKS: readonly Task[] = [
   {
     id: 'characterize',
     label: 'Characterize a run',
+    question: 'What was done to this sample before it was measured?',
+    gets: 'The protease, labels, glycopeptides and species, from 10% of the spectra.',
+    use: 'An unknown or legacy data set, before choosing search settings.',
+    notFor: 'A final call on very few spectra: the calls then say \'too little evidence\'.',
+    time: 'short',
+    timeNote: '10% of the spectra',
+    group: 'sample',
+    recommended: true,
     blurb: 'Protease, labels, glycopeptides and species from 10% of the spectra; alkylation on request.',
     products: '4 reports',
     // No alkylation report by default: it places tags on a shipped proteome,
@@ -196,6 +280,7 @@ export const TASKS: readonly Task[] = [
       subsample_fraction: '0.1'
     },
     basic: ['subsample_fraction'],
+    optionalInputs: ['taxdb'],
     help: {
       subsample_fraction: '10% gives stable calls in a tenth of the time.'
     },
@@ -210,6 +295,9 @@ export const TASKS: readonly Task[] = [
 ]
 
 export const LANDING_TASK: TaskId = 'export-tags'
+
+/// The order of the tiles in step 1, by group: the recommended start first.
+export const TILE_ORDER: readonly TaskId[] = ['export-tags', 'characterize', 'species', 'mass-shift', 'db-reduction', 'run-qc', 'triage']
 
 /// The key of the last-used values that names the workflow they ran in
 /// (not a parameter: the form renders no such field).

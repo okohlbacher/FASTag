@@ -18,7 +18,7 @@ import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdir
 import { tmpdir } from 'node:os'
 import { basename, dirname, join } from 'node:path'
 import { spawnSync } from 'node:child_process'
-import { ELEMENT, Session, until } from './wd.mjs'
+import { ELEMENT, Session, chooseTask, toStep, until } from './wd.mjs'
 
 const APP = process.env.FASTAG_APP
 const OUT = process.env.E2E_OUT || tmpdir()
@@ -44,10 +44,11 @@ const cliEnv = () => ({
 
 const tagsOf = (input) => join(dirname(input), basename(input).replace(/\.[^.]+$/, '') + '.tags.tsv')
 
-/** Click Run once Setup holds @p input: the Outputs card names the run after
+/** Click Run once Setup holds @p input: Outputs & run names the run after
  *  it (Run name = the input's stem), so Run starts this file, not another. */
 async function runOn(s, input, timeoutMs = 20000) {
   const stem = basename(input).replace(/\.[^.]+$/, '')
+  await toStep(s, 'Outputs & run')
   await until(`the run name ${stem}`, () => s.exec("const e = document.getElementById('out-name'); return !!e && e.value === arguments[0]", stem), timeoutMs)
   await s.click(await s.button('Run', timeoutMs))
 }
@@ -100,19 +101,15 @@ async function view(s, id) {
   await until(`the ${id} view`, () => s.exec(`const v = document.querySelector('.view[data-view="' + arguments[0] + '"]'); return !!v && !v.hidden`, id), 5000)
 }
 
-/** Pick the Setup task whose card reads @p label. */
+/** Choose the Setup task whose tile reads @p label (tile, Continue). */
 async function task(s, label) {
   await view(s, 'setup')
-  const ok = await s.exec(`const want = arguments[0];
-    for (const l of document.querySelectorAll('label')) {
-      if ((l.textContent || '').includes(want)) { const r = l.querySelector('input[type=radio]'); if (r) { r.click(); return true } }
-    }
-    return false`, label)
-  assert.ok(ok, `no task "${label}" on Setup`)
+  await chooseTask(s, label)
 }
 
 async function chooseInput(s, path) {
   await s.exec('const p = arguments[0]; window.fastag.pickInput = async () => p', path)
+  await toStep(s, 'Inputs')
   await s.click(await s.button('Choose file…'))
 }
 
@@ -152,13 +149,27 @@ test('probe: the installed app runs its bundled CLI', { timeout: 180000 }, () =>
     await shot(s, '01-setup-ready')
   }))
 
+// The wizard's cold start (doc/GUI-SETUP-WIZARD.md): Continue, Choose
+// file…, Run, as the app opens.
+test('cold start: Continue, Choose file…, Run', { timeout: 600000 }, () =>
+  withApp(async (s) => {
+    await until('step 1 of Setup', () => s.exec("return document.querySelector('nav[aria-label=\"Setup steps\"] [aria-current=\"step\"]')?.getAttribute('data-step-btn') === '1'"), 10000)
+    await s.click(await s.button('Continue with Generate tags ›'))
+    const input = copyIn(process.env.E2E_MZML, 'cold.mzML')
+    await s.exec('const p = arguments[0]; window.fastag.pickInput = async () => p', input)
+    await s.click(await s.button('Choose file…'))
+    await s.click(await s.button('Run'))
+    await s.waitText(/Showing ([\d,]+) of ([\d,]+)/, 480000)
+    assert.ok(existsSync(tagsOf(input)), `${tagsOf(input)} was not written`)
+  }))
+
 for (const [kind, env, name] of [
   ['mzML', 'E2E_MZML', 'ecoli.mzML'],
   ['MGF', 'E2E_MGF', 'ecoli.mgf']
 ]) {
   test(`export tags (${kind}): run with defaults, the Tags table, the CLI's own output`, { timeout: 600000 }, () =>
     withApp(async (s) => {
-      await task(s, 'Export tags')
+      await task(s, 'Generate tags')
       const input = copyIn(process.env[env], name)
       await chooseInput(s, input)
       await runOn(s, input)
@@ -264,7 +275,7 @@ test('characterize: species, digest, label reports and the Overview', { timeout:
 
 test('refusal: a file FASTag refuses is blocked before the run, with its reason', { timeout: 300000 }, () =>
   withApp(async (s) => {
-    await task(s, 'Export tags')
+    await task(s, 'Generate tags')
     // DIA spectra: FASTag refuses them (exit 11) and says why.
     const input = copyIn(process.env.E2E_REFUSED, 'dia_like.mzML')
     const d = dirname(input)

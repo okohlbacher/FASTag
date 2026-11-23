@@ -7,7 +7,7 @@ import { act, fireEvent, render, screen, waitFor, within } from '@testing-librar
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import ResultsTable, { MAX_DOM_ROWS } from './ResultsTable'
 import { installMockBridge, type MockBridge } from './testing/mockBridge'
-import { addBatch, click, goTo, logText, pickSingle, renderApp, runButton } from './testing/render'
+import { addBatch, click, goTo, logText, pickSingle, renderApp, runButton, showStep } from './testing/render'
 import { applyLastUsed, formValue } from './testing/lastUsed'
 import type { ResultsPage, RunRecord } from './types'
 
@@ -21,7 +21,8 @@ describe('P0a: last-used is an offer, never applied on its own (D6)', () => {
     // Nothing applied: the form shows FASTag's defaults.
     expect(await formValue('tag_length')).toBe('3')
     expect(await formValue('species')).toBe(false)
-    const chip = screen.getByRole('button', { name: 'Apply last-used (2)' }) // max_tags 50 is the default; version is not rendered
+    showStep(1)
+    const chip = screen.getByRole('button', { name: 'Continue last run (2)' }) // max_tags 50 is the default; version is not rendered
     expect(chip.getAttribute('title')).toBe('The settings of your last run: -tag_length 7 -species')
     await pickSingle(mock, '/d/a.mzML')
     await click(runButton())

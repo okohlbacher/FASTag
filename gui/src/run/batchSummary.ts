@@ -30,7 +30,7 @@ export const SUMMARY_COLUMNS = ['genus', 'protease', 'label', 'alkylation'] as c
 /// comparison across files needs (doc/GUI-WORKFLOWS.md 1, Batch).
 export const QC_COLUMNS = ['ms2', 'yield', 'charge', 'analyzer', 'instrument', 'kit'] as const
 /// The key figures of the other workflows, each from its own report: the
-/// log's counts (Export tags), the mass-shift accounting and table, the
+/// log's counts (Generate tags), the mass-shift accounting and table, the
 /// shortlist, the identifiability summary.
 export const WORKFLOW_COLUMNS = ['spectra', 'tagRate', 'placed', 'topShift', 'kept', 'config', 'censusTagged', 'identScore', 'glyco'] as const
 export type SummaryColumn = (typeof SUMMARY_COLUMNS)[number] | (typeof QC_COLUMNS)[number] | (typeof WORKFLOW_COLUMNS)[number]

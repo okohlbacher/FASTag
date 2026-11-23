@@ -3,10 +3,10 @@
 // so the Overview's counts are the counts of the tabs beside it: the tags of
 // the Overview are the rows of Tags, the MS2 spectra those of the QC report
 // and the identifiability ranking.
-import { test, expect, openApp, goTo } from './fixtures'
+import { test, expect, openApp, goTo, chooseTask, toStep } from './fixtures'
 
 const RUNS = [
-  { name: 'Export tags', tags: '6,279' },
+  { name: 'Generate tags', tags: '6,279' },
   { name: 'Run QC', tags: '5,937', qc: '139' },
   { name: 'Mass-shift survey', tags: '6,279', fasta: '/data/ecoli.fasta' },
   { name: 'Species', tags: '6,301' },
@@ -18,7 +18,8 @@ const RUNS = [
 for (const w of RUNS) {
   test(`${w.name}: the Overview counts what its tabs show`, async ({ page }) => {
     await openApp(page, 'workflows')
-    await page.getByRole('radio', { name: new RegExp(`^${w.name}`) }).check()
+    await chooseTask(page, w.name)
+    await toStep(page, 'Inputs')
     await page.getByRole('button', { name: 'Choose file…' }).click()
     await page.locator('#instrument').selectOption('iontrap-cid')
     if (w.fasta) await page.locator('#p-recon_fasta').fill(w.fasta)

@@ -124,7 +124,7 @@ export default function ParamField({ spec, value, onChange, onPickFile, needs, u
           brief ?? hint ?? briefHint(sentence(hintText(spec.name, plainOptions(spec.description))))
         )}
         {/* A Settings field (brief) the workflow set off the CLI's default
-            (Export tags: Extension 3, FASTag's 0) says so on its hint line,
+            (Generate tags: Extension 3, FASTag's 0) says so on its hint line,
             so a run compared with a plain CLI run holds no surprise. */}
         {defaultNote && (
           <span id={`${helpId}-c`} className="changed">

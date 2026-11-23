@@ -176,6 +176,10 @@ namespace
   ///                beam-type CID (both mzML readers give {ETD, EThcD});
   ///   split_filter the same peaks, no activation term, filter string
   ///                "...@etd50.00@hcd25.00 [..]" (hybrid by the token rule);
+  ///   split_prec   split plus the unreacted precursor and every
+  ///                charge-reduced species (monoisotopic, +1 and +2
+  ///                isotopes, one H less) at 20x the base peak: the peaks
+  ///                the c/z preparation drops and the b/y one keeps;
   ///   bycz         b, y, c and z-dot ions, EThcD;
   ///   etd          c and z-dot ions, ETD;
   ///   cid          b and y ions, CID.
@@ -183,12 +187,12 @@ namespace
   {
     if (argc < 5)
     {
-      std::cerr << "usage: hybrid_ions_test --write-mzml <fasta> <out.mzML> <split|split_filter|bycz|etd|cid> [n]\n";
+      std::cerr << "usage: hybrid_ions_test --write-mzml <fasta> <out.mzML> <split|split_filter|split_prec|bycz|etd|cid> [n]\n";
       return 2;
     }
     const std::string kind = argv[4];
     CzSynth::Ions ions;
-    if (kind == "split" || kind == "split_filter") ions = CzSynth::Ions::SPLIT;
+    if (kind == "split" || kind == "split_filter" || kind == "split_prec") ions = CzSynth::Ions::SPLIT;
     else if (kind == "bycz") ions = CzSynth::Ions::BYCZ;
     else if (kind == "etd") ions = CzSynth::Ions::CZ;
     else if (kind == "cid") ions = CzSynth::Ions::BY;
@@ -231,7 +235,23 @@ namespace
       Precursor pr;
       pr.setMZ(sp.prec_mz);
       pr.setCharge(z);
-      if (kind == "split" || kind == "bycz") pr.setActivationMethods({AM::ETD, AM::EThcD});
+      if (kind == "split_prec")
+      {
+        constexpr double H = 1.007276, C13 = 1.0033548;
+        const double M = (sp.prec_mz - H) * z;
+        double top = 0;
+        for (const auto& pk : sp.spec) top = std::max(top, static_cast<double>(pk.getIntensity()));
+        for (int q = z; q >= 1; --q)
+          for (const double d : {0.0, C13 / q, 2 * C13 / q, -H / q})
+          {
+            OpenMS::Peak1D pk;
+            pk.setMZ((M + q * H) / q + d);
+            pk.setIntensity(static_cast<float>(20 * top));
+            sp.spec.push_back(pk);
+          }
+        sp.spec.sortByPosition();
+      }
+      if (kind == "split" || kind == "split_prec" || kind == "bycz") pr.setActivationMethods({AM::ETD, AM::EThcD});
       else if (kind == "etd") pr.setActivationMethods({AM::ETD});
       else if (kind == "cid") pr.setActivationMethods({AM::CID});
       sp.spec.setPrecursors({pr});

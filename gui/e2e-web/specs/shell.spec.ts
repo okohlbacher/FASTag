@@ -4,7 +4,7 @@
 // screenshots of every view in both themes at both window sizes, kept as
 // test artifacts (e2e-web/test-results) for review.
 import type { Page } from '@playwright/test'
-import { test, expect, goTo, openApp } from './fixtures'
+import { test, expect, goTo, openApp, toStep } from './fixtures'
 
 const e2e = (page: Page, f: 'menu' | 'drop', arg: unknown): Promise<void> =>
   page.evaluate(
@@ -37,6 +37,7 @@ test('the top bar, the keyboard and the View menu switch between the four views'
 
 test('a run moves to Results with the pill; it finishes into History', async ({ page }) => {
   await openApp(page, 'default', 'defaults')
+  await toStep(page, 'Inputs')
   await page.getByRole('button', { name: 'Choose file…' }).click()
   await page.getByRole('button', { name: 'Run', exact: true }).click()
   await expect(page.getByText('Showing 2,028 of 2,028')).toBeVisible()
@@ -114,6 +115,7 @@ test('Help finds whole pages and CLI options, announces results and closes from 
 test('the theme button overrides the system theme with the D9 colours, and changes no number', async ({ page }) => {
   await page.emulateMedia({ colorScheme: 'light' })
   await openApp(page, 'default', 'defaults')
+  await toStep(page, 'Inputs')
   await page.getByRole('button', { name: 'Choose file…' }).click()
   await page.getByRole('button', { name: 'Run', exact: true }).click()
   await expect(page.getByText('Showing 2,028 of 2,028')).toBeVisible()
@@ -166,6 +168,7 @@ test('a view switch that hides the focused control moves focus into the view sho
       const v = a.closest<HTMLElement>('.view')
       return v && v.offsetParent !== null ? (v.dataset.view ?? '?') : 'hidden or outside'
     })
+  await toStep(page, 'Inputs')
   await page.getByRole('button', { name: 'Choose file…' }).click()
   // By keyboard: WebKit does not focus a clicked button.
   await page.getByRole('button', { name: 'Run', exact: true }).focus()
@@ -194,6 +197,7 @@ for (const [w, h] of [
     for (const scheme of ['light', 'dark'] as const) {
       await page.emulateMedia({ colorScheme: scheme })
       await openApp(page, 'default', 'defaults')
+      await toStep(page, 'Inputs')
       await page.getByRole('button', { name: 'Choose file…' }).click()
       await page.getByRole('button', { name: 'Run', exact: true }).click()
       await expect(page.getByText('Showing 2,028 of 2,028')).toBeVisible()

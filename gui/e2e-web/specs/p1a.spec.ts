@@ -1,9 +1,10 @@
-import { test, expect, openApp } from './fixtures'
+import { test, expect, openApp, toStep } from './fixtures'
 
 // P1 PR a: each run's events come on its own Channel (the e2e bridge sends
 // them the way events.rs does: phase, batched log, progress, Done last).
 test('the run bar names the phase the run is in, and the time left once measured', async ({ page }) => {
   await openApp(page, 'slow')
+  await toStep(page, 'Inputs')
   await page.getByRole('button', { name: 'Choose file…' }).click()
   await page.getByRole('button', { name: 'Run', exact: true }).click()
   await expect(page.locator('.runbar .what')).toHaveText('Tagging spectra')
@@ -15,6 +16,7 @@ test('the run bar names the phase the run is in, and the time left once measured
 
 test('a batch keeps each job on its own Channel: run02 fails, run01 and run03 finish', async ({ page }) => {
   await openApp(page, 'batch-fail')
+  await toStep(page, 'Inputs')
   await page.getByRole('radio', { name: 'Batch' }).check()
   await page.getByRole('button', { name: 'Add files…' }).click()
   await page.getByRole('button', { name: /^Run 3 remaining files/ }).click()

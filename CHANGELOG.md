@@ -2,6 +2,86 @@
 
 ## Unreleased
 
+- **Resolved tags are ranked by `-resolve_score cstar` (the default).** Each step a resolved tag adds is worth its C*
+  log-odds (mass error in tolerance units at a Da tolerance, rivals, support, complements at any charge) less
+  `-resolve_threshold` (3), and rank 1 is the first resolved tag without a peak and its own complement. `steplogodds`
+  (the same sum with the simpler 1.15 step model and no rank-1 rule), `evidence` (summed E-value evidence) and
+  `anchor` (the resolved tag of the best single tag first, the rest by `steplogodds`) can be chosen instead. Both
+  `-resolved_out` and the GUI, when it resolves itself, use this ranking.
+- **Held-out result behind it (preregistration amendment 3):** the first resolved tag was right in 84.9% of scans
+  against 81.5% under `steplogodds` on PXD020401 (20 ppm), and in 59.8% against 48.0% on PXD031975 (0.5 Da).
+
+- **CLI: tag merging, `-resolved_out` and `-tag_graph_out`.** FASTag merges the tags of each spectrum into resolved
+  tags itself, as the desktop app's Spectrum tab did (src/TagGraph.h, a port of its graph with the same tie-breaks):
+  one row per resolved tag in rank order (sequence N→C, series call, flanks, score, evidence, peaks, steps, the member
+  rows of `-out`, and the ranking it was made with, `scheme` and `threshold`), and the merge graph, one row per
+  placement. Ranked by `-resolve_score` (cstar by default, above) and `-resolve_threshold`; tags with E <= 1
+  (`-resolve_max_evalue`); `-resolve_join` joins tags that only touch. Off unless asked for; not under `-stream`.
+  A two-pass hybrid spectrum (`-ion_series_hybrid both`) is merged on the union of its b/y and c/z• preparations,
+  which `-dump_spectrum` now prints for it, so its c/z rows are no longer left out when the precursor peaks the b/y
+  preparation keeps crowd the peak budget.
+  The GUI takes OpenMS's residue masses, as the CLI does: on PXD003531, PXD000001, PXD076528, PXD020401 and PXD031975
+  the GUI's resolved tags equal the CLI's on every scan and rank, under each of the four rankings.
+
+- **CLI: `-resolved_out` says whether a resolved tag lies at a peptide terminus.** A new last column, `terminus`:
+  `N` or `C` when a flank is 0 (or a terminal modification of the run) within the tolerance of its side (the
+  fragment tolerance for the side read from the peaks, plus the precursor's for the other, at the `-isotope_error`
+  offsets), else `N+K` / `C+[KQ]` when it is one residue away; `N,C+R` for both, empty for neither. The flanks are
+  tested before the clamp at 0 of `nterm_mass`/`cterm_mass`, so a tag longer than the precursor allows is at no
+  terminus. The other columns, their order and the ranking are unchanged.
+
+- **GUI: FASTag's own resolved tags, and the merge graph.** When the CLI has `-resolved_out` and `-tag_graph_out`,
+  the app writes them beside the tags (`<stem>.resolved.tsv`, `<stem>.taggraph.tsv`) and the Spectrum tab's All tags,
+  resolved shows FASTag's resolution and names its ranking (it says which one is used, and falls back to the GUI's
+  when the tables do not fit the peaks or hold no row of the spectrum). The fallback ranks as the run did: the
+  ranking FASTag wrote on the table's rows, else the run's settings; tables without either are said to be of a
+  ranking not recorded, and the GUI takes the default. The new Merge graph view draws the tag graph around the
+  resolved tag selected, on its residues N to C: its tags as a staircase of bars under a residue ruler with bold
+  joins, conflicting resolved tags above, tags inside it, touching ones and the rest below; a resolved tag that reads
+  it again on its complement peaks (every peak, not just two) is a b+y badge, not a second bar; a related one of the other series is written in the ruler's direction, marked C→N; unused tags behind a toggle; choosing a bar
+  re-anchors on its resolved tag.
+- **GUI: termini of resolved tags.** The resolved tags table, the tag line and the merge graph write N–EPTIDE,
+  EPTIDE–C, and N–(K)… / …(K)–C muted one residue away, from `-resolved_out`'s `terminus` column, or computed alike
+  for older tables and the GUI's own resolution; the plot ticks b0/y0 of the selected one when in view.
+
+- **GUI: all tags of a spectrum, resolved.** The Spectrum tab's **All tags, resolved** places every tag of the spectrum
+  on its peaks and assembles the tags of one ion series that overlap and agree into longer resolved tags (a tag graph:
+  ions as nodes, steps of tags as edges). Row orders of one gapped tag count once, isobaric readings of a step stay
+  apart ({Q|[AG]}), conflicting and same-series readings are named, with an E-value cutoff (default 1). A double-click
+  on a row in Tags opens its spectrum. Choosing a resolved tag draws the others against it (same step, differing
+  step, elsewhere), shows its mass errors under the axis (each step, summed from the first peak, and the steps that
+  differ) and lists the tags behind it aligned peak by peak. With the run's tag placements (`-recon_out`), the peptide
+  most tags of the spectrum were placed on is named and its fragments are drawn as a ruler; a candidate, not an
+  identification.
+
+- **Resolved tags: the `steplogodds` ranking.** It ranks the resolved tags by the log-odds of their steps (E-value,
+  mass error, intensity of both peaks, complement ions, gap steps), less a threshold, instead of by summed E-values
+  (`evidence`). Preregistered held-out test on PXD076528 (Orbitrap Astral, 4,464 scans): the first resolved tag right
+  in 58.7% of scans (best single tag 58.2%, summed E-values 40.3%), with 11% more correct residues than the best
+  single tag. It is no longer the default: `cstar` (above) did better on the later held-out sets.
+
+- **GUI: b or y, judged on the peaks.** A tag does not say whether it was read from b or y ions, and the
+  Spectrum tab used to call the ladder walked from nterm_mass "b" and the one from cterm_mass "y", which was wrong for
+  about a quarter to half of correct tags and showed their sequence reversed. It now judges the series on the peaks
+  (a ions beside b ions, a ions beside the complement, a tryptic C-terminal K/R; the database peptide when the run
+  placed the tags), shows the tag N→C under that series, marks likely calls with ? and says "b or y" when the
+  spectrum does not tell; a ladder and its complement are opposite series. Tags on the same peaks are assembled
+  whichever flank they were walked from.
+
+- **GUI: Tags table.** Each row has a spectrum icon that opens it in the Spectrum tab. Length, Extended, Gapped and
+  Residue conf. are not shown until ticked under Columns…; Min. conf. and Mean conf. stay.
+
+- **GUI: the task Export tags is now called Generate tags.**
+- **GUI: Setup is a task-first wizard.** Setup asks one thing at a time in four steps, **Task**, **Inputs**,
+  **Settings** and **Outputs & run**, instead of five cards on one page. Step 1 shows the seven tasks as tiles in three
+  groups, each with the question it answers; the selected tile explains what you get, what you need, when to use it and
+  when not, and Continue chooses it. FASTag says up front that it reads tags and does not identify proteins with FDR
+  control. The task decides what Inputs asks for: a protein FASTA only for Mass-shift survey and Database reduction,
+  optional inputs (Filter database, taxonomy, background proteins, identifications) one click away with their effect,
+  and the instrument and fixed modifications as "About these spectra". Changing the task keeps the input files it uses
+  and the instrument you chose and says what it kept and dropped, with Undo. Outputs & run shows the command line. An
+  input file that is not on disk is named and blocks Run. Every option stays reachable (Advanced, the parameter search);
+  presets, last-used (now **Continue last run**), batch runs and the command preview are kept. No CLI default changed.
 - **GUI: in-app Feedback.** A **Feedback** button in the top bar (also Help › Send Feedback…, Cmd/Ctrl+Shift+F)
   takes a screenshot of the window (the webview's own snapshot: WKWebView, WebView2, WebKitGTK; no screen-recording
   permission), records the app and engine versions, the system, the view and the settings as typed values (paths only as

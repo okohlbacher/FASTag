@@ -739,14 +739,17 @@ namespace FASTag::Probe
 
   // ---- -dump_spectrum ------------------------------------------------------
 
-  std::string spectrumRecord(const MSSpectrum& spec, std::size_t index, bool picked, const Param& p)
+  std::string spectrumRecord(const MSSpectrum& spec, std::size_t index, bool picked, const Param& p,
+                             const Param* p_cz)
   {
     const bool has_prec = !spec.getPrecursors().empty();
     const double prec_mz = has_prec ? spec.getPrecursors().front().getMZ() : 0.0;
     const int given = has_prec ? std::max(0, spec.getPrecursors().front().getCharge()) : 0;
     // What tag_one tags: an MS2 with peaks and a precursor.
     const bool tagged = spec.getMSLevel() == 2 && !spec.empty() && has_prec;
-    const MSSpectrum peaks = tagged ? preparedPeaks(spec, prec_mz, given, p) : MSSpectrum();
+    const MSSpectrum peaks = !tagged ? MSSpectrum()
+                             : p_cz ? preparedPeaksHybrid(spec, prec_mz, given, p, *p_cz)
+                                    : preparedPeaks(spec, prec_mz, given, p);
     JsonObject o("spectrum");
     o.integer("format", FORMAT).str("native_id", spec.getNativeID()).count("index", index);
     o.integer("ms_level", static_cast<long long>(spec.getMSLevel())).num("rt", spec.getRT());
@@ -873,10 +876,15 @@ namespace FASTag::Probe
     Param p = opt.param;
     const IS::Activation act = IS::activationClass(spec);
     const bool reads_act = IS::autoReadsActivation(kind == Kind::MZPEAK, kind == Kind::MGF);
-    const bool run_column = opt.ion_mode == IS::Mode::CZ
-                            || (opt.ion_mode == IS::Mode::AUTO && reads_act && act == IS::Activation::ELECTRON);
+    // Under -ion_series_hybrid both a hybrid spectrum writes the column too
+    // and is tagged twice; it is dumped as the union of both preparations.
+    const bool run_column =
+        opt.ion_mode == IS::Mode::CZ
+        || (opt.ion_mode == IS::Mode::AUTO && reads_act
+            && (act == IS::Activation::ELECTRON || (opt.hybrid_both && act == IS::Activation::HYBRID)));
     const IS::Series sr = IS::seriesInRun(opt.ion_mode, act, run_column);
     if (spec.getMSLevel() == 2 && sr != IS::Series::BY) p.ion_pair = IS::ionPair(sr);
+    const bool two_pass = spec.getMSLevel() == 2 && IS::hybridTwoPass(opt.ion_mode, act, run_column, opt.hybrid_both);
     // -tolerance_by_analyzer: an ion-trap MS2 at -fragment_tolerance_itms, as
     // the run classes it (RunQC::factsOf: filter string, then the mzML's
     // instrument configurations).
@@ -896,7 +904,9 @@ namespace FASTag::Probe
         p.tol_ppm = false;
       }
     }
-    out.jsonl = spectrumRecord(spec, index, pick_result > 0, p);
+    Param p_cz = p;
+    p_cz.ion_pair = IS::ionPair(IS::Series::CZ);
+    out.jsonl = spectrumRecord(spec, index, pick_result > 0, p, two_pass ? &p_cz : nullptr);
     out.jsonl += JsonObject("end").line();
     return out;
   }

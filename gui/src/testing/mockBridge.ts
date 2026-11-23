@@ -118,6 +118,13 @@ export interface MockBridge extends FastagApi {
   resultsColumns: string[]
   resultsRows: string[][]
   resultsError: Error | null
+  // As browser.rs: resultsQuery refuses ("cancelled") a path resultsOpen
+  // never opened. Off by default (most tests query without an open).
+  resultsOpenOnly: boolean
+  // path -> a table tableQuery serves (filtered by spectrum, in file order);
+  // a path not named here does not open.
+  tables: Record<string, { columns: string[]; rows: string[][] }>
+  tableQueryCalls: ResultsQueryCall[]
   speciesResult: SpeciesReport | null
   // path -> species report; a path not named here reads speciesResult.
   speciesFiles: Record<string, SpeciesReport>
@@ -413,6 +420,8 @@ export function installMockBridge(): MockBridge {
     exportIniCalls: [],
     exportIniError: null,
     commandOf: (call) => [mock.binaryInfo.bin, ...mockArgv(call)],
+    // Every path exists but one whose name says it is missing.
+    pathStatus: (paths) => Promise.resolve(paths.map((path) => ({ path, exists: !/missing/i.test(path), kind: /missing/i.test(path) ? null : ('file' as const) }))),
     commandLine: (params) => {
       const call = params as unknown as RunCall
       mock.commandLineCalls.push(call)
@@ -435,6 +444,9 @@ export function installMockBridge(): MockBridge {
     runCalls: [],
     outputsCheckCalls: [],
     resultsQueryCalls: [],
+    resultsOpenOnly: false,
+    tables: {},
+    tableQueryCalls: [],
     exportCalls: [],
     exportFormats: [],
     holdExport: false,
@@ -615,12 +627,23 @@ export function installMockBridge(): MockBridge {
     resultsQuery: (path, view, offset, limit) => {
       mock.resultsQueryCalls.push({ path, view, offset, limit })
       if (mock.resultsError) return Promise.reject(mock.resultsError)
+      if (mock.resultsOpenOnly && !mock.resultsOpenCalls.includes(path)) return Promise.reject('cancelled')
       return Promise.resolve({
         columns: mock.resultsColumns,
         totalRows: mock.resultsRows.length,
         matchedRows: mock.resultsRows.length,
         rows: mock.resultsRows.slice(offset, offset + limit)
       })
+    },
+    tableQuery: (path, view, offset, limit) => {
+      mock.tableQueryCalls.push({ path, view, offset, limit })
+      const t = mock.tables[path]
+      if (!t) return Promise.reject(`cannot open ${path}`)
+      const sp = t.columns.indexOf('spectrum')
+      const want = view.spectrum
+      const ids = t.rows.map((_, i) => i).filter((i) => want == null || (view.spectrumExact ? t.rows[i][sp] === want : (t.rows[i][sp] ?? '').toLowerCase().includes(want.toLowerCase())))
+      const sel = ids.slice(offset, offset + limit)
+      return Promise.resolve({ columns: t.columns, totalRows: t.rows.length, matchedRows: ids.length, rows: sel.map((i) => t.rows[i]), rowIds: sel, ranked: true, pending: false })
     },
     // The head read: the first rows in file order. Generation 1; the mock
     // sends no events of its own (its resultsQuery is always ranked).

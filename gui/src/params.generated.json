@@ -1221,6 +1221,56 @@
       "toppAdvanced": false
     },
     {
+      "name": "resolve_join",
+      "type": "bool",
+      "default": "false",
+      "description": "Join tags that only touch at a peak into one resolved tag",
+      "required": false,
+      "toppAdvanced": true
+    },
+    {
+      "name": "resolve_max_evalue",
+      "type": "double",
+      "default": "1.0",
+      "description": "Largest E-value of the tags merged into resolved tags",
+      "required": false,
+      "toppAdvanced": true,
+      "min": 0
+    },
+    {
+      "name": "resolve_score",
+      "type": "string",
+      "default": "cstar",
+      "description": "How resolved tags are ranked: cstar (each step a chain adds is worth its C* log-odds of being right, from its peaks, mass error, rivals and support, less -resolve_threshold; rank 1 is the best resolved tag that holds no peak together with its own complement), steplogodds (the same with the simpler 1.15 step model and no complement rule), evidence (summed E-value evidence of its tags) or anchor (the best single tag first, then steplogodds)",
+      "required": false,
+      "toppAdvanced": true,
+      "choices": [
+        "cstar",
+        "steplogodds",
+        "evidence",
+        "anchor"
+      ]
+    },
+    {
+      "name": "resolve_threshold",
+      "type": "double",
+      "default": "3.0",
+      "description": "The log-odds a step must exceed to lengthen a resolved tag (cstar, steplogodds, anchor)",
+      "required": false,
+      "toppAdvanced": true
+    },
+    {
+      "name": "resolved_out",
+      "type": "output-file",
+      "default": "",
+      "description": "Merge each spectrum's tags (of -out, E-value <= -resolve_max_evalue) on its peaks into resolved tags and write one row per resolved tag, best first: sequence N->C, series call, flanks, score, evidence, peaks and steps (both in ascending m/z order: for y and z the steps run C->N, the reverse of sequence), the member rows of -out and the ranking it was made with (scheme, threshold: -resolve_score, -resolve_threshold), and whether it lies at a peptide terminus (terminus: N, C, N,C, or one residue away as N+K or C+[KQ]; empty if neither)",
+      "required": false,
+      "toppAdvanced": false,
+      "formats": [
+        "tsv"
+      ]
+    },
+    {
       "name": "search_config_out",
       "type": "output-file",
       "default": "",
@@ -1718,6 +1768,17 @@
       "required": false,
       "toppAdvanced": false,
       "min": 0
+    },
+    {
+      "name": "tag_graph_out",
+      "type": "output-file",
+      "default": "",
+      "description": "The merge graph of each spectrum: one row per placement of its tags on the peaks, with its layer, series (as judged on its own peaks, before complement pairing: it can be the other series of the pair than the resolved tag's in -resolved_out, which is authoritative), steps (ascending m/z), rows, the resolved tag that uses it and the placements that continue it",
+      "required": false,
+      "toppAdvanced": true,
+      "formats": [
+        "tsv"
+      ]
     },
     {
       "name": "tag_length",

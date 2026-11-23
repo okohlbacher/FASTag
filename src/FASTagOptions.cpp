@@ -1050,6 +1050,44 @@ void TOPPFASTag::registerOptionsAndFlags_()
                       "and the sums that must hold, as key/value TSV",
                       false, true);
   setValidFormats_("delta_counts_out", ListUtils::create<std::string>("tsv"));
+  // ---- tag merging: options ----
+  // The tags of a spectrum merged into resolved tags and ranked
+  // (src/TagGraph.h, the GUI Spectrum tab's merge). Off unless a table is asked for.
+  registerOutputFile_("resolved_out", "<file>", "",
+                      "Merge each spectrum's tags (of -out, E-value <= -resolve_max_evalue) on its peaks into "
+                      "resolved tags and write one row per resolved tag, best first: sequence N->C, series "
+                      "call, flanks, score, evidence, peaks and steps (both in ascending m/z order: for y "
+                      "and z the steps run C->N, the reverse of sequence), the member rows of -out and the "
+                      "ranking it was made with (scheme, threshold: -resolve_score, -resolve_threshold), "
+                      "and whether it lies at a peptide terminus (terminus: N, C, N,C, or one residue "
+                      "away as N+K or C+[KQ]; empty if neither)",
+                      false);
+  setValidFormats_("resolved_out", ListUtils::create<std::string>("tsv"));
+  registerOutputFile_("tag_graph_out", "<file>", "",
+                      "The merge graph of each spectrum: one row per placement of its tags on the peaks, "
+                      "with its layer, series (as judged on its own peaks, before complement pairing: it can "
+                      "be the other series of the pair than the resolved tag's in -resolved_out, which is "
+                      "authoritative), steps (ascending m/z), rows, the resolved tag that uses it and the "
+                      "placements that continue it",
+                      false, true);
+  setValidFormats_("tag_graph_out", ListUtils::create<std::string>("tsv"));
+  registerStringOption_("resolve_score", "<scheme>", "cstar",
+                        "How resolved tags are ranked: cstar (each step a chain adds is worth its C* "
+                        "log-odds of being right, from its peaks, mass error, rivals and support, less "
+                        "-resolve_threshold; rank 1 is the best resolved tag that holds no peak together "
+                        "with its own complement), steplogodds (the same with the simpler 1.15 step model "
+                        "and no complement rule), evidence (summed E-value evidence of its tags) or anchor "
+                        "(the best single tag first, then steplogodds)",
+                        false, true);
+  setValidStrings_("resolve_score", ListUtils::create<std::string>("cstar,steplogodds,evidence,anchor"));
+  registerDoubleOption_("resolve_threshold", "<t>", 3.0,
+                        "The log-odds a step must exceed to lengthen a resolved tag (cstar, steplogodds, anchor)",
+                        false, true);
+  registerDoubleOption_("resolve_max_evalue", "<E>", 1.0,
+                        "Largest E-value of the tags merged into resolved tags",
+                        false, true);
+  setMinFloat_("resolve_max_evalue", 0.0);
+  registerFlag_("resolve_join", "Join tags that only touch at a peak into one resolved tag", true);
 }
 
 bool TOPPFASTag::optionNonDefault_(const std::string& name) const

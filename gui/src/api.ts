@@ -6,6 +6,7 @@ import { listen, type UnlistenFn } from '@tauri-apps/api/event'
 import { open, save } from '@tauri-apps/plugin-dialog'
 import { openUrl } from '@tauri-apps/plugin-opener'
 import type {
+  PathStatus,
   BinaryInfo,
   CliOptions,
   ProbeRun,
@@ -108,6 +109,7 @@ const api: FastagApi = {
 
   outputsCheck: (params: Record<string, unknown>) => invoke<OutputsCheck>('outputs_check', { params }),
   commandLine: (params: Record<string, unknown>) => invoke<string[]>('command_line', { params }),
+  pathStatus: (paths: string[]) => invoke<PathStatus[]>('path_status', { paths }),
   exportIni: (params: Record<string, unknown>, dest: string) => invoke<IniExport>('export_ini', { params, dest }),
   // Each run gets a Channel of its own (GUI-DESIGN 6.2): its events cannot
   // reach another job, and they may arrive before this reply does.
@@ -126,6 +128,8 @@ const api: FastagApi = {
   cancel: () => invoke<{ cancelled: boolean }>('cancel'),
   resultsQuery: (path: string, view: ResultsView, offset: number, limit: number) =>
     invoke<ResultsPage>('results_query', { path, view, offset, limit }),
+  tableQuery: (path: string, view: ResultsView, offset: number, limit: number) =>
+    invoke<ResultsPage>('table_query', { path, view, offset, limit }),
   resultsOpen: (path: string, onEvent: (e: BrowserEvent) => void) => {
     const ch = new Channel<BrowserEvent>()
     ch.onmessage = onEvent

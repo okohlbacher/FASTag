@@ -8,7 +8,8 @@ import { baseValues, startValues, TASKS } from './tasks'
 import { PRODUCT_OF, fileName, isOn, neededBy, setProduct } from './products'
 import { SECTIONS, PARAM_BY_NAME, RENDERED } from '../paramLayout'
 import { PARAM_UI } from '../paramUi'
-import { advancedParams, FOLDED, WIRED } from './SetupForm'
+import { advancedParams, FOLDED, WIRED, inputDependents } from './SetupForm'
+import { aboutParams, inputParams } from './inputs'
 
 const ctx = { input: '/d/run01.mzML', files: 0 }
 
@@ -24,7 +25,7 @@ describe('the plan line', () => {
     expect(reportsOn(v)).toEqual(['Species report', 'Digest report', 'Label report', 'Glycopeptide report'])
     expect(planLine('Characterize a run', v, ctx)).toBe('Characterize a run on run01.mzML · 4 reports · 10% of spectra')
     expect(planLine('Run QC', startValues('builtin:run-qc', '/d/run01.tags.tsv'), ctx)).toBe('Run QC on run01.mzML · 1 report · all spectra')
-    expect(planLine('Export tags', baseValues('builtin:export-tags'), { input: '', files: 0 })).toBe('Export tags · no file yet · tags table only · all spectra')
+    expect(planLine('Generate tags', baseValues('builtin:export-tags'), { input: '', files: 0 })).toBe('Generate tags · no file yet · tags table only · all spectra')
     expect(planLine('Run QC', v, { input: '', files: 3, outDir: '/share/out' })).toBe('Run QC on 3 files · 4 reports · 10% of spectra · outputs in /share/out')
     expect(planLine('Run QC', v, { input: '', files: 3 })).toBe('Run QC on 3 files · 4 reports · 10% of spectra · outputs beside each input')
   })
@@ -43,7 +44,9 @@ describe('the workflows', () => {
     for (const t of TASKS) {
       // The spectra count is reached through Spectra to read (Custom count…).
       const folded = [...FOLDED].filter(() => [...t.basic, ...advancedParams(t)].includes('subsample_fraction'))
-      const reach = new Set([...t.basic, ...t.outputs, ...common, ...advancedParams(t), ...WIRED, ...folded])
+      // Step 2 shows the task's inputs, its about fields and what waits on them.
+      const step2 = [...inputParams(t), ...aboutParams(t), ...[...inputDependents(t, t).values()].flat()]
+      const reach = new Set([...t.basic, ...t.outputs, ...common, ...step2, ...advancedParams(t), ...WIRED, ...folded])
       const units = RENDERED.filter((n) => !reach.has(n) && /_unit$/.test(n))
       expect(RENDERED.filter((n) => !reach.has(n) && !units.includes(n)), t.id).toEqual([])
     }
@@ -61,6 +64,7 @@ describe('the workflows', () => {
         // A whole sentence that fits its one line: a path field spans two
         // columns, any other one (review round 3: no hint cut mid-word).
         const wide = PARAM_BY_NAME.get(n)?.type === 'input-file'
+        expect(wide, `${t.id} ${n}: an input file belongs to step 2`).toBe(false)
         expect(t.help[n].length, `${t.id} ${n}: ${t.help[n]}`).toBeLessThanOrEqual(wide ? 95 : 52)
         expect(t.help[n], `${t.id} ${n}`).toMatch(/[.:]$/)
       }
@@ -69,7 +73,7 @@ describe('the workflows', () => {
       expect(t.outputs[0]).toBe('out')
       // Round 5, 23: a help line of a field the workflow does not show
       // is never read and drifts.
-      for (const n of Object.keys(t.help)) expect(t.basic, `${t.id} help ${n}`).toContain(n)
+      for (const n of Object.keys(t.help)) expect([...t.basic, ...(t.about ?? []), ...inputParams(t)], `${t.id} help ${n}`).toContain(n)
     }
   })
   it('the database-reduction workflow sets the shortlist recipe (not validated)', () => {

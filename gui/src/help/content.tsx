@@ -74,20 +74,22 @@ export const START: HelpPage = {
       body: (
         <>
           <p>
-            Start in <strong>Setup</strong> with <strong>Export tags</strong>, the default task. It generates sequence
-            tags from all input spectra and includes per-residue confidence for downstream export. No FASTA file is
-            needed. To inspect an earlier analysis instead, click <strong>Open earlier results…</strong> under the workflows.
+            Setup asks one question at a time: <strong>Task</strong>, <strong>Inputs</strong>,{' '}
+            <strong>Settings</strong>, <strong>Outputs &amp; run</strong>. Step 1 selects <strong>Generate tags</strong>, the
+            default task: it generates sequence tags from all input spectra and includes per-residue confidence for
+            downstream export. No FASTA file is needed. Click <strong>Continue with Generate tags</strong>. To inspect an
+            earlier analysis instead, click <strong>Open earlier results…</strong> in step 1.
           </p>
           <ol>
             <li>
-              Under Input, click <strong>Choose file…</strong> and pick a spectra file: mzML, mzPeak, MGF, Thermo .raw or timsTOF .d.zip (see{' '}
+              In Inputs (step 2), click <strong>Choose file…</strong> and pick a spectra file: mzML, mzPeak, MGF, Thermo .raw or timsTOF .d.zip (see{' '}
               <L to="files-inputs">Input files</L>).
             </li>
             <li>
-              Under Outputs, the run name is the input&apos;s name: the tags file is <code>&lt;name&gt;.tags.tsv</code>, next to the input.
+              In Outputs &amp; run (step 4), the run name is the input&apos;s name: the tags file is <code>&lt;name&gt;.tags.tsv</code>, next to the input.
             </li>
             <li>
-              Check the instrument suggestion and the checks below the input. Under Settings, choose the
+              Check the instrument suggestion and the checks below the input. Under About these spectra (step 2), choose the
               <strong> Instrument</strong>, which sets the <L to="param-fragment_tolerance">fragment tolerance</L>: 20 <G to="gloss-ppm">ppm</G> is a starting
               point for high-resolution MS2; 0.3 Da is a starting point for ion-trap MS2. Use the analyser that
               measured the fragments, not just the instrument name. Apply a suggested preset only when it fits
@@ -105,7 +107,7 @@ export const START: HelpPage = {
           </ol>
           <p>
             For run metrics, choose <strong>Run QC</strong>. For protease, labels, glycopeptides and species, choose{' '}
-            <strong>Characterize a run</strong>; for many files, switch the Input card to <strong>Batch</strong>. Characterize samples 10% of the spectra and enables the species, digest, label and glyco reports (the alkylation report on request), opening on{' '}
+            <strong>Characterize a run</strong>; for many files, switch Inputs (step 2) to <strong>Batch</strong>. Characterize samples 10% of the spectra and enables the species, digest, label and glyco reports (the alkylation report on request), opening on{' '}
             <L to="workflow-overview">Overview</L>. A report that says “not assessed” or “no call” is not evidence
             that a feature is absent.
           </p>
@@ -142,20 +144,20 @@ export const START: HelpPage = {
           </dd>
           <dt>Does my protein occur?</dt>
           <dd>
-            Choose <strong>Export tags</strong>, open <strong>Advanced</strong> and, under <strong>Keep only tags found
+            Choose <strong>Generate tags</strong>, open <strong>Advanced</strong> and, under <strong>Keep only tags found
             in a database</strong>, choose a <L to="param-fasta">FASTA file</L> with your protein. Set the{' '}
             <L to="param-extension">Extension</L> in Settings so that tag length + 2 × extension reaches the length the
             database needs: about 4 residues for one protein, 7 or 8 for a proteome. With the default tag length 3,
             extension 1 suffices for one protein and 2 or 3 for a proteome. The run is refused if no tag can reach
-            that length. In the Outputs card, check <L to="param-out_spectra">Spectra with tags</L> to collect the
+            that length. In Outputs &amp; run, check <L to="param-out_spectra">Spectra with tags</L> to collect the
             spectra whose tags match. Read the chance table in the log before trusting a count (see{' '}
             <L to="results-fasta">Matching a sequence database</L>).
           </dd>
           <dt>How was the sample digested and labelled?</dt>
           <dd>
             <strong>Characterize a run</strong> checks the <L to="param-digest_out">Digest report</L> and the{' '}
-            <L to="param-label_out">Label report</L> in its Outputs card. Leave the database filter under Advanced
-            empty, so it does not narrow down the tags that are counted. Run, then read the Digest tab (see{' '}
+            <L to="param-label_out">Label report</L> in Outputs &amp; run. Leave the Filter database
+            out, so it does not narrow down the tags that are counted. Run, then read the Digest tab (see{' '}
             <L to="digest-ends">Reading the peptide ends</L>).
           </dd>
         </dl>
@@ -167,7 +169,7 @@ export const START: HelpPage = {
       body: (
         <>
           <p>
-            Switch the Input card to <strong>Batch</strong>, click <strong>Add files…</strong> and pick several spectra files. The same
+            In Inputs (step 2), switch to <strong>Batch</strong>, click <strong>Add files…</strong> and pick several spectra files. The same
             parameters are used for each file, one after the other.
           </p>
           <ul>
@@ -230,26 +232,29 @@ export const START: HelpPage = {
       body: (
         <>
           <p>
-            Setup reads top to bottom: <strong>Input</strong>, <strong>Workflow</strong>, <strong>Settings</strong>,{' '}
-            <strong>Outputs</strong> and <strong>Advanced</strong>. The seven workflows are Export tags (where the app
-            starts; all spectra, with per-residue confidence, see <L to="results-export">read export settings</L>), Run
-            QC, Mass-shift survey, Species, Database reduction, Identifiability triage and Characterize a run. Each
-            shows the few settings its question needs; every other option is under Advanced, the workflow&apos;s own
-            groups first, then the groups for every workflow, then Other analyses. The <strong>Outputs</strong> card
-            lists the workflow&apos;s files as checkboxes, named after the run. <strong>Batch</strong> in the Input
-            card runs the same workflow over several files, with an output folder and an optional SDRF. To look at
-            earlier results, use <strong>Open earlier results…</strong> in the Input card or the Results view.
+            Setup is four steps: <strong>Task</strong>, <strong>Inputs</strong>, <strong>Settings</strong> and{' '}
+            <strong>Outputs &amp; run</strong>. Step 1 shows the seven tasks as tiles: Generate tags (selected at start;
+            all spectra, with per-residue confidence, see <L to="results-export">read export settings</L>), Characterize
+            a run, Species, Mass-shift survey, Database reduction, Run QC and Identifiability triage. Selecting a tile
+            explains it; <strong>Continue</strong> chooses it. The task decides what Inputs asks for: a protein FASTA
+            only for Mass-shift survey and Database reduction; optional inputs are one click away under{' '}
+            <strong>Add optional input</strong>. Settings shows the few settings the task needs; every other option is
+            under Advanced, the task&apos;s own groups first. Outputs &amp; run lists the task&apos;s files as
+            checkboxes, named after the run, and the command line. <strong>Batch</strong> in Inputs runs the same
+            task over several files, with an output folder and an optional SDRF. To look at earlier results, use{' '}
+            <strong>Open earlier results…</strong> in step 1 or the Results view.
           </p>
           <p>
-            A workflow replaces the form; <strong>Undo</strong> brings back what it replaced. The workflow row says
-            when the form differs from it (modified), and its <strong>Reset</strong> takes that back. The{' '}
-            <strong>Preset</strong> menu loads FASTag&apos;s own defaults or a preset of yours.
+            A task replaces the settings but keeps the input files it uses and the instrument you chose; a line in
+            Inputs says what it kept and dropped, and <strong>Undo</strong> brings back what it replaced. The head of
+            Settings says when the form differs from the task (modified), and its <strong>Reset</strong> takes that
+            back. <strong>Presets</strong> (in steps 1 and 3) loads FASTag&apos;s own defaults or a preset of yours.
           </p>
           <p>
             <strong>Save…</strong> stores what differs from the task or defaults the form started from, under a name.
             No paths are stored: input files such as a FASTA are left out, and a report is stored by its name and
             written next to the current tags file. The app also remembers the parameters of the last run, but they
-            are never used on their own: <strong>Apply last-used (n)</strong> offers the n settings of the last run,
+            are never used on their own: <strong>Continue last run (n)</strong> in step 1 offers the n settings of the last run,
             and nothing of them is used until you click it. <strong>Reset…</strong> beside Run sets every parameter
             back to FASTag&apos;s default.
           </p>
@@ -568,7 +573,7 @@ export const RESULTS: HelpPage = {
             <tr><td>Min. conf., Mean conf.</td><td>The weakest and the average observed-step score, 0 to 1 (<L to="results-conf">residue confidence</L>).</td></tr>
             <tr><td>Database hit</td><td>Without a database filter: Not checked (-), the tags were not matched against a database. With one, only matching tags are written: In database (fwd, as written; rev, reversed), or Entrapment (efwd, erev: found only in the entrapment database).</td></tr>
             <tr><td>Database q-value</td><td>q_db, only with an <G to="gloss-entrapment">entrapment database</G> (<L to="results-nofdr">see below</L>).</td></tr>
-            <tr><td>ProForma, Residue conf., USI</td><td>Optional columns (<L to="param-proforma">ProForma</L>, <L to="param-res_conf">per-residue confidence</L>, <L to="param-usi_collection">USI</L>), checked in the Outputs card of Export tags.</td></tr>
+            <tr><td>ProForma, Residue conf., USI</td><td>Optional columns (<L to="param-proforma">ProForma</L>, <L to="param-res_conf">per-residue confidence</L>, <L to="param-usi_collection">USI</L>), checked in Outputs &amp; run of Generate tags.</td></tr>
           </tbody>
         </table>
       )
@@ -714,7 +719,7 @@ export const RESULTS: HelpPage = {
             Stitch and ALPS. A table export keeps the current filters, columns and sort order. The read exports
             use the whole tags file and their own settings, not the table filters; by default they keep the best
             tag per spectrum with at least 8 residues. Reads need the <L to="param-res_conf">per-residue confidence</L>
-            column, which the <strong>Export tags</strong> task enables.
+            column, which the <strong>Generate tags</strong> task enables.
           </p>
           <p>
             That task starts with tag length 3 and <L to="param-extension">extension</L> 3, so tags can grow to 9
@@ -731,13 +736,89 @@ export const RESULTS: HelpPage = {
       body: (
         <>
           <p>
-            In Tags, choose a row and press Enter (or Open in Spectrum). The Spectrum tab shows that spectrum with the
+            In Tags, double-click a row, or choose it and press Enter (or Open in Spectrum). The Spectrum tab shows that spectrum with the
             peaks FASTag tagged: after centroiding, the precursor cut, deisotoping and the peak budget, as the run
             prepared them (FASTag prints them with -dump_spectrum, under the options of the run that wrote the
             table). The chosen tag&apos;s ladder is drawn on them: its b or y ions one residue apart (the residue
             divided by the fragment charge), each step with its error in ppm. A <L to="tags-gapped">gapped tag</L>{' '}
             crossed a missing peak, shown dashed. Choose another tag of the spectrum below to draw its ladder; ◀ and ▶
             go to the previous and next tagged spectrum. The wheel or + and − zoom, dragging or the arrow keys pan.
+          </p>
+          <p>
+            All tags, resolved draws every tag of the spectrum at once. Each tag is placed on its peaks; rows that
+            land on the same peaks are one tag (FASTag writes a gapped tag once per order of its gap residues). Tags
+            of one ion series that overlap by at least one step and agree are assembled into one longer resolved tag,
+            and a tag inside another is not listed on its own. Resolved tags are ranked by the evidence of their
+            steps: each step&apos;s chance of being right, from its E-value, mass error, the intensity of its two
+            peaks, their complement ions at any charge, whether it is a gap step, the steps that compete with it
+            and how many tags support it, less a threshold, so a tag grows only by steps that are probably right.
+            The first is then the best resolved tag that does not hold a peak together with its own complement.
+            This is FASTag&apos;s default (Ranking cstar). (Fitted on three datasets against database search and
+            tested on two others: the first resolved tag was right in 84.9% of scans at 20 ppm and in 59.8% at
+            0.5 Da, against 81.5% and 48.0% for the earlier step ranking.) The table gives the E-value of the best and of the weakest of them, how many
+            tags build it and which other resolved tags conflict with it (they share a peak and continue
+            differently) or read the same residues in the other ion series. A step two readings cannot be told
+            apart on is written {"{Q|[AG]}"}, in italics. E-value ≤ leaves out weaker tags (1 by default); Join
+            tags that only touch also continues a tag with one that starts at its last peak, marked with a hollow
+            dot. A resolved tag is a hypothesis: it is right only where all the tags it is assembled from are.
+          </p>
+          <p>
+            Choosing a resolved tag in the table selects it. On the plot the other tags are then drawn against it:
+            solid where they read a step as it does, red and dashed where they read another step over part of its
+            m/z range (at most one of the two is right there), dashed elsewhere; thick steps have an E-value of at
+            most 0.01, faint ones above 1. Hover over a step for its readings, E-values, mass error and the
+            intensity of its two peaks. The strip under the axis shows the mass error of the selected tag: a dot
+            for each step (the distance of its two peaks against the residue mass), a line for the errors summed
+            from its first peak, hollow dots for the steps that differ from it, and the band of the run&apos;s
+            tolerance; its scale widens to hold every value. Under the table, Tags behind resolved tag lists the
+            tags it is assembled from, those inside it and those that differ from it, aligned peak by peak in m/z
+            order; a tag there opens alone.
+          </p>
+          <p>
+            When the run wrote its resolved tags and tag graph (FASTag with -resolved_out and -tag_graph_out, which
+            the app passes beside the tags when the CLI has them), the tags are resolved as FASTag resolved them and
+            the line beside the summary says Resolved by FASTag; the E-value cutoff and Join are then FASTag&apos;s own.
+            Otherwise, or when those tables do not fit the spectrum&apos;s peaks, it says Resolved in the GUI (and why):
+            the GUI then ranks the resolved tags as the run did, by its -resolve_score and -resolve_threshold, and the
+            line names the ranking it took. The ranking is the one FASTag wrote on the rows of its resolved tags (scheme,
+            threshold), else the run&apos;s settings; for tables of a run the app has no record of, written by a FASTag
+            that did not record it, the line says the ranking is not recorded and the GUI takes FASTag&apos;s default,
+            cstar at 3.
+            Merge graph draws the tag graph around the resolved tag selected: its residues N to C on a ruler (a gap
+            two residues wide; residues, not m/z, so the graph does not follow the plot&apos;s zoom), and under it
+            the tags that build it as a staircase of bars, each over its residues, with bold joins. Resolved tags that
+            conflict with it (share a peak and continue otherwise) are aligned above, the tags inside it and those that
+            only touch it below, then the rest, one row each in rank order. A resolved tag that reads it again on its
+            complement peaks (the other series of its pair) is not drawn again: a b+y badge names it. Tags in no
+            resolved tag are hidden behind Show unused tags. Choosing a bar, by click or Enter, selects its resolved
+            tag and re-anchors the graph on it; the graph is one Tab stop, and the arrow keys move between its bars.
+          </p>
+          <p>
+            A resolved tag at a peptide terminus is written N–EPTIDE or EPTIDE–C, and N–(K)EPTIDE or EPTIDE(K)–C,
+            muted, when one residue lies between: FASTag&apos;s terminus column of -resolved_out, or, for tables of
+            an older FASTag and when the GUI resolves itself, the same test of the flanks (0 or a terminal
+            modification of the run within the tolerance of that side, the precursor&apos;s added on the side measured
+            from it). The plot marks b0 or y0 of the selected one when it lies in view.
+          </p>
+          <p>
+            When the run wrote tag placements (a protein database and Tag placements), the peptide most tags of the
+            spectrum were placed on is named under the plot, and its fragments in the ion series and charge of the
+            tag drawn are the top row of the plot (DB), with the residues the tag confirms in bold; the table counts
+            the steps of each resolved tag on the peptide, the pileup shows its residues between the peaks, and the
+            strip marks each peak against the peptide&apos;s fragment with ×. A mass the placement leaves over is
+            added from the end of its region on; inside the region no fragment is drawn. The peptide is a candidate
+            from the placement of the tags, not an identification: FASTag does not score it.
+          </p>
+          <p>
+            FASTag writes a tag in ascending m/z and does not say whether it read b or y ions, and the series
+            decides which way the tag reads from N to C. The tab judges the series on the peaks: a ions (b − CO)
+            beside at least two of its peaks make it b; a ions beside its complement peaks, or a start right after
+            a C-terminal K or R, make it y; one a ion makes it likely (b? or y?); otherwise it says b or y and shows
+            the tag as FASTag wrote it, with the other reading beside it in the table. When the run placed the
+            spectrum&apos;s tags on a database peptide, the peptide&apos;s ions decide. A ladder and its complement
+            are always opposite series. At a tolerance wider than about 0.05 m/z (a Da run) nothing is judged.
+            Hover over a series for its evidence. On the development data the judged series was right in at least
+            99% of correct tags, the likely one in 86–99%.
           </p>
           <p>
             The tab needs a FASTag that has -dump_spectrum; with an older one it is not there, and the row action says
@@ -1210,7 +1291,7 @@ export const FILES: HelpPage = {
               <tr><td>Mass-shift histogram</td><td><L to="param-delta_out">Reconciliation</L></td><td>Leftover masses, one count per spectrum.</td></tr>
               <tr><td>Reconciliation as identifications</td><td><L to="param-recon_id_out">Reconciliation</L></td><td>The placements as idXML, mzIdentML (.mzid) or mzTab, not filtered by a false discovery rate.</td></tr>
               <tr><td>Mass-gap report</td><td><L to="param-massgap_out">Reconciliation</L></td><td>Gap peaks, alkylation and SILAC (<L to="digest-gaps">Digest tab</L>).</td></tr>
-              <tr><td>Spectra with tags</td><td><L to="param-out_spectra">Outputs card</L></td><td>The spectra that carry at least one reported tag that is not an entrapment match, as mzML or mzPeak.</td></tr>
+              <tr><td>Spectra with tags</td><td><L to="param-out_spectra">Outputs &amp; run</L></td><td>The spectra that carry at least one reported tag that is not an entrapment match, as mzML or mzPeak.</td></tr>
             </tbody>
           </table>
           <p>
@@ -1261,7 +1342,7 @@ export const FILES: HelpPage = {
 export const SETTINGS_INTRO: ReactNode = (
   <>
     <p>
-      Settings start from your task or preset. The default <strong>Export tags</strong> task processes all spectra
+      Settings start from your task or preset. The default <strong>Generate tags</strong> task processes all spectra
       and adds per-residue confidence. <strong>Characterize a run</strong> enables species, digest,
       label and glyco reports and samples 10% of the input spectra. The reference below shows the CLI defaults,
       which can differ from the task&apos;s values. First check the{' '}

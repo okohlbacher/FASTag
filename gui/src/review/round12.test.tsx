@@ -9,7 +9,7 @@ import { parseReport } from '../digestReport'
 import daLabel from '../fixtures/cli-1.15/workflows/characterize/run01.label.tsv?raw'
 import { buildOverview } from '../results/overview'
 import { installMockBridge } from '../testing/mockBridge'
-import { click, renderColdApp } from '../testing/render'
+import { click, renderColdApp, chooseTask, fileButton } from '../testing/render'
 
 const TRIAGE =
   'ident_rank\tspectrum\tstatus\tbest_evalue\tident_score\tidentified\ttriage\n1\ts1\ttagged\t0.1\t0.9\t0\t1\n2\ts2\ttagged\t5\t0.5\t1\t0\n3\ts3\tno_tags\t\t0.1\t0\t0\n'
@@ -63,7 +63,7 @@ describe('round 12: Shortlist counts proteins with evidence as the CLI does', ()
 })
 
 describe('round 12: a Settings value the workflow set off the CLI default says so', () => {
-  it('Export tags: Extension 3, FASTag default 0', async () => {
+  it('Generate tags: Extension 3, FASTag default 0', async () => {
     const mock = installMockBridge()
     await renderColdApp(mock)
     expect(document.getElementById('h-extension')?.textContent).toBe('3 lets a seed of 3 grow to 9. FASTag default 0.')
@@ -76,17 +76,17 @@ describe('round 12: Database reduction says its recipe is not validated, and wha
   it('a note under Settings; the Sage note for a .raw input', async () => {
     const mock = installMockBridge()
     await renderColdApp(mock)
-    await click(screen.getByRole('radio', { name: /^Database reduction/ }))
+    await chooseTask('Database reduction')
     expect(document.querySelector('.settings-note')!.textContent).toMatch(/^The shortlist recipe this workflow sets .* is not validated/)
     mock.nextPickInput = '/d/run.raw'
-    await click(screen.getByRole('button', { name: 'Choose file…' }))
+    await click(fileButton('Choose file…'))
     expect(document.getElementById('out-search_config_out-d')!.textContent).toMatch(/Sage cannot read: convert it to mzML/)
   })
   it('a picked .zip that is no .d.zip is refused, with why', async () => {
     const mock = installMockBridge()
     await renderColdApp(mock)
     mock.nextPickInput = '/d/run.mzML.zip'
-    await click(screen.getByRole('button', { name: 'Choose file…' }))
+    await click(fileButton('Choose file…'))
     expect(screen.getByText(/is not a timsTOF \.d\.zip archive/)).toBeTruthy()
     expect(screen.getByRole('button', { name: 'Choose file…' })).toBeTruthy()
   })

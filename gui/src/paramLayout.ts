@@ -80,6 +80,7 @@ const SECTION_DEFS: Omit<Section, 'open'>[] = [
   { title: 'Tagging', home: 'global', blurb: 'How long the tags are, how good, and how many per spectrum.', params: ['tag_length', 'extension', 'max_evalue', 'max_tags', 'res_conf'] },
   { title: 'Tag columns and files', home: 'export-tags', blurb: 'Extra columns in the tags table, and the spectra that carry tags.', params: ['proforma', 'usi_collection', 'out_spectra'] },
   { title: 'Tagging, advanced', home: 'global', blurb: 'Several seed lengths, gapped tags, and how near-copies of a tag are ranked.', params: ['tag_lengths', 'gaps', 'gap_penalty', 'diversity', 'orientation', 'isobaric_tolerance'] },
+  { title: 'Resolved tags, advanced', home: 'global', blurb: 'How the tags of a spectrum are merged into resolved tags and ranked, for the Spectrum tab.', params: ['resolve_score', 'resolve_threshold', 'resolve_max_evalue', 'resolve_join'] },
   { title: 'Keep only tags found in a database', home: 'global', blurb: 'Write only tags that occur in sequences you supply.', params: ['fasta', 'min_filter_length', 'entrapment_fasta'] },
   { title: 'Run QC', home: 'run-qc', blurb: 'Counts, resolution, charges, labels and instrument of the run, in one report.', params: ['qc_out'] },
   { title: 'Sampling and checks', home: 'global', blurb: 'How much of the run is read, the check for raw DIA data, and the check of the precursor charges.', params: ['subsample_fraction', 'acquisition_check', 'subsample_spectra', 'subsample_seed', 'acquisition_probe_spectra', 'check_header_charge', 'check_header_margin', 'check_header_out'] },
@@ -256,7 +257,7 @@ function differsFromCli(name: string, value: unknown, values: Record<string, unk
 ///   recipe, or differs from the manifest default or from
 ///   @p base, the values the session started from (the workflow's): a
 ///   field left at the manifest default by both is the CLI's to decide, so
-///   Export tags with MSFragger names no recipe option, while Database
+///   Generate tags with MSFragger names no recipe option, while Database
 ///   reduction with its E-value put back to 0.1 sends it;
 /// - a value and its unit as one: both when either differs from its
 ///   default (5 with Da is not 5 ppm), neither when the value is empty (a
@@ -493,7 +494,7 @@ export function briefHint(text: string): string {
 }
 
 /// Curated one-line hints, the same in Settings and in Advanced (a
-/// workflow's own hint, tasks.ts help, comes first in its Settings card and
+/// workflow's own hint, tasks.ts help, comes first in its Settings step and
 /// in its Advanced groups alike).
 export const BRIEF_HINT: Record<string, string> = {
   // Tagging
@@ -865,12 +866,12 @@ export const CONFLICTS: ((values: Record<string, unknown>, ctx: PreflightContext
   // "-recon_out needs a database: give -recon_fasta (or -fasta)."
   (values) =>
     isActive('recon_out', values) && !isActive('recon_fasta', values) && !isActive('fasta', values)
-      ? { params: ['recon_fasta', 'recon_out', 'fasta'], note: 'The placements need a protein database: choose one under Protein database.', neutral: true }
+      ? { params: ['recon_fasta', 'recon_out', 'fasta'], note: 'The placements need a protein database: choose one in Inputs.', neutral: true }
       : null,
   // "-shortlist_out needs a database: give -recon_fasta (or -fasta)."
   (values) =>
     ['shortlist_out', 'fasta_out', 'search_config_out'].some((n) => isActive(n, values)) && !isActive('recon_fasta', values) && !isActive('fasta', values)
-      ? { params: ['recon_fasta', 'shortlist_out', 'fasta'], note: 'The shortlist needs a protein database: choose one under Protein database.', neutral: true }
+      ? { params: ['recon_fasta', 'shortlist_out', 'fasta'], note: 'The shortlist needs a protein database: choose one in Inputs.', neutral: true }
       : null,
   // "-tmt_reporter_filter requires -tmt_pseudo_filter auto or on."
   (values) =>

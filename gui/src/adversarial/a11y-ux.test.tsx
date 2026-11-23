@@ -11,7 +11,7 @@ import ParamField from '../ParamField'
 import { PARAM_BY_NAME } from '../paramLayout'
 import { parseReport } from '../digestReport'
 import { installMockBridge } from '../testing/mockBridge'
-import { batchAddButton, click, flush, goTo, openGroup, renderApp } from '../testing/render'
+import { batchAddButton, click, flush, goTo, openGroup, renderApp, fileButton, showStep } from '../testing/render'
 import digestTsv from '../fixtures/digest.tsv?raw'
 import labelTsv from '../fixtures/label.tsv?raw'
 
@@ -76,7 +76,7 @@ describe('a11y: run feedback in App', () => {
     const mock = installMockBridge()
     const container = await renderApp(mock)
     mock.nextPickInput = '/data/a.mzML'
-    await click(screen.getByRole('button', { name: /^(Choose file|Change)…$/ }))
+    await click(fileButton())
     await click(screen.getByRole('button', { name: /^Run( on .+)?$/ }))
     await act(async () => { mock.emitProgress({ done: 50, total: 200 }) })
     expect(container.querySelector('.progress .fill')).not.toBeNull()
@@ -119,6 +119,8 @@ describe('a11y: run feedback in App', () => {
     await renderApp(mock)
     const until = (el: () => Element | null): Promise<void> =>
       vi.waitFor(() => expect(document.activeElement).toBe(el()))
+    // Save as preset is in the head of Settings (step 3).
+    showStep(3)
     await act(async () => { fireEvent.change(document.getElementById('origin')!, { target: { value: '__save' } }) })
     await act(async () => { fireEvent.keyDown(screen.getByRole('textbox', { name: 'Preset name' }), { key: 'Escape' }) })
     await until(() => document.getElementById('origin'))
@@ -136,7 +138,7 @@ describe('a11y: run feedback in App', () => {
       const mock = installMockBridge()
       const container = await renderApp(mock)
       mock.nextPickInput = '/data/a.mzML'
-      await click(screen.getByRole('button', { name: /^(Choose file|Change)…$/ }))
+      await click(fileButton())
       await click(screen.getByRole('button', { name: /^Run( on .+)?$/ }))
       expect((screen.getByRole('button', { name: 'Open tags…' }) as HTMLButtonElement).disabled).toBe(true)
       expect((screen.getByRole('button', { name: 'Open report…' }) as HTMLButtonElement).disabled).toBe(true)
@@ -296,7 +298,7 @@ describe('UX: a known-failing species run stays one click away', () => {
     mock.taxdbInfoResult = { path: '/t/tax_k7.taxdb', k: 7 }
     const container = await renderApp(mock)
     mock.nextPickInput = '/data/a.mzML'
-    await click(screen.getByRole('button', { name: /^(Choose file|Change)…$/ }))
+    await click(fileButton())
     await openGroup('Species')
     await click(document.getElementById('p-species')!)
     expect((screen.getByRole('button', { name: /^Run( on .+)?$/ }) as HTMLButtonElement).disabled).toBe(true)

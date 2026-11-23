@@ -100,9 +100,12 @@ set(FASTAG_CORE_SOURCES_113 src/Cleavage.cpp)
 set(FASTAG_CORE_SOURCES_116 src/BrukerInput.cpp)
 # ---- 1.16 QC: core sources ----
 set(FASTAG_CORE_SOURCES_QC src/RunQC.cpp)
+# ---- tag merging: core sources ----
+set(FASTAG_CORE_SOURCES_MERGE src/TagGraph.cpp)
 add_library(fastag_core STATIC ${FASTAG_CORE_SOURCES}
             ${FASTAG_CORE_SOURCES_E} ${FASTAG_CORE_SOURCES_A} ${FASTAG_CORE_SOURCES_D} ${FASTAG_CORE_SOURCES_F}
-            ${FASTAG_CORE_SOURCES_113} ${FASTAG_CORE_SOURCES_116} ${FASTAG_CORE_SOURCES_QC})
+            ${FASTAG_CORE_SOURCES_113} ${FASTAG_CORE_SOURCES_116} ${FASTAG_CORE_SOURCES_QC}
+            ${FASTAG_CORE_SOURCES_MERGE})
 target_include_directories(fastag_core PUBLIC
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/src>)
@@ -306,8 +309,10 @@ if(FASTAG_BUILD_TESTS)
   set(FASTAG_UNIT_TESTS_B113_MSFRAGGER msfragger_config_test)
   # ---- 1.13: unit tests ----
   set(FASTAG_UNIT_TESTS_113 complement_tol_test cleavage_test tmt_pseudo_test)
+  # ---- tag merging: unit tests ----
+  set(FASTAG_UNIT_TESTS_MERGE taggraph_test)
   foreach(t ${FASTAG_UNIT_TESTS} ${FASTAG_UNIT_TESTS_E} ${FASTAG_UNIT_TESTS_A} ${FASTAG_UNIT_TESTS_D} ${FASTAG_UNIT_TESTS_F} ${FASTAG_UNIT_TESTS_113}
-            ${FASTAG_UNIT_TESTS_B113_MSFRAGGER} ${FASTAG_UNIT_TESTS_DIGQUAL})
+            ${FASTAG_UNIT_TESTS_B113_MSFRAGGER} ${FASTAG_UNIT_TESTS_DIGQUAL} ${FASTAG_UNIT_TESTS_MERGE})
     add_executable(${t} test/${t}.cpp)
     target_link_libraries(${t} PRIVATE fastag_core)
     add_test(NAME ${t} COMMAND ${t})
@@ -316,6 +321,22 @@ if(FASTAG_BUILD_TESTS)
   # links Boost::headers PRIVATE, and OpenMS's target carries no Boost include
   # path on Windows.
   target_link_libraries(complement_test PRIVATE Boost::headers)
+  # Tag merging under libc++'s debug hardening, which checks that every sort's
+  # comparator is a strict weak ordering (NaN intensities and E-values): its
+  # own build of src/TagGraph.cpp, whose objects take precedence over the
+  # archive's. libc++ only (the mode leaves the ABI unchanged).
+  include(CheckCXXSourceCompiles)
+  check_cxx_source_compiles("#include <version>
+    #ifndef _LIBCPP_VERSION
+    #error not libc++
+    #endif
+    int main() { return 0; }" FASTAG_HAVE_LIBCXX)
+  if(FASTAG_HAVE_LIBCXX)
+    add_executable(taggraph_hardened_test test/taggraph_test.cpp src/TagGraph.cpp)
+    target_compile_definitions(taggraph_hardened_test PRIVATE _LIBCPP_HARDENING_MODE=_LIBCPP_HARDENING_MODE_DEBUG)
+    target_link_libraries(taggraph_hardened_test PRIVATE fastag_core)
+    add_test(NAME taggraph_hardened_test COMMAND taggraph_hardened_test)
+  endif()
 
   # 1.16: the mass-shift survey (-delta_out site and name columns).
   add_executable(shift_survey_test test/shift_survey_test.cpp)
@@ -532,6 +553,12 @@ if(FASTAG_BUILD_TESTS)
            COMMAND bash ${CMAKE_CURRENT_SOURCE_DIR}/test/complement_cli_test.sh $<TARGET_FILE:FASTag>
                    ${CMAKE_CURRENT_SOURCE_DIR}/test/fixtures/Ecoli_MS2_small.mzML)
   set_tests_properties(complement_cli_test PROPERTIES SKIP_RETURN_CODE 77)
+  # Tag merging: -resolved_out and -tag_graph_out (header, ranks, member
+  # rows, -stream refusal, threads).
+  add_test(NAME resolved_cli_test
+           COMMAND bash ${CMAKE_CURRENT_SOURCE_DIR}/test/resolved_cli_test.sh $<TARGET_FILE:FASTag>
+                   ${CMAKE_CURRENT_SOURCE_DIR}/test/fixtures/Ecoli_MS2_small.mzML)
+  set_tests_properties(resolved_cli_test PROPERTIES SKIP_RETURN_CODE 77)
   # 1.15.5 (PREREG-lowres-defaults): -tolerance_by_analyzer and the complement window under Da.
   add_test(NAME tolerance_by_analyzer_cli_test
            COMMAND bash ${CMAKE_CURRENT_SOURCE_DIR}/test/tolerance_by_analyzer_cli_test.sh $<TARGET_FILE:FASTag>

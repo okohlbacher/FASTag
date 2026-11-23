@@ -5,7 +5,7 @@
 import { readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import type { Page } from '@playwright/test'
-import { test, expect, goTo, openApp, mockState } from './fixtures'
+import { test, expect, goTo, openApp, mockState, toStep } from './fixtures'
 
 const TSV = readFileSync(fileURLToPath(new URL('../fixtures/ecoli.tags.tsv', import.meta.url)), 'utf8')
 const [HEAD, ...LINES] = TSV.split('\n').filter((l) => l !== '')
@@ -27,12 +27,14 @@ const ctl = (page: Page, f: keyof Ctl, ...a: number[]): Promise<void> =>
     [f, a] as const
   )
 
-/// The raw cells of column @p j of the rows in the DOM, top to bottom.
+/// The raw cells of file column @p j of the rows in the DOM, top to bottom.
+/// Length, Extended and Gapped start unticked: the DOM has no cell for them.
+const UNTICKED = ['length', 'extended', 'gapped', 'res_conf'].map((c) => HEAD.split('\t').indexOf(c)).filter((k) => k >= 0)
 const column = (page: Page, j: number): Promise<string[]> =>
   page.$$eval(
     '.rt-rows .rt-row',
     (rows, jj) => rows.map((r) => r.querySelectorAll('[role="gridcell"]')[jj as number]?.getAttribute('aria-label') ?? ''),
-    j
+    j - UNTICKED.filter((k) => k < j).length
   )
 
 async function openTags(page: Page): Promise<void> {
@@ -102,6 +104,7 @@ test('search to field: "tolerance" focuses fragment_tolerance', async ({ page })
 
 test('presets: "Ion trap CID" sets 0.3 Da and nothing else', async ({ page }) => {
   await openApp(page, 'default', 'defaults')
+  await toStep(page, 'Inputs')
   await page.getByRole('button', { name: 'Choose file…' }).click()
   await expect(page.locator('#instrument').locator('option')).toHaveText([
     'Orbitrap/TOF HCD 20 ppm',

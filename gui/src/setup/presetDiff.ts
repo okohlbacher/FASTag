@@ -16,7 +16,7 @@ export interface StoredPreset {
   base: PresetBase
   diff: Record<string, ParamValue>
   /// Saved over Batch QC, which is Characterize in Batch mode now: the
-  /// preset opens the Input card in Batch mode.
+  /// preset opens Inputs in Batch mode.
   batch?: true
 }
 

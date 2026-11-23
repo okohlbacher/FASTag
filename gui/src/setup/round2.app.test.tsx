@@ -4,11 +4,10 @@
 import { act, fireEvent, screen, within } from '@testing-library/react'
 import { describe, expect, it } from 'vitest'
 import { installMockBridge } from '../testing/mockBridge'
-import { click, flush, pickSingle, renderColdApp, runButton } from '../testing/render'
+import { chooseTask, click, flush, pickSingle, renderColdApp, runButton, showStep } from '../testing/render'
 import { PRODUCT_OF, isOn, neededBy, renameSearchConfig, setProduct } from './products'
 import { startValues } from './tasks'
 
-const workflow = (name: string): HTMLInputElement => screen.getByRole('radio', { name: new RegExp(`^${name}`) }) as HTMLInputElement
 const field = (n: string): HTMLInputElement | null => document.getElementById(`p-${n}`) as HTMLInputElement | null
 
 describe('Batch mode', () => {
@@ -23,8 +22,8 @@ describe('Batch mode', () => {
     expect(bar.textContent).toContain('no files yet')
     expect(bar.textContent).toContain('Add files or a folder to run.')
     expect(bar.textContent).not.toContain('Choose an input file to run.')
-    // The output folder is in the Input card, under the file list.
-    const input = screen.getByRole('region', { name: '1 Input' })
+    // The output folder is in Inputs, under the file list.
+    const input = screen.getByRole('region', { name: /^Inputs for / })
     expect(within(input).getByText('Output folder')).toBeDefined()
     expect(within(input).getByRole('button', { name: 'Change the output folder' })).toBeDefined()
     // Neither the Run shortcut nor the menu starts the single file.
@@ -33,14 +32,24 @@ describe('Batch mode', () => {
     expect(mock.runCalls).toHaveLength(0)
   })
 
-  it('disables the identifications field with the reason, and a batch sends none', async () => {
+  it('lists set identifications under Also set in Batch mode, with the reason, and offers none to add', async () => {
     const mock = installMockBridge()
     await renderColdApp(mock)
-    await click(workflow('Identifiability triage'))
-    expect(field('census_ids')!.disabled).toBe(false)
+    await chooseTask('Identifiability triage')
+    await act(async () => {
+      fireEvent.change(screen.getByRole('combobox', { name: 'Add optional input' }), { target: { value: 'census_ids' } })
+    })
+    await act(async () => {
+      fireEvent.change(field('census_ids')!, { target: { value: '/d/run01.idXML' } })
+    })
     await click(screen.getByRole('radio', { name: 'Batch' }))
-    expect(field('census_ids')!.disabled).toBe(true)
-    expect(document.getElementById('h-census_ids')!.textContent).toMatch(/Not in Batch mode/)
+    expect(field('census_ids')).toBeNull()
+    const also = screen.getByRole('region', { name: 'Also set' })
+    expect(also.textContent).toMatch(/Identifications.*Not used in Batch mode: one ID file cannot belong to every input/)
+    expect(screen.queryByRole('combobox', { name: 'Add optional input' })).toBeNull()
+    // Back to one file: the field again.
+    await click(screen.getByRole('radio', { name: 'One file' }))
+    expect(field('census_ids')!.value).toBe('/d/run01.idXML')
   })
 })
 
@@ -62,6 +71,7 @@ describe('products', () => {
     const mock = installMockBridge()
     await renderColdApp(mock)
     await pickSingle(mock, '/d/run01.mzML')
+    showStep(4)
     const usi = document.getElementById('out-usi_collection') as HTMLInputElement
     await click(usi)
     expect(usi.checked).toBe(true)
@@ -84,6 +94,7 @@ describe('the (?) popover', () => {
   it('shows the flag with one dash, as the CLI takes it', async () => {
     const mock = installMockBridge()
     await renderColdApp(mock)
+    showStep(3)
     const q = document.querySelector('button[data-param-help="max_evalue"]')!
     await click(q)
     const pop = screen.getByRole('dialog', { name: /^About / })
@@ -96,8 +107,10 @@ describe('the (?) popover', () => {
   it('documents the Instrument: tolerance, unit and ion series', async () => {
     const mock = installMockBridge()
     await renderColdApp(mock)
-    const settings = screen.getByRole('region', { name: '3 Settings' })
-    await click(within(settings).getByRole('button', { name: 'About Instrument' }))
+    // The instrument describes the spectra: step 2, About these spectra.
+    showStep(2)
+    const about = screen.getByRole('region', { name: 'About these spectra' })
+    await click(within(about).getByRole('button', { name: 'About Instrument' }))
     const pop = screen.getByRole('dialog', { name: 'About Instrument' })
     for (const f of ['-fragment_tolerance', '-fragment_tolerance_unit', '-ion_series']) expect(pop.textContent).toContain(f)
   })

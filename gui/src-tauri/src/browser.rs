@@ -57,6 +57,9 @@ const HEADER_CAP: u64 = 4 << 20;
 const HEAD_BYTES: usize = 1 << 20;
 /// Snapshots kept (GUI-DESIGN 5: two files).
 const MAX_SNAPSHOTS: usize = 2;
+/// Snapshots the Spectrum tab's side tables keep: -resolved_out,
+/// -tag_graph_out and -recon_out, all three read for each spectrum shown.
+const SIDE_SNAPSHOTS: usize = 3;
 /// The column the background order is built for (D5).
 pub const RANK_COLUMN: &str = "evalue";
 /// The read size of export and of a page (GUI-DESIGN 6.1 item 7).
@@ -1403,6 +1406,8 @@ struct OpenState {
 
 pub struct Shared {
     snaps: RwLock<Vec<Arc<Snapshot>>>,
+    /// Snapshots kept (MAX_SNAPSHOTS; SIDE_SNAPSHOTS for SideTables).
+    max_snaps: usize,
     /// Index builds one at a time: a query for a file being indexed waits for
     /// that build instead of starting a second scan.
     build: Mutex<()>,
@@ -1424,6 +1429,7 @@ impl Default for Shared {
     fn default() -> Shared {
         Shared {
             snaps: RwLock::default(),
+            max_snaps: MAX_SNAPSHOTS,
             build: Mutex::new(()),
             generation: AtomicU64::new(0),
             open: Mutex::new(None),
@@ -1443,6 +1449,26 @@ impl BrowserCache {
     pub(crate) fn shared(&self) -> &Arc<Shared> {
         &self.0
     }
+}
+
+/// The tables the Spectrum tab reads a spectrum's rows of besides the tags
+/// (-resolved_out, -tag_graph_out, -recon_out): no table opens them, so they
+/// are read as export reads (Mode::Exact, not refused as a file nobody has
+/// open), with snapshots of their own, so that reading them never evicts the
+/// open file's (MAX_SNAPSHOTS); room for all three (SIDE_SNAPSHOTS), so that
+/// the next spectrum does not index them again.
+#[derive(Clone)]
+pub struct SideTables(Arc<Shared>);
+
+impl Default for SideTables {
+    fn default() -> SideTables {
+        SideTables(Arc::new(Shared { max_snaps: SIDE_SNAPSHOTS, ..Shared::default() }))
+    }
+}
+
+/// One page of @p spec's view of the side table @p path.
+pub(crate) fn side_query(side: &SideTables, path: &str, spec: &ViewSpec, offset: usize, limit: usize) -> Result<ResultsPage, String> {
+    query_mode(&side.0, path, spec, offset, limit, Mode::Exact)
 }
 
 fn fields_of(raw: &[u8]) -> Vec<String> {
@@ -2203,7 +2229,7 @@ impl Shared {
         let mut snaps = self.snaps.write().unwrap();
         snaps.retain(|s| s.path != path);
         snaps.insert(0, snap.clone());
-        snaps.truncate(MAX_SNAPSHOTS);
+        snaps.truncate(self.max_snaps);
         Ok(snap)
     }
 
@@ -2704,6 +2730,20 @@ pub async fn results_query(
     // The index build on a cold gigabyte file takes seconds: keep it off the
     // IPC thread. A query for a file being indexed waits for that build.
     tauri::async_runtime::spawn_blocking(move || query_mode(&shared, &path, &view, offset, limit, Mode::Interactive))
+        .await
+        .map_err(|e| e.to_string())?
+}
+
+#[tauri::command]
+pub async fn table_query(
+    state: tauri::State<'_, SideTables>,
+    path: String,
+    view: ViewSpec,
+    offset: usize,
+    limit: usize,
+) -> Result<ResultsPage, String> {
+    let side = state.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || side_query(&side, &path, &view, offset, limit))
         .await
         .map_err(|e| e.to_string())?
 }
@@ -3990,6 +4030,36 @@ mod tests {
         assert_eq!(&r.asc[..3], &[0, 1000, 2000]);
         assert_eq!(&r.desc()[..2], &[321, 1321]);
         std::fs::remove_file(&p).ok();
+    }
+
+    /// The Spectrum tab's side tables: a file no table has open is refused
+    /// to an Interactive query, and read by side_query; their snapshots are
+    /// their own, so the open file's stays.
+    #[test]
+    fn side_tables_are_read_without_an_open_and_keep_the_open_files_snapshot() {
+        let tags = fixture("side-tags.tsv");
+        let head = "spectrum\trank\tsequence";
+        let resolved = write_fixture("side.resolved.tsv", &format!("{head}\nscan=1\t1\tPEP\nscan=10\t1\tTID\nscan=1\t2\tW\n"));
+        let graph = write_fixture("side.taggraph.tsv", "spectrum\tnode\nscan=1\t0\nscan=10\t0\n");
+        let main = Arc::new(Shared::default());
+        main.snapshot(&tags).unwrap();
+        let exact = ViewSpec { spectrum: Some("scan=1".into()), spectrum_exact: true, ..Default::default() };
+        assert_eq!(query_mode(&main, &resolved, &exact, 0, 10, Mode::Interactive).err().as_deref(), Some(CANCELLED));
+        let side = SideTables::default();
+        let r = side_query(&side, &resolved, &exact, 0, 10).unwrap();
+        assert_eq!(r.matched_rows, 2);
+        assert_eq!((0..2).map(|i| col(&r, i, "sequence")).collect::<Vec<_>>(), ["PEP", "W"]);
+        assert_eq!(side_query(&side, &graph, &exact, 0, 10).unwrap().row_ids, [0]);
+        assert!(main.fresh_any(&tags).is_some());
+        // -recon_out too, and all three stay indexed for the next spectrum.
+        let recon = write_fixture("side.recon.tsv", "spectrum\tpeptide\nscan=1\tPEPTIDE\n");
+        assert_eq!(side_query(&side, &recon, &exact, 0, 10).unwrap().matched_rows, 1);
+        for p in [&resolved, &graph, &recon] {
+            assert!(side.0.fresh_any(p).is_some(), "{p} was evicted");
+        }
+        for p in [tags, resolved, graph, recon] {
+            std::fs::remove_file(&p).ok();
+        }
     }
 
     fn by_evalue() -> ViewSpec {

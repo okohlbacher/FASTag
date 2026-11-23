@@ -1,5 +1,5 @@
 import { writeFileSync } from 'node:fs'
-import { test, expect, openApp } from './fixtures'
+import { test, expect, openApp, toStep } from './fixtures'
 
 // The P1 gate "Log line with drawer open" (GUI-DESIGN section 7): with the
 // drawer open and 5,000 lines in the log, the time from a Log message to
@@ -38,6 +38,7 @@ interface Stats {
 test('the log drawer commits a line and a 500-line batch quickly with 5,000 lines in it', async ({ page, browserName }) => {
   test.setTimeout(180_000)
   await openApp(page, 'slow')
+  await toStep(page, 'Inputs')
   await page.getByRole('button', { name: 'Choose file…' }).click()
   await page.getByRole('button', { name: 'Run', exact: true }).click()
   await expect(page.getByRole('button', { name: 'Cancel' })).toBeVisible()

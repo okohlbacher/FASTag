@@ -1,3 +1,4 @@
+import { IconSpectrum } from './icons'
 import { useEffect, useId, useMemo, useRef, useState, type JSX, type KeyboardEvent, type PointerEvent as ReactPointerEvent } from 'react'
 import { SPECTRUM_NEEDS } from './spectrum/support'
 import type { BrowserEvent, ResultsHead, ResultsPage, ResultsSort, ResultsView } from './types'
@@ -62,6 +63,8 @@ const GLYPH_W = 16
 // out of an 840 px pane. Its cells are middle-truncated (fitMiddle), so the
 // scan number stays visible; dragging the edge widens it.
 const SPECTRUM_AUTO_W = 200
+// The spectrum cell's button and its gap.
+const SPEC_ICON_W = 22
 // "Database hit" and "In database" / "Entrapment" whole.
 const HIT_MIN_W = 120
 
@@ -90,8 +93,14 @@ const LABEL: Record<string, string> = {
 }
 export const columnLabel = (c: string): string => LABEL[c] ?? c
 
+// Not shown until ticked under Columns: the tag says its length, the two
+// confidence columns sum up the per-residue ones.
+const DEFAULT_HIDDEN = ['length', 'extended', 'gapped', 'res_conf']
+// Best tags first, as the CLI ranks them.
+const DEFAULT_SORT: ResultsSort = { column: 'evalue', desc: false }
+
 /// The columns' indices in the order the table shows them: the per-residue
-/// confidence (-res_conf, the headline of Export tags) right after the tag
+/// confidence (-res_conf, the headline of Generate tags) right after the tag
 /// and its length, ahead of the flank masses, Extended and Gapped, so it is
 /// in view without scrolling; otherwise the file's order.
 export function displayOrder(columns: readonly string[]): number[] {
@@ -341,7 +350,7 @@ export default function ResultsTable({ path, source, rerunResConf, spectrum }: P
   const [error, setError] = useState<string | null>(null)
   // Best tags first, as the CLI ranks them. A file without an evalue column
   // ignores the sort (browser.rs drops a sort on a missing column).
-  const [sort, setSort] = useState<ResultsSort | null>({ column: 'evalue', desc: false })
+  const [sort, setSort] = useState<ResultsSort | null>(DEFAULT_SORT)
   // Text/number filters commit on Enter or blur (each distinct view costs the
   // backend a full-file scan; per-keystroke would burn one per character).
   const [draft, setDraft] = useState({ spectrum: '', minLength: '', maxEvalue: '' })
@@ -354,7 +363,7 @@ export default function ResultsTable({ path, source, rerunResConf, spectrum }: P
   const [userW, setUserW] = useState<Record<string, number>>({})
   const [numeric, setNumeric] = useState<Set<string>>(new Set())
   // Columns the user hid with Columns…; Export writes the shown ones.
-  const [hidden, setHidden] = useState<Set<string>>(new Set())
+  const [hidden, setHidden] = useState<Set<string>>(new Set(DEFAULT_HIDDEN))
   const [colsOpen, setColsOpen] = useState(false)
   // This file's export job (GUI-DESIGN 6.1 item 11), kept by the App's
   // store across tab switches and re-opens (results/exportJobs.ts).
@@ -441,7 +450,8 @@ export default function ResultsTable({ path, source, rerunResConf, spectrum }: P
     setAutoW(null)
     setUserW({})
     setNumeric(new Set())
-    setHidden(new Set())
+    setHidden(new Set(DEFAULT_HIDDEN))
+    setSort(DEFAULT_SORT)
     setHead(null)
     setRank(null)
     setActive(null)
@@ -919,8 +929,8 @@ export default function ResultsTable({ path, source, rerunResConf, spectrum }: P
 
   // The active row's spectrum in the Spectrum tab (P4).
   const spectrumCol = columns.indexOf('spectrum')
-  const openSpectrum = (): void => {
-    const pos = currentPos()
+  const openSpectrum = (at?: number): void => {
+    const pos = at ?? currentPos()
     if (pos == null || !spectrum) return
     if (spectrum.state !== 'yes') {
       setCopyNote(spectrum.state === 'no' ? `${SPECTRUM_NEEDS}.` : 'Still asking FASTag whether it can show spectra.')
@@ -1007,8 +1017,9 @@ export default function ResultsTable({ path, source, rerunResConf, spectrum }: P
         tabIndex={row != null ? (selected ? 0 : -1) : undefined}
         key={i}
         style={{ gridTemplateColumns: grid }}
-        onClick={() => {
-          if (row == null) return
+        onClick={(e) => {
+          // The second click of a double-click keeps the row chosen.
+          if (row == null || e.detail > 1) return
           if (selected) {
             setActive(null)
             setActivePos(null)
@@ -1017,6 +1028,13 @@ export default function ResultsTable({ path, source, rerunResConf, spectrum }: P
             setActivePos(i)
           }
           idPending.current = false
+        }}
+        // A double-click opens the row's spectrum in the Spectrum tab.
+        onDoubleClick={() => {
+          if (row == null || !spectrum) return
+          setActive(rowId ?? null)
+          setActivePos(i)
+          openSpectrum(i)
         }}
       >
         {row ? (
@@ -1031,7 +1049,27 @@ export default function ResultsTable({ path, source, rerunResConf, spectrum }: P
                   hitWords(c)
                 ) : name === 'spectrum' ? (
                   // The scan number tells rows apart; the native ID is the tooltip.
-                  fitMiddle(spectrumHint(c) || c, width(name))
+                  <>
+                    {spectrum && c !== '' && (
+                      <button
+                        type="button"
+                        className="rt-spec"
+                        tabIndex={-1}
+                        title="Show this spectrum with the tag on its peaks"
+                        aria-label={`Open spectrum ${spectrumHint(c) || c}`}
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          setActive(rowId ?? null)
+                          setActivePos(i)
+                          openSpectrum(i)
+                        }}
+                        onDoubleClick={(e) => e.stopPropagation()}
+                      >
+                        <IconSpectrum />
+                      </button>
+                    )}
+                    {fitMiddle(spectrumHint(c) || c, width(name) - (spectrum ? SPEC_ICON_W : 0))}
+                  </>
                 ) : (
                   fitMiddle(c, width(name), charW(name))
                 )}
@@ -1118,7 +1156,7 @@ export default function ResultsTable({ path, source, rerunResConf, spectrum }: P
                   ? 'Asking FASTag whether it can show spectra…'
                   : "The active row's spectrum, with FASTag's processed peaks and the tag's ladder (Enter)"
             }
-            onClick={openSpectrum}
+            onClick={() => openSpectrum()}
           >
             {spectrum.state === 'no' ? SPECTRUM_NEEDS : 'Open in Spectrum'}
           </button>
