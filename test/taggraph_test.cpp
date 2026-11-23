@@ -914,6 +914,36 @@ namespace
             "terminus column of KPEPTIDE's PEPTIDE: " + (f.empty() ? std::string() : f.back()));
       check(resolvedHeader().find("\tthreshold\tterminus\n") != std::string::npos, "terminus is the last column");
     }
+    // A tag longer than the precursor allows: the precursor-side flank is
+    // negative. The cell is written as 0 (clamped), but the terminus is tested
+    // on the raw flank, which matches no target.
+    {
+      const auto firstRow = [&](const Peaks& s, const Graph& g) {
+        std::string buf;
+        appendResolvedRows(buf, g, s, "scan=1", false, {}, t);
+        return fields(buf.substr(0, buf.find('\n')));
+      };
+      // y ladder of PEPTIDE at the C terminus; M is 500 Da below the tag's own mass.
+      Peaks sy = spec(ions(WATER, rev(SEQ)));
+      const double my = sum(SEQ) + WATER - 500;
+      sy.precursor = (my + 2 * PROTON) / 2;
+      const Graph gy = buildGraph({at(0, 5000, "PEPTIDE", 0.001, false, 0)}, sy, RES);
+      auto f = firstRow(sy, gy);
+      check(!gy.paths.empty() && gy.paths[0].series == 'y', "negative flank: y path");
+      check(f.size() > 9 && f[7] == "0.0000" && f.back() == "C",
+            "y with a raw nterm of -500 Da: nterm cell 0, terminus C only: " +
+                (f.size() > 9 ? f[7] + " / " + f.back() : std::string()));
+      // b ladder of PEPTIDE after K; M is 500 Da below KPEPTIDE.
+      const double nk = R('K');
+      Peaks sb = spec(ions(nk, SEQ));
+      const double mb = nk + sum(SEQ) + WATER - 500;
+      sb.precursor = (mb + 2 * PROTON) / 2;
+      const Graph gb = buildGraph({at(0, nk, "PEPTIDE", 0.001, false, 0)}, sb, RES);
+      f = firstRow(sb, gb);
+      check(f.size() > 9 && f[8] == "0.0000" && f.back() == "N+K",
+            "b with a raw cterm of -500 Da: cterm cell 0, terminus N+K only: " +
+                (f.size() > 9 ? f[8] + " / " + f.back() : std::string()));
+    }
   }
 }
 

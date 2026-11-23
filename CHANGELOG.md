@@ -26,8 +26,9 @@
 - **CLI: `-resolved_out` says whether a resolved tag lies at a peptide terminus.** A new last column, `terminus`:
   `N` or `C` when a flank is 0 (or a terminal modification of the run) within the tolerance of its side (the
   fragment tolerance for the side read from the peaks, plus the precursor's for the other, at the `-isotope_error`
-  offsets), else `N+K` / `C+[KQ]` when it is one residue away; `N,C+R` for both, empty for neither. The other
-  columns, their order and the ranking are unchanged.
+  offsets), else `N+K` / `C+[KQ]` when it is one residue away; `N,C+R` for both, empty for neither. The flanks are
+  tested before the clamp at 0 of `nterm_mass`/`cterm_mass`, so a tag longer than the precursor allows is at no
+  terminus. The other columns, their order and the ranking are unchanged.
 
 - **GUI: FASTag's own resolved tags, and the merge graph.** When the CLI has `-resolved_out` and `-tag_graph_out`,
   the app writes them beside the tags (`<stem>.resolved.tsv`, `<stem>.taggraph.tsv`) and the Spectrum tab's All tags,

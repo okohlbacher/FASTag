@@ -1740,20 +1740,22 @@ namespace FASTag::TagGraph
       // H2O = M either way.
       const int z = p.charge;
       const double low = s.mz[static_cast<size_t>(p.peaks.front())];
-      double nterm = 0, cterm = 0;
+      // The cells are clamped at 0; the terminus is tested on the raw flanks,
+      // so a flank below 0 (a tag longer than M allows) is at no terminus.
+      double n_raw = 0, c_raw = 0;
       if (nTerminal(p.series))
       {
-        const double n_raw = low * z - PROTON * z - (p.series == 'c' ? C_OFFSET : 0.0);
-        nterm = std::max(0.0, n_raw);
-        cterm = M ? std::max(0.0, *M - n_raw - cum - WATER) : 0.0;
+        n_raw = low * z - PROTON * z - (p.series == 'c' ? C_OFFSET : 0.0);
+        c_raw = M ? *M - n_raw - cum - WATER : 0.0;
       }
       else
       {
         // FASTag's own -out convention (FASTagger.cpp scorePath).
         const double offC = p.series == 'z' ? Z_DOT_OFFSET : WATER;
-        cterm = std::max(0.0, low * z - PROTON * z - offC);
-        nterm = M ? std::max(0.0, *M - ((low + cum / z) * z - PROTON * z) - (WATER - offC)) : 0.0;
+        c_raw = low * z - PROTON * z - offC;
+        n_raw = M ? *M - ((low + cum / z) * z - PROTON * z) - (WATER - offC) : 0.0;
       }
+      const double nterm = std::max(0.0, n_raw), cterm = std::max(0.0, c_raw);
       massField(buf, nterm, full); buf += '\t';
       massField(buf, cterm, full); buf += '\t';
       appendShortest(buf, p.score); buf += '\t';
@@ -1777,9 +1779,9 @@ namespace FASTag::TagGraph
         appendNum(buf, p.relations[k].shared);
       }
       buf += rank_cells;
-      // terminus: from the flanks as computed for nterm_mass/cterm_mass above.
+      // terminus: from the unclamped flanks of nterm_mass/cterm_mass above.
       buf += '\t';
-      buf += terminus(p.series, z, low, nterm, cterm, s, termini);
+      buf += terminus(p.series, z, low, n_raw, c_raw, s, termini);
       buf += '\n';
     }
   }

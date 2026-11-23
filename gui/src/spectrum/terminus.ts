@@ -9,7 +9,9 @@
 // them is measured from the peaks (F_N for a b/c reading, F_C for y/z), the
 // other from the precursor.
 //
-// The flanks are the ones -resolved_out writes, clamped at 0 as there.
+// The flanks are the ones -resolved_out writes, but tested unclamped: a
+// flank below 0 (a tag longer than the precursor allows) is at no terminus,
+// though the nterm_mass/cterm_mass cells show it as 0.
 // - Tolerance: the peaks' side, the fragment tolerance at the tag's low peak
 //   times its charge; the precursor's side, that plus the tolerance at the
 //   precursor m/z times the precursor charge (as complement pairs and
@@ -99,6 +101,13 @@ const nTerminal = (series: Ladder['series']): boolean => series === 'b' || serie
  *  appendResolvedRows, clamped at 0 as there); null where unknown (no
  *  precursor, a reading without a mass here). */
 export function flanksOf(p: Pick<GPath, 'series' | 'charge' | 'peaks' | 'steps'>, s: SpectrumPeaks, residues: Residues): { n: number | null; c: number | null } {
+  const f = rawFlanksOf(p, s, residues)
+  const pos = (x: number | null): number | null => (x == null ? null : Math.max(0, x))
+  return { n: pos(f.n), c: pos(f.c) }
+}
+
+/** The flanks of @p p before the clamp at 0, as terminus() tests them. */
+export function rawFlanksOf(p: Pick<GPath, 'series' | 'charge' | 'peaks' | 'steps'>, s: SpectrumPeaks, residues: Residues): { n: number | null; c: number | null } {
   const z = p.charge
   const low = s.mz[p.peaks[0]]
   let cum = 0
@@ -108,13 +117,12 @@ export function flanksOf(p: Pick<GPath, 'series' | 'charge' | 'peaks' | 'steps'>
     cum += m
   }
   const M = s.precursor != null && s.charge > 0 ? s.precursor * s.charge - s.charge * PROTON : null
-  const pos = (x: number): number => Math.max(0, x)
   if (nTerminal(p.series)) {
     const n = low * z - PROTON * z - (p.series === 'c' ? C_OFFSET : 0)
-    return { n: pos(n), c: M == null ? null : pos(M - n - cum - WATER) }
+    return { n, c: M == null ? null : M - n - cum - WATER }
   }
   const offC = p.series === 'z' ? Z_DOT_OFFSET : WATER
-  return { c: pos(low * z - PROTON * z - offC), n: M == null ? null : pos(M - (low * z - PROTON * z + cum) - (WATER - offC)) }
+  return { c: low * z - PROTON * z - offC, n: M == null ? null : M - (low * z - PROTON * z + cum) - (WATER - offC) }
 }
 
 /** Residue labels as a gap's: I and L together, then by letter. */
@@ -149,7 +157,7 @@ export function terminusFromFlanks(series: Ladder['series'], charge: number, low
 /** Where @p p lies against the peptide's termini on @p s. */
 export function terminusOf(p: Pick<GPath, 'series' | 'charge' | 'peaks' | 'steps'>, s: SpectrumPeaks, residues: Residues, ctx: TermContext): Terminus {
   if (p.peaks.length === 0) return NO_TERMINUS
-  const f = flanksOf(p, s, residues)
+  const f = rawFlanksOf(p, s, residues)
   return terminusFromFlanks(p.series, p.charge, s.mz[p.peaks[0]], f.n, f.c, s, ctx)
 }
 
@@ -193,7 +201,7 @@ export function terminusMark(p: Pick<GPath, 'series' | 'charge' | 'peaks' | 'ste
   const n = nTerminal(p.series)
   const e = n ? t.n : t.c
   if (!e || p.peaks.length === 0) return null
-  const f = flanksOf(p, s, residues)
+  const f = rawFlanksOf(p, s, residues)
   const F = n ? f.n : f.c
   if (F == null) return null
   const z = p.charge > 0 ? p.charge : 1

@@ -1881,8 +1881,9 @@ N-term, C-term or protein C-term, fixed or variable) is `N` or `C`; else one
 within it of that plus one residue (the tagger's residues, with the run's
 modifications) is `N+K`, several `N+[KQ]` (sorted as gap labels; I and L give
 `[IL]`). Tokens N side first, comma-separated (`N,C+K`); empty if neither.
-A flank FASTag clamps at 0 (`nterm_mass`/`cterm_mass` are never negative)
-reads as 0.
+The flank is tested before FASTag clamps it at 0 for `nterm_mass`/`cterm_mass`
+(never negative), so a tag longer than the precursor allows (a negative flank,
+e.g. under a wrong or assumed charge) is at no terminus.
 
 `-tag_graph_out` columns, one row per placement in canonical order (layer,
 first peak): `spectrum`, `node` (0-based), `layer` (`by2`, `cz1`), `charge`,

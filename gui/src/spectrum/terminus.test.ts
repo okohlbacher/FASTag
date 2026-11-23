@@ -52,6 +52,19 @@ describe('terminus of a resolved tag', () => {
     expect(token(terminusOf(t, s, RES, DEF))).toBe('C')
   })
 
+  it('a tag longer than the precursor allows: the negative flank is at no terminus', () => {
+    // y ladder of the whole peptide from y0, M 500 Da below it: raw nterm -500.
+    const y = ions(WATER, 'KEDITPEP')
+    const s = spectrum(y, M - 500)
+    const t = tagOn(s, 'y', y, [...'KEDITPEP'])
+    expect(flanksOf(t, s, RES).n).toBe(0)
+    expect(token(terminusOf(t, s, RES, DEF))).toBe('C')
+    // b ladder after K with M 500 Da below KPEPTIDEK: raw cterm -500.
+    const b = ions(R.K, PEP)
+    const sb = spectrum(b, R.K + M - 500)
+    expect(token(terminusOf(tagOn(sb, 'b', b, [...PEP]), sb, RES, DEF))).toBe('N+K')
+  })
+
   it('N,C: a b ladder over the whole peptide', () => {
     const b = ions(0, PEP)
     const s = spectrum(b, M)

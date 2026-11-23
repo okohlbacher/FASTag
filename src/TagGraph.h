@@ -365,8 +365,8 @@ namespace FASTag::TagGraph
     @param[in] series b, y, c or z
     @param[in] charge the fragment charge
     @param[in] low_mz the low peak (the first ion of the series ladder)
-    @param[in] nterm the nterm_mass written
-    @param[in] cterm the cterm_mass written
+    @param[in] nterm the nterm_mass before its clamp at 0 (a negative flank matches no target)
+    @param[in] cterm the cterm_mass before its clamp at 0
     @param[in] s the peaks (tolerance, precursor, isotope)
     @param[in] t the targets
     @return the tokens, N side first, comma-separated ("N", "C+K", "N,C+[IL]"); empty if neither
