@@ -3,7 +3,7 @@
 
 import { act, fireEvent, render, screen, within } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
-import type { JSX } from 'react'
+import { useState, type JSX } from 'react'
 import SpectrumPanel, { StickPlot } from './SpectrumPanel'
 import { MergeGraph } from './MergeGraph'
 import { buildGraph, sequenceOf, type TagIn } from './graph'
@@ -262,6 +262,25 @@ describe('merge graph', () => {
     act(() => w.focus())
     fireEvent.keyDown(w, { key: 'Enter' })
     expect(choose).toHaveBeenLastCalledWith(1)
+  })
+
+  it('Enter on a bar that re-anchors keeps the keyboard focus: on the new anchor\'s tab stop', () => {
+    function Stateful(): JSX.Element {
+      const [chosen, setChosen] = useState(0)
+      return <MergeGraph graph={graph} spectrum={S} chosen={chosen} onChoose={setChosen} />
+    }
+    const { container } = render(<Stateful />)
+    const w = container.querySelector('[data-path="1"]') as HTMLElement
+    act(() => w.focus())
+    fireEvent.keyDown(w, { key: 'Enter' })
+    expect(screen.getByTestId('merge-graph-ruler').getAttribute('data-sequence')).toBe('W')
+    const stop = container.querySelector('[tabindex="0"]') as Element
+    expect(stop.getAttribute('data-band')).toBe('chain')
+    expect(document.activeElement).toBe(stop)
+    // A click re-anchors without moving the focus.
+    fireEvent.click(container.querySelector('[data-path="0"]') as Element)
+    expect(screen.getByTestId('merge-graph-ruler').getAttribute('data-sequence')).toBe('EPTIDE')
+    expect(document.activeElement).toBe(document.body)
   })
 
   it('marks the termini of the anchor on its ruler and of the others beside their sequence', () => {

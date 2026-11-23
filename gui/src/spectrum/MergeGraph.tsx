@@ -22,7 +22,7 @@
 // the arrows move along a lane (left, right) and between lanes (up, down);
 // Enter or a click chooses it, which re-anchors.
 
-import { useMemo, useRef, useState, type JSX, type KeyboardEvent } from 'react'
+import { useEffect, useMemo, useRef, useState, type JSX, type KeyboardEvent } from 'react'
 import type { SpectrumPeaks } from './dump'
 import { layerOf, sequenceOf, stepLabel, type GPath, type Placement, type Step, type TagGraph } from './graph'
 import { isComplement, seriesText, type Ladder, type SeriesCall } from './ladder'
@@ -93,6 +93,15 @@ export function MergeGraph({
   const layout = useMemo(() => lay(g, s, at, terms, unused), [g, s, at, terms, unused])
   const [focus, setFocus] = useState<{ g: TagGraph; at: number; key: string } | null>(null)
   const refs = useRef(new Map<string, SVGGElement>())
+  // Set when Enter or Space re-anchors: the chosen bar unmounts, so the new
+  // anchor's tab stop takes the focus once it is drawn.
+  const refocus = useRef(false)
+  const svg = useRef<SVGSVGElement>(null)
+  useEffect(() => {
+    if (!refocus.current) return
+    refocus.current = false
+    svg.current?.querySelector<SVGGElement>('[tabindex="0"]')?.focus()
+  }, [at, layout])
 
   if (!layout)
     return (
@@ -119,6 +128,7 @@ export function MergeGraph({
   function key(e: KeyboardEvent<SVGGElement>, b: Bar): void {
     if (e.key === 'Enter' || e.key === ' ') {
       e.preventDefault()
+      if (b.path !== at) refocus.current = true
       return onChoose(b.path as number)
     }
     if (!['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].includes(e.key)) return
@@ -135,6 +145,7 @@ export function MergeGraph({
   return (
     <div className="sp-graph" data-testid="merge-graph">
       <svg
+        ref={svg}
         viewBox={`0 0 ${W} ${height}`}
         className="sp-graph-svg"
         role="group"
