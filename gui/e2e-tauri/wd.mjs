@@ -168,3 +168,33 @@ export class Session {
 
 /** XPath string literal for @p s (one without both quote kinds). */
 export const xq = (s) => JSON.stringify(s)
+
+/** The Setup wizard's steps (doc/GUI-SETUP-WIZARD.md), by name. */
+const STEP_N = { Task: 1, Inputs: 2, Settings: 3, 'Outputs & run': 4 }
+
+/** Go to Setup step @p name of the app in @p s, confirming the selected task
+ *  first (Continue) while none is: the inactive steps stay in the DOM but
+ *  hidden, and their controls cannot be clicked. */
+export async function toStep(s, name) {
+  const n = STEP_N[name]
+  if (!n) throw new Error(`no Setup step ${name}`)
+  if (n > 1)
+    await s.exec(`const b = document.querySelector('nav[aria-label="Setup steps"] button[data-step-btn="2"]')
+      if (b && b.getAttribute('aria-disabled') === 'true') document.querySelector('.wizard-foot button.continue')?.click()`)
+  await s.exec(`const b = document.querySelector('nav[aria-label="Setup steps"] button[data-step-btn="' + arguments[0] + '"]')
+    if (b && b.getAttribute('aria-current') !== 'step') b.click()`, String(n))
+  await until(`Setup step ${name}`, () => s.exec("const e = document.getElementById('step-' + arguments[0]); return !!e && !e.hidden", String(n)), 5000)
+}
+
+/** Choose the Setup task whose tile reads @p label: the tile, then Continue. */
+export async function chooseTask(s, label) {
+  await toStep(s, 'Task')
+  const ok = await s.exec(`const want = arguments[0]
+    for (const b of document.querySelectorAll('button.task-tile')) {
+      if ((b.querySelector('.task-tile-label') || {}).textContent === want) { b.click(); return true }
+    }
+    return false`, label)
+  if (!ok) throw new Error(`no task "${label}" on Setup`)
+  await s.click(await s.button(`Continue with ${label} ›`))
+  await until(`the task ${label}`, () => s.exec("return document.querySelector('button.task-tile[aria-current=\"true\"] .task-tile-label')?.textContent === arguments[0]", label), 5000)
+}
