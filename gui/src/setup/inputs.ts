@@ -145,14 +145,22 @@ export interface TaskInputs {
   shown: string[]
   /// Optional inputs the Add optional input menu offers now.
   addable: string[]
-  /// Inputs that hold a value but are not part of the task, or not usable
-  /// in this mode, with why.
+  /// Inputs that hold a value but have no control for the task, or are not
+  /// usable in this mode, with why.
   extraneous: { name: string; why: string }[]
 }
 
 /// The inputs step 2 shows for @p task. @p revealed: optional inputs the
-/// user opened that hold no value yet.
-export function taskInputs(task: Task | null, values: V, mode: 'one' | 'batch', revealed: ReadonlySet<string> = new Set()): TaskInputs {
+/// user opened that hold no value yet. @p elsewhere: the inputs with a
+/// field in another step (advancedParams): a value there is the user's
+/// setting, sent and shown where it is set, not an "Also set" entry.
+export function taskInputs(
+  task: Task | null,
+  values: V,
+  mode: 'one' | 'batch',
+  revealed: ReadonlySet<string> = new Set(),
+  elsewhere: ReadonlySet<string> = new Set()
+): TaskInputs {
   const required = task?.required ?? []
   const own = primaryInputs(task)
   const shown: string[] = []
@@ -173,6 +181,12 @@ export function taskInputs(task: Task | null, values: V, mode: 'one' | 'batch', 
   }
   for (const n of PRIMARY_STEP2) {
     if (own.includes(n) || !setHasValue(values, n)) continue
+    const info = INPUTS[n]
+    if (mode === 'batch' && info.oneFileOnly) {
+      extraneous.push({ name: n, why: info.oneFileOnly })
+      continue
+    }
+    if (setOf(n).some((m) => elsewhere.has(m))) continue
     extraneous.push({ name: n, why: `Not used by ${task?.label ?? 'this run'}, but sent: ${INPUTS[n].why ?? humanName(n)}` })
   }
   return { required, shown, addable, extraneous }

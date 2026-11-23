@@ -274,9 +274,12 @@ Order:
 4. **Add optional input ▾** (only when the task has unset optional inputs):
    each entry is the input's name and its effect line. Choosing one shows its
    field, focused.
-5. **Also set**: inputs that hold a value but are not part of this task (from
-   last-used or History, or invalid in the current mode), each with its effect
-   and **Remove**; the step badge shows "!" while one is present.
+5. **Also set**: inputs that hold a value but have no control for this task
+   (from last-used or History), or are invalid in the current mode, each with
+   its effect and **Remove**; the step badge shows "!" while one is present.
+   An input whose field is under Advanced for the task (Run QC's Filter
+   database, Characterize's Protein database) is no entry: it is the user's
+   setting, sent and shown where it was set.
 6. **About these spectra**: Instrument (preset; "(detected)" from the input
    checks, or "not detected: choose"), Fixed modifications ("Was the sample
    alkylated? Carbamidomethyl (C) is for alkylated samples; remove it if
@@ -536,7 +539,8 @@ Unit (vitest):
 - `inputs.ts`: per task, `required`/`addable` match the step-2 table; `fasta`
   stands in for `recon_fasta`; `entrapment_fasta` offered only with `fasta`;
   `census_ids` not addable in Batch mode and listed as extraneous there; a set
-  `fasta` on Species is extraneous; `extensionWarning`; no input in both
+  input with no control for the task is extraneous, one set under Advanced is
+  not; `extensionWarning`; no input in both
   `inputParams(task)` and `advancedParams(task)`; every manifest input-file
   param classified; every `also` set is a `conflicts()` set; task null.
 - `tasks.ts`: every task has question, gets, use, notFor, time, group; no

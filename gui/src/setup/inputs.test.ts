@@ -76,7 +76,20 @@ describe('inputs per task', () => {
     expect(missingInputs(T('species'), baseValues('builtin:species'), { input: '', jobs: 0, mode: 'one' })).toEqual(['in'])
   })
 
-  it('an input the task does not use is listed, never hidden; identifications not in Batch mode', () => {
+  it('an input set through its Advanced field is no "Also set" entry: it has its control there', () => {
+    for (const [id, n] of [['run-qc', 'fasta'], ['characterize', 'recon_fasta'], ['species', 'fasta']] as const) {
+      const adv = new Set(advancedParams(T(id)))
+      expect(adv.has(n), `${id} ${n}`).toBe(true)
+      const v = { ...baseValues(`builtin:${id}` as never), [n]: '/d/h.fasta' }
+      expect(taskInputs(T(id), v, 'one', new Set(), adv).extraneous, `${id} ${n}`).toEqual([])
+    }
+    // Identifications in Batch mode stay listed, wherever their field is.
+    const adv = new Set(advancedParams(T('export-tags')))
+    const ids = { ...baseValues('builtin:export-tags'), census_ids: '/d/a.idXML' }
+    expect(taskInputs(T('export-tags'), ids, 'batch', new Set(), adv).extraneous.map((x) => x.name)).toEqual(['census_ids'])
+  })
+
+  it('an input with no control for the task is listed, never hidden; identifications not in Batch mode', () => {
     const species = { ...baseValues('builtin:species'), fasta: '/d/h.fasta' }
     expect(taskInputs(T('species'), species, 'one').extraneous.map((x) => x.name)).toEqual(['fasta'])
     const ids = { ...baseValues('builtin:triage'), census_ids: '/d/a.idXML' }

@@ -598,7 +598,7 @@ export default function SetupForm({
   }
 
   // Step 2: the inputs of the task (setup/inputs.ts).
-  const ti = taskInputs(owner, values, batch ? 'batch' : 'one', session.revealed)
+  const ti = taskInputs(owner, values, batch ? 'batch' : 'one', session.revealed, ADV)
   const missing = missingInputs(owner, values, { input, jobs: jobs.length, mode: batch ? 'batch' : 'one' })
   const deps = inputDependents(task, owner)
   // Errors are shown once the user tried to move on or run, never on an

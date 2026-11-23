@@ -13,6 +13,16 @@ const field = (n: string): HTMLInputElement | null => document.getElementById(`p
 const change = (el: Element, value: string): Promise<void> => act(async () => void fireEvent.change(el, { target: { value } }))
 const tile = (id: string): HTMLElement => document.querySelector<HTMLElement>(`button.task-tile[data-task="${id}"]`)!
 const stepBtn = (n: number): HTMLElement => document.querySelector<HTMLElement>(`nav[aria-label="Setup steps"] button[data-step-btn="${n}"]`)!
+/// Open Advanced in step 3 until the field of @p name is built (each
+/// group's body is built only while open).
+const openAdvanced = async (name: string): Promise<void> => {
+  showStep(3)
+  for (let i = 0; i < 4 && !field(name); i++) {
+    const closed = [...document.querySelectorAll<HTMLElement>('[data-step="3"] summary')].filter((e) => !(e.parentElement as HTMLDetailsElement).open)
+    if (!closed.length) break
+    for (const c of closed) await click(c)
+  }
+}
 const addInput = (name: string): Promise<void> => change(screen.getByRole('combobox', { name: 'Add optional input' }), name)
 
 describe('wizard: step 1', () => {
@@ -125,6 +135,30 @@ describe('wizard: inputs per task', () => {
     showStep(4)
     await click(screen.getByRole('button', { name: 'Go to Inputs' }))
     expect(currentStep()).toBe(2)
+  })
+
+  it.each([
+    ['Run QC', 'fasta', null],
+    // The alkylation report reads the Protein database if one is given (review decision 5).
+    ['Characterize a run', 'recon_fasta', 'alkylation_out']
+  ] as const)('a database set under Advanced (%s, %s) leaves Inputs clean: no "Also set", no "!"', async (task, n, report) => {
+    {
+      const mock = installMockBridge()
+      await renderColdApp(mock)
+      await chooseTask(task)
+      mock.nextPickInput = '/d/run01.mzML'
+      await click(screen.getByRole('button', { name: 'Choose file…' }))
+      if (report) {
+        showStep(4)
+        await click(document.getElementById(`out-${report}`)!)
+      }
+      await openAdvanced(n)
+      const f = field(n)!
+      expect(Number(f.closest<HTMLElement>('[data-step]')!.dataset.step), `${task} ${n}`).toBe(3)
+      await change(f, '/d/human.fasta')
+      expect(stepBtn(2).closest('li')!.className, task).not.toMatch(/blocked/)
+      expect(screen.queryByRole('heading', { name: 'Also set' }), task).toBeNull()
+    }
   })
 
   it('Species offers only the taxonomy, as one set of three files; Remove clears all three', async () => {
