@@ -1632,10 +1632,72 @@ namespace FASTag::TagGraph
     }
   }
 
+  Termini terminiFrom(const Residues& res, const std::vector<double>& nterm_mods, const std::vector<double>& cterm_mods,
+                      const std::vector<int>& isotope)
+  {
+    Termini t;
+    t.nterm.insert(t.nterm.end(), nterm_mods.begin(), nterm_mods.end());
+    t.cterm.insert(t.cterm.end(), cterm_mods.begin(), cterm_mods.end());
+    t.isotope = isotope.empty() ? std::vector<int>{0} : isotope;
+    for (const auto& [c, m] : res.base) t.residues.emplace_back(std::string(1, c), m);
+    for (const auto& [key, m] : res.variable) t.residues.emplace_back(std::string(1, key.first) + "[" + key.second + "]", m);
+    return t;
+  }
+
+  std::string terminus(char series, int charge, double low_mz, double nterm, double cterm, const Peaks& s,
+                       const Termini& t)
+  {
+    const int z = charge > 0 ? charge : 1;
+    // The side read from the peaks: the fragment tolerance at the low peak,
+    // as a neutral mass (times z), as the ladder walks and the steps take it.
+    const double tol_peak = tolAt(s, low_mz) * z;
+    const bool have_prec = s.precursor && s.charge > 0;
+    // The side from the precursor: that plus the fragment tolerance at the
+    // precursor m/z times its charge (FASTag tags with no precursor
+    // tolerance of its own; complementTol and settleSeries take this term).
+    const double tol_prec = have_prec ? tol_peak + tolAt(s, *s.precursor) * s.charge : 0;
+    const std::vector<int> peak_iso{0};
+    std::vector<int> prec_iso;
+    for (int k : t.isotope) prec_iso.push_back(k - s.isotope);
+    if (prec_iso.empty()) prec_iso.push_back(0);
+    const auto side = [&](char end, double f, const std::vector<double>& targets, bool from_peaks) -> std::string {
+      if (!from_peaks && !have_prec) return {};
+      const double tol = from_peaks ? tol_peak : tol_prec;
+      const std::vector<int>& iso = from_peaks ? peak_iso : prec_iso;
+      const auto near = [&](double x) {
+        for (double m : targets)
+          for (int d : iso)
+            if (std::fabs(f - (m + d * C13 + x)) <= tol) return true;
+        return false;
+      };
+      if (near(0)) return std::string(1, end);
+      std::vector<std::string> labels;
+      for (const auto& [label, r] : t.residues)
+        if (near(r) && std::find(labels.begin(), labels.end(), label) == labels.end()) labels.push_back(label);
+      if (labels.empty()) return {};
+      std::stable_sort(labels.begin(), labels.end(), [](const std::string& x, const std::string& y) {
+        int c = localeCompare(il(x), il(y));
+        if (c == 0) c = localeCompare(x, y);
+        return c < 0;
+      });
+      std::string out(1, end);
+      out += '+';
+      if (labels.size() == 1) return out + labels[0];
+      out += '[';
+      for (const std::string& l : labels) out += l;
+      return out + ']';
+    };
+    const bool n_from_peaks = nTerminal(series);
+    const std::string n = side('N', nterm, t.nterm, n_from_peaks);
+    const std::string c = side('C', cterm, t.cterm, !n_from_peaks);
+    if (!n.empty() && !c.empty()) return n + "," + c;
+    return n.empty() ? c : n;
+  }
+
   std::string resolvedHeader()
   {
     return "spectrum\trank\tsequence\tlength\tseries\tcall\tcharge\tnterm_mass\tcterm_mass\tscore\tbest_e"
-           "\tweakest_e\tn_tags\tpeaks\tsteps\tmembers\tinside\tjoined\trelations\tscheme\tthreshold\n";
+           "\tweakest_e\tn_tags\tpeaks\tsteps\tmembers\tinside\tjoined\trelations\tscheme\tthreshold\tterminus\n";
   }
 
   std::string graphHeader()
@@ -1644,7 +1706,7 @@ namespace FASTag::TagGraph
   }
 
   void appendResolvedRows(std::string& buf, const Graph& g, const Peaks& s, const std::string& native_id, bool full,
-                          const Options& ranking)
+                          const Options& ranking, const Termini& termini)
   {
     // The ranking (-resolve_score, -resolve_threshold), the same on every row;
     // evidence takes no threshold, and a study's own weight is no scheme.
@@ -1715,6 +1777,9 @@ namespace FASTag::TagGraph
         appendNum(buf, p.relations[k].shared);
       }
       buf += rank_cells;
+      // terminus: from the flanks as computed for nterm_mass/cterm_mass above.
+      buf += '\t';
+      buf += terminus(p.series, z, low, nterm, cterm, s, termini);
       buf += '\n';
     }
   }

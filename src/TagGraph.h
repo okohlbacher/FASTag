@@ -77,6 +77,9 @@ namespace FASTag::TagGraph
     int charge = 2;                   ///< precursor charge (2 when none was given)
     double tolerance = 20;
     bool ppm = true;
+    /// The precursor isotope offset k the precursor m/z was already shifted
+    /// by (the selected hypothesis's, -isotope_error); terminus() only.
+    int isotope = 0;
   };
 
   /**
@@ -317,6 +320,60 @@ namespace FASTag::TagGraph
   /// by<z> or cz<z>.
   std::string layerOf(char series, int charge);
 
+  /// 13C - 12C (PrecursorHypotheses' isotope spacing).
+  inline constexpr double C13 = 1.0033548378;
+
+  /// What terminus() tests a resolved tag's flanks against (-resolved_out `terminus`).
+  struct Termini
+  {
+    /// Masses a terminal flank is "at": 0 plus the run's terminal
+    /// modifications (fixed and variable, N-term and protein N-term on the N
+    /// side, C-term and protein C-term on the C side), as the flanks carry them.
+    std::vector<double> nterm{0.0}, cterm{0.0};
+    /// The run's precursor isotope offsets k (-isotope_error); a precursor-side
+    /// flank is also accepted (k - Peaks::isotope) * C13 off its target.
+    std::vector<int> isotope{0};
+    /// The single residues a flank can be one away by: label and mass (the
+    /// tagger's residues, fixed modifications in, I and L apart, the variable
+    /// ones as M[Oxidation]).
+    std::vector<std::pair<std::string, double>> residues;
+  };
+
+  /**
+    @brief The termini the run knows: @p res's residues, and the terminal modification masses given.
+
+    @param[in] res the tagger's residues (residuesFrom)
+    @param[in] nterm_mods N-terminal modification masses (0 is always a target)
+    @param[in] cterm_mods C-terminal modification masses
+    @param[in] isotope the run's -isotope_error offsets
+  */
+  Termini terminiFrom(const Residues& res, const std::vector<double>& nterm_mods = {},
+                      const std::vector<double>& cterm_mods = {}, const std::vector<int>& isotope = {0});
+
+  /**
+    @brief Whether a resolved tag's flanks put it at a peptide terminus (-resolved_out `terminus`).
+
+    Each flank side is tested on its own. The side read from the peaks (nterm
+    for b/c, cterm for y/z) has the fragment tolerance at the low peak times
+    the fragment charge; the side from the precursor (the other) that plus the
+    fragment tolerance at the precursor m/z times the precursor charge, and
+    any isotope offset of Termini::isotope; without a precursor it is not
+    tested. A side within its tolerance of a target is "N" / "C"; else one
+    within it of a target plus one residue "N+K", several "N+[KQ]" (sorted as
+    gap labels).
+
+    @param[in] series b, y, c or z
+    @param[in] charge the fragment charge
+    @param[in] low_mz the low peak (the first ion of the series ladder)
+    @param[in] nterm the nterm_mass written
+    @param[in] cterm the cterm_mass written
+    @param[in] s the peaks (tolerance, precursor, isotope)
+    @param[in] t the targets
+    @return the tokens, N side first, comma-separated ("N", "C+K", "N,C+[IL]"); empty if neither
+  */
+  std::string terminus(char series, int charge, double low_mz, double nterm, double cterm, const Peaks& s,
+                       const Termini& t);
+
   // ---- -resolved_out / -tag_graph_out rows ----
   std::string resolvedHeader();
   std::string graphHeader();
@@ -331,9 +388,10 @@ namespace FASTag::TagGraph
     @param[in] ranking the options @p g was ranked with: its scheme and threshold
                are written on every row (scheme, threshold), so a reader of the
                table knows the ranking without the run's parameters
+    @param[in] termini what the last column, terminus, tests the flanks against
   */
   void appendResolvedRows(std::string& buf, const Graph& g, const Peaks& s, const std::string& native_id,
-                          bool full_precision = false, const Options& ranking = {});
+                          bool full_precision = false, const Options& ranking = {}, const Termini& termini = {});
   /// Append one row per placement (graph node) of @p g, in canonical order.
   void appendGraphRows(std::string& buf, const Graph& g, const Peaks& s, const std::string& native_id,
                        bool full_precision = false);

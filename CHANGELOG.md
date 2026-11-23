@@ -23,6 +23,12 @@
   The GUI takes OpenMS's residue masses, as the CLI does: on PXD003531, PXD000001, PXD076528, PXD020401 and PXD031975
   the GUI's resolved tags equal the CLI's on every scan and rank, under each of the four rankings.
 
+- **CLI: `-resolved_out` says whether a resolved tag lies at a peptide terminus.** A new last column, `terminus`:
+  `N` or `C` when a flank is 0 (or a terminal modification of the run) within the tolerance of its side (the
+  fragment tolerance for the side read from the peaks, plus the precursor's for the other, at the `-isotope_error`
+  offsets), else `N+K` / `C+[KQ]` when it is one residue away; `N,C+R` for both, empty for neither. The other
+  columns, their order and the ranking are unchanged.
+
 - **GUI: FASTag's own resolved tags, and the merge graph.** When the CLI has `-resolved_out` and `-tag_graph_out`,
   the app writes them beside the tags (`<stem>.resolved.tsv`, `<stem>.taggraph.tsv`) and the Spectrum tab's All tags,
   resolved shows FASTag's resolution and names its ranking (it says which one is used, and falls back to the GUI's

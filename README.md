@@ -1869,7 +1869,20 @@ of the tags that build it and of those subsumed), `joined` (m/z of junctions
 joined under `-resolve_join`), `relations` (`rank:fork|touch:shared steps`),
 `scheme` and `threshold` (the ranking, `-resolve_score` and `-resolve_threshold`,
 the same on every row; `threshold` is empty under `evidence`), so a reader of the
-table knows how it was ranked without the run's parameters.
+table knows how it was ranked without the run's parameters, and `terminus`
+(the last column: whether the resolved tag lies at a peptide terminus, from its
+flanks). Each flank is tested on its own: the one read from the peaks
+(`nterm_mass` for b/c, `cterm_mass` for y/z) within the fragment tolerance at
+the low peak times the fragment charge, the one from the precursor within that
+plus the fragment tolerance at the precursor m/z times the precursor charge,
+also at the `-isotope_error` offsets (k × 1.00336 Da). A flank within its
+tolerance of 0 or of a terminal modification of the run (N-term or protein
+N-term, C-term or protein C-term, fixed or variable) is `N` or `C`; else one
+within it of that plus one residue (the tagger's residues, with the run's
+modifications) is `N+K`, several `N+[KQ]` (sorted as gap labels; I and L give
+`[IL]`). Tokens N side first, comma-separated (`N,C+K`); empty if neither.
+A flank FASTag clamps at 0 (`nterm_mass`/`cterm_mass` are never negative)
+reads as 0.
 
 `-tag_graph_out` columns, one row per placement in canonical order (layer,
 first peak): `spectrum`, `node` (0-based), `layer` (`by2`, `cz1`), `charge`,

@@ -5,6 +5,7 @@
 #     every peak list is ascending with 6 decimals, graph path ranks exist,
 #     the flanks start the row's own ladder at its low peak
 #   - -threads 1 and 4 write the same files; the tags are unchanged by the options
+#   - terminus (the last column): its tokens, and the peak-side ones agree with the flanks
 #   - cstar is the default; the schemes, -resolve_threshold and -resolve_max_evalue
 #     reach the output; -stream refuses
 # Exits 77 (ctest SKIP) when the binary cannot start.
@@ -31,7 +32,7 @@ cmp -s "$TMP/plain.tsv" "$TMP/t1.tsv" || fail "the merge options changed -out"
 cmp -s "$TMP/t1.res.tsv" "$TMP/t4.res.tsv" || fail "-resolved_out differs between -threads 1 and 4"
 cmp -s "$TMP/t1.graph.tsv" "$TMP/t4.graph.tsv" || fail "-tag_graph_out differs between -threads 1 and 4"
 
-[ "$(head -1 "$TMP/t1.res.tsv")" = "$(printf 'spectrum\trank\tsequence\tlength\tseries\tcall\tcharge\tnterm_mass\tcterm_mass\tscore\tbest_e\tweakest_e\tn_tags\tpeaks\tsteps\tmembers\tinside\tjoined\trelations\tscheme\tthreshold')" ] \
+[ "$(head -1 "$TMP/t1.res.tsv")" = "$(printf 'spectrum\trank\tsequence\tlength\tseries\tcall\tcharge\tnterm_mass\tcterm_mass\tscore\tbest_e\tweakest_e\tn_tags\tpeaks\tsteps\tmembers\tinside\tjoined\trelations\tscheme\tthreshold\tterminus')" ] \
   || fail "-resolved_out header: $(head -1 "$TMP/t1.res.tsv")"
 [ "$(head -1 "$TMP/t1.graph.tsv")" = "$(printf 'spectrum\tnode\tlayer\tcharge\tseries\tpeaks\tsteps\tevalue\trows\tpath\trole\tnext')" ] \
   || fail "-tag_graph_out header: $(head -1 "$TMP/t1.graph.tsv")"
@@ -89,6 +90,29 @@ awk -F'\t' -v OUT="$TMP/t1.tsv" -v GRAPH="$TMP/t1.graph.tsv" '
   }
   END { if (nflank) print nflank " rows with flanks off their ladder"; exit bad }' "$TMP/t1.res.tsv" || fail "-resolved_out rows are inconsistent"
 
+# terminus: 22 columns on every row; tokens N side first, "N"/"C" or one
+# residue away ("N+K", "C+[KQ]"); a single residue on the side read from the
+# peaks (nterm for b/c, cterm for y/z) lies within 0.3 Da x z of that flank.
+awk -F'\t' 'BEGIN { m["R"] = 156.101111; m["K"] = 128.094963; m["F"] = 147.068414; m["W"] = 186.079313
+                     m["Y"] = 163.063329; m["V"] = 99.068414; m["S"] = 87.032028; m["H"] = 137.058912 }
+  { if (NF != 22) { print "row " NR " has " NF " columns"; bad = 1 } }
+  NR == 1 { next }
+  $22 != "" {
+    n++
+    if ($22 !~ /^(N(\+([A-Z](\[[A-Za-z]+\])?|\[[A-Z]+\]))?(,C(\+([A-Z](\[[A-Za-z]+\])?|\[[A-Z]+\]))?)?|C(\+([A-Z](\[[A-Za-z]+\])?|\[[A-Z]+\]))?)$/) { print "terminus " $22; bad = 1 }
+    k = split($22, tok, ",")
+    for (i = 1; i <= k; i++) {
+      side = substr(tok[i], 1, 1); r = substr(tok[i], 3)
+      peak = (side == "N") == ($5 == "b" || $5 == "c")
+      if (!peak || !(r in m)) continue
+      f = (side == "N") ? $8 : $9; d = f - m[r]; if (d < 0) d = -d
+      if (d > 0.3 * $7 + 0.0001) { print "terminus " $22 " of " $1 " rank " $2 " (" $5 ") off its flank " f; bad = 1 }
+      checked++
+    }
+  }
+  END { if (n < 10 || checked < 5) { print "too few terminus rows to check: " n " " checked; bad = 1 }; exit bad }' "$TMP/t1.res.tsv" \
+  || fail "-resolved_out terminus is inconsistent"
+
 # steps run in ascending m/z order, as peaks: for b/c rows their labels read
 # as sequence, for y/z the reverse of it (rows with plain one-residue steps).
 awk -F'\t' 'NR > 1 && $3 ~ /^[A-Z]+$/ {
@@ -106,6 +130,8 @@ grep -q "steps (both in ascending m/z order: for y and z the steps run C->N, the
   || fail "-resolved_out help does not give the order of steps"
 grep -q "the ranking it was made with (scheme, threshold" "$TMP/help1.txt" \
   || fail "-resolved_out help does not name the ranking columns"
+grep -q "and whether it lies at a peptide terminus (terminus:" "$TMP/help1.txt" \
+  || fail "-resolved_out help does not name the terminus column"
 grep -q "series (as judged on its own peaks, before complement pairing" "$TMP/help1.txt" \
   || fail "-tag_graph_out help does not say a node's series is its own call"
 

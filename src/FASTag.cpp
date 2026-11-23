@@ -3076,6 +3076,29 @@ TOPPFASTag::ExitCodes TOPPFASTag::main_(int, const char**)
   // The residue masses of the tagger's alphabet, for walking tags onto peaks.
   const FASTag::TagGraph::Residues graph_res =
       graph_on ? FASTag::TagGraph::residuesFrom(p.mods) : FASTag::TagGraph::Residues();
+  // -resolved_out terminus: the terminal modifications of the run (any
+  // residue, fixed or variable; resolveMods_ absorbs them into the flanks),
+  // its residues and its precursor isotope offsets.
+  FASTag::TagGraph::Termini graph_termini;
+  if (resolved_on)
+  {
+    std::vector<double> term_n, term_c;
+    for (const char* list : {"fixed_modifications", "variable_modifications"})
+      for (const std::string& nm : getStringList_(list))
+      {
+        if (nm.empty()) continue;
+        const ResidueModification* mod = nullptr;
+        try { mod = ModificationsDB::getInstance()->getModification(nm); }
+        catch (Exception::BaseException&) { continue; }  // refused by resolveMods_ already
+        if (!mod || mod->getOrigin() != 'X') continue;
+        const auto spec = mod->getTermSpecificity();
+        if (spec == ResidueModification::N_TERM || spec == ResidueModification::PROTEIN_N_TERM)
+          term_n.push_back(mod->getDiffMonoMass());
+        else if (spec == ResidueModification::C_TERM || spec == ResidueModification::PROTEIN_C_TERM)
+          term_c.push_back(mod->getDiffMonoMass());
+      }
+    graph_termini = FASTag::TagGraph::terminiFrom(graph_res, term_n, term_c, hyp_param.isotope_errors);
+  }
 
 
   const bool glyco_on = getFlag_("glyco");
@@ -3942,7 +3965,8 @@ TOPPFASTag::ExitCodes TOPPFASTag::main_(int, const char**)
           read_hybrid ? FASTag::preparedPeaksHybrid(spec, hs->mz, hs->charge, gp,
                                                     params_of(FASTag::IonSeries::Series::CZ, spec_itms).front())
                       : FASTag::preparedPeaks(spec, hs->mz, hs->charge, gp);
-      const FASTag::TagGraph::Peaks gpk = FASTag::TagGraph::peaksFrom(gprep, hs->mz, hs->charge, gp);
+      FASTag::TagGraph::Peaks gpk = FASTag::TagGraph::peaksFrom(gprep, hs->mz, hs->charge, gp);
+      gpk.isotope = hs->iso;
       const FASTag::TagGraph::Graph g = FASTag::TagGraph::buildGraph(graph_in, gpk, graph_res, graph_opt);
       // A block holds its spectra's rows until it is written. The rows are
       // built in a per-thread scratch and copied at their size, so the slack
@@ -3951,7 +3975,8 @@ TOPPFASTag::ExitCodes TOPPFASTag::main_(int, const char**)
       if (resolved_on)
       {
         gscratch.clear();
-        FASTag::TagGraph::appendResolvedRows(gscratch, g, gpk, spec.getNativeID(), g_full_precision, graph_opt);
+        FASTag::TagGraph::appendResolvedRows(gscratch, g, gpk, spec.getNativeID(), g_full_precision, graph_opt,
+                                               graph_termini);
         res.vbuf = std::string(gscratch.data(), gscratch.size());
       }
       if (tag_graph_on)

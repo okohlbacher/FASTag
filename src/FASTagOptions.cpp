@@ -1058,7 +1058,9 @@ void TOPPFASTag::registerOptionsAndFlags_()
                       "resolved tags and write one row per resolved tag, best first: sequence N->C, series "
                       "call, flanks, score, evidence, peaks and steps (both in ascending m/z order: for y "
                       "and z the steps run C->N, the reverse of sequence), the member rows of -out and the "
-                      "ranking it was made with (scheme, threshold: -resolve_score, -resolve_threshold)",
+                      "ranking it was made with (scheme, threshold: -resolve_score, -resolve_threshold), "
+                      "and whether it lies at a peptide terminus (terminus: N, C, N,C, or one residue "
+                      "away as N+K or C+[KQ]; empty if neither)",
                       false);
   setValidFormats_("resolved_out", ListUtils::create<std::string>("tsv"));
   registerOutputFile_("tag_graph_out", "<file>", "",

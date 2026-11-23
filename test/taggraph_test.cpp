@@ -406,8 +406,8 @@ namespace
         for (std::string line; std::getline(in, line); ++n)
         {
           const auto f = fields(line);
-          check(f.size() == cols && f[cols - 2] == scheme && f[cols - 1] == thr,
-                "resolved row records its ranking " + scheme + ": " + (f.size() >= 2 ? f[f.size() - 2] + "/" + f.back() : line));
+          check(f.size() == cols && f[cols - 3] == scheme && f[cols - 2] == thr,
+                "resolved row records its ranking " + scheme + ": " + (f.size() >= 3 ? f[f.size() - 3] + "/" + f[f.size() - 2] : line));
         }
         check(n == g.paths.size(), "ranked rows " + scheme);
       }
@@ -829,6 +829,92 @@ namespace
       }
     }
   }
+
+  // -resolved_out terminus: each flank against 0 (and the terminal mods),
+  // the peak side within the fragment tolerance at the low peak times z, the
+  // precursor side within that plus the tolerance at the precursor m/z times
+  // its charge (and its isotope offsets); else one residue away.
+  void terminusCases()
+  {
+    const Termini t = terminiFrom(RES);
+    const auto P = [](double tol, bool ppm, std::optional<double> prec = std::nullopt, int charge = 2) {
+      Peaks s;
+      s.tolerance = tol;
+      s.ppm = ppm;
+      s.precursor = prec;
+      s.charge = charge;
+      return s;
+    };
+    const Peaks da = P(0.02, false, 600.0, 2);  // peak side 0.02 * z, precursor side + 0.04
+    // b: nterm from the peaks, cterm from the precursor.
+    check(terminus('b', 1, 200, 0.01, 300, da, t) == "N", "b at N: " + terminus('b', 1, 200, 0.01, 300, da, t));
+    check(terminus('b', 1, 200, 0.03, 300, da, t).empty(), "b 0.03 Da off N at 0.02 Da: " + terminus('b', 1, 200, 0.03, 300, da, t));
+    check(terminus('b', 2, 200, 0.03, 300, da, t) == "N", "b at N at 2+ (tolerance times z)");
+    check(terminus('b', 1, 200, 300, 0.05, da, t) == "C", "b at C within the precursor side: " + terminus('b', 1, 200, 300, 0.05, da, t));
+    check(terminus('b', 1, 200, 300, 0.07, da, t).empty(), "b 0.07 Da off C");
+    check(terminus('b', 1, 200, 0, 0, da, t) == "N,C", "b at both ends");
+    // y: cterm from the peaks, nterm from the precursor.
+    check(terminus('y', 1, 200, 0.05, 300, da, t) == "N", "y at N within the precursor side");
+    check(terminus('y', 1, 200, 300, 0.05, da, t).empty(), "y 0.05 Da off C, the peak side");
+    check(terminus('z', 1, 200, 300, 0.01, da, t) == "C", "z at C");
+    // Without a precursor the side from it is not tested.
+    check(terminus('b', 1, 200, 300, 0, P(0.02, false), t).empty(), "no precursor: no C for b");
+    // One residue away: I and L alike, K and Q apart at 10 ppm, together at 0.05 Da.
+    const Peaks ppm = P(10, true, 800.0, 2);
+    check(terminus('b', 1, R('L') + PROTON, R('L'), 500, ppm, t) == "N+[IL]", "N+[IL]: " + terminus('b', 1, R('L') + PROTON, R('L'), 500, ppm, t));
+    check(terminus('b', 1, R('K') + PROTON, R('K'), 500, ppm, t) == "N+K", "N+K at 10 ppm: " + terminus('b', 1, R('K') + PROTON, R('K'), 500, ppm, t));
+    const Peaks wide = P(0.05, false, 800.0, 2);
+    check(terminus('b', 1, R('K') + PROTON, R('K'), 500, wide, t) == "N+[KQ]", "N+[KQ] at 0.05 Da: " + terminus('b', 1, R('K') + PROTON, R('K'), 500, wide, t));
+    check(terminus('y', 1, 300, 500, R('K'), ppm, t) == "C+K", "y one K from C");
+    check(terminus('b', 1, 200, 0, R('K'), ppm, t) == "N,C+K", "N,C+K: " + terminus('b', 1, 200, 0, R('K'), ppm, t));
+    // Only one residue: two away is nothing.
+    check(terminus('b', 1, 300, R('A') + R('S'), 500, ppm, t).empty(), "two residues away is no terminus: " + terminus('b', 1, 300, R('A') + R('S'), 500, ppm, t));
+    // The precursor-side tolerance at ppm: 10 ppm at 300 m/z (z 1) plus 10 ppm at 800 m/z times 2.
+    const double tp = 300 * 10e-6 + 800 * 10e-6 * 2;
+    check(terminus('b', 1, 300, 500, 0.98 * tp, ppm, t) == "C", "C within the ppm precursor side");
+    check(terminus('b', 1, 300, 500, 1.02 * tp, ppm, t).empty(), "C beyond the ppm precursor side");
+    // Variable residue modifications read as the tag does.
+    const Residues ox = residuesFrom({FASTag::ModSpec{'M', 15.9949146, "Oxidation", true}});
+    const Termini tox = terminiFrom(ox);
+    check(terminus('b', 1, 200, ox.variable.at({'M', "Oxidation"}), 500, ppm, tox) == "N+M[Oxidation]", "N+M[Oxidation]");
+    // A terminal modification: the flank carries it, and it is a target.
+    const double acetyl = 42.010565;
+    check(terminus('b', 1, 200, acetyl, 500, ppm, t).empty(), "acetyl flank without the mod");
+    const Termini tac = terminiFrom(RES, {acetyl});
+    check(terminus('b', 1, 200, acetyl, 500, ppm, tac) == "N", "acetyl N-term mod: " + terminus('b', 1, 200, acetyl, 500, ppm, tac));
+    // Acetyl + S is E's mass: both readings.
+    check(terminus('b', 1, 200, acetyl + R('S'), 500, ppm, tac) == "N+[ES]", "acetyl then S, or E: " + terminus('b', 1, 200, acetyl + R('S'), 500, ppm, tac));
+    check(terminus('b', 1, 200, acetyl + R('A'), 500, ppm, tac) == "N+A", "acetyl then A");
+    check(terminus('b', 1, 200, 0, 500, ppm, tac) == "N", "0 stays a target with an N-term mod");
+    const Termini tam = terminiFrom(RES, {}, {-0.984016});
+    check(terminus('y', 1, 200, 500, R('K') - 0.984016, ppm, tam) == "C+K", "C-terminal amidation, then K");
+    // Isotope offsets: the precursor side only, relative to the offset the precursor was shifted by.
+    const Termini tiso = terminiFrom(RES, {}, {}, {0, 1});
+    check(terminus('b', 1, 300, 500, C13, ppm, t).empty(), "a 13C off C without -isotope_error");
+    check(terminus('b', 1, 300, 500, C13, ppm, tiso) == "C", "a 13C off C with -isotope_error 0,1");
+    check(terminus('b', 1, 300, C13, 500, ppm, tiso).empty(), "no isotope offset on the peak side");
+    Peaks shifted = ppm;
+    shifted.isotope = 1;  // the precursor was already shifted by 1: offsets -1 and 0
+    check(terminus('b', 1, 300, 500, -C13, shifted, tiso) == "C" && terminus('b', 1, 300, 500, C13, shifted, tiso).empty(),
+          "isotope offsets relative to the selected one");
+    // In the table: the last column, from the row's own flanks. PEPTIDE's
+    // b ladder after K (N+K), the precursor of KPEPTIDE: rank rows at C.
+    {
+      const double nk = R('K');
+      Peaks s = spec(ions(nk, SEQ));
+      const double m = nk + sum(SEQ) + WATER;
+      s.precursor = (m + 2 * PROTON) / 2;
+      const Graph g = buildGraph({at(0, nk, "PEPTIDE", 0.001, false, 0)}, s, RES);
+      std::string buf;
+      appendResolvedRows(buf, g, s, "scan=1", false, {}, t);
+      const auto f = fields(buf.substr(0, buf.find('\n')));
+      size_t cols = 1;
+      for (char c : resolvedHeader()) if (c == '\t') ++cols;
+      check(!g.paths.empty() && f.size() == cols && f.back() == "N+K,C",
+            "terminus column of KPEPTIDE's PEPTIDE: " + (f.empty() ? std::string() : f.back()));
+      check(resolvedHeader().find("\tthreshold\tterminus\n") != std::string::npos, "terminus is the last column");
+    }
+  }
 }
 
 int main()
@@ -839,6 +925,7 @@ int main()
   largeLayer();
   cstarCases();
   nanCases();
+  terminusCases();
   if (failures) { std::cerr << failures << " failure(s)\n"; return 1; }
   std::cout << "taggraph_test: all passed\n";
   return 0;
