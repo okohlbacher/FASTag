@@ -33,8 +33,10 @@ function flanks(p: GPath, s: SpectrumPeaks): [string, string] {
   return [n == null ? '' : n.toFixed(4), c == null ? '' : c.toFixed(4)]
 }
 
-/** The two tables of @p g for the spectrum @p spectrum. */
-export function toCli(g: TagGraph, s: SpectrumPeaks, spectrum: string): { resolved: CliRows; nodes: CliRows } {
+/** The two tables of @p g for the spectrum @p spectrum; with @p ranking, the
+ *  scheme and threshold columns FASTag records it in (without, a table of a
+ *  FASTag that did not). */
+export function toCli(g: TagGraph, s: SpectrumPeaks, spectrum: string, ranking?: { scheme: string; threshold: string }): { resolved: CliRows; nodes: CliRows } {
   const resolved = g.paths.map((p, k) => {
     const [n, c] = flanks(p, s)
     const rows = (of: number[]): number[] => of.flatMap((i) => g.placements[i].rows)
@@ -59,7 +61,8 @@ export function toCli(g: TagGraph, s: SpectrumPeaks, spectrum: string): { resolv
       joined: mzs(s, p.joined),
       relations: p.relations.map((r) => `${r.path + 1}:${r.kind}:${r.shared}`).join(';')
     }
-    return RESOLVED_COLUMNS.map((x) => cells[x])
+    const row = RESOLVED_COLUMNS.map((x) => cells[x])
+    return ranking ? [...row, ranking.scheme, ranking.threshold] : row
   })
   const nodes = g.placements.map((pl, i) => {
     const k = g.paths.findIndex((p) => p.chain.includes(i) || p.inside.includes(i))
@@ -82,7 +85,7 @@ export function toCli(g: TagGraph, s: SpectrumPeaks, spectrum: string): { resolv
     }
     return TAG_GRAPH_COLUMNS.map((x) => cells[x])
   })
-  return { resolved: { columns: [...RESOLVED_COLUMNS], rows: resolved }, nodes: { columns: [...TAG_GRAPH_COLUMNS], rows: nodes } }
+  return { resolved: { columns: ranking ? [...RESOLVED_COLUMNS, 'scheme', 'threshold'] : [...RESOLVED_COLUMNS], rows: resolved }, nodes: { columns: [...TAG_GRAPH_COLUMNS], rows: nodes } }
 }
 
 /** @p t as a TSV file. */

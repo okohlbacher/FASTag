@@ -31,7 +31,7 @@ cmp -s "$TMP/plain.tsv" "$TMP/t1.tsv" || fail "the merge options changed -out"
 cmp -s "$TMP/t1.res.tsv" "$TMP/t4.res.tsv" || fail "-resolved_out differs between -threads 1 and 4"
 cmp -s "$TMP/t1.graph.tsv" "$TMP/t4.graph.tsv" || fail "-tag_graph_out differs between -threads 1 and 4"
 
-[ "$(head -1 "$TMP/t1.res.tsv")" = "$(printf 'spectrum\trank\tsequence\tlength\tseries\tcall\tcharge\tnterm_mass\tcterm_mass\tscore\tbest_e\tweakest_e\tn_tags\tpeaks\tsteps\tmembers\tinside\tjoined\trelations')" ] \
+[ "$(head -1 "$TMP/t1.res.tsv")" = "$(printf 'spectrum\trank\tsequence\tlength\tseries\tcall\tcharge\tnterm_mass\tcterm_mass\tscore\tbest_e\tweakest_e\tn_tags\tpeaks\tsteps\tmembers\tinside\tjoined\trelations\tscheme\tthreshold')" ] \
   || fail "-resolved_out header: $(head -1 "$TMP/t1.res.tsv")"
 [ "$(head -1 "$TMP/t1.graph.tsv")" = "$(printf 'spectrum\tnode\tlayer\tcharge\tseries\tpeaks\tsteps\tevalue\trows\tpath\trole\tnext')" ] \
   || fail "-tag_graph_out header: $(head -1 "$TMP/t1.graph.tsv")"
@@ -104,6 +104,8 @@ awk -F'\t' 'NR > 1 && $3 ~ /^[A-Z]+$/ {
 tr -s ' \n' ' ' <"$TMP/help.txt" >"$TMP/help1.txt"
 grep -q "steps (both in ascending m/z order: for y and z the steps run C->N, the reverse of sequence)" "$TMP/help1.txt" \
   || fail "-resolved_out help does not give the order of steps"
+grep -q "the ranking it was made with (scheme, threshold" "$TMP/help1.txt" \
+  || fail "-resolved_out help does not name the ranking columns"
 grep -q "series (as judged on its own peaks, before complement pairing" "$TMP/help1.txt" \
   || fail "-tag_graph_out help does not say a node's series is its own call"
 
@@ -111,10 +113,16 @@ grep -q "series (as judged on its own peaks, before complement pairing" "$TMP/he
 run cs -threads 2 -resolved_out "$TMP/cs.res.tsv" -resolve_score cstar
 cmp -s "$TMP/t1.res.tsv" "$TMP/cs.res.tsv" || fail "the default is not -resolve_score cstar"
 run sl -threads 2 -resolved_out "$TMP/sl.res.tsv" -resolve_score steplogodds
+# Every row records the ranking it was made with (scheme, threshold).
+ranking() { awk -F'\t' 'NR == 1 { for (i = 1; i <= NF; i++) c[$i] = i; next } { print $c["scheme"] "/" $c["threshold"] }' "$1" | sort -u | tr '\n' ' '; }
+[ "$(ranking "$TMP/t1.res.tsv")" = "cstar/3 " ] || fail "the default rows do not record cstar/3: $(ranking "$TMP/t1.res.tsv")"
+[ "$(ranking "$TMP/sl.res.tsv")" = "steplogodds/3 " ] || fail "steplogodds rows do not record it: $(ranking "$TMP/sl.res.tsv")"
 cmp -s "$TMP/t1.res.tsv" "$TMP/sl.res.tsv" && fail "-resolve_score steplogodds changed nothing"
 run t4c -threads 2 -resolved_out "$TMP/t4c.res.tsv" -resolve_threshold 4
+[ "$(ranking "$TMP/t4c.res.tsv")" = "cstar/4 " ] || fail "-resolve_threshold 4 rows do not record it: $(ranking "$TMP/t4c.res.tsv")"
 cmp -s "$TMP/t1.res.tsv" "$TMP/t4c.res.tsv" && fail "-resolve_threshold 4 changed nothing under cstar"
 run ev -threads 2 -resolved_out "$TMP/ev.res.tsv" -resolve_score evidence
+[ "$(ranking "$TMP/ev.res.tsv")" = "evidence/ " ] || fail "evidence rows do not record it: $(ranking "$TMP/ev.res.tsv")"
 cmp -s "$TMP/t1.res.tsv" "$TMP/ev.res.tsv" && fail "-resolve_score evidence changed nothing"
 run an -threads 2 -resolved_out "$TMP/an.res.tsv" -resolve_score anchor
 cmp -s "$TMP/t1.res.tsv" "$TMP/an.res.tsv" && fail "-resolve_score anchor changed nothing"

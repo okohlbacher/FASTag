@@ -15,6 +15,18 @@ export interface CliRows {
   rows: string[][]
 }
 
+/** The ranking FASTag wrote on the rows of -resolved_out (its scheme and
+ *  threshold columns: -resolve_score, -resolve_threshold; the threshold is
+ *  empty under evidence). null when @p t has no row or no scheme column (a
+ *  table of a FASTag that did not record it): the ranking is not known. */
+export function rankingOf(t: CliRows): { scheme: string; threshold: string } | null {
+  const sc = t.columns.indexOf('scheme')
+  const th = t.columns.indexOf('threshold')
+  const r = t.rows[0]
+  const scheme = sc >= 0 && r ? (r[sc] ?? '').trim() : ''
+  return scheme === '' ? null : { scheme, threshold: th >= 0 ? (r[th] ?? '').trim() : '' }
+}
+
 export type CliGraph = { ok: true; graph: TagGraph } | { ok: false; error: string }
 
 export const RESOLVED_COLUMNS = ['spectrum', 'rank', 'sequence', 'length', 'series', 'call', 'charge', 'nterm_mass', 'cterm_mass', 'score', 'best_e', 'weakest_e', 'n_tags', 'peaks', 'steps', 'members', 'inside', 'joined', 'relations'] as const

@@ -2,7 +2,7 @@
 // a graph buildGraph made, written in the SPEC.md formats, reads back the same.
 import { describe, expect, it } from 'vitest'
 import { buildGraph, sequenceOf, type GraphOpts, type TagGraph, type TagIn } from './graph'
-import { fromCli } from './cliGraph'
+import { fromCli, rankingOf } from './cliGraph'
 import { PROTON, WATER, residueMasses, tagRowFrom } from './ladder'
 import { stepWeight } from './stepScore'
 import { g6, toCli } from '../testing/cliGraphTsv'
@@ -164,5 +164,18 @@ describe('FASTag tag graph tables', () => {
 
   it('writes E-values as printf %g does', () => {
     expect([0.001, 1e-7, 1.234567e-5, 300, 0.5, 123456789].map(g6)).toEqual(['0.001', '1e-07', '1.23457e-05', '300', '0.5', '1.23457e+08'])
+  })
+})
+
+describe('the ranking FASTag recorded (rankingOf)', () => {
+  const cols = ['spectrum', 'rank', 'scheme', 'threshold']
+  it('reads scheme and threshold from the first row', () => {
+    expect(rankingOf({ columns: cols, rows: [['s', '1', 'steplogodds', '2.5'], ['s', '2', 'steplogodds', '2.5']] })).toEqual({ scheme: 'steplogodds', threshold: '2.5' })
+    expect(rankingOf({ columns: cols, rows: [['s', '1', 'evidence', '']] })).toEqual({ scheme: 'evidence', threshold: '' })
+  })
+  it('is null for a table that does not record it, or has no row', () => {
+    expect(rankingOf({ columns: ['spectrum', 'rank'], rows: [['s', '1']] })).toBeNull()
+    expect(rankingOf({ columns: cols, rows: [] })).toBeNull()
+    expect(rankingOf({ columns: cols, rows: [['s', '1', '', '']] })).toBeNull()
   })
 })

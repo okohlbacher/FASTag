@@ -1057,7 +1057,8 @@ void TOPPFASTag::registerOptionsAndFlags_()
                       "Merge each spectrum's tags (of -out, E-value <= -resolve_max_evalue) on its peaks into "
                       "resolved tags and write one row per resolved tag, best first: sequence N->C, series "
                       "call, flanks, score, evidence, peaks and steps (both in ascending m/z order: for y "
-                      "and z the steps run C->N, the reverse of sequence) and the member rows of -out",
+                      "and z the steps run C->N, the reverse of sequence), the member rows of -out and the "
+                      "ranking it was made with (scheme, threshold: -resolve_score, -resolve_threshold)",
                       false);
   setValidFormats_("resolved_out", ListUtils::create<std::string>("tsv"));
   registerOutputFile_("tag_graph_out", "<file>", "",

@@ -831,6 +831,18 @@ namespace FASTag::TagGraph
     throw std::invalid_argument("unknown -resolve_score '" + s + "'");
   }
 
+  std::string schemeName(Scheme s)
+  {
+    switch (s)
+    {
+      case Scheme::CSTAR: return "cstar";
+      case Scheme::STEPLOGODDS: return "steplogodds";
+      case Scheme::EVIDENCE: return "evidence";
+      case Scheme::ANCHOR: return "anchor";
+    }
+    return "cstar";
+  }
+
   double evidence(std::optional<double> e)
   {
     if (!e || !(*e >= 0)) return 0;
@@ -1613,7 +1625,7 @@ namespace FASTag::TagGraph
   std::string resolvedHeader()
   {
     return "spectrum\trank\tsequence\tlength\tseries\tcall\tcharge\tnterm_mass\tcterm_mass\tscore\tbest_e"
-           "\tweakest_e\tn_tags\tpeaks\tsteps\tmembers\tinside\tjoined\trelations\n";
+           "\tweakest_e\tn_tags\tpeaks\tsteps\tmembers\tinside\tjoined\trelations\tscheme\tthreshold\n";
   }
 
   std::string graphHeader()
@@ -1621,8 +1633,15 @@ namespace FASTag::TagGraph
     return "spectrum\tnode\tlayer\tcharge\tseries\tpeaks\tsteps\tevalue\trows\tpath\trole\tnext\n";
   }
 
-  void appendResolvedRows(std::string& buf, const Graph& g, const Peaks& s, const std::string& native_id, bool full)
+  void appendResolvedRows(std::string& buf, const Graph& g, const Peaks& s, const std::string& native_id, bool full,
+                          const Options& ranking)
   {
+    // The ranking (-resolve_score, -resolve_threshold), the same on every row;
+    // evidence takes no threshold, and a study's own weight is no scheme.
+    std::string rank_cells = "\t";
+    rank_cells += ranking.weight ? "custom" : schemeName(ranking.scheme);
+    rank_cells += '\t';
+    if (!ranking.weight && ranking.scheme != Scheme::EVIDENCE) appendShortest(rank_cells, ranking.threshold);
     const E M = s.precursor && s.charge > 0 ? E(*s.precursor * s.charge - s.charge * PROTON) : std::nullopt;
     for (size_t r = 0; r < g.paths.size(); ++r)
     {
@@ -1685,6 +1704,7 @@ namespace FASTag::TagGraph
         buf += p.relations[k].fork ? ":fork:" : ":touch:";
         appendNum(buf, p.relations[k].shared);
       }
+      buf += rank_cells;
       buf += '\n';
     }
   }

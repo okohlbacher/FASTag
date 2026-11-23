@@ -15,10 +15,10 @@ import { useCallback, useEffect, useMemo, useRef, useState, type JSX, type Keybo
 import { parseDump, type SpectrumPeaks } from './dump'
 import { hasStep, ladderFor, laddersFor, residueMasses, seriesText, tagRowFrom, type Ladder, type SeriesCall } from './ladder'
 import { kindOf, ladderOf, packRows, sequenceOf, settleSeries, stepLabel, type GPath, type StepKind, type TagGraph, type TagIn } from './graph'
-import { fromCli, type CliRows } from './cliGraph'
+import { fromCli, rankingOf, type CliRows } from './cliGraph'
 import { MergeGraph } from './MergeGraph'
 import { PAD, W, fullRange } from './plotScale'
-import { schemeGraph } from './stepScore'
+import { CSTAR_THRESHOLD, schemeGraph } from './stepScore'
 import { dbCall, ladderSteps, likelyPeptide, rulerOf, stepOnRuler, stepsOnRuler, ticksOf, type Candidate, type Ruler } from './peptide'
 import { baseName } from '../digestReport'
 import { EValue, columnLabel, hitWords, spectrumHint } from '../ResultsTable'
@@ -85,6 +85,28 @@ const fmt = (x: number, d = 4): string => x.toFixed(d)
 const ppm = (x: number | null): string => (x == null ? '–' : `${x >= 0 ? '+' : '−'}${Math.abs(x).toFixed(1)}`)
 // A run parameter as the text it was given (undefined: not given).
 const paramStr = (v: unknown): string | undefined => (v == null ? undefined : String(v))
+
+/** How the run ranked resolved tags (-resolve_score, -resolve_threshold): as
+ *  FASTag recorded it on its -resolved_out rows (scheme, threshold), else from
+ *  the run's parameters (the app sends the two only when they are not the
+ *  default, so absent is cstar at 3), else not known: tables of a run the app
+ *  has no record of, written by a FASTag that did not record the ranking. */
+interface RunRanking {
+  known: boolean
+  scheme?: string
+  threshold?: string
+}
+function runRanking(recorded: { scheme: string; threshold: string } | null, params: Record<string, unknown> | null | undefined): RunRanking {
+  if (recorded) return { known: true, scheme: recorded.scheme, threshold: recorded.threshold === '' ? undefined : recorded.threshold }
+  if (params) return { known: true, scheme: paramStr(params['resolve_score']), threshold: paramStr(params['resolve_threshold']) }
+  return { known: false }
+}
+/** The ranking as the source line names it: "cstar, threshold 3". */
+function rankingText(r: RunRanking): string {
+  if (!r.known) return "not recorded; FASTag's default is cstar"
+  const scheme = r.scheme ?? 'cstar'
+  return scheme === 'evidence' ? scheme : `${scheme}, threshold ${r.threshold ?? CSTAR_THRESHOLD}`
+}
 
 /// The other series of a pair: b <-> y, c <-> z.
 const other = (x: Ladder['series']): Ladder['series'] => (x === 'b' ? 'y' : x === 'y' ? 'b' : x === 'c' ? 'z' : 'c')
@@ -158,11 +180,21 @@ async function neighbour(path: string, spectrum: string, rowId: number | null, d
 /** The spectrum's rows of the run's resolved tags and tag graph, in file
  *  order. No Results table opens these two (an open would close the tags
  *  file's): tableQuery reads them without one. */
-async function cliOf(resolved: string, tagGraph: string, spectrum: string): Promise<{ resolved: CliRows; nodes: CliRows }> {
+async function cliOf(resolved: string, tagGraph: string, spectrum: string): Promise<CliOf> {
   const r = await tagsOf(resolved, spectrum, null, window.fastag.tableQuery)
   const n = await tagsOf(tagGraph, spectrum, null, window.fastag.tableQuery)
-  return { resolved: r, nodes: n }
+  // The ranking FASTag recorded, the same on every row: of a spectrum it
+  // resolved none of, on the table's first row.
+  let ranking = rankingOf(r)
+  if (!ranking && r.rows.length === 0) {
+    ranking = await window.fastag
+      .tableQuery(resolved, {}, 0, 1)
+      .then((pg) => rankingOf(pg))
+      .catch(() => null)
+  }
+  return { resolved: r, nodes: n, ranking }
 }
+type CliOf = { resolved: CliRows; nodes: CliRows; ranking: { scheme: string; threshold: string } | null }
 
 export default function SpectrumPanel({ target, source, tags: tagsFile, placements, resolved, tagGraph, onTarget, onLocate }: Props): JSX.Element {
   const tagsPath = tagsFile === undefined ? target.path : tagsFile
@@ -185,7 +217,7 @@ export default function SpectrumPanel({ target, source, tags: tagsFile, placemen
   const [chosenContig, setChosenContig] = useState<{ g: TagGraph; i: number } | null>(null)
   const [cand, setCand] = useState<Candidate | null>(null)
   // The spectrum's rows of the run's -resolved_out and -tag_graph_out.
-  const [cli, setCli] = useState<{ resolved: CliRows; nodes: CliRows } | { error: string } | null>(null)
+  const [cli, setCli] = useState<CliOf | { error: string } | null>(null)
   // The m/z range of the stick plot, which the merge graph follows; of
   // another spectrum's peaks, the whole spectrum.
   const [zoomed, setZoomed] = useState<{ of: SpectrumPeaks; range: [number, number] } | null>(null)
@@ -276,6 +308,9 @@ export default function SpectrumPanel({ target, source, tags: tagsFile, placemen
   const badCutoff = !Number.isFinite(cutoff) && cutoff !== Infinity
   // FASTag's tag graph is still being read: nothing resolved meanwhile.
   const cliPending = !!(resolved && tagGraph) && cli === null
+  // The ranking of the run, for FASTag's resolution and the GUI's.
+  const recorded = cli && !('error' in cli) ? cli.ranking : null
+  const ranked = useMemo(() => runRanking(recorded, source.params), [recorded, source.params])
   const merged = useMemo(() => {
     if (!allTags || !spectrum || !tags || cliPending) return null
     // FASTag's graph when the run wrote it and it fits the peaks; its rows
@@ -310,8 +345,8 @@ export default function SpectrumPanel({ target, source, tags: tagsFile, placemen
       ins.push({ row: tr, evalue, index: i })
     })
     // Ranked as the run ranked them (its -resolve_score and -resolve_threshold;
-    // FASTag's default cstar, stepScore.ts, when the run does not say).
-    const gui = run?.ok ? null : schemeGraph(ins, spectrum, residues, join, paramStr(source.params?.['resolve_score']), paramStr(source.params?.['resolve_threshold']))
+    // FASTag's default cstar at 3, stepScore.ts, when that is not known).
+    const gui = run?.ok ? null : schemeGraph(ins, spectrum, residues, join, ranked.scheme, ranked.threshold)
     const graph = run?.ok ? run.graph : (gui as NonNullable<typeof gui>).graph
     // The database peptide, when the run placed this spectrum's tags, decides the series
     // (and with it its complements and which tags read the same residues).
@@ -321,11 +356,11 @@ export default function SpectrumPanel({ target, source, tags: tagsFile, placemen
     const byRun = !!run?.ok
     const used = byRun ? new Set(graph.placements.flatMap((p) => p.rows)).size : ins.length
     // The ranking the GUI took, for the source line.
-    const ranking = gui ? `ranking ${gui.scheme}${gui.threshold == null ? '' : `, threshold ${gui.threshold}`}${gui.note ? `; ${gui.note}, so ${gui.scheme}` : ''}` : null
+    const ranking = gui
+      ? `ranking ${gui.scheme}${gui.threshold == null ? '' : `, threshold ${gui.threshold}`}${gui.note ? `; ${gui.note}, so ${gui.scheme}` : ''}${ranked.known ? '' : "; the run's ranking is not recorded, so FASTag's default"}`
+      : null
     return { graph, all, allRows: packRows(graph, spectrum, span * 0.01).rows, above: byRun ? 0 : above, used, byRun, why, ranking }
-  }, [allTags, spectrum, tags, cutoff, badCutoff, residues, join, cand, cli, cliPending, source.params])
-  // The ranking FASTag used (-resolve_score; cstar by default).
-  const scheme = String(source.params?.['resolve_score'] ?? 'cstar')
+  }, [allTags, spectrum, tags, cutoff, badCutoff, residues, join, cand, cli, cliPending, ranked, source.params])
   const contigAt = merged && chosenContig?.g === merged.graph && chosenContig.i < merged.graph.paths.length ? chosenContig.i : 0
   const choose = useCallback((i: number): void => setChosenContig(merged ? { g: merged.graph, i } : null), [merged])
   const sel = merged ? (merged.graph.paths[contigAt] ?? null) : null
@@ -559,7 +594,7 @@ export default function SpectrumPanel({ target, source, tags: tagsFile, placemen
           )}
           {merged && (
             <span className="hint" data-testid="merge-source">
-              {merged.byRun ? `Resolved by FASTag (ranking ${scheme})` : `Resolved in the GUI (${merged.ranking})${merged.why ? `: ${merged.why}` : ''}`}
+              {merged.byRun ? `Resolved by FASTag (ranking ${rankingText(ranked)})` : `Resolved in the GUI (${merged.ranking})${merged.why ? `: ${merged.why}` : ''}`}
             </span>
           )}
         </div>

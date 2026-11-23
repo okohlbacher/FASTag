@@ -1863,7 +1863,10 @@ for y and z rows the steps run C→N, the reverse of `sequence`; match a step to
 its residue by position from the right, or by its label),
 `members` and `inside` (0-based row indices of the spectrum's rows in `-out`,
 of the tags that build it and of those subsumed), `joined` (m/z of junctions
-joined under `-resolve_join`) and `relations` (`rank:fork|touch:shared steps`).
+joined under `-resolve_join`), `relations` (`rank:fork|touch:shared steps`),
+`scheme` and `threshold` (the ranking, `-resolve_score` and `-resolve_threshold`,
+the same on every row; `threshold` is empty under `evidence`), so a reader of the
+table knows how it was ranked without the run's parameters.
 
 `-tag_graph_out` columns, one row per placement in canonical order (layer,
 first peak): `spectrum`, `node` (0-based), `layer` (`by2`, `cz1`), `charge`,

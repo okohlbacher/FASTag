@@ -218,6 +218,8 @@ namespace FASTag::TagGraph
   };
   /// The scheme of a -resolve_score value; throws std::invalid_argument.
   Scheme schemeFromString(const std::string& s);
+  /// The -resolve_score value of @p s.
+  std::string schemeName(Scheme s);
 
   /// What placement @p p adds to a chain, started fresh (@p prev < 0) or continuing placement @p prev.
   using Weight = std::function<double(const Graph& g, std::size_t p, long prev)>;
@@ -326,9 +328,12 @@ namespace FASTag::TagGraph
     @param[in] s its peaks
     @param[in] native_id the spectrum
     @param[in] full_precision masses and E-values in shortest round-trip form
+    @param[in] ranking the options @p g was ranked with: its scheme and threshold
+               are written on every row (scheme, threshold), so a reader of the
+               table knows the ranking without the run's parameters
   */
   void appendResolvedRows(std::string& buf, const Graph& g, const Peaks& s, const std::string& native_id,
-                          bool full_precision = false);
+                          bool full_precision = false, const Options& ranking = {});
   /// Append one row per placement (graph node) of @p g, in canonical order.
   void appendGraphRows(std::string& buf, const Graph& g, const Peaks& s, const std::string& native_id,
                        bool full_precision = false);

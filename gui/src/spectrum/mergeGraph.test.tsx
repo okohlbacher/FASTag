@@ -50,7 +50,7 @@ const tagsPage: ResultsPage = { columns: tagCols, totalRows: 20, matchedRows: 4,
 
 const SOURCE = { input: '/d/a.mzML', params: {}, from: 'run' as const }
 let rerenderTo: (spectrum: string, rowId: number) => void = () => undefined
-function panel(cli: { resolved: CliRows; nodes: CliRows }, params: Record<string, unknown> = {}): { container: HTMLElement; mock: ReturnType<typeof installMockBridge>; unmount: () => void } {
+function panel(cli: { resolved: CliRows; nodes: CliRows }, params: Record<string, unknown> | null = {}): { container: HTMLElement; mock: ReturnType<typeof installMockBridge>; unmount: () => void } {
   const mock = installMockBridge()
   mock.spectrumDumps['scan=1'] = dump
   // As browser.rs: only the open tags file answers resultsQuery; the run's
@@ -174,7 +174,7 @@ describe('merge graph', () => {
     const { container, mock } = panel(swapRanks(toCli(graph, S, 'scan=1'), 1, 2))
     await screen.findByTestId('ladder')
     fireEvent.click(screen.getByLabelText('Merge graph'))
-    expect((await screen.findByTestId('merge-source')).textContent).toBe('Resolved by FASTag (ranking cstar)')
+    expect((await screen.findByTestId('merge-source')).textContent).toBe('Resolved by FASTag (ranking cstar, threshold 3)')
     expect(screen.getByTestId('merge-summary').textContent).toMatch(/^4 tags \(4 distinct\) → 2 resolved/)
     // Read without an open, and not through resultsQuery (browser.rs refuses a file not open).
     expect(mock.tableQueryCalls.map((c) => c.path)).toEqual(['/d/a.resolved.tsv', '/d/a.taggraph.tsv'])
@@ -298,5 +298,44 @@ describe('merge graph', () => {
     expect(await source({ resolve_score: 'anchor' })).toBe(`Resolved in the GUI (ranking anchor, threshold 3)${why}`)
     expect(await source({ resolve_score: 'cstar', resolve_threshold: '4.5' })).toBe(`Resolved in the GUI (ranking cstar, threshold 4.5)${why}`)
     expect(await source({ resolve_score: 'bogus' })).toBe(`Resolved in the GUI (ranking cstar, threshold 3; -resolve_score bogus is not a ranking the GUI knows, so cstar)${why}`)
+  })
+
+  // Tables dropped without a record of their run (source.params null): the
+  // ranking is what FASTag wrote on their rows, or said to be unknown.
+  const shown = async (cli: { resolved: CliRows; nodes: CliRows }, params: Record<string, unknown> | null): Promise<string | null> => {
+    const { unmount } = panel(cli, params)
+    await screen.findByTestId('ladder')
+    fireEvent.click(screen.getByLabelText('All tags, resolved'))
+    const t = (await screen.findByTestId('merge-source')).textContent
+    unmount()
+    return t
+  }
+  it('names the ranking FASTag recorded on its rows, ahead of the run parameters', async () => {
+    const sl = { scheme: 'steplogodds', threshold: '2' }
+    expect(await shown(swapRanks(toCli(graph, S, 'scan=1', sl), 1, 2), null)).toBe('Resolved by FASTag (ranking steplogodds, threshold 2)')
+    expect(await shown(swapRanks(toCli(graph, S, 'scan=1', sl), 1, 2), { resolve_score: 'anchor' })).toBe('Resolved by FASTag (ranking steplogodds, threshold 2)')
+    expect(await shown(toCli(graph, S, 'scan=1', { scheme: 'evidence', threshold: '' }), null)).toBe('Resolved by FASTag (ranking evidence)')
+    // The run's parameters when the rows do not record it; absent there is the default.
+    expect(await shown(toCli(graph, S, 'scan=1'), { resolve_score: 'evidence' })).toBe('Resolved by FASTag (ranking evidence)')
+    expect(await shown(toCli(graph, S, 'scan=1'), {})).toBe('Resolved by FASTag (ranking cstar, threshold 3)')
+  })
+  it('without a record of the run nor of the ranking, says it is not known rather than naming one', async () => {
+    expect(await shown(toCli(graph, S, 'scan=1'), null)).toBe("Resolved by FASTag (ranking not recorded; FASTag's default is cstar)")
+    const empty = toCli({ ...graph, placements: [], paths: [], arcs: [], offPeaks: [] }, S, 'scan=1')
+    expect(await shown(empty, null)).toBe(
+      "Resolved in the GUI (ranking cstar, threshold 3; the run's ranking is not recorded, so FASTag's default): FASTag resolved none of the 4 tags (E-value above -resolve_max_evalue 1, or not on the peaks)"
+    )
+  })
+  it('the fallback ranks as FASTag recorded on the table, for a spectrum it wrote no row of', async () => {
+    // The tables hold another spectrum's rows, ranked by steplogodds at 2.
+    const other = toCli(graph, S, 'scan=2', { scheme: 'steplogodds', threshold: '2' })
+    const { mock, unmount } = panel(other, null)
+    await screen.findByTestId('ladder')
+    fireEvent.click(screen.getByLabelText('All tags, resolved'))
+    expect((await screen.findByTestId('merge-source')).textContent).toBe(
+      'Resolved in the GUI (ranking steplogodds, threshold 2): FASTag resolved none of the 4 tags (E-value above -resolve_max_evalue 1, or not on the peaks)'
+    )
+    expect(mock.tableQueryCalls[mock.tableQueryCalls.length - 1]).toMatchObject({ path: '/d/a.resolved.tsv', offset: 0, limit: 1 })
+    unmount()
   })
 })

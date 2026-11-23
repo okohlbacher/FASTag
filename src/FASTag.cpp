@@ -3945,7 +3945,7 @@ TOPPFASTag::ExitCodes TOPPFASTag::main_(int, const char**)
       if (resolved_on)
       {
         gscratch.clear();
-        FASTag::TagGraph::appendResolvedRows(gscratch, g, gpk, spec.getNativeID(), g_full_precision);
+        FASTag::TagGraph::appendResolvedRows(gscratch, g, gpk, spec.getNativeID(), g_full_precision, graph_opt);
         res.vbuf = std::string(gscratch.data(), gscratch.size());
       }
       if (tag_graph_on)

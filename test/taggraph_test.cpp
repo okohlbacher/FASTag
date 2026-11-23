@@ -14,6 +14,7 @@
 #include <set>
 #include <sstream>
 #include <string>
+#include <tuple>
 #include <vector>
 
 using namespace FASTag::TagGraph;
@@ -392,6 +393,24 @@ namespace
         landsOnItsPeaks(f, "nested rank " + f[1]);
       }
       if (!rows.empty() && rows[0].size() == cols) check(rows[0][0] == "scan=1" && rows[0][1] == "1", "spectrum, rank");
+      // The ranking on every row: the scheme's name and threshold (none under evidence).
+      for (const auto& [o, scheme, thr] : std::vector<std::tuple<Options, std::string, std::string>>{
+             {Options{}, "cstar", "3"}, {[] { Options o; o.scheme = Scheme::STEPLOGODDS; o.threshold = 2.5; return o; }(), "steplogodds", "2.5"},
+             {[] { Options o; o.scheme = Scheme::EVIDENCE; return o; }(), "evidence", ""},
+             {[] { Options o; o.scheme = Scheme::ANCHOR; return o; }(), "anchor", "3"}})
+      {
+        std::string b;
+        appendResolvedRows(b, g, s, "scan=1", false, o);
+        std::istringstream in(b);
+        size_t n = 0;
+        for (std::string line; std::getline(in, line); ++n)
+        {
+          const auto f = fields(line);
+          check(f.size() == cols && f[cols - 2] == scheme && f[cols - 1] == thr,
+                "resolved row records its ranking " + scheme + ": " + (f.size() >= 2 ? f[f.size() - 2] + "/" + f.back() : line));
+        }
+        check(n == g.paths.size(), "ranked rows " + scheme);
+      }
       // EP = SEQ[1, 3): the flanks are the tag's own, N + P and C + TIDE.
       if (!rows.empty() && rows[0].size() == cols)
         check(std::fabs(std::stod(rows[0][7]) - (N + R('P'))) < 0.001 && std::fabs(std::stod(rows[0][8]) - (C + sum("TIDE"))) < 0.001,
