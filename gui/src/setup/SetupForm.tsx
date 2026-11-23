@@ -33,6 +33,8 @@ import {
   inputLabel,
   inputParams,
   missingInputs,
+  requiredBy,
+  satisfied,
   missingText,
   stepState,
   stepTwoDependents,
@@ -91,23 +93,35 @@ const BATCH_OUT = '<input>.tags.tsv'
 /// The params Advanced shows for @p task (its layout), less the controls
 /// step 2 shows for @p owner (the task, or null for the FASTag defaults):
 /// its inputs, its about fields and the settings that wait on an input only.
-export function advancedParams(task: Task, owner: Task | null = task): string[] {
+/// With @p values, an input step 2 requires for the reports that are on
+/// (the Protein database of Characterize's placements) leaves Advanced.
+export function advancedParams(task: Task, owner: Task | null = task, values?: Record<string, unknown>): string[] {
   const shown = new Set([
     ...task.basic,
     ...task.outputs,
     ...SECTIONS.filter((s) => s.home === 'common').flatMap((s) => s.params),
-    ...inputParams(owner),
+    ...inputParams(owner, values),
     ...aboutParams(owner)
   ])
   const base = SECTIONS.flatMap((s) => s.params).filter((n) => !shown.has(n) && !WIRED.has(n) && !UNIT_PARAMS.has(n) && !FOLDED.has(n))
-  const deps = new Set([...stepTwoDependents(owner, base).values()].flat())
+  const deps = new Set([...stepTwoDependents(owner, base, values).values()].flat())
   return base.filter((n) => !deps.has(n))
 }
 
 /// The settings step 2 shows under an input of @p owner once it is set.
-export function inputDependents(task: Task, owner: Task | null): Map<string, string[]> {
-  const shown = new Set([...task.basic, ...task.outputs, ...SECTIONS.filter((s) => s.home === 'common').flatMap((s) => s.params), ...inputParams(owner), ...aboutParams(owner)])
-  return stepTwoDependents(owner, ALL_SECTION_PARAMS.filter((n) => !shown.has(n) && !WIRED.has(n) && !UNIT_PARAMS.has(n) && !FOLDED.has(n)))
+export function inputDependents(task: Task, owner: Task | null, values?: Record<string, unknown>): Map<string, string[]> {
+  const shown = new Set([
+    ...task.basic,
+    ...task.outputs,
+    ...SECTIONS.filter((s) => s.home === 'common').flatMap((s) => s.params),
+    ...inputParams(owner, values),
+    ...aboutParams(owner)
+  ])
+  return stepTwoDependents(
+    owner,
+    ALL_SECTION_PARAMS.filter((n) => !shown.has(n) && !WIRED.has(n) && !UNIT_PARAMS.has(n) && !FOLDED.has(n)),
+    values
+  )
 }
 
 export interface SetupFormProps {
@@ -447,7 +461,7 @@ export default function SetupForm({
   }
 
   // A group of Advanced: its products as checkboxes, then its fields.
-  const ADV = new Set(advancedParams(task, owner))
+  const ADV = new Set(advancedParams(task, owner, values))
   const renderGroup = (sec: Section, defaultOpen: boolean): JSX.Element | null => {
     const names = sec.params.filter((n) => ADV.has(n))
     if (names.length === 0) return null
@@ -590,7 +604,7 @@ export default function SetupForm({
   // and E-value, waiting for Identifications; the Comet template, until
   // Search engine is Comet): hidden until it is set, not a disabled field
   // with a note (round 4, 18).
-  const ownInputs = inputParams(owner)
+  const ownInputs = inputParams(owner, values)
   const shownHere = new Set([...task.basic, ...aboutParams(owner), ...ownInputs])
   const waitsOnShownFile = (n: string): boolean => {
     const d = inertDependency(n, values)
@@ -600,7 +614,7 @@ export default function SetupForm({
   // Step 2: the inputs of the task (setup/inputs.ts).
   const ti = taskInputs(owner, values, batch ? 'batch' : 'one', session.revealed, ADV)
   const missing = missingInputs(owner, values, { input, jobs: jobs.length, mode: batch ? 'batch' : 'one' })
-  const deps = inputDependents(task, owner)
+  const deps = inputDependents(task, owner, values)
   // Errors are shown once the user tried to move on or run, never on an
   // untouched step.
   const [tried, setTried] = useState(false)
@@ -765,7 +779,7 @@ export default function SetupForm({
   // An input's errors, under its field: missing, wrong extension, not found.
   const inputNotes = (n: string, required = false): JSX.Element | null => {
     const notes: { warn: boolean; text: string }[] = []
-    if (required && tried && !hasValue(values, n)) notes.push({ warn: true, text: `Required for ${taskLabel}: choose a protein FASTA.` })
+    if (required && tried && !satisfied(values, n)) notes.push({ warn: true, text: `Required for ${requiredBy(owner, values, n)}: choose a protein FASTA.` })
     for (const m of [n, ...(INPUTS[n]?.also ?? [])]) {
       const w = extensionWarning(m, String(values[m] ?? ''))
       if (w) notes.push({ warn: false, text: w })
@@ -1017,6 +1031,11 @@ export default function SetupForm({
       )}
       <p className="lead">
         {taskLabel} needs {youNeed(owner)}.
+        {ti.required
+          .filter((n) => !(owner?.required ?? []).includes(n))
+          .map((n) => (
+            <span key={n}> Also required for {requiredBy(owner, values, n)}: a protein FASTA.</span>
+          ))}
       </p>
       {spectraBlock}
       {(ti.required.length > 0 || ti.shown.length > 0 || ti.addable.length > 0) && (

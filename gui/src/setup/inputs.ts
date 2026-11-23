@@ -8,6 +8,7 @@ import type { ParamValue } from '../ParamField'
 import { sameValue } from '../app/format'
 import type { Task } from './tasks'
 import { diffNames, sameSetting } from './presetDiff'
+import { PRODUCTS, isOn } from './products'
 
 type V = Record<string, ParamValue | unknown>
 
@@ -85,6 +86,25 @@ export const hasValue = (values: V, name: string): boolean => {
 }
 const setHasValue = (values: V, name: string): boolean => setOf(name).some((n) => hasValue(values, n))
 
+/// The products on in @p values that need the protein database (products.ts db).
+const dbProductsOn = (values: V): string[] => PRODUCTS.filter((p) => p.db && isOn(p, values as never)).map((p) => p.label)
+
+/// The inputs @p task requires: its own and, with @p values, the Protein
+/// database while a report that needs it is on (Tag placements turned on
+/// under Advanced in Characterize): what is needed follows the products,
+/// not only the task.
+export function requiredInputs(task: Task | null, values?: V): string[] {
+  const req = task?.required ?? []
+  if (!values || req.includes('recon_fasta') || !dbProductsOn(values).length) return req
+  return [...req, 'recon_fasta']
+}
+
+/// What requires the input @p name: the task, or the reports that need it.
+export function requiredBy(task: Task | null, values: V, name: string): string {
+  if ((task?.required ?? []).includes(name)) return task!.label
+  return name === 'recon_fasta' ? dbProductsOn(values).join(', ') || (task?.label ?? 'this run') : (task?.label ?? 'this run')
+}
+
 /// The input @p name stands in for in @p task (fasta for its required
 /// recon_fasta), or null.
 const standsInFor = (task: Task | null, name: string): string | null => (task?.required ?? []).find((r) => STANDS_IN[r] === name) ?? null
@@ -97,21 +117,23 @@ export const inputLabel = (name: string, task: Task | null = null): string => {
   return forName ? `${label} (also the ${inputLabel(forName)} while that is empty)` : label
 }
 
-/// The primary inputs @p task shows in step 2: required, their stand-ins,
+/// The primary inputs @p task shows in step 2: required (with @p values:
+/// also what its reports need), the stand-ins of its own required inputs,
 /// the optional ones and the inputs offered after one of these (the
 /// entrapment database after the Filter database). No task (the FASTag
 /// defaults): every step-2 input.
-export function primaryInputs(task: Task | null): string[] {
+export function primaryInputs(task: Task | null, values?: V): string[] {
   if (!task) return PRIMARY_STEP2
   const req = task.required ?? []
-  const own = [...req, ...req.flatMap((n) => (STANDS_IN[n] ? [STANDS_IN[n]] : [])), ...(task.optionalInputs ?? [])]
+  const own = [...requiredInputs(task, values), ...req.flatMap((n) => (STANDS_IN[n] ? [STANDS_IN[n]] : [])), ...(task.optionalInputs ?? [])]
   const later = PRIMARY_STEP2.filter((n) => !own.includes(n) && !!INPUTS[n].after && own.includes(INPUTS[n].after!))
   return [...own, ...later]
 }
 
-/// Every input-file parameter step 2 owns for @p task, sets expanded.
-export function inputParams(task: Task | null): Set<string> {
-  return new Set(primaryInputs(task).flatMap(setOf))
+/// Every input-file parameter step 2 owns for @p task (with @p values:
+/// also what its reports need), sets expanded.
+export function inputParams(task: Task | null, values?: V): Set<string> {
+  return new Set(primaryInputs(task, values).flatMap(setOf))
 }
 
 /// The settings that describe the sample, step 2's "About these spectra":
@@ -123,8 +145,8 @@ export const aboutParams = (task: Task | null): string[] => task?.about ?? []
 /// Settings under Advanced that depend on nothing but a step-2 input of
 /// @p task (Shortest tag matched on the Filter database): they render under
 /// that input in step 2 once it is set, and leave Advanced. Keyed by input.
-export function stepTwoDependents(task: Task | null, candidates: readonly string[]): Map<string, string[]> {
-  const own = inputParams(task)
+export function stepTwoDependents(task: Task | null, candidates: readonly string[], values?: V): Map<string, string[]> {
+  const own = inputParams(task, values)
   const out = new Map<string, string[]>()
   for (const n of candidates) {
     if (own.has(n)) continue
@@ -161,8 +183,8 @@ export function taskInputs(
   revealed: ReadonlySet<string> = new Set(),
   elsewhere: ReadonlySet<string> = new Set()
 ): TaskInputs {
-  const required = task?.required ?? []
-  const own = primaryInputs(task)
+  const required = requiredInputs(task, values)
+  const own = primaryInputs(task, values)
   const shown: string[] = []
   const addable: string[] = []
   const extraneous: { name: string; why: string }[] = []
@@ -199,7 +221,7 @@ export const satisfied = (values: V, name: string): boolean => hasValue(values, 
 export function missingInputs(task: Task | null, values: V, ctx: { input: string; jobs: number; mode: 'one' | 'batch' }): string[] {
   const miss: string[] = []
   if (ctx.mode === 'batch' || ctx.jobs > 0 ? ctx.jobs === 0 : !ctx.input) miss.push('in')
-  for (const n of task?.required ?? []) if (!satisfied(values, n)) miss.push(n)
+  for (const n of requiredInputs(task, values)) if (!satisfied(values, n)) miss.push(n)
   return miss
 }
 

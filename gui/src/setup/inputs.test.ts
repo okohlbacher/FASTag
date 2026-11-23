@@ -14,6 +14,7 @@ import {
   inputLabel,
   inputParams,
   missingInputs,
+  requiredBy,
   stepState,
   taskInputs
 } from './inputs'
@@ -145,6 +146,26 @@ describe('inputs per task', () => {
     }
     expect(inputLabel('fasta', T('mass-shift'))).toMatch(/Filter database.*Protein database/)
     expect(inputLabel('fasta', T('export-tags'))).toBe('Filter database')
+  })
+
+  it('a report that needs the protein database makes it a required input of the task, in step 2 and not under Advanced', () => {
+    for (const id of ['characterize', 'export-tags', 'run-qc', 'species', 'triage']) {
+      const base = baseValues(`builtin:${id}` as never)
+      expect(taskInputs(T(id), base, 'one').required, id).toEqual([])
+      for (const product of ['recon_out', 'shortlist_out']) {
+        const v = { ...base, [product]: `/d/run.${product}.tsv` }
+        const ctx = { input: '/d/run.mzML', jobs: 0, mode: 'one' as const }
+        expect(taskInputs(T(id), v, 'one').required, `${id} ${product}`).toEqual(['recon_fasta'])
+        expect(missingInputs(T(id), v, ctx), `${id} ${product}`).toEqual(['recon_fasta'])
+        expect(inputParams(T(id), v).has('recon_fasta'), id).toBe(true)
+        expect(advancedParams(T(id), T(id), v), id).not.toContain('recon_fasta')
+        // Satisfied by a protein database, or a Filter database standing in.
+        expect(missingInputs(T(id), { ...v, recon_fasta: '/d/h.fasta' }, ctx), id).toEqual([])
+        expect(missingInputs(T(id), { ...v, fasta: '/d/h.fasta' }, ctx), id).toEqual([])
+      }
+    }
+    expect(requiredBy(T('characterize'), { ...baseValues('builtin:characterize'), recon_out: '/d/r.tsv' }, 'recon_fasta')).toBe('Tag placements')
+    expect(requiredBy(T('mass-shift'), baseValues('builtin:mass-shift'), 'recon_fasta')).toBe('Mass-shift survey')
   })
 
   it('warns, never blocks, on a file that is not of the formats the CLI lists', () => {

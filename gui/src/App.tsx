@@ -58,7 +58,7 @@ const FASTA_FORMATS = ['fasta', 'fa', 'faa']
 
 /// The input files step 2 shows that hold a path: the ones checked on disk.
 function stepTwoPaths(task: import('./setup/tasks').Task | null, values: Record<string, ParamValue>): string[] {
-  return [...inputParams(task)].map((n) => String(values[n] ?? '').trim()).filter(Boolean)
+  return [...inputParams(task, values)].map((n) => String(values[n] ?? '').trim()).filter(Boolean)
 }
 /// The step whose control a refusal names first: 2 for an input file of
 /// step 2 (or a file not found), 3 for a setting; null for a product.

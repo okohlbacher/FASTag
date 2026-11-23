@@ -15,9 +15,10 @@ const tile = (id: string): HTMLElement => document.querySelector<HTMLElement>(`b
 const stepBtn = (n: number): HTMLElement => document.querySelector<HTMLElement>(`nav[aria-label="Setup steps"] button[data-step-btn="${n}"]`)!
 /// Open Advanced in step 3 until the field of @p name is built (each
 /// group's body is built only while open).
-const openAdvanced = async (name: string): Promise<void> => {
+const openAdvanced = (name: string): Promise<void> => openAdvancedTo(`p-${name}`)
+const openAdvancedTo = async (id: string): Promise<void> => {
   showStep(3)
-  for (let i = 0; i < 4 && !field(name); i++) {
+  for (let i = 0; i < 4 && !document.querySelector(`[data-step="3"] #${id}`); i++) {
     const closed = [...document.querySelectorAll<HTMLElement>('[data-step="3"] summary')].filter((e) => !(e.parentElement as HTMLDetailsElement).open)
     if (!closed.length) break
     for (const c of closed) await click(c)
@@ -159,6 +160,35 @@ describe('wizard: inputs per task', () => {
       expect(stepBtn(2).closest('li')!.className, task).not.toMatch(/blocked/)
       expect(screen.queryByRole('heading', { name: 'Also set' }), task).toBeNull()
     }
+  })
+
+  it('Characterize with Tag placements turned on under Advanced: the protein database becomes a required input; the hint leads to it', async () => {
+    const mock = installMockBridge()
+    await renderColdApp(mock)
+    await chooseTask('Characterize a run')
+    mock.nextPickInput = '/d/run01.mzML'
+    await click(screen.getByRole('button', { name: 'Choose file…' }))
+    expect(field('recon_fasta')).toBeNull()
+    await openAdvancedTo('out-recon_out')
+    await click(document.getElementById('out-recon_out')!)
+    expect((runButton() as HTMLButtonElement).disabled).toBe(true)
+    // Inputs is the step to fix, and shows the field there.
+    expect(stepBtn(2).closest('li')!.className).toMatch(/blocked/)
+    expect(Number(field('recon_fasta')!.closest<HTMLElement>('[data-step]')!.dataset.step)).toBe(2)
+    expect(document.querySelectorAll('#p-recon_fasta')).toHaveLength(1)
+    showStep(4)
+    await click(screen.getByRole('button', { name: 'choose it in Inputs' }))
+    expect(currentStep()).toBe(2)
+    expect(document.querySelector('.still-missing')!.textContent).toBe('Still missing: Protein database')
+    expect(document.querySelector('[data-step="2"] .lead')!.textContent).toBe('Characterize a run needs spectra; optional: your taxonomy. Also required for Tag placements: a protein FASTA.')
+    await change(field('recon_fasta')!, '/d/human.fasta')
+    expect(stepBtn(2).closest('li')!.className).not.toMatch(/blocked/)
+    expect((runButton() as HTMLButtonElement).disabled).toBe(false)
+    // Turned off again: the field goes back under Advanced, with its value.
+    await openAdvancedTo('out-recon_out')
+    await click(document.getElementById('out-recon_out')!)
+    expect(Number(field('recon_fasta')!.closest<HTMLElement>('[data-step]')!.dataset.step)).toBe(3)
+    expect(field('recon_fasta')!.value).toBe('/d/human.fasta')
   })
 
   it('Species offers only the taxonomy, as one set of three files; Remove clears all three', async () => {

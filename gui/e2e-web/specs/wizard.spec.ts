@@ -49,6 +49,35 @@ test('Mass-shift survey: the FASTA is required, a wrong extension warns, a missi
   await expect(page.getByRole('button', { name: 'Run', exact: true })).toBeEnabled()
 })
 
+test('Characterize: Tag placements turned on under Advanced make the protein database a required input; the run bar leads to it', async ({ page }) => {
+  await openApp(page)
+  await chooseTask(page, 'Characterize a run')
+  await page.getByRole('button', { name: 'Choose file…' }).click()
+  await expect(page.locator('#p-recon_fasta')).toHaveCount(0)
+  await toStep(page, 'Settings')
+  await page.locator('#step-3 details.advanced > summary').click()
+  for (const title of ['Other analyses', 'Placement on the database'])
+    await page.locator('#step-3 summary', { has: page.locator('.sec-title', { hasText: new RegExp(`^${title}$`) }) }).click()
+  await page.locator('#out-recon_out').check()
+  const run = page.getByRole('button', { name: 'Run', exact: true })
+  await expect(run).toBeDisabled()
+  await expect(page.locator('nav[aria-label="Setup steps"] button[data-step-btn="2"]').locator('xpath=ancestor::li')).toHaveClass(/blocked/)
+  await page.getByRole('button', { name: 'Go to Inputs' }).click()
+  await expect(page.locator('#step-2 #p-recon_fasta')).toBeVisible()
+  await page.locator('#step-2 #p-recon_fasta').fill('/data/human.fasta')
+  await expect(run).toBeEnabled()
+})
+
+test('Mass-shift survey: the Filter database is an optional input that says it stands in', async ({ page }) => {
+  await openApp(page)
+  await chooseTask(page, 'Mass-shift survey')
+  await expect(page.getByRole('combobox', { name: 'Add optional input' }).locator('option')).toHaveText(['Choose…', /^Filter database \(also the Protein database while that is empty\): /])
+  await addInput(page, 'fasta')
+  await page.locator('#p-fasta').fill('/data/human.fasta')
+  await expect(page.locator('#step-2')).toContainText('Using your Filter database: human.fasta')
+  await expect(page.getByRole('combobox', { name: 'Add optional input' }).locator('option')).toHaveText(['Choose…', /^Entrapment database: /])
+})
+
 test('Species: no FASTA; Add optional input offers the taxonomy only', async ({ page }) => {
   await openApp(page)
   await chooseTask(page, 'Species')

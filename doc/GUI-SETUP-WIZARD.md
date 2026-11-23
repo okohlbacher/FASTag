@@ -269,6 +269,13 @@ Order:
    reduction only. When the Filter database (`fasta`) stands in for it (the
    CLI rule "give -recon_fasta (or -fasta)"), the field reads "Using your
    Filter database: x.fasta" with **Choose another**, never "not set".
+   What is required follows the products that are on, not only the task: a
+   report that needs the protein database (Tag placements, the shortlist, the
+   reduced FASTA, the search-engine configuration, turned on under Advanced in
+   any other task) makes Protein database a required input here, the line
+   under the heading says "Also required for Tag placements: a protein FASTA",
+   and the field leaves Advanced while it is required. The step-4 hint and the
+   run bar's "Go to Inputs" lead to it.
 3. **Optional inputs already set**, then those revealed, each with its effect
    line and **Remove** (Remove clears the whole set: taxonomy = three files).
 4. **Add optional input ▾** (only when the task has unset optional inputs):
