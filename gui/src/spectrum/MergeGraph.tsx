@@ -14,7 +14,8 @@
 //   order, N to C on their own residues, left-aligned;
 // - tags in no resolved tag only behind "Show N unused tags".
 // A resolved tag that reads the anchor's residues again (the other series of
-// its pair on the complement peaks, or the same residues in another layer:
+// its pair with every peak on the complement of an anchor peak, or the same
+// residues in another layer:
 // isComplement, sameAs) is not drawn again: the anchor gets a b+y badge.
 //
 // The bars that select a resolved tag are one tab stop (roving tabindex):
@@ -287,9 +288,11 @@ function lay(g: TagGraph, s: SpectrumPeaks, at: number, termini: Terminus[], sho
   })
   const anchorPl = [...A.chain, ...A.inside]
   // Read again: the same residues in another layer or series (sameAs), or
-  // every tag of it on the complement peaks of the anchor's tags.
-  const onComplement = (peaks: number[], charge: number): boolean =>
-    charge === z && anchorPl.some((i) => isComplement(g.placements[i].peaks, peaks, z, s) || isComplement(peaks, g.placements[i].peaks, z, s))
+  // every peak of every tag of it on the complement of an anchor tag's peak,
+  // so it reads the anchor's steps reversed. Two shared complement peaks
+  // (the pairing threshold) are not enough: such a tag reads on.
+  const anchorPeaks = [...new Set(anchorPl.flatMap((i) => g.placements[i].peaks))]
+  const onComplement = (peaks: number[], charge: number): boolean => charge === z && isComplement(anchorPeaks, peaks, z, s, true)
   const dups: Layout['dups'] = []
   const dupPath = new Set<number>()
   g.paths.forEach((p, k) => {

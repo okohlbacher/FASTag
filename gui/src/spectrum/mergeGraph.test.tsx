@@ -149,6 +149,18 @@ describe('merge graph', () => {
     }
   })
 
+  it('draws a resolved tag that shares only some complement peaks with the anchor and reads on: no badge', () => {
+    // EPT on b2..b4 (with b1), TID as y on y1..y4: y3 and y4 are the complements of b4 and b3, y1 and y2 are not.
+    const s = specL([...bL.slice(1, 5), ...yL.slice(1, 5)])
+    const g = buildGraph([tagL(0, 1, 3, 0.01), tagL(1, 3, 3, 0.02)], s, RL)
+    const ept = g.paths.findIndex((p) => sequenceOf(p) === 'EPT')
+    const tid = g.paths.findIndex((p) => sequenceOf(p) === 'TID')
+    expect([ept >= 0, tid >= 0, g.paths[tid]?.series]).toEqual([true, true, 'y'])
+    const { container } = render(<MergeGraph graph={g} spectrum={s} chosen={ept} onChoose={vi.fn()} />)
+    expect(screen.queryByTestId('merge-graph-dup')).toBeNull()
+    expect(container.querySelector(`[data-path="${tid}"]`)?.textContent).toContain(`#${tid + 1} TID`)
+  })
+
   it('places the other resolved tags around the anchor: conflicting above, the rest listed below in rank order', () => {
     // EPTIDE, and W (one weak peak a W above b2): W forks from EPTIDE at b2.
     const { container } = render(<MergeGraph graph={graph} spectrum={S} chosen={0} onChoose={vi.fn()} />)

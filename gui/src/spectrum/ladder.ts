@@ -266,14 +266,15 @@ export function seriesCall(peaks: number[], z: number, flankSeries: Ladder['seri
   }
 }
 
-/** Whether @p b lies on the complements of @p a (at least two of its peaks). */
-export function isComplement(a: number[], b: number[], z: number, s: SpectrumPeaks): boolean {
+/** Whether @p b lies on the complements of @p a: at least two of its peaks,
+ *  or with @p all every one of them (b reads a's steps again, reversed). */
+export function isComplement(a: number[], b: number[], z: number, s: SpectrumPeaks, all = false): boolean {
   let n = 0
   for (const k of b) {
     const m = complementOf(s, k, z)
     if (m != null && a.some((j) => Math.abs(s.mz[j] * z - z * PROTON - m) <= complementTol(s, s.mz[j]) * z)) n++
   }
-  return n >= Math.min(2, b.length)
+  return all ? b.length > 0 && n === b.length : n >= Math.min(2, b.length)
 }
 
 /** A ladder and its complement are opposite series: a judged one settles an
