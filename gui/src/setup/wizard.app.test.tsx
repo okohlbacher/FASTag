@@ -191,6 +191,24 @@ describe('wizard: inputs per task', () => {
     expect(field('recon_fasta')!.value).toBe('/d/human.fasta')
   })
 
+  it('a refusal leads to the step where its field is for the task: the entrapment database under Advanced in Species', async () => {
+    const mock = installMockBridge()
+    await renderColdApp(mock)
+    await chooseTask('Species')
+    mock.nextPickInput = '/d/run01.mzML'
+    await click(screen.getByRole('button', { name: 'Choose file…' }))
+    await openAdvanced('fasta')
+    await change(field('fasta')!, '/d/human.fasta')
+    await openAdvanced('entrapment_fasta')
+    await change(field('entrapment_fasta')!, '/d/entrap.fasta')
+    expect((runButton() as HTMLButtonElement).disabled).toBe(true)
+    showStep(2)
+    expect(screen.queryByRole('button', { name: 'Go to Inputs' })).toBeNull()
+    await click(screen.getByRole('button', { name: 'Go to Settings' }))
+    expect(currentStep()).toBe(3)
+    expect(field('entrapment_fasta')!.closest<HTMLElement>('[data-step]')!.dataset.step).toBe('3')
+  })
+
   it('Species offers only the taxonomy, as one set of three files; Remove clears all three', async () => {
     const mock = installMockBridge()
     await renderColdApp(mock)

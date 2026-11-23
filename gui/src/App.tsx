@@ -35,7 +35,7 @@ import Notices, { type Toast } from './shell/Notices'
 import { useFinish } from './shell/useFinish'
 import { LANDING, taskById, type Origin, type TaskId } from './setup/tasks'
 import PlanFooter from './setup/PlanFooter'
-import { INPUTS, inputParams, taskInputs, type Step } from './setup/inputs'
+import { INPUTS, aboutParams, inputParams, taskInputs, type Step } from './setup/inputs'
 import { usePathStatus } from './setup/usePathStatus'
 import { SECTION_OF } from './paramLayout'
 import type { Tab } from './app/viewStore'
@@ -60,11 +60,17 @@ const FASTA_FORMATS = ['fasta', 'fa', 'faa']
 function stepTwoPaths(task: import('./setup/tasks').Task | null, values: Record<string, ParamValue>): string[] {
   return [...inputParams(task, values)].map((n) => String(values[n] ?? '').trim()).filter(Boolean)
 }
-/// The step whose control a refusal names first: 2 for an input file of
-/// step 2 (or a file not found), 3 for a setting; null for a product.
-function stepOfParam(name: string): Step | null {
-  if (name === 'in_file' || INPUTS[name]?.place === 'step2') return 2
+/// The step whose control a refusal names first, for @p task: the step
+/// whose body holds its field (all four are mounted), else, for a field not
+/// built (a closed group), 2 for an input or about field step 2 shows for
+/// the task (or a file not found) and 3 for the rest; null for a product.
+/// Never INPUTS.place alone: most tasks keep the databases under Advanced.
+function stepOfParam(name: string, task: import('./setup/tasks').Task | null, values: Record<string, ParamValue>): Step | null {
+  if (name === 'in_file') return 2
   if (name === 'in' || name === 'out') return null
+  const at = Number(document.getElementById(`p-${name}`)?.closest<HTMLElement>('[data-step]')?.dataset.step ?? 0)
+  if (at >= 2 && at <= 4) return at as Step
+  if (inputParams(task, values).has(name) || aboutParams(task).includes(name)) return 2
   return 3
 }
 
@@ -648,7 +654,7 @@ export default function App({ start }: { start?: Origin } = {}): JSX.Element {
       invalid={session.invalid}
       refused={refused}
       goTo={(c) => {
-        const st = stepOfParam(c.params[0])
+        const st = stepOfParam(c.params[0], session.task ? (taskById(session.task) ?? null) : null, values)
         return st ? { label: st === 2 ? 'Go to Inputs' : 'Go to Settings', go: () => session.setStep(st) } : null
       }}
       fixes={session.fixes}
