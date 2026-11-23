@@ -23,7 +23,7 @@ import { join } from 'node:path'
 import App from '../App'
 import { installMockBridge, type MockBridge } from '../testing/mockBridge'
 import { DEFAULTS, LANDING, type Origin } from '../setup/tasks'
-import { click, openGroup, showView, fileButton } from '../testing/render'
+import { click, openGroup, showView, fileButton, goToStep, type SetupStep } from '../testing/render'
 import { applyAndCheck } from '../testing/lastUsed'
 import { PARAM_BY_NAME, invalidBecause, invalidParams } from '../paramLayout'
 import { FASTAG_BIN, ORDER_RS, REPO_FIXTURES_DIR, SRC_TAURI_DIR } from './external'
@@ -142,6 +142,8 @@ async function changeReport(mock: MockBridge, param: string, label: string, path
   if (group && !document.querySelector(`input[data-param="${param}"]`)) await openGroup(group)
   const box = document.querySelector<HTMLInputElement>(`input[data-param="${param}"]`)!
   expect(box, param).not.toBeNull()
+  // The report's Change… is only reachable on the wizard step that holds it.
+  await goToStep(Number(box.closest<HTMLElement>('[data-step]')!.dataset.step) as SetupStep)
   if (!box.checked) await click(box)
   expect(box.checked).toBe(true)
   mock.nextPickOutput = path
