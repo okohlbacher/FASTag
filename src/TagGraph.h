@@ -9,7 +9,7 @@
 // into resolved tags and ranked (-resolved_out, -tag_graph_out).
 //
 // A port of the desktop GUI's gui/src/spectrum/{ladder,graph,stepScore}.ts
-// (data/DESIGN-tag-graph.md v3, GUI commit 38b5da63) with the same constants,
+// (data/DESIGN-tag-graph.md v4, GUI commit 38b5da63) with the same constants,
 // the same tie-breaks and the same step model, so the CLI ranks a spectrum's
 // resolved tags exactly as the Spectrum tab does:
 //
