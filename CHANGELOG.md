@@ -2,27 +2,32 @@
 
 ## Unreleased
 
-- **Resolved tags: a new default ranking, `-resolve_score cstar`.** Each step a resolved tag adds is worth its C*
-  log-odds (mass error in tolerance units at a Da tolerance, rivals, support, complements at any charge) less 3, and
-  rank 1 is the first resolved tag without a peak and its own complement; the GUI ranks the same when it resolves
-  itself, and `steplogodds` stays selectable.
+- **Resolved tags are ranked by `-resolve_score cstar` (the default).** Each step a resolved tag adds is worth its C*
+  log-odds (mass error in tolerance units at a Da tolerance, rivals, support, complements at any charge) less
+  `-resolve_threshold` (3), and rank 1 is the first resolved tag without a peak and its own complement. `steplogodds`
+  (the same sum with the simpler 1.15 step model and no rank-1 rule), `evidence` (summed E-value evidence) and
+  `anchor` (the resolved tag of the best single tag first, the rest by `steplogodds`) can be chosen instead. Both
+  `-resolved_out` and the GUI, when it resolves itself, use this ranking.
 - **Held-out result behind it (preregistration amendment 3):** the first resolved tag was right in 84.9% of scans
   against 81.5% under `steplogodds` on PXD020401 (20 ppm), and in 59.8% against 48.0% on PXD031975 (0.5 Da).
 
 - **CLI: tag merging, `-resolved_out` and `-tag_graph_out`.** FASTag merges the tags of each spectrum into resolved
   tags itself, as the desktop app's Spectrum tab did (src/TagGraph.h, a port of its graph with the same tie-breaks):
   one row per resolved tag in rank order (sequence N→C, series call, flanks, score, evidence, peaks, steps, the member
-  rows of `-out`), and the merge graph, one row per placement. Ranked by the preregistered step log-odds less 3
-  (`-resolve_score steplogodds`, `-resolve_threshold`); `evidence` and `anchor` for comparison; tags with E <= 1
+  rows of `-out`, and the ranking it was made with, `scheme` and `threshold`), and the merge graph, one row per
+  placement. Ranked by `-resolve_score` (cstar by default, above) and `-resolve_threshold`; tags with E <= 1
   (`-resolve_max_evalue`); `-resolve_join` joins tags that only touch. Off unless asked for; not under `-stream`.
-  On PXD003531, PXD000001 and PXD076528 the resolved tags equal the GUI's on every scan and rank when both use the
-  tagger's residue masses.
+  The GUI takes OpenMS's residue masses, as the CLI does: on PXD003531, PXD000001, PXD076528, PXD020401 and PXD031975
+  the GUI's resolved tags equal the CLI's on every scan and rank, under each of the four rankings.
 
 - **GUI: FASTag's own resolved tags, and the merge graph.** When the CLI has `-resolved_out` and `-tag_graph_out`,
   the app writes them beside the tags (`<stem>.resolved.tsv`, `<stem>.taggraph.tsv`) and the Spectrum tab's All tags,
-  resolved shows FASTag's resolution (it says which one is used, and falls back to the GUI's when the tables do not
-  fit the peaks). The new Merge graph view draws the tag graph: tags as bars on the m/z axis, one band per ion layer,
-  joins as arcs, those of a resolved tag in the colour of its rank; a tag selects its resolved tag.
+  resolved shows FASTag's resolution and names its ranking (it says which one is used, and falls back to the GUI's
+  when the tables do not fit the peaks or hold no row of the spectrum). The fallback ranks as the run did: the
+  ranking FASTag wrote on the table's rows, else the run's settings; tables without either are said to be of a
+  ranking not recorded, and the GUI takes the default. The new Merge graph view draws the tag graph: tags as bars on
+  the m/z axis, one band per ion layer, joins as arcs, those of a resolved tag in the colour of its rank; a tag
+  selects its resolved tag.
 
 - **GUI: all tags of a spectrum, resolved.** The Spectrum tab's **All tags, resolved** places every tag of the spectrum
   on its peaks and assembles the tags of one ion series that overlap and agree into longer resolved tags (a tag graph:
@@ -34,11 +39,11 @@
   most tags of the spectrum were placed on is named and its fragments are drawn as a ruler; a candidate, not an
   identification.
 
-- **GUI: resolved tags ranked by step evidence.** All tags, resolved now ranks the resolved tags by the log-odds of
-  their steps (E-value, mass error, intensity of both peaks, complement ions, gap steps), less a threshold, instead of
-  by summed E-values. Preregistered held-out test on PXD076528 (Orbitrap Astral, 4,464 scans): the first resolved tag
-  right in 58.7% of scans (best single tag 58.2%, summed E-values 40.3%), with 11% more correct residues than the best
-  single tag.
+- **Resolved tags: the `steplogodds` ranking.** It ranks the resolved tags by the log-odds of their steps (E-value,
+  mass error, intensity of both peaks, complement ions, gap steps), less a threshold, instead of by summed E-values
+  (`evidence`). Preregistered held-out test on PXD076528 (Orbitrap Astral, 4,464 scans): the first resolved tag right
+  in 58.7% of scans (best single tag 58.2%, summed E-values 40.3%), with 11% more correct residues than the best
+  single tag. It is no longer the default: `cstar` (above) did better on the later held-out sets.
 
 - **GUI: b or y, judged on the peaks.** A tag does not say whether it was read from b or y ions, and the
   Spectrum tab used to call the ladder walked from nterm_mass "b" and the one from cterm_mass "y", which was wrong for
