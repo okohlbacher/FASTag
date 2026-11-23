@@ -4,13 +4,14 @@
 
 import { describe, expect, it } from 'vitest'
 import { BRIEF_HINT, conflicts } from '../paramLayout'
-import { advancedParams } from './SetupForm'
+import { advancedParams, inputDependents } from './SetupForm'
 import { TASKS, baseValues, taskById } from './tasks'
 import {
   INPUTS,
   MANIFEST_INPUTS,
   carryInputs,
   extensionWarning,
+  inputLabel,
   inputParams,
   missingInputs,
   stepState,
@@ -34,10 +35,11 @@ describe('inputs per task', () => {
   it('offers per task what the step-2 table says', () => {
     const offer = (id: string, v = baseValues(`builtin:${id}` as never)): string[] => taskInputs(T(id), v, 'one').addable
     expect(offer('export-tags')).toEqual(['fasta'])
-    expect(offer('mass-shift')).toEqual([])
+    // The Filter database stands in for the Protein database: offered, and said so.
+    expect(offer('mass-shift')).toEqual(['fasta'])
     expect(offer('species')).toEqual(['taxdb'])
     expect(offer('characterize')).toEqual(['taxdb'])
-    expect(offer('db-reduction')).toEqual(['shortlist_background'])
+    expect(offer('db-reduction')).toEqual(['fasta', 'shortlist_background'])
     expect(offer('triage')).toEqual(['census_ids'])
     expect(offer('run-qc')).toEqual([])
     // The entrapment database only with a filter database.
@@ -99,6 +101,37 @@ describe('inputs per task', () => {
     }
     const adv = new Set(advancedParams(T('export-tags'), null))
     expect([...inputParams(null)].filter((n) => adv.has(n))).toEqual([])
+  })
+
+  it('every input file of the manifest has a control in every task: required, addable or under Advanced', () => {
+    for (const t of [...TASKS, null]) {
+      const v = t ? baseValues(`builtin:${t.id}` as never) : baseValues('defaults')
+      const adv = new Set(advancedParams(t ?? T('export-tags'), t))
+      for (const [n, info] of Object.entries(INPUTS)) {
+        if (info.place === 'hidden' || info.partOf) continue
+        if (info.place === 'setting') {
+          expect([...(t?.basic ?? []), ...(t?.about ?? []), ...adv].includes(n) || !t, `${t?.id} ${n}`).toBe(true)
+          continue
+        }
+        // An input offered after another: with that one set.
+        const w = info.after ? { ...v, [info.after]: '/d/x.fasta' } : v
+        const ti = taskInputs(t, w, 'one')
+        expect(ti.required.includes(n) || ti.addable.includes(n) || ti.shown.includes(n) || adv.has(n), `${t?.id ?? 'defaults'} ${n}`).toBe(true)
+      }
+      // The settings that wait on an input only: under it in step 2 once set, else under Advanced.
+      const deps = new Set([...inputDependents(t ?? T('export-tags'), t).values()].flat())
+      expect(deps.has('min_filter_length') || adv.has('min_filter_length'), `${t?.id} min_filter_length`).toBe(true)
+    }
+  })
+
+  it('the Filter database is offered where it stands in for the Protein database, with the entrapment database after it', () => {
+    for (const id of ['mass-shift', 'db-reduction']) {
+      const v = baseValues(`builtin:${id}` as never)
+      expect(taskInputs(T(id), v, 'one').addable, id).toContain('fasta')
+      expect(taskInputs(T(id), { ...v, fasta: '/d/h.fasta' }, 'one').addable, id).toContain('entrapment_fasta')
+    }
+    expect(inputLabel('fasta', T('mass-shift'))).toMatch(/Filter database.*Protein database/)
+    expect(inputLabel('fasta', T('export-tags'))).toBe('Filter database')
   })
 
   it('warns, never blocks, on a file that is not of the formats the CLI lists', () => {

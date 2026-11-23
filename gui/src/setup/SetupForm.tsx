@@ -1040,7 +1040,7 @@ export default function SetupForm({
                 <option value="">Choose…</option>
                 {ti.addable.map((n) => (
                   <option key={n} value={n} title={INPUTS[n]?.why}>
-                    {inputLabel(n)}: {INPUTS[n]?.why ?? task.help[n] ?? ''}
+                    {inputLabel(n, owner)}: {INPUTS[n]?.why ?? task.help[n] ?? ''}
                   </option>
                 ))}
               </select>

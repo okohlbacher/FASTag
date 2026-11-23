@@ -291,10 +291,10 @@ and SECTIONS blurbs):
 | Task | Required | Optional |
 |---|---|---|
 | Export tags | | Filter database (`fasta`); Entrapment database (`entrapment_fasta`), offered once a Filter database is set |
-| Mass-shift survey | Protein database (`recon_fasta`, or `fasta`) | none |
+| Mass-shift survey | Protein database (`recon_fasta`, or `fasta`) | Filter database (`fasta`; its menu entry says it also stands in for the Protein database); Entrapment database, offered once a Filter database is set |
 | Species | | Your taxonomy (`taxdb` + `taxonomy_nodes` + `taxonomy_names`, one entry) |
 | Characterize a run | | Your taxonomy (one entry, as above) |
-| Database reduction | Protein database (`recon_fasta`, or `fasta`) | Background proteins (`shortlist_background`) |
+| Database reduction | Protein database (`recon_fasta`, or `fasta`) | Filter database (`fasta`, as for Mass-shift survey); Entrapment database after it; Background proteins (`shortlist_background`) |
 | Identifiability triage | | Identifications (`census_ids`), One file mode only |
 | Run QC | | none |
 | FASTag defaults (5.5) | | every step-2 input |
@@ -598,7 +598,9 @@ The design review of the first draft (23 issues). Each adopted or rejected:
    the list field (with the alkylation question as its help line): a yes/no
    would hide other fixed modifications.
 5. Five FASTA fields, cross-step dependencies — **adopted in part**:
-   Mass-shift drops the entrapment entry; the stand-in reads "Using your
+   (Mass-shift first dropped the entrapment entry; the walkthrough review of
+   2026-11-23 restored it, with the Filter database as a menu entry, because
+   a stand-in removed from Advanced had no control left.) The stand-in reads "Using your
    Filter database"; effect-first reason lines; the help line on the required
    field; a test that every `after` names an input of the same step.
    Characterize's `recon_fasta` is **not** moved into step 4's alkylation row:

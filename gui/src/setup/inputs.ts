@@ -85,15 +85,28 @@ export const hasValue = (values: V, name: string): boolean => {
 }
 const setHasValue = (values: V, name: string): boolean => setOf(name).some((n) => hasValue(values, n))
 
-/// The menu and field label of an input.
-export const inputLabel = (name: string): string => INPUTS[name]?.label ?? humanName(name)
+/// The input @p name stands in for in @p task (fasta for its required
+/// recon_fasta), or null.
+const standsInFor = (task: Task | null, name: string): string | null => (task?.required ?? []).find((r) => STANDS_IN[r] === name) ?? null
 
-/// The primary inputs @p task shows in step 2: required, their stand-ins
-/// and the optional ones. No task (the FASTag defaults): every step-2 input.
+/// The menu and field label of an input. With @p task, a stand-in says
+/// what it also does there.
+export const inputLabel = (name: string, task: Task | null = null): string => {
+  const label = INPUTS[name]?.label ?? humanName(name)
+  const forName = standsInFor(task, name)
+  return forName ? `${label} (also the ${inputLabel(forName)} while that is empty)` : label
+}
+
+/// The primary inputs @p task shows in step 2: required, their stand-ins,
+/// the optional ones and the inputs offered after one of these (the
+/// entrapment database after the Filter database). No task (the FASTag
+/// defaults): every step-2 input.
 export function primaryInputs(task: Task | null): string[] {
   if (!task) return PRIMARY_STEP2
   const req = task.required ?? []
-  return [...req, ...req.flatMap((n) => (STANDS_IN[n] ? [STANDS_IN[n]] : [])), ...(task.optionalInputs ?? [])]
+  const own = [...req, ...req.flatMap((n) => (STANDS_IN[n] ? [STANDS_IN[n]] : [])), ...(task.optionalInputs ?? [])]
+  const later = PRIMARY_STEP2.filter((n) => !own.includes(n) && !!INPUTS[n].after && own.includes(INPUTS[n].after!))
+  return [...own, ...later]
 }
 
 /// Every input-file parameter step 2 owns for @p task, sets expanded.
@@ -142,7 +155,6 @@ export interface TaskInputs {
 export function taskInputs(task: Task | null, values: V, mode: 'one' | 'batch', revealed: ReadonlySet<string> = new Set()): TaskInputs {
   const required = task?.required ?? []
   const own = primaryInputs(task)
-  const standIns = new Set(required.flatMap((n) => (STANDS_IN[n] ? [STANDS_IN[n]] : [])))
   const shown: string[] = []
   const addable: string[] = []
   const extraneous: { name: string; why: string }[] = []
@@ -154,11 +166,8 @@ export function taskInputs(task: Task | null, values: V, mode: 'one' | 'batch', 
       if (set) extraneous.push({ name: n, why: info.oneFileOnly })
       continue
     }
-    // A stand-in shows only while it stands in: it is no menu entry.
-    if (standIns.has(n)) {
-      if (set) shown.push(n)
-      continue
-    }
+    // A stand-in (the Filter database of Mass-shift survey) is an optional
+    // input like any other: its menu entry says that it stands in.
     if (set || revealed.has(n)) shown.push(n)
     else if (!info?.after || setHasValue(values, info.after)) addable.push(n)
   }
