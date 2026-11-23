@@ -321,6 +321,22 @@ if(FASTAG_BUILD_TESTS)
   # links Boost::headers PRIVATE, and OpenMS's target carries no Boost include
   # path on Windows.
   target_link_libraries(complement_test PRIVATE Boost::headers)
+  # Tag merging under libc++'s debug hardening, which checks that every sort's
+  # comparator is a strict weak ordering (NaN intensities and E-values): its
+  # own build of src/TagGraph.cpp, whose objects take precedence over the
+  # archive's. libc++ only (the mode leaves the ABI unchanged).
+  include(CheckCXXSourceCompiles)
+  check_cxx_source_compiles("#include <version>
+    #ifndef _LIBCPP_VERSION
+    #error not libc++
+    #endif
+    int main() { return 0; }" FASTAG_HAVE_LIBCXX)
+  if(FASTAG_HAVE_LIBCXX)
+    add_executable(taggraph_hardened_test test/taggraph_test.cpp src/TagGraph.cpp)
+    target_compile_definitions(taggraph_hardened_test PRIVATE _LIBCPP_HARDENING_MODE=_LIBCPP_HARDENING_MODE_DEBUG)
+    target_link_libraries(taggraph_hardened_test PRIVATE fastag_core)
+    add_test(NAME taggraph_hardened_test COMMAND taggraph_hardened_test)
+  endif()
 
   # 1.16: the mass-shift survey (-delta_out site and name columns).
   add_executable(shift_survey_test test/shift_survey_test.cpp)

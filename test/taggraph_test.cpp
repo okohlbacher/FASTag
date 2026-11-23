@@ -749,6 +749,86 @@ namespace
     check(membersc == gc.placements.size(), "large layer cstar: every placement in one resolved tag");
     check(secc < 20, "large layer cstar took " + std::to_string(secc) + " s");
   }
+
+  // NaN intensities and E-values. The sorts are strict weak orderings (a
+  // libc++ debug-hardened build checks this on every sort), a NaN intensity
+  // ranks as 0 and a NaN E-value orders as a missing one (+Infinity): the
+  // order, and so every output row, is that of 0 and of no E-value.
+  void nanCases()
+  {
+    const auto table = [](const Graph& g, const Peaks& s, const Options& o) {
+      std::string rows;
+      appendResolvedRows(rows, g, s, "scan=1", true, o);
+      appendGraphRows(rows, g, s, "scan=1", true);
+      return rows;
+    };
+    const double nan = std::nan("");
+    const std::vector<Options> schemes{Options{}, sl(), ev(), [] { Options o; o.scheme = Scheme::ANCHOR; return o; }()};
+    size_t compared = 0;
+    for (const XCase& x : xcases())
+    {
+      Peaks zero;
+      zero.mz = x.mz;
+      zero.intensity = x.intensity;
+      zero.precursor = x.precursor;
+      zero.charge = x.charge;
+      zero.tolerance = x.tolerance;
+      zero.ppm = x.ppm;
+      Peaks withNan = zero;
+      for (size_t i = 0; i < zero.intensity.size(); i += 3) { zero.intensity[i] = 0; withNan.intensity[i] = nan; }
+      for (const Options& o : schemes)
+      {
+        const Graph a = buildGraph(x.tags, zero, RES, o);
+        const Graph b = buildGraph(x.tags, withNan, RES, o);
+        check(table(a, zero, o) == table(b, withNan, o), x.name + ": NaN intensity ranks as 0 under " + schemeName(o.scheme));
+        ++compared;
+      }
+    }
+    check(compared > 0, "NaN intensity cases ran");
+    // NaN E-values among the tags: every sort by E-value takes a NaN as a
+    // missing E-value (+Infinity, as the GUI's byE does with null), so the
+    // readings of a step run by ascending E with NaN and missing last, and the
+    // same input gives the same tables.
+    {
+      const std::vector<TagIn> tags{tag(0, 0, 3, 0.01), tag(1, 2, 3, nan), tag(2, 1, 2, 0.1), tag(3, 3, 3, std::nullopt),
+                                    tag(4, 1, 3, 0.01), tag(5, 0, 2, nan), tag(6, 4, 3, 0.5), tag(7, 2, 2, nan),
+                                    at(8, N + R('P'), "EL", nan), at(9, N + R('P'), "EI", 0.2), at(10, N + R('P'), "EI", std::nullopt)};
+      const Peaks s = spec(cat(b, y));
+      for (const Options& o : schemes)
+      {
+        const Graph g = buildGraph(tags, s, RES, o);
+        check(!g.paths.empty(), "NaN E: resolved tags under " + schemeName(o.scheme));
+        size_t multi = 0;
+        for (const Placement& p : g.placements)
+          for (const Step& st : p.steps)
+          {
+            double last = -INFINITY;
+            bool ordered = true, missing = false;
+            for (const Reading& r : st.readings)
+            {
+              const bool none = !r.evalue || std::isnan(*r.evalue);
+              if (none) { missing = true; continue; }
+              ordered = ordered && !missing && *r.evalue >= last;
+              last = *r.evalue;
+            }
+            check(ordered, "NaN E: readings by E, NaN and missing last, under " + schemeName(o.scheme) + ": " + stepLabel(st));
+            if (st.readings.size() > 1) ++multi;
+          }
+        // Isobaric readings: Q (E = 300) before [AG] (NaN), as before a missing E.
+        const Graph iso = buildGraph({at(0, N, "PAGP", nan, true), at(1, N, "PQP", 300)}, spec(ions(N, "PQP")), RES, o);
+        for (const Placement& p : iso.placements)
+          for (const Step& st : p.steps)
+            if (st.readings.size() > 1)
+            {
+              ++multi;
+              check(st.readings.size() == 2 && st.readings[0].label == "Q" && st.readings[1].label == "[AG]",
+                    "NaN E: isobaric readings under " + schemeName(o.scheme) + ": " + stepLabel(st));
+            }
+        check(multi > 0, "NaN E: a step with several readings under " + schemeName(o.scheme));
+        check(table(g, s, o) == table(buildGraph(tags, s, RES, o), s, o), "NaN E deterministic under " + schemeName(o.scheme));
+      }
+    }
+  }
 }
 
 int main()
@@ -758,6 +838,7 @@ int main()
   ranking();
   largeLayer();
   cstarCases();
+  nanCases();
   if (failures) { std::cerr << failures << " failure(s)\n"; return 1; }
   std::cout << "taggraph_test: all passed\n";
   return 0;

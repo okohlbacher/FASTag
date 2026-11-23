@@ -34,11 +34,21 @@ namespace FASTag::TagGraph
     using E = std::optional<double>;
 
     // ---- JavaScript semantics ----
-    /// A comparator result as JS sort reads (a - b): NaN is equal.
-    int jsCmp(double a, double b)
+    /// A comparator result in the order a JS sort reads from (a - b), as a
+    /// strict weak ordering: NaN sorts as +Infinity (the GUI's value for a
+    /// missing E-value), so a NaN never makes the order intransitive.
+    int sortCmp(double a, double b)
     {
-      const double d = a - b;
-      return d < 0 ? -1 : d > 0 ? 1 : 0;
+      if (std::isnan(a)) a = INF;
+      if (std::isnan(b)) b = INF;
+      return a < b ? -1 : a > b ? 1 : 0;
+    }
+    /// Descending intensity for the intensity ranks: NaN counts as 0.
+    bool moreIntense(double a, double b)
+    {
+      if (std::isnan(a)) a = 0;
+      if (std::isnan(b)) b = 0;
+      return a > b;
     }
     double jsMin(double a, double b) { return std::isnan(a) || std::isnan(b) ? std::nan("") : std::min(a, b); }
     double jsMax(double a, double b) { return std::isnan(a) || std::isnan(b) ? std::nan("") : std::max(a, b); }
@@ -88,7 +98,7 @@ namespace FASTag::TagGraph
     }
 
     double tolAt(const Peaks& s, double x) { return s.ppm ? (x * s.tolerance) / 1e6 : s.tolerance; }
-    int byE(const E& a, const E& b) { return jsCmp(a.value_or(INF), b.value_or(INF)); }
+    int byE(const E& a, const E& b) { return sortCmp(a.value_or(INF), b.value_or(INF)); }
     E minE(const E& a, const E& b)
     {
       if (!a) return b;
@@ -857,7 +867,7 @@ namespace FASTag::TagGraph
     const size_t n = s.mz.size();
     std::vector<size_t> order(n);
     for (size_t i = 0; i < n; ++i) order[i] = i;
-    std::stable_sort(order.begin(), order.end(), [&](size_t a, size_t b) { return s.intensity[b] - s.intensity[a] < 0; });
+    std::stable_sort(order.begin(), order.end(), [&](size_t a, size_t b) { return moreIntense(s.intensity[a], s.intensity[b]); });
     rank_.assign(n, 0);
     for (size_t r = 0; r < n; ++r) rank_[order[r]] = static_cast<double>(r) / std::max<double>(1, static_cast<double>(n) - 1);
     if (s.precursor && s.charge > 0) M_ = *s.precursor * s.charge - s.charge * PROTON;
@@ -999,7 +1009,7 @@ namespace FASTag::TagGraph
     const size_t n = s.mz.size();
     std::vector<size_t> order(n);
     for (size_t i = 0; i < n; ++i) order[i] = i;
-    std::stable_sort(order.begin(), order.end(), [&](size_t a, size_t b) { return s.intensity[b] - s.intensity[a] < 0; });
+    std::stable_sort(order.begin(), order.end(), [&](size_t a, size_t b) { return moreIntense(s.intensity[a], s.intensity[b]); });
     std::vector<double> rank(n, 0);
     for (size_t r = 0; r < n; ++r) rank[order[r]] = static_cast<double>(r) / std::max<double>(1, static_cast<double>(n) - 1);
     // Local rank: the fraction of the peaks within +-50 Th that are more intense.
@@ -1010,12 +1020,12 @@ namespace FASTag::TagGraph
       for (long j = static_cast<long>(i); j >= 0 && s.mz[i] - s.mz[static_cast<size_t>(j)] <= 50; --j)
       {
         ++cnt;
-        if (s.intensity[static_cast<size_t>(j)] > s.intensity[i]) ++more;
+        if (moreIntense(s.intensity[static_cast<size_t>(j)], s.intensity[i])) ++more;
       }
       for (size_t j = i + 1; j < n && s.mz[j] - s.mz[i] <= 50; ++j)
       {
         ++cnt;
-        if (s.intensity[j] > s.intensity[i]) ++more;
+        if (moreIntense(s.intensity[j], s.intensity[i])) ++more;
       }
       lrank[i] = cnt > 1 ? more / (cnt - 1) : 0;
     }
@@ -1445,8 +1455,8 @@ namespace FASTag::TagGraph
       std::vector<const Placement*> lead;
       for (size_t i : members) lead.push_back(&placements[i]);
       std::stable_sort(lead.begin(), lead.end(), [](const Placement* a, const Placement* b) {
-        int c = jsCmp(a->flank_e.first, b->flank_e.first);
-        if (c == 0) c = jsCmp(a->flank_e.second, b->flank_e.second);
+        int c = sortCmp(a->flank_e.first, b->flank_e.first);
+        if (c == 0) c = sortCmp(a->flank_e.second, b->flank_e.second);
         return c < 0;
       });
       path.call = seriesCall(peaks, head.charge, lead[0]->flank, s, res);
