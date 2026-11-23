@@ -46,6 +46,7 @@ const MOD_DELTA: Record<string, number> = {
   phospho: 79.966331,
   acetyl: 42.010565,
   deamidated: 0.984016,
+  amidated: -0.984016,
   methyl: 14.01565,
   methylthio: 45.987721,
   dimethyl: 28.0313,
@@ -63,8 +64,12 @@ const MOD_DELTA: Record<string, number> = {
   'label:13c(6)15n(4)': 10.008269
 }
 
+/** The Unimod monoisotopic delta of the modification @p name (case does
+ *  not matter); undefined when it is not known here. */
+export const modDelta = (name: string): number | undefined => MOD_DELTA[name.trim().toLowerCase()]
+
 // The CLI's default -fixed_modifications.
-const DEFAULT_FIXED = ['Carbamidomethyl (C)']
+export const DEFAULT_FIXED = ['Carbamidomethyl (C)']
 
 export interface Residues {
   masses: Record<string, number>

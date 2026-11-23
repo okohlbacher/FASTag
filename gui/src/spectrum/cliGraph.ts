@@ -7,6 +7,7 @@
 
 import type { SpectrumPeaks } from './dump'
 import { sameAsOf, type Arc, type GPath, type Placement, type Reading, type Step, type TagGraph } from './graph'
+import { parseTerminus } from './terminus'
 import { nearest, readingMass, seriesCall, type Ladder, type Residues, type SeriesCall } from './ladder'
 
 /** The rows of one spectrum in one of the two tables, with its header. */
@@ -145,7 +146,10 @@ export function fromCli(resolved: CliRows, nodes: CliRows, s: SpectrumPeaks, res
       if (!(Number(to) >= 1) || (kind !== 'fork' && kind !== 'touch')) return fail(`resolved tag #${k + 1}: relation ${x} is not one`)
       relations.push({ path: Number(to) - 1, kind, shared: Number(shared) || 0 })
     }
-    paths.push({ series, call: { series, level, why: WHY }, charge, peaks, steps, chain, inside, best: eOf(cell(resolved, r, 'best_e')), weakest: eOf(cell(resolved, r, 'weakest_e')), joined, relations, sameAs: [] })
+    // The terminus column, last; a table of an older FASTag has none.
+    const terminus = resolved.columns.includes('terminus') ? { series, text: cell(resolved, r, 'terminus').trim() } : undefined
+    if (terminus && parseTerminus(terminus.text) == null) return fail(`resolved tag #${k + 1}: terminus ${terminus.text} is not one`)
+    paths.push({ series, call: { series, level, why: WHY }, charge, peaks, steps, chain, inside, best: eOf(cell(resolved, r, 'best_e')), weakest: eOf(cell(resolved, r, 'weakest_e')), joined, relations, sameAs: [], ...(terminus ? { terminus } : {}) })
   }
   if (paths.some((p) => p.relations.some((x) => x.path >= paths.length))) return fail('a relation names a resolved tag that is not there')
   const graph: TagGraph = { placements, paths, offPeaks: [], arcs }

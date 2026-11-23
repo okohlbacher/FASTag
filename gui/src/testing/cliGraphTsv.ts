@@ -36,7 +36,14 @@ function flanks(p: GPath, s: SpectrumPeaks): [string, string] {
 /** The two tables of @p g for the spectrum @p spectrum; with @p ranking, the
  *  scheme and threshold columns FASTag records it in (without, a table of a
  *  FASTag that did not). */
-export function toCli(g: TagGraph, s: SpectrumPeaks, spectrum: string, ranking?: { scheme: string; threshold: string }): { resolved: CliRows; nodes: CliRows } {
+export function toCli(
+  g: TagGraph,
+  s: SpectrumPeaks,
+  spectrum: string,
+  ranking?: { scheme: string; threshold: string },
+  // The terminus column of each resolved tag, last (a FASTag that writes it); left out, none.
+  terminus?: (p: GPath, rank: number) => string
+): { resolved: CliRows; nodes: CliRows } {
   const resolved = g.paths.map((p, k) => {
     const [n, c] = flanks(p, s)
     const rows = (of: number[]): number[] => of.flatMap((i) => g.placements[i].rows)
@@ -62,7 +69,8 @@ export function toCli(g: TagGraph, s: SpectrumPeaks, spectrum: string, ranking?:
       relations: p.relations.map((r) => `${r.path + 1}:${r.kind}:${r.shared}`).join(';')
     }
     const row = RESOLVED_COLUMNS.map((x) => cells[x])
-    return ranking ? [...row, ranking.scheme, ranking.threshold] : row
+    const ranked = ranking ? [...row, ranking.scheme, ranking.threshold] : row
+    return terminus ? [...ranked, terminus(p, k + 1)] : ranked
   })
   const nodes = g.placements.map((pl, i) => {
     const k = g.paths.findIndex((p) => p.chain.includes(i) || p.inside.includes(i))
@@ -85,7 +93,8 @@ export function toCli(g: TagGraph, s: SpectrumPeaks, spectrum: string, ranking?:
     }
     return TAG_GRAPH_COLUMNS.map((x) => cells[x])
   })
-  return { resolved: { columns: ranking ? [...RESOLVED_COLUMNS, 'scheme', 'threshold'] : [...RESOLVED_COLUMNS], rows: resolved }, nodes: { columns: [...TAG_GRAPH_COLUMNS], rows: nodes } }
+  const columns = [...RESOLVED_COLUMNS, ...(ranking ? ['scheme', 'threshold'] : []), ...(terminus ? ['terminus'] : [])]
+  return { resolved: { columns, rows: resolved }, nodes: { columns: [...TAG_GRAPH_COLUMNS], rows: nodes } }
 }
 
 /** @p t as a TSV file. */

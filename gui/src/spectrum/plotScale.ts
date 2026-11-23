@@ -1,5 +1,5 @@
-// The stick plot's frame (SVG user units; the element scales to its box),
-// shared with the merge graph so both read on one m/z axis.
+// The stick plot's frame (SVG user units; the element scales to its box);
+// the merge graph is as wide (its axis is residues, not m/z).
 export const W = 1000
 export const PAD = { l: 48, r: 12, t: 56, b: 28 }
 

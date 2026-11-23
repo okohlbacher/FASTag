@@ -59,7 +59,12 @@ describe('Spectrum, all tags', () => {
     expect(screen.getByTestId('merge-summary').textContent).toMatch(/4 tags \(4 distinct\) → 2 resolved/)
     // EPT, PTID and IDE assemble; W from b2 differs from them.
     const rows = Array.from(container.querySelectorAll('table[aria-label="Resolved tags of this spectrum"] tbody tr')).map((r) => Array.from(r.querySelectorAll('td')).map((c) => c.textContent))
-    expect(rows[0][0]).toBe('#1 EPTIDE')
+    // One P before it and one K after it (PEPTIDEK): its termini beside it.
+    expect(rows[0][0]).toBe('#1 N–(P)EPTIDE(K)–C')
+    expect([...(container.querySelector('table[aria-label="Resolved tags of this spectrum"] tbody tr td') as Element).querySelectorAll('.sp-term')].map((t) => [t.getAttribute('aria-label'), t.className])).toEqual([
+      ['one residue (P) from the N terminus', 'sp-term away'],
+      ['one residue (K) from the C terminus', 'sp-term away']
+    ])
     // No a ions on these b peaks: the database peptide decides the series (b, sure).
     const cell = container.querySelector('table[aria-label="Resolved tags of this spectrum"] tbody tr td[data-series-level]')!
     expect([cell.textContent, cell.getAttribute('data-series-level')]).toEqual(['b', 'sure'])

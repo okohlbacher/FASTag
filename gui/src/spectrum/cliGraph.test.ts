@@ -3,6 +3,7 @@
 import { describe, expect, it } from 'vitest'
 import { buildGraph, sequenceOf, type GraphOpts, type TagGraph, type TagIn } from './graph'
 import { fromCli, rankingOf } from './cliGraph'
+import { termContext, terminiOf, terminusOf, terminusText } from './terminus'
 import { PROTON, WATER, residueMasses, tagRowFrom } from './ladder'
 import { stepWeight } from './stepScore'
 import { g6, toCli } from '../testing/cliGraphTsv'
@@ -160,6 +161,28 @@ describe('FASTag tag graph tables', () => {
     // The GUI's own graph of these tags ranks them alike (the same model).
     const ins: TagIn[] = tags.rows.flatMap((x, k) => (Number(x[ev]) <= 1 ? [{ row: tagRowFrom(tags.columns, x)!, evalue: Number(x[ev]), index: k }] : []))
     expect(buildGraph(ins, d.spectrum, res, { join: false, weight: stepWeight(d.spectrum) }).paths.map(sequenceOf)).toEqual(g.paths.map(sequenceOf))
+  })
+
+  it('reads the terminus column when FASTag wrote it, and computes it for an older table', () => {
+    // Whatever FASTag wrote is taken as written.
+    const s = spec(b)
+    const g = buildGraph([tag(0, 0, 3, 0.01), tag(1, 4, 3, 0.02)], s, RES)
+    const ctx = termContext({}, RES)
+    const written = toCli(g, s, 'scan=1', { scheme: 'cstar', threshold: '3' }, (_, k) => (k === 1 ? 'N+[IL]' : ''))
+    expect(written.resolved.columns.slice(-3)).toEqual(['scheme', 'threshold', 'terminus'])
+    const r = fromCli(written.resolved, written.nodes, s, RES)
+    if (!r.ok) throw new Error(r.error)
+    expect(r.graph.paths.map((p) => p.terminus)).toEqual(g.paths.map((p, k) => ({ series: p.series, text: k === 0 ? 'N+[IL]' : '' })))
+    expect(terminiOf(r.graph.paths, s, RES, ctx).map(terminusText)).toEqual(['N+[IL]', ''])
+    // A table without the column is read, the terminus computed as the GUI's fallback does.
+    const old = toCli(g, s, 'scan=1', { scheme: 'cstar', threshold: '3' })
+    const o = fromCli(old.resolved, old.nodes, s, RES)
+    if (!o.ok) throw new Error(o.error)
+    expect(o.graph.paths.every((p) => p.terminus === undefined)).toBe(true)
+    expect(terminiOf(o.graph.paths, s, RES, ctx)).toEqual(g.paths.map((p) => terminusOf(p, s, RES, ctx)))
+    // A cell that is no terminus is refused.
+    const bad = toCli(g, s, 'scan=1', undefined, () => 'X')
+    expect(fromCli(bad.resolved, bad.nodes, s, RES)).toEqual({ ok: false, error: 'resolved tag #1: terminus X is not one' })
   })
 
   it('writes E-values as printf %g does', () => {

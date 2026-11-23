@@ -100,6 +100,9 @@ export interface GPath {
   relations: Relation[]
   // Resolved tags of another layer with the same steps at the same prefix masses.
   sameAs: { path: number; steps: number }[]
+  // The terminus column of FASTag's -resolved_out (terminus.ts), and the
+  // series it was written for; missing: not written (computed by the GUI).
+  terminus?: { series: Ladder['series']; text: string }
 }
 
 /** One placement continuing another (placement indices, from < to). */

@@ -172,7 +172,9 @@ test('with the run\'s resolved tags and tag graph, all tags are resolved as FAST
   // FASTag's own resolution: the GUI's cutoff does not apply.
   await expect(page.getByLabel('Largest E-value of the tags used')).toHaveCount(0)
   const graph = page.getByTestId('merge-graph')
-  await expect(graph.locator('[data-node]').first()).toBeVisible()
+  // Laid out around #1: the tags that build it under a residue ruler.
+  await expect(graph.getByTestId('merge-graph-ruler')).toBeVisible()
+  await expect(graph.locator('[data-band=chain]').first()).toBeVisible()
   const table = page.getByRole('grid', { name: 'Resolved tags of this spectrum' })
   // FASTag's ranking (the fixture swapped the GUI's first two), read without
   // a Results table open on its tables.
@@ -182,19 +184,18 @@ test('with the run\'s resolved tags and tag graph, all tags are resolved as FAST
   // One tab stop in the graph.
   await expect(graph.locator('[tabindex="0"]')).toHaveCount(1)
   const n = await table.locator('tbody tr').count()
-  // A node of the last resolved tag selects it, and the ladder drawn is its.
-  const node = graph.getByRole('button', { name: new RegExp(`builds resolved tag ${n}\\b`) }).first()
-  await node.click()
+  // The bar of the last resolved tag selects it and re-anchors the graph on it; the ladder drawn is its.
+  await graph.getByRole('button', { name: new RegExp(`^\\S+, resolved tag ${n}\\b`) }).first().click()
   await expect(table.locator('tbody tr').nth(n - 1)).toHaveAttribute('aria-selected', 'true')
-  await expect(node).toHaveAttribute('aria-pressed', 'true')
+  await expect(graph.getByRole('button', { name: new RegExp(`builds resolved tag ${n}\\b`) }).first()).toHaveAttribute('aria-pressed', 'true')
   const seq = ((await table.locator('tbody tr').nth(n - 1).locator('td').first().textContent()) ?? '').replace(/^#\d+ /, '').split(' ')[0]
   await expect(page.getByTestId('ladder')).toContainText(seq)
   // From the keyboard too.
-  await graph.getByRole('button', { name: /builds resolved tag 1\b/ }).first().focus()
+  await graph.getByRole('button', { name: /^\S+, resolved tag 1\b/ }).first().focus()
   await page.keyboard.press('Enter')
   await expect(table.locator('tbody tr').first()).toHaveAttribute('aria-selected', 'true')
   // ▶ to a tagged spectrum FASTag resolved nothing of: resolved in the GUI, and why; ◀ back selects #1 again, not the rank chosen before.
-  await graph.getByRole('button', { name: new RegExp(`builds resolved tag ${n}\\b`) }).first().click()
+  await graph.getByRole('button', { name: new RegExp(`^\\S+, resolved tag ${n}\\b`) }).first().click()
   await expect(table.locator('tbody tr').nth(n - 1)).toHaveAttribute('aria-selected', 'true')
   const resolvedIds = await mockState<string[]>(page, 'resolvedSpectra')
   const next = SPECTRA[SPECTRA.indexOf(id) + 1]

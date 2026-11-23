@@ -4,9 +4,10 @@
 import { act, fireEvent, render, screen, within } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 import type { JSX } from 'react'
-import SpectrumPanel from './SpectrumPanel'
+import SpectrumPanel, { StickPlot } from './SpectrumPanel'
 import { MergeGraph } from './MergeGraph'
-import { sequenceOf, type TagIn } from './graph'
+import { buildGraph, sequenceOf, type TagIn } from './graph'
+import type { SpectrumPeaks } from './dump'
 import { parseDump } from './dump'
 import { PROTON, WATER, residueMasses, seriesText, tagRowFrom } from './ladder'
 import { cstarGraph } from './stepScore'
@@ -77,95 +78,205 @@ function panel(cli: { resolved: CliRows; nodes: CliRows }, params: Record<string
 }
 const selected = (c: HTMLElement): string | null | undefined => c.querySelector('table[aria-label="Resolved tags of this spectrum"] tr[aria-selected=true] td')?.textContent
 
+// The layout around an anchor, on a spectrum of known b and y ions (as graph.test.ts).
+const RL = residueMasses([])
+const RM = RL.masses
+const sumL = (t: string): number => [...t].reduce((a, r) => a + RM[r], 0)
+const NF = 100
+const CF = 200
+const SEQ = 'PEPTIDE'
+const ML = NF + sumL(SEQ) + CF + WATER
+const ionsL = (start: number, seq: string): number[] => {
+  const out = [start + PROTON]
+  for (const r of seq) out.push(out[out.length - 1] + RM[r])
+  return out
+}
+const bL = ionsL(NF, SEQ)
+const yL = ionsL(CF + WATER, [...SEQ].reverse().join(''))
+const specL = (xs: number[]): SpectrumPeaks => {
+  const u = [...new Set(xs.map((x) => Math.round(x * 1e6) / 1e6))].sort((p, q) => p - q)
+  return { nativeId: 'scan=1', index: 0, msLevel: 2, rt: null, precursor: (ML + 2 * PROTON) / 2, charge: 2, chargeGiven: 2, tolerance: 10, toleranceUnit: 'ppm', picked: false, deisotoped: true, tagged: true, nRead: u.length, mz: u, int: u.map(() => 100) }
+}
+const colsL = ['spectrum', 'tag', 'charge', 'nterm_mass', 'cterm_mass', 'gapped', 'evalue']
+const atL = (index: number, nterm: number, text: string, evalue: number, cterm = 5000): TagIn => ({ row: tagRowFrom(colsL, ['scan=1', text, '1', String(nterm), String(cterm), '0', String(evalue)])!, evalue, index })
+const tagL = (index: number, from: number, len: number, evalue: number, text = SEQ.slice(from, from + len)): TagIn => atL(index, NF + sumL(SEQ.slice(0, from)), text, evalue, CF + sumL(SEQ.slice(from + len)))
+const barX = (c: Element, sel: string): number => Number(c.querySelector(`${sel} .sp-graph-bar`)?.getAttribute('x'))
+const barY = (c: Element, sel: string): number => Number(c.querySelector(`${sel} .sp-graph-bar`)?.getAttribute('y'))
+
 describe('merge graph', () => {
-  it('draws a node per distinct tag and an arc per join; a node selects its resolved tag', () => {
-    const choose = vi.fn()
-    const { container } = render(<MergeGraph graph={graph} spectrum={S} chosen={0} onChoose={choose} />)
-    expect(container.querySelectorAll('[data-node]').length).toBe(graph.placements.length)
-    expect(container.querySelectorAll('[data-arc=used]').length).toBe(graph.arcs.filter((a) => a.used).length)
-    expect(container.querySelectorAll('[data-arc]').length).toBe(graph.arcs.length)
-    // The rank is written on the nodes of a chain, not only coloured.
-    const w = screen.getByRole('button', { name: /^W, builds resolved tag 2/ })
-    expect(w.textContent).toContain('#2')
-    expect(w.querySelector('title')?.textContent).toMatch(/^W \(.*\) · E-value 0\.9 · 1 tag: W · builds resolved tag 2$/)
-    fireEvent.click(w)
-    expect(choose).toHaveBeenLastCalledWith(1)
-    fireEvent.keyDown(screen.getByRole('button', { name: /^EPT, builds resolved tag 1/ }), { key: 'Enter' })
-    expect(choose).toHaveBeenLastCalledWith(0)
-    expect(screen.getAllByRole('button', { pressed: true }).every((n) => /resolved tag 1/.test(n.getAttribute('aria-label') ?? ''))).toBe(true)
+  it('lays the anchor out N to C by residue: a y tag runs against m/z, its tags a staircase under the ruler, the joins bold', () => {
+    const s = specL(yL)
+    const g = buildGraph([tagL(0, 0, 3, 0.01), tagL(1, 2, 3, 0.02)], s, RL)
+    expect(g.paths.map((p) => [p.series, sequenceOf(p)])).toEqual([['y', 'PEPTI']])
+    const { container } = render(<MergeGraph graph={g} spectrum={s} chosen={0} onChoose={vi.fn()} />)
+    const ruler = screen.getByTestId('merge-graph-ruler')
+    expect(ruler.getAttribute('data-sequence')).toBe('PEPTI')
+    // The ruler's residues left to right are the sequence N to C.
+    expect([...ruler.querySelectorAll('[data-res]')].sort((a, b) => Number(a.getAttribute('x')) - Number(b.getAttribute('x'))).map((t) => t.textContent).join('')).toBe('PEPTI')
+    const [pep, pti] = [0, 1].map((r) => g.placements.findIndex((pl) => pl.rows.includes(r)))
+    // PTI lies on the lower m/z (y ions grow from the C terminus) and is drawn right of PEP.
+    expect(s.mz[g.placements[pti].peaks[0]]).toBeLessThan(s.mz[g.placements[pep].peaks[0]])
+    expect(barX(container, `[data-node="${pti}"]`)).toBeGreaterThan(barX(container, `[data-node="${pep}"]`))
+    // Each bar spans its residues: PEP three of five, starting at the ruler's start.
+    const cells = [...ruler.querySelectorAll('[data-res]')].map((t) => Number(t.getAttribute('x'))).sort((a, b) => a - b)
+    const unit = cells[1] - cells[0]
+    const w = (i: number): number => Number(container.querySelector(`[data-node="${i}"] .sp-graph-bar`)?.getAttribute('width'))
+    expect(w(pep)).toBeCloseTo(3 * unit, 6)
+    expect(barX(container, `[data-node="${pti}"]`) - barX(container, `[data-node="${pep}"]`)).toBeCloseTo(2 * unit, 6)
+    // Overlapping, so one under the other, both under the ruler; one bold join.
+    expect(barY(container, `[data-node="${pti}"]`)).toBeGreaterThan(barY(container, `[data-node="${pep}"]`))
+    expect(container.querySelectorAll('[data-arc=used]').length).toBe(1)
+    expect(container.querySelector('[data-arc=used]')?.getAttribute('class')).toContain('on')
   })
 
-  it('is one tab stop: the arrows move between the nodes that select, the others are not focusable', () => {
-    const { container } = render(<MergeGraph graph={graph} spectrum={S} chosen={1} onChoose={vi.fn()} />)
-    const stops = (): string[] => [...container.querySelectorAll('[data-node][tabindex="0"]')].map((n) => n.getAttribute('data-node') ?? '')
-    // The stop is the first node of the chosen resolved tag.
-    expect(stops()).toEqual([String(graph.paths[1].chain[0])])
-    expect(container.querySelectorAll('[data-node][tabindex="-1"]').length).toBe(graph.placements.length - 1)
-    // From the stop the arrows reach every node, and the stop follows the focus.
-    const node = (i: string): HTMLElement => container.querySelector(`[data-node="${i}"]`) as HTMLElement
-    const seen = new Set(stops())
-    for (const i of seen) {
-      for (const key of ['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown']) {
-        act(() => node(i).focus())
-        fireEvent.keyDown(node(i), { key })
-        const to = document.activeElement?.getAttribute('data-node')
-        if (to == null) continue
-        expect(stops()).toEqual([to])
-        seen.add(to)
-      }
+  it('does not draw a resolved tag again that reads the anchor on its complement peaks: a b+y badge says so', () => {
+    const s = specL([...bL, ...yL])
+    const g = buildGraph([tagL(0, 1, 3, 0.01)], s, RL)
+    expect(g.paths.map((p) => p.series).sort()).toEqual(['b', 'y'])
+    // By sameAs, and without it by the complement peaks alone.
+    const how = ['the same residues at the same masses', 'on the complement peaks']
+    for (const [k, graph2] of [g, { ...g, paths: g.paths.map((p) => ({ ...p, sameAs: [] })) }].entries()) {
+      const { container, unmount } = render(<MergeGraph graph={graph2} spectrum={s} chosen={0} onChoose={vi.fn()} />)
+      expect(container.querySelectorAll('[data-path="1"]').length).toBe(0)
+      expect(container.querySelectorAll('.sp-graph-node').length).toBe(1)
+      const dup = screen.getByTestId('merge-graph-dup')
+      expect(dup.querySelector('text')?.textContent).toBe('b+y')
+      expect(dup.getAttribute('aria-label')).toBe('b+y: read again by #2, not drawn again')
+      expect(dup.querySelector('title')?.textContent).toBe(`The same residues read again, not drawn: #2 EPT (b or y 1+, ${how[k]})`)
+      // Nor is the complement tag offered as unused.
+      expect(screen.queryByTestId('merge-graph-unused')).toBeNull()
+      unmount()
     }
-    expect([...seen].sort()).toEqual(graph.placements.map((_, i) => String(i)).sort())
-    // A node in no resolved tag selects nothing: an image, not a tab stop.
-    const { container: c2 } = render(<MergeGraph graph={{ ...graph, paths: graph.paths.slice(0, 1) }} spectrum={S} chosen={0} onChoose={vi.fn()} />)
-    const none = c2.querySelector('.sp-graph-node.none') as Element
+  })
+
+  it('places the other resolved tags around the anchor: conflicting above, the rest listed below in rank order', () => {
+    // EPTIDE, and W (one weak peak a W above b2): W forks from EPTIDE at b2.
+    const { container } = render(<MergeGraph graph={graph} spectrum={S} chosen={0} onChoose={vi.fn()} />)
+    expect(graph.paths[1].relations).toMatchObject([{ path: 0, kind: 'fork' }])
+    const ruler = Number(screen.getByTestId('merge-graph-ruler').querySelector('line')?.getAttribute('y1'))
+    const w = container.querySelector('[data-path="1"]') as Element
+    expect(w.getAttribute('data-band')).toBe('fork')
+    expect(barY(container, '[data-path="1"]')).toBeLessThan(ruler)
+    expect(w.textContent).toContain('#2 W')
+    // Unrelated resolved tags: one row each below, left-aligned, in rank order.
+    const lone = { ...graph, paths: graph.paths.map((p) => ({ ...p, relations: [] })) }
+    const { container: c2 } = render(<MergeGraph graph={lone} spectrum={S} chosen={0} onChoose={vi.fn()} />)
+    const other = c2.querySelector('[data-path="1"]') as Element
+    expect(other.getAttribute('data-band')).toBe('other')
+    expect(barY(c2, '[data-path="1"]')).toBeGreaterThan(ruler)
+    expect(c2.querySelectorAll('[data-arc]').length).toBe(graph.paths[0].chain.length - 1)
+  })
+
+  it('hides the tags in no resolved tag behind a toggle', () => {
+    const one = { ...graph, paths: graph.paths.slice(0, 1).map((p) => ({ ...p, relations: [] })) }
+    const free = graph.paths[1].chain.length + graph.paths[1].inside.length
+    const { container } = render(<MergeGraph graph={one} spectrum={S} chosen={0} onChoose={vi.fn()} />)
+    expect(container.querySelectorAll('[data-band=unused]').length).toBe(0)
+    const btn = screen.getByTestId('merge-graph-unused')
+    expect(btn.textContent).toBe(`Show ${free} unused tag${free === 1 ? '' : 's'}`)
+    fireEvent.click(btn)
+    expect(container.querySelectorAll('[data-band=unused]').length).toBe(free)
+    expect(btn.textContent).toBe(`Hide ${free} unused tag${free === 1 ? '' : 's'}`)
+    // Not a tab stop, an image.
+    const none = container.querySelector('[data-band=unused]') as Element
     expect(none.getAttribute('role')).toBe('img')
     expect(none.hasAttribute('tabindex')).toBe(false)
-    expect(c2.querySelectorAll('[tabindex="0"]').length).toBe(1)
+    fireEvent.click(btn)
+    expect(container.querySelectorAll('[data-band=unused]').length).toBe(0)
   })
 
-  it("follows the plot's m/z range: bars outside are not drawn nor a tab stop, arcs run to the edge, the lanes stay", () => {
-    const whole = render(<MergeGraph graph={graph} spectrum={S} chosen={0} onChoose={vi.fn()} />)
-    const lanes = (c: HTMLElement): Record<string, string | null> =>
-      Object.fromEntries([...c.querySelectorAll('[data-node]')].map((n) => [n.getAttribute('data-node') ?? '', n.querySelector('.sp-graph-bar')?.getAttribute('y') ?? null]))
-    const all = lanes(whole.container)
-    whole.unmount()
-    // From below the first peak to between b2 and b3: the tags that start above it are out of view.
-    const range: [number, number] = [mz[0] - 5, (b[1] + b[2]) / 2]
-    const seen = graph.placements.map((p, i) => ({ i, on: S.mz[p.peaks[p.peaks.length - 1]] >= range[0] && S.mz[p.peaks[0]] <= range[1] }))
-    const out = seen.filter((x) => !x.on).map((x) => String(x.i))
-    expect(out.length).toBeGreaterThan(0)
-    expect(seen.some((x) => x.on)).toBe(true)
-    const { container } = render(<MergeGraph graph={graph} spectrum={S} range={range} chosen={0} onChoose={vi.fn()} />)
-    const drawn = lanes(container)
-    expect(Object.keys(drawn).sort()).toEqual(seen.filter((x) => x.on).map((x) => String(x.i)).sort())
-    // A drawn bar keeps its lane.
-    for (const [i, y] of Object.entries(drawn)) expect(y, i).toBe(all[i])
-    // Every arc is still drawn, clipped to the plot's width (an arc to a bar out of view runs to the edge).
-    expect(container.querySelectorAll('[data-arc]').length).toBe(graph.arcs.length)
-    const clip = container.querySelector('clipPath rect') as Element
-    expect([clip.getAttribute('x'), clip.getAttribute('width')]).toEqual([String(PAD.l), String(W - PAD.l - PAD.r)])
-    expect(container.querySelector('[data-arc]')?.closest('g[clip-path]')).not.toBeNull()
-    // One tab stop, in view.
-    const stops = [...container.querySelectorAll('[data-node][tabindex="0"]')].map((n) => n.getAttribute('data-node'))
-    expect(stops.length).toBe(1)
-    expect(out).not.toContain(stops[0])
-    expect(screen.getByRole('group', { name: /Merge graph/ }).getAttribute('aria-label')).toContain(`; ${out.length} outside m/z`)
+  it('choosing another resolved tag re-anchors on it', () => {
+    const choose = vi.fn()
+    const { container, rerender } = render(<MergeGraph graph={graph} spectrum={S} chosen={0} onChoose={choose} />)
+    expect(screen.getByTestId('merge-graph-ruler').getAttribute('data-sequence')).toBe('EPTIDE')
+    fireEvent.click(container.querySelector('[data-path="1"]') as Element)
+    expect(choose).toHaveBeenLastCalledWith(1)
+    rerender(<MergeGraph graph={graph} spectrum={S} chosen={1} onChoose={choose} />)
+    expect(screen.getByTestId('merge-graph-ruler').getAttribute('data-sequence')).toBe('W')
+    expect([...container.querySelectorAll('[data-band=chain]')].map((n) => Number(n.getAttribute('data-node')))).toEqual(graph.paths[1].chain)
+    // The tags of EPTIDE are now one bar of resolved tag 1, above (it conflicts).
+    expect(container.querySelector('[data-path="0"]')?.getAttribute('data-band')).toBe('fork')
+    expect(screen.getAllByRole('button', { pressed: true }).every((n) => /resolved tag 2\b/.test(n.getAttribute('aria-label') ?? ''))).toBe(true)
+    // A tag of the anchor names how it reads and what it builds.
+    const w = screen.getByRole('button', { name: /^W, builds resolved tag 2/ })
+    expect(w.querySelector('title')?.textContent).toMatch(/^W \(.*\) · E-value 0\.9 · 1 tag: W · builds resolved tag 2$/)
   })
 
-  it('zooms with the stick plot of the Spectrum tab', async () => {
+  it('is one tab stop: the arrows move between the bars, Enter chooses', () => {
+    const choose = vi.fn()
+    const { container } = render(<MergeGraph graph={graph} spectrum={S} chosen={0} onChoose={choose} />)
+    const stops = (): Element[] => [...container.querySelectorAll('[tabindex="0"]')]
+    // The stop: the anchor's N-terminal tag.
+    expect(stops().length).toBe(1)
+    const first = stops()[0]
+    const chain = [...container.querySelectorAll('[data-band=chain]')]
+    expect(first).toBe(chain.sort((a, b) => Number(a.querySelector('.sp-graph-bar')?.getAttribute('x')) - Number(b.querySelector('.sp-graph-bar')?.getAttribute('x')))[0])
+    const focusable = [...container.querySelectorAll('[tabindex]')]
+    const seen = new Set<Element>([first])
+    for (let round = 0; round < 3; round++)
+      for (const el of [...seen])
+        for (const key of ['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown']) {
+          act(() => (el as HTMLElement).focus())
+          fireEvent.keyDown(el, { key })
+          const to = document.activeElement as Element
+          if (!focusable.includes(to)) continue
+          seen.add(to)
+          expect(stops()).toEqual([to])
+        }
+    expect(seen.size).toBe(focusable.length)
+    // Up from the anchor reaches the conflicting #2, Enter chooses it.
+    const w = container.querySelector('[data-path="1"]') as HTMLElement
+    act(() => w.focus())
+    fireEvent.keyDown(w, { key: 'Enter' })
+    expect(choose).toHaveBeenLastCalledWith(1)
+  })
+
+  it('marks the termini of the anchor on its ruler and of the others beside their sequence', () => {
+    const t = [{ n: 'at' as const, c: { away: 'K' } }, { n: { away: '[IL]' }, c: null }]
+    const { container } = render(<MergeGraph graph={graph} spectrum={S} chosen={0} onChoose={vi.fn()} termini={t} />)
+    const ruler = screen.getByTestId('merge-graph-ruler')
+    const n = ruler.querySelector('[data-term=N]') as Element
+    const c = ruler.querySelector('[data-term=C]') as Element
+    expect([n.textContent, n.getAttribute('aria-label'), n.getAttribute('class')]).toEqual(['at the peptide N terminusN–', 'at the peptide N terminus', 'sp-graph-term'])
+    expect([c.getAttribute('aria-label'), c.getAttribute('class')]).toEqual(['one residue (K) from the C terminus', 'sp-graph-term away'])
+    expect(c.textContent).toContain('(K)–C')
+    expect(container.querySelector('[data-path="1"] .sp-graph-label')?.textContent).toBe('#2 N–([IL])W')
+    expect(container.querySelector('[data-path="1"] title')?.textContent).toContain('one residue ([IL]) from the N terminus')
+  })
+
+  it("shows the terminus FASTag wrote in its table, over the GUI's own", async () => {
+    const { container } = panel(toCli(graph, S, 'scan=1', { scheme: 'cstar', threshold: '3' }, (_, k) => (k === 1 ? 'N' : '')))
+    await screen.findByTestId('ladder')
+    fireEvent.click(screen.getByLabelText('Merge graph'))
+    await screen.findByTestId('merge-source')
+    // Computed it would be N+P and C+K (a test above); FASTag's column says N.
+    expect(selected(container)).toMatch(/^#1 N–EPTIDE /)
+    expect(screen.getByTestId('ladder').textContent).toMatch(/: N–EPTIDE N→C/)
+    const n = screen.getByTestId('merge-graph-ruler').querySelector('[data-term=N]') as Element
+    expect([n.getAttribute('aria-label'), screen.getByTestId('merge-graph-ruler').querySelector('[data-term=C]')]).toEqual(['at the peptide N terminus', null])
+    // b0 lies below the plotted m/z: no tick.
+    expect(screen.queryByTestId('terminus-mark')).toBeNull()
+  })
+
+  it('the stick plot ticks the terminus of the selected resolved tag only inside its m/z range', () => {
+    const mark = (x: number) => [{ mz: x, label: 'N b0', words: 'one residue (P) from the N terminus', away: true }]
+    const { container, rerender } = render(<StickPlot spectrum={S} ladder={null} marks={mark(mz[0] + 1)} />)
+    const t = screen.getByTestId('terminus-mark')
+    expect([t.getAttribute('aria-label'), t.getAttribute('class'), t.querySelector('text')?.textContent]).toEqual([`N b0 at m/z ${(mz[0] + 1).toFixed(4)}: one residue (P) from the N terminus`, 'sp-term-mark away', 'N b0'])
+    rerender(<StickPlot spectrum={S} ladder={null} marks={mark(PROTON)} />)
+    expect(container.querySelector('[data-testid=terminus-mark]')).toBeNull()
+  })
+
+  it('the Spectrum tab no longer zooms the merge graph with the plot', async () => {
     panel(swapRanks(toCli(graph, S, 'scan=1'), 1, 2))
     await screen.findByTestId('ladder')
     fireEvent.click(screen.getByLabelText('Merge graph'))
     await screen.findByTestId('merge-source')
     const g = screen.getByTestId('merge-graph')
-    const bar = (): number => Number(g.querySelector(`[data-node="${graph.paths[0].chain[0]}"] .sp-graph-bar`)?.getAttribute('width'))
-    const before = bar()
+    const before = g.innerHTML
     fireEvent.click(screen.getByRole('button', { name: 'Zoom in' }))
-    expect(bar()).toBeCloseTo(before / 0.8, 6)
     fireEvent.click(screen.getByRole('button', { name: 'Zoom in' }))
-    expect(bar()).toBeCloseTo(before / 0.64, 6)
-    fireEvent.click(screen.getByRole('button', { name: 'Whole spectrum' }))
-    expect(bar()).toBeCloseTo(before, 6)
+    expect(g.innerHTML).toBe(before)
   })
 
   it('the Spectrum tab resolves as FASTag did when the run wrote its tag graph, and its nodes select', async () => {
@@ -182,19 +293,24 @@ describe('merge graph', () => {
     // The GUI's cutoff and join are not FASTag's.
     expect(screen.queryByLabelText('Largest E-value of the tags used')).toBeNull()
     const g = screen.getByTestId('merge-graph')
-    expect(g.querySelectorAll('[data-node]').length).toBe(4)
-    expect(within(container.querySelector('table[aria-label="Resolved tags of this spectrum"]') as HTMLElement).getAllByRole('row').slice(1).map((r) => r.querySelector('td')?.textContent?.split(' ').slice(0, 2).join(' '))).toEqual(['#1 W', '#2 EPTIDE'])
+    // Anchored on #1 W: its one tag; EPTIDE, which conflicts with it, one bar above.
+    expect(g.querySelectorAll('[data-node]').length).toBe(1)
+    expect(g.querySelector('[data-path="1"]')?.getAttribute('data-band')).toBe('fork')
+    expect(within(container.querySelector('table[aria-label="Resolved tags of this spectrum"]') as HTMLElement).getAllByRole('row').slice(1).map((r) => r.querySelector('td')?.textContent?.split(' ').slice(0, 2).join(' '))).toEqual(['#1 W', '#2 N–(P)EPTIDE(K)–C'])
     expect(selected(container)).toMatch(/^#1 W/)
     // A node's rank and tags are FASTag's rows, named by the panel's (E-value ordered) rows.
     const w = within(g).getByRole('button', { name: /^W, builds resolved tag 1/ })
-    expect(w.textContent).toContain('#1')
+    expect(within(g).getByTestId('merge-graph-ruler').textContent).toMatch(/^#1/)
     expect(w.querySelector('title')?.textContent).toMatch(/· 1 tag: W · builds resolved tag 1$/)
-    const ept = within(g).getByRole('button', { name: /^EPT, builds resolved tag 2/ })
-    expect(ept.querySelector('title')?.textContent).toMatch(/· 1 tag: EPT · builds resolved tag 2$/)
+    const ept = within(g).getByRole('button', { name: /^EPTIDE, resolved tag 2, conflicts with #1/ })
     fireEvent.click(ept)
-    expect(selected(container)).toMatch(/^#2 EPTIDE/)
+    // The old table has no terminus column: computed as FASTag does (b1 to b7 of PEPTIDEK, one P before, one K after).
+    expect(selected(container)).toMatch(/^#2 N–\(P\)EPTIDE\(K\)–C/)
+    // Re-anchored: the tags that build it.
+    const tag = within(g).getByRole('button', { name: /^EPT, builds resolved tag 2/ })
+    expect(tag.querySelector('title')?.textContent).toMatch(/· 1 tag: EPT · builds resolved tag 2$/)
     // The plot draws the ladder of the tag selected.
-    expect(screen.getByTestId('ladder').textContent).toMatch(/: EPTIDE N→C/)
+    expect(screen.getByTestId('ladder').textContent).toMatch(/: N–\(P\)EPTIDE\(K\)–C N→C/)
   })
 
   it('a node reads as its resolved tag reads the same peaks, and says how it reads on its own', () => {
@@ -258,8 +374,8 @@ describe('merge graph', () => {
     await screen.findByTestId('ladder')
     fireEvent.click(screen.getByLabelText('Merge graph'))
     await screen.findByTestId('merge-source')
-    fireEvent.click(within(screen.getByTestId('merge-graph')).getByRole('button', { name: /^EPT, builds resolved tag 2/ }))
-    expect(selected(container)).toMatch(/^#2 EPTIDE/)
+    fireEvent.click(within(screen.getByTestId('merge-graph')).getByRole('button', { name: /^EPTIDE, resolved tag 2\b/ }))
+    expect(selected(container)).toMatch(/^#2 N–\(P\)EPTIDE/)
     // ▶: the panel shows the next spectrum (as ResultTabs does, the same panel).
     rerenderTo('scan=2', FIRST_ROW + 4 + 2)
     await screen.findByText(/scan=2/)

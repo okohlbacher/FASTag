@@ -1174,32 +1174,49 @@ kbd { font-family: var(--font-mono); font-size: var(--text-xs); color: var(--mut
 .sp-pile-step.pep { border-bottom: 1px solid var(--plot-muted); font-weight: 400; }
 .sp-pile-step.ambig { font-style: italic; }
 .sp-member { margin-right: 6px; }
-/* The merge graph: the tag graph's placements as bars on the plot's m/z axis,
-   arcs where one continues another, coloured by the rank of the resolved tag
-   they build (the rank is written on the node too). */
+/* The merge graph: laid out around the chosen resolved tag on its residues
+   N to C; bars coloured by the rank of the resolved tag they select (the rank
+   is written on them too). */
 .sp-graph { display: flex; flex-direction: column; gap: var(--space-1); }
-.sp-graph-svg { width: 100%; background: var(--plot-background); border: 1px solid var(--border); border-radius: var(--radius-md); }
+.sp-graph-svg { width: 100%; height: auto; background: var(--plot-background); border: 1px solid var(--border); border-radius: var(--radius-md); }
 .sp-graph-node { cursor: pointer; --rank: var(--plot-foreground); }
 .sp-graph-hit { fill: transparent; stroke: none; }
-.sp-graph-bar { fill: var(--rank); stroke: var(--rank); stroke-width: 1; vector-effect: non-scaling-stroke; }
-.sp-graph-node.inside .sp-graph-bar { fill: var(--plot-background); }
+.sp-graph-bar { fill: var(--rank); stroke: var(--rank); stroke-width: 1; }
+.sp-graph-node.inside .sp-graph-bar, .sp-graph-node.fork .sp-graph-bar { fill: var(--plot-background); }
 .sp-graph-node.none { cursor: default; --rank: var(--plot-muted); }
 .sp-graph-node.none .sp-graph-bar { fill: var(--plot-background); stroke-dasharray: 3 2; }
-.sp-graph-node.sel .sp-graph-bar { stroke-width: 3; }
+.sp-graph-node.none .sp-graph-label { fill: var(--plot-muted); font-weight: 400; }
+.sp-graph-node.sel .sp-graph-bar { stroke-width: 1.5; }
 .sp-graph-node:focus { outline: none; }
 .sp-graph-node:focus-visible .sp-graph-bar { stroke: var(--ring); stroke-width: 3; }
 .sp-graph-label { fill: var(--plot-foreground); font: 600 11px var(--font-seq); pointer-events: none; }
-.sp-graph-arc { fill: none; stroke: var(--plot-muted); stroke-width: 1; opacity: 0.6; vector-effect: non-scaling-stroke; }
+.sp-graph-res { fill: var(--plot-foreground); font: 700 13px var(--font-seq); }
+.sp-graph-res.gap { font-style: italic; font-weight: 600; }
+.sp-graph-term { fill: var(--plot-foreground); font: 700 13px var(--font-seq); }
+.sp-graph-term.away { fill: var(--plot-muted); font-weight: 400; }
+.sp-graph-rank { fill: var(--rank); font: 700 13px var(--font-seq); --rank: var(--plot-foreground); }
+.sp-graph-band-label { fill: var(--plot-muted); font-size: 10px; }
+.sp-graph-dup rect { fill: var(--plot-background); stroke: var(--plot-muted); stroke-width: 1; }
+.sp-graph-dup text { fill: var(--plot-muted); font: 600 10px var(--font-seq); }
+.sp-graph-arc { fill: none; stroke: var(--plot-muted); stroke-width: 1; opacity: 0.6; }
 .sp-graph-arc.touch { stroke-dasharray: 4 3; }
-.sp-graph-arc.on { stroke: var(--rank); stroke-width: 3; opacity: 1; }
-.sp-graph-attach { stroke: var(--rank); stroke-width: 1; vector-effect: non-scaling-stroke; }
-.sp-graph-node.r1, .sp-graph-arc.r1, .sp-graph-attach.r1 { --rank: var(--plot-accent); }
-.sp-graph-node.r2, .sp-graph-arc.r2, .sp-graph-attach.r2 { --rank: var(--plot-accent-2); }
-.sp-graph-node.r3, .sp-graph-arc.r3, .sp-graph-attach.r3 { --rank: var(--plot-flag); }
-.sp-graph-node.r4, .sp-graph-arc.r4, .sp-graph-attach.r4 { --rank: var(--plot-muted); }
+.sp-graph-arc.on { stroke: var(--rank); stroke-width: 2.5; opacity: 1; }
+.sp-graph-node.r1, .sp-graph-arc.r1, .sp-graph-rank.r1 { --rank: var(--plot-accent); }
+.sp-graph-node.r2, .sp-graph-arc.r2, .sp-graph-rank.r2 { --rank: var(--plot-accent-2); }
+.sp-graph-node.r3, .sp-graph-arc.r3, .sp-graph-rank.r3 { --rank: var(--plot-flag); }
+.sp-graph-node.r4, .sp-graph-arc.r4, .sp-graph-rank.r4 { --rank: var(--plot-muted); }
 /* Below the third rank a tag is drawn hollow: the first three stand out. */
 .sp-graph-node.r4 .sp-graph-bar { fill: var(--plot-background); }
-.sp-graph-node.r4.sel { --rank: var(--plot-foreground); }
+.sp-graph-node.r4.sel, .sp-graph-rank.r4 { --rank: var(--plot-foreground); }
+/* The termini of a resolved tag beside its sequence: N– and –C; one residue
+   away, N–(K) muted. */
+.sp-term { font-weight: 700; }
+.sp-term.away { color: var(--muted-foreground); font-weight: 400; }
+/* The stick plot's tick at the selected resolved tag's terminus (b0, y0). */
+.sp-term-mark line { stroke: var(--plot-foreground); stroke-width: 1.5; vector-effect: non-scaling-stroke; }
+.sp-term-mark text { fill: var(--plot-foreground); font: 700 11px var(--font-seq); }
+.sp-term-mark.away line { stroke: var(--plot-muted); stroke-dasharray: 3 2; }
+.sp-term-mark.away text { fill: var(--plot-muted); font-weight: 400; }
 .sp-mode { display: flex; flex-wrap: wrap; gap: 4px 16px; align-items: center; margin: 4px 0 6px; }
 .sp-mode input[type=text] { width: 7em; }
 .sp-svg { width: 100%; height: 260px; background: var(--plot-background); border: 1px solid var(--border); border-radius: var(--radius-md); touch-action: none; cursor: grab; }

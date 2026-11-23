@@ -17,6 +17,8 @@ import { hasStep, ladderFor, laddersFor, residueMasses, seriesText, tagRowFrom, 
 import { kindOf, ladderOf, packRows, sequenceOf, settleSeries, stepLabel, type GPath, type StepKind, type TagGraph, type TagIn } from './graph'
 import { fromCli, rankingOf, type CliRows } from './cliGraph'
 import { MergeGraph } from './MergeGraph'
+import { TermSeq } from './TermSeq'
+import { termContext, terminiOf, terminusMark, type Terminus } from './terminus'
 import { PAD, W, fullRange } from './plotScale'
 import { CSTAR_THRESHOLD, schemeGraph } from './stepScore'
 import { dbCall, ladderSteps, likelyPeptide, rulerOf, stepOnRuler, stepsOnRuler, ticksOf, type Candidate, type Ruler } from './peptide'
@@ -218,9 +220,6 @@ export default function SpectrumPanel({ target, source, tags: tagsFile, placemen
   const [cand, setCand] = useState<Candidate | null>(null)
   // The spectrum's rows of the run's -resolved_out and -tag_graph_out.
   const [cli, setCli] = useState<CliOf | { error: string } | null>(null)
-  // The m/z range of the stick plot, which the merge graph follows; of
-  // another spectrum's peaks, the whole spectrum.
-  const [zoomed, setZoomed] = useState<{ of: SpectrumPeaks; range: [number, number] } | null>(null)
 
   // The dump.
   useEffect(() => {
@@ -290,13 +289,6 @@ export default function SpectrumPanel({ target, source, tags: tagsFile, placemen
   }, [source.params])
 
   const spectrum = peaks.state === 'ok' ? peaks.spectrum : null
-  const plotRange = useMemo((): [number, number] | null => (spectrum ? (zoomed?.of === spectrum ? zoomed.range : fullRange(spectrum.mz)) : null), [spectrum, zoomed])
-  const onRange = useCallback(
-    (r: [number, number]): void => {
-      if (spectrum) setZoomed({ of: spectrum, range: r })
-    },
-    [spectrum]
-  )
   const row = tags && tags.rows[chosen] ? tagRowFrom(tags.columns, tags.rows[chosen]) : null
   const lads = spectrum && row ? laddersFor(row, spectrum, residues) : null
   const byDb = (l: Ladder): Ladder => withDb(l, cand, spectrum, residues)
@@ -364,6 +356,15 @@ export default function SpectrumPanel({ target, source, tags: tagsFile, placemen
   const contigAt = merged && chosenContig?.g === merged.graph && chosenContig.i < merged.graph.paths.length ? chosenContig.i : 0
   const choose = useCallback((i: number): void => setChosenContig(merged ? { g: merged.graph, i } : null), [merged])
   const sel = merged ? (merged.graph.paths[contigAt] ?? null) : null
+  // Where each resolved tag lies against the peptide's termini: as FASTag
+  // wrote it (-resolved_out terminus), else computed as FASTag does.
+  const tctx = useMemo(() => termContext(source.params, residues), [source.params, residues])
+  const termini = useMemo((): Terminus[] => (merged && spectrum ? terminiOf(merged.graph.paths, spectrum, residues, tctx) : []), [merged, spectrum, residues, tctx])
+  const termMarks = useMemo(() => {
+    const t = termini[contigAt]
+    const mk = sel && spectrum && t ? terminusMark(sel, t, spectrum, residues, tctx) : null
+    return mk ? [mk] : []
+  }, [termini, contigAt, sel, spectrum, residues, tctx])
   // The peptide's fragments in the layer of the tag drawn.
   const ruler = useMemo(() => {
     const of = sel ?? ladder
@@ -610,8 +611,7 @@ export default function SpectrumPanel({ target, source, tags: tagsFile, placemen
           titles={view?.titles}
           ruler={plotRuler}
           strip={strip}
-          range={plotRange ?? undefined}
-          onRange={onRange}
+          marks={termMarks}
         />
         {merged && (
           <p className="hint sp-legend">
@@ -619,7 +619,7 @@ export default function SpectrumPanel({ target, source, tags: tagsFile, placemen
             of the two is right) · <span className="sp-key other" /> elsewhere · <em>italic</em>: readings not told apart · thick: E-value ≤ 0.01, faint: &gt; 1
           </p>
         )}
-        {merged && mode === 'graph' && spectrum && <MergeGraph graph={merged.graph} spectrum={spectrum} range={plotRange ?? undefined} chosen={contigAt} onChoose={choose} />}
+        {merged && mode === 'graph' && spectrum && <MergeGraph graph={merged.graph} spectrum={spectrum} chosen={contigAt} onChoose={choose} termini={termini} />}
         {cand && (
           <p className="hint sp-peptide" data-testid="peptide">
             Tags placed on <strong className="mono">{cand.peptide}</strong>
@@ -633,6 +633,7 @@ export default function SpectrumPanel({ target, source, tags: tagsFile, placemen
           <LadderLine
             ladder={shownLadder}
             tag={merged ? sequenceOf(merged.graph.paths[contigAt]) : nToC(shownLadder.series, shownLadder.residues)}
+            terminus={merged ? termini[contigAt] : undefined}
             written={merged ? undefined : row?.tag}
             unit={peaks.spectrum.toleranceUnit}
           />
@@ -664,7 +665,7 @@ export default function SpectrumPanel({ target, source, tags: tagsFile, placemen
           <p className="hint">Reading…</p>
         ) : merged ? (
           <>
-            <PathTable graph={merged.graph} chosen={contigAt} onChoose={choose} ruler={ruler} spectrum={spectrum} />
+            <PathTable graph={merged.graph} chosen={contigAt} onChoose={choose} ruler={ruler} spectrum={spectrum} termini={termini} />
             {sel && spectrum && (
               <Pileup
                 graph={merged.graph}
@@ -688,7 +689,7 @@ export default function SpectrumPanel({ target, source, tags: tagsFile, placemen
 
 /// The resolved tags of a spectrum (the paths of its tag graph), best
 /// evidence first.
-function PathTable(p: { graph: TagGraph; chosen: number; onChoose(i: number): void; ruler: Ruler | null; spectrum: SpectrumPeaks | null }): JSX.Element {
+function PathTable(p: { graph: TagGraph; chosen: number; onChoose(i: number): void; ruler: Ruler | null; spectrum: SpectrumPeaks | null; termini: Terminus[] }): JSX.Element {
   const g = p.graph
   return (
     <div className="sp-tags-wrap">
@@ -718,7 +719,7 @@ function PathTable(p: { graph: TagGraph; chosen: number; onChoose(i: number): vo
               <tr key={i} tabIndex={i === p.chosen ? 0 : -1} aria-selected={i === p.chosen} className={i === p.chosen ? 'on' : undefined} onClick={() => p.onChoose(i)}>
                 <td role="gridcell" className="mono">
                   <span className="muted">#{i + 1} </span>
-                  {sequenceOf(c)}
+                  <TermSeq seq={sequenceOf(c)} t={p.termini[i]} />
                   {c.call.level === 'open' && sequenceOf({ ...c, series: other(c.series) }) !== sequenceOf(c) && (
                     <span className="muted sp-as" title="b or y is not told apart: the other series reads the other way">
                       {' '}
@@ -945,14 +946,17 @@ function StepDelta({ to, unit }: { to: Ladder['positions'][number]; unit: string
 /// The tag's ladder and its verdict. A ladder that could not be built (a
 /// modification without a known mass, a tag that does not parse) has no
 /// positions: then only the verdict with its reason is shown.
-export function LadderLine({ ladder, tag, unit, written }: { ladder: Ladder; tag: string; unit: string; written?: string }): JSX.Element {
+export function LadderLine({ ladder, tag, unit, written, terminus }: { ladder: Ladder; tag: string; unit: string; written?: string; terminus?: Terminus }): JSX.Element {
   const steps = ladder.residues.map((res, k) => ({ res, to: ladder.positions[k + 1] }))
   return (
     <div className="sp-ladder" data-testid="ladder">
       {/* Polite: choosing another tag redraws the ladder and its verdict. */}
       <p aria-live="polite" aria-atomic="true">
         <strong title={callTitle(ladder.call)}>
-          {seriesText(ladder.series, ladder.call)} ions{ladder.call?.level === 'open' ? ` (read as ${ladder.series})` : ''}: <span className="mono">{tag}</span> N→C
+          {seriesText(ladder.series, ladder.call)} ions{ladder.call?.level === 'open' ? ` (read as ${ladder.series})` : ''}: <span className="mono">
+            <TermSeq seq={tag} t={terminus} />
+          </span>{' '}
+          N→C
         </strong>
         {written && written !== tag && <span className="muted"> (written {written})</span>}{' '}
         {ladder.complete ? (
@@ -1044,8 +1048,7 @@ export function StickPlot({
   titles,
   ruler = null,
   strip = null,
-  range: rangeIn,
-  onRange
+  marks = []
 }: {
   spectrum: SpectrumPeaks
   ladder: Ladder | null
@@ -1063,10 +1066,8 @@ export function StickPlot({
   titles?: string[][]
   ruler?: PlotRuler | null
   strip?: ErrorStrip | null
-  // The m/z range shown, when the caller holds it (the merge graph follows
-  // it): every zoom and pan goes to onRange. Left out, the plot holds it.
-  range?: [number, number]
-  onRange?(r: [number, number]): void
+  // Ticks at the terminus of the selected resolved tag (terminus.ts terminusMark), drawn when in view.
+  marks?: { mz: number; label: string; words: string; away: boolean }[]
 }): JSX.Element {
   const { mz, int } = spectrum
   // By default b/c on the upper line, y/z on the lower; two ladders judged the same series (or not told apart) one above the other.
@@ -1082,10 +1083,8 @@ export function StickPlot({
   const HP = 260 - PAD.t + padT
   const H = HP + (strip ? STRIP_H : 0)
   const full = useMemo(() => fullRange(mz), [mz])
-  const [own, setOwn] = useState<[number, number]>(full)
-  useEffect(() => setOwn(full), [full])
-  const range = rangeIn ?? own
-  const setRange = onRange ?? setOwn
+  const [range, setRange] = useState<[number, number]>(full)
+  useEffect(() => setRange(full), [full])
   const drag = useRef<{ x: number; range: [number, number] } | null>(null)
   const svgRef = useRef<SVGSVGElement>(null)
 
@@ -1229,6 +1228,18 @@ export function StickPlot({
               className={onLadder.has(i) ? 'sp-peak on' : onOther.has(i) ? 'sp-peak on alt' : 'sp-peak'}
               data-peak={onLadder.has(i) ? 'ladder' : onOther.has(i) ? 'other' : undefined}
             />
+          ) : null
+        )}
+        {/* The terminus of the selected resolved tag (b0/c0 or y0/z0), when in view. */}
+        {marks.map((m) =>
+          inView(m.mz) ? (
+            <g key={m.label} className={`sp-term-mark${m.away ? ' away' : ''}`} data-testid="terminus-mark" role="img" aria-label={`${m.label} at m/z ${fmt(m.mz)}: ${m.words}`}>
+              <title>{`${m.label} at m/z ${fmt(m.mz)}: ${m.words}`}</title>
+              <line x1={X(m.mz)} x2={X(m.mz)} y1={HP - PAD.b + 6} y2={HP - PAD.b - 14} />
+              <text x={X(m.mz) + 3} y={HP - PAD.b - 6}>
+                {m.label}
+              </text>
+            </g>
           ) : null
         )}
         {lp.map((p, k) => {

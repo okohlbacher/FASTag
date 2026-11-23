@@ -779,11 +779,21 @@ export const RESULTS: HelpPage = {
             threshold), else the run&apos;s settings; for tables of a run the app has no record of, written by a FASTag
             that did not record it, the line says the ranking is not recorded and the GUI takes FASTag&apos;s default,
             cstar at 3.
-            Merge graph draws the tag graph itself: each distinct tag is a bar from its first to its last peak on the
-            plot&apos;s m/z axis, one band per ion layer; a line joins a tag to one that continues it (solid over a shared
-            step, dashed where they only touch), bold in the colour of the resolved tag it builds, whose rank is written
-            on the bar. Tags inside a resolved tag hang from it. Choosing a bar, by click or Enter, selects its
-            resolved tag as the table does; the graph is one Tab stop, and the arrow keys move between its bars.
+            Merge graph draws the tag graph around the resolved tag selected: its residues N to C on a ruler (a gap
+            two residues wide; residues, not m/z, so the graph does not follow the plot&apos;s zoom), and under it
+            the tags that build it as a staircase of bars, each over its residues, with bold joins. Resolved tags that
+            conflict with it (share a peak and continue otherwise) are aligned above, the tags inside it and those that
+            only touch it below, then the rest, one row each in rank order. A resolved tag that reads it again on its
+            complement peaks (the other series of its pair) is not drawn again: a b+y badge names it. Tags in no
+            resolved tag are hidden behind Show unused tags. Choosing a bar, by click or Enter, selects its resolved
+            tag and re-anchors the graph on it; the graph is one Tab stop, and the arrow keys move between its bars.
+          </p>
+          <p>
+            A resolved tag at a peptide terminus is written N–EPTIDE or EPTIDE–C, and N–(K)EPTIDE or EPTIDE(K)–C,
+            muted, when one residue lies between: FASTag&apos;s terminus column of -resolved_out, or, for tables of
+            an older FASTag and when the GUI resolves itself, the same test of the flanks (0 or a terminal
+            modification of the run within the tolerance of that side, the precursor&apos;s added on the side measured
+            from it). The plot marks b0 or y0 of the selected one when it lies in view.
           </p>
           <p>
             When the run wrote tag placements (a protein database and Tag placements), the peptide most tags of the

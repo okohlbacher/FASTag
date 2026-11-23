@@ -34,9 +34,14 @@
   resolved shows FASTag's resolution and names its ranking (it says which one is used, and falls back to the GUI's
   when the tables do not fit the peaks or hold no row of the spectrum). The fallback ranks as the run did: the
   ranking FASTag wrote on the table's rows, else the run's settings; tables without either are said to be of a
-  ranking not recorded, and the GUI takes the default. The new Merge graph view draws the tag graph: tags as bars on
-  the m/z axis, one band per ion layer, joins as arcs, those of a resolved tag in the colour of its rank; a tag
-  selects its resolved tag.
+  ranking not recorded, and the GUI takes the default. The new Merge graph view draws the tag graph around the
+  resolved tag selected, on its residues N to C: its tags as a staircase of bars under a residue ruler with bold
+  joins, conflicting resolved tags above, tags inside it, touching ones and the rest below; a resolved tag that reads
+  it again on its complement peaks is a b+y badge, not a second bar; unused tags behind a toggle; choosing a bar
+  re-anchors on its resolved tag.
+- **GUI: termini of resolved tags.** The resolved tags table, the tag line and the merge graph write N–EPTIDE,
+  EPTIDE–C, and N–(K)… / …(K)–C muted one residue away, from `-resolved_out`'s `terminus` column, or computed alike
+  for older tables and the GUI's own resolution; the plot ticks b0/y0 of the selected one when in view.
 
 - **GUI: all tags of a spectrum, resolved.** The Spectrum tab's **All tags, resolved** places every tag of the spectrum
   on its peaks and assembles the tags of one ion series that overlap and agree into longer resolved tags (a tag graph:
