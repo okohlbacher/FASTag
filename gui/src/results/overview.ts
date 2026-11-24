@@ -892,9 +892,16 @@ function alkylationReportTile(c: AlkylationReport, params: Record<string, unknow
   // Format 2: the call is read off the tags (no database); the placements
   // on a database, when given, refine it (source).
   const fromTags = c.source === 'tags' || c.source === 'tags+placement'
-  const counted = fromTags
-    ? `${fmt(c.binned)} spectra whose tags read a cysteine${c.source === 'tags+placement' ? `; the placements${db} agree` : ', no database'}`
-    : `${fmt(c.binned)} spectra with one cysteine${db}`
+  // Release-gate review n4: the share is over the reported denominator (the
+  // share row's n), which from format 3 holds the conflicted votes too.
+  const conflicted = c.voted != null && c.binned != null && c.voted > c.binned ? c.voted - c.binned : 0
+  const counted = conflicted
+    ? fromTags
+      ? `${fmt(c.voted)} tag votes (${fmt(c.binned)} for a form, ${fmt(conflicted)} conflicted)${c.source === 'tags+placement' ? `; the placements${db} agree` : ', no database'}`
+      : `${fmt(c.voted)} spectra with one cysteine (${fmt(c.binned)} binned, ${fmt(conflicted)} conflicted)${db}`
+    : fromTags
+      ? `${fmt(c.binned)} spectra whose tags read a cysteine${c.source === 'tags+placement' ? `; the placements${db} agree` : ', no database'}`
+      : `${fmt(c.binned)} spectra with one cysteine${db}`
   if (c.status === 'call')
     return {
       ...base,

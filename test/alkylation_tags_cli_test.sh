@@ -70,7 +70,7 @@ for f in Carbamidomethyl Nethylmaleimide unmodified; do
     -alkylation_out "$TMP/$f.alk.tsv" -alkylation_tags_out "$TMP/$f.both.alkt.tsv"
   same "$TMP/$f.base.tsv" "$TMP/$f.o.tsv" "-alkylation_out changed the tag TSV ($f)"
   [ "$(val "$TMP/$f.alk.tsv" alk_run format) $(val "$TMP/$f.alk.tsv" alk_run method) $(val "$TMP/$f.alk.tsv" alk_run database_source)" \
-    = "3 tags none" ] || fail "$f: -alkylation_out is not a format 3 tag-only report"
+    = "4 tags none" ] || fail "$f: -alkylation_out is not a format 4 tag-only report"
   [ "$(val "$TMP/$f.alk.tsv" alkylation_call source)" = tags ] || fail "$f: source is not tags"
   tr -d '\r' < "$TMP/$f.alk.tsv" | awk -F'\t' '$1 ~ /^alkt_|^alkylation_tags_call$/' > "$TMP/$f.a.sec"
   tr -d '\r' < "$TMP/$f.alkt.tsv" | awk -F'\t' '$1 ~ /^alkt_|^alkylation_tags_call$/' > "$TMP/$f.t.sec"
@@ -115,7 +115,7 @@ run -in "$TMP/Carbamidomethyl.mzML" -out "$TMP/vm.tsv" "${COMMON[@]}" -variable_
 R="$TMP/Carbamidomethyl.alkt.tsv"
 head -1 "$R" | tr -d '\r' | grep -qx $'section\tkey\tvalue\tn\tdescription' || fail "report header"
 tr -d '\r' < "$R" | awk -F'\t' 'NF != 5 || $5 == "" { bad = 1 } END { exit bad }' || fail "a row without five fields"
-[ "$(val "$R" alkt_run format)" = 3 ] || fail "alkt_run format is not 3"
+[ "$(val "$R" alkt_run format)" = 4 ] || fail "alkt_run format is not 4"
 for s in run alkt_run alkt_form alkylation_tags_call; do
   tr -d '\r' < "$R" | cut -f1 | grep -qx "$s" || fail "no $s section"
 done

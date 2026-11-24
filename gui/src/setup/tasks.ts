@@ -283,7 +283,7 @@ export const TASKS: readonly Task[] = [
     // All spectra and the alkylation report by default (user decision,
     // 1.16): the report needs no proteome (its call is read off the tags),
     // and on all spectra at Extension 2 enough cysteines vote (PXD000001:
-    // methylthio, 52 of 69 votes); on 10% they did not (8 votes, no call).
+    // methylthio, 52 of 59 votes); on 10% they did not (8 votes, no call).
     values: {
       ...ALL,
       digest_out: 'digest.tsv',

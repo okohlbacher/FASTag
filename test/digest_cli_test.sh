@@ -321,7 +321,7 @@ if [ -n "$BUILDTAXDB" ] && [ -n "$TAXDIR" ]; then
 fi
 
 # ---- 1.12 D: -alkylation_out (#3g)
-alk_check() {  # FILE [tags]: sections, five fields, the call rows (format 3; "tags": no database)
+alk_check() {  # FILE [tags]: sections, five fields, the call rows (format 4; "tags": no database)
   tr -d '\r' < "$1" | awk -F'\t' 'NF != 5 || $5 == "" { bad = 1 } END { exit bad }' || fail "$1: a malformed row"
   local want="run alk_run alk_cys alkylation_placement_call alkt_run alkt_form alkylation_tags_call alkylation_call"
   [ "${2:-}" = tags ] && want="run alk_run alkt_run alkt_form alkylation_tags_call alkylation_call"
@@ -330,7 +330,7 @@ alk_check() {  # FILE [tags]: sections, five fields, the call rows (format 3; "t
   tr -d '\r' < "$1" | cut -f1 | grep -qx -e cys -e call && fail "$1: a cys or call section (the mass-gap or digest names)"
   [ "$(tr -d '\r' < "$1" | awk -F'\t' '$1 == "alkylation_call" { k = k (k == "" ? "" : ",") $2 } END { print k }')" \
     = "status,reagent,mass,share,voted,reason,source" ] || fail "$1: alkylation_call rows"
-  [ "$(val "$1" alk_run format)" = 3 ] || fail "$1: alk_run format"
+  [ "$(val "$1" alk_run format)" = 4 ] || fail "$1: alk_run format"
 }
 counts_of() { tr -d '\r' < "$1" | awk -F'\t' '$1 == "alk_cys" || $1 == "alkylation_placement_call" || $1 == "alkylation_call" || ($1 == "alk_run" && ($2 == "tags" || $2 == "spectra"))'; }
 run "${COMMON[@]}" -out "$TMP/a0.tsv" -alkylation_out "$TMP/alk0.tsv" -alkylation_proteome "$DB"

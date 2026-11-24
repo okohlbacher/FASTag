@@ -280,7 +280,7 @@ export function labelFindings(r: Report): LabelFinding[] {
   }))
 }
 
-// ---- alkylation (1.12, -alkylation_out formats 1 and 2) ---------------------
+// ---- alkylation (1.12, -alkylation_out formats 1 to 4) ---------------------
 
 export interface AlkylationCall {
   status: 'call' | 'no_call' | 'unknown'
@@ -292,6 +292,9 @@ export interface AlkylationCall {
   share: number | null
   /// Binned spectra (placements) or votes (tags) the call is based on.
   binned: number | null
+  /// The share's denominator, the `share` row's n: from format 3 the binned
+  /// plus the conflicted votes (`voted`), up to format 2 the binned ones.
+  voted: number | null
   /// `few_cys_spectra`, `ambiguous`, `tags_too_short` (format 1),
   /// `unresolved_forms` or `disagree` (format 2) on no_call.
   reason?: string
@@ -300,7 +303,8 @@ export interface AlkylationCall {
   /// Format 2: where the call comes from, `tags`, `placement` or
   /// `tags+placement`; absent in format 1 (placements only).
   source?: string
-  /// The `alk_run format` value; a reader knows formats 1 and 2.
+  /// The `alk_run format` value; a reader knows formats 1 to 4 (3 adds the
+  /// conflicts to the share's denominator, 4 the alias_unconfirmed row).
   format: number | null
   /// Format 2 with a database: the placement call on its own
   /// (`alkylation_placement_call`), whatever the call of the report took
@@ -316,6 +320,8 @@ export interface AlkylationPart {
   share: number | null
   /// Binned spectra.
   binned: number | null
+  /// The share's denominator (the `share` row's n; binned plus conflicted from format 3).
+  voted: number | null
   reason?: string
 }
 
@@ -330,6 +336,7 @@ function alkylationPart(r: Report, sect: string): AlkylationPart {
     reagent: called && reagent != null && reagent !== '-' ? reagent : undefined,
     share: num(v('share')),
     binned: row(r, sect, 'status')?.n ?? null,
+    voted: row(r, sect, 'share')?.n ?? row(r, sect, 'status')?.n ?? null,
     reason: v('reason') == null || v('reason') === '-' ? undefined : v('reason')
   }
 }
@@ -338,7 +345,7 @@ function alkylationPart(r: Report, sect: string): AlkylationPart {
 /// doc/ALKYLATION-REPORT.md requires.
 export function alkylationCall(r: Report): AlkylationCall {
   const v = (k: string): string | undefined => value(r, 'alkylation_call', k)
-  const { status, reagent, share, binned, reason } = alkylationPart(r, 'alkylation_call')
+  const { status, reagent, share, binned, voted, reason } = alkylationPart(r, 'alkylation_call')
   const placed = row(r, 'alkylation_placement_call', 'status') != null
   return {
     status,
@@ -346,6 +353,7 @@ export function alkylationCall(r: Report): AlkylationCall {
     mass: status === 'call' ? num(v('mass')) : null,
     share,
     binned,
+    voted,
     reason,
     databaseSource: value(r, 'alk_run', 'database_source'),
     source: v('source'),

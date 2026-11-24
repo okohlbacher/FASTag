@@ -1339,7 +1339,8 @@ export const FILES: HelpPage = {
             With <L to="param-glyco">Glyco flag</L>, FASTag writes one row per MS2 spectrum: how many different{' '}
             <G to="gloss-oxonium">oxonium ions</G> it holds, their summed intensity as a share of the strongest peak,
             a 0/1 flag and the ion names. By default, the flag is 1 when at least 2 different oxonium ions are found and their
-            share reaches the <L to="param-glyco_min_fraction">minimum fraction</L> (0.10). These are raw-spectrum
+            share reaches the <L to="param-glyco_min_fraction">minimum fraction</L> (0.10). The fragments of HexNAc
+            (126.055 to 186.076) count only when HexNAc itself (204.087) is found. These are raw-spectrum
             signals, measured before the peak budget used for tagging; the fraction is relative to the strongest
             peak, not the sum of all peak intensities, and can exceed 1.
           </p>

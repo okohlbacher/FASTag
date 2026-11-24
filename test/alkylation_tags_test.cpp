@@ -52,6 +52,22 @@ static std::string withForm(const std::string& pep, const std::string& form)
   return pep.substr(0, c) + "C(" + form + ")" + pep.substr(c + 1);
 }
 
+/// Adds the C immonium ion of @p form (AlkylationTags::immoniumMz) to a
+/// synthetic spectrum, at 0.3 (fragments 0.5-1, noise 0.02-0.22), as HCD
+/// spectra of a C peptide often carry it (49-61% of CAM peptide spectra on
+/// PXD020401 and PXD003531). Release-gate review n1: a vote whose C edge an
+/// alias reads as well needs it.
+static void addImmonium(OpenMS::MSSpectrum& s, const std::string& form)
+{
+  for (const auto& f : FASTag::Alkylation::forms())
+    if (f.name == form)
+    {
+      s.emplace_back(FASTag::AlkylationTags::immoniumMz(f), 0.3f);
+      s.sortByPosition();
+      return;
+    }
+}
+
 static int writeMzml(const std::string& out, const std::string& form, int n)
 {
   OpenMS::PeakMap exp;
@@ -63,6 +79,7 @@ static int writeMzml(const std::string& out, const std::string& form, int n)
       // "mixed": two of three spectra Carbamidomethyl, one Nethylmaleimide.
       const std::string f = form != "mixed" ? form : (scan % 3 == 2 ? "Nethylmaleimide" : "Carbamidomethyl");
       ComplementSynth::Spec s = ComplementSynth::make(withForm(pep, f), 2, false, 0, 0.0, 20, 1000u + static_cast<unsigned>(scan));
+      addImmonium(s.spec, f);
       OpenMS::MSSpectrum sp = s.spec;
       sp.setMSLevel(2);
       sp.setRT(10.0 + scan);
@@ -366,8 +383,8 @@ int main(int argc, char** argv)
       if (r.section == "alkt_run" && r.key == "format") fmt = r.value;
       if (r.section == "alkt_run" && r.key == "forms_resolved") resolved = r.value;
     }
-    check(fmt == "3" && twins_rows == AT::NUM_CANDIDATES && cam_twin == "K[Twin]:0.0004" && resolved == "no",
-          "format 3, six twin rows, forms_resolved no: " + fmt + " " + std::to_string(twins_rows) + " " + cam_twin + " " + resolved);
+    check(fmt == "4" && twins_rows == AT::NUM_CANDIDATES && cam_twin == "K[Twin]:0.0004" && resolved == "no",
+          "format 4, six twin rows, forms_resolved no: " + fmt + " " + std::to_string(twins_rows) + " " + cam_twin + " " + resolved);
   }
 
   // ---- the call: #3g's rule over the six classes
@@ -447,7 +464,8 @@ int main(int argc, char** argv)
       unsigned seed = 7;
       for (const char* pep : PEPTIDES)
       {
-        const ComplementSynth::Spec s = ComplementSynth::make(withForm(pep, form), 2, false, 0, 0.0, 20, seed++);
+        ComplementSynth::Spec s = ComplementSynth::make(withForm(pep, form), 2, false, 0, 0.0, 20, seed++);
+        addImmonium(s.spec, form);
         tagChecked(t, s.spec, s.prec_mz, 2, sp, tabs, ctx);
       }
       A::Settings st;
@@ -539,6 +557,7 @@ int main(int argc, char** argv)
       for (const char* pep : PEPTIDES)
       {
         ComplementSynth::Spec s = ComplementSynth::make(withForm(pep, "Carbamidomethyl"), 2, false, 2, 0.0, 20, seed++);
+        addImmonium(s.spec, "Carbamidomethyl");
         if (broken)
         {
           const OpenMS::AASequence aa = OpenMS::AASequence::fromString(withForm(pep, "Carbamidomethyl"));
@@ -608,7 +627,8 @@ int main(int argc, char** argv)
       }
       none.addSpectrum(v);
       tagChecked(none_c, s.spec, s.prec_mz, 2, sp, tabs, ctx);
-      const ComplementSynth::Spec s3 = ComplementSynth::make(withForm(pep, "Carbamidomethyl"), 3, true, 0, 0.0, 20, seed++);
+      ComplementSynth::Spec s3 = ComplementSynth::make(withForm(pep, "Carbamidomethyl"), 3, true, 0, 0.0, 20, seed++);
+      addImmonium(s3.spec, "Carbamidomethyl");
       AT::Vote w;
       for (const FASTag::Tag& tg : FASTag::tagSpectrum(s3.spec, s3.prec_mz, 3, sp, tabs)) z3.addTag(w, tg, cands);
       z3.addSpectrum(w);
@@ -680,6 +700,7 @@ int main(int argc, char** argv)
         tg.low_mz = tg.path_mz.front();
         tg.high_mz = tg.path_mz.back();
         OpenMS::MSSpectrum pk;
+        pk.emplace_back(AT::immoniumMz(cands[0]), 30.0f);  // the CAM immonium ion (review n1)
         for (double mz : tg.path_mz) pk.emplace_back(mz, 100.0f);
         const AT::SpectrumPeaks sp{&pk, 4000.0};
         AT::Vote v, w;
@@ -865,6 +886,131 @@ int main(int argc, char** argv)
       check(!(cc.called && cc.cls == cands[static_cast<std::size_t>(k)].cls),
             std::string(1, x) + "C with a lost middle peak: no " + fname + " call");
       check(checked.alias_rejected > 0, std::string(1, x) + "C: the alias check rejects votes");
+    }
+  }
+
+  // ---- release-gate review n1: an alias that leaves no trace. Unmodified
+  //      GC/CG (AC/CA) with the middle peak lost in BOTH series reads as one
+  //      C[Carbamidomethyl] (C[Propionamide]) edge that no peak contradicts;
+  //      the format 3 vote counted it for the reagent. The vote now needs the
+  //      reagent's C immonium ion, which an unmodified C peptide does not
+  //      give (its own, 76.022, is added): the final call is not the reagent.
+  {
+    FASTag::Param run;
+    run.tag_length = 3;
+    run.max_extension = 6;
+    run.mods = {{'C', cands[0].mass, "Carbamidomethyl", false}};
+    const FASTag::Param sp = AT::shadowParam(run, cands);
+    const FASTag::Tables tabs(sp);
+    const AT::VoteContext ctx = AT::voteContext(sp, cands, nullptr);
+    for (const char x : {'G', 'A'})
+    {
+      const int k = x == 'G' ? 0 : 1;
+      AT::Tally checked, raw;
+      unsigned seed = 900;
+      int n = 0;
+      for (int rep = 0; rep < 2; ++rep)
+        for (const char* base : PEPTIDES)
+        {
+          std::string pep = base;
+          const std::size_t c = pep.find('C');
+          pep.insert((n % 2) == 0 ? c : c + 1, 1, x);
+          ComplementSynth::Spec s = ComplementSynth::make(pep, 2, false, 0, 0.0, 20, seed++);
+          const OpenMS::AASequence aa = OpenMS::AASequence::fromString(pep);
+          const double b_mid = aa.getPrefix(c + 1).getMonoWeight(OpenMS::Residue::BIon, 1);
+          const double y_mid = aa.getSuffix(aa.size() - c - 1).getMonoWeight(OpenMS::Residue::YIon, 1);
+          OpenMS::MSSpectrum kept;
+          for (const auto& pk : s.spec)
+            if (std::fabs(pk.getMZ() - b_mid) > 1e-6 && std::fabs(pk.getMZ() - y_mid) > 1e-6) kept.push_back(pk);
+          check(kept.size() + 2 == s.spec.size(), pep + ": both middle peaks dropped");
+          addImmonium(kept, "unmodified");
+          tagChecked(checked, kept, s.prec_mz, 2, sp, tabs, ctx, &raw);
+          ++n;
+        }
+      A::Settings st;
+      const A::Call rc = A::callAlkylation(raw.asAlkylationTally(cands), st);
+      const A::Call cc = AT::callTags(checked, st, ctx);
+      const std::string fname = cands[static_cast<std::size_t>(k)].name;
+      std::cerr << "alias " << x << "C, both middle peaks lost: unchecked " << fname << " "
+                << raw.votes[static_cast<std::size_t>(k)] << " of " << raw.spectra << " -> "
+                << (rc.called ? A::className(rc.cls) : "no_call " + rc.reason) << "; checked " << fname << " "
+                << checked.votes[static_cast<std::size_t>(k)] << " alias_unconfirmed " << checked.alias_unconfirmed << " of "
+                << checked.spectra << " -> " << (cc.called ? A::className(cc.cls) : "no_call " + cc.reason) << "\n";
+      check(rc.called && rc.cls == cands[static_cast<std::size_t>(k)].cls,
+            std::string(1, x) + "C, both middle peaks lost: the unchecked vote calls " + fname + " (the confound is live)");
+      check(checked.alias_unconfirmed > 0, std::string(1, x) + "C, both middle peaks lost: votes abstain (alias_unconfirmed)");
+      check(checked.votes[static_cast<std::size_t>(k)] <= 2,
+            std::string(1, x) + "C, both middle peaks lost: at most 2 " + fname + " votes survive (" +
+                std::to_string(checked.votes[static_cast<std::size_t>(k)]) + ")");
+      check(!(cc.called && cc.cls == cands[static_cast<std::size_t>(k)].cls),
+            std::string(1, x) + "C, both middle peaks lost: the final call is not " + fname);
+    }
+    // Positive control: real CAM spectra keep their call with the immonium
+    // ion and abstain without it (the rule is live on true reagent spectra).
+    AT::Tally with, without;
+    unsigned seed = 950;
+    for (const char* pep : PEPTIDES)
+    {
+      ComplementSynth::Spec s = ComplementSynth::make(withForm(pep, "Carbamidomethyl"), 2, false, 0, 0.0, 20, seed++);
+      tagChecked(without, s.spec, s.prec_mz, 2, sp, tabs, ctx);
+      addImmonium(s.spec, "Carbamidomethyl");
+      tagChecked(with, s.spec, s.prec_mz, 2, sp, tabs, ctx);
+    }
+    A::Settings st;
+    st.min_spectra = 6;
+    const A::Call cw = AT::callTags(with, st, ctx);
+    check(cw.called && cw.cls == A::CARBAMIDOMETHYL && with.alias_unconfirmed == 0,
+          "CAM spectra with the immonium ion: call CAM, none abstains");
+    check(without.votes[0] == 0 && without.alias_unconfirmed >= with.votes[0] && !AT::callTags(without, st, ctx).called,
+          "CAM spectra without the immonium ion: every CAM vote abstains, no call (" + std::to_string(without.alias_unconfirmed) + ")");
+    // the report row
+    std::string au, au_n;
+    for (const auto& r : AT::rows(without, AT::callTags(without, st, ctx), st, cands, AT::ReportInfo{}))
+      if (r.section == "alkt_form" && r.key == "alias_unconfirmed") { au = r.value; au_n = r.n; }
+    check(au == std::to_string(without.alias_unconfirmed) &&
+              au_n == std::to_string(without.spectra + without.unresolved + without.alias_unconfirmed),
+          "row alias_unconfirmed " + au + " of " + au_n);
+  }
+
+  // ---- immoniumConfirms: the form's immonium, resolved from the alias's own
+  {
+    check(std::fabs(AT::immoniumMz(cands[0]) - 133.0430) < 1e-3, "CAM C immonium 133.043");
+    check(std::fabs(AT::immoniumMz(cands[AT::UNMODIFIED]) - 76.0216) < 1e-3, "unmodified C immonium 76.022");
+    FASTag::Param p;
+    p.tol_ppm = true;
+    p.frag_tol = 20.0;
+    const auto al = AT::aliasList(cands, 0.05, nullptr);
+    const AT::Alias* cg = nullptr;
+    const AT::Alias* iso = nullptr;
+    for (const auto& a : al[0])
+      if (a.name == "C+G") cg = &a;
+    for (const auto& a : al[4])
+      if (a.kind == AT::Alias::Kind::ISO && a.other == 0) iso = &a;
+    check(cg && iso, "aliases C+G of CAM and C[Carbamidomethyl]+13C of Carboxymethyl listed");
+    if (cg && iso)
+    {
+      OpenMS::MSSpectrum with, without;
+      with.emplace_back(AT::immoniumMz(cands[0]), 10.0f);
+      with.emplace_back(500.0, 100.0f);
+      without.emplace_back(120.0, 10.0f);
+      without.emplace_back(500.0, 100.0f);
+      const AT::SpectrumPeaks pw{&with, 1000.0}, po{&without, 1000.0};
+      check(AT::immoniumConfirms(0, *cg, cands, pw, p), "CAM immonium present: C+G confirmed as CAM");
+      check(!AT::immoniumConfirms(0, *cg, cands, po, p), "no CAM immonium: not confirmed");
+      // raw takes precedence over the prepared peaks
+      const AT::SpectrumPeaks pr{&without, 1000.0, &with};
+      check(AT::immoniumConfirms(0, *cg, cands, pr, p), "the raw spectrum's immonium ion counts");
+      // Carboxymethyl (134.027) against CAM + 13C (its immonium's 13C at
+      // 134.046): told apart at 20 ppm, not at 0.02 Da
+      OpenMS::MSSpectrum cm;
+      cm.emplace_back(AT::immoniumMz(cands[4]), 10.0f);
+      cm.emplace_back(500.0, 100.0f);
+      const AT::SpectrumPeaks pc{&cm, 1000.0};
+      check(AT::immoniumConfirms(4, *iso, cands, pc, p), "20 ppm: the Carboxymethyl immonium confirms against CAM+13C");
+      FASTag::Param da;
+      da.tol_ppm = false;
+      da.frag_tol = 0.02;
+      check(!AT::immoniumConfirms(4, *iso, cands, pc, da), "0.02 Da: the CAM 13C immonium is in the window, not confirmed");
     }
   }
 

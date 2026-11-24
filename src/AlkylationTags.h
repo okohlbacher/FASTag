@@ -43,8 +43,17 @@
 // intermediate position (in the same series or at the complementary m/z),
 // or the monoisotopic peak beside a 13C endpoint, explains the edge as the
 // alias, and so does an alias the spectrum cannot test; the vote is then a
-// conflict (Tally::alias_rejected). Only both intermediate peaks lost in
-// both series still reads as the C form.
+// conflict (Tally::alias_rejected). Review n1 (release gate): an alias that
+// leaves no trace (both intermediate peaks lost in both series, or removed
+// by the peak selection) is not evidence for the C form either, since the
+// two readings have one mass. Such a vote counts only with independent
+// evidence of its form: the form's C immonium ion (residue - CO + H+, e.g.
+// 133.043 for C[Carbamidomethyl]) in the spectrum as read, resolved from the
+// immonium ion of any C form the alias reads instead. Without it the vote
+// abstains (Tally::alias_unconfirmed), set aside like an unresolved one.
+// Measured on PXD020401 and PXD003531 with an open Sage search: the CAM
+// immonium is in 49-61% of the spectra of CAM peptides and in 3.5-4.6% of
+// those of peptides without CAM; the NEM one in 46% of NEM peptides.
 //
 // Opt-in and experimental: on development data 61 of 123 runs are called,
 // 51 as the SDRF annotation states, and unalkylated runs are rarely called.
@@ -82,7 +91,12 @@ namespace FASTag::AlkylationTags
   /// alias_rejected and unresolved; conflicts count against the share (the
   /// share's n is votes plus conflicts) and alkylation_tags_call gains the
   /// row voted after share.
-  inline constexpr int REPORT_FORMAT = 3;
+  ///
+  /// 4 (release-gate review n1): a vote whose C edge an alias reads as well,
+  /// with no trace of the alias in the spectrum, counts only when the form's
+  /// C immonium ion is seen; else it abstains (alkt_form alias_unconfirmed,
+  /// new row; not in the share). The alias.<form> descriptions say so.
+  inline constexpr int REPORT_FORMAT = 4;
 
   /// @brief The 13C - 12C spacing (Da) the alias check uses for isotope-shifted edges.
   inline constexpr double C13_SPACING = 1.0033548378;
@@ -176,6 +190,7 @@ namespace FASTag::AlkylationTags
     int form = -1;  ///< candidate index (no conflict)
     bool alias = false;  ///< an alias explains a C edge of the kept tag (aliasExplains()); then also conflict
     bool unresolved = false;  ///< a C edge of the kept tag lies where its form has a twin in the edge windows
+    bool unconfirmed = false;  ///< an alias reads a C edge of the kept tag as well, leaves no trace, and the form's immonium ion is not seen
   };
 
   /**
@@ -348,7 +363,40 @@ namespace FASTag::AlkylationTags
   {
     const OpenMS::MSSpectrum* peaks = nullptr;  ///< the tagger's prepared peaks (preparedPeaks()), m/z sorted
     double prec_mass = 0.0;                     ///< neutral precursor mass (Da), for the complementary m/z
+    /// The spectrum as read (before the tagger's peak selection), m/z sorted,
+    /// for the immonium check; null: @p peaks are used.
+    const OpenMS::MSSpectrum* raw = nullptr;
   };
+
+  /**
+    @brief The m/z of the C immonium ion of a candidate form (1+).
+
+    C residue + form mass - CO + proton: 133.0430 for Carbamidomethyl,
+    76.0216 for unmodified C.
+
+    @param[in] f the form
+    @return the m/z
+  */
+  double immoniumMz(const Alkylation::Form& f);
+
+  /**
+    @brief Whether the spectrum holds independent evidence for form @p k against alias @p a.
+
+    True when a peak lies within the tagger's per-peak tolerance of the C
+    immonium ion of form @p k (immoniumMz()) in @p sp (raw when given, else
+    peaks), and that position cannot be the immonium ion, or its 13C peak, of
+    a C form the alias reads instead (its pair steps that are C forms, or
+    its other form); false when the immonium lies outside the peaks.
+
+    @param[in] k the candidate index of the voted form
+    @param[in] a the alias of form @p k
+    @param[in] cands the candidate forms
+    @param[in] sp the peaks
+    @param[in] p the Param whose frag_tol and tol_ppm give the tolerance
+    @return the verdict
+  */
+  bool immoniumConfirms(int k, const Alias& a, const std::vector<Alkylation::Form>& cands, const SpectrumPeaks& sp,
+                        const Param& p);
 
   /// @brief What aliasExplains() found.
   enum class AliasCheck
@@ -413,6 +461,7 @@ namespace FASTag::AlkylationTags
     std::uint64_t conflict = 0;        ///< votes whose tag holds two forms, or that an alias explains
     std::uint64_t alias_rejected = 0;  ///< of the conflicts, votes whose C edge an alias explains (aliasExplains())
     std::uint64_t unresolved = 0;      ///< votes set aside: a C edge where its form has a twin in the edge windows
+    std::uint64_t alias_unconfirmed = 0;  ///< votes set aside: an alias without a trace and no immonium ion of the form
     std::array<std::uint64_t, NUM_CANDIDATES> votes{};     ///< votes per form
     std::array<std::uint64_t, NUM_CANDIDATES> residues{};  ///< C residues per form over counted tags
 
@@ -435,7 +484,8 @@ namespace FASTag::AlkylationTags
       windows hold a twin; Tag::path_mz locates the edge, else
       Tag::high_mz bounds it) makes the vote unresolved; else an alias of
       the edge's form that aliasExplains() finds explained or untestable
-      makes it a conflict (alias).
+      makes it a conflict (alias); an alias that it finds not explained
+      needs immoniumConfirms(), else the vote abstains (unconfirmed).
 
       @param[in,out] v the spectrum's vote so far
       @param[in] t the shadow tag

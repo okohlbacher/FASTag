@@ -427,6 +427,20 @@ describe('Overview model: the alkylation report', () => {
     expect(u.note).toMatch(/cannot tell two cysteine forms apart/)
   })
 
+  // Release-gate review n4: 18 CAM + 2 other + 4 conflicts is a share of
+  // 0.75 of 24 (the share row's n, format 3), not "75% of 20".
+  it('a format 3 call pairs the share with its reported denominator, conflicts included', () => {
+    const text = tagReport(
+      'call',
+      '-',
+      'alkylation_call\treagent\tCarbamidomethyl\t18\t-\nalkylation_call\tmass\t57.021464\t-\t-\nalkylation_call\tshare\t0.75\t24\t-\nalkylation_call\tvoted\t24\t20\t-'
+    ).replace('alkylation_call\tstatus\tcall\t8\t-', 'alkylation_call\tstatus\tcall\t20\t-')
+    const c = tile(of(text), 'alkylation')
+    expect(c).toMatchObject({ value: 'Carbamidomethyl', tone: 'call' })
+    expect(c.note).toMatch(/^75% of 24 tag votes \(20 for a form, 4 conflicted\), no database; experimental$/)
+    expect(c.note).not.toMatch(/of 20/)
+  })
+
   // Review n4: neither component calls on a shipped proteome with too short
   // tags (PXD000001, gui/src/fixtures/alkylation-tags.tsv): the report's
   // call is the tag call's few_cys_spectra, the tags_too_short is the

@@ -219,6 +219,7 @@ describe('alkylation (1.12 -alkylation_out)', () => {
       mass: null,
       share: null,
       binned: 0,
+      voted: 0,
       reason: 'few_cys_spectra',
       databaseSource: 'proteome',
       format: 1
@@ -238,7 +239,9 @@ describe('alkylation (1.12 -alkylation_out)', () => {
   it('reads the placement call of a report with a database beside the call of the report', () => {
     const c = alkylationCall(parseReport(alkylationTagsTsv, 'a'))
     expect(c).toMatchObject({ status: 'no_call', reason: 'few_cys_spectra', source: 'tags', binned: 8, databaseSource: 'bundled:human' })
-    expect(c.placement).toEqual({ status: 'no_call', reagent: undefined, share: null, binned: 0, reason: 'tags_too_short' })
+    expect(c.placement).toEqual({ status: 'no_call', reagent: undefined, share: null, binned: 0, voted: 0, reason: 'tags_too_short' })
+    // the share's denominator is the share row's n (format 3: votes plus conflicts)
+    expect(c.voted).toBe(8)
     // Format 1 has no placement call of its own: its call is that.
     expect(alkylationCall(parseReport(alkylationTsv, 'a')).placement).toBeUndefined()
   })

@@ -508,7 +508,7 @@ export const PARAM_UI: Record<string, ParamUi> = {
     section: 'Glycopeptides',
     label: 'Oxonium flagging',
     help: {
-      text: 'Write a report that flags spectra with oxonium ions, the small sugar fragments that glycopeptides and glycans give off. A spectrum is flagged when at least 2 different oxonium ions are found and their summed intensity reaches the minimum fraction of the base peak.',
+      text: 'Write a report that flags spectra with oxonium ions, the small sugar fragments that glycopeptides and glycans give off. A spectrum is flagged when at least 2 different oxonium ions are found and their summed intensity reaches the minimum fraction of the base peak; the fragments of HexNAc count only when HexNAc itself (204.087) is found.',
       tip: 'A flag means a sugar broke apart in that spectrum; it does not identify a glycopeptide. On TMT data at 0.3 Da, a TMT reporter ion (126.128) overlaps a sugar fragment (126.055), so read the flags with care. Keep the tolerance that suits the MS2 analyzer.'
     }
   },

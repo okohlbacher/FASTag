@@ -324,6 +324,42 @@ namespace FASTag::AlkylationTags
     return s[static_cast<std::size_t>(m)].getIntensity() >= end_int ? AliasCheck::EXPLAINED : AliasCheck::NOT_EXPLAINED;
   }
 
+  double immoniumMz(const Alkylation::Form& f)
+  {
+    // Immonium ion: the residue minus CO, protonated.
+    static const double CO = 12.0 + 15.9949146196;
+    return cMass() + f.mass - CO + OpenMS::Constants::PROTON_MASS_U;
+  }
+
+  bool immoniumConfirms(int k, const Alias& a, const std::vector<Alkylation::Form>& cands, const SpectrumPeaks& sp,
+                        const Param& p)
+  {
+    if (k < 0 || static_cast<std::size_t>(k) >= cands.size()) return false;
+    const OpenMS::MSSpectrum* s = sp.raw ? sp.raw : sp.peaks;
+    if (!s || s->empty()) return false;
+    const double mz = immoniumMz(cands[static_cast<std::size_t>(k)]);
+    const double tol = tolAt(p, mz);
+    // The C forms the alias reads instead: its pair steps that are a C form
+    // (C+G reads unmodified C), or its other form (13C).
+    const double c = cMass();
+    std::vector<int> other;
+    for (std::size_t g = 0; g < cands.size(); ++g)
+    {
+      if (static_cast<int>(g) == k) continue;
+      const double cg = c + cands[g].mass;
+      const bool in_pair = a.kind == Alias::Kind::PAIR && (std::fabs(a.x - cg) < 1e-6 || std::fabs(a.y - cg) < 1e-6);
+      if (in_pair || (a.kind == Alias::Kind::ISO && a.other == static_cast<int>(g))) other.push_back(static_cast<int>(g));
+    }
+    for (int g : other)
+    {
+      const double og = immoniumMz(cands[static_cast<std::size_t>(g)]);
+      for (double shift : {0.0, C13_SPACING})
+        if (std::fabs(og + shift - mz) <= tol + tolAt(p, og + shift)) return false;  // that reading's own ion
+    }
+    if (!inRange(*s, mz, tol)) return false;
+    return peakNear(*s, mz, tol) >= 0;
+  }
+
   VoteContext voteContext(const Param& p, const std::vector<Alkylation::Form>& cands, const std::vector<Step>* alpha)
   {
     VoteContext ctx;
@@ -441,6 +477,7 @@ namespace FASTag::AlkylationTags
     {
       bool unresolved = false;
       bool alias = false;
+      bool unconfirmed = false;
     };
 
     /// The vote checks of one C-bearing tag (Tally::addTag with a context).
@@ -484,6 +521,9 @@ namespace FASTag::AlkylationTags
           const double edge = (hi - lo) * z;
           if (std::fabs(a.mass - edge) > (tolAt(ctx.tol, lo) + tolAt(ctx.tol, hi)) * z) continue;
           if (aliasExplains(lo, hi, z, a, sp, ctx.tol) != AliasCheck::NOT_EXPLAINED) out.alias = true;
+          // Release-gate review n1: no trace of the alias is no evidence for
+          // the form; its immonium ion is.
+          else if (!immoniumConfirms(f, a, ctx.cands, sp, ctx.tol)) out.unconfirmed = true;
         }
       }
       return out;
@@ -532,6 +572,8 @@ namespace FASTag::AlkylationTags
       // An equal E-value with another form, an alias or a twin: the evidence does not decide.
       if (ck.unresolved) v.unresolved = true;
       if (ck.alias) v.alias = true;
+      // Of two tags of one form, one without an unconfirmed alias confirms the vote.
+      if (!ck.unconfirmed) v.unconfirmed = false;
       if (kinds > 1 || v.conflict || form != v.form || ck.alias)
       {
         v.conflict = true;
@@ -543,6 +585,7 @@ namespace FASTag::AlkylationTags
     v.evalue = t.evalue;
     v.unresolved = ck.unresolved;
     v.alias = ck.alias;
+    v.unconfirmed = ck.unconfirmed;
     v.conflict = kinds > 1 || ck.alias;
     v.form = v.conflict ? -1 : form;
   }
@@ -554,6 +597,11 @@ namespace FASTag::AlkylationTags
     if (v.unresolved)
     {
       ++unresolved;
+      return;
+    }
+    if (v.unconfirmed && !v.conflict)
+    {
+      ++alias_unconfirmed;
       return;
     }
     ++spectra;
@@ -576,6 +624,7 @@ namespace FASTag::AlkylationTags
     conflict += o.conflict;
     alias_rejected += o.alias_rejected;
     unresolved += o.unresolved;
+    alias_unconfirmed += o.alias_unconfirmed;
     for (std::size_t k = 0; k < votes.size(); ++k) votes[k] += o.votes[k];
     for (std::size_t k = 0; k < residues.size(); ++k) residues[k] += o.residues[k];
   }
@@ -620,8 +669,9 @@ namespace FASTag::AlkylationTags
         "Every MS2 spectrum is tagged a second time with unmodified C and one alternative C edge per reagent; "
         "those tags are not written. No database is used.");
     add("alkt_run", "status", "experimental", "-",
-        "Experimental: the held-out test passed at the margin, 40 of 57 runs called and 37 of the calls right "
-        "(doc/ALKYLATION-REPORT.md). Unalkylated and low-resolution runs are rarely called.");
+        "Experimental: the held-out test passed at the margin, 40 of 57 runs called and 37 of the calls right, "
+        "with report format 2; the voting rules of format " + std::to_string(REPORT_FORMAT) +
+            " were not tested again (doc/ALKYLATION-REPORT.md). Unalkylated and low-resolution runs are rarely called.");
     std::string forms;
     for (const auto& f : cands) forms += (forms.empty() ? "" : ",") + f.name;
     add("alkt_run", "forms", forms, std::to_string(cands.size()), "The C forms the shadow pass can spell.");
@@ -696,7 +746,8 @@ namespace FASTag::AlkylationTags
               ? "No two residues sum to C[" + f.name + "] and no 13C-shifted C form reads like it within twice the edge tolerance."
               : "Two residues whose middle peak is missing (X+Y), or another C form whose edge starts or ends on a 13C peak "
                 "(C[Name]+13C / -13C), read like C[" + f.name + "] (reading:distance in Da); a vote whose edge the spectrum "
-                "explains so is a conflict (alias_rejected).");
+                "explains so is a conflict (alias_rejected); one it does not explain counts only with the C[" + f.name +
+                "] immonium ion at " + num(immoniumMz(f)) + " m/z (alias_unconfirmed).");
     }
     const std::vector<std::string> tw = twins(cands, info.tol_da, alpha);
     for (int k = 0; k < NUM_CANDIDATES; ++k)
@@ -718,6 +769,9 @@ namespace FASTag::AlkylationTags
     add("alkt_form", "unresolved", u(t.unresolved), u(t.spectra + t.unresolved),
         u(t.unresolved) + " spectra would vote with a C edge at or above resolved_below_mz, where the edge windows "
                           "hold a twin of its form; they are set aside, not in the share.");
+    add("alkt_form", "alias_unconfirmed", u(t.alias_unconfirmed), u(t.spectra + t.unresolved + t.alias_unconfirmed),
+        u(t.alias_unconfirmed) + " spectra would vote with a C edge that an alias also reads, with no trace of the alias "
+                                 "and without the immonium ion of the form; they abstain, not in the share.");
 
     // ---- alkylation_tags_call
     const std::string name = c.cls >= 0 ? Alkylation::className(c.cls) : "-";

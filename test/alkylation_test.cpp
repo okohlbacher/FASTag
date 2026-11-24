@@ -314,7 +314,7 @@ int main()
           "sections alk_run, alk_cys, alkylation_placement_call only (never run or cys)");
     check(full, "every field filled");
     check(call_keys == "status,reagent,mass,share,voted,reason", "alkylation_placement_call keys in order: " + call_keys);
-    check(value(rows, "alk_run", "format") == "3" && value(rows, "alk_run", "method") == "tags+placement" &&
+    check(value(rows, "alk_run", "format") == "4" && value(rows, "alk_run", "method") == "tags+placement" &&
               value(rows, "alkylation_placement_call", "reagent") == "Carbamidomethyl" &&
               value(rows, "alk_cys", "class.Carbamidomethyl") == "30" && value(rows, "alk_cys", "unexplained") == "12",
           "report values");
@@ -526,7 +526,7 @@ int main()
       keys += (keys.empty() ? "" : ",") + r.key;
     }
     check(keys == "format,method,database,database_source,min_spectra,min_share", "tag-only alk_run keys: " + keys);
-    check(value(run, "alk_run", "format") == "3" && value(run, "alk_run", "method") == "tags" &&
+    check(value(run, "alk_run", "format") == "4" && value(run, "alk_run", "method") == "tags" &&
               value(run, "alk_run", "database") == "-" && value(run, "alk_run", "database_source") == "none",
           "tag-only alk_run values");
 

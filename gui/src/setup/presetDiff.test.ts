@@ -71,7 +71,7 @@ describe('presets as diffs', () => {
     expect([c['species'], c['extension'], c['glyco'], c['subsample_fraction'], c['threads']]).toEqual([true, '2', true, '0.0', '0'])
     expect(Boolean(c['digest_out']) && Boolean(c['label_out'])).toBe(true)
     // On by default from 1.16: on all spectra its call is read off the tags
-    // with no proteome (PXD000001: methylthio, 52 of 69 votes).
+    // with no proteome (PXD000001: methylthio, 52 of 59 votes).
     expect(c['alkylation_out']).toBe('alkylation.tsv')
     expect(baseValues('builtin:export-tags')['res_conf']).toBe(true)
     expect(baseValues('defaults')).toEqual(defaults)

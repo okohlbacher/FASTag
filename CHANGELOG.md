@@ -2,13 +2,33 @@
 
 ## Unreleased
 
+- **Alkylation report format 4: a vote that an alias reads as well needs the cysteine's immonium ion.** A C edge
+  with the mass of two residues (C[Carbamidomethyl] = G + C, C[Propionamide] = A + C, C[Nethylmaleimide] ~ N + N)
+  whose spectrum lost both middle peaks (in b and y, or in the peak selection) has nothing in the ladders to tell
+  the readings apart; it counted for the reagent, so an unmodified GC peptide could vote Carbamidomethyl. Such a vote
+  now counts only when the spectrum holds the C immonium ion of its form (133.043 for Carbamidomethyl), resolved from
+  the ion of the reading it competes with; otherwise it abstains (new row `alkt_form alias_unconfirmed`, not in the
+  share). On open Sage searches the CAM immonium ion is in 49-61% of CAM peptide spectra and 4-5% of spectra without
+  C. `alk_run format` and `alkt_run format` are 4. Characterize command (`-extension 2`, fixed CAM, all spectra):
+  PXD000001 Methylthio 52 of 69 votes (0.754) -> 52 of 59 (0.881); PXD003531 no call, CAM 75 of 164 (0.457) -> 49
+  of 112 (0.438); PXD020401 no call, CAM 595 / NEM 549 of 1,263 -> 366 / 405 of 865. Both no calls are right: an
+  open Sage search finds PXD003531's cysteines mixed (CAM 62%, free 23%, +58.005 14%) and PXD020401 blocked with
+  N-ethylmaleimide before carbamidomethylation (NEM 2,418, CAM 1,777 residues) (doc/ALKYLATION-REPORT.md,
+  "Independent evidence").
+- **Glyco flag: HexNAc fragment ions count only with HexNAc 204.087.** 126.055, 138.055, 144.066, 168.066 and
+  186.076 are fragments of the HexNAc oxonium ion; without 204.087 they flagged spectra as two species (most often
+  126.055 + 144.066). Fewer rows are flagged (`n_oxonium` and `ions` list only the ions that count): PXD003531
+  13,307 -> 12,533 of 27,345, PXD020401 13,164 -> 12,707 of 49,964, PXD000001 1 -> 0 of 6,103. The high counts on
+  the first two are oxonium ions that are there (1-3 ppm, decoys 0.25 Th off match over 1,000 times less often): a
+  TiO2 phospho enrichment co-enriches sialylated glycopeptides, phagosomes are rich in glycoproteins (README, Glyco
+  flag).
 - **Desktop app: Characterize a run reads all spectra and writes the alkylation report by default.** The workflow
   no longer samples 10% of the spectra (`subsample_fraction 0.1`): it tags every spectrum (Spectra to read: All
   spectra; a share is still offered), and the alkylation report (`-alkylation_out`, its call read off the tags, no
   database) is on, so the workflow writes five reports. On 10% too few cysteines voted for a call (PXD000001: 8
-  votes, no call); on all spectra PXD000001 is called Methylthio (52 of 69 votes, share 0.754), and the whole
-  survey with species detection took 0.8 s there and 4.1 s on PXD003531 (27,345 MS2; alkylation no call,
-  ambiguous: Carbamidomethyl 75 of 164 votes) on an Apple M4 Max with 8 threads. Characterize is the only
+  votes, no call); on all spectra PXD000001 is called Methylthio (52 of 59 votes, share 0.881, report format 4),
+  and the whole survey with species detection took 0.8 s there and 4.1 s on PXD003531 (27,345 MS2; alkylation no
+  call, ambiguous: Carbamidomethyl 49 of 112 votes) on an Apple M4 Max with 8 threads. Characterize is the only
   workflow that offers the report, so the only one whose default changed. The Species workflow's notes no longer
   call 10% enough. The CLI is unchanged: its reports stay opt-in and it reads all spectra by default.
 - **Building: the species detection index for local builds and the debug app, with no variable to set.**
@@ -127,7 +147,8 @@
   middle peak was lost in one series (the peak is in the other, or at the complementary m/z), or an edge ending on a
   13C peak (the monoisotopic peak is beside it), no longer votes Carbamidomethyl, Propionamide or Carboxymethyl; such
   a vote is a conflict (`alkt_form alias_rejected`). On PXD000001 the call is unchanged: Methylthio, 52 of 69 votes
-  with `-extension 2` (1 CAM vote now an alias conflict), no call at the defaults (8 votes). The held-out result
+  with `-extension 2` (1 CAM vote now an alias conflict; 52 of 59 with format 4, above), no call at the defaults (8
+  votes). The held-out result
   (40 of 57 runs called, 37 right) was measured without these checks.
 
 - **Mass-shift survey without a FASTA of your own (feedback 422372a2).** New CLI option `-recon_proteome
@@ -170,9 +191,9 @@
   `method`; `alk_cys` and `alkylation_placement_call` only with a database; the tag sections `alkt_run`, `alkt_form`,
   `alkylation_tags_call` inside; `alkylation_call` gains `source` (doc/ALKYLATION-REPORT.md). `-alkylation_tags_out`
   is `alkt_run format` 2 (the twin rows; aliases over the run's alphabet). `-alkylation_window` is read only with a
-  database. On PXD000001 (no database, `-extension 2`) the call is Methylthio, 52 of 69 votes. The GUI's
-  Characterize task runs the alkylation report without any proteome: the check before the run no longer asks for the
-  human proteome, Extension is not raised, and the Overview tile names the votes.
+  database. On PXD000001 (no database, `-extension 2`) the call is Methylthio, 52 of 69 votes (52 of 59 with format
+  4). The GUI's Characterize task runs the alkylation report without any proteome: the check before the run no
+  longer asks for the human proteome, Extension is not raised, and the Overview tile names the votes.
 
 - **Shipped data found from a build tree, and a missing file named before the run.** The build links `data/digest`,
   `data/alkylation` and `data/taxonomy` beside the built FASTag (`share-FASTag-*`; copied on Windows;

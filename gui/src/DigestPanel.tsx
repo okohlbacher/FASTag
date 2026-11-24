@@ -589,9 +589,16 @@ function GapHistogram({ bins }: { bins: GapBin[] }): JSX.Element {
 }
 
 // What a call of each source has been tested on (doc/ALKYLATION-REPORT.md,
-// "What a call means").
-const TAG_TESTED =
-  'Tag call: passed a held-out test at the margin (40 of 57 runs called, 37 right, at tag length 4 and Extension 6); a call to check, not a setting to copy.'
+// "What a call means"). The held-out test ran on report format 2; format 3
+// (alias check, per-vote twin guard, conflicts in the share) and format 4
+// (immonium rule) changed the votes and were not tested again, so a later
+// report names the format the result belongs to.
+const TAG_HELD_OUT = '40 of 57 runs called, 37 right, at tag length 4 and Extension 6'
+function tagTested(format: number | null): string {
+  if (format == null || format <= 2)
+    return `Tag call: passed a held-out test at the margin (${TAG_HELD_OUT}); a call to check, not a setting to copy.`
+  return `Tag call: its held-out test passed at the margin on report format 2 (${TAG_HELD_OUT}); this report is format ${format}, whose voting rules were not tested again: a call to check, not a setting to copy.`
+}
 const PLACEMENT_UNTESTED = 'Not validated on held-out data: a call to check, not a setting to copy.'
 
 /// The alkylation report (-alkylation_out): the reagent called, or why no
@@ -622,9 +629,9 @@ function Alkylation({ report }: { report: Report }): JSX.Element {
       </dl>
       <p className="hint">
         {c.source === 'tags'
-          ? TAG_TESTED
+          ? tagTested(c.format)
           : c.source === 'tags+placement'
-            ? `${TAG_TESTED} The placement call is not validated and the combination is a rule of this version.`
+            ? `${tagTested(c.format)} The placement call is not validated and the combination is a rule of this version.`
             : PLACEMENT_UNTESTED}
       </p>
       <RawRows report={report} />

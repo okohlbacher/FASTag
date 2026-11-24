@@ -3910,8 +3910,18 @@ TOPPFASTag::ExitCodes TOPPFASTag::main_(int, const char**)
               break;
             }
           const int alkt_z = hy.charge > 0 ? hy.charge : 2;
+          // Release-gate review n1: the immonium check reads the spectrum as
+          // read (the peak selection may drop the low m/z ions), m/z sorted.
+          const MSSpectrum* alkt_raw = &spec;
+          static thread_local MSSpectrum alkt_sorted;
+          if (!alkt_peaks.empty() && !spec.isSorted())
+          {
+            alkt_sorted = spec;
+            alkt_sorted.sortByPosition();
+            alkt_raw = &alkt_sorted;
+          }
           const FASTag::AlkylationTags::SpectrumPeaks alkt_sp{
-              &alkt_peaks, (hy.mz - OpenMS::Constants::PROTON_MASS_U) * alkt_z};
+              &alkt_peaks, (hy.mz - OpenMS::Constants::PROTON_MASS_U) * alkt_z, alkt_raw};
           FASTag::AlkylationTags::Vote v;
           for (const FASTag::Tag& t : st) pt.acc.d.alkt.addTag(v, t, alkt_ctx, alkt_sp);
           pt.acc.d.alkt.addSpectrum(v);

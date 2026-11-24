@@ -77,7 +77,11 @@ namespace FASTag::Alkylation
   /// 3 (review n3): the share's denominator counts the conflicted votes
   /// (Call::voted, binned + conflict); the share rows' n is that
   /// denominator, and the call sections gain the row voted after share.
-  inline constexpr int REPORT_FORMAT = 3;
+  ///
+  /// 4 (release-gate review n1): the tag call's votes need the C immonium ion when
+  /// an alias without a trace reads their C edge (alkt_form alias_unconfirmed,
+  /// AlkylationTags::REPORT_FORMAT 4); the alkt_* sections gain that row.
+  inline constexpr int REPORT_FORMAT = 4;
 
   /**
     @brief The call classes of the alkylation call.

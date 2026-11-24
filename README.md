@@ -1186,10 +1186,10 @@ FDR-controlled. See Mass-shift survey.
 | Column | Meaning |
 |---|---|
 | `spectrum` | native ID |
-| `n_oxonium` | distinct oxonium ions matched |
+| `n_oxonium` | distinct oxonium ions matched; a HexNAc fragment (126.055 to 186.076) only with HexNAc 204.087 |
 | `oxonium_frac` | their summed intensity over the base peak, 3 decimals |
 | `glyco` | 1 when `n_oxonium` >= 2 and `oxonium_frac` >= `-glyco_min_fraction`, else 0 |
-| `ions` | names of the matched ions, separated by `;` (e.g. `HexNAc;NeuAc-H2O`) |
+| `ions` | names of the counted ions, separated by `;` (e.g. `HexNAc;NeuAc-H2O`) |
 
 **`-check_header_out`**: one row per MS2 spectrum with a header charge, in input
 order; the 18 columns are described in
@@ -1508,7 +1508,9 @@ options and their values.
   between them is missing, and an edge ending on a 13C peak reads as another
   form. Since format 3 each voting C edge is checked against the spectrum for
   them (the middle peak in either series, the monoisotopic peak); only a pair
-  that lost its middle peak in both series still votes. The pass costs about
+  that lost its middle peak in both series still votes, and since format 4
+  only when the spectrum holds the C immonium ion of its form (otherwise it
+  abstains, `alias_unconfirmed`). The pass costs about
   one more tagging run. The held-out result below was measured before these
   checks. On 57 held-out runs
   from 57 PRIDE projects it called 40, 37 of them right (0.925, Wilson 95%
@@ -1650,7 +1652,10 @@ whose `--helphelp` does not list it is taken to read auto as the human proteome.
 count of matched oxonium ions, their summed intensity over the base peak, a
 0/1 flag (>= 2 distinct ions AND fraction >= `-glyco_min_fraction`, the
 GPQuest / MSFragger-Glyco heuristics with their literature thresholds), and
-the ion names. The flag means "a glycan fragmented here" — glycopeptide, free
+the ion names. The HexNAc fragments (126.055, 138.055, 144.066, 168.066,
+186.076) count only with HexNAc 204.087 itself: they are evidence of that one
+HexNAc, not of a second species (before 1.16, 126.055 + 144.066 without 204.087
+flagged a spectrum). The flag means "a glycan fragmented here" — glycopeptide, free
 glycan, or O-GlcNAc — never an identification. It lives in its own file
 because glyco spectra are precisely the tag-poor ones a tag-TSV column would
 miss; expect more rows than "MS2 tagged". Matching runs on the raw peak list
@@ -1658,6 +1663,15 @@ at the run's fragment tolerance. At 0.3 Da the TMT reporter 126.128 collides
 with the HexNAc fragment 126.055, so glyco flags on labeled ion-trap data are
 unreliable; on high-resolution MS2 use a ppm tolerance.
 Measured specificity on non-enriched runs: 0.6% (Astral, ppm) flagged.
+A high count is not by itself a false flag: on PXD003531 (TiO2
+phospho-enriched, which co-enriches sialylated glycopeptides) 12,533 of 27,345
+MS2 are flagged and on PXD020401 (mouse phagosomes, rich in lysosomal
+glycoproteins) 12,707 of 49,964; there the matched ions sit within 1-3 ppm of
+their masses (decoy masses 0.25 Th off match HexNAc over 1,000 times less often),
+HexNAc 204.087 is the base peak of 289 and 4,098 spectra, and Sage identifies
+6% and 1% of those, against 34% and 48% of the spectra without 204.087. Co-isolated glycopeptides flag spectra
+of other peptides too: the flag says a glycan fragmented in the isolation
+window.
 
 ## Census
 

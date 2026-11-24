@@ -17,7 +17,10 @@ const block = (text: string): string => {
   render(<DigestPanel reports={[parseReport(text, '/d/run01.alkylation.tsv')]} errors={[]} onOpen={() => {}} />)
   return screen.getByRole('region', { name: 'Alkylation' }).textContent ?? ''
 }
-const TESTED = /Tag call: passed a held-out test at the margin \(40 of 57 runs called, 37 right, at tag length 4 and Extension 6\)/
+// Review (release gate) n4: the held-out result is format 2's; a format 3
+// report (the fixture) says so and that its rules were not tested again.
+const TESTED = /Tag call: its held-out test passed at the margin on report format 2 \(40 of 57 runs called, 37 right, at tag length 4 and Extension 6\); this report is format 3, whose voting rules were not tested again/
+const TESTED_F2 = /Tag call: passed a held-out test at the margin \(40 of 57 runs called, 37 right, at tag length 4 and Extension 6\)/
 
 describe('Digest tab: the alkylation call by its source', () => {
   it('a tag no call: votes from tags, the tag call\'s test, and the placement call with its own reason', () => {
@@ -46,6 +49,12 @@ describe('Digest tab: the alkylation call by its source', () => {
     expect(t).toMatch(TESTED)
     expect(t).toMatch(/The placement call is not validated and the combination is a rule of this version\./)
     expect(t).not.toMatch(/Not validated on held-out/)
+  })
+
+  it('the held-out result is labelled by the report format', () => {
+    const f2 = block(ALKYLATION_TAGS.replace(/^alk_run\tformat\t3\t/m, 'alk_run\tformat\t2\t'))
+    expect(f2).toMatch(TESTED_F2)
+    expect(f2).not.toMatch(/not tested again/)
   })
 
   it('format 1 (placements only) keeps its words', () => {
