@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 1.16.0 (2026-11-24)
 
 - **Alkylation report: the tags alone never call a reagent whose cysteine has the mass of two residues.**
   C[Carbamidomethyl] = C + G and C[Propionamide] = A + C exactly, and the immonium rule below cannot tell them
