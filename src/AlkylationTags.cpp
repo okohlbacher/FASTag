@@ -76,15 +76,94 @@ namespace FASTag::AlkylationTags
     return true;
   }
 
-  std::vector<std::string> aliases(const std::vector<Alkylation::Form>& cands, double tol_da)
+  std::vector<Step> alphabet(const std::vector<ModSpec>& mods)
   {
-    std::vector<std::pair<char, double>> res;
+    std::vector<Step> out;
     for (const OpenMS::Residue* r : OpenMS::ResidueDB::getInstance()->getResidues("Natural19WithoutI"))
-      res.emplace_back(r->getOneLetterCode()[0], r->getMonoWeight(OpenMS::Residue::Internal));
+    {
+      const char c = r->getOneLetterCode()[0];
+      if (c == 'C') continue;
+      double m = r->getMonoWeight(OpenMS::Residue::Internal);
+      for (const ModSpec& mod : mods)
+        if (!mod.variable && mod.residue == c) m += mod.delta;
+      out.push_back(Step{std::string(1, c), m});
+    }
+    std::sort(out.begin(), out.end(), [](const Step& a, const Step& b) { return a.name < b.name; });
+    const std::size_t n_base = out.size();
+    for (const ModSpec& mod : mods)
+    {
+      if (!mod.variable || mod.residue == 'C') continue;
+      for (std::size_t i = 0; i < n_base; ++i)
+        if (out[i].name[0] == mod.residue) out.push_back(Step{out[i].name + "[" + mod.name + "]", out[i].mass + mod.delta});
+    }
+    return out;
+  }
+
+  namespace
+  {
+    double cMass()
+    {
+      return OpenMS::ResidueDB::getInstance()->getResidue('C')->getMonoWeight(OpenMS::Residue::Internal);
+    }
+    /// "C" for unmodified, "C[Name]" otherwise.
+    std::string cName(const Alkylation::Form& f) { return f.name == "unmodified" ? std::string("C") : "C[" + f.name + "]"; }
+    /// Comma-separated "name:distance" by distance, "-" when empty.
+    std::string joinHits(std::vector<std::pair<double, std::string>> hits)
+    {
+      std::sort(hits.begin(), hits.end());
+      std::string v;
+      for (const auto& [d, name] : hits)
+      {
+        char b[32];
+        std::snprintf(b, sizeof b, ":%.4f", d);
+        v += (v.empty() ? "" : ",") + name + b;
+      }
+      return v.empty() ? "-" : v;
+    }
+  }
+
+  std::vector<std::string> twins(const std::vector<Alkylation::Form>& cands, double tol_da, const std::vector<Step>* alpha)
+  {
+    const std::vector<Step> base = alpha ? std::vector<Step>() : alphabet({});
+    const std::vector<Step>& steps = alpha ? *alpha : base;
+    const double c = cMass();
+    std::vector<std::string> out;
+    for (const auto& f : cands)
+    {
+      std::vector<std::pair<double, std::string>> hits;
+      for (const auto& g : cands)
+      {
+        if (&g == &f) continue;
+        const double d = std::fabs(g.mass - f.mass);
+        if (d <= 2.0 * tol_da) hits.emplace_back(d, cName(g));
+      }
+      for (const Step& st : steps)
+      {
+        const double d = std::fabs(st.mass - (c + f.mass));
+        if (d <= 2.0 * tol_da) hits.emplace_back(d, st.name);
+      }
+      out.push_back(joinHits(std::move(hits)));
+    }
+    return out;
+  }
+
+  bool stepsResolved(const std::vector<Alkylation::Form>& cands, double tol_da, const std::vector<Step>* alpha)
+  {
+    for (const std::string& t : twins(cands, tol_da, alpha))
+      if (t != "-") return false;
+    return true;
+  }
+
+  std::vector<std::string> aliases(const std::vector<Alkylation::Form>& cands, double tol_da, const std::vector<Step>* alpha)
+  {
+    // Every step a pair can be made of: the residue steps and the C forms,
+    // by name ("C" sorts before "C[...]" and "D"), so a pair is spelled with
+    // its names in order ("C+G").
+    const double c = cMass();
+    std::vector<std::pair<std::string, double>> res;
+    for (const Step& st : alpha ? *alpha : alphabet({})) res.emplace_back(st.name, st.mass);
+    for (const auto& f : cands) res.emplace_back(cName(f), c + f.mass);
     std::sort(res.begin(), res.end());
-    double c = 0.0;
-    for (const auto& [k, m] : res)
-      if (k == 'C') c = m;
     std::vector<std::string> out;
     for (const auto& f : cands)
     {
@@ -94,7 +173,7 @@ namespace FASTag::AlkylationTags
         for (std::size_t j = i; j < res.size(); ++j)
         {
           const double d = std::fabs(res[i].second + res[j].second - target);
-          if (d <= 2.0 * tol_da) hits.emplace_back(d, std::string(1, res[i].first) + "+" + std::string(1, res[j].first));
+          if (d <= 2.0 * tol_da) hits.emplace_back(d, res[i].first + "+" + res[j].first);
         }
       // 1.13 #22 review: an edge that starts or ends on the 13C peak of an
       // ion (not deisotoped, or under -no_deisotope) reads as another form
@@ -109,24 +188,16 @@ namespace FASTag::AlkylationTags
           if (d <= 2.0 * tol_da) hits.emplace_back(d, "C[" + g.name + "]" + (sign > 0 ? "+13C" : "-13C"));
         }
       }
-      std::sort(hits.begin(), hits.end());
-      std::string v;
-      for (const auto& [d, name] : hits)
-      {
-        char b[32];
-        std::snprintf(b, sizeof b, ":%.4f", d);
-        v += (v.empty() ? "" : ",") + name + b;
-      }
-      out.push_back(v.empty() ? "-" : v);
+      out.push_back(joinHits(std::move(hits)));
     }
     return out;
   }
 
   Alkylation::Call callTags(const Tally& t, const Alkylation::Settings& s, const std::vector<Alkylation::Form>& cands,
-                            double tol_da)
+                            double tol_da, const std::vector<Step>* alpha)
   {
     Alkylation::Call c = Alkylation::callAlkylation(t.asAlkylationTally(cands), s);
-    if (!formsResolved(cands, tol_da))
+    if (!stepsResolved(cands, tol_da, alpha))
     {
       c.called = false;
       c.reason = "unresolved_forms";
@@ -303,10 +374,13 @@ namespace FASTag::AlkylationTags
     add("alkt_run", "edge_tolerance", num(info.tol_da), "-",
         "The report reasons with an edge tolerance of " + num(info.tol_da) +
             " Da (the fragment tolerance, or in ppm at 1000 m/z).");
-    const bool resolved = formsResolved(cands, info.tol_da);
+    const std::vector<Step>* alpha = info.alpha.empty() ? nullptr : &info.alpha;
+    const bool resolved = stepsResolved(cands, info.tol_da, alpha);
     add("alkt_run", "forms_resolved", resolved ? "yes" : "no", "-",
-        resolved ? "Every two C forms are more than twice the edge tolerance apart (isotope-shifted readings are listed under alias)."
-                 : "Two C forms lie within twice the edge tolerance (Carbamidomethyl and Carboxymethyl are 0.984 Da apart): no call is made.");
+        resolved ? "No C form lies within twice the edge tolerance of another C form or of a residue this run can read "
+                   "(two-step and isotope-shifted readings are listed under alias)."
+                 : "A C form lies within twice the edge tolerance of another C form or of a residue this run can read "
+                   "(twin.<form>; Carbamidomethyl and Carboxymethyl are 0.984 Da apart): no call is made.");
 
     // ---- alkt_form
     std::uint64_t binned = 0;
@@ -326,7 +400,7 @@ namespace FASTag::AlkylationTags
       add("alkt_form", "residues." + f.name, u(t.residues[static_cast<std::size_t>(k)]), u(res_all),
           u(t.residues[static_cast<std::size_t>(k)]) + " of " + u(res_all) + " C residues in counted tags are " + f.name + ".");
     }
-    const std::vector<std::string> al = aliases(cands, info.tol_da);
+    const std::vector<std::string> al = aliases(cands, info.tol_da, alpha);
     for (int k = 0; k < NUM_CANDIDATES; ++k)
     {
       const auto& f = cands[static_cast<std::size_t>(k)];
@@ -335,6 +409,16 @@ namespace FASTag::AlkylationTags
               ? "No two residues sum to C[" + f.name + "] and no 13C-shifted C form reads like it within twice the edge tolerance."
               : "Two residues whose middle peak is missing (X+Y), or another C form whose edge starts or ends on a 13C peak "
                 "(C[Name]+13C / -13C), read like C[" + f.name + "] (reading:distance in Da); such votes are not corrected.");
+    }
+    const std::vector<std::string> tw = twins(cands, info.tol_da, alpha);
+    for (int k = 0; k < NUM_CANDIDATES; ++k)
+    {
+      const auto& f = cands[static_cast<std::size_t>(k)];
+      const std::string& v = tw[static_cast<std::size_t>(k)];
+      add("alkt_form", "twin." + f.name, v, "-",
+          v == "-" ? "No other C form and no residue this run can read lies within twice the edge tolerance of C[" + f.name + "]."
+                   : "One edge of this mass also reads as another C form or a residue (reading:distance in Da): the forms "
+                     "cannot be told apart, so no call is made.");
     }
     add("alkt_form", "conflict", u(t.conflict), u(t.spectra),
         u(t.conflict) + " voting spectra have a best tag (or tags of equal E-value) with C residues of two forms; they are not in the share.");

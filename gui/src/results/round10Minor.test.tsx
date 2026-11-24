@@ -50,7 +50,8 @@ describe('round 10 minor: the alkylation note says where Extension is', () => {
       await openGroup('Alkylation')
     }
     const note = document.getElementById('out-alkylation_out-d')!
-    expect(note.textContent).toBe('Turning it on raises Extension 0 → 3 (Settings); that changes every tag.')
+    // feedback 202dbcf4: no database, so no raise; the note links Extension.
+    expect(note.textContent).toBe('No database needed: the call is read off the tags; a longer Extension (Settings) gives more votes.')
   })
 })
 

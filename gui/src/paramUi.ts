@@ -124,10 +124,14 @@ const DB_UNUSED: Dependency = {
 /// Read wherever tags meet protein sequences: the database filter and every
 /// report that places tags (FASTag.cpp: the filter and TagReconciler take the
 /// orientation and the isobaric tolerance).
+// The alkylation report places only with a database (FASTag.cpp
+// alk_place): with a Filter database (in the list), a Protein database (then
+// DB_UNUSED's readers) or a named proteome, never on its own.
 const TAGS_ON_DB: Dependency = {
-  on: ['fasta', ...(DB_UNUSED.on as string[])],
+  on: ['fasta', 'recon_out', 'shortlist_out', 'fasta_out', 'search_config_out', 'alkylation_proteome'],
+  when: { alkylation_proteome: { isNot: ['auto'] } },
   say: 'a Filter database, or a report that places tags on a protein database',
-  note: 'keep only tags found in a database, or turn on the placements, the shortlist or the alkylation report'
+  note: 'keep only tags found in a database, or turn on the placements or the shortlist'
 }
 const DELTA_OFF: Dependency = { on: 'delta_out', note: 'only the mass-shift table uses it' }
 const SHORTLIST_OFF: Dependency = { on: ['shortlist_out', 'fasta_out', 'search_config_out'], note: 'no shortlist is written' }
@@ -642,7 +646,7 @@ export const PARAM_UI: Record<string, ParamUi> = {
     label: 'Placements as identifications',
     depends: [{ on: 'recon_out', note: 'it writes the placements as identifications' }],
     help: {
-      text: 'Write the placements as identifications in idXML, mzIdentML or mzTab, for tools that read those formats. The file extension chooses the format: .idXML, .mzid or .mzTab (.mzIdentML is not accepted).',
+      text: 'Write the placements as identifications, for tools that read them. The file extension chooses the format: .mzTab (the default here, shown under Mass shifts), .idXML or .mzid (.mzIdentML is not accepted). An idXML or mzid file is listed under Mass shifts, to reveal or open in another tool.',
       tip: 'These are not filtered by a false discovery rate.'
     }
   },
@@ -906,20 +910,20 @@ export const PARAM_UI: Record<string, ParamUi> = {
     section: 'Alkylation',
     depends: [ALKYLATION_OFF],
     help: {
-      text: 'Which share of the counted spectra the alkylation call needs.'
+      text: 'Which share of the votes (or of the placed spectra, from a database) the alkylation call needs.'
     }
   },
   alkylation_min_spectra: {
     section: 'Alkylation',
     depends: [ALKYLATION_OFF],
     help: {
-      text: 'How many spectra the alkylation call needs.'
+      text: 'How many spectra the alkylation call needs: votes from the tags, or placed spectra from a database.'
     }
   },
   alkylation_out: {
     section: 'Alkylation',
     help: {
-      text: 'Write a report of which reagent alkylated the cysteines, or none, from the placements of peptides with one cysteine. Not validated on held-out data.'
+      text: 'Write a report of which reagent alkylated the cysteines, or none. No database is needed: every spectrum is tagged a second time with unmodified and alkylated cysteine (carbamidomethyl, propionamide, N-ethylmaleimide, methylthio, carboxymethyl) as alternatives, and the cysteine forms inside the best tags vote. With too few votes the report says no call and why, with the counts; give tag extension for more votes (tested with tag length 4 and Extension 6). With a protein database (Protein database, Filter database or a proteome named here) it also places peptides with one cysteine on it as a check.'
     }
   },
   alkylation_proteome: {
@@ -937,7 +941,7 @@ export const PARAM_UI: Record<string, ParamUi> = {
       }
     ],
     help: {
-      text: 'The database the alkylation report uses when no placement database is given: auto (the human proteome), human, mouse, yeast or ecoli for the UniProt reference proteomes shipped with FASTag (reviewed entries; the release is in the report), or a FASTA file (.gz allowed). Tags place on the shipped proteomes from 8 residues (human, mouse) or 7 (yeast, E. coli) (or Shortest tag placed, when set above 0), so tag length + 2 × Extension must reach that: at tag length 3, Extension 3 for human or mouse, 2 for yeast or E. coli; otherwise no tag places and there is no call (reason tags_too_short). A FASTA file, here or as Protein database, is indexed with a minimum length that grows with its size (8 for a human-sized one, 4 for a few proteins). Shortest tag placed sets that length; it is in Advanced, group “Placement, advanced”, which is under Other analyses in every workflow but Mass-shift survey. Extension is not raised for a FASTA file, and a run on it that places nothing gives no tags_too_short reason.'
+      text: 'The database the alkylation report places peptides with one cysteine on, as a check of its call from the tags. auto (the default): the Protein database or the Filter database when one is given, else none (the call from the tags alone). Or human, mouse, yeast or ecoli for the UniProt reference proteomes shipped with FASTag (reviewed entries; the release is in the report), or a FASTA file (.gz allowed). Tags place on the shipped proteomes from 8 residues (human, mouse) or 7 (yeast, E. coli) (or Shortest tag placed, when set above 0), so tag length + 2 × Extension must reach that: at tag length 3, Extension 3 for human or mouse, 2 for yeast or E. coli; otherwise no tag places and there is no call (reason tags_too_short). A FASTA file, here or as Protein database, is indexed with a minimum length that grows with its size (8 for a human-sized one, 4 for a few proteins). Shortest tag placed sets that length; it is in Advanced, group “Placement, advanced”, which is under Other analyses in every workflow but Mass-shift survey. Extension is not raised for a FASTA file, and a run on it that places nothing gives no tags_too_short reason.'
     }
   },
   alkylation_tags_out: {
@@ -949,9 +953,18 @@ export const PARAM_UI: Record<string, ParamUi> = {
   },
   alkylation_window: {
     section: 'Alkylation',
-    depends: [{ on: 'alkylation_out', note: 'only the alkylation report uses it' }],
+    // FASTag.cpp alk_place: read only when the report places on a database.
+    depends: [
+      { on: 'alkylation_out', note: 'only the alkylation report uses it' },
+      {
+        on: ['recon_fasta', 'fasta', 'recon_out', 'shortlist_out', 'fasta_out', 'search_config_out', 'alkylation_proteome'],
+        when: { alkylation_proteome: { isNot: ['auto'] } },
+        say: 'a protein database or a named proteome',
+        note: 'without a database the call is read off the tags; the window is for placements'
+      }
+    ],
     help: {
-      text: 'The mass window around each cysteine form for the alkylation report. 0 means 0.02 Da on a ppm run and 0.5 Da on a Da run.'
+      text: 'The mass window around each cysteine form for the placements of the alkylation report (only with a database). 0 means 0.02 Da on a ppm run and 0.5 Da on a Da run.'
     }
   },
   census: {

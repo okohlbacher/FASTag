@@ -18,7 +18,8 @@
 #   OPENMS_LIB     dylibbundler search path (OpenMS) [openms-build/lib]
 #   DEPS_LIB       dylibbundler search path (deps)   [fastag-mm/envs/omsbuild/lib]
 #   OPENMS_SHARE   OpenMS data dir                   [openms-src/share/OpenMS]
-#   TAXONOMY_DIR   share/FASTag/taxonomy             [share/FASTag/taxonomy]
+#   TAXONOMY_DIR   share/FASTag/taxonomy             [share/FASTag/taxonomy if it holds
+#                  tax_k7.taxdb (an unpacked FASTag-<version>-taxonomy-k7.tar.gz), else data/taxonomy]
 #   DIGEST_DIR     share/FASTag/digest               [data/digest]
 #   ALKYLATION_DIR share/FASTag/alkylation           [data/alkylation]
 #   OUT            output resource root              [gui/src-tauri/resources/fastag]
@@ -29,7 +30,8 @@ FASTAG_BIN="${FASTAG_BIN:-$repo/build-rel/FASTag}"
 OPENMS_LIB="${OPENMS_LIB:-$repo/../openms-build/lib}"
 DEPS_LIB="${DEPS_LIB:-$repo/../fastag-mm/envs/omsbuild/lib}"
 OPENMS_SHARE="${OPENMS_SHARE:-$repo/../openms-src/share/OpenMS}"
-TAXONOMY_DIR="${TAXONOMY_DIR:-$repo/share/FASTag/taxonomy}"
+if [ -s "$repo/share/FASTag/taxonomy/tax_k7.taxdb" ]; then _tax="$repo/share/FASTag/taxonomy"; else _tax="$repo/data/taxonomy"; fi
+TAXONOMY_DIR="${TAXONOMY_DIR:-$_tax}"
 DIGEST_DIR="${DIGEST_DIR:-$repo/data/digest}"
 ALKYLATION_DIR="${ALKYLATION_DIR:-$repo/data/alkylation}"
 OUT="${OUT:-$repo/gui/src-tauri/resources/fastag}"
@@ -69,10 +71,19 @@ dedup_rpath "$OUT/bin/FASTag"
 for so in "$OUT"/lib/*.dylib; do [ -L "$so" ] && continue; dedup_rpath "$so"; done
 
 echo ">> copying OpenMS data, taxonomy and digest data"
-cp -R "$OPENMS_SHARE" "$OUT/share/OpenMS"
-cp -R "$TAXONOMY_DIR" "$OUT/share/FASTag/taxonomy"
-cp -R "$DIGEST_DIR" "$OUT/share/FASTag/digest"
-cp -R "$ALKYLATION_DIR" "$OUT/share/FASTag/alkylation"
+cp -RL "$OPENMS_SHARE" "$OUT/share/OpenMS"
+cp -RL "$TAXONOMY_DIR" "$OUT/share/FASTag/taxonomy"
+cp -RL "$DIGEST_DIR" "$OUT/share/FASTag/digest"
+cp -RL "$ALKYLATION_DIR" "$OUT/share/FASTag/alkylation"
+# An index folder (the release asset) has the index and its dumps only: the
+# rest of data/taxonomy (species_call.tsv) goes beside it, as in a release.
+for f in "$repo"/data/taxonomy/*; do
+  [ -f "$f" ] && [ ! -e "$OUT/share/FASTag/taxonomy/$(basename "$f")" ] && cp "$f" "$OUT/share/FASTag/taxonomy/"
+done
+# Every data file the CLI reads (tools/shipped_data.py), or no bundle.
+python3 "$repo/tools/shipped_data.py" check --layout gui "$OUT"
+[ -s "$OUT/share/FASTag/taxonomy/tax_k7.taxdb" ] \
+  || echo "!! no tax_k7.taxdb in $TAXONOMY_DIR: -species will not run in this app (set TAXONOMY_DIR)"
 
 libomp=$(ls "$OUT"/lib | grep -c '^libomp\.dylib$' || true)
 echo ">> done: $(du -sh "$OUT" | cut -f1) at $OUT (libomp copies: $libomp — must be 1)"

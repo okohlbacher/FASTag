@@ -231,6 +231,44 @@ if(OpenMP_CXX_FOUND)
 endif()
 install(TARGETS FASTag RUNTIME DESTINATION bin)
 
+# The shipped data beside the built binary, in the flat release layout the CLI
+# already searches (share-FASTag-{digest,alkylation,taxonomy}), so a build-tree
+# FASTag runs -digest_out, -massgap_out, the hand-off and -alkylation_out
+# without FASTAG_DIGEST_DIR (cmake/stage-data.cmake: a symlink to data/; on
+# Windows, where a symlink needs Developer Mode, a copy of about 16 MB). The
+# taxonomy folder holds the dumps only, so -species still asks for the index,
+# unless FASTAG_TAXONOMY_INDEX_DIR names a folder with the index (the release
+# asset FASTag-<version>-taxonomy-k7.tar.gz, unpacked): then share-FASTag-taxonomy
+# is the index and its dumps plus the rest of data/taxonomy (species_call.tsv),
+# as in a release. The install and the release packaging copy data/ themselves.
+# tools/shipped_data.py lists the files; test/shipped_data_test.py checks them.
+option(FASTAG_STAGE_DATA_IN_BUILD "Link (Windows: copy) data/ beside the built FASTag" ON)
+set(FASTAG_TAXONOMY_INDEX_DIR "" CACHE PATH
+    "Folder with tax_k7.taxdb and its dumps, staged as share-FASTag-taxonomy beside the built FASTag")
+if(FASTAG_TAXONOMY_INDEX_DIR AND NOT EXISTS "${FASTAG_TAXONOMY_INDEX_DIR}/tax_k7.taxdb")
+  message(FATAL_ERROR "FASTAG_TAXONOMY_INDEX_DIR='${FASTAG_TAXONOMY_INDEX_DIR}' holds no tax_k7.taxdb "
+                      "(unpack FASTag-<version>-taxonomy-k7.tar.gz and name its share-FASTag-taxonomy folder)")
+endif()
+if(FASTAG_STAGE_DATA_IN_BUILD)
+  foreach(_fastag_data digest alkylation taxonomy)
+    if(WIN32)
+      set(_fastag_copy ON)
+    else()
+      set(_fastag_copy OFF)
+    endif()
+    set(_fastag_index "")
+    if(_fastag_data STREQUAL "taxonomy" AND FASTAG_TAXONOMY_INDEX_DIR)
+      set(_fastag_index "-DINDEX=${FASTAG_TAXONOMY_INDEX_DIR}")
+    endif()
+    add_custom_command(TARGET FASTag POST_BUILD
+      COMMAND "${CMAKE_COMMAND}" -DSRC=${CMAKE_CURRENT_SOURCE_DIR}/data/${_fastag_data}
+              -DDST=$<TARGET_FILE_DIR:FASTag>/share-FASTag-${_fastag_data} -DCOPY=${_fastag_copy}
+              ${_fastag_index}
+              -P ${CMAKE_CURRENT_SOURCE_DIR}/cmake/stage-data.cmake
+      VERBATIM)
+  endforeach()
+endif()
+
 # The taxonomy -species resolves by default, at <bin>/../share/FASTag/taxonomy.
 #
 # Only the pruned NCBI dumps (~30 KB) are installed here -- correct for a
@@ -763,8 +801,18 @@ if(FASTAG_BUILD_TESTS)
            COMMAND bash ${CMAKE_CURRENT_SOURCE_DIR}/test/gui_cli_test.sh $<TARGET_FILE:FASTag>
                    ${CMAKE_CURRENT_SOURCE_DIR}/test/fixtures
                    ${CMAKE_CURRENT_SOURCE_DIR}/data/digest
-                   ${CMAKE_CURRENT_SOURCE_DIR}/CMakeLists.txt)
+                   ${CMAKE_CURRENT_SOURCE_DIR}/CMakeLists.txt
+                   $<IF:$<BOOL:${FASTAG_STAGE_DATA_IN_BUILD}>,ON,OFF>)
   set_tests_properties(gui_cli_test PROPERTIES SKIP_RETURN_CODE 77)
+  # Every data file the CLI reads (read from src/) is in data/, the cmake
+  # --install tree, the build tree, the release workflows' CLI archives and
+  # desktop apps, and the local macOS app bundle. Skips (77) without python3.
+  add_test(NAME shipped_data_test
+           COMMAND bash -c "PY=\${FASTAG_PYTHON:-python3}; command -v \"\$PY\" >/dev/null || exit 77; exec \"\$PY\" \"\$@\"" _
+                   ${CMAKE_CURRENT_SOURCE_DIR}/test/shipped_data_test.py ${CMAKE_CURRENT_SOURCE_DIR}
+                   $<TARGET_FILE_DIR:FASTag> $<IF:$<BOOL:${FASTAG_STAGE_DATA_IN_BUILD}>,ON,OFF>
+                   ${CMAKE_COMMAND} ${CMAKE_BINARY_DIR} "${FASTAG_TAXONOMY_INDEX_DIR}")
+  set_tests_properties(shipped_data_test PROPERTIES SKIP_RETURN_CODE 77)
   # Every option FASTagOptions.cpp registers has a row in README's
   # command-line table, and no row names an unregistered one. Skips (77)
   # without python3 (FASTAG_PYTHON names another).

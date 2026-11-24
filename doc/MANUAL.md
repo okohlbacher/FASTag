@@ -66,6 +66,11 @@ told apart), with the mass error of each step, and the table below lists the spe
 reports. The screenshots use PXD000001 (an *Erwinia carotovora* lysate, trypsin, TMT; see
 [TUTORIAL.md, Part 2](TUTORIAL.md#part-2-pxd000001) for the download).
 
+The **Alkylation report** (step 4, off by default) needs no protein database and no shipped
+proteome: it reads the cysteine forms in the tags. Its votes need a cysteine inside a tag, so a
+larger Extension gives more; on 10% of the spectra at Extension 2 it often says "no call" with the
+counts. On all of PXD000001 at Extension 2 it calls Methylthio (MMTS), 52 of 69 votes.
+
 ![Setup for a survey](images/manual-05-setup-characterize.png)
 
 **Results > Overview** summarises the reports on one page:

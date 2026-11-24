@@ -60,10 +60,62 @@ run -in "$TMP/Nethylmaleimide.mzML" -out "$TMP/nofix.tsv" "${COMMON[@]}" -fixed_
 [ "$(call "$TMP/nofix.alkt.tsv")" = Nethylmaleimide ] || fail "NEM without fixed mods: call $(call "$TMP/nofix.alkt.tsv")"
 [ "$(val "$TMP/nofix.alkt.tsv" alkt_run c_mods_removed)" = "-" ] || fail "c_mods_removed without C mods"
 
+# ---- feedback 202dbcf4: -alkylation_out needs no database. Its default call
+# is this tag call (format 2): database_source none, no proteome read (an
+# empty FASTAG_ALKYLATION_DIR), the alkt_* sections and the tag call equal to
+# -alkylation_tags_out's, and alkylation_call with source tags.
+mkdir -p "$TMP/noalk"
+for f in Carbamidomethyl Nethylmaleimide unmodified; do
+  FASTAG_ALKYLATION_DIR="$TMP/noalk" run -in "$TMP/$f.mzML" -out "$TMP/$f.o.tsv" "${COMMON[@]}" \
+    -alkylation_out "$TMP/$f.alk.tsv" -alkylation_tags_out "$TMP/$f.both.alkt.tsv"
+  same "$TMP/$f.base.tsv" "$TMP/$f.o.tsv" "-alkylation_out changed the tag TSV ($f)"
+  [ "$(val "$TMP/$f.alk.tsv" alk_run format) $(val "$TMP/$f.alk.tsv" alk_run method) $(val "$TMP/$f.alk.tsv" alk_run database_source)" \
+    = "2 tags none" ] || fail "$f: -alkylation_out is not a format 2 tag-only report"
+  [ "$(val "$TMP/$f.alk.tsv" alkylation_call source)" = tags ] || fail "$f: source is not tags"
+  tr -d '\r' < "$TMP/$f.alk.tsv" | awk -F'\t' '$1 ~ /^alkt_|^alkylation_tags_call$/' > "$TMP/$f.a.sec"
+  tr -d '\r' < "$TMP/$f.alkt.tsv" | awk -F'\t' '$1 ~ /^alkt_|^alkylation_tags_call$/' > "$TMP/$f.t.sec"
+  same "$TMP/$f.t.sec" "$TMP/$f.a.sec" "$f: the tag sections of -alkylation_out differ from -alkylation_tags_out"
+  for k in status reagent share; do
+    [ "$(val "$TMP/$f.alk.tsv" alkylation_call $k)" = "$(val "$TMP/$f.alkt.tsv" alkylation_tags_call $k)" ] \
+      || fail "$f: alkylation_call $k is not the tag call's"
+  done
+  grep -q "Recon index" "$TMP/log" && fail "$f: a database was indexed"
+  grep -q "^Alkylation: .* spectra vote from their tags, .*(tags) -> " "$TMP/log" || fail "$f: no -alkylation_out log line"
+done
+[ "$(val "$TMP/Carbamidomethyl.alk.tsv" alkylation_call reagent)" = Carbamidomethyl ] || fail "-alkylation_out CAM call"
+[ "$(val "$TMP/Nethylmaleimide.alk.tsv" alkylation_call reagent)" = Nethylmaleimide ] || fail "-alkylation_out NEM call"
+[ "$(val "$TMP/unmodified.alk.tsv" alkylation_call reagent)" = none ] || fail "-alkylation_out unmodified call"
+# the tag-only alk_run: six rows, no placement section
+[ "$(tr -d '\r' < "$TMP/Carbamidomethyl.alk.tsv" | awk -F'\t' '$1 == "alk_run" { k = k (k == "" ? "" : ",") $2 } END { print k }')" \
+  = "format,method,database,database_source,min_spectra,min_share" ] || fail "tag-only alk_run rows"
+tr -d '\r' < "$TMP/Carbamidomethyl.alk.tsv" | cut -f1 | grep -qx -e alk_cys -e alkylation_placement_call \
+  && fail "placement sections without a database"
+# -alkylation_out alone (no -alkylation_tags_out) gives the same report
+FASTAG_ALKYLATION_DIR="$TMP/noalk" run -in "$TMP/Carbamidomethyl.mzML" -out "$TMP/alone.tsv" "${COMMON[@]}" -alkylation_out "$TMP/alone.alk.tsv"
+same "$TMP/Carbamidomethyl.alk.tsv" "$TMP/alone.alk.tsv" "-alkylation_out alone differs from -alkylation_out with -alkylation_tags_out"
+# -alkylation_min_share is read for it (two thirds CAM, one third NEM)
+run -in "$TMP/mixed.mzML" -out "$TMP/mxa.tsv" "${COMMON[@]}" -alkylation_out "$TMP/mxa.alk.tsv" -alkylation_min_share 0.9
+[ "$(val "$TMP/mxa.alk.tsv" alkylation_call status) $(val "$TMP/mxa.alk.tsv" alkylation_call reason)" = "no_call ambiguous" ] \
+  || fail "-alkylation_out, mixed with -alkylation_min_share 0.9"
+# a 0.5 Da run: CAM and Carboxymethyl are twins (one edge), no call, the twin row says it
+run -in "$TMP/Carbamidomethyl.mzML" -out "$TMP/daa.tsv" -tag_length 4 -extension 6 -fragment_tolerance 0.5 -fragment_tolerance_unit Da \
+  -alkylation_out "$TMP/daa.alk.tsv"
+[ "$(val "$TMP/daa.alk.tsv" alkylation_call reason)" = unresolved_forms ] || fail "0.5 Da -alkylation_out: $(val "$TMP/daa.alk.tsv" alkylation_call reason)"
+[ "$(val "$TMP/daa.alk.tsv" alkt_form twin.Carbamidomethyl)" = "C[Carboxymethyl]:0.9840" ] \
+  || fail "0.5 Da: twin.Carbamidomethyl '$(val "$TMP/daa.alk.tsv" alkt_form twin.Carbamidomethyl)'"
+# a variable modification without a twin (Oxidation (M), 147.035) leaves the
+# twin rows empty and the call made (twins of a modification: alkylation_tags_test)
+run -in "$TMP/Carbamidomethyl.mzML" -out "$TMP/vm.tsv" "${COMMON[@]}" -variable_modifications 'Oxidation (M)' \
+  -alkylation_out "$TMP/vm.alk.tsv"
+[ "$(val "$TMP/vm.alk.tsv" alkt_form twin.Carbamidomethyl) $(val "$TMP/vm.alk.tsv" alkt_run forms_resolved)" = "- yes" ] \
+  || fail "Oxidation (M) made a twin"
+[ "$(val "$TMP/vm.alk.tsv" alkylation_call reagent)" = Carbamidomethyl ] || fail "with Oxidation (M): no CAM call"
+
 # ---- report structure
 R="$TMP/Carbamidomethyl.alkt.tsv"
 head -1 "$R" | tr -d '\r' | grep -qx $'section\tkey\tvalue\tn\tdescription' || fail "report header"
 tr -d '\r' < "$R" | awk -F'\t' 'NF != 5 || $5 == "" { bad = 1 } END { exit bad }' || fail "a row without five fields"
+[ "$(val "$R" alkt_run format)" = 2 ] || fail "alkt_run format is not 2"
 for s in run alkt_run alkt_form alkylation_tags_call; do
   tr -d '\r' < "$R" | cut -f1 | grep -qx "$s" || fail "no $s section"
 done

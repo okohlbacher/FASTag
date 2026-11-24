@@ -221,8 +221,14 @@ describe('feedback dialog', () => {
     await renderApp(mock)
     const d = await open()
     expect(within(d).getByText(/drawn from the page/)).toBeTruthy()
-    expect((d.querySelector('input[name="share-screenshot"]') as HTMLInputElement).disabled).toBe(false)
-    expect((d.querySelector('input[name="share-screenshot"]') as HTMLInputElement).checked).toBe(false)
+    // A captured screenshot is included by default (report 20261124T113631Z_a8b7e2e7) and can be unticked.
+    const shot = (): HTMLInputElement => d.querySelector('input[name="share-screenshot"]') as HTMLInputElement
+    expect(shot().disabled).toBe(false)
+    expect(shot().checked).toBe(true)
+    await click(shot())
+    expect(shot().checked).toBe(false)
+    await click(shot())
+    expect(shot().checked).toBe(true)
     await click(within(d).getByRole('button', { name: 'Mark up…' }))
     // The keyboard path: choose Redaction, Add, then place it with the fields.
     await click(within(dialog()).getByRole('button', { name: 'Redaction' }))

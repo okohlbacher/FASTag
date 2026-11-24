@@ -824,9 +824,9 @@ vendored.
 | `-digest_flank2 <off\|auto>` | off | Experimental: where y1 is cut off or the P1 counts are too few, score the two-residue flank sums m(P2) + m(P1) instead |
 | `-digest_min_confidence <f>` / `-digest_calibration <file>` | 0 / shipped | Experimental: write the calibrated `p_correct` of a call and withhold one below the threshold (`low_confidence`); the shipped calibration is unfitted (p_correct 0.5) |
 | `-digest_quality <enzyme\|auto>` | none | Experimental (1.13): append missed-cleavage and non-specific-end measurements (section `quality`) to `-digest_out` for a model of the protease table (e.g. `Trypsin`) or for the report's own call (`auto`); see doc/DESIGN-digest.md, "Digestion quality" |
-| `-alkylation_out <file>` | none | Experimental (1.12), not validated on held-out data: which reagent alkylated the cysteines, or none, from the placements of single-Cys peptides (see Digest, label and mass-gap reports; format in doc/ALKYLATION-REPORT.md) |
-| `-alkylation_proteome <name\|file>` | auto | Database of `-alkylation_out` when nothing else places: `auto` (= human), `human`, `mouse`, `yeast`, `ecoli` name the shipped UniProt reference proteomes (release 2026_04, reviewed entries, `share/FASTag/alkylation/<name>.fasta.gz`, CC BY 4.0; since 1.13, in 1.12 they stopped with exit code 6), or a FASTA file (`.gz` allowed); ignored with `-recon_fasta`. **The shipped proteomes need `-tag_length 8` (human, mouse) or `-tag_length 7` (yeast, ecoli):** shorter tags do not place on them, and at the default `-tag_length 3` the call is `no_call` with reason `tags_too_short`. The report's `database_release` row names the release and the FASTA's sha256, which FASTag checks the file against (doc/ALKYLATION-REPORT.md, Shipped proteomes) |
-| `-alkylation_min_spectra <n>` / `-alkylation_min_share <f>` / `-alkylation_window <Da>` | 10 / 0.6 / 0 | Advanced: spectra and share the call needs; bin window (0 = 0.02 Da on ppm runs, 0.5 Da on Da runs) |
+| `-alkylation_out <file>` | none | Experimental: which reagent alkylated the cysteines, or none. **Needs no database**: the call is read off the C residues in the tags (the method of `-alkylation_tags_out`), with the counts per C form, and `no_call` with the reason when too few spectra vote. Give `-extension` for more votes (tested with `-tag_length 4 -extension 6`). With `-recon_fasta`, `-fasta` or an explicit `-alkylation_proteome` it also places single-Cys peptides on that database as a check (see Digest, label and mass-gap reports; format 2 in doc/ALKYLATION-REPORT.md) |
+| `-alkylation_proteome <name\|file>` | auto | Database `-alkylation_out` checks its tag call on, when nothing else places. `auto`: `-recon_fasta` or `-fasta` when given, else **no database** (before, `auto` meant the shipped human proteome). `human`, `mouse`, `yeast`, `ecoli` name the shipped UniProt reference proteomes (release 2026_04, reviewed entries, `share/FASTag/alkylation/<name>.fasta.gz`, CC BY 4.0), or give a FASTA file (`.gz` allowed); ignored with `-recon_fasta`. The shipped proteomes need `-tag_length 8` (human, mouse) or `-tag_length 7` (yeast, ecoli): shorter tags do not place on them, and the placement call is then `no_call` with reason `tags_too_short` (the tag call is unaffected). The report's `database_release` row names the release and the FASTA's sha256, which FASTag checks the file against (doc/ALKYLATION-REPORT.md, Shipped proteomes) |
+| `-alkylation_min_spectra <n>` / `-alkylation_min_share <f>` / `-alkylation_window <Da>` | 10 / 0.6 / 0 | Advanced: votes (or placed spectra) and share a call needs; placement bin window, read only with a database (0 = 0.02 Da on ppm runs, 0.5 Da on Da runs) |
 | `-alkylation_tags_out <file>` | none | Experimental (1.13), advanced; its held-out test passed at the margin (40 of 57 runs called, 37 right; see Validation), and unalkylated runs are rarely called: the database-free alkylation call. Every MS2 spectrum is tagged a second time with unmodified C and one alternative C edge per reagent; a spectrum votes when its best such tag (E <= 1e-4) holds a C inside the tag (use with `-extension`; measured with `-tag_length 4 -extension 6`; without extension few spectra vote), and the call uses `-alkylation_min_spectra` / `-alkylation_min_share`. Every other output is unchanged (format in doc/ALKYLATION-REPORT.md, section `-alkylation_tags_out`) |
 | `-shortlist_out <file>` | none | Experimental (1.12): ranked protein shortlist from the tag placements on `-recon_fasta` (or `-fasta`), one row per protein with evidence (see Protein shortlist and search hand-off). A search-space reduction, NOT FDR-controlled |
 | `-fasta_out <file>` | none | Experimental: reduced FASTA of the kept proteins (never decoys), then `-shortlist_background`. When it would hold no protein, neither it nor `-search_config_out` is written and FASTag exits with code 13 (1.14; before, an empty file and exit code 0) |
@@ -1468,19 +1468,28 @@ options and their values.
   Cys alkylation): spectra near each Cys alkylation mass, and gap peaks
   explained as the smallest combination of up to three of 38 Unimod
   modifications.
-- **`-alkylation_out`** (1.12, experimental, not validated on held-out data)
-  calls the Cys alkylation reagent (Carbamidomethyl, Propionamide,
-  Nethylmaleimide, Methylthio, Carboxymethyl) or `none` (unmodified, oxidised,
-  cysteinylated or dehydroalanine Cys) from the placements of the run's own
-  reconciler: each MS2 spectrum votes once with its best tag placed on a
-  peptide with exactly one C on the gap side, and the reagent mass is the gap
-  plus the fixed C modification. On a labelled run (a fixed N- or C-terminal
-  TMT or iTRAQ modification) the label is first taken off a gap on its side,
-  as the reconciler's flanks carry it. Without `-recon_out` the placements are made
-  on `-recon_fasta` or `-alkylation_proteome` and not written; every other
-  output is the same with and without it. Sections `alk_run`, `alk_cys` and
-  `alkylation_call`; the format is documented and versioned in
-  doc/ALKYLATION-REPORT.md.
+- **`-alkylation_out`** (experimental) calls the Cys alkylation reagent
+  (Carbamidomethyl, Propionamide, Nethylmaleimide, Methylthio, Carboxymethyl)
+  or `none`. It needs no protein database: the call is that of
+  `-alkylation_tags_out` (below), the C residues the tags read in each form.
+  A C form whose mass one other step reads (another C form or a residue of
+  the run, fixed and variable modifications included) is a twin, and the run
+  then gets no call (`unresolved_forms`); two-step readings (C + G for
+  Carbamidomethyl) are listed, not excluded. The counts are in the report
+  whether or not it calls. With a database (`-recon_fasta`, `-fasta`, an
+  explicit `-alkylation_proteome`, or another report that places tags) it
+  also makes the 1.12 placement call: each MS2 spectrum votes once with its
+  best tag placed on a peptide with exactly one C on the gap side, and the
+  reagent mass is the gap plus the fixed C modification (on a labelled run
+  the fixed terminal label is first taken off a gap on its side). The report's
+  call combines the two: one call alone is taken, two that agree are taken,
+  two that differ are `no_call` `disagree`. Every other output is the same
+  with and without it. Format 2: sections `alk_run`, `alk_cys` and
+  `alkylation_placement_call` (with a database), `alkt_run`, `alkt_form`,
+  `alkylation_tags_call` and `alkylation_call`; documented and versioned in
+  doc/ALKYLATION-REPORT.md. Until this version the default `auto` placed on the
+  shipped human proteome and the call needed tags of 8 residues; it now reads
+  no proteome.
 - **`-alkylation_tags_out`** (1.13, experimental; held-out test passed at the
   margin) makes the same call without a database. A second tagging pass, whose
   tags are not written, drops the run's C modifications. It spells C as
@@ -1525,8 +1534,20 @@ distribution before mixing, from which the Desktop GUI draws its logos. The
 counting reproduces prose-auto 0.1.3's detectors. `FASTAG_FULL_PRECISION=1`
 in the environment writes the tag TSV's masses and E-values in full precision,
 for comparing against a reader of that file. The shipped tables are read from
-`share/FASTag/digest` next to the binary; a binary run outside its install
-tree needs `FASTAG_DIGEST_DIR` set to that directory.
+`share/FASTag/digest` next to the binary (`share-FASTag-digest` in the flat
+release folder and in a build tree, which links `data/digest` there). A copy of
+the binary on its own needs `FASTAG_DIGEST_DIR` set to a folder that holds them
+(`data/digest` in the sources); a `FASTAG_DIGEST_DIR` that names no folder finds
+nothing. When a table is missing, FASTag stops with exit 6 before any output and
+says which option needs which file, where it looked and what to do:
+`-massgap_out` needs `massgap_mods.tsv`; `-digest_out` needs `digest_models.tsv`
+(`digest_models_v2.tsv` under `-digest_models_version v2`, or none with
+`-digest_models`) and, under v2 or `-digest_min_confidence`, `digest_calibration.tsv`
+(or `-digest_calibration`); `-shortlist_out`, `-fasta_out` and `-search_config_out`
+need `digest_models.tsv` for their protease check (unless `-digest_out` has
+`-digest_models`); `-alkylation_out` needs no data file, except with
+`-alkylation_proteome human|mouse|yeast|ecoli`, which needs
+`<name>.fasta.gz` from `share/FASTag/alkylation` (or `FASTAG_ALKYLATION_DIR`).
 
 ## q_db: entrapment-calibrated filter confidence
 
@@ -2121,6 +2142,11 @@ For a source build, an upgrade of an older install or a
 ```bash
 tar xzf FASTag-<version>-taxonomy-k7.tar.gz -C /path/to/FASTag/   # -> share-FASTag-taxonomy/
 ```
+
+For a FASTag run from its build tree, configure with
+`-DFASTAG_TAXONOMY_INDEX_DIR=/path/to/share-FASTag-taxonomy` instead: the build
+puts the index beside the binary with the rest of `data/taxonomy`
+([BUILDING.md](BUILDING.md)).
 
 `MANIFEST.json` names what the index was built from: the UniProt reference
 proteomes, the NCBI taxdump, the build commands and the sha256 of every file.

@@ -32,13 +32,17 @@
 #       three installed layouts (cmake --install's bin/ + share/FASTag/digest
 #       as CMakeLists.txt installs it, the flat release tarball and Homebrew
 #       cask's FASTag.bin + share-FASTag-digest, the GUI bundle's
-#       resources/fastag/bin + share/FASTag/digest), and not in a bare copy
+#       resources/fastag/bin + share/FASTag/digest), and not in a bare copy;
+#       the build-tree binary itself finds it (FASTAG_STAGE_DATA_IN_BUILD links
+#       data/ beside it), and the errors name the file, the folders searched
+#       and the fixes
 # Exits 77 (ctest SKIP) when the binary cannot start or Python 3 is missing.
 set -u
 BIN="$1"
 FIX="$2"        # test/fixtures
 DIGEST="$3"     # data/digest
 CMAKELISTS="$4" # CMakeLists.txt (install destination of the digest data)
+STAGED="${5:-}" # FASTAG_STAGE_DATA_IN_BUILD: ON when data/ is linked beside the built binary
 
 if ! "$BIN" --help >/dev/null 2>&1; then
   echo "SKIP: binary cannot initialize (OpenMS share data unreachable?)" >&2
@@ -564,7 +568,7 @@ layout() { # layout <name> <binary path inside> <digest dir inside or ''>: a cop
   echo "$root/$2"
 }
 digest_in() { # digest_in <binary>: 0 when -digest_out finds the shipped models without FASTAG_DIGEST_DIR
-  local b="$1" d; d=$(dirname "$b")/../run.$$; mkdir -p "$d"
+  local b="$1" d; d=$(mktemp -d "$TMP/run.XXXXXX")
   (cd "$d" && env -u FASTAG_DIGEST_DIR "$b" -in "$IN" -out t.tsv -digest_out d.tsv -threads 2 > log 2>&1) \
     && grep -q $'^run\tbackground\tshipped_human\t' "$d/d.tsv" && return 0
   echo "digest_in $b:" >&2; tail -5 "$d/log" >&2; head -14 "$d/d.tsv" 2>/dev/null | tail -2 >&2; return 1
@@ -575,6 +579,49 @@ B=$(layout gui resources/fastag/bin/FASTag resources/fastag/share/FASTag/digest)
 B=$(layout bare bin/FASTag ""); digest_in "$B" && fail "(f) a bare copy found digest data it does not have"
 if [ -z "$(env -u FASTAG_DIGEST_DIR "$B" -in "$IN" -out "$TMP/bare.tsv" -digest_out "$TMP/bare.d.tsv" 2>&1 | grep -o 'FASTAG_DIGEST_DIR')" ]; then
   fail "(f) a bare copy's error does not name FASTAG_DIGEST_DIR"
+fi
+# The bare copy's errors: one line naming the option, the file, every folder
+# searched (absolute, without ".."), and the fixes; exit 6 before any output.
+# The folder as the executable's path names it (with or without symlinks
+# resolved: /var and /private/var on macOS).
+BARE_L=$(cd "$(dirname "$B")" && pwd -L); BARE_P=$(cd "$(dirname "$B")" && pwd -P)
+bare_err() { # bare_err <file wanted> <option named> args...: checks the error of a bare-copy run
+  local want="$1" opt="$2"; shift 2
+  rm -f "$TMP/bare.err"
+  (cd "$TMP" && env -u FASTAG_DIGEST_DIR -u FASTAG_ALKYLATION_DIR "$B" -in "$IN" -out "$TMP/bare.tsv" "$@" > /dev/null 2> "$TMP/bare.err")
+  local rc=$?
+  [ "$rc" = 6 ] || { cat "$TMP/bare.err" >&2; fail "(f) bare copy, $opt: exit $rc, not 6"; }
+  local line; line=$(grep -m1 -- "needs $want from FASTag's shipped digest data" "$TMP/bare.err")
+  [ -n "$line" ] || { cat "$TMP/bare.err" >&2; fail "(f) bare copy, $opt: the error does not name $want"; }
+  case "$line" in *"$opt"*) ;; *) fail "(f) bare copy: the error does not name $opt: $line";; esac
+  local BARE_DIR
+  for BARE_DIR in "$BARE_L" "$BARE_P"; do
+    case "$line" in *"$BARE_DIR/"*) break;; esac
+  done
+  for c in "$(dirname "$BARE_DIR")/share/FASTag/digest" "$BARE_DIR/share-FASTag-digest" "$BARE_DIR/digest"; do
+    case "$line" in *"$c"*) ;; *) fail "(f) bare copy, $opt: the error does not name the folder $c: $line";; esac
+  done
+  case "$line" in *'/../'*) fail "(f) bare copy, $opt: a folder with '..' in the error: $line";; esac
+  case "$line" in *"cmake --install"*"FASTAG_DIGEST_DIR"*"data/digest"*) ;; *) fail "(f) bare copy, $opt: the error gives no fix: $line";; esac
+}
+bare_err digest_models.tsv -digest_out -digest_out "$TMP/bare.d.tsv"
+bare_err massgap_mods.tsv -massgap_out -recon_out "$TMP/bare.r.tsv" -recon_fasta "$DB" -massgap_out "$TMP/bare.g.tsv"
+bare_err digest_models.tsv -shortlist_out -fasta "$DB" -shortlist_out "$TMP/bare.s.tsv"
+[ ! -e "$TMP/bare.tsv" ] || fail "(f) bare copy: -out written although the run was refused"
+# A FASTAG_DIGEST_DIR that names no folder is said so, and not replaced by the
+# data beside the binary.
+FASTAG_DIGEST_DIR="$TMP/no-such-folder" "$BIN" -in "$IN" -out "$TMP/nf.tsv" -digest_out "$TMP/nf.d.tsv" > /dev/null 2> "$TMP/nf.err" \
+  && fail "(f) a FASTAG_DIGEST_DIR that is no folder was replaced by other data"
+grep -q "FASTAG_DIGEST_DIR is set to '$TMP/no-such-folder', which is not a folder" "$TMP/nf.err" \
+  || { cat "$TMP/nf.err" >&2; fail "(f) the error does not say FASTAG_DIGEST_DIR is no folder"; }
+# The build tree: the binary as built finds the data CMakeLists.txt links
+# beside it (FASTAG_STAGE_DATA_IN_BUILD), with no FASTAG_DIGEST_DIR.
+if [ "$STAGED" = ON ]; then
+  digest_in "$EXE" || fail "(f) the build-tree binary does not find data/digest beside it (FASTAG_STAGE_DATA_IN_BUILD)"
+  [ -e "$(dirname "$EXE")/share-FASTag-alkylation/proteomes.tsv" ] \
+    || fail "(f) no share-FASTag-alkylation beside the build-tree binary"
+else
+  echo "note: FASTAG_STAGE_DATA_IN_BUILD is off; the build-tree check is skipped" >&2
 fi
 
 echo "gui_cli_test: all checks passed"

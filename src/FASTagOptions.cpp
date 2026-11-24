@@ -890,30 +890,35 @@ void TOPPFASTag::registerOptionsAndFlags_()
                         "a model name of the protease table (e.g. Trypsin) or 'auto' (the report's call). "
                         "Experimental; empty = off",
                         false, true);
-  // #3g the alkylation call (src/AlkylationCall.h), from the reconciler's
-  // placements. Opt-in; every other output is the same with or without it.
+  // #3g the alkylation call. Since feedback 202dbcf4 read off the tags
+  // alone (src/AlkylationTags.h, no database); the reconciler's placements
+  // (src/AlkylationCall.h) refine it when there is a database. Opt-in; every
+  // other output is the same with or without it.
   registerOutputFile_("alkylation_out", "<file>", "",
-                      "Report which reagent alkylated the cysteines (or none), from the placements of "
-                      "single-Cys peptides on -recon_fasta or -alkylation_proteome: Cys form counts and "
-                      "the call (not validated on held-out data)", false);
+                      "Report which reagent alkylated the cysteines (or none). No database is needed: the call is "
+                      "read off the C residues in the tags (a second tagging pass with unmodified C and one C edge "
+                      "per reagent). With -recon_fasta, -fasta or -alkylation_proteome the placements of single-Cys "
+                      "peptides on that database are added. Votes per C form and the call; give -extension "
+                      "(tested with -tag_length 4 -extension 6), without it few spectra vote",
+                      false);
   setValidFormats_("alkylation_out", ListUtils::create<std::string>("tsv"));
   registerStringOption_("alkylation_proteome", "<name>", "auto",
-                        "Database of -alkylation_out without -recon_fasta: a FASTA file (.gz allowed). The names "
-                        "auto (= human), human, mouse, yeast and ecoli stand for the shipped UniProt reference "
-                        "proteomes (reviewed entries; share/FASTag/alkylation, release in its proteomes.tsv). "
-                        "Tags place on them from 8 residues (human, mouse) or 7 (yeast, ecoli): give -tag_length 8 "
-                        "or 7, at the default no tag places and there is no call (reason tags_too_short)",
+                        "Database that -alkylation_out places single-Cys peptides on, to refine the tag call. auto: "
+                        "-recon_fasta or -fasta when given, else none (tags only). A FASTA file (.gz allowed), or "
+                        "human, mouse, yeast, ecoli for the shipped UniProt reference proteomes (reviewed entries; "
+                        "share/FASTag/alkylation, release in its proteomes.tsv). Tags place on those from 8 residues "
+                        "(human, mouse) or 7 (yeast, ecoli): give -tag_length 8 or 7",
                         false, true);
   registerIntOption_("alkylation_min_spectra", "<n>", 10,
-                     "Spectra the -alkylation_out call needs, binned and for the called class", false, true);
+                     "Spectra (votes, or binned placements) an alkylation call needs, in total and for the called class", false, true);
   setMinInt_("alkylation_min_spectra", 1);
   registerDoubleOption_("alkylation_min_share", "<f>", 0.6,
-                        "Share of the binned spectra the -alkylation_out call needs", false, true);
+                        "Share of the votes (or binned placements) an alkylation call needs", false, true);
   setMinFloat_("alkylation_min_share", 0.0);
   setMaxFloat_("alkylation_min_share", 1.0);
   registerDoubleOption_("alkylation_window", "<Da>", 0.0,
-                        "Window of -alkylation_out around each Cys form mass; 0 = 0.02 Da on a ppm run, "
-                        "0.5 Da on a run with a Da fragment tolerance", false, true);
+                        "Window of the -alkylation_out placements around each Cys form mass (with a database only); "
+                        "0 = 0.02 Da on a ppm run, 0.5 Da on a run with a Da fragment tolerance", false, true);
   setMinFloat_("alkylation_window", 0.0);
   // 1.13 #22: the database-free alkylation call (src/AlkylationTags.h),
   // from a second, unwritten tagging pass with alternative C edges.

@@ -271,6 +271,76 @@ int main(int argc, char** argv)
     check(!c.called && c.reason == "unresolved_forms", "30 CAM votes at 0.5 Da: unresolved_forms");
   }
 
+  // ---- feedback 202dbcf4: single-step twins and aliases over the run's alphabet
+  {
+    const auto base = AT::alphabet({});
+    check(base.size() == 18, "18 base steps without C: " + std::to_string(base.size()));
+    bool no_c = true;
+    for (const auto& st : base) no_c = no_c && st.name != "C";
+    check(no_c, "C is not a step (its forms are the candidates)");
+    // the base residues: no twin at 20 ppm or 0.3 Da; at 0.5 Da CAM and Carboxymethyl twin each other
+    const auto t02 = AT::twins(cands, 0.02);
+    const auto t05 = AT::twins(cands, 0.5);
+    bool none02 = true;
+    for (const auto& v : t02) none02 = none02 && v == "-";
+    check(none02 && AT::stepsResolved(cands, 0.02) && AT::stepsResolved(cands, 0.3), "no twin at 0.02 or 0.3 Da");
+    check(t05[0] == "C[Carboxymethyl]:0.9840" && t05[4] == "C[Carbamidomethyl]:0.9840" && !AT::stepsResolved(cands, 0.5),
+          "CAM and Carboxymethyl twin at 0.5 Da: " + t05[0] + " / " + t05[4]);
+    check(AT::stepsResolved(cands, 0.02) == AT::formsResolved(cands, 0.02) &&
+              AT::stepsResolved(cands, 0.5) == AT::formsResolved(cands, 0.5),
+          "on the base residues, the step rule is the 1.13 form rule");
+    // a variable modification whose residue reads like a C form: one edge of
+    // that mass is either, so the form is not resolved and there is no call.
+    // K + 31.9361 = 160.0311, 0.0004 Da from C[Carbamidomethyl] (160.0307).
+    const double k = OpenMS::ResidueDB::getInstance()->getResidue('K')->getMonoWeight(OpenMS::Residue::Internal);
+    const double cam_c = OpenMS::ResidueDB::getInstance()->getResidue('C')->getMonoWeight(OpenMS::Residue::Internal) + cands[0].mass;
+    std::vector<FASTag::ModSpec> mods = {FASTag::ModSpec{'K', cam_c - k + 0.0004, "Twin", true}};
+    const auto alpha = AT::alphabet(AT::shadowMods(mods, cands));
+    check(alpha.size() == 19 && alpha.back().name == "K[Twin]", "the variable alternative is a step: " + alpha.back().name);
+    const auto tw = AT::twins(cands, 0.02, &alpha);
+    check(tw[0] == "K[Twin]:0.0004", "K[Twin] twins C[Carbamidomethyl]: " + tw[0]);
+    check(!AT::stepsResolved(cands, 0.02, &alpha), "a residue twin leaves the forms unresolved");
+    AT::Tally t;
+    t.spectra = 30;
+    t.votes[0] = 30;
+    A::Settings s;
+    check(AT::callTags(t, s, cands, 0.02).called, "30 CAM votes, base residues: call");
+    const A::Call c = AT::callTags(t, s, cands, 0.02, &alpha);
+    check(!c.called && c.reason == "unresolved_forms", "30 CAM votes with a residue twin: unresolved_forms");
+    // a fixed modification moves the residue (the step K is then K + delta)
+    const auto fixed = AT::alphabet({FASTag::ModSpec{'K', cam_c - k + 0.0004, "Twin", false}});
+    check(fixed.size() == 18 && !AT::stepsResolved(cands, 0.02, &fixed), "a fixed K twin also leaves the forms unresolved");
+    // the alias sums use the alphabet: the base aliases stay with a modification
+    const auto al = AT::aliases(cands, 0.02, &alpha);
+    check(al[0].rfind("C+G:0.0000", 0) == 0, "CAM's C+G alias kept with mods: " + al[0]);
+    // An alias that only a modified residue makes: Oxidation (M) + A
+    // (147.0354 + 71.0371 = 218.0725) against a form that sits there.
+    const double oxm = 131.040485 + 15.994915;
+    std::vector<FASTag::ModSpec> mo = {FASTag::ModSpec{'M', 15.994915, "Oxidation", true}};
+    const auto alpha_ox = AT::alphabet(AT::shadowMods(mo, cands));
+    std::vector<A::Form> fake = cands;
+    fake[3].mass = oxm + 71.03711 - (cam_c - cands[0].mass);  // Methylthio moved onto M[Oxidation] + A
+    const auto alo = AT::aliases(fake, 0.02, &alpha_ox);
+    check(alo[3].find("A+M[Oxidation]") != std::string::npos, "a modified residue in an alias: " + alo[3]);
+    check(AT::aliases(fake, 0.02)[3].find("M[Oxidation]") == std::string::npos, "not without the modification");
+    // the report rows: format 2 and one twin row per form
+    AT::ReportInfo info;
+    info.tol_da = 0.02;
+    info.alpha = alpha;
+    const auto rows = AT::rows(t, c, s, cands, info);
+    int twins_rows = 0;
+    std::string fmt, resolved, cam_twin;
+    for (const auto& r : rows)
+    {
+      if (r.section == "alkt_form" && r.key.rfind("twin.", 0) == 0) ++twins_rows;
+      if (r.section == "alkt_form" && r.key == "twin.Carbamidomethyl") cam_twin = r.value;
+      if (r.section == "alkt_run" && r.key == "format") fmt = r.value;
+      if (r.section == "alkt_run" && r.key == "forms_resolved") resolved = r.value;
+    }
+    check(fmt == "2" && twins_rows == AT::NUM_CANDIDATES && cam_twin == "K[Twin]:0.0004" && resolved == "no",
+          "format 2, six twin rows, forms_resolved no: " + fmt + " " + std::to_string(twins_rows) + " " + cam_twin + " " + resolved);
+  }
+
   // ---- the call: #3g's rule over the six classes
   {
     A::Settings s;

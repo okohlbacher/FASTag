@@ -12,9 +12,9 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import type { ParamValue } from '../ParamField'
 import { PARAM_BY_NAME } from '../paramLayout'
 import { capabilitiesOf, NO_CAPABILITIES, type CliCapabilities } from './capabilities'
-import { preStartChecks, type Check, type PreStart } from './checks'
+import { preStartChecks, shippedDataNeeds, type Check, type PreStart } from './checks'
 import { parseProbe, type ProbeFasta, type ProbeReport } from './probe'
-import type { TaxonomyStatus } from '../types'
+import type { DataStatus, TaxonomyStatus } from '../types'
 
 interface Probed {
   report?: ProbeReport
@@ -97,6 +97,22 @@ export function useInspector(o: { input: string; values: Record<string, ParamVal
       live = false
     }
   }, [binOk, speciesOn, taxdbField, generation, focusCount])
+  // The shipped digest data and proteomes: whenever an output that needs
+  // them is on, at the same moments as the taxonomy.
+  const [data, setData] = useState<DataStatus | undefined>(undefined)
+  const needsData = shippedDataNeeds(values).length > 0
+  useEffect(() => {
+    if (!binOk || !needsData) return
+    let live = true
+    // A bridge without data_status leaves the data unknown (no check).
+    Promise.resolve()
+      .then(() => window.fastag.dataStatus())
+      .then((d) => live && setData(d))
+      .catch(() => live && setData(undefined))
+    return () => {
+      live = false
+    }
+  }, [binOk, needsData, generation, focusCount])
 
   useEffect(() => {
     if (!binOk) return
@@ -155,7 +171,7 @@ export function useInspector(o: { input: string; values: Record<string, ParamVal
   const pre = useMemo<PreStart>(() => {
     if (!input) {
       // No file: only the checks of the settings.
-      const s = preStartChecks({ input, values, supported: false, probe: null, taxonomy })
+      const s = preStartChecks({ input, values, supported: false, probe: null, taxonomy, data })
       return { ...s, notChecked: null }
     }
     const report = probed?.report
@@ -167,9 +183,10 @@ export function useInspector(o: { input: string; values: Record<string, ParamVal
       // The FASTA record comes from its own probe only.
       probe: report ? { ...report, fasta: fastaRecord ?? undefined } : null,
       probeError: probed?.error ?? null,
-      taxonomy
+      taxonomy,
+      data
     })
-  }, [input, values, caps, probed, fastaRecord, taxonomy])
+  }, [input, values, caps, probed, fastaRecord, taxonomy, data])
 
   const isAnswered = useCallback((id: string) => answered.has(`${input} ${id}`), [answered, input])
   const blocks = pre.checks.filter((c) => c.level === 'block')

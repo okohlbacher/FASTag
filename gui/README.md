@@ -209,6 +209,19 @@ Windows, which the Windows CLI zip does not contain: it ships `FASTag.bat` and
 at a local build with `FASTAG_BIN=/path/to/FASTag npm run tauri dev`, or drop a
 symlink at `src-tauri/resources/fastag/bin/FASTag`.
 
+The bundled CLI gets its data folders explicitly (`src-tauri/src/data.rs`
+`data_env`): `FASTAG_TAXONOMY_DIR`, `FASTAG_DIGEST_DIR` and
+`FASTAG_ALKYLATION_DIR`, each the user's own when it names a folder, else
+`resources/fastag/share/FASTag/<name>`. A CLI from `FASTAG_BIN` finds its own
+(a build tree links `data/` beside the binary). When it has none beside it (a
+build from before that, or with `-DFASTAG_STAGE_DATA_IN_BUILD=OFF`), a debug
+build of the app gives it this source tree's `data/digest`, `data/alkylation`
+and `data/taxonomy` instead; a release build never does. Before a run, `data_status`
+resolves the digest data and proteomes as the CLI does, and the check before
+the run (`inspector/checks.ts`, `no-shipped-data-<option>`) blocks a mass-gap
+report, digest report, database reduction or alkylation report whose file is
+missing, with the folders searched and the fix.
+
 `npm run dev` opened in a browser (http://localhost:1420) shows the React part
 without the backend: a mock bridge stands in, and "open a report" loads the
 fixture reports. A production build does not contain it.
@@ -537,8 +550,9 @@ them.
 Sharing is the second step. The backend builds the public export (`export.json`,
 `fastag-feedback-public/1`, `src/feedback/schema/feedback-public.schema.json`, which must stay identical
 to the intake's `doc/feedback/feedback-public.schema.json`) fresh from typed fields, zips it with the
-screenshot if included into `<id>.feedback.zip`, and the dialog shows it field by field. Screenshot
-and log are off by default, diagnostics on. After the confirmation that it becomes a public GitHub
+screenshot if included into `<id>.feedback.zip`, and the dialog shows it field by field. The
+screenshot (when there is one) and diagnostics are included by default, the log is off; each can be
+unticked. After the confirmation that it becomes a public GitHub
 issue, **Open issue draft** opens
 `https://github.com/okohlbacher/FASTag/issues/new?template=feedback.yml&title=…&report-id=…&kind=…`
 (text fields only, under 2 KB; the opener is scoped to that endpoint in

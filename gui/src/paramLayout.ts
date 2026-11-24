@@ -97,7 +97,7 @@ const SECTION_DEFS: Omit<Section, 'open'>[] = [
   { title: 'Identifiability', home: 'triage', blurb: 'One row per MS/MS spectrum, ranked by how identifiable it is, and marked when your search identified it.', params: ['census', 'census_score', 'census_out', 'census_summary_out', 'census_sorted_out', 'census_ids', 'census_ids_fdr', 'census_triage_evalue'] },
   { title: 'Identifiability, advanced', home: 'triage', blurb: 'How the identification file is joined to the spectra.', params: ['census_ids_accept', 'census_ids_exact'] },
   { title: 'Digest and labels', home: 'characterize', blurb: 'The protease the tags fit and the labels they carry.', params: ['digest_out', 'label_out', 'digest_models', 'digest_models_version', 'digest_calibration', 'digest_detection', 'digest_flank2', 'digest_min_confidence', 'digest_tag_min', 'digest_window', 'digest_background_share', 'digest_silac_min', 'digest_quality'] },
-  { title: 'Alkylation', home: 'characterize', blurb: 'Which reagent alkylated the cysteines, from placements on a shipped proteome.', params: ['alkylation_out', 'alkylation_tags_out', 'alkylation_proteome', 'alkylation_min_share', 'alkylation_min_spectra', 'alkylation_window'] },
+  { title: 'Alkylation', home: 'characterize', blurb: 'Which reagent alkylated the cysteines, read off the tags; a protein database adds a check.', params: ['alkylation_out', 'alkylation_tags_out', 'alkylation_proteome', 'alkylation_min_share', 'alkylation_min_spectra', 'alkylation_window'] },
   { title: 'Glycopeptides', home: 'characterize', blurb: 'Flag spectra that carry oxonium ions.', params: ['glyco', 'glyco_out', 'glyco_min_fraction'] },
   { title: 'Performance', home: 'global', blurb: 'How much of the computer a run may use.', params: ['threads'] },
   { title: 'Fragment tolerance by analyzer', home: 'global', blurb: 'Ion-trap spectra of a mixed run (for example Orbitrap MS1, ion-trap MS2) tagged at their own tolerance; the reports use the fragment tolerance.', params: ['tolerance_by_analyzer', 'fragment_tolerance_itms'] },
@@ -561,7 +561,7 @@ export const BRIEF_HINT: Record<string, string> = {
   digest_background_share: 'Background composition mixed into every protease model.',
   digest_silac_min: 'K and R tag ends the label report needs for heavy SILAC.',
   // Alkylation and glycopeptides
-  alkylation_proteome: 'The database the alkylation report uses without a placement one.',
+  alkylation_proteome: 'Where the alkylation call is checked (auto: the run\'s database or none).',
   glyco: 'Flags spectra with oxonium ions (glycopeptide sugar fragments).',
   // Peaks, charges and complements
   peaks_per_window: 'Keeps this many of the strongest peaks per 100 Da.',

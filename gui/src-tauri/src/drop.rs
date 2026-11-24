@@ -66,8 +66,8 @@ pub fn classify(p: &Path) -> Kind {
         "mzml" | "mzpeak" | "mgf" | "raw" => return Kind::Spectra,
         "fasta" | "fa" | "faa" => return Kind::Fasta,
         "taxdb" => return Kind::Taxdb,
-        // -recon_id_out (P4c): the Mass gaps & recon tab reads the mzTab
-        // form; an idXML or mzIdentML one is sniffed there and named.
+        // -recon_id_out (P4c): the Mass shifts tab reads the mzTab form and
+        // lists an idXML or mzIdentML one as a file to reveal or open.
         "mztab" | "idxml" | "mzid" => return Kind::Report("recon_ids"),
         "tsv" => {}
         _ => return Kind::Other,
@@ -231,6 +231,13 @@ pub fn route(paths: &[PathBuf]) -> DropRoute {
     r
 }
 
+/// The dropped files the user may reveal or open from the app (reveal.rs):
+/// the -recon_id_out files, which Mass shifts lists as files when it does
+/// not show them (idXML, mzid). The OS named them, not the renderer.
+pub fn openable(r: &DropRoute) -> Vec<PathBuf> {
+    r.reports.iter().filter(|x| x.kind == "recon_ids").map(|x| PathBuf::from(&x.path)).collect()
+}
+
 /// What lib.rs does with one WindowEvent::DragDrop: @p hover tells the
 /// renderer a drag is over the window or has left it, @p dropped gets the
 /// route of a drop. Over (the pointer moving) sends nothing.
@@ -355,6 +362,17 @@ mod tests {
             ]
         );
         assert_eq!(r.ignored, vec!["/d/b.recon_id.mzTab"]);
+    }
+
+    // Feedback 20261124T095212Z: a dropped idXML or mzid -recon_id_out is
+    // listed in Mass shifts with Reveal and Open, so the drop makes it
+    // revealable; the other reports are not widened.
+    #[test]
+    fn a_dropped_recon_id_out_may_be_revealed() {
+        let r = route(&pb(&["/d/run.recon_id.idXML", "/d/run.recon.tsv"]));
+        assert_eq!(openable(&r), vec![PathBuf::from("/d/run.recon_id.idXML")]);
+        assert_eq!(openable(&route(&pb(&["/d/run.mzid"]))), vec![PathBuf::from("/d/run.mzid")]);
+        assert!(openable(&route(&pb(&["/d/run.recon.tsv"]))).is_empty());
     }
 
     #[test]

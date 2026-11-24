@@ -1599,7 +1599,7 @@ pub(crate) mod tests {
         assert_eq!(String::from_utf8(files[0].1.clone()).unwrap(), e.json, "the preview is the attachment");
         assert_eq!(files[1].0, SCREENSHOT_FILE);
         assert_eq!(e.image.as_ref().unwrap().width, 40);
-        // Defaults: no screenshot, no log.
+        // Without the screenshot and the log.
         let def = Include { screenshot: false, diagnostics: true, log: false };
         let e = export(&d, &s.id, def, NOW).unwrap();
         let files = unzip(&std::fs::read(&e.zip).unwrap());

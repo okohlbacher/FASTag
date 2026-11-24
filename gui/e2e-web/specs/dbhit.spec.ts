@@ -73,7 +73,10 @@ for (const scheme of ['light', 'dark'] as const) {
     await goTo(page, 'Results')
     await page.getByRole('button', { name: 'Open report…' }).click()
     const kit = page.locator('.qc-strip .stat').filter({ has: page.locator('dt', { hasText: 'Isobaric kit' }) })
-    await expect(kit.locator('dd')).toHaveText('TMT 6-plex')
+    await expect(kit.locator('dd').first()).toHaveText('TMT 6-plex')
+    await page.screenshot({ path: info.outputPath(`dbhit-qc-chart-${scheme}.png`), fullPage: true })
+    // The channels are a chart; its Table view is the channel table.
+    await page.locator('figure', { hasText: 'each reporter channel' }).getByRole('button', { name: 'Table' }).click()
     const channels = page.getByRole('region', { name: 'Reporter channels' })
     await expect(channels.locator('tbody tr')).toHaveCount(11)
     await expect(channels.locator('tbody tr').first()).toContainText('4,658')

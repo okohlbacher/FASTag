@@ -150,6 +150,35 @@ export const FAQ: FaqEntry[] = [
     ]
   },
   {
+    id: 'faq-shipped-data',
+    group: 'Running',
+    question: "The run fails because FASTag's shipped data is missing",
+    symptoms: (
+      <>
+        The check before the run, or FASTag&apos;s reason (exit code 6), says the mass-gap report, the digest report, the database reduction or the
+        alkylation report with a named proteome needs a file of FASTag&apos;s shipped data (massgap_mods.tsv, digest_models.tsv, a proteome such as human.fasta.gz) and it is not
+        found.
+      </>
+    ),
+    causes: [
+      <>
+        FASTag finds its shipped data next to the program. A FASTag built from source and not installed, or a copy of the program on its own (for example one
+        named by <C>FASTAG_BIN</C>), has none beside it. The desktop app and an installed FASTag have it.
+      </>,
+      <>
+        <C>FASTAG_DIGEST_DIR</C> or <C>FASTAG_ALKYLATION_DIR</C> is set to a folder that does not exist or lacks the file.
+      </>
+    ],
+    fixes: [
+      <>Use an installed FASTag: cmake --install puts the data in &lt;prefix&gt;/share/FASTag/digest and share/FASTag/alkylation.</>,
+      <>
+        Or set <C>FASTAG_DIGEST_DIR</C> to a folder that holds the file (data/digest in the FASTag sources), and for the alkylation report{' '}
+        <C>FASTAG_ALKYLATION_DIR</C> (data/alkylation). Then start FASTag again.
+      </>,
+      <>Or run without the report that needs it. The alkylation report needs no proteome at its default (auto): its call is read off the tags.</>
+    ]
+  },
+  {
     id: 'faq-min-filter',
     group: 'Running',
     question: 'The run is refused: no tag can reach the minimum filter length',
@@ -442,6 +471,7 @@ export const CLASSES: [RegExp, string][] = [
   [/FASTAG_REFUSED reason=raw_dia|' is raw \S*DIA\b|-acquisition_check warn/, 'faq-raw-dia'],
   [/cannot reach the index k/, 'faq-species-short'],
   [/-species: no |taxonomy directory|Failed to load (-taxdb|taxonomy)/, 'faq-species-reference'],
+  [/shipped digest data|no shipped \w+ proteome|FASTAG_DIGEST_DIR|FASTAG_ALKYLATION_DIR/, 'faq-shipped-data'],
   [/Unknown modification/, 'faq-modification'],
   [/reach the minimum filter length/, 'faq-min-filter'],
   [/No spectrum carried a reported tag/, 'faq-out-spectra-none'],

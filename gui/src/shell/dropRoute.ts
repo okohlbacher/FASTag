@@ -5,8 +5,8 @@
 //              folder (Batch); .fasta -> Database; .taxdb -> Taxonomy;
 //   a tags TSV -> Results; digest, label and mass-gap reports -> the Digest
 //   tab; recon and delta tables -> Mass gaps & recon, a glyco report ->
-//   Glyco (P4c: the report opener sniffs which), a -recon_id_out (.mzTab;
-//   .idXML and .mzid are named there) -> Mass gaps & recon; a species report -> the
+//   Glyco (P4c: the report opener sniffs which), a -recon_id_out (.mzTab is
+//   shown; .idXML and .mzid are listed as files) -> Mass gaps & recon; a species report -> the
 //   Species tab; .sdrf.tsv -> Batch.
 // Nothing is taken while FASTag runs (the Open buttons are disabled then).
 

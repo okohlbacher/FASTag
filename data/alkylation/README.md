@@ -3,8 +3,9 @@
 FASTag looks for this directory at `<bin>/../share/FASTag/alkylation` (a normal
 install) or `<bin>/share-FASTag-alkylation` (the flat release layout), that is,
 beside the digest data directory, or wherever `FASTAG_ALKYLATION_DIR` points.
-`-alkylation_proteome auto` (the default, = `human`), `human`, `mouse`, `yeast`
-and `ecoli` name these files; `-alkylation_out` places its single-Cys peptides
+`-alkylation_proteome` `human`, `mouse`, `yeast` and `ecoli` name these files
+(the default `auto` reads none of them: `-alkylation_out` then calls from the
+tags alone, or also places on `-recon_fasta` / `-fasta` when given); `-alkylation_out` places its single-Cys peptides
 on the named proteome when the run has no `-recon_fasta` and no other placement
 reader.
 

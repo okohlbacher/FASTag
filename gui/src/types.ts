@@ -271,6 +271,25 @@ export interface TaxonomyStatus {
   fromEnv: boolean
 }
 
+/// Where the CLI finds its shipped digest data and alkylation proteomes
+/// (data.rs data_status): the Mass-shift survey, Characterize a run and
+/// Database reduction need them.
+export interface DataStatus {
+  // The digest folder the CLI reads; null when it finds none.
+  digestDir: string | null
+  // Which tables that folder holds.
+  files: { digestModels: boolean; digestModelsV2: boolean; massgapMods: boolean; calibration: boolean }
+  // The alkylation folder the CLI reads; null when it finds none.
+  alkylationDir: string | null
+  // The shipped proteomes there whose file is present (human, mouse, yeast, ecoli).
+  proteomes: string[]
+  // The digest folders looked in: the one FASTAG_DIGEST_DIR names, else the
+  // three beside the FASTag program.
+  searched: string[]
+  // The digest folder comes from FASTAG_DIGEST_DIR.
+  fromEnv: boolean
+}
+
 export interface Settings {
   schemaVersion: number
   lastUsed: Record<string, unknown> | null
@@ -325,6 +344,8 @@ export interface FastagApi extends FeedbackApi {
   taxdbInfo: (explicit?: string) => Promise<TaxdbInfo | null>
   // Where a run with -species finds the taxonomy index (@p explicit: -taxdb).
   taxonomyStatus: (explicit?: string) => Promise<TaxonomyStatus>
+  // Where a run finds FASTag's shipped digest data and proteomes.
+  dataStatus: () => Promise<DataStatus>
   // The -species report, parsed in the renderer (results/species.ts); null
   // when it is missing, unreadable or empty.
   species: (path: string) => Promise<SpeciesReport | null>
@@ -422,6 +443,8 @@ export interface FastagApi extends FeedbackApi {
   resultsPosition: (path: string, view: ResultsView, row: number) => Promise<number | null>
   // Reveal an output of a run of this app (folder: open its folder instead).
   revealOutput: (path: string, folder: boolean) => Promise<void>
+  // Open an output of a run of this app in the app the system gives its type.
+  openOutput: (path: string) => Promise<void>
   // A native menu item (menu.rs): its action name.
   onMenu: (cb: (action: string) => void) => () => void
   // Start an export job: the rows of a view, only the named columns, to dest

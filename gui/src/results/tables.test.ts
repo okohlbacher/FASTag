@@ -9,6 +9,8 @@ import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
 import {
   filterRecon,
+  idFormat,
+  NotShownFormat,
   parseDelta,
   parseGlyco,
   parseRecon,
@@ -202,9 +204,21 @@ describe('tables.ts: -recon_id_out (mzTab)', () => {
     expect(m.sequence[1]).toBe(recon.peptide[1])
   })
 
-  it('says idXML and mzIdentML are not read here', () => {
+  // Feedback 20261124T095212Z: an idXML or mzIdentML file is a format not
+  // shown here (NotShownFormat: listed as a file), never a read error.
+  it('says idXML and mzIdentML are not read here, as a format not shown', () => {
+    expect(() => parseTable('<?xml version="1.0"?><IdXML>', '/d/run.recon.idXML')).toThrow(NotShownFormat)
     expect(() => parseTable('<?xml version="1.0"?><IdXML>', '/d/run.recon.idXML')).toThrow(/idXML.*mzTab/)
     expect(() => parseTable('<?xml version="1.0"?><MzIdentML>', '/d/run.recon.mzid')).toThrow(/mzIdentML.*mzTab/)
+    // A .mzTab that holds XML: the same, not shown.
+    expect(() => parseTable('<?xml version="1.0"?><IdXML>', '/d/run.recon_id.mzTab')).toThrow(NotShownFormat)
+  })
+
+  it('shows only the mzTab form of -recon_id_out, by its name', () => {
+    expect(idFormat('/d/run.recon_id.mzTab')).toBe('mzTab')
+    expect(idFormat('/d/run.recon_id.MZTAB')).toBe('mzTab')
+    expect(idFormat('/d/run.recon_id.idXML')).toBe('idXML')
+    expect(idFormat('/d/run.recon_id.mzid')).toBe('mzIdentML')
   })
 
   // A run that placed nothing: OpenMS MzTabFile::store writes the PSH header

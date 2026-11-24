@@ -2,7 +2,7 @@
 // the channels leave) replaces the list of compatible kits, and the reporter
 // channels are counted per channel. Real runs of the CLI (fixtures/cli-dev).
 
-import { render, screen, waitFor, within } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { describe, expect, it } from 'vitest'
 import ReportTable, { qcSummary } from './ReportTable'
 import { kitCallOf, kitText, reporterChannels } from './calls'
@@ -118,6 +118,9 @@ describe('reporter channel counts', () => {
     await waitFor(() => expect(screen.getByLabelText('QC summary')).toBeDefined())
     const kit = [...document.querySelectorAll('.qc-strip .stat')].find((s) => s.querySelector('dt')!.textContent === 'Isobaric kit')!
     expect(kit.querySelector('dd')!.textContent).toBe('TMT 6-plex')
+    // The channels are a chart; its Table view is the channel table.
+    const chart = [...document.querySelectorAll('figure')].find((f) => /reporter channel/.test(f.querySelector('figcaption')!.textContent!)) as HTMLElement
+    fireEvent.click(within(chart).getByRole('button', { name: 'Table' }))
     const table = within(screen.getByRole('region', { name: 'Reporter channels' })).getByRole('table')
     const rows = within(table).getAllByRole('row').slice(1)
     expect(rows).toHaveLength(11)

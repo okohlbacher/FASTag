@@ -154,12 +154,7 @@ impl<V: Clone> Lru<V> {
 fn command(r: &Resolved) -> Command {
     let mut cmd = Command::new(&r.bin);
     no_console_window(&mut cmd);
-    if let Some(d) = &r.data {
-        cmd.env("OPENMS_DATA_PATH", d);
-    }
-    if let Some(t) = taxonomy_dir(r) {
-        cmd.env("FASTAG_TAXONOMY_DIR", t);
-    }
+    crate::data::data_env(&mut cmd, r);
     cli_env(&mut cmd);
     lifetime::die_with_parent(&mut cmd);
     cmd

@@ -1125,17 +1125,12 @@ pub fn launch(mgr: &RunManager, r: &Resolved, params: RunParams, sink: Sink, his
         cmd.current_dir(d);
     }
     new_process_group(&mut cmd);
-    if let Some(d) = &r.data {
-        cmd.env("OPENMS_DATA_PATH", d);
-    }
+    // OpenMS's share data, and FASTag's own data passed explicitly (the CLI's
+    // own <bin>/../share lookup fails for a copied/symlinked binary): the
+    // user's own folders if set, the ones species.rs and data.rs report on.
+    crate::data::data_env(&mut cmd, r);
     cli_env(&mut cmd);
     no_console_window(&mut cmd);
-    if let Some(t) = taxonomy_dir(r) {
-        // Point -species at the taxonomy explicitly (the CLI's own
-        // <bin>/../share lookup fails for a copied/symlinked binary) -- the
-        // user's own directory if set, the same one species.rs reports on.
-        cmd.env("FASTAG_TAXONOMY_DIR", t);
-    }
     let start = history::now_ms();
     let files = RunFiles { input: &params.input, outputs: &outputs, cwd: cwd.as_deref(), overwrite: params.overwrite, protect: &params.protect };
     // The databases as the run reads them, resolved and opened once before

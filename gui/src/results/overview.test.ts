@@ -132,10 +132,11 @@ describe('Overview model: calls', () => {
     const t = tile(o, 'alkylation')
     expect(t.value).toBe('not assessed')
     expect(t.tone).toBe('off')
-    // Characterize's extension 2 cannot place tags in a proteome: the action
-    // raises it to 3, and the tile says so.
-    expect(t.action).toEqual({ kind: 'enable', label: 'Add Alkylation report and run again', values: { alkylation_out: 'alkylation.tsv', extension: '3' } })
-    expect(t.note).toMatch(/raises the extension from 2 to 3/)
+    // feedback 202dbcf4: the report needs no database, so the action adds it
+    // without raising Characterize's extension 2, and the tile says so.
+    expect(t.action).toEqual({ kind: 'enable', label: 'Add Alkylation report and run again', values: { alkylation_out: 'alkylation.tsv' } })
+    expect(t.note).toMatch(/needs no database/)
+    expect(t.note).not.toMatch(/raises the extension/)
     expect(line(o, 'fixed C')).toMatchObject({ evidence: 'default' })
     expect(line(o, 'fixed C').note).toBe('default, alkylation not assessed (alkylation report not written)')
   })
@@ -394,6 +395,35 @@ describe('Overview model: the alkylation report', () => {
     expect(t).toMatchObject({ value: 'no call', tone: 'nocall' })
     expect(t.note).toMatch(/no tag reaches the 8 residues the proteome needs/)
     expect(t.action).toEqual({ kind: 'enable', label: 'Run again with extension 3', values: { extension: '3' } })
+  })
+
+  // feedback 202dbcf4: format 2, the call from the tags without a database
+  const tagReport = (status: string, reason: string, extra = ''): string =>
+    [
+      'section\tkey\tvalue\tn\tdescription',
+      'alk_run\tformat\t2\t-\t-',
+      'alk_run\tmethod\ttags\t-\t-',
+      'alk_run\tdatabase\t-\t-\t-',
+      'alk_run\tdatabase_source\tnone\t-\t-',
+      'alkt_run\tformat\t2\t-\t-',
+      `alkylation_call\tstatus\t${status}\t8\t-`,
+      `alkylation_call\treason\t${reason}\t-\t-`,
+      'alkylation_call\tsource\ttags\t-\t-',
+      extra
+    ].join('\n')
+  it('a tag-only report (format 2): the call names the votes and no database, and few votes ask for longer tags', () => {
+    const r = parseReport(tagReport('no_call', 'few_cys_spectra'), '/d/a.alkylation.tsv')
+    expect(r.kind).toBe('alkylation')
+    const t = tile(of(tagReport('no_call', 'few_cys_spectra')), 'alkylation')
+    expect(t).toMatchObject({ value: 'no call', tone: 'nocall' })
+    expect(t.note).toMatch(/8 spectra vote from their tags/)
+    expect(t.note).not.toMatch(/proteome/)
+    expect(t.action).toBeUndefined()
+    const c = tile(of(tagReport('call', '-', 'alkylation_call\treagent\tMethylthio\t6\t-\nalkylation_call\tmass\t45.987721\t-\t-\nalkylation_call\tshare\t0.75\t8\t-')), 'alkylation')
+    expect(c).toMatchObject({ value: 'Methylthio', tone: 'call' })
+    expect(c.note).toMatch(/75% of 8 spectra whose tags read a cysteine, no database; experimental/)
+    const u = tile(of(tagReport('no_call', 'unresolved_forms')), 'alkylation')
+    expect(u.note).toMatch(/cannot tell two cysteine forms apart/)
   })
 
   it('shows the call with its reagent, and suggests it for the search', () => {

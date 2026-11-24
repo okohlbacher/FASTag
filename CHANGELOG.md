@@ -2,6 +2,47 @@
 
 ## Unreleased
 
+- **CLI: the alkylation call needs no protein database (`-alkylation_out` format 2).** `-alkylation_out` now
+  reads the cysteine forms in the tags (unmodified, Carbamidomethyl, Propionamide, Nethylmaleimide, Methylthio,
+  Carboxymethyl; the method of `-alkylation_tags_out`) and calls the reagent, or says `no_call` with the reason and
+  the counts. **`-alkylation_proteome auto` (the default) no longer means the shipped human proteome**: it means
+  `-recon_fasta` or `-fasta` when given, else no database. A named proteome (`human`, `mouse`, `yeast`, `ecoli`), a
+  FASTA file, `-recon_fasta` or `-fasta` adds the 1.12 placement call as a check: the report's call takes the one
+  that calls, or both when they agree, and says `no_call` `disagree` when they differ. Before, a run without a
+  database placed on the human proteome, needed tags of 8 residues and stopped with exit code 6 without the shipped
+  file. The C forms are checked against the run's residues (fixed and variable modifications included): a C form
+  that one step of another mass reads (`alkt_form twin.<form>`, new) gives `no_call` `unresolved_forms`; two-step
+  readings such as C + G = C[Carbamidomethyl] stay listed under `alias.<form>`. Report: `alk_run format` 2 with
+  `method`; `alk_cys` and `alkylation_placement_call` only with a database; the tag sections `alkt_run`, `alkt_form`,
+  `alkylation_tags_call` inside; `alkylation_call` gains `source` (doc/ALKYLATION-REPORT.md). `-alkylation_tags_out`
+  is `alkt_run format` 2 (the twin rows; aliases over the run's alphabet). `-alkylation_window` is read only with a
+  database. On PXD000001 (no database, `-extension 2`) the call is Methylthio, 52 of 69 votes. The GUI's
+  Characterize task runs the alkylation report without any proteome: the check before the run no longer asks for the
+  human proteome, Extension is not raised, and the Overview tile names the votes.
+
+- **Shipped data found from a build tree, and a missing file named before the run.** The build links `data/digest`,
+  `data/alkylation` and `data/taxonomy` beside the built FASTag (`share-FASTag-*`; copied on Windows;
+  `-DFASTAG_STAGE_DATA_IN_BUILD=OFF` to turn it off), so a build-tree FASTag runs the mass-gap, digest and
+  alkylation reports and the hand-off without `FASTAG_DIGEST_DIR`. When a file is missing, the error names the
+  option, the file, every folder searched and the fixes, on one line (exit 6, before any output). A
+  `FASTAG_DIGEST_DIR` or `FASTAG_ALKYLATION_DIR` that names no folder now finds nothing and is said so, instead of
+  being ignored. The desktop app passes its bundled digest and alkylation folders to the CLI, and its check before
+  the run blocks the Mass-shift survey, Characterize a run or Database reduction when their file is missing, with the
+  reason and a fix ("Run without the mass-gap report").
+- **Every shipped data file checked in every layout, and the k-mer index in a build tree.** A new test
+  (`shipped_data_test`) reads from the sources each data file the CLI opens (protease models, calibration,
+  mass-gap modifications, proteomes and their manifest, taxonomy dumps, `species_call.tsv`, the index) and fails
+  when one is missing from `data/`, the `cmake --install` tree, the build tree, a release archive or desktop app,
+  or the local macOS app bundle. `-DFASTAG_TAXONOMY_INDEX_DIR=<folder with tax_k7.taxdb>` puts the index beside a
+  build-tree FASTag, so `-species` runs there too. `gui/scripts/bundle-macos.sh` falls back to `data/taxonomy`,
+  adds `species_call.tsv` beside an index folder, and stops when a file is missing. A debug build of the app gives
+  a `FASTAG_BIN` CLI with no data beside it the source tree's `data/` folders, so the Mass-shift survey,
+  Characterize a run and Database reduction no longer stop with exit 6 there.
+- **GUI: no red error for the placements as identifications.** The app names this product `.recon_id.mzTab`,
+  the form Mass shifts shows (as the "Identifications (mzTab)" table); before, it named it `.idXML` and then
+  could not show its own file. An idXML or mzid file, named so by the user, kept by a preset or dropped on the
+  window, is listed under Mass shifts with **Reveal** and **Open with default app**, not as an error. The
+  Shortlist tab's reduced FASTA and engine configuration use the same row, with Open added.
 - **GUI: the Feedback form no longer blocks the window.** It is a floating panel docked at the bottom right, with no
   dimmed background: the app behind it stays usable (scroll, switch tabs, open another spectrum) and the form keeps
   its text. Drag the title bar to move it (keyboard: arrow keys on Move, or Alt+arrow keys on the title bar), drag
@@ -37,13 +78,21 @@
   database is indexed once, in bounded memory also for long lines or very large files, so a protein is a seek and a
   short read. Tags in several proteins are named, not aligned, and so is a protein whose identifier the database
   gives to more than one entry (the run's positions may be of any of them): its positions are listed, with a note.
-- **GUI: Run QC shows the isobaric kit call and the reporter channels.** The QC strip shows the one kit of
-  `qc_version` 3 (`TMT 6-plex`), or "Ambiguous: A or B" when only the reporter channels decide, or, as a warning,
-  "Conflict: TMT label, reporters fit TMTpro 18-plex" when the label mass and the channels disagree, in place of the
-  list of compatible kits; a table gives, per channel, its m/z and the MS2 that show it;
-  channels the report does not call seen are dimmed. The batch summary uses the same call; a conflict, or a kit
+- **GUI: Run QC shows the isobaric kit call and the reporter channels.** The Isobaric kit tile of the QC page shows
+  the one kit of `qc_version` 3 (`TMT 6-plex`), or "Ambiguous: A or B" when only the reporter channels decide, or, as a
+  warning, "Conflict: TMT label, reporters fit TMTpro 18-plex" when the label mass and the channels disagree, in place
+  of the list of compatible kits; the Reporter ions section repeats it with how it was decided. The Table view of the
+  channel chart gives, per channel, its m/z and the MS2 that show it; channels the report does not call seen are
+  dimmed, in the chart and in the table. The batch summary uses the same call; a conflict, or a kit
   value the app does not know, is no call and never counts towards or against the kit majority. Older reports still show
   the compatible kits.
+- **GUI: a short, graphical Run QC page.** Results > QC opens on five tiles (MS2 spectra, tag yield, instrument
+  with its serial number and start time, isobaric kit, redundancy) and small charts: spectra per MS level by analyzer,
+  precursor charges, resolution by m/z band (measured points, a stated value as a dashed line), which MS2 can show
+  reporter ions, and how often each reporter channel is seen (a line at the 20% threshold). Each chart has a tooltip,
+  keyboard steps and a Table view; the channel table is the Table view of the channel chart. Every other value of the
+  report is under one closed **All values**, with a filter and the empty rows on request, in place of the long list
+  of numbers. Older QC reports (`qc_version` 1 and 2) get the same page.
 - **GUI: Edit menu on Windows and Linux.** Cut, Copy, Paste and Select All, as on macOS, for every text field. On
   Linux a click on them now acts, on X11 and Wayland: they run WebKitGTK's own editing command in the window (the
   platform items only sent the keys through libxdo, which the app does not ship, so a click did nothing). Their
@@ -159,8 +208,8 @@
   permission), records the app and engine versions, the system, the view and the settings as typed values (paths only as
   role and extension), and opens a form with a mark-up editor (boxes, arrows, pen, labels, redactions, keyboard-operable).
   **Save** keeps the report on this computer only (`<app data>/feedback/`, 180 days); sharing is a separate, reviewed
-  step that writes `<id>.feedback.zip` and opens a prefilled GitHub issue form. Screenshot and log are off for sharing by
-  default.
+  step that writes `<id>.feedback.zip` and opens a prefilled GitHub issue form. The screenshot is included for sharing by
+  default when there is one (untick it to leave it out); the log is off.
 - **GUI: tag ladders tied to their peaks** ([#127](https://github.com/okohlbacher/FASTag/issues/127)). In the Spectrum
   tab each residue of the tag now spans the two peaks whose mass difference it is, with a dashed line from the tag line
   down to each of those peaks. The b (or c) and y (or z) ladders get separate lines, labelled and in different colours,

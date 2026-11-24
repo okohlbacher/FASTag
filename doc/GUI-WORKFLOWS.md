@@ -31,7 +31,7 @@ grid; see the Decision at the end of this section.
 |---|---|---|---|---|---|
 | W1 | **Generate tags** (landing) | Sequence tags from every spectrum, with per-residue confidence, for de novo assembly and export. | spectra | tags.tsv (spectra with tags .mzML) | Overview, Tags, Spectrum |
 | W2 | **Run QC** | QC of one run: MS/MS counts and resolution by analyzer, charges, isobaric kit (one call, with the count of each reporter channel), tag yield, instrument, serial and start time. | spectra | qc.tsv; tags.tsv (always) | Overview, QC, Tags, Spectrum |
-| W3 | **Mass-shift survey** (blind modification search) | Mass shifts between tags and the database: a frequency table, sites and UniMod names. | spectra, protein FASTA | recon.tsv, delta.tsv, delta_spectra.tsv, delta_counts.tsv (massgap.tsv, recon_id.tsv) | Overview, Mass shifts, Tags, Spectrum |
+| W3 | **Mass-shift survey** (blind modification search) | Mass shifts between tags and the database: a frequency table, sites and UniMod names. | spectra, protein FASTA | recon.tsv, delta.tsv, delta_spectra.tsv, delta_counts.tsv (massgap.tsv, recon_id.mzTab) | Overview, Mass shifts, Tags, Spectrum |
 | W4 | **Species** | Which taxa the sample contains, from the bundled taxonomy index. No FASTA needed. | spectra | species.tsv | Overview, Species, Tags, Spectrum |
 | W5 | **Database reduction** | A protein shortlist, a reduced FASTA and a Sage, Comet or MSFragger configuration for your search. | spectra, protein FASTA | shortlist.tsv, reduced.fasta, engine config | Overview, Shortlist, Tags, Spectrum |
 | W6 | **Identifiability triage** | Rank MS/MS spectra by how identifiable they are, and mark those your search identified. | spectra (IDs optional) | census.tsv, census_summary.tsv, census_sorted.tsv | Overview, Triage, Tags, Spectrum |
@@ -77,7 +77,7 @@ grid; see the Decision at the end of this section.
 | W4 | `species true`, `species_out`, `extension 2` (validated in the paper: seed 3 + 2 x 2 = k 7) |
 | W5 | `shortlist_out`, `fasta_out`, `search_config_out`, `extension 3`, plus the shortlist recipe `shortlist_gapped true`, `recon_min_length 6`, `shortlist_max_evalue 10`, `recon_missed_cleavages 2` (doc/SHORTLIST.md). The recipe is **not validated**: with MSFragger and the tryptic shortlist it passed its second held-out test and failed the third. From 1.15.4 the CLI applies it by default only under `-search_engine msfragger` with `-shortlist_protease trypsin`; the GUI sets it for every engine and protease as its default recipe, and the workflow help says so. |
 | W6 | `census true`, `census_score true`, `census_sorted_out` |
-| W7 | `digest_out`, `label_out`, `glyco true`, `species true`, `extension 2`, `subsample_fraction 0.1`. `alkylation_out` is offered unchecked (round 2): its shipped proteome needs tags of 8+ residues, and extension 2 (validated for the species call) reaches 7. |
+| W7 | `digest_out`, `label_out`, `glyco true`, `species true`, `extension 2`, `subsample_fraction 0.1`. `alkylation_out` is offered unchecked: it needs no database (its call is read off the tags), but on 10% of the spectra at extension 2 few spectra vote (PXD000001: 8 votes, no call). Before, it placed on the shipped human proteome, which needs tags of 8+ residues. |
 
 ## 2. Parameters per workflow
 
@@ -146,7 +146,7 @@ Wiring rules (the checkbox drives the boolean; there is no separate field):
 | glyco.tsv | `glyco true` |
 | any census_* | `census true` |
 | census_sorted.tsv | `census_score true` |
-| delta.tsv, massgap.tsv, recon_id.tsv | recon.tsv checked and greyed ("needed by …") |
+| delta.tsv, massgap.tsv, recon_id.mzTab | recon.tsv checked and greyed ("needed by …") |
 | delta_spectra.tsv, delta_counts.tsv | delta.tsv |
 | shortlist, reduced FASTA, engine config | Protein database required |
 | check_header.tsv | `check_header_charge` set |
@@ -238,7 +238,14 @@ Rules:
 - **Results tabs:**
   - Show only tabs whose report exists, in the order of section 1.
   - Rename "Mass gaps & recon" to **Mass shifts**.
-  - New tabs: **QC** (qc.tsv as grouped key/value pairs), **Triage**
+  - New tabs: **QC** (qc.tsv as a short page: tiles for MS2 spectra, tag
+    yield, instrument with serial and start time, isobaric kit and
+    redundancy; small charts, each with a Table view, for spectra per MS
+    level by analyzer, precursor charge, resolution by m/z band, reporter
+    assessability and reporter channels; every other row under a closed
+    **All values** with a filter; older `qc_version` reports get the same
+    page, the kit from their compatible kits and the channels from
+    `reporter_observed_*`), **Triage**
     (census_sorted with an identified/unidentified filter), and **Shortlist**
     (ranked proteins, "Reveal reduced FASTA / engine config").
   - Triage opens with an **Overview** of every row (collapsible; the filter
@@ -332,7 +339,8 @@ Implementation notes:
   `census_ids_accept`, `census_ids_exact`) must name a released version or
   none. The manifest is 1.15.3.
 - Alkylation: the Overview must not say "needs a FASTA".
-  `alkylation_proteome auto` uses the shipped human proteome.
+  `alkylation_proteome auto` reads no proteome: the call is read off the tags
+  (the run's Protein or Filter database, when given, adds a check).
 
 ## 5. Acceptance criteria (checkable on screenshots)
 

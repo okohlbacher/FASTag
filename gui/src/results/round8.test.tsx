@@ -74,7 +74,7 @@ describe('round 8, 5, 6, 19, 20: the alkylation extension follows proteome and t
     expect(alkylationExtension({ alkylation_proteome: '/x/human.fasta', tag_length: '3', extension: '0' })).toBeNull()
   })
   it('recomputed while the report is on: yeast lowers the raise, a shorter seed raises it, off puts it back', () => {
-    const on = toggleProduct(alk, true, { tag_length: '3', extension: '0' }, '/d/a.tags.tsv', null)
+    const on = toggleProduct(alk, true, { tag_length: '3', extension: '0', alkylation_proteome: 'human' }, '/d/a.tags.tsv', null)
     expect(on.raised).toEqual({ from: '0', to: '3' })
     const yeast = alkylationRaise({ ...on.values, alkylation_proteome: 'yeast' }, on.raised)
     expect(yeast.values['extension']).toBe('2')
@@ -85,7 +85,9 @@ describe('round 8, 5, 6, 19, 20: the alkylation extension follows proteome and t
     const mouse = alkylationRaise({ alkylation_out: '/d/a.alk.tsv', tag_length: '3', extension: '2', alkylation_proteome: 'mouse' }, null)
     expect(mouse).toMatchObject({ values: { extension: '3' }, raised: { from: '2', to: '3' } })
     // Seed 2: (8 - 2) / 2 = 3, from an Extension of 2.
-    expect(alkylationRaise({ alkylation_out: 'x', tag_length: '2', extension: '2' }, null).values['extension']).toBe('3')
+    expect(alkylationRaise({ alkylation_out: 'x', tag_length: '2', extension: '2', alkylation_proteome: 'human' }, null).values['extension']).toBe('3')
+    // auto (no proteome, feedback 202dbcf4): nothing to reach, nothing raised.
+    expect(alkylationRaise({ alkylation_out: 'x', tag_length: '2', extension: '2' }, null).values['extension']).toBe('2')
     // Off: the raise in force goes back.
     const off = toggleProduct(alk, false, human.values, '/d/a.tags.tsv', human.raised)
     expect(off.values['extension']).toBe('0')

@@ -46,7 +46,7 @@ import {
 } from './inputs'
 import { IconCheck, IconUpload, TaskIcon } from '../icons'
 import { INSTRUMENTS, presetText, shownInstrument } from './presets'
-import { PRODUCT_OF, PRODUCTS, USI_PLACEHOLDER, fileName, isOn, missingDatabase, neededBy, productLabel, alkylationExtension, alkylationRaise, alkylationShipped, alkylationShort, toggleProduct, type Product } from './products'
+import { PRODUCT_OF, PRODUCTS, USI_PLACEHOLDER, fileName, isOn, missingDatabase, neededBy, productLabel, alkylationExtension, alkylationRaise, alkylationShipped, alkylationShort, alkylationTagOnly, toggleProduct, type Product } from './products'
 
 // A parameter that exists in the CLI but nowhere in the layout would silently
 // be unreachable; surface it instead of hiding it.
@@ -370,7 +370,19 @@ export default function SetupForm({
     if (!on.length) return ''
     return `; ${on.length === 2 ? 'species and digest are' : on[0] === 'species_out' ? 'species is' : 'digest is'} validated at 2`
   }
+  // feedback 202dbcf4: without a database the report needs no length; its
+  // votes need a C inside a tag, so longer tags give more.
+  const tagOnlyNote = (): JSX.Element => (
+    <>
+      No database needed: the call is read off the tags; a longer{' '}
+      <button type="button" className="link small" onClick={goToExtension}>
+        Extension
+      </button>{' '}
+      ({extWhere}) gives more votes.
+    </>
+  )
   const alkylationWhy = (on: boolean): JSX.Element | string | null => {
+    if (alkylationTagOnly(values)) return tagOnlyNote()
     const need = alkylationExtension(values)
     const short = alkylationShort(values)
     const custom = !alkylationShipped(values)

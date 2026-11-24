@@ -1,6 +1,7 @@
 // The Mass gaps & recon tab (GUI-DESIGN S7): the mass-gap chart with the
 // Unimod deltas marked, and one shared table for -recon_out (placements),
-// -delta_out (gap peaks) and -recon_id_out (the placements as PSMs, mzTab).
+// -delta_out (gap peaks) and -recon_id_out (the placements as PSMs, mzTab;
+// an idXML or mzid one is listed as a file to reveal or open).
 // A warning when too few spectra are placed for any conclusion, and an empty
 // state that offers the FASTA and the run. It reports what the CLI wrote and
 // adds no judgement of its own: every gap is a candidate.
@@ -13,12 +14,13 @@ import { HelpLink } from '../help/HelpLink'
 import { IconWarning } from '../icons'
 import DataTable, { type Column } from './DataTable'
 import MassGapChart, { type GapBin } from './MassGapChart'
-import { filterRecon, type DeltaTable, type ReconFilter, type ReconIdTable, type ReconTable, type TableGen, type TablePaths } from './tables'
+import { filterRecon, idFormat, type DeltaTable, type ReconFilter, type ReconIdTable, type ReconTable, type TableGen, type TablePaths } from './tables'
 import { useTable } from './useTable'
 import { useSticky } from './tableStore'
 import { FASTA_EXTENSION, SHIFT_MIN_DA, type TileAction } from './overview'
 import { longestSeed, shortestSeed } from '../paramLayout'
 import ReportHeader from './ReportHeader'
+import ProductFiles, { type ProductFile } from './ProductFiles'
 import './viewers.css'
 
 /// Below this many placed spectra the gap distribution supports no
@@ -170,7 +172,25 @@ const signed = (v: number, d = 4): string => (Number.isNaN(v) ? '' : v > 0 ? `+$
 export default function ReconView({ massgap, tables, gen = {}, notice, action, extend, onOpen }: ReconViewProps): JSX.Element {
   const recon = useTable(tables.recon, 'recon', gen.recon)
   const delta = useTable(tables.delta, 'delta', gen.delta)
-  const ids = useTable(tables.reconIds, 'reconIds', gen.reconIds)
+  // Only an mzTab -recon_id_out is read here. An idXML or mzid one (the
+  // user's choice, an older preset, a dropped file) is listed as a file, as
+  // is a .mzTab that holds XML: never a red error for a file written on purpose.
+  const idPath = tables.reconIds
+  const idFmt = idPath ? idFormat(idPath) : null
+  const ids = useTable(idFmt === 'mzTab' ? idPath : undefined, 'reconIds', gen.reconIds)
+  const idFiles: ProductFile[] =
+    idPath && (idFmt !== 'mzTab' || ids.notShown)
+      ? [
+          {
+            label: 'placements as identifications',
+            path: idPath,
+            note:
+              idFmt !== 'mzTab'
+                ? `${idFmt}, for identification tools. Only the mzTab form is shown here.`
+                : 'Not an mzTab file: open it in an identification tool.'
+          }
+        ]
+      : []
   const errors = [recon.error, delta.error, ids.error].filter((e): e is string => !!e)
   const loading = recon.loading || delta.loading || ids.loading
 
@@ -233,6 +253,7 @@ export default function ReconView({ massgap, tables, gen = {}, notice, action, e
           {e}
         </p>
       ))}
+      <ProductFiles files={idFiles} label="Identification files" />
       {[recon.table, delta.table, ids.table].flatMap((t) => t?.warnings ?? []).map((w) => (
         <div className="caveat" key={w}>
           {w}

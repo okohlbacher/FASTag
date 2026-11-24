@@ -106,17 +106,31 @@ describe('the products', () => {
     v = setProduct(species, false, v, out)
     expect([v.species, v.species_out]).toEqual([false, ''])
   })
+  // Feedback 20261124T095212Z: the GUI names -recon_id_out .mzTab, the form
+  // the Mass shifts tab reads; idXML or mzid only when the user names it so.
+  it('the placements as identifications are written as mzTab unless the user names another format', () => {
+    const ids = PRODUCT_OF.get('recon_id_out')!
+    const v = setProduct(ids, true, baseValues('builtin:mass-shift'), out)
+    expect(v.recon_id_out).toBe('/d/run01.recon_id.mzTab')
+    expect(fileName(ids, v, out)).toBe('run01.recon_id.mzTab')
+    expect(fileName(ids, { ...v, recon_id_out: '' }, out)).toBe('run01.recon_id.mzTab')
+    expect(fileName(ids, { ...v, recon_id_out: '/d/mine.idXML' }, out)).toBe('mine.idXML')
+    expect(fileName(ids, { ...v, recon_id_out: 'ids.mzid' }, out)).toBe('run01.recon_id.mzid')
+  })
   // Round 5, 8: the charge check report keeps the mode both.
   it('the charge check report promotes off to warn and keeps both', () => {
     const p = PRODUCT_OF.get('check_header_out')!
     expect(setProduct(p, true, baseValues('defaults'), out).check_header_charge).toBe('warn')
     expect(setProduct(p, true, { ...baseValues('defaults'), check_header_charge: 'both' }, out).check_header_charge).toBe('both')
   })
-  // Round 5, 20: the alkylation report without a database raises the
-  // extension so tags reach the 8 residues of the shipped human proteome.
-  it('the alkylation report raises Extension to 3 without a protein database', () => {
+  // Round 5, 20: the alkylation report on the shipped human proteome raises
+  // the extension so tags reach its 8 residues. feedback 202dbcf4: the
+  // default auto reads no proteome (the tags alone) and raises nothing.
+  it('the alkylation report raises Extension to 3 on a shipped proteome, not at its default', () => {
     const p = PRODUCT_OF.get('alkylation_out')!
-    const ch = startValues('builtin:characterize', out)
+    const ch0 = startValues('builtin:characterize', out)
+    expect(setProduct(p, true, ch0, out).extension).toBe('2')
+    const ch = { ...ch0, alkylation_proteome: 'human' }
     expect(setProduct(p, true, ch, out).extension).toBe('3')
     expect(setProduct(p, true, { ...ch, recon_fasta: '/d/db.fasta' }, out).extension).toBe('2')
     expect(setProduct(p, true, { ...ch, extension: '4' }, out).extension).toBe('4')

@@ -163,9 +163,19 @@ export OPENMS_DATA_PATH="$PWD/openms-install/share/OpenMS"
 install/bin/FASTag --help | grep Version          # Version: 1.15.0 (OpenMS 3.7.0-...)
 ```
 
-`build/FASTag`, run from the build tree, does not find the digest tables, which several
-reports and the shortlist's protease check need ("No shipped protease models found"): set
-`FASTAG_DIGEST_DIR="$PWD/data/digest"` or use the installed binary.
+`build/FASTag`, run from the build tree, finds the shipped data too: the build links
+`data/digest`, `data/alkylation` and `data/taxonomy` beside the binary as
+`share-FASTag-digest`, `share-FASTag-alkylation` and `share-FASTag-taxonomy` (on Windows it
+copies them, about 16 MB). `-DFASTAG_STAGE_DATA_IN_BUILD=OFF` turns this off. A
+`FASTAG_DIGEST_DIR` or `FASTAG_ALKYLATION_DIR` you set wins, and one that names no folder
+finds nothing (the error says so). The taxonomy folder holds the dumps only, so `-species`
+still needs the k-mer index: unpack the release asset `FASTag-<version>-taxonomy-k7.tar.gz` and
+configure with `-DFASTAG_TAXONOMY_INDEX_DIR=/path/to/share-FASTag-taxonomy` (the folder with
+`tax_k7.taxdb`). The build then makes `share-FASTag-taxonomy` a folder of links: the index and its
+dumps from there, the rest of `data/taxonomy` (`species_call.tsv`) from the sources, as in a
+release. `tools/shipped_data.py list` prints every data file the CLI reads, and
+`test/shipped_data_test.py` (ctest `shipped_data_test`) checks that `data/`, `cmake --install`,
+the build tree, the release workflows and `gui/scripts/bundle-macos.sh` all have each one.
 
 ## 4. Tests
 

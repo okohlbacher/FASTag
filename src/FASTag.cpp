@@ -56,32 +56,98 @@ namespace
   }
 
 
+  /// The value of environment variable @p name, "" when it is unset or empty.
+  std::string envOf_(const char* name)
+  {
+    const char* env = std::getenv(name);
+    return env == nullptr ? std::string() : std::string(env);
+  }
+
+  /// The folders beside the executable where the shipped digest data is
+  /// looked for: the cmake --install tree (../share/FASTag/digest), the flat
+  /// release layout (share-FASTag-digest; a build tree links data/digest
+  /// there, CMakeLists.txt FASTAG_STAGE_DATA_IN_BUILD) and a plain digest/.
+  std::vector<std::string> digestCandidates_()
+  {
+    const std::string exe = File::getExecutablePath();
+    return {exe + "../share/FASTag/digest", exe + "share-FASTag-digest", exe + "digest"};
+  }
+
   /// Directory holding the shipped digest data (protease models, mass-gap
-  /// modifications): $FASTAG_DIGEST_DIR, else beside the executable in the
-  /// two layouts taxonomyDir_() knows. "" when there is none.
+  /// modifications): $FASTAG_DIGEST_DIR, else the first candidate beside the
+  /// executable that holds digest_models.tsv. "" when there is none. A
+  /// FASTAG_DIGEST_DIR that names no folder finds nothing (the error says
+  /// so): it is not silently replaced by other data.
   std::string digestDir_()
   {
-    const char* env = std::getenv("FASTAG_DIGEST_DIR");
-    if (env != nullptr && *env != '\0' && File::isDirectory(std::string(env))) return std::string(env);
-    const std::string exe = File::getExecutablePath();
-    for (const std::string& c : {exe + "../share/FASTag/digest", exe + "share-FASTag-digest", exe + "digest"})
+    const std::string env = envOf_("FASTAG_DIGEST_DIR");
+    if (!env.empty()) return File::isDirectory(env) ? env : std::string();
+    for (const std::string& c : digestCandidates_())
       if (File::exists(c + "/digest_models.tsv")) return c;
     return std::string();
+  }
+
+  /// @p d with a trailing "digest" replaced by "alkylation"; "" when it does
+  /// not end in "digest".
+  std::string alkylationSibling_(std::string d)
+  {
+    while (!d.empty() && (d.back() == '/' || d.back() == '\\')) d.pop_back();
+    if (d.size() < 6 || d.compare(d.size() - 6, 6, "digest") != 0) return std::string();
+    return d.substr(0, d.size() - 6) + "alkylation";
   }
 
   /// 1.12 D (#3g): directory of the shipped -alkylation_proteome proteomes:
   /// $FASTAG_ALKYLATION_DIR, else "alkylation" beside the digest data
   /// directory (share/FASTag/digest -> share/FASTag/alkylation,
   /// share-FASTag-digest -> share-FASTag-alkylation). "" when there is none.
+  /// As for the digest data, a FASTAG_ALKYLATION_DIR that names no folder
+  /// finds nothing.
   std::string alkylationDir_()
   {
-    const char* env = std::getenv("FASTAG_ALKYLATION_DIR");
-    if (env != nullptr && *env != '\0' && File::isDirectory(std::string(env))) return std::string(env);
-    std::string d = digestDir_();
-    while (!d.empty() && (d.back() == '/' || d.back() == '\\')) d.pop_back();
-    if (d.size() < 6 || d.compare(d.size() - 6, 6, "digest") != 0) return std::string();
-    const std::string a = d.substr(0, d.size() - 6) + "alkylation";
-    return File::isDirectory(a) ? a : std::string();
+    const std::string env = envOf_("FASTAG_ALKYLATION_DIR");
+    if (!env.empty()) return File::isDirectory(env) ? env : std::string();
+    const std::string a = alkylationSibling_(digestDir_());
+    return !a.empty() && File::isDirectory(a) ? a : std::string();
+  }
+
+  /// @p p without "." and ".." steps, for messages.
+  std::string shownPath_(const std::string& p)
+  {
+    return std::filesystem::path(p).lexically_normal().string();
+  }
+
+  /// Where a shipped data file was looked for, for the error that names it:
+  /// the folder @p env_name names (and whether it is one), else the folder
+  /// found (@p dir), else every candidate (@p cands).
+  std::string searchedFor_(const char* env_name, const std::string& dir, const std::vector<std::string>& cands)
+  {
+    const std::string env = envOf_(env_name);
+    if (!env.empty())
+      return File::isDirectory(env) ? "it is not in '" + env + "', the folder " + env_name + " names"
+                                    : std::string(env_name) + " is set to '" + env + "', which is not a folder";
+    if (!dir.empty()) return "it is not in '" + shownPath_(dir) + "'";
+    std::string where;
+    for (const std::string& c : cands) where += (where.empty() ? "" : ", ") + shownPath_(c);
+    return "looked in " + where;
+  }
+
+  /// The error for shipped digest data a run needs and does not find: what
+  /// needs it (@p what), the file, where it was looked for, and the fixes in
+  /// order, ending with @p tail (an option that replaces the file, or the
+  /// output to leave out). One line: the GUI shows the first line.
+  void missingDigestData_(const std::string& what, const std::string& file, const std::string& dir, const std::string& tail)
+  {
+    OPENMS_LOG_ERROR << what << " needs " << file << " from FASTag's shipped digest data, and it was not found ("
+                     << searchedFor_("FASTAG_DIGEST_DIR", dir, digestCandidates_())
+                     << "). To fix: use an installed FASTag (cmake --install puts the data in "
+                        "<prefix>/share/FASTag/digest), or set FASTAG_DIGEST_DIR to a folder that holds "
+                     << file << " (data/digest in the FASTag sources), or " << tail << "." << std::endl;
+  }
+
+  /// @p dir/@p file when the file is there, else "".
+  std::string shippedFile_(const std::string& dir, const std::string& file)
+  {
+    return !dir.empty() && File::exists(dir + "/" + file) ? dir + "/" + file : std::string();
   }
 
   /// k of a taxonomy index, read from its 16-byte header alone.
@@ -852,22 +918,31 @@ TOPPFASTag::ExitCodes TOPPFASTag::main_(int, const char**)
   const std::string search_config_out = getStringOption_("search_config_out");
   const bool shortlist_on = !shortlist_out.empty() || !fasta_out.empty();
   const bool handoff_on = shortlist_on || !search_config_out.empty();
-  // #3g: -alkylation_out reads the placements of the run's own reconciler.
+  // #3g: -alkylation_out. Its call is read off the tags (the shadow pass of
+  // 1.13 #22, no database); since feedback 202dbcf4 the placements of the
+  // run's own reconciler only refine it, when there is a database: another
+  // placement reader, -recon_fasta, -fasta or a non-default
+  // -alkylation_proteome. The default auto no longer means the human proteome.
   const std::string alkylation_out = getStringOption_("alkylation_out");
   const bool alkylation_on = !alkylation_out.empty();
   // 1.13 #22: -alkylation_tags_out tags every MS2 a second time; it places nothing.
   const std::string alkylation_tags_out = getStringOption_("alkylation_tags_out");
   const bool alkylation_tags_on = !alkylation_tags_out.empty();
+  // The shadow pass runs for either report (one tally, run_acc.d.alkt).
+  const bool alkylation_shadow_on = alkylation_on || alkylation_tags_on;
+  const std::string alk_prot_opt = alkylation_on ? getStringOption_("alkylation_proteome") : std::string();
+  const bool alk_place = alkylation_on && (recon_on || handoff_on || !getStringOption_("recon_fasta").empty() ||
+                                           !fasta.empty() || !(alk_prot_opt.empty() || alk_prot_opt == "auto"));
   const bool place_on = recon_on
       // ---- 1.12 A: placement readers ----
       || handoff_on
       // ---- 1.12 D: placement readers ----
-      || alkylation_on
+      || alk_place
       ;
   // Only -alkylation_out places: every other placement reader is off, so
   // the index is built on its database and only the tags it reads are
   // placed (recon_out, the hand-off and -delta_out read every tag).
-  const bool alkylation_only_db = alkylation_on && !recon_on && !handoff_on;
+  const bool alkylation_only_db = alk_place && !recon_on && !handoff_on;
   // The placement-report checks below keep their 1.11 meaning: placing for
   // -alkylation_out alone does not satisfy them (1.12 D #3g).
   const bool place_reports = place_on && !alkylation_only_db;
@@ -1023,9 +1098,9 @@ TOPPFASTag::ExitCodes TOPPFASTag::main_(int, const char**)
   // 1.13 (#24): a shipped proteome's manifest row (entries 0 = no manifest).
   FASTag::Alkylation::ShippedProteome alk_shipped;
   std::string alk_manifest;
-  if (alkylation_on)
+  if (alk_place)
   {
-    const std::string prot = getStringOption_("alkylation_proteome");
+    const std::string prot = alk_prot_opt;
     if (!getStringOption_("recon_fasta").empty() || !alkylation_only_db)
     {
       if (optionNonDefault_("alkylation_proteome"))
@@ -1033,14 +1108,19 @@ TOPPFASTag::ExitCodes TOPPFASTag::main_(int, const char**)
                         << (getStringOption_("recon_fasta").empty() ? "-fasta" : "-recon_fasta") << "." << std::endl;
       alk_db_source = getStringOption_("recon_fasta").empty() ? "fasta" : "recon_fasta";
     }
+    else if (prot.empty() || prot == "auto")
+    {
+      // feedback 202dbcf4: auto with -fasta places on -fasta (the run's own
+      // database); auto without any database places nothing (alk_place).
+      alk_db = fasta;
+      alk_db_source = "fasta";
+    }
     else
     {
-      const bool named = prot == "auto" || prot == "human" || prot == "mouse" || prot == "yeast" || prot == "ecoli";
+      const bool named = prot == "human" || prot == "mouse" || prot == "yeast" || prot == "ecoli";
       if (named)
       {
-        // auto: the human proteome. Taking the top -species genus would need
-        // the species call before the tagging loop that places the tags.
-        const std::string name = prot == "auto" ? "human" : prot;
+        const std::string name = prot;
         const std::string dir = alkylationDir_();
         std::string path = dir.empty() ? std::string() : dir + "/" + name + ".fasta.gz";
         // 1.13 (#24): the shipped directory's proteomes.tsv names each file and
@@ -1068,9 +1148,18 @@ TOPPFASTag::ExitCodes TOPPFASTag::main_(int, const char**)
         }
         if (path.empty() || !File::exists(path))
         {
-          OPENMS_LOG_ERROR << "-alkylation_out: no shipped " << name << " proteome found (expected "
-                              "<bin>/../share/FASTag/alkylation/" << name << ".fasta.gz, or set "
-                              "FASTAG_ALKYLATION_DIR). Give -alkylation_proteome <fasta> or -recon_fasta." << std::endl;
+          // Where it was looked for: the folder beside the digest data, or
+          // beside each place the digest data is looked for.
+          std::vector<std::string> alk_cands;
+          const std::string dd = digestDir_();
+          for (const std::string& c : dd.empty() ? digestCandidates_() : std::vector<std::string>{dd})
+            alk_cands.push_back(alkylationSibling_(c));
+          OPENMS_LOG_ERROR << "-alkylation_out: no shipped " << name << " proteome found ("
+                           << searchedFor_("FASTAG_ALKYLATION_DIR", dir, alk_cands)
+                           << "). Give -alkylation_proteome <fasta> or -recon_fasta, or use an installed FASTag "
+                              "(cmake --install puts the proteomes in <prefix>/share/FASTag/alkylation), or set "
+                              "FASTAG_ALKYLATION_DIR to a folder that holds "
+                           << name << ".fasta.gz (data/alkylation in the FASTag sources)." << std::endl;
           return ILLEGAL_PARAMETERS;
         }
         alk_db = path;
@@ -1084,7 +1173,7 @@ TOPPFASTag::ExitCodes TOPPFASTag::main_(int, const char**)
       else
       {
         OPENMS_LOG_ERROR << "-alkylation_proteome '" << prot << "' is neither auto, human, mouse, yeast, ecoli "
-                            "nor a readable FASTA file." << std::endl;
+                            "nor a readable FASTA file. auto (the default) needs no database." << std::endl;
         return ILLEGAL_PARAMETERS;
       }
     }
@@ -1228,11 +1317,11 @@ TOPPFASTag::ExitCodes TOPPFASTag::main_(int, const char**)
     // 1.13 (#24): a run whose tags cannot reach that length places nothing,
     // and -alkylation_out cannot call (the default -tag_length 3 on a
     // shipped proteome, which needs 7 or 8).
-    if (alkylation_on && max_len < rmin)
+    if (alk_place && max_len < rmin)
       OPENMS_LOG_WARN << "-alkylation_out: tags place on '" << recon_db << "' from " << rmin
                       << " residues, but this run's longest tag has " << max_len
-                      << " (seed length + 2 x -extension); no tag will place and there will be no call. "
-                         "Give -tag_length " << rmin << " or more." << std::endl;
+                      << " (seed length + 2 x -extension); no tag will place and the placements will make no call "
+                         "(the call comes from the tags alone). Give -tag_length " << rmin << " or more." << std::endl;
   }
 
   // ---- phase 2: report setup ---------------------------------------------
@@ -1414,7 +1503,7 @@ TOPPFASTag::ExitCodes TOPPFASTag::main_(int, const char**)
          alkylation_on || alkylation_tags_on},
         {"alkylation_min_share", alkylation_tags_on ? "-alkylation_out or -alkylation_tags_out" : "-alkylation_out",
          alkylation_on || alkylation_tags_on},
-        {"alkylation_window", "-alkylation_out", alkylation_on},
+        {"alkylation_window", "-alkylation_out with a database (-recon_fasta, -fasta or -alkylation_proteome)", alk_place},
         // ---- 1.12 F: ignored-option warnings ----
         {"census_out", "-census", getFlag_("census")},
         {"census_summary_out", "-census", getFlag_("census")},
@@ -1441,10 +1530,10 @@ TOPPFASTag::ExitCodes TOPPFASTag::main_(int, const char**)
   // run consumes although no option names them, so the path guard checks
   // every output against them too ({label, path}).
   std::vector<std::pair<std::string, std::string>> resolved_inputs;
-  const auto no_digest_dir = [&](const char* what) {
-    OPENMS_LOG_ERROR << "No shipped " << what << " found (expected <bin>/../share/FASTag/digest). "
-                        "Set FASTAG_DIGEST_DIR to the directory holding digest_models.tsv and "
-                        "massgap_mods.tsv" << (digest_on ? ", or give -digest_models." : ".") << std::endl;
+  // A shipped table a run needs and does not find: the error names it, where
+  // it was looked for and what to do (missingDigestData_), before any output.
+  const auto no_digest_data = [&](const std::string& what, const std::string& file, const std::string& tail) {
+    missingDigestData_(what, file, digest_dir, tail);
     return ILLEGAL_PARAMETERS;
   };
   // 1.12 D (#3c-#3f): the v2 models, detection, flank2 and calibration.
@@ -1458,8 +1547,10 @@ TOPPFASTag::ExitCodes TOPPFASTag::main_(int, const char**)
     std::string models_path = digest_models;
     if (models_path.empty())
     {
-      if (digest_dir.empty()) return no_digest_dir("protease models");
-      models_path = digest_dir + (digest_v2 ? "/digest_models_v2.tsv" : "/digest_models.tsv");
+      const std::string file = digest_v2 ? "digest_models_v2.tsv" : "digest_models.tsv";
+      models_path = shippedFile_(digest_dir, file);
+      if (models_path.empty())
+        return no_digest_data("-digest_out", file, "give -digest_models <tsv>, or leave out -digest_out");
     }
     else if (digest_v2)
       OPENMS_LOG_WARN << "-digest_models_version v2 is ignored: -digest_models '" << digest_models
@@ -1484,8 +1575,10 @@ TOPPFASTag::ExitCodes TOPPFASTag::main_(int, const char**)
     const std::string cal_path = getStringOption_("digest_calibration");
     if (digest_v2 || digest_settings.min_confidence > 0.0 || !cal_path.empty())
     {
-      if (cal_path.empty() && digest_dir.empty()) return no_digest_dir("calibration");
-      const std::string cp = cal_path.empty() ? digest_dir + "/digest_calibration.tsv" : cal_path;
+      const std::string cp = cal_path.empty() ? shippedFile_(digest_dir, "digest_calibration.tsv") : cal_path;
+      if (cp.empty())
+        return no_digest_data(digest_v2 ? "-digest_out with -digest_models_version v2" : "-digest_out with -digest_min_confidence",
+                              "digest_calibration.tsv", "give -digest_calibration <tsv>");
       if (!FD::loadCalibration(cp, digest_settings.calibration, &err))
       {
         OPENMS_LOG_ERROR << "-digest_calibration '" << cp << "': " << err << std::endl;
@@ -1514,7 +1607,9 @@ TOPPFASTag::ExitCodes TOPPFASTag::main_(int, const char**)
     else if (!protease_models.has_bg)
     {
       FD::ModelTable shipped;
-      if (digest_dir.empty()) return no_digest_dir("background");
+      if (shippedFile_(digest_dir, "digest_models.tsv").empty())
+        return no_digest_data("-digest_out with a -digest_models table without a background", "digest_models.tsv",
+                              "give -fasta or -recon_fasta for the background");
       if (!FD::loadModelTable(digest_dir + "/digest_models.tsv", shipped, &err) || !shipped.has_bg)
       {
         OPENMS_LOG_ERROR << "The shipped digest_models.tsv in '" << digest_dir << "' has no background: " << err << std::endl;
@@ -1546,7 +1641,8 @@ TOPPFASTag::ExitCodes TOPPFASTag::main_(int, const char**)
   FD::GapSettings gap_settings;
   if (gap_needed)
   {
-    if (digest_dir.empty()) return no_digest_dir("mass-gap modifications");
+    if (shippedFile_(digest_dir, "massgap_mods.tsv").empty())
+      return no_digest_data("-massgap_out", "massgap_mods.tsv", "leave out -massgap_out");
     std::ifstream mf((digest_dir + "/massgap_mods.tsv").c_str());
     std::string err;
     if (!mf || !FD::parseGapMods(mf, gap_mods, &err))
@@ -1601,11 +1697,16 @@ TOPPFASTag::ExitCodes TOPPFASTag::main_(int, const char**)
     {
       const std::string dd = digestDir_();
       std::string err;
-      if (dd.empty())
+      if (shippedFile_(dd, "digest_models.tsv").empty())
       {
-        OPENMS_LOG_ERROR << "No shipped protease models found (expected <bin>/../share/FASTag/digest); the "
-                            "shortlist's protease check needs them. Set FASTAG_DIGEST_DIR to the directory "
-                            "holding digest_models.tsv." << std::endl;
+        // Name the outputs given: the protease check runs for each of them.
+        std::string given;
+        for (const auto& o : {std::make_pair("-shortlist_out", &shortlist_out), std::make_pair("-fasta_out", &fasta_out),
+                              std::make_pair("-search_config_out", &search_config_out)})
+          if (!o.second->empty()) given += (given.empty() ? "" : ", ") + std::string(o.first);
+        missingDigestData_(given + " (the protease check of the hand-off)", "digest_models.tsv", dd,
+                           "give -digest_out with -digest_models <tsv> (the check then uses that table), or leave out "
+                               + given);
         return ILLEGAL_PARAMETERS;
       }
       if (!FD::loadModelTable(dd + "/digest_models.tsv", sl_models, &err))
@@ -2902,12 +3003,15 @@ TOPPFASTag::ExitCodes TOPPFASTag::main_(int, const char**)
   std::vector<FASTag::Param> alkt_params;
   std::vector<FASTag::Tables> alkt_tables;
   std::vector<std::string> alkt_dropped;
-  if (alkylation_tags_on)
+  // The shadow alphabet's other residue steps, for the twin and alias checks.
+  std::vector<FASTag::AlkylationTags::Step> alkt_alpha;
+  const char* const alkt_opt = alkylation_on ? "-alkylation_out" : "-alkylation_tags_out";
+  if (alkylation_shadow_on)
   {
     try { alkt_cands = FASTag::AlkylationTags::candidates(FASTag::Alkylation::forms()); }
     catch (const std::exception& e)
     {
-      OPENMS_LOG_ERROR << "-alkylation_tags_out: " << e.what() << "." << std::endl;
+      OPENMS_LOG_ERROR << alkt_opt << ": " << e.what() << "." << std::endl;
       return INTERNAL_ERROR;
     }
     for (const FASTag::Param& lp : len_params)
@@ -2916,10 +3020,11 @@ TOPPFASTag::ExitCodes TOPPFASTag::main_(int, const char**)
     // must not push a large -variable_modifications list past it.
     if (FASTag::AlkylationTags::alphabetSize(alkt_params.front().mods) > 255)
     {
-      OPENMS_LOG_ERROR << "-alkylation_tags_out: the variable modifications and the five C alternatives make more "
+      OPENMS_LOG_ERROR << alkt_opt << ": the variable modifications and the five C alternatives make more "
                           "than 255 residue entries; give fewer -variable_modifications." << std::endl;
       return ILLEGAL_PARAMETERS;
     }
+    alkt_alpha = FASTag::AlkylationTags::alphabet(alkt_params.front().mods);
     alkt_tables.reserve(alkt_params.size());
     for (const FASTag::Param& lp : alkt_params) alkt_tables.emplace_back(lp);
   }
@@ -3674,8 +3779,9 @@ TOPPFASTag::ExitCodes TOPPFASTag::main_(int, const char**)
     };
     // 1.13 #22: the shadow pass of -alkylation_tags_out, on the selected
     // hypothesis with the run's multiplicity. Its tags are counted, never
-    // written; a spectrum read as c/z is not shadow-tagged.
-    if (alkylation_tags_on)
+    // written; a spectrum read as c/z is not shadow-tagged. Also for
+    // -alkylation_out, whose default call it is.
+    if (alkylation_shadow_on)
     {
       if (read_cz) ++pt.acc.d.alkt.spectra_cz;
       else
@@ -3936,7 +4042,7 @@ TOPPFASTag::ExitCodes TOPPFASTag::main_(int, const char**)
       // tag (#15 phase B) is not placed for the call: the Cys form rules
       // are b/y-only, so it is counted in Tally::excludeNonBy() instead
       // (PLAN-INTEGRATION 2.3 contract 2; doc/ALKYLATION-REPORT.md).
-      const bool alk_counted = alkylation_on && sel && FASTag::Alkylation::countsTag(t.gapped, t.evalue);
+      const bool alk_counted = alk_place && sel && FASTag::Alkylation::countsTag(t.gapped, t.evalue);
       const bool alk_tag = alk_counted && !tag_cz;
       if (alk_counted && tag_cz) pt.acc.d.alk.excludeNonBy();
       if (place_on && !row_entrap && (place_every || alk_tag))  // known-false rows must not place or bin
@@ -5041,7 +5147,7 @@ TOPPFASTag::ExitCodes TOPPFASTag::main_(int, const char**)
   // Before the hand-off exports, so a reader of the call there sees the
   // same Call that -alkylation_out writes after phase 9.
   FASTag::Alkylation::Call alk_call;
-  if (alkylation_on)
+  if (alk_place)
   {
     alk_call = FASTag::Alkylation::callAlkylation(run_acc.d.alk, alk_settings);
     // 1.13 (#24): on a shipped proteome, say when the tags were too short to place.
@@ -6208,24 +6314,46 @@ TOPPFASTag::ExitCodes TOPPFASTag::main_(int, const char**)
     }
   }
 
-  // ---- 1.12 D: -alkylation_out (#3g) ----
+  // ---- 1.12 D: -alkylation_out (#3g); format 2 (feedback 202dbcf4): the
+  // tag-only call, refined by the placements when there is a database ----
+  const double alkt_tol_da = alkylation_shadow_on ? FASTag::AlkylationTags::edgeToleranceDa(len_params.front()) : 0.0;
+  FASTag::AlkylationTags::ReportInfo alkt_info;
+  if (alkylation_shadow_on)
+  {
+    alkt_info.tol_da = alkt_tol_da;
+    alkt_info.dropped = alkt_dropped;
+    alkt_info.alpha = alkt_alpha;
+    for (int L : lengths) alkt_info.lengths += (alkt_info.lengths.empty() ? "" : ",") + std::to_string(L);
+  }
   if (alkylation_on)
   {
-    const FASTag::Alkylation::Tally& at = run_acc.d.alk;
-    const FASTag::Alkylation::Call& call = alk_call;
-    FASTag::Alkylation::ReportInfo info;
-    info.database = recon_db;
-    info.database_source = alk_db_source;
-    if (alk_shipped.entries > 0)
-    {
-      info.database_release = FASTag::Alkylation::shippedRelease(alk_shipped);
-      info.min_tag_length = recon_min_len;
-      info.longest_tag = max_len;
-    }
-    for (const auto& m : p.mods)
-      if (!m.variable && m.residue == 'C') info.reagent_note += (info.reagent_note.empty() ? "" : "+") + m.name;
+    const FASTag::AlkylationTags::Tally& tt = run_acc.d.alkt;
+    const FASTag::Alkylation::Call tag_call =
+        FASTag::AlkylationTags::callTags(tt, alk_settings, alkt_cands, alkt_tol_da, &alkt_alpha);
+    const FASTag::Alkylation::Call call = FASTag::Alkylation::combineCalls(tag_call, alk_place ? &alk_call : nullptr);
     std::vector<FD::Row> rows = FASTag::RunReport::runRows(run_meta, FASTag::RunReport::Emit::VERSIONED);
-    for (FD::Row& r : FASTag::Alkylation::alkylationRows(at, call, alk_settings, alk_forms, info)) rows.push_back(std::move(r));
+    if (alk_place)
+    {
+      FASTag::Alkylation::ReportInfo info;
+      info.database = recon_db;
+      info.database_source = alk_db_source;
+      if (alk_shipped.entries > 0)
+      {
+        info.database_release = FASTag::Alkylation::shippedRelease(alk_shipped);
+        info.min_tag_length = recon_min_len;
+        info.longest_tag = max_len;
+      }
+      for (const auto& m : p.mods)
+        if (!m.variable && m.residue == 'C') info.reagent_note += (info.reagent_note.empty() ? "" : "+") + m.name;
+      for (FD::Row& r : FASTag::Alkylation::alkylationRows(run_acc.d.alk, alk_call, alk_settings, alk_forms, info))
+        rows.push_back(std::move(r));
+    }
+    else
+      for (FD::Row& r : FASTag::Alkylation::tagOnlyRunRows(alk_settings)) rows.push_back(std::move(r));
+    for (FD::Row& r : FASTag::AlkylationTags::rows(tt, tag_call, alk_settings, alkt_cands, alkt_info)) rows.push_back(std::move(r));
+    for (FD::Row& r : FASTag::Alkylation::callRows("alkylation_call", call, alk_settings, alk_forms,
+                                                   call.source == "placement" ? "binned spectra" : "votes", true))
+      rows.push_back(std::move(r));
     FASTag::PartFile alk_part(alkylation_out);
     if (!alk_part.begin() || !FD::writeReport(alk_part.writePath(), rows) || !alk_part.commit())
     {
@@ -6233,10 +6361,11 @@ TOPPFASTag::ExitCodes TOPPFASTag::main_(int, const char**)
                        << (alk_part.error().empty() ? std::string() : ": " + alk_part.error()) << std::endl;
       return CANNOT_WRITE_OUTPUT_FILE;
     }
-    OPENMS_LOG_INFO << "Alkylation: " << at.spectra << " spectra with a single-Cys placement, "
-                    << (call.called ? std::string("call ") + FASTag::Alkylation::className(call.cls)
-                                    : "no_call " + call.reason)
-                    << " -> " << alkylation_out << std::endl;
+    OPENMS_LOG_INFO << "Alkylation: " << tt.spectra << " of " << tt.spectra_tagged << " spectra vote from their tags"
+                    << (alk_place ? ", " + std::to_string(run_acc.d.alk.spectra) + " have a single-Cys placement" : std::string())
+                    << ", " << (call.called ? std::string("call ") + FASTag::Alkylation::className(call.cls)
+                                            : "no_call " + call.reason)
+                    << " (" << call.source << ") -> " << alkylation_out << std::endl;
   }
 
   // ---- 1.13 #22: -alkylation_tags_out ----
@@ -6246,14 +6375,9 @@ TOPPFASTag::ExitCodes TOPPFASTag::main_(int, const char**)
     FASTag::Alkylation::Settings as;
     as.min_spectra = static_cast<std::uint64_t>(getIntOption_("alkylation_min_spectra"));
     as.min_share = getDoubleOption_("alkylation_min_share");
-    const double tol_da = FASTag::AlkylationTags::edgeToleranceDa(len_params.front());
-    const FASTag::Alkylation::Call call = FASTag::AlkylationTags::callTags(at, as, alkt_cands, tol_da);
-    FASTag::AlkylationTags::ReportInfo info;
-    info.tol_da = tol_da;
-    info.dropped = alkt_dropped;
-    for (int L : lengths) info.lengths += (info.lengths.empty() ? "" : ",") + std::to_string(L);
+    const FASTag::Alkylation::Call call = FASTag::AlkylationTags::callTags(at, as, alkt_cands, alkt_tol_da, &alkt_alpha);
     std::vector<FD::Row> rows = FASTag::RunReport::runRows(run_meta, FASTag::RunReport::Emit::VERSIONED);
-    for (FD::Row& r : FASTag::AlkylationTags::rows(at, call, as, alkt_cands, info)) rows.push_back(std::move(r));
+    for (FD::Row& r : FASTag::AlkylationTags::rows(at, call, as, alkt_cands, alkt_info)) rows.push_back(std::move(r));
     FASTag::PartFile part(alkylation_tags_out);
     if (!part.begin() || !FD::writeReport(part.writePath(), rows) || !part.commit())
     {

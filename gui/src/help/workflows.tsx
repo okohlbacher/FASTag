@@ -147,6 +147,15 @@ export const WORKFLOWS: HelpPage = {
             tag yield and redundancy, and the instrument model, serial number and start time the file records.
           </p>
           <p>
+            <strong>Reading the QC tab.</strong> Tiles at the top give the headline: MS2 spectra, tag yield,
+            instrument, isobaric kit and redundancy. Small charts show the spread: spectra per MS level by analyzer,
+            precursor charges, resolution by m/z band, and the reporter ions (which MS2 can show them, and how often
+            each channel is seen). Hover a mark, or focus a chart and use the arrow keys, for its numbers; Table shows
+            them as a table. When the label mass and the reporter channels disagree, the kit tile says Conflict, as a
+            warning, and no kit is called; in the channel chart and its table, the channels the report does not call
+            seen are dimmed. Every other value of the report is under <strong>All values</strong>, with a filter.
+          </p>
+          <p>
             <strong>Spectra to read</strong> below 1 reads a random share of the spectra; the counts then describe
             that share only. Raw DIA files are refused by default; choose <strong>warn</strong> under DIA input to
             run them anyway. For many files, switch Inputs (step 2) to Batch.
@@ -240,8 +249,9 @@ export const WORKFLOWS: HelpPage = {
             <li>In the placement table, <strong>Contains</strong> searches spectrum, tag, protein or peptide. <strong>|Δ| at least (Da)</strong> filters by the size of the gap in either direction. <strong>Interpretation</strong> selects modification, substitution or unexplained rows; <strong>One flank off</strong> keeps placements with a gap localized to one side of the tag.</li>
           </ul>
           <p>
-            Table filters and sort order are kept when switching tabs. Reconciliation identifications can be
-            viewed here as mzTab; idXML and mzIdentML need an external viewer. These report tables have a
+            Table filters and sort order are kept when switching tabs. Reconciliation identifications are
+            written as mzTab and shown here. An idXML or mzIdentML file (named so on purpose) is listed as a file,
+            with buttons to reveal it or open it in another tool. These report tables have a
             128 MiB size limit (shown as 128 MB in the app); larger reports need an external tool. This limit is
             separate from the large-file Tags browser. Placements are not FDR-controlled identifications;
             read <L to="digest-gaps">how mass gaps are interpreted</L> before drawing a conclusion.

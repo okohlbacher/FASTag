@@ -4,7 +4,7 @@
 // read once is kept (tableStore.ts): showing its tab again reads nothing.
 
 import { useEffect, useState } from 'react'
-import { parseTable, type AnyTable, type TableKind } from './tables'
+import { NotShownFormat, parseTable, type AnyTable, type TableKind } from './tables'
 import { keepTable, keptTable } from './tableStore'
 
 export interface TableState<T extends AnyTable = AnyTable> {
@@ -13,9 +13,12 @@ export interface TableState<T extends AnyTable = AnyTable> {
   loading: boolean
   /// The path was given, but the file does not exist.
   missing: boolean
+  /// An identifications file in a format this viewer does not show
+  /// (NotShownFormat): listed as a file, not an error.
+  notShown: boolean
 }
 
-const NONE: TableState<never> = { table: null, error: null, loading: false, missing: false }
+const NONE: TableState<never> = { table: null, error: null, loading: false, missing: false, notShown: false }
 
 /// @p gen: how often the table was opened (Reports.gen); a new value reads
 /// the file again at the same path, as a rerun or a reopened file needs.
@@ -50,7 +53,11 @@ export function useTable<K extends TableKind>(path: string | undefined, kind: K,
         setState({ at, s: { ...NONE, table: t as T } })
       })
       .catch((e: unknown) => {
-        if (live) setState({ at, s: { ...NONE, error: `Cannot read ${path}: ${e instanceof Error ? e.message : String(e)}` } })
+        if (!live) return
+        // Only the identifications have a format not shown (idXML, mzid); XML
+        // in a recon, delta or glyco table is a broken file, named in red.
+        if (e instanceof NotShownFormat && kind === 'reconIds') setState({ at, s: { ...NONE, notShown: true } })
+        else setState({ at, s: { ...NONE, error: `Cannot read ${path}: ${e instanceof Error ? e.message : String(e)}` } })
       })
     return () => {
       live = false

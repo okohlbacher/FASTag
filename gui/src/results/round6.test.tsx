@@ -150,10 +150,14 @@ describe('round 6, 8: a tie at the top of the species call names no proteome', (
 
 describe('round 6, 15: the alkylation report raises Extension only where the CLI places on a shipped proteome', () => {
   const alk = PRODUCT_OF.get('alkylation_out')!
-  const base = { tag_length: '3', extension: '2', alkylation_out: '' }
+  const base = { tag_length: '3', extension: '2', alkylation_out: '', alkylation_proteome: 'human' }
 
   it('raises to 3 alone; not with placements, a hand-off output or a protein database', () => {
     expect(alkylationExtension(base)).toBe('3')
+    // feedback 202dbcf4: the default auto reads no proteome and raises nothing.
+    expect(alkylationExtension({ ...base, alkylation_proteome: 'auto' })).toBeNull()
+    expect(alkylationExtension({ tag_length: '3', extension: '2', alkylation_out: '' })).toBeNull()
+    expect(alkylationExtension({ ...base, alkylation_proteome: 'auto', fasta: '/d/x' })).toBeNull()
     for (const n of ['recon_out', 'shortlist_out', 'fasta_out', 'search_config_out', 'recon_fasta'])
       expect(alkylationExtension({ ...base, [n]: '/d/x' }), n).toBeNull()
   })

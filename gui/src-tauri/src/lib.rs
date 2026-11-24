@@ -1,6 +1,7 @@
 #[doc(hidden)]
 pub mod browser;
 mod close_guard;
+mod data;
 pub mod denovo;
 mod drop;
 mod events;
@@ -158,6 +159,7 @@ pub fn run() {
             history::history_delete,
             history::history_rerun,
             reveal::reveal_output,
+            reveal::open_output,
             close_guard::set_ui_busy,
             close_guard::close_answer,
             notify::notify_finished,
@@ -177,6 +179,7 @@ pub fn run() {
             drop::path_status,
             species::taxdb_info,
             species::taxonomy_status,
+            data::data_status,
             spectrum::spectrum_support,
             spectrum::spectrum_peaks,
             fasta::fasta_segment,
@@ -216,6 +219,11 @@ pub fn run() {
                     let _ = window.emit(drop::HOVER_EVENT, over);
                 },
                 |route| {
+                    // A dropped identification file is listed with Reveal and
+                    // Open (Mass shifts): the drop scopes it, as a run does.
+                    if let Ok(mut r) = window.app_handle().state::<RunManager>().revealable.lock() {
+                        r.extend(drop::openable(&route));
+                    }
                     let _ = window.emit(drop::DROP_EVENT, route);
                 },
             ),

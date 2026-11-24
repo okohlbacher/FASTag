@@ -27,8 +27,9 @@ export interface DraftText {
   share: Share
 }
 
-/// Sharing defaults: screenshot off, diagnostics on, log off.
-export const DEFAULT_SHARE: Share = { screenshot: false, diagnostics: true, log: false }
+/// Sharing defaults: the screenshot on (when there is one; report
+/// 20261124T113631Z_a8b7e2e7), diagnostics on, log off.
+export const DEFAULT_SHARE: Share = { screenshot: true, diagnostics: true, log: false }
 
 export const emptyText = (): DraftText => ({
   kind: 'bug',

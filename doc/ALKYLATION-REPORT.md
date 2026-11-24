@@ -1,15 +1,34 @@
-# The -alkylation_out report (format 1)
+# The -alkylation_out report (format 2)
 
-FASTag 1.12 (#3g). `-alkylation_out <tsv>` says which reagent alkylated the
-cysteines of a run, or that they are not alkylated. The call is read off the
-placements the run's own reconciler makes (src/TagRecon.h); there is no second
-index. The option is opt-in, and every other output (tags, `-recon_out`
-including `delta_interp`, `-delta_out`, `-massgap_out`, `-digest_out`,
-`-label_out`, species) is byte-identical with and without it.
+`-alkylation_out <tsv>` says which reagent alkylated the cysteines of a run, or
+that they are not alkylated. **It needs no protein database.** The call is read
+off the C residues in the run's tags: the method of `-alkylation_tags_out`
+(1.13 #22, held-out test passed at the margin; section `-alkylation_tags_out`
+below). With a database it also makes the 1.12 placement call (#3g): it reads
+the placements the run's own reconciler makes (src/TagRecon.h) of peptides with
+one C, and checks the tag call against them. The option is opt-in, and every
+other output (tags, `-recon_out` including `delta_interp`, `-delta_out`,
+`-massgap_out`, `-digest_out`, `-label_out`, species) is byte-identical with and
+without it.
 
-**Not validated on held-out data.** The thresholds are the plan's priors
-(PLAN-organism-chemistry.md, #3g); they are frozen only after the DEV
-regeneration on the release candidate and PREREG-chem.md.
+**Format 2 (feedback 202dbcf4).** Up to format 1 the call came from the
+placements only, and without `-recon_fasta` the default
+`-alkylation_proteome auto` placed on the shipped human proteome, which needs
+tags of 8 residues. A sample that is not human, or a run with shorter tags, got
+no call; a FASTag without the shipped proteome stopped with exit code 6. Now:
+
+| given | database | call |
+|---|---|---|
+| nothing (`auto`, the default) | none | the tags (`alk_run method tags`, `database_source none`) |
+| `-recon_fasta`, or another report that places tags | `-recon_fasta`, else `-fasta` | tags and placements |
+| `-fasta` (only `-alkylation_out` places) | `-fasta` | tags and placements |
+| `-alkylation_proteome human\|mouse\|yeast\|ecoli\|<fasta>` | that proteome | tags and placements |
+
+**What a call means.** The tag call passed a held-out test at the margin (40 of
+57 runs called, 37 right); it rarely calls unalkylated samples. The placement
+call is not validated on held-out data: its thresholds are the plan's priors
+(PLAN-organism-chemistry.md, #3g). How the two are combined (below) is a rule
+of this version, not a measured one.
 
 This file is the contract for readers of the report (the GUI Overview
 alkylation tile, GUI-DESIGN.md P2b, and prose-auto). It is versioned by the row
@@ -36,6 +55,11 @@ never sees a partial report. A refused or failed run leaves no file.
 
 ## Sections, in this order
 
+`run`, `alk_run`, then with a database `alk_cys` and
+`alkylation_placement_call`, then `alkt_run`, `alkt_form`,
+`alkylation_tags_call` (the tag sections, as `-alkylation_tags_out` writes
+them), then `alkylation_call`.
+
 ### `run` (shared run rows)
 
 The versioned run rows every 1.12 report starts with
@@ -48,23 +72,28 @@ version. Their format is owned by RunMeta and numbered by
 
 ### `alk_run` (settings and what was looked at)
 
+Without a database, `alk_run` has six rows: `format`, `method` (`tags`),
+`database` (`-`), `database_source` (`none`), `min_spectra`, `min_share`.
+With a database it has all of these rows:
+
 | key | value | n |
 |---|---|---|
-| `format` | `1`, the format of the `alk_*` and `alkylation_call` sections | `-` |
-| `database` | path of the FASTA the placements are on | `-` |
-| `database_source` | `recon_fasta`, `fasta` (the run's placement database), `proteome` (an `-alkylation_proteome` FASTA) or `bundled:<name>` (`human`, `mouse`, `yeast`, `ecoli`) | `-` |
+| `format` | `2`, the format of the `alk_*`, `alkylation_placement_call` and `alkylation_call` sections | `-` |
+| `method` | `tags` (no database) or `tags+placement` | `-` |
+| `database` | path of the FASTA the placements are on; `-` without one | `-` |
+| `database_source` | `none` (no database), `recon_fasta`, `fasta` (the run's placement database, or `-fasta` with `auto`), `proteome` (an `-alkylation_proteome` FASTA) or `bundled:<name>` (`human`, `mouse`, `yeast`, `ecoli`) | `-` |
 | `database_release` | only for `bundled:<name>` with a `proteomes.tsv` beside it (1.13): `UniProt <release> <proteome> (taxon <id>, reviewed, <n> entries, FASTA sha256 <hash>)`, the hash being the manifest's `fasta_sha256`, which the FASTA read was checked against before the run; absent otherwise, so a report on a FASTA path is that of 1.12 | `-` |
 | `min_tag_length` | only with `database_release` (1.13): the reconciler's minimum tag length on the database (`-recon_min_length`, else derived from its size); shorter tags do not place | the run's longest tag (seed length + 2 x `-extension`) |
 | `fixed_c_delta` | the run's fixed modification mass on C in Da (`0` without one); reagent mass = gap + this | `-` |
 | `fixed_nterm_delta` | the run's fixed peptide N-terminal modification mass in Da (a TMT or iTRAQ label; `0` without one), taken off an N-side gap first | `-` |
 | `fixed_cterm_delta` | the same for a fixed peptide C-terminal modification | `-` |
 | `window` | bin window in Da (`-alkylation_window`; default 0.02 on a ppm run, 0.5 on a Da run) | `-` |
-| `min_spectra` | `-alkylation_min_spectra` | `-` |
-| `min_share` | `-alkylation_min_share` | `-` |
+| `min_spectra` | `-alkylation_min_spectra` (both calls) | `-` |
+| `min_share` | `-alkylation_min_share` (both calls) | `-` |
 | `tags` | placed tags looked at (ungapped, E-value <= 1, as the digest report counts) | `-` |
 | `spectra` | MS2 spectra that vote (have a tag with a counted placement) | `-` |
 
-### `alk_cys` (votes and exclusions)
+### `alk_cys` (votes and exclusions; with a database only)
 
 Each spectrum votes once, with its best tag (lowest E-value) that has a counted
 placement.
@@ -101,7 +130,9 @@ the gap is not the mass of the one or two outermost residues of the gap side
 (a shorter non-specific product). With an M on the gap side, the reading with
 and without Met oxidation (+15.995) must fall into one class.
 
-### `alkylation_call` (the call; always these five rows, this order)
+### `alkylation_placement_call` (the placement call; with a database only; these five rows, this order)
+
+The `alkylation_call` of format 1, renamed.
 
 | key | value when called | value on no_call | n |
 |---|---|---|---|
@@ -120,12 +151,42 @@ shorter than `alk_run min_tag_length` is `tags_too_short` instead: no tag could
 place, which says nothing about the run's Cys spectra. The other database
 sources keep the 1.12 reasons (and the log warns there too).
 
-A reader that only wants the call reads `alkylation_call status`, `reagent`
-and `share`, and `alk_run database_source` for the caveat.
+### `alkylation_call` (the call of the report; always these six rows, this order)
+
+| key | value |
+|---|---|
+| `status`, `reagent`, `mass`, `share`, `reason` | as in `alkylation_placement_call`, of the call named in `source`; `n` counts votes (tags) or binned spectra (placements) |
+| `source` | `tags`, `placement` or `tags+placement` |
+
+Rule (`Alkylation::combineCalls`):
+- no database: the tag call (`source tags`);
+- only one of the two calls: that one (`tags` or `placement`);
+- both call the same class: that call, with the tag call's counts
+  (`tags+placement`);
+- both call, but different classes: `no_call`, reason `disagree`
+  (`tags+placement`); each call is in its own section;
+- neither calls: the tag call's `no_call` and reason (`tags`).
+
+`reason` is one of `few_cys_spectra`, `ambiguous`, `unresolved_forms` (tags)
+or `disagree`; `tags_too_short` is only in `alkylation_placement_call`.
+
+The counts are in the report whether it calls or not: `alkt_run spectra`
+(voting spectra), the six `alkt_form <form>` vote rows and `residues.<form>`;
+with a database also `alk_cys`.
+
+A reader that only wants the call reads `alkylation_call status`, `reagent`,
+`share` and `source`, and `alk_run database_source` for the caveat.
 
 ## Stability
 
-- Format 1 is frozen from the 1.12.0 release on (the rows `fixed_nterm_delta`,
+- Format 2 (feedback 202dbcf4) changed from format 1: the `method` row and the
+  six-row `alk_run` without a database; `alk_cys` only with a database; the
+  placement call moved from `alkylation_call` to `alkylation_placement_call`;
+  the tag sections inside the report; `alkylation_call` is the combined call
+  with the row `source`; the reasons `unresolved_forms` and `disagree`.
+  A format 1 reader that reads `alkylation_call status`, `reagent` and `share`
+  by key still reads the call.
+- Format 1 was frozen from the 1.12.0 release on (the rows `fixed_nterm_delta`,
   `fixed_cterm_delta` and `excluded.non_by` were added before it). Any change to a section name, a key, the order of rows,
   the meaning or formatting of a `value` or `n`, or a new row, bumps
   `alk_run format` (`FASTag::Alkylation::kReportFormat`) and this file.
@@ -141,18 +202,18 @@ and `share`, and `alk_run database_source` for the caveat.
 
 | option | default | |
 |---|---|---|
-| `-alkylation_out <tsv>` | off | the report; refused with `-stream`, guarded against overwriting inputs and other outputs |
-| `-alkylation_proteome` | `auto` | database without `-recon_fasta`/placement readers: `auto` (= `human`), `human`, `mouse`, `yeast`, `ecoli` (shipped UniProt 2026_04 reference proteomes, reviewed entries: `<bin>/../share/FASTag/alkylation/<name>.fasta.gz` or `$FASTAG_ALKYLATION_DIR`; see Shipped proteomes), or a FASTA file (`.gz` allowed). Ignored with a warning when `-recon_fasta` is given or another placement reader runs |
-| `-alkylation_min_spectra` | 10 | |
-| `-alkylation_min_share` | 0.6 | |
-| `-alkylation_window` | 0 (= 0.02 Da on ppm runs, 0.5 Da on Da runs) | |
+| `-alkylation_out <tsv>` | off | the report; refused with `-stream`, guarded against overwriting inputs and other outputs. Runs the shadow tagging pass (one more tagging of every MS2) |
+| `-alkylation_proteome` | `auto` | database for the placement call without `-recon_fasta`/placement readers: `auto` = `-fasta` when given, else none (the tag call alone; before format 2, `auto` meant `human`); `human`, `mouse`, `yeast`, `ecoli` (shipped UniProt 2026_04 reference proteomes, reviewed entries: `<bin>/../share/FASTag/alkylation/<name>.fasta.gz` or `$FASTAG_ALKYLATION_DIR`; see Shipped proteomes), or a FASTA file (`.gz` allowed). Ignored with a warning when `-recon_fasta` is given or another placement reader runs |
+| `-alkylation_min_spectra` | 10 | both calls |
+| `-alkylation_min_share` | 0.6 | both calls |
+| `-alkylation_window` | 0 (= 0.02 Da on ppm runs, 0.5 Da on Da runs) | placement call only; warned as ignored without a database |
 
 `-delta_out`, `-massgap_out` and `-recon_localize` still require `-recon_out`
 (or a #5 hand-off output); `-alkylation_out` alone does not satisfy them.
 
-`auto` takes the human proteome. The plan's "top `-species` genus" needs the
-species call before the tagging loop that places the tags, so it is not
-implemented.
+`auto` reads no proteome. (Format 1 took the human proteome; the plan's "top
+`-species` genus" needs the species call before the tagging loop that places
+the tags, so it was never implemented.)
 
 ## Merge obligations (integration/1.12)
 
@@ -186,7 +247,7 @@ installed to `share/FASTag/alkylation` (flat release layout:
 
 | name | proteome | taxon | entries | gz size |
 |---|---|---|---|---|
-| `human` (`auto`) | UP000005640 | 9606 | 20,414 | 7.5 MB |
+| `human` | UP000005640 | 9606 | 20,414 | 7.5 MB |
 | `mouse` | UP000000589 | 10090 | 17,279 | 6.6 MB |
 | `yeast` | UP000002311 | 559292 | 6,067 | 2.0 MB |
 | `ecoli` | UP000000625 | 83333 | 4,403 | 1.0 MB |
@@ -227,7 +288,8 @@ Measured on data with `-tag_length 8` (1.13 branch build): PXD014764
 call Carbamidomethyl, share 0.937; PXD003531
 (`20130611_QE3_UPLC10_CFR_SA_OC_T_NO_03_01_01`) 1,065, Carbamidomethyl,
 0.667. Both reports equal those on the same FASTA given as a path, apart from
-the `database*` rows.
+the `database*` rows. (These are placement calls, in format 2 the
+`alkylation_placement_call` section.)
 
 A directory without `proteomes.tsv` (one's own `FASTAG_ALKYLATION_DIR`) is
 read as in 1.12: `<name>.fasta.gz`, no `database_release` row. A missing file
@@ -248,18 +310,21 @@ every name in the installed and the flat layout and through
 `FASTAG_ALKYLATION_DIR`, and checks the refusals (truncated, one residue
 edited with the entry count kept, entry count wrong, invalid row) and that a
 recompressed unchanged file is accepted, and the `tags_too_short` reason at
-`-tag_length 4`. CI checks the shipped Linux and Windows bundles with
-`-alkylation_out` at the default `auto` (it must resolve the shipped human
-proteome and report `tags_too_short`) and with `-alkylation_proteome ecoli
+`-tag_length 4`, and that the default `auto` reads no proteome. CI checks the
+shipped Linux and Windows bundles with `-alkylation_out` at the default `auto`
+(a tag-only report: `database_source none`, `alkylation_call source tags`),
+with `-alkylation_proteome human` (it must resolve the shipped human proteome
+and report `tags_too_short` in `alkylation_placement_call`) and with `-alkylation_proteome ecoli
 -tag_length 8` (0.5 Da) on the E. coli example, where the placements (the `n`
 of the `alk_cys excluded.*` rows) must be above 0: tags place on the shipped
 file. That example is too small for single-Cys votes at length 8 (115
 placements, `alk_run spectra` 0; at length 7, 194 placements and 2 spectra).
 
-## `-alkylation_tags_out` (1.13, database-free, format 1)
+## `-alkylation_tags_out` (1.13, database-free, `alkt_run format` 2)
 
-Backlog #22, src/AlkylationTags.h. This report tries the same call without a
-protein database. It is opt-in and experimental. On development data it calls
+Backlog #22, src/AlkylationTags.h. This report makes the call without a
+protein database; since format 2 of `-alkylation_out` it is also that report's
+default call, and its sections are inside it. It is opt-in and experimental. On development data it calls
 61 of 123 runs, 51 of them as the SDRF annotation states (see "Development
 result" below); unalkylated and low-resolution runs are rarely called. A
 held-out test followed and passed at the margin (see "Held-out result" below);
@@ -298,12 +363,40 @@ Conflicts are not in the share.
 The call is #3g's rule over six classes: the five reagents, and `none` for
 unmodified C. The leading class needs `-alkylation_min_spectra` votes and a
 share of `-alkylation_min_share` of the votes. One more rule comes first:
-when two candidate C masses lie within twice the edge tolerance of each
-other, there is no call (`unresolved_forms`). The edge tolerance is the
-fragment tolerance in Da, or the ppm tolerance at 1000 m/z.
-Carbamidomethyl and Carboxymethyl are 0.984 Da apart, so a 0.5 Da run
-cannot tell them apart; a 0.3 Da or ppm run can. Oxidised, cysteinylated
-and dehydroalanine Cys are not candidates here.
+when a candidate C mass has a single-step twin, there is no call
+(`unresolved_forms`). The edge tolerance is the fragment tolerance in Da, or
+the ppm tolerance at 1000 m/z. Oxidised, cysteinylated and dehydroalanine Cys
+are not candidates here.
+
+**Isobaric collisions (format 2).** Each candidate C mass (unmodified C
+103.00919, C[Carbamidomethyl] 160.03065, C[Propionamide] 174.04630,
+C[Nethylmaleimide] 228.05686, C[Methylthio] 148.99691, C[Carboxymethyl]
+161.01466) is checked against the run's own alphabet: the 18 other base
+residues (I as L) with the run's fixed modifications, plus one entry per
+variable modification of them (`AlkylationTags::alphabet`, as the tagger
+builds it). Two kinds of collision within twice the edge tolerance:
+
+- *Single-step twin* (`alkt_form twin.<form>`): another C form, or one residue
+  step of the alphabet, has the same mass. One edge cannot tell them apart, so
+  the forms are not resolved (`forms_resolved no`) and the call is excluded:
+  `no_call unresolved_forms`. This is the 1.13 rule (two C forms within twice
+  the tolerance) extended to residues and modified residues. At 20 ppm there
+  is none; at 0.5 Da Carbamidomethyl and Carboxymethyl twin each other
+  (0.984 Da apart); a variable modification that lands on a C form (say a
+  K + 31.936 Da) would twin it at any tolerance.
+- *Two-step alias* (`alkt_form alias.<form>`): two steps of the alphabet or C
+  forms (an edge over a missing peak), or another C form shifted by a 13C
+  peak. These are listed, not excluded: C[Carbamidomethyl] = G + C and
+  C[Propionamide] = A + C exactly, so excluding them would make the two most
+  common reagents uncallable, and the held-out test measured the method with
+  them in.
+
+On PXD000001 (20 ppm, `-tag_length 4 -extension 6`) the aliases are
+`C+G:0.0000,C[Carboxymethyl]-13C:0.0193` (Carbamidomethyl),
+`A+C:0.0000,S+S:0.0178` (Propionamide), `N+N:0.0290,M+P:0.0364`
+(Nethylmaleimide), `C[Carbamidomethyl]+13C:0.0193` (Carboxymethyl), none for
+Methylthio and unmodified C, and no twin. At 0.5 Da the same run gets the
+twin rows above and `no_call unresolved_forms`.
 
 **Background votes.** Random edges between noise peaks give weak C tags
 (E 0.3 to 1) even in spectra without a C, mostly at an end of a tag. The first
@@ -396,6 +489,26 @@ Limits of this result:
 **Cost.** One more tagging of every MS2 spectrum. The alphabet has five more
 residues and no gap edges.
 
+**PXD000001 (feedback 202dbcf4, descriptive).**
+`TMT_Erwinia_1uLSike_Top10HCD_isol2_45stepped_60min_01-20141210.mzML`, 6,103
+MS2, 20 ppm, `-alkylation_out` with no database:
+
+| settings | voting spectra | Methylthio | CAM | Propionamide | NEM | Carboxymethyl | unmodified | call |
+|---|---|---|---|---|---|---|---|---|
+| defaults (`-tag_length 3`, no extension) | 8 | 6 | 2 | 0 | 0 | 0 | 0 | no_call few_cys_spectra |
+| `-extension 2`, 10% of the spectra (Characterize) | 8 of 611 | 7 | 0 | 1 | 0 | 0 | 0 | no_call few_cys_spectra |
+| `-extension 2` | 69 | 52 | 6 | 3 | 4 | 2 | 2 | Methylthio, share 0.754 |
+| `-tag_length 4 -extension 6` | 117 | 75 | 11 | 10 | 6 | 10 | 5 | Methylthio, share 0.641 |
+
+With `-fasta erwinia_carotovora.fasta` and the TMT labels as fixed
+modifications (`-tag_length 4 -extension 6`), the placements agree but are too
+few: 9 binned spectra, 8 of them Methylthio (`alkylation_placement_call`
+no_call few_cys_spectra); the tag call is Methylthio (78 of 123 votes, 0.634),
+so `alkylation_call` is Methylthio with `source tags`. Methylthio is the mark
+of MMTS. Before format 2 the same `-alkylation_out` call stopped with exit
+code 6 on a build without the human proteome, and placed nothing on it at
+these tag lengths.
+
 The report has the shared `run` rows, then these sections. Rows are looked up
 by `(section, key)`. The GUI does not read this report:
 gui/src/digestReport.ts names none of its sections and refuses it.
@@ -404,7 +517,7 @@ gui/src/digestReport.ts names none of its sections and refuses it.
 
 | key | value |
 |---|---|
-| `format` | 1 |
+| `format` | 2 (1 until format 2 of `-alkylation_out`: no `twin.<form>` rows, aliases over the base residues only) |
 | `method` | `shadow_tags` |
 | `status` | `experimental`; the description gives the held-out result (passed at the margin: 40 of 57 runs called, 37 right) |
 | `forms` | the six candidate forms, comma-separated (n: 6) |
@@ -418,7 +531,7 @@ gui/src/digestReport.ts names none of its sections and refuses it.
 | `spectra` | spectra with a vote: the best counted tag holds a C, none at an end, E <= 1e-4 (n: `spectra_tagged`) |
 | `min_spectra`, `min_share` | the call thresholds |
 | `edge_tolerance` | the edge tolerance in Da |
-| `forms_resolved` | `yes`, or `no` when two forms' own masses lie within twice the edge tolerance (then no call); 13C-shifted readings are under `alias.<form>` |
+| `forms_resolved` | `yes`, or `no` when a form has a single-step twin (`twin.<form>`: another form or a residue of the run within twice the edge tolerance; then no call); two-step and 13C-shifted readings are under `alias.<form>` |
 
 ### `alkt_form`
 
@@ -426,7 +539,8 @@ gui/src/digestReport.ts names none of its sections and refuses it.
 |---|---|
 | `<form>`, six rows in the order of `forms` | votes for the form (n: votes without conflicts) |
 | `residues.<form>` | C residues of the form in all counted tags (n: all C residues) |
-| `alias.<form>` | two-residue sums (`C+G:0.0000`) and 13C-shifted other C forms (`C[Carbamidomethyl]+13C:0.0193`) within twice the edge tolerance of the C form, by distance, comma-separated, or `-` |
+| `alias.<form>` | two-step sums over the run's alphabet and the C forms (`C+G:0.0000`, `A+M[Oxidation]:...`) and 13C-shifted other C forms (`C[Carbamidomethyl]+13C:0.0193`) within twice the edge tolerance of the C form, by distance, comma-separated, or `-` |
+| `twin.<form>` (format 2) | single steps that read like the C form: another C form (`C[Carboxymethyl]:0.9840`, `C` for unmodified) or a residue of the run's alphabet (`K[Name]:0.0004`), by distance, or `-`; any twin makes `forms_resolved` `no` |
 | `conflict` | votes whose tag holds two forms (n: `spectra`) |
 
 ### `alkylation_tags_call`

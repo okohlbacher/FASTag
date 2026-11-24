@@ -26,7 +26,7 @@
       "name": "alkylation_min_share",
       "type": "double",
       "default": "0.6",
-      "description": "Share of the binned spectra the -alkylation_out call needs",
+      "description": "Share of the votes (or binned placements) an alkylation call needs",
       "required": false,
       "toppAdvanced": true,
       "min": 0,
@@ -36,7 +36,7 @@
       "name": "alkylation_min_spectra",
       "type": "int",
       "default": "10",
-      "description": "Spectra the -alkylation_out call needs, binned and for the called class",
+      "description": "Spectra (votes, or binned placements) an alkylation call needs, in total and for the called class",
       "required": false,
       "toppAdvanced": true,
       "min": 1
@@ -45,7 +45,7 @@
       "name": "alkylation_out",
       "type": "output-file",
       "default": "",
-      "description": "Report which reagent alkylated the cysteines (or none), from the placements of single-Cys peptides on -recon_fasta or -alkylation_proteome: Cys form counts and the call (not validated on held-out data)",
+      "description": "Report which reagent alkylated the cysteines (or none). No database is needed: the call is read off the C residues in the tags (a second tagging pass with unmodified C and one C edge per reagent). With -recon_fasta, -fasta or -alkylation_proteome the placements of single-Cys peptides on that database are added. Votes per C form and the call; give -extension (tested with -tag_length 4 -extension 6), without it few spectra vote",
       "required": false,
       "toppAdvanced": false,
       "formats": [
@@ -56,7 +56,7 @@
       "name": "alkylation_proteome",
       "type": "string",
       "default": "auto",
-      "description": "Database of -alkylation_out without -recon_fasta: a FASTA file (.gz allowed). The names auto (= human), human, mouse, yeast and ecoli stand for the shipped UniProt reference proteomes (reviewed entries; share/FASTag/alkylation, release in its proteomes.tsv). Tags place on them from 8 residues (human, mouse) or 7 (yeast, ecoli): give -tag_length 8 or 7, at the default no tag places and there is no call (reason tags_too_short)",
+      "description": "Database that -alkylation_out places single-Cys peptides on, to refine the tag call. auto: -recon_fasta or -fasta when given, else none (tags only). A FASTA file (.gz allowed), or human, mouse, yeast, ecoli for the shipped UniProt reference proteomes (reviewed entries; share/FASTag/alkylation, release in its proteomes.tsv). Tags place on those from 8 residues (human, mouse) or 7 (yeast, ecoli): give -tag_length 8 or 7",
       "required": false,
       "toppAdvanced": true
     },
@@ -75,7 +75,7 @@
       "name": "alkylation_window",
       "type": "double",
       "default": "0.0",
-      "description": "Window of -alkylation_out around each Cys form mass; 0 = 0.02 Da on a ppm run, 0.5 Da on a run with a Da fragment tolerance",
+      "description": "Window of the -alkylation_out placements around each Cys form mass (with a database only); 0 = 0.02 Da on a ppm run, 0.5 Da on a run with a Da fragment tolerance",
       "required": false,
       "toppAdvanced": true,
       "min": 0

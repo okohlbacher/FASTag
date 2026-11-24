@@ -23,7 +23,7 @@ use std::time::{Duration, Instant, SystemTime};
 use serde::Serialize;
 use tauri::AppHandle;
 
-use crate::fastag::{no_console_window, cli_env, resolve_binary, taxonomy_dir, Resolved};
+use crate::fastag::{no_console_window, cli_env, resolve_binary, Resolved};
 use crate::lifetime;
 
 /// How long a probe may take: it reads metadata only (the 1.12 acquisition
@@ -104,12 +104,7 @@ pub fn probe_args(options: &[String], input: &str, fasta: Option<&str>) -> Resul
 fn command(r: &Resolved) -> Command {
     let mut cmd = Command::new(&r.bin);
     no_console_window(&mut cmd);
-    if let Some(d) = &r.data {
-        cmd.env("OPENMS_DATA_PATH", d);
-    }
-    if let Some(t) = taxonomy_dir(r) {
-        cmd.env("FASTAG_TAXONOMY_DIR", t);
-    }
+    crate::data::data_env(&mut cmd, r);
     cli_env(&mut cmd);
     // Started by the spawner thread like every CLI child (lifetime.rs, see
     // run_bounded): the blocking-pool thread that asks may exit when idle.

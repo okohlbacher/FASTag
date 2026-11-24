@@ -1070,7 +1070,7 @@ export const DIGEST: HelpPage = {
             own. The chip below names the candidate cysteine modification with the most matching placed spectra;
             these are counts, not an alkylation call. The{' '}
             <L to="param-alkylation_out">alkylation report</L>, an optional report of Characterize a run, makes that
-            call; on a shipped proteome it needs tags of 8 residues (human, mouse) or 7 (yeast, E. coli), so turning it on raises Extension to 3 or 2 (not on a FASTA of your own, as the proteome or as Protein database, nor with another report that places tags).
+            call from the cysteine forms in the tags, with no database. With a shipped proteome named (human, mouse, yeast, E. coli) it also places tags on it as a check; that needs tags of 8 residues (human, mouse) or 7 (yeast, E. coli), so turning it on then raises Extension to 3 or 2 (not on a FASTA of your own, as the proteome or as Protein database, nor with another report that places tags).
           </p>
         </>
       )
@@ -1316,7 +1316,7 @@ export const FILES: HelpPage = {
               <tr><td>Label report</td><td><L to="param-label_out">Digest and labels</L></td><td>Label and SILAC counts and the label call (<L to="digest-labels">Digest tab</L>).</td></tr>
               <tr><td>Reconciliation table</td><td><L to="param-recon_out">Reconciliation</L></td><td>Each tag placed in database peptides, with the leftover mass (<L to="digest-gaps">mass gaps</L>).</td></tr>
               <tr><td>Mass-shift histogram</td><td><L to="param-delta_out">Reconciliation</L></td><td>Leftover masses, one count per spectrum.</td></tr>
-              <tr><td>Reconciliation as identifications</td><td><L to="param-recon_id_out">Reconciliation</L></td><td>The placements as idXML, mzIdentML (.mzid) or mzTab, not filtered by a false discovery rate.</td></tr>
+              <tr><td>Reconciliation as identifications</td><td><L to="param-recon_id_out">Reconciliation</L></td><td>The placements as identifications, not filtered by a false discovery rate. mzTab by default, shown under Mass shifts; name the file .idXML or .mzid for those formats, which are listed there as files to reveal or open.</td></tr>
               <tr><td>Mass-gap report</td><td><L to="param-massgap_out">Reconciliation</L></td><td>Gap peaks, alkylation and SILAC (<L to="digest-gaps">Digest tab</L>).</td></tr>
               <tr><td>Spectra with tags</td><td><L to="param-out_spectra">Outputs &amp; run</L></td><td>The spectra that carry at least one reported tag that is not an entrapment match, as mzML or mzPeak.</td></tr>
             </tbody>

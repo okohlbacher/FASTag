@@ -3,7 +3,7 @@
 // only when their tab is shown.
 
 import { act, screen, within } from '@testing-library/react'
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { installMockBridge, type MockBridge } from '../testing/mockBridge'
 import { click, flush, goTo, pickSingle, renderApp, runButton } from '../testing/render'
 import { applyLastUsed } from '../testing/lastUsed'
@@ -35,14 +35,68 @@ describe('P4c viewers in the app', () => {
     expect(screen.getByRole('tab', { name: 'Mass shifts' })).toBeTruthy()
   })
 
-  it('names an idXML -recon_id_out it cannot show', async () => {
+  // Feedback 20261124T095212Z: an idXML -recon_id_out is a file of the run,
+  // not a read error. Mass shifts lists it with Reveal and Open, no alert.
+  it('lists an idXML -recon_id_out it does not show as a file to reveal or open, with no error', async () => {
     const mock = installMockBridge()
     mock.reportFiles = { '/r/run.recon.idXML': '<?xml version="1.0" encoding="UTF-8"?>\n<IdXML version="1.5">' }
     mock.nextPickReport = '/r/run.recon.idXML'
     await renderApp(mock)
     await goTo('results')
     await click(screen.getByRole('button', { name: 'Open report…' }))
-    expect((await screen.findByRole('alert')).textContent).toMatch(/run\.recon\.idXML is idXML; this viewer reads the mzTab form/)
+    expect((await screen.findByRole('tab', { name: 'Mass shifts' })).getAttribute('aria-selected')).toBe('true')
+    const files = await screen.findByRole('group', { name: 'Identification files' })
+    expect(files.textContent).toMatch(/idXML, for identification tools\. Only the mzTab form is shown here\./)
+    expect(screen.queryByRole('alert')).toBeNull()
+    // Not read whole: the viewer does not parse it.
+    expect(mock.reportCalls).not.toContain('/r/run.recon.idXML')
+    await click(within(files).getByRole('button', { name: /: placements as identifications \(run\.recon\.idXML\)$/ }))
+    expect(mock.revealCalls).toEqual([{ path: '/r/run.recon.idXML', folder: false }])
+    await click(within(files).getByRole('button', { name: 'Open placements as identifications (run.recon.idXML) with the default app' }))
+    expect(mock.openCalls).toEqual(['/r/run.recon.idXML'])
+    expect(screen.queryByRole('alert')).toBeNull()
+  })
+
+  it('lists an mzid -recon_id_out, and a .mzTab that holds XML, as files with no error', async () => {
+    const mock = installMockBridge()
+    mock.reportFiles = {
+      '/r/run.recon_id.mzid': '<?xml version="1.0"?>\n<MzIdentML version="1.2.0">',
+      '/r/odd.recon_id.mzTab': '<?xml version="1.0"?>\n<IdXML version="1.5">'
+    }
+    mock.nextPickReport = '/r/run.recon_id.mzid'
+    await renderApp(mock)
+    await goTo('results')
+    await click(screen.getByRole('button', { name: 'Open report…' }))
+    expect((await screen.findByRole('group', { name: 'Identification files' })).textContent).toMatch(/mzIdentML, for identification tools/)
+    expect(screen.queryByRole('alert')).toBeNull()
+    mock.nextPickReport = '/r/odd.recon_id.mzTab'
+    await click(screen.getByRole('button', { name: 'Open report…' }))
+    await vi.waitFor(() => expect(screen.getByRole('group', { name: 'Identification files' }).textContent).toMatch(/Not an mzTab file: open it in an identification tool\./))
+    expect(screen.queryByRole('alert')).toBeNull()
+  })
+
+  // The GUI's own choice: a Mass-shift survey run with the identifications
+  // product writes the mzTab the tab shows; an idXML a preset kept is listed.
+  it('a run whose -recon_id_out is idXML shows the mass shifts and lists the file, with no alert', async () => {
+    const mock = installMockBridge()
+    const paths = { recon_out: '/r/a.recon.tsv', delta_out: '/r/a.delta.tsv', recon_id_out: '/r/a.recon_id.idXML' }
+    mock.settings.lastUsed = { ...paths, recon_fasta: '/db/human.fasta' }
+    mock.reportFiles = {
+      [paths.recon_out]: humanRecon,
+      [paths.delta_out]: humanDelta,
+      [paths.recon_id_out]: '<?xml version="1.0"?>\n<IdXML version="1.5">'
+    }
+    await renderApp(mock)
+    await applyLastUsed(4)
+    await pickSingle(mock, '/r/a.mzML')
+    await click(runButton())
+    await emitDone(mock, 1, true)
+    await click(await screen.findByRole('tab', { name: 'Mass shifts' }))
+    await screen.findByRole('grid', { name: 'Mass-shift table' })
+    expect(within(await screen.findByRole('group', { name: 'Identification files' })).getByRole('button', { name: /: placements as identifications \(a\.recon_id\.idXML\)$/ })).toBeTruthy()
+    expect(screen.queryByRole('alert')).toBeNull()
+    // The table buttons offer no identifications table for an idXML.
+    expect(screen.queryByRole('button', { name: 'Identifications (mzTab)' })).toBeNull()
   })
 
   it('a run with -recon_out, -delta_out, -massgap_out and -glyco: the tabs read the outputs the run resolved', async () => {

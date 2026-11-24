@@ -1,11 +1,12 @@
-// Resolved outputs and "Reveal in Finder / Explorer" (GUI-DESIGN 6.3; the
-// full table of every output option from P1).
+// Resolved outputs, "Reveal in Finder / Explorer" and "Open with default
+// app" (GUI-DESIGN 6.3; the full table of every output option from P1).
 //
 // The renderer never names a path to the opener plugin itself: it asks
 // `reveal_output`, and the backend reveals the file (or opens its folder)
 // only when that file is an output of a run of this app -- one started in
 // this session (RunManager.revealable) or one in the run record
-// (history.jsonl). capabilities/default.json grants the renderer no opener
+// (history.jsonl), or a -recon_id_out dropped on the window (drop.rs
+// openable). The same scope holds for `open_output`. capabilities/default.json grants the renderer no opener
 // permission for paths, so this check is the whole scope.
 
 use std::path::{Path, PathBuf};
@@ -186,6 +187,20 @@ pub fn reveal_output(app: AppHandle, state: State<'_, RunManager>, path: String,
     } else {
         app.opener().reveal_item_in_dir(&p).map_err(|e| e.to_string())
     }
+}
+
+/// Open @p path in the app the system gives its type (an idXML in an
+/// identification tool), under the same scope as reveal_output: an output of
+/// a run of this app, or a file dropped on the window. The renderer has no
+/// opener permission for paths (capabilities/default.json); this check is
+/// the whole scope.
+#[tauri::command]
+pub fn open_output(app: AppHandle, state: State<'_, RunManager>, path: String) -> Result<(), String> {
+    let p = PathBuf::from(&path);
+    if !is_revealable(&p, &allowed(&app, &state)) {
+        return Err(format!("{path} is not an output of a run of this app"));
+    }
+    app.opener().open_path(p.display().to_string(), None::<&str>).map_err(|e| e.to_string())
 }
 
 #[cfg(test)]

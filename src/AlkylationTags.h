@@ -61,8 +61,13 @@
 
 namespace FASTag::AlkylationTags
 {
-  /// @brief Version of the -alkylation_tags_out sections (alkt_run.format).
-  inline constexpr int REPORT_FORMAT = 1;
+  /// @brief Version of the alkt_* and alkylation_tags_call sections (alkt_run.format).
+  ///
+  /// 2 (feedback 202dbcf4): alias.<form> sums over the run's own alphabet (fixed and
+  /// variable modifications of other residues); new rows twin.<form>; a
+  /// twin makes forms_resolved no. Written by -alkylation_tags_out and
+  /// inside -alkylation_out, whose default call it is.
+  inline constexpr int REPORT_FORMAT = 2;
 
   /// @brief The 13C - 12C spacing (Da) the alias check uses for isotope-shifted edges.
   inline constexpr double C13_SPACING = 1.0033548378;
@@ -183,18 +188,74 @@ namespace FASTag::AlkylationTags
   bool formsResolved(const std::vector<Alkylation::Form>& cands, double tol_da);
 
   /**
-    @brief Per candidate, the masses that could be mistaken for its C mass.
+    @brief One residue step the shadow pass can read besides a C form.
+  */
+  struct Step
+  {
+    std::string name;  ///< "K", or "M[Oxidation]" for a variable alternative
+    double mass = 0.0; ///< residue mass in Da, fixed modifications included
+  };
 
-    The two-residue sums (unmodified base residues, I as L) and the other
-    candidate C forms shifted by +/- C13_SPACING within 2 * @p tol_da of the
-    candidate's C mass: "G+C:0.0000" and "C[Carbamidomethyl]+13C:0.0193"
-    entries, by distance, comma-separated, "-" when none.
+  /**
+    @brief The residue steps of the shadow alphabet other than C.
+
+    The 18 base residues other than C (I as L) with the fixed modifications
+    of @p mods folded in, then one entry per variable modification on one of
+    them, as the tagger builds its alphabet (FASTagger.cpp, Alphabet). C is
+    left out: its forms are the candidates.
+
+    @param[in] mods the shadow pass' modifications (shadowMods())
+    @return the steps, base residues by name, then the variable alternatives
+  */
+  std::vector<Step> alphabet(const std::vector<ModSpec>& mods);
+
+  /**
+    @brief Per candidate, the single steps that read like its C mass.
+
+    Another candidate C form, or a residue step of @p alpha, whose mass lies
+    within 2 * @p tol_da of the candidate's C mass ("C[Carboxymethyl]:0.9840",
+    "C" for unmodified C), by distance, comma-separated, "-" when none. Such
+    a twin is one edge, so no spectrum can tell the two apart: the call is
+    then not made (unresolved_forms).
 
     @param[in] cands the candidate forms
     @param[in] tol_da the edge tolerance (Da)
+    @param[in] alpha the residue steps (alphabet()); the base residues when null
     @return one entry per candidate
   */
-  std::vector<std::string> aliases(const std::vector<Alkylation::Form>& cands, double tol_da);
+  std::vector<std::string> twins(const std::vector<Alkylation::Form>& cands, double tol_da,
+                                 const std::vector<Step>* alpha = nullptr);
+
+  /**
+    @brief Whether no candidate has a single-step twin (twins()).
+
+    formsResolved() over the candidates, plus no residue step of @p alpha
+    within 2 * @p tol_da of a candidate's C mass.
+
+    @param[in] cands the candidate forms
+    @param[in] tol_da the edge tolerance (Da)
+    @param[in] alpha the residue steps (alphabet()); the base residues when null
+    @return true when every candidate is resolved
+  */
+  bool stepsResolved(const std::vector<Alkylation::Form>& cands, double tol_da, const std::vector<Step>* alpha = nullptr);
+
+  /**
+    @brief Per candidate, the masses that could be mistaken for its C mass.
+
+    The two-step sums (two residue steps of @p alpha or C forms, I as L) and
+    the other candidate C forms shifted by +/- C13_SPACING within
+    2 * @p tol_da of the candidate's C mass: "C+G:0.0000" and
+    "C[Carbamidomethyl]+13C:0.0193" entries, by distance, comma-separated,
+    "-" when none. These need a missing peak or an isotope peak; they are
+    listed, not excluded.
+
+    @param[in] cands the candidate forms
+    @param[in] tol_da the edge tolerance (Da)
+    @param[in] alpha the residue steps (alphabet()); the base residues when null
+    @return one entry per candidate
+  */
+  std::vector<std::string> aliases(const std::vector<Alkylation::Form>& cands, double tol_da,
+                                   const std::vector<Step>* alpha = nullptr);
 
   /**
     @brief The run's counts of shadow tags and votes.
@@ -252,22 +313,25 @@ namespace FASTag::AlkylationTags
     std::vector<std::string> dropped;  ///< C modifications the shadow pass took out
     std::string lengths;               ///< seed lengths, "4" or "3,4"
     double tol_da = 0.0;               ///< edgeToleranceDa() of the run
+    std::vector<Step> alpha;           ///< the shadow alphabet's other steps (alphabet()); empty = the base residues
   };
 
   /**
     @brief The alkylation call over the votes.
 
-    #3g's call over the votes, then no_call unresolved_forms when the
-    candidates are not resolved at @p tol_da (formsResolved()).
+    #3g's call over the votes, then no_call unresolved_forms when a
+    candidate has a single-step twin at @p tol_da (stepsResolved()).
 
     @param[in] t the run's tally
     @param[in] s the call settings
     @param[in] cands the candidate forms
     @param[in] tol_da the edge tolerance (Da)
+    @param[in] alpha the residue steps (alphabet()); the base residues when null
     @return the call
   */
   Alkylation::Call callTags(const Tally& t, const Alkylation::Settings& s,
-                            const std::vector<Alkylation::Form>& cands, double tol_da);
+                            const std::vector<Alkylation::Form>& cands, double tol_da,
+                            const std::vector<Step>* alpha = nullptr);
 
   /**
     @brief The alkt_run, alkt_form and alkylation_tags_call rows of -alkylation_tags_out.

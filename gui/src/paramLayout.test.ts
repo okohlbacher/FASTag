@@ -230,6 +230,10 @@ describe('dependencies follow the CLI reader table', () => {
     '-species_call decoy': { on: [{ species: true, species_call: 'decoy' }], off: [{ species: true, species_call: 'none' }] },
     '-alkylation_out': { on: [{ alkylation_out: 'a.tsv' }], off: [{ alkylation_tags_out: 't.tsv' }] },
     '-alkylation_out or -alkylation_tags_out': { on: [{ alkylation_out: 'a.tsv' }, { alkylation_tags_out: 't.tsv' }], off: [{}] },
+    '-alkylation_out with a database (-recon_fasta, -fasta or -alkylation_proteome)': {
+      on: [{ alkylation_out: 'a.tsv', recon_fasta: '/d/db.fasta' }, { alkylation_out: 'a.tsv', fasta: '/d/db.fasta' }, { alkylation_out: 'a.tsv', alkylation_proteome: 'human' }],
+      off: [{ alkylation_out: 'a.tsv' }, { alkylation_out: 'a.tsv', alkylation_proteome: 'auto' }, { recon_fasta: '/d/db.fasta' }]
+    },
     '-census': { on: [{ census: true }], off: [{}] },
     '-census_ids': { on: [ids], off: [{ census: true }] },
     '-census_score': { on: [{ census: true, census_score: true }], off: [{ census: true }] }

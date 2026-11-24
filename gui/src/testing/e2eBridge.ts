@@ -770,7 +770,17 @@ export function installE2EBridge(): Origin | undefined {
       if (want('recon_out')) o.recon_out = '/data/run01.recon.tsv'
       if (want('delta_out')) o.delta_out = '/data/run01.delta.tsv'
       if (want('glyco')) o.glyco_out = '/data/run01.tags.glyco.tsv'
-      if (want('recon_id_out')) o.recon_id_out = recon.mzTab ? '/data/run01.recon.mzTab' : null
+      if (want('recon_id_out')) {
+        // In the format the form named, as FASTag.cpp picks it by extension:
+        // the fixture's mzTab, else an idXML or mzIdentML file of the run.
+        const ext = /\.(idxml|mzid)$/i.exec(String(sent['recon_id_out']))?.[1].toLowerCase()
+        if (!ext) o.recon_id_out = recon.mzTab ? '/data/run01.recon.mzTab' : null
+        else {
+          o.recon_id_out = `/data/run01.recon_id.${ext === 'mzid' ? 'mzid' : 'idXML'}`
+          mock.reportFiles[o.recon_id_out] =
+            ext === 'mzid' ? '<?xml version="1.0" encoding="UTF-8"?>\n<MzIdentML version="1.2.0">\n' : '<?xml version="1.0" encoding="UTF-8"?>\n<IdXML version="1.5">\n'
+        }
+      }
     }
     if (fixture === 'workflows') {
       // The files of the real run of the call's workflow, where this run

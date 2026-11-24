@@ -32,7 +32,8 @@ import type {
   SpectrumSupport,
   TaxdbInfo,
   TaxonomyStatus,
-  TaxonomyDump
+  TaxonomyDump,
+  DataStatus
 } from './types'
 import { parseSpecies } from './results/species'
 import { frame, unframe } from './feedback/frame'
@@ -140,6 +141,7 @@ const api: FastagApi = {
   resultsPosition: (path: string, view: ResultsView, row: number) =>
     invoke<number | null>('results_position', { path, view, row }),
   revealOutput: (path: string, folder: boolean) => invoke<void>('reveal_output', { path, folder }),
+  openOutput: (path: string) => invoke<void>('open_output', { path }),
   onMenu: (cb) => subscribe<string>('fastag:menu', cb),
   // An export is a job (GUI-DESIGN 6.1 item 11) with a Channel of its own.
   exportResults: (
@@ -178,6 +180,7 @@ const api: FastagApi = {
   reportHead: (path: string) => invoke<string | null>('report_head', { path }),
   taxdbInfo: (explicit?: string) => invoke<TaxdbInfo | null>('taxdb_info', { explicit }),
   taxonomyStatus: (explicit?: string) => invoke<TaxonomyStatus>('taxonomy_status', { explicit }),
+  dataStatus: () => invoke<DataStatus>('data_status'),
 
   loadSettings: () => invoke<Settings>('load_settings'),
   saveLast: (values: Record<string, unknown>) => invoke<boolean>('save_last', { values }),

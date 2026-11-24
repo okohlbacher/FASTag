@@ -490,9 +490,10 @@ export default function FeedbackDialog({ session, text, setText, onSaved, onClos
       const draft = buildDraft(session, text, state)
       const r = await window.fastag.feedbackSave(draft, png)
       setSaved(r)
-      setSavedText(text)
+      // What was saved: no screenshot to share when none was saved.
+      setSavedText({ ...text, share: draft.share })
       onSaved()
-      await exportNow(r.id, text.share)
+      await exportNow(r.id, draft.share)
       setStep('share')
     } catch (e) {
       setError(`Not saved: ${msg(e)}`)

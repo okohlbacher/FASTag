@@ -280,7 +280,7 @@ export function labelFindings(r: Report): LabelFinding[] {
   }))
 }
 
-// ---- alkylation (1.12, -alkylation_out format 1) ---------------------------
+// ---- alkylation (1.12, -alkylation_out formats 1 and 2) ---------------------
 
 export interface AlkylationCall {
   status: 'call' | 'no_call' | 'unknown'
@@ -290,13 +290,17 @@ export interface AlkylationCall {
   mass: number | null
   /// Share of the binned spectra (the leading class's on no_call).
   share: number | null
-  /// Binned spectra the call is based on.
+  /// Binned spectra (placements) or votes (tags) the call is based on.
   binned: number | null
-  /// `few_cys_spectra` or `ambiguous` on no_call.
+  /// `few_cys_spectra`, `ambiguous`, `tags_too_short` (format 1),
+  /// `unresolved_forms` or `disagree` (format 2) on no_call.
   reason?: string
-  /// `recon_fasta`, `fasta`, `proteome` or `bundled:<name>`.
+  /// `none` (format 2: no database), `recon_fasta`, `fasta`, `proteome` or `bundled:<name>`.
   databaseSource?: string
-  /// The `alk_run format` value; a reader knows format 1.
+  /// Format 2: where the call comes from, `tags`, `placement` or
+  /// `tags+placement`; absent in format 1 (placements only).
+  source?: string
+  /// The `alk_run format` value; a reader knows formats 1 and 2.
   format: number | null
 }
 
@@ -315,6 +319,7 @@ export function alkylationCall(r: Report): AlkylationCall {
     binned: row(r, 'alkylation_call', 'status')?.n ?? null,
     reason: v('reason') == null || v('reason') === '-' ? undefined : v('reason'),
     databaseSource: value(r, 'alk_run', 'database_source'),
+    source: v('source'),
     format: num(value(r, 'alk_run', 'format'))
   }
 }

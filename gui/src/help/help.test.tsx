@@ -191,6 +191,12 @@ describe('help: troubleshooting', () => {
     const cases: [string, string][] = [
       ['-species: tag_length (3) + 2*extension (0) = 3 cannot reach the index k = 7', 'faq-species-short'],
       ["-species: no taxdb. Looked in '/x'. Pass -taxdb explicitly, or set FASTAG_TAXONOMY_DIR.", 'faq-species-reference'],
+      [
+        "-massgap_out needs massgap_mods.tsv from FASTag's shipped digest data, and it was not found (looked in /b/share/FASTag/digest, /b/bin/share-FASTag-digest, /b/bin/digest). To fix: use an installed FASTag",
+        'faq-shipped-data'
+      ],
+      ["-alkylation_out: no shipped human proteome found (it is not in '/a'). Give -alkylation_proteome <fasta> or -recon_fasta", 'faq-shipped-data'],
+      ["-digest_out needs digest_models.tsv from FASTag's shipped digest data, and it was not found (FASTAG_DIGEST_DIR is set to '/x', which is not a folder)", 'faq-shipped-data'],
       ["Input 'run.raw' is neither .mzML, .mzpeak nor .mgf.", 'faq-input'],
       ["Input 'run.mgf.gz' is gzip-compressed; FASTag reads uncompressed input only. Decompress it first.", 'faq-input'],
       ['Error: File not found (the file /d/a.mzML could not be found)', 'faq-input'],

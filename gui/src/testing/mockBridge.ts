@@ -35,6 +35,7 @@ import type {
   SpectrumSupport,
   TaxdbInfo,
   TaxonomyStatus,
+  DataStatus,
   TaxonomyDump
 } from '../types'
 import runStartedFixture from './fixtures/run-started.json'
@@ -152,6 +153,10 @@ export interface MockBridge extends FastagApi {
   // with the taxonomy asset unpacked); taxonomyStatusCalls: the -taxdb asked.
   taxonomyStatusResult: TaxonomyStatus
   taxonomyStatusCalls: (string | undefined)[]
+  // Where a run finds the shipped digest data and proteomes (default: all
+  // there, as in an installed FASTag); dataStatusCalls: how often it was asked.
+  dataStatusResult: DataStatus
+  dataStatusCalls: number
   // The CLI's --helphelp options. The default is a CLI without
   // -probe_input, as every released FASTag is.
   cliOptions: CliOptions
@@ -195,6 +200,7 @@ export interface MockBridge extends FastagApi {
   // The last open's event callback: tests drive the D5 events with it.
   emitBrowser(e: BrowserEvent): void
   revealCalls: { path: string; folder: boolean }[]
+  openCalls: string[]
   revealError: Error | null
   emitMenu(action: string): void
   exportCalls: { path: string; view: ResultsView; columns: string[]; dest: string }[]
@@ -420,6 +426,15 @@ export function installMockBridge(): MockBridge {
     taxdbInfoResult: null,
     taxonomyStatusResult: { index: '/app/taxonomy/tax_k7.taxdb', dir: '/app/taxonomy', expected: '/app/taxonomy/tax_k7.taxdb', fromEnv: false },
     taxonomyStatusCalls: [],
+    dataStatusResult: {
+      digestDir: '/app/share/FASTag/digest',
+      files: { digestModels: true, digestModelsV2: true, massgapMods: true, calibration: true },
+      alkylationDir: '/app/share/FASTag/alkylation',
+      proteomes: ['human', 'mouse', 'yeast', 'ecoli'],
+      searched: ['/app/share/FASTag/digest', '/app/bin/share-FASTag-digest', '/app/bin/digest'],
+      fromEnv: false
+    },
+    dataStatusCalls: 0,
     cliOptions: { options: ['in', 'out', 'fasta', 'fragment_tolerance', 'fragment_tolerance_unit'], ok: true, detail: '5 options' },
     probeOutputs: {},
     probeCalls: [],
@@ -474,6 +489,7 @@ export function installMockBridge(): MockBridge {
     finishReads: () => finishReads?.(),
     resultsOpenCalls: [],
     revealCalls: [],
+    openCalls: [],
     revealError: null,
     emitBrowser: (e) => browserCb?.(e),
     emitMenu: (a) => menuListeners.slice().forEach((cb) => cb(a)),
@@ -555,6 +571,10 @@ export function installMockBridge(): MockBridge {
     taxonomyStatus: (explicit) => {
       mock.taxonomyStatusCalls.push(explicit)
       return Promise.resolve(mock.taxonomyStatusResult)
+    },
+    dataStatus: () => {
+      mock.dataStatusCalls += 1
+      return Promise.resolve(mock.dataStatusResult)
     },
     cliCapabilities: () => Promise.resolve(mock.cliOptions),
     probeInput: (input, fasta) => {
@@ -694,6 +714,10 @@ export function installMockBridge(): MockBridge {
     resultsPosition: () => Promise.resolve(null),
     revealOutput: (path, folder) => {
       mock.revealCalls.push({ path, folder })
+      return mock.revealError ? Promise.reject(mock.revealError) : Promise.resolve()
+    },
+    openOutput: (path) => {
+      mock.openCalls.push(path)
       return mock.revealError ? Promise.reject(mock.revealError) : Promise.resolve()
     },
     onMenu: on(menuListeners),

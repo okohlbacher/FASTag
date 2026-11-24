@@ -64,7 +64,15 @@
 namespace FASTag::Alkylation
 {
   /// Version of the -alkylation_out sections (alk_run.format).
-  inline constexpr int REPORT_FORMAT = 1;
+  ///
+  /// 2 (feedback 202dbcf4): the call no longer needs a database. alk_run
+  /// gains the row method; without a database it holds only format, method,
+  /// database (-), database_source (none), min_spectra and min_share, and
+  /// alk_cys is not written. The placement call moves to
+  /// alkylation_placement_call; the tag-only sections (AlkylationTags,
+  /// alkt_run, alkt_form, alkylation_tags_call) follow; alkylation_call is
+  /// the combined call (combineCalls()) with a sixth row, source.
+  inline constexpr int REPORT_FORMAT = 2;
 
   /**
     @brief The call classes of the alkylation call.
@@ -303,7 +311,10 @@ namespace FASTag::Alkylation
   {
     bool called = false;         ///< a class was called
     int cls = -1;                ///< the call (called) or the leading class
-    std::string reason = "-";    ///< no call: few_cys_spectra, ambiguous or (shipped proteome) tags_too_short
+    std::string reason = "-";    ///< no call: few_cys_spectra, ambiguous, (shipped proteome) tags_too_short, (tags) unresolved_forms, (combined) disagree
+    /// combineCalls() only: the call the result is taken from, "tags",
+    /// "placement" or "tags+placement" (both agree, or disagree).
+    std::string source = "-";
     std::uint64_t top = 0, binned = 0;  ///< spectra of the leading class; spectra binned to any class
     double share = 0.0;          ///< top / binned (0 when nothing is binned)
   };
@@ -336,6 +347,49 @@ namespace FASTag::Alkylation
   bool markTagsTooShort(Call& c, int longest_tag, int min_tag_length);
 
   /**
+    @brief The call of -alkylation_out from the tag-only call and, with a database, the placement call.
+
+    The tag-only call (AlkylationTags::callTags) needs no database; the
+    placement call refines it:
+      - only one of them calls: that call (source tags or placement);
+      - both call the same class: that call (source tags+placement), with the
+        tag call's counts;
+      - both call, different classes: no_call, reason disagree (source
+        tags+placement);
+      - neither calls: the tag call's no_call and reason (source tags).
+
+    @param[in] tags The tag-only call.
+    @param[in] placement The placement call; null without a database.
+    @return The combined call; its counts (top, binned, share) are those of the call in source (the tag call for tags+placement).
+  */
+  Call combineCalls(const Call& tags, const Call* placement);
+
+  /**
+    @brief The alk_run rows of -alkylation_out without a database (format 2).
+
+    format, method (tags), database (-), database_source (none), min_spectra
+    and min_share.
+
+    @param[in] s Settings (min_spectra, min_share).
+    @return The rows.
+  */
+  std::vector<Digest::Row> tagOnlyRunRows(const Settings& s);
+
+  /**
+    @brief The rows of one call section: status, reagent, mass, share, reason (and source with @p with_source).
+
+    @param[in] section The section name (alkylation_call, alkylation_placement_call).
+    @param[in] c The call.
+    @param[in] s Settings (min_spectra, min_share).
+    @param[in] forms The Cys forms (forms()).
+    @param[in] unit What the counts are, for the descriptions ("binned spectra", "votes").
+    @param[in] with_source Write the sixth row, source (the combined call).
+    @return The rows.
+  */
+  std::vector<Digest::Row> callRows(const std::string& section, const Call& c, const Settings& s,
+                                    const std::vector<Form>& forms, const std::string& unit, bool with_source);
+
+  /**
     @brief What the report states about the database and the run.
   */
   struct ReportInfo
@@ -354,7 +408,12 @@ namespace FASTag::Alkylation
     int longest_tag = 0;  ///< the run's longest tag (see min_tag_length)
   };
   /**
-    @brief The alk_run, alk_cys and alkylation_call rows of -alkylation_out.
+    @brief The placement rows of -alkylation_out: alk_run, alk_cys and alkylation_placement_call.
+
+    Format 2: alk_run carries the row method (tags+placement) after format;
+    the placement call is the section alkylation_placement_call (five rows).
+    The caller appends the tag-only sections and the combined alkylation_call
+    (callRows()).
 
     @param[in] t Run totals.
     @param[in] c The call.

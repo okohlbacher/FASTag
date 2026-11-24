@@ -92,3 +92,9 @@ table.taxa.dt td.mono { font-family: var(--font-seq); font-size: var(--text-xs);
   .mg-mark { stroke: GrayText; opacity: 1; }
   table.dt tr.active td { background: Highlight; color: HighlightText; }
 }
+
+/* Files a run wrote that no viewer here shows (ProductFiles.tsx): Reveal, Open, a note. */
+.written-files { display: flex; flex-direction: column; gap: var(--space-1); margin: var(--space-2) 0; }
+.written-file { flex-wrap: wrap; gap: var(--space-2); }
+.written-file .muted { font-size: var(--text-sm); }
+.written-file button { max-width: 100%; overflow-wrap: anywhere; white-space: normal; height: auto; }

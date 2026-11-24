@@ -1,0 +1,114 @@
+// The check before a run that needs FASTag's shipped data (report
+// 20261124T094950Z_54456a88: a Mass-shift survey with an engine from a build
+// tree stopped with exit 6 after 123 ms). One case per rule of FASTag.cpp:
+// what needs which file, what gives its own, and an unknown status.
+import { describe, expect, it } from 'vitest'
+import { missingDataChecks, preStartChecks, shippedDataNeeds } from './checks'
+import type { DataStatus } from '../types'
+
+const BARE: DataStatus = {
+  digestDir: null,
+  files: { digestModels: false, digestModelsV2: false, massgapMods: false, calibration: false },
+  alkylationDir: null,
+  proteomes: [],
+  searched: ['/b/share/FASTag/digest', '/b/bin/share-FASTag-digest', '/b/bin/digest'],
+  fromEnv: false
+}
+const FULL: DataStatus = {
+  digestDir: '/app/share/FASTag/digest',
+  files: { digestModels: true, digestModelsV2: true, massgapMods: true, calibration: true },
+  alkylationDir: '/app/share/FASTag/alkylation',
+  proteomes: ['human', 'mouse', 'yeast', 'ecoli'],
+  searched: ['/app/share/FASTag/digest'],
+  fromEnv: false
+}
+const files = (v: Record<string, string | boolean>): string[] => shippedDataNeeds(v).map((n) => `${n.option}:${n.file}`)
+
+describe('shipped data before a run', () => {
+  it('names the file each output needs, as FASTag.cpp reads it', () => {
+    expect(files({ recon_out: 'r.tsv', recon_fasta: '/d/db.fasta', massgap_out: 'g.tsv' })).toEqual(['massgap_out:massgap_mods.tsv'])
+    expect(files({ digest_out: 'd.tsv' })).toEqual(['digest_out:digest_models.tsv'])
+    expect(files({ digest_out: 'd.tsv', digest_models_version: 'v2' })).toEqual(['digest_out:digest_models_v2.tsv', 'digest_out:digest_calibration.tsv'])
+    expect(files({ digest_out: 'd.tsv', digest_min_confidence: '0.5' })).toEqual(['digest_out:digest_models.tsv', 'digest_out:digest_calibration.tsv'])
+    expect(files({ fasta: '/d/db.fasta', shortlist_out: 's.tsv' })).toEqual(['shortlist_out:digest_models.tsv'])
+    expect(files({ fasta: '/d/db.fasta', search_config_out: 's.json' })).toEqual(['search_config_out:digest_models.tsv'])
+    // The default auto reads no proteome: the call is read off the tags (feedback 202dbcf4).
+    expect(files({ alkylation_out: 'a.tsv' })).toEqual([])
+    expect(files({ alkylation_out: 'a.tsv', alkylation_proteome: 'auto' })).toEqual([])
+    expect(files({ alkylation_out: 'a.tsv', alkylation_proteome: 'human' })).toEqual(['alkylation_out:human.fasta.gz'])
+    expect(files({ alkylation_out: 'a.tsv', alkylation_proteome: 'yeast' })).toEqual(['alkylation_out:yeast.fasta.gz'])
+    // QC, tags alone: nothing.
+    expect(files({ qc_out: 'q.tsv' })).toEqual([])
+  })
+
+  it('an option that gives its own file needs none', () => {
+    expect(files({ digest_out: 'd.tsv', digest_models: '/m.tsv' })).toEqual([])
+    expect(files({ digest_out: 'd.tsv', digest_models_version: 'v2', digest_models: '/m.tsv', digest_calibration: '/c.tsv' })).toEqual([])
+    // The hand-off uses the digest report's models when it is on.
+    expect(files({ fasta: '/d/db.fasta', shortlist_out: 's.tsv', digest_out: 'd.tsv', digest_models: '/m.tsv' })).toEqual([])
+    // The alkylation report on a database: -recon_fasta, a FASTA path, or the placements' database.
+    expect(files({ alkylation_out: 'a.tsv', recon_fasta: '/d/db.fasta' })).toEqual([])
+    expect(files({ alkylation_out: 'a.tsv', alkylation_proteome: '/d/my.fasta' })).toEqual([])
+    expect(files({ alkylation_out: 'a.tsv', recon_out: 'r.tsv', fasta: '/d/db.fasta' })).toEqual([])
+    expect(files({ alkylation_out: 'a.tsv', fasta: '/d/db.fasta', shortlist_out: 's.tsv' })).toEqual(['shortlist_out:digest_models.tsv'])
+  })
+
+  it('blocks the Mass-shift survey with a bare binary, names the folders and the fix, and offers to run without the report', () => {
+    const values = { recon_out: 'r.tsv', recon_fasta: '/d/db.fasta', massgap_out: 'g.tsv' }
+    const r = preStartChecks({ input: '/d/a.mzML', values, supported: false, probe: null, data: BARE })
+    expect(r.checks.map((c) => `${c.level}:${c.id}`)).toEqual(['block:no-shipped-data-massgap_out'])
+    const c = r.checks[0]
+    expect(c.title).toBe("The mass-gap report needs FASTag's shipped data (massgap_mods.tsv)")
+    expect(c.detail).toContain('It is not found next to the FASTag program (looked in /b/share/FASTag/digest, /b/bin/share-FASTag-digest, /b/bin/digest).')
+    expect(c.detail).toContain('Use an installed FASTag (cmake --install puts it in <prefix>/share/FASTag/digest)')
+    expect(c.detail).toContain('set FASTAG_DIGEST_DIR to a folder that holds it (data/digest in the FASTag sources) and start FASTag again')
+    expect(c.detail).toContain('Or run without the mass-gap report.')
+    expect(c.fix).toEqual({ label: 'Run without the mass-gap report', params: { massgap_out: '' } })
+    expect(c.faq).toBe('faq-shipped-data')
+    // The fix clears the need.
+    expect(missingDataChecks({ ...values, ...c.fix!.params } as Record<string, string>, BARE)).toEqual([])
+  })
+
+  it('Characterize a run: the digest and alkylation reports, each with its own fix', () => {
+    // The alkylation report at its default needs no proteome: only the digest data block.
+    const plain = { digest_out: 'd.tsv', alkylation_out: 'a.tsv', qc_out: 'q.tsv' }
+    expect(missingDataChecks(plain, BARE).map((c) => c.id)).toEqual(['no-shipped-data-digest_out'])
+    expect(missingDataChecks({ alkylation_out: 'a.tsv' }, BARE)).toEqual([])
+    // A shipped proteome named: it is needed.
+    const values = { ...plain, alkylation_proteome: 'human' }
+    const cs = missingDataChecks(values, BARE)
+    expect(cs.map((c) => c.id)).toEqual(['no-shipped-data-digest_out', 'no-shipped-data-alkylation_out'])
+    expect(cs[0].fix?.params).toEqual({ digest_out: '' })
+    expect(cs[1].title).toBe('The alkylation report needs the shipped human proteome (human.fasta.gz)')
+    expect(cs[1].detail).toContain('There is no alkylation folder beside the FASTag program.')
+    expect(cs[1].detail).toContain('FASTAG_ALKYLATION_DIR')
+    expect(cs[1].fix?.params).toEqual({ alkylation_out: '' })
+    // The digest data found, the proteome not: only the alkylation report.
+    const noYeast = { ...FULL, proteomes: ['human'] }
+    expect(missingDataChecks({ ...values, alkylation_proteome: 'yeast' }, noYeast).map((c) => c.id)).toEqual(['no-shipped-data-alkylation_out'])
+    expect(missingDataChecks({ ...values, alkylation_proteome: 'yeast' }, noYeast)[0].detail).toContain('It is not in /app/share/FASTag/alkylation.')
+  })
+
+  it('Database reduction is blocked without a fix button', () => {
+    const cs = missingDataChecks({ fasta: '/d/db.fasta', shortlist_out: 's.tsv', fasta_out: 'r.fasta' }, BARE)
+    expect(cs.map((c) => c.id)).toEqual(['no-shipped-data-shortlist_out'])
+    expect(cs[0].title).toBe("The database reduction needs FASTag's shipped data (digest_models.tsv)")
+    expect(cs[0].fix).toBeUndefined()
+  })
+
+  it('a folder without the file, and a FASTAG_DIGEST_DIR that is no folder, are said as such', () => {
+    const noGap = { ...FULL, files: { ...FULL.files, massgapMods: false } }
+    const values = { recon_out: 'r.tsv', recon_fasta: '/d/db.fasta', massgap_out: 'g.tsv' }
+    expect(missingDataChecks(values, noGap)[0].detail).toContain('It is not in /app/share/FASTag/digest.')
+    const env = { ...BARE, fromEnv: true, searched: ['/nope'] }
+    expect(missingDataChecks(values, env)[0].detail).toContain('FASTAG_DIGEST_DIR names /nope, which is not a folder.')
+  })
+
+  it('nothing while the status is unknown or the data is there', () => {
+    const values = { recon_out: 'r.tsv', recon_fasta: '/d/db.fasta', massgap_out: 'g.tsv', digest_out: 'd.tsv', alkylation_out: 'a.tsv' }
+    expect(missingDataChecks(values, undefined)).toEqual([])
+    expect(missingDataChecks(values, null)).toEqual([])
+    expect(missingDataChecks(values, FULL)).toEqual([])
+    expect(preStartChecks({ input: '/d/a.mzML', values, supported: false, probe: null }).checks).toEqual([])
+  })
+})

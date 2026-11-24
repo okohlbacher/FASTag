@@ -127,12 +127,39 @@ export function sniffTable(text: string): TableKind | null {
   return null
 }
 
-/// Parse a table of any of the four kinds. Throws with a readable message.
-export function parseTable(text: string, path: string): AnyTable {
-  if (/^\s*<\?xml|^\s*</.test(text)) {
-    const what = /<MzIdentML/i.test(text.slice(0, 4096)) || /\.mzid$/i.test(path) ? 'mzIdentML' : 'idXML'
-    throw new Error(`${baseName(path)} is ${what}; this viewer reads the mzTab form of -recon_id_out (name the file .mzTab), or open it in an identification tool`)
+/// A file in a format this viewer does not show (an idXML or mzIdentML
+/// -recon_id_out): the view lists it as a file to reveal or open, never as
+/// a read error (the user, or an older GUI, chose that format on purpose).
+export class NotShownFormat extends Error {
+  readonly format: string
+  constructor(path: string, format: string) {
+    super(`${baseName(path)} is ${format}; this viewer reads the mzTab form of -recon_id_out (name the file .mzTab), or open it in an identification tool`)
+    this.name = 'NotShownFormat'
+    this.format = format
   }
+}
+
+/// The format of a -recon_id_out by its name: mzTab is shown in Mass
+/// shifts; idXML and mzid (the CLI's other two) are listed as files.
+export function idFormat(path: string): 'mzTab' | 'idXML' | 'mzIdentML' {
+  if (/\.idxml$/i.test(path)) return 'idXML'
+  if (/\.mzid$/i.test(path)) return 'mzIdentML'
+  return 'mzTab'
+}
+
+/// The identification format of an XML file @p text at @p path, by its root
+/// element or its name; null for another XML (an mzML picked as a report).
+export function xmlIdFormat(text: string, path: string): 'idXML' | 'mzIdentML' | null {
+  const head = text.slice(0, 4096)
+  if (/<MzIdentML\b/i.test(head) || /\.mzid$/i.test(path)) return 'mzIdentML'
+  if (/<IdXML\b/i.test(head) || /\.idxml$/i.test(path)) return 'idXML'
+  return null
+}
+
+/// Parse a table of any of the four kinds. Throws with a readable message;
+/// an XML identification file throws NotShownFormat.
+export function parseTable(text: string, path: string): AnyTable {
+  if (/^\s*<\?xml|^\s*</.test(text)) throw new NotShownFormat(path, xmlIdFormat(text, path) ?? 'XML')
   switch (sniffTable(text)) {
     case 'recon':
       return parseRecon(text, path)
