@@ -1,11 +1,11 @@
-// Whether a resolved tag lies at a peptide terminus (terminus.ts), the cases
-// the C++ tests of the terminus column check.
+// Whether a tag lies at a peptide terminus (terminus.ts), the cases the C++
+// tests of FASTag's terminus test check.
 import { describe, expect, it } from 'vitest'
 import type { SpectrumPeaks } from './dump'
 import type { Ladder } from './ladder'
 import { PROTON, WATER, Z_DOT_OFFSET, residueMasses } from './ladder'
-import { C13, flanksOf, terminusFromFlanks, parseTerminus, termContext, termText, terminiOf, terminusMark, terminusOf, terminusText, type Terminus } from './terminus'
-import type { GPath, Step } from './graph'
+import { C13, flanksOf, terminusFromFlanks, termContext, termText, terminusMark, terminusOf, terminusText, type Terminus } from './terminus'
+import type { Step, StepPath } from './step'
 
 const RES = residueMasses(undefined)
 const R = RES.masses
@@ -18,8 +18,8 @@ function spectrum(mz: number[], M: number | null, tol = 10, unit: 'ppm' | 'Da' =
     tolerance: tol, toleranceUnit: unit, picked: false, deisotoped: true, tagged: true, nRead: s.length, mz: s, int: s.map(() => 100)
   }
 }
-/** A resolved tag over the peaks at @p mz (ascending), reading @p labels between them (in m/z order). */
-function tagOn(s: SpectrumPeaks, series: Ladder['series'], mz: number[], labels: string[], charge = 1): Pick<GPath, 'series' | 'charge' | 'peaks' | 'steps'> {
+/** A tag over the peaks at @p mz (ascending), reading @p labels between them (in m/z order). */
+function tagOn(s: SpectrumPeaks, series: Ladder['series'], mz: number[], labels: string[], charge = 1): StepPath {
   const peaks = mz.map((x) => s.mz.findIndex((y) => Math.abs(y - x) < 1e-9))
   if (peaks.some((i) => i < 0)) throw new Error('not a peak')
   const steps: Step[] = labels.map((label, k) => ({ u: peaks[k], v: peaks[k + 1], readings: [{ label, gap: label.startsWith('['), evalue: 0.01, deltaMz: 0, deltaPpm: 0 }] }))
@@ -37,7 +37,7 @@ const DEF = termContext({}, RES)
 const PEP = 'PEPTIDEK'
 const M = sum(PEP) + WATER
 
-describe('terminus of a resolved tag', () => {
+describe('terminus of a tag', () => {
   it('N: a b ladder from b0', () => {
     const b = ions(0, 'PEP')
     const s = spectrum(b, M)
@@ -138,21 +138,9 @@ describe('terminus of a resolved tag', () => {
     expect(token(terminusOf(tagOn(s, 'b', b, [...'PTI']), s, RES, DEF))).toBe('')
   })
 
-  it('reads the column back, and prefers it for the series it was written for', () => {
-    for (const x of ['', 'N', 'C', 'N,C', 'N+[IL]', 'N,C+K', 'N+M[Oxidation],C+[KQ]']) expect(terminusText(parseTerminus(x) as Terminus)).toBe(x)
-    expect(parseTerminus('X')).toBeNull()
-    expect(parseTerminus('N+')).toBeNull()
-    const b = ions(0, 'PEP')
-    const s = spectrum(b, M)
-    const p = { ...tagOn(s, 'b', b, ['P', 'E', 'P']), call: { series: 'b' as const, level: 'sure' as const, why: '' }, chain: [], inside: [], best: null, weakest: null, joined: [], relations: [], sameAs: [] }
-    expect(terminiOf([p], s, RES, DEF).map(token)).toEqual(['N'])
-    expect(terminiOf([{ ...p, terminus: { series: 'b', text: 'C+K' } }], s, RES, DEF).map(token)).toEqual(['C+K'])
-    // Written for y, read as b now (the peptide settled it): computed here.
-    expect(terminiOf([{ ...p, terminus: { series: 'y', text: 'C+K' } }], s, RES, DEF).map(token)).toEqual(['N'])
-  })
 })
 
-// The cases of test/taggraph_test.cpp terminusCases, on the flanks as there.
+// The cases of FASTag's C++ terminus tests (test/terminus_test.cpp, FASTag::Terminus::terminus), on the flanks as there.
 describe('terminus from the flanks, as the C++ tests', () => {
   const P = (tol: number, ppm: boolean, prec: number | null = null, charge = 2): SpectrumPeaks => ({ ...spectrum([100], null, tol, ppm ? 'ppm' : 'Da', charge), precursor: prec })
   const T = (series: Ladder['series'], z: number, low: number, n: number, c: number, s: SpectrumPeaks, ctx = DEF): string => token(terminusFromFlanks(series, z, low, n, c, s, ctx))

@@ -69,11 +69,6 @@ export function recordOutputs(r: RunRecord, out: string): ResolvedOutputs {
     if (params[on] !== true || o[key]) continue
     o[key] = r.outputs.find((x) => x.endsWith(suffix)) ?? `${stripExt(out)}${suffix}`
   }
-  // The tag graph tables the backend adds beside the tags (fastag.rs), never sent as params.
-  for (const key of ['resolved_out', 'tag_graph_out'] as const) {
-    const i = r.argv.indexOf(`-${key}`)
-    if (i > 0 && r.argv[i + 1] && !o[key]) o[key] = place(r.argv[i + 1])
-  }
   return o
 }
 

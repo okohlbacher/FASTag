@@ -1221,56 +1221,6 @@
       "toppAdvanced": false
     },
     {
-      "name": "resolve_join",
-      "type": "bool",
-      "default": "false",
-      "description": "Join tags that only touch at a peak into one resolved tag",
-      "required": false,
-      "toppAdvanced": true
-    },
-    {
-      "name": "resolve_max_evalue",
-      "type": "double",
-      "default": "1.0",
-      "description": "Largest E-value of the tags merged into resolved tags",
-      "required": false,
-      "toppAdvanced": true,
-      "min": 0
-    },
-    {
-      "name": "resolve_score",
-      "type": "string",
-      "default": "cstar",
-      "description": "How resolved tags are ranked: cstar (each step a chain adds is worth its C* log-odds of being right, from its peaks, mass error, rivals and support, less -resolve_threshold; rank 1 is the best resolved tag that holds no peak together with its own complement), steplogodds (the same with the simpler 1.15 step model and no complement rule), evidence (summed E-value evidence of its tags) or anchor (the best single tag first, then steplogodds)",
-      "required": false,
-      "toppAdvanced": true,
-      "choices": [
-        "cstar",
-        "steplogodds",
-        "evidence",
-        "anchor"
-      ]
-    },
-    {
-      "name": "resolve_threshold",
-      "type": "double",
-      "default": "3.0",
-      "description": "The log-odds a step must exceed to lengthen a resolved tag (cstar, steplogodds, anchor)",
-      "required": false,
-      "toppAdvanced": true
-    },
-    {
-      "name": "resolved_out",
-      "type": "output-file",
-      "default": "",
-      "description": "Merge each spectrum's tags (of -out, E-value <= -resolve_max_evalue) on its peaks into resolved tags and write one row per resolved tag, best first: sequence N->C, series call, flanks, score, evidence, peaks and steps (both in ascending m/z order: for y and z the steps run C->N, the reverse of sequence), the member rows of -out and the ranking it was made with (scheme, threshold: -resolve_score, -resolve_threshold), and whether it lies at a peptide terminus (terminus: N, C, N,C, or one residue away as N+K or C+[KQ]; empty if neither)",
-      "required": false,
-      "toppAdvanced": false,
-      "formats": [
-        "tsv"
-      ]
-    },
-    {
       "name": "search_config_out",
       "type": "output-file",
       "default": "",
@@ -1737,7 +1687,7 @@
       "name": "stream",
       "type": "bool",
       "default": "false",
-      "description": "Resident single-spectrum mode: spectrum blocks on stdin, TSV rows + '#end' sentinels on stdout. Core tagging only (refuses -fasta, -entrapment_fasta, -species, -species_out, -taxdb, -glyco, -recon_out, -recon_id_out, -out_spectra, -delta_out, -digest_out, -label_out, -massgap_out, -usi_collection); parameter changes need a restart",
+      "description": "Resident single-spectrum mode: spectrum blocks on stdin, TSV rows + '#end' sentinels on stdout. Core tagging only (refuses -fasta, -entrapment_fasta, -species, -species_out, -taxdb, -glyco, -recon_out, -recon_id_out, -out_spectra, -delta_out, -digest_out, -label_out, -massgap_out, -usi_collection, -terminus); parameter changes need a restart",
       "required": false,
       "toppAdvanced": false
     },
@@ -1770,14 +1720,15 @@
       "min": 0
     },
     {
-      "name": "tag_graph_out",
-      "type": "output-file",
-      "default": "",
-      "description": "The merge graph of each spectrum: one row per placement of its tags on the peaks, with its layer, series (as judged on its own peaks, before complement pairing: it can be the other series of the pair than the resolved tag's in -resolved_out, which is authoritative), steps (ascending m/z), rows, the resolved tag that uses it and the placements that continue it",
+      "name": "subsume_tags",
+      "type": "string",
+      "default": "on",
+      "description": "Leave out of -out a tag whose peaks are a run of another tag's that reads the same residues on them, in the same spectrum (same fragment charge, ion series and precursor hypothesis), when that tag is at least as significant (E-value <= its own; a longer tag with a worse E-value keeps the shorter one; of two identical tags the one with the lower E-value is kept). Only the -out rows change; reports, placements and calibrations count every tag. off: every tag is written, as before",
       "required": false,
-      "toppAdvanced": true,
-      "formats": [
-        "tsv"
+      "toppAdvanced": false,
+      "choices": [
+        "on",
+        "off"
       ]
     },
     {
@@ -1820,6 +1771,14 @@
       "type": "input-file",
       "default": "",
       "description": "NCBI taxonomy nodes.dmp. Default: the bundled nodes.dmp",
+      "required": false,
+      "toppAdvanced": false
+    },
+    {
+      "name": "terminus",
+      "type": "bool",
+      "default": "false",
+      "description": "Append series and terminus columns: each tag read as written (y, or z under c/z) and reversed (b, or c), each reading's flanks tested against the peptide termini (one residue at most, e.g. a low peak that is y1 of a C-terminal K); terminus lists every token found (N, C, C+K, N,C+R; y:..;b:.. when both readings are anchored, '-' if none); series is the one reading anchored through a kind that decides it (any N-side token, C, y1 of a C-terminal K or R, a C-terminal set holding K or R such as C+[KQ]; not a lone K or R from the precursor, b(n-1), nor another C-terminal residue): b or y, '-' if none or both, '-' above 25 ppm or 0.02 Da fragment tolerance, and '-' on c/z rows (c/z anchors were not measured; terminus still lists their tokens). Not with -stream",
       "required": false,
       "toppAdvanced": false
     },

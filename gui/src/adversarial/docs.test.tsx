@@ -193,11 +193,11 @@ describe('docs: code comments that promise the CLI will not reject a GUI value',
     await click(runButton())
     expect(mock.runCalls).toHaveLength(0)
   })
-  it('the 98 advanced FASTag parameters (14 before 1.12, 8 of label discovery (removed in 1.14, all advanced since), search_shifts and search_shifts_out (removed in 1.14, advanced since), shortlist_exact_only (removed in 1.14, advanced since), 12 from 1.13: alkylation_tags_out, complement_probe, ion_series_photo, ion_series_hybrid, label_call_min_tags, -check_header_*, shortlist_protease, shortlist_specificity, digest_quality, species_reagents; 14 from 1.15.2: census_ids_exact, recon_sub_tolerance(_unit) and eleven of the mass-shift survey, delta_*; census_ids_accept of 1.16; shortlist_defaults of 1.15.4; fragment_tolerance_itms of 1.15.5; tag_graph_out and the four resolve_* of 1.15.7) are in the manifest, and the ignored mzpeak_read_memory is hidden', () => {
+  it('the 93 advanced FASTag parameters (14 before 1.12, 8 of label discovery (removed in 1.14, all advanced since), search_shifts and search_shifts_out (removed in 1.14, advanced since), shortlist_exact_only (removed in 1.14, advanced since), 12 from 1.13: alkylation_tags_out, complement_probe, ion_series_photo, ion_series_hybrid, label_call_min_tags, -check_header_*, shortlist_protease, shortlist_specificity, digest_quality, species_reagents; 14 from 1.15.2: census_ids_exact, recon_sub_tolerance(_unit) and eleven of the mass-shift survey, delta_*; census_ids_accept of 1.16; shortlist_defaults of 1.15.4; fragment_tolerance_itms of 1.15.5; terminus and subsume_tags of 1.16 are not advanced) are in the manifest, and the ignored mzpeak_read_memory is hidden', () => {
     const own = ['version', 'log', 'debug', 'no_progress', 'force', 'test']
     const adv = (manifest.params as { name: string; toppAdvanced: boolean }[]).filter((p) => p.toppAdvanced && !own.includes(p.name))
-    expect(adv.length).toBe(98)
-    for (const n of ['tag_graph_out', 'resolve_score', 'resolve_threshold', 'resolve_max_evalue', 'resolve_join']) expect(adv.map((p) => p.name)).toContain(n)
+    expect(adv.length).toBe(93)
+    for (const n of ['tag_graph_out', 'resolve_score', 'resolve_threshold', 'resolve_max_evalue', 'resolve_join', 'terminus', 'subsume_tags']) expect(adv.map((p) => p.name)).not.toContain(n)
     for (const n of ['census_ids_exact', 'census_ids_accept', 'recon_sub_tolerance', 'delta_loc_model', 'delta_spectra_out']) expect(adv.map((p) => p.name)).toContain(n)
     expect(adv.map((p) => p.name)).toContain('shortlist_exact_only')
     expect(adv.map((p) => p.name)).toContain('species_reagents')

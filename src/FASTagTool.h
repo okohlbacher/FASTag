@@ -76,6 +76,7 @@
 #include "SpectrumSampler.h"
 #include "TagFDR.h"
 #include "TagRecon.h"
+#include "Terminus.h"
 #include "TmtPseudoFilter.h"
 #include "TaxDeconv.h"
 #include "TaxIndex.h"
@@ -159,6 +160,15 @@ inline std::set<std::string> g_cli_options;
 /// doubles -digest_out counted. Deliberately not an option.
 inline const bool g_full_precision = [] {
   const char* e = std::getenv("FASTAG_FULL_PRECISION");
+  return e != nullptr && std::strcmp(e, "1") == 0;
+}();
+/// FASTAG_PATH_PEAKS=1: the tag TSV gains a last column path_mz, the m/z of
+/// each row's path peaks (Tag::path_mz, ';'-separated, the two peaks of a
+/// gap step ':'-separated, shortest round-trip form), so a test can check
+/// -subsume_tags on the peaks and steps it compares.
+/// Deliberately not an option.
+inline const bool g_path_peaks = [] {
+  const char* e = std::getenv("FASTAG_PATH_PEAKS");
   return e != nullptr && std::strcmp(e, "1") == 0;
 }();
 //@}
@@ -308,8 +318,10 @@ protected:
   /// The tag TSV header line, matching appendTagRow_'s columns.
   /// @p hyp (1.12 #6, non-default -unknown_charge or -isotope_error only)
   /// adds the hypothesis columns after the other optional ones; @p
-  /// ion_series (1.12 #15 phase B) the ion_series column after those.
-  static std::string tagHeader_(bool proforma, bool res_conf, bool usi, bool hyp = false, bool ion_series = false);
+  /// ion_series (1.12 #15 phase B) the ion_series column after those; @p
+  /// terminus (-terminus) the series and terminus columns last.
+  static std::string tagHeader_(bool proforma, bool res_conf, bool usi, bool hyp = false, bool ion_series = false,
+                                bool terminus = false);
 
   /// One TSV row for one tag, appended to buf. File mode and -stream both call
   /// this, so the two formats cannot drift. readSpeciesFields_() reads columns
@@ -326,7 +338,8 @@ protected:
                            bool want_proforma, const std::string& proforma_fixed,
                            bool want_res_conf, const std::string& usi = std::string(),
                            const FASTag::Hyp::Hypothesis* hyp = nullptr,
-                           bool want_series = false);
+                           bool want_series = false,
+                           const FASTag::Terminus::Call* term = nullptr);
 
   /// Reads back, from one appendTagRow_ line [start, nl) of @p r, the columns
   /// species detection needs: 0 (spectrum id), 1 (tag), 7 (gapped) and 8

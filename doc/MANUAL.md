@@ -47,8 +47,9 @@ Select a row and press Enter (or **Open in Spectrum**) to see its evidence:
 
 ![A tag drawn on its spectrum](images/manual-04-spectrum.png)
 
-The stick plot shows the peaks FASTag used; the tag's b or y ladder is drawn over them with the
-mass error of each step, and the table below lists the spectrum's other tags.
+The stick plot shows the peaks FASTag used; the tag's b and y ladders are drawn over them on
+their own lines, each labelled with its series as judged from the peaks (**b or y?** when it is not
+told apart), with the mass error of each step, and the table below lists the spectrum's other tags.
 
 ## 3. Surveying a run
 

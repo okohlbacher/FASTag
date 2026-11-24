@@ -251,17 +251,6 @@ describe('tables.ts: sniffing and the run outputs', () => {
       tablePaths({ out: '/d/t.tsv', recon_out: '/d/r.tsv', delta_out: null, recon_id_out: '/d/r.mzTab', glyco_out: '/d/t.glyco.tsv' })
     ).toEqual({ recon: '/d/r.tsv', reconIds: '/d/r.mzTab', glyco: '/d/t.glyco.tsv' })
     expect(tablePaths({ out: '/d/t.tsv' })).toEqual({})
-    expect(tablePaths({ out: '/d/t.tags.tsv', resolved_out: '/d/t.resolved.tsv', tag_graph_out: '/d/t.taggraph.tsv' })).toEqual({ resolved: '/d/t.resolved.tsv', tagGraph: '/d/t.taggraph.tsv' })
-  })
-
-  it('names the resolved tags and the tag graph (SPEC.md headers), read per spectrum only', () => {
-    const resolved = 'spectrum\trank\tsequence\tlength\tseries\tcall\tcharge\tnterm_mass\tcterm_mass\tscore\tbest_e\tweakest_e\tn_tags\tpeaks\tsteps\tmembers\tinside\tjoined\trelations\n'
-    const graph = 'spectrum\tnode\tlayer\tcharge\tseries\tpeaks\tsteps\tevalue\trows\tpath\trole\tnext\n'
-    expect(sniffTable(resolved)).toBe('resolved')
-    expect(sniffTable(graph)).toBe('tagGraph')
-    // A tags table is neither.
-    expect(sniffTable('spectrum\ttag\tlength\tcharge\tnterm_mass\tcterm_mass\textended\tgapped\tevalue\n')).toBeNull()
-    expect(() => parseTable(graph, '/d/a.taggraph.tsv')).toThrow(/read per spectrum by the Spectrum tab/)
   })
 })
 

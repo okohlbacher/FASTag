@@ -783,12 +783,8 @@ vendored.
 | `-res_conf` | off | Append per-residue confidences 0..100, N→C, space-separated (see Assembly export) |
 | `-usi_collection <id>` | none | Append a `usi` column naming each tag's spectrum as a Universal Spectrum Identifier in this collection (`PXDnnnnnn`, …, or `USI000000`; see Output) |
 | `-diversity` | off | Under `-max_tags`, demote near-duplicate re-reads of an already-kept tag's peak set behind non-duplicates, then backfill. Reorders which tags occupy the capped slots; never changes output size or rank 1 (see Tag diversity) |
-| `-resolved_out <file>` | none | Merge each spectrum's tags (E-value <= `-resolve_max_evalue`) on its peaks into resolved tags, best first, one row each (see Tag merging). Not under `-stream` |
-| `-tag_graph_out <file>` | none | Advanced: the merge graph, one row per placement of a spectrum's tags on its peaks (see Tag merging). Not under `-stream` |
-| `-resolve_score <scheme>` | cstar | Advanced: how resolved tags are ranked: `cstar` (each step a chain adds is worth its C* log-odds of being right less `-resolve_threshold`; rank 1 is the first resolved tag that holds no peak together with its own complement), `steplogodds` (the 1.15 step model, no complement rule), `evidence` (summed E-value evidence of its tags) or `anchor` (the best single tag first, then `steplogodds`) |
-| `-resolve_threshold <t>` | 3 | Advanced: the log-odds a step must exceed to lengthen a resolved tag |
-| `-resolve_max_evalue <E>` | 1 | Advanced: largest E-value of the tags merged |
-| `-resolve_join` | off | Advanced: also join tags that only touch at a peak |
+| `-subsume_tags <on\|off>` | on | Leave out of `-out` a tag whose peaks are a run of another tag's that reads the same residues on them, in the same spectrum (same fragment charge, ion series and precursor hypothesis), when that tag is at least as significant, E-value <= its own (a longer tag with a worse E-value keeps the shorter one; of two identical tags the lower E-value stays). At `-tag_lengths 3 4 5` on PXD003531 it drops 41% of the rows and 1.3% of the PSM spectra lose their only correct tag; held out on PXD020401, 45% and 0.85%. Only the `-out` rows change; the digest, label, alkylation, census tag statistics, `-species` evidence, placements and `-qc_out` count every tag; with `-entrapment_fasta` a target tag is never left out for an entrapment-only one. At one seed length without `-extension` no tag lies in another; `off` writes every tag (see Subsumed tags) |
+| `-terminus` | off | Append `series` and `terminus` columns: which series (b or y) a tag was read off, from a terminal anchor of one of its two readings of a kind that was measured to hold, and every anchor token found (see Terminal anchors). `series` is `-` above 25 ppm or 0.02 Da and on c/z rows (not measured; `terminus` still lists their tokens). Not with `-stream` |
 | `-recon_out <file>` | none | Reconcile reported tags against a protein database: one row per placement with protein, peptide, position, flank agreement, localized mass gap and its interpretation (see Reconciliation). Requires `-recon_fasta` or `-fasta` |
 | `-recon_fasta <file>` | `-fasta` | Database for `-recon_out`; independent of the membership filter, so a proteome-scale reconciliation never forces the filter's per-length index build |
 | `-recon_missed_cleavages <n>` | 1 | Missed tryptic cleavages in reconciliation windows; 2 by the shortlist recipe default (with `-shortlist_out`, `-fasta_out` or `-search_config_out` and a tryptic shortlist, unless given; 1.15.4) |
@@ -896,7 +892,7 @@ vendored.
 | `-pick_profile <legacy\|off>` | legacy | Centroid profile MS2 (MS:1000128) with OpenMS `PeakPickerHiRes` before tagging: `legacy` on mzPeak input only (as 1.11), `off` never. Centroided MS2 are never re-picked. `-out_spectra` writes the spectra as they were tagged. Not with `-stream`. `auto` was removed in 1.14 (failed its held-out test, see Held-out acceptance): accepted with a warning, read as `legacy` |
 | `-pick_unknown_type` | off | Removed in 1.14 (read only by `-pick_profile auto`, which failed its held-out test): accepted with a warning, no effect |
 | `-ion_series <by\|cz\|auto>` | by | Ion series the MS2 spectra are read as: `by` (b/y ions, as 1.11), `cz` (c/z• ions of ETD/ECD, every spectrum), `auto` (c/z• for spectra whose activation is ETD or ECD, b/y for all others, hybrid EThcD/ETciD included, with a warning). `ax` (1.13, a/x ions) was removed in 1.14 (failed its held-out test, see Held-out acceptance): accepted with a warning, read as `by`. Under `cz`, and under `auto` when the run has electron-activated spectra, the tag TSV gains a last `ion_series` column and the census a `best_ion_series` column (see Ion series). Not with `-stream`. Opt-in: on held-out Orbitrap ETD spectra `auto` gave 82.2% correct rank-1 tags against 0.9% under `by` (verdict inconclusive, see Validation) |
-| `-ion_series_hybrid <by\|both>` | by | 1.13, under `-ion_series auto` only: how hybrid EThcD/ETciD spectra are read. `by` is `auto` as in 1.12 (b/y ions, with the `Hybrid activation:` warning); `both` tags each hybrid mzML spectrum twice, as b/y and as c/z• ions, multiplies every E-value by 2 and merges the two passes' rows by E-value under one `-max_tags` cap; each row keeps its `ion_series` and every per-row consumer reads its offsets from it; `-species` and `-alkylation_out` count b/y rows only. The precursor hypotheses, `-check_header_charge`, the `-complement_tolerance_unit auto` probe and the census diagnostics (`n_kept`, `n_edges`, `n_compl`) still read a hybrid spectrum as b/y; `-dump_spectrum` and tag merging take the union of its b/y and c/z• preparations (doc/HYBRID-IONS.md). Ignored with a warning under other modes; not with `-stream`. Experimental; **passed** its held-out test (see Held-out acceptance) |
+| `-ion_series_hybrid <by\|both>` | by | 1.13, under `-ion_series auto` only: how hybrid EThcD/ETciD spectra are read. `by` is `auto` as in 1.12 (b/y ions, with the `Hybrid activation:` warning); `both` tags each hybrid mzML spectrum twice, as b/y and as c/z• ions, multiplies every E-value by 2 and merges the two passes' rows by E-value under one `-max_tags` cap; each row keeps its `ion_series` and every per-row consumer reads its offsets from it; `-species` and `-alkylation_out` count b/y rows only. The precursor hypotheses, `-check_header_charge`, the `-complement_tolerance_unit auto` probe and the census diagnostics (`n_kept`, `n_edges`, `n_compl`) still read a hybrid spectrum as b/y; `-dump_spectrum` takes the union of its b/y and c/z• preparations (doc/HYBRID-IONS.md). Ignored with a warning under other modes; not with `-stream`. Experimental; **passed** its held-out test (see Held-out acceptance) |
 | `-ion_series_photo <series>` | by | Removed in 1.14 (the a/x reading failed its held-out test, see Held-out acceptance): accepted with a warning, no effect |
 | `-complement_tolerance_unit <Da\|fragment\|auto>` | Da | How the complement window is set: `Da` is `-complement_tolerance` (0.02 Da, as 1.11); `fragment` is `-complement_tol_factor` x (the fragment tolerance at the peak + at its partner); `auto` measures it on the run from the complement pairs of high-confidence tags (see doc/COMPLEMENT-TOLERANCE.md) and never sets a window narrower than `-complement_tolerance`, which is also the fallback when the probe finds too few pairs. The window in force is logged and recorded in `-out_spectra` (mzML) and the `-census`/`-alkylation_out` run rows. `auto` is **validated**: its third held-out test passed (+3.31 points of correct rank-1 tags on ion trap, timsTOF not worse; see Validation); the first, with an earlier estimator, failed and the second was inconclusive. The default stays `Da`. Not with `-stream` or mzPeak input. Since 1.15.5 `auto` is the default when `-fragment_tolerance_unit Da` and no complement option is given (not under `-stream` or with mzPeak input) |
 | `-complement_rule <same_charge\|precursor\|both>` | same_charge | Experimental (1.12; held-out test of `both` inconclusive, see Validation): which fragment pairs count as complements in the complement subscore: `same_charge` (both at the fragment charge z), `precursor` (the partner carries the precursor's remaining c - z charges) or `both` (advanced) |
@@ -1070,7 +1066,7 @@ left out. Hybrid EThcD/ETciD spectra are read as b/y under `auto`; with
 `-ion_series_hybrid both` (1.13, experimental; passed its held-out test, see Held-out acceptance) they are tagged twice, as b/y
 and as c/z•, and the rows of both passes are merged by E-value, each with its
 own `ion_series`; the precursor hypotheses, `-check_header_charge`, the complement-tolerance probe
-and the census diagnostics still read them as b/y, `-dump_spectrum` and tag merging take the union of
+and the census diagnostics still read them as b/y, `-dump_spectrum` takes the union of
 both preparations (doc/HYBRID-IONS.md). The a/x reading
 (1.13, `-ion_series ax` and `-ion_series_photo`) was removed in 1.14: it failed its held-out test (see
 Held-out acceptance).
@@ -1817,85 +1813,103 @@ spectra with at least one database hit **rose** from 8,547 to 8,695 under a
 far below the cap — deferral reorders families near the head; it is not
 per-peptide clustering. Off by default.
 
-## Tag merging
+## Subsumed tags
 
-`-resolved_out` merges the tags of each spectrum into resolved tags, as the
-desktop app's Spectrum tab does (All tags, resolved): every written tag of the
-spectrum with E-value <= `-resolve_max_evalue` (1) is walked onto the peaks it
-was tagged on (the list `-dump_spectrum` prints; for a two-pass hybrid spectrum
-under `-ion_series_hybrid both`, the union of its b/y and c/z preparations) from
-both flanks; rows on the
-same chain of peaks of one layer (b and y of one fragment charge, c and z apart)
-are one placement, a step's isobaric readings kept apart (`{Q|[AG]}`). A
-resolved tag is a chain of whole placements, each overlapping the one before by
-at least one step and agreeing with it on every shared step (with
-`-resolve_join`, touching at a peak); placements wholly inside it are
-subsumed. Chains are taken best first by `-resolve_score`. By default
-(`cstar`) each new step is worth its C* log-odds of being right less
-`-resolve_threshold` (3): a logistic model fitted on PXD003531, PXD000001 and
-PXD076528 against Sage, of the step's E-value, mass error (at a Da tolerance or
-above 25 ppm in tolerance units, 20·Δm/z/tol), peak intensity ranks (global and
-within ±50 Th), complement ions at any charge, gap, ambiguity, rival steps and
-the support of the tags. Rank 1 is then the first resolved tag that holds no
-peak together with its own complement; the others follow in their order (the
-`score` of rank 1 can be lower than that of rank 2). The scheme (X1) won a
-preregistered held-out test: on PXD020401 (Orbitrap HCD, 20 ppm) the first
-resolved tag was right in 84.9% of scans against 81.5% for `steplogodds` and
-81.7% for the best single tag, and on PXD031975 (ion trap, 0.5 Da) in 59.8%
-against 48.0% and 56.1%. `steplogodds`, the 1.15 default, uses a simpler step
-model (E-value, mass error, intensity ranks, complements, gap and ambiguity;
-without the mass error at a Da tolerance or above 25 ppm). Residue masses are
-the tagger's (OpenMS, with the run's modifications). Under several precursor
-hypotheses the selected one's rows are merged.
+Under `-tag_lengths` with several lengths, or with `-extension`, a spectrum's
+rows include shorter tags read off part of a longer tag's ladder. By default
+(`-subsume_tags on`) FASTag leaves such a tag out of `-out`: a row is
+subsumed by another row of the same spectrum when both have the same
+fragment charge, ion series and precursor hypothesis, its path peaks are a
+contiguous run of the other's (m/z compared exactly) and on those peaks the
+other row reads exactly its residues, step by step (a gap step carries two;
+inline modifications as written; the same residues elsewhere in the other
+row do not count), and the other row is at least as significant: its E-value is at most the row's
+own. A longer tag with a worse E-value therefore keeps the shorter one. Of
+two rows on the same peaks with the same sequence the one with the lower
+E-value is kept (ties: the earlier row). An unscored E-value (NaN) counts as
++infinity: such a row gives way to any row it lies in and makes only other
+unscored rows give way. The rule is transitive (A in B in C with E(C) <=
+E(B) <= E(A)), so every row left out lies in a written row whose E-value is
+at most its own. Measured on PXD003531 (Sage PSMs at 1% q, `-tag_lengths 3 4
+5`): the rule drops 41.3% of the rows and 1.30% of the PSM spectra lose their
+only correct tag; leaving out every contained tag regardless of E-value would
+drop 47.6% and lose 3.2%, because a correct short tag often lies in a longer
+one extended past its correct part. Held out on PXD020401 (same settings) it
+drops 45.1% of the rows and 0.85% of the PSM spectra lose their only correct
+tag. A gapped tag lies only in a tag with
+the same gap; the same peaks read as b/y and as c/z• are two readings, not one.
+The test runs on the final rows of the spectrum, after every merge and cap, so
+a dropped row frees no slot; the remaining rows keep their order. Only `-out`
+and what follows its rows (`q_db`, the reported counts and the census
+`n_reported`) lose them; the digest, label and alkylation reports, the census
+tag statistics, the `-species` evidence, `-recon_out`, `-recon_id_out`,
+`-delta_out`, `-qc_out` and the `-out_spectra` choice of spectra with a target
+tag count every row, so they do not depend on the option. With `-fasta`, rows
+the filter drops neither subsume nor are subsumed, and a row is only subsumed
+by a row of its own hit class: a target row never gives way to an
+entrapment-only (`efwd`/`erev`) row, nor the other way round. The run summary prints `Subsumed tags dropped: n`. At a single seed
+length without extension every row has the same length and none lies in
+another, so the defaults write what `off` writes. `-subsume_tags off` keeps
+every row. For tests, `FASTAG_PATH_PEAKS=1` adds a last column `path_mz` with
+each row's path peaks (`;`-separated, the two peaks of a gap step joined by
+`:`), the peaks and steps the rule compares.
 
-`-resolved_out` columns, one row per resolved tag in rank order: `spectrum`,
-`rank` (1-based), `sequence` (N→C in the called series; a step with several
-readings `{Q|[AG]}`, a gap `[AG]`), `length` (residues, a gap 2), `series`
-(b, y, c, z) and `call` (`sure`, `likely`, `open`: not told apart, shown as its
-best tag was walked), `charge` (fragment), `nterm_mass` and `cterm_mass` (the
-flanks of the called reading, from the observed peaks, so that `sequence` and
-the flanks form a tag row: the low peak is the first ion of the b/c ladder
-walked from `nterm_mass` over the sequence, or of the y/z ladder walked from
-`cterm_mass` over it reversed; nterm + residues + cterm + H2O = M), `score`
-(the chain weight),
-`best_e` and `weakest_e` (the best step and the weakest step or junction; empty
-when a step has no evidence), `n_tags`, `peaks` (m/z ascending, `;`, 6
-decimals), `steps` (`label:E` readings `|`-separated per step, steps `;`, in
-ascending m/z order like `peaks`: step *i* lies between peaks *i* and *i*+1, so
-for y and z rows the steps run C→N, the reverse of `sequence`; match a step to
-its residue by position from the right, or by its label),
-`members` and `inside` (0-based row indices of the spectrum's rows in `-out`,
-of the tags that build it and of those subsumed), `joined` (m/z of junctions
-joined under `-resolve_join`), `relations` (`rank:fork|touch:shared steps`),
-`scheme` and `threshold` (the ranking, `-resolve_score` and `-resolve_threshold`,
-the same on every row; `threshold` is empty under `evidence`), so a reader of the
-table knows how it was ranked without the run's parameters, and `terminus`
-(the last column: whether the resolved tag lies at a peptide terminus, from its
-flanks). Each flank is tested on its own: the one read from the peaks
-(`nterm_mass` for b/c, `cterm_mass` for y/z) within the fragment tolerance at
-the low peak times the fragment charge, the one from the precursor within that
-plus the fragment tolerance at the precursor m/z times the precursor charge,
-also at the `-isotope_error` offsets (k × 1.00336 Da). A flank within its
-tolerance of 0 or of a terminal modification of the run (N-term or protein
-N-term, C-term or protein C-term, fixed or variable) is `N` or `C`; else one
-within it of that plus one residue (the tagger's residues, with the run's
-modifications) is `N+K`, several `N+[KQ]` (sorted as gap labels; I and L give
-`[IL]`). Tokens N side first, comma-separated (`N,C+K`); empty if neither.
-The flank is tested before FASTag clamps it at 0 for `nterm_mass`/`cterm_mass`
-(never negative), so a tag longer than the precursor allows (a negative flank,
-e.g. under a wrong or assumed charge) is at no terminus.
+## Terminal anchors
 
-`-tag_graph_out` columns, one row per placement in canonical order (layer,
-first peak): `spectrum`, `node` (0-based), `layer` (`by2`, `cz1`), `charge`,
-`series` (the series judged on the placement's own peaks, before complement
-pairing; the resolved tag's `series` in `-resolved_out` is authoritative, and
-for about 2% of chain nodes it is the other series of the pair, reading the
-same steps the other way round), `peaks` and `steps` (both in ascending m/z
-order, as in `-resolved_out`), `evalue`, `rows` (in `-out`), `path` (the rank of
-the resolved tag using it, empty if none), `role` (`chain`, `inside`, `none`)
-and `next` (nodes continuing it; `~` an arc that only touches, `*` an arc on a
-resolved tag). Both tables are written in input order and are computed only
-when asked for.
+A tag's flanks assume its low peak is a C-terminal ion (y, or z• under c/z);
+read reversed, the low peak is an N-terminal ion (b, or c) and the flanks
+carry the series' reversed offset (+H2O for b/y, −15.0347 Da for c/z•).
+`-terminus` tests both readings for a peptide terminus and appends two
+columns after all other optional ones (`q_db` aside): `series` and
+`terminus`. For each reading the unclamped flanks are taken from the low
+peak, the tag's residue masses and the precursor of the row's hypothesis, as
+`nterm_mass` and `cterm_mass` are (reading y/z: N = M − (low + residues) −
+(H2O − offC), C = low − offC; reading b/c: N = C(y/z) + reversed offset,
+C = N(y/z) − reversed offset, with low as a neutral mass at the tag's
+charge). Each side is tested on its own: the
+one read from the peaks (C for y/z, N for b/c) within the fragment tolerance
+at the low peak times the fragment charge, the one from the precursor within
+that plus the fragment tolerance at the precursor m/z times the precursor
+charge, also at the `-isotope_error` offsets relative to the row's (k ×
+1.00336 Da); without a precursor only the peak side is tested. A side within
+its tolerance of 0 or of a terminal modification of the run (N-term or
+protein N-term, C-term or protein C-term, fixed or variable) is `N` or `C`;
+one residue away (the tagger's residues with the run's modifications) is
+`N+K`, several `N+[KQ]` (I and L give `[IL]`); never two residues. Tokens N
+side first, comma-separated. A reading is anchored when it has a token.
+
+`terminus` lists every token found: the anchored reading's tokens (`C+K`:
+the low peak is y1 of a C-terminal K; `N`; `N+M[Oxidation],C`), both lists as
+`y:<tokens>;b:<tokens>` (`z:`/`c:` under c/z) when both readings are
+anchored, `-` when neither is. Only some kinds of token decide `series`, the
+ones that held when measured at 20 ppm on PXD003531 (development) and
+PXD020401 (held out), the decision rule fixed before the held-out set was
+read:
+
+- used: any N-side token (`N`, b1 = `N+X` from the peaks, y(n−1) = `N+X`
+  from the precursor); the C terminus itself (`C`); y1 of a C-terminal K or
+  R (`C+K`, `C+R` on the peak side of a y/z reading; the run's K and R with
+  their fixed modifications, not a variably modified `K[…]`); a C-terminal
+  set holding a bare K or R, such as `C+[KQ]`, on either side;
+- not used: a C-terminal K or R alone on the precursor side (b(n−1), 87% /
+  94% right), and any other C-terminal residue on either side (86% / 23%:
+  W read off the isobaric dipeptides GE, AD, SV, or b2 of FG; E after an
+  N-terminal Met oxidation).
+
+Tokens with one used side are used. `series` is the one reading anchored
+through a used token (`b` or `y`), and `-` when none or both are;
+called that way it was right for 99.8% of the correct tags it called on
+PXD003531 and 99.9% on PXD020401 (6,532 of 6,547 and 4,612 of 4,615, about
+12% and 16% of the correct tags; taking every token, 99.5% and 99.3%). The
+c/z kinds were not measured, so a c/z row's `series` is always `-`; its
+`terminus` still lists the tokens (`z:`/`c:` when both readings have some;
+the GUI shows a c/z anchor as likely at most). Above 25 ppm or 0.02 Da fragment tolerance (an
+ion trap, a Da run; under `-tolerance_by_analyzer` the spectrum's own
+tolerance) `series` is `-`: the precursor-side window then meets a residue
+by chance; `terminus` is still filled. A fixed modification on K or R (TMT)
+is in the residue mass, and a fixed N-terminal label is a terminal target, so
+b1 of a labelled peptide reads `N+A`. The desktop GUI uses the same kinds and
+the same tolerance gate for its terminal anchor. Not with `-stream`.
 
 ## Assembly export
 

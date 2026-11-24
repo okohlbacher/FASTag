@@ -379,40 +379,6 @@ export const PARAM_UI: Record<string, ParamUi> = {
       tip: '0.04 Da is the default.'
     }
   },
-  // ---- Resolved tags (-resolved_out, -tag_graph_out: the Spectrum tab)
-  resolve_score: {
-    section: 'Resolved tags, advanced',
-    label: 'Ranking',
-    help: {
-      text: "How the resolved tags of a spectrum are ranked, the tags merged on its peaks that the Spectrum tab shows under All tags. cstar adds, for each step a chain gains, the step's C* log-odds of being right (its peaks, mass error, rival steps and the support of the tags) less the step threshold, and ranks first the best resolved tag that holds no peak together with its own complement; steplogodds is the same with the simpler 1.15 step model and without that rule; evidence sums the E-value evidence of a resolved tag's tags; anchor puts the resolved tag of the best single tag first and ranks the rest by steplogodds.",
-      tip: 'Keep cstar, the default: it won the preregistered held-out test, at 20 ppm and at 0.5 Da.'
-    }
-  },
-  resolve_threshold: {
-    section: 'Resolved tags, advanced',
-    label: 'Step threshold',
-    depends: [{ on: 'resolve_score', note: 'the evidence ranking uses no step threshold', when: { resolve_score: { isNot: ['evidence'] } } }],
-    help: {
-      text: 'The log-odds a step must exceed to lengthen a resolved tag, under the cstar, steplogodds and anchor rankings. Higher keeps resolved tags shorter and surer.',
-      tip: '3, the default, is the threshold the held-out tests adopted.'
-    }
-  },
-  resolve_max_evalue: {
-    section: 'Resolved tags, advanced',
-    label: 'Largest E-value merged',
-    help: {
-      text: 'Only tags with an E-value up to this are merged into resolved tags; the tags table itself is not filtered by it.',
-      tip: '1 is the default. Raise it to let weaker tags lengthen resolved tags.'
-    }
-  },
-  resolve_join: {
-    section: 'Resolved tags, advanced',
-    label: 'Join tags that touch',
-    help: {
-      text: 'Also join two tags that only meet at a shared peak, without a step in common, into one resolved tag.',
-      tip: 'Off by default: a join at one peak is weaker evidence than a shared step.'
-    }
-  },
   min_filter_length: {
     section: 'Keep only tags found in a database',
     depends: [{ on: 'fasta', note: 'only affects matching against a sequence database' }],
@@ -792,6 +758,22 @@ export const PARAM_UI: Record<string, ParamUi> = {
       text: 'Add a column with each tag in ProForma 2.0 notation, a standard way to write peptides that other tools can read. I and L are written as J.'
     }
   },
+  terminus: {
+    section: 'Tag columns and files',
+    label: 'Series and terminus columns',
+    help: {
+      text: "Add two columns, series and terminus. FASTag reads each tag both ways, as y ions (z under c/z) and as b ions (c), and tests whether either reading reaches a peptide terminus, at most one residue away: for example a low peak that is y1 of a C-terminal K. terminus names every terminus found, such as C+K or N. series is the one reading that reaches a terminus in a way that was measured to hold (b, y, c or z): at a terminus, one residue from the N terminus, y1 of a C-terminal K or R, or one residue from the C terminus that may be K or R among others (such as [KQ]); not a lone K or R one residue beyond the high peak, nor any other residue one from the C terminus. It is - when no reading or both do.",
+      tip: 'Off by default. Above 25 ppm or 0.02 Da (ion-trap data, 0.5 Da) series is always -, as a terminus is often found by chance there; terminus is still filled.'
+    }
+  },
+  subsume_tags: {
+    section: 'Tag columns and files',
+    label: 'Drop tags inside longer tags',
+    help: {
+      text: 'Leave out of the tags table a tag whose peaks and residues all lie in a longer tag of the same spectrum, with the same fragment charge, ion series and precursor hypothesis, when the longer tag is at least as significant (its E-value is no higher). A longer tag with a worse E-value keeps the shorter one. Of two identical tags the one with the lower E-value stays. Only the tags table changes: the reports and placements still count every tag.',
+      tip: 'On by default. It drops rows only when tags of several lengths are made (Seed lengths, Extension). Off writes every tag.'
+    }
+  },
   res_conf: {
     section: 'Tagging',
     label: 'Per-residue confidence',
@@ -849,18 +831,6 @@ export const PARAM_UI: Record<string, ParamUi> = {
     hidden: 'dedicated output field',
     help: {
       text: 'The tags file. Set under Output as "Tags TSV".'
-    }
-  },
-  resolved_out: {
-    hidden: 'derived: the app writes it beside the tags output when the CLI has it',
-    help: {
-      text: 'The resolved tags of each spectrum, best first: the tags merged on its peaks into longer reads. The app writes it beside the tags (run.resolved.tsv) and the Spectrum tab shows it under All tags.'
-    }
-  },
-  tag_graph_out: {
-    hidden: 'derived: the app writes it beside the tags output when the CLI has it',
-    help: {
-      text: "The merge graph of each spectrum: where its tags sit on the peaks and which continue which. The app writes it beside the tags (run.taggraph.tsv) and the Spectrum tab draws it as the merge graph."
     }
   },
   progress: {

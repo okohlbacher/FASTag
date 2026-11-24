@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest'
 import { likelyPeptide, rulerOf, stepOnRuler, ticksOf } from './peptide'
 import { PROTON, WATER, residueMasses } from './ladder'
 import type { SpectrumPeaks } from './dump'
-import type { Step } from './graph'
+import type { Step } from './step'
 
 const RES = residueMasses([])
 const R = RES.masses

@@ -573,6 +573,7 @@ export const RESULTS: HelpPage = {
             <tr><td>Database hit</td><td>Without a database filter: Not checked (-), the tags were not matched against a database. With one, only matching tags are written: In database (fwd, as written; rev, reversed), or Entrapment (efwd, erev: found only in the entrapment database).</td></tr>
             <tr><td>Database q-value</td><td>q_db, only with an <G to="gloss-entrapment">entrapment database</G> (<L to="results-nofdr">see below</L>).</td></tr>
             <tr><td>ProForma, Residue conf., USI</td><td>Optional columns (<L to="param-proforma">ProForma</L>, <L to="param-res_conf">per-residue confidence</L>, <L to="param-usi_collection">USI</L>), checked in Outputs &amp; run of Generate tags.</td></tr>
+            <tr><td>Series, Terminus</td><td>Optional columns (<L to="param-terminus">series and terminus</L>): the series (b, y, c or z) of the one reading of a tag that reaches a peptide terminus in a way measured to hold (- when none or both do, or above 25 ppm or 0.02 Da), and every terminus found (for example C+K; - when neither reading reaches one).</td></tr>
           </tbody>
         </table>
       )
@@ -738,86 +739,63 @@ export const RESULTS: HelpPage = {
             In Tags, double-click a row, or choose it and press Enter (or Open in Spectrum). The Spectrum tab shows that spectrum with the
             peaks FASTag tagged: after centroiding, the precursor cut, deisotoping and the peak budget, as the run
             prepared them (FASTag prints them with -dump_spectrum, under the options of the run that wrote the
-            table). The chosen tag&apos;s ladder is drawn on them: its b or y ions one residue apart (the residue
-            divided by the fragment charge), each step with its error in ppm. A <L to="tags-gapped">gapped tag</L>{' '}
-            crossed a missing peak, shown dashed. Choose another tag of the spectrum below to draw its ladder; ◀ and ▶
-            go to the previous and next tagged spectrum. The wheel or + and − zoom, dragging or the arrow keys pan.
+            table). The chosen tag&apos;s ladder is drawn on them: its ions one residue apart (the residue divided by
+            the fragment charge), each step with its error in ppm. The tag is walked from both of its flanks, so
+            its b ladder and its y ladder (c and z for a c/z row) each get their own line when they lie on the
+            peaks, labelled with the series as judged (below), with a dashed line down to each peak. A{' '}
+            <L to="tags-gapped">gapped tag</L> crossed a missing peak, shown dashed. Choose another tag of the
+            spectrum in the table below to draw its ladder; ◀ and ▶ go to the previous and next tagged spectrum.
+            The wheel or + and − zoom, dragging or the arrow keys pan.
           </p>
           <p>
-            All tags, resolved draws every tag of the spectrum at once. Each tag is placed on its peaks; rows that
-            land on the same peaks are one tag (FASTag writes a gapped tag once per order of its gap residues). Tags
-            of one ion series that overlap by at least one step and agree are assembled into one longer resolved tag,
-            and a tag inside another is not listed on its own. Resolved tags are ranked by the evidence of their
-            steps: each step&apos;s chance of being right, from its E-value, mass error, the intensity of its two
-            peaks, their complement ions at any charge, whether it is a gap step, the steps that compete with it
-            and how many tags support it, less a threshold, so a tag grows only by steps that are probably right.
-            The first is then the best resolved tag that does not hold a peak together with its own complement.
-            This is FASTag&apos;s default (Ranking cstar). (Fitted on three datasets against database search and
-            tested on two others: the first resolved tag was right in 84.9% of scans at 20 ppm and in 59.8% at
-            0.5 Da, against 81.5% and 48.0% for the earlier step ranking.) The table gives the E-value of the best and of the weakest of them, how many
-            tags build it and which other resolved tags conflict with it (they share a peak and continue
-            differently) or read the same residues in the other ion series. A step two readings cannot be told
-            apart on is written {"{Q|[AG]}"}, in italics. E-value ≤ leaves out weaker tags (1 by default); Join
-            tags that only touch also continues a tag with one that starts at its last peak, marked with a hollow
-            dot. A resolved tag is a hypothesis: it is right only where all the tags it is assembled from are.
+            The table lists the tags FASTag wrote for the spectrum, best E-value first, with the series and how
+            many ladder positions lie on peaks. The strip under the axis shows the mass error of the tag drawn: a
+            dot for each step (the distance of its two peaks against the residue mass), a line for the errors
+            summed from its first peak, and the band of the run&apos;s tolerance; its scale widens to hold every
+            value.
           </p>
           <p>
-            Choosing a resolved tag in the table selects it. On the plot the other tags are then drawn against it:
-            solid where they read a step as it does, red and dashed where they read another step over part of its
-            m/z range (at most one of the two is right there), dashed elsewhere; thick steps have an E-value of at
-            most 0.01, faint ones above 1. Hover over a step for its readings, E-values, mass error and the
-            intensity of its two peaks. The strip under the axis shows the mass error of the selected tag: a dot
-            for each step (the distance of its two peaks against the residue mass), a line for the errors summed
-            from its first peak, hollow dots for the steps that differ from it, and the band of the run&apos;s
-            tolerance; its scale widens to hold every value. Under the table, Tags behind resolved tag lists the
-            tags it is assembled from, those inside it and those that differ from it, aligned peak by peak in m/z
-            order; a tag there opens alone.
+            FASTag drops a tag whose ions all lie, in order, in a longer tag of the same spectrum, fragment charge
+            and ion series when that longer tag is at least as significant, its E-value no higher (a subsumed
+            tag): it adds nothing the longer one does not show. A longer tag with a worse E-value keeps the shorter
+            one in the table, since the longer one may have been extended past its correct part. Run FASTag with
+            -subsume_tags off to keep every tag.
           </p>
           <p>
-            When the run wrote its resolved tags and tag graph (FASTag with -resolved_out and -tag_graph_out, which
-            the app passes beside the tags when the CLI has them), the tags are resolved as FASTag resolved them and
-            the line beside the summary says Resolved by FASTag; the E-value cutoff and Join are then FASTag&apos;s own.
-            Otherwise, or when those tables do not fit the spectrum&apos;s peaks, it says Resolved in the GUI (and why):
-            the GUI then ranks the resolved tags as the run did, by its -resolve_score and -resolve_threshold, and the
-            line names the ranking it took. The ranking is the one FASTag wrote on the rows of its resolved tags (scheme,
-            threshold), else the run&apos;s settings; for tables of a run the app has no record of, written by a FASTag
-            that did not record it, the line says the ranking is not recorded and the GUI takes FASTag&apos;s default,
-            cstar at 3.
-            Merge graph draws the tag graph around the resolved tag selected: its residues N to C on a ruler (a gap
-            two residues wide; residues, not m/z, so the graph does not follow the plot&apos;s zoom), and under it
-            the tags that build it as a staircase of bars, each over its residues, with bold joins. Resolved tags that
-            conflict with it (share a peak and continue otherwise) are aligned above, the tags inside it and those that
-            only touch it below, then the rest, one row each in rank order. A resolved tag that reads it again on its
-            complement peaks (the other series of its pair) is not drawn again: a b+y badge names it. Tags in no
-            resolved tag are hidden behind Show unused tags. Choosing a bar, by click or Enter, selects its resolved
-            tag and re-anchors the graph on it; the graph is one Tab stop, and the arrow keys move between its bars.
-          </p>
-          <p>
-            A resolved tag at a peptide terminus is written N–EPTIDE or EPTIDE–C, and N–(K)EPTIDE or EPTIDE(K)–C,
-            muted, when one residue lies between: FASTag&apos;s terminus column of -resolved_out, or, for tables of
-            an older FASTag and when the GUI resolves itself, the same test of the flanks (0 or a terminal
-            modification of the run within the tolerance of that side, the precursor&apos;s added on the side measured
-            from it). The plot marks b0 or y0 of the selected one when it lies in view.
+            A tag at a peptide terminus is written N–EPTIDE or EPTIDE–C, and N–(K)EPTIDE or EPTIDE(K)–C, muted,
+            when one residue lies between: its flank, under the series shown, is 0 or a terminal modification of
+            the run within the tolerance (the fragment tolerance on the side measured from its peaks, the
+            precursor&apos;s added on the side measured from the precursor, at each -isotope_error offset), or one
+            residue more. The plot marks b0 or y0 of the tag drawn when it lies in view.
           </p>
           <p>
             When the run wrote tag placements (a protein database and Tag placements), the peptide most tags of the
             spectrum were placed on is named under the plot, and its fragments in the ion series and charge of the
-            tag drawn are the top row of the plot (DB), with the residues the tag confirms in bold; the table counts
-            the steps of each resolved tag on the peptide, the pileup shows its residues between the peaks, and the
-            strip marks each peak against the peptide&apos;s fragment with ×. A mass the placement leaves over is
-            added from the end of its region on; inside the region no fragment is drawn. The peptide is a candidate
-            from the placement of the tags, not an identification: FASTag does not score it.
+            tag drawn are the top row of the plot (DB), with the residues the tag confirms in bold; the strip marks
+            each of its peaks against the peptide&apos;s fragment with ×. A mass the placement leaves over is added
+            from the end of its region on; inside the region no fragment is drawn. The peptide is a candidate from
+            the placement of the tags, not an identification: FASTag does not score it.
           </p>
           <p>
             FASTag writes a tag in ascending m/z and does not say whether it read b or y ions, and the series
             decides which way the tag reads from N to C. The tab judges the series on the peaks: a ions (b − CO)
             beside at least two of its peaks make it b; a ions beside its complement peaks, or a start right after
-            a C-terminal K or R, make it y; one a ion makes it likely (b? or y?); otherwise it says b or y and shows
-            the tag as FASTag wrote it, with the other reading beside it in the table. When the run placed the
+            a C-terminal K or R, make it y; one a ion makes it likely (b? or y?). Then the termini: only the kinds
+            that held when measured are used: at a terminus, one residue from the N terminus (such as b1, also
+            after an N-terminal label), y1 of a C-terminal K or R, and one residue from the C terminus that may be
+            K or R among others (such as [KQ]). A ladder whose high peak is one K or R from the C terminus, or that
+            is one other residue from it (such as W, which GE, AD or SV weigh as well), is not used. When only one
+            reading of its peaks, as b ions or as y ions (c or z), lies at a terminus in a used way, that reading
+            settles a call the a ions left open (sure), makes a call that agrees sure, and leaves a call that
+            disagrees open; when both readings do, the termini decide nothing. The series column of -terminus
+            makes the same call from the termini alone. For c and z ions no terminus was measured, so it makes a
+            call likely at most (c? or z?). Otherwise it says b or y? (c or z?) and shows the tag as FASTag wrote it. When the run placed the
             spectrum&apos;s tags on a database peptide, the peptide&apos;s ions decide. A ladder and its complement
-            are always opposite series. At a tolerance wider than about 0.05 m/z (a Da run) nothing is judged.
-            Hover over a series for its evidence. On the development data the judged series was right in at least
-            99% of correct tags, the likely one in 86–99%.
+            are always opposite series. At a tolerance wider than 25 ppm or 0.02 Da neither the a ions nor the
+            termini are used, as they match by chance there: only the database peptide settles the series. Hover
+            over a series for its evidence. On the development data the series judged by a ions was right in at
+            least 99% of correct tags, the likely one in 86–99%; the termini used were right in more than 99% at
+            20 ppm, on a second data set as well.
           </p>
           <p>
             The tab needs a FASTag that has -dump_spectrum; with an older one it is not there, and the row action says

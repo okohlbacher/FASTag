@@ -299,7 +299,7 @@ namespace FASTag::Probe
     IonSeries::Mode ion_mode = IonSeries::Mode::BY;
     /// -ion_series_hybrid both (1.13 item 10): under auto a hybrid spectrum
     /// is tagged as b/y and as c/z-dot, and dumped as the union of both
-    /// preparations (preparedPeaksHybrid), the peaks tag merging walks on.
+    /// preparations (preparedPeaksHybrid), the peaks of both passes' rows.
     bool hybrid_both = false;
     /// -tolerance_by_analyzer on (1.15.7): > 0 is -fragment_tolerance_itms
     /// (Da), the tolerance an ion-trap MS2 is prepared at, as the run tags it.

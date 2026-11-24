@@ -17,6 +17,8 @@
 // cterm_mass + H2O - NH2.
 
 import type { SpectrumPeaks } from './dump'
+// A cycle (terminus.ts reads this module's masses): both use each other only inside functions.
+import { anchorsOf, termContext, withAnchor, type TermContext } from './terminus'
 
 export const PROTON = 1.007276466812
 export const WATER = 18.0105646837
@@ -27,8 +29,8 @@ export const Z_DOT_OFFSET = WATER - 16.0187240694
 
 // Monoisotopic residue masses (unmodified; C without Carbamidomethyl): OpenMS
 // ResidueDB's internal masses (Residue::getMonoWeight(Internal) over
-// Natural19WithoutI, I = L), as FASTag's TagGraph takes them, so that the GUI
-// resolves and ranks a spectrum's tags exactly as the CLI does.
+// Natural19WithoutI, I = L), as FASTag takes them, so that the GUI
+// places a tag on the peaks, and tests its termini, exactly as the CLI does.
 const RESIDUE: Record<string, number> = {
   G: 57.0214640957, A: 71.03711415949999, S: 87.0320291595, P: 97.05276422329999, V: 99.0684142871,
   T: 101.04767922330001, C: 103.00918488949999, L: 113.08406435089999, I: 113.08406435089999, N: 114.04292819140001,
@@ -132,7 +134,7 @@ const massOf = (r: TagResidue, residues: Residues): number | undefined => {
   return m === undefined || d === undefined ? undefined : m + d
 }
 
-/** The mass of a step reading as graph.ts labels it (A, M[Oxidation], a
+/** The mass of a step reading as step.ts labels it (A, M[Oxidation], a
  *  gap's residues [AG]); null when it does not parse or has no mass here. */
 export function readingMass(label: string, residues: Residues): number | null {
   const parsed = parseTag(label.startsWith('[') && label.endsWith(']') ? label.slice(1, -1) : label)
@@ -228,6 +230,9 @@ const CO = 27.9949146
 // trap) matches a ions and K/R by chance too often to be believed.
 const SERIES_MAX_PPM = 25
 const SERIES_MAX_DA = 0.02
+/** Whether the series rules (the a ions, K/R, a terminal anchor) were
+ *  measured at the tolerance of @p s (20 ppm data; up to 25 ppm or 0.02 Da). */
+const seriesTolerance = (s: SpectrumPeaks): boolean => (s.toleranceUnit === 'ppm' ? s.tolerance <= SERIES_MAX_PPM : s.tolerance <= SERIES_MAX_DA)
 // The complement of a peak lies within this of the precursor less the peak.
 export const complementTol = (s: SpectrumPeaks, x: number): number => tolAt(s, x) + (s.precursor != null ? tolAt(s, s.precursor) : 0)
 /** The neutral mass of the complement of peak @p k at charge @p z, or null without a precursor. */
@@ -238,7 +243,7 @@ export function complementOf(s: SpectrumPeaks, k: number, z: number): number | n
 export function seriesCall(peaks: number[], z: number, flankSeries: Ladder['series'], s: SpectrumPeaks, residues: Residues): SeriesCall {
   // c/z-dot: no rule measured; the flank the ladder was walked from decides.
   if (flankSeries === 'c' || flankSeries === 'z') return { series: flankSeries, level: 'open', why: 'c and z ions are not told apart here' }
-  if (s.toleranceUnit === 'ppm' ? s.tolerance > SERIES_MAX_PPM : s.tolerance > SERIES_MAX_DA)
+  if (!seriesTolerance(s))
     return { series: flankSeries, level: 'open', why: `at this tolerance (${s.tolerance} ${s.toleranceUnit}) a ions match by chance too often to tell b from y` }
   const neutral = (k: number): number => s.mz[k] * z - z * PROTON
   const at = (m: number): number => {
@@ -290,19 +295,25 @@ export function pairCalls(a: SeriesCall, b: SeriesCall): [SeriesCall, SeriesCall
   return [a, b]
 }
 
-/** The ladder relabelled with the series its peaks are judged to be. */
-export function called(l: Ladder, s: SpectrumPeaks, residues: Residues): Ladder {
+/** The ladder relabelled with the series its peaks are judged to be: the
+ *  a-ion call (seriesCall), settled by a terminus only one reading of its
+ *  peaks lies at (terminus.ts withAnchor; @p ctx: the run's termini,
+ *  FASTag's defaults without it). Above 25 ppm or 0.02 Da the anchor is
+ *  not used either: its window (the precursor side about 1.5-2 Da at 0.5
+ *  Da) meets a residue by chance, and it was measured at 20 ppm only. */
+export function called(l: Ladder, s: SpectrumPeaks, residues: Residues, ctx: TermContext = termContext(null, residues)): Ladder {
   const peaks = l.positions.map((p) => p.peak).filter((p): p is number => p != null)
   if (peaks.length === 0) return l
-  const call = seriesCall(peaks, l.charge, l.series, s, residues)
+  const aIons = seriesCall(peaks, l.charge, l.series, s, residues)
+  const call = seriesTolerance(s) ? withAnchor(aIons, anchorsOf(l, s, residues, ctx), l.series) : aIons
   return { ...l, series: call.series, call, walked: l.series }
 }
 
-/** The series as shown: b, y, with ? when likely, "b or y" when open. */
+/** The series as shown: b, y, with ? when likely, "b or y?" when open. */
 export function seriesText(series: Ladder['series'], call?: SeriesCall): string {
   if (!call || call.level === 'sure') return series
   if (call.level === 'likely') return `${series}?`
-  return series === 'c' || series === 'z' ? 'c or z' : 'b or y'
+  return series === 'c' || series === 'z' ? 'c or z?' : 'b or y?'
 }
 
 const tolAt = (s: SpectrumPeaks, x: number): number => (s.toleranceUnit === 'ppm' ? (x * s.tolerance) / 1e6 : s.tolerance)
@@ -447,9 +458,9 @@ function walk(series: Ladder['series'], start: number, residues: number[], label
   }
 }
 
-/** The ladder of @p row on the peaks of @p s, under @p residues. */
-export function ladderFor(row: TagRow, s: SpectrumPeaks, residues: Residues): Ladder {
-  return laddersFor(row, s, residues).best
+/** The ladder of @p row on the peaks of @p s, under @p residues (and the run's termini @p ctx). */
+export function ladderFor(row: TagRow, s: SpectrumPeaks, residues: Residues, ctx?: TermContext): Ladder {
+  return laddersFor(row, s, residues, ctx).best
 }
 
 /** At least one residue step joins two peaks. */
@@ -458,7 +469,7 @@ export const hasStep = (l: Ladder): boolean => l.positions.some((p, k) => k > 0 
 /** Both ladders of @p row (N-terminal series first) and the one on the
  *  peaks (ladderFor). The plot draws each series with a step on the peaks
  *  on its own line (#127); `both` is empty when no ladder can be built. */
-export function laddersFor(row: TagRow, s: SpectrumPeaks, residues: Residues): { best: Ladder; both: Ladder[] } {
+export function laddersFor(row: TagRow, s: SpectrumPeaks, residues: Residues, ctx?: TermContext): { best: Ladder; both: Ladder[] } {
   const z = row.charge
   const parsed = parseTag(row.tag)
   const cz = row.ionSeries === 'cz'
@@ -478,8 +489,8 @@ export function laddersFor(row: TagRow, s: SpectrumPeaks, residues: Residues): {
   }
   if (s.mz.length === 0) return none('the spectrum has no peaks')
   // Walked from either flank; each is then judged b or y on its own peaks.
-  let b = called(walk(cz ? 'c' : 'b', row.ntermMass + (cz ? C_OFFSET : 0), masses, labels, z, s, row.gapped), s, residues)
-  let y = called(walk(cz ? 'z' : 'y', row.ctermMass + (cz ? Z_DOT_OFFSET : WATER), [...masses].reverse(), [...labels].reverse(), z, s, row.gapped), s, residues)
+  let b = called(walk(cz ? 'c' : 'b', row.ntermMass + (cz ? C_OFFSET : 0), masses, labels, z, s, row.gapped), s, residues, ctx)
+  let y = called(walk(cz ? 'z' : 'y', row.ctermMass + (cz ? Z_DOT_OFFSET : WATER), [...masses].reverse(), [...labels].reverse(), z, s, row.gapped), s, residues, ctx)
   // The two walks of one tag usually land on complementary peaks: judge them together.
   const onPeaks = (l: Ladder): number[] => l.positions.map((p) => p.peak).filter((p): p is number => p != null)
   if (b.call && y.call && isComplement(onPeaks(b), onPeaks(y), z, s)) {

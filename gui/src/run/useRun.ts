@@ -160,9 +160,7 @@ export function evidenceOfLog(lines: readonly string[]): { contributed: number |
 }
 
 // The option behind each table and workflow report, for its name in words.
-const TABLE_PARAM: Record<TableKind, string> = { recon: 'recon_out', delta: 'delta_out', glyco: 'glyco_out', reconIds: 'recon_id_out', resolved: 'resolved_out', tagGraph: 'tag_graph_out' }
-// The tables no Setup product names (the backend adds them, fastag.rs).
-const TABLE_LABEL: Partial<Record<TableKind, string>> = { resolved: 'Resolved tags', tagGraph: 'Tag graph' }
+const TABLE_PARAM: Record<TableKind, string> = { recon: 'recon_out', delta: 'delta_out', glyco: 'glyco_out', reconIds: 'recon_id_out' }
 const WORKFLOW_PARAM: Record<WorkflowKind, string> = {
   qc: 'qc_out',
   shortlist: 'shortlist_out',
@@ -570,7 +568,7 @@ export function useRun(s: RunInputs, view: ViewStore, hooks: RunHooks = {}) {
     const tables: TablePaths = {}
     for (const [k, p] of Object.entries(tablePaths(outputs)) as [TableKind, string][]) {
       if (await exists(p)) tables[k] = p
-      else if (k !== 'reconIds') missing.push(productLabel(TABLE_PARAM[k]) ?? TABLE_LABEL[k] ?? k)
+      else if (k !== 'reconIds') missing.push(productLabel(TABLE_PARAM[k]) ?? k)
     }
     if (stale()) return
     const all = workflowReportsOf(outputs)
@@ -1085,9 +1083,7 @@ export function useRun(s: RunInputs, view: ViewStore, hooks: RunHooks = {}) {
       })
       mark()
       // An unreadable one is named where report errors are: the Digest tab.
-      // The resolved tags and the tag graph show in the Spectrum tab, opened from Tags.
-      const kind = 'kind' in table ? table.kind : null
-      if (latest(t)) setTab(kind === 'glyco' ? 'glyco' : kind === 'resolved' || kind === 'tagGraph' ? 'results' : kind ? 'recon' : 'digest')
+      if (latest(t)) setTab('kind' in table ? (table.kind === 'glyco' ? 'glyco' : 'recon') : 'digest')
       closeOtherRun(p)
       return
     }

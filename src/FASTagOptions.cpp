@@ -206,12 +206,39 @@ void TOPPFASTag::registerOptionsAndFlags_()
                 "rows + '#end' sentinels on stdout. Core tagging only (refuses "
                 "-fasta, -entrapment_fasta, -species, -species_out, -taxdb, -glyco, "
                 "-recon_out, -recon_id_out, -out_spectra, -delta_out, -digest_out, "
-                "-label_out, -massgap_out, -usi_collection); parameter changes need a restart");
+                "-label_out, -massgap_out, -usi_collection, -terminus); parameter changes need a restart");
 
   registerFlag_("diversity",
                 "On spectra with more tags than -max_tags, prefer tags built from "
                 "different peaks over near-copies of a tag already kept. Changes "
                 "which tags fill the slots, not how many");
+
+  // Subsumed tags: a row whose peaks lie in a longer row of the same spectrum
+  // that reads the row's residues on them (same charge, series and precursor hypothesis) with an
+  // E-value at most its own is not written to -out (FASTag::subsumedTags).
+  // Every other consumer sees all rows.
+  registerStringOption_("subsume_tags", "<on|off>", "on",
+                        "Leave out of -out a tag whose peaks are a run of another tag's that reads the same "
+                        "residues on them, in the same spectrum (same fragment charge, ion series and precursor "
+                        "hypothesis), when that tag is at least "
+                        "as significant (E-value <= its own; a longer tag with a worse E-value keeps the shorter "
+                        "one; of two identical tags the one with the lower E-value is kept). Only the -out rows "
+                        "change; reports, placements and calibrations count every tag. off: every tag is "
+                        "written, as before",
+                        false);
+  setValidStrings_("subsume_tags", ListUtils::create<std::string>("on,off"));
+
+  // -terminus: which series a terminally anchored tag was read off (src/Terminus.h).
+  registerFlag_("terminus",
+                "Append series and terminus columns: each tag read as written (y, or z under c/z) and "
+                "reversed (b, or c), each reading's flanks tested against the peptide termini (one residue "
+                "at most, e.g. a low peak that is y1 of a C-terminal K); terminus lists every token found "
+                "(N, C, C+K, N,C+R; y:..;b:.. when both readings are anchored, '-' if none); series is the "
+                "one reading anchored through a kind that decides it (any N-side token, C, y1 of a "
+                "C-terminal K or R, a C-terminal set holding K or R such as C+[KQ]; not a lone K or R from "
+                "the precursor, b(n-1), nor another C-terminal residue): b or y, '-' if none or both, "
+                "'-' above 25 ppm or 0.02 Da fragment tolerance, and '-' on c/z rows (c/z anchors were not "
+                "measured; terminus still lists their tokens). Not with -stream");
 
   // ProForma 2.0 rendering of each tag, appended as a trailing column. Off by
   // default so the TSV schema is unchanged unless asked for. See Proforma.h.
@@ -1050,44 +1077,6 @@ void TOPPFASTag::registerOptionsAndFlags_()
                       "and the sums that must hold, as key/value TSV",
                       false, true);
   setValidFormats_("delta_counts_out", ListUtils::create<std::string>("tsv"));
-  // ---- tag merging: options ----
-  // The tags of a spectrum merged into resolved tags and ranked
-  // (src/TagGraph.h, the GUI Spectrum tab's merge). Off unless a table is asked for.
-  registerOutputFile_("resolved_out", "<file>", "",
-                      "Merge each spectrum's tags (of -out, E-value <= -resolve_max_evalue) on its peaks into "
-                      "resolved tags and write one row per resolved tag, best first: sequence N->C, series "
-                      "call, flanks, score, evidence, peaks and steps (both in ascending m/z order: for y "
-                      "and z the steps run C->N, the reverse of sequence), the member rows of -out and the "
-                      "ranking it was made with (scheme, threshold: -resolve_score, -resolve_threshold), "
-                      "and whether it lies at a peptide terminus (terminus: N, C, N,C, or one residue "
-                      "away as N+K or C+[KQ]; empty if neither)",
-                      false);
-  setValidFormats_("resolved_out", ListUtils::create<std::string>("tsv"));
-  registerOutputFile_("tag_graph_out", "<file>", "",
-                      "The merge graph of each spectrum: one row per placement of its tags on the peaks, "
-                      "with its layer, series (as judged on its own peaks, before complement pairing: it can "
-                      "be the other series of the pair than the resolved tag's in -resolved_out, which is "
-                      "authoritative), steps (ascending m/z), rows, the resolved tag that uses it and the "
-                      "placements that continue it",
-                      false, true);
-  setValidFormats_("tag_graph_out", ListUtils::create<std::string>("tsv"));
-  registerStringOption_("resolve_score", "<scheme>", "cstar",
-                        "How resolved tags are ranked: cstar (each step a chain adds is worth its C* "
-                        "log-odds of being right, from its peaks, mass error, rivals and support, less "
-                        "-resolve_threshold; rank 1 is the best resolved tag that holds no peak together "
-                        "with its own complement), steplogodds (the same with the simpler 1.15 step model "
-                        "and no complement rule), evidence (summed E-value evidence of its tags) or anchor "
-                        "(the best single tag first, then steplogodds)",
-                        false, true);
-  setValidStrings_("resolve_score", ListUtils::create<std::string>("cstar,steplogodds,evidence,anchor"));
-  registerDoubleOption_("resolve_threshold", "<t>", 3.0,
-                        "The log-odds a step must exceed to lengthen a resolved tag (cstar, steplogodds, anchor)",
-                        false, true);
-  registerDoubleOption_("resolve_max_evalue", "<E>", 1.0,
-                        "Largest E-value of the tags merged into resolved tags",
-                        false, true);
-  setMinFloat_("resolve_max_evalue", 0.0);
-  registerFlag_("resolve_join", "Join tags that only touch at a peak into one resolved tag", true);
 }
 
 bool TOPPFASTag::optionNonDefault_(const std::string& name) const

@@ -1,17 +1,17 @@
-// Whether a resolved tag lies at a peptide terminus, or one residue from it:
-// the GUI's twin of the `terminus` column FASTag writes on -resolved_out
-// (SPEC.md), used for tables of a FASTag that did not write it and when the
-// GUI resolves the tags itself.
+// Whether a tag lies at a peptide terminus, or one residue from it: the
+// GUI's twin of FASTag's terminus test (src/Terminus.cpp, the -terminus
+// columns of -out). The Spectrum tab marks the terminus of the tag drawn,
+// and a terminus that only one reading of its peaks (b or y, c or z) lies at
+// settles its series (anchorsOf, withAnchor).
 //
-// A resolved tag's flanks in FASTag's tag convention: nterm_mass F_N and
-// cterm_mass F_C, the residue sums before and after it (terminal
-// modifications included), with F_N + residues + F_C + H2O = M. One of
-// them is measured from the peaks (F_N for a b/c reading, F_C for y/z), the
-// other from the precursor.
+// A tag's flanks under one reading: F_N and F_C, the residue sums before
+// and after it (terminal modifications included), with F_N + residues +
+// F_C + H2O = M. One of them is measured from the peaks (F_N for a b/c
+// reading, F_C for y/z), the other from the precursor.
 //
-// The flanks are the ones -resolved_out writes, but tested unclamped: a
-// flank below 0 (a tag longer than the precursor allows) is at no terminus,
-// though the nterm_mass/cterm_mass cells show it as 0.
+// The flanks are tested unclamped: a flank below 0 (a tag longer than the
+// precursor allows) is at no terminus, though FASTag's nterm_mass and
+// cterm_mass cells show it as 0.
 // - Tolerance: the peaks' side, the fragment tolerance at the tag's low peak
 //   times its charge; the precursor's side, that plus the tolerance at the
 //   precursor m/z times the precursor charge (as complement pairs and
@@ -30,8 +30,8 @@
 // empty when neither side is.
 
 import type { SpectrumPeaks } from './dump'
-import type { GPath } from './graph'
-import { C_OFFSET, DEFAULT_FIXED, PROTON, WATER, Z_DOT_OFFSET, modDelta, readingMass, type Ladder, type Residues } from './ladder'
+import { C_OFFSET, DEFAULT_FIXED, PROTON, WATER, Z_DOT_OFFSET, modDelta, readingMass, type Ladder, type Residues, type SeriesCall } from './ladder'
+import { pathOf, type StepPath } from './step'
 
 export const C13 = 1.0033548
 
@@ -97,17 +97,17 @@ export function termContext(params: Record<string, unknown> | null | undefined, 
 const tolAt = (s: SpectrumPeaks, x: number): number => (s.toleranceUnit === 'ppm' ? (x * s.tolerance) / 1e6 : s.tolerance)
 const nTerminal = (series: Ladder['series']): boolean => series === 'b' || series === 'c'
 
-/** The flanks of @p p as -resolved_out writes them (TagGraph.cpp
- *  appendResolvedRows, clamped at 0 as there); null where unknown (no
- *  precursor, a reading without a mass here). */
-export function flanksOf(p: Pick<GPath, 'series' | 'charge' | 'peaks' | 'steps'>, s: SpectrumPeaks, residues: Residues): { n: number | null; c: number | null } {
+/** The flanks of @p p under its series, clamped at 0 as FASTag writes
+ *  nterm_mass and cterm_mass; null where unknown (no precursor, a reading
+ *  without a mass here). */
+export function flanksOf(p: StepPath, s: SpectrumPeaks, residues: Residues): { n: number | null; c: number | null } {
   const f = rawFlanksOf(p, s, residues)
   const pos = (x: number | null): number | null => (x == null ? null : Math.max(0, x))
   return { n: pos(f.n), c: pos(f.c) }
 }
 
 /** The flanks of @p p before the clamp at 0, as terminus() tests them. */
-export function rawFlanksOf(p: Pick<GPath, 'series' | 'charge' | 'peaks' | 'steps'>, s: SpectrumPeaks, residues: Residues): { n: number | null; c: number | null } {
+export function rawFlanksOf(p: StepPath, s: SpectrumPeaks, residues: Residues): { n: number | null; c: number | null } {
   const z = p.charge
   const low = s.mz[p.peaks[0]]
   let cum = 0
@@ -140,7 +140,7 @@ function endOf(F: number | null, targets: number[], offsets: number[], tol: numb
 }
 
 /** Where a tag lies against the peptide's termini, from its flanks (as
- *  TagGraph.cpp terminus() takes them): @p series and fragment @p charge,
+ *  FASTag's Terminus::terminus() takes them): @p series and fragment @p charge,
  *  its low peak @p lowMz, the flanks @p nterm and @p cterm (null: unknown).
  *  Without a precursor the side from it is not tested. */
 export function terminusFromFlanks(series: Ladder['series'], charge: number, lowMz: number, nterm: number | null, cterm: number | null, s: SpectrumPeaks, ctx: TermContext): Terminus {
@@ -155,29 +155,16 @@ export function terminusFromFlanks(series: Ladder['series'], charge: number, low
 }
 
 /** Where @p p lies against the peptide's termini on @p s. */
-export function terminusOf(p: Pick<GPath, 'series' | 'charge' | 'peaks' | 'steps'>, s: SpectrumPeaks, residues: Residues, ctx: TermContext): Terminus {
+export function terminusOf(p: StepPath, s: SpectrumPeaks, residues: Residues, ctx: TermContext): Terminus {
   if (p.peaks.length === 0) return NO_TERMINUS
   const f = rawFlanksOf(p, s, residues)
   return terminusFromFlanks(p.series, p.charge, s.mz[p.peaks[0]], f.n, f.c, s, ctx)
 }
 
-/** The token of @p t, as the terminus column writes it. */
+/** The token of @p t, as FASTag's -terminus column writes it. */
 export function terminusText(t: Terminus): string {
   const one = (side: 'N' | 'C', e: End): string | null => (e === 'at' ? side : e ? `${side}+${e.away}` : null)
   return [one('N', t.n), one('C', t.c)].filter((x) => x != null).join(',')
-}
-
-/** A terminus column cell read back; null when it is not one. */
-export function parseTerminus(cell: string): Terminus | null {
-  const t: Terminus = { n: null, c: null }
-  for (const tok of cell.split(',').map((x) => x.trim()).filter(Boolean)) {
-    const m = /^([NC])(?:\+(.+))?$/.exec(tok)
-    if (!m) return null
-    const e: End = m[2] ? { away: m[2] } : 'at'
-    if (m[1] === 'N') t.n = e
-    else t.c = e
-  }
-  return t
 }
 
 /** The words of one side: "at the peptide N terminus", "one residue (K) from the C terminus". */
@@ -197,7 +184,7 @@ export function termText(t: Terminus): { pre: string; post: string; words: strin
  *  charge, the terminal target its flank matched (0 or a terminal
  *  modification) included. None when that side is not at or one residue
  *  from the terminus, or its flank is not known. */
-export function terminusMark(p: Pick<GPath, 'series' | 'charge' | 'peaks' | 'steps'>, t: Terminus, s: SpectrumPeaks, residues: Residues, ctx: TermContext): { mz: number; side: 'N' | 'C'; label: string; words: string; away: boolean } | null {
+export function terminusMark(p: StepPath, t: Terminus, s: SpectrumPeaks, residues: Residues, ctx: TermContext): { mz: number; side: 'N' | 'C'; label: string; words: string; away: boolean } | null {
   const n = nTerminal(p.series)
   const e = n ? t.n : t.c
   if (!e || p.peaks.length === 0) return null
@@ -219,9 +206,84 @@ export function terminusMark(p: Pick<GPath, 'series' | 'charge' | 'peaks' | 'ste
   return { mz: (m + off + z * PROTON) / z, side, label: `${side} ${p.series}0${z > 1 ? ` ${z}+` : ''}`, words: endWords(side, e) ?? '', away: e !== 'at' }
 }
 
-/** The terminus of each resolved tag of @p paths: as FASTag wrote it when
- *  its table has the column and the tag is still read in the series FASTag
- *  wrote it for (the peptide can settle another), else computed here. */
-export function terminiOf(paths: GPath[], s: SpectrumPeaks, residues: Residues, ctx: TermContext): Terminus[] {
-  return paths.map((p) => (p.terminus && p.terminus.series === p.series ? parseTerminus(p.terminus.text) : null) ?? terminusOf(p, s, residues, ctx))
+/** A reading of a ladder's peaks that lies at, or one residue from, a
+ *  peptide terminus. */
+export interface Anchor {
+  series: Ladder['series']
+  t: Terminus
+}
+
+/** The readings of the peaks of @p l, b and y (c and z for a c/z ladder),
+ *  that lie at a terminus (terminusOf on each): at most two. */
+export function anchorsOf(l: Ladder, s: SpectrumPeaks, residues: Residues, ctx: TermContext): Anchor[] {
+  const p = pathOf(l)
+  if (p.peaks.length === 0) return []
+  const pair: Ladder['series'][] = l.series === 'c' || l.series === 'z' ? ['c', 'z'] : ['b', 'y']
+  return pair.map((series) => ({ series, t: terminusOf({ ...p, series }, s, residues, ctx) })).filter((a) => a.t.n != null || a.t.c != null)
+}
+
+/** Whether an anchor may settle a series, by its kind, as measured at 20
+ *  ppm (work/anchor-subsume-measure: PXD003531 development, PXD020401
+ *  held out, the decision rule fixed before the held-out set was read).
+ *  Used: a side at the terminus (100% / 100%); an N side one residue away,
+ *  b1 or y(n-1) (99.9% / 100%); a C-terminal K or R one residue away on the
+ *  peak side, y1 of K/R (100% / 100%; the run's K and R, fixed
+ *  modifications included, a variably modified K[...] is not cleaved); a
+ *  C-terminal set holding K or R, such as [KQ] (100% / 100%, held-out n
+ *  26). Not used: a C-terminal K or R alone on the precursor side, b(n-1)
+ *  (87% / 94%), and any other C-terminal residue (86% / 23%: W, read off
+ *  the isobaric GE, AD and SV, or b2 of FG, and E after an N-terminal
+ *  M[Oxidation]). An anchor with one used side is used. */
+export function anchorUsed(a: Anchor): boolean {
+  const cFromPeaks = !nTerminal(a.series)
+  if (a.t.n != null) return true
+  const c = a.t.c
+  if (c == null) return false
+  if (c === 'at') return true
+  if (c.away === 'K' || c.away === 'R') return cFromPeaks
+  // A set, [KQ]: its residues (X or X[Name]); a bare K or R among them.
+  const set: string[] = c.away.startsWith('[') ? c.away.slice(1, -1).match(/[A-Z](\[[^\]]*\])?/g) ?? [] : []
+  return set.includes('K') || set.includes('R')
+}
+
+/** Why @p a anchors its reading, in words: "read as y ions, its low peak is
+ *  y1 of a C-terminal K". The side measured from the peaks speaks of the
+ *  low peak, the other (from the precursor) of the high peak. */
+export function anchorWhy(a: Anchor): string {
+  const fromPeaks: 'N' | 'C' = nTerminal(a.series) ? 'N' : 'C'
+  const term = (side: 'N' | 'C'): string => (side === 'N' ? 'an N-terminal' : 'a C-terminal')
+  const one = (side: 'N' | 'C', e: End): string | null => {
+    if (!e) return null
+    if (side === fromPeaks) return e === 'at' ? `its low peak is ${a.series}0, at the peptide ${side} terminus` : `its low peak is ${a.series}1 of ${term(side)} ${e.away}`
+    return e === 'at' ? `its high peak reaches the peptide ${side} terminus (from the precursor)` : `its high peak is ${a.series}(n−1), ${side === 'C' ? 'before' : 'after'} ${term(side)} ${e.away} (from the precursor)`
+  }
+  return `read as ${a.series} ions, ${[one(fromPeaks, fromPeaks === 'N' ? a.t.n : a.t.c), one(fromPeaks === 'N' ? 'C' : 'N', fromPeaks === 'N' ? a.t.c : a.t.n)].filter(Boolean).join(' and ')}`
+}
+
+/** The one reading of @p anchors whose terminus is of a kind that was
+ *  measured to hold (anchorUsed), or null when none or both are: the
+ *  anchor-only series call, as FASTag's -terminus series column makes it
+ *  (src/Terminus.cpp seriesCall; that column is also "-" above 25 ppm or
+ *  0.02 Da, where called() does not use the anchor either). */
+export function usedAnchor(anchors: Anchor[]): Anchor | null {
+  const used = anchors.filter(anchorUsed)
+  return used.length === 1 ? used[0] : null
+}
+
+/** The a-ion call of a ladder (seriesCall) with its terminal anchor: when
+ *  exactly one reading of its peaks lies at a terminus in a way that was
+ *  measured to hold (@p anchors, usedAnchor), an open call takes that
+ *  reading, sure, a call that agrees becomes sure, and one that conflicts
+ *  becomes open, shown as @p walked. A c/z anchor gives at most likely: no
+ *  c/z data were measured. Both readings used, none, or only anchors not
+ *  used change nothing. */
+export function withAnchor(call: SeriesCall, anchors: Anchor[], walked: Ladder['series']): SeriesCall {
+  const a = usedAnchor(anchors)
+  if (!a) return call
+  const cz = a.series === 'c' || a.series === 'z'
+  const why = cz ? `${anchorWhy(a)} (c and z anchors were not measured: likely at most)` : anchorWhy(a)
+  if (call.level === 'open') return { series: a.series, level: cz ? 'likely' : 'sure', why }
+  if (call.series === a.series) return { ...call, level: cz ? call.level : 'sure', why: `${call.why}; ${why}` }
+  const pair = cz ? 'c or z' : 'b or y'
+  return { series: walked, level: 'open', why: `the a ions say ${call.series} (${call.why}), but ${why}: ${pair} is not told apart` }
 }

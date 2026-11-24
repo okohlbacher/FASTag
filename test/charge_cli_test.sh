@@ -62,9 +62,11 @@ grep -q '^CHARGE=' "$TMP/noz.mgf" && fail "CHARGE lines survived the strip"
 # 1.15.5: these checks pin the 1.15.4 tolerance defaults (PREREG-lowres-defaults changes A and B; tolerance_by_analyzer_cli_test tests them)
 COMMON=(-tag_length 4 -extension 1 -fragment_tolerance 0.3 -fragment_tolerance_unit Da -complement_tolerance_unit Da -tolerance_by_analyzer off -fasta "$DB")
 OUTS=(tsv recon.tsv delta.tsv digest.tsv label.tsv massgap.tsv)
+# -subsume_tags off: the pinned 1.11.0 -out keeps the rows -extension 1 makes
+# subsumed (the other reports count every row either way, checked below).
 full() {  # dir input args...
   local d=$1 in=$2; shift 2; mkdir -p "$d"
-  "$BIN" -in "$in" -out "$d/t.tsv" "${COMMON[@]}" -recon_out "$d/t.recon.tsv" -delta_out "$d/t.delta.tsv" \
+  "$BIN" -in "$in" -out "$d/t.tsv" "${COMMON[@]}" -subsume_tags off -recon_out "$d/t.recon.tsv" -delta_out "$d/t.delta.tsv" \
     -digest_out "$d/t.digest.tsv" -label_out "$d/t.label.tsv" -massgap_out "$d/t.massgap.tsv" "$@" \
     > "$d/log" 2>&1 || { cat "$d/log" >&2; fail "run $d failed"; }
 }
@@ -105,6 +107,13 @@ for x in "${OUTS[@]}"; do
 done
 [ "$(wc -l < "$TMP/absent/t.tsv")" -gt 20 ] && [ "$(wc -l < "$TMP/absent/t.digest.tsv")" -gt 20 ] \
   || fail "too few rows at defaults; the identity proves nothing"
+# -subsume_tags on (the default) drops -out rows only: every other report is
+# the 1.11.0 one.
+full "$TMP/subsumed" "$TMP/noz.mgf" -threads 2 -subsume_tags on
+[ "$(wc -l < "$TMP/subsumed/t.tsv")" -lt "$(wc -l < "$TMP/absent/t.tsv")" ] || fail "-subsume_tags on dropped no row"
+for x in recon.tsv delta.tsv digest.tsv label.tsv massgap.tsv; do
+  cmp -s "$TMP/absent/t.$x" "$TMP/subsumed/t.$x" || fail "-subsume_tags on changed t.$x"
+done
 if [ -n "${FASTAG_BASELINE_BIN:-}" ]; then
   mkdir -p "$TMP/base"
   "$FASTAG_BASELINE_BIN" -in "$TMP/noz.mgf" -out "$TMP/base/t.tsv" "${COMMON[@]}" -recon_out "$TMP/base/t.recon.tsv" \
@@ -230,7 +239,7 @@ done
 # Skipped while the binary has no -alkylation_out.
 HELPHELP=$("$BIN" --helphelp 2>&1)
 if grep -q -- '-alkylation_out' <<< "$HELPHELP"; then
-  "$BIN" -in "$TMP/noz.mgf" -out "$TMP/alk_e.tsv" "${COMMON[@]}" -unknown_charge enumerate -threads 2 \
+  "$BIN" -in "$TMP/noz.mgf" -out "$TMP/alk_e.tsv" "${COMMON[@]}" -subsume_tags off -unknown_charge enumerate -threads 2 \
     -alkylation_out "$TMP/alk_e.alk.tsv" -alkylation_proteome "$DB" > "$TMP/alk_e.log" 2>&1 \
     || { cat "$TMP/alk_e.log" >&2; fail "enumerate with -alkylation_out failed"; }
   cmp -s "$TMP/alk_e.tsv" "$E1/t.tsv" || fail "-alkylation_out changed the enumerate tags"

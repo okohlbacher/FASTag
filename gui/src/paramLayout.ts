@@ -78,9 +78,8 @@ export interface Section {
 const SECTION_DEFS: Omit<Section, 'open'>[] = [
   { title: 'Common', home: 'common', blurb: 'The fragment tolerance of your analyzer and the fixed modifications.', params: ['fragment_tolerance', 'fragment_tolerance_unit', 'fixed_modifications'] },
   { title: 'Tagging', home: 'global', blurb: 'How long the tags are, how good, and how many per spectrum.', params: ['tag_length', 'extension', 'max_evalue', 'max_tags', 'res_conf'] },
-  { title: 'Tag columns and files', home: 'export-tags', blurb: 'Extra columns in the tags table, and the spectra that carry tags.', params: ['proforma', 'usi_collection', 'out_spectra'] },
+  { title: 'Tag columns and files', home: 'export-tags', blurb: 'Extra columns in the tags table, the tags it leaves out, and the spectra that carry tags.', params: ['proforma', 'terminus', 'subsume_tags', 'usi_collection', 'out_spectra'] },
   { title: 'Tagging, advanced', home: 'global', blurb: 'Several seed lengths, gapped tags, and how near-copies of a tag are ranked.', params: ['tag_lengths', 'gaps', 'gap_penalty', 'diversity', 'orientation', 'isobaric_tolerance'] },
-  { title: 'Resolved tags, advanced', home: 'global', blurb: 'How the tags of a spectrum are merged into resolved tags and ranked, for the Spectrum tab.', params: ['resolve_score', 'resolve_threshold', 'resolve_max_evalue', 'resolve_join'] },
   { title: 'Keep only tags found in a database', home: 'global', blurb: 'Write only tags that occur in sequences you supply.', params: ['fasta', 'min_filter_length', 'entrapment_fasta'] },
   { title: 'Run QC', home: 'run-qc', blurb: 'Counts, resolution, charges, labels and instrument of the run, in one report.', params: ['qc_out'] },
   { title: 'Sampling and checks', home: 'global', blurb: 'How much of the run is read, the check for raw DIA data, and the check of the precursor charges.', params: ['subsample_fraction', 'acquisition_check', 'subsample_spectra', 'subsample_seed', 'acquisition_probe_spectra', 'check_header_charge', 'check_header_margin', 'check_header_out'] },
@@ -516,6 +515,8 @@ export const BRIEF_HINT: Record<string, string> = {
   threads: 'Processor threads a run uses; 0 uses half the logical cores.',
   // Tag columns and files
   proforma: 'Adds each tag in ProForma 2.0 notation.',
+  terminus: 'Adds the series and terminus a tag’s ends reach, if any.',
+  subsume_tags: 'Leaves out tags that lie wholly in a longer tag at least as significant.',
   usi_collection: 'Adds each spectrum’s USI in this dataset (e.g. PXD000001).',
   out_spectra: 'Also writes the spectra that carry a reported tag.',
   // Sampling and checks

@@ -7,7 +7,7 @@
 // --------------------------------------------------------------------------
 
 #include "FASTagTool.h"
-#include "TagGraph.h"
+#include "Terminus.h"
 
 #ifdef FASTAG_MIMALLOC
 #include <mimalloc.h> // Windows: mimalloc with CRT redirection (CMakeLists.txt)
@@ -467,9 +467,7 @@ TOPPFASTag::ExitCodes TOPPFASTag::main_(int, const char**)
         // ---- 1.12 G: -stream refusals ----
         {"probe_input", nullptr},
         {"dump_spectrum", nullptr},
-        // ---- tag merging: -stream refusals ----
-        {"resolved_out", nullptr},
-        {"tag_graph_out", nullptr},
+        {"terminus", nullptr},  // the -terminus columns need the run's precursor hypotheses
     };
     // 1.13 item 15: the probe needs random access to the run.
     if (getStringOption_("complement_tolerance_unit") == "auto")
@@ -794,18 +792,11 @@ TOPPFASTag::ExitCodes TOPPFASTag::main_(int, const char**)
   }
 
   const std::string recon_out = getStringOption_("recon_out");
-  // Tag merging (src/TagGraph.h): the spectrum's tags merged into resolved
-  // tags and ranked, computed only when one of the two tables is written.
-  const std::string resolved_out = getStringOption_("resolved_out");
-  const std::string tag_graph_out = getStringOption_("tag_graph_out");
-  const bool resolved_on = !resolved_out.empty();
-  const bool tag_graph_on = !tag_graph_out.empty();
-  const bool graph_on = resolved_on || tag_graph_on;
-  FASTag::TagGraph::Options graph_opt;
-  graph_opt.scheme = FASTag::TagGraph::schemeFromString(getStringOption_("resolve_score"));
-  graph_opt.threshold = getDoubleOption_("resolve_threshold");
-  graph_opt.join = getFlag_("resolve_join");
-  const double resolve_max_e = getDoubleOption_("resolve_max_evalue");
+  // -subsume_tags (on by default): rows lying wholly in another row of their
+  // spectrum are left out of -out (FASTag::subsumedTags); -terminus: the
+  // series and terminus columns (src/Terminus.h).
+  const bool subsume_on = getStringOption_("subsume_tags") == "on";
+  const bool terminus_on = getFlag_("terminus");
   const std::string delta_out = getStringOption_("delta_out");
   const std::string delta_spectra_out = getStringOption_("delta_spectra_out");
   // recon_on: -recon_out is written. place_on: tags are placed on the
@@ -1753,9 +1744,13 @@ TOPPFASTag::ExitCodes TOPPFASTag::main_(int, const char**)
         if (!spec.empty())
         {
           const auto tags = tag_all(spec, prec_mz, charge, stream_tables);
-          n = tags.size();
-          for (const auto& t : tags)
-            appendTagRow_(buf, t, id, "-", stream_proforma, stream_proforma_prefix, p.per_residue_conf);
+          const std::vector<char> drop = subsume_on ? FASTag::subsumedTags(tags) : std::vector<char>();
+          for (size_t ti = 0; ti < tags.size(); ++ti)
+          {
+            if (!drop.empty() && drop[ti]) continue;
+            appendTagRow_(buf, tags[ti], id, "-", stream_proforma, stream_proforma_prefix, p.per_residue_conf);
+            ++n;
+          }
         }
         if (std::fprintf(dataf, "%s#end %s %zu\n", buf.c_str(), id.c_str(), n) < 0
             || std::fflush(dataf) != 0)
@@ -2917,8 +2912,6 @@ TOPPFASTag::ExitCodes TOPPFASTag::main_(int, const char**)
     guard.output("out", out);
     guard.output("out_spectra", out_spectra);
     guard.output("recon_out", recon_out);
-    guard.output("resolved_out", resolved_out);
-    guard.output("tag_graph_out", tag_graph_out);
     guard.output("delta_out", delta_out);
     guard.output("delta_spectra_out", delta_spectra_out);
     guard.output("delta_counts_out", delta_counts_out);
@@ -3037,7 +3030,14 @@ TOPPFASTag::ExitCodes TOPPFASTag::main_(int, const char**)
     return CANNOT_WRITE_OUTPUT_FILE;
   }
   const bool want_proforma = getFlag_("proforma");
-  tsv << tagHeader_(want_proforma, p.per_residue_conf, !usi_prefix.empty(), hyp_on, ion_column);
+  tsv << tagHeader_(want_proforma, p.per_residue_conf, !usi_prefix.empty(), hyp_on, ion_column, terminus_on);
+  // -terminus: the run's termini (its terminal modifications, residues and
+  // precursor isotope offsets).
+  std::vector<std::string> mod_names = getStringList_("fixed_modifications");
+  for (const std::string& nm : getStringList_("variable_modifications")) mod_names.push_back(nm);
+  const FASTag::Terminus::Termini termini = terminus_on
+      ? FASTag::Terminus::terminiOfRun(p.mods, mod_names, hyp_param.isotope_errors)
+      : FASTag::Terminus::Termini();
 
   std::ofstream rtsv;
   if (recon_on)
@@ -3051,53 +3051,6 @@ TOPPFASTag::ExitCodes TOPPFASTag::main_(int, const char**)
     rtsv << "spectrum\ttag\tprotein\tpeptide\tpos\treversed\tnterm_match\tcterm_match"
             "\tdelta_mass\tregion\tdelta_interp"
          << (recon_loc ? "\tloc_site\tloc_score\tloc_ties" : "") << "\n";
-  }
-  std::ofstream vtsv, ttsv;  // -resolved_out, -tag_graph_out
-  if (resolved_on)
-  {
-    vtsv.open(resolved_out.c_str());
-    if (!vtsv)
-    {
-      OPENMS_LOG_ERROR << "Cannot open output file " << resolved_out << " for writing." << std::endl;
-      return CANNOT_WRITE_OUTPUT_FILE;
-    }
-    vtsv << FASTag::TagGraph::resolvedHeader();
-  }
-  if (tag_graph_on)
-  {
-    ttsv.open(tag_graph_out.c_str());
-    if (!ttsv)
-    {
-      OPENMS_LOG_ERROR << "Cannot open output file " << tag_graph_out << " for writing." << std::endl;
-      return CANNOT_WRITE_OUTPUT_FILE;
-    }
-    ttsv << FASTag::TagGraph::graphHeader();
-  }
-  // The residue masses of the tagger's alphabet, for walking tags onto peaks.
-  const FASTag::TagGraph::Residues graph_res =
-      graph_on ? FASTag::TagGraph::residuesFrom(p.mods) : FASTag::TagGraph::Residues();
-  // -resolved_out terminus: the terminal modifications of the run (any
-  // residue, fixed or variable; resolveMods_ absorbs them into the flanks),
-  // its residues and its precursor isotope offsets.
-  FASTag::TagGraph::Termini graph_termini;
-  if (resolved_on)
-  {
-    std::vector<double> term_n, term_c;
-    for (const char* list : {"fixed_modifications", "variable_modifications"})
-      for (const std::string& nm : getStringList_(list))
-      {
-        if (nm.empty()) continue;
-        const ResidueModification* mod = nullptr;
-        try { mod = ModificationsDB::getInstance()->getModification(nm); }
-        catch (Exception::BaseException&) { continue; }  // refused by resolveMods_ already
-        if (!mod || mod->getOrigin() != 'X') continue;
-        const auto spec = mod->getTermSpecificity();
-        if (spec == ResidueModification::N_TERM || spec == ResidueModification::PROTEIN_N_TERM)
-          term_n.push_back(mod->getDiffMonoMass());
-        else if (spec == ResidueModification::C_TERM || spec == ResidueModification::PROTEIN_C_TERM)
-          term_c.push_back(mod->getDiffMonoMass());
-      }
-    graph_termini = FASTag::TagGraph::terminiFrom(graph_res, term_n, term_c, hyp_param.isotope_errors);
   }
 
 
@@ -3199,7 +3152,7 @@ TOPPFASTag::ExitCodes TOPPFASTag::main_(int, const char**)
 
   // ---- phase 6: the tagging loop -----------------------------------------
 
-  size_t n_ms2 = 0, n_tags = 0, n_reported = 0;
+  size_t n_ms2 = 0, n_tags = 0, n_reported = 0, n_subsumed = 0;
   size_t n_untaggable_msn = 0;  // 1.16: MS2 without peaks or a precursor, and non-MS2 with a precursor
   size_t n_glyco = 0, n_glyco_scanned = 0;
   std::map<int, std::pair<size_t, size_t>> by_len;   // length -> (seen, matched)
@@ -3222,7 +3175,6 @@ TOPPFASTag::ExitCodes TOPPFASTag::main_(int, const char**)
     size_t base = 0;                 ///< input index of slot 0
     std::vector<std::string> rows;
     std::vector<std::string> recon_rows;  ///< recon rows (recon_on only)
-    std::vector<std::string> resolved_rows, graph_rows;  ///< (resolved_on, tag_graph_on only)
     std::vector<std::vector<PeptideIdentification>> recon_id_lists;  ///< (recon_ids_on only)
     std::vector<std::string> glyco_rows;  ///< glyco rows (glyco_on only)
     std::vector<std::vector<std::pair<double, bool>>> row_meta;  ///< (entrap_on only)
@@ -3231,6 +3183,9 @@ TOPPFASTag::ExitCodes TOPPFASTag::main_(int, const char**)
     /// want_species only. A flag beside the rows, never a column read back
     /// off them, so adding TSV columns cannot change it.
     std::vector<std::vector<char>> row_species;
+    /// -species: per spectrum, every row incl. the ones -subsume_tags left
+    /// out of -out (SpecResult::sbuf), when it left any out; else empty.
+    std::vector<std::string> species_rows;
     std::vector<char> keep, keep_target;
     /// #15 phase B: per spectrum, whether its rows were read as c/z-dot
     /// ions (SpecResult::cz); every row of a spectrum shares its series.
@@ -3290,7 +3245,7 @@ TOPPFASTag::ExitCodes TOPPFASTag::main_(int, const char**)
   struct alignas(64) PerThread
   {
     std::map<int, std::pair<size_t, size_t>> len;  ///< length -> (seen, matched)
-    size_t ms2 = 0, tags = 0, reported = 0;
+    size_t ms2 = 0, tags = 0, reported = 0, subsumed = 0;
     size_t untaggable_msn = 0;  ///< spectra not tagged although MS2 or with a precursor
     size_t no_charge = 0;  ///< MS2 whose precursor carries no charge (tagged as 2+)
     size_t multi_charge = 0;  ///< ... of them, those listing several possible charges
@@ -3383,13 +3338,17 @@ TOPPFASTag::ExitCodes TOPPFASTag::main_(int, const char**)
   struct SpecResult
   {
     std::string buf, rbuf;
-    std::string vbuf, gbuf;  ///< -resolved_out, -tag_graph_out rows
     /// Per reported row, in row order: (evalue, is_entrapment) -- the
     /// material the q_db post-pass consumes without ever reparsing a
     /// serialized %g evalue back off the TSV.
     std::vector<std::pair<double, bool>> meta;
-    bool any_target = false;  ///< at least one non-entrapment reported tag
-    /// Per written tag row: may it be species evidence (Block::row_species).
+    bool any_target = false;  ///< at least one non-entrapment tag the filter keeps (written or subsumed)
+    /// -species when -subsume_tags dropped rows of the spectrum: every row,
+    /// written or not, in row order (Block::species_rows); empty otherwise,
+    /// and then the species pass reads the written rows (buf).
+    std::string sbuf;
+    /// Per row the species pass reads (sbuf when set, else buf): may it be
+    /// species evidence (Block::row_species).
     std::vector<char> row_species;
     /// -recon_id_out: the spectrum's identification, when it placed anything.
     std::vector<PeptideIdentification> ids;
@@ -3728,23 +3687,45 @@ TOPPFASTag::ExitCodes TOPPFASTag::main_(int, const char**)
       loc_peaks.sortByPosition();
     }
 
-    // Tag merging: the written rows of the selected hypothesis with
-    // E <= -resolve_max_evalue, with the values as written (the GUI reads
-    // them off -out), indexed by their position among the spectrum's rows.
-    std::vector<FASTag::TagGraph::TagIn> graph_in;
-    size_t row_no = 0;
-    const auto as_written = [](double v, bool mass) {
-      std::string b;
-      if (g_full_precision) FASTag::appendShortest(b, v);
-      else if (mass) FASTag::appendNum(b, v, std::chars_format::fixed, 4);
-      else FASTag::appendNum(b, v, std::chars_format::general, 6);
-      return std::strtod(b.c_str(), nullptr);  // C locale: FASTag never calls setlocale
-    };
+    // -subsume_tags: the rows of -out that lie wholly in another written row
+    // of the spectrum (FASTag::subsumedTags), from the final list (after
+    // every merge and cap), among the rows the -fasta filter would write.
+    // They are dropped from -out and from what follows it row by row (q_db,
+    // the reported counts) only: the filter, digest, label, alkylation,
+    // census tag statistics, placements, -qc_out, the -species evidence and
+    // the -out_spectra target flag still see every row.
+    std::vector<char> drop;
+    if (subsume_on && tags.size() > 1)
+    {
+      std::vector<char> eligible;
+      if (filtering)
+      {
+        eligible.resize(tags.size());
+        for (size_t ti = 0; ti < tags.size(); ++ti)
+        {
+          // The row's hit class, attributed target-first as the row loop
+          // does: 1 target, 2 entrapment only, 0 dropped by the filter. A
+          // row is only subsumed by a row of its own class, so a target row
+          // never gives way to a known-false entrapment row.
+          const std::string base = FASTag::baseSequence(tags[ti].seq);
+          if (filt.match(base) != FASTag::FastaFilter::Hit::NONE) eligible[ti] = 1;
+          else if (entrap_on && entrap.match(base) != FASTag::FastaFilter::Hit::NONE) eligible[ti] = 2;
+        }
+      }
+      drop = FASTag::subsumedTags(tags, tag_hyp, eligible);
+    }
+    // -species counts every row: when rows are dropped, its pass reads them
+    // all from sbuf (the written ones copied, the dropped ones formatted).
+    const bool species_all = want_species && std::find(drop.begin(), drop.end(), 1) != drop.end();
+    res.sbuf.clear();
+    size_t census_dropped = 0;  // dropped rows among ctags (census n_reported counts written rows)
+
     for (size_t ti = 0; ti < tags.size(); ++ti)
     {
       const FASTag::Tag& t = tags[ti];
       const FASTag::Hyp::Hypothesis& hy = hyp_of(ti);
       const bool sel = hy.selected;  // always true at the defaults
+      const bool written = drop.empty() || !drop[ti];
       const char* hit = "-";
       bool row_entrap = false;
       if (filtering)
@@ -3773,39 +3754,54 @@ TOPPFASTag::ExitCodes TOPPFASTag::main_(int, const char**)
           if (entrap_on) pt.target_e.push_back(t.evalue);
         }
       }
-      if (!row_entrap) res.any_target = true;
-      if (entrap_on) res.meta.emplace_back(t.evalue, row_entrap);
       if (qc_on && sel && t.evalue < res.qc_best_e)  // -qc_out tag yield (1.16)
       {
         res.qc_best_e = t.evalue;
         res.qc_best_tag = t.seq;
       }
-      ++pt.reported;
-      if (res.census && sel) ctags.push_back(census_view(t));
-
-      appendTagRow_(buf, t, spec.getNativeID(), hit, want_proforma, proforma_fixed,
-                   p.per_residue_conf, usi, hyp_on ? &hy : nullptr, ion_column);
-      if (graph_on)
+      if (res.census && sel)
       {
-        const double e = as_written(t.evalue, false);
-        if (sel && e <= resolve_max_e)
-        {
-          FASTag::TagGraph::TagIn ti_in;
-          ti_in.seq = t.seq;
-          ti_in.charge = t.charge;
-          ti_in.nterm_mass = as_written(t.nterm_mass, true);
-          ti_in.cterm_mass = as_written(t.cterm_mass, true);
-          ti_in.gapped = t.gapped;
-          ti_in.cz = t.ion_series == FASTag::IonSeries::Series::CZ;
-          ti_in.evalue = e;
-          ti_in.index = row_no;
-          graph_in.push_back(std::move(ti_in));
-        }
-        ++row_no;
+        ctags.push_back(census_view(t));
+        if (!written) ++census_dropped;
       }
-      if (species_sel_on) res.row_species.push_back(sel ? 1 : 0);
-      // 1.13 item 10: a two-pass hybrid spectrum's rows differ in series.
-      if (read_hybrid) res.row_series.push_back(t.ion_series == FASTag::IonSeries::Series::CZ ? 1 : 0);
+      if (!row_entrap) res.any_target = true;
+      if (written)
+      {
+        if (entrap_on) res.meta.emplace_back(t.evalue, row_entrap);
+        ++pt.reported;
+        FASTag::Terminus::Call term;
+        if (terminus_on)
+        {
+          // The row's precursor (its hypothesis) and its series' tolerance.
+          const FASTag::Param& tp = params_of(t.ion_series, spec_itms).front();
+          FASTag::Terminus::Peaks tpk;
+          if (hy.mz > 0 && std::isfinite(hy.mz)) tpk.precursor = hy.mz;
+          tpk.charge = hy.charge > 0 ? hy.charge : 2;
+          tpk.tolerance = tp.frag_tol;
+          tpk.ppm = tp.tol_ppm;
+          tpk.isotope = hy.iso;
+          term = FASTag::Terminus::seriesCall(t, tpk, termini);
+        }
+        const size_t row_start = buf.size();
+        appendTagRow_(buf, t, spec.getNativeID(), hit, want_proforma, proforma_fixed,
+                     p.per_residue_conf, usi, hyp_on ? &hy : nullptr, ion_column, terminus_on ? &term : nullptr);
+        if (species_all) res.sbuf.append(buf, row_start, std::string::npos);
+      }
+      else
+      {
+        ++pt.subsumed;
+        // Only the species pass reads this copy (readSpeciesFields_: the
+        // leading columns), so the -terminus columns are left off.
+        if (species_all)
+          appendTagRow_(res.sbuf, t, spec.getNativeID(), hit, want_proforma, proforma_fixed,
+                        p.per_residue_conf, usi, hyp_on ? &hy : nullptr, ion_column, nullptr);
+      }
+      if (written || species_all)
+      {
+        if (species_sel_on) res.row_species.push_back(sel ? 1 : 0);
+        // 1.13 item 10: a two-pass hybrid spectrum's rows differ in series.
+        if (read_hybrid) res.row_series.push_back(t.ion_series == FASTag::IonSeries::Series::CZ ? 1 : 0);
+      }
       // The tags the digest and label reports count: every written row that
       // is ungapped with E <= 1 (of the selected hypothesis, #6). A c/z tag
       // (#15 phase B) with its series' reversed-read offset.
@@ -3948,42 +3944,6 @@ TOPPFASTag::ExitCodes TOPPFASTag::main_(int, const char**)
           if (better) delta_e = t.evalue;
           delta_have = true;
         }
-      }
-    }
-    if (graph_on && !graph_in.empty())
-    {
-      // The peaks of the selected hypothesis, prepared as for its tags
-      // (-dump_spectrum's list at the defaults). A two-pass hybrid spectrum
-      // was tagged on two preparations: the c/z one drops the unreacted and
-      // charge-reduced precursor peaks before the peak budget, the b/y one
-      // keeps them. The graph takes the union of both (preparedPeaksHybrid,
-      // the list -dump_spectrum prints for it), so every row's ladder is on it.
-      const FASTag::Hyp::Hypothesis* hs = &hyps[0];
-      for (const auto& hy : hyps) if (hy.selected) { hs = &hy; break; }
-      const FASTag::Param& gp = params_of(read_series, spec_itms).front();
-      const OpenMS::MSSpectrum gprep =
-          read_hybrid ? FASTag::preparedPeaksHybrid(spec, hs->mz, hs->charge, gp,
-                                                    params_of(FASTag::IonSeries::Series::CZ, spec_itms).front())
-                      : FASTag::preparedPeaks(spec, hs->mz, hs->charge, gp);
-      FASTag::TagGraph::Peaks gpk = FASTag::TagGraph::peaksFrom(gprep, hs->mz, hs->charge, gp);
-      gpk.isotope = hs->iso;
-      const FASTag::TagGraph::Graph g = FASTag::TagGraph::buildGraph(graph_in, gpk, graph_res, graph_opt);
-      // A block holds its spectra's rows until it is written. The rows are
-      // built in a per-thread scratch and copied at their size, so the slack
-      // of a string grown by appends is not held along with them.
-      static thread_local std::string gscratch;
-      if (resolved_on)
-      {
-        gscratch.clear();
-        FASTag::TagGraph::appendResolvedRows(gscratch, g, gpk, spec.getNativeID(), g_full_precision, graph_opt,
-                                               graph_termini);
-        res.vbuf = std::string(gscratch.data(), gscratch.size());
-      }
-      if (tag_graph_on)
-      {
-        gscratch.clear();
-        FASTag::TagGraph::appendGraphRows(gscratch, g, gpk, spec.getNativeID(), g_full_precision);
-        res.gbuf = std::string(gscratch.data(), gscratch.size());
       }
     }
     if (delta_tagged) ++pt.delta_tagged;
@@ -4201,7 +4161,7 @@ TOPPFASTag::ExitCodes TOPPFASTag::main_(int, const char**)
         if (h.selected) crow.charge_used = h.charge > 0 ? h.charge : 2;
       cfacts.enough_peaks = cdiag.enough_peaks;
       cfacts.n_found = sel_found;
-      cfacts.n_reported = ctags.size();
+      cfacts.n_reported = ctags.size() - census_dropped;
       cfacts.n_placed = cplaced;
       cfacts.count_placements = recon_on;
       crow.status = FASTag::Census::classify(cfacts);
@@ -4210,7 +4170,7 @@ TOPPFASTag::ExitCodes TOPPFASTag::main_(int, const char**)
       crow.n_edges = cdiag.n_edges;
       crow.n_compl = cdiag.n_compl;
       crow.n_found = sel_found;
-      crow.n_reported = ctags.size();
+      crow.n_reported = ctags.size() - census_dropped;
       const size_t best = FASTag::Census::bestTag(ctags);
       if (best != FASTag::Census::NO_INDEX)
       {
@@ -4279,12 +4239,11 @@ TOPPFASTag::ExitCodes TOPPFASTag::main_(int, const char**)
     if (r.buf.empty()) return;  // rbuf is only ever non-empty alongside buf
     b.rows[idx].swap(r.buf);
     if (recon_on) b.recon_rows[idx].swap(r.rbuf);
-    if (resolved_on) b.resolved_rows[idx].swap(r.vbuf);
-    if (tag_graph_on) b.graph_rows[idx].swap(r.gbuf);
     if (recon_ids_on) b.recon_id_lists[idx].swap(r.ids);
     if (entrap_on) b.row_meta[idx].swap(r.meta);
     if (species_sel_on) b.row_species[idx].swap(r.row_species);
     if (hybrid_both) b.row_series[idx].swap(r.row_series);
+    if (want_species) b.species_rows[idx].swap(r.sbuf);
     b.row_cz[idx] = r.cz ? 1 : 0;
     b.keep[idx] = 1;
     // A spectrum whose only reported tags are entrapment matches is
@@ -4302,13 +4261,12 @@ TOPPFASTag::ExitCodes TOPPFASTag::main_(int, const char**)
     {
       b.rows.resize(n_used);
       if (recon_on) b.recon_rows.resize(n_used);
-      if (resolved_on) b.resolved_rows.resize(n_used);
-      if (tag_graph_on) b.graph_rows.resize(n_used);
       if (recon_ids_on) b.recon_id_lists.resize(n_used);
       if (glyco_on) b.glyco_rows.resize(n_used);
       if (entrap_on) b.row_meta.resize(n_used);
       if (species_sel_on) b.row_species.resize(n_used);
       if (hybrid_both) b.row_series.resize(n_used);
+      if (want_species) b.species_rows.resize(n_used);
     }
     b.keep.assign(n_used, 0);
     b.row_cz.assign(n_used, 0);
@@ -4341,7 +4299,7 @@ TOPPFASTag::ExitCodes TOPPFASTag::main_(int, const char**)
   // thread counts. 4 MB, emptied at the end of every block; larger only
   // holds more memory.
   constexpr size_t WRITE_CHUNK = size_t(4) << 20;
-  std::string tsv_pending, rtsv_pending, ctsv_pending, vtsv_pending, ttsv_pending;
+  std::string tsv_pending, rtsv_pending, ctsv_pending;
   auto drain = [](std::ofstream& os, std::string& pending)
   {
     if (pending.empty()) return;
@@ -4376,10 +4334,6 @@ TOPPFASTag::ExitCodes TOPPFASTag::main_(int, const char**)
       if (!b.keep[i]) continue;
       put_rows(tsv, tsv_pending, b.rows[i]);
       if (recon_on && !b.recon_rows[i].empty()) { put_rows(rtsv, rtsv_pending, b.recon_rows[i]); b.recon_rows[i].clear(); }
-      // Freed, not cleared: these rows are copied at their size, so a kept
-      // capacity would only be held until the slot's next swap.
-      if (resolved_on && !b.resolved_rows[i].empty()) { put_rows(vtsv, vtsv_pending, b.resolved_rows[i]); std::string().swap(b.resolved_rows[i]); }
-      if (tag_graph_on && !b.graph_rows[i].empty()) { put_rows(ttsv, ttsv_pending, b.graph_rows[i]); std::string().swap(b.graph_rows[i]); }
       if (recon_ids_on)
       {
         for (PeptideIdentification& id : b.recon_id_lists[i]) recon_ids.push_back(std::move(id));
@@ -4392,7 +4346,9 @@ TOPPFASTag::ExitCodes TOPPFASTag::main_(int, const char**)
       }
       if (want_species)
       {
-        const std::string& r = b.rows[i];
+        // Every row of the spectrum: the written ones, or all of them when
+        // -subsume_tags left some out of -out (Block::species_rows).
+        const std::string& r = b.species_rows[i].empty() ? b.rows[i] : b.species_rows[i];
         size_t start = 0, row = 0, rix = 0;
         // 1.13 item 10: per-row series of a two-pass hybrid spectrum.
         const std::vector<char>* rser =
@@ -4427,12 +4383,11 @@ TOPPFASTag::ExitCodes TOPPFASTag::main_(int, const char**)
         }
       }
       b.rows[i].clear();
+      if (want_species) b.species_rows[i].clear();
       if (want_out && b.keep_target[i]) kept_idx.push_back(static_cast<Size>(b.base + i));
     }
     drain(tsv, tsv_pending);
     if (recon_on) drain(rtsv, rtsv_pending);
-    if (resolved_on) drain(vtsv, vtsv_pending);
-    if (tag_graph_on) drain(ttsv, ttsv_pending);
     if (census_on) drain(ctsv, ctsv_pending);
   };
 
@@ -4768,8 +4723,6 @@ TOPPFASTag::ExitCodes TOPPFASTag::main_(int, const char**)
     };
     drop(tsv, out);
     if (recon_on) drop(rtsv, recon_out);
-    if (resolved_on) drop(vtsv, resolved_out);
-    if (tag_graph_on) drop(ttsv, tag_graph_out);
     if (glyco_on) drop(gtsv, glyco_out);
     if (census_on)
     {
@@ -4908,6 +4861,7 @@ TOPPFASTag::ExitCodes TOPPFASTag::main_(int, const char**)
     n_untaggable_msn += pt.untaggable_msn;
     n_tags += pt.tags;
     n_reported += pt.reported;
+    n_subsumed += pt.subsumed;
     for (const auto& kv : pt.len)
     {
       by_len[kv.first].first += kv.second.first;
@@ -5322,17 +5276,6 @@ TOPPFASTag::ExitCodes TOPPFASTag::main_(int, const char**)
     if (rtsv.fail())
     {
       OPENMS_LOG_ERROR << "Failed writing " << recon_out << " (disk full?)." << std::endl;
-      return CANNOT_WRITE_OUTPUT_FILE;
-    }
-  }
-  for (auto [os, on, path] : {std::make_tuple(&vtsv, resolved_on, &resolved_out),
-                              std::make_tuple(&ttsv, tag_graph_on, &tag_graph_out)})
-  {
-    if (!on) continue;
-    os->close();
-    if (os->fail())
-    {
-      OPENMS_LOG_ERROR << "Failed writing " << *path << " (disk full?)." << std::endl;
       return CANNOT_WRITE_OUTPUT_FILE;
     }
   }
@@ -6203,6 +6146,7 @@ TOPPFASTag::ExitCodes TOPPFASTag::main_(int, const char**)
   OPENMS_LOG_INFO << n_ms2 << " MS2 spectra, " << n_tags << " tags";
   if (filtering) OPENMS_LOG_INFO << " -> " << n_reported << " after filtering";
   OPENMS_LOG_INFO << std::endl;
+  if (subsume_on) OPENMS_LOG_INFO << "Subsumed tags dropped: " << n_subsumed << std::endl;
   // 1.15.5 change B: stderr only (stdout's summary line is read by gates).
   if (itms_on_)
     std::cerr << "Tolerance by analyzer: " << n_ms2_itms.load() << " ion-trap MS2 tagged at " << itms_tol

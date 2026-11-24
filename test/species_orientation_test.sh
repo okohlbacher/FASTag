@@ -78,8 +78,10 @@ awk '/^>/ { if (s != "") print s; print; s = ""; next } { s = s $0 } END { if (s
 GENUS="562:561,28901:590,1280:1279,4932:4930,1313:1301"
 
 TAX=(-taxdb "$TMP/toy.taxdb" -taxonomy_nodes "$TAXDIR/nodes.dmp" -taxonomy_names "$TAXDIR/names.dmp")
+# -subsume_tags off: the species evidence counts every row, and the recount
+# reads them off -out, so -out must hold every row.
 COMMON=(-in "$IN" -tag_length 7 -extension 1 -fragment_tolerance 600 -fragment_tolerance_unit ppm
-        -max_evalue 0 -max_tags 200)
+        -max_evalue 0 -max_tags 200 -subsume_tags off)
 export FASTAG_TAXONOMY_DIR="$TAXDIR"
 export FASTAG_FULL_PRECISION=1
 
@@ -180,7 +182,7 @@ done
 # At the default -max_evalue and -max_tags the genera absent from the sample
 # gain at most 2 spectra from the reversed readings, and the both count is
 # at most forward + that predicted gain.
-LIGHT=(-in "$IN" -tag_length 7 -extension 1 -fragment_tolerance 600 -fragment_tolerance_unit ppm)
+LIGHT=(-in "$IN" -tag_length 7 -extension 1 -fragment_tolerance 600 -fragment_tolerance_unit ppm -subsume_tags off)
 run light "${LIGHT[@]}" -species "${TAX[@]}" -threads 2 || { cat "$TMP/light.log" >&2; fail "default-cutoff run"; }
 run light_both "${LIGHT[@]}" -species "${TAX[@]}" -species_orientation both -threads 2 \
   || { cat "$TMP/light_both.log" >&2; fail "default-cutoff both run"; }

@@ -2,75 +2,53 @@
 
 ## Unreleased
 
-- **Resolved tags are ranked by `-resolve_score cstar` (the default).** Each step a resolved tag adds is worth its C*
-  log-odds (mass error in tolerance units at a Da tolerance, rivals, support, complements at any charge) less
-  `-resolve_threshold` (3), and rank 1 is the first resolved tag without a peak and its own complement. `steplogodds`
-  (the same sum with the simpler 1.15 step model and no rank-1 rule), `evidence` (summed E-value evidence) and
-  `anchor` (the resolved tag of the best single tag first, the rest by `steplogodds`) can be chosen instead. Both
-  `-resolved_out` and the GUI, when it resolves itself, use this ranking.
-- **Held-out result behind it (preregistration amendment 3):** the first resolved tag was right in 84.9% of scans
-  against 81.5% under `steplogodds` on PXD020401 (20 ppm), and in 59.8% against 48.0% on PXD031975 (0.5 Da).
-
-- **CLI: tag merging, `-resolved_out` and `-tag_graph_out`.** FASTag merges the tags of each spectrum into resolved
-  tags itself, as the desktop app's Spectrum tab did (src/TagGraph.h, a port of its graph with the same tie-breaks):
-  one row per resolved tag in rank order (sequence N→C, series call, flanks, score, evidence, peaks, steps, the member
-  rows of `-out`, and the ranking it was made with, `scheme` and `threshold`), and the merge graph, one row per
-  placement. Ranked by `-resolve_score` (cstar by default, above) and `-resolve_threshold`; tags with E <= 1
-  (`-resolve_max_evalue`); `-resolve_join` joins tags that only touch. Off unless asked for; not under `-stream`.
-  A two-pass hybrid spectrum (`-ion_series_hybrid both`) is merged on the union of its b/y and c/z• preparations,
-  which `-dump_spectrum` now prints for it, so its c/z rows are no longer left out when the precursor peaks the b/y
-  preparation keeps crowd the peak budget.
-  The GUI takes OpenMS's residue masses, as the CLI does: on PXD003531, PXD000001, PXD076528, PXD020401 and PXD031975
-  the GUI's resolved tags equal the CLI's on every scan and rank, under each of the four rankings.
-
-- **CLI: `-resolved_out` says whether a resolved tag lies at a peptide terminus.** A new last column, `terminus`:
-  `N` or `C` when a flank is 0 (or a terminal modification of the run) within the tolerance of its side (the
-  fragment tolerance for the side read from the peaks, plus the precursor's for the other, at the `-isotope_error`
-  offsets), else `N+K` / `C+[KQ]` when it is one residue away; `N,C+R` for both, empty for neither. The flanks are
-  tested before the clamp at 0 of `nterm_mass`/`cterm_mass`, so a tag longer than the precursor allows is at no
-  terminus. The other columns, their order and the ranking are unchanged.
-
-- **GUI: FASTag's own resolved tags, and the merge graph.** When the CLI has `-resolved_out` and `-tag_graph_out`,
-  the app writes them beside the tags (`<stem>.resolved.tsv`, `<stem>.taggraph.tsv`) and the Spectrum tab's All tags,
-  resolved shows FASTag's resolution and names its ranking (it says which one is used, and falls back to the GUI's
-  when the tables do not fit the peaks or hold no row of the spectrum). The fallback ranks as the run did: the
-  ranking FASTag wrote on the table's rows, else the run's settings; tables without either are said to be of a
-  ranking not recorded, and the GUI takes the default. The new Merge graph view draws the tag graph around the
-  resolved tag selected, on its residues N to C: its tags as a staircase of bars under a residue ruler with bold
-  joins, conflicting resolved tags above, tags inside it, touching ones and the rest below; a resolved tag that reads
-  it again on its complement peaks (every peak, not just two) is a b+y badge, not a second bar; a related one of the other series is written in the ruler's direction, marked C→N; unused tags behind a toggle; choosing a bar
-  re-anchors on its resolved tag.
-- **GUI: termini of resolved tags.** The resolved tags table, the tag line and the merge graph write N–EPTIDE,
-  EPTIDE–C, and N–(K)… / …(K)–C muted one residue away, from `-resolved_out`'s `terminus` column, or computed alike
-  for older tables and the GUI's own resolution; the plot ticks b0/y0 of the selected one when in view.
-
-- **GUI: all tags of a spectrum, resolved.** The Spectrum tab's **All tags, resolved** places every tag of the spectrum
-  on its peaks and assembles the tags of one ion series that overlap and agree into longer resolved tags (a tag graph:
-  ions as nodes, steps of tags as edges). Row orders of one gapped tag count once, isobaric readings of a step stay
-  apart ({Q|[AG]}), conflicting and same-series readings are named, with an E-value cutoff (default 1). A double-click
-  on a row in Tags opens its spectrum. Choosing a resolved tag draws the others against it (same step, differing
-  step, elsewhere), shows its mass errors under the axis (each step, summed from the first peak, and the steps that
-  differ) and lists the tags behind it aligned peak by peak. With the run's tag placements (`-recon_out`), the peptide
-  most tags of the spectrum were placed on is named and its fragments are drawn as a ruler; a candidate, not an
-  identification.
-
-- **Resolved tags: the `steplogodds` ranking.** It ranks the resolved tags by the log-odds of their steps (E-value,
-  mass error, intensity of both peaks, complement ions, gap steps), less a threshold, instead of by summed E-values
-  (`evidence`). Preregistered held-out test on PXD076528 (Orbitrap Astral, 4,464 scans): the first resolved tag right
-  in 58.7% of scans (best single tag 58.2%, summed E-values 40.3%), with 11% more correct residues than the best
-  single tag. It is no longer the default: `cstar` (above) did better on the later held-out sets.
+- **CLI: subsumed tags are left out of `-out` (`-subsume_tags`, on by default).** A tag whose path peaks are a
+  contiguous run of another tag's of the same spectrum, on which that tag reads exactly its residues (same
+  fragment charge, ion series and precursor hypothesis), is no longer written when that tag is at least as
+  significant (E-value <= its own; a longer tag with a worse E-value keeps the shorter one); of two copies of one tag
+  the lower E-value stays. It happens under several `-tag_lengths` or with `-extension`; at one seed length without
+  extension no row changes. On PXD003531 at `-tag_lengths 3 4 5` it drops 41% of the rows, and 1.3% of the PSM
+  spectra lose their only correct tag (3.2% if every contained tag were dropped); held out on PXD020401, 45% of
+  the rows and 0.85%. Only `-out` and the counts of its rows change: the digest, label, alkylation, census tag statistics,
+  placements, mass-shift and QC reports and the `-species` evidence count every tag as before, and a target tag is
+  never left out for a longer entrapment-only one. The run summary prints `Subsumed tags dropped: n`;
+  `-subsume_tags off` writes every tag. Also under `-stream`.
+- **CLI: `-terminus`, the series of a terminally anchored tag.** Two new last columns, `series` and `terminus`: each
+  tag is read as written (y, or z under c/z) and reversed (b, or c), each reading's flanks tested for a peptide
+  terminus (at it, or one residue away, such as a low peak that is y1 of a C-terminal K); `terminus` lists every
+  token found (`C+K`, `N`, `N+M[Oxidation],C`; `y:…;b:…` when both readings have some, `-` when neither has).
+  `series` is the one reading anchored through a kind that held when measured at 20 ppm (any N-side token, the C
+  terminus, y1 of a C-terminal K or R, a C-terminal set holding K or R such as `C+[KQ]`; not a lone K or R from the
+  precursor, b(n-1), nor another C-terminal residue): 99.8% right on PXD003531 and 99.9% on PXD020401. Above 25 ppm
+  or 0.02 Da, and on c/z rows (c/z anchors were not measured), `series` is `-`; `terminus` still lists the tokens.
+  Off by default; not with `-stream`.
 
 - **GUI: b or y, judged on the peaks.** A tag does not say whether it was read from b or y ions, and the
   Spectrum tab used to call the ladder walked from nterm_mass "b" and the one from cterm_mass "y", which was wrong for
   about a quarter to half of correct tags and showed their sequence reversed. It now judges the series on the peaks
   (a ions beside b ions, a ions beside the complement, a tryptic C-terminal K/R; the database peptide when the run
-  placed the tags), shows the tag N→C under that series, marks likely calls with ? and says "b or y" when the
-  spectrum does not tell; a ladder and its complement are opposite series. Tags on the same peaks are assembled
-  whichever flank they were walked from.
+  placed the tags), shows the tag N→C under that series, marks likely calls with ? and says "b or y?" when the
+  spectrum does not tell; a ladder and its complement are opposite series.
+- **GUI: a terminal anchor settles the series.** Each ladder is also read both ways against the peptide termini, as
+  `-terminus` does: when exactly one reading reaches a terminus through a kind that held when measured at 20 ppm on
+  two data sets (at a terminus, one residue from the N terminus, y1 of a C-terminal K or R, a C-terminal set holding
+  K or R: over 99% right), an open call takes that series, sure; an a-ion call it agrees with becomes sure, one it
+  contradicts becomes "b or y?" with both reasons in the tooltip. The GUI's terminal-anchor decision, before the a
+  ions and the database peptide are weighed, is the `series` column of `-terminus` on every b/y row (parity test on
+  PXD003531); the call the tab shows also weighs those two and can differ from it. A c/z ladder's anchor gives at most "likely" (no c/z data were measured). None is used above
+  25 ppm or 0.02 Da. The terminus of the shown ladder is marked beside the
+  tag and on the plot. The database peptide still outranks both.
+- **GUI: the Spectrum tab shows one view of the chosen tag.** The tags table of the spectrum's `-out` rows, the b and y
+  ladders on their own lines, the peptide ruler, the error strip and the ladder line. Tags whose ions all lie in a longer tag are
+  no longer in new runs' tables (`-subsume_tags`); the Help says so.
+- **GUI: "b or y?" (and "c or z?").** An open series call is labelled with a question mark in the tags table, the
+  ladder line, the plot and Help. The Tag columns and files group offers `-terminus` (Series and
+  terminus columns) and `-subsume_tags` (Drop tags inside longer tags).
 
 - **GUI: Tags table.** Each row has a spectrum icon that opens it in the Spectrum tab. Length, Extended, Gapped and
   Residue conf. are not shown until ticked under Columns…; Min. conf. and Mean conf. stay.
 
+- **GUI: the start page has no Last run block.** Continue last run, Presets and Open earlier results… sit at the right of the step 1 heading; a finished run opens in Results, and History lists every run with its status.
 - **GUI: the task Export tags is now called Generate tags.**
 - **GUI: Setup is a task-first wizard.** Setup asks one thing at a time in four steps, **Task**, **Inputs**,
   **Settings** and **Outputs & run**, instead of five cards on one page. Step 1 shows the seven tasks as tiles in three

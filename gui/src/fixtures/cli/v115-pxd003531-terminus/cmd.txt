@@ -1,0 +1,5 @@
+# FASTag 1.15.7 (worktree consol-wizard, uncommitted -terminus/-subsume_tags build), macOS arm64.
+# Input: PXD003531 20130611_QE3_UPLC10_CFR_SA_OC_T_NO_03_01_01.mzML (Q Exactive, 20 ppm), 30 spectra drawn, 23 MS2 tagged.
+FASTag -in 20130611_QE3_UPLC10_CFR_SA_OC_T_NO_03_01_01.mzML -out run.tags.tsv -terminus -subsample_spectra 30 -subsample_seed 13 -threads 4
+# dumps.jsonl: for each spectrum of run.tags.tsv, in order of first appearance:
+FASTag -in 20130611_QE3_UPLC10_CFR_SA_OC_T_NO_03_01_01.mzML -dump_spectrum <nativeId> -threads 1

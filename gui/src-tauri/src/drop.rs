@@ -45,7 +45,7 @@ pub enum Kind {
 /// the renderer reads the file's header to tell what it holds.
 const REPORTS: &[&str] = &[
     "digest", "label", "massgap", "recon_id", "recon", "delta_spectra", "delta_counts", "delta", "glyco", "species", "qc",
-    "shortlist", "census_sorted", "census_summary", "census", "alkylation", "check_header", "resolved", "taggraph",
+    "shortlist", "census_sorted", "census_summary", "census", "alkylation", "check_header",
 ];
 
 fn lower_name(p: &Path) -> String {
@@ -279,9 +279,6 @@ mod tests {
         assert_eq!(k("/d/run01.recon_id.tsv"), Kind::Report("recon_id"));
         assert_eq!(k("/d/run01.delta.tsv"), Kind::Report("delta"));
         assert_eq!(k("/d/run01.glyco.tsv"), Kind::Report("glyco"));
-        // The tag graph tables (-resolved_out, -tag_graph_out) the Spectrum tab reads.
-        assert_eq!(k("/d/run01.resolved.tsv"), Kind::Report("resolved"));
-        assert_eq!(k("/d/run01.taggraph.tsv"), Kind::Report("taggraph"));
         assert_eq!(k("/d/run01.species.tsv"), Kind::Report("species"));
         // The reports of the workflows: their own views, never the tags table.
         assert_eq!(k("/d/run01.qc.tsv"), Kind::Report("qc"));

@@ -22,6 +22,7 @@
 
 #include "IonSeries.h"
 
+#include <cstdint>
 #include <limits>
 #include <memory>
 #include <string>
@@ -196,7 +197,21 @@ namespace FASTag
                                 ///< mass-only inference, not two observed steps
     double low_mz = 0;          ///< lowest peak; also the output tie-break
     double high_mz = 0;         ///< highest path peak (census tag_cover); not serialised
+    /// The summed residue masses of the path (Da, a gap's matched pair sum
+    /// included), unclamped: low peak + res_mass is the far end the flanks
+    /// assume (nterm_mass), which -terminus tests; not serialised.
+    double res_mass = 0;
     float  peak_tic = 0;        ///< summed intensity of the path peaks (census best_tic); not serialised
+    /// The m/z of the path peaks, ascending (low_mz first, high_mz last):
+    /// what subsumedTags() compares; not serialised.
+    std::vector<double> path_mz;
+    /// The residues of each path step, ascending m/z like path_mz (one entry
+    /// per step, path_mz.size() - 1 of them): 1, or 2 for a gap step. seq is
+    /// written N->C from the HIGH m/z end (spell()), so the last step's
+    /// residues come first. subsumedTags() aligns residues with peaks by it;
+    /// empty (a tag not from the tagger): one residue per step if that fits
+    /// n_res. Not serialised.
+    std::vector<uint8_t> step_res;
     /// The series the tag was read as (Param::ion_pair.kind); every consumer
     /// of the flanks takes the reversed-read offset from it.
     IonSeries::Series ion_series = IonSeries::Series::BY;
@@ -533,6 +548,39 @@ namespace FASTag
     @return the merged rows
   */
   std::vector<Tag> mergeSeriesPasses(std::vector<Tag> by, std::vector<Tag> cz, size_t cap);
+
+  /**
+    @brief Which of one spectrum's final rows lie wholly inside another row (-subsume_tags).
+
+    Row A is subsumed by row B (A != B) iff both have the same fragment charge,
+    ion series and precursor hypothesis (@p hyp, or both without one), A's
+    path peaks (Tag::path_mz, m/z compared exactly) are a contiguous run of
+    B's, and on those peaks B reads exactly A's residues: step by step the
+    same residue count (Tag::step_res; a gap step carries two) and the same
+    residues (inline modifications as written: on the peaks where
+    "LM[Oxidation]K" reads "M[Oxidation]K", "M[Oxidation]K" lies in it, "MK"
+    does not). A's residues occurring in B on other peaks do not count.
+    seq runs from the high m/z end, so a run of B's low peaks reads B's last
+    residues. A row whose step counts are unknown (Tag::step_res empty and
+    n_res not one per step) takes no part. And B is at least as significant:
+    E(B) <= E(A). A longer tag with a worse E-value keeps the shorter one.
+    Two rows with the same peaks and the same sequence are duplicates: the
+    one with the higher E-value is the subsumed one (ties: the later row).
+    An unscored row (NaN E-value) counts as +infinity: it subsumes only
+    other unscored rows and is subsumed by any containing row. The relation
+    is transitive (A in B in C gives E(C) <= E(A)), so every flagged row lies
+    in an unflagged row whose E-value is at most its own.
+
+    @param[in] tags the rows of one spectrum
+    @param[in] hyp per row its precursor hypothesis; empty: one hypothesis for all
+    @param[in] eligible per row its class: 0 takes no part (a row that would
+               not be written neither subsumes nor is subsumed), otherwise a
+               row is only subsumed by a row of the same nonzero class (-fasta:
+               1 target hit, 2 entrapment-only hit); empty: every row, one class
+    @return per row 1 if subsumed (not to be written), else 0
+  */
+  std::vector<char> subsumedTags(const std::vector<Tag>& tags, const std::vector<std::uint8_t>& hyp = {},
+                                 const std::vector<char>& eligible = {});
 
   /**
     @brief Strip inline modification annotations, leaving one base residue per position.

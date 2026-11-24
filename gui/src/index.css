@@ -1184,85 +1184,23 @@ kbd { font-family: var(--font-mono); font-size: var(--text-xs); color: var(--mut
 .sp-caveat { margin: 0; }
 .sp-plot { display: flex; flex-direction: column; gap: var(--space-2); }
 .sp-plot-tools { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); }
-.sp-faint { opacity: 0.45; }
-.sp-link { stroke: var(--plot-muted); stroke-width: 1; vector-effect: non-scaling-stroke; }
-.sp-joined { fill: var(--plot-background); stroke: var(--plot-flag); stroke-width: 1.5; vector-effect: non-scaling-stroke; }
-/* All tags: another tag's step against the selected tag. */
-.sp-step.alt.same { stroke: var(--plot-accent); stroke-dasharray: none; stroke-width: 1; }
-.sp-step.alt.differs { stroke: var(--plot-flag); stroke-dasharray: 3 3; }
-.sp-step.strong { stroke-width: 3; }
-.sp-res-label.differs { fill: var(--flag-text); }
-.sp-res-label.ambig { font-style: italic; }
 .sp-ruler-tick { stroke: var(--plot-muted); stroke-width: 1; vector-effect: non-scaling-stroke; }
 .sp-ruler-res { fill: var(--plot-muted); font: 12px var(--font-seq); }
 .sp-ruler-res.on { fill: var(--plot-foreground); font-weight: 700; }
 .sp-strip-band { fill: var(--plot-grid); opacity: 0.45; }
 .sp-strip-drift { fill: none; stroke: var(--plot-accent); stroke-width: 1.5; vector-effect: non-scaling-stroke; }
 .sp-strip-step { fill: var(--plot-accent); }
-.sp-strip-other { fill: var(--plot-background); stroke: var(--plot-flag); stroke-width: 1.5; vector-effect: non-scaling-stroke; }
 .sp-strip-pep line { stroke: var(--plot-foreground); stroke-width: 1.5; vector-effect: non-scaling-stroke; }
-.sp-legend, .sp-peptide { margin: 0; }
-.sp-key { display: inline-block; width: 22px; height: 0; vertical-align: middle; border-top: 2px solid var(--plot-accent); }
-.sp-key.differs { border-top: 2px dashed var(--plot-flag); }
-.sp-key.other { border-top: 2px dashed var(--plot-accent-2); }
-.sp-pile-wrap { margin-top: var(--space-3); overflow-x: auto; }
-.sp-pile { display: grid; gap: 2px 0; align-items: center; font-size: var(--text-xs); width: max-content; }
-.sp-pile-label { margin-right: var(--space-3); text-align: left; white-space: nowrap; }
-.sp-pile-e { padding-right: var(--space-2); white-space: nowrap; text-align: right; font-variant-numeric: tabular-nums; }
-.sp-pile-mz { text-align: right; color: var(--muted-foreground); font-size: 10px; padding: 0 2px; font-variant-numeric: tabular-nums; }
-.sp-pile-step { text-align: center; font: 600 var(--text-xs) var(--font-seq); padding: 1px 3px; margin: 0 1px; border-bottom: 2px solid var(--plot-accent-2); white-space: nowrap; }
-.sp-pile-step.same, .sp-pile-step.resolved { border-bottom: 2px solid var(--plot-accent); }
-.sp-pile-step.resolved { background: var(--primary-soft); }
-.sp-pile-step.differs { border-bottom: 2px dashed var(--plot-flag); color: var(--flag-text); }
-.sp-pile-step.other { border-bottom-style: dashed; }
-.sp-pile-step.pep { border-bottom: 1px solid var(--plot-muted); font-weight: 400; }
-.sp-pile-step.ambig { font-style: italic; }
-.sp-member { margin-right: 6px; }
-/* The merge graph: laid out around the chosen resolved tag on its residues
-   N to C; bars coloured by the rank of the resolved tag they select (the rank
-   is written on them too). */
-.sp-graph { display: flex; flex-direction: column; gap: var(--space-1); }
-.sp-graph-svg { width: 100%; height: auto; background: var(--plot-background); border: 1px solid var(--border); border-radius: var(--radius-md); }
-.sp-graph-node { cursor: pointer; --rank: var(--plot-foreground); }
-.sp-graph-hit { fill: transparent; stroke: none; }
-.sp-graph-bar { fill: var(--rank); stroke: var(--rank); stroke-width: 1; }
-.sp-graph-node.inside .sp-graph-bar, .sp-graph-node.fork .sp-graph-bar { fill: var(--plot-background); }
-.sp-graph-node.none { cursor: default; --rank: var(--plot-muted); }
-.sp-graph-node.none .sp-graph-bar { fill: var(--plot-background); stroke-dasharray: 3 2; }
-.sp-graph-node.none .sp-graph-label { fill: var(--plot-muted); font-weight: 400; }
-.sp-graph-node.sel .sp-graph-bar { stroke-width: 1.5; }
-.sp-graph-node:focus { outline: none; }
-.sp-graph-node:focus-visible .sp-graph-bar { stroke: var(--ring); stroke-width: 3; }
-.sp-graph-label { fill: var(--plot-foreground); font: 600 11px var(--font-seq); pointer-events: none; }
-.sp-graph-res { fill: var(--plot-foreground); font: 700 13px var(--font-seq); }
-.sp-graph-res.gap { font-style: italic; font-weight: 600; }
-.sp-graph-term { fill: var(--plot-foreground); font: 700 13px var(--font-seq); }
-.sp-graph-term.away { fill: var(--plot-muted); font-weight: 400; }
-.sp-graph-rank { fill: var(--rank); font: 700 13px var(--font-seq); --rank: var(--plot-foreground); }
-.sp-graph-band-label { fill: var(--plot-muted); font-size: 10px; }
-.sp-graph-dup rect { fill: var(--plot-background); stroke: var(--plot-muted); stroke-width: 1; }
-.sp-graph-dup text { fill: var(--plot-muted); font: 600 10px var(--font-seq); }
-.sp-graph-arc { fill: none; stroke: var(--plot-muted); stroke-width: 1; opacity: 0.6; }
-.sp-graph-arc.touch { stroke-dasharray: 4 3; }
-.sp-graph-arc.on { stroke: var(--rank); stroke-width: 2.5; opacity: 1; }
-.sp-graph-node.r1, .sp-graph-arc.r1, .sp-graph-rank.r1 { --rank: var(--plot-accent); }
-.sp-graph-node.r2, .sp-graph-arc.r2, .sp-graph-rank.r2 { --rank: var(--plot-accent-2); }
-.sp-graph-node.r3, .sp-graph-arc.r3, .sp-graph-rank.r3 { --rank: var(--plot-flag); }
-.sp-graph-node.r4, .sp-graph-arc.r4, .sp-graph-rank.r4 { --rank: var(--plot-muted); }
-/* Below the third rank a tag is drawn hollow: the first three stand out. */
-.sp-graph-node.r4 .sp-graph-bar { fill: var(--plot-background); }
-.sp-graph-node.r4.sel, .sp-graph-rank.r4 { --rank: var(--plot-foreground); }
-/* The termini of a resolved tag beside its sequence: N– and –C; one residue
-   away, N–(K) muted. */
+.sp-peptide { margin: 0; }
+/* The termini of a tag beside its sequence: N– and –C; one residue away,
+   N–(K) muted. */
 .sp-term { font-weight: 700; }
 .sp-term.away { color: var(--muted-foreground); font-weight: 400; }
-/* The stick plot's tick at the selected resolved tag's terminus (b0, y0). */
+/* The stick plot's tick at the terminus of the tag drawn (b0, y0). */
 .sp-term-mark line { stroke: var(--plot-foreground); stroke-width: 1.5; vector-effect: non-scaling-stroke; }
 .sp-term-mark text { fill: var(--plot-foreground); font: 700 11px var(--font-seq); }
 .sp-term-mark.away line { stroke: var(--plot-muted); stroke-dasharray: 3 2; }
 .sp-term-mark.away text { fill: var(--plot-muted); font-weight: 400; }
-.sp-mode { display: flex; flex-wrap: wrap; gap: 4px 16px; align-items: center; margin: 4px 0 6px; }
-.sp-mode input[type=text] { width: 7em; }
 .sp-svg { width: 100%; height: 260px; background: var(--plot-background); border: 1px solid var(--border); border-radius: var(--radius-md); touch-action: none; cursor: grab; }
 .sp-svg:focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; }
 .sp-axis { stroke: var(--plot-grid); stroke-width: 1; vector-effect: non-scaling-stroke; }

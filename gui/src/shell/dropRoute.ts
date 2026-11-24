@@ -31,13 +31,12 @@ export interface DropPlan {
 }
 
 // The report kinds a tab shows (the long-form reports in Digest; P4c: recon
-// and delta in Mass gaps & recon, glyco in Glyco; the resolved tags and the
-// tag graph in Spectrum).
+// and delta in Mass gaps & recon, glyco in Glyco).
 // The workflow reports (qc, shortlist, census*, alkylation, delta_spectra,
 // delta_counts) open like a picked report: their header says which view.
 const REPORT_TABS = new Set([
   'digest', 'label', 'massgap', 'recon', 'delta', 'glyco', 'recon_ids', 'qc', 'shortlist', 'census_sorted', 'census_summary',
-  'census', 'alkylation', 'delta_spectra', 'delta_counts', 'check_header', 'resolved', 'taggraph'
+  'census', 'alkylation', 'delta_spectra', 'delta_counts', 'check_header'
 ])
 
 const base = (p: string): string => p.slice(Math.max(p.lastIndexOf('/'), p.lastIndexOf('\\')) + 1)

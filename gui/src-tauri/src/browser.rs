@@ -57,9 +57,9 @@ const HEADER_CAP: u64 = 4 << 20;
 const HEAD_BYTES: usize = 1 << 20;
 /// Snapshots kept (GUI-DESIGN 5: two files).
 const MAX_SNAPSHOTS: usize = 2;
-/// Snapshots the Spectrum tab's side tables keep: -resolved_out,
-/// -tag_graph_out and -recon_out, all three read for each spectrum shown.
-const SIDE_SNAPSHOTS: usize = 3;
+/// Snapshots the Spectrum tab's side tables keep: -recon_out, read for each
+/// spectrum shown.
+const SIDE_SNAPSHOTS: usize = 1;
 /// The column the background order is built for (D5).
 pub const RANK_COLUMN: &str = "evalue";
 /// The read size of export and of a page (GUI-DESIGN 6.1 item 7).
@@ -1451,12 +1451,11 @@ impl BrowserCache {
     }
 }
 
-/// The tables the Spectrum tab reads a spectrum's rows of besides the tags
-/// (-resolved_out, -tag_graph_out, -recon_out): no table opens them, so they
-/// are read as export reads (Mode::Exact, not refused as a file nobody has
-/// open), with snapshots of their own, so that reading them never evicts the
-/// open file's (MAX_SNAPSHOTS); room for all three (SIDE_SNAPSHOTS), so that
-/// the next spectrum does not index them again.
+/// The table the Spectrum tab reads a spectrum's rows of besides the tags
+/// (-recon_out): no table opens it, so it is read as export reads
+/// (Mode::Exact, not refused as a file nobody has open), with a snapshot of
+/// its own, so that reading it never evicts the open file's (MAX_SNAPSHOTS),
+/// and the next spectrum does not index it again (SIDE_SNAPSHOTS).
 #[derive(Clone)]
 pub struct SideTables(Arc<Shared>);
 
@@ -4032,32 +4031,25 @@ mod tests {
         std::fs::remove_file(&p).ok();
     }
 
-    /// The Spectrum tab's side tables: a file no table has open is refused
-    /// to an Interactive query, and read by side_query; their snapshots are
-    /// their own, so the open file's stays.
+    /// The Spectrum tab's side table (-recon_out): a file no table has open
+    /// is refused to an Interactive query, and read by side_query; its
+    /// snapshot is its own, so the open file's stays.
     #[test]
     fn side_tables_are_read_without_an_open_and_keep_the_open_files_snapshot() {
         let tags = fixture("side-tags.tsv");
-        let head = "spectrum\trank\tsequence";
-        let resolved = write_fixture("side.resolved.tsv", &format!("{head}\nscan=1\t1\tPEP\nscan=10\t1\tTID\nscan=1\t2\tW\n"));
-        let graph = write_fixture("side.taggraph.tsv", "spectrum\tnode\nscan=1\t0\nscan=10\t0\n");
+        let recon = write_fixture("side.recon.tsv", "spectrum\tpeptide\nscan=1\tPEPTIDE\nscan=10\tTIDE\nscan=1\tW\n");
         let main = Arc::new(Shared::default());
         main.snapshot(&tags).unwrap();
         let exact = ViewSpec { spectrum: Some("scan=1".into()), spectrum_exact: true, ..Default::default() };
-        assert_eq!(query_mode(&main, &resolved, &exact, 0, 10, Mode::Interactive).err().as_deref(), Some(CANCELLED));
+        assert_eq!(query_mode(&main, &recon, &exact, 0, 10, Mode::Interactive).err().as_deref(), Some(CANCELLED));
         let side = SideTables::default();
-        let r = side_query(&side, &resolved, &exact, 0, 10).unwrap();
+        let r = side_query(&side, &recon, &exact, 0, 10).unwrap();
         assert_eq!(r.matched_rows, 2);
-        assert_eq!((0..2).map(|i| col(&r, i, "sequence")).collect::<Vec<_>>(), ["PEP", "W"]);
-        assert_eq!(side_query(&side, &graph, &exact, 0, 10).unwrap().row_ids, [0]);
+        assert_eq!((0..2).map(|i| col(&r, i, "peptide")).collect::<Vec<_>>(), ["PEPTIDE", "W"]);
         assert!(main.fresh_any(&tags).is_some());
-        // -recon_out too, and all three stay indexed for the next spectrum.
-        let recon = write_fixture("side.recon.tsv", "spectrum\tpeptide\nscan=1\tPEPTIDE\n");
-        assert_eq!(side_query(&side, &recon, &exact, 0, 10).unwrap().matched_rows, 1);
-        for p in [&resolved, &graph, &recon] {
-            assert!(side.0.fresh_any(p).is_some(), "{p} was evicted");
-        }
-        for p in [tags, resolved, graph, recon] {
+        // It stays indexed for the next spectrum.
+        assert!(side.0.fresh_any(&recon).is_some(), "{recon} was evicted");
+        for p in [tags, recon] {
             std::fs::remove_file(&p).ok();
         }
     }

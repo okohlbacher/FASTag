@@ -1,8 +1,9 @@
 // Which ion series a ladder lies on (seriesCall): a ions beside b ions, the
-// complement's a ions, a tryptic C terminus; otherwise not told apart.
+// complement's a ions, a tryptic C terminus, a terminus only one reading of
+// its peaks lies at; otherwise not told apart.
 import { describe, expect, it } from 'vitest'
-import { PROTON, WATER, laddersFor, residueMasses, seriesCall, seriesText, tagRowFrom } from './ladder'
-import { buildGraph, sequenceOf } from './graph'
+import { PROTON, WATER, Z_DOT_OFFSET, laddersFor, residueMasses, seriesCall, seriesText, tagRowFrom, type Ladder } from './ladder'
+import { anchorsOf, termContext, withAnchor } from './terminus'
 import { dbCall, ladderSteps, likelyPeptide } from './peptide'
 import type { SpectrumPeaks } from './dump'
 
@@ -47,7 +48,8 @@ describe('series call', () => {
     const s0 = spec([b(2), b(3), b(4)])
     expect(seriesCall(idx(s0, [b(2), b(3), b(4)]), 1, 'y', s0, RES)).toMatchObject({ series: 'y', level: 'open' })
     expect(seriesCall(idx(s0, [b(2), b(3), b(4)]), 1, 'b', s0, RES)).toMatchObject({ series: 'b', level: 'open' })
-    expect(seriesText('y', { series: 'y', level: 'open', why: '' })).toBe('b or y')
+    expect(seriesText('y', { series: 'y', level: 'open', why: '' })).toBe('b or y?')
+    expect(seriesText('z', { series: 'z', level: 'open', why: '' })).toBe('c or z?')
     expect(seriesText('b', { series: 'b', level: 'likely', why: '' })).toBe('b?')
   })
   it('c and z are not judged', () => {
@@ -56,7 +58,7 @@ describe('series call', () => {
   })
 })
 
-describe('series of ladders and resolved tags', () => {
+describe('series of ladders', () => {
   it('a tag on y ions walked from its N-terminal flank is shown as y, read the other way N to C', () => {
     // FASTag wrote the ascending residues K|E|D? Take y1..y4 = K, E, D, I ascending: the tag "EDI" from y1.
     const s = spec([y(1), y(2), y(3), y(4)])
@@ -68,19 +70,6 @@ describe('series of ladders and resolved tags', () => {
     expect(walkedB.call?.level).toBe('sure')
     // Ascending residues E, D, I; as y ions that reads I D E from N to C (…IDEK).
     expect(walkedB.residues).toEqual(['E', 'D', 'I'])
-  })
-
-  it('tags on the same peaks meet whichever flank they were walked from', () => {
-    // Two tags on y1..y5 (K, E, D, I, T ascending): "EDI" from the N-terminal flank, "TID" read
-    // the other way round (its C-terminal walk lands on the same ascending peaks).
-    const s = spec([y(1), y(2), y(3), y(4), y(5)])
-    const a = row('EDI', y(1) - PROTON, M - (y(4) - PROTON), '0.001')
-    const c = row('TID', M - (y(5) - PROTON) - WATER, y(2) - PROTON - WATER, '0.002')
-    const g = buildGraph([{ row: a, evalue: 0.001, index: 0 }, { row: c, evalue: 0.002, index: 1 }], s, RES, { join: false })
-    const top = g.paths[0]
-    expect(top.peaks.length).toBe(5)
-    expect(top.series).toBe('y')
-    expect(sequenceOf(top)).toBe('TIDE')
   })
 
   it('the database peptide decides the series of a ladder', () => {
@@ -133,36 +122,6 @@ describe('series: review findings', () => {
     expect(w2.call?.level).toBe('sure')
   })
 
-  it('a b tag and its complement y tag are not "differs"; a fork on the same peaks is', async () => {
-    const { kindOf } = await import('./graph')
-    // b2..b5 with a ions, and y3..y6 (their complements).
-    const s = spec([b(2), b(3), b(4), b(5), b(2) - CO, b(3) - CO, y(3), y(4), y(5), y(6)])
-    const g = buildGraph([{ row: rowOn('PTI', b(2) - PROTON, '0.001'), evalue: 0.001, index: 0 }], s, RES, { join: false })
-    const bPath = g.paths.find((p) => p.series === 'b')!
-    const yPath = g.paths.find((p) => p.series === 'y')!
-    expect(bPath.call.level).toBe('sure')
-    expect(yPath.call.level).toBe('sure')
-    expect(sequenceOf(bPath)).toBe('PTI')
-    expect(sequenceOf(yPath)).toBe('PTI')
-    expect(yPath.steps.map((st) => kindOf(st, yPath, bPath, s))).toEqual(['other', 'other', 'other'])
-    expect(bPath.sameAs.map((q) => q.path)).toContain(g.paths.indexOf(yPath))
-  })
-
-  it('an open tag reads the same whatever the order of its rows', () => {
-    // y3..y7 with no a ions and no complements: A is read up from y3 from its N-terminal flank,
-    // B is the reversed text whose C-terminal walk lands on the same peaks.
-    const s = spec([y(3), y(4), y(5), y(6), y(7)])
-    const lo = y(3) - PROTON
-    const A = { row: rowOn(yAsc(3, 7), lo, '0.001'), evalue: 0.001, index: 0 }
-    const rev = [...yAsc(3, 7)].reverse().join('')
-    const B = { row: tagRowFrom(cols, ['scan=1', rev, '1', String(M - lo - sum(rev)), String(lo - WATER), '0', '0.002'])!, evalue: 0.002, index: 1 }
-    const g1 = buildGraph([A, B], s, RES, { join: false })
-    const g2 = buildGraph([{ ...B, index: 0 }, { ...A, index: 1 }], s, RES, { join: false })
-    const top1 = g1.paths[0], top2 = g2.paths[0]
-    expect(top1.call.level).toBe('open')
-    expect([top1.series, sequenceOf(top1)]).toEqual([top2.series, sequenceOf(top2)])
-  })
-
   it('the database decides against the walked flank; a tie decides nothing', () => {
     const s = spec([y(2), y(3), y(4), y(5)])
     const l = laddersFor(rowOn(yAsc(2, 5), y(2) - PROTON), s, RES).both.find((x) => x.walked === 'b')!
@@ -171,5 +130,114 @@ describe('series: review findings', () => {
     const off = spec([500, 500 + R.G, 500 + R.G + R.G])
     const l2 = laddersFor(rowOn('GG', 500 - PROTON), off, RES).both.find((x) => x.walked === 'b')!
     expect(dbCall(cand, ladderSteps(l2), 1, 'b', RES, off)).toBeNull()
+  })
+})
+
+// A terminus only one reading of the peaks (b or y, c or z) lies at settles the series.
+describe('series: the terminal anchor', () => {
+  const walkedB = (r: ReturnType<typeof row>, s: SpectrumPeaks, res = RES, ctx = termContext({}, res)) => laddersFor(r, s, res, ctx).both.find((l) => l.walked === 'b')!
+
+  it('an open call on y1 of a C-terminal K: y, sure', () => {
+    // y1..y3 (K, E, D ascending); an a ion beside y2 and one beside its complement b5: the a ions tell nothing.
+    const s = spec([y(1), y(2), y(3), y(2) - CO, b(5), b(5) - CO])
+    expect(seriesCall(idx(s, [y(1), y(2), y(3)]), 1, 'b', s, RES).level).toBe('open')
+    const l = walkedB(row('ED', y(1) - PROTON, M - (y(3) - PROTON)), s)
+    expect(l.call).toMatchObject({ series: 'y', level: 'sure' })
+    expect(l.call?.why).toBe('read as y ions, its low peak is y1 of a C-terminal K')
+  })
+
+  it('b1 after a fixed N-terminal TMT: b, sure (one residue from the N terminus)', () => {
+    const tmt = 229.162932
+    const mt = M + tmt
+    const bt = (i: number): number => tmt + sum(PEP.slice(0, i)) + PROTON
+    const s = { ...spec([bt(1), bt(2), bt(3)]), precursor: (mt + 2 * PROTON) / 2 }
+    const r = row('EP', bt(1) - PROTON, mt - WATER - (bt(1) - PROTON) - sum('EP'))
+    const ctx = termContext({ fixed_modifications: ['Carbamidomethyl (C)', 'TMT6plex (N-term)'] }, RES)
+    const l = walkedB(r, s, RES, ctx)
+    expect(l.call).toMatchObject({ series: 'b', level: 'sure', why: 'read as b ions, its low peak is b1 of an N-terminal P' })
+    // Without the run's TMT the peaks lie at no terminus: not told apart.
+    expect(walkedB(r, s).call?.level).toBe('open')
+  })
+
+  it('an anchor against the a ions: open, naming both', () => {
+    // a ions beside y2 and y3 say b; read as y its low peak is y1 of a C-terminal K.
+    const s = spec([y(1), y(2), y(3), y(2) - CO, y(3) - CO])
+    expect(seriesCall(idx(s, [y(1), y(2), y(3)]), 1, 'b', s, RES)).toMatchObject({ series: 'b', level: 'sure' })
+    const l = walkedB(row('ED', y(1) - PROTON, M - (y(3) - PROTON)), s)
+    expect(l.call?.level).toBe('open')
+    expect(l.call?.why).toMatch(/^the a ions say b \(a ions \(b − CO\) beside 2 peaks\), but read as y ions, its low peak is y1 of a C-terminal K: b or y is not told apart$/)
+    expect(seriesText(l.series, l.call)).toBe('b or y?')
+  })
+
+  it('an anchor that agrees with the a ions makes the call sure', () => {
+    const call = { series: 'y' as const, level: 'likely' as const, why: 'an a ion beside 1 complement peak (its b ions)' }
+    expect(withAnchor(call, [{ series: 'y', t: { n: null, c: { away: 'K' } } }], 'b')).toMatchObject({ series: 'y', level: 'sure' })
+  })
+
+  it('the kinds of anchor measured not to hold change nothing', () => {
+    const open = { series: 'b' as const, level: 'open' as const, why: 'x' }
+    const sureB = { series: 'b' as const, level: 'sure' as const, why: 'a ions' }
+    // b(n-1) of a C-terminal K or R (from the precursor): 87% / 94% when measured.
+    expect(withAnchor(open, [{ series: 'b', t: { n: null, c: { away: 'R' } } }], 'b')).toBe(open)
+    expect(withAnchor(sureB, [{ series: 'y', t: { n: null, c: { away: 'K' } } }], 'b')).not.toBe(sureB)
+    // Another C-terminal residue, on either side (W: GE, AD, SV weigh the same).
+    expect(withAnchor(open, [{ series: 'y', t: { n: null, c: { away: 'W' } } }], 'b')).toBe(open)
+    expect(withAnchor(open, [{ series: 'b', t: { n: null, c: { away: '[IL]' } } }], 'b')).toBe(open)
+    expect(withAnchor(sureB, [{ series: 'y', t: { n: null, c: { away: 'E' } } }], 'b')).toBe(sureB)
+    // Used: a set holding K or R ([KQ]), the C terminus itself, an N side.
+    expect(withAnchor(open, [{ series: 'b', t: { n: null, c: { away: '[KQ]' } } }], 'b')).toMatchObject({ series: 'b', level: 'sure' })
+    expect(withAnchor(open, [{ series: 'b', t: { n: null, c: 'at' } }], 'y')).toMatchObject({ series: 'b', level: 'sure' })
+    expect(withAnchor(open, [{ series: 'y', t: { n: { away: 'G' }, c: null } }], 'b')).toMatchObject({ series: 'y', level: 'sure' })
+    // An unused C side beside a used N side: used.
+    expect(withAnchor(open, [{ series: 'y', t: { n: { away: 'G' }, c: { away: 'W' } } }], 'b')).toMatchObject({ series: 'y', level: 'sure' })
+  })
+
+  it('above 25 ppm or 0.02 Da no terminus settles the series', () => {
+    // y1 of a C-terminal K as in the first case, at 0.5 Da: the a-ion call (open at this tolerance) stands.
+    const s = { ...spec([y(1), y(2), y(3)]), tolerance: 0.5, toleranceUnit: 'Da' as const }
+    const l = walkedB(row('ED', y(1) - PROTON, M - (y(3) - PROTON)), s)
+    expect(l.call).toEqual(seriesCall(idx(s, [y(1), y(2), y(3)]), 1, 'b', s, RES))
+    expect(l.call?.level).toBe('open')
+    const s30 = { ...spec([y(1), y(2), y(3)]), tolerance: 30 }
+    expect(walkedB(row('ED', y(1) - PROTON, M - (y(3) - PROTON)), s30).call?.level).toBe('open')
+    // At 20 ppm the same ladder is y, sure.
+    const s20 = { ...spec([y(1), y(2), y(3)]), tolerance: 20 }
+    expect(walkedB(row('ED', y(1) - PROTON, M - (y(3) - PROTON)), s20).call).toMatchObject({ series: 'y', level: 'sure' })
+  })
+
+  it('both readings at a terminus: only a used one counts, two used ones decide nothing', () => {
+    // At 0.02 Da the low peak is b1 of an N-terminal F and, as y, y1 of a C-terminal E (F and E + H2O differ by 0.015 Da).
+    // y1 of E is not a used kind (as -terminus), so b1 of F settles the open call.
+    const lo = R.F + PROTON
+    const s = { ...spec([lo, lo + R.G, lo + R.G + R.A]), tolerance: 0.02, toleranceUnit: 'Da' as const }
+    const l = walkedB(rowOn('GA', R.F), s)
+    expect(anchorsOf({ ...l, series: 'b' }, s, RES, termContext({}, RES)).map((a) => a.series)).toEqual(['b', 'y'])
+    expect(seriesCall(idx(s, [lo, lo + R.G, lo + R.G + R.A]), 1, 'b', s, RES).level).toBe('open')
+    expect(l.call).toMatchObject({ series: 'b', level: 'sure', why: 'read as b ions, its low peak is b1 of an N-terminal F' })
+    const open = { series: 'b' as const, level: 'open' as const, why: 'x' }
+    expect(withAnchor(open, [{ series: 'b', t: { n: { away: 'F' }, c: null } }, { series: 'y', t: { n: null, c: { away: 'E' } } }], 'y')).toMatchObject({ series: 'b', level: 'sure' })
+    // Both readings used (b1 of F; y at the N terminus from the precursor): unchanged.
+    expect(withAnchor(open, [{ series: 'b', t: { n: { away: 'F' }, c: null } }, { series: 'y', t: { n: 'at', c: { away: 'E' } } }], 'b')).toBe(open)
+  })
+
+  it('c and z: a z ladder after a C-terminal K is z, likely at most (no c/z data were measured)', () => {
+    const z1 = R.K + Z_DOT_OFFSET + PROTON
+    const s = spec([z1, z1 + R.E, z1 + R.E + R.D])
+    const l: Ladder = {
+      series: 'c', charge: 1, residues: ['E', 'D'], matched: 3, complete: true,
+      positions: [z1, z1 + R.E, z1 + R.E + R.D].map((x, k) => ({ expected: x, peak: k, mz: x, deltaPpm: 0, deltaMz: 0 }))
+    }
+    const a = anchorsOf(l, s, RES, termContext({}, RES))
+    expect(a.map((x) => x.series)).toEqual(['z'])
+    expect(withAnchor(seriesCall([0, 1, 2], 1, 'c', s, RES), a, 'c')).toMatchObject({
+      series: 'z',
+      level: 'likely',
+      why: 'read as z ions, its low peak is z1 of a C-terminal K (c and z anchors were not measured: likely at most)'
+    })
+    expect(seriesText('z', withAnchor(seriesCall([0, 1, 2], 1, 'c', s, RES), a, 'c'))).toBe('z?')
+    // A sure c/z call it agrees with stays sure; a likely one stays likely.
+    expect(withAnchor({ series: 'z', level: 'sure', why: 'db' }, a, 'c').level).toBe('sure')
+    expect(withAnchor({ series: 'z', level: 'likely', why: 'x' }, a, 'c').level).toBe('likely')
+    expect(seriesText('c', { series: 'c', level: 'open', why: '' })).toBe('c or z?')
   })
 })

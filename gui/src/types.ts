@@ -137,10 +137,6 @@ export interface ResolvedOutputs {
   delta_spectra_out?: string | null
   delta_counts_out?: string | null
   check_header_out?: string | null
-  // The resolved tags and the tag graph of each spectrum, which the
-  // backend adds beside the tags when the CLI has the options (fastag.rs).
-  resolved_out?: string | null
-  tag_graph_out?: string | null
 }
 
 export interface RunResult {
@@ -411,8 +407,8 @@ export interface FastagApi extends FeedbackApi {
   keepLeftovers: (paths: string[]) => Promise<void>
   cancel: () => Promise<{ cancelled: boolean }>
   resultsQuery: (path: string, view: ResultsView, offset: number, limit: number) => Promise<ResultsPage>
-  // A page of a table no Results table opens (the Spectrum tab's resolved
-  // tags and tag graph): read in full order, with snapshots of its own
+  // A page of a table no Results table opens (the Spectrum tab's tag
+  // placements, -recon_out): read in full order, with snapshots of its own
   // (browser.rs SideTables), never refused as not open.
   tableQuery: (path: string, view: ResultsView, offset: number, limit: number) => Promise<ResultsPage>
   // D5: the head rows now; index and E-value order announced through onEvent.

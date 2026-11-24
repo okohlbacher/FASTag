@@ -260,7 +260,7 @@ pub fn probe_with(
 // (path and mtime), not for every file the inspector looks at.
 static CAPS: Mutex<Option<(PathBuf, Option<SystemTime>, Capabilities)>> = Mutex::new(None);
 
-pub(crate) fn cached_capabilities(r: &Resolved) -> Capabilities {
+fn cached_capabilities(r: &Resolved) -> Capabilities {
     let mtime = std::fs::metadata(&r.bin).and_then(|m| m.modified()).ok();
     if let Ok(g) = CAPS.lock() {
         if let Some((p, t, c)) = g.as_ref() {

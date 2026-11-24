@@ -69,7 +69,7 @@ const SPEC_ICON_W = 22
 const HIT_MIN_W = 120
 
 // The tags file's column names in words, the optional ones (-proforma,
-// -res_conf, -usi_collection, -entrapment_fasta) included; any other column
+// -res_conf, -usi_collection, -terminus, -entrapment_fasta) included; any other column
 // keeps its name.
 const LABEL: Record<string, string> = {
   spectrum: 'Spectrum',
@@ -89,6 +89,9 @@ const LABEL: Record<string, string> = {
   proforma: 'ProForma',
   res_conf: 'Residue conf. (%)',
   usi: 'USI',
+  // -terminus: the series a terminal anchor settles, and that terminus.
+  series: 'Series',
+  terminus: 'Terminus',
   q_db: 'Database q-value'
 }
 export const columnLabel = (c: string): string => LABEL[c] ?? c
