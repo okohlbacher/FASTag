@@ -1512,6 +1512,12 @@ jobs:
           # The notices (non-trivial, naming the app's own stack) and the
           # example data travel in the app's resources.
           bash tools/check_bundle_notices.sh "$(dirname "$(dirname "$CLI")")"
+          # The k-mer index travels in the shipped image, not only in the
+          # staged resources (checked again here, where a user gets it).
+          if [ "${{ startsWith(github.ref, 'refs/tags/v') || (inputs.gui_dry_run && inputs.gui_full_payload) }}" = "true" ]; then
+            test -s "$(dirname "$(dirname "$CLI")")/share/FASTag/taxonomy/tax_k7.taxdb" \
+              || { echo "::error::the app in the dmg has no share/FASTag/taxonomy/tax_k7.taxdb"; exit 1; }
+          fi
           env -i HOME="$HOME" "$CLI" --help > "$RUNNER_TEMP/dmg-help.txt" 2>&1 \
             || { echo "::error::the CLI inside the mounted dmg does not run"; cat "$RUNNER_TEMP/dmg-help.txt"; exit 1; }
           want=$(sed -n 's/^project(FASTag VERSION \([0-9.]*\).*/\1/p' CMakeLists.txt)
@@ -1628,6 +1634,8 @@ jobs:
           STAGE="${RUNNER_TEMP}/dmgroot"
           rm -rf "$STAGE"; mkdir -p "$STAGE"
           cp -R dist/FASTag "$STAGE/FASTag"
+          test -s "$STAGE/FASTag/share-FASTag-taxonomy/tax_k7.taxdb" \
+            || { echo "::error::the CLI disk image would carry no tax_k7.taxdb"; exit 1; }
 
           # A custom volume icon needs THREE things, and missing any one leaves
           # the generic white disk: the icon at the volume root named
@@ -2053,6 +2061,11 @@ jobs:
           unsquashfs -o "$("$app" --appimage-offset)" -lls "$app" > "$L"
           inside=$(awk '{print $NF}' "$L" | grep '/resources/fastag/GUI-THIRD-PARTY-NOTICES.txt$' | head -1)
           [ -n "$inside" ] || { echo "::error::the AppImage carries no resources/fastag/GUI-THIRD-PARTY-NOTICES.txt"; exit 1; }
+          # The k-mer index in the AppImage's squashfs, where the index is due.
+          if [ "${{ startsWith(github.ref, 'refs/tags/v') || (inputs.gui_dry_run && inputs.gui_full_payload) }}" = "true" ]; then
+            awk '{print $NF}' "$L" | grep -q '/resources/fastag/share/FASTag/taxonomy/tax_k7.taxdb$' \
+              || { echo "::error::the AppImage carries no resources/fastag/share/FASTag/taxonomy/tax_k7.taxdb"; exit 1; }
+          fi
           # No Thermo reader and no .NET runtime in the AppImage (see above).
           if grep -E 'ThermoFisher\.CommonCore|/resources/fastag/bin/dotnet/|ThermoRawFileReader-License' "$L"; then
             echo "::error::the AppImage carries the Thermo reader"; exit 1
@@ -2113,6 +2126,11 @@ jobs:
           [ -n "$cli" ] || { echo "::error::the .deb carries no executable resources/fastag/bin/FASTag"; exit 1; }
           echo "CLI in the .deb: ${cli#"$X"}"
           bash tools/check_bundle_notices.sh "$(dirname "$(dirname "$cli")")"
+          # The k-mer index in the package itself (the tarball is its /usr tree).
+          if [ "${{ startsWith(github.ref, 'refs/tags/v') || (inputs.gui_dry_run && inputs.gui_full_payload) }}" = "true" ]; then
+            test -s "$(dirname "$(dirname "$cli")")/share/FASTag/taxonomy/tax_k7.taxdb" \
+              || { echo "::error::the .deb carries no resources/fastag/share/FASTag/taxonomy/tax_k7.taxdb"; exit 1; }
+          fi
           # bundle.category in tauri.conf.json sets the menu category;
           # without it Categories= is empty and menus file FASTag under
           # "Other".

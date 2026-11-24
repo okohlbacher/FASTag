@@ -1,7 +1,7 @@
 # Puts one shipped data folder beside the built FASTag (CMakeLists.txt,
 # FASTAG_STAGE_DATA_IN_BUILD, target fastag_stage_data, run on every build):
 # cmake -DSRC=<data/x> -DDST=<bin dir>/share-FASTag-x [-DCOPY=ON]
-# [-DINDEX=<folder>] -P stage-data.cmake.
+# [-DINDEX=<folder or file>] [-DINDEX_SEARCH=<folder>|<folder>...] -P stage-data.cmake.
 #
 # A symlink to SRC (it follows edits to data/), or with COPY=ON (Windows,
 # where a symlink needs Developer Mode) a folder holding a copy of each entry
@@ -13,7 +13,13 @@
 # every entry of SRC, with tax_k7.taxdb, nodes.dmp, names.dmp and MANIFEST.json
 # from INDEX in place of the repo's, as the release workflows assemble
 # share-FASTag-taxonomy. Each is a link, or a copy with COPY=ON (copied again
-# only when it changed).
+# only when it changed). INDEX may also name the index file itself (any name):
+# it is staged as tax_k7.taxdb, and the dumps stay those of SRC.
+#
+# INDEX_SEARCH (the taxonomy without INDEX; FASTAG_TAXONOMY_INDEX_AUTO): folders
+# separated by "|", looked at on every run; the first that holds tax_k7.taxdb
+# is INDEX (tools/fetch_taxonomy_index.py puts the release asset there). None
+# does: SRC alone, as without INDEX, so a removed cache is unstaged again.
 #
 # Every real folder the script makes carries .fastag-staged, which lists the
 # top-level entries it staged there; only those are ever replaced or removed.
@@ -49,7 +55,14 @@ function(_fastag_put from to)
       endforeach()
     endif()
     get_filename_component(_dir "${to}" DIRECTORY)
-    file(COPY "${from}" DESTINATION "${_dir}")
+    get_filename_component(_fname "${from}" NAME)
+    get_filename_component(_tname "${to}" NAME)
+    if(_fname STREQUAL _tname)
+      file(COPY "${from}" DESTINATION "${_dir}")
+    elseif(NOT EXISTS "${to}" OR "${from}" IS_NEWER_THAN "${to}")
+      # An index file under another name, copied as tax_k7.taxdb.
+      file(COPY_FILE "${from}" "${to}")
+    endif()
   else()
     if(IS_SYMLINK "${to}" OR EXISTS "${to}")
       file(REMOVE_RECURSE "${to}")
@@ -107,8 +120,37 @@ function(_fastag_unstage keep)
   endif()
 endfunction()
 
-if(INDEX AND NOT EXISTS "${INDEX}/tax_k7.taxdb")
-  message(FATAL_ERROR "stage-data.cmake: no tax_k7.taxdb in '${INDEX}' (FASTAG_TAXONOMY_INDEX_DIR)")
+if(NOT INDEX AND INDEX_SEARCH)
+  string(REPLACE "|" ";" _search "${INDEX_SEARCH}")
+  foreach(_c IN LISTS _search)
+    if(_c AND EXISTS "${_c}/tax_k7.taxdb")
+      set(INDEX "${_c}")
+      break()
+    endif()
+  endforeach()
+endif()
+
+# The files INDEX supplies: their names here and their paths there.
+set(_idx_names "")
+set(_idx_froms "")
+if(INDEX)
+  if(IS_DIRECTORY "${INDEX}")
+    if(NOT EXISTS "${INDEX}/tax_k7.taxdb")
+      message(FATAL_ERROR "stage-data.cmake: no tax_k7.taxdb in '${INDEX}' (FASTAG_TAXONOMY_INDEX_DIR)")
+    endif()
+    foreach(_i IN LISTS _from_index)
+      if(EXISTS "${INDEX}/${_i}")
+        list(APPEND _idx_names "${_i}")
+        list(APPEND _idx_froms "${INDEX}/${_i}")
+      endif()
+    endforeach()
+  elseif(EXISTS "${INDEX}")
+    list(APPEND _idx_names "tax_k7.taxdb")
+    list(APPEND _idx_froms "${INDEX}")
+  else()
+    message(FATAL_ERROR "stage-data.cmake: '${INDEX}' is neither a folder with tax_k7.taxdb nor an index file "
+                        "(FASTAG_TAXONOMY_INDEX_DIR)")
+  endif()
 endif()
 
 # What a staged folder holds (INDEX or COPY): each entry's name and source.
@@ -118,20 +160,14 @@ if(INDEX OR COPY)
   file(GLOB _items RELATIVE "${SRC}" "${SRC}/*")
   list(REMOVE_ITEM _items ".fastag-staged")
   foreach(_i IN LISTS _items)
-    list(FIND _from_index "${_i}" _k)
-    if(NOT INDEX OR _k LESS 0 OR NOT EXISTS "${INDEX}/${_i}")
+    list(FIND _idx_names "${_i}" _k)
+    if(_k LESS 0)
       list(APPEND _names "${_i}")
       list(APPEND _froms "${SRC}/${_i}")
     endif()
   endforeach()
-  if(INDEX)
-    foreach(_i IN LISTS _from_index)
-      if(EXISTS "${INDEX}/${_i}")
-        list(APPEND _names "${_i}")
-        list(APPEND _froms "${INDEX}/${_i}")
-      endif()
-    endforeach()
-  endif()
+  list(APPEND _names ${_idx_names})
+  list(APPEND _froms ${_idx_froms})
 endif()
 
 # Who owns DST, decided before anything is written: a symlink is ours, a real

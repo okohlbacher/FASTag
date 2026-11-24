@@ -326,9 +326,9 @@ Linux x64 (from 1.15.0 also Linux arm64; glibc ≥ 2.35, WebKitGTK 4.1: Ubuntu 2
 For a first run, keep **Generate tags**, choose spectra, confirm the
 MS2 analyser's tolerance, then run and inspect **Results → Tags**. For a
 separate survey, choose **Characterize a run** and read **Results → Overview**;
-that task samples a tenth of the spectra and enables species, digest, label
-and glyco reports. To survey the whole input, set **Subsample fraction** to `1`
-and **Subsample spectra** to `0`. The
+that task reads all spectra and enables species, digest, label, alkylation
+and glyco reports. For a quicker look at a large run, set **Spectra to read**
+to a share. The
 [desktop first-run guide](gui/README.md#first-run) explains the tasks,
 outputs, checks and result views.
 
@@ -2167,10 +2167,11 @@ For a source build, an upgrade of an older install or a
 tar xzf FASTag-<version>-taxonomy-k7.tar.gz -C /path/to/FASTag/   # -> share-FASTag-taxonomy/
 ```
 
-For a FASTag run from its build tree, configure with
-`-DFASTAG_TAXONOMY_INDEX_DIR=/path/to/share-FASTag-taxonomy` instead: the build
-puts the index beside the binary with the rest of `data/taxonomy`
-([BUILDING.md](BUILDING.md)).
+For a FASTag run from its build tree, run `python3 tools/fetch_taxonomy_index.py`
+once instead (it downloads the pinned asset into `~/.cache/fastag` and checks
+its sha256): every later `cmake --build` puts the index beside the binary with
+the rest of `data/taxonomy`. `-DFASTAG_TAXONOMY_INDEX_DIR=<folder or
+tax_k7.taxdb>` names a copy you already have ([BUILDING.md](BUILDING.md)).
 
 `MANIFEST.json` names what the index was built from: the UniProt reference
 proteomes, the NCBI taxdump, the build commands and the sha256 of every file.

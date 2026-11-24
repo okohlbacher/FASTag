@@ -57,15 +57,17 @@ describe('Overview in the app', () => {
     expect(within(tile('MS2 spectra')).getByText('2,738')).toBeDefined()
   })
 
-  it('Characterize: no alkylation tile unless its report is asked for; the C+57.021 line says "default"', async () => {
+  it('Characterize: no alkylation tile once its report is turned off; the C+57.021 line says "default"', async () => {
     const mock = installMockBridge()
     gate(mock, CLI_CASES.v112)
     await renderCharacterizeApp(mock)
     await click(fileButton('Choose file…'))
+    // On by default from 1.16: the user turns it off.
+    await click(document.getElementById('out-alkylation_out')!)
     await click(runButton())
     await finish(mock, CLI_CASES.v112)
     await waitFor(() => expect(selectedTab()).toBe('Overview'))
-    expect(mock.runCalls[0].params.alkylation_out ?? '').toBe('') // guard: off by default
+    expect(mock.runCalls[0].params.alkylation_out ?? '').toBe('') // guard: turned off
     // The Overview names the workflow (in the page header) and shows no tile for a report nobody asked for.
     expect(document.querySelector('.view-results .page-header .run-workflow')!.textContent).toContain('Characterize a run')
     expect(screen.queryByRole('region', { name: 'Alkylation' })).toBeNull()
@@ -95,13 +97,13 @@ describe('Overview in the app', () => {
     await waitFor(() => expect(selectedTab()).toBe('Overview'))
   })
 
-  it('the alkylation report, asked for, is read: its no call and the reason in the tile and the Digest tab', async () => {
+  it('the alkylation report, on by default, is read: its no call and the reason in the tile and the Digest tab', async () => {
     const mock = installMockBridge()
     gate(mock, CLI_CASES.v112)
     mock.reportFiles['/d/run01.alkylation.tsv'] = ALKYLATION
     await renderCharacterizeApp(mock)
     await click(fileButton('Choose file…'))
-    await click(document.getElementById('out-alkylation_out')!)
+    // No click: Characterize writes it by default (1.16).
     await click(runButton())
     expect(mock.runCalls[0].params.alkylation_out).toBe('/d/run01.alkylation.tsv')
     await finish(mock, CLI_CASES.v112)

@@ -238,9 +238,15 @@ install(TARGETS FASTag RUNTIME DESTINATION bin)
 # Windows, where a symlink needs Developer Mode, a copy of about 16 MB). The
 # taxonomy folder holds the dumps only, so -species still asks for the index,
 # unless FASTAG_TAXONOMY_INDEX_DIR names a folder with the index (the release
-# asset FASTag-<version>-taxonomy-k7.tar.gz, unpacked): then share-FASTag-taxonomy
-# is the index and its dumps plus the rest of data/taxonomy (species_call.tsv),
-# as in a release. The install and the release packaging copy data/ themselves.
+# asset FASTag-<version>-taxonomy-k7.tar.gz, unpacked) or the index file itself:
+# then share-FASTag-taxonomy is the index (and a folder's dumps) plus the rest
+# of data/taxonomy (species_call.tsv), as in a release. Without it, and with
+# FASTAG_TAXONOMY_INDEX_AUTO (on), every build looks for the pinned index where
+# tools/fetch_taxonomy_index.py puts it (FASTAG_TAXONOMY_CACHE_DIR/<data
+# release>/share-FASTag-taxonomy, one data release per manifest in
+# data/taxonomy/manifests, newest first), so a one-time fetch serves every
+# build tree of this machine with no variable to set. The install and the
+# release packaging copy data/ themselves.
 # Staged by the target fastag_stage_data, on every build (cmake --build), so an
 # edit to data/ alone and a deleted share-FASTag-* folder are restaged; ctest
 # stages first (the fixture fastag_staged_data). A real folder there without
@@ -248,10 +254,40 @@ install(TARGETS FASTag RUNTIME DESTINATION bin)
 # tools/shipped_data.py lists the files; test/shipped_data_test.py checks them.
 option(FASTAG_STAGE_DATA_IN_BUILD "Link (Windows: copy) data/ beside the built FASTag" ON)
 set(FASTAG_TAXONOMY_INDEX_DIR "" CACHE PATH
-    "Folder with tax_k7.taxdb and its dumps, staged as share-FASTag-taxonomy beside the built FASTag")
-if(FASTAG_TAXONOMY_INDEX_DIR AND NOT EXISTS "${FASTAG_TAXONOMY_INDEX_DIR}/tax_k7.taxdb")
-  message(FATAL_ERROR "FASTAG_TAXONOMY_INDEX_DIR='${FASTAG_TAXONOMY_INDEX_DIR}' holds no tax_k7.taxdb "
-                      "(unpack FASTag-<version>-taxonomy-k7.tar.gz and name its share-FASTag-taxonomy folder)")
+    "Folder with tax_k7.taxdb (and its dumps), or the index file itself, staged as share-FASTag-taxonomy beside the built FASTag")
+if(FASTAG_TAXONOMY_INDEX_DIR AND NOT EXISTS "${FASTAG_TAXONOMY_INDEX_DIR}/tax_k7.taxdb"
+   AND (IS_DIRECTORY "${FASTAG_TAXONOMY_INDEX_DIR}" OR NOT EXISTS "${FASTAG_TAXONOMY_INDEX_DIR}"))
+  message(FATAL_ERROR "FASTAG_TAXONOMY_INDEX_DIR='${FASTAG_TAXONOMY_INDEX_DIR}' is neither a folder with "
+                      "tax_k7.taxdb nor an index file (run tools/fetch_taxonomy_index.py, or unpack "
+                      "FASTag-<version>-taxonomy-k7.tar.gz and name its share-FASTag-taxonomy folder)")
+endif()
+option(FASTAG_TAXONOMY_INDEX_AUTO
+       "Without FASTAG_TAXONOMY_INDEX_DIR, stage the index tools/fetch_taxonomy_index.py fetched into FASTAG_TAXONOMY_CACHE_DIR" ON)
+# The default of tools/fetch_taxonomy_index.py (fastag_cache_dir there).
+if(WIN32 AND DEFINED ENV{LOCALAPPDATA})
+  set(_fastag_cache_default "$ENV{LOCALAPPDATA}/fastag")
+elseif(DEFINED ENV{XDG_CACHE_HOME} AND NOT "$ENV{XDG_CACHE_HOME}" STREQUAL "")
+  set(_fastag_cache_default "$ENV{XDG_CACHE_HOME}/fastag")
+elseif(DEFINED ENV{HOME})
+  set(_fastag_cache_default "$ENV{HOME}/.cache/fastag")
+else()
+  set(_fastag_cache_default "")
+endif()
+file(TO_CMAKE_PATH "${_fastag_cache_default}" _fastag_cache_default)
+set(FASTAG_TAXONOMY_CACHE_DIR "${_fastag_cache_default}" CACHE PATH
+    "Where tools/fetch_taxonomy_index.py puts the taxonomy index (FASTAG_TAXONOMY_INDEX_AUTO)")
+# The folders a build looks in (stage-data.cmake INDEX_SEARCH), newest data
+# release first.
+set(FASTAG_TAXONOMY_INDEX_SEARCH "")
+if(FASTAG_TAXONOMY_INDEX_AUTO AND NOT FASTAG_TAXONOMY_INDEX_DIR AND FASTAG_TAXONOMY_CACHE_DIR)
+  file(GLOB _fastag_manifests "${CMAKE_CURRENT_SOURCE_DIR}/data/taxonomy/manifests/*.json")
+  list(SORT _fastag_manifests ORDER DESCENDING)
+  set(_fastag_search "")
+  foreach(_m IN LISTS _fastag_manifests)
+    get_filename_component(_rel "${_m}" NAME_WE)
+    list(APPEND _fastag_search "${FASTAG_TAXONOMY_CACHE_DIR}/${_rel}/share-FASTag-taxonomy")
+  endforeach()
+  list(JOIN _fastag_search "|" FASTAG_TAXONOMY_INDEX_SEARCH)
 endif()
 if(FASTAG_STAGE_DATA_IN_BUILD)
   set(_fastag_stage_cmds "")
@@ -264,6 +300,8 @@ if(FASTAG_STAGE_DATA_IN_BUILD)
     set(_fastag_index "")
     if(_fastag_data STREQUAL "taxonomy" AND FASTAG_TAXONOMY_INDEX_DIR)
       set(_fastag_index "-DINDEX=${FASTAG_TAXONOMY_INDEX_DIR}")
+    elseif(_fastag_data STREQUAL "taxonomy" AND FASTAG_TAXONOMY_INDEX_SEARCH)
+      set(_fastag_index "-DINDEX_SEARCH=${FASTAG_TAXONOMY_INDEX_SEARCH}")
     endif()
     list(APPEND _fastag_stage_cmds
       COMMAND "${CMAKE_COMMAND}" -DSRC=${CMAKE_CURRENT_SOURCE_DIR}/data/${_fastag_data}
@@ -830,7 +868,8 @@ if(FASTAG_BUILD_TESTS)
            COMMAND bash -c "PY=\${FASTAG_PYTHON:-python3}; command -v \"\$PY\" >/dev/null || exit 77; exec \"\$PY\" \"\$@\"" _
                    ${CMAKE_CURRENT_SOURCE_DIR}/test/shipped_data_test.py ${CMAKE_CURRENT_SOURCE_DIR}
                    $<TARGET_FILE_DIR:FASTag> $<IF:$<BOOL:${FASTAG_STAGE_DATA_IN_BUILD}>,ON,OFF>
-                   ${CMAKE_COMMAND} ${CMAKE_BINARY_DIR} "${FASTAG_TAXONOMY_INDEX_DIR}")
+                   ${CMAKE_COMMAND} ${CMAKE_BINARY_DIR} "${FASTAG_TAXONOMY_INDEX_DIR}"
+                   "${FASTAG_TAXONOMY_INDEX_SEARCH}")
   # RUN_SERIAL: (g) moves share-FASTag-alkylation aside and has the build put it back.
   set_tests_properties(shipped_data_test PROPERTIES SKIP_RETURN_CODE 77 RUN_SERIAL TRUE
                        ENVIRONMENT "FASTAG_BUILD_CONFIG=$<CONFIG>")

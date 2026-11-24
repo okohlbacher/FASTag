@@ -22,12 +22,16 @@ describe('the plan line', () => {
   })
   it('names the workflow, the file or batch, the reports and the sampling', () => {
     const v = startValues('builtin:characterize', '/d/run01.tags.tsv')
-    expect(reportsOn(v)).toEqual(['Species report', 'Digest report', 'Label report', 'Glycopeptide report'])
-    expect(planLine('Characterize a run', v, ctx)).toBe('Characterize a run on run01.mzML · 4 reports · 10% of spectra')
+    // From 1.16 Characterize writes the alkylation report and reads all spectra.
+    expect(reportsOn(v)).toEqual(['Species report', 'Digest report', 'Label report', 'Alkylation report', 'Glycopeptide report'])
+    expect(planLine('Characterize a run', v, ctx)).toBe('Characterize a run on run01.mzML · 5 reports · all spectra')
     expect(planLine('Run QC', startValues('builtin:run-qc', '/d/run01.tags.tsv'), ctx)).toBe('Run QC on run01.mzML · 1 report · all spectra')
     expect(planLine('Generate tags', baseValues('builtin:export-tags'), { input: '', files: 0 })).toBe('Generate tags · no file yet · tags table only · all spectra')
-    expect(planLine('Run QC', v, { input: '', files: 3, outDir: '/share/out' })).toBe('Run QC on 3 files · 4 reports · 10% of spectra · outputs in /share/out')
-    expect(planLine('Run QC', v, { input: '', files: 3 })).toBe('Run QC on 3 files · 4 reports · 10% of spectra · outputs beside each input')
+    // A share set by the user is named in the line.
+    const tenth = { ...v, subsample_fraction: '0.1' }
+    expect(planLine('Characterize a run', tenth, ctx)).toBe('Characterize a run on run01.mzML · 5 reports · 10% of spectra')
+    expect(planLine('Run QC', tenth, { input: '', files: 3, outDir: '/share/out' })).toBe('Run QC on 3 files · 5 reports · 10% of spectra · outputs in /share/out')
+    expect(planLine('Run QC', tenth, { input: '', files: 3 })).toBe('Run QC on 3 files · 5 reports · 10% of spectra · outputs beside each input')
   })
   it('in Batch mode the queue is the input: no files yet, never the single file', () => {
     const v = startValues('builtin:run-qc', '/d/run01.tags.tsv')

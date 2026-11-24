@@ -15,8 +15,9 @@ export const WORKFLOWS: HelpPage = {
         <>
           <p>
             <strong>Characterize a run</strong> opens Results on <strong>Overview</strong>. Start with the file
-            name and counts, then read each result with the explanation beneath it. With the initial 10% sample,
-            the figures describe the processed subset, not the whole input.
+            name and counts, then read each result with the explanation beneath it. Characterize reads all spectra by
+            default; when Spectra to read is set to a share, the figures describe the processed subset, not the whole
+            input.
           </p>
           <ul>
             <li><strong>MS2 spectra</strong> counts spectra processed by the tagger. <strong>With any tag</strong> counts spectra with any reported tag, when the run recorded that count.</li>

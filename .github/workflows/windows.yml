@@ -1131,6 +1131,12 @@ jobs:
           cp dist/FASTag/*.dll "$R/bin/"
           cp -r dist/FASTag/share-OpenMS "$R/share/OpenMS"
           cp -r dist/FASTag/share-FASTag-taxonomy "$R/share/FASTag/taxonomy"
+          # A release carries the k-mer index (embedded above), as the macOS
+          # and Linux staging steps require.
+          if [ "${{ (startsWith(github.ref, 'refs/tags/v') || inputs.release_tag != '') }}" = "true" ]; then
+            test -s "$R/share/FASTag/taxonomy/tax_k7.taxdb" \
+              || { echo "::error::the Windows app bundle has no tax_k7.taxdb -- -species would fail in the shipped app"; exit 1; }
+          fi
           cp -r dist/FASTag/share-FASTag-digest "$R/share/FASTag/digest"
           cp -r dist/FASTag/share-FASTag-alkylation "$R/share/FASTag/alkylation"
           cp dist/FASTag/LICENSE dist/FASTag/THIRD-PARTY-NOTICES.txt "$R/"
@@ -1249,7 +1255,7 @@ jobs:
         run: |
           $i = Get-ChildItem fastag/gui/src-tauri/target/release/bundle/nsis/*.exe | Select-Object -First 1
           if (-not $i) { Write-Host "::error::no NSIS installer was built"; exit 1 }
-          ./fastag/tools/windows_installed_check.ps1 -Installer $i.FullName -Scope AllUsers -Out "$env:RUNNER_TEMP\installed-check" -ThermoRaw "$env:GITHUB_WORKSPACE\ci-data\thermo-smoke.raw"
+          ./fastag/tools/windows_installed_check.ps1 -Installer $i.FullName -Scope AllUsers -Out "$env:RUNNER_TEMP\installed-check" -ThermoRaw "$env:GITHUB_WORKSPACE\ci-data\thermo-smoke.raw" -RequireTaxonomyIndex:$${{ (startsWith(github.ref, 'refs/tags/v') || inputs.release_tag != '') }}
           if ($LASTEXITCODE) { exit $LASTEXITCODE }
 
       # The release zip, packed here so that job installed-app checks the
@@ -1260,7 +1266,18 @@ jobs:
       - name: Pack the release zip
         if: (startsWith(github.ref, 'refs/tags/v') || inputs.release_tag != '') || inputs.gui_dry_run
         shell: pwsh
-        run: Compress-Archive -Path dist/FASTag -DestinationPath "FASTag-$($env:ASSET_VERSION)-windows-x64.zip" -Force
+        run: |
+          $zip = "FASTag-$($env:ASSET_VERSION)-windows-x64.zip"
+          Compress-Archive -Path dist/FASTag -DestinationPath $zip -Force
+          # A release zip carries the k-mer index: checked in the zip itself.
+          if ('${{ (startsWith(github.ref, 'refs/tags/v') || inputs.release_tag != '') }}' -eq 'true') {
+            Add-Type -AssemblyName System.IO.Compression.FileSystem
+            $z = [System.IO.Compression.ZipFile]::OpenRead((Resolve-Path $zip))
+            try { $e = $z.Entries | Where-Object { $_.FullName -replace '\\', '/' -match '(^|/)share-FASTag-taxonomy/tax_k7\.taxdb$' -and $_.Length -gt 0 } | Select-Object -First 1 }
+            finally { $z.Dispose() }
+            if (-not $e) { Write-Host "::error::$zip carries no share-FASTag-taxonomy/tax_k7.taxdb"; exit 1 }
+            Write-Host "taxonomy index in the zip: $($e.FullName), $($e.Length) bytes"
+          }
 
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         if: (startsWith(github.ref, 'refs/tags/v') || inputs.release_tag != '') || inputs.gui_dry_run
@@ -1403,14 +1420,14 @@ jobs:
         shell: pwsh
         run: |
           $i = Get-ChildItem installer -Recurse -Filter *-setup.exe | Select-Object -First 1
-          ./tools/windows_installed_check.ps1 -Installer $i.FullName -Scope CurrentUser -Out "$env:RUNNER_TEMP\installed-check\per-user"
+          ./tools/windows_installed_check.ps1 -Installer $i.FullName -Scope CurrentUser -Out "$env:RUNNER_TEMP\installed-check\per-user" -RequireTaxonomyIndex:$${{ (startsWith(github.ref, 'refs/tags/v') || inputs.release_tag != '') }}
           if ($LASTEXITCODE) { exit $LASTEXITCODE }
       # Kept installed for the end-to-end specs.
       - name: Installed-app check (all users)
         shell: pwsh
         run: |
           $i = Get-ChildItem installer -Recurse -Filter *-setup.exe | Select-Object -First 1
-          ./tools/windows_installed_check.ps1 -Installer $i.FullName -Scope AllUsers -Out "$env:RUNNER_TEMP\installed-check\all-users" -Keep -DirOut "$env:RUNNER_TEMP\fastag-app-dir.txt"
+          ./tools/windows_installed_check.ps1 -Installer $i.FullName -Scope AllUsers -Out "$env:RUNNER_TEMP\installed-check\all-users" -Keep -DirOut "$env:RUNNER_TEMP\fastag-app-dir.txt" -RequireTaxonomyIndex:$${{ (startsWith(github.ref, 'refs/tags/v') || inputs.release_tag != '') }}
           if ($LASTEXITCODE) { exit $LASTEXITCODE }
           "FASTAG_APP_DIR=$((Get-Content "$env:RUNNER_TEMP\fastag-app-dir.txt" -Raw).Trim())" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
       # The release zip as a zip user runs it: unpacked, FASTag.bat --help

@@ -181,7 +181,7 @@ export const TASKS: readonly Task[] = [
     use: 'Contamination checks, mixed or unknown samples.',
     notFor: 'Ion-trap data: the calls are unreliable at the wide tolerances it needs.',
     time: 'short',
-    timeNote: '10% of the spectra is usually enough',
+    timeNote: 'tagging plus a lookup in the bundled index',
     group: 'sample',
     blurb: 'Which taxa the sample contains, from the bundled taxonomy index. No FASTA needed.',
     products: 'species report',
@@ -193,7 +193,7 @@ export const TASKS: readonly Task[] = [
     optionalInputs: ['taxdb'],
     help: {
       species_rank: 'The taxonomic level of the report.',
-      subsample_fraction: 'All spectra by default; 10% is usually enough.'
+      subsample_fraction: 'All spectra by default; a share reads faster.'
     },
     outputs: ['out', 'species_out'],
     docs: { to: 'species-howto', label: 'Species detection' }
@@ -271,36 +271,37 @@ export const TASKS: readonly Task[] = [
     id: 'characterize',
     label: 'Characterize a run',
     question: 'What was done to this sample before it was measured?',
-    gets: 'The protease, labels, glycopeptides and species, from 10% of the spectra.',
+    gets: 'The protease, labels, alkylation, glycopeptides and species, from all spectra.',
     use: 'An unknown or legacy data set, before choosing search settings.',
     notFor: 'A final call on very few spectra: the calls then say \'too little evidence\'.',
     time: 'short',
-    timeNote: '10% of the spectra',
+    timeNote: 'tagging plus the survey reports',
     group: 'sample',
     recommended: true,
-    blurb: 'Protease, labels, glycopeptides and species from 10% of the spectra; alkylation on request.',
-    products: '4 reports',
-    // No alkylation report by default: it needs no proteome (its call is read
-    // off the tags), but on 10% of the spectra at Extension 2 few spectra
-    // vote (PXD000001: 8 of 611, no call).
+    blurb: 'Protease, labels, alkylation, glycopeptides and species, from all spectra.',
+    products: '5 reports',
+    // All spectra and the alkylation report by default (user decision,
+    // 1.16): the report needs no proteome (its call is read off the tags),
+    // and on all spectra at Extension 2 enough cysteines vote (PXD000001:
+    // methylthio, 52 of 69 votes); on 10% they did not (8 votes, no call).
     values: {
       ...ALL,
       digest_out: 'digest.tsv',
       label_out: 'label.tsv',
+      alkylation_out: 'alkylation.tsv',
       glyco: true,
       species: true,
-      extension: '2',
-      subsample_fraction: '0.1'
+      extension: '2'
     },
     basic: ['subsample_fraction'],
     optionalInputs: ['taxdb'],
     help: {
-      subsample_fraction: '10% gives stable calls in a tenth of the time.'
+      subsample_fraction: 'All spectra; on a share too few cysteines may vote.'
     },
     outputs: ['out', 'digest_out', 'label_out', 'alkylation_out', 'glyco_out', 'species_out'],
     productNotes: {
       alkylation_out:
-        'The alkylation report needs no protein database: it counts the cysteines the tags read in each form (unmodified, carbamidomethyl, propionamide, N-ethylmaleimide, methylthio, carboxymethyl) and calls the reagent when enough spectra vote; otherwise it says no call and why, with the counts. Votes need a cysteine inside a tag, so longer tags give more (tested with tag length 4 and Extension 6); on 10% of the spectra at Extension 2 there are often too few. A protein database adds the placements of single-cysteine peptides as a check. A shipped proteome named as the proteome needs tags of 8 residues (human, mouse) or 7 (yeast, E. coli) (or Shortest tag placed, when set above 0): turning the report on then raises Extension so that tag length + 2 × Extension reaches that length; this changes every tag of the run. The species and digest calls are validated at Extension 2. A FASTA of your own (as the proteome or as Protein database) needs a length that grows with its size (8 for a human-sized one): Extension is not raised, and the note says what a human-sized one needs. With another report that places tags, Extension is left as it is.'
+        'The alkylation report needs no protein database: it counts the cysteines the tags read in each form (unmodified, carbamidomethyl, propionamide, N-ethylmaleimide, methylthio, carboxymethyl) and calls the reagent when enough spectra vote; otherwise it says no call and why, with the counts. Votes need a cysteine inside a tag, so longer tags give more (tested with tag length 4 and Extension 6); on all spectra at Extension 2 there are usually enough, on a share of them often too few. A protein database adds the placements of single-cysteine peptides as a check. A shipped proteome named as the proteome needs tags of 8 residues (human, mouse) or 7 (yeast, E. coli) (or Shortest tag placed, when set above 0): turning the report on then raises Extension so that tag length + 2 × Extension reaches that length; this changes every tag of the run. The species and digest calls are validated at Extension 2. A FASTA of your own (as the proteome or as Protein database) needs a length that grows with its size (8 for a human-sized one): Extension is not raised, and the note says what a human-sized one needs. With another report that places tags, Extension is left as it is.'
     },
     leadGroups: ['Species', 'Species, advanced', 'Taxonomy'],
     docs: { to: 'digest', label: 'Digest, label and mass-gap reports' }

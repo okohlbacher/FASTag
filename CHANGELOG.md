@@ -2,6 +2,33 @@
 
 ## Unreleased
 
+- **Desktop app: Characterize a run reads all spectra and writes the alkylation report by default.** The workflow
+  no longer samples 10% of the spectra (`subsample_fraction 0.1`): it tags every spectrum (Spectra to read: All
+  spectra; a share is still offered), and the alkylation report (`-alkylation_out`, its call read off the tags, no
+  database) is on, so the workflow writes five reports. On 10% too few cysteines voted for a call (PXD000001: 8
+  votes, no call); on all spectra PXD000001 is called Methylthio (52 of 69 votes, share 0.754), and the whole
+  survey with species detection took 0.8 s there and 4.1 s on PXD003531 (27,345 MS2; alkylation no call,
+  ambiguous: Carbamidomethyl 75 of 164 votes) on an Apple M4 Max with 8 threads. Characterize is the only
+  workflow that offers the report, so the only one whose default changed. The Species workflow's notes no longer
+  call 10% enough. The CLI is unchanged: its reports stay opt-in and it reads all spectra by default.
+- **Building: the species detection index for local builds and the debug app, with no variable to set.**
+  `tools/fetch_taxonomy_index.py` downloads the pinned release asset (`FASTag-taxonomy-k7.tar.gz` of the data release
+  of the newest `data/taxonomy/manifests` entry, the one the release workflows embed) once into
+  `~/.cache/fastag/<data release>/share-FASTag-taxonomy`, checks the tarball and every file against the manifest's
+  sha256 and refuses what does not match; `--from` takes a tarball, an unpacked folder or the index file already on
+  disk. Every `cmake --build` then stages it beside the built FASTag (`FASTAG_TAXONOMY_INDEX_AUTO`, on by default,
+  looks in `FASTAG_TAXONOMY_CACHE_DIR`; a removed cache is unstaged again), and `FASTAG_TAXONOMY_INDEX_DIR` also
+  takes the index file itself. A debug build of the desktop app gives a CLI without an index of its own that
+  fetched index (`FASTAG_TAXONOMY_DIR`), and its Species panel and pre-run check report on the same folder;
+  `gui/scripts/bundle-macos.sh` takes the index from the CLI's build tree or the cache too. The 1.1 GB index is
+  never in git. `shipped_data_test` checks the new staging, the fetch script's checks, and that its pin is the
+  workflows' `TAXDB_TAG` and `TAXDB_SHA256`.
+- **Release CI: the species detection index is checked in every shipped desktop artefact, not only in the staged
+  resources.** On a tag (and a full-payload dry run) the jobs now fail when `tax_k7.taxdb` is missing from the
+  mounted macOS app disk image, the macOS CLI disk image, the Linux `.deb` (and so its tarball), the Linux
+  AppImage's squashfs, the Windows app's staged resources, the Windows release zip and the installed Windows app
+  (`windows_installed_check.ps1 -RequireTaxonomyIndex`).
+
 - **CLI: `-data_paths` reports where FASTag reads its shipped data.** The new advanced flag prints one JSON line
   (`digest_dir`, `digest_from_env`, `digest_searched`, `alkylation_dir`, `proteomes`, `alkylation_auto` `none`) and
   exits 0, with the same lookup and environment as a run; needs no `-in` or `-out`, refused with `-stream`. The

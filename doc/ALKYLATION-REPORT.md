@@ -551,7 +551,7 @@ MS2, 20 ppm, `-alkylation_out` with no database:
 | settings | voting spectra | Methylthio | CAM | Propionamide | NEM | Carboxymethyl | unmodified | call |
 |---|---|---|---|---|---|---|---|---|
 | defaults (`-tag_length 3`, no extension) | 8 | 6 | 2 | 0 | 0 | 0 | 0 | no_call few_cys_spectra |
-| `-extension 2`, 10% of the spectra (Characterize) | 8 of 611 | 7 | 0 | 1 | 0 | 0 | 0 | no_call few_cys_spectra |
+| `-extension 2`, 10% of the spectra (Characterize before 1.16; from 1.16 it reads all spectra) | 8 of 611 | 7 | 0 | 1 | 0 | 0 | 0 | no_call few_cys_spectra |
 | `-extension 2` | 69 | 52 | 6 | 3 | 4 | 2 | 2 | Methylthio, share 0.754 |
 | `-tag_length 4 -extension 6` | 117 | 75 | 11 | 10 | 6 | 10 | 5 | Methylthio, share 0.641 |
 

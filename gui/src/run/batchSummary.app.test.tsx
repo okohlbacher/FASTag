@@ -30,6 +30,14 @@ async function runAll(mock: MockBridge, cases: BatchCase[]): Promise<void> {
   }
 }
 
+// These jobs are the 1.12 batch output, written without an alkylation
+// report: the report Characterize writes by default from 1.16 is turned off.
+async function renderCharacterizeNoAlkylation(mock: MockBridge): Promise<void> {
+  await renderCharacterizeApp(mock)
+  await click(document.getElementById('out-alkylation_out')!)
+  expect((document.getElementById('out-alkylation_out') as HTMLInputElement).checked).toBe(false)
+}
+
 const table = (): HTMLElement => screen.getByRole('table', { name: /^Batch summary/ })
 const bodyRows = (): HTMLElement[] => within(table()).getAllByRole('row').filter((r) => r.closest('tbody'))
 const cells = (r: HTMLElement): string[] => within(r).getAllByRole('cell').map((c) => c.getAttribute('data-text') ?? c.textContent ?? '')
@@ -37,7 +45,7 @@ const cells = (r: HTMLElement): string[] => within(r).getAllByRole('cell').map((
 describe('the batch summary', () => {
   it('has one row per job with the CLI calls, and flags the one that differs from a majority of 3', async () => {
     const mock = installMockBridge()
-    await renderCharacterizeApp(mock)
+    await renderCharacterizeNoAlkylation(mock)
     const cases = [BATCH_CASES.pxd003531, BATCH_CASES.pxd004541, BATCH_CASES.pxd003531mzpeak]
     ;['a', 'b', 'c'].forEach((s, i) => serve(mock, s, cases[i]))
     await addBatch(mock, ['/d/a.mzML', '/d/b.mzML', '/d/c.mzML'])
@@ -65,6 +73,17 @@ describe('the batch summary', () => {
     expect(foot.textContent).toContain('no majority (no calls)')
   })
 
+  it('Characterize asks every job for the alkylation report by default (1.16): its column is there', async () => {
+    const mock = installMockBridge()
+    await renderCharacterizeApp(mock)
+    serve(mock, 'a', BATCH_CASES.pxd003531)
+    await addBatch(mock, ['/d/a.mzML'])
+    await runAll(mock, [BATCH_CASES.pxd003531])
+    expect(mock.runCalls[0].params.alkylation_out).toBe('/d/a.alkylation.tsv')
+    await waitFor(() => expect(within(bodyRows()[0]).getByText('none (label-free)')).toBeDefined())
+    expect(screen.getByRole('columnheader', { name: /^Alkylation/ })).toBeDefined()
+  })
+
   it('with fewer than 3 jobs nothing is flagged, though the calls differ', async () => {
     const mock = installMockBridge()
     await renderCharacterizeApp(mock)
@@ -79,7 +98,7 @@ describe('the batch summary', () => {
 
   it('a raw DIA input the CLI refuses (exit 11, FASTag 1.12) fails with the CLI sentence as its reason, and counts nothing', async () => {
     const mock = installMockBridge()
-    await renderCharacterizeApp(mock)
+    await renderCharacterizeNoAlkylation(mock)
     serve(mock, 'a', BATCH_CASES.pxd003531)
     await addBatch(mock, ['/d/a.mzML', '/d/dia.mzML'])
     await startBatch()
@@ -147,7 +166,7 @@ describe('the batch summary', () => {
 
   it('exports the summary TSV: the table, cell for cell, through a .part-safe write', async () => {
     const mock = installMockBridge()
-    await renderCharacterizeApp(mock)
+    await renderCharacterizeNoAlkylation(mock)
     const cases = [BATCH_CASES.pxd003531, BATCH_CASES.pxd004541, BATCH_CASES.pxd014764]
     ;['a', 'b', 'c'].forEach((s, i) => serve(mock, s, cases[i]))
     await addBatch(mock, ['/d/a.mzML', '/d/b.mzML', '/d/c.mzML'])
@@ -296,7 +315,7 @@ describe('what a summary cell says when a read goes wrong, and where notes show'
 
   it("each call cell shows its cutoff or caveat, not only on hover", async () => {
     const mock = installMockBridge()
-    await renderCharacterizeApp(mock)
+    await renderCharacterizeNoAlkylation(mock)
     serve(mock, 'a', BATCH_CASES.pxd003531)
     await addBatch(mock, ['/d/a.mzML'])
     await runAll(mock, [BATCH_CASES.pxd003531])

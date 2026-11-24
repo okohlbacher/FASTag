@@ -100,6 +100,9 @@ describe('round 10, 8: the needs sentence names what its buttons turn on', () =>
   it('Shortlist, advanced: Reduced FASTA in words and on its one button; no "(see ?)" anywhere', async () => {
     const mock = installMockBridge()
     await renderCharacterizeApp(mock)
+    // The alkylation report (on by default from 1.16) arms Placement on the
+    // database; off, that group names what would arm it.
+    await click(document.getElementById('out-alkylation_out')!)
     const adv = [...document.querySelectorAll<HTMLElement>('summary')].find((s) => /Advanced/.test(s.textContent ?? ''))!
     await click(adv)
     await openGroup('Other analyses')

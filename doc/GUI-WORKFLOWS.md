@@ -35,7 +35,7 @@ grid; see the Decision at the end of this section.
 | W4 | **Species** | Which taxa the sample contains, from the bundled taxonomy index. No FASTA needed. | spectra | species.tsv | Overview, Species, Tags, Spectrum |
 | W5 | **Database reduction** | A protein shortlist, a reduced FASTA and a Sage, Comet or MSFragger configuration for your search. | spectra, protein FASTA | shortlist.tsv, reduced.fasta, engine config | Overview, Shortlist, Tags, Spectrum |
 | W6 | **Identifiability triage** | Rank MS/MS spectra by how identifiable they are, and mark those your search identified. | spectra (IDs optional) | census.tsv, census_summary.tsv, census_sorted.tsv | Overview, Triage, Tags, Spectrum |
-| W7 | **Characterize a run** | Protease, isobaric and SILAC labels, alkylation, glycopeptides and species, from 10% of the spectra. | spectra | digest.tsv, label.tsv, alkylation.tsv, glyco.tsv, species.tsv | Overview, Digest, Species, Glyco, Tags, Spectrum |
+| W7 | **Characterize a run** | Protease, isobaric and SILAC labels, alkylation, glycopeptides and species, from all spectra. | spectra | digest.tsv, label.tsv, alkylation.tsv, glyco.tsv, species.tsv | Overview, Digest, Species, Glyco, Tags, Spectrum |
 
 - **Tabs.** Every run writes its tags table, so Tags and Spectrum follow
   the workflow's own tabs in every workflow (results/ResultTabs.tsx
@@ -77,7 +77,7 @@ grid; see the Decision at the end of this section.
 | W4 | `species true`, `species_out`, `extension 2` (validated in the paper: seed 3 + 2 x 2 = k 7) |
 | W5 | `shortlist_out`, `fasta_out`, `search_config_out`, `extension 3`, plus the shortlist recipe `shortlist_gapped true`, `recon_min_length 6`, `shortlist_max_evalue 10`, `recon_missed_cleavages 2` (doc/SHORTLIST.md). The recipe is **not validated**: with MSFragger and the tryptic shortlist it passed its second held-out test and failed the third. From 1.15.4 the CLI applies it by default only under `-search_engine msfragger` with `-shortlist_protease trypsin`; the GUI sets it for every engine and protease as its default recipe, and the workflow help says so. |
 | W6 | `census true`, `census_score true`, `census_sorted_out` |
-| W7 | `digest_out`, `label_out`, `glyco true`, `species true`, `extension 2`, `subsample_fraction 0.1`. `alkylation_out` is offered unchecked: it needs no database (its call is read off the tags), but on 10% of the spectra at extension 2 few spectra vote (PXD000001: 8 votes, no call). Before, it placed on the shipped human proteome, which needs tags of 8+ residues. |
+| W7 | `digest_out`, `label_out`, `alkylation_out`, `glyco true`, `species true`, `extension 2`; all spectra (no `subsample_fraction`). From 1.16 the alkylation report is on and every spectrum is read: the report needs no database (its call is read off the tags), and on all spectra at extension 2 enough cysteines vote (PXD000001: methylthio, 52 of 69 votes), where 10% of the spectra (the earlier default) gave 8 votes and no call. Before 1.16 it placed on the shipped human proteome, which needs tags of 8+ residues. |
 
 ## 2. Parameters per workflow
 
@@ -111,7 +111,7 @@ where needed.
 | W3 | Missed cleavages (`recon_missed_cleavages`) | Missed tryptic cleavages allowed in a placement window (0 to 10). |
 | W4 | Report rank (`species_rank`) | Taxonomic level of the report: genus, family, … |
 | W4 | Presence call (`species_call`) | Experimental: under Advanced (round 2). Decoy calls each taxon present, no call or not detected. |
-| W4 | Spectra to read (`subsample_fraction`) | Fraction of spectra to read, 0 = all. 0.1 is usually enough. |
+| W4 | Spectra to read (`subsample_fraction`) | Fraction of spectra to read, 0 = all (the default). A share reads faster but gives fewer votes. |
 | W5 | Protein database (`recon_fasta`), required | FASTA to shortlist from. |
 | W5 | Background proteins (`shortlist_background`) | Host proteome and contaminants, always added to the reduced FASTA. |
 | W5 | Search engine (`search_engine`) | Engine to write a configuration for: Sage, Comet or MSFragger (experimental). |
@@ -120,7 +120,7 @@ where needed.
 | W6 | Identifications (`census_ids`), optional | idXML or mzIdentML of this run. Marks which spectra your search identified. |
 | W6 | ID q-value (`census_ids_fdr`) | q-value a target hit needs to count as identified. |
 | W6 | Triage E-value (`census_triage_evalue`) | An unidentified spectrum with a tag at or below this E-value is a triage candidate. |
-| W7 | Spectra to read (`subsample_fraction`) | Fraction of spectra to read. 0.1 gives stable calls in a tenth of the time. |
+| W7 | Spectra to read (`subsample_fraction`) | Fraction of spectra to read, 0 = all (the default). A share reads faster, but too few cysteines may vote for an alkylation call. |
 
 ### 2.3 Outputs card (per workflow)
 

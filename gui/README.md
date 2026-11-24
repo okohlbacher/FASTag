@@ -45,11 +45,12 @@ only tags that actually reach the export minimum will be kept. Lower the
 export minimum only if shorter reads suit the downstream tool. Read exports
 use the whole file and their own filters, not the Tags table's filters.
 
-For QC, choose **Characterize a run**: it samples **10% of the input spectra**
-and enables species, digest, label and glyco reports, opening on
+For QC, choose **Characterize a run**: it reads **all input spectra**
+and enables species, digest, label, alkylation and glyco reports, opening on
 **Results → Overview**. A species ranking is not a presence call, and “no
-call” or “not assessed” does not establish absence. For a full survey, set
-**Subsample fraction** to `1` and **Subsample spectra** to `0` under **Spectra**.
+call” or “not assessed” does not establish absence. For a quicker look at a
+large run, set **Spectra to read** to a share (fewer spectra vote, often too
+few for the alkylation call).
 **Batch QC vs SDRF** runs that survey for multiple files. An SDRF
 (sample and data relationship format) metadata table is optional; load one
 in **Batch** to compare its annotations with the reports. **Open results /
@@ -216,7 +217,11 @@ The bundled CLI gets its data folders explicitly (`src-tauri/src/data.rs`
 (a build tree links `data/` beside the binary). When it has none beside it (a
 build from before that, or with `-DFASTAG_STAGE_DATA_IN_BUILD=OFF`), a debug
 build of the app gives it this source tree's `data/digest`, `data/alkylation`
-and `data/taxonomy` instead; a release build never does. Before a run, `data_status`
+and `data/taxonomy` instead; a release build never does. A debug build also gives a CLI that
+has no taxonomy index of its own the one `tools/fetch_taxonomy_index.py` fetched (the folder
+a build tree stages, `~/.cache/fastag/<data release>/share-FASTag-taxonomy`), so `-species`
+runs without `FASTAG_TAXONOMY_DIR`; the Species panel and the check before a run report on
+that same folder. Before a run, `data_status`
 resolves the digest data and proteomes as the CLI does, and the check before
 the run (`inspector/checks.ts`, `no-shipped-data-<option>`) blocks a mass-gap
 report, digest report, database reduction or alkylation report whose file is
@@ -347,7 +352,7 @@ or a link to the same file).
 Setup presents tasks in this order: **Generate tags** (the default: all spectra
 with the per-residue confidence column), **Open results / inspect spectra**
 (no run), **Characterize a run** (species with extension 2, digest, label and
-glyco reports, a tenth of the spectra), then **Batch QC vs SDRF**. "Starting from" also
+alkylation and glyco reports, all spectra), then **Batch QC vs SDRF**. "Starting from" also
 offers FASTag's own defaults and your saved presets. The parameters sit in
 four step cards (Spectra, Database & taxonomy, Tagging, Reports), each with a
 one-line summary; settings that only a section's switch turns on (species,

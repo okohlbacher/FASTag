@@ -226,7 +226,7 @@ export const PARAM_UI: Record<string, ParamUi> = {
     ],
     help: {
       text: 'Tag only this share of the spectra (more than 0, up to 1), chosen at random. 0 tags all of them.',
-      tip: '0.1 gives a fast species call on a large run.'
+      tip: 'All spectra is the default. 0.1 gives a faster species call on a large run, but too few cysteines may vote for an alkylation call.'
     }
   },
   subsample_seed: {

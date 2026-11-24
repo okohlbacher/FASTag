@@ -108,7 +108,7 @@ export const START: HelpPage = {
           </ol>
           <p>
             For run metrics, choose <strong>Run QC</strong>. For protease, labels, glycopeptides and species, choose{' '}
-            <strong>Characterize a run</strong>; for many files, switch Inputs (step 2) to <strong>Batch</strong>. Characterize samples 10% of the spectra and enables the species, digest, label and glyco reports (the alkylation report on request), opening on{' '}
+            <strong>Characterize a run</strong>; for many files, switch Inputs (step 2) to <strong>Batch</strong>. Characterize reads all spectra and enables the species, digest, label, alkylation and glyco reports, opening on{' '}
             <L to="workflow-overview">Overview</L>. A report that says “not assessed” or “no call” is not evidence
             that a feature is absent.
           </p>
@@ -139,7 +139,7 @@ export const START: HelpPage = {
           <dt>What is in this run?</dt>
           <dd>
             Choose <strong>Characterize a run</strong>. It turns on the <L to="param-species">Species report</L> with
-            tag length 3 and extension 2, so tags reach the 7 residues the bundled index needs, and reads 10% of the
+            tag length 3 and extension 2, so tags reach the 7 residues the bundled index needs, and reads all
             spectra. Read the evidence count in the <L to="species">Species tab</L>; a ranking alone is not a
             presence call. For the taxa alone, choose <strong>Species</strong>.
           </dd>
@@ -1069,7 +1069,7 @@ export const DIGEST: HelpPage = {
             &quot;Context&quot; says when an explanation was chosen because its parts also appear as peaks of their
             own. The chip below names the candidate cysteine modification with the most matching placed spectra;
             these are counts, not an alkylation call. The{' '}
-            <L to="param-alkylation_out">alkylation report</L>, an optional report of Characterize a run, makes that
+            <L to="param-alkylation_out">alkylation report</L>, a default report of Characterize a run, makes that
             call from the cysteine forms in the tags, with no database. With a shipped proteome named (human, mouse, yeast, E. coli) it also places tags on it as a check; that needs tags of 8 residues (human, mouse) or 7 (yeast, E. coli), so turning it on then raises Extension to 3 or 2 (not on a FASTA of your own, as the proteome or as Protein database, nor with another report that places tags).
           </p>
         </>
@@ -1371,7 +1371,7 @@ export const SETTINGS_INTRO: ReactNode = (
     <p>
       Settings start from your task or preset. The default <strong>Generate tags</strong> task processes all spectra
       and adds per-residue confidence. <strong>Characterize a run</strong> enables species, digest,
-      label and glyco reports and samples 10% of the input spectra. The reference below shows the CLI defaults,
+      label, alkylation and glyco reports and also reads all spectra. The reference below shows the CLI defaults,
       which can differ from the task&apos;s values. First check the{' '}
       <L to="param-fragment_tolerance">fragment tolerance</L> for the MS2 analyser. Species detection needs tags
       that reach 7 residues: the Characterize task uses <L to="param-tag_length">tag length</L> 3 with extension 2.

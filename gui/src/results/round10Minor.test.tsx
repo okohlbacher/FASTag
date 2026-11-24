@@ -67,6 +67,8 @@ describe('round 10 minor: the Outputs card layout of the alkylation row', () => 
   it('the (?) follows the label and the note takes a full line', async () => {
     const mock = installMockBridge()
     await renderCharacterizeApp(mock)
+    // On by default from 1.16; its note shows while it is off.
+    await click(document.getElementById('out-alkylation_out')!)
     const row = document.getElementById('out-alkylation_out')!.closest('li')!
     expect(row.classList.contains('wide')).toBe(true)
     const kids = [...row.children]

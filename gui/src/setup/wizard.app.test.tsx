@@ -53,7 +53,7 @@ describe('wizard: step 1', () => {
     fireEvent.keyDown(tile('export-tags'), { key: 'ArrowRight' })
     expect(document.activeElement).toBe(tile('characterize'))
     // Focus selects (the detail panel), it does not choose.
-    expect(screen.getByRole('region', { name: /Characterize a run/ }).textContent).toMatch(/protease, labels, glycopeptides and species/)
+    expect(screen.getByRole('region', { name: /Characterize a run/ }).textContent).toMatch(/protease, labels, alkylation, glycopeptides and species, from all spectra/)
     expect(stepBtn(2).getAttribute('aria-disabled')).toBe('true')
     await act(async () => void fireEvent.keyDown(tile('characterize'), { key: 'Enter' }))
     expect(currentStep()).toBe(2)
@@ -204,8 +204,9 @@ describe('wizard: inputs per task', () => {
       mock.nextPickInput = '/d/run01.mzML'
       await click(screen.getByRole('button', { name: 'Choose file…' }))
       if (report) {
+        // On by default from 1.16 (Characterize's alkylation report).
         showStep(4)
-        await click(document.getElementById(`out-${report}`)!)
+        expect((document.getElementById(`out-${report}`) as HTMLInputElement).checked, report).toBe(true)
       }
       await openAdvanced(n)
       const f = field(n)!
@@ -230,6 +231,10 @@ describe('wizard: inputs per task', () => {
     expect(stepBtn(2).closest('li')!.className).toMatch(/blocked/)
     expect(Number(field('recon_fasta')!.closest<HTMLElement>('[data-step]')!.dataset.step)).toBe(2)
     expect(document.querySelectorAll('#p-recon_fasta')).toHaveLength(1)
+    // The run bar leads there too, though the field sat under Advanced (the
+    // alkylation report, on by default, reads it) while the change rendered.
+    expect(screen.getByRole('button', { name: 'Go to Inputs' })).toBeDefined()
+    expect(screen.queryByRole('button', { name: 'Go to Settings' })).toBeNull()
     showStep(4)
     await click(screen.getByRole('button', { name: 'choose it in Inputs' }))
     expect(currentStep()).toBe(2)

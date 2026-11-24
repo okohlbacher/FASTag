@@ -39,9 +39,14 @@ function oracle(c: string) {
 const tile = (page: Page, name: string) => page.getByRole('region', { name, exact: true })
 const value = (page: Page, name: string) => tile(page, name).locator('.tile-value')
 
-async function characterize(page: Page, fixture: string): Promise<void> {
+async function characterize(page: Page, fixture: string, opts: { alkylationOff?: boolean } = {}): Promise<void> {
   await openApp(page, fixture)
   await chooseTask(page, 'Characterize a run')
+  if (opts.alkylationOff) {
+    // On by default from 1.16: turned off where a run must not ask for it.
+    await toStep(page, 'Outputs & run')
+    await page.locator('#out-alkylation_out').uncheck()
+  }
   await toStep(page, 'Inputs')
   await page.getByRole('button', { name: 'Choose file…' }).click()
   await page.getByRole('button', { name: 'Run', exact: true }).click()
@@ -61,8 +66,10 @@ test('choosing Characterize, adding a file and running reaches Overview through 
   const calls = await mockState<{ params: Record<string, unknown> }[]>(page, 'runCalls')
   expect(calls).toHaveLength(1)
   const p = calls[0].params
-  expect([p.species, p.extension, p.glyco, p.subsample_fraction]).toEqual([true, '2', true, '0.1'])
+  // All spectra and the alkylation report from 1.16.
+  expect([p.species, p.extension, p.glyco, p.subsample_fraction]).toEqual([true, '2', true, '0.0'])
   expect(String(p.digest_out)).toMatch(/run01\.digest\.tsv$/)
+  expect(String(p.alkylation_out)).toMatch(/run01\.alkylation\.tsv$/)
   expect(String(p.label_out)).toMatch(/run01\.label\.tsv$/)
 })
 
@@ -86,9 +93,9 @@ test('Overview figures and calls equal the oracles of the 1.12 gate output', asy
   await expect(page.locator('.stat', { has: page.locator('dt', { hasText: /^Tags E ≤ 1$/ }) }).locator('dd')).toHaveText(en(o.filtered))
 })
 
-test('no alkylation report asked for: no Alkylation tile, and the fixed cysteine line a default', async ({ page }) => {
+test('the alkylation report turned off: no Alkylation tile, and the fixed cysteine line a default', async ({ page }) => {
   for (const fixture of ['gate', 'gate-1.11']) {
-    await characterize(page, fixture)
+    await characterize(page, fixture, { alkylationOff: true })
     await expect(page.getByRole('tab', { name: 'Overview' })).toHaveAttribute('aria-selected', 'true')
     const calls = await mockState<{ params: Record<string, unknown> }[]>(page, 'runCalls')
     expect(calls[0].params.alkylation_out ?? '').toBe('')

@@ -15,9 +15,15 @@ in src/ and each -alkylation_proteome name). Checked:
       leaves a folder of the user's own (no .fastag-staged) alone in both
       modes, and cleans only what it staged;
   (g) every build restages data/ (a deleted share-FASTag-* comes back), and a
-      restage tracks the source: changed bytes, deleted and added files.
+      restage tracks the source: changed bytes, deleted and added files;
+  (h) the taxonomy index for local builds: stage-data.cmake takes INDEX as the
+      index file itself and finds one through INDEX_SEARCH (the fetch cache,
+      FASTAG_TAXONOMY_INDEX_AUTO); tools/fetch_taxonomy_index.py stages only
+      files with the manifest's sha256 and pins what the release workflows pin;
+      and the build tree's index, when one is configured or fetched, is that
+      very file (gated: nothing to compare without one).
 
-usage: shipped_data_test.py <src> <FASTag bin dir> <ON|OFF staged> <cmake> <build dir> [<index dir>]
+usage: shipped_data_test.py <src> <FASTag bin dir> <ON|OFF staged> <cmake> <build dir> [<index dir> [<index search>]]
 """
 import os
 import re
@@ -28,6 +34,10 @@ import tempfile
 
 SRC, BIN, STAGED, CMAKE, BUILD = sys.argv[1:6]
 INDEX_DIR = sys.argv[6] if len(sys.argv) > 6 else ""
+# FASTAG_TAXONOMY_INDEX_SEARCH: the fetch-cache folders a build looks in, "|"-separated.
+INDEX_SEARCH = [c for c in (sys.argv[7] if len(sys.argv) > 7 else "").split("|") if c]
+# The index the build tree stages: the configured one, else the first fetched.
+INDEX_USED = INDEX_DIR or next((c for c in INDEX_SEARCH if os.path.isfile(os.path.join(c, "tax_k7.taxdb"))), "")
 # The configuration of a multi-config build tree, for (g)'s cmake --build.
 CONFIG = os.environ.get("FASTAG_BUILD_CONFIG", "")
 sys.path.insert(0, os.path.join(SRC, "tools"))
@@ -77,7 +87,20 @@ try:
 
     # (c) the build tree
     if STAGED == "ON":
-        check("(c) build tree (FASTAG_STAGE_DATA_IN_BUILD)", "flat", BIN, index=bool(INDEX_DIR))
+        check("(c) build tree (FASTAG_STAGE_DATA_IN_BUILD)", "flat", BIN, index=bool(INDEX_USED))
+        staged = os.path.join(BIN, "share-FASTag-taxonomy", "tax_k7.taxdb")
+        if INDEX_USED:
+            want = INDEX_USED if os.path.isfile(INDEX_USED) else os.path.join(INDEX_USED, "tax_k7.taxdb")
+            same = os.path.isfile(staged) and (os.path.samefile(staged, want)
+                                               or os.path.getsize(staged) == os.path.getsize(want))
+            if not same:
+                fail("(c) build tree: share-FASTag-taxonomy/tax_k7.taxdb is not the index %s" % want)
+            else:
+                print("note: (c) the build tree stages the index %s" % want, file=sys.stderr)
+        elif os.path.exists(staged):
+            fail("(c) build tree: a tax_k7.taxdb is staged though no index is configured or fetched")
+        else:
+            print("note: no taxonomy index configured or fetched; (c) checks the dumps only", file=sys.stderr)
     else:
         print("note: FASTAG_STAGE_DATA_IN_BUILD is off; (c) skipped", file=sys.stderr)
 
@@ -203,7 +226,7 @@ try:
                 elif not os.path.isdir(alk):
                     fail("(g) %s did not restore a deleted %s" % (what, alk))
                 else:
-                    check("(g) build tree after %s" % what, "flat", BIN, index=bool(INDEX_DIR))
+                    check("(g) build tree after %s" % what, "flat", BIN, index=bool(INDEX_USED))
             finally:
                 # Put the original back when the build did not restore it.
                 if os.path.lexists(alk):
@@ -256,6 +279,125 @@ try:
                 fail("(g) INDEX link update: a file added to the source is not linked")
             if os.path.lexists(os.path.join(lnk, "reference-set.tsv")):
                 fail("(g) INDEX link update: a file deleted from the source is still linked")
+
+    # (h) INDEX as the index file itself: staged as tax_k7.taxdb, the dumps
+    # those of data/taxonomy.
+    ifile = os.path.join(tmp, "elsewhere", "pinned-k7.taxdb")
+    write(ifile, "index file")
+    for copy in modes:
+        dst = os.path.join(tmp, "bin-file-" + copy, "share-FASTag-taxonomy")
+        os.makedirs(os.path.dirname(dst))
+        r = run_stage(TAX, dst, copy, ifile)
+        if r.returncode != 0:
+            fail("(h) COPY=%s: stage-data.cmake with INDEX=<file> failed: %s" % (copy, r.stdout))
+            continue
+        p = os.path.join(dst, "tax_k7.taxdb")
+        if not os.path.isfile(p) or text(p) != "index file":
+            fail("(h) COPY=%s: INDEX=<file> is not staged as tax_k7.taxdb" % copy)
+        for f in ("nodes.dmp", "names.dmp", "species_call.tsv"):
+            if not os.path.isfile(os.path.join(dst, f)) or text(os.path.join(dst, f)) != text(os.path.join(TAX, f)):
+                fail("(h) COPY=%s: with INDEX=<file>, %s is not data/taxonomy's" % (copy, f))
+        if os.path.exists(os.path.join(dst, "pinned-k7.taxdb")):
+            fail("(h) COPY=%s: INDEX=<file> is staged under its own name too" % copy)
+    r = run_stage(TAX, os.path.join(tmp, "bin-nofile", "share-FASTag-taxonomy"), "ON", os.path.join(tmp, "no-such.taxdb"))
+    if r.returncode == 0:
+        fail("(h) stage-data.cmake accepted an INDEX that is neither a folder nor a file")
+
+    # (h) INDEX_SEARCH, looked at on every run: none holds an index, the first
+    # that does, and a cache removed afterwards.
+    def run_search(dst, copy, cands):
+        cmd = [CMAKE, "-DSRC=" + TAX, "-DDST=" + dst, "-DCOPY=" + copy, "-DINDEX_SEARCH=" + "|".join(cands), "-P", stage]
+        return subprocess.run(cmd, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
+
+    c1, c2 = os.path.join(tmp, "cache", "rel-2"), os.path.join(tmp, "cache", "rel-1")
+    for copy in modes:
+        dst = os.path.join(tmp, "bin-search-" + copy, "share-FASTag-taxonomy")
+        os.makedirs(os.path.dirname(dst))
+        r = run_search(dst, copy, [c1, c2])
+        if r.returncode != 0 or os.path.exists(os.path.join(dst, "tax_k7.taxdb"))                 or not os.path.isfile(os.path.join(dst, "species_call.tsv")):
+            fail("(h) COPY=%s: INDEX_SEARCH with no index found did not stage data/taxonomy alone: %s" % (copy, r.stdout))
+        write(os.path.join(c2, "tax_k7.taxdb"), "cached index")
+        r = run_search(dst, copy, [c1, c2])
+        p = os.path.join(dst, "tax_k7.taxdb")
+        if r.returncode != 0 or not os.path.isfile(p) or text(p) != "cached index":
+            fail("(h) COPY=%s: INDEX_SEARCH did not stage the index of its first folder that has one: %s"
+                 % (copy, r.stdout))
+        shutil.rmtree(c2)
+        r = run_search(dst, copy, [c1, c2])
+        if r.returncode != 0 or os.path.lexists(os.path.join(dst, "tax_k7.taxdb")) \
+                or not os.path.isfile(os.path.join(dst, "species_call.tsv")):
+            fail("(h) COPY=%s: with the cached index gone the staged one was not removed: %s" % (copy, r.stdout))
+
+    # (h) tools/fetch_taxonomy_index.py on a synthetic asset and manifest:
+    # only files with the pinned sha256 are staged.
+    import hashlib
+    import json
+    import tarfile
+
+    def digest(p):
+        with open(p, "rb") as fh:
+            return hashlib.sha256(fh.read()).hexdigest()
+
+    fx = os.path.join(tmp, "fetch")
+    asset_dir = os.path.join(fx, "asset", "share-FASTag-taxonomy")
+    write(os.path.join(asset_dir, "tax_k7.taxdb"), "synthetic index")
+    shutil.copyfile(os.path.join(TAX, "nodes.dmp"), os.path.join(asset_dir, "nodes.dmp"))
+    shutil.copyfile(os.path.join(TAX, "names.dmp"), os.path.join(asset_dir, "names.dmp"))
+    tgz = os.path.join(fx, "FASTag-taxonomy-k7.tar.gz")
+    with tarfile.open(tgz, "w:gz") as t:
+        t.add(asset_dir, arcname="share-FASTag-taxonomy")
+    entry = lambda p: {"sha256": digest(p), "bytes": os.path.getsize(p)}  # noqa: E731
+    man = {"data_release": "taxonomy-k7-test", "tarball": {"name": "FASTag-taxonomy-k7.tar.gz", "sha256": digest(tgz)},
+           "files": {f: entry(os.path.join(asset_dir, f)) for f in ("tax_k7.taxdb", "nodes.dmp", "names.dmp")}}
+    mpath = os.path.join(fx, "taxonomy-k7-test.json")
+    write(mpath, json.dumps(man))
+    fetch = os.path.join(SRC, "tools", "fetch_taxonomy_index.py")
+
+    def run_fetch(*args):
+        return subprocess.run([sys.executable, fetch, "--src", SRC, "--manifest", mpath] + list(args),
+                              stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
+
+    good = os.path.join(fx, "good")
+    r = run_fetch("--from", tgz, "--dest", good)
+    gf = os.path.join(good, "share-FASTag-taxonomy")
+    if r.returncode != 0:
+        fail("(h) fetch_taxonomy_index.py --from <tarball> failed: %s" % r.stdout)
+    else:
+        if not os.path.isfile(os.path.join(gf, "tax_k7.taxdb")) or text(os.path.join(gf, "tax_k7.taxdb")) != "synthetic index":
+            fail("(h) fetch_taxonomy_index.py: the asset's index is not in %s" % gf)
+        for f in ("MANIFEST.json", "species_call.tsv"):
+            if not os.path.isfile(os.path.join(gf, f)):
+                fail("(h) fetch_taxonomy_index.py: no %s beside the fetched index" % f)
+        if r.stdout.strip().splitlines()[-1:] != [gf] and gf not in r.stdout:
+            fail("(h) fetch_taxonomy_index.py does not print the folder it filled")
+    # A tarball whose sha256 the manifest does not pin is refused.
+    bad = os.path.join(fx, "bad.tar.gz")
+    with tarfile.open(bad, "w:gz") as t:
+        t.add(asset_dir, arcname="share-FASTag-taxonomy")
+        t.add(mpath, arcname="share-FASTag-taxonomy/extra.json")
+    r = run_fetch("--from", bad, "--dest", os.path.join(fx, "bad"))
+    if r.returncode == 0 or os.path.exists(os.path.join(fx, "bad", "share-FASTag-taxonomy", "tax_k7.taxdb")):
+        fail("(h) fetch_taxonomy_index.py staged a tarball whose sha256 is not the pinned one: %s" % r.stdout)
+    # An unpacked copy: linked when every file matches; refused when the index does not.
+    linked = os.path.join(fx, "linked")
+    r = run_fetch("--from", asset_dir, "--dest", linked)
+    lf = os.path.join(linked, "share-FASTag-taxonomy", "tax_k7.taxdb")
+    if r.returncode != 0 or not os.path.isfile(lf) or text(lf) != "synthetic index":
+        fail("(h) fetch_taxonomy_index.py --from <folder> did not stage the matching index: %s" % r.stdout)
+    other = os.path.join(fx, "other")
+    write(os.path.join(other, "tax_k7.taxdb"), "another index")
+    r = run_fetch("--from", os.path.join(other, "tax_k7.taxdb"), "--dest", os.path.join(fx, "refused"))
+    if r.returncode == 0 or os.path.lexists(os.path.join(fx, "refused", "share-FASTag-taxonomy", "tax_k7.taxdb")):
+        fail("(h) fetch_taxonomy_index.py staged an index file the manifest does not pin: %s" % r.stdout)
+    # The default folder is the one CMake looks in (FASTAG_TAXONOMY_INDEX_SEARCH).
+    r = subprocess.run([sys.executable, fetch, "--src", SRC, "--print-dir"], stdin=subprocess.DEVNULL,
+                       stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
+    if r.returncode != 0:
+        fail("(h) fetch_taxonomy_index.py --print-dir failed: %s" % r.stdout)
+    elif INDEX_SEARCH and os.path.normcase(os.path.normpath(r.stdout.strip())) != \
+            os.path.normcase(os.path.normpath(INDEX_SEARCH[0])):
+        fail("(h) fetch_taxonomy_index.py fills %s, but the build looks in %s first"
+             % (r.stdout.strip(), INDEX_SEARCH[0]))
 finally:
     shutil.rmtree(tmp, ignore_errors=True)
 
@@ -265,6 +407,21 @@ ci, win = read(".github/workflows/ci.yml"), read(".github/workflows/windows.yml"
 # Taxonomy files the index asset does not carry: put back after it replaces the folder.
 asset = {"taxonomy/tax_k7.taxdb", "taxonomy/nodes.dmp", "taxonomy/names.dmp"}
 put_back = [f.split("/", 1)[1] for f in files if f.startswith("taxonomy/") and f not in asset]
+# The pin: the release workflows embed the asset of the newest manifest, the
+# one tools/fetch_taxonomy_index.py fetches for local builds.
+import json  # noqa: E402
+mans = sorted(n for n in os.listdir(os.path.join(SRC, "data", "taxonomy", "manifests")) if n.endswith(".json"))
+if not mans:
+    fail("(h) data/taxonomy/manifests holds no manifest")
+else:
+    pin = json.loads(read(os.path.join("data", "taxonomy", "manifests", mans[-1])))
+    for wf_name, wf in (("ci.yml", ci), ("windows.yml", win)):
+        tag = re.search(r"^\s*TAXDB_TAG:\s*(\S+)", wf, re.M)
+        sha = re.search(r"^\s*TAXDB_SHA256:\s*([0-9a-f]{64})", wf, re.M)
+        if not tag or tag.group(1) != pin["data_release"]:
+            fail("(h) %s: TAXDB_TAG is %s, the newest manifest is %s" % (wf_name, tag and tag.group(1), pin["data_release"]))
+        if not sha or sha.group(1) != pin["tarball"]["sha256"]:
+            fail("(h) %s: TAXDB_SHA256 is not the newest manifest's tarball sha256" % wf_name)
 for wf_name, wf, n_cli, n_app in (("ci.yml", ci, 2, 2), ("windows.yml", win, 1, 1)):
     for x in FOLDERS:
         cli = len(re.findall(r"cp -r (?:fastag/)?data/%s dist/FASTag/share-FASTag-%s\b" % (x, x), wf))

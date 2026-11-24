@@ -77,12 +77,66 @@ pub fn alkylation_dir(r: &Resolved) -> Option<PathBuf> {
     )
 }
 
+/// The cache tools/fetch_taxonomy_index.py fetches the taxonomy index into
+/// (CMakeLists.txt FASTAG_TAXONOMY_CACHE_DIR): %LOCALAPPDATA%\fastag on
+/// Windows, else $XDG_CACHE_HOME/fastag, else ~/.cache/fastag. Debug builds
+/// only, as source_data.
+fn dev_cache() -> Option<PathBuf> {
+    if !cfg!(debug_assertions) {
+        return None;
+    }
+    let set = |v: &str| std::env::var_os(v).filter(|s| !s.is_empty()).map(PathBuf::from);
+    if cfg!(windows) {
+        if let Some(l) = set("LOCALAPPDATA") {
+            return Some(l.join("fastag"));
+        }
+    }
+    set("XDG_CACHE_HOME").map(|x| x.join("fastag")).or_else(|| set("HOME").map(|h| h.join(".cache").join("fastag")))
+}
+
+/// A taxonomy folder -species can use: the dumps and the k-mer index.
+fn has_index(d: &Path) -> bool {
+    ["nodes.dmp", "names.dmp", "tax_k7.taxdb"].iter().all(|f| d.join(f).is_file())
+}
+
+/// For a CLI that finds no k-mer index (none beside it, @p r.taxonomy unset:
+/// a build tree without one staged, a dev bundle of its dumps only), the
+/// index tools/fetch_taxonomy_index.py put in @p cache: the first
+/// <cache>/<data release>/share-FASTag-taxonomy that holds it, one data
+/// release per manifest of @p src/taxonomy/manifests, newest first. The same
+/// folders a build tree stages (FASTAG_TAXONOMY_INDEX_AUTO), so the debug app
+/// runs -species on this machine with no variable set. None without sources
+/// or cache (a release build), or for a CLI that has its own.
+fn dev_index(r: &Resolved, src: Option<&Path>, cache: Option<&Path>) -> Option<PathBuf> {
+    let (src, cache) = (src?, cache?);
+    if r.source == "missing" || r.taxonomy.is_some() {
+        return None;
+    }
+    let b = r.bin.parent().filter(|b| !b.as_os_str().is_empty())?;
+    let beside = [b.join("..").join("share").join("FASTag").join("taxonomy"), b.join("share-FASTag-taxonomy"), b.join("taxonomy")];
+    if beside.iter().any(|c| has_index(c)) {
+        return None;
+    }
+    let mut releases: Vec<String> = std::fs::read_dir(src.join("taxonomy").join("manifests"))
+        .ok()?
+        .filter_map(|e| {
+            let p = e.ok()?.path();
+            (p.extension()? == "json").then(|| p.file_stem()?.to_str().map(str::to_string)).flatten()
+        })
+        .collect();
+    releases.sort_unstable_by(|a, b| b.cmp(a));
+    releases.iter().map(|rel| cache.join(rel).join("share-FASTag-taxonomy")).find(|d| has_index(d))
+}
+
 /// The taxonomy folder a CLI child gets as FASTAG_TAXONOMY_DIR: as
-/// fastag::taxonomy_dir, else (debug builds, a CLI from FASTAG_BIN without
-/// its own) the sources' data/taxonomy, which has the dumps and
-/// species_call.tsv but no index.
-fn taxonomy_dir_for_child(r: &Resolved) -> Option<PathBuf> {
-    taxonomy_dir(r).or_else(|| dev_data(r, "taxonomy", "nodes.dmp", source_data().as_deref()))
+/// fastag::taxonomy_dir, else (debug builds) the fetched index (dev_index),
+/// else (a CLI from FASTAG_BIN without its own) the sources' data/taxonomy,
+/// which has the dumps and species_call.tsv but no index. species.rs reports
+/// on this same folder.
+pub(crate) fn taxonomy_dir_for_child(r: &Resolved) -> Option<PathBuf> {
+    taxonomy_dir(r)
+        .or_else(|| dev_index(r, source_data().as_deref(), dev_cache().as_deref()))
+        .or_else(|| dev_data(r, "taxonomy", "nodes.dmp", source_data().as_deref()))
 }
 
 /// The data environment of every CLI child that runs FASTag on a file (the
@@ -455,6 +509,47 @@ mod tests {
         let _ = std::fs::remove_dir_all(&root);
     }
 
+    /// A build tree or dev bundle with no index of its own: a debug app gives
+    /// the CLI the index tools/fetch_taxonomy_index.py fetched, newest data
+    /// release first; never over an index the CLI has, nor without one.
+    #[test]
+    fn a_dev_cli_without_an_index_gets_the_fetched_one() {
+        let (root, bin) = tree("devindex");
+        let src = root.join("src-data");
+        digest_at(&src.join("taxonomy").join("manifests"), &["taxonomy-k7-20260901.json", "taxonomy-k7-20270101.json", "notes.txt"]);
+        let cache = root.join("cache");
+        let old = cache.join("taxonomy-k7-20260901").join("share-FASTag-taxonomy");
+        let new = cache.join("taxonomy-k7-20270101").join("share-FASTag-taxonomy");
+        let mk = |source: &'static str, taxonomy: Option<PathBuf>| Resolved { bin: bin.clone(), data: None, taxonomy, source };
+        let r = mk("env", None);
+        // No cache folder holds an index: nothing.
+        assert_eq!(dev_index(&r, Some(&src), Some(&cache)), None);
+        // Dumps without the index are no index.
+        digest_at(&new, &["nodes.dmp", "names.dmp"]);
+        assert_eq!(dev_index(&r, Some(&src), Some(&cache)), None);
+        digest_at(&old, &["nodes.dmp", "names.dmp", "tax_k7.taxdb"]);
+        assert_eq!(dev_index(&r, Some(&src), Some(&cache)), Some(old.clone()));
+        // The newest data release first.
+        digest_at(&new, &["tax_k7.taxdb"]);
+        assert_eq!(dev_index(&r, Some(&src), Some(&cache)), Some(new.clone()));
+        // Every kind of dev CLI: from FASTAG_BIN, on PATH, a dev bundle of dumps only.
+        for source in ["path", "bundled"] {
+            assert_eq!(dev_index(&mk(source, None), Some(&src), Some(&cache)), Some(new.clone()), "{source}");
+        }
+        // Not for a missing CLI, a bundle with its index, or without sources or cache (release builds).
+        assert_eq!(dev_index(&mk("missing", None), Some(&src), Some(&cache)), None);
+        assert_eq!(dev_index(&mk("bundled", Some(root.join("t"))), Some(&src), Some(&cache)), None);
+        assert_eq!(dev_index(&r, None, Some(&cache)), None);
+        assert_eq!(dev_index(&r, Some(&src), None), None);
+        // A dumps-only folder beside the CLI does not stop it; one with the index does.
+        let beside = root.join("bin").join("share-FASTag-taxonomy");
+        digest_at(&beside, &["nodes.dmp", "names.dmp"]);
+        assert_eq!(dev_index(&r, Some(&src), Some(&cache)), Some(new.clone()));
+        digest_at(&beside, &["tax_k7.taxdb"]);
+        assert_eq!(dev_index(&r, Some(&src), Some(&cache)), None);
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
     /// The reported runs (exit 6, "No shipped protease models found"): the app
     /// ran a dev CLI from FASTAG_BIN with no data beside it and gave it no
     /// FASTAG_DIGEST_DIR. A debug app now passes the sources' data/.
@@ -475,7 +570,10 @@ mod tests {
         let data = dunce::canonicalize(source_data().unwrap()).unwrap();
         assert_eq!(envs.get("FASTAG_DIGEST_DIR"), Some(&data.join("digest")));
         assert_eq!(envs.get("FASTAG_ALKYLATION_DIR"), Some(&data.join("alkylation")));
-        assert_eq!(envs.get("FASTAG_TAXONOMY_DIR"), Some(&data.join("taxonomy")));
+        // The fetched index when this machine has one (dev_index), else the
+        // sources' dumps.
+        let tax = dev_index(&r, source_data().as_deref(), dev_cache().as_deref()).unwrap_or_else(|| data.join("taxonomy"));
+        assert_eq!(envs.get("FASTAG_TAXONOMY_DIR"), Some(&tax));
         // Every file the CLI reads from them is there (tools/shipped_data.py lists them).
         for f in ["digest/digest_models.tsv", "digest/massgap_mods.tsv", "alkylation/proteomes.tsv", "alkylation/human.fasta.gz", "taxonomy/species_call.tsv"] {
             assert!(data.join(f).is_file(), "{f}");

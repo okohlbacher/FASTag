@@ -66,8 +66,9 @@ test('Generate tags after Characterize leaves the Species tab for the requested 
   const calls = await mockState<RunCall[]>(page, 'runCalls')
   expect(calls).toHaveLength(2)
   expect(calls[0].params).toMatchObject({ species: true })
-  // Off by default: the shipped proteome needs tags of 8+ residues.
-  expect(calls[0].params.alkylation_out ?? '').toBe('')
+  // On by default from 1.16: its call is read off the tags, no proteome.
+  expect(String(calls[0].params.alkylation_out)).toMatch(/run01\.alkylation\.tsv$/)
+  expect(calls[1].params.alkylation_out ?? '').toBe('')
   expect(calls[1].params).toMatchObject({ res_conf: true, species: false, digest_out: '', label_out: '' })
 
   await goTo(page, 'Setup')
@@ -119,14 +120,15 @@ test('the workflow row counts what differs, and Reset takes it back', async ({ p
   await chooseTask(page, 'Characterize a run')
   await toStep(page, 'Inputs')
   await page.getByRole('button', { name: 'Choose file…' }).click()
-  await expect(plan(page)).toContainText('Characterize a run on run01.mzML · 4 reports · 10% of spectra')
+  await expect(plan(page)).toContainText('Characterize a run on run01.mzML · 5 reports · all spectra')
   await toStep(page, 'Settings')
   await expect(page.locator('.origin-name')).toHaveText('Characterize a run')
   // Spectra to read is a select: All spectra, 10%, 25%, Custom.
   await page.locator('#p-subsample_fraction').selectOption({ label: '25%' })
   await expect(page.locator('.origin-name')).toContainText('(modified)')
   await page.getByRole('button', { name: 'Reset to Characterize a run' }).click()
-  await expect(page.locator('#p-subsample_fraction')).toHaveValue('0.1')
+  // All spectra from 1.16.
+  await expect(page.locator('#p-subsample_fraction')).toHaveValue('0')
   await expect(page.locator('.origin-name')).toHaveText('Characterize a run')
 })
 

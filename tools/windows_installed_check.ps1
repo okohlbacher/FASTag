@@ -9,9 +9,11 @@
 
     windows_installed_check.ps1 -Installer <setup.exe> [-Scope AllUsers|CurrentUser]
                                 [-Out <dir>] [-Keep] [-DirOut <file>]
-                                [-ThermoRaw <file.raw>]
+                                [-ThermoRaw <file.raw>] [-RequireTaxonomyIndex]
 
   -DirOut: a file the install folder is written to (for the steps after).
+  -RequireTaxonomyIndex: the installed app must carry the k-mer index
+  (resources\fastag\share\FASTag\taxonomy\tax_k7.taxdb), as a release does.
 
   Checks, each with the exit code printed in hex (0xC0000142 is
   STATUS_DLL_INIT_FAILED, 0xC0000135 STATUS_DLL_NOT_FOUND):
@@ -35,7 +37,8 @@ param(
   [string]$Out = (Join-Path ([IO.Path]::GetTempPath()) 'fastag-installed-check'),
   [switch]$Keep,
   [string]$DirOut = '',
-  [string]$ThermoRaw = $env:FASTAG_THERMO_SMOKE_RAW
+  [string]$ThermoRaw = $env:FASTAG_THERMO_SMOKE_RAW,
+  [switch]$RequireTaxonomyIndex
 )
 $ErrorActionPreference = 'Stop'
 . (Join-Path $PSScriptRoot 'windows_install_lib.ps1')
@@ -53,6 +56,11 @@ foreach ($f in @('LICENSE', 'THIRD-PARTY-NOTICES.txt', 'GUI-THIRD-PARTY-NOTICES.
                  'LICENSES\ThermoRawFileReader-License.doc', 'LICENSES\ThermoRawFileReader-License.txt',
                  'share\OpenMS\openms_thermo_bridge\managed\ThermoFisher.CommonCore.RawFileReader.dll')) {
   if (-not (Test-Path (Join-Path $R $f))) { Fail "the installed app has no resources\fastag\$f" }
+}
+$taxdb = Join-Path $R 'share\FASTag\taxonomy\tax_k7.taxdb'
+if ($RequireTaxonomyIndex) {
+  if (-not (Test-Path $taxdb) -or (Get-Item $taxdb).Length -eq 0) { Fail "the installed app has no resources\fastag\share\FASTag\taxonomy\tax_k7.taxdb (-species would fail)" }
+  Write-Host "taxonomy index: $((Get-Item $taxdb).Length) bytes"
 }
 $guiNotices = Join-Path $R 'GUI-THIRD-PARTY-NOTICES.txt'
 $n = (Get-Item $guiNotices).Length

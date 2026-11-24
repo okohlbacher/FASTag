@@ -62,6 +62,10 @@ async function shown(page: Page): Promise<string[][]> {
 async function runFolder(page: Page): Promise<void> {
   await openApp(page, 'gate-batch')
   await chooseTask(page, 'Characterize a run')
+  // These jobs are the 1.12 batch output, written without an alkylation
+  // report: the report Characterize writes by default from 1.16 is off.
+  await toStep(page, 'Outputs & run')
+  await page.locator('#out-alkylation_out').uncheck()
   await toStep(page, 'Inputs')
   await page.getByRole('radio', { name: 'Batch' }).check()
   await goTo(page, 'Batch')

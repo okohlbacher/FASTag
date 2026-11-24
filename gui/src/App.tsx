@@ -77,17 +77,21 @@ const TAB_HELP: Record<Tab, string> = {
 function stepTwoPaths(task: import('./setup/tasks').Task | null, values: Record<string, ParamValue>): string[] {
   return [...inputParams(task, values)].map((n) => String(values[n] ?? '').trim()).filter(Boolean)
 }
-/// The step whose control a refusal names first, for @p task: the step
-/// whose body holds its field (all four are mounted), else, for a field not
-/// built (a closed group), 2 for an input or about field step 2 shows for
-/// the task (or a file not found) and 3 for the rest; null for a product.
-/// Never INPUTS.place alone: most tasks keep the databases under Advanced.
+/// The step whose control a refusal names first, for @p task: 2 for an input
+/// or about field step 2 shows for the task with @p values (or a file not
+/// found), else the step whose body holds its field (all four are mounted),
+/// else (a field not built: a closed group) 3; null for a product. Step 2's
+/// fields come first from @p values, not the page: this runs while the
+/// change renders, and the page still has the field where it was before (the
+/// Protein database under Advanced while the alkylation report is on, moving
+/// to Inputs as Tag placements turn on). Never INPUTS.place alone: most tasks
+/// keep the databases under Advanced.
 function stepOfParam(name: string, task: import('./setup/tasks').Task | null, values: Record<string, ParamValue>): Step | null {
   if (name === 'in_file') return 2
   if (name === 'in' || name === 'out') return null
+  if (inputParams(task, values).has(name) || aboutParams(task).includes(name)) return 2
   const at = Number(document.getElementById(`p-${name}`)?.closest<HTMLElement>('[data-step]')?.dataset.step ?? 0)
   if (at >= 2 && at <= 4) return at as Step
-  if (inputParams(task, values).has(name) || aboutParams(task).includes(name)) return 2
   return 3
 }
 

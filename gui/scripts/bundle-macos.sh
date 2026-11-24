@@ -18,8 +18,10 @@
 #   OPENMS_LIB     dylibbundler search path (OpenMS) [openms-build/lib]
 #   DEPS_LIB       dylibbundler search path (deps)   [fastag-mm/envs/omsbuild/lib]
 #   OPENMS_SHARE   OpenMS data dir                   [openms-src/share/OpenMS]
-#   TAXONOMY_DIR   share/FASTag/taxonomy             [share/FASTag/taxonomy if it holds
-#                  tax_k7.taxdb (an unpacked FASTag-<version>-taxonomy-k7.tar.gz), else data/taxonomy]
+#   TAXONOMY_DIR   share/FASTag/taxonomy             [the first that holds tax_k7.taxdb of
+#                  share/FASTag/taxonomy (an unpacked FASTag-<version>-taxonomy-k7.tar.gz), the
+#                  CLI's own share-FASTag-taxonomy (a build tree with the index staged) and the
+#                  folder tools/fetch_taxonomy_index.py fetched it into; else data/taxonomy]
 #   DIGEST_DIR     share/FASTag/digest               [data/digest]
 #   ALKYLATION_DIR share/FASTag/alkylation           [data/alkylation]
 #   OUT            output resource root              [gui/src-tauri/resources/fastag]
@@ -30,7 +32,11 @@ FASTAG_BIN="${FASTAG_BIN:-$repo/build-rel/FASTag}"
 OPENMS_LIB="${OPENMS_LIB:-$repo/../openms-build/lib}"
 DEPS_LIB="${DEPS_LIB:-$repo/../fastag-mm/envs/omsbuild/lib}"
 OPENMS_SHARE="${OPENMS_SHARE:-$repo/../openms-src/share/OpenMS}"
-if [ -s "$repo/share/FASTag/taxonomy/tax_k7.taxdb" ]; then _tax="$repo/share/FASTag/taxonomy"; else _tax="$repo/data/taxonomy"; fi
+_tax="$repo/data/taxonomy"
+_fetched="$(python3 "$repo/tools/fetch_taxonomy_index.py" --print-dir 2>/dev/null || true)"
+for _c in "$repo/share/FASTag/taxonomy" "$(dirname "$FASTAG_BIN")/share-FASTag-taxonomy" "$_fetched"; do
+  if [ -n "$_c" ] && [ -s "$_c/tax_k7.taxdb" ]; then _tax="$_c"; break; fi
+done
 TAXONOMY_DIR="${TAXONOMY_DIR:-$_tax}"
 DIGEST_DIR="${DIGEST_DIR:-$repo/data/digest}"
 ALKYLATION_DIR="${ALKYLATION_DIR:-$repo/data/alkylation}"
@@ -76,9 +82,13 @@ cp -RL "$TAXONOMY_DIR" "$OUT/share/FASTag/taxonomy"
 cp -RL "$DIGEST_DIR" "$OUT/share/FASTag/digest"
 cp -RL "$ALKYLATION_DIR" "$OUT/share/FASTag/alkylation"
 # An index folder (the release asset) has the index and its dumps only: the
-# rest of data/taxonomy (species_call.tsv) goes beside it, as in a release.
+# rest of data/taxonomy (species_call.tsv) goes beside it, as in a release;
+# species_call.tsv is always this tree's (a fetched folder's copy may be older).
 for f in "$repo"/data/taxonomy/*; do
-  [ -f "$f" ] && [ ! -e "$OUT/share/FASTag/taxonomy/$(basename "$f")" ] && cp "$f" "$OUT/share/FASTag/taxonomy/"
+  n=$(basename "$f")
+  if [ -f "$f" ] && { [ ! -e "$OUT/share/FASTag/taxonomy/$n" ] || [ "$n" = species_call.tsv ]; }; then
+    cp "$f" "$OUT/share/FASTag/taxonomy/"
+  fi
 done
 # Every data file the CLI reads (tools/shipped_data.py), or no bundle.
 python3 "$repo/tools/shipped_data.py" check --layout gui "$OUT"

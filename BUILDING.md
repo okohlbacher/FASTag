@@ -171,12 +171,32 @@ edit to `data/` alone, or a deleted `share-FASTag-*` folder, is picked up; a sta
 `.fastag-staged`, and a folder there without it is yours and is left alone (delete it to restage).
 `-DFASTAG_STAGE_DATA_IN_BUILD=OFF` turns this off. A
 `FASTAG_DIGEST_DIR` or `FASTAG_ALKYLATION_DIR` you set wins, and one that names no folder
-finds nothing (the error says so). The taxonomy folder holds the dumps only, so `-species`
-still needs the k-mer index: unpack the release asset `FASTag-<version>-taxonomy-k7.tar.gz` and
-configure with `-DFASTAG_TAXONOMY_INDEX_DIR=/path/to/share-FASTag-taxonomy` (the folder with
-`tax_k7.taxdb`). The build then makes `share-FASTag-taxonomy` a folder of links: the index and its
-dumps from there, the rest of `data/taxonomy` (`species_call.tsv`) from the sources, as in a
-release. `tools/shipped_data.py list` prints every data file the CLI reads, and
+finds nothing (the error says so).
+
+**Species detection index.** `data/taxonomy` holds the NCBI dumps only; `-species` also needs the
+k-mer index `tax_k7.taxdb` (about 1.1 GB, never in git). Releases embed it. For a source build,
+fetch it once per machine:
+
+```bash
+python3 tools/fetch_taxonomy_index.py      # ~450 MB download, sha256-checked against
+                                           # data/taxonomy/manifests/<data release>.json
+cmake --build build                        # share-FASTag-taxonomy now links the index
+```
+
+The script puts the release asset `FASTag-taxonomy-k7.tar.gz` of the pinned data release (the
+one the release workflows embed, `TAXDB_TAG`) into `~/.cache/fastag/<data
+release>/share-FASTag-taxonomy` (`$XDG_CACHE_HOME/fastag`, or `%LOCALAPPDATA%\fastag` on Windows;
+`--dest <folder>` for another place), checks the tarball and each file against the manifest, and
+adds `species_call.tsv` from the sources. Every build tree then finds it with no variable to set:
+with `FASTAG_TAXONOMY_INDEX_AUTO` (on by default) each `cmake --build` looks in
+`FASTAG_TAXONOMY_CACHE_DIR` (that cache) and makes `share-FASTag-taxonomy` a folder of links, the
+index and its dumps from there and the rest of `data/taxonomy` from the sources, as in a release;
+when the cache goes, the next build stages the dumps alone again. Already have a copy? `--from
+<FASTag-taxonomy-k7.tar.gz>`, `--from <a release's share-FASTag-taxonomy>` or `--from
+<tax_k7.taxdb>` checks it and links it into the cache (`--copy` copies). Or name it directly:
+`-DFASTAG_TAXONOMY_INDEX_DIR=<folder with tax_k7.taxdb, or the index file itself>` (a file is
+staged as `tax_k7.taxdb`, with the dumps of `data/taxonomy`). `-DFASTAG_TAXONOMY_INDEX_AUTO=OFF`
+turns the lookup off. `tools/shipped_data.py list` prints every data file the CLI reads, and
 `test/shipped_data_test.py` (ctest `shipped_data_test`) checks that `data/`, `cmake --install`,
 the build tree, the release workflows and `gui/scripts/bundle-macos.sh` all have each one.
 
@@ -224,6 +244,12 @@ FASTAG_BIN="$PWD/../install/bin/FASTag" npm run tauri dev
 cd src-tauri && cargo test --lib                  # backend tests; frontend: npm test
 ```
 
+A build-tree CLI (`FASTAG_BIN=$PWD/../build/FASTag`) runs `-species` in the app once its build
+staged the index (above). A debug app also gives any CLI that has no index of its own (an
+installed one, a build without the cache, a dev bundle of the dumps only) the index
+`tools/fetch_taxonomy_index.py` fetched, as `FASTAG_TAXONOMY_DIR`
+(`gui/src-tauri/src/data.rs` `dev_index`); a release app never does.
+
 **Bundled build** (`tauri build`): stage a complete CLI in the layout `resolve_binary()`
 (`gui/src-tauri/src/fastag.rs`) expects. The simplest source is the CLI archive of the same
 release (`FASTag-<version>-macos-arm64.dmg`, `FASTag-<version>-linux-x64.tar.gz`, ...), whose
@@ -253,7 +279,10 @@ npm run tauri build -- --debug        # unsigned; drop --debug for a release bui
 
 Copy with `-L`: Tauri's resource bundler skips symlinked directories without an error. The
 taxonomy index `tax_k7.taxdb` goes into `share/FASTag/taxonomy/` only if the app should run
-`-species` without a separate download. Signing and notarization are described in
+`-species` without a separate download; from a build tree with the index staged, `cp -RL` of its
+`share-FASTag-taxonomy` carries it. On macOS, `gui/scripts/bundle-macos.sh` takes the index from
+`share/FASTag/taxonomy` of the sources, the CLI's own `share-FASTag-taxonomy` or the fetch cache,
+the first that has one. Signing and notarization are described in
 [doc/SIGNING-macos-gui.md](doc/SIGNING-macos-gui.md); the Windows installer is built only in
 `windows.yml`.
 

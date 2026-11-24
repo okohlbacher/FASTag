@@ -68,10 +68,11 @@ describe('presets as diffs', () => {
     for (const t of TASKS) for (const n of Object.keys(t.values)) expect(RENDERED).toContain(n)
     expect(TASKS.map((t) => t.label)).toEqual(['Generate tags', 'Run QC', 'Mass-shift survey', 'Species', 'Database reduction', 'Identifiability triage', 'Characterize a run'])
     const c = baseValues('builtin:characterize')
-    expect([c['species'], c['extension'], c['glyco'], c['subsample_fraction'], c['threads']]).toEqual([true, '2', true, '0.1', '0'])
+    expect([c['species'], c['extension'], c['glyco'], c['subsample_fraction'], c['threads']]).toEqual([true, '2', true, '0.0', '0'])
     expect(Boolean(c['digest_out']) && Boolean(c['label_out'])).toBe(true)
-    // Off by default: the shipped proteome needs tags of 8+ residues.
-    expect(c['alkylation_out']).toBe('')
+    // On by default from 1.16: on all spectra its call is read off the tags
+    // with no proteome (PXD000001: methylthio, 52 of 69 votes).
+    expect(c['alkylation_out']).toBe('alkylation.tsv')
     expect(baseValues('builtin:export-tags')['res_conf']).toBe(true)
     expect(baseValues('defaults')).toEqual(defaults)
     expect(originText(LANDING)).toBe('Generate tags')

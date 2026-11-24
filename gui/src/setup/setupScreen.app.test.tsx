@@ -403,7 +403,7 @@ describe('Setup: the plan footer', () => {
     await renderCharacterizeApp(mock)
     await openGroup('Tagging')
     await chooseFile(mock, '/d/run01.mzML')
-    expect(within(footer()).getByText('Characterize a run on run01.mzML · 4 reports · 10% of spectra')).toBeDefined()
+    expect(within(footer()).getByText('Characterize a run on run01.mzML · 5 reports · all spectra')).toBeDefined()
     expect(screen.queryByText('(modified)')).toBeNull()
     await change(field('tag_length')!, '4')
     await change(field('max_tags')!, '20')
