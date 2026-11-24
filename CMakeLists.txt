@@ -278,7 +278,10 @@ set(FASTAG_TAXONOMY_CACHE_DIR "${_fastag_cache_default}" CACHE PATH
     "Where tools/fetch_taxonomy_index.py puts the taxonomy index (FASTAG_TAXONOMY_INDEX_AUTO)")
 # The folders a build looks in (stage-data.cmake INDEX_SEARCH), newest data
 # release first.
+# Each with the manifest it must be a complete fetch of (INDEX_MANIFESTS:
+# the folder's completion marker names it).
 set(FASTAG_TAXONOMY_INDEX_SEARCH "")
+set(FASTAG_TAXONOMY_INDEX_MANIFESTS "")
 if(FASTAG_TAXONOMY_INDEX_AUTO AND NOT FASTAG_TAXONOMY_INDEX_DIR AND FASTAG_TAXONOMY_CACHE_DIR)
   file(GLOB _fastag_manifests "${CMAKE_CURRENT_SOURCE_DIR}/data/taxonomy/manifests/*.json")
   list(SORT _fastag_manifests ORDER DESCENDING)
@@ -288,6 +291,14 @@ if(FASTAG_TAXONOMY_INDEX_AUTO AND NOT FASTAG_TAXONOMY_INDEX_DIR AND FASTAG_TAXON
     list(APPEND _fastag_search "${FASTAG_TAXONOMY_CACHE_DIR}/${_rel}/share-FASTag-taxonomy")
   endforeach()
   list(JOIN _fastag_search "|" FASTAG_TAXONOMY_INDEX_SEARCH)
+  list(JOIN _fastag_manifests "|" FASTAG_TAXONOMY_INDEX_MANIFESTS)
+endif()
+# Whether FASTAG_TAXONOMY_CACHE_DIR is the default tools/fetch_taxonomy_index.py
+# fills (shipped_data_test compares the two only then).
+if(FASTAG_TAXONOMY_CACHE_DIR STREQUAL _fastag_cache_default)
+  set(_fastag_cache_is_default default)
+else()
+  set(_fastag_cache_is_default custom)
 endif()
 if(FASTAG_STAGE_DATA_IN_BUILD)
   set(_fastag_stage_cmds "")
@@ -301,7 +312,8 @@ if(FASTAG_STAGE_DATA_IN_BUILD)
     if(_fastag_data STREQUAL "taxonomy" AND FASTAG_TAXONOMY_INDEX_DIR)
       set(_fastag_index "-DINDEX=${FASTAG_TAXONOMY_INDEX_DIR}")
     elseif(_fastag_data STREQUAL "taxonomy" AND FASTAG_TAXONOMY_INDEX_SEARCH)
-      set(_fastag_index "-DINDEX_SEARCH=${FASTAG_TAXONOMY_INDEX_SEARCH}")
+      set(_fastag_index "-DINDEX_SEARCH=${FASTAG_TAXONOMY_INDEX_SEARCH}"
+                        "-DINDEX_MANIFESTS=${FASTAG_TAXONOMY_INDEX_MANIFESTS}")
     endif()
     list(APPEND _fastag_stage_cmds
       COMMAND "${CMAKE_COMMAND}" -DSRC=${CMAKE_CURRENT_SOURCE_DIR}/data/${_fastag_data}
@@ -869,7 +881,8 @@ if(FASTAG_BUILD_TESTS)
                    ${CMAKE_CURRENT_SOURCE_DIR}/test/shipped_data_test.py ${CMAKE_CURRENT_SOURCE_DIR}
                    $<TARGET_FILE_DIR:FASTag> $<IF:$<BOOL:${FASTAG_STAGE_DATA_IN_BUILD}>,ON,OFF>
                    ${CMAKE_COMMAND} ${CMAKE_BINARY_DIR} "${FASTAG_TAXONOMY_INDEX_DIR}"
-                   "${FASTAG_TAXONOMY_INDEX_SEARCH}")
+                   "${FASTAG_TAXONOMY_INDEX_SEARCH}" "${FASTAG_TAXONOMY_INDEX_MANIFESTS}"
+                   ${_fastag_cache_is_default})
   # RUN_SERIAL: (g) moves share-FASTag-alkylation aside and has the build put it back.
   set_tests_properties(shipped_data_test PROPERTIES SKIP_RETURN_CODE 77 RUN_SERIAL TRUE
                        ENVIRONMENT "FASTAG_BUILD_CONFIG=$<CONFIG>")

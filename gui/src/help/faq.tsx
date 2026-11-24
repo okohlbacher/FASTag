@@ -177,8 +177,10 @@ export const FAQ: FaqEntry[] = [
       </>,
       <>Or run without the report that needs it. The alkylation report needs no proteome at its default (auto): its call is read off the tags.</>,
       <>
-        A FASTag program older than the app (named by <C>FASTAG_BIN</C>, from before the call from the tags) reads auto as the shipped human proteome: the check
-        before the run then asks for human.fasta.gz, or says the report will use the human proteome. Use the FASTag the app ships, or name the proteome of your sample.
+        A FASTag program older than the app (named by <C>FASTAG_BIN</C>) may read auto as the shipped human proteome. One that says so asks for human.fasta.gz before
+        the run, or says the report will use the human proteome; one without <C>-data_paths</C> does not say how it reads auto, so the check only warns and does not
+        hold the run. Use the FASTag the app ships, or name the proteome of your sample. A program without <C>-recon_proteome</C> is held before a shipped proteome is
+        sent to it (Use no shipped proteome).
       </>
     ]
   },

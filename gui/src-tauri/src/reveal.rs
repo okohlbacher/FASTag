@@ -15,12 +15,16 @@
 // types (.command, .app, .terminal on macOS) runs it, so its scope is
 // narrower (may_open): only the identification files and hand-off files the
 // UI offers Open for (ProductFiles: -recon_id_out as idXML, mzid or mzTab,
-// -fasta_out, -search_config_out; OPENABLE), only a file a run of this
-// session committed (ended with exit 0) or the OS handed over in a drop
-// (RunManager.openable, with the identity each had then), never a planned
-// output or one of the record, and only while it is still that file: a
-// regular file, not a symlink, at the same path with the same device,
-// inode, size and modification time.
+// -fasta_out, -search_config_out; OPENABLE), only a file a run committed
+// (ended with exit 0: in this session, RunManager.openable, or in an earlier
+// one, the identities its run record keeps, RunRecord.open_identities) or
+// the OS handed over in a drop (RunManager.openable), never a planned
+// output, and only while it is still that file: a regular file, not a
+// symlink, at the same path with the same device, inode, size and
+// modification time. The file is opened once for that check, and what the
+// system opener gets is a private copy made from that very handle
+// (private_copy), never the path again: a file swapped in at that path
+// after the check is not the one opened.
 
 use std::path::{Path, PathBuf};
 
@@ -233,23 +237,125 @@ pub fn openable_identity(p: &Path) -> Option<crate::fasta::FileIdentity> {
     crate::fasta::identity_at(&parent_resolved(p)?)
 }
 
+/// @p path opened once, checked as openable_identity checks it, and its
+/// identity (taken from that handle) one of @p allowed: the handle and the
+/// identity. None: refused.
+pub fn open_verified(path: &Path, allowed: &[crate::fasta::FileIdentity]) -> Option<(std::fs::File, crate::fasta::FileIdentity)> {
+    let ext = path.extension()?.to_str()?.to_ascii_lowercase();
+    if !OPENABLE.contains(&ext.as_str()) {
+        return None;
+    }
+    let m = std::fs::symlink_metadata(path).ok()?;
+    if m.file_type().is_symlink() || !m.is_file() {
+        return None;
+    }
+    let (f, now) = crate::fasta::open_identified_at(&parent_resolved(path)?)?;
+    allowed.contains(&now).then_some((f, now))
+}
+
 /// @p path may be opened: openable_identity of it now is one of @p allowed
 /// (the identities recorded when a run committed the file or it was
-/// dropped). The path to open, folder-resolved; None: refused.
+/// dropped). The path, folder-resolved; None: refused.
+#[cfg(test)]
 pub fn may_open(path: &Path, allowed: &[crate::fasta::FileIdentity]) -> Option<PathBuf> {
-    let now = openable_identity(path)?;
-    allowed.contains(&now).then(|| PathBuf::from(now.path))
+    open_verified(path, allowed).map(|(_, id)| PathBuf::from(id.path))
+}
+
+/// Every identity Open may open: @p session (this session's committed
+/// outputs and drops), then those the run records in @p history_dir keep
+/// (RunRecord.open_identities), so an export reopened from History after a
+/// restart opens while it is unchanged.
+pub fn open_allowed(session: &[crate::fasta::FileIdentity], history_dir: Option<&Path>) -> Vec<crate::fasta::FileIdentity> {
+    let mut v = session.to_vec();
+    if let Some(d) = history_dir {
+        for rec in history::list(d, 1000) {
+            v.extend(rec.open_identities);
+        }
+    }
+    v
+}
+
+/// Copies under @p root older than this are removed by the next Open.
+const PRIVATE_COPY_DAYS: u64 = 1;
+
+/// The bytes of the verified handle @p f (@p id its identity) as a new file
+/// named like @p id.path in a new folder of its own under @p root (mode
+/// 0700, the file 0600 on Unix), which nothing else writes to: what the
+/// system opener gets. Checked against @p id after the copy, so a file
+/// rewritten in place while it was copied is refused.
+pub fn private_copy(mut f: std::fs::File, id: &crate::fasta::FileIdentity, root: &Path) -> Result<PathBuf, String> {
+    use std::io::{Read, Seek, Write};
+    let name = Path::new(&id.path).file_name().ok_or("the file has no name")?.to_owned();
+    std::fs::create_dir_all(root).map_err(|e| format!("cannot make {}: {e}", root.display()))?;
+    // Earlier copies: the apps they were opened in have had a day.
+    if let Ok(rd) = std::fs::read_dir(root) {
+        for e in rd.flatten() {
+            let old = e.metadata().and_then(|m| m.modified()).ok().and_then(|t| t.elapsed().ok());
+            if old.is_some_and(|a| a.as_secs() > PRIVATE_COPY_DAYS * 86_400) {
+                let _ = std::fs::remove_dir_all(e.path());
+            }
+        }
+    }
+    let mut rnd = [0u8; 8];
+    getrandom::fill(&mut rnd).map_err(|e| e.to_string())?;
+    let dir = root.join(rnd.iter().map(|b| format!("{b:02x}")).collect::<String>());
+    let mut b = std::fs::DirBuilder::new();
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::DirBuilderExt;
+        b.mode(0o700);
+    }
+    b.create(&dir).map_err(|e| format!("cannot make {}: {e}", dir.display()))?;
+    let out = dir.join(name);
+    let mut o = std::fs::OpenOptions::new();
+    o.write(true).create_new(true);
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::OpenOptionsExt;
+        o.mode(0o600);
+    }
+    let fail = |e: std::io::Error| {
+        let _ = std::fs::remove_dir_all(&dir);
+        format!("cannot copy {}: {e}", id.path)
+    };
+    let mut w = o.open(&out).map_err(fail)?;
+    f.rewind().map_err(fail)?;
+    let mut buf = vec![0u8; 1 << 20];
+    let mut n_total = 0u64;
+    loop {
+        let n = f.read(&mut buf).map_err(fail)?;
+        if n == 0 {
+            break;
+        }
+        w.write_all(&buf[..n]).map_err(fail)?;
+        n_total += n as u64;
+    }
+    w.flush().map_err(fail)?;
+    drop(w);
+    // The handle still names the file checked, unchanged while copied.
+    let same = f.metadata().ok().is_some_and(|m| m.len() == id.len && n_total == id.len)
+        && crate::fasta::identity_of_handle(&f).is_some_and(|h| h.dev == id.dev && h.ino == id.ino && h.mtime_ns == id.mtime_ns);
+    if !same {
+        let _ = std::fs::remove_dir_all(&dir);
+        return Err(format!("{} changed while it was opened", id.path));
+    }
+    Ok(out)
 }
 
 /// Open @p path in the app the system gives its type (an idXML in an
-/// identification tool), under the Open scope (may_open): a file of a type
-/// the UI offers Open for that a run of this session committed or that was
-/// dropped on the window, unchanged since.
+/// identification tool), under the Open scope (open_verified): a file of a
+/// type the UI offers Open for that a run committed (this session or one in
+/// the record) or that was dropped on the window, unchanged since. The
+/// opener gets a private copy made from the handle that was checked.
 #[tauri::command]
 pub fn open_output(app: AppHandle, state: State<'_, RunManager>, path: String) -> Result<(), String> {
-    let allowed = state.openable.lock().map(|o| o.clone()).unwrap_or_default();
-    let p = may_open(Path::new(&path), &allowed).ok_or_else(|| format!("{path} is not a file this app wrote or you opened"))?;
-    app.opener().open_path(p.display().to_string(), None::<&str>).map_err(|e| e.to_string())
+    use tauri::Manager;
+    let session = state.openable.lock().map(|o| o.clone()).unwrap_or_default();
+    let allowed = open_allowed(&session, history::dir(&app).as_deref());
+    let (f, id) = open_verified(Path::new(&path), &allowed).ok_or_else(|| format!("{path} is not a file this app wrote or you opened"))?;
+    let root = app.path().app_cache_dir().map_err(|e| e.to_string())?.join("opened");
+    let copy = private_copy(f, &id, &root)?;
+    app.opener().open_path(copy.display().to_string(), None::<&str>).map_err(|e| e.to_string())
 }
 
 #[cfg(test)]
@@ -442,6 +548,86 @@ mod tests {
         let other = d.join("c.idXML");
         std::fs::write(&other, "x").unwrap();
         assert_eq!(may_open(&other, &allowed), None);
+        std::fs::remove_dir_all(&d).ok();
+    }
+    // Codex New 10: the opener got the pathname again after the check, so a
+    // file swapped in at that path (a shared output folder) was dispatched.
+    // Now the opener gets a private copy of the handle that was checked: the
+    // swapped-in file is never read.
+    #[cfg(unix)]
+    #[test]
+    fn open_hands_off_a_private_copy_of_the_checked_file() {
+        use std::io::Write;
+        let d = odir("handoff");
+        let out = d.join("a.recon_id.idXML");
+        std::fs::write(&out, "<IdXML>checked</IdXML>").unwrap();
+        let allowed = vec![openable_identity(&out).unwrap()];
+        let (f, id) = open_verified(&out, &allowed).expect("the committed file is openable");
+        // Swapped between the check and the hand-off.
+        let evil = d.join("evil.idXML");
+        std::fs::write(&evil, "#!/bin/sh\necho swapped\n").unwrap();
+        std::fs::rename(&evil, &out).unwrap();
+        let root = d.join("private");
+        let copy = private_copy(f, &id, &root).unwrap();
+        assert!(copy.starts_with(&root), "{}", copy.display());
+        assert_ne!(copy, out);
+        assert_eq!(copy.file_name(), out.file_name());
+        assert_eq!(std::fs::read_to_string(&copy).unwrap(), "<IdXML>checked</IdXML>");
+        use std::os::unix::fs::PermissionsExt;
+        assert_eq!(std::fs::metadata(copy.parent().unwrap()).unwrap().permissions().mode() & 0o777, 0o700);
+        assert_eq!(std::fs::metadata(&copy).unwrap().permissions().mode() & 0o777, 0o600);
+        // The swapped file is not openable now either.
+        assert!(open_verified(&out, &allowed).is_none());
+        // A file rewritten in place after the check (same inode, other
+        // bytes): the copy is refused, nothing is left.
+        let other = d.join("b.reduced.fasta");
+        std::fs::write(&other, ">p\nPEPTIDEK\n").unwrap();
+        let allowed = vec![openable_identity(&other).unwrap()];
+        let (f, id) = open_verified(&other, &allowed).unwrap();
+        std::fs::OpenOptions::new().append(true).open(&other).unwrap().write_all(b">q\nKK\n").unwrap();
+        let before = std::fs::read_dir(&root).unwrap().count();
+        assert!(private_copy(f, &id, &root).is_err());
+        assert_eq!(std::fs::read_dir(&root).unwrap().count(), before);
+        std::fs::remove_dir_all(&d).ok();
+    }
+
+    // Codex New 11: an export reopened from History after a restart (no
+    // identity in this session) opens while it is the file the run
+    // committed: the run record keeps that identity. A file changed since,
+    // or one the record never had, is refused.
+    #[test]
+    fn a_committed_output_opens_after_a_restart_from_its_run_record() {
+        let d = odir("restart");
+        let mztab = d.join("a.recon_id.mzTab");
+        std::fs::write(&mztab, "MTD\tmzTab-version\t1.0.0\n").unwrap();
+        let hist = d.join("history");
+        std::fs::create_dir_all(&hist).unwrap();
+        let mut rec: history::RunRecord = serde_json::from_value(serde_json::json!({
+            "id": "1-1", "input": "/d/a.mzML", "outputs": [mztab.display().to_string()], "cwd": null,
+            "argv": ["FASTag"], "status": "ok", "exitCode": 0, "message": null, "start": 1, "end": 2,
+            "cleanup": serde_json::to_value(crate::outputs::Cleanup::default()).unwrap()
+        }))
+        .unwrap();
+        rec.open_identities = vec![openable_identity(&mztab).unwrap()];
+        history::append(&hist, &rec).unwrap();
+        // The session after a restart: nothing of its own.
+        assert_eq!(may_open(&mztab, &open_allowed(&[], None)), None);
+        let allowed = open_allowed(&[], Some(&hist));
+        assert_eq!(may_open(&mztab, &allowed), Some(mztab.clone()));
+        // The record reads back the identity it wrote.
+        assert_eq!(history::list(&hist, 10)[0].open_identities, rec.open_identities);
+        // Changed since the run: refused.
+        std::fs::write(&mztab, "MTD\tmzTab-version\t1.0.0\nPSH\n").unwrap();
+        assert_eq!(may_open(&mztab, &open_allowed(&[], Some(&hist))), None);
+        // A record without identities (older, or a run that did not finish).
+        let other = d.join("b.recon_id.idXML");
+        std::fs::write(&other, "<IdXML/>").unwrap();
+        let mut old = rec.clone();
+        old.id = "2-2".into();
+        old.open_identities.clear();
+        old.outputs = vec![other.display().to_string()];
+        history::append(&hist, &old).unwrap();
+        assert_eq!(may_open(&other, &open_allowed(&[], Some(&hist))), None);
         std::fs::remove_dir_all(&d).ok();
     }
 }

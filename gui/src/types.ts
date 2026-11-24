@@ -302,10 +302,11 @@ export interface DataStatus {
   searched: string[]
   // The digest folder comes from FASTAG_DIGEST_DIR.
   fromEnv: boolean
-  // -alkylation_proteome auto reads no database (the engine lists -data_paths
-  // and says so). False for an engine from before 1.16, which reads auto
-  // as the shipped human proteome.
-  autoDbFree: boolean
+  // -alkylation_proteome auto reads no database: true when the engine lists
+  // -data_paths and says so, false when it reports another reading (the
+  // shipped human proteome), null when it has no -data_paths and so does not
+  // say (the CLI of 0dfac519 reads auto database-free, older ones human).
+  autoDbFree: boolean | null
 }
 
 export interface Settings {

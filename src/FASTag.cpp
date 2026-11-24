@@ -4531,12 +4531,14 @@ TOPPFASTag::ExitCodes TOPPFASTag::main_(int, const char**)
         crow.best = ctags[best];
         crow.tag_cover = FASTag::Census::tagCoverOf(ctags);
         crow.max_len = cmax_len;
-        // While any orientation is unresolved every tag is folded (known ones
-        // after their exact placement), so a known and an unresolved read of
-        // one stretch count once; folding a folded block changes nothing.
+        // While any orientation is unresolved every residue is folded (known
+        // tags after their exact placement), each on its own, so a known and
+        // an unresolved read of one stretch, and overlapping tags, count each
+        // residue once; folding a folded span changes nothing. The longest
+        // tag is the other lower bound.
         if (!cres_exact)
           for (const auto& [a, b, ax] : cres_blk) FASTag::Census::foldResidueSpans(cres, a, b, ax);
-        crow.res_cover = FASTag::Census::residueCover(cres);
+        crow.res_cover = FASTag::Census::resCoverLowerBound(cres, cmax_len);
         crow.res_cover_exact = cres_exact;
       }
       const size_t pre = FASTag::Census::bestTag(cpre);

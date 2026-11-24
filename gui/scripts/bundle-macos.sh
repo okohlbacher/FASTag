@@ -21,7 +21,8 @@
 #   TAXONOMY_DIR   share/FASTag/taxonomy             [the first that holds tax_k7.taxdb of
 #                  share/FASTag/taxonomy (an unpacked FASTag-<version>-taxonomy-k7.tar.gz), the
 #                  CLI's own share-FASTag-taxonomy (a build tree with the index staged) and the
-#                  folder tools/fetch_taxonomy_index.py fetched it into; else data/taxonomy]
+#                  folder tools/fetch_taxonomy_index.py fetched it into (when its completion
+#                  marker says the fetch is complete: --check); else data/taxonomy]
 #   DIGEST_DIR     share/FASTag/digest               [data/digest]
 #   ALKYLATION_DIR share/FASTag/alkylation           [data/alkylation]
 #   OUT            output resource root              [gui/src-tauri/resources/fastag]
@@ -34,6 +35,9 @@ DEPS_LIB="${DEPS_LIB:-$repo/../fastag-mm/envs/omsbuild/lib}"
 OPENMS_SHARE="${OPENMS_SHARE:-$repo/../openms-src/share/OpenMS}"
 _tax="$repo/data/taxonomy"
 _fetched="$(python3 "$repo/tools/fetch_taxonomy_index.py" --print-dir 2>/dev/null || true)"
+# The fetched folder only as a complete fetch of the pinned manifest (its
+# completion marker; an interrupted or failed fetch is not bundled).
+if [ -n "$_fetched" ] && ! python3 "$repo/tools/fetch_taxonomy_index.py" --check "$_fetched" 2>/dev/null; then _fetched=""; fi
 for _c in "$repo/share/FASTag/taxonomy" "$(dirname "$FASTAG_BIN")/share-FASTag-taxonomy" "$_fetched"; do
   if [ -n "$_c" ] && [ -s "$_c/tax_k7.taxdb" ]; then _tax="$_c"; break; fi
 done
@@ -79,6 +83,8 @@ for so in "$OUT"/lib/*.dylib; do [ -L "$so" ] && continue; dedup_rpath "$so"; do
 echo ">> copying OpenMS data, taxonomy and digest data"
 cp -RL "$OPENMS_SHARE" "$OUT/share/OpenMS"
 cp -RL "$TAXONOMY_DIR" "$OUT/share/FASTag/taxonomy"
+# The fetch's completion marker and staging marker are this machine's, not the app's.
+rm -f "$OUT/share/FASTag/taxonomy/.fastag-fetched" "$OUT/share/FASTag/taxonomy/.fastag-staged"
 cp -RL "$DIGEST_DIR" "$OUT/share/FASTag/digest"
 cp -RL "$ALKYLATION_DIR" "$OUT/share/FASTag/alkylation"
 # An index folder (the release asset) has the index and its dumps only: the

@@ -590,11 +590,64 @@ int main(int argc, char** argv)
             on_true = std::fabs(k[i].first - pre[4 + i / 2]) < 1e-6 && std::fabs(k[i].second - pre[5 + i / 2]) < 1e-6;
           CHECK(on_true, "%s: known reads on 5..7 were moved off the true residues", nm);
         }
-        // A tag across the centre is folded whole: its residues stay distinct.
+        // A tag across the centre: its residues fold each on its own, so two
+        // that mirror each other share an image; the tag's length is the
+        // other lower bound, and res_cover is never below it.
         Spans mid;
         C::addResidueSpans(mid, 0.5 * axis - 150, {100, 200, 300, 400}, one3, 1, 3, 300, C::Orientation::Unresolved,
                            axis);
-        CHECK(C::residueCover(mid) == 3, "%s: a centred tag folded to %zu residues", nm, C::residueCover(mid));
+        CHECK(C::resCoverLowerBound(mid, 3) == 3, "%s: a centred tag folded to %zu residues", nm,
+              C::resCoverLowerBound(mid, 3));
+        // Codex Earlier 4: two overlapping unresolved reads (y ions) whose own
+        // midpoints straddle the centre. Folded as wholes, one stayed and the
+        // other was mirrored, and their shared residues counted twice (10 for
+        // 9 with realistic masses). Folded per residue, each residue has one
+        // image: no more than the distinct residues, no fewer than the longest.
+        {
+          const AASequence lp = AASequence::fromString("SAMPLERGLYTWEK");
+          const double LM = lp.getMonoWeight();
+          std::vector<double> lpre(1, 0.0);
+          for (size_t i = 1; i <= lp.size(); ++i) lpre.push_back(lp.getPrefix(i).getMonoWeight(Residue::Internal));
+          const double laxis = LM - W + ip.reversedOffset();
+          // A y-read tag of residues i..j (1-based): its spans [P(k-1), P(k)].
+          const auto read = [&](size_t i, size_t j) {
+            std::vector<double> mz;
+            for (size_t k = j + 1; k-- > i - 1;) mz.push_back(lpre.back() - lpre[k] + ip.offC + H);
+            std::vector<std::uint8_t> ones(j - i + 1, 1);
+            Spans v;
+            C::addResidueSpans(v, lpre[i - 1], mz, ones, 1, j - i + 1, lpre[j] - lpre[i - 1],
+                               C::Orientation::Unresolved, laxis);
+            return v;
+          };
+          // Residues 3..9 and 6..11: 9 distinct residues, 7 the longest (the
+          // whole-tag fold counted 10).
+          const double ma = 0.5 * (lpre[2] + lpre[9]), mb = 0.5 * (lpre[5] + lpre[11]);
+          CHECK(ma < 0.5 * laxis && mb > 0.5 * laxis, "%s: the overlapping reads do not straddle the centre (%.1f %.1f %.1f)",
+                nm, ma, mb, 0.5 * laxis);
+          Spans both = read(3, 9);
+          const Spans b2 = read(6, 11);
+          both.insert(both.end(), b2.begin(), b2.end());
+          const std::size_t got = C::resCoverLowerBound(both, 7);
+          CHECK(got <= 9 && got >= 7, "%s: overlapping reads across the centre: res_cover %zu, want 7..9", nm, got);
+          // The same reads in the other order: the same count.
+          Spans rev = read(6, 11);
+          const Spans r2 = read(3, 9);
+          rev.insert(rev.end(), r2.begin(), r2.end());
+          CHECK(C::resCoverLowerBound(rev, 7) == got, "%s: res_cover depends on the order of the reads", nm);
+          // Each shared residue has one image: its folded span in either tag
+          // is its span read alone.
+          for (size_t r = 6; r <= 9; ++r)
+          {
+            const Spans alone = read(r, r);
+            for (const Spans& t : {read(3, 9), read(6, 11)})
+            {
+              bool one = false;
+              for (const auto& sp : t)
+                one = one || (std::fabs(sp.first - alone[0].first) < 1e-6 && std::fabs(sp.second - alone[0].second) < 1e-6);
+              CHECK(one, "%s: residue %zu has another image in an overlapping tag", nm, r);
+            }
+          }
+        }
       }
       std::printf("   complementary ladders: b/y and c/z-dot count once\n");
     }

@@ -23,7 +23,8 @@ in src/ and each -alkylation_proteome name). Checked:
       and the build tree's index, when one is configured or fetched, is that
       very file (gated: nothing to compare without one).
 
-usage: shipped_data_test.py <src> <FASTag bin dir> <ON|OFF staged> <cmake> <build dir> [<index dir> [<index search>]]
+usage: shipped_data_test.py <src> <FASTag bin dir> <ON|OFF staged> <cmake> <build dir> [<index dir>
+       [<index search> [<index manifests> [default|custom]]]]
 """
 import os
 import re
@@ -36,8 +37,14 @@ SRC, BIN, STAGED, CMAKE, BUILD = sys.argv[1:6]
 INDEX_DIR = sys.argv[6] if len(sys.argv) > 6 else ""
 # FASTAG_TAXONOMY_INDEX_SEARCH: the fetch-cache folders a build looks in, "|"-separated.
 INDEX_SEARCH = [c for c in (sys.argv[7] if len(sys.argv) > 7 else "").split("|") if c]
-# The index the build tree stages: the configured one, else the first fetched.
-INDEX_USED = INDEX_DIR or next((c for c in INDEX_SEARCH if os.path.isfile(os.path.join(c, "tax_k7.taxdb"))), "")
+# FASTAG_TAXONOMY_INDEX_MANIFESTS: the manifest each of those folders must be a complete fetch of.
+INDEX_MANIFESTS = [c for c in (sys.argv[8] if len(sys.argv) > 8 else "").split("|") if c]
+# Whether FASTAG_TAXONOMY_CACHE_DIR is the default the fetch script fills.
+CACHE_DEFAULT = (sys.argv[9] if len(sys.argv) > 9 else "default") == "default"
+sys.path.insert(0, os.path.join(SRC, "tools"))
+import fetch_taxonomy_index as fti  # noqa: E402
+# The index the build tree stages: the configured one, else the first complete fetch.
+INDEX_USED = INDEX_DIR or next((c for c, m in zip(INDEX_SEARCH, INDEX_MANIFESTS) if fti.fetched_complete(c, m)), "")
 # The configuration of a multi-config build tree, for (g)'s cmake --build.
 CONFIG = os.environ.get("FASTAG_BUILD_CONFIG", "")
 sys.path.insert(0, os.path.join(SRC, "tools"))
@@ -304,32 +311,8 @@ try:
         fail("(h) stage-data.cmake accepted an INDEX that is neither a folder nor a file")
 
     # (h) INDEX_SEARCH, looked at on every run: none holds an index, the first
-    # that does, and a cache removed afterwards.
-    def run_search(dst, copy, cands):
-        cmd = [CMAKE, "-DSRC=" + TAX, "-DDST=" + dst, "-DCOPY=" + copy, "-DINDEX_SEARCH=" + "|".join(cands), "-P", stage]
-        return subprocess.run(cmd, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
-
-    c1, c2 = os.path.join(tmp, "cache", "rel-2"), os.path.join(tmp, "cache", "rel-1")
-    for copy in modes:
-        dst = os.path.join(tmp, "bin-search-" + copy, "share-FASTag-taxonomy")
-        os.makedirs(os.path.dirname(dst))
-        r = run_search(dst, copy, [c1, c2])
-        if r.returncode != 0 or os.path.exists(os.path.join(dst, "tax_k7.taxdb"))                 or not os.path.isfile(os.path.join(dst, "species_call.tsv")):
-            fail("(h) COPY=%s: INDEX_SEARCH with no index found did not stage data/taxonomy alone: %s" % (copy, r.stdout))
-        write(os.path.join(c2, "tax_k7.taxdb"), "cached index")
-        r = run_search(dst, copy, [c1, c2])
-        p = os.path.join(dst, "tax_k7.taxdb")
-        if r.returncode != 0 or not os.path.isfile(p) or text(p) != "cached index":
-            fail("(h) COPY=%s: INDEX_SEARCH did not stage the index of its first folder that has one: %s"
-                 % (copy, r.stdout))
-        shutil.rmtree(c2)
-        r = run_search(dst, copy, [c1, c2])
-        if r.returncode != 0 or os.path.lexists(os.path.join(dst, "tax_k7.taxdb")) \
-                or not os.path.isfile(os.path.join(dst, "species_call.tsv")):
-            fail("(h) COPY=%s: with the cached index gone the staged one was not removed: %s" % (copy, r.stdout))
-
-    # (h) tools/fetch_taxonomy_index.py on a synthetic asset and manifest:
-    # only files with the pinned sha256 are staged.
+    # that holds a complete fetch of its manifest (the fetch's completion
+    # marker, Codex finding 1), and a cache removed afterwards.
     import hashlib
     import json
     import tarfile
@@ -338,6 +321,98 @@ try:
         with open(p, "rb") as fh:
             return hashlib.sha256(fh.read()).hexdigest()
 
+    def run_search(dst, copy, cands, mans):
+        cmd = [CMAKE, "-DSRC=" + TAX, "-DDST=" + dst, "-DCOPY=" + copy, "-DINDEX_SEARCH=" + "|".join(cands),
+               "-DINDEX_MANIFESTS=" + "|".join(mans), "-P", stage]
+        return subprocess.run(cmd, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
+
+    def search_manifest(path, rel, idx_text):
+        files = {"tax_k7.taxdb": idx_text.encode(), "nodes.dmp": open(os.path.join(TAX, "nodes.dmp"), "rb").read(),
+                 "names.dmp": open(os.path.join(TAX, "names.dmp"), "rb").read()}
+        man = {"data_release": rel, "tarball": {"name": "x.tar.gz", "sha256": "0" * 64},
+               "files": {n: {"sha256": hashlib.sha256(b).hexdigest(), "bytes": len(b)} for n, b in files.items()}}
+        write(path, json.dumps(man))
+        return man
+
+    def fill(folder, man, idx_text):
+        write(os.path.join(folder, "tax_k7.taxdb"), idx_text)
+        for f in ("nodes.dmp", "names.dmp"):
+            shutil.copyfile(os.path.join(TAX, f), os.path.join(folder, f))
+
+    def mark(folder, mpath, man):
+        from pathlib import Path
+        write(os.path.join(folder, fti.MARKER), fti.marker_text(Path(mpath), man["data_release"], man["files"], Path(folder)))
+
+    c1, c2 = os.path.join(tmp, "cache", "rel-2"), os.path.join(tmp, "cache", "rel-1")
+    m1, m2 = os.path.join(tmp, "cache", "rel-2.json"), os.path.join(tmp, "cache", "rel-1.json")
+    search_manifest(m1, "rel-2", "newer index")
+    man2 = search_manifest(m2, "rel-1", "cached index")
+    for copy in modes:
+        dst = os.path.join(tmp, "bin-search-" + copy, "share-FASTag-taxonomy")
+        os.makedirs(os.path.dirname(dst))
+        r = run_search(dst, copy, [c1, c2], [m1, m2])
+        if r.returncode != 0 or os.path.exists(os.path.join(dst, "tax_k7.taxdb")) \
+                or not os.path.isfile(os.path.join(dst, "species_call.tsv")):
+            fail("(h) COPY=%s: INDEX_SEARCH with no index found did not stage data/taxonomy alone: %s" % (copy, r.stdout))
+        # Every file there, but no completion marker (an interrupted fetch,
+        # an index published before its dumps were checked): not staged.
+        fill(c2, man2, "cached index")
+        r = run_search(dst, copy, [c1, c2], [m1, m2])
+        if r.returncode != 0 or os.path.lexists(os.path.join(dst, "tax_k7.taxdb")):
+            fail("(h) COPY=%s: INDEX_SEARCH staged a folder without the fetch's completion marker: %s" % (copy, r.stdout))
+        mark(c2, m2, man2)
+        r = run_search(dst, copy, [c1, c2], [m1, m2])
+        p = os.path.join(dst, "tax_k7.taxdb")
+        if r.returncode != 0 or not os.path.isfile(p) or text(p) != "cached index":
+            fail("(h) COPY=%s: INDEX_SEARCH did not stage the index of its first complete fetch: %s"
+                 % (copy, r.stdout))
+        # A marker of another manifest (the first folder's), or a file cut
+        # short after the fetch: no complete fetch, so the index goes again.
+        r = run_search(dst, copy, [c1, c2], [m1, m1])
+        if r.returncode != 0 or os.path.lexists(os.path.join(dst, "tax_k7.taxdb")):
+            fail("(h) COPY=%s: INDEX_SEARCH staged a folder whose marker names another manifest: %s" % (copy, r.stdout))
+        write(os.path.join(c2, "names.dmp"), "cut")
+        r = run_search(dst, copy, [c1, c2], [m1, m2])
+        if r.returncode != 0 or os.path.lexists(os.path.join(dst, "tax_k7.taxdb")):
+            fail("(h) COPY=%s: INDEX_SEARCH staged a folder with a dump cut short: %s" % (copy, r.stdout))
+        shutil.copyfile(os.path.join(TAX, "names.dmp"), os.path.join(c2, "names.dmp"))
+        r = run_search(dst, copy, [c1, c2], [m1, m2])
+        if r.returncode != 0 or not os.path.isfile(p):
+            fail("(h) COPY=%s: INDEX_SEARCH did not stage the complete fetch again: %s" % (copy, r.stdout))
+        shutil.rmtree(c2)
+        r = run_search(dst, copy, [c1, c2], [m1, m2])
+        if r.returncode != 0 or os.path.lexists(os.path.join(dst, "tax_k7.taxdb")) \
+                or not os.path.isfile(os.path.join(dst, "species_call.tsv")):
+            fail("(h) COPY=%s: with the cached index gone the staged one was not removed: %s" % (copy, r.stdout))
+
+    # (h) Codex finding 4: INDEX as an index file of another name, copy mode:
+    # a switch to another file with an OLDER time stamp is copied too.
+    newer = os.path.join(tmp, "switch", "a-k7.taxdb")
+    older = os.path.join(tmp, "switch", "b-k7.taxdb")
+    write(newer, "index A")
+    write(older, "index B, older")
+    os.utime(older, (1_000_000_000, 1_000_000_000))
+    dst = os.path.join(tmp, "bin-switch", "share-FASTag-taxonomy")
+    os.makedirs(os.path.dirname(dst))
+    r1 = run_stage(TAX, dst, "ON", newer)
+    r2 = run_stage(TAX, dst, "ON", older)
+    p = os.path.join(dst, "tax_k7.taxdb")
+    if r1.returncode != 0 or r2.returncode != 0:
+        fail("(h) COPY=ON index switch: stage-data.cmake failed: %s%s" % (r1.stdout, r2.stdout))
+    elif text(p) != "index B, older":
+        fail("(h) COPY=ON: after switching INDEX to an index file with an older time stamp, the previous index "
+             "is still staged")
+    # And back, and unchanged: the staged copy follows the file named.
+    r3 = run_stage(TAX, dst, "ON", newer)
+    if r3.returncode != 0 or text(p) != "index A":
+        fail("(h) COPY=ON: switching INDEX back did not stage that index again: %s" % r3.stdout)
+    r4 = run_stage(TAX, dst, "ON", newer)
+    if r4.returncode != 0 or text(p) != "index A":
+        fail("(h) COPY=ON: an unchanged INDEX run changed the staged index: %s" % r4.stdout)
+
+    # (h) tools/fetch_taxonomy_index.py on a synthetic asset and manifest:
+    # only files with the pinned sha256 are staged, assembled in a private
+    # folder, checked whole and published with the completion marker.
     fx = os.path.join(tmp, "fetch")
     asset_dir = os.path.join(fx, "asset", "share-FASTag-taxonomy")
     write(os.path.join(asset_dir, "tax_k7.taxdb"), "synthetic index")
@@ -353,9 +428,12 @@ try:
     write(mpath, json.dumps(man))
     fetch = os.path.join(SRC, "tools", "fetch_taxonomy_index.py")
 
-    def run_fetch(*args):
-        return subprocess.run([sys.executable, fetch, "--src", SRC, "--manifest", mpath] + list(args),
+    def run_fetch(*args, manifest=None):
+        return subprocess.run([sys.executable, fetch, "--src", SRC, "--manifest", manifest or mpath] + list(args),
                               stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
+
+    def complete(folder, manifest=None):
+        return fti.fetched_complete(folder, manifest or mpath)
 
     good = os.path.join(fx, "good")
     r = run_fetch("--from", tgz, "--dest", good)
@@ -370,6 +448,10 @@ try:
                 fail("(h) fetch_taxonomy_index.py: no %s beside the fetched index" % f)
         if r.stdout.strip().splitlines()[-1:] != [gf] and gf not in r.stdout:
             fail("(h) fetch_taxonomy_index.py does not print the folder it filled")
+        if not complete(gf) or run_fetch("--check", gf).returncode != 0:
+            fail("(h) fetch_taxonomy_index.py: the fetched folder has no completion marker of its manifest")
+        if [n for n in os.listdir(good) if n.startswith(".")]:
+            fail("(h) fetch_taxonomy_index.py left its private folder behind: %s" % os.listdir(good))
     # A tarball whose sha256 the manifest does not pin is refused.
     bad = os.path.join(fx, "bad.tar.gz")
     with tarfile.open(bad, "w:gz") as t:
@@ -378,26 +460,100 @@ try:
     r = run_fetch("--from", bad, "--dest", os.path.join(fx, "bad"))
     if r.returncode == 0 or os.path.exists(os.path.join(fx, "bad", "share-FASTag-taxonomy", "tax_k7.taxdb")):
         fail("(h) fetch_taxonomy_index.py staged a tarball whose sha256 is not the pinned one: %s" % r.stdout)
-    # An unpacked copy: linked when every file matches; refused when the index does not.
-    linked = os.path.join(fx, "linked")
-    r = run_fetch("--from", asset_dir, "--dest", linked)
-    lf = os.path.join(linked, "share-FASTag-taxonomy", "tax_k7.taxdb")
-    if r.returncode != 0 or not os.path.isfile(lf) or text(lf) != "synthetic index":
-        fail("(h) fetch_taxonomy_index.py --from <folder> did not stage the matching index: %s" % r.stdout)
+
+    # Codex finding 1: pinned tarballs with a member twice, a link member,
+    # or a pinned file missing are refused, and nothing is published.
+    def pinned_tarball(name, members, files=None):
+        path = os.path.join(fx, name)
+        with tarfile.open(path, "w:gz") as t:
+            for arc, src, kind in members:
+                if kind == "file":
+                    t.add(src, arcname=arc)
+                else:
+                    ti = tarfile.TarInfo(arc)
+                    ti.type = tarfile.SYMTYPE
+                    ti.linkname = src
+                    t.addfile(ti)
+        m = dict(man, tarball={"name": "FASTag-taxonomy-k7.tar.gz", "sha256": digest(path)}, files=files or man["files"])
+        mp = path + ".json"
+        write(mp, json.dumps(m))
+        return path, mp
+
+    F = lambda n: ("share-FASTag-taxonomy/" + n, os.path.join(asset_dir, n), "file")  # noqa: E731
+    for name, members in (("twice.tar.gz", [F("tax_k7.taxdb"), F("nodes.dmp"), F("names.dmp"), F("tax_k7.taxdb")]),
+                          ("link.tar.gz", [F("tax_k7.taxdb"), F("nodes.dmp"),
+                                           ("share-FASTag-taxonomy/names.dmp", "/etc/hosts", "link")]),
+                          ("short.tar.gz", [F("tax_k7.taxdb"), F("nodes.dmp")])):
+        tb, mp = pinned_tarball(name, members)
+        out = os.path.join(fx, "refused-" + name)
+        r = run_fetch("--from", tb, "--dest", out, manifest=mp)
+        if r.returncode == 0 or os.path.lexists(os.path.join(out, "share-FASTag-taxonomy")):
+            fail("(h) fetch_taxonomy_index.py published %s (a member twice, a link, or a file missing): %s"
+                 % (name, r.stdout))
+    # A destination folder that is a link elsewhere: the fetch replaces the
+    # link and writes nothing through it.
+    victim = os.path.join(fx, "victim")
+    write(os.path.join(victim, "keep.txt"), "keep")
+    linkdest = os.path.join(fx, "linkdest")
+    os.makedirs(linkdest)
+    if SYMLINK:
+        os.symlink(victim, os.path.join(linkdest, "share-FASTag-taxonomy"))
+        r = run_fetch("--from", tgz, "--dest", linkdest)
+        lf = os.path.join(linkdest, "share-FASTag-taxonomy")
+        if r.returncode != 0 or os.path.islink(lf) or not complete(lf):
+            fail("(h) fetch_taxonomy_index.py into a linked destination folder failed or kept the link: %s" % r.stdout)
+        if sorted(os.listdir(victim)) != ["keep.txt"]:
+            fail("(h) fetch_taxonomy_index.py wrote through a linked destination folder into %s: %s"
+                 % (victim, os.listdir(victim)))
+    # A failed fetch over a complete one (of another index, whose tarball
+    # lacks a dump) leaves the complete one in place.
+    write(os.path.join(fx, "idx2", "tax_k7.taxdb"), "second index")
+    tb, mp = pinned_tarball("short2.tar.gz", [("share-FASTag-taxonomy/tax_k7.taxdb", os.path.join(fx, "idx2", "tax_k7.taxdb"),
+                                               "file"), F("nodes.dmp")],
+                            dict(man["files"], **{"tax_k7.taxdb": entry(os.path.join(fx, "idx2", "tax_k7.taxdb"))}))
+    r = run_fetch("--from", tb, "--dest", good, manifest=mp)
+    if r.returncode == 0 or not complete(gf) or text(os.path.join(gf, "tax_k7.taxdb")) != "synthetic index":
+        fail("(h) a failed fetch damaged the complete fetch already there: %s" % r.stdout)
+    # An unpacked copy: copied (always tested) or linked (with the privilege)
+    # when every file matches; refused when the index does not, and when the
+    # index matches but a dump does not, nothing is published (Codex finding
+    # 3: the link case needs the symlink privilege, the copy case does not).
+    for how in ["--copy"] + ([""] if SYMLINK else []):
+        out = os.path.join(fx, "unpacked" + (how or "-link"))
+        r = run_fetch("--from", asset_dir, "--dest", out, *([how] if how else []))
+        lf = os.path.join(out, "share-FASTag-taxonomy", "tax_k7.taxdb")
+        if r.returncode != 0 or not os.path.isfile(lf) or text(lf) != "synthetic index" \
+                or not complete(os.path.dirname(lf)):
+            fail("(h) fetch_taxonomy_index.py --from <folder> %s did not stage the matching index: %s" % (how, r.stdout))
+        elif how == "--copy" and os.path.islink(lf):
+            fail("(h) fetch_taxonomy_index.py --from <folder> --copy linked the index")
+    if not SYMLINK:
+        print("note: no symlink privilege; fetch_taxonomy_index.py --from <folder> without --copy skipped",
+              file=sys.stderr)
     other = os.path.join(fx, "other")
     write(os.path.join(other, "tax_k7.taxdb"), "another index")
-    r = run_fetch("--from", os.path.join(other, "tax_k7.taxdb"), "--dest", os.path.join(fx, "refused"))
+    r = run_fetch("--from", os.path.join(other, "tax_k7.taxdb"), "--dest", os.path.join(fx, "refused"), "--copy")
     if r.returncode == 0 or os.path.lexists(os.path.join(fx, "refused", "share-FASTag-taxonomy", "tax_k7.taxdb")):
         fail("(h) fetch_taxonomy_index.py staged an index file the manifest does not pin: %s" % r.stdout)
-    # The default folder is the one CMake looks in (FASTAG_TAXONOMY_INDEX_SEARCH).
+    dumps_bad = dict(man, files=dict(man["files"], **{"names.dmp": {"sha256": "1" * 64, "bytes": 3}}))
+    mbad = os.path.join(fx, "dumps-bad.json")
+    write(mbad, json.dumps(dumps_bad))
+    r = run_fetch("--from", asset_dir, "--dest", os.path.join(fx, "nodumps"), "--copy", manifest=mbad)
+    if r.returncode == 0 or os.path.lexists(os.path.join(fx, "nodumps", "share-FASTag-taxonomy")):
+        fail("(h) fetch_taxonomy_index.py published an index whose dumps do not match: %s" % r.stdout)
+    # The default folder is the one CMake looks in (FASTAG_TAXONOMY_INDEX_SEARCH),
+    # compared only when FASTAG_TAXONOMY_CACHE_DIR is the default (an override
+    # is the user's: the fetch then takes --dest).
     r = subprocess.run([sys.executable, fetch, "--src", SRC, "--print-dir"], stdin=subprocess.DEVNULL,
                        stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
     if r.returncode != 0:
         fail("(h) fetch_taxonomy_index.py --print-dir failed: %s" % r.stdout)
-    elif INDEX_SEARCH and os.path.normcase(os.path.normpath(r.stdout.strip())) != \
+    elif INDEX_SEARCH and CACHE_DEFAULT and os.path.normcase(os.path.normpath(r.stdout.strip())) != \
             os.path.normcase(os.path.normpath(INDEX_SEARCH[0])):
         fail("(h) fetch_taxonomy_index.py fills %s, but the build looks in %s first"
              % (r.stdout.strip(), INDEX_SEARCH[0]))
+    elif INDEX_SEARCH and not CACHE_DEFAULT:
+        print("note: FASTAG_TAXONOMY_CACHE_DIR is set; the fetch's default folder is not compared", file=sys.stderr)
 finally:
     shutil.rmtree(tmp, ignore_errors=True)
 

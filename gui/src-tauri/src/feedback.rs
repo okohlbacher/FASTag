@@ -55,6 +55,17 @@ fn lock() -> std::sync::MutexGuard<'static, ()> {
     LOCK.lock().unwrap_or_else(|p| p.into_inner())
 }
 
+/// Per report id, the request number (Exported.seq) of the export its zip
+/// now holds, or of the newest one that started writing it. Read and
+/// written under LOCK only. An export request older than it is refused
+/// (export_ordered), so a late older request never overwrites the zip of a
+/// newer one; feedback_reveal shows the zip only for the request the
+/// renderer accepted (reveal_target).
+static EXPORT_SEQ: Mutex<BTreeMap<String, u64>> = Mutex::new(BTreeMap::new());
+
+/// The refusal of an export request older than the one that wrote the zip.
+pub const STALE_EXPORT: &str = "a newer export of this report was built after this request";
+
 // ---------------------------------------------------------------- the report
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -1201,15 +1212,40 @@ pub struct Exported {
     pub json: String,
     /// The PNG in the zip, if any.
     pub image: Option<ImageInfo>,
+    /// The request number this zip was built for (export_ordered): the zip
+    /// feedback_reveal shows for it is exactly this one.
+    pub seq: u64,
 }
 
 /// Write `<id>.feedback.zip` (export.json and, if included, the PNG) into
 /// the report's folder. An earlier export of it is removed first, so a
 /// failed export leaves no zip of other choices behind (one with a
 /// screenshot since left out): feedback_reveal then shows report.json.
+#[cfg(test)]
 pub fn export(dir: &Path, id: &str, inc: Include, now: u64) -> Result<Exported, String> {
+    export_ordered(dir, id, inc, now, None)
+}
+
+/// export() in request order: @p seq numbers the request (the renderer's,
+/// increasing; None: newer than every request so far). Under the store's
+/// lock, a request older than the one whose export the zip holds is refused
+/// (STALE_EXPORT) and writes nothing, whatever order the requests reach the
+/// lock in: the zip is always that of the newest request that ran.
+pub fn export_ordered(dir: &Path, id: &str, inc: Include, now: u64, seq: Option<u64>) -> Result<Exported, String> {
     let _g = lock();
     let p = resolve(dir, id)?;
+    let seq = {
+        let mut m = EXPORT_SEQ.lock().unwrap_or_else(|e| e.into_inner());
+        let last = m.get(id).copied().unwrap_or(0);
+        let seq = seq.unwrap_or(last + 1);
+        if seq < last {
+            return Err(STALE_EXPORT.to_string());
+        }
+        // Claimed before the old zip goes: a failed build leaves none, and
+        // an older request coming later is still refused.
+        m.insert(id.to_string(), seq);
+        seq
+    };
     let old = p.join(zip_name(id));
     match std::fs::remove_file(&old) {
         Ok(()) => {}
@@ -1232,7 +1268,27 @@ pub fn export(dir: &Path, id: &str, inc: Include, now: u64) -> Result<Exported, 
     };
     let zip = p.join(zip_name(&r.id));
     write_atomic(&zip, &zip_stored(&files, now)).map_err(|e| format!("cannot write {}: {e}", zip.display()))?;
-    Ok(Exported { zip: zip.display().to_string(), json, image })
+    Ok(Exported { zip: zip.display().to_string(), json, image, seq })
+}
+
+/// What feedback_reveal shows for report @p id: with @p seq (the request
+/// the renderer accepted), its zip, and only while the zip is still that
+/// request's (no other export ran since); without, the zip if there is one,
+/// else report.json (the reports list).
+pub fn reveal_target(dir: &Path, id: &str, seq: Option<u64>) -> Result<PathBuf, String> {
+    let _g = lock();
+    let p = resolve(dir, id)?;
+    let zip = p.join(zip_name(id));
+    match seq {
+        Some(s) => {
+            let held = EXPORT_SEQ.lock().unwrap_or_else(|e| e.into_inner()).get(id).copied();
+            if held != Some(s) || !is_real_file(&zip) {
+                return Err("the export shown is no longer the zip in the report's folder; change a choice to build it again".into());
+            }
+            Ok(zip)
+        }
+        None => Ok(if is_real_file(&zip) { zip } else { p.join(REPORT_FILE) }),
+    }
 }
 
 // ------------------------------------------------------------- IPC frames
@@ -1301,20 +1357,20 @@ pub fn feedback_delete_all(app: AppHandle) -> Result<usize, String> {
     delete_all(&need_dir(&app)?)
 }
 
-/// Reveal the report's zip (if exported) or its report.json.
+/// Reveal the report's zip (if exported) or its report.json; with @p seq,
+/// the zip of that very export request (reveal_target).
 #[tauri::command]
-pub fn feedback_reveal(app: AppHandle, id: String) -> Result<(), String> {
+pub fn feedback_reveal(app: AppHandle, id: String, seq: Option<u64>) -> Result<(), String> {
     use tauri_plugin_opener::OpenerExt;
-    let p = resolve(&need_dir(&app)?, &id)?;
-    let zip = p.join(zip_name(&id));
-    let target = if is_real_file(&zip) { zip } else { p.join(REPORT_FILE) };
+    let target = reveal_target(&need_dir(&app)?, &id, seq)?;
     app.opener().reveal_item_in_dir(&target).map_err(|e| e.to_string())
 }
 
+/// Build the report's zip for @p include, as request @p seq (export_ordered).
 #[tauri::command]
-pub async fn feedback_export(app: AppHandle, id: String, include: Include) -> Result<Exported, String> {
+pub async fn feedback_export(app: AppHandle, id: String, include: Include, seq: Option<u64>) -> Result<Exported, String> {
     let d = need_dir(&app)?;
-    tauri::async_runtime::spawn_blocking(move || export(&d, &id, include, now_secs())).await.map_err(|e| e.to_string())?
+    tauri::async_runtime::spawn_blocking(move || export_ordered(&d, &id, include, now_secs(), seq)).await.map_err(|e| e.to_string())?
 }
 
 #[tauri::command]
@@ -1615,6 +1671,62 @@ pub(crate) mod tests {
         assert!(failed.is_err(), "{failed:?}");
         // No zip with the screenshot is left for feedback_reveal to show.
         assert!(!folder.join(zip_name(&s.id)).exists());
+        let _ = std::fs::remove_dir_all(&d);
+    }
+
+    // Codex New 6: two exports of one report raced for the lock; the older
+    // request (screenshot ticked) ran after the newer one (unticked) and
+    // overwrote the zip the share step had just shown. In request order the
+    // older one is refused, and the zip revealed for the accepted request
+    // is the bytes of that request: no screenshot.
+    #[test]
+    fn an_older_export_request_never_overwrites_the_zip_revealed() {
+        let d = tmp("export-order");
+        let s = save(&d, draft(), Some(&png(40, 20)), NOW).unwrap();
+        let shot = Include { screenshot: true, diagnostics: true, log: false };
+        let none = Include { screenshot: false, diagnostics: true, log: false };
+        // Request 10 (screenshot) and 11 (none) were sent in that order; 11
+        // reaches the lock first.
+        let newer = export_ordered(&d, &s.id, none, NOW, Some(11)).unwrap();
+        assert_eq!(newer.seq, 11);
+        let older = export_ordered(&d, &s.id, shot, NOW, Some(10));
+        assert_eq!(older.err().as_deref(), Some(STALE_EXPORT));
+        // What feedback_reveal shows for the accepted request: its zip, and
+        // the bytes in it are the newer choices.
+        let target = reveal_target(&d, &s.id, Some(newer.seq)).unwrap();
+        assert_eq!(target.display().to_string(), newer.zip);
+        let bytes = std::fs::read(&target).unwrap();
+        let files = unzip(&bytes);
+        assert_eq!(files.iter().map(|f| f.0.as_str()).collect::<Vec<_>>(), vec![EXPORT_FILE]);
+        assert_eq!(String::from_utf8(files[0].1.clone()).unwrap(), newer.json);
+        // Nor does the stale request's answer reveal anything.
+        assert!(reveal_target(&d, &s.id, Some(10)).is_err());
+        // A later request (the screenshot ticked again) is built, and the
+        // earlier accepted one no longer reveals the zip it does not hold.
+        let again = export_ordered(&d, &s.id, shot, NOW, Some(12)).unwrap();
+        assert!(unzip(&std::fs::read(&again.zip).unwrap()).iter().any(|f| f.0 == SCREENSHOT_FILE));
+        assert!(reveal_target(&d, &s.id, Some(11)).is_err());
+        assert_eq!(reveal_target(&d, &s.id, Some(12)).unwrap().display().to_string(), again.zip);
+        // Without a request number (the reports list): the zip as it is.
+        assert_eq!(reveal_target(&d, &s.id, None).unwrap().display().to_string(), again.zip);
+        // Real concurrency: many requests in flight, any order; the zip is
+        // that of the newest one that ran, and every older one is refused.
+        let ids: Vec<u64> = (20..40).collect();
+        let res: Vec<(u64, Result<Exported, String>)> = std::thread::scope(|sc| {
+            let hs: Vec<_> = ids
+                .iter()
+                .rev()
+                .map(|&n| {
+                    let (d, id) = (&d, &s.id);
+                    sc.spawn(move || (n, export_ordered(d, id, if n % 2 == 0 { shot } else { none }, NOW, Some(n))))
+                })
+                .collect();
+            hs.into_iter().map(|h| h.join().unwrap()).collect()
+        });
+        let best = res.iter().filter(|(_, r)| r.is_ok()).map(|(n, _)| *n).max().unwrap();
+        assert_eq!(best, 39);
+        let z = unzip(&std::fs::read(reveal_target(&d, &s.id, Some(39)).unwrap()).unwrap());
+        assert!(!z.iter().any(|f| f.0 == SCREENSHOT_FILE), "39 unticked the screenshot");
         let _ = std::fs::remove_dir_all(&d);
     }
 

@@ -83,6 +83,13 @@ pub struct RunRecord {
     /// failed or was cancelled, and in older records, which align nothing.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub tags_identity: Option<crate::fasta::FileIdentity>,
+    /// The files Open may hand to the system (reveal.rs OPENABLE: the
+    /// -recon_id_out, -fasta_out and -search_config_out the run committed),
+    /// as they were when the run ended with exit 0 (reveal.rs
+    /// openable_identity): a later session opens them while each is still
+    /// that file. Absent for a run that did not finish, and in older records.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub open_identities: Vec<crate::fasta::FileIdentity>,
 }
 
 impl RunRecord {
@@ -401,6 +408,7 @@ mod tests {
             workflow: None,
             databases: Vec::new(),
             tags_identity: None,
+            open_identities: Vec::new(),
         }
     }
 

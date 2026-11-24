@@ -234,11 +234,119 @@ pub(crate) struct Index {
     /// (data_end for the last), trailing newline included.
     pub(crate) offsets: Mapped<u64>,
     pub(crate) data_end: u64,
+    /// The file the offsets are of (Codex Earlier 9): every read of a row
+    /// goes through it (Index::reader) and is checked against it
+    /// (Index::verify), so new bytes at old offsets are never read as rows.
+    src: Source,
+}
+
+/// A file as it was indexed: the open handle (on Unix, where it is kept and
+/// every read is from it, so a file renamed over the path is not read), and
+/// its stamp taken from that handle. On Windows a kept handle would stop the
+/// CLI from renaming its new output onto the path, so each read opens the
+/// path again and must find the same file (volume, file index, size, time).
+struct Source {
+    path: String,
+    stamp: Stamp,
+    #[cfg(unix)]
+    file: Arc<File>,
+    /// A read found the file changed: no query is served from it again.
+    stale: AtomicBool,
+}
+
+/// What tells a file's generations apart: size, modification time and its
+/// file identity (fasta.rs file_id).
+#[derive(Clone, Copy, PartialEq, Debug)]
+struct Stamp {
+    len: u64,
+    mtime: Option<SystemTime>,
+    id: (u64, u64),
+}
+
+fn stamp_of(f: &File) -> std::io::Result<Stamp> {
+    let m = f.metadata()?;
+    Ok(Stamp { len: m.len(), mtime: m.modified().ok(), id: crate::fasta::file_id(f, &m) })
+}
+
+/// The refusal of a read that found the indexed file changed under it.
+pub(crate) const CHANGED: &str = "changed while it was read; it is read again";
+
+/// Positional reads of a shared handle as a Read + Seek stream: readers of
+/// one kept handle never move each other's position.
+struct PosReader<'a> {
+    f: &'a File,
+    pos: u64,
+}
+
+impl Read for PosReader<'_> {
+    fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
+        #[cfg(unix)]
+        let n = {
+            use std::os::unix::fs::FileExt;
+            self.f.read_at(buf, self.pos)?
+        };
+        #[cfg(windows)]
+        let n = {
+            use std::os::windows::fs::FileExt;
+            self.f.seek_read(buf, self.pos)?
+        };
+        self.pos += n as u64;
+        Ok(n)
+    }
+}
+
+impl Seek for PosReader<'_> {
+    fn seek(&mut self, to: SeekFrom) -> std::io::Result<u64> {
+        let base = match to {
+            SeekFrom::Start(n) => return Ok({ self.pos = n; n }),
+            SeekFrom::Current(d) => self.pos as i128 + d as i128,
+            SeekFrom::End(d) => self.f.metadata()?.len() as i128 + d as i128,
+        };
+        if base < 0 {
+            return Err(std::io::ErrorKind::InvalidInput.into());
+        }
+        self.pos = base as u64;
+        Ok(self.pos)
+    }
 }
 
 impl Index {
     fn end_of(&self, i: usize) -> u64 {
         self.offsets.get(i + 1).copied().unwrap_or(self.data_end)
+    }
+
+    /// The handle every read of the indexed file uses: the kept one (Unix),
+    /// or (Windows) the path opened again, refused unless it is still the
+    /// file indexed.
+    fn reader(&self) -> Result<Arc<File>, String> {
+        #[cfg(unix)]
+        let f = self.src.file.clone();
+        #[cfg(not(unix))]
+        let f = {
+            let path = &self.src.path;
+            Arc::new(File::open(path).map_err(|e| format!("cannot open {path}: {e}"))?)
+        };
+        self.verify(&f)?;
+        Ok(f)
+    }
+
+    /// @p f (reader's) still holds the file indexed: same size, time and
+    /// identity. A file rewritten in place (same inode) shows here.
+    fn verify(&self, f: &File) -> Result<(), String> {
+        let path = &self.src.path;
+        if self.src.stale.load(Ordering::Relaxed) {
+            return Err(format!("{path} {CHANGED}"));
+        }
+        let now = stamp_of(f).map_err(|e| format!("cannot read {path}: {e}"))?;
+        if now != self.src.stamp {
+            self.src.stale.store(true, Ordering::Relaxed);
+            return Err(format!("{path} {CHANGED}"));
+        }
+        Ok(())
+    }
+
+    fn stale(&self) -> bool {
+        self.src.stale.load(Ordering::Relaxed)
     }
 }
 
@@ -618,7 +726,7 @@ struct PartOut {
 }
 
 fn typed_part(path: &str, index: &Index, cols: &TypedCols, mut part: TypedPart, cancel: &Cancel) -> Result<PartOut, String> {
-    let f = File::open(path).map_err(|e| format!("cannot open {path}: {e}"))?;
+    let f = index.reader()?;
     let mut out = PartOut { dict: HashMap::new(), exc: Vec::new(), ev_inf: Vec::new(), all_clean: true };
     let mut buf: Vec<u8> = Vec::new();
     let mut r = part.ra;
@@ -702,6 +810,7 @@ fn typed_part(path: &str, index: &Index, cols: &TypedCols, mut part: TypedPart, 
         }
         r = e;
     }
+    index.verify(&f)?;
     Ok(out)
 }
 
@@ -893,7 +1002,7 @@ fn keep_bits(t: &Typed, res: &Resolved, n: usize, ev: Option<&[u64]>) -> Vec<u64
 /// binary search reading those cells), and the infinities of @p inf.
 fn evalue_bits(snap: &Snapshot, rank: &Rank, column: usize, max: f64, inf: &[(u32, f64)]) -> Result<Vec<u64>, String> {
     let (path, index) = (&snap.path, &snap.index);
-    let f = File::open(path).map_err(|e| format!("cannot open {path}: {e}"))?;
+    let f = index.reader()?;
     let mut buf = Vec::new();
     let mut value = |row: u32| -> Result<f64, String> {
         let (s, l) = row_span(index, row as usize);
@@ -910,6 +1019,7 @@ fn evalue_bits(snap: &Snapshot, rank: &Rank, column: usize, max: f64, inf: &[(u3
             hi = mid;
         }
     }
+    index.verify(&f)?;
     let mut bits = vec![0u64; index.offsets.len().div_ceil(64)];
     for &r in &rank.asc[..lo] {
         bits[r as usize / 64] |= 1 << (r % 64);
@@ -1488,7 +1598,9 @@ fn field_at(raw: &[u8], col: usize) -> &[u8] {
 
 pub(crate) fn build_index(path: &str, cancel: &Cancel) -> Result<Index, String> {
     let file = File::open(path).map_err(|e| format!("cannot open {path}: {e}"))?;
-    let mut reader = BufReader::with_capacity(1 << 20, file);
+    // The stamp of the very handle the offsets are read from.
+    let stamp = stamp_of(&file).map_err(|e| format!("cannot read {path}: {e}"))?;
+    let mut reader = BufReader::with_capacity(1 << 20, PosReader { f: &file, pos: 0 });
     // One pass counting newlines chunk-wise: line content is not needed here,
     // so a multi-GB file costs one buffer, not one allocation per row.
     let mut offsets: Mapped<u64> = Mapped::with_capacity(1 << 16);
@@ -1556,13 +1668,30 @@ pub(crate) fn build_index(path: &str, cancel: &Cancel) -> Result<Index, String> 
     let columns = match header_end {
         None => Vec::new(),
         Some(end) => {
-            let mut f = File::open(path).map_err(|e| format!("cannot open {path}: {e}"))?;
             let mut raw = vec![0u8; end as usize];
-            f.read_exact(&mut raw).map_err(|e| format!("cannot read {path}: {e}"))?;
+            read_exact_at(&file, &mut raw, 0).map_err(|e| format!("cannot read {path}: {e}"))?;
             header_columns(&raw)
         }
     };
-    Ok(Index { columns, offsets, data_end })
+    drop(reader);
+    let index = Index {
+        columns,
+        offsets,
+        data_end,
+        src: Source {
+            path: path.to_string(),
+            stamp,
+            #[cfg(unix)]
+            file: Arc::new(file.try_clone().map_err(|e| format!("cannot open {path}: {e}"))?),
+            stale: AtomicBool::new(false),
+        },
+    };
+    // Rewritten while it was indexed: the offsets are of no one file.
+    #[cfg(unix)]
+    index.verify(&index.src.file)?;
+    #[cfg(not(unix))]
+    index.verify(&file)?;
+    Ok(index)
 }
 
 /// The header line's columns. A UTF-8 BOM would otherwise rename the first
@@ -1729,8 +1858,8 @@ impl Resolved {
 /// The rows matching @p res's row filters, as a bitset in file order: the
 /// chunk-scan fallback for a file beyond the typed budget (item 12).
 fn filter_rows(path: &str, index: &Index, res: &Resolved, cancel: &Cancel) -> Result<Vec<u64>, String> {
-    let file = File::open(path).map_err(|e| format!("cannot open {path}: {e}"))?;
-    let mut reader = BufReader::with_capacity(1 << 20, file);
+    let file = index.reader()?;
+    let mut reader = BufReader::with_capacity(1 << 20, PosReader { f: &file, pos: 0 });
     reader
         .seek(SeekFrom::Start(index.offsets.first().copied().unwrap_or(index.data_end)))
         .map_err(|e| e.to_string())?;
@@ -1752,6 +1881,8 @@ fn filter_rows(path: &str, index: &Index, res: &Resolved, cancel: &Cancel) -> Re
             keep[i / 64] |= 1 << (i % 64);
         }
     }
+    drop(reader);
+    index.verify(&file)?;
     Ok(keep)
 }
 
@@ -1871,7 +2002,7 @@ fn fill_round(
             return Ok(());
         }
         let row_of = |k: usize| rows.map_or(k, |r| r[k] as usize);
-        let file = File::open(path).map_err(|e| format!("cannot open {path}: {e}"))?;
+        let file = index.reader()?;
         // span[..have] holds the file's bytes from `at`.
         let (mut at, mut have) = (0u64, 0usize);
         let mut num = [0u8; 8];
@@ -1901,7 +2032,7 @@ fn fill_round(
             r[..take].copy_from_slice(&left[..take]);
             r[w] = block << 7 | left.len().min(w + 1) as u8;
         }
-        Ok(())
+        index.verify(&file)
     };
     let work = &work;
     if jobs.len() == 1 {
@@ -2128,7 +2259,13 @@ pub(crate) fn build_order(
 /// contiguous rows merged into one read of up to CHUNK bytes, mapped back.
 fn read_rows(snap: &Snapshot, rows: &[u32]) -> Result<Vec<Vec<String>>, String> {
     let (path, index) = (&snap.path, &snap.index);
-    let f = File::open(path).map_err(|e| format!("cannot open {path}: {e}"))?;
+    #[cfg(test)]
+    READ_HOOK.with(|h| {
+        if let Some(f) = h.borrow_mut().as_mut() {
+            f()
+        }
+    });
+    let f = index.reader()?;
     let mut by_offset: Vec<usize> = (0..rows.len()).collect();
     by_offset.sort_unstable_by_key(|&k| rows[k]);
     let mut out: Vec<Vec<String>> = vec![Vec::new(); rows.len()];
@@ -2161,25 +2298,48 @@ fn read_rows(snap: &Snapshot, rows: &[u32]) -> Result<Vec<Vec<String>>, String> 
         }
         j = e;
     }
+    // Rewritten in place while it was read: these bytes may be of two files.
+    index.verify(&f)?;
     Ok(out)
 }
 
-fn file_meta(path: &str) -> Result<(u64, Option<SystemTime>), String> {
+#[cfg(test)]
+thread_local! {
+    /// Called before each read_rows: the tests' way to change the file
+    /// between the reads of one call (neighbours).
+    pub(crate) static READ_HOOK: std::cell::RefCell<Option<Box<dyn FnMut()>>> = const { std::cell::RefCell::new(None) };
+}
+
+/// A file's size, time and (Unix) device and inode, as file_meta reads them.
+type PathMeta = (u64, Option<SystemTime>, Option<(u64, u64)>);
+
+/// The size, time and (Unix) device and inode of the file at @p path now.
+fn file_meta(path: &str) -> Result<PathMeta, String> {
     let meta = std::fs::metadata(path).map_err(|e| format!("cannot open {path}: {e}"))?;
     // A FIFO or device would block the reader or never end; a directory has no rows.
     if !meta.is_file() {
         return Err(format!("{path} is not a file"));
     }
-    Ok((meta.len(), meta.modified().ok()))
+    #[cfg(unix)]
+    let id = {
+        use std::os::unix::fs::MetadataExt;
+        Some((meta.dev(), meta.ino()))
+    };
+    #[cfg(not(unix))]
+    let id = None;
+    Ok((meta.len(), meta.modified().ok(), id))
 }
 
 impl Shared {
-    fn fresh(&self, path: &str, len: u64, mtime: Option<SystemTime>) -> Option<Arc<Snapshot>> {
+    /// The snapshot of the file at @p path as it is now: the same size and
+    /// time, the same file (Unix: device and inode; elsewhere each read
+    /// checks it), and no read of it found it changed.
+    fn fresh(&self, path: &str, len: u64, mtime: Option<SystemTime>, id: Option<(u64, u64)>) -> Option<Arc<Snapshot>> {
         self.snaps
             .read()
             .unwrap()
             .iter()
-            .find(|s| s.path == path && s.len == len && s.mtime == mtime)
+            .find(|s| s.path == path && s.len == len && s.mtime == mtime && id.is_none_or(|i| i == s.index.src.stamp.id) && !s.index.stale())
             .cloned()
     }
 
@@ -2212,8 +2372,8 @@ impl Shared {
     /// has open with a token nothing cancels. An Interactive call for a file
     /// that is not open does not index it at all.
     fn snapshot_mode(&self, path: &str, mode: Mode) -> Result<Arc<Snapshot>, String> {
-        let (len, mtime) = file_meta(path)?;
-        if let Some(s) = self.fresh(path, len, mtime) {
+        let (len, mtime, id) = file_meta(path)?;
+        if let Some(s) = self.fresh(path, len, mtime, id) {
             return Ok(s);
         }
         let token = match (self.index_token(path), mode) {
@@ -2223,13 +2383,15 @@ impl Shared {
         };
         let _one = self.build.lock().unwrap_or_else(|e| e.into_inner());
         // Another build may have finished while this one waited.
-        if let Some(s) = self.fresh(path, len, mtime) {
+        if let Some(s) = self.fresh(path, len, mtime, id) {
             return Ok(s);
         }
         if token.is_cancelled() {
             return Err(CANCELLED.into());
         }
         let index = build_index(path, &token)?;
+        // The stamp of the handle indexed, not of the look before it.
+        let (len, mtime) = (index.src.stamp.len, index.src.stamp.mtime);
         let snap = Arc::new(Snapshot::new(path, len, mtime, index));
         let mut snaps = self.snaps.write().unwrap();
         snaps.retain(|s| s.path != path);
@@ -2691,8 +2853,8 @@ pub(crate) fn open(shared: &Arc<Shared>, path: &str, emit: Emit) -> Result<Resul
 /// Where file row @p row sits in @p spec's view, if that view is built (the
 /// renderer's anchor across the D5 swap). Never starts a build.
 pub(crate) fn position(shared: &Arc<Shared>, path: &str, spec: &ViewSpec, row: u32) -> Result<Option<usize>, String> {
-    let (len, mtime) = file_meta(path)?;
-    let Some(snap) = shared.fresh(path, len, mtime) else {
+    let (len, mtime, id) = file_meta(path)?;
+    let Some(snap) = shared.fresh(path, len, mtime, id) else {
         return Ok(None);
     };
     let res = Resolved::bind(spec, &snap.index.columns);
@@ -3054,7 +3216,7 @@ pub(crate) fn export_to(
         format_header(&index.columns, &pick, fmt, &mut head);
         w.write_all(&head).map_err(err)?;
         progress(0, total);
-        let src = File::open(path).map_err(|e| format!("cannot open {path}: {e}"))?;
+        let src = index.reader()?;
         // The read span (at most CHUNK, or one capped row), in a mapping of
         // its own like the window buffers below: returned when the export
         // ends, not kept by the allocator (GUI-DESIGN 7, backend peak).
@@ -3891,6 +4053,76 @@ mod tests {
         // Ends.
         assert!(matches!(nav(Some(0), "s7"), NavAnswer::At { pos: 0, prev: None, next: Some(_), .. }));
         assert!(matches!(nav(Some(5), "s6"), NavAnswer::At { pos: 5, prev: Some(_), next: None, .. }));
+        std::fs::remove_file(&p).ok();
+    }
+
+    // Codex Earlier 9: each row read of one neighbour lookup opened the path
+    // again, so a TSV replaced between two reads gave new bytes at old
+    // offsets under the old snapshot id. Every read is now of the file
+    // indexed: a file renamed over the path mid-lookup is not read (Unix:
+    // the kept handle; elsewhere the lookup is refused), and one rewritten
+    // in place is refused, then indexed again.
+    #[test]
+    fn a_file_replaced_during_one_neighbour_lookup_is_not_read() {
+        let row = |sp: &str, tag: &str, ev: &str| format!("{sp}\t{tag}\t7\t1\t0\t0\t0\t0\t{ev}\t0.5\t0.5\tfwd");
+        let a = [row("s1", "AAAAAAA", "0.1"), row("s2", "CCCCCCC", "0.2"), row("s3", "DDDDDDD", "0.3")];
+        let body_a = format!("{HEADER}\n{}\n", a.join("\n"));
+        // The same length, other spectra at the same offsets.
+        let b = [row("x1", "AAAAAAA", "0.1"), row("x2", "CCCCCCC", "0.2"), row("x3", "DDDDDDD", "0.3")];
+        let body_b = format!("{HEADER}\n{}\n", b.join("\n"));
+        assert_eq!(body_a.len(), body_b.len());
+        let p = write_fixture("neighbours-swap.tsv", &body_a);
+        let shared = Arc::new(Shared::default());
+        let spec = ViewSpec { sort: Some(SortSpec { column: "evalue".into(), desc: false }), ..Default::default() };
+        let step = |sp: &str, r: u32| Some(NavStep { spectrum: sp.into(), row_id: r });
+        // Index and rank it first: the lookup below reads rows only.
+        let NavAnswer::At { snapshot: sa, .. } = neighbours(&shared, &p, &spec, Some(1), "s2", Mode::Exact).unwrap() else { panic!() };
+        let swap = |how: &'static str| {
+            let (p, body_b) = (p.clone(), body_b.clone());
+            let mut n = 0;
+            Box::new(move || {
+                n += 1;
+                // After the first read of the lookup (the position's row).
+                if n == 2 {
+                    if how == "rename" {
+                        let tmp = format!("{p}.new");
+                        std::fs::write(&tmp, &body_b).unwrap();
+                        std::fs::rename(&tmp, &p).unwrap();
+                    } else {
+                        std::thread::sleep(Duration::from_millis(20));
+                        let mut f = std::fs::OpenOptions::new().write(true).open(&p).unwrap();
+                        f.write_all(body_b.as_bytes()).unwrap();
+                    }
+                }
+            }) as Box<dyn FnMut()>
+        };
+        READ_HOOK.with(|h| *h.borrow_mut() = Some(swap("rename")));
+        let got = neighbours(&shared, &p, &spec, Some(1), "s2", Mode::Exact);
+        READ_HOOK.with(|h| *h.borrow_mut() = None);
+        #[cfg(unix)]
+        assert_eq!(
+            got,
+            Ok(NavAnswer::At { snapshot: sa, pos: 1, matched: 3, row_id: 1, prev: step("s1", 0), next: step("s3", 2) }),
+            "every part of the answer from the file indexed"
+        );
+        #[cfg(not(unix))]
+        assert!(got.as_ref().is_err_and(|e| e.contains(CHANGED)), "{got:?}");
+        // The next lookup indexes the new file.
+        let NavAnswer::At { snapshot: sb, next, .. } = neighbours(&shared, &p, &spec, Some(1), "x2", Mode::Exact).unwrap() else { panic!() };
+        assert_ne!(sb, sa);
+        assert_eq!(next, step("x3", 2));
+
+        // In place (same inode, same length, a later time): refused, never
+        // the new spectra under the old snapshot; then read again.
+        std::fs::write(&p, &body_a).unwrap();
+        let NavAnswer::At { snapshot: sc, .. } = neighbours(&shared, &p, &spec, Some(1), "s2", Mode::Exact).unwrap() else { panic!() };
+        READ_HOOK.with(|h| *h.borrow_mut() = Some(swap("inplace")));
+        let got = neighbours(&shared, &p, &spec, Some(1), "s2", Mode::Exact);
+        READ_HOOK.with(|h| *h.borrow_mut() = None);
+        assert!(got.as_ref().is_err_and(|e| e.contains(CHANGED)), "{got:?}");
+        let NavAnswer::At { snapshot: sd, prev, .. } = neighbours(&shared, &p, &spec, Some(1), "x2", Mode::Exact).unwrap() else { panic!() };
+        assert_ne!(sd, sc);
+        assert_eq!(prev, step("x1", 0));
         std::fs::remove_file(&p).ok();
     }
 

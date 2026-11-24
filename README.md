@@ -1690,14 +1690,16 @@ S = M − H2O + (offC − offN) (M for b/y), and census format 3 corrects for it
 a tag that matches `-fasta` (or `-entrapment_fasta`) in one orientation only is
 placed by it (a reverse-only match is a b or c read and is mirrored back to its
 true residues); any other tag, without `-fasta` or matching both ways, is
-folded as a whole onto the lower half (mirrored when its midpoint is above
-S/2), so a stretch read on both series lands on one interval. When any tag
-of a spectrum is folded, its tags placed by their orientation are folded too,
-after that placement, so a placed read and a folded read of the same residues
-also count once.
+folded onto the lower half residue by residue (a residue is mirrored when its
+midpoint is above S/2), so a stretch read on both series lands on one
+interval and a residue has one image in every tag that holds it, also in
+overlapping tags on either side of the centre. When any tag of a spectrum is
+folded, its tags placed by their orientation are folded too, after that
+placement, so a placed read and a folded read of the same residues also
+count once.
 `res_cover_exact` is 1 when every reported tag was placed by its orientation
 and 0 when one was folded: `res_cover` is then a lower bound (residues that
-mirror each other about the centre count once). Residues of different tags are
+mirror each other about the centre count once), and never below `max_len`. Residues of different tags are
 one residue when the midpoint of one lies inside the other; a residue counts
 once. Unlike `tag_cover`, which adds m/z over fragment charges and series,
 `res_cover` is in residues and can be compared with the peptide length.

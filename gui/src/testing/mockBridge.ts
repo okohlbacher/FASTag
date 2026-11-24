@@ -260,11 +260,14 @@ export interface MockBridge extends FastagApi {
   feedbackPlatformResult: FeedbackPlatform
   feedbackRunResult: RunInfo | null
   feedbackRunCalls: (string | null)[]
-  feedbackReports: { report: FeedbackReport; png: Uint8Array | null; folder: string; zip: string | null }[]
+  // zipOf: what the report's zip holds (feedback.rs export_ordered), and for which request.
+  feedbackReports: { report: FeedbackReport; png: Uint8Array | null; folder: string; zip: string | null; zipOf?: { seq: number; json: string; screenshot: boolean } }[]
   feedbackSaveError: string | null
   feedbackExports: { id: string; include: Include; json: string }[]
   feedbackIssues: { title: string; reportId: string; kind: string; url: string }[]
   feedbackRevealCalls: string[]
+  // Each zip revealed: its request and what it holds.
+  feedbackRevealed: { id: string; seq: number; json: string; screenshot: boolean }[]
   holdRun(): void
   // With @p error: the held invoke replies fail (an invoke that fails after
   // its Done: the job settles without outputs, runJob.ts).
@@ -440,7 +443,7 @@ export function installMockBridge(): MockBridge {
       autoDbFree: true
     },
     dataStatusCalls: 0,
-    cliOptions: { options: ['in', 'out', 'fasta', 'fragment_tolerance', 'fragment_tolerance_unit'], ok: true, detail: '5 options' },
+    cliOptions: { options: ['in', 'out', 'fasta', 'fragment_tolerance', 'fragment_tolerance_unit', 'recon_proteome'], ok: true, detail: '6 options' },
     probeOutputs: {},
     probeCalls: [],
     holdProbes: false,
@@ -547,6 +550,7 @@ export function installMockBridge(): MockBridge {
     feedbackExports: [],
     feedbackIssues: [],
     feedbackRevealCalls: [],
+    feedbackRevealed: [],
     holdRun: () => {
       held = held ?? []
     },
@@ -999,22 +1003,32 @@ export function installMockBridge(): MockBridge {
       mock.feedbackReports = []
       return Promise.resolve(n)
     },
-    feedbackReveal: (id) => {
+    // As feedback.rs reveal_target: with a request number, only the zip that
+    // request built; the zip revealed is recorded with its bytes (the json
+    // and the screenshot it holds).
+    feedbackReveal: (id, seq) => {
+      const r = mock.feedbackReports.find((x) => x.report.id === id)
+      if (seq !== undefined && (!r?.zipOf || r.zipOf.seq !== seq)) return Promise.reject(new Error('the export shown is no longer the zip'))
       mock.feedbackRevealCalls.push(id)
+      if (r?.zipOf) mock.feedbackRevealed.push({ id, ...r.zipOf })
       return Promise.resolve()
     },
-    // As feedback.rs export (publicExport is its port).
-    feedbackExport: (id, include) => {
+    // As feedback.rs export_ordered (publicExport is its port): a request
+    // older than the one whose zip is there is refused and writes nothing.
+    feedbackExport: (id, include, seq) => {
       const r = mock.feedbackReports.find((x) => x.report.id === id)
       if (!r) return Promise.reject(new Error(`no feedback report ${id}`))
+      const n = seq ?? (r.zipOf?.seq ?? 0) + 1
+      if (r.zipOf && n < r.zipOf.seq) return Promise.reject(new Error('a newer export of this report was built after this request'))
       const json = JSON.stringify(publicExport(r.report, include, !!r.png), null, 2)
       r.zip = `${r.folder}/${id}.feedback.zip`
+      r.zipOf = { seq: n, json, screenshot: include.screenshot && !!r.png }
       mock.feedbackExports.push({ id, include: { ...include }, json })
       const size = (png: Uint8Array): { width: number; height: number } => {
         const v = new DataView(png.buffer, png.byteOffset, png.byteLength)
         return png.length >= 24 ? { width: v.getUint32(16), height: v.getUint32(20) } : { width: 0, height: 0 }
       }
-      return Promise.resolve({ zip: r.zip, json, image: include.screenshot && r.png ? { bytes: r.png.length, ...size(r.png) } : null })
+      return Promise.resolve({ zip: r.zip, json, image: include.screenshot && r.png ? { bytes: r.png.length, ...size(r.png) } : null, seq: n })
     },
     feedbackSetStatus: (id, status, url) => {
       const r = mock.feedbackReports.find((x) => x.report.id === id)

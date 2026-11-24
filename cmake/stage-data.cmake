@@ -17,9 +17,20 @@
 # it is staged as tax_k7.taxdb, and the dumps stay those of SRC.
 #
 # INDEX_SEARCH (the taxonomy without INDEX; FASTAG_TAXONOMY_INDEX_AUTO): folders
-# separated by "|", looked at on every run; the first that holds tax_k7.taxdb
-# is INDEX (tools/fetch_taxonomy_index.py puts the release asset there). None
-# does: SRC alone, as without INDEX, so a removed cache is unstaged again.
+# separated by "|", looked at on every run, with INDEX_MANIFESTS the pinned
+# manifest of each (data/taxonomy/manifests/<data release>.json, "|"-separated,
+# in the same order); the first that holds a complete fetch of its manifest is
+# INDEX. A complete fetch is what tools/fetch_taxonomy_index.py publishes: its
+# completion marker .fastag-fetched names that very manifest (data release and
+# sha256) and each of its files with the pinned sha256 and size, and each file
+# is there with that size. A folder without the marker (an interrupted or
+# failed fetch, a copy made by hand) is not used. None is: SRC alone, as
+# without INDEX, so a removed cache is unstaged again.
+#
+# INDEX as an index file of another name is copied (COPY=ON) when it is not
+# the one staged last: the marker records its path, size and time stamp, so a
+# switch to another file, also one with an older time stamp, is copied, and
+# file(COPY_FILE ... ONLY_IF_DIFFERENT) leaves equal bytes alone.
 #
 # Every real folder the script makes carries .fastag-staged, which lists the
 # top-level entries it staged there; only those are ever replaced or removed.
@@ -31,6 +42,63 @@ if(NOT SRC OR NOT DST)
 endif()
 set(_mark "${DST}/.fastag-staged")
 set(_from_index tax_k7.taxdb nodes.dmp names.dmp MANIFEST.json)
+
+# The stamp of an index file copied under another name: "# copied <name> <size>
+# <time stamp> <path>", a comment line of the marker.
+function(_fastag_stamp from out)
+  file(SIZE "${from}" _size)
+  file(TIMESTAMP "${from}" _time "%Y-%m-%dT%H:%M:%S" UTC)
+  get_filename_component(_abs "${from}" ABSOLUTE)
+  set(${out} "# copied ${_size} ${_time} ${_abs}" PARENT_SCOPE)
+endfunction()
+
+# The stamps the marker of the last run recorded.
+set(_fastag_old_stamps "")
+if(EXISTS "${_mark}")
+  file(STRINGS "${_mark}" _fastag_old_stamps REGEX "^# copied ")
+endif()
+set_property(GLOBAL PROPERTY _fastag_new_stamps "")
+
+# @p folder holds a complete fetch of the manifest @p manifest
+# (tools/fetch_taxonomy_index.py fetched_complete): its marker names that
+# manifest by data release and sha256, lists each of the manifest's files with
+# its pinned sha256 and size, and each is a regular file of that size there.
+function(_fastag_fetch_complete folder manifest out)
+  set(${out} OFF PARENT_SCOPE)
+  set(_m "${folder}/.fastag-fetched")
+  if(NOT EXISTS "${_m}" OR IS_SYMLINK "${_m}" OR IS_DIRECTORY "${_m}" OR NOT EXISTS "${manifest}")
+    return()
+  endif()
+  file(SHA256 "${manifest}" _msha)
+  file(READ "${manifest}" _json)
+  string(JSON _release ERROR_VARIABLE _err GET "${_json}" data_release)
+  if(_err)
+    return()
+  endif()
+  file(STRINGS "${_m}" _lines)
+  if(NOT "manifest ${_release} ${_msha}" IN_LIST _lines)
+    return()
+  endif()
+  string(JSON _n ERROR_VARIABLE _err LENGTH "${_json}" files)
+  if(_err OR _n EQUAL 0)
+    return()
+  endif()
+  math(EXPR _last "${_n} - 1")
+  foreach(_k RANGE ${_last})
+    string(JSON _name MEMBER "${_json}" files ${_k})
+    string(JSON _sha GET "${_json}" files "${_name}" sha256)
+    string(JSON _bytes ERROR_VARIABLE _nob GET "${_json}" files "${_name}" bytes)
+    set(_f "${folder}/${_name}")
+    if(NOT EXISTS "${_f}" OR IS_DIRECTORY "${_f}")
+      return()
+    endif()
+    file(SIZE "${_f}" _size)
+    if(NOT "file ${_name} ${_size} ${_sha}" IN_LIST _lines OR (NOT _nob AND NOT _size EQUAL _bytes))
+      return()
+    endif()
+  endforeach()
+  set(${out} ON PARENT_SCOPE)
+endfunction()
 
 # Link (or copy) @p from to @p to.
 function(_fastag_put from to)
@@ -59,9 +127,15 @@ function(_fastag_put from to)
     get_filename_component(_tname "${to}" NAME)
     if(_fname STREQUAL _tname)
       file(COPY "${from}" DESTINATION "${_dir}")
-    elseif(NOT EXISTS "${to}" OR "${from}" IS_NEWER_THAN "${to}")
-      # An index file under another name, copied as tax_k7.taxdb.
-      file(COPY_FILE "${from}" "${to}")
+    else()
+      # An index file under another name, copied as tax_k7.taxdb: again
+      # whenever it is not the file staged last (its path, size and time
+      # stamp as the marker recorded them), whichever of the two is newer.
+      _fastag_stamp("${from}" _stamp)
+      if(NOT EXISTS "${to}" OR NOT _stamp IN_LIST _fastag_old_stamps)
+        file(COPY_FILE "${from}" "${to}" ONLY_IF_DIFFERENT)
+      endif()
+      set_property(GLOBAL APPEND PROPERTY _fastag_new_stamps "${_stamp}")
     endif()
   else()
     if(IS_SYMLINK "${to}" OR EXISTS "${to}")
@@ -122,10 +196,23 @@ endfunction()
 
 if(NOT INDEX AND INDEX_SEARCH)
   string(REPLACE "|" ";" _search "${INDEX_SEARCH}")
-  foreach(_c IN LISTS _search)
-    if(_c AND EXISTS "${_c}/tax_k7.taxdb")
+  string(REPLACE "|" ";" _search_man "${INDEX_MANIFESTS}")
+  list(LENGTH _search _ns)
+  list(LENGTH _search_man _nm)
+  if(NOT _ns EQUAL _nm)
+    message(FATAL_ERROR "stage-data.cmake: INDEX_SEARCH names ${_ns} folders and INDEX_MANIFESTS ${_nm} manifests")
+  endif()
+  math(EXPR _last "${_ns} - 1")
+  foreach(_k RANGE ${_last})
+    list(GET _search ${_k} _c)
+    list(GET _search_man ${_k} _cm)
+    _fastag_fetch_complete("${_c}" "${_cm}" _ok)
+    if(_ok)
       set(INDEX "${_c}")
       break()
+    elseif(EXISTS "${_c}/tax_k7.taxdb")
+      message(STATUS "stage-data.cmake: ${_c} holds no complete fetch of ${_cm} (no matching .fastag-fetched); "
+                     "not staged (run tools/fetch_taxonomy_index.py)")
     endif()
   endforeach()
 endif()
@@ -219,4 +306,8 @@ if(_n GREATER 0)
     string(APPEND _list "${_name}\n")
   endforeach()
 endif()
+get_property(_stamps GLOBAL PROPERTY _fastag_new_stamps)
+foreach(_s IN LISTS _stamps)
+  string(APPEND _list "${_s}\n")
+endforeach()
 file(WRITE "${_mark}" "${_list}")

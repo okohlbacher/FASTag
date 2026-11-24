@@ -188,13 +188,70 @@ describe('scan links on the Results page', () => {
     expect(within(grid).getAllByRole('gridcell')[0].getAttribute('title')).toBe(`${firstGlyco()}\n${SPECTRUM_NEEDS}.`)
   })
 
-  it('a glyco report opened alone: no spectra file, plain scans that say so', async () => {
+  // Codex finding 6: a report opened on its own (no tags table, no
+  // ranking) links its scans too. The spectra file and the tags come from
+  // the run record of the report clicked (History); when there is none,
+  // the Spectrum tab asks for the input (Locate input…).
+  it('a glyco report opened alone links its scans to its run record\'s input', async () => {
+    const mock = installMockBridge()
+    mock.reportFiles = { [GLYCO]: humanGlyco }
+    mock.history = [
+      {
+        id: 'G', input: '/r/run.mzML', outputs: ['/r/run.tags.tsv', GLYCO], cwd: '/r',
+        argv: ['FASTag', '-in', '/r/run.mzML', '-out', '/r/run.tags.tsv', '-glyco'], status: 'ok', exitCode: 0, message: null,
+        start: 1, end: 2, cleanup: { removed: [], renamed: [], failed: [] }, params: { tag_length: '6' }, workflow: 'characterize'
+      }
+    ]
+    render(<Harness tab="glyco" reports={reports} spectrumSupport={{ supported: true, probed: true, detail: '' }} />)
+    await flush()
+    expect(screen.getByRole('tab', { name: 'Spectrum' })).toBeDefined()
+    const grid = screen.getByRole('grid', { name: 'Glyco spectra' })
+    await click(within(grid).getAllByRole('button', { name: /^Open spectrum / })[0])
+    await flush()
+    expect(screen.getByRole('tab', { name: 'Spectrum' }).getAttribute('aria-selected')).toBe('true')
+    const call = mock.spectrumCalls[mock.spectrumCalls.length - 1]
+    expect(call?.nativeId).toBe(firstGlyco())
+    expect(call?.input).toBe('/r/run.mzML')
+    expect(call?.params).toEqual({ tag_length: '6' })
+  })
+
+  it('a glyco report opened alone without a run record: the scan opens the Spectrum tab, which asks for the input', async () => {
     const mock = installMockBridge()
     mock.reportFiles = { [GLYCO]: humanGlyco }
     render(<Harness tab="glyco" reports={reports} spectrumSupport={{ supported: true, probed: true, detail: '' }} />)
     await flush()
     const grid = screen.getByRole('grid', { name: 'Glyco spectra' })
+    await click(within(grid).getAllByRole('button', { name: /^Open spectrum / })[0])
+    await flush()
+    expect(screen.getByRole('tab', { name: 'Spectrum' }).getAttribute('aria-selected')).toBe('true')
+    expect(screen.getByRole('button', { name: 'Locate input…' })).toBeDefined()
+    expect(mock.spectrumCalls).toHaveLength(0)
+  })
+
+  it('the spectra per mass shift opened alone: their scans follow their own run record', async () => {
+    const mock = installMockBridge()
+    mock.reportFiles = { [DS]: deltaSpectra }
+    mock.history = [
+      {
+        id: 'D', input: '/r/run01.mzML', outputs: ['/r/run01.tags.tsv', DS], cwd: '/r',
+        argv: ['FASTag', '-in', '/r/run01.mzML', '-out', '/r/run01.tags.tsv'], status: 'ok', exitCode: 0, message: null,
+        start: 1, end: 2, cleanup: { removed: [], renamed: [], failed: [] }, params: {}, workflow: 'mass-shift'
+      }
+    ]
+    render(<Harness tab="recon" reports={{ list: [], errors: [], workflow: { deltaSpectra: DS } }} spectrumSupport={{ supported: true, probed: true, detail: '' }} />)
+    await flush()
+    const grid = screen.getAllByRole('grid')[0]
+    await click(within(grid).getAllByRole('button', { name: /^Open spectrum / })[0])
+    await flush()
+    expect(mock.spectrumCalls[mock.spectrumCalls.length - 1]).toMatchObject({ input: '/r/run01.mzML', nativeId: 'controllerType=0 controllerNumber=1 scan=11482' })
+  })
+
+  it('no report with scans and no tags: plain scans that say so', async () => {
+    const mock = installMockBridge()
+    mock.reportFiles = { [GLYCO]: humanGlyco }
+    render(withLink({ off: NO_SPECTRA_FILE }, <GlycoTable path={GLYCO} />))
+    await flush()
+    const grid = screen.getByRole('grid', { name: 'Glyco spectra' })
     expect(within(grid).queryAllByRole('button', { name: /^Open spectrum / })).toHaveLength(0)
-    expect(within(grid).getAllByRole('gridcell')[0].getAttribute('title')).toBe(`${firstGlyco()}\n${NO_SPECTRA_FILE}.`)
   })
 })

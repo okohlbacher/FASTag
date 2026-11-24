@@ -1024,6 +1024,7 @@ pub fn record_of(
         workflow: None,
         databases: Vec::new(),
         tags_identity: None,
+        open_identities: Vec::new(),
     }
 }
 
@@ -1048,6 +1049,7 @@ pub fn marker_of(files: &RunFiles<'_>, argv: &[String], start: u64) -> history::
         workflow: None,
         databases: Vec::new(),
         tags_identity: None,
+        open_identities: Vec::new(),
     }
 }
 
@@ -1219,10 +1221,12 @@ pub fn launch(mgr: &RunManager, r: &Resolved, params: RunParams, sink: Sink, his
         // Only a run that ended with exit 0 committed its outputs: their
         // identity now, after the CLI wrote them.
         let tags_identity = if end.ok { tags_out.as_deref().and_then(crate::fasta::identity_of_file) } else { None };
-        if end.ok {
-            if let Ok(mut o) = openable.lock() {
-                o.extend(open_outs.iter().filter_map(|p| crate::reveal::openable_identity(p)));
-            }
+        // The files Open may open, as committed: for this session and, in
+        // the run record, for later ones (reveal.rs open_allowed).
+        let open_identities: Vec<crate::fasta::FileIdentity> =
+            if end.ok { open_outs.iter().filter_map(|p| crate::reveal::openable_identity(p)).collect() } else { Vec::new() };
+        if let Ok(mut o) = openable.lock() {
+            o.extend(open_identities.iter().cloned());
         }
         if let Ok(mut runs) = session_runs.lock() {
             if let Some(r) = runs.iter_mut().find(|r| r.start == start) {
@@ -1236,6 +1240,7 @@ pub fn launch(mgr: &RunManager, r: &Resolved, params: RunParams, sink: Sink, his
             rec.workflow = rec_workflow;
             rec.databases = rec_databases;
             rec.tags_identity = tags_identity;
+            rec.open_identities = open_identities;
             record_run(&d, &rec, &end.log);
         }
     });
@@ -2516,9 +2521,13 @@ mod tests {
                 if ok {
                     assert_eq!(crate::reveal::may_open(&ids, &openable), Some(dunce::canonicalize(&ids).unwrap()));
                     assert!(session_tags.is_some() && rec.tags_identity == session_tags);
+                    // Codex New 11: the record keeps it for a later session.
+                    assert_eq!(rec.open_identities, openable);
+                    assert_eq!(crate::reveal::may_open(&ids, &rec.open_identities), Some(dunce::canonicalize(&ids).unwrap()));
                 } else {
                     assert!(openable.is_empty(), "{openable:?}");
                     assert!(session_tags.is_none() && rec.tags_identity.is_none());
+                    assert!(rec.open_identities.is_empty());
                 }
                 let _ = std::fs::remove_dir_all(&d);
             }

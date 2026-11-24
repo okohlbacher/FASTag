@@ -50,10 +50,10 @@ function hold(mock: MockBridge): { held: Held[]; on(): void } {
   const real = mock.feedbackExport
   const held: Held[] = []
   let holding = false
-  mock.feedbackExport = (id, include) => {
-    if (!holding) return real(id, include)
+  mock.feedbackExport = (id, include, seq) => {
+    if (!holding) return real(id, include, seq)
     return new Promise<FeedbackExported>((res, rej) => {
-      held.push({ include: { ...include }, go: () => void real(id, include).then(res, rej), fail: (why) => rej(new Error(why)) })
+      held.push({ include: { ...include }, go: () => void real(id, include, seq).then(res, rej), fail: (why) => rej(new Error(why)) })
     })
   }
   return { held, on: () => (holding = true) }
@@ -147,6 +147,32 @@ describe('the share step hands off the export of the choices shown', () => {
     expect(fields()).not.toContain('screenshot.png')
     await click(confirmBox())
     expect(openBtn().disabled).toBe(false)
+  })
+
+  // Codex New 6: the older request (screenshot ticked) reaches the store
+  // after the newer one (unticked). It is refused there and writes nothing,
+  // and the zip revealed for the issue draft holds the newer choices.
+  it('an older export reaching the store late does not change the zip revealed', async () => {
+    const h = hold(mock)
+    await saved(mock)
+    h.on()
+    await click(box('log'))
+    await click(box('screenshot'))
+    expect(h.held.map((x) => x.include.screenshot)).toEqual([true, false])
+    await act(async () => h.held[1].go())
+    await flush()
+    await act(async () => h.held[0].go())
+    await flush()
+    // The store holds the newer request's zip: no screenshot.
+    expect(mock.feedbackReports[0].zipOf?.screenshot).toBe(false)
+    await click(confirmBox())
+    await click(openBtn())
+    await flush()
+    expect(mock.feedbackIssues).toHaveLength(1)
+    const shown = mock.feedbackRevealed[mock.feedbackRevealed.length - 1]
+    expect(shown.screenshot).toBe(false)
+    expect(JSON.parse(shown.json).log).toBeDefined()
+    expect(shown.json).not.toContain('"screenshot.png"')
   })
 
   it('the privacy notice says what is included by default, under a new version', async () => {

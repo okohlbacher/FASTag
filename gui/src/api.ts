@@ -221,8 +221,8 @@ const api: FastagApi = {
   feedbackList: () => invoke<FeedbackSummary[]>('feedback_list'),
   feedbackDelete: (id) => invoke<void>('feedback_delete', { id }),
   feedbackDeleteAll: () => invoke<number>('feedback_delete_all'),
-  feedbackReveal: (id) => invoke<void>('feedback_reveal', { id }),
-  feedbackExport: (id, include) => invoke<FeedbackExported>('feedback_export', { id, include }),
+  feedbackReveal: (id, seq) => invoke<void>('feedback_reveal', { id, seq: seq ?? null }),
+  feedbackExport: (id, include, seq) => invoke<FeedbackExported>('feedback_export', { id, include, seq: seq ?? null }),
   feedbackSetStatus: (id, status, issueUrl) => invoke<void>('feedback_set_status', { id, status, issueUrl: issueUrl ?? null }),
   // Built from a fixed template here (as openTaxon): the renderer passes
   // the title, id and kind, never a URL (the opener is scoped to it too).

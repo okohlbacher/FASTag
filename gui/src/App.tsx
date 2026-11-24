@@ -35,7 +35,7 @@ import { useDrops } from './shell/useDrops'
 import { CloseQuestion, OverwriteQuestion } from './shell/Questions'
 import Notices, { type Toast } from './shell/Notices'
 import { useFinish } from './shell/useFinish'
-import { LANDING, taskById, type Origin, type TaskId } from './setup/tasks'
+import { LANDING, runValues, taskById, type Origin, type TaskId } from './setup/tasks'
 import PlanFooter from './setup/PlanFooter'
 import { INPUTS, aboutParams, inputParams, taskInputs, type Step } from './setup/inputs'
 import { usePathStatus } from './setup/usePathStatus'
@@ -168,7 +168,11 @@ export default function App({ start }: { start?: Origin } = {}): JSX.Element {
   const writeProtect = useMemo(() => (sdrfPath ? [sdrfPath] : []), [sdrfPath])
   // The checks before a run (GUI-DESIGN 3 S1, P2b): from the CLI's metadata
   // probe when it has one, and the form.
-  const inspector = useInspector({ input, values, binOk: !!bin?.ok })
+  // The values the run is sent (tasks.ts runValues, as useRun's toRun):
+  // Mass-shift survey's shift reports off without a database, so no check
+  // holds a run on a file it would not read (Codex finding 5).
+  const runForm = useMemo(() => runValues(taskById(session.task ?? ''), values), [session.task, values])
+  const inspector = useInspector({ input, values: runForm, binOk: !!bin?.ok })
   // Re-run with this fix (an instrument preset, its parameters) once the
   // form holds its values.
   const [rerunWith, setRerunWith] = useState<CheckFix | null>(null)

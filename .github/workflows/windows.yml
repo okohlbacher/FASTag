@@ -1134,8 +1134,8 @@ jobs:
           # A release carries the k-mer index (embedded above), as the macOS
           # and Linux staging steps require.
           if [ "${{ (startsWith(github.ref, 'refs/tags/v') || inputs.release_tag != '') }}" = "true" ]; then
-            test -s "$R/share/FASTag/taxonomy/tax_k7.taxdb" \
-              || { echo "::error::the Windows app bundle has no tax_k7.taxdb -- -species would fail in the shipped app"; exit 1; }
+            python fastag/tools/check_taxonomy_manifest.py --pinned "fastag/data/taxonomy/manifests/$TAXDB_TAG.json" "$R/share/FASTag/taxonomy" \
+              || { echo "::error::the Windows app bundle does not carry the pinned taxonomy index -- -species would fail in the shipped app"; exit 1; }
           fi
           cp -r dist/FASTag/share-FASTag-digest "$R/share/FASTag/digest"
           cp -r dist/FASTag/share-FASTag-alkylation "$R/share/FASTag/alkylation"
@@ -1269,14 +1269,26 @@ jobs:
         run: |
           $zip = "FASTag-$($env:ASSET_VERSION)-windows-x64.zip"
           Compress-Archive -Path dist/FASTag -DestinationPath $zip -Force
-          # A release zip carries the k-mer index: checked in the zip itself.
+          # A release zip carries the pinned k-mer index: each file the
+          # manifest pins, checked in the zip itself by size and sha256.
           if ('${{ (startsWith(github.ref, 'refs/tags/v') || inputs.release_tag != '') }}' -eq 'true') {
             Add-Type -AssemblyName System.IO.Compression.FileSystem
+            $pin = Get-Content -Raw "fastag/data/taxonomy/manifests/$($env:TAXDB_TAG).json" | ConvertFrom-Json
             $z = [System.IO.Compression.ZipFile]::OpenRead((Resolve-Path $zip))
-            try { $e = $z.Entries | Where-Object { $_.FullName -replace '\\', '/' -match '(^|/)share-FASTag-taxonomy/tax_k7\.taxdb$' -and $_.Length -gt 0 } | Select-Object -First 1 }
+            try {
+              foreach ($f in $pin.files.PSObject.Properties) {
+                $want = [regex]::Escape($f.Name)
+                $e = @($z.Entries | Where-Object { ($_.FullName -replace '\\', '/') -match "(^|/)share-FASTag-taxonomy/$want$" })
+                if ($e.Count -ne 1) { Write-Host "::error::$zip carries $($e.Count) share-FASTag-taxonomy/$($f.Name), expected one"; exit 1 }
+                if ($e[0].Length -ne [int64]$f.Value.bytes) { Write-Host "::error::${zip}: $($f.Name) is $($e[0].Length) bytes, the manifest pins $($f.Value.bytes)"; exit 1 }
+                $sha = [System.Security.Cryptography.SHA256]::Create()
+                $st = $e[0].Open()
+                try { $got = -join ($sha.ComputeHash($st) | ForEach-Object { $_.ToString('x2') }) } finally { $st.Dispose(); $sha.Dispose() }
+                if ($got -ne $f.Value.sha256) { Write-Host "::error::${zip}: $($f.Name) has sha256 $got, the manifest pins $($f.Value.sha256)"; exit 1 }
+                Write-Host "taxonomy in the zip: $($e[0].FullName), $($e[0].Length) bytes, sha256 as pinned"
+              }
+            }
             finally { $z.Dispose() }
-            if (-not $e) { Write-Host "::error::$zip carries no share-FASTag-taxonomy/tax_k7.taxdb"; exit 1 }
-            Write-Host "taxonomy index in the zip: $($e.FullName), $($e.Length) bytes"
           }
 
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
@@ -1381,6 +1393,7 @@ jobs:
             test/fixtures
             gui/e2e-tauri
             CMakeLists.txt
+            data/taxonomy/manifests
           sparse-checkout-cone-mode: false
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
         with:

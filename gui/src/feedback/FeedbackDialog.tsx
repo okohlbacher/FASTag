@@ -243,6 +243,14 @@ interface Props {
 
 const clampTo = (v: number, lo: number, hi: number): number => Math.min(Math.max(v, lo), Math.max(lo, hi))
 
+/// The number of the next export request: increasing within this window,
+/// across dialogs and reloads (the time in µs, or one more than the last).
+let lastExportSeq = 0
+export function nextExportSeq(): number {
+  lastExportSeq = Math.max(Date.now() * 1000, lastExportSeq + 1)
+  return lastExportSeq
+}
+
 export default function FeedbackDialog({ session, text, setText, onSaved, onClose, onRetake, retaking, raised, layouts, setLayout }: Props): JSX.Element {
   const box = useRef<HTMLDivElement>(null)
   const bar = useRef<HTMLDivElement>(null)
@@ -464,15 +472,21 @@ export default function FeedbackDialog({ session, text, setText, onSaved, onClos
   // inclusion asked for: each request is numbered, an older answer that
   // comes late is dropped, and nothing is exported while one is in flight
   // or after one failed (Open issue draft needs `exported`).
+  // The backend builds them in that order too (Codex New 6): each request
+  // carries its number (nextExportSeq, increasing across dialogs and
+  // reloads), an older one that reaches the store after a newer one is
+  // refused there, and Open issue draft reveals the zip of the accepted
+  // answer only (feedbackReveal with its seq).
   const exportSeq = useRef(0)
   const exportNow = async (id: string, inc: Share): Promise<void> => {
-    const n = ++exportSeq.current
+    const seq = nextExportSeq()
+    exportSeq.current = seq
     setExported(null)
     try {
-      const r = await window.fastag.feedbackExport(id, inc)
-      if (n === exportSeq.current) setExported(r)
+      const r = await window.fastag.feedbackExport(id, inc, seq)
+      if (seq === exportSeq.current) setExported(r)
     } catch (e) {
-      if (n === exportSeq.current) setError(`Cannot build the export: ${msg(e)}. Change a choice to try again; nothing can be shared until the export matches your choices.`)
+      if (seq === exportSeq.current) setError(`Cannot build the export: ${msg(e)}. Change a choice to try again; nothing can be shared until the export matches your choices.`)
     }
   }
 
@@ -530,8 +544,15 @@ export default function FeedbackDialog({ session, text, setText, onSaved, onClos
       const ok = await window.fastag.openFeedbackIssue({ title: savedText.title, reportId: saved.id, kind: savedText.kind })
       if (!ok) throw new Error('the issue address could not be built')
       await window.fastag.feedbackSetStatus(saved.id, 'handoff_opened')
-      await window.fastag.feedbackReveal(saved.id).catch(() => {})
-      setNote('The issue form is open in your browser, and the zip is shown in the file manager: drop it into the form’s upload field, paste the diagnostics, and submit. Offline? The report stays saved; share it later from here.')
+      // The zip of the export shown, or none: never one built for other choices.
+      const shown = await window.fastag.feedbackReveal(saved.id, exported.seq).then(
+        () => true,
+        () => false
+      )
+      if (shown)
+        setNote('The issue form is open in your browser, and the zip is shown in the file manager: drop it into the form’s upload field, paste the diagnostics, and submit. Offline? The report stays saved; share it later from here.')
+      else
+        setError('The issue form is open in your browser, but the zip in the report’s folder is no longer the export shown here, so it is not shown. Change a choice and back to build it again.')
     } catch (e) {
       setError(`Cannot open the issue draft: ${msg(e)}. The report stays saved; the zip is at ${exported?.zip ?? 'its folder'}.`)
     }

@@ -118,6 +118,47 @@ describe('shipped data before a run', () => {
     expect(missingDataChecks({ ...values, alkylation_proteome: 'yeast' }, withHuman).map((c) => c.id)).toEqual(['no-shipped-data-alkylation_out'])
   })
 
+  // Codex New 5: an engine without -data_paths (FASTAG_BIN naming the CLI of
+  // 0dfac519, which reads auto database-free) does not say how it reads
+  // auto: unknown, never taken as human. With no human proteome the run is
+  // not blocked; a warning says the reading is not known.
+  it('an engine that does not say how it reads auto (0dfac519) is not held for the human proteome', () => {
+    const values = { alkylation_out: 'a.tsv', alkylation_proteome: 'auto' }
+    const unknown: DataStatus = { ...BARE, autoDbFree: null }
+    expect(shippedDataNeeds(values, unknown)).toEqual([])
+    const cs = missingDataChecks(values, unknown)
+    expect(cs.map((c) => [c.id, c.level])).toEqual([['auto-reading-unknown', 'warn']])
+    expect(cs[0].detail).toContain('-data_paths')
+    // In the checks before a run: nothing blocks, nothing waits.
+    const pre = preStartChecks({ input: '', values, supported: false, probe: null, data: unknown })
+    expect(pre.checks.filter((c) => c.level === 'block' || c.level === 'flag')).toEqual([])
+    // With the human proteome there, still only the warning (no "will use
+    // the human proteome" flag: the engine may well read none).
+    expect(missingDataChecks(values, { ...unknown, alkylationDir: '/b/alkylation', proteomes: ['human'] }).map((c) => c.id)).toEqual(['auto-reading-unknown'])
+    // A named proteome, a database or the placements: as for any engine.
+    expect(missingDataChecks({ ...values, alkylation_proteome: 'yeast' }, unknown).map((c) => c.id)).toEqual(['no-shipped-data-alkylation_out'])
+    expect(missingDataChecks({ ...values, recon_fasta: '/d/db.fasta' }, unknown)).toEqual([])
+    // The engine that says so (true): no warning.
+    expect(missingDataChecks(values, BARE)).toEqual([])
+  })
+
+  // Codex finding 5: the checks read what the run sends. A mass-gap report
+  // without placements is not sent (inert), so it needs no file; an engine
+  // without -recon_proteome is held before a shipped proteome is sent.
+  it('an inert mass-gap report needs nothing; -recon_proteome needs the engine to know it', () => {
+    expect(files({ massgap_out: 'g.tsv' })).toEqual([])
+    expect(files({ massgap_out: 'g.tsv', recon_out: 'r.tsv', recon_fasta: '/d/db.fasta' })).toEqual(['massgap_out:massgap_mods.tsv'])
+    const values = { recon_out: 'r.tsv', recon_proteome: 'human' }
+    const held = preStartChecks({ input: '', values, supported: false, options: ['in', 'out', 'recon_out'], probe: null, data: FULL })
+    expect(held.checks.map((c) => [c.id, c.level])).toEqual([['no-recon-proteome-option', 'block']])
+    expect(held.checks[0].fix?.params).toEqual({ recon_proteome: '' })
+    // Unknown options (not asked yet, or the probe failed): no check.
+    expect(preStartChecks({ input: '', values, supported: false, options: null, probe: null, data: FULL }).checks).toEqual([])
+    expect(preStartChecks({ input: '', values, supported: false, options: ['in', 'recon_proteome'], probe: null, data: FULL }).checks).toEqual([])
+    // Not sent (no placements): nothing to hold.
+    expect(preStartChecks({ input: '', values: { recon_proteome: 'human' }, supported: false, options: ['in'], probe: null, data: FULL }).checks).toEqual([])
+  })
+
   // Feedback 422372a2: -recon_proteome places the tags on a shipped proteome,
   // which FASTag looks for as the alkylation report's (exit 6 without it).
   it("a shipped proteome for the placements is checked like the alkylation report's", () => {

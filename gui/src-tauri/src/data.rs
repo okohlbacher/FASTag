@@ -99,11 +99,61 @@ fn has_index(d: &Path) -> bool {
     ["nodes.dmp", "names.dmp", "tax_k7.taxdb"].iter().all(|f| d.join(f).is_file())
 }
 
+/// The sha256 of the file @p p, lower-case hex.
+fn sha256_file(p: &Path) -> Option<String> {
+    use sha2::Digest;
+    use std::io::Read;
+    let mut f = std::fs::File::open(p).ok()?;
+    let mut h = sha2::Sha256::new();
+    let mut buf = vec![0u8; 1 << 16];
+    loop {
+        let n = f.read(&mut buf).ok()?;
+        if n == 0 {
+            break;
+        }
+        h.update(&buf[..n]);
+    }
+    Some(h.finalize().iter().map(|b| format!("{b:02x}")).collect())
+}
+
+/// @p d holds a complete fetch of the manifest @p manifest, as
+/// tools/fetch_taxonomy_index.py fetched_complete (and stage-data.cmake)
+/// decide it: its completion marker .fastag-fetched names that manifest by
+/// data release and sha256 and lists each of its files with the pinned
+/// sha256 and size, and each is a regular file of that size in @p d. An
+/// interrupted or failed fetch has no such marker.
+fn fetched_complete(d: &Path, manifest: &Path) -> bool {
+    let marker = d.join(".fastag-fetched");
+    if std::fs::symlink_metadata(&marker).map(|m| !m.is_file()).unwrap_or(true) {
+        return false;
+    }
+    let (Ok(text), Ok(json)) = (std::fs::read_to_string(&marker), std::fs::read_to_string(manifest)) else {
+        return false;
+    };
+    let Ok(man) = serde_json::from_str::<serde_json::Value>(&json) else { return false };
+    let (Some(release), Some(files), Some(msha)) = (man["data_release"].as_str(), man["files"].as_object(), sha256_file(manifest)) else {
+        return false;
+    };
+    let lines: Vec<Vec<&str>> = text.lines().map(|l| l.split_whitespace().collect()).collect();
+    if !lines.iter().any(|f| f.as_slice() == ["manifest", release, msha.as_str()]) || files.is_empty() {
+        return false;
+    }
+    files.iter().all(|(name, want)| {
+        let Some(sha) = want["sha256"].as_str() else { return false };
+        let Ok(m) = std::fs::metadata(d.join(name)) else { return false };
+        let size = m.len().to_string();
+        m.is_file()
+            && want["bytes"].as_u64().is_none_or(|b| b == m.len())
+            && lines.iter().any(|f| f.as_slice() == ["file", name.as_str(), size.as_str(), sha])
+    })
+}
+
 /// For a CLI that finds no k-mer index (none beside it, @p r.taxonomy unset:
 /// a build tree without one staged, a dev bundle of its dumps only), the
 /// index tools/fetch_taxonomy_index.py put in @p cache: the first
-/// <cache>/<data release>/share-FASTag-taxonomy that holds it, one data
-/// release per manifest of @p src/taxonomy/manifests, newest first. The same
+/// <cache>/<data release>/share-FASTag-taxonomy that holds a complete fetch
+/// of it (fetched_complete), one data release per manifest of
+/// @p src/taxonomy/manifests, newest first. The same
 /// folders a build tree stages (FASTAG_TAXONOMY_INDEX_AUTO), so the debug app
 /// runs -species on this machine with no variable set. None without sources
 /// or cache (a release build), or for a CLI that has its own.
@@ -125,7 +175,12 @@ fn dev_index(r: &Resolved, src: Option<&Path>, cache: Option<&Path>) -> Option<P
         })
         .collect();
     releases.sort_unstable_by(|a, b| b.cmp(a));
-    releases.iter().map(|rel| cache.join(rel).join("share-FASTag-taxonomy")).find(|d| has_index(d))
+    let manifests = src.join("taxonomy").join("manifests");
+    releases
+        .iter()
+        .map(|rel| (cache.join(rel).join("share-FASTag-taxonomy"), manifests.join(format!("{rel}.json"))))
+        .find(|(d, m)| has_index(d) && fetched_complete(d, m))
+        .map(|(d, _)| d)
 }
 
 /// The taxonomy folder a CLI child gets as FASTAG_TAXONOMY_DIR: as
@@ -188,10 +243,13 @@ pub struct DataStatus {
     /// The digest folder comes from FASTAG_DIGEST_DIR.
     from_env: bool,
     /// -alkylation_proteome auto reads no database without -recon_fasta or
-    /// -fasta: the engine says so (-data_paths alkylation_auto none). False
-    /// for an engine without -data_paths (before 1.16), which reads auto as
-    /// the shipped human proteome.
-    auto_db_free: bool,
+    /// -fasta: Some(true) when the engine says so (-data_paths
+    /// alkylation_auto none), Some(false) when it reports another reading.
+    /// None (unknown) for an engine without -data_paths: one from before
+    /// 1.16 reads auto as the shipped human proteome, but the CLI of
+    /// 0dfac519 already reads it database-free without the flag, so the
+    /// absence of the probe tells neither.
+    auto_db_free: Option<bool>,
 }
 
 /// What `-data_paths` prints (FASTag.cpp dataPathsJson_).
@@ -222,7 +280,7 @@ fn data_status_of_engine(line: &str) -> Option<DataStatus> {
         proteomes: e.proteomes.into_iter().filter(|p| PROTEOMES.contains(&p.as_str())).collect(),
         searched: e.digest_searched,
         from_env: e.digest_from_env,
-        auto_db_free: e.alkylation_auto.as_deref() == Some("none"),
+        auto_db_free: Some(e.alkylation_auto.as_deref() == Some("none")),
     })
 }
 
@@ -327,7 +385,7 @@ fn data_status_of(digest_env: Option<&str>, alkylation_env: Option<&str>, bin: &
         alkylation_dir: alk.as_deref().map(shown),
         searched,
         from_env: digest_env.is_some(),
-        auto_db_free: false,
+        auto_db_free: None,
     }
 }
 
@@ -340,8 +398,8 @@ fn child_env(var: &str, set: Option<PathBuf>) -> Option<String> {
 /// Where a run of @p r finds FASTag's shipped data: what the engine itself
 /// reports (-data_paths, with the environment its runs get), else, for an
 /// engine without the flag, resolved as the CLI does (data_status_of) from
-/// the resolved absolute binary and that environment, and auto read as the
-/// human proteome (auto_db_free false).
+/// the resolved absolute binary and that environment, with how it reads
+/// auto unknown (auto_db_free None).
 pub(crate) fn data_status_for(r: &Resolved) -> DataStatus {
     if let Some(s) = crate::inspect::data_paths_of(r).and_then(|l| data_status_of_engine(&l)) {
         return s;
@@ -350,7 +408,8 @@ pub(crate) fn data_status_for(r: &Resolved) -> DataStatus {
     let alkylation = child_env("FASTAG_ALKYLATION_DIR", alkylation_dir(r));
     let mut s = data_status_of(digest.as_deref(), alkylation.as_deref(), &r.bin);
     // It has the flag, but its answer was lost: still the 1.16 meaning.
-    s.auto_db_free = crate::inspect::cli_has(r, "data_paths");
+    // Without the flag it is not known (None).
+    s.auto_db_free = crate::inspect::cli_has(r, "data_paths").then_some(true);
     s
 }
 
@@ -509,6 +568,25 @@ mod tests {
         let _ = std::fs::remove_dir_all(&root);
     }
 
+    /// A manifest pinning the three files digest_at writes ("x", 1 byte).
+    fn manifest_json(rel: &str) -> String {
+        let x = "2d711642b726b04401627ca9fbac32f5c8530fb1903cc4db02258717921a4881";
+        format!(
+            r#"{{"data_release":"{rel}","note":"x","files":{{"tax_k7.taxdb":{{"sha256":"{x}","bytes":1}},"nodes.dmp":{{"sha256":"{x}","bytes":1}},"names.dmp":{{"sha256":"{x}","bytes":1}}}}}}"#
+        )
+    }
+
+    /// The completion marker tools/fetch_taxonomy_index.py writes into @p d
+    /// for the manifest @p m.
+    fn fetched(d: &Path, m: &Path, rel: &str) {
+        let x = "2d711642b726b04401627ca9fbac32f5c8530fb1903cc4db02258717921a4881";
+        let mut t = format!("# marker\nmanifest {rel} {}\n", sha256_file(m).unwrap());
+        for n in ["names.dmp", "nodes.dmp", "tax_k7.taxdb"] {
+            t.push_str(&format!("file {n} 1 {x}\n"));
+        }
+        std::fs::write(d.join(".fastag-fetched"), t).unwrap();
+    }
+
     /// A build tree or dev bundle with no index of its own: a debug app gives
     /// the CLI the index tools/fetch_taxonomy_index.py fetched, newest data
     /// release first; never over an index the CLI has, nor without one.
@@ -516,10 +594,14 @@ mod tests {
     fn a_dev_cli_without_an_index_gets_the_fetched_one() {
         let (root, bin) = tree("devindex");
         let src = root.join("src-data");
-        digest_at(&src.join("taxonomy").join("manifests"), &["taxonomy-k7-20260901.json", "taxonomy-k7-20270101.json", "notes.txt"]);
+        let mans = src.join("taxonomy").join("manifests");
+        digest_at(&mans, &["notes.txt"]);
         let cache = root.join("cache");
         let old = cache.join("taxonomy-k7-20260901").join("share-FASTag-taxonomy");
         let new = cache.join("taxonomy-k7-20270101").join("share-FASTag-taxonomy");
+        for rel in ["taxonomy-k7-20260901", "taxonomy-k7-20270101"] {
+            std::fs::write(mans.join(format!("{rel}.json")), manifest_json(rel)).unwrap();
+        }
         let mk = |source: &'static str, taxonomy: Option<PathBuf>| Resolved { bin: bin.clone(), data: None, taxonomy, source };
         let r = mk("env", None);
         // No cache folder holds an index: nothing.
@@ -528,9 +610,26 @@ mod tests {
         digest_at(&new, &["nodes.dmp", "names.dmp"]);
         assert_eq!(dev_index(&r, Some(&src), Some(&cache)), None);
         digest_at(&old, &["nodes.dmp", "names.dmp", "tax_k7.taxdb"]);
+        // Codex finding 1: the files without the fetch's completion marker
+        // (an interrupted or failed fetch) are no index.
+        assert_eq!(dev_index(&r, Some(&src), Some(&cache)), None);
+        fetched(&old, &mans.join("taxonomy-k7-20260901.json"), "taxonomy-k7-20260901");
         assert_eq!(dev_index(&r, Some(&src), Some(&cache)), Some(old.clone()));
-        // The newest data release first.
+        // The newest data release first, once its fetch is complete.
         digest_at(&new, &["tax_k7.taxdb"]);
+        assert_eq!(dev_index(&r, Some(&src), Some(&cache)), Some(old.clone()));
+        fetched(&new, &mans.join("taxonomy-k7-20270101.json"), "taxonomy-k7-20270101");
+        assert_eq!(dev_index(&r, Some(&src), Some(&cache)), Some(new.clone()));
+        // A marker of another manifest (the manifest changed since), or a
+        // file cut short since the fetch: not that release's index.
+        let changed = mans.join("taxonomy-k7-20270101.json");
+        std::fs::write(&changed, manifest_json("taxonomy-k7-20270101").replace("\"x\"", "\"x \"")).unwrap();
+        assert_eq!(dev_index(&r, Some(&src), Some(&cache)), Some(old.clone()));
+        std::fs::write(&changed, manifest_json("taxonomy-k7-20270101")).unwrap();
+        assert_eq!(dev_index(&r, Some(&src), Some(&cache)), Some(new.clone()));
+        std::fs::write(new.join("tax_k7.taxdb"), "").unwrap();
+        assert_eq!(dev_index(&r, Some(&src), Some(&cache)), Some(old.clone()));
+        std::fs::write(new.join("tax_k7.taxdb"), "x").unwrap();
         assert_eq!(dev_index(&r, Some(&src), Some(&cache)), Some(new.clone()));
         // Every kind of dev CLI: from FASTAG_BIN, on PATH, a dev bundle of dumps only.
         for source in ["path", "bundled"] {
@@ -651,9 +750,9 @@ mod tests {
     }
 
     // Codex n5 (2, 3): an engine that lists -data_paths reports its own
-    // folders and that auto reads no database; one without it (before 1.16)
-    // reads auto as the human proteome (auto_db_free false), whatever its
-    // data.
+    // folders and that auto reads no database; for one without it how auto
+    // reads is not known (auto_db_free None): the CLI of 0dfac519 has no
+    // -data_paths yet reads auto database-free, an older one reads human.
     #[cfg(unix)]
     #[test]
     fn the_engine_reports_its_data_and_an_older_one_reads_auto_as_human() {
@@ -675,18 +774,23 @@ mod tests {
         stub_at(&bin, "  -data_paths                      Print the data folders\n", &json);
         let r = crate::fastag::env_override(&bin.display().to_string()).unwrap();
         let s = data_status_for(&r);
-        assert!(s.auto_db_free);
+        assert_eq!(s.auto_db_free, Some(true));
         assert_eq!(s.digest_dir.as_deref(), Some(d.display().to_string().as_str()));
         assert!(s.files.digest_models && s.files.massgap_mods && !s.files.calibration);
         assert_eq!(s.alkylation_dir.as_deref(), Some(a.display().to_string().as_str()));
         assert_eq!(s.proteomes, vec!["yeast".to_string()]);
         assert_eq!(s.searched, vec![d.display().to_string()]);
-        // The same data beside an older engine: its own lookup, auto as human.
+        // The same data beside an older engine (0dfac519: no -data_paths):
+        // its own lookup, and how it reads auto is unknown, not "human".
         let (old_root, old_bin) = tree("engine-old");
         stub_at(&old_bin, "", &json);
         let r = crate::fastag::env_override(&old_bin.display().to_string()).unwrap();
         let s = data_status_for(&r);
-        assert!(!s.auto_db_free);
+        assert_eq!(s.auto_db_free, None);
+        assert!(serde_json::to_string(&s).unwrap().contains(r#""autoDbFree":null"#));
+        // An engine that reports another reading of auto: Some(false).
+        let other = json.replace(r#""alkylation_auto":"none""#, r#""alkylation_auto":"human""#);
+        assert_eq!(data_status_of_engine(&other).unwrap().auto_db_free, Some(false));
         assert_ne!(s.digest_dir.as_deref(), Some(d.display().to_string().as_str()));
         let _ = std::fs::remove_dir_all(&root);
         let _ = std::fs::remove_dir_all(&old_root);

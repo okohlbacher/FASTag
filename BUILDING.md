@@ -187,7 +187,14 @@ The script puts the release asset `FASTag-taxonomy-k7.tar.gz` of the pinned data
 one the release workflows embed, `TAXDB_TAG`) into `~/.cache/fastag/<data
 release>/share-FASTag-taxonomy` (`$XDG_CACHE_HOME/fastag`, or `%LOCALAPPDATA%\fastag` on Windows;
 `--dest <folder>` for another place), checks the tarball and each file against the manifest, and
-adds `species_call.tsv` from the sources. Every build tree then finds it with no variable to set:
+adds `species_call.tsv` from the sources. It assembles the folder in a private temporary folder
+beside it (each expected regular file of the tarball once, nothing else), checks the whole set and
+only then renames it into place, with the completion marker `.fastag-fetched` (the pinned
+manifest's sha256 and each file's size and sha256) written last; `--check <folder>` tells whether a
+folder holds a complete fetch. Builds, the debug desktop app and `gui/scripts/bundle-macos.sh` use
+a fetched folder only with that marker, so an interrupted or failed fetch is never staged (a folder
+fetched before the marker existed gets it on the next run of the script, after its files are
+checked). Every build tree then finds it with no variable to set:
 with `FASTAG_TAXONOMY_INDEX_AUTO` (on by default) each `cmake --build` looks in
 `FASTAG_TAXONOMY_CACHE_DIR` (that cache) and makes `share-FASTag-taxonomy` a folder of links, the
 index and its dumps from there and the rest of `data/taxonomy` from the sources, as in a release;
@@ -195,7 +202,8 @@ when the cache goes, the next build stages the dumps alone again. Already have a
 <FASTag-taxonomy-k7.tar.gz>`, `--from <a release's share-FASTag-taxonomy>` or `--from
 <tax_k7.taxdb>` checks it and links it into the cache (`--copy` copies). Or name it directly:
 `-DFASTAG_TAXONOMY_INDEX_DIR=<folder with tax_k7.taxdb, or the index file itself>` (a file is
-staged as `tax_k7.taxdb`, with the dumps of `data/taxonomy`). `-DFASTAG_TAXONOMY_INDEX_AUTO=OFF`
+staged as `tax_k7.taxdb`, with the dumps of `data/taxonomy`; in copy mode, on Windows, it is copied
+again whenever another file is named, also one with an older time stamp). `-DFASTAG_TAXONOMY_INDEX_AUTO=OFF`
 turns the lookup off. `tools/shipped_data.py list` prints every data file the CLI reads, and
 `test/shipped_data_test.py` (ctest `shipped_data_test`) checks that `data/`, `cmake --install`,
 the build tree, the release workflows and `gui/scripts/bundle-macos.sh` all have each one.

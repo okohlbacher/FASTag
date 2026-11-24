@@ -23,6 +23,55 @@
   `gui/scripts/bundle-macos.sh` takes the index from the CLI's build tree or the cache too. The 1.1 GB index is
   never in git. `shipped_data_test` checks the new staging, the fetch script's checks, and that its pin is the
   workflows' `TAXDB_TAG` and `TAXDB_SHA256`.
+- **Building: a taxonomy fetch is used only when it is complete.** `tools/fetch_taxonomy_index.py` now assembles the
+  folder in a private temporary folder beside the cache (no predictable `.part` paths, nothing written through an
+  existing link), takes each pinned regular file of the tarball exactly once (a link, a second copy, another name or
+  a missing file refuses the tarball), checks the whole set and only then renames the folder into place, with the
+  completion marker `.fastag-fetched` (the pinned manifest's sha256, each file's size and sha256) written last; a
+  failed fetch leaves an earlier complete one as it was. `--check <folder>` tells whether a folder holds a complete
+  fetch. CMake (`stage-data.cmake`, with the new `INDEX_MANIFESTS` beside `INDEX_SEARCH`), the debug desktop app
+  and `gui/scripts/bundle-macos.sh` stage a fetched folder only when its marker names the manifest of these sources
+  and every file has its pinned size; a cache fetched before the marker existed gets it on the next run of the
+  script. On Windows (copy staging) an index file named under another name is copied again whenever another file
+  is named, also one with an older time stamp (it kept the previous index); `file(COPY_FILE ... ONLY_IF_DIFFERENT)`
+  leaves equal bytes alone. `shipped_data_test` tests the copy case of `--from <folder>` always and the link case
+  only with the symlink privilege (Windows runners without it failed), and compares the fetch's default folder with
+  the build's only when `FASTAG_TAXONOMY_CACHE_DIR` is the default.
+- **Release CI: the shipped taxonomy index is checked against the pinned manifest.** The app disk image (mounted),
+  the CLI disk image (staged and, once notarized, mounted), the `.deb`, the AppImage (its taxonomy folder unpacked
+  from the squashfs), the Windows app's resources, the Windows release zip (each entry hashed) and the installed
+  Windows app (`windows_installed_check.ps1 -TaxonomyManifest`, default the newest manifest) now require each pinned
+  file as a regular file with the manifest's size and sha256 (`tools/check_taxonomy_manifest.py --pinned`), where a
+  truncated index passed the size or name checks before. The AppImage goes into the workflow artefact only when its
+  best-effort build passed every check.
+- **CLI: census `res_cover` folds each residue on its own.** With an unresolved orientation, `res_cover` folded each
+  tag as a whole: two overlapping tags whose midpoints lay on either side of the centre folded in opposite
+  directions and their shared residues counted twice (10 residues for tags covering 9). Each residue is now mirrored
+  by its own midpoint, so it has one image in every tag that holds it, and `res_cover` is at least `max_len` (the
+  longest tag, the other lower bound). Runs with every orientation known (`res_cover_exact` 1) are unchanged.
+- **Desktop app: the check before a run follows the command it runs.** The inspector reads the values the run is
+  sent (Mass-shift survey without a database sends the tags run only, and a mass-gap report without placements is not
+  sent), so a missing `massgap_mods.tsv` no longer holds a tags-only run. A FASTag program whose `--helphelp` lacks
+  `-recon_proteome` (an older `FASTAG_BIN`) is held before a shipped proteome is sent to it, with the fix "Use no
+  shipped proteome". An engine without `-data_paths` no longer counts as reading `-alkylation_proteome auto` as the
+  human proteome: how it reads auto is unknown (the CLI of 0dfac519 reads it database-free), so the check only warns
+  and does not ask for `human.fasta.gz`.
+- **Desktop app: feedback exports are built in request order, and the zip revealed is the export shown.** Each export
+  request carries an increasing number; the store refuses one older than the export its zip holds, so a late request
+  with the screenshot ticked can no longer overwrite the zip just built without it. Open issue draft reveals the zip
+  only while it is that very export (else it says so). The screenshot stays included by default.
+- **Desktop app: Open with default app hands off a private copy.** The file is opened once for the identity check and
+  the system opener gets a copy made from that handle, in a private folder of the app's cache (removed after a day),
+  so a file swapped in at that path after the check is never opened; one rewritten while copied is refused. An
+  identification file or hand-off file a run committed is now recorded with its identity in the run record
+  (`openIdentities`), so Open works for an unchanged export reopened from History after the app restarted.
+- **Desktop app: Spectrum navigation reads one file.** The table viewer keeps the handle it indexed a file from (on
+  Unix; on Windows each read must find the same file) and checks it after every read: a TSV renamed over the path
+  during ◀ ▶ is not read, and one rewritten in place is refused and indexed again, never new bytes at old offsets
+  under the old snapshot.
+- **Desktop app: scan links in reports opened on their own.** A Glyco, Mass shifts or spectra-per-shift report opened
+  without its tags table now links its scans too: the Spectrum tab takes the spectra file and the tags from the run
+  record of the report clicked (History), and asks for the input (Locate input…) when there is none.
 - **Release CI: the species detection index is checked in every shipped desktop artefact, not only in the staged
   resources.** On a tag (and a full-payload dry run) the jobs now fail when `tax_k7.taxdb` is missing from the
   mounted macOS app disk image, the macOS CLI disk image, the Linux `.deb` (and so its tarball), the Linux

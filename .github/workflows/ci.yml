@@ -1513,10 +1513,12 @@ jobs:
           # example data travel in the app's resources.
           bash tools/check_bundle_notices.sh "$(dirname "$(dirname "$CLI")")"
           # The k-mer index travels in the shipped image, not only in the
-          # staged resources (checked again here, where a user gets it).
+          # staged resources (checked again here, where a user gets it):
+          # each pinned file a regular file with the manifest's size and
+          # sha256, so a truncated or substituted index fails too.
           if [ "${{ startsWith(github.ref, 'refs/tags/v') || (inputs.gui_dry_run && inputs.gui_full_payload) }}" = "true" ]; then
-            test -s "$(dirname "$(dirname "$CLI")")/share/FASTag/taxonomy/tax_k7.taxdb" \
-              || { echo "::error::the app in the dmg has no share/FASTag/taxonomy/tax_k7.taxdb"; exit 1; }
+            python3 tools/check_taxonomy_manifest.py --pinned "data/taxonomy/manifests/$TAXDB_TAG.json" "$(dirname "$(dirname "$CLI")")/share/FASTag/taxonomy" \
+              || { echo "::error::the app in the dmg does not carry the pinned taxonomy index"; exit 1; }
           fi
           env -i HOME="$HOME" "$CLI" --help > "$RUNNER_TEMP/dmg-help.txt" 2>&1 \
             || { echo "::error::the CLI inside the mounted dmg does not run"; cat "$RUNNER_TEMP/dmg-help.txt"; exit 1; }
@@ -1634,8 +1636,8 @@ jobs:
           STAGE="${RUNNER_TEMP}/dmgroot"
           rm -rf "$STAGE"; mkdir -p "$STAGE"
           cp -R dist/FASTag "$STAGE/FASTag"
-          test -s "$STAGE/FASTag/share-FASTag-taxonomy/tax_k7.taxdb" \
-            || { echo "::error::the CLI disk image would carry no tax_k7.taxdb"; exit 1; }
+          python3 tools/check_taxonomy_manifest.py --pinned "data/taxonomy/manifests/$TAXDB_TAG.json" "$STAGE/FASTag/share-FASTag-taxonomy" \
+            || { echo "::error::the CLI disk image would not carry the pinned taxonomy index"; exit 1; }
 
           # A custom volume icon needs THREE things, and missing any one leaves
           # the generic white disk: the icon at the volume root named
@@ -1663,6 +1665,15 @@ jobs:
           # Refuse to ship an image whose ticket is not attached -- that is the
           # entire reason this artifact exists.
           xcrun stapler validate "$DMG"
+          # The pinned taxonomy index in the final image itself, mounted
+          # read-only as a user gets it (the licence agreement answered).
+          CMNT="$RUNNER_TEMP/fastag-cli-dmg-mnt"
+          mkdir -p "$CMNT"
+          env PAGER=cat hdiutil attach "$DMG" -readonly -nobrowse -noautoopen -mountpoint "$CMNT" < <(yes) > /dev/null
+          pinned=yes
+          python3 tools/check_taxonomy_manifest.py --pinned "data/taxonomy/manifests/$TAXDB_TAG.json" "$CMNT/FASTag/share-FASTag-taxonomy" || pinned=no
+          hdiutil detach "$CMNT" -force > /dev/null 2>&1 || true
+          [ "$pinned" = yes ] || { echo "::error::the CLI disk image does not carry the pinned taxonomy index"; exit 1; }
 
       # Placed last on purpose: everything above that needs the identity has
       # run. `always()` so a failure earlier still tears the keychain down.
@@ -2061,10 +2072,19 @@ jobs:
           unsquashfs -o "$("$app" --appimage-offset)" -lls "$app" > "$L"
           inside=$(awk '{print $NF}' "$L" | grep '/resources/fastag/GUI-THIRD-PARTY-NOTICES.txt$' | head -1)
           [ -n "$inside" ] || { echo "::error::the AppImage carries no resources/fastag/GUI-THIRD-PARTY-NOTICES.txt"; exit 1; }
-          # The k-mer index in the AppImage's squashfs, where the index is due.
+          # The k-mer index in the AppImage's squashfs, where the index is due:
+          # its taxonomy folder unpacked and each pinned file checked (a
+          # regular file with the manifest's size and sha256), not a name in
+          # the listing.
           if [ "${{ startsWith(github.ref, 'refs/tags/v') || (inputs.gui_dry_run && inputs.gui_full_payload) }}" = "true" ]; then
-            awk '{print $NF}' "$L" | grep -q '/resources/fastag/share/FASTag/taxonomy/tax_k7.taxdb$' \
-              || { echo "::error::the AppImage carries no resources/fastag/share/FASTag/taxonomy/tax_k7.taxdb"; exit 1; }
+            tdir=$(awk '{print $NF}' "$L" | grep '/resources/fastag/share/FASTag/taxonomy/tax_k7.taxdb$' | head -1)
+            [ -n "$tdir" ] || { echo "::error::the AppImage carries no resources/fastag/share/FASTag/taxonomy/tax_k7.taxdb"; exit 1; }
+            tdir=$(dirname "${tdir#squashfs-root/}")
+            TX="$RUNNER_TEMP/appimage-taxonomy"; rm -rf "$TX"
+            unsquashfs -o "$("$app" --appimage-offset)" -d "$TX" "$app" "$tdir" > /dev/null
+            python3 ../tools/check_taxonomy_manifest.py --pinned "../data/taxonomy/manifests/$TAXDB_TAG.json" "$TX/$tdir" \
+              || { echo "::error::the AppImage does not carry the pinned taxonomy index"; exit 1; }
+            rm -rf "$TX"
           fi
           # No Thermo reader and no .NET runtime in the AppImage (see above).
           if grep -E 'ThermoFisher\.CommonCore|/resources/fastag/bin/dotnet/|ThermoRawFileReader-License' "$L"; then
@@ -2128,8 +2148,8 @@ jobs:
           bash tools/check_bundle_notices.sh "$(dirname "$(dirname "$cli")")"
           # The k-mer index in the package itself (the tarball is its /usr tree).
           if [ "${{ startsWith(github.ref, 'refs/tags/v') || (inputs.gui_dry_run && inputs.gui_full_payload) }}" = "true" ]; then
-            test -s "$(dirname "$(dirname "$cli")")/share/FASTag/taxonomy/tax_k7.taxdb" \
-              || { echo "::error::the .deb carries no resources/fastag/share/FASTag/taxonomy/tax_k7.taxdb"; exit 1; }
+            python3 tools/check_taxonomy_manifest.py --pinned "data/taxonomy/manifests/$TAXDB_TAG.json" "$(dirname "$(dirname "$cli")")/share/FASTag/taxonomy" \
+              || { echo "::error::the .deb does not carry the pinned taxonomy index in resources/fastag/share/FASTag/taxonomy"; exit 1; }
           fi
           # bundle.category in tauri.conf.json sets the menu category;
           # without it Categories= is empty and menus file FASTag under
@@ -2146,8 +2166,11 @@ jobs:
           rm -rf "$T"
           echo "tarball=$TGZ" >> "$GITHUB_OUTPUT"
           echo "appimage_file=$APPIMAGE" >> "$GITHUB_OUTPUT"
+          # The AppImage only when its best-effort build finished every check
+          # (steps.appimage built=true): a half-checked image is never copied
+          # into the artifact.
           apps=("$B"/appimage/*.AppImage)
-          if [ ${#apps[@]} -eq 1 ]; then cp "${apps[0]}" "$APPIMAGE"; fi
+          if [ "${{ steps.appimage.outputs.built }}" = "true" ] && [ ${#apps[@]} -eq 1 ]; then cp "${apps[0]}" "$APPIMAGE"; fi
           # The names the release would attach, checked on a dry run too.
           names=("$DEB" "$TGZ"); [ -f "$APPIMAGE" ] && names+=("$APPIMAGE")
           tools/release_assets.sh check "$VER" "${names[@]}"

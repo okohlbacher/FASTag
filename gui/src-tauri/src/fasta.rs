@@ -201,7 +201,7 @@ pub fn identities_of(argv: &[String], cwd: Option<&Path>) -> Vec<DbIdentity> {
 
 /// Open @p path for reading without following a final symlink or blocking
 /// on a FIFO.
-fn open_file(path: &Path) -> std::io::Result<File> {
+pub(crate) fn open_file(path: &Path) -> std::io::Result<File> {
     let mut o = std::fs::OpenOptions::new();
     o.read(true);
     #[cfg(unix)]
@@ -214,13 +214,13 @@ fn open_file(path: &Path) -> std::io::Result<File> {
 
 /// The device and file number of the open @p f (@p m its metadata).
 #[cfg(unix)]
-fn file_id(_f: &File, m: &std::fs::Metadata) -> (u64, u64) {
+pub(crate) fn file_id(_f: &File, m: &std::fs::Metadata) -> (u64, u64) {
     use std::os::unix::fs::MetadataExt;
     (m.dev(), m.ino())
 }
 
 #[cfg(windows)]
-fn file_id(f: &File, _m: &std::fs::Metadata) -> (u64, u64) {
+pub(crate) fn file_id(f: &File, _m: &std::fs::Metadata) -> (u64, u64) {
     use std::os::windows::io::AsRawHandle;
     use windows_sys::Win32::Storage::FileSystem::{GetFileInformationByHandle, BY_HANDLE_FILE_INFORMATION};
     // SAFETY: a plain-data out struct, filled by the call for a valid handle.
@@ -232,7 +232,7 @@ fn file_id(f: &File, _m: &std::fs::Metadata) -> (u64, u64) {
 }
 
 #[cfg(not(any(unix, windows)))]
-fn file_id(_f: &File, _m: &std::fs::Metadata) -> (u64, u64) {
+pub(crate) fn file_id(_f: &File, _m: &std::fs::Metadata) -> (u64, u64) {
     (0, 0)
 }
 
@@ -262,13 +262,27 @@ pub fn identity_of_file(path: &Path) -> Option<FileIdentity> {
 /// following a final symlink (open_file), its identity from that handle and
 /// @p path as given. None: missing, a symlink, not a regular file.
 pub fn identity_at(path: &Path) -> Option<FileIdentity> {
+    open_identified_at(path).map(|(_, id)| id)
+}
+
+/// The identity of the open @p f now (its path left empty).
+pub fn identity_of_handle(f: &File) -> Option<FileIdentity> {
+    let m = f.metadata().ok()?;
+    let (dev, ino) = file_id(f, &m);
+    Some(FileIdentity { path: String::new(), dev, ino, len: m.len(), mtime_ns: mtime_ns(&m) })
+}
+
+/// identity_at with the handle it was taken from: every later read of the
+/// file (reveal.rs open_output's private copy) is from this very handle.
+pub fn open_identified_at(path: &Path) -> Option<(File, FileIdentity)> {
     let f = open_file(path).ok()?;
     let m = f.metadata().ok()?;
     if !m.file_type().is_file() {
         return None;
     }
     let (dev, ino) = file_id(&f, &m);
-    Some(FileIdentity { path: path.to_string_lossy().into_owned(), dev, ino, len: m.len(), mtime_ns: mtime_ns(&m) })
+    let id = FileIdentity { path: path.to_string_lossy().into_owned(), dev, ino, len: m.len(), mtime_ns: mtime_ns(&m) };
+    Some((f, id))
 }
 
 /// @p path (of the option @p option) as a run reads it now (identity_of_file).

@@ -3,7 +3,7 @@
 // protein database, are off and say so instead of blocking Run; the shipped
 // proteomes are a database choice in Inputs, with the species report's hint.
 
-import { act, fireEvent, screen } from '@testing-library/react'
+import { act, fireEvent, screen, within } from '@testing-library/react'
 import { describe, expect, it } from 'vitest'
 import { installMockBridge } from '../testing/mockBridge'
 import { chooseTask, click, pickSingle, renderColdApp, runButton, showStep } from '../testing/render'
@@ -90,5 +90,53 @@ describe('Mass-shift survey without a protein database (feedback 422372a2)', () 
     const sent2 = mock.runCalls[mock.runCalls.length - 1].params
     expect(sent2['recon_proteome']).toBe('human')
     for (const n of SHIFT) expect(String(sent2[n] ?? ''), n).toMatch(/run01\./)
+  })
+
+  // Codex finding 5: the check before a run reads the values the run is
+  // sent. With the Mass-gap report ticked and no database, launch sends no
+  // placements and so no mass-gap report: a missing massgap_mods.tsv must
+  // not hold the tags-only run. An engine without -recon_proteome is held
+  // before a shipped proteome is sent to it.
+  it('the checks follow what is sent: no mass-gap data needed without a database; an engine without -recon_proteome is held', async () => {
+    const mock = installMockBridge()
+    mock.dataStatusResult = { ...mock.dataStatusResult, files: { ...mock.dataStatusResult.files, massgapMods: false }, proteomes: ['human'] }
+    await renderColdApp(mock)
+    await chooseTask('Mass-shift survey')
+    await pickSingle(mock, '/d/run01.mzML')
+    showStep(2)
+    await change(field('recon_proteome')!, 'human')
+    showStep(4)
+    const mg = document.getElementById('out-massgap_out') as HTMLInputElement
+    if (!mg.checked) await click(mg)
+    expect(mg.checked).toBe(true)
+    // With the placements on, the mass-gap report needs its file: held.
+    expect(document.querySelector('li.check[data-check="no-shipped-data-massgap_out"]')).not.toBeNull()
+    expect((runButton() as HTMLButtonElement).disabled).toBe(true)
+    showStep(2)
+    await change(field('recon_proteome')!, '')
+    // No database: the run is the tags alone, the report is not sent.
+    expect(document.querySelector('li.check[data-check="no-shipped-data-massgap_out"]')).toBeNull()
+    expect((runButton() as HTMLButtonElement).disabled).toBe(false)
+    await click(runButton())
+    const sent = mock.runCalls[mock.runCalls.length - 1].params
+    expect(String(sent['massgap_out'] ?? '')).toBe('')
+    await act(async () => mock.emitDone({ ok: true, code: 0, runId: 1 }))
+  })
+
+  it('an engine whose --helphelp lacks -recon_proteome holds the shipped-proteome run, with the fix', async () => {
+    const mock = installMockBridge()
+    mock.cliOptions = { ...mock.cliOptions, options: mock.cliOptions.options.filter((o) => o !== 'recon_proteome') }
+    await renderColdApp(mock)
+    await chooseTask('Mass-shift survey')
+    await pickSingle(mock, '/d/run01.mzML')
+    expect((runButton() as HTMLButtonElement).disabled).toBe(false)
+    showStep(2)
+    await change(field('recon_proteome')!, 'human')
+    const li = document.querySelector<HTMLElement>('li.check[data-check="no-recon-proteome-option"]')
+    expect(li).not.toBeNull()
+    expect((runButton() as HTMLButtonElement).disabled).toBe(true)
+    await click(within(li!).getByRole('button', { name: 'Use no shipped proteome' }))
+    expect(document.querySelector('li.check[data-check="no-recon-proteome-option"]')).toBeNull()
+    expect((runButton() as HTMLButtonElement).disabled).toBe(false)
   })
 })

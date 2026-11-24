@@ -30,6 +30,9 @@ tauri-plugin-store = "~2.4.0"
 # Feedback report ids (feedback.rs uuid_v4): the OS generator, already in the
 # lock through rand (tauri-plugin-notification).
 getrandom = "0.3"
+# The taxonomy fetch's completion marker names its manifest by sha256
+# (data.rs fetched_complete); already in the lock through tauri.
+sha2 = "0.10"
 
 # The native feedback screenshot (feedback_capture.rs), with the platform
 # crates tauri itself uses at the versions the lock pins; only features are

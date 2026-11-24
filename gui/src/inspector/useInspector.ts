@@ -39,8 +39,9 @@ export interface Inspector {
   undoRunAnyway(id: string): void
   // Probe the input again (it may have changed on disk).
   recheck(): void
-  // The engine is from before 1.16 (no -data_paths): it reads Alkylation
-  // proteome auto as the shipped human proteome. False while unknown.
+  // The engine says it reads Alkylation proteome auto as the shipped human
+  // proteome (DataStatus.autoDbFree false). False while unknown, and for an
+  // engine that does not say (no -data_paths).
   legacyAuto: boolean
 }
 
@@ -176,7 +177,7 @@ export function useInspector(o: { input: string; values: Record<string, ParamVal
   const pre = useMemo<PreStart>(() => {
     if (!input) {
       // No file: only the checks of the settings.
-      const s = preStartChecks({ input, values, supported: false, probe: null, taxonomy, data })
+      const s = preStartChecks({ input, values, supported: false, options: caps?.options.length ? caps.options : null, probe: null, taxonomy, data })
       return { ...s, notChecked: null }
     }
     const report = probed?.report
@@ -185,6 +186,7 @@ export function useInspector(o: { input: string; values: Record<string, ParamVal
       values,
       // Not known yet: the probe is pending, never "not checked".
       supported: caps ? caps.probeInput : true,
+      options: caps?.options.length ? caps.options : null,
       // The FASTA record comes from its own probe only.
       probe: report ? { ...report, fasta: fastaRecord ?? undefined } : null,
       probeError: probed?.error ?? null,
@@ -200,7 +202,7 @@ export function useInspector(o: { input: string; values: Record<string, ParamVal
   return {
     caps,
     pre,
-    legacyAuto: !!data && !data.autoDbFree,
+    legacyAuto: data?.autoDbFree === false,
     blocks,
     unanswered,
     checking,

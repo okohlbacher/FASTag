@@ -338,32 +338,29 @@ namespace FASTag::Census
   };
 
   /**
-    @brief Folds one tag's residue spans onto the lower half of the peptide.
+    @brief Folds residue spans onto the lower half of the peptide, each on its own.
 
-    When the midpoint of the whole span [first, last) lies above axis / 2,
-    each span [a, b] becomes [axis - b, axis - a]. The fold is symmetric
-    about axis / 2, so a b read and the complementary y read of the same
-    residues (or an exactly placed read of them) give one image; folding a
-    folded block again changes nothing. The block is folded as a whole, so
-    its own residues stay distinct.
+    Each span [a, b] whose midpoint lies above axis / 2 becomes
+    [axis - b, axis - a]. The fold is symmetric about axis / 2 and is decided
+    per residue, so a residue has one image whichever tag holds it: a b read
+    and the complementary y read of the same residues (or an exactly placed
+    read of them) give one image, and so do two overlapping tags whose own
+    midpoints lie on either side of the axis. Folding a folded span again
+    changes nothing. Residues of one tag that mirror each other about the
+    centre then count once, so the count of the folded spans can fall below
+    the tag's length: res_cover takes the longest tag as a second lower bound
+    (resCoverLowerBound).
 
     @param[in,out] spans Residue intervals.
-    @param[in] first First span of the tag.
-    @param[in] last One past the tag's last span.
+    @param[in] first First span to fold.
+    @param[in] last One past the last span to fold.
     @param[in] axis The mirror axis (Da), see addResidueSpans.
   */
   inline void foldResidueSpans(std::vector<std::pair<double, double>>& spans, std::size_t first, std::size_t last,
                                double axis)
   {
-    if (last <= first) return;
-    double lo = spans[first].first, hi = spans[first].second;
-    for (std::size_t i = first; i < last; ++i)
-    {
-      lo = std::min(lo, spans[i].first);
-      hi = std::max(hi, spans[i].second);
-    }
-    if (0.5 * (lo + hi) > 0.5 * axis)
-      for (std::size_t i = first; i < last; ++i)
+    for (std::size_t i = first; i < last && i < spans.size(); ++i)
+      if (0.5 * (spans[i].first + spans[i].second) > 0.5 * axis)
         spans[i] = {axis - spans[i].second, axis - spans[i].first};
   }
 
@@ -386,12 +383,13 @@ namespace FASTag::Census
     - Forward: the spans are kept.
     - Reversed: each span [a, b] becomes [axis - b, axis - a], the exact
       placement of the b or c read.
-    - Unresolved: the tag is folded onto the lower half: when the midpoint
-      of its whole span lies above axis / 2 every span is mirrored. A b read
-      and the complementary y read of the same residues then land on one
-      interval, so res_cover is a lower bound (residues that mirror each
-      other about the centre count once). The tag is folded as a whole, so
-      its own residues never merge and res_cover stays >= max_len.
+    - Unresolved: the tag is folded onto the lower half, each residue on
+      its own (foldResidueSpans): a residue whose midpoint lies above
+      axis / 2 is mirrored. A b read and the complementary y read of the
+      same residues then land on one interval, and a residue has the same
+      image in every tag that holds it, so res_cover is a lower bound
+      (residues that mirror each other about the centre count once; the
+      longest tag is the other lower bound, resCoverLowerBound).
 
     When any tag of a spectrum is Unresolved, the caller folds the known
     (Forward and Reversed) tags too, after their exact placement, with
@@ -475,6 +473,24 @@ namespace FASTag::Census
       reach = std::max(reach, s.second);
     }
     return n;
+  }
+
+  /**
+    @brief res_cover: the distinct residues of a spectrum's tags (residueCover),
+    and never fewer than its longest tag.
+
+    Both are lower bounds on the residues the tags cover: folded spans
+    (foldResidueSpans) count residues that mirror each other about the centre
+    once, which can fall below one tag's own length; @p max_len is that tag's
+    length.
+
+    @param[in,out] spans Residue intervals; sorted in place.
+    @param[in] max_len The longest reported tag (residues).
+    @return max(residueCover(spans), max_len).
+  */
+  inline std::size_t resCoverLowerBound(std::vector<std::pair<double, double>>& spans, std::size_t max_len)
+  {
+    return std::max(residueCover(spans), max_len);
   }
 
   /**
