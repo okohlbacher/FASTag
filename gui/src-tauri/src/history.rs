@@ -77,6 +77,12 @@ pub struct RunRecord {
     /// 1.16, which align nothing.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub databases: Vec<crate::fasta::DbIdentity>,
+    /// The tags table (-out) the run wrote, as it was when the run ended with
+    /// exit 0 (fasta.rs identity_of_file): the Spectrum tab's alignment reads
+    /// this run's databases only for that very file. Absent for a run that
+    /// failed or was cancelled, and in older records, which align nothing.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub tags_identity: Option<crate::fasta::FileIdentity>,
 }
 
 impl RunRecord {
@@ -272,6 +278,17 @@ pub fn of_output(dir: &Path, path: &Path) -> Option<RunRecord> {
     newest_of(&text, path)
 }
 
+/// The newest run that recorded @p tags as the identity of the tags table it
+/// wrote (RunRecord.tags_identity): the record of that very file, whatever
+/// path it is asked for by.
+pub fn of_tags(dir: &Path, tags: &crate::fasta::FileIdentity) -> Option<RunRecord> {
+    let Ok(text) = std::fs::read_to_string(dir.join(HISTORY_FILE)) else { return None };
+    text.lines()
+        .rev()
+        .filter_map(|l| serde_json::from_str::<RunRecord>(l).ok())
+        .find(|r| r.tags_identity.as_ref() == Some(tags))
+}
+
 /// The newest record in @p text (history.jsonl) that wrote @p path.
 fn newest_of(text: &str, path: &Path) -> Option<RunRecord> {
     let canon = |p: &Path| p.canonicalize().unwrap_or_else(|_| p.to_path_buf());
@@ -383,6 +400,7 @@ mod tests {
             tags: None,
             workflow: None,
             databases: Vec::new(),
+            tags_identity: None,
         }
     }
 
@@ -412,6 +430,29 @@ mod tests {
         // "a.digest.tsv" is relative to the run's cwd /d.
         assert_eq!(of_output(&d, Path::new("/d/a.digest.tsv")).unwrap().status, Status::Failed);
         assert!(of_output(&d, Path::new("/elsewhere/a.tags.tsv")).is_none());
+        let _ = std::fs::remove_dir_all(&d);
+    }
+
+    // Codex #3, part 2 (d): the identity of the tags table a run wrote reads
+    // back whole; a record without it (before) reads as None and writes no
+    // key, and of_tags finds the record by that identity only.
+    #[test]
+    fn the_tags_identity_reads_back_and_defaults_to_none() {
+        let d = tmp("tagsid");
+        let mut r = rec("6-6", "/d/a.tags.tsv", Status::Ok);
+        let line = serde_json::to_string(&r).unwrap();
+        assert!(!line.contains("tagsIdentity"), "{line}");
+        let id = crate::fasta::FileIdentity { path: "/d/a.tags.tsv".into(), dev: 1, ino: 2, len: 3, mtime_ns: -4 };
+        r.tags_identity = Some(id.clone());
+        let line = serde_json::to_string(&r).unwrap();
+        assert!(line.contains(r#""tagsIdentity":{"path":"/d/a.tags.tsv","dev":1,"ino":2,"len":3,"mtimeNs":-4}"#), "{line}");
+        assert_eq!(serde_json::from_str::<RunRecord>(&line).unwrap(), r);
+        append(&d, &rec("5-5", "/d/a.tags.tsv", Status::Ok)).unwrap();
+        append(&d, &r).unwrap();
+        append(&d, &rec("7-7", "/d/a.tags.tsv", Status::Failed)).unwrap();
+        assert_eq!(list(&d, 10)[2].tags_identity, None);
+        assert_eq!(of_tags(&d, &id).unwrap().id, "6-6");
+        assert!(of_tags(&d, &crate::fasta::FileIdentity { len: 9, ..id }).is_none());
         let _ = std::fs::remove_dir_all(&d);
     }
 

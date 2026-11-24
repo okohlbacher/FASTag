@@ -91,6 +91,20 @@ export interface ResultsPage {
   pending?: boolean
 }
 
+// results_neighbours (browser.rs NavAnswer): where a spectrum sits in a view
+// and the spectrum either side of it (◀ ▶ of the Spectrum tab), all read
+// from one snapshot of the file (snapshot: its id; a rewritten file is
+// another). pending: the view is not in its final order yet (D5); absent:
+// neither the row nor any row of the spectrum is in the view.
+export interface NavNeighbour {
+  spectrum: string
+  rowId: number
+}
+export type NavAnswer =
+  | { status: 'pending'; snapshot: number }
+  | { status: 'absent'; snapshot: number }
+  | { status: 'at'; snapshot: number; pos: number; matched: number; rowId: number; prev: NavNeighbour | null; next: NavNeighbour | null }
+
 // results_open: the header and first rows from a head read, before the index.
 export interface ResultsHead {
   generation: number
@@ -288,6 +302,10 @@ export interface DataStatus {
   searched: string[]
   // The digest folder comes from FASTAG_DIGEST_DIR.
   fromEnv: boolean
+  // -alkylation_proteome auto reads no database (the engine lists -data_paths
+  // and says so). False for an engine from before 1.16, which reads auto
+  // as the shipped human proteome.
+  autoDbFree: boolean
 }
 
 export interface Settings {
@@ -441,6 +459,9 @@ export interface FastagApi extends FeedbackApi {
   resultsOpen: (path: string, onEvent: (e: BrowserEvent) => void) => Promise<ResultsHead>
   // Where file row @p row sits in a built view (null: not built).
   resultsPosition: (path: string, view: ResultsView, row: number) => Promise<number | null>
+  // ◀ ▶ of the Spectrum tab: file row @p row (null: none) or else the first
+  // row of @p spectrum in a view, and its neighbours, from one snapshot.
+  resultsNeighbours: (path: string, view: ResultsView, row: number | null, spectrum: string) => Promise<NavAnswer>
   // Reveal an output of a run of this app (folder: open its folder instead).
   revealOutput: (path: string, folder: boolean) => Promise<void>
   // Open an output of a run of this app in the app the system gives its type.

@@ -4,6 +4,7 @@
 
 import { describe, expect, it } from 'vitest'
 import { parseReport } from '../digestReport'
+import ALKYLATION_TAGS from '../fixtures/alkylation-tags.tsv?raw'
 import { CLI_CASES, logLines, type CliCase } from '../testing/cliFixtures'
 import { speciesFromTsv } from '../testing/speciesTsv'
 import { addNote, buildOverview, MIN_TAGGED, type Overview, type Tile } from './overview'
@@ -424,6 +425,19 @@ describe('Overview model: the alkylation report', () => {
     expect(c.note).toMatch(/75% of 8 spectra whose tags read a cysteine, no database; experimental/)
     const u = tile(of(tagReport('no_call', 'unresolved_forms')), 'alkylation')
     expect(u.note).toMatch(/cannot tell two cysteine forms apart/)
+  })
+
+  // Review n4: neither component calls on a shipped proteome with too short
+  // tags (PXD000001, gui/src/fixtures/alkylation-tags.tsv): the report's
+  // call is the tag call's few_cys_spectra, the tags_too_short is the
+  // placement call's; the tile keeps both and the extension that places.
+  it('a tag no call over a placement call whose tags are too short keeps the diagnosis and the extension', () => {
+    const t = tile(of(ALKYLATION_TAGS, { tag_length: '3', extension: '0' }), 'alkylation')
+    expect(t).toMatchObject({ value: 'no call', tone: 'nocall' })
+    expect(t.note).toMatch(/^8 spectra vote from their tags, fewer than the call needs; the placements: no tag reaches the 8 residues the proteome needs$/)
+    expect(t.action).toEqual({ kind: 'enable', label: 'Run again with extension 3', values: { extension: '3' } })
+    // The search line's reason is the tag call's, in tag words.
+    expect(line(of(ALKYLATION_TAGS, { tag_length: '3', extension: '0' }), 'fixed C').note).toBe('default; no alkylation call (too few tag votes for a cysteine form)')
   })
 
   it('shows the call with its reagent, and suggests it for the search', () => {

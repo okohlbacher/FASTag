@@ -36,6 +36,11 @@
 #       the build-tree binary itself finds it (FASTAG_STAGE_DATA_IN_BUILD links
 #       data/ beside it), and the errors name the file, the folders searched
 #       and the fixes
+#   (g) -data_paths (the desktop app's capability check): listed by
+#       --helphelp; one JSON line on stdout, exit 0, with the digest and
+#       alkylation folders a run of that copy reads (the flat layout's, none
+#       for a bare copy, none for a FASTAG_DIGEST_DIR that is no folder), the
+#       folders looked in, and alkylation_auto none
 # Exits 77 (ctest SKIP) when the binary cannot start or Python 3 is missing.
 set -u
 BIN="$1"
@@ -584,7 +589,18 @@ fi
 # searched (absolute, without ".."), and the fixes; exit 6 before any output.
 # The folder as the executable's path names it (with or without symlinks
 # resolved: /var and /private/var on macOS).
-BARE_L=$(cd "$(dirname "$B")" && pwd -L); BARE_P=$(cd "$(dirname "$B")" && pwd -P)
+# On Windows (Git Bash) the binary names native folders (C:\Users\...), and pwd
+# MSYS ones (/c/Users/...): both sides become C:/Users/... with the drive
+# letter in lower case, so the checks compare like with like.
+case "$(uname -s)" in MINGW*|MSYS*|CYGWIN*) WIN=1;; *) WIN=;; esac
+natpath() { # natpath <path>: the path as the binary prints it, with forward slashes
+  if [ -n "$WIN" ]; then
+    local p; p=$(cygpath -m "$1"); printf '%s\n' "$(printf '%s' "${p:0:1}" | tr '[:upper:]' '[:lower:]')${p:1}"
+  else
+    printf '%s\n' "$1"
+  fi
+}
+BARE_L=$(natpath "$(cd "$(dirname "$B")" && pwd -L)"); BARE_P=$(natpath "$(cd "$(dirname "$B")" && pwd -P)")
 bare_err() { # bare_err <file wanted> <option named> args...: checks the error of a bare-copy run
   local want="$1" opt="$2"; shift 2
   rm -f "$TMP/bare.err"
@@ -592,6 +608,12 @@ bare_err() { # bare_err <file wanted> <option named> args...: checks the error o
   local rc=$?
   [ "$rc" = 6 ] || { cat "$TMP/bare.err" >&2; fail "(f) bare copy, $opt: exit $rc, not 6"; }
   local line; line=$(grep -m1 -- "needs $want from FASTag's shipped digest data" "$TMP/bare.err")
+  if [ -n "$WIN" ]; then # backslashes to slashes, and each drive letter in lower case
+    line=${line//\\//}
+    local d; for d in A B C D E F G H I J K L M N O P Q R S T U V W X Y Z; do
+      line=${line//$d:\//$(printf '%s' "$d" | tr '[:upper:]' '[:lower:]'):/}
+    done
+  fi
   [ -n "$line" ] || { cat "$TMP/bare.err" >&2; fail "(f) bare copy, $opt: the error does not name $want"; }
   case "$line" in *"$opt"*) ;; *) fail "(f) bare copy: the error does not name $opt: $line";; esac
   local BARE_DIR
@@ -610,9 +632,12 @@ bare_err digest_models.tsv -shortlist_out -fasta "$DB" -shortlist_out "$TMP/bare
 [ ! -e "$TMP/bare.tsv" ] || fail "(f) bare copy: -out written although the run was refused"
 # A FASTAG_DIGEST_DIR that names no folder is said so, and not replaced by the
 # data beside the binary.
-FASTAG_DIGEST_DIR="$TMP/no-such-folder" "$BIN" -in "$IN" -out "$TMP/nf.tsv" -digest_out "$TMP/nf.d.tsv" > /dev/null 2> "$TMP/nf.err" \
+# The value is echoed verbatim; on Windows it is given in native form (MSYS
+# would convert an MSYS path on the way in).
+NF="$(natpath "$TMP")/no-such-folder"
+FASTAG_DIGEST_DIR="$NF" "$BIN" -in "$IN" -out "$TMP/nf.tsv" -digest_out "$TMP/nf.d.tsv" > /dev/null 2> "$TMP/nf.err" \
   && fail "(f) a FASTAG_DIGEST_DIR that is no folder was replaced by other data"
-grep -q "FASTAG_DIGEST_DIR is set to '$TMP/no-such-folder', which is not a folder" "$TMP/nf.err" \
+grep -qF "FASTAG_DIGEST_DIR is set to '$NF', which is not a folder" "$TMP/nf.err" \
   || { cat "$TMP/nf.err" >&2; fail "(f) the error does not say FASTAG_DIGEST_DIR is no folder"; }
 # The build tree: the binary as built finds the data CMakeLists.txt links
 # beside it (FASTAG_STAGE_DATA_IN_BUILD), with no FASTAG_DIGEST_DIR.
@@ -623,6 +648,31 @@ if [ "$STAGED" = ON ]; then
 else
   echo "note: FASTAG_STAGE_DATA_IN_BUILD is off; the build-tree check is skipped" >&2
 fi
+
+# (g) -data_paths: what a run of each copy reads, as JSON on stdout.
+grep -q -- '-data_paths' <<< "$("$BIN" --helphelp 2>&1)" || fail "(g) --helphelp does not list -data_paths"
+data_paths() { # data_paths <binary> <python check of j>: the line's JSON
+  local b="$1" check="$2" out
+  out=$(env -u FASTAG_ALKYLATION_DIR "$b" -data_paths 2>/dev/null) || fail "(g) $b -data_paths did not exit 0"
+  [ "$(printf '%s\n' "$out" | wc -l | tr -d ' ')" = 1 ] || fail "(g) $b -data_paths printed more than one line: $out"
+  "$PY" -c 'import json, sys
+j = json.loads(sys.argv[1])
+assert set(j) == {"digest_dir", "digest_from_env", "digest_searched", "alkylation_dir", "proteomes", "alkylation_auto"}, j
+assert j["alkylation_auto"] == "none", j
+'"$check" "$out" || fail "(g) $b -data_paths: $out"
+}
+FLAT=$(layout flatdp FASTag/FASTag.bin FASTag/share-FASTag-digest)
+mkdir -p "$TMP/l_flatdp/FASTag/share-FASTag-alkylation"; : > "$TMP/l_flatdp/FASTag/share-FASTag-alkylation/yeast.fasta.gz"
+FLAT_DIR=$(natpath "$(cd "$TMP/l_flatdp/FASTag" && pwd -L)"); FLAT_P=$(natpath "$(cd "$TMP/l_flatdp/FASTag" && pwd -P)")
+FASTAG_DIGEST_DIR= data_paths "$FLAT" "
+assert j['digest_dir'] in ('$FLAT_DIR/share-FASTag-digest', '$FLAT_P/share-FASTag-digest'), j
+assert j['alkylation_dir'] in ('$FLAT_DIR/share-FASTag-alkylation', '$FLAT_P/share-FASTag-alkylation'), j
+assert j['proteomes'] == ['yeast'] and j['digest_from_env'] is False and len(j['digest_searched']) == 3, j"
+FASTAG_DIGEST_DIR= data_paths "$B" "
+assert j['digest_dir'] is None and j['alkylation_dir'] is None and j['proteomes'] == [], j
+assert all('..' not in p.split('/') for p in j['digest_searched']), j"
+FASTAG_DIGEST_DIR="$NF" data_paths "$FLAT" "
+assert j['digest_dir'] is None and j['digest_from_env'] is True and j['digest_searched'] == ['$NF'], j"
 
 echo "gui_cli_test: all checks passed"
 exit 0

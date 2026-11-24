@@ -471,7 +471,7 @@ function QcView({ tsv }: { tsv: Tsv }): JSX.Element {
             {model.channels.channels.length > 0 && (
               <BarChart
                 caption="Share of the assessable MS2 with each reporter channel"
-                bars={model.channels.channels.map((c) => ({ id: c.label, label: c.label, value: c.seen, share: c.share, n: c.assessable, muted: c.observed === false || (c.observed == null && (c.share ?? 0) < OBSERVED_SHARE) }))}
+                bars={model.channels.channels.map((c) => ({ id: c.label, label: c.label, value: c.seen ?? c.share ?? 0, share: c.share, n: c.assessable, muted: c.observed === false || (c.observed == null && (c.share ?? 0) < OBSERVED_SHARE) }))}
                 xTitle="channel"
                 rule={{ at: OBSERVED_SHARE, label: `seen: ${OBSERVED_SHARE * 100}%` }}
                 legend={[
@@ -486,16 +486,18 @@ function QcView({ tsv }: { tsv: Tsv }): JSX.Element {
                     head: `Channel ${c.label}`,
                     lines: [
                       ...(c.mz != null ? [`m/z ${c.mz.toFixed(4)}`] : []),
-                      `${fmtInt(c.seen)} of ${fmtInt(c.assessable)} assessable MS2${c.share != null ? ` (${pctText(c.share)})` : ''}`
+                      c.seen == null
+                        ? `${c.share != null ? pctText(c.share) : '–'} of ${fmtInt(c.assessable)} assessable MS2 (the report gives the share only)`
+                        : `${fmtInt(c.seen)} of ${fmtInt(c.assessable)} assessable MS2${c.share != null ? ` (${pctText(c.share)})` : ''}`
                     ]
                   }
                 }}
                 tableView={<ReporterChannels channels={model.channels.channels} />}
-                summary={`Reporter channels: ${model.channels.channels.map((c) => `${c.label} ${c.share != null ? pctText(c.share) : fmtInt(c.seen)}`).join(', ')}`}
+                summary={`Reporter channels: ${model.channels.channels.map((c) => `${c.label} ${c.share != null ? pctText(c.share) : c.seen != null ? fmtInt(c.seen) : '–'}`).join(', ')}`}
               >
                 <p className="footnote">
                   Seen: the reporter ion within 20 ppm at 3× the median peak or more.
-                  {model.channels.partial && ' Older report: only the channels seen in 20% of the MS2 or more are listed.'}
+                  {model.channels.partial && ' Older report: shares only, no per-channel counts; only the channels seen in 20% of the MS2 or more are listed.'}
                 </p>
               </BarChart>
             )}
@@ -605,12 +607,12 @@ function ReporterChannels({ channels }: { channels: ReporterChannel[] }): JSX.El
         </thead>
         <tbody>
           {channels.map((c) => (
-            <tr key={c.label} className={(c.observed ?? c.seen > 0) ? undefined : 'muted'}>
+            <tr key={c.label} className={(c.observed ?? (c.seen ?? 0) > 0) ? undefined : 'muted'}>
               <th scope="row" className="mono">
                 {c.label}
               </th>
               <td className="num mono">{c.mz == null ? '–' : c.mz.toFixed(4)}</td>
-              <td className="num mono">{fmtInt(c.seen)}</td>
+              <td className="num mono">{c.seen == null ? '–' : fmtInt(c.seen)}</td>
               <td className="num mono">{fmtInt(c.assessable)}</td>
               <td className="num mono">{c.share == null ? '–' : `${(c.share * 100).toFixed(1)}%`}</td>
             </tr>

@@ -529,6 +529,67 @@ int main(int argc, char** argv)
         const Spans uy = spans(c_nterm, cmz, C::Orientation::Unresolved);
         ub.insert(ub.end(), uy.begin(), uy.end());
         CHECK(C::residueCover(ub) == 3, "%s: unresolved: res_cover %zu, want 3", nm, C::residueCover(ub));
+        // Mixed known and unresolved reads, on residues 5..7 (I D E) in the
+        // upper half, where a known Forward read and a folded one do not
+        // coincide. One spectrum's tags as FASTagger adds them: each block
+        // placed by its orientation, then, while any orientation is
+        // unresolved, every block folded (the known ones too).
+        {
+          std::vector<double> nmz5, cmz5;
+          for (size_t i = 4; i <= 7; ++i) nmz5.push_back(pre[i] + ip.offN + H);
+          for (size_t i = 8; i >= 5; --i) cmz5.push_back(mres - pre[i - 1] + ip.offC + H);
+          const double n5 = M - (nmz5.back() - H) - corr;
+          const double c5 = M - (cmz5.back() - H) - corr;
+          CHECK(std::fabs(c5 - pre[4]) < 1e-6, "%s: the C-series tag on 5..7 has nterm %.6f, want %.6f", nm, c5, pre[4]);
+          CHECK(0.5 * (pre[4] + pre[7]) > 0.5 * axis, "%s: residues 5..7 not in the upper half", nm);
+          struct Read
+          {
+            double nterm;
+            const std::vector<double>* mz;
+            C::Orientation o;
+          };
+          const auto spectrum = [&](const std::vector<Read>& reads, bool fold_known) {
+            Spans v;
+            std::vector<std::pair<size_t, size_t>> blk;
+            bool exact = true;
+            for (const Read& r : reads)
+            {
+              const size_t first = v.size();
+              C::addResidueSpans(v, r.nterm, *r.mz, one3, 1, 3, r.mz->back() - r.mz->front(), r.o, axis);
+              blk.emplace_back(first, v.size());
+              if (r.o == C::Orientation::Unresolved) exact = false;
+            }
+            if (!exact && fold_known)
+              for (const auto& [a, b] : blk) C::foldResidueSpans(v, a, b, axis);
+            return v;
+          };
+          using O = C::Orientation;
+          // y read Forward, b read Unresolved: folding per tag alone counts
+          // the stretch and its mirror image (over 3 residues).
+          const std::vector<Read> yb = {{c5, &cmz5, O::Forward}, {n5, &nmz5, O::Unresolved}};
+          Spans m1 = spectrum(yb, false);
+          CHECK(C::residueCover(m1) > 3, "%s: y fwd + b unresolved, per tag: res_cover %zu, want > 3", nm,
+                C::residueCover(m1));
+          Spans m2 = spectrum(yb, true);
+          CHECK(C::residueCover(m2) == 3, "%s: y fwd + b unresolved: res_cover %zu, want 3", nm, C::residueCover(m2));
+          // b read Reversed, y read Unresolved.
+          const std::vector<Read> by = {{n5, &nmz5, O::Reversed}, {c5, &cmz5, O::Unresolved}};
+          Spans m3 = spectrum(by, true);
+          CHECK(C::residueCover(m3) == 3, "%s: b rev + y unresolved: res_cover %zu, want 3", nm, C::residueCover(m3));
+          // Folding again (an already folded block) changes nothing.
+          Spans m4 = m2;
+          C::foldResidueSpans(m4, 0, m4.size() / 2, axis);
+          C::foldResidueSpans(m4, m4.size() / 2, m4.size(), axis);
+          CHECK(m4 == m2, "%s: folding a folded spectrum changed it", nm);
+          // Every orientation known: exact and unfolded, on the true residues.
+          Spans k = spectrum({{n5, &nmz5, O::Reversed}, {c5, &cmz5, O::Forward}}, true);
+          CHECK(C::residueCover(k) == 3, "%s: known on 5..7: res_cover %zu, want 3", nm, C::residueCover(k));
+          std::sort(k.begin(), k.end());
+          bool on_true = k.size() == 6;
+          for (size_t i = 0; on_true && i < 6; ++i)
+            on_true = std::fabs(k[i].first - pre[4 + i / 2]) < 1e-6 && std::fabs(k[i].second - pre[5 + i / 2]) < 1e-6;
+          CHECK(on_true, "%s: known reads on 5..7 were moved off the true residues", nm);
+        }
         // A tag across the centre is folded whole: its residues stay distinct.
         Spans mid;
         C::addResidueSpans(mid, 0.5 * axis - 150, {100, 200, 300, 400}, one3, 1, 3, 300, C::Orientation::Unresolved,

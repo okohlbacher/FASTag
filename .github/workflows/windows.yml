@@ -463,7 +463,15 @@ jobs:
 
       - name: Test
         shell: bash
+        env:
+          FASTAG_PYTHON: ${{ steps.validator-python.outputs.python-path }}
         run: |
+          # An explicit `shell: bash` runs as bash -eo pipefail: a failing ctest
+          # fails the step through the tee below.
+          set -o pipefail
+          # The setup-python interpreter, so gui_cli_test and shipped_data_test
+          # (which skip without a Python 3) run: python3 may be missing here.
+          FASTAG_PYTHON="${FASTAG_PYTHON//\\//}"; export FASTAG_PYTHON
           # OpenMS resolves share/OpenMS (ResidueDB, ModificationsDB, unimod)
           # via OPENMS_DATA_PATH, then a compiled-in path, then exe-relative.
           # A unit-test binary in the build tree is not FASTag.exe and must not
@@ -481,7 +489,9 @@ jobs:
           # decoder's spectrum-by-spectrum check against OpenMS, and for
           # mimalloc_redirect_test.
           # bruker_cli_test and thermo_cli_test: the vendor readers (1.15.2).
-          for t in mzpeak_roundtrip mzpeak_validate mzpeak_stream_test indexed_mzml_test mimalloc_redirect_test bruker_cli_test thermo_cli_test; do
+          # gui_cli_test and shipped_data_test: the shipped data in every
+          # layout and the build tree's copy staging (they skip without Python).
+          for t in mzpeak_roundtrip mzpeak_validate mzpeak_stream_test indexed_mzml_test mimalloc_redirect_test bruker_cli_test thermo_cli_test gui_cli_test shipped_data_test; do
             grep -E "Test +#[0-9]+: $t " ctest.log | grep -q 'Passed' \
               || { echo "::error::$t did not pass (skipped, not run or missing)"; grep -E "$t" ctest.log || true; exit 1; }
           done

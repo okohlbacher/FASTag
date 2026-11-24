@@ -277,7 +277,8 @@ export function assessability(rows: Row[]): Stack[] {
 export interface Channels {
   channels: ReporterChannel[]
   /// From reporter_observed_* of an older report: only the channels seen in
-  /// at least 20 % of the assessable MS2, without their m/z.
+  /// at least 20 % of the assessable MS2, without their m/z, and their
+  /// rounded shares without counts (seen null).
   partial: boolean
 }
 
@@ -292,7 +293,9 @@ export function qcChannels(rows: Row[]): Channels {
     return r.value.split(',').flatMap((p) => {
       const [label, s] = p.split(':').map((x) => x.trim())
       const share = num(s)
-      return label && share != null ? [{ label, mz: null, seen: Math.round(share * n), assessable: n, share, observed: true }] : []
+      // The share is written to 4 decimals (RunQC.cpp share()): above 10,000
+      // assessable MS2 it names no count, so none is made up from it.
+      return label && share != null ? [{ label, mz: null, seen: null, assessable: n, share, observed: true }] : []
     })
   })
   return { channels: old, partial: old.length > 0 }

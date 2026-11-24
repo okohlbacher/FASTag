@@ -1326,6 +1326,12 @@ export const PARAM_UI: Record<string, ParamUi> = {
     }
   },
   pick_unknown_type: { hidden: REMOVED_1_14, help: REMOVED_1_14_HELP },
+  data_paths: {
+    hidden: 'capability check for the app; prints JSON and exits',
+    help: {
+      text: 'Print the folders this FASTag reads its shipped data from and exit. It writes no output file; the app reads it before a run.'
+    }
+  },
   probe_input: {
     hidden: 'metadata probe for programs; prints JSON lines and exits',
     help: {

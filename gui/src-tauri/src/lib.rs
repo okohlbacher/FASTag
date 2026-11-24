@@ -166,6 +166,7 @@ pub fn run() {
             browser::results_open,
             browser::results_query,
             browser::results_position,
+            browser::results_neighbours,
             browser::results_export,
             browser::results_cancel,
             browser::table_query,
@@ -220,9 +221,15 @@ pub fn run() {
                 },
                 |route| {
                     // A dropped identification file is listed with Reveal and
-                    // Open (Mass shifts): the drop scopes it, as a run does.
-                    if let Ok(mut r) = window.app_handle().state::<RunManager>().revealable.lock() {
-                        r.extend(drop::openable(&route));
+                    // Open (Mass shifts): the drop scopes it, as a run does,
+                    // and Open records its identity now (reveal.rs may_open).
+                    let mgr = window.app_handle().state::<RunManager>();
+                    let dropped = drop::openable(&route);
+                    if let Ok(mut o) = mgr.openable.lock() {
+                        o.extend(dropped.iter().filter_map(|p| reveal::openable_identity(p)));
+                    }
+                    if let Ok(mut r) = mgr.revealable.lock() {
+                        r.extend(dropped);
                     }
                     let _ = window.emit(drop::DROP_EVENT, route);
                 },

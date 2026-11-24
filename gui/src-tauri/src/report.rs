@@ -18,6 +18,10 @@ const SUMMARY_MAX_BYTES: u64 = MAX_BYTES;
 /// What report_head reads: enough for the header line of a wide table and
 /// the first lines of an mzTab or XML file (results/reports.ts sniffPath).
 pub(crate) const HEAD_BYTES: u64 = 64 << 10;
+/// The start of read_report's error for a file over MAX_BYTES: the
+/// renderer tells it from a read failure by it (results/useTable.ts) and
+/// keeps an identifications mzTab listed as a file with Open and Reveal.
+pub(crate) const TOO_LARGE_PREFIX: &str = "too large to show";
 
 pub(crate) fn read_report(path: &str) -> Result<Option<String>, String> {
     if path.trim().is_empty() {
@@ -33,7 +37,7 @@ pub(crate) fn read_report(path: &str) -> Result<Option<String>, String> {
     }
     if meta.len() > MAX_BYTES {
         return Err(format!(
-            "{path} is {} MB, too large to show here (the limit is {} MB); open it in a spreadsheet",
+            "{TOO_LARGE_PREFIX}: {path} is {} MB (the limit is {} MB); open it in a spreadsheet or an identification tool",
             meta.len() >> 20,
             MAX_BYTES >> 20
         ));
@@ -225,7 +229,8 @@ mod tests {
         let fh = std::fs::File::create(&f).unwrap();
         fh.set_len(MAX_BYTES + 1).unwrap();
         let e = read_report(f.to_str().unwrap()).unwrap_err();
-        assert!(e.contains("too large"), "{e}");
+        assert!(e.starts_with(TOO_LARGE_PREFIX), "{e}");
+        assert!(e.contains("the limit is 128 MB"), "{e}");
         std::fs::remove_file(&f).ok();
     }
 

@@ -428,7 +428,9 @@ once. Parsing a 50 MB table (810,738 glyco rows or 402,313 recon rows, the
 PXD014764 rows repeated) took 0.18 to 0.25 s and 80 to 130 MB of heap
 beyond the text in Node 26 (V8, vitest) on an M4 Max; the IPC transfer of such a
 string is not measured. A larger table shows "too large" and opens only in
-a spreadsheet.
+a spreadsheet; a larger `-recon_id_out` mzTab is listed under Identification
+files with Open and Reveal (the error starts with `too large to show`,
+report.rs `TOO_LARGE_PREFIX`).
 
 Themes: System (the default), Light and Dark, from the top bar or View >
 Theme; the choice is remembered on this machine. Text uses the system UI

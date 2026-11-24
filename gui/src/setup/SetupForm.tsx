@@ -163,6 +163,9 @@ export interface SetupFormProps {
   // Why the input was not checked before the run, when that is no problem
   // to act on (no -probe_input): behind a (?) by the Instrument brief.
   notCheckedNote?: string | null
+  // The engine reads Alkylation proteome auto as the shipped human proteome
+  // (from before 1.16; Inspector.legacyAuto).
+  legacyAuto?: boolean
 }
 
 export default function SetupForm({
@@ -179,7 +182,8 @@ export default function SetupForm({
   sdrf,
   detectedInstrument,
   notFound = [],
-  notCheckedNote = null
+  notCheckedNote = null,
+  legacyAuto = false
 }: SetupFormProps): JSX.Element {
   const { input, out, values, setValue, openGroups, setOpenGroups, writingFiles, changedParams } = session
   const { busy, jobs, revealErr } = run
@@ -372,7 +376,10 @@ export default function SetupForm({
   }
   // feedback 202dbcf4: without a database the report needs no length; its
   // votes need a C inside a tag, so longer tags give more.
-  const tagOnlyNote = (): JSX.Element => (
+  // An engine from before 1.16 places such a run on the human proteome.
+  const tagOnlyNote = (): JSX.Element => legacyAuto ? (
+    <>This FASTag program is older than the app: with Proteome auto it places the tags on the shipped human proteome, not the call from the tags alone.</>
+  ) : (
     <>
       No database needed: the call is read off the tags; a longer{' '}
       <button type="button" className="link small" onClick={goToExtension}>

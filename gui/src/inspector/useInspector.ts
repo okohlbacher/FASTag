@@ -39,6 +39,9 @@ export interface Inspector {
   undoRunAnyway(id: string): void
   // Probe the input again (it may have changed on disk).
   recheck(): void
+  // The engine is from before 1.16 (no -data_paths): it reads Alkylation
+  // proteome auto as the shipped human proteome. False while unknown.
+  legacyAuto: boolean
 }
 
 /// How long the FASTA field must stay unchanged before it is probed.
@@ -100,7 +103,9 @@ export function useInspector(o: { input: string; values: Record<string, ParamVal
   // The shipped digest data and proteomes: whenever an output that needs
   // them is on, at the same moments as the taxonomy.
   const [data, setData] = useState<DataStatus | undefined>(undefined)
-  const needsData = shippedDataNeeds(values).length > 0
+  // As an engine from before 1.16 would need it (auto read as human): the
+  // status says which engine it is, so it is asked for whenever it may matter.
+  const needsData = shippedDataNeeds(values, { autoDbFree: false }).length > 0
   useEffect(() => {
     if (!binOk || !needsData) return
     let live = true
@@ -195,6 +200,7 @@ export function useInspector(o: { input: string; values: Record<string, ParamVal
   return {
     caps,
     pre,
+    legacyAuto: !!data && !data.autoDbFree,
     blocks,
     unanswered,
     checking,

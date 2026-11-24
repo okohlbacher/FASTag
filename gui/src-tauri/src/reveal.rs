@@ -2,12 +2,25 @@
 // app" (GUI-DESIGN 6.3; the full table of every output option from P1).
 //
 // The renderer never names a path to the opener plugin itself: it asks
-// `reveal_output`, and the backend reveals the file (or opens its folder)
-// only when that file is an output of a run of this app -- one started in
-// this session (RunManager.revealable) or one in the run record
-// (history.jsonl), or a -recon_id_out dropped on the window (drop.rs
-// openable). The same scope holds for `open_output`. capabilities/default.json grants the renderer no opener
-// permission for paths, so this check is the whole scope.
+// `reveal_output` or `open_output`, and the backend checks the path.
+// capabilities/default.json grants the renderer no opener permission for
+// paths, so these checks are the whole scope.
+//
+// Reveal shows a file in the file manager (or opens its folder) when it is
+// an output of a run of this app: one started in this session
+// (RunManager.revealable) or one in the run record (history.jsonl), or a
+// -recon_id_out dropped on the window (drop.rs openable).
+//
+// Open hands a file to the app the system gives its type, which for some
+// types (.command, .app, .terminal on macOS) runs it, so its scope is
+// narrower (may_open): only the identification files and hand-off files the
+// UI offers Open for (ProductFiles: -recon_id_out as idXML, mzid or mzTab,
+// -fasta_out, -search_config_out; OPENABLE), only a file a run of this
+// session committed (ended with exit 0) or the OS handed over in a drop
+// (RunManager.openable, with the identity each had then), never a planned
+// output or one of the record, and only while it is still that file: a
+// regular file, not a symlink, at the same path with the same device,
+// inode, size and modification time.
 
 use std::path::{Path, PathBuf};
 
@@ -189,17 +202,53 @@ pub fn reveal_output(app: AppHandle, state: State<'_, RunManager>, path: String,
     }
 }
 
+/// The file types Open may hand to the system, lower case: what ProductFiles
+/// offers Open for (-recon_id_out idXML, mzid or mzTab; -fasta_out; the
+/// -search_config_out of Sage (JSON), Comet or MSFragger (.params)).
+pub const OPENABLE: &[&str] = &["idxml", "mzid", "mztab", "fasta", "fa", "json", "params"];
+
+/// @p p with its folder resolved and its last component as it is (not
+/// followed when it is a symlink).
+fn parent_resolved(p: &Path) -> Option<PathBuf> {
+    let name = p.file_name()?;
+    let parent = match p.parent() {
+        Some(d) if !d.as_os_str().is_empty() => d,
+        _ => Path::new("."),
+    };
+    Some(std::fs::canonicalize(parent).ok()?.join(name))
+}
+
+/// @p p as Open records and checks it: of an OPENABLE type, a regular file
+/// and no symlink, at its folder-resolved path (parent_resolved), with the
+/// identity of the handle opened there. None: anything else.
+pub fn openable_identity(p: &Path) -> Option<crate::fasta::FileIdentity> {
+    let ext = p.extension()?.to_str()?.to_ascii_lowercase();
+    if !OPENABLE.contains(&ext.as_str()) {
+        return None;
+    }
+    let m = std::fs::symlink_metadata(p).ok()?;
+    if m.file_type().is_symlink() || !m.is_file() {
+        return None;
+    }
+    crate::fasta::identity_at(&parent_resolved(p)?)
+}
+
+/// @p path may be opened: openable_identity of it now is one of @p allowed
+/// (the identities recorded when a run committed the file or it was
+/// dropped). The path to open, folder-resolved; None: refused.
+pub fn may_open(path: &Path, allowed: &[crate::fasta::FileIdentity]) -> Option<PathBuf> {
+    let now = openable_identity(path)?;
+    allowed.contains(&now).then(|| PathBuf::from(now.path))
+}
+
 /// Open @p path in the app the system gives its type (an idXML in an
-/// identification tool), under the same scope as reveal_output: an output of
-/// a run of this app, or a file dropped on the window. The renderer has no
-/// opener permission for paths (capabilities/default.json); this check is
-/// the whole scope.
+/// identification tool), under the Open scope (may_open): a file of a type
+/// the UI offers Open for that a run of this session committed or that was
+/// dropped on the window, unchanged since.
 #[tauri::command]
 pub fn open_output(app: AppHandle, state: State<'_, RunManager>, path: String) -> Result<(), String> {
-    let p = PathBuf::from(&path);
-    if !is_revealable(&p, &allowed(&app, &state)) {
-        return Err(format!("{path} is not an output of a run of this app"));
-    }
+    let allowed = state.openable.lock().map(|o| o.clone()).unwrap_or_default();
+    let p = may_open(Path::new(&path), &allowed).ok_or_else(|| format!("{path} is not a file this app wrote or you opened"))?;
     app.opener().open_path(p.display().to_string(), None::<&str>).map_err(|e| e.to_string())
 }
 
@@ -291,6 +340,108 @@ mod tests {
             assert!(!is_revealable(&link, &allowed));
             assert!(is_revealable(&link, std::slice::from_ref(&other)));
         }
+        std::fs::remove_dir_all(&d).ok();
+    }
+
+    /// A fresh folder for an Open test.
+    fn odir(name: &str) -> PathBuf {
+        let d = std::env::temp_dir().join(format!("fastag-open-{}-{name}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&d);
+        std::fs::create_dir_all(&d).unwrap();
+        dunce::canonicalize(&d).unwrap()
+    }
+
+    // Codex n10: a committed output replaced by a symlink to another file
+    // opens neither the link nor its target (was: both canonicalized to the
+    // target, which then passed).
+    #[cfg(unix)]
+    #[test]
+    fn open_refuses_a_symlink_swapped_output() {
+        let d = odir("swap");
+        let out = d.join("a.recon_id.idXML");
+        std::fs::write(&out, "<IdXML/>").unwrap();
+        let x = d.join("x.idXML");
+        std::fs::write(&x, "<other/>").unwrap();
+        let allowed = vec![openable_identity(&out).unwrap()];
+        std::fs::remove_file(&out).unwrap();
+        std::os::unix::fs::symlink(&x, &out).unwrap();
+        assert_eq!(may_open(&out, &allowed), None);
+        assert_eq!(may_open(&x, &allowed), None);
+        // Nor is a link recorded in the first place.
+        assert_eq!(openable_identity(&out), None);
+        std::fs::remove_dir_all(&d).ok();
+    }
+
+    // A planned output (revealable from the start of the run) is not
+    // openable unless the run committed it.
+    #[test]
+    fn open_refuses_a_planned_output_of_a_run_that_did_not_finish() {
+        let d = odir("planned");
+        let out = d.join("a.recon_id.idXML");
+        std::fs::write(&out, "<IdXML/>").unwrap();
+        assert!(is_revealable(&out, std::slice::from_ref(&out)));
+        assert_eq!(may_open(&out, &[]), None);
+        std::fs::remove_dir_all(&d).ok();
+    }
+
+    // Only the types ProductFiles offers Open for reach the system's opener.
+    #[test]
+    fn open_refuses_other_types() {
+        let d = odir("types");
+        for f in ["x.command", "x.tags.tsv", "x.app", "x.terminal", "x"] {
+            let p = d.join(f);
+            std::fs::write(&p, "#!/bin/sh\n").unwrap();
+            assert_eq!(openable_identity(&p), None, "{f}");
+            let forged = crate::fasta::identity_of_file(&p).unwrap();
+            assert_eq!(may_open(&p, &[forged]), None, "{f}");
+        }
+        // A folder named like an idXML is no file.
+        std::fs::create_dir_all(d.join("dir.idXML")).unwrap();
+        assert_eq!(openable_identity(&d.join("dir.idXML")), None);
+        std::fs::remove_dir_all(&d).ok();
+    }
+
+    // The same path rewritten (another size, time or inode) is refused.
+    #[test]
+    fn open_refuses_a_replaced_file() {
+        let d = odir("replaced");
+        let out = d.join("a.reduced.fasta");
+        std::fs::write(&out, ">p\nPEPTIDEK\n").unwrap();
+        let allowed = vec![openable_identity(&out).unwrap()];
+        assert_eq!(may_open(&out, &allowed), Some(out.clone()));
+        std::fs::write(&out, ">p\nPEPTIDEKK\n").unwrap();
+        assert_eq!(may_open(&out, &allowed), None);
+        let tmp = d.join("new.fasta");
+        std::fs::write(&tmp, ">p\nPEPTIDEK\n").unwrap();
+        std::fs::rename(&tmp, &out).unwrap();
+        assert_eq!(may_open(&out, &allowed), None);
+        std::fs::remove_dir_all(&d).ok();
+    }
+
+    #[test]
+    fn open_allows_a_committed_idxml_and_a_dropped_mzid() {
+        let d = odir("allowed");
+        std::fs::create_dir_all(d.join("sub")).unwrap();
+        let idxml = d.join("a.recon_id.idXML");
+        let mzid = d.join("b.MZID");
+        let json = d.join("a.search.json");
+        for p in [&idxml, &mzid, &json] {
+            std::fs::write(p, "x").unwrap();
+        }
+        // Committed at the end of a run, dropped by the OS (lib.rs).
+        let route = crate::drop::route(std::slice::from_ref(&mzid));
+        let mut allowed: Vec<_> = [&idxml, &json].into_iter().filter_map(|p| openable_identity(p)).collect();
+        allowed.extend(crate::drop::openable(&route).iter().filter_map(|p| openable_identity(p)));
+        assert_eq!(allowed.len(), 3);
+        assert_eq!(may_open(&idxml, &allowed), Some(idxml.clone()));
+        assert_eq!(may_open(&mzid, &allowed), Some(mzid.clone()));
+        assert_eq!(may_open(&json, &allowed), Some(json.clone()));
+        // Another spelling of the folder is the same file.
+        assert_eq!(may_open(&d.join("sub").join("..").join("a.recon_id.idXML"), &allowed), Some(idxml.clone()));
+        // Another file of an openable type is not.
+        let other = d.join("c.idXML");
+        std::fs::write(&other, "x").unwrap();
+        assert_eq!(may_open(&other, &allowed), None);
         std::fs::remove_dir_all(&d).ok();
     }
 }

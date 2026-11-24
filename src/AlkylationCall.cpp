@@ -268,7 +268,11 @@ namespace FASTag::Alkylation
     }
     c.cls = top;
     c.top = t.cls[static_cast<std::size_t>(top)];
-    c.share = c.binned ? static_cast<double>(c.top) / static_cast<double>(c.binned) : 0.0;
+    // Review n3: a conflicted vote counts against the share (10 CAM and 90
+    // conflicts are a share of 0.1, not 1). Unexplained votes (placement
+    // call only) stay out of it.
+    c.voted = c.binned + t.conflict;
+    c.share = c.voted ? static_cast<double>(c.top) / static_cast<double>(c.voted) : 0.0;
     if (c.binned < s.min_spectra) c.reason = "few_cys_spectra";
     else if (tie || c.top < s.min_spectra || c.share < s.min_share) c.reason = "ambiguous";
     else c.called = true;
@@ -330,7 +334,7 @@ namespace FASTag::Alkylation
     add("database", "-", "No protein database is used.");
     add("database_source", "none", "No protein database is used.");
     add("min_spectra", u(s.min_spectra), "A call needs " + u(s.min_spectra) + " votes in total and for the called class.");
-    add("min_share", num(s.min_share), "A call needs a share of " + num(s.min_share) + " of the votes.");
+    add("min_share", num(s.min_share), "A call needs a share of " + num(s.min_share) + " of the votes, conflicts included.");
     return r;
   }
 
@@ -357,7 +361,11 @@ namespace FASTag::Alkylation
       add("reagent", name, u(c.top), "The call is " + name + ".");
       add("mass", c.cls == NONE ? "-" : num(mass), "-",
           c.cls == NONE ? "A call of none has no reagent mass." : name + " adds " + num(mass) + " Da to C.");
-      add("share", num(c.share), u(c.binned), "A share of " + f3(c.share) + " of the " + u(c.binned) + " " + unit + " are " + name + ".");
+      add("share", num(c.share), u(c.voted),
+          "A share of " + f3(c.share) + " of the " + u(c.voted) + " " + unit + " (binned plus conflicted) are " + name + ".");
+      add("voted", u(c.voted), u(c.binned),
+          u(c.voted) + " " + unit + " are in the share: " + u(c.binned) + " binned to a class, " + u(c.voted - c.binned) +
+              " conflicted.");
       add("reason", "-", "-", "The call is made.");
     }
     else
@@ -372,12 +380,17 @@ namespace FASTag::Alkylation
                 "(alkylation_tags_call, alkylation_placement_call)."
           : c.reason == "few_cys_spectra"
               ? "No alkylation is called: " + u(c.binned) + " " + unit + " are fewer than " + u(s.min_spectra) + "."
-              : "No alkylation is called: the leading class " + name + " has " + u(c.top) + " of " + u(c.binned) + " " + unit +
-                    ", short of " + u(s.min_spectra) + " and a share of " + num(s.min_share) + " (or tied).");
+              : "No alkylation is called: the leading class " + name + " has " + u(c.top) + " of " + u(c.voted) + " " + unit +
+                    " (binned plus conflicted), short of " + u(s.min_spectra) + " and a share of " + num(s.min_share) + " (or tied).");
       add("reagent", "-", "-", "No reagent is called.");
       add("mass", "-", "-", "No reagent is called.");
-      add("share", c.binned ? num(c.share) : "-", u(c.binned),
-          c.binned ? "The leading class " + name + " has a share of " + f3(c.share) + "." : "Nothing is counted.");
+      add("share", c.voted ? num(c.share) : "-", u(c.voted),
+          c.voted ? "The leading class " + name + " has a share of " + f3(c.share) + " of the " + u(c.voted) + " " + unit +
+                        " (binned plus conflicted)."
+                  : "Nothing is counted.");
+      add("voted", u(c.voted), u(c.binned),
+          u(c.voted) + " " + unit + " are in the share: " + u(c.binned) + " binned to a class, " + u(c.voted - c.binned) +
+              " conflicted.");
       add("reason", c.reason, "-", "The first no-call rule that applies is " + c.reason + ".");
     }
     if (with_source)
@@ -433,7 +446,7 @@ namespace FASTag::Alkylation
     add("alk_run", "min_spectra", u(s.min_spectra), "-",
         "A call needs " + u(s.min_spectra) + " spectra binned in total and for the called class.");
     add("alk_run", "min_share", num(s.min_share), "-",
-        "A call needs a share of " + num(s.min_share) + " of the binned spectra.");
+        "A call needs a share of " + num(s.min_share) + " of the binned and conflicted spectra.");
     add("alk_run", "tags", u(t.tags), "-", u(t.tags) + " placed tags (ungapped, E-value at most 1) were looked at.");
     add("alk_run", "spectra", u(t.spectra), "-",
         u(t.spectra) + " MS2 spectra have a tag with a single-Cys placement that counts; each votes once, with its best such tag.");
@@ -452,7 +465,7 @@ namespace FASTag::Alkylation
     add("alk_cys", "unexplained", u(t.unexplained), u(t.spectra),
         u(t.unexplained) + " spectra have a reagent mass no Cys form explains within the window.");
     add("alk_cys", "conflict", u(t.conflict), u(t.spectra),
-        u(t.conflict) + " spectra have a best tag whose counted placements disagree on the class.");
+        u(t.conflict) + " spectra have a best tag whose counted placements disagree on the class; they count against the share.");
     std::uint64_t placements = 0;
     for (std::uint64_t v : t.outcomes) placements += v;
     for (int k = static_cast<int>(Outcome::NO_CYS); k < static_cast<int>(Outcome::COUNT); ++k)

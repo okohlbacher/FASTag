@@ -28,7 +28,7 @@ import { EValue, columnLabel, hitCellText, spectrumHint } from '../ResultsTable'
 import { dbCellsOf, dbHitTitle } from '../results/dbProteins'
 import { DbAlignment } from './DbAlignment'
 import { HelpLink } from '../help/HelpLink'
-import type { ResultsView } from '../types'
+import type { NavAnswer, ResultsView } from '../types'
 
 export interface SpectrumTarget {
   // The tags file and the spectrum (its native ID).
@@ -169,74 +169,48 @@ export interface Step {
   rowId: number | null
   view: ResultsView | null
 }
-/// The order ◀ ▶ walk and where the spectrum shown sits in it.
+/// The order ◀ ▶ walk, where the spectrum shown sits in it and the spectra
+/// either side: one answer of results_neighbours, so all of one snapshot
+/// of the file (browser.rs neighbours).
 interface Order {
   view: ResultsView
   pos: number
   matched: number
+  snapshot: number
+  prev: Step | null
+  next: Step | null
 }
 // A view waiting for the E-value order (browser.rs D5, pending) is not
-// cached, so its positions are not known yet: asked again this often.
+// in its final order yet, so its positions are not known: asked again this often.
 export const RANK_WAIT = { ms: 250, tries: 40 }
-// Rows read at a time when stepping over the other tags of one spectrum.
-const SCAN = 200
-const SCAN_PAGES = 50
 const sleep = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms))
 
-/// Where a row sits in a view, as far as it is known: at a position of a
-/// ranked (or final) snapshot of the view, confirmed absent from it, still
-/// waiting for its E-value order (D5 pending) after RANK_WAIT, or a lookup
-/// that failed. Pending and failed are not absence: nothing falls back on them.
-type Lookup = { kind: 'at'; order: Order } | { kind: 'absent' } | { kind: 'pending' } | { kind: 'failed'; reason: string }
+/// Where a spectrum sits in a view, as far as it is known: at a position of
+/// a ranked (or final) snapshot of the view, confirmed absent from it (in
+/// snapshot @p snapshot), still waiting for its E-value order (D5 pending)
+/// after RANK_WAIT, or a lookup that failed. Pending and failed are not
+/// absence: nothing falls back on them.
+type Lookup = { kind: 'at'; order: Order } | { kind: 'absent'; snapshot: number } | { kind: 'pending' } | { kind: 'failed'; reason: string }
 const reasonOf = (e: unknown): string => (e instanceof Error ? e.message : String(e))
-// A page read from a view in its final order: ranked, or not waiting for it.
-const settled = (pg: { ranked?: boolean; pending?: boolean }): boolean => !!pg.ranked || !pg.pending
 
-/** Where file row @p row sits in @p view. resultsPosition answers only for
- *  a view the backend has built and cached (browser.rs position "never
- *  starts a build"), so the view is queried first; a position is taken only
- *  when that head read is of the view's final order (ranked, or not
- *  pending), so the position, its count and the neighbours read later are
- *  of one order. */
-async function positionIn(path: string, view: ResultsView, row: number): Promise<Lookup> {
-  for (let tries = 1; ; tries++) {
-    let head: Awaited<ReturnType<typeof query>>
-    let pos: number | null
-    try {
-      head = await query(path, view, 0, 1)
-      pos = await retried(() => window.fastag.resultsPosition(path, view, row))
-    } catch (e) {
-      return { kind: 'failed', reason: reasonOf(e) }
-    }
-    if (pos != null && pos >= 0 && settled(head)) return { kind: 'at', order: { view, pos, matched: head.matchedRows } }
-    if (!head.pending) return { kind: 'absent' }
-    if (tries >= RANK_WAIT.tries) return { kind: 'pending' }
-    await sleep(RANK_WAIT.ms)
-  }
-}
-
-/** Where @p target sits in @p view: its row, else (that row confirmed
- *  absent) the spectrum's first row in the view (with per-spectrum, its
- *  best tag), read from the view's final order. */
+/** Where @p target sits in @p view (its row, else, that row not in the
+ *  view or of another spectrum, the spectrum's first row there) and the
+ *  spectra either side, in one call that the backend answers from one
+ *  snapshot of the file: a file rewritten meanwhile (a rerun) cannot give a
+ *  position of one file and the neighbours of another. A view not in its
+ *  final order yet is asked again, RANK_WAIT. */
 async function lookupIn(path: string, view: ResultsView, target: SpectrumTarget): Promise<Lookup> {
-  if (target.rowId != null) {
-    const l = await positionIn(path, view, target.rowId)
-    if (l.kind !== 'absent') return l
-  }
+  const stepView = view === PER_SPECTRUM ? null : view
+  const step = (n: { spectrum: string; rowId: number } | null): Step | null => (n ? { spectrum: n.spectrum, rowId: n.rowId, view: stepView } : null)
   for (let tries = 1; ; tries++) {
-    let mine: Awaited<ReturnType<typeof query>>
+    let a: NavAnswer
     try {
-      mine = await query(path, { ...view, spectrum: target.spectrum, spectrumExact: true }, 0, 1)
+      a = await retried(() => window.fastag.resultsNeighbours(path, view, target.rowId, target.spectrum))
     } catch (e) {
       return { kind: 'failed', reason: reasonOf(e) }
     }
-    // The filters do not wait for the E-value order: no row is no row.
-    if (mine.rows.length === 0) return { kind: 'absent' }
-    if (settled(mine)) {
-      const row = mine.rowIds?.[0]
-      return row == null || row === target.rowId ? { kind: 'absent' } : positionIn(path, view, row)
-    }
-    // Which row is first is not known before the order is.
+    if (a.status === 'at') return { kind: 'at', order: { view, pos: a.pos, matched: a.matched, snapshot: a.snapshot, prev: step(a.prev), next: step(a.next) } }
+    if (a.status === 'absent') return { kind: 'absent', snapshot: a.snapshot }
     if (tries >= RANK_WAIT.tries) return { kind: 'pending' }
     await sleep(RANK_WAIT.ms)
   }
@@ -257,55 +231,33 @@ interface Walk {
  *  from (its sort and filters); each tagged spectrum once in file order when
  *  it was opened without one, or the spectrum is confirmed absent from it.
  *  A view still waiting for its E-value order, or a lookup that failed, is
- *  said so: the file order is not walked in its place. */
+ *  said so: the file order is not walked in its place. Absent from the
+ *  table's view is taken only of the snapshot the file order is then read
+ *  from: of another (the file was rewritten between the two answers), the
+ *  lookup starts again, at most RANK_WAIT.tries times. */
 async function orderOf(path: string, target: SpectrumTarget): Promise<Walk> {
-  let fellBack: Walk['fellBack'] = null
-  if (target.view) {
-    const l = await lookupIn(path, target.view, target)
-    if (l.kind === 'at') return { order: l.order, fellBack: null, status: 'ok' }
-    if (l.kind === 'pending') return { order: null, fellBack: null, status: 'pending' }
-    if (l.kind === 'failed') return { order: null, fellBack: null, status: 'failed', reason: l.reason }
-    fellBack = 'absent'
-  }
-  const l = await lookupIn(path, PER_SPECTRUM, target)
-  if (l.kind === 'at') return { order: l.order, fellBack, status: 'ok' }
-  if (l.kind === 'pending') return { order: null, fellBack, status: 'pending' }
-  if (l.kind === 'failed') return { order: null, fellBack, status: 'failed', reason: l.reason }
-  return { order: null, fellBack, status: 'ok' }
-}
-
-/// A step ◀ or ▶ leads to: the spectrum (null at an end), or why it is not known.
-type Stepped = { status: 'ok'; step: Step | null } | { status: 'pending' } | { status: 'failed'; reason: string }
-
-/** The next spectrum (@p dir +1) or the previous one (-1) in order @p o
- *  after the one shown: the next row whose spectrum is another; step null
- *  at an end. Each page must be of the order's final state (ranked, or not
- *  pending): an unranked page is not walked (status pending). */
-async function stepFrom(path: string, o: Order, spectrum: string, dir: -1 | 1): Promise<Stepped> {
-  const view = o.view === PER_SPECTRUM ? null : o.view
-  const hit = (pg: Awaited<ReturnType<typeof query>>, i: number): Step | null => {
-    const sp = pg.rows[i]?.[pg.columns.indexOf('spectrum')]
-    return sp != null && sp !== spectrum ? { spectrum: sp, rowId: pg.rowIds?.[i] ?? null, view } : null
-  }
-  for (let n = 0; n < SCAN_PAGES; n++) {
-    // The rows [a, b) after (or before) the ones read so far.
-    const a = dir > 0 ? o.pos + 1 + n * SCAN : Math.max(0, o.pos - (n + 1) * SCAN)
-    const b = dir > 0 ? Math.min(o.matched, a + SCAN) : o.pos - n * SCAN
-    if (a >= b) return { status: 'ok', step: null }
-    let pg: Awaited<ReturnType<typeof query>>
-    try {
-      pg = await query(path, o.view, a, b - a)
-    } catch (e) {
-      return { status: 'failed', reason: reasonOf(e) }
+  for (let tries = 1; ; tries++) {
+    let fellBack: Walk['fellBack'] = null
+    let absentIn: number | null = null
+    if (target.view) {
+      const l = await lookupIn(path, target.view, target)
+      if (l.kind === 'at') return { order: l.order, fellBack: null, status: 'ok' }
+      if (l.kind === 'pending') return { order: null, fellBack: null, status: 'pending' }
+      if (l.kind === 'failed') return { order: null, fellBack: null, status: 'failed', reason: l.reason }
+      fellBack = 'absent'
+      absentIn = l.snapshot
     }
-    if (!settled(pg)) return { status: 'pending' }
-    if (pg.rows.length === 0) return { status: 'ok', step: null }
-    for (let k = 0; k < pg.rows.length; k++) {
-      const s = hit(pg, dir > 0 ? k : pg.rows.length - 1 - k)
-      if (s) return { status: 'ok', step: s }
+    const l = await lookupIn(path, PER_SPECTRUM, target)
+    const of = l.kind === 'at' ? l.order.snapshot : l.kind === 'absent' ? l.snapshot : null
+    if (absentIn != null && of != null && of !== absentIn) {
+      if (tries >= RANK_WAIT.tries) return { order: null, fellBack: null, status: 'failed', reason: 'the tags file kept changing while it was read' }
+      continue
     }
+    if (l.kind === 'at') return { order: l.order, fellBack, status: 'ok' }
+    if (l.kind === 'pending') return { order: null, fellBack, status: 'pending' }
+    if (l.kind === 'failed') return { order: null, fellBack, status: 'failed', reason: l.reason }
+    return { order: null, fellBack, status: 'ok' }
   }
-  return { status: 'ok', step: null }
 }
 
 /// Where ◀ ▶ lead: undefined while it is looked up, null at an end.
@@ -336,15 +288,10 @@ async function navOf(path: string, target: SpectrumTarget, live: () => boolean):
   const o = w.order
   if (!o) return { ...base, status: 'ok' }
   if (!live()) return NAV0
-  const prev = await stepFrom(path, o, target.spectrum, -1)
-  if (prev.status !== 'ok') return { ...base, status: prev.status, reason: prev.status === 'failed' ? prev.reason : undefined }
-  if (!live()) return NAV0
-  const next = await stepFrom(path, o, target.spectrum, 1)
-  if (next.status !== 'ok') return { ...base, status: next.status, reason: next.status === 'failed' ? next.reason : undefined }
   return {
     ...base,
-    prev: prev.step,
-    next: next.step,
+    prev: o.prev,
+    next: o.next,
     at: { k: o.pos + 1, n: o.matched, spectra: o.view.perSpectrum === 1 },
     status: 'ok',
     table: o.view !== PER_SPECTRUM

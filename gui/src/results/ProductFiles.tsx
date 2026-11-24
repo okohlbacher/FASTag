@@ -2,8 +2,12 @@
 // configuration, an idXML or mzid -recon_id_out): each is a row with its
 // name, an optional note, and buttons to reveal it in the file manager or
 // open it in the app the system gives its type. Never an error: the run
-// wrote the file on purpose. The backend opens only outputs of a run of this
-// app (reveal.rs), so a failure says why in the row's own line.
+// wrote the file on purpose. The backend reveals only outputs of a run of
+// this app, and opens (reveal.rs may_open) only these types (idXML, mzid,
+// mzTab, FASTA, the engine configuration) when a run of this session ended
+// with exit 0 having written them, or the file was dropped on the window,
+// and only while it is still that file; a failure says why in the row's own
+// line.
 
 import { useState, type JSX } from 'react'
 import { baseName } from '../digestReport'

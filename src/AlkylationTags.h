@@ -23,21 +23,28 @@
 // spectrum at E <= 1, failed: chance C edges in weak or terminal positions
 // spread the votes over all forms.) The call is
 // #3g's rule (Alkylation::callAlkylation) over the six classes (five
-// reagents and none = unmodified C), plus one rule of its own: no call
-// (unresolved_forms) when two candidate C masses lie within twice the edge
-// tolerance of each other (CAM and Carboxymethyl are 0.984 Da apart, so a
-// 0.5 Da run cannot tell them).
+// reagents and none = unmodified C; a conflict counts against the share),
+// plus the twin guard: a C form whose mass lies within the two edge windows
+// of another C form or a residue step (CAM and Carboxymethyl are 0.984 Da
+// apart) cannot be told from it. Review n2: the guard applies per vote, with
+// the windows the tagger used at the C edge's own m/z (resolvedBelowMz());
+// such a vote is set aside (Tally::unresolved), and the call is no_call
+// unresolved_forms when no vote is left (a 0.5 Da run: none at any m/z).
 //
-// Known confounds, reported and not corrected: an ordinary edge can equal a
-// two-residue sum when the peak between them is missing. C[Carbamidomethyl]
-// is G + C exactly (C2H3NO is the Gly residue), C[Propionamide] is A + C
-// exactly (and 0.018 Da from S + S), C[Nethylmaleimide] lies 0.029 Da from
-// N + N and 0.036 Da from M + P. An edge that starts or ends on a 13C
-// peak (an isotope peak the deisotoper keeps, every one under
-// -no_deisotope) is another form +/- 1.00336 Da: C[Carbamidomethyl] + 13C
-// lies 0.0193 Da from C[Carboxymethyl], so in CAM runs such edges can vote
-// Carboxymethyl. The report lists the twins within the run's tolerance
-// (aliases()); formsResolved() compares the forms' own masses only.
+// Aliases (review n1): an edge can equal a two-residue sum when the peak
+// between them is missing. C[Carbamidomethyl] is G + C exactly (C2H3NO is
+// the Gly residue), C[Propionamide] is A + C exactly (and 0.018 Da from
+// S + S), C[Nethylmaleimide] lies 0.029 Da from N + N and 0.036 Da from
+// M + P. An edge that starts or ends on a 13C peak (an isotope peak the
+// deisotoper keeps, every one under -no_deisotope) is another form
+// +/- 1.00336 Da: C[Carbamidomethyl] + 13C lies 0.0193 Da from
+// C[Carboxymethyl]. Each C edge of a voting tag is checked against the
+// spectrum for every alias of its form (aliasExplains()): a peak at either
+// intermediate position (in the same series or at the complementary m/z),
+// or the monoisotopic peak beside a 13C endpoint, explains the edge as the
+// alias, and so does an alias the spectrum cannot test; the vote is then a
+// conflict (Tally::alias_rejected). Only both intermediate peaks lost in
+// both series still reads as the C form.
 //
 // Opt-in and experimental: on development data 61 of 123 runs are called,
 // 51 as the SDRF annotation states, and unalkylated runs are rarely called.
@@ -54,8 +61,11 @@
 #include "Digest.h"
 #include "FASTagger.h"
 
+#include <OpenMS/KERNEL/MSSpectrum.h>
+
 #include <array>
 #include <cstdint>
+#include <limits>
 #include <string>
 #include <vector>
 
@@ -67,7 +77,12 @@ namespace FASTag::AlkylationTags
   /// variable modifications of other residues); new rows twin.<form>; a
   /// twin makes forms_resolved no. Written by -alkylation_tags_out and
   /// inside -alkylation_out, whose default call it is.
-  inline constexpr int REPORT_FORMAT = 2;
+  ///
+  /// 3 (review n1, n2, n3): alkt_run resolved_below_mz; alkt_form
+  /// alias_rejected and unresolved; conflicts count against the share (the
+  /// share's n is votes plus conflicts) and alkylation_tags_call gains the
+  /// row voted after share.
+  inline constexpr int REPORT_FORMAT = 3;
 
   /// @brief The 13C - 12C spacing (Da) the alias check uses for isotope-shifted edges.
   inline constexpr double C13_SPACING = 1.0033548378;
@@ -157,8 +172,10 @@ namespace FASTag::AlkylationTags
     double best = 0.0;  ///< lowest E-value over the counted tags, with or without C
     bool have = false;  ///< a voting C tag was kept
     double evalue = 0.0;  ///< E-value of the kept C tag
-    bool conflict = false;  ///< the kept vote is a conflict between forms
+    bool conflict = false;  ///< the kept vote is a conflict between forms (or an alias explains it)
     int form = -1;  ///< candidate index (no conflict)
+    bool alias = false;  ///< an alias explains a C edge of the kept tag (aliasExplains()); then also conflict
+    bool unresolved = false;  ///< a C edge of the kept tag lies where its form has a twin in the edge windows
   };
 
   /**
@@ -186,6 +203,43 @@ namespace FASTag::AlkylationTags
     @return true when all pairs are resolved
   */
   bool formsResolved(const std::vector<Alkylation::Form>& cands, double tol_da);
+
+  struct Step;
+
+  /**
+    @brief Per candidate, the distance (Da) from its C mass to the nearest single-step twin.
+
+    The pairs of twins(): another candidate form (|g.mass - f.mass|) and,
+    with @p with_steps, a residue step of @p alpha (|step - (C + f.mass)|).
+
+    @param[in] cands the candidate forms
+    @param[in] alpha the residue steps (alphabet()); the base residues when null
+    @param[in] with_steps false: the other forms only (formsResolved())
+    @return one distance per candidate; +inf when there is nothing to compare
+  */
+  std::vector<double> twinDistances(const std::vector<Alkylation::Form>& cands, const std::vector<Step>* alpha = nullptr,
+                                    bool with_steps = true);
+
+  /**
+    @brief The smallest single-step twin distance over the candidates (twinDistances()).
+    @param[in] cands the candidate forms
+    @param[in] alpha the residue steps (alphabet()); the base residues when null
+    @return the distance in Da; +inf when there is none
+  */
+  double minTwinDistance(const std::vector<Alkylation::Form>& cands, const std::vector<Step>* alpha = nullptr);
+
+  /**
+    @brief The m/z below which the tagger's two edge windows cannot both take a step @p d_min apart.
+
+    The tagger looks each step up with the tolerance at its target m/z
+    (FASTagger.cpp tolAt), so two steps @p d_min apart can end on one peak at
+    m/z M when 2 * tol(M) >= @p d_min (the boundary of formsResolved()).
+
+    @param[in] p the run's (or shadow) Param: frag_tol, tol_ppm
+    @param[in] d_min the twin distance in Da (minTwinDistance(), or one entry of twinDistances())
+    @return Da: +inf when 2 * frag_tol < @p d_min, else 0; ppm: @p d_min / (2 * frag_tol * 1e-6)
+  */
+  double resolvedBelowMz(const Param& p, double d_min);
 
   /**
     @brief One residue step the shadow pass can read besides a C form.
@@ -246,8 +300,8 @@ namespace FASTag::AlkylationTags
     the other candidate C forms shifted by +/- C13_SPACING within
     2 * @p tol_da of the candidate's C mass: "C+G:0.0000" and
     "C[Carbamidomethyl]+13C:0.0193" entries, by distance, comma-separated,
-    "-" when none. These need a missing peak or an isotope peak; they are
-    listed, not excluded.
+    "-" when none. These need a missing peak or an isotope peak; a voting
+    C edge is checked for them against the spectrum (aliasExplains()).
 
     @param[in] cands the candidate forms
     @param[in] tol_da the edge tolerance (Da)
@@ -256,6 +310,94 @@ namespace FASTag::AlkylationTags
   */
   std::vector<std::string> aliases(const std::vector<Alkylation::Form>& cands, double tol_da,
                                    const std::vector<Step>* alpha = nullptr);
+
+  /**
+    @brief One reading a candidate's single C edge can also be (an alias; aliasList()).
+  */
+  struct Alias
+  {
+    enum class Kind
+    {
+      PAIR,  ///< two steps over a missing peak
+      ISO    ///< another C form whose edge starts or ends on a 13C peak
+    };
+    Kind kind = Kind::PAIR;
+    int form = -1;            ///< the candidate it reads like
+    double x = 0.0, y = 0.0;  ///< PAIR: the two step masses (Da), in name order
+    int other = -1;           ///< ISO: the other candidate
+    double shift = 0.0;       ///< ISO: +C13_SPACING (the edge ends on a 13C peak) or -C13_SPACING (it starts on one)
+    double mass = 0.0;        ///< the reading's mass: x + y, or the other form's C mass + shift
+    double dist = 0.0;        ///< |mass - the candidate's C mass|
+    std::string name;         ///< as in aliases(): "C+G", "C[Carbamidomethyl]+13C"
+  };
+
+  /**
+    @brief The aliases of aliases(), structured: per candidate, by distance.
+    @param[in] cands the candidate forms
+    @param[in] tol_da the edge tolerance (Da): an alias within 2 * @p tol_da is listed
+    @param[in] alpha the residue steps (alphabet()); the base residues when null
+    @return one list per candidate
+  */
+  std::vector<std::vector<Alias>> aliasList(const std::vector<Alkylation::Form>& cands, double tol_da,
+                                            const std::vector<Step>* alpha = nullptr);
+
+  /**
+    @brief The peaks a shadow tag was read from, for the alias check.
+  */
+  struct SpectrumPeaks
+  {
+    const OpenMS::MSSpectrum* peaks = nullptr;  ///< the tagger's prepared peaks (preparedPeaks()), m/z sorted
+    double prec_mass = 0.0;                     ///< neutral precursor mass (Da), for the complementary m/z
+  };
+
+  /// @brief What aliasExplains() found.
+  enum class AliasCheck
+  {
+    NOT_EXPLAINED,  ///< the alias leaves no trace: the edge reads as the C form
+    EXPLAINED,      ///< a peak the alias puts there is present
+    UNTESTABLE      ///< every position the alias predicts lies outside the peaks
+  };
+
+  /**
+    @brief Whether the spectrum explains the C edge @p lo -> @p hi (m/z, fragment charge @p z) as @p a.
+
+    PAIR X+Y: a peak within the tagger's per-peak tolerance (tolAt) at
+    lo + X/z or lo + Y/z (the missing middle peak of the same series), or at
+    the complementary m/z of either (prec_mass/z + 2 * proton - m). ISO
+    +13C: a peak at hi - C13_SPACING/z at least as intense as the peak at hi
+    (hi is the 13C peak of that ion); ISO -13C: the same below lo.
+
+    @param[in] lo the lower peak of the edge (m/z)
+    @param[in] hi the upper peak of the edge (m/z)
+    @param[in] z the fragment charge
+    @param[in] a the alias
+    @param[in] sp the peaks
+    @param[in] p the Param whose frag_tol and tol_ppm give the per-peak tolerance
+    @return the verdict
+  */
+  AliasCheck aliasExplains(double lo, double hi, int z, const Alias& a, const SpectrumPeaks& sp, const Param& p);
+
+  /**
+    @brief What the vote checks need of a run: its candidates, aliases and windows.
+  */
+  struct VoteContext
+  {
+    std::vector<Alkylation::Form> cands;           ///< the candidate forms
+    std::vector<std::vector<Alias>> aliases;       ///< aliasList() at the widest edge window of the run
+    Param tol;                                     ///< frag_tol and tol_ppm of the shadow pass
+    std::array<double, NUM_CANDIDATES> resolved_below{};  ///< per candidate, resolvedBelowMz() of its twin distance
+    double resolved_below_mz = 0.0;                ///< the smallest of them: the run's report row
+  };
+
+  /**
+    @brief The VoteContext of a run.
+    @param[in] p the shadow Param (shadowParam())
+    @param[in] cands the candidate forms
+    @param[in] alpha the residue steps (alphabet()); the base residues when null
+    @return the context
+  */
+  VoteContext voteContext(const Param& p, const std::vector<Alkylation::Form>& cands,
+                          const std::vector<Step>* alpha = nullptr);
 
   /**
     @brief The run's counts of shadow tags and votes.
@@ -268,7 +410,9 @@ namespace FASTag::AlkylationTags
     std::uint64_t tags_multi = 0;      ///< ungapped E <= 1 shadow tags at fragment charge >= 2, not counted
     std::uint64_t tags_with_c = 0;     ///< of those, tags with a C
     std::uint64_t spectra = 0;         ///< spectra with a vote
-    std::uint64_t conflict = 0;        ///< votes whose tag holds two forms
+    std::uint64_t conflict = 0;        ///< votes whose tag holds two forms, or that an alias explains
+    std::uint64_t alias_rejected = 0;  ///< of the conflicts, votes whose C edge an alias explains (aliasExplains())
+    std::uint64_t unresolved = 0;      ///< votes set aside: a C edge where its form has a twin in the edge windows
     std::array<std::uint64_t, NUM_CANDIDATES> votes{};     ///< votes per form
     std::array<std::uint64_t, NUM_CANDIDATES> residues{};  ///< C residues per form over counted tags
 
@@ -283,6 +427,27 @@ namespace FASTag::AlkylationTags
       @param[in] cands the candidate forms
     */
     void addTag(Vote& v, const Tag& t, const std::vector<Alkylation::Form>& cands);
+    /**
+      @brief Adds one shadow tag of a spectrum, with the vote checks of the tool.
+
+      As addTag() above; a tag that would be kept is first checked: a C
+      edge whose upper m/z reaches its form's resolved_below (the edge
+      windows hold a twin; Tag::path_mz locates the edge, else
+      Tag::high_mz bounds it) makes the vote unresolved; else an alias of
+      the edge's form that aliasExplains() finds explained or untestable
+      makes it a conflict (alias).
+
+      @param[in,out] v the spectrum's vote so far
+      @param[in] t the shadow tag
+      @param[in] ctx the run's vote context (voteContext())
+      @param[in] sp the spectrum's prepared peaks
+    */
+    void addTag(Vote& v, const Tag& t, const VoteContext& ctx, const SpectrumPeaks& sp);
+  private:
+    void addTagChecked(Vote& v, const Tag& t, const std::vector<Alkylation::Form>& cands, const VoteContext* ctx,
+                       const SpectrumPeaks* sp);
+
+  public:
     /**
       @brief Adds the spectrum's vote (after its tags).
 
@@ -313,14 +478,18 @@ namespace FASTag::AlkylationTags
     std::vector<std::string> dropped;  ///< C modifications the shadow pass took out
     std::string lengths;               ///< seed lengths, "4" or "3,4"
     double tol_da = 0.0;               ///< edgeToleranceDa() of the run
+    bool tol_ppm = false;              ///< the run's fragment tolerance is in ppm
+    double resolved_below_mz = std::numeric_limits<double>::infinity();  ///< VoteContext::resolved_below_mz
     std::vector<Step> alpha;           ///< the shadow alphabet's other steps (alphabet()); empty = the base residues
   };
 
   /**
-    @brief The alkylation call over the votes.
+    @brief The alkylation call over the votes, at a Da edge tolerance.
 
     #3g's call over the votes, then no_call unresolved_forms when a
-    candidate has a single-step twin at @p tol_da (stepsResolved()).
+    candidate has a single-step twin at @p tol_da (stepsResolved()): at a
+    tolerance in Da no m/z resolves it. callTags(t, s, ctx) is the call of a
+    run.
 
     @param[in] t the run's tally
     @param[in] s the call settings
@@ -332,6 +501,20 @@ namespace FASTag::AlkylationTags
   Alkylation::Call callTags(const Tally& t, const Alkylation::Settings& s,
                             const std::vector<Alkylation::Form>& cands, double tol_da,
                             const std::vector<Step>* alpha = nullptr);
+
+  /**
+    @brief The alkylation call of a run over its checked votes.
+
+    #3g's call over the votes; no_call unresolved_forms when no m/z resolves
+    the forms (ctx.resolved_below_mz <= 0) or when every vote was set aside
+    as unresolved (t.spectra == 0, t.unresolved > 0).
+
+    @param[in] t the run's tally (addTag() with the context)
+    @param[in] s the call settings
+    @param[in] ctx the run's vote context
+    @return the call
+  */
+  Alkylation::Call callTags(const Tally& t, const Alkylation::Settings& s, const VoteContext& ctx);
 
   /**
     @brief The alkt_run, alkt_form and alkylation_tags_call rows of -alkylation_tags_out.

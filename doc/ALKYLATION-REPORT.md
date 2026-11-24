@@ -1,4 +1,4 @@
-# The -alkylation_out report (format 2)
+# The -alkylation_out report (format 3)
 
 `-alkylation_out <tsv>` says which reagent alkylated the cysteines of a run, or
 that they are not alkylated. **It needs no protein database.** The call is read
@@ -23,6 +23,22 @@ no call; a FASTag without the shipped proteome stopped with exit code 6. Now:
 | `-recon_fasta`, or another report that places tags | `-recon_fasta`, else `-fasta` | tags and placements |
 | `-fasta` (only `-alkylation_out` places) | `-fasta` | tags and placements |
 | `-alkylation_proteome human\|mouse\|yeast\|ecoli\|<fasta>` | that proteome | tags and placements |
+
+**Format 3 (review of 1.13, n1 to n3).** Three changes to the call, all in the
+reported counts:
+- a conflicted vote counts against the share: share = class votes /
+  (binned + conflicted), the new row `voted` gives that denominator, and the
+  share row's `n` is it (before, 10 CAM votes and 90 conflicts were a share of
+  1.0 and a call; now 0.1, `ambiguous`);
+- the twin guard of the tag call applies per vote, with the edge windows the
+  tagger used at the C edge's own m/z, not once per run at 1000 m/z
+  (`alkt_run resolved_below_mz`, `alkt_form unresolved`);
+- each C edge of a voting tag is checked against the spectrum for the
+  two-residue and 13C readings of its mass (`alkt_form alias_rejected`).
+
+The held-out and development numbers below were measured with format 2: without
+the alias check, without the per-vote twin guard and with conflicts outside the
+share. They have not been measured again.
 
 **What a call means.** The tag call passed a held-out test at the margin (40 of
 57 runs called, 37 right); it rarely calls unalkylated samples. The placement
@@ -78,7 +94,7 @@ With a database it has all of these rows:
 
 | key | value | n |
 |---|---|---|
-| `format` | `2`, the format of the `alk_*`, `alkylation_placement_call` and `alkylation_call` sections | `-` |
+| `format` | `3`, the format of the `alk_*`, `alkylation_placement_call` and `alkylation_call` sections | `-` |
 | `method` | `tags` (no database) or `tags+placement` | `-` |
 | `database` | path of the FASTA the placements are on; `-` without one | `-` |
 | `database_source` | `none` (no database), `recon_fasta`, `fasta` (the run's placement database, or `-fasta` with `auto`), `proteome` (an `-alkylation_proteome` FASTA) or `bundled:<name>` (`human`, `mouse`, `yeast`, `ecoli`) | `-` |
@@ -89,7 +105,7 @@ With a database it has all of these rows:
 | `fixed_cterm_delta` | the same for a fixed peptide C-terminal modification | `-` |
 | `window` | bin window in Da (`-alkylation_window`; default 0.02 on a ppm run, 0.5 on a Da run) | `-` |
 | `min_spectra` | `-alkylation_min_spectra` (both calls) | `-` |
-| `min_share` | `-alkylation_min_share` (both calls) | `-` |
+| `min_share` | `-alkylation_min_share` (both calls), a share of the binned and conflicted spectra | `-` |
 | `tags` | placed tags looked at (ungapped, E-value <= 1, as the digest report counts) | `-` |
 | `spectra` | MS2 spectra that vote (have a tag with a counted placement) | `-` |
 
@@ -103,7 +119,7 @@ placement.
 | `Carbamidomethyl`, `Propionamide`, `Nethylmaleimide`, `Methylthio`, `Carboxymethyl`, `unmodified`, `Oxidation`, `Dioxidation`, `Trioxidation`, `Cysteinyl`, `Dehydroalanine` (11 rows, this order) | spectra whose counted placements all bin to this Cys form | binned spectra (sum of the `class.*` values) |
 | `class.Carbamidomethyl`, `class.Propionamide`, `class.Nethylmaleimide`, `class.Methylthio`, `class.Carboxymethyl`, `class.none` (6 rows, this order) | spectra of this call class; `none` is the "not alkylated" family (unmodified, Cys oxidation, di-, trioxidation, cysteinylation, dehydroalanine) | binned spectra |
 | `unexplained` | voting spectra whose reagent mass no form explains within the window | `spectra` |
-| `conflict` | voting spectra whose best tag's counted placements disagree on the class | `spectra` |
+| `conflict` | voting spectra whose best tag's counted placements disagree on the class; they count against the share (format 3) | `spectra` |
 | `excluded.no_cys`, `excluded.multi_cys`, `excluded.cys_in_tag`, `excluded.cys_outside_region`, `excluded.protein_nterm`, `excluded.truncation`, `excluded.met_ambiguous` (7 rows, this order) | placements (not spectra) left out by that rule | all placements evaluated |
 | `excluded.non_by` (last `alk_cys` row) | tags (not placements) left out because they are not b/y tags (c/z, #15 phase B); `0` until c/z tagging exists | `alk_run tags` + this value |
 
@@ -130,32 +146,35 @@ the gap is not the mass of the one or two outermost residues of the gap side
 (a shorter non-specific product). With an M on the gap side, the reading with
 and without Met oxidation (+15.995) must fall into one class.
 
-### `alkylation_placement_call` (the placement call; with a database only; these five rows, this order)
+### `alkylation_placement_call` (the placement call; with a database only; these six rows, this order)
 
-The `alkylation_call` of format 1, renamed.
+The `alkylation_call` of format 1, renamed; format 3 adds `voted`.
 
 | key | value when called | value on no_call | n |
 |---|---|---|---|
 | `status` | `call` | `no_call` | binned spectra |
 | `reagent` | the class: `Carbamidomethyl`, `Propionamide`, `Nethylmaleimide`, `Methylthio`, `Carboxymethyl` or `none` | `-` | spectra of the class (call) or `-` |
 | `mass` | the reagent's mass on C in Da; `-` for `none` | `-` | `-` |
-| `share` | class spectra / binned spectra | the leading class's share, `-` when nothing is binned | binned spectra |
+| `share` | class spectra / (binned + conflicted spectra) (format 3; up to format 2 / binned spectra) | the leading class's share, `-` when nothing is voted | binned + conflicted spectra (format 3) |
+| `voted` (format 3) | binned + conflicted spectra, the share's denominator | the same | binned spectra |
 | `reason` | `-` | `few_cys_spectra`, `ambiguous` or (shipped proteome only, 1.13) `tags_too_short` | `-` |
 
 Rule: the class with the most binned spectra is called when the binned spectra
-and its own spectra are both at least `min_spectra` and its share is at least
-`min_share`. Fewer binned spectra than `min_spectra` is `few_cys_spectra`; a
+and its own spectra are both at least `min_spectra` and its share of the
+binned and conflicted spectra (`voted`) is at least `min_share`. Unexplained
+spectra (`alk_cys unexplained`, a reagent mass no form explains) are not in
+the denominator. Fewer binned spectra than `min_spectra` is `few_cys_spectra`; a
 tie for the lead, or a leader short of `min_spectra` or `min_share`, is
 `ambiguous`. On a shipped proteome (1.13), a no_call whose longest tag is
 shorter than `alk_run min_tag_length` is `tags_too_short` instead: no tag could
 place, which says nothing about the run's Cys spectra. The other database
 sources keep the 1.12 reasons (and the log warns there too).
 
-### `alkylation_call` (the call of the report; always these six rows, this order)
+### `alkylation_call` (the call of the report; always these seven rows, this order)
 
 | key | value |
 |---|---|
-| `status`, `reagent`, `mass`, `share`, `reason` | as in `alkylation_placement_call`, of the call named in `source`; `n` counts votes (tags) or binned spectra (placements) |
+| `status`, `reagent`, `mass`, `share`, `voted`, `reason` | as in `alkylation_placement_call`, of the call named in `source`; `n` counts votes (tags) or binned spectra (placements), and the share's `n` (and `voted`) adds the conflicts |
 | `source` | `tags`, `placement` or `tags+placement` |
 
 Rule (`Alkylation::combineCalls`):
@@ -179,6 +198,14 @@ A reader that only wants the call reads `alkylation_call status`, `reagent`,
 
 ## Stability
 
+- Format 3 (review n1 to n3) changed from format 2: `share` is class /
+  (binned + conflicted) and its `n` is that denominator; the row `voted`
+  after `share` in `alkylation_placement_call` and `alkylation_call` (and
+  `alkylation_tags_call`); the tag sections gain `alkt_run resolved_below_mz`
+  and `alkt_form alias_rejected` and `unresolved`; in ppm the tag call's twin
+  guard is per vote (`unresolved_forms` only when no vote is left). A format 2
+  reader that reads `status`, `reagent` and `share` by key still reads the
+  call.
 - Format 2 (feedback 202dbcf4) changed from format 1: the `method` row and the
   six-row `alk_run` without a database; `alk_cys` only with a database; the
   placement call moved from `alkylation_call` to `alkylation_placement_call`;
@@ -320,7 +347,7 @@ of the `alk_cys excluded.*` rows) must be above 0: tags place on the shipped
 file. That example is too small for single-Cys votes at length 8 (115
 placements, `alk_run spectra` 0; at length 7, 194 placements and 2 spectra).
 
-## `-alkylation_tags_out` (1.13, database-free, `alkt_run format` 2)
+## `-alkylation_tags_out` (1.13, database-free, `alkt_run format` 3)
 
 Backlog #22, src/AlkylationTags.h. This report makes the call without a
 protein database; since format 2 of `-alkylation_out` it is also that report's
@@ -356,17 +383,22 @@ vote. Short tags leave few inner positions, so `-extension` gives more votes.
 The vote is:
 - for the form that all of the tag's C residues share;
 - as a conflict when the tag's C residues have two forms;
-- as a conflict when another tag of equal E-value has another form.
+- as a conflict when another tag of equal E-value has another form;
+- as a conflict when a C edge of the tag is explained as an alias (format 3,
+  below: `alias_rejected`);
+- set aside, not counted, when a C edge lies where its form has a twin in the
+  edge windows (format 3, below: `unresolved`).
 
-Conflicts are not in the share.
+Conflicts count against the share (format 3; up to format 2 they were left
+out of it, so 10 votes for one form and 90 conflicts were a share of 1.0).
 
 The call is #3g's rule over six classes: the five reagents, and `none` for
 unmodified C. The leading class needs `-alkylation_min_spectra` votes and a
-share of `-alkylation_min_share` of the votes. One more rule comes first:
-when a candidate C mass has a single-step twin, there is no call
-(`unresolved_forms`). The edge tolerance is the fragment tolerance in Da, or
-the ppm tolerance at 1000 m/z. Oxidised, cysteinylated and dehydroalanine Cys
-are not candidates here.
+share of `-alkylation_min_share` of the votes and conflicts. A run whose
+tolerance resolves a twin at no m/z (in Da: twice the tolerance reaches the
+twin's distance), or whose every vote was set aside as unresolved, gets no
+call (`unresolved_forms`). Oxidised, cysteinylated and dehydroalanine Cys are
+not candidates here.
 
 **Isobaric collisions (format 2).** Each candidate C mass (unmodified C
 103.00919, C[Carbamidomethyl] 160.03065, C[Propionamide] 174.04630,
@@ -377,19 +409,29 @@ variable modification of them (`AlkylationTags::alphabet`, as the tagger
 builds it). Two kinds of collision within twice the edge tolerance:
 
 - *Single-step twin* (`alkt_form twin.<form>`): another C form, or one residue
-  step of the alphabet, has the same mass. One edge cannot tell them apart, so
-  the forms are not resolved (`forms_resolved no`) and the call is excluded:
-  `no_call unresolved_forms`. This is the 1.13 rule (two C forms within twice
-  the tolerance) extended to residues and modified residues. At 20 ppm there
-  is none; at 0.5 Da Carbamidomethyl and Carboxymethyl twin each other
-  (0.984 Da apart); a variable modification that lands on a C form (say a
-  K + 31.936 Da) would twin it at any tolerance.
+  step of the alphabet, has the same mass. One edge cannot tell them apart.
+  This is the 1.13 rule (two C forms within twice the tolerance) extended to
+  residues and modified residues. At 20 ppm there is none at 1000 m/z; at
+  0.5 Da Carbamidomethyl and Carboxymethyl twin each other (0.984 Da apart); a
+  variable modification that lands on a C form (say a K + 31.936 Da) would
+  twin it at any tolerance. *Per vote (format 3).* The tagger looks each step
+  up with the tolerance at its own target m/z (`tolAt`), so two steps d apart
+  can end on one peak at m/z M when 2 x tol(M) >= d. In Da that holds at every
+  m/z or at none: a twin gives `forms_resolved no` and `no_call
+  unresolved_forms`, as in format 2. In ppm it holds from M = d / (2 x ppm x
+  1e-6) up: `alkt_run resolved_below_mz` (CAM / Carboxymethyl: 1230 m/z at
+  400 ppm, 984 at 500, 24,600 at 20). A vote whose C edge reaches its form's
+  bound is set aside (`alkt_form unresolved`), the others count. Up to format
+  2 one tolerance at 1000 m/z decided for the whole run: at 400 ppm the
+  guard passed (0.8 < 0.984 Da) while the windows above 1230 m/z overlap, and
+  at 500 ppm it made no call (1.0 >= 0.984 Da) although the windows below
+  984 m/z do not. `forms_resolved` still reports the 1000 m/z reading.
 - *Two-step alias* (`alkt_form alias.<form>`): two steps of the alphabet or C
   forms (an edge over a missing peak), or another C form shifted by a 13C
-  peak. These are listed, not excluded: C[Carbamidomethyl] = G + C and
-  C[Propionamide] = A + C exactly, so excluding them would make the two most
-  common reagents uncallable, and the held-out test measured the method with
-  them in.
+  peak. C[Carbamidomethyl] = G + C and C[Propionamide] = A + C exactly, so
+  excluding these readings would make the two most common reagents
+  uncallable. Format 3 checks them against the spectrum instead (below,
+  Aliases).
 
 On PXD000001 (20 ppm, `-tag_length 4 -extension 6`) the aliases are
 `C+G:0.0000,C[Carboxymethyl]-13C:0.0193` (Carbamidomethyl),
@@ -404,35 +446,48 @@ version of the rule let every spectrum vote with its best C tag at E <= 1;
 those chance edges then spread the votes over all six forms (3 calls on 123
 development runs). The three conditions above remove most of them.
 
-**Confounds (not corrected).** A single edge equals a two-residue sum when the
-peak between the two residues is missing:
+**Aliases (checked since format 3).** A single edge equals a two-residue sum
+when the peak between the two residues is missing:
 - C[Carbamidomethyl] = G + C exactly;
 - C[Propionamide] = A + C exactly;
 - C[Nethylmaleimide] is 0.029 Da from N + N and 0.036 Da from M + P.
 
-So in an unalkylated sample, GC/CG and AC/CA with a missing peak vote
-Carbamidomethyl or Propionamide. The report lists every such twin within
-twice the run's edge tolerance (`alias.<form>`). At 20 ppm the list also
-holds S + S for C[Propionamide] (0.018 Da). At 0.5 Da it holds many more
-pairs.
+So in an unalkylated sample, GC/CG and AC/CA with a missing peak read
+Carbamidomethyl or Propionamide. At 20 ppm the list also holds S + S for
+C[Propionamide] (0.018 Da); at 0.5 Da it holds many more pairs. An edge can
+also start or end on the 13C peak of an ion (an isotope peak the deisotoper
+keeps, every one under `-no_deisotope`): such an edge is another C form
++/- 1.00336 Da, and C[Carbamidomethyl] + 13C lies 0.0193 Da from
+C[Carboxymethyl] (58.00548 - 57.02146 = 0.98402 Da). The tagger matches an
+edge with the tolerance at its peak, so that twin reads at a 0.02 Da tolerance
+at every m/z, and at 20 ppm only for fragments above about 965 m/z.
 
-An edge can also start or end on the 13C peak of an ion: an isotope peak the
-deisotoper keeps, and every one under `-no_deisotope`. Such an edge is another
-C form +/- 1.00336 Da. C[Carbamidomethyl] + 13C lies 0.0193 Da from
-C[Carboxymethyl] (58.00548 - 57.02146 = 0.98402 Da), so in CAM runs those
-edges vote Carboxymethyl whenever such a reading is a spectrum's best tag, and
-in Carboxymethyl runs C[Carboxymethyl] - 13C can vote CAM. The tagger matches an edge with the tolerance at its peak, so the
-twin reads at a 0.02 Da tolerance at every m/z, and at 20 ppm only for
-fragments above about 965 m/z. It is within twice the report's edge tolerance
-(the ppm tolerance at 1000 m/z) from 10 ppm up. The report lists it as `C[Carbamidomethyl]+13C` under
-`alias.Carboxymethyl` and `C[Carboxymethyl]-13C` under
-`alias.Carbamidomethyl`. It is not corrected and does not set
-`forms_resolved` to `no`: that row compares the forms' own masses, the
-quantity a coarse tolerance cannot resolve, while the isotope twin, like
-G + C, is a second peak path to the same edge mass. The unit test builds an
-undeisotoped CAM ladder with 13C peaks (0.02 Da tolerance) and checks that the
-C[Carboxymethyl] reading exists: 25 such readings in 12 spectra, none of them
-a spectrum's best tag there.
+Up to format 2 these readings were listed and voted. Format 3 checks every C
+edge of the tag a spectrum would vote with (its two path peaks, Tag::path_mz)
+against the peaks the tagger read (the prepared spectrum), for each alias of
+the edge's form whose mass the edge's two windows could have matched
+(`AlkylationTags::aliasExplains`):
+- *pair X + Y*: a peak at lo + X or lo + Y (the missing middle peak, in either
+  order) or at the complementary m/z of either (precursor mass + 2 protons
+  minus it, the other series), within the tagger's per-peak tolerance;
+- *+13C* (the edge ends on a 13C peak): a peak 1.00336 Th below the upper
+  end, at least as intense as it (the monoisotopic peak of that ion); *-13C*:
+  the same below the lower end.
+
+A true C[form] edge leaves none of these; a GC or CG that lost the middle peak
+in one series usually keeps it in the other. An alias found, or one whose
+positions all lie outside the spectrum (it cannot be tested), makes the vote a
+conflict (`alkt_form alias_rejected`, a part of `conflict`), which counts
+against the share. Only a pair that lost its middle peak in both series still
+reads as the C form: the spectrum has nothing to tell it apart.
+
+The unit tests (test/alkylation_tags_test.cpp) build each case and assert the
+final call: unmodified GC/CG and AC/CA peptides with the middle b or y peak
+dropped are called Carbamidomethyl (23 of 24 votes) and Propionamide (22 of 24)
+without the check and get no call with it (23 votes rejected); undeisotoped
+CAM spectra with 13C peaks and the monoisotopic peak after the C lost give 3
+Carboxymethyl votes of 9 without the check and none with it; spectra of each
+real C form still call that form (12 of 12 votes).
 
 **Development result (descriptive, not held-out).** On the 123 evaluable
 SDRF development runs of acceptance/1.12 (105 CAM, 17 none, 1 Methylthio),
@@ -500,6 +555,17 @@ MS2, 20 ppm, `-alkylation_out` with no database:
 | `-extension 2` | 69 | 52 | 6 | 3 | 4 | 2 | 2 | Methylthio, share 0.754 |
 | `-tag_length 4 -extension 6` | 117 | 75 | 11 | 10 | 6 | 10 | 5 | Methylthio, share 0.641 |
 
+Format 3 (alias check, per-vote twin guard, conflicts in the share), all
+spectra:
+
+| settings | voting spectra (`voted`) | Methylthio | CAM | Propionamide | NEM | Carboxymethyl | unmodified | conflict (alias_rejected) | unresolved | call |
+|---|---|---|---|---|---|---|---|---|---|---|
+| defaults | 8 | 6 | 2 | 0 | 0 | 0 | 0 | 0 | 0 | no_call few_cys_spectra |
+| `-extension 2` | 69 | 52 | 5 | 3 | 4 | 2 | 2 | 1 (1) | 0 | Methylthio, share 0.754 (52 of 69) |
+| `-tag_length 4 -extension 6` | 117 | 75 | 10 | 7 | 5 | 10 | 5 | 5 (5) | 0 | Methylthio, share 0.641 (75 of 117) |
+
+`resolved_below_mz` is 24,600 m/z at 20 ppm, so no vote is set aside.
+
 With `-fasta erwinia_carotovora.fasta` and the TMT labels as fixed
 modifications (`-tag_length 4 -extension 6`), the placements agree but are too
 few: 9 binned spectra, 8 of them Methylthio (`alkylation_placement_call`
@@ -517,7 +583,7 @@ gui/src/digestReport.ts names none of its sections and refuses it.
 
 | key | value |
 |---|---|
-| `format` | 2 (1 until format 2 of `-alkylation_out`: no `twin.<form>` rows, aliases over the base residues only) |
+| `format` | 3 (2: no `resolved_below_mz`, `alias_rejected`, `unresolved` and `voted` rows, aliases not checked, conflicts out of the share; 1 until format 2 of `-alkylation_out`: no `twin.<form>` rows, aliases over the base residues only) |
 | `method` | `shadow_tags` |
 | `status` | `experimental`; the description gives the held-out result (passed at the margin: 40 of 57 runs called, 37 right) |
 | `forms` | the six candidate forms, comma-separated (n: 6) |
@@ -531,7 +597,8 @@ gui/src/digestReport.ts names none of its sections and refuses it.
 | `spectra` | spectra with a vote: the best counted tag holds a C, none at an end, E <= 1e-4 (n: `spectra_tagged`) |
 | `min_spectra`, `min_share` | the call thresholds |
 | `edge_tolerance` | the edge tolerance in Da |
-| `forms_resolved` | `yes`, or `no` when a form has a single-step twin (`twin.<form>`: another form or a residue of the run within twice the edge tolerance; then no call); two-step and 13C-shifted readings are under `alias.<form>` |
+| `forms_resolved` | `yes`, or `no` when a form has a single-step twin (`twin.<form>`: another form or a residue of the run within twice the edge tolerance; in Da then no call, in ppm the reading at 1000 m/z); two-step and 13C-shifted readings are under `alias.<form>` |
+| `resolved_below_mz` (format 3) | the m/z from which the two edge windows hold a twin of some C form (the smallest over the forms; ppm: twin distance / (2 x ppm x 1e-6)); `0` when no m/z resolves it (Da), `-` when every m/z does. A vote whose C edge reaches its own form's bound is set aside (`unresolved`) |
 
 ### `alkt_form`
 
@@ -541,13 +608,17 @@ gui/src/digestReport.ts names none of its sections and refuses it.
 | `residues.<form>` | C residues of the form in all counted tags (n: all C residues) |
 | `alias.<form>` | two-step sums over the run's alphabet and the C forms (`C+G:0.0000`, `A+M[Oxidation]:...`) and 13C-shifted other C forms (`C[Carbamidomethyl]+13C:0.0193`) within twice the edge tolerance of the C form, by distance, comma-separated, or `-` |
 | `twin.<form>` (format 2) | single steps that read like the C form: another C form (`C[Carboxymethyl]:0.9840`, `C` for unmodified) or a residue of the run's alphabet (`K[Name]:0.0004`), by distance, or `-`; any twin makes `forms_resolved` `no` |
-| `conflict` | votes whose tag holds two forms (n: `spectra`) |
+| `conflict` | votes whose tag holds two forms, or whose C edge an alias explains; they count against the share (n: `spectra`) |
+| `alias_rejected` (format 3) | of the conflicts, votes whose C edge the spectrum explains as an alias (or cannot test) (n: `conflict`) |
+| `unresolved` (format 3) | spectra that would vote with a C edge at or above its form's twin bound (`resolved_below_mz`); set aside, not in `spectra` or the share (n: `spectra` + this) |
 
 ### `alkylation_tags_call`
 
-`status` (`call` / `no_call`), `reagent`, `mass`, `share`, `reason`
-(`-`, `unresolved_forms`, `few_cys_spectra` or `ambiguous`). These are the rows of `alkylation_call`,
-with the votes in place of the binned spectra.
+`status` (`call` / `no_call`), `reagent`, `mass`, `share`, `voted` (format 3),
+`reason` (`-`, `unresolved_forms`, `few_cys_spectra` or `ambiguous`). These are
+the rows of `alkylation_call`, with the votes in place of the binned spectra:
+`share` is the leading form's votes over the votes plus the conflicts, and its
+`n` and `voted` are that denominator.
 
 | option | default | |
 |---|---|---|

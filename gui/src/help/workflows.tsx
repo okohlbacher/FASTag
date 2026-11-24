@@ -252,7 +252,8 @@ export const WORKFLOWS: HelpPage = {
             Table filters and sort order are kept when switching tabs. Reconciliation identifications are
             written as mzTab and shown here. An idXML or mzIdentML file (named so on purpose) is listed as a file,
             with buttons to reveal it or open it in another tool. These report tables have a
-            128 MiB size limit (shown as 128 MB in the app); larger reports need an external tool. This limit is
+            128 MiB size limit (shown as 128 MB in the app); larger reports need an external tool. A larger identifications mzTab
+            is listed as a file the same way, with buttons to reveal it or open it in another tool. This limit is
             separate from the large-file Tags browser. Placements are not FDR-controlled identifications;
             read <L to="digest-gaps">how mass gaps are interpreted</L> before drawing a conclusion.
           </p>

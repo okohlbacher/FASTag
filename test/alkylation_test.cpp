@@ -313,8 +313,8 @@ int main()
     check(sections == std::set<std::string>{"alk_run", "alk_cys", "alkylation_placement_call"},
           "sections alk_run, alk_cys, alkylation_placement_call only (never run or cys)");
     check(full, "every field filled");
-    check(call_keys == "status,reagent,mass,share,reason", "alkylation_placement_call keys in order: " + call_keys);
-    check(value(rows, "alk_run", "format") == "2" && value(rows, "alk_run", "method") == "tags+placement" &&
+    check(call_keys == "status,reagent,mass,share,voted,reason", "alkylation_placement_call keys in order: " + call_keys);
+    check(value(rows, "alk_run", "format") == "3" && value(rows, "alk_run", "method") == "tags+placement" &&
               value(rows, "alkylation_placement_call", "reagent") == "Carbamidomethyl" &&
               value(rows, "alk_cys", "class.Carbamidomethyl") == "30" && value(rows, "alk_cys", "unexplained") == "12",
           "report values");
@@ -526,21 +526,54 @@ int main()
       keys += (keys.empty() ? "" : ",") + r.key;
     }
     check(keys == "format,method,database,database_source,min_spectra,min_share", "tag-only alk_run keys: " + keys);
-    check(value(run, "alk_run", "format") == "2" && value(run, "alk_run", "method") == "tags" &&
+    check(value(run, "alk_run", "format") == "3" && value(run, "alk_run", "method") == "tags" &&
               value(run, "alk_run", "database") == "-" && value(run, "alk_run", "database_source") == "none",
           "tag-only alk_run values");
 
-    // the combined call section: six rows, source last
+    // the combined call section: seven rows (format 3: voted after share), source last
     const auto fr = A::callRows("alkylation_call", A::combineCalls(tags_cam, nullptr), s, forms, "votes", true);
     keys.clear();
     for (const D::Row& r : fr) keys += (keys.empty() ? "" : ",") + r.key;
-    check(keys == "status,reagent,mass,share,reason,source", "alkylation_call keys: " + keys);
+    check(keys == "status,reagent,mass,share,voted,reason,source", "alkylation_call keys: " + keys);
     check(value(fr, "alkylation_call", "source") == "tags" && value(fr, "alkylation_call", "reagent") == "Carbamidomethyl",
           "alkylation_call values");
     const auto dr = A::callRows("alkylation_call", A::combineCalls(tags_cam, &tags_none), s, forms, "votes", true);
     check(value(dr, "alkylation_call", "status") == "no_call" && value(dr, "alkylation_call", "reason") == "disagree" &&
               value(dr, "alkylation_call", "reagent") == "-" && value(dr, "alkylation_call", "source") == "tags+placement",
           "a disagreement is a no_call");
+  }
+
+  // ---- review n3: a conflict counts against the share. 10 CAM and 90
+  //      conflicts were a share of 1.0 (the conflicts left the denominator)
+  //      and a call; now 0.1 of 100, ambiguous. 90 CAM and 10 conflicts stay
+  //      called at 0.9.
+  {
+    A::Settings s;
+    A::Tally t;
+    t.cls[A::CARBAMIDOMETHYL] = 10;
+    t.conflict = 90;
+    t.spectra = 100;
+    const A::Call c = A::callAlkylation(t, s);
+    check(!c.called && c.reason == "ambiguous" && c.binned == 10 && c.voted == 100 && std::fabs(c.share - 0.1) < 1e-12,
+          "10 CAM + 90 conflicts: no_call ambiguous, share 0.1 of 100 (called " + std::to_string(c.called) + ", share " +
+              std::to_string(c.share) + ", voted " + std::to_string(c.voted) + ")");
+    const auto r = A::callRows("alkylation_placement_call", c, s, A::forms(), "binned spectra", false);
+    check(value(r, "alkylation_placement_call", "share") == "0.1" && value(r, "alkylation_placement_call", "voted") == "100",
+          "the share and voted rows: " + value(r, "alkylation_placement_call", "share") + " " +
+              value(r, "alkylation_placement_call", "voted"));
+    for (const D::Row& row : r)
+      if (row.key == "share") check(row.n == "100", "the share row's n is the denominator: " + row.n);
+    A::Tally k;
+    k.cls[A::CARBAMIDOMETHYL] = 90;
+    k.conflict = 10;
+    k.spectra = 100;
+    const A::Call d = A::callAlkylation(k, s);
+    check(d.called && d.cls == A::CARBAMIDOMETHYL && d.voted == 100 && std::fabs(d.share - 0.9) < 1e-12,
+          "90 CAM + 10 conflicts: call CAM, share 0.9");
+    // unexplained votes stay out of the denominator
+    A::Tally x = k;
+    x.unexplained = 50;
+    check(A::callAlkylation(x, s).voted == 100, "unexplained votes are not in the share");
   }
 
   if (failures) std::cerr << failures << " failure(s)\n";

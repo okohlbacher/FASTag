@@ -9,7 +9,7 @@ import type { CaptureInfo, FeedbackDraft } from './types'
 import type { DraftText, Session } from './useFeedback'
 
 /// The privacy notice the dialog shows; a new wording gets a new version.
-export const CONSENT_TEXT_VERSION = 'fastag-feedback-privacy-1'
+export const CONSENT_TEXT_VERSION = 'fastag-feedback-privacy-2'
 
 const cut = (s: string, n: number): string => [...s].slice(0, n).join('')
 

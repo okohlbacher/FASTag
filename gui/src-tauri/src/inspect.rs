@@ -281,6 +281,22 @@ pub(crate) fn cli_has(r: &Resolved, opt: &str) -> bool {
     c.ok && c.options.iter().any(|o| o == opt)
 }
 
+/// The JSON line `-data_paths` prints with the binary @p r and the data
+/// environment its runs get (command: data_env), when it exits 0 within
+/// HELP_TIMEOUT. None for a binary without the flag (cli_has) or one that
+/// fails.
+pub(crate) fn data_paths_of(r: &Resolved) -> Option<String> {
+    if !cli_has(r, "data_paths") {
+        return None;
+    }
+    let mut cmd = command(r);
+    cmd.arg("-data_paths");
+    match run_bounded(cmd, HELP_TIMEOUT, 1 << 20, &|| false) {
+        Ok(b) if !b.timed_out && b.code == Some(0) => b.stdout.lines().map(str::trim).find(|l| l.starts_with('{')).map(str::to_string),
+        _ => None,
+    }
+}
+
 #[tauri::command]
 pub async fn cli_capabilities(app: AppHandle) -> Capabilities {
     tauri::async_runtime::spawn_blocking(move || cached_capabilities(&resolve_binary(&app)))

@@ -136,7 +136,8 @@ function Privacy(): JSX.Element {
     <details className="fb-privacy">
       <summary>Privacy notice</summary>
       <p>
-        <b>What:</b> your text, and, as you choose, the screenshot (with your mark-up and redactions), diagnostics and the log.{' '}
+        <b>What:</b> your text; the screenshot (with your mark-up and redactions) and the diagnostics, which are included by default
+        (untick them to leave them out); and the log, only if you tick it.{' '}
         <b>Why:</b> so the FASTag developers can reproduce and fix what you saw. <b>Where:</b> Save keeps the report on this computer
         only, in the app's data folder under <code>feedback</code>; nothing is sent. Sharing opens a GitHub issue form in your browser:
         what you attach becomes a <b>public</b> issue, visible to anyone and hard to delete. <b>Retention:</b> local reports are kept
@@ -459,11 +460,19 @@ export default function FeedbackDialog({ session, text, setText, onSaved, onClos
   }, [retaking])
 
   const share = savedText?.share ?? text.share
+  // The export the share step shows and hands off is that of the last
+  // inclusion asked for: each request is numbered, an older answer that
+  // comes late is dropped, and nothing is exported while one is in flight
+  // or after one failed (Open issue draft needs `exported`).
+  const exportSeq = useRef(0)
   const exportNow = async (id: string, inc: Share): Promise<void> => {
+    const n = ++exportSeq.current
+    setExported(null)
     try {
-      setExported(await window.fastag.feedbackExport(id, inc))
+      const r = await window.fastag.feedbackExport(id, inc)
+      if (n === exportSeq.current) setExported(r)
     } catch (e) {
-      setError(`Cannot build the export: ${msg(e)}`)
+      if (n === exportSeq.current) setError(`Cannot build the export: ${msg(e)}. Change a choice to try again; nothing can be shared until the export matches your choices.`)
     }
   }
 
@@ -506,12 +515,16 @@ export default function FeedbackDialog({ session, text, setText, onSaved, onClos
     if (savedText && saved) {
       const next = { ...savedText, share: { ...savedText.share, [key]: on } }
       setSavedText(next)
+      // What was reviewed is not what will be shared: review it again.
+      setConfirmed(false)
+      setNote('')
+      setError('')
       await exportNow(saved.id, next.share)
     } else setText((t) => ({ ...t, share: { ...t.share, [key]: on } }))
   }
 
   async function openDraft(): Promise<void> {
-    if (!saved || !savedText || !confirmed) return
+    if (!saved || !savedText || !confirmed || !exported) return
     setError('')
     try {
       const ok = await window.fastag.openFeedbackIssue({ title: savedText.title, reportId: saved.id, kind: savedText.kind })

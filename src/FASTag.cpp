@@ -9,6 +9,7 @@
 #include "FASTagTool.h"
 #include "Terminus.h"
 
+#include <tuple>
 #include <unordered_set>
 
 #ifdef FASTAG_MIMALLOC
@@ -129,6 +130,46 @@ namespace
     std::string where;
     for (const std::string& c : cands) where += (where.empty() ? "" : ", ") + shownPath_(c);
     return "looked in " + where;
+  }
+
+  /// -data_paths (the desktop app's capability check): one JSON line with the
+  /// folders this FASTag reads its shipped data from, as a run would
+  /// (digestDir_, alkylationDir_, with this process's environment), the
+  /// digest folders looked in (FASTAG_DIGEST_DIR as given, or the three
+  /// beside the executable), the shipped proteomes whose file is there, and
+  /// what -alkylation_proteome auto reads without a database: "none" (the
+  /// call from the tags alone; before 1.16 auto meant the human proteome).
+  std::string dataPathsJson_()
+  {
+    namespace P = FASTag::Probe;
+    const std::string env = envOf_("FASTAG_DIGEST_DIR");
+    const std::string digest = digestDir_();
+    const std::string alk = alkylationDir_();
+    std::string j = "{\"digest_dir\":" + (digest.empty() ? std::string("null") : P::jsonString(shownPath_(digest)));
+    j += ",\"digest_from_env\":" + std::string(env.empty() ? "false" : "true") + ",\"digest_searched\":[";
+    const std::vector<std::string> searched = env.empty() ? digestCandidates_() : std::vector<std::string>{env};
+    for (std::size_t i = 0; i < searched.size(); ++i) j += (i ? "," : "") + P::jsonString(env.empty() ? shownPath_(searched[i]) : env);
+    j += "],\"alkylation_dir\":" + (alk.empty() ? std::string("null") : P::jsonString(shownPath_(alk))) + ",\"proteomes\":[";
+    std::string mtext;
+    const bool manifest = !alk.empty() && File::exists(alk + "/proteomes.tsv");
+    if (manifest)
+    {
+      std::ifstream mf((alk + "/proteomes.tsv").c_str(), std::ios::binary);
+      mtext.assign(std::istreambuf_iterator<char>(mf), std::istreambuf_iterator<char>());
+    }
+    bool first = true;
+    for (const char* name : {"human", "mouse", "yeast", "ecoli"})
+    {
+      if (alk.empty()) break;
+      FASTag::Alkylation::ShippedProteome sp;
+      const std::string file = manifest ? (FASTag::Alkylation::findShippedProteome(mtext, name, sp) ? sp.file : std::string())
+                                        : std::string(name) + ".fasta.gz";
+      if (file.empty() || file.find_first_of("/\\") != std::string::npos || !File::exists(alk + "/" + file)) continue;
+      j += (first ? "" : ",") + P::jsonString(name);
+      first = false;
+    }
+    j += "],\"alkylation_auto\":\"none\"}\n";
+    return j;
   }
 
   /// The error for shipped digest data a run needs and does not find: what
@@ -337,6 +378,8 @@ TOPPFASTag::ExitCodes TOPPFASTag::main_(int, const char**)
                       << "; an option given on the command line or in an INI wins." << std::endl;
   }
   const bool dump_mode = !getFlag_("stream") && !getStringOption_("dump_spectrum").empty();
+  // -data_paths: a GUI mode like the two above (JSON on the sealed stdout).
+  const bool data_paths_mode = !getFlag_("stream") && getFlag_("data_paths");
 
   if (getIntOption_("threads") == 0)
   {
@@ -345,11 +388,11 @@ TOPPFASTag::ExitCodes TOPPFASTag::main_(int, const char**)
     TOPPBase::setMaxNumberOfThreads(n);  // omp_set_num_threads, or a no-op without OpenMP
     // Not under -stream: this runs before stdout is rewired into the data
     // channel, and a log line there is a corrupt spectrum block.
-    if (!getFlag_("stream") && !probe_mode && !dump_mode)
+    if (!getFlag_("stream") && !probe_mode && !dump_mode && !data_paths_mode)
       OPENMS_LOG_INFO << "-threads 0: using " << n << " of " << cores << " logical cores." << std::endl;
   }
 
-  if (getFlag_("stream") || probe_mode || dump_mode)
+  if (getFlag_("stream") || probe_mode || dump_mode || data_paths_mode)
   {
     // stdout is the -stream DATA CHANNEL. OpenMS logs through thread-local
     // streams that do not follow a global reconfig, and TOPPBase prints its
@@ -363,7 +406,7 @@ TOPPFASTag::ExitCodes TOPPFASTag::main_(int, const char**)
 #ifndef _WIN32
       if (data_fd >= 0 && !stream_data_) close(data_fd);
 #endif
-      OPENMS_LOG_ERROR << (getFlag_("stream") ? "-stream" : probe_mode ? "-probe_input" : "-dump_spectrum")
+      OPENMS_LOG_ERROR << (getFlag_("stream") ? "-stream" : probe_mode ? "-probe_input" : dump_mode ? "-dump_spectrum" : "-data_paths")
                        << ": cannot rewire stdout." << std::endl;
       return ILLEGAL_PARAMETERS;
     }
@@ -382,6 +425,20 @@ TOPPFASTag::ExitCodes TOPPFASTag::main_(int, const char**)
     return ILLEGAL_PARAMETERS;
   }
   if (probe_mode) return probeInputMode_();
+  if (data_paths_mode)
+  {
+    if (dump_mode)
+    {
+      OPENMS_LOG_ERROR << "-data_paths and -dump_spectrum are separate modes; give one of them." << std::endl;
+      return ILLEGAL_PARAMETERS;
+    }
+    if (!writeGuiStream_(dataPathsJson_()))
+    {
+      OPENMS_LOG_ERROR << "-data_paths: cannot write to stdout." << std::endl;
+      return CANNOT_WRITE_OUTPUT_FILE;
+    }
+    return EXECUTION_OK;
+  }
 
   // ---- phase 1: option checks, refusals and tagging parameters ----------
 
@@ -559,6 +616,7 @@ TOPPFASTag::ExitCodes TOPPFASTag::main_(int, const char**)
         // ---- 1.12 G: -stream refusals ----
         {"probe_input", nullptr},
         {"dump_spectrum", nullptr},
+        {"data_paths", nullptr},
         {"terminus", nullptr},  // the -terminus columns need the run's precursor hypotheses
     };
     // 1.13 item 15: the probe needs random access to the run.
@@ -3005,6 +3063,9 @@ TOPPFASTag::ExitCodes TOPPFASTag::main_(int, const char**)
   std::vector<std::string> alkt_dropped;
   // The shadow alphabet's other residue steps, for the twin and alias checks.
   std::vector<FASTag::AlkylationTags::Step> alkt_alpha;
+  // Review n1/n2: the per-vote checks (aliases against the spectrum, the
+  // twin windows at the C edge's m/z).
+  FASTag::AlkylationTags::VoteContext alkt_ctx;
   const char* const alkt_opt = alkylation_on ? "-alkylation_out" : "-alkylation_tags_out";
   if (alkylation_shadow_on)
   {
@@ -3025,6 +3086,7 @@ TOPPFASTag::ExitCodes TOPPFASTag::main_(int, const char**)
       return ILLEGAL_PARAMETERS;
     }
     alkt_alpha = FASTag::AlkylationTags::alphabet(alkt_params.front().mods);
+    alkt_ctx = FASTag::AlkylationTags::voteContext(alkt_params.front(), alkt_cands, &alkt_alpha);
     alkt_tables.reserve(alkt_params.size());
     for (const FASTag::Param& lp : alkt_params) alkt_tables.emplace_back(lp);
   }
@@ -3792,8 +3854,21 @@ TOPPFASTag::ExitCodes TOPPFASTag::main_(int, const char**)
           const std::vector<FASTag::Tag> st = alkt_params.size() == 1
               ? FASTag::tagSpectrum(spec, hy.mz, hy.charge, alkt_params[0], alkt_tables[0], nullptr, H)
               : FASTag::mergeLengths(FASTag::tagSpectrum(spec, hy.mz, hy.charge, alkt_params, alkt_tables, nullptr, H));
+          // The alias check reads the peaks the tagger read (only when a
+          // tag holds a C).
+          static thread_local OpenMS::MSSpectrum alkt_peaks;
+          alkt_peaks.clear(true);
+          for (const FASTag::Tag& t : st)
+            if (t.seq.find('C') != std::string::npos)
+            {
+              alkt_peaks = FASTag::preparedPeaks(spec, hy.mz, hy.charge, alkt_params[0]);
+              break;
+            }
+          const int alkt_z = hy.charge > 0 ? hy.charge : 2;
+          const FASTag::AlkylationTags::SpectrumPeaks alkt_sp{
+              &alkt_peaks, (hy.mz - OpenMS::Constants::PROTON_MASS_U) * alkt_z};
           FASTag::AlkylationTags::Vote v;
-          for (const FASTag::Tag& t : st) pt.acc.d.alkt.addTag(v, t, alkt_cands);
+          for (const FASTag::Tag& t : st) pt.acc.d.alkt.addTag(v, t, alkt_ctx, alkt_sp);
           pt.acc.d.alkt.addSpectrum(v);
           break;
         }
@@ -3806,6 +3881,11 @@ TOPPFASTag::ExitCodes TOPPFASTag::main_(int, const char**)
     static thread_local std::vector<std::pair<double, double>> cres;
     cres.clear();
     bool cres_exact = true;  // census 3: every orientation known (res_cover_exact)
+    // census 3: each tag's span block [first, last) in cres and its mirror
+    // axis (tags of different hypotheses have different axes), folded at
+    // the end when any orientation is unresolved.
+    static thread_local std::vector<std::tuple<std::size_t, std::size_t, double>> cres_blk;
+    cres_blk.clear();
     size_t cmax_len = 0;
     size_t cplaced = 0;
     const auto census_view = [](const FASTag::Tag& t) {
@@ -3974,8 +4054,10 @@ TOPPFASTag::ExitCodes TOPPFASTag::main_(int, const char**)
         const int zc = hy.charge > 0 ? hy.charge : 2;
         const double axis = hy.mz * zc - zc * Constants::PROTON_MASS_U - WATER_MONO
                           + FASTag::IonSeries::ionPair(t.ion_series).reversedOffset();
+        const std::size_t cfirst = cres.size();
         FASTag::Census::addResidueSpans(cres, t.nterm_mass, t.path_mz, t.step_res, t.charge, t.n_res, t.res_mass,
                                         orient, axis);
+        cres_blk.emplace_back(cfirst, cres.size(), axis);
       }
       if (!row_entrap) res.any_target = true;
       if (written)
@@ -4404,6 +4486,11 @@ TOPPFASTag::ExitCodes TOPPFASTag::main_(int, const char**)
         crow.best = ctags[best];
         crow.tag_cover = FASTag::Census::tagCoverOf(ctags);
         crow.max_len = cmax_len;
+        // While any orientation is unresolved every tag is folded (known ones
+        // after their exact placement), so a known and an unresolved read of
+        // one stretch count once; folding a folded block changes nothing.
+        if (!cres_exact)
+          for (const auto& [a, b, ax] : cres_blk) FASTag::Census::foldResidueSpans(cres, a, b, ax);
         crow.res_cover = FASTag::Census::residueCover(cres);
         crow.res_cover_exact = cres_exact;
       }
@@ -6321,6 +6408,8 @@ TOPPFASTag::ExitCodes TOPPFASTag::main_(int, const char**)
   if (alkylation_shadow_on)
   {
     alkt_info.tol_da = alkt_tol_da;
+    alkt_info.tol_ppm = len_params.front().tol_ppm;
+    alkt_info.resolved_below_mz = alkt_ctx.resolved_below_mz;
     alkt_info.dropped = alkt_dropped;
     alkt_info.alpha = alkt_alpha;
     for (int L : lengths) alkt_info.lengths += (alkt_info.lengths.empty() ? "" : ",") + std::to_string(L);
@@ -6329,7 +6418,7 @@ TOPPFASTag::ExitCodes TOPPFASTag::main_(int, const char**)
   {
     const FASTag::AlkylationTags::Tally& tt = run_acc.d.alkt;
     const FASTag::Alkylation::Call tag_call =
-        FASTag::AlkylationTags::callTags(tt, alk_settings, alkt_cands, alkt_tol_da, &alkt_alpha);
+        FASTag::AlkylationTags::callTags(tt, alk_settings, alkt_ctx);
     const FASTag::Alkylation::Call call = FASTag::Alkylation::combineCalls(tag_call, alk_place ? &alk_call : nullptr);
     std::vector<FD::Row> rows = FASTag::RunReport::runRows(run_meta, FASTag::RunReport::Emit::VERSIONED);
     if (alk_place)
@@ -6375,7 +6464,7 @@ TOPPFASTag::ExitCodes TOPPFASTag::main_(int, const char**)
     FASTag::Alkylation::Settings as;
     as.min_spectra = static_cast<std::uint64_t>(getIntOption_("alkylation_min_spectra"));
     as.min_share = getDoubleOption_("alkylation_min_share");
-    const FASTag::Alkylation::Call call = FASTag::AlkylationTags::callTags(at, as, alkt_cands, alkt_tol_da, &alkt_alpha);
+    const FASTag::Alkylation::Call call = FASTag::AlkylationTags::callTags(at, as, alkt_ctx);
     std::vector<FD::Row> rows = FASTag::RunReport::runRows(run_meta, FASTag::RunReport::Emit::VERSIONED);
     for (FD::Row& r : FASTag::AlkylationTags::rows(at, call, as, alkt_cands, alkt_info)) rows.push_back(std::move(r));
     FASTag::PartFile part(alkylation_tags_out);

@@ -35,7 +35,8 @@
 // counted placement: for the class all its counted placements agree on, else
 // as a conflict. The call is the class with the most spectra when it has at
 // least min_spectra of them and a share of at least min_share of the binned
-// spectra; the "not alkylated" family (unmodified, Cys oxidation, di- and
+// and conflicted spectra (a conflict counts against the share; review n3:
+// leaving it out gave 10 CAM and 90 conflicts a share of 1); the "not alkylated" family (unmodified, Cys oxidation, di- and
 // trioxidation, cysteinylation, dehydroalanine) winning is the call "none".
 // Otherwise no_call: few_cys_spectra (fewer than min_spectra binned) or
 // ambiguous.
@@ -72,7 +73,11 @@ namespace FASTag::Alkylation
   /// alkylation_placement_call; the tag-only sections (AlkylationTags,
   /// alkt_run, alkt_form, alkylation_tags_call) follow; alkylation_call is
   /// the combined call (combineCalls()) with a sixth row, source.
-  inline constexpr int REPORT_FORMAT = 2;
+  ///
+  /// 3 (review n3): the share's denominator counts the conflicted votes
+  /// (Call::voted, binned + conflict); the share rows' n is that
+  /// denominator, and the call sections gain the row voted after share.
+  inline constexpr int REPORT_FORMAT = 3;
 
   /**
     @brief The call classes of the alkylation call.
@@ -316,14 +321,17 @@ namespace FASTag::Alkylation
     /// "placement" or "tags+placement" (both agree, or disagree).
     std::string source = "-";
     std::uint64_t top = 0, binned = 0;  ///< spectra of the leading class; spectra binned to any class
-    double share = 0.0;          ///< top / binned (0 when nothing is binned)
+    std::uint64_t voted = 0;     ///< binned + conflict, the share's denominator
+    double share = 0.0;          ///< top / voted (0 when nothing is voted)
   };
   /**
     @brief Makes the call from the run totals.
 
     The class with the most spectra is called when it has at least
-    min_spectra spectra, a share of at least min_share and no tie; otherwise
-    the reason is few_cys_spectra (fewer than min_spectra binned) or ambiguous.
+    min_spectra spectra, a share of at least min_share of the binned and
+    conflicted spectra (Call::voted; unexplained votes are not in it) and no
+    tie; otherwise the reason is few_cys_spectra (fewer than min_spectra
+    binned) or ambiguous.
 
     @param[in] t Run totals.
     @param[in] s Settings (min_spectra, min_share).

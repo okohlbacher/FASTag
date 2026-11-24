@@ -28,6 +28,7 @@
     "allow-results-open",
     "allow-results-query",
     "allow-results-position",
+    "allow-results-neighbours",
     "allow-results-export",
     "allow-results-cancel",
     "allow-table-query",

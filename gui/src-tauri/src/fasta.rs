@@ -18,6 +18,16 @@
 // a symlink retargeted after the run, a folder or a FIFO is refused, never
 // read. A record without identities (before 1.16) aligns nothing.
 //
+// Which run the tags table @p tags is of is bound by identity too, not by
+// its pathname: when a run ends with exit 0, the identity of the -out tags
+// table it wrote (FileIdentity, taken from the opened file as above) is
+// recorded on its session entry (SessionRun.tags) and in its run record
+// (RunRecord.tags_identity). A request opens @p tags once and authorizes
+// only the newest run whose recorded tags identity is that file's: a table
+// rewritten, copied or renamed onto a run's output path after the run, and
+// any run that is still going, failed, was cancelled or was recorded before
+// this, authorizes no database read.
+//
 // Each verified file is indexed once (Index: the byte offset of each entry,
 // its residue count and a checkpoint every CHECKPOINT residues), in one
 // bounded pass of CHUNK bytes; concurrent requests for a new file wait for
@@ -110,11 +120,28 @@ impl DbIdentity {
     }
 }
 
-/// The run of this session that wrote @p outputs read @p databases.
+/// A file as a run wrote it: its canonical path and the identity of the
+/// opened handle (identity_of_file). Stored in the run record for the tags
+/// table (-out) of a run that ended with exit 0, and kept for the files
+/// open_output may open (reveal.rs).
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct FileIdentity {
+    pub path: String,
+    pub dev: u64,
+    pub ino: u64,
+    pub len: u64,
+    pub mtime_ns: i64,
+}
+
+/// The run of this session that wrote @p outputs read @p databases; @p tags
+/// is the identity of its -out tags table, set once the run ended with exit
+/// 0 (None while it runs, and for one that failed or was cancelled).
 pub struct SessionRun {
     pub start: u64,
     pub outputs: Vec<PathBuf>,
     pub databases: Vec<DbIdentity>,
+    pub tags: Option<FileIdentity>,
 }
 
 /// One entry of an index. Its header is read again when asked for.
@@ -217,10 +244,10 @@ fn mtime_ns(m: &std::fs::Metadata) -> i64 {
     }
 }
 
-/// @p path (of the option @p option) as a run reads it now: canonical, opened
-/// once, and its identity taken from the opened handle. None: missing, not
-/// a regular file, or unreadable.
-pub fn identity_of(option: &str, path: &Path) -> Option<DbIdentity> {
+/// @p path as it is now: canonical, opened once (open_file), and its
+/// identity taken from the opened handle. None: missing, not a regular
+/// file, or unreadable.
+pub fn identity_of_file(path: &Path) -> Option<FileIdentity> {
     let canon = std::fs::canonicalize(path).ok()?;
     let f = open_file(&canon).ok()?;
     let m = f.metadata().ok()?;
@@ -228,7 +255,26 @@ pub fn identity_of(option: &str, path: &Path) -> Option<DbIdentity> {
         return None;
     }
     let (dev, ino) = file_id(&f, &m);
-    Some(DbIdentity { option: option.to_string(), path: canon.to_string_lossy().into_owned(), dev, ino, len: m.len(), mtime_ns: mtime_ns(&m) })
+    Some(FileIdentity { path: canon.to_string_lossy().into_owned(), dev, ino, len: m.len(), mtime_ns: mtime_ns(&m) })
+}
+
+/// The file at @p path itself, not canonicalized: opened once without
+/// following a final symlink (open_file), its identity from that handle and
+/// @p path as given. None: missing, a symlink, not a regular file.
+pub fn identity_at(path: &Path) -> Option<FileIdentity> {
+    let f = open_file(path).ok()?;
+    let m = f.metadata().ok()?;
+    if !m.file_type().is_file() {
+        return None;
+    }
+    let (dev, ino) = file_id(&f, &m);
+    Some(FileIdentity { path: path.to_string_lossy().into_owned(), dev, ino, len: m.len(), mtime_ns: mtime_ns(&m) })
+}
+
+/// @p path (of the option @p option) as a run reads it now (identity_of_file).
+pub fn identity_of(option: &str, path: &Path) -> Option<DbIdentity> {
+    let FileIdentity { path, dev, ino, len, mtime_ns } = identity_of_file(path)?;
+    Some(DbIdentity { option: option.to_string(), path, dev, ino, len, mtime_ns })
 }
 
 /// The file @p ident names, opened once and checked: a regular file with
@@ -244,16 +290,16 @@ fn open_verified(ident: &DbIdentity) -> Result<File, String> {
     Ok(f)
 }
 
-/// The databases of the run that wrote @p tags: this session's newest run
-/// with that output (@p session), or the newest record of one (@p record,
-/// history::of_output), whichever started later.
-pub fn run_databases(session: &[SessionRun], record: Option<history::RunRecord>, tags: &Path) -> Option<Vec<DbIdentity>> {
-    let canon = |p: &Path| p.canonicalize().unwrap_or_else(|_| p.to_path_buf());
-    let want = canon(tags);
-    let mine = session
-        .iter()
-        .filter(|r| r.outputs.iter().any(|p| p == tags || canon(p) == want))
-        .max_by_key(|r| r.start);
+/// The databases of the run that wrote the tags table whose identity is
+/// @p tags (identity_of_file, taken when it is asked for): this session's
+/// newest run that recorded that identity for its tags table (@p session),
+/// or the newest record that did (@p record, history::of_tags), whichever
+/// started later. Matched by identity, never by pathname: a run that
+/// recorded no tags identity (still running, failed, cancelled, or a record
+/// written before tags identities were recorded) authorizes nothing.
+pub fn run_databases(session: &[SessionRun], record: Option<history::RunRecord>, tags: &FileIdentity) -> Option<Vec<DbIdentity>> {
+    let mine = session.iter().filter(|r| r.tags.as_ref() == Some(tags)).max_by_key(|r| r.start);
+    let record = record.filter(|r| r.tags_identity.as_ref() == Some(tags));
     match (mine, record) {
         (Some(s), Some(r)) if r.start > s.start => Some(r.databases),
         (Some(s), _) => Some(s.databases.clone()),
@@ -491,6 +537,28 @@ fn segment_in(sh: &Shared, ident: &DbIdentity, identifier: &str, start: usize, e
     })
 }
 
+/// The databases of the run that wrote the tags table at @p tags: the file
+/// is opened once and its identity taken (identity_of_file), then only a
+/// run of @p session or a record in @p history_dir that recorded exactly
+/// that identity for its tags table authorizes them (run_databases).
+pub fn tags_run_databases(session: &[SessionRun], history_dir: Option<&Path>, tags: &Path) -> Result<Vec<DbIdentity>, String> {
+    let shown = tags.display();
+    let ident = identity_of_file(tags).ok_or_else(|| format!("{shown} cannot be read as a file"))?;
+    let record = history_dir.and_then(|d| history::of_tags(d, &ident));
+    if let Some(dbs) = run_databases(session, record, &ident) {
+        return Ok(dbs);
+    }
+    // Written by a run of this app at that path, but not this file any more.
+    let by_path = |p: &Path| p.canonicalize().ok().is_some_and(|c| c.to_string_lossy() == ident.path);
+    let at_path = session.iter().any(|r| r.tags.is_some() && r.outputs.iter().any(|p| by_path(p)))
+        || history_dir.and_then(|d| history::of_output(d, tags)).is_some_and(|r| r.tags_identity.is_some());
+    Err(if at_path {
+        format!("{shown} changed since the run wrote it, so its positions cannot be shown on the run's database")
+    } else {
+        format!("{shown} was not written by a run of this app that finished")
+    })
+}
+
 #[tauri::command]
 #[allow(clippy::too_many_arguments)]
 pub async fn fasta_segment(
@@ -503,12 +571,11 @@ pub async fn fasta_segment(
     start: usize,
     end: usize,
 ) -> Result<FastaSegment, String> {
-    let record = history::dir(&app).and_then(|d| history::of_output(&d, Path::new(&tags)));
+    let path = PathBuf::from(&tags);
     let dbs = {
         let session = mgr.databases.lock().map_err(|_| "the run list is unavailable".to_string())?;
-        run_databases(&session, record, Path::new(&tags))
-    }
-    .ok_or_else(|| format!("{tags} was not written by a run of this app"))?;
+        tags_run_databases(&session, history::dir(&app).as_deref(), &path)?
+    };
     let ident = dbs
         .into_iter()
         .find(|d| d.option == database)
@@ -875,6 +942,12 @@ MAAKDVKFGN\nDARVKMLRGV\r\nNVLADAVKVT LGPKGRNVVL*\n\
         }
     }
 
+    /// A tags table at @p p with @p text, and its identity as a run records it.
+    fn tags_at(p: &Path, text: &str) -> FileIdentity {
+        std::fs::write(p, text).unwrap();
+        identity_of_file(p).expect("a regular file")
+    }
+
     // Codex #3 (c): a run's databases are those of the run that wrote the
     // tags asked for, never another run's.
     #[test]
@@ -883,14 +956,16 @@ MAAKDVKFGN\nDARVKMLRGV\r\nNVLADAVKVT LGPKGRNVVL*\n\
         let x = file("runs-x", ">p\nAAAAK\n");
         let y = file("runs-y", ">q\nCCCCK\n");
         let xi = identity_of("entrapment_fasta", &x).unwrap();
+        let (xt, yt) = (tags_at(&d.join("x.tags.tsv"), "x"), tags_at(&d.join("y.tags.tsv"), "yy"));
         let session = vec![
-            SessionRun { start: 1, outputs: vec![d.join("x.tags.tsv")], databases: vec![ident(&x), xi] },
-            SessionRun { start: 2, outputs: vec![d.join("y.tags.tsv")], databases: vec![ident(&y)] },
+            SessionRun { start: 1, outputs: vec![d.join("x.tags.tsv")], databases: vec![ident(&x), xi], tags: Some(xt) },
+            SessionRun { start: 2, outputs: vec![d.join("y.tags.tsv")], databases: vec![ident(&y)], tags: Some(yt.clone()) },
         ];
-        let of_y = run_databases(&session, None, &d.join("y.tags.tsv")).unwrap();
+        let of_y = run_databases(&session, None, &yt).unwrap();
         assert_eq!(of_y, vec![ident(&y)]);
         assert!(!of_y.iter().any(|i| i.option == "entrapment_fasta"));
-        assert!(run_databases(&session, None, &d.join("z.tags.tsv")).is_none());
+        let zt = tags_at(&d.join("z.tags.tsv"), "z");
+        assert!(run_databases(&session, None, &zt).is_none());
         // A record that started later wins; one of an older version has no
         // identities, so nothing is read for it (not its argv).
         let mut rec: history::RunRecord = serde_json::from_value(serde_json::json!({
@@ -900,8 +975,81 @@ MAAKDVKFGN\nDARVKMLRGV\r\nNVLADAVKVT LGPKGRNVVL*\n\
         }))
         .unwrap();
         assert!(rec.databases.is_empty());
-        assert_eq!(run_databases(&session, Some(rec.clone()), &d.join("y.tags.tsv")), Some(vec![]));
+        rec.tags_identity = Some(yt.clone());
+        assert_eq!(run_databases(&session, Some(rec.clone()), &yt), Some(vec![]));
         rec.start = 1;
-        assert_eq!(run_databases(&session, Some(rec), &d.join("y.tags.tsv")), Some(vec![ident(&y)]));
+        assert_eq!(run_databases(&session, Some(rec), &yt), Some(vec![ident(&y)]));
+    }
+
+    // Codex #3, part 2 (a): the run's tags table rewritten at the same path
+    // (another size or time) or replaced by a rename authorizes nothing (was:
+    // the run was found by the pathname of its output, and the new table's
+    // positions read on the run's database).
+    #[test]
+    fn a_tags_table_changed_after_the_run_authorizes_no_database() {
+        let d = dir("tags-changed");
+        let db = file("tags-changed-db", ">p\nAAAAK\n");
+        let tags = d.join("a.tags.tsv");
+        let run = tags_at(&tags, "spectrum\ttag\nscan=1\tAAK\n");
+        let session = vec![SessionRun { start: 1, outputs: vec![tags.clone()], databases: vec![ident(&db)], tags: Some(run) }];
+        // (b) Unchanged: the run's database.
+        assert_eq!(tags_run_databases(&session, None, &tags), Ok(vec![ident(&db)]));
+        // Rewritten in place with another size.
+        let now = tags_at(&tags, "spectrum\ttag\nscan=1\tAAK\nscan=2\tKAA\n");
+        assert!(run_databases(&session, None, &now).is_none());
+        let e = tags_run_databases(&session, None, &tags).unwrap_err();
+        assert!(e.contains("changed since the run wrote it"), "{e}");
+        // Another table renamed over the path (same size as the run's).
+        std::fs::write(&tags, "spectrum\ttag\nscan=1\tAAK\n").unwrap();
+        let other = d.join("other.tsv");
+        let moved = tags_at(&other, "spectrum\ttag\nscan=9\tCCK\n");
+        std::fs::rename(&other, &tags).unwrap();
+        assert!(run_databases(&session, None, &identity_of_file(&tags).unwrap()).is_none());
+        assert!(tags_run_databases(&session, None, &tags).is_err());
+        assert_ne!(Some(moved), identity_of_file(&tags));
+        // A table no run of this app wrote.
+        let alien = d.join("b.tags.tsv");
+        std::fs::write(&alien, "x").unwrap();
+        let e = tags_run_databases(&session, None, &alien).unwrap_err();
+        assert!(e.contains("was not written by a run of this app"), "{e}");
+        // And the same through a record in history.jsonl.
+        let hist = d.join("hist");
+        std::fs::create_dir_all(&hist).unwrap();
+        let fresh = tags_at(&tags, "spectrum\ttag\nscan=1\tAAK\n");
+        let mut rec: history::RunRecord = serde_json::from_value(serde_json::json!({
+            "id": "5-1", "input": "a.mzML", "outputs": [tags.clone()], "cwd": null,
+            "argv": ["FASTag"], "status": "ok", "exitCode": 0, "message": null,
+            "start": 5, "end": 6, "cleanup": {"removed": [], "renamed": [], "failed": []}
+        }))
+        .unwrap();
+        rec.databases = vec![ident(&db)];
+        rec.tags_identity = Some(fresh);
+        history::append(&hist, &rec).unwrap();
+        assert_eq!(tags_run_databases(&[], Some(&hist), &tags), Ok(vec![ident(&db)]));
+        std::fs::write(&tags, "spectrum\ttag\nscan=1\tAAK\nscan=3\tAAK\n").unwrap();
+        assert!(tags_run_databases(&[], Some(&hist), &tags).unwrap_err().contains("changed since the run wrote it"));
+    }
+
+    // Codex #3, part 2 (c): a run that recorded no tags identity (still
+    // running, failed, cancelled, or a record from before) authorizes nothing,
+    // although its output path is the table's.
+    #[test]
+    fn a_run_without_a_recorded_tags_identity_authorizes_nothing() {
+        let d = dir("tags-none");
+        let db = file("tags-none-db", ">p\nAAAAK\n");
+        let tags = d.join("a.tags.tsv");
+        let now = tags_at(&tags, "x");
+        let session = vec![SessionRun { start: 1, outputs: vec![tags.clone()], databases: vec![ident(&db)], tags: None }];
+        assert!(run_databases(&session, None, &now).is_none());
+        let rec: history::RunRecord = serde_json::from_value(serde_json::json!({
+            "id": "3-1", "input": "a.mzML", "outputs": [tags.clone()], "cwd": null,
+            "argv": ["FASTag"], "status": "ok", "exitCode": 0, "message": null,
+            "start": 3, "end": 4, "cleanup": {"removed": [], "renamed": [], "failed": []},
+            "databases": [ident(&db)]
+        }))
+        .unwrap();
+        assert_eq!(rec.tags_identity, None);
+        assert!(run_databases(&session, Some(rec), &now).is_none());
+        assert!(tags_run_databases(&session, None, &tags).unwrap_err().contains("was not written by a run of this app"));
     }
 }

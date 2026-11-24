@@ -588,23 +588,45 @@ function GapHistogram({ bins }: { bins: GapBin[] }): JSX.Element {
   )
 }
 
+// What a call of each source has been tested on (doc/ALKYLATION-REPORT.md,
+// "What a call means").
+const TAG_TESTED =
+  'Tag call: passed a held-out test at the margin (40 of 57 runs called, 37 right, at tag length 4 and Extension 6); a call to check, not a setting to copy.'
+const PLACEMENT_UNTESTED = 'Not validated on held-out data: a call to check, not a setting to copy.'
+
 /// The alkylation report (-alkylation_out): the reagent called, or why no
-/// call was made, from placements on a shipped proteome or the FASTA given.
+/// call was made. Format 2 reads the call off the tags (their votes), with a
+/// database also from the placements (source); format 1 from placements on
+/// a shipped proteome or the FASTA given (spectra with one cysteine).
 function Alkylation({ report }: { report: Report }): JSX.Element {
   const c = alkylationCall(report)
   const db = value(report, 'alk_run', 'database')
+  const fromTags = c.source === 'tags' || c.source === 'tags+placement'
+  const p = c.placement
+  const reagentOf = (r: string | undefined): string | undefined => (r === 'none' ? 'none (not alkylated)' : r)
   return (
     <section className="dg-block card" aria-labelledby="dg-alk">
       <Heading id="dg-alk" title="Alkylation" report={report} help="digest-gaps" />
       <dl className="stats">
         <Stat label={c.status === 'call' ? 'Reagent' : 'No call'} big>
-          {c.status === 'call' ? (c.reagent === 'none' ? 'none (not alkylated)' : c.reagent) : alkylationReason(c.reason)}
+          {c.status === 'call' ? reagentOf(c.reagent) : alkylationReason(c.reason, c.source)}
         </Stat>
-        {c.binned != null && <Stat label="Spectra with one cysteine">{fmt(c.binned)}</Stat>}
+        {c.binned != null && <Stat label={fromTags ? 'Votes from tags' : 'Spectra with one cysteine'}>{fmt(c.binned)}</Stat>}
         {c.share != null && c.status === 'call' && <Stat label="Share">{pct(c.share)}</Stat>}
+        {p && (
+          <Stat label="Placement call">
+            {p.status === 'call' ? `${reagentOf(p.reagent)}${p.binned != null ? ` (${fmt(p.binned)} spectra with one cysteine)` : ''}` : `no call: ${alkylationReason(p.reason)}`}
+          </Stat>
+        )}
         {db && <Stat label="Database">{db}</Stat>}
       </dl>
-      <p className="hint">Not validated on held-out data: a call to check, not a setting to copy.</p>
+      <p className="hint">
+        {c.source === 'tags'
+          ? TAG_TESTED
+          : c.source === 'tags+placement'
+            ? `${TAG_TESTED} The placement call is not validated and the combination is a rule of this version.`
+            : PLACEMENT_UNTESTED}
+      </p>
       <RawRows report={report} />
     </section>
   )

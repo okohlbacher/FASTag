@@ -61,7 +61,7 @@ run -in "$TMP/Nethylmaleimide.mzML" -out "$TMP/nofix.tsv" "${COMMON[@]}" -fixed_
 [ "$(val "$TMP/nofix.alkt.tsv" alkt_run c_mods_removed)" = "-" ] || fail "c_mods_removed without C mods"
 
 # ---- feedback 202dbcf4: -alkylation_out needs no database. Its default call
-# is this tag call (format 2): database_source none, no proteome read (an
+# is this tag call (format 2, now 3): database_source none, no proteome read (an
 # empty FASTAG_ALKYLATION_DIR), the alkt_* sections and the tag call equal to
 # -alkylation_tags_out's, and alkylation_call with source tags.
 mkdir -p "$TMP/noalk"
@@ -70,7 +70,7 @@ for f in Carbamidomethyl Nethylmaleimide unmodified; do
     -alkylation_out "$TMP/$f.alk.tsv" -alkylation_tags_out "$TMP/$f.both.alkt.tsv"
   same "$TMP/$f.base.tsv" "$TMP/$f.o.tsv" "-alkylation_out changed the tag TSV ($f)"
   [ "$(val "$TMP/$f.alk.tsv" alk_run format) $(val "$TMP/$f.alk.tsv" alk_run method) $(val "$TMP/$f.alk.tsv" alk_run database_source)" \
-    = "2 tags none" ] || fail "$f: -alkylation_out is not a format 2 tag-only report"
+    = "3 tags none" ] || fail "$f: -alkylation_out is not a format 3 tag-only report"
   [ "$(val "$TMP/$f.alk.tsv" alkylation_call source)" = tags ] || fail "$f: source is not tags"
   tr -d '\r' < "$TMP/$f.alk.tsv" | awk -F'\t' '$1 ~ /^alkt_|^alkylation_tags_call$/' > "$TMP/$f.a.sec"
   tr -d '\r' < "$TMP/$f.alkt.tsv" | awk -F'\t' '$1 ~ /^alkt_|^alkylation_tags_call$/' > "$TMP/$f.t.sec"
@@ -115,7 +115,7 @@ run -in "$TMP/Carbamidomethyl.mzML" -out "$TMP/vm.tsv" "${COMMON[@]}" -variable_
 R="$TMP/Carbamidomethyl.alkt.tsv"
 head -1 "$R" | tr -d '\r' | grep -qx $'section\tkey\tvalue\tn\tdescription' || fail "report header"
 tr -d '\r' < "$R" | awk -F'\t' 'NF != 5 || $5 == "" { bad = 1 } END { exit bad }' || fail "a row without five fields"
-[ "$(val "$R" alkt_run format)" = 2 ] || fail "alkt_run format is not 2"
+[ "$(val "$R" alkt_run format)" = 3 ] || fail "alkt_run format is not 3"
 for s in run alkt_run alkt_form alkylation_tags_call; do
   tr -d '\r' < "$R" | cut -f1 | grep -qx "$s" || fail "no $s section"
 done
@@ -151,6 +151,27 @@ run -in "$TMP/Carbamidomethyl.mzML" -out "$TMP/da.tsv" -tag_length 4 -extension 
   -alkylation_tags_out "$TMP/da.alkt.tsv"
 [ "$(call "$TMP/da.alkt.tsv")" = "no_call:unresolved_forms" ] || fail "0.5 Da: $(call "$TMP/da.alkt.tsv")"
 [ "$(val "$TMP/da.alkt.tsv" alkt_run forms_resolved)" = no ] || fail "0.5 Da: forms_resolved is not no"
+# format 3 (review n2): at 0.5 Da no m/z resolves CAM from Carboxymethyl: no CAM
+# vote is kept, the CAM edges are set aside as unresolved (forms without a twin,
+# such as Methylthio, still vote; the call stays unresolved_forms)
+[ "$(val "$TMP/da.alkt.tsv" alkt_run resolved_below_mz)" = 0 ] || fail "0.5 Da: resolved_below_mz is not 0"
+[ "$(val "$TMP/da.alkt.tsv" alkt_form Carbamidomethyl)" = 0 ] \
+  && [ "$(val "$TMP/da.alkt.tsv" alkt_form unresolved)" -gt "$(val "$TMP/da.alkt.tsv" alkt_run spectra)" ] \
+  || fail "0.5 Da: the CAM votes are not set aside as unresolved"
+# ... while in ppm the guard is per vote at the C edge's m/z: at 500 ppm (0.5 Da
+# at 1000 m/z, where the run-wide guard of format 2 made no call) the CAM
+# edges below 984 m/z resolve, and the run is called
+run -in "$TMP/Carbamidomethyl.mzML" -out "$TMP/p500.tsv" -tag_length 4 -extension 6 -fragment_tolerance 500 \
+  -fragment_tolerance_unit ppm -alkylation_tags_out "$TMP/p500.alkt.tsv"
+[ "$(call "$TMP/p500.alkt.tsv")" = Carbamidomethyl ] || fail "500 ppm: $(call "$TMP/p500.alkt.tsv")"
+[ "$(val "$TMP/p500.alkt.tsv" alkt_run forms_resolved)" = no ] || fail "500 ppm: forms_resolved at 1000 m/z is not no"
+case "$(val "$TMP/p500.alkt.tsv" alkt_run resolved_below_mz)" in 984.01*) ;; *) fail "500 ppm: resolved_below_mz $(val "$TMP/p500.alkt.tsv" alkt_run resolved_below_mz)";; esac
+# the share's n is the votes plus the conflicts (review n3), and the voted row says so
+awk -v n="$(tr -d '\r' < "$TMP/p500.alkt.tsv" | awk -F'\t' '$1 == "alkylation_tags_call" && $2 == "share" { print $4 }')" \
+    -v b="$(val "$TMP/p500.alkt.tsv" alkt_form conflict)" -v v="$(val "$TMP/p500.alkt.tsv" alkylation_tags_call voted)" \
+    -v s="$(val "$TMP/p500.alkt.tsv" alkt_run spectra)" 'BEGIN { exit !(n == v && v == s && b > 0) }' \
+  || fail "500 ppm: the share's n is not votes plus conflicts"
+[ "$(val "$R" alkt_form alias_rejected)" = 0 ] || fail "20 ppm CAM: alias_rejected $(val "$R" alkt_form alias_rejected)"
 [ "$(val "$R" alkt_run forms_resolved)" = yes ] || fail "20 ppm: forms_resolved is not yes"
 val "$R" alkt_form alias.Propionamide | grep -q "S+S" || fail "20 ppm: S+S is not an alias of Propionamide"
 [ "$(val "$R" alkt_form alias.Carboxymethyl)" = "C[Carbamidomethyl]+13C:0.0193" ] \

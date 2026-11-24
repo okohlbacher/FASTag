@@ -507,7 +507,9 @@ jobs:
           # The vendor readers (1.15.2) likewise: bruker_cli_test reads the
           # trimmed timsTOF fixture, thermo_cli_test checks the reader's gate
           # and notice (its data part needs a peptide .raw, which CI has not).
-          for t in mzpeak_roundtrip mzpeak_validate mzpeak_stream_test bruker_cli_test thermo_cli_test; do
+          # gui_cli_test and shipped_data_test: the shipped data in every
+          # layout and the build tree's staging (they skip without Python).
+          for t in mzpeak_roundtrip mzpeak_validate mzpeak_stream_test bruker_cli_test thermo_cli_test gui_cli_test shipped_data_test; do
             grep -E "Test +#[0-9]+: $t " ctest.log | grep -q 'Passed' \
               || { echo "::error::$t did not pass (skipped, not run or missing)"; grep -E "$t" ctest.log || true; exit 1; }
           done

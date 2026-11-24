@@ -133,6 +133,53 @@ pub struct DataStatus {
     searched: Vec<String>,
     /// The digest folder comes from FASTAG_DIGEST_DIR.
     from_env: bool,
+    /// -alkylation_proteome auto reads no database without -recon_fasta or
+    /// -fasta: the engine says so (-data_paths alkylation_auto none). False
+    /// for an engine without -data_paths (before 1.16), which reads auto as
+    /// the shipped human proteome.
+    auto_db_free: bool,
+}
+
+/// What `-data_paths` prints (FASTag.cpp dataPathsJson_).
+#[derive(serde::Deserialize)]
+struct EnginePaths {
+    digest_dir: Option<String>,
+    #[serde(default)]
+    digest_from_env: bool,
+    #[serde(default)]
+    digest_searched: Vec<String>,
+    alkylation_dir: Option<String>,
+    #[serde(default)]
+    proteomes: Vec<String>,
+    #[serde(default)]
+    alkylation_auto: Option<String>,
+}
+
+/// The DataStatus of the JSON line @p line of `-data_paths`: the folders the
+/// engine itself reads; the digest tables are those in its digest folder.
+fn data_status_of_engine(line: &str) -> Option<DataStatus> {
+    let e: EnginePaths = serde_json::from_str(line).ok()?;
+    let dir = e.digest_dir.filter(|d| !d.is_empty()).map(PathBuf::from);
+    let files = dir.as_ref().map(|d| digest_files(d)).unwrap_or_default();
+    Some(DataStatus {
+        digest_dir: dir.as_deref().map(shown),
+        files,
+        alkylation_dir: e.alkylation_dir.filter(|d| !d.is_empty()).map(|d| shown(Path::new(&d))),
+        proteomes: e.proteomes.into_iter().filter(|p| PROTEOMES.contains(&p.as_str())).collect(),
+        searched: e.digest_searched,
+        from_env: e.digest_from_env,
+        auto_db_free: e.alkylation_auto.as_deref() == Some("none"),
+    })
+}
+
+/// Which digest tables @p d holds.
+fn digest_files(d: &Path) -> DigestFiles {
+    DigestFiles {
+        digest_models: d.join("digest_models.tsv").is_file(),
+        digest_models_v2: d.join("digest_models_v2.tsv").is_file(),
+        massgap_mods: d.join("massgap_mods.tsv").is_file(),
+        calibration: d.join("digest_calibration.tsv").is_file(),
+    }
 }
 
 const PROTEOMES: [&str; 4] = ["human", "mouse", "yeast", "ecoli"];
@@ -214,15 +261,7 @@ fn data_status_of(digest_env: Option<&str>, alkylation_env: Option<&str>, bin: &
             (found, cands.iter().map(|c| lexical(c).display().to_string()).collect())
         }
     };
-    let files = dir
-        .as_ref()
-        .map(|d| DigestFiles {
-            digest_models: d.join("digest_models.tsv").is_file(),
-            digest_models_v2: d.join("digest_models_v2.tsv").is_file(),
-            massgap_mods: d.join("massgap_mods.tsv").is_file(),
-            calibration: d.join("digest_calibration.tsv").is_file(),
-        })
-        .unwrap_or_default();
+    let files = dir.as_deref().map(digest_files).unwrap_or_default();
     let alk = match alkylation_env.filter(|e| !e.is_empty()) {
         Some(e) => Path::new(e).is_dir().then(|| PathBuf::from(e)),
         None => dir.as_deref().and_then(alkylation_sibling).filter(|a| a.is_dir()),
@@ -234,6 +273,7 @@ fn data_status_of(digest_env: Option<&str>, alkylation_env: Option<&str>, bin: &
         alkylation_dir: alk.as_deref().map(shown),
         searched,
         from_env: digest_env.is_some(),
+        auto_db_free: false,
     }
 }
 
@@ -243,14 +283,30 @@ fn child_env(var: &str, set: Option<PathBuf>) -> Option<String> {
     set.map(|p| p.display().to_string()).or_else(|| std::env::var(var).ok())
 }
 
-/// Where a run finds FASTag's shipped data, resolved as the CLI does from the
-/// binary the app runs and the environment it gets (data_env).
+/// Where a run of @p r finds FASTag's shipped data: what the engine itself
+/// reports (-data_paths, with the environment its runs get), else, for an
+/// engine without the flag, resolved as the CLI does (data_status_of) from
+/// the resolved absolute binary and that environment, and auto read as the
+/// human proteome (auto_db_free false).
+pub(crate) fn data_status_for(r: &Resolved) -> DataStatus {
+    if let Some(s) = crate::inspect::data_paths_of(r).and_then(|l| data_status_of_engine(&l)) {
+        return s;
+    }
+    let digest = child_env("FASTAG_DIGEST_DIR", digest_dir(r));
+    let alkylation = child_env("FASTAG_ALKYLATION_DIR", alkylation_dir(r));
+    let mut s = data_status_of(digest.as_deref(), alkylation.as_deref(), &r.bin);
+    // It has the flag, but its answer was lost: still the 1.16 meaning.
+    s.auto_db_free = crate::inspect::cli_has(r, "data_paths");
+    s
+}
+
+/// Where a run finds FASTag's shipped data (data_status_for).
 #[tauri::command]
-pub fn data_status(app: AppHandle) -> DataStatus {
+pub async fn data_status(app: AppHandle) -> DataStatus {
     let r = crate::fastag::resolve_binary(&app);
-    let digest = child_env("FASTAG_DIGEST_DIR", digest_dir(&r));
-    let alkylation = child_env("FASTAG_ALKYLATION_DIR", alkylation_dir(&r));
-    data_status_of(digest.as_deref(), alkylation.as_deref(), &r.bin)
+    tauri::async_runtime::spawn_blocking(move || data_status_for(&r))
+        .await
+        .unwrap_or_else(|_| data_status_of(None, None, Path::new("")))
 }
 
 #[cfg(test)]
@@ -392,7 +448,8 @@ mod tests {
         assert_eq!(dev_data(&r, "alkylation", "proteomes.tsv", Some(&src)), None);
         // Only for a CLI from FASTAG_BIN, and only with sources that hold the file.
         assert_eq!(dev_data(&Resolved { source: "bundled", ..Resolved { bin: bin.clone(), data: None, taxonomy: None, source: "env" } }, "taxonomy", "nodes.dmp", Some(&src)), None);
-        assert_eq!(dev_data(&Resolved { bin: PathBuf::from("FASTag"), data: None, taxonomy: None, source: "path" }, "taxonomy", "nodes.dmp", Some(&src)), None);
+        // A CLI found on PATH is absolute (fastag::find_on_path) and finds its own data.
+        assert_eq!(dev_data(&Resolved { bin: bin.clone(), data: None, taxonomy: None, source: "path" }, "taxonomy", "nodes.dmp", Some(&src)), None);
         assert_eq!(dev_data(&r, "taxonomy", "nodes.dmp", None), None);
         assert_eq!(dev_data(&r, "taxonomy", "species_call.tsv", Some(&src)), None);
         let _ = std::fs::remove_dir_all(&root);
@@ -428,5 +485,112 @@ mod tests {
         assert!(s.files.digest_models && s.files.massgap_mods);
         assert_eq!(s.proteomes.len(), 4);
         let _ = std::fs::remove_dir_all(&root);
+    }
+
+    /// An executable stub at @p p printing @p helphelp for --helphelp and
+    /// @p json for -data_paths.
+    #[cfg(unix)]
+    fn stub_at(p: &Path, helphelp: &str, json: &str) {
+        use std::os::unix::fs::PermissionsExt;
+        std::fs::create_dir_all(p.parent().unwrap()).unwrap();
+        let script = format!(
+            "#!/bin/sh\nif [ \"$1\" = --helphelp ]; then\ncat <<'EOF'\nFASTag -- stub\nVersion: 0.0.0-stub\n\nOptions:\n  -in <file>                       Input\n{helphelp}EOF\nexit 0\nfi\nif [ \"$1\" = -data_paths ]; then\ncat <<'EOF'\n{json}\nEOF\nexit 0\nfi\nexit 1\n"
+        );
+        std::fs::write(p, script).unwrap();
+        std::fs::set_permissions(p, std::fs::Permissions::from_mode(0o755)).unwrap();
+    }
+
+    // Codex n5 (2): a FASTag found on PATH is its absolute, canonical path, so
+    // the check looks beside its real folder, as the CLI does; the bare name
+    // the app stored before looked relative to the app's own working folder.
+    #[cfg(unix)]
+    #[test]
+    fn a_path_launch_looks_beside_the_real_binary() {
+        let (root, bin) = tree("pathlaunch");
+        stub_at(&bin, "", "");
+        let d = root.join("share").join("FASTag").join("digest");
+        digest_at(&d, &["digest_models.tsv"]);
+        // Not a file, not executable, or not there: the next folder.
+        let empty = root.join("empty");
+        std::fs::create_dir_all(empty.join("FASTag")).unwrap();
+        let noexec = root.join("noexec");
+        digest_at(&noexec, &["FASTag"]);
+        let path = std::env::join_paths([empty.clone(), noexec, root.join("gone"), bin.parent().unwrap().to_path_buf()]).unwrap();
+        let found = crate::fastag::find_on_path(&path, "FASTag").expect("the stub on PATH");
+        assert_eq!(found, bin);
+        assert!(found.is_absolute());
+        let s = data_status_of(None, None, &found);
+        assert_eq!(s.digest_dir.as_deref(), Some(d.display().to_string().as_str()));
+        assert!(s.files.digest_models);
+        // The bare name finds nothing there (its folders are the app's cwd's).
+        let bare = data_status_of(None, None, Path::new("FASTag"));
+        assert_ne!(bare.digest_dir, s.digest_dir);
+        assert!(bare.searched.iter().all(|p| !Path::new(p).starts_with(&root)), "{:?}", bare.searched);
+        assert_eq!(crate::fastag::find_on_path(&std::env::join_paths([empty]).unwrap(), "FASTag"), None);
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    // Codex n5 (1): FASTAG_BIN through a symlink (a Homebrew bin/FASTag into
+    // the Cellar) is the canonical target, whose data the CLI reads.
+    #[cfg(unix)]
+    #[test]
+    fn an_override_through_a_symlink_is_the_target() {
+        let (root, bin) = tree("override");
+        stub_at(&bin, "", "");
+        digest_at(&root.join("share").join("FASTag").join("digest"), &["digest_models.tsv"]);
+        let link_dir = root.join("brew").join("bin");
+        std::fs::create_dir_all(&link_dir).unwrap();
+        let link = link_dir.join("FASTag");
+        std::os::unix::fs::symlink(&bin, &link).unwrap();
+        let r = crate::fastag::env_override(&link.display().to_string()).unwrap();
+        assert_eq!((r.bin.clone(), r.source), (bin.clone(), "env"));
+        assert!(data_status_of(None, None, &r.bin).files.digest_models);
+        // Beside the link there is nothing.
+        assert!(!data_status_of(None, None, &link).files.digest_models);
+        assert!(crate::fastag::env_override(&root.join("gone").display().to_string()).is_none());
+        assert!(crate::fastag::env_override("").is_none());
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    // Codex n5 (2, 3): an engine that lists -data_paths reports its own
+    // folders and that auto reads no database; one without it (before 1.16)
+    // reads auto as the human proteome (auto_db_free false), whatever its
+    // data.
+    #[cfg(unix)]
+    #[test]
+    fn the_engine_reports_its_data_and_an_older_one_reads_auto_as_human() {
+        if ["FASTAG_DIGEST_DIR", "FASTAG_ALKYLATION_DIR"].iter().any(|v| std::env::var_os(v).is_some()) {
+            eprintln!("skipped: a FASTAG_*_DIR is set in this environment");
+            return;
+        }
+        let (root, bin) = tree("engine");
+        let d = root.join("elsewhere").join("digest");
+        digest_at(&d, &["digest_models.tsv", "massgap_mods.tsv"]);
+        let a = root.join("elsewhere").join("alkylation");
+        std::fs::create_dir_all(&a).unwrap();
+        let json = format!(
+            r#"{{"digest_dir":"{}","digest_from_env":false,"digest_searched":["{}"],"alkylation_dir":"{}","proteomes":["yeast","nonsense"],"alkylation_auto":"none"}}"#,
+            d.display(),
+            d.display(),
+            a.display()
+        );
+        stub_at(&bin, "  -data_paths                      Print the data folders\n", &json);
+        let r = crate::fastag::env_override(&bin.display().to_string()).unwrap();
+        let s = data_status_for(&r);
+        assert!(s.auto_db_free);
+        assert_eq!(s.digest_dir.as_deref(), Some(d.display().to_string().as_str()));
+        assert!(s.files.digest_models && s.files.massgap_mods && !s.files.calibration);
+        assert_eq!(s.alkylation_dir.as_deref(), Some(a.display().to_string().as_str()));
+        assert_eq!(s.proteomes, vec!["yeast".to_string()]);
+        assert_eq!(s.searched, vec![d.display().to_string()]);
+        // The same data beside an older engine: its own lookup, auto as human.
+        let (old_root, old_bin) = tree("engine-old");
+        stub_at(&old_bin, "", &json);
+        let r = crate::fastag::env_override(&old_bin.display().to_string()).unwrap();
+        let s = data_status_for(&r);
+        assert!(!s.auto_db_free);
+        assert_ne!(s.digest_dir.as_deref(), Some(d.display().to_string().as_str()));
+        let _ = std::fs::remove_dir_all(&root);
+        let _ = std::fs::remove_dir_all(&old_root);
     }
 }

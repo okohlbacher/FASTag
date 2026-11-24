@@ -325,7 +325,7 @@ analyses" there.
 | Global > Charge and ions | `ion_series`, `ion_series_hybrid`, `unknown_charge`, `charge_min`, `charge_max`, `charge_infer_margin`, `isotope_error` | Advanced (`ion_series` is also set by the Instrument preset) |
 | Global > Complement pairs | `complement_rule`, `complement_tolerance`, `complement_tolerance_unit`, `complement_tol_factor`, `complement_probe`, `complement_midp` | Advanced |
 | Global > Isobaric reporters | `tmt_pseudo_filter`, `tmt_reporter_filter` | Advanced (experimental) |
-| Hidden, managed by the GUI | `progress`, `dump_spectrum`, `probe_input` | Hidden (progress bar, Spectrum tab, Input probe) |
+| Hidden, managed by the GUI | `progress`, `dump_spectrum`, `probe_input`, `data_paths` | Hidden (progress bar, Spectrum tab, Input probe) |
 | Hidden, boilerplate or no effect | `no_progress`, `version`, `log`, `debug`, `force`, `test`, `stream`, `mzpeak_read_memory` | Hidden |
 | Hidden, removed in 1.14 | `ion_series_photo`, `label_call_min_tags`, `label_discovery_depth`, `label_discovery_max_flank`, `label_discovery_min_share`, `label_discovery_min_spectra`, `label_discovery_out`, `label_discovery_unimod_top`, `label_discovery_window_c`, `label_discovery_window_n`, `pick_unknown_type`, `search_shifts`, `search_shifts_out`, `shift_expand_sites`, `shift_max_offsets`, `shift_max_variable`, `shift_site_min_count`, `shift_site_min_ions`, `shift_site_min_share`, `shortlist_exact_only`, `species_reagents` | Hidden; listed under Help > "Options not in the GUI" |
 

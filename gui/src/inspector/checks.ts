@@ -125,15 +125,19 @@ export interface DataNeed {
   proteome?: string
 }
 
-// auto reads no proteome (the tags alone, or -recon_fasta / -fasta).
+// auto reads no proteome (the tags alone, or -recon_fasta / -fasta), on an
+// engine that says so (DataStatus.autoDbFree); before 1.16 it read human.
 const SHIPPED_PROTEOME_NAMES = new Set(['human', 'mouse', 'yeast', 'ecoli'])
 const HANDOFF = ['shortlist_out', 'fasta_out', 'search_config_out']
 
 /// The shipped data @p values need, by the CLI's rules (FASTag.cpp, where
 /// the digest data and the proteomes are read). An option that gives its own
 /// file (-digest_models, -digest_calibration, a protein database for the
-/// alkylation report) needs none.
-export function shippedDataNeeds(values: Record<string, ParamValue>): DataNeed[] {
+/// alkylation report) needs none. @p engine is what the engine said
+/// (DataStatus): one from before 1.16 (autoDbFree false) reads
+/// -alkylation_proteome auto as the shipped human proteome; unknown (none)
+/// is taken as the current engine.
+export function shippedDataNeeds(values: Record<string, ParamValue>, engine?: Pick<DataStatus, 'autoDbFree'> | null): DataNeed[] {
   const on = (n: string): boolean => isActive(n, values)
   const text = (n: string): string => String(values[n] ?? PARAM_BY_NAME.get(n)?.default ?? '').trim()
   const needs: DataNeed[] = []
@@ -149,9 +153,11 @@ export function shippedDataNeeds(values: Record<string, ParamValue>): DataNeed[]
   // With -digest_out the hand-off uses that report's models (above).
   if (handoff.length && !on('digest_out')) needs.push({ option: handoff[0], file: 'digest_models.tsv' })
   // The alkylation report reads a shipped proteome only when one is named
-  // (auto, the default, reads none) and it places its tags on its own
-  // database: no -recon_fasta, no placements, no hand-off.
-  const prot = (text('alkylation_proteome') || 'auto').toLowerCase()
+  // (auto, the default, reads none; an engine before 1.16 reads it as human)
+  // and it places its tags on its own database: no -recon_fasta, no
+  // placements, no hand-off.
+  const given = (text('alkylation_proteome') || 'auto').toLowerCase()
+  const prot = given === 'auto' && engine && !engine.autoDbFree ? 'human' : given
   if (on('alkylation_out') && !on('recon_fasta') && !on('recon_out') && !handoff.length && SHIPPED_PROTEOME_NAMES.has(prot)) {
     needs.push({ option: 'alkylation_out', file: `${prot}.fasta.gz`, proteome: prot })
   }
@@ -189,6 +195,22 @@ function lookedIn(need: DataNeed, data: DataStatus): string {
   return `It is not found next to the FASTag program (looked in ${data.searched.join(', ')}).`
 }
 
+const LEGACY_AUTO =
+  'This FASTag program is older than the app: with Alkylation proteome auto and no protein database it places the tags on the shipped human proteome, where the current FASTag reads no database and calls the reagent from the tags alone.'
+
+/// An engine from before 1.16 (no -data_paths) with the human proteome at
+/// hand: the alkylation report of an auto run places on it.
+function legacyAutoCheck(): Check {
+  return {
+    id: 'legacy-auto-human',
+    level: 'flag',
+    title: 'The alkylation report will use the human proteome',
+    detail: `${LEGACY_AUTO} Its call then includes a placement check on human proteins, which fits only a human sample. Use the FASTag the app ships for the call from the tags alone, or name the proteome of your sample (or give a protein database).`,
+    faq: 'faq-shipped-data',
+    source: 'the FASTag program and the settings'
+  }
+}
+
 /// The run needs FASTag's shipped data and it is not there (an engine from a
 /// build tree or a copied binary, FASTAG_BIN): FASTag would stop with exit
 /// 6 a moment after Run. One check per output that needs it; none while
@@ -197,14 +219,22 @@ export function missingDataChecks(values: Record<string, ParamValue>, data: Data
   if (!data) return []
   const checks: Check[] = []
   const seen = new Set<string>()
-  for (const need of shippedDataNeeds(values)) {
-    if (hasData(need, data) || seen.has(need.option)) continue
+  for (const need of shippedDataNeeds(values, data)) {
+    if (seen.has(need.option)) continue
+    // An engine from before 1.16 reads auto as the human proteome.
+    const legacyAuto = need.proteome === 'human' && !data.autoDbFree && (String(values['alkylation_proteome'] ?? '').trim() || 'auto').toLowerCase() === 'auto'
+    if (hasData(need, data)) {
+      // It has the proteome: the run goes, but on a database the user did
+      // not choose, where the app's copy promises the call from the tags.
+      if (legacyAuto) checks.push(legacyAutoCheck())
+      continue
+    }
     seen.add(need.option)
     const handoff = HANDOFF.includes(need.option)
     const what = handoff ? 'the database reduction' : productText(need.option)
     const Cap = what.charAt(0).toUpperCase() + what.slice(1)
     const how = need.proteome
-      ? `Give a protein database (FASTA) for the run, or use an installed FASTag (it has the proteomes in share/FASTag/alkylation), or set FASTAG_ALKYLATION_DIR to a folder that holds ${need.file} (data/alkylation in the FASTag sources) and start FASTag again.`
+      ? `${legacyAuto ? `${LEGACY_AUTO} Use the FASTag the app ships, or ` : ''}${legacyAuto ? 'give' : 'Give'} a protein database (FASTA) for the run, or use an installed FASTag (it has the proteomes in share/FASTag/alkylation), or set FASTAG_ALKYLATION_DIR to a folder that holds ${need.file} (data/alkylation in the FASTag sources) and start FASTag again.`
       : `Use an installed FASTag (cmake --install puts it in <prefix>/share/FASTag/digest), or set FASTAG_DIGEST_DIR to a folder that holds it (data/digest in the FASTag sources) and start FASTag again.`
     const without = handoff
       ? 'Or run without the protein shortlist, the reduced FASTA and the search-engine configuration.'

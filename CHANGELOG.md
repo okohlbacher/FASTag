@@ -2,6 +2,58 @@
 
 ## Unreleased
 
+- **CLI: `-data_paths` reports where FASTag reads its shipped data.** The new advanced flag prints one JSON line
+  (`digest_dir`, `digest_from_env`, `digest_searched`, `alkylation_dir`, `proteomes`, `alkylation_auto` `none`) and
+  exits 0, with the same lookup and environment as a run; needs no `-in` or `-out`, refused with `-stream`. The
+  desktop app's check before a run now asks the engine through it instead of guessing from the program's path, and
+  an engine whose `--helphelp` does not list it (before 1.16) is taken to read `-alkylation_proteome auto` as the
+  shipped human proteome: the check then asks for `human.fasta.gz`, or says the report will use the human proteome,
+  and Setup no longer promises the call from the tags alone for it. A `FASTAG_BIN` symlink is resolved to its target,
+  and a debug build that finds FASTag on `PATH` uses its absolute path (it stored the bare name, so the check looked
+  for data relative to the app's working folder).
+- **Desktop app: the Spectrum tab's protein alignment is bound to the tags table the run wrote.** When a run ends with
+  exit 0, the identity of its `-out` table (canonical path, device, inode, size, modification time) is recorded, in
+  the session and in the run record (`tagsIdentity`). The alignment reads the run's database only for that very file:
+  a tags table rewritten, copied or renamed onto the run's output path afterwards, a run that failed, was cancelled or
+  is still going, and a record written before this change align nothing ("changed since the run wrote it", "was not
+  written by a run of this app that finished").
+- **Desktop app: Open with default app opens only what the app offers it for.** Open now takes an idXML, mzid or
+  mzTab `-recon_id_out`, a `-fasta_out` FASTA or a `-search_config_out` (JSON or `.params`) that a run of this session
+  committed (ended with exit 0) or that was dropped on the window, while it is still the same regular file (no
+  symlink; same device, inode, size and modification time). A planned output of a run that did not finish, a record
+  of an earlier session, a file replaced or symlinked at that path, and any other file type (for example `.command`)
+  are refused ("not a file this app wrote or you opened"). Reveal is unchanged.
+- **Desktop app: feedback shares only the export that matches the choices shown.** The screenshot and the
+  diagnostics stay included by default; the privacy notice now says so (and that the log is included only when
+  ticked), under notice version `fastag-feedback-privacy-2`. Changing what is included after Save builds the zip
+  again and asks for the public-issue confirmation again; Open issue draft stays off until that zip is there, and
+  after a failed build. A failed build no longer leaves the earlier zip (with a screenshot since unticked) in the
+  report's folder, and an older build that finishes after a newer one is dropped.
+- **Desktop app fixes:** ◀ ▶ in the Spectrum tab read the position and both neighbours from one snapshot of the
+  tags table (a table rewritten by a rerun during the lookup no longer mixes two files or falls back to file
+  order). The Digest tab's alkylation block counts a call from the tags as votes from tags, gives the tag call's
+  held-out result (the placement call stays not validated), and shows the placement call and its reason beside
+  it; the Overview keeps the placements' too-short-tags diagnosis and its Run again with extension when neither
+  call is made. An identifications mzTab over the 128 MB viewer limit (or one that cannot be read) is listed with
+  Open and Reveal. The QC page of an older report (no per-channel counts) shows each reporter channel's share
+  without a made-up count.
+
+- **CLI: the alkylation call checks its votes (`-alkylation_out` format 3, `-alkylation_tags_out` `alkt_run format`
+  3).** Three changes to the call. (1) Conflicted votes count in the share's denominator: share = class votes /
+  (binned + conflicted), the share row's `n` is that denominator and a new row `voted` (after `share`, in
+  `alkylation_call`, `alkylation_placement_call` and `alkylation_tags_call`) gives it; a heavily conflicted run no
+  longer gets a reagent call (10 CAM and 90 conflicts were share 1.0 and a CAM call, now 0.1 and `ambiguous`).
+  (2) In ppm the twin guard (CAM and Carboxymethyl are 0.984 Da apart) applies per vote with the tagger's windows at
+  the C edge's own m/z, no longer once per run at 1000 m/z: at 400 ppm C edges above 1230 m/z are set aside (they
+  were counted), at 500 ppm edges below 984 m/z are counted (the run got `unresolved_forms`). New rows
+  `alkt_run resolved_below_mz` and `alkt_form unresolved`; `unresolved_forms` now means no vote is left (in Da, as
+  before, any twin). (3) Each voting C edge is checked against the spectrum for its aliases: a GC/CG or AC/CA whose
+  middle peak was lost in one series (the peak is in the other, or at the complementary m/z), or an edge ending on a
+  13C peak (the monoisotopic peak is beside it), no longer votes Carbamidomethyl, Propionamide or Carboxymethyl; such
+  a vote is a conflict (`alkt_form alias_rejected`). On PXD000001 the call is unchanged: Methylthio, 52 of 69 votes
+  with `-extension 2` (1 CAM vote now an alias conflict), no call at the defaults (8 votes). The held-out result
+  (40 of 57 runs called, 37 right) was measured without these checks.
+
 - **CLI: the alkylation call needs no protein database (`-alkylation_out` format 2).** `-alkylation_out` now
   reads the cysteine forms in the tags (unmodified, Carbamidomethyl, Propionamide, Nethylmaleimide, Methylthio,
   Carboxymethyl; the method of `-alkylation_tags_out`) and calls the reagent, or says `no_call` with the reason and
@@ -28,7 +80,12 @@
   `FASTAG_DIGEST_DIR` or `FASTAG_ALKYLATION_DIR` that names no folder now finds nothing and is said so, instead of
   being ignored. The desktop app passes its bundled digest and alkylation folders to the CLI, and its check before
   the run blocks the Mass-shift survey, Characterize a run or Database reduction when their file is missing, with the
-  reason and a fix ("Run without the mass-gap report").
+  reason and a fix ("Run without the mass-gap report"). The build tree restages `data/` on every build (target
+  `fastag_stage_data`), so an edit to `data/` alone and a deleted `share-FASTag-*` folder are restored; a Windows copy
+  follows `data/` exactly (changed files copied again, deleted ones removed). A staged folder carries
+  `.fastag-staged`, listing what the build put there, and only that is ever replaced or removed; a folder without it
+  is the user's and is left alone in both modes (a Windows build tree copy-staged before this change has no marker:
+  delete its `share-FASTag-*` folders once to restage them).
 - **Every shipped data file checked in every layout, and the k-mer index in a build tree.** A new test
   (`shipped_data_test`) reads from the sources each data file the CLI opens (protease models, calibration,
   mass-gap modifications, proteomes and their manifest, taxonomy dumps, `species_call.tsv`, the index) and fails
@@ -120,7 +177,11 @@
   `res_cover` could exceed the peptide length (PXD000001: 1705 of 5594 spectra above (M − H2O)/110). Now a tag
   that matches `-fasta` (or `-entrapment_fasta`) in one orientation only is placed by it, a reverse-only match as a
   b (or c) read; any other tag (no `-fasta`, or a match both ways) is folded onto the lower half of the peptide, so
-  the two reads of a stretch count once and `res_cover` is a lower bound. A new column `res_cover_exact` after
+  the two reads of a stretch count once and `res_cover` is a lower bound. When any tag of a spectrum is folded, every
+  tag of it is folded (the placed ones after their placement), so a placed read and a folded read of the same
+  residues count once too (with `-fasta` and `-extension 4` on PXD000001 this lowers `res_cover` in 207 of the 277
+  folded spectra, by 883 residues in all, raises it by 1 or 2 in 7, and the folded spectra above the length estimate fall from 24 to 9; spectra with every
+  orientation known are unchanged). A new column `res_cover_exact` after
   `res_cover` is 1 when every reported tag of the spectrum was placed by its orientation and 0 when `res_cover` is
   the folded lower bound; `census_version` is 3. On PXD000001 without `-fasta`, 77 spectra remain above the length
   estimate. Readers that take columns by name are unaffected; `best_ion_series` and the later columns move one

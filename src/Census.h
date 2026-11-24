@@ -338,6 +338,36 @@ namespace FASTag::Census
   };
 
   /**
+    @brief Folds one tag's residue spans onto the lower half of the peptide.
+
+    When the midpoint of the whole span [first, last) lies above axis / 2,
+    each span [a, b] becomes [axis - b, axis - a]. The fold is symmetric
+    about axis / 2, so a b read and the complementary y read of the same
+    residues (or an exactly placed read of them) give one image; folding a
+    folded block again changes nothing. The block is folded as a whole, so
+    its own residues stay distinct.
+
+    @param[in,out] spans Residue intervals.
+    @param[in] first First span of the tag.
+    @param[in] last One past the tag's last span.
+    @param[in] axis The mirror axis (Da), see addResidueSpans.
+  */
+  inline void foldResidueSpans(std::vector<std::pair<double, double>>& spans, std::size_t first, std::size_t last,
+                               double axis)
+  {
+    if (last <= first) return;
+    double lo = spans[first].first, hi = spans[first].second;
+    for (std::size_t i = first; i < last; ++i)
+    {
+      lo = std::min(lo, spans[i].first);
+      hi = std::max(hi, spans[i].second);
+    }
+    if (0.5 * (lo + hi) > 0.5 * axis)
+      for (std::size_t i = first; i < last; ++i)
+        spans[i] = {axis - spans[i].second, axis - spans[i].first};
+  }
+
+  /**
     @brief Appends the residues of one tag to a residue-cover list.
 
     The spans are first built as the tag TSV writes the tag (the low peak a
@@ -362,6 +392,12 @@ namespace FASTag::Census
       interval, so res_cover is a lower bound (residues that mirror each
       other about the centre count once). The tag is folded as a whole, so
       its own residues never merge and res_cover stays >= max_len.
+
+    When any tag of a spectrum is Unresolved, the caller folds the known
+    (Forward and Reversed) tags too, after their exact placement, with
+    foldResidueSpans: a known read and an unresolved read of the same
+    residues then share one lower-half image and count once, and res_cover
+    is the lower bound. When every orientation is known nothing is folded.
 
     @param[in,out] spans Residue intervals appended to.
     @param[in] nterm_mass The tag's nterm_mass (Da).
@@ -408,20 +444,11 @@ namespace FASTag::Census
                              a + (b - a) * static_cast<double>(i + 1) / static_cast<double>(r));
       }
     }
-    bool mirror = orient == Orientation::Reversed;
-    if (orient == Orientation::Unresolved && spans.size() > first)
-    {
-      double lo = spans[first].first, hi = spans[first].second;
-      for (std::size_t i = first; i < spans.size(); ++i)
-      {
-        lo = std::min(lo, spans[i].first);
-        hi = std::max(hi, spans[i].second);
-      }
-      mirror = 0.5 * (lo + hi) > 0.5 * axis;
-    }
-    if (mirror)
+    if (orient == Orientation::Reversed)
       for (std::size_t i = first; i < spans.size(); ++i)
         spans[i] = {axis - spans[i].second, axis - spans[i].first};
+    else if (orient == Orientation::Unresolved)
+      foldResidueSpans(spans, first, spans.size(), axis);
   }
 
   /**

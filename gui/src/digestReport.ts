@@ -302,25 +302,55 @@ export interface AlkylationCall {
   source?: string
   /// The `alk_run format` value; a reader knows formats 1 and 2.
   format: number | null
+  /// Format 2 with a database: the placement call on its own
+  /// (`alkylation_placement_call`), whatever the call of the report took
+  /// from it; its `tags_too_short` is there only. Undefined in format 1,
+  /// whose `alkylation_call` is the placement call, and without a database.
+  placement?: AlkylationPart
 }
 
-/// The call of an -alkylation_out report, read by (section, key) as
-/// doc/ALKYLATION-REPORT.md requires.
-export function alkylationCall(r: Report): AlkylationCall {
-  const v = (k: string): string | undefined => value(r, 'alkylation_call', k)
+/// One component call of a format 2 report (its section's rows).
+export interface AlkylationPart {
+  status: 'call' | 'no_call' | 'unknown'
+  reagent?: string
+  share: number | null
+  /// Binned spectra.
+  binned: number | null
+  reason?: string
+}
+
+/// The rows of the call in @p sect of @p r.
+function alkylationPart(r: Report, sect: string): AlkylationPart {
+  const v = (k: string): string | undefined => value(r, sect, k)
   const st = v('status')
   const called = st === 'call'
   const reagent = v('reagent')
   return {
     status: called || st === 'no_call' ? st : 'unknown',
     reagent: called && reagent != null && reagent !== '-' ? reagent : undefined,
-    mass: called ? num(v('mass')) : null,
     share: num(v('share')),
-    binned: row(r, 'alkylation_call', 'status')?.n ?? null,
-    reason: v('reason') == null || v('reason') === '-' ? undefined : v('reason'),
+    binned: row(r, sect, 'status')?.n ?? null,
+    reason: v('reason') == null || v('reason') === '-' ? undefined : v('reason')
+  }
+}
+
+/// The call of an -alkylation_out report, read by (section, key) as
+/// doc/ALKYLATION-REPORT.md requires.
+export function alkylationCall(r: Report): AlkylationCall {
+  const v = (k: string): string | undefined => value(r, 'alkylation_call', k)
+  const { status, reagent, share, binned, reason } = alkylationPart(r, 'alkylation_call')
+  const placed = row(r, 'alkylation_placement_call', 'status') != null
+  return {
+    status,
+    reagent,
+    mass: status === 'call' ? num(v('mass')) : null,
+    share,
+    binned,
+    reason,
     databaseSource: value(r, 'alk_run', 'database_source'),
     source: v('source'),
-    format: num(value(r, 'alk_run', 'format'))
+    format: num(value(r, 'alk_run', 'format')),
+    ...(placed ? { placement: alkylationPart(r, 'alkylation_placement_call') } : {})
   }
 }
 

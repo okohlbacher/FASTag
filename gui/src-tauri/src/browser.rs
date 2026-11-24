@@ -1250,6 +1250,10 @@ impl ViewRows {
 /// One file as indexed, with the orders built over it. Immutable but for
 /// its lazily filled slots; shared by Arc, never locked across a build.
 pub(crate) struct Snapshot {
+    /// Unique in the process: a re-indexed file (rewritten, rerun) is
+    /// another snapshot with another id, so answers of two calls can be
+    /// told apart (the Spectrum tab's ◀ ▶, results_neighbours).
+    pub(crate) id: u64,
     path: String,
     len: u64,
     mtime: Option<SystemTime>,
@@ -1287,7 +1291,9 @@ pub(crate) struct Snapshot {
 
 impl Snapshot {
     fn new(path: &str, len: u64, mtime: Option<SystemTime>, index: Index) -> Snapshot {
+        static NEXT: AtomicU64 = AtomicU64::new(1);
         Snapshot {
+            id: NEXT.fetch_add(1, Ordering::Relaxed),
             path: path.to_string(),
             len,
             mtime,
@@ -2702,6 +2708,118 @@ pub(crate) fn position(shared: &Arc<Shared>, path: &str, spec: &ViewSpec, row: u
     Ok(snap.cached_view(spec).and_then(|v| v.position(row)))
 }
 
+/// A spectrum ◀ or ▶ leads to: its first row in the order walked.
+#[derive(Serialize, Debug, PartialEq, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct NavStep {
+    pub spectrum: String,
+    pub row_id: u32,
+}
+
+/// Where a spectrum sits in a view and which spectra lie either side of it,
+/// every part read from one snapshot (`snapshot`: its id).
+#[derive(Serialize, Debug, PartialEq)]
+#[serde(tag = "status", rename_all = "camelCase", rename_all_fields = "camelCase")]
+pub enum NavAnswer {
+    /// The view is not in its final order yet (D5: the E-value order is
+    /// being built); asked again later.
+    Pending { snapshot: u64 },
+    /// Neither the row nor any row of the spectrum is in the view.
+    Absent { snapshot: u64 },
+    /// At position `pos` of the `matched` rows, on file row `row_id`;
+    /// `prev` and `next`: none at an end (or past NAV_SCAN * NAV_SCAN_PAGES
+    /// rows of the same spectrum).
+    At { snapshot: u64, pos: usize, matched: usize, row_id: u32, prev: Option<NavStep>, next: Option<NavStep> },
+}
+
+/// Rows read at a time while stepping over the other rows of one spectrum,
+/// and at most that many reads each way.
+const NAV_SCAN: usize = 200;
+const NAV_SCAN_PAGES: usize = 50;
+
+/// ◀ ▶ of the Spectrum tab: where @p spectrum sits in @p spec's view (file
+/// row @p row when it is in the view and of that spectrum, else the
+/// spectrum's first row there) and the nearest row of another spectrum
+/// either side. One snapshot answers all of it: a file rewritten between
+/// the renderer's calls can no longer give a position of one file and the
+/// rows of another.
+pub(crate) fn neighbours(
+    shared: &Arc<Shared>,
+    path: &str,
+    spec: &ViewSpec,
+    row: Option<u32>,
+    spectrum: &str,
+    mode: Mode,
+) -> Result<NavAnswer, String> {
+    let snap = shared.snapshot_mode(path, mode)?;
+    let snapshot = snap.id;
+    let (rows, ranked, _) = shared.view_of(&snap, spec, mode, None)?;
+    if !ranked {
+        return Ok(NavAnswer::Pending { snapshot });
+    }
+    let sp_col = snap.index.columns.iter().position(|c| c == "spectrum");
+    let spectra_of = |ids: &[u32]| -> Result<Vec<Option<String>>, String> {
+        let Some(c) = sp_col else {
+            return Ok(vec![None; ids.len()]);
+        };
+        Ok(read_rows(&snap, ids)?.into_iter().map(|mut f| (c < f.len()).then(|| std::mem::take(&mut f[c]))).collect())
+    };
+    let mut at: Option<(usize, u32)> = None;
+    if let Some(r) = row.filter(|&r| (r as usize) < snap.index.offsets.len()) {
+        if let Some(p) = rows.position(r) {
+            // A row id of an older file names another spectrum in this one.
+            if spectra_of(&[r])?[0].as_deref() == Some(spectrum) {
+                at = Some((p, r));
+            }
+        }
+    }
+    let (pos, row_id) = match at {
+        Some(a) => a,
+        None => {
+            let mine = ViewSpec { spectrum: Some(spectrum.to_string()), spectrum_exact: true, ..spec.clone() };
+            let (m, m_ranked, _) = shared.view_of(&snap, &mine, mode, None)?;
+            // The filters do not wait for the E-value order: no row is no row.
+            let Some(&first) = m.window(0, 1).first() else {
+                return Ok(NavAnswer::Absent { snapshot });
+            };
+            // Which row is first is not known before the order is.
+            if !m_ranked {
+                return Ok(NavAnswer::Pending { snapshot });
+            }
+            match rows.position(first) {
+                Some(p) => (p, first),
+                None => return Ok(NavAnswer::Absent { snapshot }),
+            }
+        }
+    };
+    let n = rows.len();
+    let step = |fwd: bool| -> Result<Option<NavStep>, String> {
+        for k in 0..NAV_SCAN_PAGES {
+            let (a, b) = if fwd {
+                let a = pos + 1 + k * NAV_SCAN;
+                (a, (a + NAV_SCAN).min(n))
+            } else {
+                let b = pos.saturating_sub(k * NAV_SCAN);
+                (b.saturating_sub(NAV_SCAN), b)
+            };
+            if a >= b {
+                return Ok(None);
+            }
+            let ids = rows.window(a, b - a);
+            let sps = spectra_of(&ids)?;
+            let hit = |i: usize| sps[i].as_deref().filter(|s| *s != spectrum).map(|s| NavStep { spectrum: s.to_string(), row_id: ids[i] });
+            let found = if fwd { (0..ids.len()).find_map(hit) } else { (0..ids.len()).rev().find_map(hit) };
+            if found.is_some() {
+                return Ok(found);
+            }
+        }
+        Ok(None)
+    };
+    let prev = step(false)?;
+    let next = step(true)?;
+    Ok(NavAnswer::At { snapshot, pos, matched: n, row_id, prev, next })
+}
+
 #[tauri::command]
 pub async fn results_open(
     state: tauri::State<'_, BrowserCache>,
@@ -2756,6 +2874,20 @@ pub async fn results_position(
 ) -> Result<Option<usize>, String> {
     let shared = state.0.clone();
     tauri::async_runtime::spawn_blocking(move || position(&shared, &path, &view, row))
+        .await
+        .map_err(|e| e.to_string())?
+}
+
+#[tauri::command]
+pub async fn results_neighbours(
+    state: tauri::State<'_, BrowserCache>,
+    path: String,
+    view: ViewSpec,
+    row: Option<u32>,
+    spectrum: String,
+) -> Result<NavAnswer, String> {
+    let shared = state.0.clone();
+    tauri::async_runtime::spawn_blocking(move || neighbours(&shared, &path, &view, row, &spectrum, Mode::Interactive))
         .await
         .map_err(|e| e.to_string())?
 }
@@ -3718,6 +3850,67 @@ mod tests {
         let r3 = query(&cache, &p, &spec, 0, 100).unwrap();
         assert_eq!(r3.total_rows, 1);
         assert_eq!(col(&r3, 0, "tag"), "ZZ");
+        std::fs::remove_file(&p).ok();
+    }
+
+    #[test]
+    fn neighbours_come_from_one_snapshot_across_a_rewrite() {
+        let row = |sp: &str, tag: &str, ev: &str| format!("{sp}\t{tag}\t7\t1\t0\t0\t0\t0\t{ev}\t0.5\t0.5\tfwd");
+        let a = [row("s1", "AAAAAAA", "0.1"), row("s2", "CCCCCCC", "0.2"), row("s3", "DDDDDDD", "0.3")];
+        let p = write_fixture("neighbours.tsv", &format!("{HEADER}\n{}\n", a.join("\n")));
+        let shared = Arc::new(Shared::default());
+        let spec = ViewSpec { sort: Some(SortSpec { column: "evalue".into(), desc: false }), ..Default::default() };
+        let nav = |row: Option<u32>, sp: &str| neighbours(&shared, &p, &spec, row, sp, Mode::Exact).unwrap();
+        let step = |sp: &str, r: u32| Some(NavStep { spectrum: sp.into(), row_id: r });
+        let NavAnswer::At { snapshot: sa, pos, matched, row_id, prev, next } = nav(Some(1), "s2") else { panic!("s2 is in A") };
+        assert_eq!((pos, matched, row_id), (1, 3, 1));
+        assert_eq!((prev, next), (step("s1", 0), step("s3", 2)));
+        // The same file: the same snapshot.
+        assert!(matches!(nav(Some(1), "s2"), NavAnswer::At { snapshot, .. } if snapshot == sa));
+
+        // Rewritten between calls (a rerun): other rows, another length. File
+        // row 1 is now of s9, and s2 sits elsewhere in the E-value order.
+        let b = [
+            row("s7", "EEEEEEE", "0.01"),
+            row("s9", "FFFFFFF", "0.02"),
+            row("s8", "GGGGGGG", "0.03"),
+            row("s2", "CCCCCCC", "0.04"),
+            row("s2", "HHHHHHH", "0.05"),
+            row("s6", "KKKKKKK", "0.06"),
+        ];
+        std::fs::write(&p, format!("{HEADER}\n{}\n", b.join("\n"))).unwrap();
+        let NavAnswer::At { snapshot: sb, pos, matched, row_id, prev, next } = nav(Some(1), "s2") else { panic!("s2 is in B") };
+        assert_ne!(sb, sa);
+        // All of B: not A's position 1 and count 3 with B's rows, and not B's
+        // row 1 (s9) taken for s2.
+        assert_eq!((pos, matched, row_id), (3, 6, 3));
+        // ▶ steps over s2's second row.
+        assert_eq!((prev, next), (step("s8", 2), step("s6", 5)));
+        // A spectrum B does not have.
+        assert_eq!(nav(Some(2), "s3"), NavAnswer::Absent { snapshot: sb });
+        // Ends.
+        assert!(matches!(nav(Some(0), "s7"), NavAnswer::At { pos: 0, prev: None, next: Some(_), .. }));
+        assert!(matches!(nav(Some(5), "s6"), NavAnswer::At { pos: 5, prev: Some(_), next: None, .. }));
+        std::fs::remove_file(&p).ok();
+    }
+
+    #[test]
+    fn neighbours_wait_for_the_evalue_order_in_the_table() {
+        let p = fixture("neighbours-pending.tsv");
+        let shared = Arc::new(Shared::default());
+        // The open file, its E-value order being built (D5): pending, never
+        // the file order taken for it.
+        let snap = shared.snapshot(&p).unwrap();
+        *shared.open.lock().unwrap() = Some(OpenState { path: p.clone(), generation: 1, emit: Arc::new(|_| {}), index: Cancel::default() });
+        *snap.rank.lock().unwrap() = RankSlot::Building(Cancel::default());
+        let spec = ViewSpec { sort: Some(SortSpec { column: "evalue".into(), desc: false }), ..Default::default() };
+        assert_eq!(neighbours(&shared, &p, &spec, Some(0), "frame=5", Mode::Interactive).unwrap(), NavAnswer::Pending { snapshot: snap.id });
+        finish_rank_after(&shared, &snap, 0).join().unwrap();
+        // Ranked: frame=7 (0.0001) is first, then frame=5's rows.
+        let NavAnswer::At { pos, prev, next, .. } = neighbours(&shared, &p, &spec, Some(0), "frame=5", Mode::Interactive).unwrap() else { panic!() };
+        assert_eq!(pos, 1);
+        assert_eq!(prev, Some(NavStep { spectrum: "frame=7".into(), row_id: 2 }));
+        assert_eq!(next, Some(NavStep { spectrum: "Frame=9".into(), row_id: 3 }));
         std::fs::remove_file(&p).ok();
     }
 

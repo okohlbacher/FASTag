@@ -22,6 +22,7 @@ import type {
   FastagApi,
   ProbeRun,
   ResolvedOutputs,
+  NavAnswer,
   ResultsView,
   RunEvent,
   RunRecord,
@@ -115,6 +116,8 @@ export interface MockBridge extends FastagApi {
   taxonomyCalls: { nodes?: string; names?: string }[]
   // path -> report text; a missing path reads as "not written".
   reportFiles: Record<string, string>
+  // path -> the error report() rejects with (report.rs read_report: too large, unreadable).
+  reportErrors: Record<string, string>
   reportCalls: string[]
   // reportHead() calls (the sniff of an opened or dropped file).
   reportHeadCalls: string[]
@@ -404,6 +407,7 @@ export function installMockBridge(): MockBridge {
     taxonomyError: null,
     taxonomyCalls: [],
     reportFiles: {},
+    reportErrors: {},
     reportCalls: [],
     reportHeadCalls: [],
     resultsColumns: ['spectrum', 'tag', 'length', 'evalue', 'fasta_hit'],
@@ -432,7 +436,8 @@ export function installMockBridge(): MockBridge {
       alkylationDir: '/app/share/FASTag/alkylation',
       proteomes: ['human', 'mouse', 'yeast', 'ecoli'],
       searched: ['/app/share/FASTag/digest', '/app/bin/share-FASTag-digest', '/app/bin/digest'],
-      fromEnv: false
+      fromEnv: false,
+      autoDbFree: true
     },
     dataStatusCalls: 0,
     cliOptions: { options: ['in', 'out', 'fasta', 'fragment_tolerance', 'fragment_tolerance_unit'], ok: true, detail: '5 options' },
@@ -633,6 +638,8 @@ export function installMockBridge(): MockBridge {
     },
     report: (path) => {
       mock.reportCalls.push(path)
+      // As report.rs read_report's errors (over its size limit, a read that failed).
+      if (mock.reportErrors[path] != null) return Promise.reject(new Error(mock.reportErrors[path]))
       return Promise.resolve(mock.reportFiles[path] ?? null)
     },
     reportHead: (path) => {
@@ -712,6 +719,59 @@ export function installMockBridge(): MockBridge {
       })
     },
     resultsPosition: () => Promise.resolve(null),
+    // As browser.rs neighbours(), built from this mock's own resultsQuery
+    // and resultsPosition, so a test's views, D5 waits and failures apply.
+    // The backend answers from one snapshot; the mock's table changes
+    // between these calls only when a test changes it (and a test of that
+    // replaces resultsNeighbours). Snapshot 0: the mock has one.
+    resultsNeighbours: async (path, view, row, spectrum): Promise<NavAnswer> => {
+      const snapshot = 0
+      const pending: NavAnswer = { status: 'pending', snapshot }
+      const absent: NavAnswer = { status: 'absent', snapshot }
+      const at = async (r: number): Promise<{ pos: number; matched: number } | 'pending' | null> => {
+        const head = await mock.resultsQuery(path, view, 0, 1)
+        if (head.ranked === false) return 'pending'
+        const pos = await mock.resultsPosition(path, view, r)
+        return pos != null && pos >= 0 ? { pos, matched: head.matchedRows } : null
+      }
+      let found = row != null ? await at(row) : null
+      if (found === 'pending') return pending
+      let rowId = row ?? -1
+      if (!found) {
+        const mine = await mock.resultsQuery(path, { ...view, spectrum, spectrumExact: true }, 0, 1)
+        if (mine.rows.length === 0) return absent
+        if (mine.ranked === false) return pending
+        const first = mine.rowIds?.[0]
+        if (first == null || first === row) return absent
+        found = await at(first)
+        if (found === 'pending') return pending
+        if (!found) return absent
+        rowId = first
+      }
+      const { pos, matched } = found
+      const step = async (dir: -1 | 1): Promise<{ spectrum: string; rowId: number } | null | 'pending'> => {
+        for (let n = 0; n < 50; n++) {
+          const a = dir > 0 ? pos + 1 + n * 200 : Math.max(0, pos - (n + 1) * 200)
+          const b = dir > 0 ? Math.min(matched, a + 200) : pos - n * 200
+          if (a >= b) return null
+          const pg = await mock.resultsQuery(path, view, a, b - a)
+          if (pg.ranked === false) return 'pending'
+          if (pg.rows.length === 0) return null
+          const sc = pg.columns.indexOf('spectrum')
+          for (let k = 0; k < pg.rows.length; k++) {
+            const i = dir > 0 ? k : pg.rows.length - 1 - k
+            const sp = pg.rows[i]?.[sc]
+            if (sp != null && sp !== spectrum) return { spectrum: sp, rowId: pg.rowIds?.[i] ?? -1 }
+          }
+        }
+        return null
+      }
+      const prev = await step(-1)
+      if (prev === 'pending') return pending
+      const next = await step(1)
+      if (next === 'pending') return pending
+      return { status: 'at', snapshot, pos, matched, rowId, prev, next }
+    },
     revealOutput: (path, folder) => {
       mock.revealCalls.push({ path, folder })
       return mock.revealError ? Promise.reject(mock.revealError) : Promise.resolve()

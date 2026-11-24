@@ -7,10 +7,12 @@
 
 #include <OpenMS/CHEMISTRY/Residue.h>
 #include <OpenMS/CHEMISTRY/ResidueDB.h>
+#include <OpenMS/CONCEPT/Constants.h>
 
 #include <algorithm>
 #include <cmath>
 #include <cstdio>
+#include <limits>
 #include <stdexcept>
 
 namespace FASTag::AlkylationTags
@@ -70,9 +72,8 @@ namespace FASTag::AlkylationTags
 
   bool formsResolved(const std::vector<Alkylation::Form>& cands, double tol_da)
   {
-    for (std::size_t i = 0; i < cands.size(); ++i)
-      for (std::size_t j = i + 1; j < cands.size(); ++j)
-        if (std::fabs(cands[i].mass - cands[j].mass) <= 2.0 * tol_da) return false;
+    for (double d : twinDistances(cands, nullptr, false))
+      if (d <= 2.0 * tol_da) return false;
     return true;
   }
 
@@ -122,6 +123,39 @@ namespace FASTag::AlkylationTags
     }
   }
 
+  std::vector<double> twinDistances(const std::vector<Alkylation::Form>& cands, const std::vector<Step>* alpha,
+                                    bool with_steps)
+  {
+    const std::vector<Step> base = alpha || !with_steps ? std::vector<Step>() : alphabet({});
+    const std::vector<Step>& steps = alpha ? *alpha : base;
+    const double c = cMass();
+    std::vector<double> out;
+    for (const auto& f : cands)
+    {
+      double d = std::numeric_limits<double>::infinity();
+      for (const auto& g : cands)
+        if (&g != &f) d = std::min(d, std::fabs(g.mass - f.mass));
+      if (with_steps)
+        for (const Step& st : steps) d = std::min(d, std::fabs(st.mass - (c + f.mass)));
+      out.push_back(d);
+    }
+    return out;
+  }
+
+  double minTwinDistance(const std::vector<Alkylation::Form>& cands, const std::vector<Step>* alpha)
+  {
+    double d = std::numeric_limits<double>::infinity();
+    for (double x : twinDistances(cands, alpha)) d = std::min(d, x);
+    return d;
+  }
+
+  double resolvedBelowMz(const Param& p, double d_min)
+  {
+    if (!p.tol_ppm) return 2.0 * p.frag_tol < d_min ? std::numeric_limits<double>::infinity() : 0.0;
+    if (!(p.frag_tol > 0.0)) return std::numeric_limits<double>::infinity();
+    return d_min / (2.0 * p.frag_tol * 1e-6);
+  }
+
   std::vector<std::string> twins(const std::vector<Alkylation::Form>& cands, double tol_da, const std::vector<Step>* alpha)
   {
     const std::vector<Step> base = alpha ? std::vector<Step>() : alphabet({});
@@ -149,12 +183,11 @@ namespace FASTag::AlkylationTags
 
   bool stepsResolved(const std::vector<Alkylation::Form>& cands, double tol_da, const std::vector<Step>* alpha)
   {
-    for (const std::string& t : twins(cands, tol_da, alpha))
-      if (t != "-") return false;
-    return true;
+    return minTwinDistance(cands, alpha) > 2.0 * tol_da;
   }
 
-  std::vector<std::string> aliases(const std::vector<Alkylation::Form>& cands, double tol_da, const std::vector<Step>* alpha)
+  std::vector<std::vector<Alias>> aliasList(const std::vector<Alkylation::Form>& cands, double tol_da,
+                                            const std::vector<Step>* alpha)
   {
     // Every step a pair can be made of: the residue steps and the C forms,
     // by name ("C" sorts before "C[...]" and "D"), so a pair is spelled with
@@ -164,45 +197,177 @@ namespace FASTag::AlkylationTags
     for (const Step& st : alpha ? *alpha : alphabet({})) res.emplace_back(st.name, st.mass);
     for (const auto& f : cands) res.emplace_back(cName(f), c + f.mass);
     std::sort(res.begin(), res.end());
-    std::vector<std::string> out;
-    for (const auto& f : cands)
+    std::vector<std::vector<Alias>> out;
+    for (std::size_t k = 0; k < cands.size(); ++k)
     {
+      const auto& f = cands[k];
       const double target = c + f.mass;
-      std::vector<std::pair<double, std::string>> hits;
+      std::vector<Alias> hits;
       for (std::size_t i = 0; i < res.size(); ++i)
         for (std::size_t j = i; j < res.size(); ++j)
         {
-          const double d = std::fabs(res[i].second + res[j].second - target);
-          if (d <= 2.0 * tol_da) hits.emplace_back(d, res[i].first + "+" + res[j].first);
+          const double m = res[i].second + res[j].second;
+          const double d = std::fabs(m - target);
+          if (d > 2.0 * tol_da) continue;
+          Alias a;
+          a.kind = Alias::Kind::PAIR;
+          a.form = static_cast<int>(k);
+          a.x = res[i].second;
+          a.y = res[j].second;
+          a.mass = m;
+          a.dist = d;
+          a.name = res[i].first + "+" + res[j].first;
+          hits.push_back(std::move(a));
         }
       // 1.13 #22 review: an edge that starts or ends on the 13C peak of an
       // ion (not deisotoped, or under -no_deisotope) reads as another form
       // +/- 1.00336 Da: C[Carbamidomethyl] + 13C lies 0.0193 Da from
       // C[Carboxymethyl].
-      for (const auto& g : cands)
+      for (std::size_t g = 0; g < cands.size(); ++g)
       {
-        if (&g == &f) continue;
+        if (g == k) continue;
         for (int sign : {+1, -1})
         {
-          const double d = std::fabs(g.mass + sign * C13_SPACING - f.mass);
-          if (d <= 2.0 * tol_da) hits.emplace_back(d, "C[" + g.name + "]" + (sign > 0 ? "+13C" : "-13C"));
+          const double m = c + cands[g].mass + sign * C13_SPACING;
+          const double d = std::fabs(m - target);
+          if (d > 2.0 * tol_da) continue;
+          Alias a;
+          a.kind = Alias::Kind::ISO;
+          a.form = static_cast<int>(k);
+          a.other = static_cast<int>(g);
+          a.shift = sign * C13_SPACING;
+          a.mass = m;
+          a.dist = d;
+          a.name = "C[" + cands[g].name + "]" + (sign > 0 ? "+13C" : "-13C");
+          hits.push_back(std::move(a));
         }
       }
+      std::sort(hits.begin(), hits.end(),
+                [](const Alias& a, const Alias& b) { return a.dist != b.dist ? a.dist < b.dist : a.name < b.name; });
+      out.push_back(std::move(hits));
+    }
+    return out;
+  }
+
+  std::vector<std::string> aliases(const std::vector<Alkylation::Form>& cands, double tol_da, const std::vector<Step>* alpha)
+  {
+    std::vector<std::string> out;
+    for (const std::vector<Alias>& list : aliasList(cands, tol_da, alpha))
+    {
+      std::vector<std::pair<double, std::string>> hits;
+      for (const Alias& a : list) hits.emplace_back(a.dist, a.name);
       out.push_back(joinHits(std::move(hits)));
     }
     return out;
   }
 
+  namespace
+  {
+    /// The tagger's per-peak tolerance (FASTagger.cpp tolAt).
+    double tolAt(const Param& p, double mz) { return p.tol_ppm ? mz * p.frag_tol * 1e-6 : p.frag_tol; }
+
+    /// Index of the most intense peak within @p tol of @p mz, -1 when none.
+    long peakNear(const OpenMS::MSSpectrum& s, double mz, double tol)
+    {
+      auto it = std::lower_bound(s.begin(), s.end(), mz - tol,
+                                 [](const OpenMS::Peak1D& pk, double v) { return pk.getMZ() < v; });
+      long best = -1;
+      for (; it != s.end() && it->getMZ() <= mz + tol; ++it)
+        if (best < 0 || it->getIntensity() > s[static_cast<std::size_t>(best)].getIntensity())
+          best = static_cast<long>(it - s.begin());
+      return best;
+    }
+
+    /// Whether @p mz lies within the m/z range of the peaks (widened by @p tol).
+    bool inRange(const OpenMS::MSSpectrum& s, double mz, double tol)
+    {
+      return !s.empty() && mz >= s.front().getMZ() - tol && mz <= s.back().getMZ() + tol;
+    }
+  }
+
+  AliasCheck aliasExplains(double lo, double hi, int z, const Alias& a, const SpectrumPeaks& sp, const Param& p)
+  {
+    if (!sp.peaks || sp.peaks->empty() || z < 1) return AliasCheck::UNTESTABLE;
+    const OpenMS::MSSpectrum& s = *sp.peaks;
+    const double zz = static_cast<double>(z);
+    bool testable = false;
+    const auto probe = [&](double mz) {
+      const double tol = tolAt(p, mz);
+      if (!inRange(s, mz, tol)) return false;
+      testable = true;
+      return peakNear(s, mz, tol) >= 0;
+    };
+    if (a.kind == Alias::Kind::PAIR)
+    {
+      // The two orders of the pair put the missing peak at lo + X/z or
+      // lo + Y/z; the complementary series has it at the partner m/z.
+      const double comp = sp.prec_mass > 0.0 ? sp.prec_mass / zz + 2.0 * OpenMS::Constants::PROTON_MASS_U : 0.0;
+      for (double m : {a.x, a.y})
+      {
+        const double mid = lo + m / zz;
+        if (probe(mid)) return AliasCheck::EXPLAINED;
+        if (comp > 0.0 && probe(comp - mid)) return AliasCheck::EXPLAINED;
+      }
+      return testable ? AliasCheck::NOT_EXPLAINED : AliasCheck::UNTESTABLE;
+    }
+    // ISO: +13C, the edge ends on the 13C peak of the ion at hi - 1.00336/z;
+    // -13C, it starts on the 13C peak of the ion at lo - 1.00336/z. The
+    // monoisotopic peak is at least as intense as its 13C peak.
+    const double end = a.shift > 0.0 ? hi : lo;
+    const double mono = end - C13_SPACING / zz;
+    const double tol = tolAt(p, mono);
+    if (!inRange(s, mono, tol)) return AliasCheck::UNTESTABLE;
+    const long m = peakNear(s, mono, tol);
+    if (m < 0) return AliasCheck::NOT_EXPLAINED;
+    const long e = peakNear(s, end, tolAt(p, end));
+    const double end_int = e >= 0 ? s[static_cast<std::size_t>(e)].getIntensity() : 0.0;
+    return s[static_cast<std::size_t>(m)].getIntensity() >= end_int ? AliasCheck::EXPLAINED : AliasCheck::NOT_EXPLAINED;
+  }
+
+  VoteContext voteContext(const Param& p, const std::vector<Alkylation::Form>& cands, const std::vector<Step>* alpha)
+  {
+    VoteContext ctx;
+    ctx.cands = cands;
+    ctx.tol = p;
+    // Listed at the widest window an edge of the run can have (Da: the
+    // tolerance; ppm: at 5000 m/z); each edge keeps the aliases inside its
+    // own two windows (addTag()).
+    const double widest = p.tol_ppm ? 5000.0 * p.frag_tol * 1e-6 : p.frag_tol;
+    ctx.aliases = aliasList(cands, widest, alpha);
+    const std::vector<double> d = twinDistances(cands, alpha);
+    ctx.resolved_below_mz = std::numeric_limits<double>::infinity();
+    for (std::size_t k = 0; k < ctx.resolved_below.size() && k < d.size(); ++k)
+    {
+      ctx.resolved_below[k] = resolvedBelowMz(p, d[k]);
+      ctx.resolved_below_mz = std::min(ctx.resolved_below_mz, ctx.resolved_below[k]);
+    }
+    return ctx;
+  }
+
+  namespace
+  {
+    Alkylation::Call callAt(const Tally& t, const Alkylation::Settings& s, const std::vector<Alkylation::Form>& cands,
+                            double resolved_below_mz)
+    {
+      Alkylation::Call c = Alkylation::callAlkylation(t.asAlkylationTally(cands), s);
+      if (!(resolved_below_mz > 0.0) || (t.spectra == 0 && t.unresolved > 0))
+      {
+        c.called = false;
+        c.reason = "unresolved_forms";
+      }
+      return c;
+    }
+  }
+
   Alkylation::Call callTags(const Tally& t, const Alkylation::Settings& s, const std::vector<Alkylation::Form>& cands,
                             double tol_da, const std::vector<Step>* alpha)
   {
-    Alkylation::Call c = Alkylation::callAlkylation(t.asAlkylationTally(cands), s);
-    if (!stepsResolved(cands, tol_da, alpha))
-    {
-      c.called = false;
-      c.reason = "unresolved_forms";
-    }
-    return c;
+    return callAt(t, s, cands, stepsResolved(cands, tol_da, alpha) ? std::numeric_limits<double>::infinity() : 0.0);
+  }
+
+  Alkylation::Call callTags(const Tally& t, const Alkylation::Settings& s, const VoteContext& ctx)
+  {
+    return callAt(t, s, ctx.cands, ctx.resolved_below_mz);
   }
 
   std::array<std::uint32_t, NUM_CANDIDATES> formsInTag(const std::string& seq, const std::vector<Alkylation::Form>& cands)
@@ -242,7 +407,101 @@ namespace FASTag::AlkylationTags
     return b != std::string::npos && b > 0 && seq[b - 1] == 'C';
   }
 
+  namespace
+  {
+    /// Per residue of @p seq (N->C), its candidate index; -1 for another residue or an unknown C annotation.
+    std::vector<int> residueForms(const std::string& seq, const std::vector<Alkylation::Form>& cands)
+    {
+      std::vector<int> out;
+      for (std::size_t i = 0; i < seq.size(); ++i)
+      {
+        int k = -1;
+        const bool c = seq[i] == 'C';
+        if (i + 1 < seq.size() && seq[i + 1] == '[')
+        {
+          const std::size_t e = seq.find(']', i + 1);
+          if (e == std::string::npos) break;
+          if (c)
+          {
+            const std::string name = seq.substr(i + 2, e - i - 2);
+            for (int j = 0; j < NUM_CANDIDATES; ++j)
+              if (j != UNMODIFIED && cands[static_cast<std::size_t>(j)].name == name) { k = j; break; }
+          }
+          i = e;
+        }
+        else if (c)
+          k = UNMODIFIED;
+        out.push_back(k);
+      }
+      return out;
+    }
+
+    /// What the vote checks say of one tag.
+    struct Checked
+    {
+      bool unresolved = false;
+      bool alias = false;
+    };
+
+    /// The vote checks of one C-bearing tag (Tally::addTag with a context).
+    Checked checkTag(const Tag& t, const VoteContext& ctx, const SpectrumPeaks& sp)
+    {
+      Checked out;
+      const std::vector<int> rf = residueForms(t.seq, ctx.cands);
+      const std::size_t n = rf.size();
+      // The path peaks locate each residue's edge: seq is spelled from the
+      // high m/z end, so residue k is the step n-1-k (no gap: one residue
+      // per step).
+      const bool located = t.path_mz.size() == n + 1 && !t.gapped;
+      const int z = t.charge > 0 ? t.charge : 1;
+      for (std::size_t k = 0; k < n; ++k)
+      {
+        const int f = rf[k];
+        if (f < 0) continue;
+        double lo = 0.0, hi = t.high_mz;
+        if (located)
+        {
+          lo = t.path_mz[n - 1 - k];
+          hi = t.path_mz[n - k];
+        }
+        // Review n2: the windows at the edge's own m/z hold a twin.
+        if (hi >= ctx.resolved_below[static_cast<std::size_t>(f)])
+        {
+          out.unresolved = true;
+          return out;
+        }
+        if (out.alias) continue;
+        for (const Alias& a : ctx.aliases[static_cast<std::size_t>(f)])
+        {
+          if (!located)
+          {
+            // No edge to test: the alias cannot be ruled out where its
+            // distance fits the windows at the tag's top.
+            if (a.dist <= 2.0 * tolAt(ctx.tol, hi)) out.alias = true;
+            continue;
+          }
+          // Only an alias the two windows of this edge could have matched.
+          const double edge = (hi - lo) * z;
+          if (std::fabs(a.mass - edge) > (tolAt(ctx.tol, lo) + tolAt(ctx.tol, hi)) * z) continue;
+          if (aliasExplains(lo, hi, z, a, sp, ctx.tol) != AliasCheck::NOT_EXPLAINED) out.alias = true;
+        }
+      }
+      return out;
+    }
+  }
+
   void Tally::addTag(Vote& v, const Tag& t, const std::vector<Alkylation::Form>& cands)
+  {
+    addTagChecked(v, t, cands, nullptr, nullptr);
+  }
+
+  void Tally::addTag(Vote& v, const Tag& t, const VoteContext& ctx, const SpectrumPeaks& sp)
+  {
+    addTagChecked(v, t, ctx.cands, &ctx, &sp);
+  }
+
+  void Tally::addTagChecked(Vote& v, const Tag& t, const std::vector<Alkylation::Form>& cands, const VoteContext* ctx,
+                            const SpectrumPeaks* sp)
   {
     if (!Alkylation::countsTag(t.gapped, t.evalue)) return;
     if (t.charge != 1)
@@ -265,29 +524,44 @@ namespace FASTag::AlkylationTags
     if (kinds == 0) return;
     ++tags_with_c;
     if (cAtEnd(t.seq)) return;
+    if (v.have && t.evalue > v.evalue) return;
+    // Only a tag that is kept, or ties the kept one, is checked.
+    const Checked ck = ctx && sp ? checkTag(t, *ctx, *sp) : Checked{};
     if (v.have && t.evalue == v.evalue)
     {
-      // An equal E-value with another form: the evidence does not decide.
-      if (kinds > 1 || v.conflict || form != v.form)
+      // An equal E-value with another form, an alias or a twin: the evidence does not decide.
+      if (ck.unresolved) v.unresolved = true;
+      if (ck.alias) v.alias = true;
+      if (kinds > 1 || v.conflict || form != v.form || ck.alias)
       {
         v.conflict = true;
         v.form = -1;
       }
       return;
     }
-    if (v.have && !(t.evalue < v.evalue)) return;
     v.have = true;
     v.evalue = t.evalue;
-    v.conflict = kinds > 1;
-    v.form = kinds > 1 ? -1 : form;
+    v.unresolved = ck.unresolved;
+    v.alias = ck.alias;
+    v.conflict = kinds > 1 || ck.alias;
+    v.form = v.conflict ? -1 : form;
   }
 
   void Tally::addSpectrum(const Vote& v)
   {
     ++spectra_tagged;
     if (!v.have || v.evalue > v.best || v.evalue > VOTE_MAX_EVALUE) return;
+    if (v.unresolved)
+    {
+      ++unresolved;
+      return;
+    }
     ++spectra;
-    if (v.conflict) ++conflict;
+    if (v.conflict)
+    {
+      ++conflict;
+      if (v.alias) ++alias_rejected;
+    }
     else ++votes[static_cast<std::size_t>(v.form)];
   }
 
@@ -300,6 +574,8 @@ namespace FASTag::AlkylationTags
     tags_with_c += o.tags_with_c;
     spectra += o.spectra;
     conflict += o.conflict;
+    alias_rejected += o.alias_rejected;
+    unresolved += o.unresolved;
     for (std::size_t k = 0; k < votes.size(); ++k) votes[k] += o.votes[k];
     for (std::size_t k = 0; k < residues.size(); ++k) residues[k] += o.residues[k];
   }
@@ -370,7 +646,7 @@ namespace FASTag::AlkylationTags
             num(VOTE_MAX_EVALUE) + ".");
     add("alkt_run", "min_spectra", u(s.min_spectra), "-",
         "A call needs " + u(s.min_spectra) + " votes in total and for the called class.");
-    add("alkt_run", "min_share", num(s.min_share), "-", "A call needs a share of " + num(s.min_share) + " of the votes.");
+    add("alkt_run", "min_share", num(s.min_share), "-", "A call needs a share of " + num(s.min_share) + " of the votes, conflicts included.");
     add("alkt_run", "edge_tolerance", num(info.tol_da), "-",
         "The report reasons with an edge tolerance of " + num(info.tol_da) +
             " Da (the fragment tolerance, or in ppm at 1000 m/z).");
@@ -379,8 +655,19 @@ namespace FASTag::AlkylationTags
     add("alkt_run", "forms_resolved", resolved ? "yes" : "no", "-",
         resolved ? "No C form lies within twice the edge tolerance of another C form or of a residue this run can read "
                    "(two-step and isotope-shifted readings are listed under alias)."
-                 : "A C form lies within twice the edge tolerance of another C form or of a residue this run can read "
-                   "(twin.<form>; Carbamidomethyl and Carboxymethyl are 0.984 Da apart): no call is made.");
+        : info.tol_ppm
+            ? "At 1000 m/z a C form lies within twice the edge tolerance of another C form or of a residue this run can read "
+              "(twin.<form>); in ppm the guard applies per vote at the C edge's m/z (resolved_below_mz)."
+            : "A C form lies within twice the edge tolerance of another C form or of a residue this run can read "
+              "(twin.<form>; Carbamidomethyl and Carboxymethyl are 0.984 Da apart): no call is made.");
+    const bool every_mz = std::isinf(info.resolved_below_mz);
+    add("alkt_run", "resolved_below_mz", every_mz ? "-" : num(info.resolved_below_mz), "-",
+        every_mz ? std::string("The edge windows hold no twin of a C form at any m/z.")
+        : info.resolved_below_mz <= 0.0
+            ? std::string("The edge windows hold a twin of a C form at every m/z: no vote is resolved.")
+            : "A C edge reaching " + num(info.resolved_below_mz) +
+                  " m/z or more has a twin of its form in the two edge windows (the tolerance at its own m/z); its "
+                  "vote is set aside (alkt_form unresolved).");
 
     // ---- alkt_form
     std::uint64_t binned = 0;
@@ -408,7 +695,8 @@ namespace FASTag::AlkylationTags
           al[static_cast<std::size_t>(k)] == "-"
               ? "No two residues sum to C[" + f.name + "] and no 13C-shifted C form reads like it within twice the edge tolerance."
               : "Two residues whose middle peak is missing (X+Y), or another C form whose edge starts or ends on a 13C peak "
-                "(C[Name]+13C / -13C), read like C[" + f.name + "] (reading:distance in Da); such votes are not corrected.");
+                "(C[Name]+13C / -13C), read like C[" + f.name + "] (reading:distance in Da); a vote whose edge the spectrum "
+                "explains so is a conflict (alias_rejected).");
     }
     const std::vector<std::string> tw = twins(cands, info.tol_da, alpha);
     for (int k = 0; k < NUM_CANDIDATES; ++k)
@@ -421,7 +709,15 @@ namespace FASTag::AlkylationTags
                      "cannot be told apart, so no call is made.");
     }
     add("alkt_form", "conflict", u(t.conflict), u(t.spectra),
-        u(t.conflict) + " voting spectra have a best tag (or tags of equal E-value) with C residues of two forms; they are not in the share.");
+        u(t.conflict) + " voting spectra have a best tag (or tags of equal E-value) with C residues of two forms, or one "
+                        "an alias explains; they count against the share.");
+    add("alkt_form", "alias_rejected", u(t.alias_rejected), u(t.conflict),
+        u(t.alias_rejected) + " of the conflicts have a C edge that the spectrum explains as an alias (a peak between "
+                              "the two residues, in either series, or the monoisotopic peak beside a 13C endpoint), or "
+                              "one it cannot test.");
+    add("alkt_form", "unresolved", u(t.unresolved), u(t.spectra + t.unresolved),
+        u(t.unresolved) + " spectra would vote with a C edge at or above resolved_below_mz, where the edge windows "
+                          "hold a twin of its form; they are set aside, not in the share.");
 
     // ---- alkylation_tags_call
     const std::string name = c.cls >= 0 ? Alkylation::className(c.cls) : "-";
@@ -439,22 +735,30 @@ namespace FASTag::AlkylationTags
       add(sec, "reagent", name, u(c.top), "The call is " + name + ".");
       add(sec, "mass", c.cls == Alkylation::NONE ? "-" : num(mass), "-",
           c.cls == Alkylation::NONE ? "A call of none has no reagent mass." : name + " adds " + num(mass) + " Da to C.");
-      add(sec, "share", num(c.share), u(c.binned), "A share of " + f3(c.share) + " of the " + u(c.binned) + " votes are " + name + ".");
+      add(sec, "share", num(c.share), u(c.voted),
+          "A share of " + f3(c.share) + " of the " + u(c.voted) + " votes (binned plus conflicted) are " + name + ".");
+      add(sec, "voted", u(c.voted), u(c.binned),
+          u(c.voted) + " votes are in the share: " + u(c.binned) + " for a form, " + u(c.voted - c.binned) + " conflicted.");
       add(sec, "reason", "-", "-", "The call is made.");
     }
     else
     {
       add(sec, "status", "no_call", u(c.binned),
           c.reason == "unresolved_forms"
-              ? std::string("No alkylation is called: the fragment tolerance does not resolve the C forms.")
+              ? std::string("No alkylation is called: the fragment tolerance does not resolve the C forms where the votes are.")
           : c.reason == "few_cys_spectra"
               ? "No alkylation is called: " + u(c.binned) + " votes are fewer than " + u(s.min_spectra) + "."
-              : "No alkylation is called: the leading class " + name + " has " + u(c.top) + " of " + u(c.binned) +
-                    " votes, short of " + u(s.min_spectra) + " votes and a share of " + num(s.min_share) + " (or tied).");
+              : "No alkylation is called: the leading class " + name + " has " + u(c.top) + " of " + u(c.voted) +
+                    " votes (binned plus conflicted), short of " + u(s.min_spectra) + " votes and a share of " +
+                    num(s.min_share) + " (or tied).");
       add(sec, "reagent", "-", "-", "No reagent is called.");
       add(sec, "mass", "-", "-", "No reagent is called.");
-      add(sec, "share", c.binned ? num(c.share) : "-", u(c.binned),
-          c.binned ? "The leading class " + name + " has a share of " + f3(c.share) + "." : "No spectrum votes.");
+      add(sec, "share", c.voted ? num(c.share) : "-", u(c.voted),
+          c.voted ? "The leading class " + name + " has a share of " + f3(c.share) + " of the " + u(c.voted) +
+                        " votes (binned plus conflicted)."
+                  : "No spectrum votes.");
+      add(sec, "voted", u(c.voted), u(c.binned),
+          u(c.voted) + " votes are in the share: " + u(c.binned) + " for a form, " + u(c.voted - c.binned) + " conflicted.");
       add(sec, "reason", c.reason, "-", "The first no-call rule that applies is " + c.reason + ".");
     }
     return r;

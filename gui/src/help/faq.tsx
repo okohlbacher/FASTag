@@ -175,7 +175,11 @@ export const FAQ: FaqEntry[] = [
         Or set <C>FASTAG_DIGEST_DIR</C> to a folder that holds the file (data/digest in the FASTag sources), and for the alkylation report{' '}
         <C>FASTAG_ALKYLATION_DIR</C> (data/alkylation). Then start FASTag again.
       </>,
-      <>Or run without the report that needs it. The alkylation report needs no proteome at its default (auto): its call is read off the tags.</>
+      <>Or run without the report that needs it. The alkylation report needs no proteome at its default (auto): its call is read off the tags.</>,
+      <>
+        A FASTag program older than the app (named by <C>FASTAG_BIN</C>, from before the call from the tags) reads auto as the shipped human proteome: the check
+        before the run then asks for human.fasta.gz, or says the report will use the human proteome. Use the FASTag the app ships, or name the proteome of your sample.
+      </>
     ]
   },
   {

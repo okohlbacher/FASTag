@@ -1204,10 +1204,18 @@ pub struct Exported {
 }
 
 /// Write `<id>.feedback.zip` (export.json and, if included, the PNG) into
-/// the report's folder, replacing an earlier export of it.
+/// the report's folder. An earlier export of it is removed first, so a
+/// failed export leaves no zip of other choices behind (one with a
+/// screenshot since left out): feedback_reveal then shows report.json.
 pub fn export(dir: &Path, id: &str, inc: Include, now: u64) -> Result<Exported, String> {
     let _g = lock();
     let p = resolve(dir, id)?;
+    let old = p.join(zip_name(id));
+    match std::fs::remove_file(&old) {
+        Ok(()) => {}
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
+        Err(e) => return Err(format!("cannot remove the earlier export {}: {e}", old.display())),
+    }
     let r = read_report(&p)?;
     let shot = p.join(SCREENSHOT_FILE);
     let png = if is_real_file(&shot) { Some(std::fs::read(&shot).map_err(|e| e.to_string())?) } else { None };
@@ -1584,6 +1592,29 @@ pub(crate) mod tests {
         if let Ok(o) = std::process::Command::new("unzip").arg("-t").arg(&p).output() {
             assert!(o.status.success(), "{}", String::from_utf8_lossy(&o.stdout));
         }
+        let _ = std::fs::remove_dir_all(&d);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn a_failed_export_leaves_no_earlier_zip_behind() {
+        let d = tmp("export-stale");
+        let s = save(&d, draft(), Some(&png(40, 20)), NOW).unwrap();
+        let all = Include { screenshot: true, diagnostics: true, log: false };
+        let e = export(&d, &s.id, all, NOW).unwrap();
+        assert!(unzip(&std::fs::read(&e.zip).unwrap()).iter().any(|f| f.0 == SCREENSHOT_FILE));
+        // The screenshot unticked, and that export fails (the screenshot
+        // cannot be read).
+        use std::os::unix::fs::PermissionsExt;
+        let folder = resolve(&d, &s.id).unwrap();
+        let shot = folder.join(SCREENSHOT_FILE);
+        std::fs::set_permissions(&shot, std::fs::Permissions::from_mode(0o000)).unwrap();
+        let none = Include { screenshot: false, diagnostics: true, log: false };
+        let failed = export(&d, &s.id, none, NOW);
+        std::fs::set_permissions(&shot, std::fs::Permissions::from_mode(0o600)).unwrap();
+        assert!(failed.is_err(), "{failed:?}");
+        // No zip with the screenshot is left for feedback_reveal to show.
+        assert!(!folder.join(zip_name(&s.id)).exists());
         let _ = std::fs::remove_dir_all(&d);
     }
 

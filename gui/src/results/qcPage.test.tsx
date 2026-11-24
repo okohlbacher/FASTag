@@ -122,14 +122,37 @@ describe('the charts', () => {
     expect(qcChannels(rowsOf(tmtQc))).toMatchObject({ partial: false })
     expect(qcChannels(rowsOf(tmtQc)).channels).toHaveLength(11)
     expect(qcChannels(rowsOf(v2Qc)).channels).toEqual([])
+    // An older report gives each seen channel's share to 4 decimals only:
+    // no count is made up from it (review n12).
     const old = qcChannels([{ sec: 'qc', key: 'reporter_observed_TMT', value: '126:0.7632,131:0.5000', n: '1000', desc: '' }])
     expect(old).toEqual({
       partial: true,
       channels: [
-        { label: '126', mz: null, seen: 763, assessable: 1000, share: 0.7632, observed: true },
-        { label: '131', mz: null, seen: 500, assessable: 1000, share: 0.5, observed: true }
+        { label: '126', mz: null, seen: null, assessable: 1000, share: 0.7632, observed: true },
+        { label: '131', mz: null, seen: null, assessable: 1000, share: 0.5, observed: true }
       ]
     })
+    // At 123,457 assessable MS2, 0.7632 is any count from 94,216 to 94,228;
+    // Math.round(share * n) would claim 94,222.
+    const big = qcChannels([{ sec: 'qc', key: 'reporter_observed_TMT', value: '126:0.7632', n: '123457', desc: '' }])
+    expect(big.channels).toEqual([{ label: '126', mz: null, seen: null, assessable: 123457, share: 0.7632, observed: true }])
+  })
+
+  it('an older report\'s channels: the share, no count, in the table, the summary and the note', async () => {
+    const legacy = v2Qc.replace(/^qc\treporter_observed_TMT\t[^\n]*$/m, 'qc\treporter_observed_TMT\t126:0.7632,131:0.5000\t123457\tChannels seen in at least 20% of the assessable MS2, with that share.')
+    expect(legacy).not.toBe(v2Qc)
+    await open(legacy)
+    const rep = screen.getByRole('region', { name: 'Reporter ions' })
+    const channelChart = [...rep.querySelectorAll('figure')].find((f) => /reporter channel/.test(f.querySelector('figcaption')!.textContent!))!
+    expect(channelChart.textContent).toMatch(/Older report: shares only, no per-channel counts/)
+    expect(rep.innerHTML).not.toMatch(/94,222|61,729/)
+    fireEvent.click(within(channelChart as HTMLElement).getByRole('button', { name: 'Table' }))
+    const table = within(screen.getByRole('region', { name: 'Reporter channels' })).getByRole('table')
+    const ch = within(table).getAllByRole('row').slice(1)
+    expect(ch.map((r) => [...r.querySelectorAll('th,td')].map((c) => c.textContent))).toEqual([
+      ['126', '–', '–', '123,457', '76.3%'],
+      ['131', '–', '–', '123,457', '50.0%']
+    ])
   })
 
   it('the kit with how it was decided, from the kit call', () => {

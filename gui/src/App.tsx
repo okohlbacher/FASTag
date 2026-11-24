@@ -902,6 +902,7 @@ export default function App({ start }: { start?: Origin } = {}): JSX.Element {
                 detectedInstrument={detectedPreset}
                 notFound={notFound}
                 notCheckedNote={inspector.pre.notChecked === NOT_CHECKED_NO_PROBE ? inspector.pre.notChecked : null}
+                legacyAuto={inspector.legacyAuto}
                 inspector={
                   <PreStartPanel
                     checks={inspector.pre.checks}

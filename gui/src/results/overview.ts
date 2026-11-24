@@ -618,7 +618,7 @@ export function buildOverview(i: OverviewInputs): Overview {
       evidence: 'default',
       note:
         alkCall
-          ? `default; no alkylation call (${alkylationReason(alkCall.reason)})`
+          ? `default; no alkylation call (${alkylationReason(alkCall.reason, alkCall.source)})`
           : alk.state === 'counts' && !alk.placed
           ? 'default, alkylation not assessed (no tag placed in the FASTA)'
           : alk.state === 'counts'
@@ -864,13 +864,15 @@ function alkylationTile(c: AlkylationCall, fasta: boolean, params: Record<string
   }
 }
 
-/// The reasons of an alkylation no call, in words.
-export function alkylationReason(reason: string | undefined): string {
+/// The reasons of an alkylation no call, in words; @p source: the call's
+/// (format 2), whose tag votes are not spectra with one cysteine.
+export function alkylationReason(reason: string | undefined, source?: string): string {
+  const fromTags = source === 'tags' || source === 'tags+placement'
   switch (reason) {
     case 'tags_too_short':
       return 'no tag reaches the length the proteome needs (8 residues for human or mouse, 7 for yeast or E. coli)'
     case 'few_cys_spectra':
-      return 'too few spectra with one cysteine'
+      return fromTags ? 'too few tag votes for a cysteine form' : 'too few spectra with one cysteine'
     case 'ambiguous':
       return 'no reagent has a clear majority'
     case 'unresolved_forms':
@@ -900,7 +902,12 @@ function alkylationReportTile(c: AlkylationReport, params: Record<string, unknow
       tone: 'call',
       note: `${c.share != null ? `${pct(c.share)} of ` : ''}${counted}; ${fromTags ? 'experimental' : 'not validated'}`
     }
-  if (c.source === 'tags' && c.reason === 'few_cys_spectra')
+  // Too short tags for the proteome: the call's reason (format 1, where it is
+  // the placement call), or the placement call's in format 2, where the
+  // report's call is then the tag call's no call (neither calls).
+  const short = c.reason === 'tags_too_short' || c.placement?.reason === 'tags_too_short'
+  const fewVotes = c.source === 'tags' && c.reason === 'few_cys_spectra'
+  if (fewVotes && !short)
     return {
       ...base,
       value: 'no call',
@@ -913,13 +920,15 @@ function alkylationReportTile(c: AlkylationReport, params: Record<string, unknow
   // human: its database_source names the proteome.
   const shipped = c.databaseSource?.startsWith('bundled:') ? c.databaseSource.slice('bundled:'.length) : null
   const p = (shipped ? { ...params, alkylation_proteome: shipped } : params) as Record<string, ParamValue>
-  const need = c.reason === 'tags_too_short' ? alkylationShort(p) : null
+  const need = short ? alkylationShort(p) : null
   const target = alkylationTarget(p)
+  const tooShort = `no tag reaches the ${target} residues the proteome needs`
+  const tags = fewVotes ? `${fmt(c.binned)} spectra vote from their tags, fewer than the call needs` : alkylationReason(c.reason, c.source)
   return {
     ...base,
     value: 'no call',
     tone: 'nocall',
-    note: c.reason === 'tags_too_short' ? `no tag reaches the ${target} residues the proteome needs` : alkylationReason(c.reason),
+    note: c.reason === 'tags_too_short' ? tooShort : short ? `${tags}; the placements: ${tooShort}` : alkylationReason(c.reason, c.source),
     ...(need ? { action: { kind: 'enable' as const, label: `Run again with extension ${need}`, values: { extension: need } } } : {})
   }
 }

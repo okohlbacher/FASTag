@@ -166,7 +166,10 @@ install/bin/FASTag --help | grep Version          # Version: 1.15.0 (OpenMS 3.7.
 `build/FASTag`, run from the build tree, finds the shipped data too: the build links
 `data/digest`, `data/alkylation` and `data/taxonomy` beside the binary as
 `share-FASTag-digest`, `share-FASTag-alkylation` and `share-FASTag-taxonomy` (on Windows it
-copies them, about 16 MB). `-DFASTAG_STAGE_DATA_IN_BUILD=OFF` turns this off. A
+copies them, about 16 MB). Every `cmake --build` restages them (target `fastag_stage_data`), so an
+edit to `data/` alone, or a deleted `share-FASTag-*` folder, is picked up; a staged folder carries
+`.fastag-staged`, and a folder there without it is yours and is left alone (delete it to restage).
+`-DFASTAG_STAGE_DATA_IN_BUILD=OFF` turns this off. A
 `FASTAG_DIGEST_DIR` or `FASTAG_ALKYLATION_DIR` you set wins, and one that names no folder
 finds nothing (the error says so). The taxonomy folder holds the dumps only, so `-species`
 still needs the k-mer index: unpack the release asset `FASTag-<version>-taxonomy-k7.tar.gz` and

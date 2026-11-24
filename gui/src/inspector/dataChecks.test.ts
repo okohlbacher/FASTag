@@ -12,7 +12,8 @@ const BARE: DataStatus = {
   alkylationDir: null,
   proteomes: [],
   searched: ['/b/share/FASTag/digest', '/b/bin/share-FASTag-digest', '/b/bin/digest'],
-  fromEnv: false
+  fromEnv: false,
+  autoDbFree: true
 }
 const FULL: DataStatus = {
   digestDir: '/app/share/FASTag/digest',
@@ -20,7 +21,8 @@ const FULL: DataStatus = {
   alkylationDir: '/app/share/FASTag/alkylation',
   proteomes: ['human', 'mouse', 'yeast', 'ecoli'],
   searched: ['/app/share/FASTag/digest'],
-  fromEnv: false
+  fromEnv: false,
+  autoDbFree: true
 }
 const files = (v: Record<string, string | boolean>): string[] => shippedDataNeeds(v).map((n) => `${n.option}:${n.file}`)
 
@@ -87,6 +89,33 @@ describe('shipped data before a run', () => {
     const noYeast = { ...FULL, proteomes: ['human'] }
     expect(missingDataChecks({ ...values, alkylation_proteome: 'yeast' }, noYeast).map((c) => c.id)).toEqual(['no-shipped-data-alkylation_out'])
     expect(missingDataChecks({ ...values, alkylation_proteome: 'yeast' }, noYeast)[0].detail).toContain('It is not in /app/share/FASTag/alkylation.')
+  })
+
+  // Codex n5: an engine from before 1.16 (no -data_paths: autoDbFree false)
+  // reads Alkylation proteome auto as the shipped human proteome, which the
+  // check skipped: it stopped with exit 6 without the file, or placed the
+  // tags on human proteins although the app showed the call from the tags.
+  it('an older engine reads auto as the human proteome', () => {
+    const values = { alkylation_out: 'a.tsv', alkylation_proteome: 'auto' }
+    const legacy = { ...BARE, autoDbFree: false }
+    expect(shippedDataNeeds(values, legacy)).toEqual([{ option: 'alkylation_out', file: 'human.fasta.gz', proteome: 'human' }])
+    expect(shippedDataNeeds({ alkylation_out: 'a.tsv' }, legacy).map((n) => n.file)).toEqual(['human.fasta.gz'])
+    const cs = missingDataChecks(values, legacy)
+    expect(cs.map((c) => c.id)).toEqual(['no-shipped-data-alkylation_out'])
+    expect(cs[0].title).toBe('The alkylation report needs the shipped human proteome (human.fasta.gz)')
+    expect(cs[0].detail).toContain('older than the app')
+    // The current engine: no need, no check.
+    expect(shippedDataNeeds(values, BARE)).toEqual([])
+    expect(missingDataChecks(values, BARE)).toEqual([])
+    // With human there, the run goes but says it uses the human proteome.
+    const withHuman = { ...legacy, alkylationDir: '/b/alkylation', proteomes: ['human'] }
+    const flag = missingDataChecks(values, withHuman)
+    expect(flag.map((c) => [c.id, c.level])).toEqual([['legacy-auto-human', 'flag']])
+    expect(flag[0].detail).toContain('shipped human proteome')
+    expect(missingDataChecks(values, { ...FULL, autoDbFree: false }).map((c) => c.id)).toEqual(['legacy-auto-human'])
+    // A protein database or a named proteome: as before, whatever the engine.
+    expect(missingDataChecks({ ...values, recon_fasta: '/d/db.fasta' }, legacy)).toEqual([])
+    expect(missingDataChecks({ ...values, alkylation_proteome: 'yeast' }, withHuman).map((c) => c.id)).toEqual(['no-shipped-data-alkylation_out'])
   })
 
   it('Database reduction is blocked without a fix button', () => {

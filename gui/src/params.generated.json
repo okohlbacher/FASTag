@@ -305,6 +305,14 @@
       ]
     },
     {
+      "name": "data_paths",
+      "type": "bool",
+      "default": "false",
+      "description": "Print, as one JSON line, the folders this FASTag reads its shipped data from (digest data, alkylation proteomes; after FASTAG_DIGEST_DIR and FASTAG_ALKYLATION_DIR), the digest folders looked in, the shipped proteomes present, and what -alkylation_proteome auto reads without a database (none), and exit; needs no -in or -out",
+      "required": false,
+      "toppAdvanced": true
+    },
+    {
       "name": "debug",
       "type": "int",
       "default": "0",

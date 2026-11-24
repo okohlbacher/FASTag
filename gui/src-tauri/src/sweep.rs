@@ -419,6 +419,7 @@ mod tests {
             tags: None,
             workflow: None,
             databases: Vec::new(),
+            tags_identity: None,
         }
     }
 

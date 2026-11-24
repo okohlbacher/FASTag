@@ -374,8 +374,9 @@ export interface ReporterChannel {
   label: string
   // From the row's description; null when it names none.
   mz: number | null
-  // Assessable MS2 with the reporter above the noise threshold.
-  seen: number
+  // Assessable MS2 with the reporter above the noise threshold; null when the
+  // report gives only a rounded share (older reports, reporter_observed_*).
+  seen: number | null
   // The family's assessable MS2.
   assessable: number
   // seen / assessable; null when nothing was assessable.

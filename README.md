@@ -910,6 +910,7 @@ vendored.
 | `-check_header_out <file>` | (none) | With `-check_header_charge`: one row per header-charged MS2 spectrum (header charge, call, evidence, verdict, the charge tagged) |
 | `-probe_input <file>` | (none) | Print the metadata of a spectra file (or a FASTA alone) as JSON lines and exit; writes no file, needs no `-in`/`-out` (advanced; see Probe and spectrum dump) |
 | `-dump_spectrum <nativeId>` | (none) | Print the peaks FASTag tags of one spectrum of `-in` as JSON lines and exit; writes no file (advanced; see Probe and spectrum dump) |
+| `-data_paths` | off | Print the folders this FASTag reads its shipped data from, the shipped proteomes present and what `-alkylation_proteome auto` reads without a database, as one JSON line, and exit; needs no `-in`/`-out` (advanced; the desktop app's capability check; see Probe and spectrum dump) |
 
 The `-glyco_*` options are read only with `-glyco`, the `-census_*` options only
 with `-census`, and the `-taxdb`,
@@ -1474,8 +1475,11 @@ options and their values.
   `-alkylation_tags_out` (below), the C residues the tags read in each form.
   A C form whose mass one other step reads (another C form or a residue of
   the run, fixed and variable modifications included) is a twin, and the run
-  then gets no call (`unresolved_forms`); two-step readings (C + G for
-  Carbamidomethyl) are listed, not excluded. The counts are in the report
+  then gets no call (`unresolved_forms`; in ppm the guard is per vote, at
+  the C edge's own m/z). Two-step readings (C + G for Carbamidomethyl, an
+  edge over a missing peak) and 13C-shifted ones are checked against the
+  spectrum: a vote whose edge the spectrum explains so is a conflict, and
+  conflicts count against the share. The counts are in the report
   whether or not it calls. With a database (`-recon_fasta`, `-fasta`, an
   explicit `-alkylation_proteome`, or another report that places tags) it
   also makes the 1.12 placement call: each MS2 spectrum votes once with its
@@ -1484,7 +1488,7 @@ options and their values.
   the fixed terminal label is first taken off a gap on its side). The report's
   call combines the two: one call alone is taken, two that agree are taken,
   two that differ are `no_call` `disagree`. Every other output is the same
-  with and without it. Format 2: sections `alk_run`, `alk_cys` and
+  with and without it. Format 3: sections `alk_run`, `alk_cys` and
   `alkylation_placement_call` (with a database), `alkt_run`, `alkt_form`,
   `alkylation_tags_call` and `alkylation_call`; documented and versioned in
   doc/ALKYLATION-REPORT.md. Until this version the default `auto` placed on the
@@ -1497,10 +1501,15 @@ options and their values.
   votes once with its best ungapped 1+ tag (E <= 1) that holds a C; tied
   tags of two forms are a conflict. A tolerance that cannot separate
   Carbamidomethyl from Carboxymethyl (0.984 Da apart, so 0.5 Da) gives no
-  call (`unresolved_forms`). There are known confounds:
+  call (`unresolved_forms`); in ppm a vote is set aside only where the edge
+  windows at its own m/z overlap. There are known confounds:
   C[Carbamidomethyl] = G + C and C[Propionamide] = A + C when the peak
-  between them is missing. The report lists the twins within the run's
-  tolerance. The pass costs about one more tagging run. On 57 held-out runs
+  between them is missing, and an edge ending on a 13C peak reads as another
+  form. Since format 3 each voting C edge is checked against the spectrum for
+  them (the middle peak in either series, the monoisotopic peak); only a pair
+  that lost its middle peak in both series still votes. The pass costs about
+  one more tagging run. The held-out result below was measured before these
+  checks. On 57 held-out runs
   from 57 PRIDE projects it called 40, 37 of them right (0.925, Wilson 95%
   interval 0.801-0.974). It abstains on samples that are not alkylated (2 of
   12 called) and does not confirm the absence of alkylation
@@ -1622,6 +1631,17 @@ listed in `--helphelp`, which is how the GUI detects them.
   (or 2+) only; with `-unknown_charge` or `-isotope_error` away from their
   defaults it exits 6 rather than print peaks that were not tagged.
 
+A third, `-data_paths` (1.16), prints one JSON object on one line and exits 0:
+`digest_dir` and `alkylation_dir`, the folders a run reads its shipped digest
+data and alkylation proteomes from with the same environment (`null` when there
+is none; `FASTAG_DIGEST_DIR` and `FASTAG_ALKYLATION_DIR` first, a value that
+names no folder finds nothing), `digest_from_env`, `digest_searched` (that
+variable as given, or the three folders beside the executable), `proteomes`
+(the shipped ones whose file is there) and `alkylation_auto` (`none`: auto
+without `-recon_fasta` or `-fasta` reads no database; before 1.16 it read the
+human proteome). The desktop app's check before a run reads it, and a FASTag
+whose `--helphelp` does not list it is taken to read auto as the human proteome.
+
 ## Glyco flag
 
 `-glyco` writes `<out>` with its extension replaced by `.glyco.tsv`
@@ -1670,7 +1690,10 @@ a tag that matches `-fasta` (or `-entrapment_fasta`) in one orientation only is
 placed by it (a reverse-only match is a b or c read and is mirrored back to its
 true residues); any other tag, without `-fasta` or matching both ways, is
 folded as a whole onto the lower half (mirrored when its midpoint is above
-S/2), so a stretch read on both series lands on one interval.
+S/2), so a stretch read on both series lands on one interval. When any tag
+of a spectrum is folded, its tags placed by their orientation are folded too,
+after that placement, so a placed read and a folded read of the same residues
+also count once.
 `res_cover_exact` is 1 when every reported tag was placed by its orientation
 and 0 when one was folded: `res_cover` is then a lower bound (residues that
 mirror each other about the centre count once). Residues of different tags are

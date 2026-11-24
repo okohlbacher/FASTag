@@ -241,6 +241,10 @@ install(TARGETS FASTag RUNTIME DESTINATION bin)
 # asset FASTag-<version>-taxonomy-k7.tar.gz, unpacked): then share-FASTag-taxonomy
 # is the index and its dumps plus the rest of data/taxonomy (species_call.tsv),
 # as in a release. The install and the release packaging copy data/ themselves.
+# Staged by the target fastag_stage_data, on every build (cmake --build), so an
+# edit to data/ alone and a deleted share-FASTag-* folder are restaged; ctest
+# stages first (the fixture fastag_staged_data). A real folder there without
+# the marker .fastag-staged is the user's and is left alone.
 # tools/shipped_data.py lists the files; test/shipped_data_test.py checks them.
 option(FASTAG_STAGE_DATA_IN_BUILD "Link (Windows: copy) data/ beside the built FASTag" ON)
 set(FASTAG_TAXONOMY_INDEX_DIR "" CACHE PATH
@@ -250,6 +254,7 @@ if(FASTAG_TAXONOMY_INDEX_DIR AND NOT EXISTS "${FASTAG_TAXONOMY_INDEX_DIR}/tax_k7
                       "(unpack FASTag-<version>-taxonomy-k7.tar.gz and name its share-FASTag-taxonomy folder)")
 endif()
 if(FASTAG_STAGE_DATA_IN_BUILD)
+  set(_fastag_stage_cmds "")
   foreach(_fastag_data digest alkylation taxonomy)
     if(WIN32)
       set(_fastag_copy ON)
@@ -260,13 +265,21 @@ if(FASTAG_STAGE_DATA_IN_BUILD)
     if(_fastag_data STREQUAL "taxonomy" AND FASTAG_TAXONOMY_INDEX_DIR)
       set(_fastag_index "-DINDEX=${FASTAG_TAXONOMY_INDEX_DIR}")
     endif()
-    add_custom_command(TARGET FASTag POST_BUILD
+    list(APPEND _fastag_stage_cmds
       COMMAND "${CMAKE_COMMAND}" -DSRC=${CMAKE_CURRENT_SOURCE_DIR}/data/${_fastag_data}
               -DDST=$<TARGET_FILE_DIR:FASTag>/share-FASTag-${_fastag_data} -DCOPY=${_fastag_copy}
               ${_fastag_index}
-              -P ${CMAKE_CURRENT_SOURCE_DIR}/cmake/stage-data.cmake
-      VERBATIM)
+              -P ${CMAKE_CURRENT_SOURCE_DIR}/cmake/stage-data.cmake)
   endforeach()
+  # No OUTPUT, so it runs on every build: a data-only edit and a deleted
+  # share-FASTag-* are restaged too. Cheap when nothing changed: a link that
+  # names data/ already is kept, and a copy skips files whose time stamps match.
+  add_custom_target(fastag_stage_data ALL
+    ${_fastag_stage_cmds}
+    DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/cmake/stage-data.cmake
+    COMMENT "Staging data/ beside FASTag"
+    VERBATIM)
+  add_dependencies(fastag_stage_data FASTag)
 endif()
 
 # The taxonomy -species resolves by default, at <bin>/../share/FASTag/taxonomy.
@@ -812,7 +825,18 @@ if(FASTAG_BUILD_TESTS)
                    ${CMAKE_CURRENT_SOURCE_DIR}/test/shipped_data_test.py ${CMAKE_CURRENT_SOURCE_DIR}
                    $<TARGET_FILE_DIR:FASTag> $<IF:$<BOOL:${FASTAG_STAGE_DATA_IN_BUILD}>,ON,OFF>
                    ${CMAKE_COMMAND} ${CMAKE_BINARY_DIR} "${FASTAG_TAXONOMY_INDEX_DIR}")
-  set_tests_properties(shipped_data_test PROPERTIES SKIP_RETURN_CODE 77)
+  # RUN_SERIAL: (g) moves share-FASTag-alkylation aside and has the build put it back.
+  set_tests_properties(shipped_data_test PROPERTIES SKIP_RETURN_CODE 77 RUN_SERIAL TRUE
+                       ENVIRONMENT "FASTAG_BUILD_CONFIG=$<CONFIG>")
+  # Both read the data the build stages beside FASTag: stage it first, so a
+  # ctest after an edit to data/ alone sees the edit.
+  if(FASTAG_STAGE_DATA_IN_BUILD)
+    add_test(NAME stage_data_setup
+             COMMAND "${CMAKE_COMMAND}" --build "${CMAKE_BINARY_DIR}" --config "$<CONFIG>"
+                     --target fastag_stage_data)
+    set_tests_properties(stage_data_setup PROPERTIES FIXTURES_SETUP fastag_staged_data)
+    set_tests_properties(gui_cli_test shipped_data_test PROPERTIES FIXTURES_REQUIRED fastag_staged_data)
+  endif()
   # Every option FASTagOptions.cpp registers has a row in README's
   # command-line table, and no row names an unregistered one. Skips (77)
   # without python3 (FASTAG_PYTHON names another).

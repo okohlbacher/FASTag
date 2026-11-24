@@ -89,9 +89,17 @@ pub struct RunManager {
     pub revealable: Mutex<Vec<PathBuf>>,
     // The databases (-fasta, -entrapment_fasta) of the runs of this session,
     // by run and with the identity each had when the run started: the files
-    // fasta_segment may read for that run's tags (fasta.rs). Earlier
-    // sessions' come from the run record.
-    pub databases: Mutex<Vec<crate::fasta::SessionRun>>,
+    // fasta_segment may read for that run's tags (fasta.rs), once the run
+    // has ended with exit 0 and recorded the identity of its tags table.
+    // Earlier sessions' come from the run record. Shared with the run's
+    // finish, which sets that identity.
+    pub databases: Arc<Mutex<Vec<crate::fasta::SessionRun>>>,
+    // The files open_output may open (reveal.rs): the -recon_id_out,
+    // -fasta_out and -search_config_out of a run of this session that ended
+    // with exit 0, and an identification file dropped on the window, each
+    // with its identity when it was committed or dropped. Shared with the
+    // run's finish.
+    pub openable: Arc<Mutex<Vec<crate::fasta::FileIdentity>>>,
 }
 
 impl RunManager {
@@ -193,20 +201,51 @@ pub struct Resolved {
     pub source: &'static str,
 }
 
-// Resolve the binary in priority order: FASTAG_BIN env override, then bundled
-// beside the app (the resource dir). Debug builds also try the dev resources
-// dir baked in at compile time, then the bare name on PATH. A release build
+/// The first @p exe in the folders of @p path_env (a PATH value) that is a
+/// file (and executable, on Unix), canonical: the program the CLI itself is
+/// (File::getExecutablePath), so the data checks look beside its real
+/// folder, not relative to the app's working folder. None when there is none.
+pub fn find_on_path(path_env: &std::ffi::OsStr, exe: &str) -> Option<PathBuf> {
+    std::env::split_paths(path_env).filter(|d| !d.as_os_str().is_empty()).map(|d| d.join(exe)).find_map(|c| {
+        let m = std::fs::metadata(&c).ok()?;
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            if m.permissions().mode() & 0o111 == 0 {
+                return None;
+            }
+        }
+        if !m.is_file() {
+            return None;
+        }
+        dunce::canonicalize(&c).ok()
+    })
+}
+
+/// The binary FASTAG_BIN names (@p env_bin), when it exists: canonical, so a
+/// symlinked override (a Homebrew bin/FASTag into the Cellar) looks for its
+/// data where the CLI does (File::getExecutablePath), beside the target.
+pub fn env_override(env_bin: &str) -> Option<Resolved> {
+    if env_bin.is_empty() || !Path::new(env_bin).exists() {
+        return None;
+    }
+    let data = std::env::var("OPENMS_DATA_PATH").ok().map(PathBuf::from);
+    // The CLI already honours a user-set FASTAG_TAXONOMY_DIR itself.
+    let bin = dunce::canonicalize(env_bin).unwrap_or_else(|_| PathBuf::from(env_bin));
+    Some(Resolved { bin, data, taxonomy: None, source: "env" })
+}
+
+// Resolve the binary in priority order: FASTAG_BIN env override (canonical,
+// as the CLI resolves its own path), then bundled beside the app (the
+// resource dir). Debug builds also try the dev resources dir baked in at
+// compile time, then the first FASTag on PATH (find_on_path). A release build
 // does neither: the baked-in path is the CI runner's (and on Windows would sit
 // on a drive any user can create), and a PATH lookup cannot find the Windows
 // CLI (FASTag.bat) and could pick up an unrelated binary. It reports
 // "missing" instead, which the probe turns into a clear error.
 pub fn resolve_binary(app: &AppHandle) -> Resolved {
-    if let Ok(env_bin) = std::env::var("FASTAG_BIN") {
-        if !env_bin.is_empty() && PathBuf::from(&env_bin).exists() {
-            let data = std::env::var("OPENMS_DATA_PATH").ok().map(PathBuf::from);
-            // The CLI already honours a user-set FASTAG_TAXONOMY_DIR itself.
-            return Resolved { bin: PathBuf::from(env_bin), data, taxonomy: None, source: "env" };
-        }
+    if let Some(r) = std::env::var("FASTAG_BIN").ok().and_then(|b| env_override(&b)) {
+        return r;
     }
     let mut roots: Vec<PathBuf> = Vec::new();
     if let Ok(rd) = app.path().resource_dir() {
@@ -234,7 +273,9 @@ pub fn resolve_binary(app: &AppHandle) -> Resolved {
         }
     }
     if cfg!(debug_assertions) {
-        return Resolved { bin: PathBuf::from(EXE), data: None, taxonomy: None, source: "path" };
+        if let Some(bin) = std::env::var_os("PATH").and_then(|p| find_on_path(&p, EXE)) {
+            return Resolved { bin, data: None, taxonomy: None, source: "path" };
+        }
     }
     Resolved { bin: expected.unwrap_or_else(|| PathBuf::from(EXE)), data: None, taxonomy: None, source: "missing" }
 }
@@ -982,6 +1023,7 @@ pub fn record_of(
         tags: if end.ok { history::tags_of_log(&end.log) } else { None },
         workflow: None,
         databases: Vec::new(),
+        tags_identity: None,
     }
 }
 
@@ -1005,6 +1047,7 @@ pub fn marker_of(files: &RunFiles<'_>, argv: &[String], start: u64) -> history::
         tags: None,
         workflow: None,
         databases: Vec::new(),
+        tags_identity: None,
     }
 }
 
@@ -1150,11 +1193,41 @@ pub fn launch(mgr: &RunManager, r: &Resolved, params: RunParams, sink: Sink, his
     let rec_workflow = params.workflow.clone();
     let rec_databases = dbs.clone();
     let run_marker = marker.clone();
+    // The outputs whose identity the run commits when it ends with exit 0:
+    // its tags table (fasta.rs, the alignment) and the files Open may open
+    // (reveal.rs). Absolute: a relative one against the app's own cwd, as
+    // the child, which runs there when no cwd is given, resolves it.
+    let absolute = |p: &str| {
+        let p = PathBuf::from(p);
+        if p.is_relative() {
+            std::env::current_dir().map(|c| c.join(&p)).unwrap_or(p)
+        } else {
+            p
+        }
+    };
+    let tags_out = resolved.out.as_deref().map(absolute);
+    let open_outs: Vec<PathBuf> =
+        [&resolved.recon_id_out, &resolved.fasta_out, &resolved.search_config_out].into_iter().flatten().map(|p| absolute(p)).collect();
+    let session_runs = mgr.databases.clone();
+    let openable = mgr.openable.clone();
     let finish = Box::new(move |end: &RunEnd| {
         // The marker first: a record next to a stale marker would be
         // followed by a second, "interrupted" one at the next start.
         if let Some(m) = &run_marker {
             sweep::clear_running(m);
+        }
+        // Only a run that ended with exit 0 committed its outputs: their
+        // identity now, after the CLI wrote them.
+        let tags_identity = if end.ok { tags_out.as_deref().and_then(crate::fasta::identity_of_file) } else { None };
+        if end.ok {
+            if let Ok(mut o) = openable.lock() {
+                o.extend(open_outs.iter().filter_map(|p| crate::reveal::openable_identity(p)));
+            }
+        }
+        if let Ok(mut runs) = session_runs.lock() {
+            if let Some(r) = runs.iter_mut().find(|r| r.start == start) {
+                r.tags = tags_identity.clone();
+            }
         }
         if let Some(d) = history_dir {
             let files = RunFiles { input: &rec_input, outputs: &rec_outputs, cwd: rec_cwd.as_deref(), overwrite: true, protect: &[] };
@@ -1162,17 +1235,21 @@ pub fn launch(mgr: &RunManager, r: &Resolved, params: RunParams, sink: Sink, his
             rec.params = Some(rec_params);
             rec.workflow = rec_workflow;
             rec.databases = rec_databases;
+            rec.tags_identity = tags_identity;
             record_run(&d, &rec, &end.log);
         }
     });
     let abs: Vec<PathBuf> = resolved.paths().into_iter().map(PathBuf::from).collect();
+    // The session's entry before the CLI starts: a run that ends at once
+    // finds it to set its tags identity on. No tags identity until then, so
+    // it authorizes nothing while it runs.
+    if let Ok(mut d) = mgr.databases.lock() {
+        d.push(crate::fasta::SessionRun { start, outputs: abs.clone(), databases: dbs, tags: None });
+    }
     // A spawn failure is known synchronously: report it as a non-start so the
     // frontend reports "FASTag could not start" and settles cleanly.
     match start_run(mgr, cmd, files, sink, finish) {
         Ok(()) => {
-            if let Ok(mut d) = mgr.databases.lock() {
-                d.push(crate::fasta::SessionRun { start, outputs: abs.clone(), databases: dbs });
-            }
             if let Ok(mut r) = mgr.revealable.lock() {
                 r.extend(abs);
             }
@@ -1185,6 +1262,9 @@ pub fn launch(mgr: &RunManager, r: &Resolved, params: RunParams, sink: Sink, his
             }
         }
         Err(e) => {
+            if let Ok(mut d) = mgr.databases.lock() {
+                d.retain(|r| r.start != start || r.tags.is_some());
+            }
             // Its own marker only: a refusal because another run is live
             // must not take that run's marker.
             if let Some(m) = &marker {
@@ -2402,11 +2482,46 @@ mod tests {
             let want = crate::fasta::identity_of("fasta", &d.join("db.fasta")).unwrap();
             assert_eq!(rec.databases, vec![want.clone()]);
             let tags = PathBuf::from(started.out.clone().unwrap());
+            // Codex #3, part 2: the run ended with exit 0, so the identity of
+            // the tags table it wrote is on its entry and in its record.
+            let written = crate::fasta::identity_of_file(&tags).unwrap();
+            assert_eq!(rec.tags_identity.as_ref(), Some(&written));
             let session = mgr.databases.lock().unwrap();
-            assert_eq!(crate::fasta::run_databases(&session, None, &tags), Some(vec![want.clone()]));
-            assert_eq!(crate::fasta::run_databases(&session, Some(rec), &tags), Some(vec![want]));
+            assert_eq!(session.last().unwrap().tags.as_ref(), Some(&written));
+            assert_eq!(crate::fasta::run_databases(&session, None, &written), Some(vec![want.clone()]));
+            assert_eq!(crate::fasta::run_databases(&session, Some(rec), &written), Some(vec![want.clone()]));
+            assert_eq!(crate::fasta::tags_run_databases(&session, Some(&d.join("appdata")), &tags), Ok(vec![want]));
             drop(session);
             let _ = std::fs::remove_dir_all(&d);
+        }
+
+        // Codex #3 part 2 and n10: only a run that ended with exit 0 commits
+        // its outputs: the identity of its tags table (the alignment) and of
+        // its -recon_id_out (Open). A failed run commits neither, though its
+        // outputs are revealable from the start.
+        #[test]
+        fn only_a_run_that_ended_with_exit_0_commits_its_outputs() {
+            for (name, control, ok) in [("commit-ok", "", true), ("commit-fail", "STUB_FAIL=3\n", false)] {
+                let d = dir(name);
+                std::fs::write(d.join("db.fasta"), ">p\nPEPTIDEK\n").unwrap();
+                let params = r#"{"in":"$IN","out":"a.tags.tsv","params":{"recon_fasta":"db.fasta","recon_out":"a.recon.tsv","recon_id_out":"a.recon_id.idXML"}}"#;
+                let (mgr, started, wire) = launch_stub(&d, params, control);
+                assert!(started.started, "{:?}", started.reason);
+                let ids = PathBuf::from(started.outputs.as_ref().unwrap().recon_id_out.clone().expect("no -recon_id_out"));
+                let rec = record_after(&d, &wire);
+                assert_eq!(rec.status == history::Status::Ok, ok, "{name}");
+                assert!(mgr.revealable.lock().unwrap().contains(&ids), "{name}");
+                let openable = mgr.openable.lock().unwrap().clone();
+                let session_tags = mgr.databases.lock().unwrap().last().unwrap().tags.clone();
+                if ok {
+                    assert_eq!(crate::reveal::may_open(&ids, &openable), Some(dunce::canonicalize(&ids).unwrap()));
+                    assert!(session_tags.is_some() && rec.tags_identity == session_tags);
+                } else {
+                    assert!(openable.is_empty(), "{openable:?}");
+                    assert!(session_tags.is_none() && rec.tags_identity.is_none());
+                }
+                let _ = std::fs::remove_dir_all(&d);
+            }
         }
 
         // Review of PR h (GUI-DESIGN 3 S9, 6.5 history_rerun): a Re-run

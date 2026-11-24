@@ -1016,6 +1016,15 @@ void TOPPFASTag::registerOptionsAndFlags_()
                         "options given) as JSON lines and exit; needs no -out. Prepares the "
                         "given precursor at its charge (or 2+) only",
                         false, true);
+  // The desktop app's capability check: its presence in --helphelp says this
+  // FASTag reports its data folders and reads -alkylation_proteome auto as
+  // no database (the GUI's check before a run follows what it prints).
+  registerFlag_("data_paths",
+                "Print, as one JSON line, the folders this FASTag reads its shipped data from (digest "
+                "data, alkylation proteomes; after FASTAG_DIGEST_DIR and FASTAG_ALKYLATION_DIR), the "
+                "digest folders looked in, the shipped proteomes present, and what -alkylation_proteome "
+                "auto reads without a database (none), and exit; needs no -in or -out",
+                true);
   // ---- 1.16: options ----
   // Mass-shift survey: -delta_out's site and name columns.
   registerDoubleOption_("delta_name_tolerance", "<tol>", 10.0,

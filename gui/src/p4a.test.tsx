@@ -555,6 +555,66 @@ describe('P4a: ◀ ▶ when the Tags table order is pending, failed or leaves th
     expect(fileOrderQueried(mock)).toBe(false)
   })
 
+  // Review #9 (codex4 p9): the tags file rewritten (a rerun) while ◀ ▶ are
+  // looked up. The position, the count and the neighbours are one answer of
+  // one file; a lookup of the old file is not taken for absence, so the
+  // file order is not walked in the table order's place.
+  it('the tags file rewritten during the lookup: position and neighbours all of the new file, no file-order fallback', async () => {
+    const mock = bridge(true)
+    // B: the file without the first spectrum's rows; ROW1 is another row there.
+    const B = ROWS.filter((r: string[]) => r[0] !== SPECTRA[0])
+    let file: string[][] = ROWS
+    let swapped = false
+    const swap = (): void => {
+      swapped = true
+      file = B
+    }
+    mock.resultsQuery = (path, view, offset, limit) => {
+      mock.resultsQueryCalls.push({ path, view, offset, limit })
+      const all = viewIds(COLUMNS, file, view)
+      const sel = all.slice(offset, offset + Math.min(limit, MAX_WINDOW))
+      return Promise.resolve({ columns: COLUMNS, totalRows: file.length, matchedRows: all.length, rows: sel.map((i) => file[i]), rowIds: sel, ranked: true, pending: false })
+    }
+    // The rewrite lands right after the old file answered the head: the
+    // position call finds no snapshot of the new file yet.
+    mock.resultsPosition = () => {
+      swap()
+      return Promise.resolve(null)
+    }
+    // The backend: the rewrite lands first, then one snapshot answers it all.
+    mock.resultsNeighbours = (_p, view, row, spectrum) => {
+      swap()
+      const ids = viewIds(COLUMNS, file, view)
+      const mine = row != null && row < file.length && file[row][0] === spectrum ? ids.indexOf(row) : -1
+      const pos = mine >= 0 ? mine : ids.findIndex((i) => file[i][0] === spectrum)
+      if (pos < 0) return Promise.resolve({ status: 'absent', snapshot: 2 })
+      const nb = (d: -1 | 1) => {
+        const s = stepIn(file, ids, pos, d)
+        return s ? { spectrum: s.spectrum, rowId: ids[s.pos] } : null
+      }
+      return Promise.resolve({ status: 'at', snapshot: 2, pos, matched: ids.length, rowId: ids[pos], prev: nb(-1), next: nb(1) })
+    }
+    render(<Panel first={{ path: TAGS, spectrum: SPECTRA[1], rowId: ROW1, view: BY_TAG }} />)
+    await screen.findByTestId('ladder-verdict')
+    const ids = viewIds(COLUMNS, B, BY_TAG)
+    const pos = ids.findIndex((i) => B[i][0] === SPECTRA[1])
+    // ROW1 of the old file is of another spectrum in the new one.
+    expect(B[ROW1][0]).not.toBe(SPECTRA[1])
+    await waitFor(() => expect(screen.getByTestId('nav-at').textContent).toBe(`tag ${pos + 1} of ${ids.length.toLocaleString('en-US')}`))
+    expect(swapped).toBe(true)
+    // The Tags table order, not the file order in its place.
+    expect(screen.getByTestId('nav-at').title).not.toMatch(/file order/)
+    expect(nextBtn().title).toBe('Next spectrum in the Tags table order (Alt+→ or Page Down)')
+    expect(fileOrderQueried(mock)).toBe(false)
+    const want = stepIn(B, ids, pos, 1)!
+    const back = stepIn(B, ids, pos, -1)!
+    await waitFor(() => expect(nextBtn().disabled).toBe(false))
+    expect(prevBtn().disabled).toBe(false)
+    await click(nextBtn())
+    await waitFor(() => expect(heading()).toBe(want.spectrum))
+    expect(back.spectrum).not.toBe(SPECTRA[1])
+  })
+
   it('a position against a view whose head is still pending is not taken; Try again takes it once the order is there', () =>
     shrunk(async () => {
       // Pending for exactly the head reads of one wait; resultsPosition

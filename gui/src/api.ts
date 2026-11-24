@@ -18,6 +18,7 @@ import type {
   IniExport,
   ResultsHead,
   FastagApi,
+  NavAnswer,
   ResultsPage,
   OutputsCheck,
   ResultsView,
@@ -140,6 +141,8 @@ const api: FastagApi = {
   },
   resultsPosition: (path: string, view: ResultsView, row: number) =>
     invoke<number | null>('results_position', { path, view, row }),
+  resultsNeighbours: (path: string, view: ResultsView, row: number | null, spectrum: string) =>
+    invoke<NavAnswer>('results_neighbours', { path, view, row, spectrum }),
   revealOutput: (path: string, folder: boolean) => invoke<void>('reveal_output', { path, folder }),
   openOutput: (path: string) => invoke<void>('open_output', { path }),
   onMenu: (cb) => subscribe<string>('fastag:menu', cb),

@@ -178,8 +178,10 @@ export default function ReconView({ massgap, tables, gen = {}, notice, action, e
   const idPath = tables.reconIds
   const idFmt = idPath ? idFormat(idPath) : null
   const ids = useTable(idFmt === 'mzTab' ? idPath : undefined, 'reconIds', gen.reconIds)
+  // An mzTab that cannot be shown (over the viewer's size limit, or a read
+  // that failed) keeps its Open and Reveal: it is a valid export all the same.
   const idFiles: ProductFile[] =
-    idPath && (idFmt !== 'mzTab' || ids.notShown)
+    idPath && (idFmt !== 'mzTab' || ids.notShown || ids.tooLarge || !!ids.error)
       ? [
           {
             label: 'placements as identifications',
@@ -187,11 +189,16 @@ export default function ReconView({ massgap, tables, gen = {}, notice, action, e
             note:
               idFmt !== 'mzTab'
                 ? `${idFmt}, for identification tools. Only the mzTab form is shown here.`
-                : 'Not an mzTab file: open it in an identification tool.'
+                : ids.notShown
+                  ? 'Not an mzTab file: open it in an identification tool.'
+                  : ids.tooLarge
+                    ? 'mzTab larger than the 128 MB viewer limit: open it in an identification tool or a spreadsheet.'
+                    : 'This mzTab could not be read here: open it in an identification tool or a spreadsheet.'
           }
         ]
       : []
-  const errors = [recon.error, delta.error, ids.error].filter((e): e is string => !!e)
+  // The size limit is the file row's note, not a second error in red.
+  const errors = [recon.error, delta.error, ids.tooLarge ? null : ids.error].filter((e): e is string => !!e)
   const loading = recon.loading || delta.loading || ids.loading
 
   // The bins: -delta_out (with its interpretations), else the hist rows of

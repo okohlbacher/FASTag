@@ -27,7 +27,8 @@ describe('shipped data before a run', () => {
       alkylationDir: null,
       proteomes: [],
       searched: ['/b/share/FASTag/digest', '/b/bin/share-FASTag-digest', '/b/bin/digest'],
-      fromEnv: false
+      fromEnv: false,
+      autoDbFree: true
     }
     await renderCharacterizeApp(mock)
     await pickSingle(mock, IN)

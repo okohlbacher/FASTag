@@ -26,6 +26,7 @@ pub const APP_COMMANDS: &[&str] = &[
     "results_open",
     "results_query",
     "results_position",
+    "results_neighbours",
     "results_export",
     "results_cancel",
     "table_query",

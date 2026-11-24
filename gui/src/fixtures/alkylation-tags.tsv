@@ -1,0 +1,133 @@
+section	key	value	n	description
+run	version	1.15.7	-	FASTag 1.15.7 wrote this report.
+run	input	TMT_Erwinia_1uLSike_Top10HCD_isol2_45stepped_60min_01-20141210.mzML	-	The spectra were read from TMT_Erwinia_1uLSike_Top10HCD_isol2_45stepped_60min_01-20141210.mzML.
+run	fragment_tolerance	20	-	The fragment tolerance is 20 ppm.
+run	fragment_tolerance_unit	ppm	-	The fragment tolerance is in ppm.
+run	tag_length	3	-	Tags were seeded at length 3.
+run	subsample_fraction	0	-	A fraction of 0 of the spectra was tagged (0 = all).
+run	subsample_spectra	0	-	0 spectra were drawn for tagging (0 = all).
+run	run_report_version	5	-	The run section follows FASTag run report format 5.
+run	pick_profile	legacy	-	Profile MS2 was centroided under -pick_profile legacy.
+run	profile_ms2_picked	0	0	0 of 0 profile MS2 spectra were centroided before tagging.
+run	profile_ms2_kept	0	0	0 of 0 profile MS2 spectra were tagged as profile (picking yielded nothing).
+run	activation_collisional	6103	6103	6103 of 6103 MS2 spectra were activated by collision (CID, HCD, trap-type CID, PQD).
+run	activation_electron	0	6103	0 of 6103 MS2 spectra were activated by electron transfer or capture (ETD, ECD).
+run	activation_hybrid	0	6103	0 of 6103 MS2 spectra were activated by a hybrid method (EThcD, ETciD).
+run	activation_unknown	0	6103	0 of 6103 MS2 spectra carry no activation FASTag classifies.
+run	unknown_charge	assume2	-	Precursors without a charge were tagged under -unknown_charge assume2.
+run	isotope_error	0	-	Precursor isotope offsets 0 were considered.
+run	charge_header	0	0	0 of 0 MS2 spectra were reported at their precursor's charge.
+run	charge_possible	0	0	0 of 0 MS2 spectra were reported at a listed possible charge.
+run	charge_inferred	0	0	0 of 0 MS2 spectra were reported at an inferred charge.
+run	charge_ambiguous	0	0	0 of 0 MS2 spectra were reported at the better of two inferred charges.
+run	charge_assumed	0	0	0 of 0 MS2 spectra were reported at charge 2 without charge evidence.
+run	charge_enumerated	0	0	0 of 0 MS2 spectra were reported at an enumerated charge.
+run	isotope_shifted	0	0	0 of 0 MS2 spectra were reported at a precursor isotope offset other than 0.
+run	multi_hypothesis	0	0	0 of 0 MS2 spectra were tagged under more than one precursor hypothesis.
+run	ion_series	by	-	MS2 spectra were read under -ion_series by.
+run	ion_series_by	6103	6103	6103 of 6103 MS2 spectra were tagged as b/y ions.
+run	ion_series_cz	0	6103	0 of 6103 MS2 spectra were tagged as c/z-dot ions.
+alk_run	format	3	-	The alkylation report follows format 3 (doc/ALKYLATION-REPORT.md).
+alk_run	method	tags+placement	-	The call is read off the tags (alkt_* sections) and off the placements of single-Cys peptides on the database (alk_cys, alkylation_placement_call); alkylation_call combines them.
+alk_run	database	share/FASTag/alkylation/human.fasta.gz	-	The placements are on the database share/FASTag/alkylation/human.fasta.gz.
+alk_run	database_source	bundled:human	-	The database is the proteome shipped with FASTag (bundled:human).
+alk_run	database_release	UniProt 2026_04 UP000005640 (taxon 9606, reviewed, 20414 entries, FASTA sha256 6342992b6a9824ab73f31ac9df8c90f8bf24f54d4a0730768e28535f34ef6416)	-	The shipped proteome's UniProt release, proteome, entries and sha256 (share/FASTag/alkylation/proteomes.tsv); the FASTA read had that sha256 and number of entries (checked before the run).
+alk_run	min_tag_length	8	3	Tags place on this database from 8 residues (the reconciler's minimum); the run's longest tag has 3 residues, so no tag places: give -tag_length 8 or more.
+alk_run	fixed_c_delta	57.021464	-	The run's fixed Carbamidomethyl on C adds 57.021464 Da to every gap: the reagent mass is gap + 57.021464.
+alk_run	fixed_nterm_delta	0	-	The run has no fixed peptide N-terminal modification.
+alk_run	fixed_cterm_delta	0	-	The run has no fixed peptide C-terminal modification.
+alk_run	window	0.02	-	A reagent mass bins to a Cys form within 0.02 Da of it.
+alk_run	min_spectra	10	-	A call needs 10 spectra binned in total and for the called class.
+alk_run	min_share	0.6	-	A call needs a share of 0.6 of the binned and conflicted spectra.
+alk_run	tags	43584	-	43584 placed tags (ungapped, E-value at most 1) were looked at.
+alk_run	spectra	0	-	0 MS2 spectra have a tag with a single-Cys placement that counts; each votes once, with its best such tag.
+alk_cys	Carbamidomethyl	0	0	0 spectra bin to Carbamidomethyl (57.021464 Da on C; class Carbamidomethyl).
+alk_cys	Propionamide	0	0	0 spectra bin to Propionamide (71.037114 Da on C; class Propionamide).
+alk_cys	Nethylmaleimide	0	0	0 spectra bin to Nethylmaleimide (125.047679 Da on C; class Nethylmaleimide).
+alk_cys	Methylthio	0	0	0 spectra bin to Methylthio (45.987721 Da on C; class Methylthio).
+alk_cys	Carboxymethyl	0	0	0 spectra bin to Carboxymethyl (58.005479 Da on C; class Carboxymethyl).
+alk_cys	unmodified	0	0	0 spectra bin to unmodified (0 Da on C; class none).
+alk_cys	Oxidation	0	0	0 spectra bin to Oxidation (15.994915 Da on C; class none).
+alk_cys	Dioxidation	0	0	0 spectra bin to Dioxidation (31.989829 Da on C; class none).
+alk_cys	Trioxidation	0	0	0 spectra bin to Trioxidation (47.984744 Da on C; class none).
+alk_cys	Cysteinyl	0	0	0 spectra bin to Cysteinyl (119.004099 Da on C; class none).
+alk_cys	Dehydroalanine	0	0	0 spectra bin to Dehydroalanine (-33.987721 Da on C; class none).
+alk_cys	class.Carbamidomethyl	0	0	0 of 0 binned spectra are of the class Carbamidomethyl.
+alk_cys	class.Propionamide	0	0	0 of 0 binned spectra are of the class Propionamide.
+alk_cys	class.Nethylmaleimide	0	0	0 of 0 binned spectra are of the class Nethylmaleimide.
+alk_cys	class.Methylthio	0	0	0 of 0 binned spectra are of the class Methylthio.
+alk_cys	class.Carboxymethyl	0	0	0 of 0 binned spectra are of the class Carboxymethyl.
+alk_cys	class.none	0	0	0 of 0 binned spectra are of the class none (unmodified, oxidised, cysteinylated or dehydroalanine Cys).
+alk_cys	unexplained	0	0	0 spectra have a reagent mass no Cys form explains within the window.
+alk_cys	conflict	0	0	0 spectra have a best tag whose counted placements disagree on the class; they count against the share.
+alk_cys	excluded.no_cys	0	0	0 of 0 placements are left out: they have no C in the peptide.
+alk_cys	excluded.multi_cys	0	0	0 of 0 placements are left out: they have two or more C in the peptide.
+alk_cys	excluded.cys_in_tag	0	0	0 of 0 placements are left out: they have their one C inside the tag.
+alk_cys	excluded.cys_outside_region	0	0	0 of 0 placements are left out: they have their one C on the side without the gap.
+alk_cys	excluded.protein_nterm	0	0	0 of 0 placements are left out: they have the gap at the protein N-terminus.
+alk_cys	excluded.truncation	0	0	0 of 0 placements are left out: they have a gap equal to the mass of the outermost one or two residues (a shorter product).
+alk_cys	excluded.met_ambiguous	0	0	0 of 0 placements are left out: they read as two classes with and without an M oxidation in the gap.
+alk_cys	excluded.non_by	0	43584	0 of 43584 tags are left out because they are not b/y tags (c/z); they are not placed for the call.
+alkylation_placement_call	status	no_call	0	No alkylation is called: the run's tags are too short to place on this database (alk_run min_tag_length).
+alkylation_placement_call	reagent	-	-	No reagent is called.
+alkylation_placement_call	mass	-	-	No reagent is called.
+alkylation_placement_call	share	-	0	Nothing is counted.
+alkylation_placement_call	voted	0	0	0 binned spectra are in the share: 0 binned to a class, 0 conflicted.
+alkylation_placement_call	reason	tags_too_short	-	The first no-call rule that applies is tags_too_short.
+alkt_run	format	3	-	The database-free alkylation report follows format 3 (doc/ALKYLATION-REPORT.md, -alkylation_tags_out).
+alkt_run	method	shadow_tags	-	Every MS2 spectrum is tagged a second time with unmodified C and one alternative C edge per reagent; those tags are not written. No database is used.
+alkt_run	status	experimental	-	Experimental: the held-out test passed at the margin, 40 of 57 runs called and 37 of the calls right (doc/ALKYLATION-REPORT.md). Unalkylated and low-resolution runs are rarely called.
+alkt_run	forms	Carbamidomethyl,Propionamide,Nethylmaleimide,Methylthio,Carboxymethyl,unmodified	6	The C forms the shadow pass can spell.
+alkt_run	c_mods_removed	Carbamidomethyl (fixed)	1	The shadow pass leaves out the run's C modifications: Carbamidomethyl (fixed).
+alkt_run	tag_lengths	3	-	The shadow pass uses the run's seed lengths, extension and tolerances, without gap edges.
+alkt_run	spectra_tagged	6103	-	6103 MS2 spectra with peaks and a precursor were shadow-tagged (b/y); some may give no tag.
+alkt_run	spectra_cz	0	-	0 MS2 spectra were read as c/z and are not shadow-tagged.
+alkt_run	tags	71764	-	71764 shadow tags are ungapped with an E-value of at most 1, read at fragment charge 1.
+alkt_run	tags_multi	722	-	722 such tags read at fragment charge 2 or more are not counted (C[Propionamide]/2 reads like S).
+alkt_run	tags_with_c	3240	71764	3240 of them hold a C.
+alkt_run	spectra	8	6103	8 spectra vote: their best counted tag holds a C, none at an end of the tag, with an E-value of at most 1e-04.
+alkt_run	min_spectra	10	-	A call needs 10 votes in total and for the called class.
+alkt_run	min_share	0.6	-	A call needs a share of 0.6 of the votes, conflicts included.
+alkt_run	edge_tolerance	0.02	-	The report reasons with an edge tolerance of 0.02 Da (the fragment tolerance, or in ppm at 1000 m/z).
+alkt_run	forms_resolved	yes	-	No C form lies within twice the edge tolerance of another C form or of a residue this run can read (two-step and isotope-shifted readings are listed under alias).
+alkt_run	resolved_below_mz	24600.37499999999	-	A C edge reaching 24600.37499999999 m/z or more has a twin of its form in the two edge windows (the tolerance at its own m/z); its vote is set aside (alkt_form unresolved).
+alkt_form	Carbamidomethyl	2	8	2 spectra vote Carbamidomethyl (57.021464 Da on C; class Carbamidomethyl).
+alkt_form	Propionamide	0	8	0 spectra vote Propionamide (71.037114 Da on C; class Propionamide).
+alkt_form	Nethylmaleimide	0	8	0 spectra vote Nethylmaleimide (125.047679 Da on C; class Nethylmaleimide).
+alkt_form	Methylthio	6	8	6 spectra vote Methylthio (45.987721 Da on C; class Methylthio).
+alkt_form	Carboxymethyl	0	8	0 spectra vote Carboxymethyl (58.005479 Da on C; class Carboxymethyl).
+alkt_form	unmodified	0	8	0 spectra vote unmodified (0 Da on C; class none).
+alkt_form	residues.Carbamidomethyl	438	3278	438 of 3278 C residues in counted tags are Carbamidomethyl.
+alkt_form	residues.Propionamide	593	3278	593 of 3278 C residues in counted tags are Propionamide.
+alkt_form	residues.Nethylmaleimide	460	3278	460 of 3278 C residues in counted tags are Nethylmaleimide.
+alkt_form	residues.Methylthio	914	3278	914 of 3278 C residues in counted tags are Methylthio.
+alkt_form	residues.Carboxymethyl	340	3278	340 of 3278 C residues in counted tags are Carboxymethyl.
+alkt_form	residues.unmodified	533	3278	533 of 3278 C residues in counted tags are unmodified.
+alkt_form	alias.Carbamidomethyl	C+G:0.0000,C[Carboxymethyl]-13C:0.0193	-	Two residues whose middle peak is missing (X+Y), or another C form whose edge starts or ends on a 13C peak (C[Name]+13C / -13C), read like C[Carbamidomethyl] (reading:distance in Da); a vote whose edge the spectrum explains so is a conflict (alias_rejected).
+alkt_form	alias.Propionamide	A+C:0.0000,S+S:0.0178	-	Two residues whose middle peak is missing (X+Y), or another C form whose edge starts or ends on a 13C peak (C[Name]+13C / -13C), read like C[Propionamide] (reading:distance in Da); a vote whose edge the spectrum explains so is a conflict (alias_rejected).
+alkt_form	alias.Nethylmaleimide	N+N:0.0290,M+P:0.0364	-	Two residues whose middle peak is missing (X+Y), or another C form whose edge starts or ends on a 13C peak (C[Name]+13C / -13C), read like C[Nethylmaleimide] (reading:distance in Da); a vote whose edge the spectrum explains so is a conflict (alias_rejected).
+alkt_form	alias.Methylthio	-	-	No two residues sum to C[Methylthio] and no 13C-shifted C form reads like it within twice the edge tolerance.
+alkt_form	alias.Carboxymethyl	C[Carbamidomethyl]+13C:0.0193	-	Two residues whose middle peak is missing (X+Y), or another C form whose edge starts or ends on a 13C peak (C[Name]+13C / -13C), read like C[Carboxymethyl] (reading:distance in Da); a vote whose edge the spectrum explains so is a conflict (alias_rejected).
+alkt_form	alias.unmodified	-	-	No two residues sum to C[unmodified] and no 13C-shifted C form reads like it within twice the edge tolerance.
+alkt_form	twin.Carbamidomethyl	-	-	No other C form and no residue this run can read lies within twice the edge tolerance of C[Carbamidomethyl].
+alkt_form	twin.Propionamide	-	-	No other C form and no residue this run can read lies within twice the edge tolerance of C[Propionamide].
+alkt_form	twin.Nethylmaleimide	-	-	No other C form and no residue this run can read lies within twice the edge tolerance of C[Nethylmaleimide].
+alkt_form	twin.Methylthio	-	-	No other C form and no residue this run can read lies within twice the edge tolerance of C[Methylthio].
+alkt_form	twin.Carboxymethyl	-	-	No other C form and no residue this run can read lies within twice the edge tolerance of C[Carboxymethyl].
+alkt_form	twin.unmodified	-	-	No other C form and no residue this run can read lies within twice the edge tolerance of C[unmodified].
+alkt_form	conflict	0	8	0 voting spectra have a best tag (or tags of equal E-value) with C residues of two forms, or one an alias explains; they count against the share.
+alkt_form	alias_rejected	0	0	0 of the conflicts have a C edge that the spectrum explains as an alias (a peak between the two residues, in either series, or the monoisotopic peak beside a 13C endpoint), or one it cannot test.
+alkt_form	unresolved	0	8	0 spectra would vote with a C edge at or above resolved_below_mz, where the edge windows hold a twin of its form; they are set aside, not in the share.
+alkylation_tags_call	status	no_call	8	No alkylation is called: 8 votes are fewer than 10.
+alkylation_tags_call	reagent	-	-	No reagent is called.
+alkylation_tags_call	mass	-	-	No reagent is called.
+alkylation_tags_call	share	0.75	8	The leading class Methylthio has a share of 0.750 of the 8 votes (binned plus conflicted).
+alkylation_tags_call	voted	8	8	8 votes are in the share: 8 for a form, 0 conflicted.
+alkylation_tags_call	reason	few_cys_spectra	-	The first no-call rule that applies is few_cys_spectra.
+alkylation_call	status	no_call	8	No alkylation is called: 8 votes are fewer than 10.
+alkylation_call	reagent	-	-	No reagent is called.
+alkylation_call	mass	-	-	No reagent is called.
+alkylation_call	share	0.75	8	The leading class Methylthio has a share of 0.750 of the 8 votes (binned plus conflicted).
+alkylation_call	voted	8	8	8 votes are in the share: 8 binned to a class, 0 conflicted.
+alkylation_call	reason	few_cys_spectra	-	The first no-call rule that applies is few_cys_spectra.
+alkylation_call	source	tags	-	The call is that of the tags (no database, or the placements make none).
