@@ -164,8 +164,11 @@ pub fn resolved(args: &[String], cwd: Option<&Path>) -> ResolvedOutputs {
     r
 }
 
+/// @p p canonical, in the spelling every path of this module has: on Windows
+/// `C:\...`, not the verbatim `\\?\C:\...` of std::fs::canonicalize (dunce
+/// keeps the verbatim form only where a plain one cannot name the file).
 fn canonical(p: &Path) -> Option<PathBuf> {
-    std::fs::canonicalize(p).ok()
+    dunce::canonicalize(p).ok()
 }
 
 /// @p path may be revealed: it is an existing regular file and the same file
@@ -211,15 +214,17 @@ pub fn reveal_output(app: AppHandle, state: State<'_, RunManager>, path: String,
 /// -search_config_out of Sage (JSON), Comet or MSFragger (.params)).
 pub const OPENABLE: &[&str] = &["idxml", "mzid", "mztab", "fasta", "fa", "json", "params"];
 
-/// @p p with its folder resolved and its last component as it is (not
-/// followed when it is a symlink).
+/// @p p with its folder resolved (canonical, as `canonical` spells it) and
+/// its last component as it is (not followed when it is a symlink). The
+/// identities Open records and checks carry this path, so one spelling for
+/// both: a recorded `C:\...` and a checked `\\?\C:\...` would never match.
 fn parent_resolved(p: &Path) -> Option<PathBuf> {
     let name = p.file_name()?;
     let parent = match p.parent() {
         Some(d) if !d.as_os_str().is_empty() => d,
         _ => Path::new("."),
     };
-    Some(std::fs::canonicalize(parent).ok()?.join(name))
+    Some(canonical(parent)?.join(name))
 }
 
 /// @p p as Open records and checks it: of an OPENABLE type, a regular file
@@ -588,6 +593,23 @@ mod tests {
         let before = std::fs::read_dir(&root).unwrap().count();
         assert!(private_copy(f, &id, &root).is_err());
         assert_eq!(std::fs::read_dir(&root).unwrap().count(), before);
+        std::fs::remove_dir_all(&d).ok();
+    }
+
+    // Codex6 finding 6: the identity Open records carries the path in the
+    // spelling of dunce::canonicalize, the one the History records and the
+    // UI hold (`C:\...` on Windows, not the verbatim `\\?\C:\...`). Fails on
+    // Windows with std::fs::canonicalize in parent_resolved; required there
+    // (ci.yml gui-windows, "Backend Open and Reveal tests").
+    #[test]
+    fn open_identities_use_the_plain_canonical_spelling() {
+        let d = odir("spelling");
+        let f = d.join("a.recon_id.idXML");
+        std::fs::write(&f, "<IdXML/>").unwrap();
+        let id = openable_identity(&f).unwrap();
+        assert_eq!(PathBuf::from(&id.path), dunce::canonicalize(&f).unwrap());
+        assert!(!id.path.starts_with(r"\\?\"), "{}", id.path);
+        assert_eq!(may_open(&f, &[id]), Some(f.clone()));
         std::fs::remove_dir_all(&d).ok();
     }
 

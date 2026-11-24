@@ -23,41 +23,30 @@
 # INDEX. A complete fetch is what tools/fetch_taxonomy_index.py publishes: its
 # completion marker .fastag-fetched names that very manifest (data release and
 # sha256) and each of its files with the pinned sha256 and size, and each file
-# is there with that size. A folder without the marker (an interrupted or
+# is there with that size (a linked file also with that sha256, hashed on each
+# run: its target can change). A folder without the marker (an interrupted or
 # failed fetch, a copy made by hand) is not used. None is: SRC alone, as
 # without INDEX, so a removed cache is unstaged again.
 #
-# INDEX as an index file of another name is copied (COPY=ON) when it is not
-# the one staged last: the marker records its path, size and time stamp, so a
-# switch to another file, also one with an older time stamp, is copied, and
-# file(COPY_FILE ... ONLY_IF_DIFFERENT) leaves equal bytes alone.
+# INDEX as an index file of another name is compared byte for byte with the
+# staged tax_k7.taxdb on every run (COPY=ON; file(COPY_FILE ...
+# ONLY_IF_DIFFERENT)), so a switch to another file, one with an older time
+# stamp, or one rewritten in place with the same size and time stamp is copied,
+# and equal bytes are left alone.
 #
 # Every real folder the script makes carries .fastag-staged, which lists the
 # top-level entries it staged there; only those are ever replaced or removed.
 # A real folder at DST without the marker is the user's, in both modes, and is
 # left alone (also a folder copy-staged before the marker existed: delete it
 # to restage).
+# Run as a script (-P), the policies are those of this version: IN_LIST
+# (CMP0057) and the rest, also on the oldest CMake the build supports.
+cmake_minimum_required(VERSION 3.28)
 if(NOT SRC OR NOT DST)
   message(FATAL_ERROR "stage-data.cmake: SRC and DST are required")
 endif()
 set(_mark "${DST}/.fastag-staged")
 set(_from_index tax_k7.taxdb nodes.dmp names.dmp MANIFEST.json)
-
-# The stamp of an index file copied under another name: "# copied <name> <size>
-# <time stamp> <path>", a comment line of the marker.
-function(_fastag_stamp from out)
-  file(SIZE "${from}" _size)
-  file(TIMESTAMP "${from}" _time "%Y-%m-%dT%H:%M:%S" UTC)
-  get_filename_component(_abs "${from}" ABSOLUTE)
-  set(${out} "# copied ${_size} ${_time} ${_abs}" PARENT_SCOPE)
-endfunction()
-
-# The stamps the marker of the last run recorded.
-set(_fastag_old_stamps "")
-if(EXISTS "${_mark}")
-  file(STRINGS "${_mark}" _fastag_old_stamps REGEX "^# copied ")
-endif()
-set_property(GLOBAL PROPERTY _fastag_new_stamps "")
 
 # @p folder holds a complete fetch of the manifest @p manifest
 # (tools/fetch_taxonomy_index.py fetched_complete): its marker names that
@@ -96,6 +85,14 @@ function(_fastag_fetch_complete folder manifest out)
     if(NOT "file ${_name} ${_size} ${_sha}" IN_LIST _lines OR (NOT _nob AND NOT _size EQUAL _bytes))
       return()
     endif()
+    # A linked file (fetch --from without --copy) is the file it links to,
+    # which can change after the fetch at the same size: hashed again.
+    if(IS_SYMLINK "${_f}")
+      file(SHA256 "${_f}" _live)
+      if(NOT _live STREQUAL _sha)
+        return()
+      endif()
+    endif()
   endforeach()
   set(${out} ON PARENT_SCOPE)
 endfunction()
@@ -128,14 +125,10 @@ function(_fastag_put from to)
     if(_fname STREQUAL _tname)
       file(COPY "${from}" DESTINATION "${_dir}")
     else()
-      # An index file under another name, copied as tax_k7.taxdb: again
-      # whenever it is not the file staged last (its path, size and time
-      # stamp as the marker recorded them), whichever of the two is newer.
-      _fastag_stamp("${from}" _stamp)
-      if(NOT EXISTS "${to}" OR NOT _stamp IN_LIST _fastag_old_stamps)
-        file(COPY_FILE "${from}" "${to}" ONLY_IF_DIFFERENT)
-      endif()
-      set_property(GLOBAL APPEND PROPERTY _fastag_new_stamps "${_stamp}")
+      # An index file under another name, copied as tax_k7.taxdb whenever
+      # its bytes differ from the staged copy's: no time-stamp shortcut, which
+      # an in-place rewrite of the same size and second would pass.
+      file(COPY_FILE "${from}" "${to}" ONLY_IF_DIFFERENT)
     endif()
   else()
     if(IS_SYMLINK "${to}" OR EXISTS "${to}")
@@ -306,8 +299,4 @@ if(_n GREATER 0)
     string(APPEND _list "${_name}\n")
   endforeach()
 endif()
-get_property(_stamps GLOBAL PROPERTY _fastag_new_stamps)
-foreach(_s IN LISTS _stamps)
-  string(APPEND _list "${_s}\n")
-endforeach()
 file(WRITE "${_mark}" "${_list}")

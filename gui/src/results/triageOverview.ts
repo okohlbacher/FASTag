@@ -225,8 +225,9 @@ export interface OverviewStats {
   /// What the cover series is: res_cover (residues), the tag_cover m/z
   /// span proxy, or nothing (an old census).
   coverFrom: 'res_cover' | 'proxy' | null
-  /// census 3 (res_cover_exact): tagged spectra whose res_cover is the
-  /// folded lower bound (some tag's orientation unresolved, no -fasta), of
+  /// census 3 (res_cover_exact): tagged spectra whose res_cover is a lower
+  /// bound (some tag's orientation unresolved, no -fasta, so folded; or a
+  /// gap's residues left out), of
   /// the tagged spectra with a res_cover_exact value. null: no such column
   /// (census 2, whose res_cover places every tag as a y read).
   coverFolded: { folded: number; of: number } | null

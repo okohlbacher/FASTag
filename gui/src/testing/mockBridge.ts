@@ -1014,14 +1014,15 @@ export function installMockBridge(): MockBridge {
       return Promise.resolve()
     },
     // As feedback.rs export_ordered (publicExport is its port): a request
-    // older than the one whose zip is there is refused and writes nothing.
+    // not newer than the one whose zip is there is refused and writes
+    // nothing; each accepted one writes a file of its own (export-<n>/).
     feedbackExport: (id, include, seq) => {
       const r = mock.feedbackReports.find((x) => x.report.id === id)
       if (!r) return Promise.reject(new Error(`no feedback report ${id}`))
       const n = seq ?? (r.zipOf?.seq ?? 0) + 1
-      if (r.zipOf && n < r.zipOf.seq) return Promise.reject(new Error('a newer export of this report was built after this request'))
+      if (r.zipOf && n <= r.zipOf.seq) return Promise.reject(new Error('a newer export of this report was built after this request'))
       const json = JSON.stringify(publicExport(r.report, include, !!r.png), null, 2)
-      r.zip = `${r.folder}/${id}.feedback.zip`
+      r.zip = `${r.folder}/export-${n}/${id}.feedback.zip`
       r.zipOf = { seq: n, json, screenshot: include.screenshot && !!r.png }
       mock.feedbackExports.push({ id, include: { ...include }, json })
       const size = (png: Uint8Array): { width: number; height: number } => {

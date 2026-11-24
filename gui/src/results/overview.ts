@@ -893,11 +893,15 @@ function alkylationReportTile(c: AlkylationReport, params: Record<string, unknow
   // on a database, when given, refine it (source).
   const fromTags = c.source === 'tags' || c.source === 'tags+placement'
   // Release-gate review n4: the share is over the reported denominator (the
-  // share row's n), which from format 3 holds the conflicted votes too.
-  const conflicted = c.voted != null && c.binned != null && c.voted > c.binned ? c.voted - c.binned : 0
-  const counted = conflicted
+  // share row's n), which from format 3 holds the conflicted votes too, and
+  // from format 4 the abstained tag votes (codex6 review n1).
+  const abstained = c.abstained ?? 0
+  const extra = c.voted != null && c.binned != null && c.voted > c.binned ? c.voted - c.binned : 0
+  const conflicted = Math.max(0, extra - abstained)
+  const parts = [`${fmt(c.binned)} for a form`, ...(conflicted ? [`${fmt(conflicted)} conflicted`] : []), ...(abstained ? [`${fmt(abstained)} abstained`] : [])]
+  const counted = extra
     ? fromTags
-      ? `${fmt(c.voted)} tag votes (${fmt(c.binned)} for a form, ${fmt(conflicted)} conflicted)${c.source === 'tags+placement' ? `; the placements${db} agree` : ', no database'}`
+      ? `${fmt(c.voted)} tag votes (${parts.join(', ')})${c.source === 'tags+placement' ? `; the placements${db} agree` : ', no database'}`
       : `${fmt(c.voted)} spectra with one cysteine (${fmt(c.binned)} binned, ${fmt(conflicted)} conflicted)${db}`
     : fromTags
       ? `${fmt(c.binned)} spectra whose tags read a cysteine${c.source === 'tags+placement' ? `; the placements${db} agree` : ', no database'}`

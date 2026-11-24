@@ -1509,8 +1509,11 @@ options and their values.
   form. Since format 3 each voting C edge is checked against the spectrum for
   them (the middle peak in either series, the monoisotopic peak); only a pair
   that lost its middle peak in both series still votes, and since format 4
-  only when the spectrum holds the C immonium ion of its form (otherwise it
-  abstains, `alias_unconfirmed`). The pass costs about
+  only when the spectrum holds the C immonium ion of its form and none of the
+  immonium ions of the pair's residues where it could hold them (the pair's
+  internal a-type ion has the form's immonium m/z: 133.043 for GC and CAM);
+  otherwise it abstains (`alias_unconfirmed`), and the abstentions count in
+  the share's denominator. The pass costs about
   one more tagging run. The held-out result below was measured before these
   checks. On 57 held-out runs
   from 57 PRIDE projects it called 40, 37 of them right (0.925, Wilson 95%
@@ -1698,7 +1701,8 @@ residues of the peptide that the reported tags cover together. Each tag is
 first placed on the peptide as the tag TSV writes it (its low peak a y ion, or
 a z• ion under c/z): it starts `nterm_mass` from the N-terminus, so the
 precursor mass of the selected hypothesis maps the y ladder onto b positions,
-and each path step holds its residues (a gap's two residues share its mass). A
+and each path step of one residue gives that residue (a gap does not say where
+its residues meet, so they are left out; below). A
 tag read on the b (or c) ions lands so at its mirror image about
 S = M − H2O + (offC − offN) (M for b/y), and census format 3 corrects for it:
 a tag that matches `-fasta` (or `-entrapment_fasta`) in one orientation only is
@@ -1712,8 +1716,11 @@ folded, its tags placed by their orientation are folded too, after that
 placement, so a placed read and a folded read of the same residues also
 count once.
 `res_cover_exact` is 1 when every reported tag was placed by its orientation
-and 0 when one was folded: `res_cover` is then a lower bound (residues that
-mirror each other about the centre count once), and never below `max_len`. Residues of different tags are
+and every residue on its own, and 0 when one was folded or a tag has a gap:
+`res_cover` is then a lower bound (residues that mirror each other about the
+centre count once; a gap's residues are not counted, since splitting its mass
+evenly would make up a boundary that other tags' residues straddle), and never
+below `max_len`. Residues of different tags are
 one residue when the midpoint of one lies inside the other; a residue counts
 once. Unlike `tag_cover`, which adds m/z over fragment charges and series,
 `res_cover` is in residues and can be compared with the peptide length.

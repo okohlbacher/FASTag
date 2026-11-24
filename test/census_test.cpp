@@ -29,6 +29,7 @@
 
 #include <OpenMS/CHEMISTRY/AASequence.h>
 #include <OpenMS/CHEMISTRY/Residue.h>
+#include <OpenMS/CHEMISTRY/ResidueDB.h>
 #include <OpenMS/CONCEPT/Constants.h>
 #include <OpenMS/FORMAT/MzMLFile.h>
 #include <OpenMS/KERNEL/MSExperiment.h>
@@ -417,14 +418,19 @@ int main(int argc, char** argv)
     // Tag C: nterm 260, 2+, steps of 50 m/z = 100 Da -> [260,360], [360,460]:
     // midpoints 310 and 410, both new (310 is past A's last residue, 300).
     C::addResidueSpans(sp, 260, {100, 150, 200}, {1, 1}, 2, 2, 200);
-    // Tag G: one gap step of two residues, nterm 1000 -> [1000,1100], [1100,1200].
-    C::addResidueSpans(sp, 1000, {100, 300}, {2}, 1, 2, 200);
-    // Tag E: no path -> res_mass split evenly: [2000,2050], [2050,2100].
-    C::addResidueSpans(sp, 2000, {}, {}, 1, 2, 100);
-    CHECK(sp.size() == 3 + 2 + 3 + 2 + 2 + 2, "spans %zu", sp.size());
+    // Tag G: one gap step of two residues, nterm 1000: where the two meet is
+    // not known, so no span (codex6 review n7: an even split made up a
+    // boundary), and the tag is not resolved.
+    CHECK(!C::addResidueSpans(sp, 1000, {100, 300}, {2}, 1, 2, 200), "a gap tag counts as resolved");
+    // Tag E: no path: no boundaries either.
+    CHECK(!C::addResidueSpans(sp, 2000, {}, {}, 1, 2, 100), "a tag without a path counts as resolved");
+    CHECK(C::addResidueSpans(sp, 5000, {100, 200}, {1}, 1, 1, 100) && sp.back() == std::make_pair(5000.0, 5100.0),
+          "a one-step tag is resolved");
+    sp.pop_back();
+    CHECK(sp.size() == 3 + 2 + 3 + 2, "spans %zu", sp.size());
     Spans copy = sp;
     const std::size_t n = C::residueCover(sp);
-    CHECK(n == 3 + 2 + 2 + 2, "res_cover %zu, want 9", n);
+    CHECK(n == 3 + 2, "res_cover %zu, want 5", n);
     std::reverse(copy.begin(), copy.end());
     CHECK(C::residueCover(copy) == n, "res_cover depends on the order");
     Spans none;
@@ -450,8 +456,12 @@ int main(int argc, char** argv)
     {
       max_len = std::max(max_len, t.n_res);
       Spans one;
-      C::addResidueSpans(one, t.nterm_mass, t.path_mz, t.step_res, t.charge, t.n_res, t.res_mass);
-      CHECK(one.size() == t.n_res, "tag %s gave %zu residues", t.seq.c_str(), one.size());
+      const bool resolved = C::addResidueSpans(one, t.nterm_mass, t.path_mz, t.step_res, t.charge, t.n_res, t.res_mass);
+      std::size_t in_gaps = 0;
+      for (const std::uint8_t r : t.step_res)
+        if (r > 1) in_gaps += r;
+      CHECK(one.size() + in_gaps == t.n_res && resolved == (in_gaps == 0), "tag %s gave %zu residues (%zu in gaps)",
+            t.seq.c_str(), one.size(), in_gaps);
       for (const auto& [lo, hi] : one)
       {
         bool lo_ok = false, hi_ok = false;
@@ -460,8 +470,8 @@ int main(int argc, char** argv)
           lo_ok = lo_ok || std::fabs(lo - m) < 0.02;
           hi_ok = hi_ok || std::fabs(hi - m) < 0.02;
         }
-        // A gap's two residues split its mass: only its outer ends are boundaries.
-        if (t.gapped ? !(lo_ok || hi_ok) : !(lo_ok && hi_ok)) ++bad;
+        // Every span is a resolved residue: both ends are boundaries (a gap adds none).
+        if (!(lo_ok && hi_ok)) ++bad;
       }
       ys.insert(ys.end(), one.begin(), one.end());
     }
@@ -470,6 +480,33 @@ int main(int argc, char** argv)
     const std::size_t yc = C::residueCover(ys);
     CHECK(yc == 13 && yc >= max_len, "y-ladder res_cover %zu (max_len %zu)", yc, max_len);
     std::printf("   y ladder: %zu tags, max_len %zu, res_cover %zu\n", tags.size(), max_len, yc);
+
+    // codex6 review n7: an ungapped GWKA and an overlapping S(GW)K (a gap of
+    // G + W) of the peptide SGWKA cover its five residues. Splitting the gap
+    // evenly put a boundary at S + (G + W) / 2 between G's and W's: six
+    // counted intervals for five residues. The gap adds no span now, and
+    // res_cover is a lower bound (inexact), at least the longest tag.
+    {
+      const auto m = [](const char* r) { return ResidueDB::getInstance()->getResidue(r)->getMonoWeight(Residue::Internal); };
+      const double S = m("S"), G = m("G"), Wt = m("W"), K = m("K"), A = m("A");
+      const double h = 900.0;
+      Spans u;
+      // GWKA: nterm = S, path ascending, one residue per step (A, K, W, G from the low end).
+      const bool r1 = C::addResidueSpans(u, S, {h - (G + Wt + K + A), h - (G + Wt + K), h - (G + Wt), h - G, h}, {1, 1, 1, 1}, 1, 4,
+                                         G + Wt + K + A);
+      // S(GW)K: nterm 0, steps from the low end K, the gap GW, S.
+      const bool r2 = C::addResidueSpans(u, 0.0, {h - (S + G + Wt + K), h - (S + G + Wt), h - S, h}, {1, 2, 1}, 1, 4,
+                                         S + G + Wt + K);
+      CHECK(r1 && !r2, "GWKA resolved, S(GW)K not (%d %d)", r1, r2);
+      Spans v = u;
+      CHECK(C::residueCover(v) == 5, "GWKA + S(GW)K: res_cover %zu, want 5", C::residueCover(v));
+      CHECK(C::resCoverLowerBound(u, 4) == 5, "GWKA + S(GW)K: lower bound %zu, want 5", C::resCoverLowerBound(u, 4));
+      // S(GW)K alone: S and K resolved, the longest tag (4) the bound.
+      Spans w;
+      C::addResidueSpans(w, 0.0, {h - (S + G + Wt + K), h - (S + G + Wt), h - S, h}, {1, 2, 1}, 1, 4, S + G + Wt + K);
+      CHECK(w.size() == 2 && C::resCoverLowerBound(w, 4) == 4, "S(GW)K alone: %zu spans, bound %zu", w.size(),
+            C::resCoverLowerBound(w, 4));
+    }
 
     // census 3: complementary ladders over the same residues (E P T of
     // PEPTIDEK, residues 2..4, precursor 1+) count once. Each tag is built

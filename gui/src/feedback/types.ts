@@ -204,7 +204,7 @@ export interface FeedbackApi {
   // With @p seq (FeedbackExported.seq): that export's zip, or a refusal
   // once another export replaced it.
   feedbackReveal: (id: string, seq?: number) => Promise<void>
-  // The public export: <id>.feedback.zip and its export.json.
+  // The public export: export-<n>/<id>.feedback.zip (one file per accepted export) and its export.json.
   // @p seq numbers the request, increasing (nextExportSeq): the backend
   // refuses one older than the export its zip holds.
   feedbackExport: (id: string, include: Include, seq?: number) => Promise<FeedbackExported>

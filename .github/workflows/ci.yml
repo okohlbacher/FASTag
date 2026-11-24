@@ -1782,7 +1782,8 @@ jobs:
   #   \data\x.tsv is not absolute; ResolvedOutputs, GUI-DESIGN 6.3), and the
   #   GUI ships for Windows. No OpenMS and no CLI: the run-lifecycle tests that
   #   drive the sh stub are cfg(unix). Informational (step-level
-  #   continue-on-error) until it has been green once.
+  #   continue-on-error) until it has been green once, except the Open and
+  #   Reveal tests (reveal::), which are required.
   # pwsh, not bash: Git Bash's link.exe shadows MSVC's linker (windows.yml,
   # "Build the desktop app").
   gui-windows:
@@ -1815,6 +1816,22 @@ jobs:
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           cargo test --lib lifetime
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      # Required: Reveal and Open compare canonical paths, which Windows
+      # spells two ways (C:\... and the verbatim \\?\C:\...); the History
+      # Open regression (Codex6 finding 6) only shows there. Each named test
+      # must report ok, so a rename or a filter that matches nothing fails.
+      - name: Backend Open and Reveal tests (Windows)
+        working-directory: gui/src-tauri
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $log = cargo test --lib reveal::
+          $code = $LASTEXITCODE
+          $log | Out-Host
+          if ($code -ne 0) { exit $code }
+          foreach ($t in 'a_committed_output_opens_after_a_restart_from_its_run_record', 'open_identities_use_the_plain_canonical_spelling') {
+            if (-not ($log | Select-String -SimpleMatch "reveal::tests::$t ... ok")) { Write-Error "required test $t did not pass"; exit 1 }
+          }
       - name: Backend unit tests (Windows)
         working-directory: gui/src-tauri
         shell: pwsh
@@ -2130,6 +2147,11 @@ jobs:
           sed -i "s/^Package: .*/Package: $DEB_PACKAGE/" "$X/DEBIAN/control"
           dpkg-deb --root-owner-group -Zgzip --build "$X" "$DEB"
           rm -f "${debs[0]}"
+          # Every content check below reads the generated $DEB itself, not
+          # the repack input: an omission or corruption introduced by the
+          # repack cannot pass them.
+          rm -rf "$X"
+          dpkg-deb -R "$DEB" "$X"
           dpkg-deb -I "$DEB"
           [ "$(dpkg-deb -f "$DEB" Package)" = "$DEB_PACKAGE" ] \
             || { echo "::error::the .deb is not named $DEB_PACKAGE"; exit 1; }
@@ -2146,7 +2168,8 @@ jobs:
           [ -n "$cli" ] || { echo "::error::the .deb carries no executable resources/fastag/bin/FASTag"; exit 1; }
           echo "CLI in the .deb: ${cli#"$X"}"
           bash tools/check_bundle_notices.sh "$(dirname "$(dirname "$cli")")"
-          # The k-mer index in the package itself (the tarball is its /usr tree).
+          # The k-mer index in the package itself, as extracted from $DEB
+          # above (the tarball is its /usr tree).
           if [ "${{ startsWith(github.ref, 'refs/tags/v') || (inputs.gui_dry_run && inputs.gui_full_payload) }}" = "true" ]; then
             python3 tools/check_taxonomy_manifest.py --pinned "data/taxonomy/manifests/$TAXDB_TAG.json" "$(dirname "$(dirname "$cli")")/share/FASTag/taxonomy" \
               || { echo "::error::the .deb does not carry the pinned taxonomy index in resources/fastag/share/FASTag/taxonomy"; exit 1; }

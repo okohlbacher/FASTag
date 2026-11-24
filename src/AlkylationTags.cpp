@@ -324,11 +324,35 @@ namespace FASTag::AlkylationTags
     return s[static_cast<std::size_t>(m)].getIntensity() >= end_int ? AliasCheck::EXPLAINED : AliasCheck::NOT_EXPLAINED;
   }
 
-  double immoniumMz(const Alkylation::Form& f)
+  namespace
   {
-    // Immonium ion: the residue minus CO, protonated.
-    static const double CO = 12.0 + 15.9949146196;
-    return cMass() + f.mass - CO + OpenMS::Constants::PROTON_MASS_U;
+    /// CO, the loss from a residue's b-type ion that gives its immonium (a-type) ion.
+    const double CO_MASS = 12.0 + 15.9949146196;
+
+    /// The immonium (a-type, 1+) m/z of a step of @p mass Da.
+    double immoniumOf(double mass) { return mass - CO_MASS + OpenMS::Constants::PROTON_MASS_U; }
+
+    /// Whether an ion at @p mz could have been seen in @p s: inside a scan
+    /// window the spectrum declares (the acquisition range), else inside the
+    /// range of its peaks.
+    bool acquired(const OpenMS::MSSpectrum& s, double mz, double tol)
+    {
+      const auto& w = s.getInstrumentSettings().getScanWindows();
+      if (w.empty()) return inRange(s, mz, tol);
+      for (const auto& x : w)
+        if (x.end > x.begin && mz >= x.begin - tol && mz <= x.end + tol) return true;
+      return false;
+    }
+  }
+
+  double immoniumMz(const Alkylation::Form& f) { return immoniumOf(cMass() + f.mass); }
+
+  std::vector<double> aliasIons(const Alias& a, const std::vector<Alkylation::Form>& cands)
+  {
+    if (a.kind == Alias::Kind::PAIR) return {immoniumOf(a.x), immoniumOf(a.y)};
+    if (a.other >= 0 && static_cast<std::size_t>(a.other) < cands.size())
+      return {immoniumMz(cands[static_cast<std::size_t>(a.other)])};
+    return {};
   }
 
   bool immoniumConfirms(int k, const Alias& a, const std::vector<Alkylation::Form>& cands, const SpectrumPeaks& sp,
@@ -356,8 +380,26 @@ namespace FASTag::AlkylationTags
       for (double shift : {0.0, C13_SPACING})
         if (std::fabs(og + shift - mz) <= tol + tolAt(p, og + shift)) return false;  // that reading's own ion
     }
-    if (!inRange(*s, mz, tol)) return false;
-    return peakNear(*s, mz, tol) >= 0;
+    if (!inRange(*s, mz, tol) || peakNear(*s, mz, tol) < 0) return false;
+    // Codex6 review n1: the form's immonium ion does not tell an exact pair
+    // alias apart. The internal a-type ion of the pair (X + Y - CO + H+) has
+    // the pair's mass less CO, which is the form's C mass less CO: for
+    // unmodified GC or CG it is 133.0430, the CAM immonium ion itself. What
+    // only the alias reading gives are the immonium ions of its own steps
+    // (76.022 for unmodified C, 30.034 for G); the vote counts only when
+    // each of them that could have been seen is absent, and (a pair) at
+    // least one could have been: else nothing in the spectrum tells the two
+    // readings apart. An ISO alias's other form has an immonium ion of its
+    // own (checked above), which must be absent where it could be seen.
+    bool tested = false;
+    for (double m : aliasIons(a, cands))
+    {
+      const double t = tolAt(p, m);
+      if (!acquired(*s, m, t)) continue;
+      tested = true;
+      if (peakNear(*s, m, t) >= 0) return false;  // an ion of the alias reading
+    }
+    return tested || a.kind != Alias::Kind::PAIR;
   }
 
   VoteContext voteContext(const Param& p, const std::vector<Alkylation::Form>& cands, const std::vector<Step>* alpha)
@@ -386,6 +428,21 @@ namespace FASTag::AlkylationTags
                             double resolved_below_mz)
     {
       Alkylation::Call c = Alkylation::callAlkylation(t.asAlkylationTally(cands), s);
+      // Codex6 review n1: an abstention for want of evidence against an
+      // alias is not a vote for the other forms. Abstentions fall on the
+      // aliased forms only, so leaving them out of the share lets another
+      // form clear min_share on the votes the abstaining form lost.
+      if (t.alias_unconfirmed > 0)
+      {
+        c.abstained = t.alias_unconfirmed;
+        c.voted += c.abstained;
+        c.share = static_cast<double>(c.top) / static_cast<double>(c.voted);
+        if (c.called && c.share < s.min_share)
+        {
+          c.called = false;
+          c.reason = "ambiguous";
+        }
+      }
       if (!(resolved_below_mz > 0.0) || (t.spectra == 0 && t.unresolved > 0))
       {
         c.called = false;
@@ -652,6 +709,12 @@ namespace FASTag::AlkylationTags
       std::snprintf(b, sizeof b, "%.3f", v);
       return b;
     }
+    std::string votedText(const Alkylation::Call& c)
+    {
+      return u(c.voted) + " votes are in the share: " + u(c.binned) + " for a form, " +
+             u(c.voted - c.binned - c.abstained) + " conflicted, " + u(c.abstained) +
+             " abstained (alias_unconfirmed).";
+    }
   }
 
   std::vector<Digest::Row> rows(const Tally& t, const Alkylation::Call& c, const Alkylation::Settings& s,
@@ -747,7 +810,9 @@ namespace FASTag::AlkylationTags
               : "Two residues whose middle peak is missing (X+Y), or another C form whose edge starts or ends on a 13C peak "
                 "(C[Name]+13C / -13C), read like C[" + f.name + "] (reading:distance in Da); a vote whose edge the spectrum "
                 "explains so is a conflict (alias_rejected); one it does not explain counts only with the C[" + f.name +
-                "] immonium ion at " + num(immoniumMz(f)) + " m/z (alias_unconfirmed).");
+                "] immonium ion at " + num(immoniumMz(f)) + " m/z and, for X+Y, with the immonium ions of X and Y "
+                "absent where the spectrum could hold them (one of them there at least; the X+Y internal a-ion has the "
+                "immonium's m/z), else it abstains (alias_unconfirmed).");
     }
     const std::vector<std::string> tw = twins(cands, info.tol_da, alpha);
     for (int k = 0; k < NUM_CANDIDATES; ++k)
@@ -771,7 +836,8 @@ namespace FASTag::AlkylationTags
                           "hold a twin of its form; they are set aside, not in the share.");
     add("alkt_form", "alias_unconfirmed", u(t.alias_unconfirmed), u(t.spectra + t.unresolved + t.alias_unconfirmed),
         u(t.alias_unconfirmed) + " spectra would vote with a C edge that an alias also reads, with no trace of the alias "
-                                 "and without the immonium ion of the form; they abstain, not in the share.");
+                                 "and without an ion that tells the readings apart (the form's immonium, none of the alias's own immonium "
+                                 "ions); they abstain, and count in the share's denominator.");
 
     // ---- alkylation_tags_call
     const std::string name = c.cls >= 0 ? Alkylation::className(c.cls) : "-";
@@ -790,9 +856,8 @@ namespace FASTag::AlkylationTags
       add(sec, "mass", c.cls == Alkylation::NONE ? "-" : num(mass), "-",
           c.cls == Alkylation::NONE ? "A call of none has no reagent mass." : name + " adds " + num(mass) + " Da to C.");
       add(sec, "share", num(c.share), u(c.voted),
-          "A share of " + f3(c.share) + " of the " + u(c.voted) + " votes (binned plus conflicted) are " + name + ".");
-      add(sec, "voted", u(c.voted), u(c.binned),
-          u(c.voted) + " votes are in the share: " + u(c.binned) + " for a form, " + u(c.voted - c.binned) + " conflicted.");
+          "A share of " + f3(c.share) + " of the " + u(c.voted) + " votes (binned, conflicted and abstained) are " + name + ".");
+      add(sec, "voted", u(c.voted), u(c.binned), votedText(c));
       add(sec, "reason", "-", "-", "The call is made.");
     }
     else
@@ -803,16 +868,15 @@ namespace FASTag::AlkylationTags
           : c.reason == "few_cys_spectra"
               ? "No alkylation is called: " + u(c.binned) + " votes are fewer than " + u(s.min_spectra) + "."
               : "No alkylation is called: the leading class " + name + " has " + u(c.top) + " of " + u(c.voted) +
-                    " votes (binned plus conflicted), short of " + u(s.min_spectra) + " votes and a share of " +
+                    " votes (binned, conflicted and abstained), short of " + u(s.min_spectra) + " votes and a share of " +
                     num(s.min_share) + " (or tied).");
       add(sec, "reagent", "-", "-", "No reagent is called.");
       add(sec, "mass", "-", "-", "No reagent is called.");
       add(sec, "share", c.voted ? num(c.share) : "-", u(c.voted),
           c.voted ? "The leading class " + name + " has a share of " + f3(c.share) + " of the " + u(c.voted) +
-                        " votes (binned plus conflicted)."
+                        " votes (binned, conflicted and abstained)."
                   : "No spectrum votes.");
-      add(sec, "voted", u(c.voted), u(c.binned),
-          u(c.voted) + " votes are in the share: " + u(c.binned) + " for a form, " + u(c.voted - c.binned) + " conflicted.");
+      add(sec, "voted", u(c.voted), u(c.binned), votedText(c));
       add(sec, "reason", c.reason, "-", "The first no-call rule that applies is " + c.reason + ".");
     }
     return r;

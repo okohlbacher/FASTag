@@ -46,11 +46,21 @@
 // conflict (Tally::alias_rejected). Review n1 (release gate): an alias that
 // leaves no trace (both intermediate peaks lost in both series, or removed
 // by the peak selection) is not evidence for the C form either, since the
-// two readings have one mass. Such a vote counts only with independent
-// evidence of its form: the form's C immonium ion (residue - CO + H+, e.g.
-// 133.043 for C[Carbamidomethyl]) in the spectrum as read, resolved from the
-// immonium ion of any C form the alias reads instead. Without it the vote
-// abstains (Tally::alias_unconfirmed), set aside like an unresolved one.
+// two readings have one mass. Such a vote counts only with evidence that
+// tells the readings apart: the form's C immonium ion (residue - CO + H+,
+// e.g. 133.043 for C[Carbamidomethyl]) in the spectrum as read, resolved from
+// the immonium ion of any C form the alias reads instead, and none of the
+// ions only the alias reading gives. For a pair alias the form's immonium
+// alone is no such evidence (review codex6 n1): the pair's internal a-type
+// ion has the same m/z (unmodified GC or CG: 133.0430), so the immonium ions
+// of the pair's own steps (76.022 for unmodified C, 30.034 for G) must be
+// absent wherever the spectrum could hold them (its scan window, else its
+// peaks' range), and at least one must lie there. Without that the vote
+// abstains (Tally::alias_unconfirmed), set aside like an unresolved one, but
+// the abstentions stay in the share's denominator (callTags()): a form whose
+// votes abstain more often cannot win by that alone. A complementary-series
+// peak tells nothing more: for an exact alias the two readings predict the
+// same b and y ions except the intermediate ones aliasExplains() tests.
 // Measured on PXD020401 and PXD003531 with an open Sage search: the CAM
 // immonium is in 49-61% of the spectra of CAM peptides and in 3.5-4.6% of
 // those of peptides without CAM; the NEM one in 46% of NEM peptides.
@@ -92,10 +102,13 @@ namespace FASTag::AlkylationTags
   /// share's n is votes plus conflicts) and alkylation_tags_call gains the
   /// row voted after share.
   ///
-  /// 4 (release-gate review n1): a vote whose C edge an alias reads as well,
-  /// with no trace of the alias in the spectrum, counts only when the form's
-  /// C immonium ion is seen; else it abstains (alkt_form alias_unconfirmed,
-  /// new row; not in the share). The alias.<form> descriptions say so.
+  /// 4 (release-gate reviews n1): a vote whose C edge an alias reads as
+  /// well, with no trace of the alias in the spectrum, counts only when the
+  /// form's C immonium ion is seen and (a pair alias) the immonium ions of the
+  /// pair's steps could be seen and are not; else it abstains (alkt_form
+  /// alias_unconfirmed, new row). The abstentions are in the share's
+  /// denominator (alkylation_tags_call share n, voted). The alias.<form>
+  /// descriptions say so.
   inline constexpr int REPORT_FORMAT = 4;
 
   /// @brief The 13C - 12C spacing (Da) the alias check uses for isotope-shifted edges.
@@ -190,7 +203,7 @@ namespace FASTag::AlkylationTags
     int form = -1;  ///< candidate index (no conflict)
     bool alias = false;  ///< an alias explains a C edge of the kept tag (aliasExplains()); then also conflict
     bool unresolved = false;  ///< a C edge of the kept tag lies where its form has a twin in the edge windows
-    bool unconfirmed = false;  ///< an alias reads a C edge of the kept tag as well, leaves no trace, and the form's immonium ion is not seen
+    bool unconfirmed = false;  ///< an alias reads a C edge of the kept tag as well, leaves no trace, and immoniumConfirms() is false
   };
 
   /**
@@ -384,9 +397,14 @@ namespace FASTag::AlkylationTags
 
     True when a peak lies within the tagger's per-peak tolerance of the C
     immonium ion of form @p k (immoniumMz()) in @p sp (raw when given, else
-    peaks), and that position cannot be the immonium ion, or its 13C peak, of
+    peaks), that position cannot be the immonium ion, or its 13C peak, of
     a C form the alias reads instead (its pair steps that are C forms, or
-    its other form); false when the immonium lies outside the peaks.
+    its other form), and no ion of aliasIons() is there wherever the
+    spectrum could hold it (a scan window it declares, else the range of its
+    peaks). A pair alias also needs at least one of its aliasIons() inside
+    that range: its internal a-type ion has the m/z of the form's immonium,
+    so the immonium alone does not tell the readings apart. False when the
+    immonium lies outside the peaks.
 
     @param[in] k the candidate index of the voted form
     @param[in] a the alias of form @p k
@@ -395,6 +413,16 @@ namespace FASTag::AlkylationTags
     @param[in] p the Param whose frag_tol and tol_ppm give the tolerance
     @return the verdict
   */
+  /**
+    @brief The ions only the alias reading of an edge gives: the immonium (1+)
+    of each step of a pair (76.022 for unmodified C, 30.034 for G), or of
+    the other form of an ISO alias.
+    @param[in] a the alias
+    @param[in] cands the candidate forms
+    @return the m/z values
+  */
+  std::vector<double> aliasIons(const Alias& a, const std::vector<Alkylation::Form>& cands);
+
   bool immoniumConfirms(int k, const Alias& a, const std::vector<Alkylation::Form>& cands, const SpectrumPeaks& sp,
                         const Param& p);
 
@@ -557,7 +585,11 @@ namespace FASTag::AlkylationTags
 
     #3g's call over the votes; no_call unresolved_forms when no m/z resolves
     the forms (ctx.resolved_below_mz <= 0) or when every vote was set aside
-    as unresolved (t.spectra == 0, t.unresolved > 0).
+    as unresolved (t.spectra == 0, t.unresolved > 0). The votes that
+    abstained for want of evidence against an alias (t.alias_unconfirmed)
+    are in the share's denominator (Call::abstained, Call::voted): 27
+    Carbamidomethyl and 45 Methylthio votes with 28 Carbamidomethyl ones
+    abstaining are a Methylthio share of 0.45, not 0.625. Both overloads.
 
     @param[in] t the run's tally (addTag() with the context)
     @param[in] s the call settings

@@ -34,6 +34,9 @@ import sys
 import tempfile
 
 SRC, BIN, STAGED, CMAKE, BUILD = sys.argv[1:6]
+# The cmake that runs stage-data.cmake as a script (-P) in (f)-(h): the build's
+# by default; FASTAG_SCRIPT_CMAKE names another, e.g. the oldest supported (3.28).
+SCRIPT_CMAKE = os.environ.get("FASTAG_SCRIPT_CMAKE") or CMAKE
 INDEX_DIR = sys.argv[6] if len(sys.argv) > 6 else ""
 # FASTAG_TAXONOMY_INDEX_SEARCH: the fetch-cache folders a build looks in, "|"-separated.
 INDEX_SEARCH = [c for c in (sys.argv[7] if len(sys.argv) > 7 else "").split("|") if c]
@@ -116,7 +119,7 @@ try:
     TAX = os.path.join(SRC, "data", "taxonomy")
 
     def run_stage(src, dst, copy, index=None):
-        cmd = [CMAKE, "-DSRC=" + src, "-DDST=" + dst, "-DCOPY=" + copy]
+        cmd = [SCRIPT_CMAKE, "-DSRC=" + src, "-DDST=" + dst, "-DCOPY=" + copy]
         if index:
             cmd.append("-DINDEX=" + index)
         return subprocess.run(cmd + ["-P", stage], stdin=subprocess.DEVNULL, stdout=subprocess.PIPE,
@@ -322,7 +325,7 @@ try:
             return hashlib.sha256(fh.read()).hexdigest()
 
     def run_search(dst, copy, cands, mans):
-        cmd = [CMAKE, "-DSRC=" + TAX, "-DDST=" + dst, "-DCOPY=" + copy, "-DINDEX_SEARCH=" + "|".join(cands),
+        cmd = [SCRIPT_CMAKE, "-DSRC=" + TAX, "-DDST=" + dst, "-DCOPY=" + copy, "-DINDEX_SEARCH=" + "|".join(cands),
                "-DINDEX_MANIFESTS=" + "|".join(mans), "-P", stage]
         return subprocess.run(cmd, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
 
@@ -409,6 +412,25 @@ try:
     r4 = run_stage(TAX, dst, "ON", newer)
     if r4.returncode != 0 or text(p) != "index A":
         fail("(h) COPY=ON: an unchanged INDEX run changed the staged index: %s" % r4.stdout)
+    # Codex6 finding 4: the same file rewritten in place with the same size
+    # and time stamp (to the second) is copied again: bytes, not stamps, decide.
+    st = os.stat(newer)
+    write(newer, "index Z")
+    os.utime(newer, ns=(st.st_atime_ns, st.st_mtime_ns))
+    r5 = run_stage(TAX, dst, "ON", newer)
+    if r5.returncode != 0 or text(p) != "index Z":
+        fail("(h) COPY=ON: an index rewritten in place with the same size and time stamp was not copied "
+             "again: %s" % r5.stdout)
+    # Codex6 finding 4: run as a script (cmake -P) the policies are unset
+    # unless the script sets them, and CMake 3.28 (the minimum) then rejects
+    # IN_LIST (CMP0057): the script sets them before its first command.
+    with open(stage, encoding="utf-8") as fh:
+        code = [ln.split("#", 1)[0].strip() for ln in fh]
+    code = [ln for ln in code if ln]
+    m = re.match(r"cmake_minimum_required\(VERSION (\d+)\.(\d+)", code[0]) if code else None
+    if not m or (int(m.group(1)), int(m.group(2))) < (3, 3):
+        fail("(h) stage-data.cmake does not begin with cmake_minimum_required(VERSION >= 3.3), so cmake -P on "
+             "CMake 3.x leaves CMP0057 (IN_LIST) unset: %r" % (code[0] if code else ""))
 
     # (h) tools/fetch_taxonomy_index.py on a synthetic asset and manifest:
     # only files with the pinned sha256 are staged, assembled in a private
@@ -530,6 +552,75 @@ try:
     if not SYMLINK:
         print("note: no symlink privilege; fetch_taxonomy_index.py --from <folder> without --copy skipped",
               file=sys.stderr)
+    # Codex6 finding 3: (a) a destination folder of the user's (no fetch's
+    # files only: an extra file) is refused, and nothing in it is deleted.
+    users = os.path.join(fx, "users")
+    uf = os.path.join(users, "share-FASTag-taxonomy")
+    write(os.path.join(uf, "my-notes.txt"), "mine")
+    write(os.path.join(uf, "tax_k7.taxdb"), "my own index")
+    r = run_fetch("--from", tgz, "--dest", users)
+    if r.returncode == 0 or sorted(os.listdir(uf)) != ["my-notes.txt", "tax_k7.taxdb"] \
+            or text(os.path.join(uf, "my-notes.txt")) != "mine" or text(os.path.join(uf, "tax_k7.taxdb")) != "my own index":
+        fail("(h) fetch_taxonomy_index.py replaced a destination folder holding the user's files: %s %s"
+             % (r.stdout, os.listdir(uf) if os.path.isdir(uf) else "(gone)"))
+    # ... and so does publish() itself, if such a folder appears after the checks.
+    stage_tmp = os.path.join(fx, "pub-tmp")
+    write(os.path.join(stage_tmp, "tax_k7.taxdb"), "new")
+    try:
+        fti.publish(fti.Path(stage_tmp), fti.Path(uf), man["files"])
+        fail("(h) fetch_taxonomy_index.publish replaced a folder holding the user's files")
+    except SystemExit:
+        if text(os.path.join(uf, "my-notes.txt")) != "mine":
+            fail("(h) fetch_taxonomy_index.publish deleted the user's file")
+    # (b) publication fails (the new folder is no complete fetch once in
+    # place): the earlier complete fetch is put back, unchanged.
+    try:
+        fti.publish(fti.Path(stage_tmp), fti.Path(gf), man["files"], verify=lambda f: False)
+        fail("(h) fetch_taxonomy_index.publish reported success for a failed verification")
+    except SystemExit:
+        pass
+    if not complete(gf) or text(os.path.join(gf, "tax_k7.taxdb")) != "synthetic index" \
+            or [n for n in os.listdir(good) if n.startswith(".old-")]:
+        fail("(h) a failed publication did not put the earlier fetch back: %s" % os.listdir(good))
+    if SYMLINK:
+        # (c) an import folder elsewhere whose index is a link back into the
+        # cache being replaced: copied, so the published index neither
+        # dangles nor points at itself.
+        back = os.path.join(fx, "import-back")
+        os.makedirs(back)
+        for n in ("tax_k7.taxdb", "nodes.dmp", "names.dmp"):
+            os.symlink(os.path.join(gf, n), os.path.join(back, n))
+        r = run_fetch("--from", back, "--dest", good)
+        bi = os.path.join(gf, "tax_k7.taxdb")
+        if r.returncode != 0 or not os.path.isfile(bi) or os.path.islink(bi) or text(bi) != "synthetic index" \
+                or not complete(gf):
+            fail("(h) fetch_taxonomy_index.py --from a folder linking into the cache published a broken index: %s"
+                 % r.stdout)
+        # (d) a linked payload whose target changes after the fetch at the
+        # same size: the recorded sha256 and the live size still match, the
+        # live sha256 does not, so it is no complete fetch (also for CMake).
+        src_l = os.path.join(fx, "linked-src")
+        os.makedirs(src_l)
+        for n in ("tax_k7.taxdb", "nodes.dmp", "names.dmp"):
+            shutil.copyfile(os.path.join(asset_dir, n), os.path.join(src_l, n))
+        ldest = os.path.join(fx, "linked")
+        r = run_fetch("--from", src_l, "--dest", ldest)
+        lfold = os.path.join(ldest, "share-FASTag-taxonomy")
+        if r.returncode != 0 or not os.path.islink(os.path.join(lfold, "tax_k7.taxdb")) or not complete(lfold):
+            fail("(h) fetch_taxonomy_index.py --from <folder> did not link the index: %s" % r.stdout)
+        else:
+            write(os.path.join(src_l, "tax_k7.taxdb"), "SYNTHETIC INDEX")  # same size, other bytes
+            if complete(lfold) or run_fetch("--check", lfold).returncode == 0:
+                fail("(h) a linked index changed at the same size still counts as a complete fetch")
+            dl = os.path.join(tmp, "bin-linked", "share-FASTag-taxonomy")
+            os.makedirs(os.path.dirname(dl))
+            r = run_search(dl, "OFF", [lfold], [mpath])
+            if r.returncode != 0 or os.path.lexists(os.path.join(dl, "tax_k7.taxdb")):
+                fail("(h) stage-data.cmake staged a linked index changed at the same size: %s" % r.stdout)
+            write(os.path.join(src_l, "tax_k7.taxdb"), "synthetic index")
+            r = run_search(dl, "OFF", [lfold], [mpath])
+            if r.returncode != 0 or not os.path.isfile(os.path.join(dl, "tax_k7.taxdb")):
+                fail("(h) stage-data.cmake did not stage the linked index once it matched again: %s" % r.stdout)
     other = os.path.join(fx, "other")
     write(os.path.join(other, "tax_k7.taxdb"), "another index")
     r = run_fetch("--from", os.path.join(other, "tax_k7.taxdb"), "--dest", os.path.join(fx, "refused"), "--copy")
@@ -595,6 +686,14 @@ for wf_name, wf, n_cli, n_app in (("ci.yml", ci, 2, 2), ("windows.yml", win, 1, 
                                  after):
                     fail("(d) %s:%d: the index asset replaces share-FASTag-taxonomy, and %s is not put back"
                          % (wf_name, i + 1, f))
+# Codex6 finding 8: the .deb's pinned-taxonomy check reads the generated
+# package, extracted again after the repack, not the repack's input folder.
+m = re.search(r'dpkg-deb [^\n]*--build "\$X" "\$DEB"\n(.*?)check_taxonomy_manifest\.py[^\n]*\n[^\n]*the \.deb does not carry',
+              ci, re.S)
+if not m:
+    fail("(d) ci.yml: no pinned taxonomy check of the repacked .deb found")
+elif not re.search(r'rm -rf "\$X"\n\s*dpkg-deb -(?:R|x) "\$DEB" "\$X"\n', m.group(1)):
+    fail("(d) ci.yml: the .deb's taxonomy check reads the repack input $X, not an extraction of the generated $DEB")
 
 # (e) the Tauri bundle and the local macOS bundle script
 conf = read("gui/src-tauri/tauri.conf.json")

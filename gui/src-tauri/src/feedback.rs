@@ -9,7 +9,10 @@
 // - the public export, `export.json` (`fastag-feedback-public/1`,
 //   gui/src/feedback/schema/feedback-public.schema.json), built fresh from
 //   typed, allow-listed fields of the report when the user shares it, and
-//   zipped with the PNG (if included) into `<id>.feedback.zip` beside it. The
+//   zipped with the PNG (if included) into `export-<n>/<id>.feedback.zip`
+//   beside it, `<n>` the export request's number: each accepted export is a
+//   file of its own that is never written again, and the one revealed is
+//   that very file (a newer export removes it, never rewrites it). The
 //   preview, Copy diagnostics and the attachment are this one JSON.
 //
 // The feedback dir is `<app_local_data_dir>/feedback`; every function below
@@ -861,6 +864,59 @@ fn zip_name(id: &str) -> String {
     format!("{id}.feedback.zip")
 }
 
+/// The folder of export request @p seq in report folder @p p: one per
+/// accepted export, written once (codex6 review n2).
+fn export_dir(p: &Path, seq: u64) -> PathBuf {
+    p.join(format!("export-{seq}"))
+}
+
+/// The exports in report folder @p p: (request number, folder), real
+/// folders named `export-<digits>` only.
+fn exports(p: &Path) -> Vec<(u64, PathBuf)> {
+    let Ok(rd) = std::fs::read_dir(p) else { return Vec::new() };
+    let mut v: Vec<(u64, PathBuf)> = rd
+        .flatten()
+        .filter_map(|e| {
+            let name = e.file_name().to_string_lossy().to_string();
+            let n = name.strip_prefix("export-")?;
+            if n.is_empty() || !n.bytes().all(|b| b.is_ascii_digit()) {
+                return None;
+            }
+            let seq = n.parse::<u64>().ok()?;
+            is_real_dir(&e.path()).then(|| (seq, e.path()))
+        })
+        .collect();
+    v.sort();
+    v
+}
+
+/// The zip of report @p id's newest export in its folder @p p, or the zip
+/// an app before export folders wrote beside report.json; None: no export.
+fn current_zip(p: &Path, id: &str) -> Option<PathBuf> {
+    for (_, d) in exports(p).into_iter().rev() {
+        let z = d.join(zip_name(id));
+        if is_real_file(&z) {
+            return Some(z);
+        }
+    }
+    let legacy = p.join(zip_name(id));
+    is_real_file(&legacy).then_some(legacy)
+}
+
+/// Removes every export of report @p id from its folder @p p (the export
+/// folders and a zip of an earlier app beside report.json).
+fn remove_exports(p: &Path, id: &str) -> Result<(), String> {
+    for (_, d) in exports(p) {
+        std::fs::remove_dir_all(&d).map_err(|e| format!("cannot remove the earlier export {}: {e}", d.display()))?;
+    }
+    let legacy = p.join(zip_name(id));
+    match std::fs::remove_file(&legacy) {
+        Ok(()) => Ok(()),
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(()),
+        Err(e) => Err(format!("cannot remove the earlier export {}: {e}", legacy.display())),
+    }
+}
+
 /// The reports in @p dir, newest first, without their images. Reports
 /// older than RETENTION_DAYS (by folder name) and temporary folders of an
 /// interrupted save older than an hour are removed first.
@@ -889,7 +945,7 @@ pub fn list(dir: &Path, now: u64) -> Vec<Summary> {
             let _ = std::fs::remove_dir_all(&p);
             continue;
         }
-        let zip = p.join(zip_name(&r.id));
+        let zip = current_zip(&p, &r.id);
         out.push(Summary {
             folder: p.display().to_string(),
             created_utc: r.created_utc.clone(),
@@ -898,7 +954,7 @@ pub fn list(dir: &Path, now: u64) -> Vec<Summary> {
             status: r.status.clone(),
             issue_url: r.issue_url.clone(),
             screenshot: is_real_file(&p.join(SCREENSHOT_FILE)),
-            zip: is_real_file(&zip).then(|| zip.display().to_string()),
+            zip: zip.map(|z| z.display().to_string()),
             bytes: dir_size(&p),
             id: r.id,
         });
@@ -1217,9 +1273,9 @@ pub struct Exported {
     pub seq: u64,
 }
 
-/// Write `<id>.feedback.zip` (export.json and, if included, the PNG) into
-/// the report's folder. An earlier export of it is removed first, so a
-/// failed export leaves no zip of other choices behind (one with a
+/// Write `export-<n>/<id>.feedback.zip` (export.json and, if included, the
+/// PNG) into the report's folder. Earlier exports of it are removed first,
+/// so a failed export leaves no zip of other choices behind (one with a
 /// screenshot since left out): feedback_reveal then shows report.json.
 #[cfg(test)]
 pub fn export(dir: &Path, id: &str, inc: Include, now: u64) -> Result<Exported, String> {
@@ -1228,9 +1284,12 @@ pub fn export(dir: &Path, id: &str, inc: Include, now: u64) -> Result<Exported, 
 
 /// export() in request order: @p seq numbers the request (the renderer's,
 /// increasing; None: newer than every request so far). Under the store's
-/// lock, a request older than the one whose export the zip holds is refused
-/// (STALE_EXPORT) and writes nothing, whatever order the requests reach the
-/// lock in: the zip is always that of the newest request that ran.
+/// lock, a request not newer than the one whose export the zip holds is
+/// refused (STALE_EXPORT) and writes nothing, whatever order the requests
+/// reach the lock in: the zip is always that of the newest request that
+/// ran. Each accepted request writes a new file, `export-<seq>/<id>.feedback.zip`,
+/// created once and never written again, so a path revealed for one request
+/// names that request's bytes or nothing (codex6 review n2).
 pub fn export_ordered(dir: &Path, id: &str, inc: Include, now: u64, seq: Option<u64>) -> Result<Exported, String> {
     let _g = lock();
     let p = resolve(dir, id)?;
@@ -1238,7 +1297,8 @@ pub fn export_ordered(dir: &Path, id: &str, inc: Include, now: u64, seq: Option<
         let mut m = EXPORT_SEQ.lock().unwrap_or_else(|e| e.into_inner());
         let last = m.get(id).copied().unwrap_or(0);
         let seq = seq.unwrap_or(last + 1);
-        if seq < last {
+        // The same number twice would write that request's file again.
+        if seq < last || (seq == last && m.contains_key(id)) {
             return Err(STALE_EXPORT.to_string());
         }
         // Claimed before the old zip goes: a failed build leaves none, and
@@ -1246,12 +1306,7 @@ pub fn export_ordered(dir: &Path, id: &str, inc: Include, now: u64, seq: Option<
         m.insert(id.to_string(), seq);
         seq
     };
-    let old = p.join(zip_name(id));
-    match std::fs::remove_file(&old) {
-        Ok(()) => {}
-        Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
-        Err(e) => return Err(format!("cannot remove the earlier export {}: {e}", old.display())),
-    }
+    remove_exports(&p, id)?;
     let r = read_report(&p)?;
     let shot = p.join(SCREENSHOT_FILE);
     let png = if is_real_file(&shot) { Some(std::fs::read(&shot).map_err(|e| e.to_string())?) } else { None };
@@ -1266,28 +1321,35 @@ pub fn export_ordered(dir: &Path, id: &str, inc: Include, now: u64, seq: Option<
         }
         _ => None,
     };
-    let zip = p.join(zip_name(&r.id));
+    // A folder of its own, made here (create_dir fails on one that exists).
+    let out = export_dir(&p, seq);
+    std::fs::create_dir(&out).map_err(|e| format!("cannot make {}: {e}", out.display()))?;
+    let zip = out.join(zip_name(&r.id));
     write_atomic(&zip, &zip_stored(&files, now)).map_err(|e| format!("cannot write {}: {e}", zip.display()))?;
     Ok(Exported { zip: zip.display().to_string(), json, image, seq })
 }
 
 /// What feedback_reveal shows for report @p id: with @p seq (the request
-/// the renderer accepted), its zip, and only while the zip is still that
-/// request's (no other export ran since); without, the zip if there is one,
-/// else report.json (the reports list).
+/// the renderer accepted), the file that request's export wrote
+/// (`export-<seq>/<id>.feedback.zip`), and only while it is the newest
+/// export (no other ran since); without, the newest export's zip if there
+/// is one, else report.json (the reports list). The path names one export:
+/// an export that runs after this check removes the file, it never puts
+/// other bytes under that name, so the file manager shows that export or
+/// nothing.
 pub fn reveal_target(dir: &Path, id: &str, seq: Option<u64>) -> Result<PathBuf, String> {
     let _g = lock();
     let p = resolve(dir, id)?;
-    let zip = p.join(zip_name(id));
     match seq {
         Some(s) => {
             let held = EXPORT_SEQ.lock().unwrap_or_else(|e| e.into_inner()).get(id).copied();
-            if held != Some(s) || !is_real_file(&zip) {
+            let zip = export_dir(&p, s).join(zip_name(id));
+            if held != Some(s) || !is_real_dir(&export_dir(&p, s)) || !is_real_file(&zip) {
                 return Err("the export shown is no longer the zip in the report's folder; change a choice to build it again".into());
             }
             Ok(zip)
         }
-        None => Ok(if is_real_file(&zip) { zip } else { p.join(REPORT_FILE) }),
+        None => Ok(current_zip(&p, id).unwrap_or_else(|| p.join(REPORT_FILE))),
     }
 }
 
@@ -1671,6 +1733,9 @@ pub(crate) mod tests {
         assert!(failed.is_err(), "{failed:?}");
         // No zip with the screenshot is left for feedback_reveal to show.
         assert!(!folder.join(zip_name(&s.id)).exists());
+        assert_eq!(current_zip(&folder, &s.id), None);
+        assert!(exports(&folder).is_empty());
+        assert_eq!(reveal_target(&d, &s.id, None).unwrap(), folder.join(REPORT_FILE));
         let _ = std::fs::remove_dir_all(&d);
     }
 
@@ -1727,6 +1792,62 @@ pub(crate) mod tests {
         assert_eq!(best, 39);
         let z = unzip(&std::fs::read(reveal_target(&d, &s.id, Some(39)).unwrap()).unwrap());
         assert!(!z.iter().any(|f| f.0 == SCREENSHOT_FILE), "39 unticked the screenshot");
+        let _ = std::fs::remove_dir_all(&d);
+    }
+
+    // Codex6 review n2: Open issue draft checks the request under the lock,
+    // then hands the path to the file manager; a later export (a checkbox
+    // changed meanwhile) used to rewrite that same path before the file
+    // manager resolved it or the user dragged it into GitHub. Each accepted
+    // export is a file of its own now: the path authorized for request 1
+    // (screenshot left out) never holds the bytes of request 2 (screenshot
+    // in), and the newer export removes it rather than rewriting it.
+    #[test]
+    fn a_revealed_export_is_never_replaced_by_a_later_one() {
+        let d = tmp("export-immutable");
+        let s = save(&d, draft(), Some(&png(40, 20)), NOW).unwrap();
+        let folder = resolve(&d, &s.id).unwrap();
+        let shot = Include { screenshot: true, diagnostics: true, log: false };
+        let none = Include { screenshot: false, diagnostics: true, log: false };
+        let first = export_ordered(&d, &s.id, none, NOW, Some(1)).unwrap();
+        // Authorized: the path the file manager is handed for request 1.
+        let authorized = reveal_target(&d, &s.id, Some(first.seq)).unwrap();
+        assert_eq!(authorized.display().to_string(), first.zip);
+        assert_eq!(authorized.file_name().unwrap().to_string_lossy(), zip_name(&s.id));
+        assert!(authorized.starts_with(&folder), "{}", authorized.display());
+        let bytes1 = std::fs::read(&authorized).unwrap();
+        // Before the handoff resolves it, request 2 includes the screenshot.
+        let second = export_ordered(&d, &s.id, shot, NOW, Some(2)).unwrap();
+        assert_ne!(second.zip, first.zip, "two exports share one path");
+        assert!(unzip(&std::fs::read(&second.zip).unwrap()).iter().any(|f| f.0 == SCREENSHOT_FILE));
+        // The authorized path holds request 1's bytes or nothing: never the
+        // screenshot of request 2.
+        match std::fs::read(&authorized) {
+            Ok(b) => {
+                assert_eq!(b, bytes1);
+                assert!(!unzip(&b).iter().any(|f| f.0 == SCREENSHOT_FILE));
+            }
+            Err(e) => assert_eq!(e.kind(), std::io::ErrorKind::NotFound),
+        }
+        assert!(!authorized.exists(), "the older export is removed, so no stale zip is left to drag");
+        // Request 1 no longer reveals; request 2 reveals its own file, and
+        // the reports list shows that one too.
+        assert!(reveal_target(&d, &s.id, Some(1)).is_err());
+        assert_eq!(reveal_target(&d, &s.id, Some(2)).unwrap().display().to_string(), second.zip);
+        assert_eq!(reveal_target(&d, &s.id, None).unwrap().display().to_string(), second.zip);
+        assert_eq!(list(&d, NOW)[0].zip.as_deref(), Some(second.zip.as_str()));
+        // The same request number again would write request 2's file again: refused.
+        assert_eq!(export_ordered(&d, &s.id, none, NOW, Some(2)).err().as_deref(), Some(STALE_EXPORT));
+        assert!(unzip(&std::fs::read(&second.zip).unwrap()).iter().any(|f| f.0 == SCREENSHOT_FILE));
+        // A zip an earlier app wrote beside report.json is shown until an
+        // export runs, which removes it.
+        let s2 = save(&d, draft(), Some(&png(40, 20)), NOW + 1).unwrap();
+        let f2 = resolve(&d, &s2.id).unwrap();
+        std::fs::write(f2.join(zip_name(&s2.id)), b"legacy").unwrap();
+        assert_eq!(reveal_target(&d, &s2.id, None).unwrap(), f2.join(zip_name(&s2.id)));
+        let e2 = export_ordered(&d, &s2.id, none, NOW, None).unwrap();
+        assert!(!f2.join(zip_name(&s2.id)).exists());
+        assert_eq!(reveal_target(&d, &s2.id, None).unwrap().display().to_string(), e2.zip);
         let _ = std::fs::remove_dir_all(&d);
     }
 

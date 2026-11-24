@@ -44,6 +44,16 @@ so an interrupted or failed fetch is never staged.
 
     fetch_taxonomy_index.py --check <folder>      exit 0 when <folder> holds a
                                                   complete fetch of the manifest
+
+A linked file (--from <folder|file> without --copy) is the file it links to,
+which can change after the fetch: every reader (this script's --check, CMake,
+the debug desktop app) hashes a linked file again before it uses it, and a
+source whose file resolves into the folder being replaced is copied, not
+linked (the link would dangle, or point at itself, once the folder is
+replaced). The folder replaced must be one this script could have written:
+a real folder holding anything but the fetch's own files is the user's and
+is refused, never deleted. If the new folder cannot be put in place, or is
+not a complete fetch once there, the old one is put back.
 """
 import argparse
 import hashlib
@@ -131,7 +141,9 @@ def fetched_complete(folder, mpath):
     """@p folder holds a complete fetch of the manifest @p mpath: its marker
     names that very manifest (sha256), lists each of the manifest's files with
     its pinned sha256, and each is a regular file of that size. The sha256 of
-    the files themselves is checked by the fetch, before the marker is written."""
+    a copied file is checked by the fetch, before the marker is written; a
+    linked file (a symlink to the --from source) is hashed again here, since
+    its target can change after the fetch at the same size (codex6 review n3)."""
     folder, mpath = Path(folder), Path(mpath)
     mk = read_marker(folder)
     if mk is None:
@@ -148,7 +160,41 @@ def fetched_complete(folder, mpath):
         p = folder / n
         if not p.is_file() or p.stat().st_size != listed[n][0]:
             return False
+        if p.is_symlink() and sha256(p) != w["sha256"]:
+            return False
     return True
+
+
+# The entries a fetched folder holds: what a fetch writes there, and the
+# temporary marker of a marker update.
+def own_entry(name, files):
+    return name in files or name in ("MANIFEST.json", "species_call.tsv", MARKER) or name.startswith(".marker-")
+
+
+def refuse_unowned(folder, files):
+    """Refuses to replace @p folder unless it is a link (only the link goes),
+    absent, or a real folder holding nothing but a fetch's own entries
+    (own_entry): anything else there is the user's and is never deleted."""
+    if folder.is_symlink() or not folder.exists():
+        return
+    if not folder.is_dir():
+        raise SystemExit("%s is a file, not a fetched folder; refused (move it away)" % folder)
+    extra = sorted(e.name for e in os.scandir(folder) if not own_entry(e.name, files))
+    if extra:
+        raise SystemExit("%s holds files that are not a fetch's (%s); refused, nothing deleted (move them away, "
+                         "or give --dest another folder)" % (folder, ", ".join(extra[:5]) + (" ..." if len(extra) > 5 else "")))
+
+
+def inside(path, folder):
+    """Whether @p path resolves into @p folder (as it is, or resolved)."""
+    t = os.path.realpath(path)
+    for f in {os.path.realpath(folder), os.path.abspath(folder)}:
+        try:
+            if os.path.commonpath([t, f]) == f:
+                return True
+        except ValueError:  # another drive
+            pass
+    return False
 
 
 def safe_extract(tarball, into, files):
@@ -178,15 +224,34 @@ def safe_extract(tarball, into, files):
         raise SystemExit("%s: no %s in the tarball; not used" % (tarball, ", ".join(missing)))
 
 
-def publish(tmp_folder, folder):
-    """Put the complete @p tmp_folder at @p folder: the old one (a folder or a
-    link) is moved aside first and removed after, so @p folder is either the
-    old, the new or absent, never a partial copy."""
+def publish(tmp_folder, folder, files, verify=None):
+    """Put the complete @p tmp_folder at @p folder: the old one (a folder of a
+    fetch, or a link; refuse_unowned) is moved aside first and removed after,
+    so @p folder is either the old, the new or absent, never a partial copy.
+    When the rename fails, or @p verify (called on @p folder once the new
+    one is there) is false, the new one is removed and the old one put back,
+    and the publication fails."""
+    refuse_unowned(folder, files)
     old = None
     if folder.is_symlink() or folder.exists():
         old = Path(tempfile.mkdtemp(prefix=".old-", dir=folder.parent))
         os.rename(folder, old / "x")
-    os.rename(tmp_folder, folder)
+    placed = False
+    try:
+        os.rename(tmp_folder, folder)
+        placed = True
+        if verify is not None and not verify(folder):
+            raise SystemExit("%s is not a complete fetch once in place; the earlier folder is put back" % folder)
+    except BaseException:
+        if placed:
+            if folder.is_symlink():
+                folder.unlink()
+            else:
+                shutil.rmtree(folder, ignore_errors=True)
+        if old is not None:
+            os.rename(old / "x", folder)
+            shutil.rmtree(old, ignore_errors=True)
+        raise
     if old is not None:
         x = old / "x"
         if x.is_symlink() or x.is_file():
@@ -228,7 +293,8 @@ def put(src, dst, copy):
         with open(src, "rb") as fin, os.fdopen(fd, "wb") as fout:
             shutil.copyfileobj(fin, fout, 1 << 20)
     else:
-        os.symlink(os.path.abspath(src), dst)
+        # To the file itself: a chain of links could end in the folder replaced.
+        os.symlink(os.path.realpath(src), dst)
 
 
 def main(argv):
@@ -278,6 +344,8 @@ def main(argv):
     dest.mkdir(parents=True, exist_ok=True)
     if dest.is_symlink() or not dest.is_dir():
         raise SystemExit("%s is not a folder; refused" % dest)
+    # Before anything is fetched: a folder of the user's is never replaced.
+    refuse_unowned(folder, files)
     # Everything is assembled in a private folder (mode 0700, a new name)
     # beside the destination, on the same file system, then renamed into place.
     work = Path(tempfile.mkdtemp(prefix=".fetch-", dir=dest))
@@ -288,13 +356,6 @@ def main(argv):
             # An unpacked copy: each file from it when it matches, else (the
             # dumps) from data/taxonomy of these sources when that matches.
             s = Path(a.source)
-            # A link into the folder being replaced would dangle: copied.
-            try:
-                inside = folder.exists() and \
-                    os.path.commonpath([os.path.realpath(s), os.path.realpath(folder)]) == os.path.realpath(folder)
-            except ValueError:  # another drive
-                inside = False
-            copy = a.copy or inside
             for n, w in files.items():
                 cands = [s / n] if s.is_dir() else ([s] if n == "tax_k7.taxdb" else [])
                 cands.append(Path(a.src) / "data" / "taxonomy" / n)
@@ -302,8 +363,13 @@ def main(argv):
                 if hit is None:
                     raise SystemExit("%s: no %s with the sha256 %s pins (%s) in %s or data/taxonomy; refused"
                                      % (a.source, n, mpath.name, w["sha256"][:12], s))
+                # A file that resolves into the folder being replaced (also
+                # through a link in a source folder elsewhere) is copied: a
+                # link to it would dangle, or point at itself, once the
+                # folder is replaced (codex6 review n3).
+                copy = a.copy or ((folder.is_symlink() or folder.exists()) and inside(hit, folder))
                 put(hit, tmp_folder / n, copy)
-                print("%s: %s from %s" % (folder, n, hit), file=sys.stderr)
+                print("%s: %s %s %s" % (folder, n, "copied from" if copy else "linked to", hit), file=sys.stderr)
             if s.is_dir() and (s / "MANIFEST.json").is_file() and not (s / "MANIFEST.json").is_symlink():
                 put(s / "MANIFEST.json", tmp_folder / "MANIFEST.json", True)
         else:
@@ -334,7 +400,7 @@ def main(argv):
             put(sc, tmp_folder / "species_call.tsv", True)
         # Last: the marker, written only once everything above is checked.
         (tmp_folder / MARKER).write_text(marker_text(mpath, release, files, tmp_folder), encoding="utf-8")
-        publish(tmp_folder, folder)
+        publish(tmp_folder, folder, files, verify=lambda f: fetched_complete(f, mpath))
     finally:
         shutil.rmtree(work, ignore_errors=True)
     print(folder)

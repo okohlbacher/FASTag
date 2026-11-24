@@ -158,8 +158,8 @@ describe('Triage overview', () => {
     mock.reportFiles[PATH] = census(20, (i) => ({ max_len: 5, res_cover: 7, res_cover_exact: i < 15 ? 0 : 1 }), ['max_len', 'res_cover', 'res_cover_exact'])
     render(<ReportTable kind="triage" path={PATH} params={{ max_tags: 50 }} />)
     ov = await screen.findByRole('region', { name: 'Identifiability overview' })
-    expect(ov.textContent).toMatch(/Approximate: orientation unresolved \(folded, lower bound\) for 15 of 20 tagged spectra/)
-    expect(ov.textContent).toMatch(/\(res_cover\) \/ estimated length; approximate: orientation unresolved \(folded, lower bound\)\./)
+    expect(ov.textContent).toMatch(/Approximate: a lower bound \(orientation unresolved, or a gap in a tag\) for 15 of 20 tagged spectra/)
+    expect(ov.textContent).toMatch(/\(res_cover\) \/ estimated length; approximate: a lower bound \(orientation unresolved, or a gap in a tag\)\./)
   })
 
   it('collapses, and stays collapsed when the tab is shown again', async () => {

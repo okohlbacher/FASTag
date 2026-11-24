@@ -325,7 +325,10 @@ namespace FASTag::Alkylation
     /// "placement" or "tags+placement" (both agree, or disagree).
     std::string source = "-";
     std::uint64_t top = 0, binned = 0;  ///< spectra of the leading class; spectra binned to any class
-    std::uint64_t voted = 0;     ///< binned + conflict, the share's denominator
+    std::uint64_t voted = 0;     ///< binned + conflict + abstained, the share's denominator
+    /// Tag call only (AlkylationTags::callTags): votes that abstained for want
+    /// of evidence against an alias (Tally::alias_unconfirmed); 0 otherwise.
+    std::uint64_t abstained = 0;
     double share = 0.0;          ///< top / voted (0 when nothing is voted)
   };
   /**

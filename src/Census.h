@@ -54,7 +54,9 @@ namespace FASTag::Census
   /// summary row run/max_tags.
   /// 3: res_cover places b and c reads by their orientation (addResidueSpans),
   /// and the column res_cover_exact after res_cover says whether every
-  /// orientation was known (1) or res_cover is the folded lower bound (0).
+  /// orientation was known and every residue placed on its own (1) or
+  /// res_cover is a lower bound (0: a tag folded, or a gap's residues left
+  /// out).
   inline constexpr int TABLE_VERSION = 3;
 
   /**
@@ -372,8 +374,15 @@ namespace FASTag::Census
     of residue mass from the peptide's N-terminus, a position the precursor
     mass of the tag's hypothesis gives. Walking from that end, each path step
     (the m/z difference of two path peaks times the fragment charge) holds
-    step_res residues, a gap's two residues sharing its mass equally. Each
-    residue is a [start, end] in residue mass from the N-terminus.
+    step_res residues. Each residue a step of one residue resolves is a
+    [start, end] in residue mass from the N-terminus. A gap (a step of two or
+    more residues) does not say where its residues meet: splitting its mass
+    evenly made up a boundary that another tag's resolved residues straddle,
+    and the count then exceeded the residues (an ungapped GWKA and an
+    overlapping S(GW)K gave six for five). Its residues add no span, nor do
+    those of a tag whose path does not describe its residues; the result is
+    false then, res_cover is a lower bound (res_cover_exact 0), and the
+    longest tag is the other one (resCoverLowerBound).
 
     A b or c read placed so lands at its mirror image about @p axis: residues
     i..j of the peptide come out at [axis - P(j), axis - P(i-1)], P the
@@ -404,17 +413,18 @@ namespace FASTag::Census
       (empty: one residue per step when that gives @p n_res).
     @param[in] charge Fragment charge of the tag.
     @param[in] n_res Tag length (residues).
-    @param[in] res_mass Summed residue mass of the tag (Da); used, split
-      evenly over @p n_res, when the path does not describe the residues.
+    @param[in] res_mass Summed residue mass of the tag (Da); unused (a tag
+      whose path does not describe its residues adds no span).
     @param[in] orient The tag's orientation (Forward: the 1.15 placement).
     @param[in] axis The mirror axis (Da); unused for Forward.
+    @return Whether every residue of the tag got a span of its own.
   */
-  inline void addResidueSpans(std::vector<std::pair<double, double>>& spans, double nterm_mass,
+  inline bool addResidueSpans(std::vector<std::pair<double, double>>& spans, double nterm_mass,
                               const std::vector<double>& path_mz, const std::vector<std::uint8_t>& step_res,
                               int charge, std::size_t n_res, double res_mass,
                               Orientation orient = Orientation::Forward, double axis = 0.0)
   {
-    if (n_res == 0) return;
+    if (n_res == 0) return true;
     const std::size_t first = spans.size();
     const std::size_t steps = path_mz.size() > 1 ? path_mz.size() - 1 : 0;
     std::size_t total = 0;
@@ -422,24 +432,21 @@ namespace FASTag::Census
       for (const std::uint8_t k : step_res) total += k;
     const bool by_steps = steps > 0 && charge > 0 &&
         ((step_res.size() == steps && total == n_res) || (step_res.empty() && steps == n_res));
-    if (!by_steps)
-    {
-      const double w = res_mass / static_cast<double>(n_res);
-      for (std::size_t i = 0; i < n_res; ++i)
-        spans.emplace_back(nterm_mass + w * static_cast<double>(i), nterm_mass + w * static_cast<double>(i + 1));
-    }
-    else
+    (void)res_mass;  // the residues of a tag without a path have no boundaries to place
+    bool resolved = by_steps;
+    if (by_steps)
     {
       const double z = static_cast<double>(charge);
       const double high = path_mz.back();
       for (std::size_t k = steps; k-- > 0;)  // from the high-m/z (N-terminal) end
       {
-        const double a = nterm_mass + (high - path_mz[k + 1]) * z;
-        const double b = nterm_mass + (high - path_mz[k]) * z;
         const std::size_t r = step_res.empty() ? 1 : step_res[k];
-        for (std::size_t i = 0; i < r; ++i)
-          spans.emplace_back(a + (b - a) * static_cast<double>(i) / static_cast<double>(r),
-                             a + (b - a) * static_cast<double>(i + 1) / static_cast<double>(r));
+        if (r != 1)
+        {
+          resolved = false;  // a gap: where its residues meet is not known
+          continue;
+        }
+        spans.emplace_back(nterm_mass + (high - path_mz[k + 1]) * z, nterm_mass + (high - path_mz[k]) * z);
       }
     }
     if (orient == Orientation::Reversed)
@@ -447,6 +454,7 @@ namespace FASTag::Census
         spans[i] = {axis - spans[i].second, axis - spans[i].first};
     else if (orient == Orientation::Unresolved)
       foldResidueSpans(spans, first, spans.size(), axis);
+    return resolved;
   }
 
   /**
@@ -481,8 +489,8 @@ namespace FASTag::Census
 
     Both are lower bounds on the residues the tags cover: folded spans
     (foldResidueSpans) count residues that mirror each other about the centre
-    once, which can fall below one tag's own length; @p max_len is that tag's
-    length.
+    once, and a gap's residues add no span (addResidueSpans), either of which
+    can fall below one tag's own length; @p max_len is that tag's length.
 
     @param[in,out] spans Residue intervals; sorted in place.
     @param[in] max_len The longest reported tag (residues).
@@ -519,7 +527,7 @@ namespace FASTag::Census
     double tag_cover = 0;       ///< tag_cover of the reported rows
     std::size_t max_len = 0;    ///< the longest reported tag (residues; census 2)
     std::size_t res_cover = 0;  ///< residues the reported tags cover (residueCover; census 2)
-    bool res_cover_exact = true;  ///< every reported tag's orientation was known (census 3)
+    bool res_cover_exact = true;  ///< every reported tag's orientation was known and every residue placed on its own (census 3)
     /// -census_score (1.16 item 4): the best of ALL tags of the selected
     /// hypothesis, before any database filter (-fasta), and their tag_cover.
     bool has_pre = false;       ///< pre_best and pre_tag_cover are valid

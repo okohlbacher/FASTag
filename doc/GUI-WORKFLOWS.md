@@ -77,7 +77,7 @@ grid; see the Decision at the end of this section.
 | W4 | `species true`, `species_out`, `extension 2` (validated in the paper: seed 3 + 2 x 2 = k 7) |
 | W5 | `shortlist_out`, `fasta_out`, `search_config_out`, `extension 3`, plus the shortlist recipe `shortlist_gapped true`, `recon_min_length 6`, `shortlist_max_evalue 10`, `recon_missed_cleavages 2` (doc/SHORTLIST.md). The recipe is **not validated**: with MSFragger and the tryptic shortlist it passed its second held-out test and failed the third. From 1.15.4 the CLI applies it by default only under `-search_engine msfragger` with `-shortlist_protease trypsin`; the GUI sets it for every engine and protease as its default recipe, and the workflow help says so. |
 | W6 | `census true`, `census_score true`, `census_sorted_out` |
-| W7 | `digest_out`, `label_out`, `alkylation_out`, `glyco true`, `species true`, `extension 2`; all spectra (no `subsample_fraction`). From 1.16 the alkylation report is on and every spectrum is read: the report needs no database (its call is read off the tags), and on all spectra at extension 2 enough cysteines vote (PXD000001: methylthio, 52 of 59 votes), where 10% of the spectra (the earlier default) gave 8 votes and no call. Before 1.16 it placed on the shipped human proteome, which needs tags of 8+ residues. |
+| W7 | `digest_out`, `label_out`, `alkylation_out`, `glyco true`, `species true`, `extension 2`; all spectra (no `subsample_fraction`). From 1.16 the alkylation report is on and every spectrum is read: the report needs no database (its call is read off the tags), and on all spectra at extension 2 enough cysteines vote (PXD000001: methylthio, 52 of 69 votes), where 10% of the spectra (the earlier default) gave 8 votes and no call. Before 1.16 it placed on the shipped human proteome, which needs tags of 8+ residues. |
 
 ## 2. Parameters per workflow
 
@@ -258,8 +258,8 @@ Rules:
     half, the -max_tags cap); and the share of the peptide the tags cover by
     estimated length (res_cover and max_len of census 2 and 3, else
     best_len and the tag_cover m/z span, marked approximate; a census 3
-    res_cover with res_cover_exact 0 is marked approximate: orientation
-    unresolved, folded, lower bound; a census 2 res_cover as placed by y
+    res_cover with res_cover_exact 0 is marked approximate: a lower bound,
+    orientation unresolved (folded) or a gap's residues left out; a census 2 res_cover as placed by y
     reads only). The -max_tags cap is per seed length; the number of
     lengths is read from the summary's run/tag_length first.
   - Until a view exists, the file opens in the generic table.

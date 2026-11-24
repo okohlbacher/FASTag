@@ -3,7 +3,7 @@
 // evidence, and nothing is a call the CLI did not make (Q2).
 
 import { describe, expect, it } from 'vitest'
-import { parseReport } from '../digestReport'
+import { alkylationCall, parseReport } from '../digestReport'
 import ALKYLATION_TAGS from '../fixtures/alkylation-tags.tsv?raw'
 import { CLI_CASES, logLines, type CliCase } from '../testing/cliFixtures'
 import { speciesFromTsv } from '../testing/speciesTsv'
@@ -439,6 +439,27 @@ describe('Overview model: the alkylation report', () => {
     expect(c).toMatchObject({ value: 'Carbamidomethyl', tone: 'call' })
     expect(c.note).toMatch(/^75% of 24 tag votes \(20 for a form, 4 conflicted\), no database; experimental$/)
     expect(c.note).not.toMatch(/of 20/)
+  })
+
+  // Codex6 review n1: from format 4 the share's denominator holds the tag
+  // votes that abstained (alkt_form alias_unconfirmed); PXD000001 at
+  // Extension 2: Methylthio 52 of 69, 57 for a form, 1 conflicted, 11 abstained.
+  it('a format 4 call names the abstained votes in its denominator, not as conflicts', () => {
+    const text = tagReport(
+      'call',
+      '-',
+      'alkt_form\talias_unconfirmed\t11\t69\t-\nalkylation_call\treagent\tMethylthio\t52\t-\nalkylation_call\tmass\t45.987721\t-\t-\nalkylation_call\tshare\t0.7536231884057971\t69\t-\nalkylation_call\tvoted\t69\t57\t-'
+    )
+      .replace('alk_run\tformat\t2\t-\t-', 'alk_run\tformat\t4\t-\t-')
+      .replace('alkylation_call\tstatus\tcall\t8\t-', 'alkylation_call\tstatus\tcall\t57\t-')
+    expect(alkylationCall(parseReport(text, '/d/a.alkylation.tsv')).abstained).toBe(11)
+    const c = tile(of(text), 'alkylation')
+    expect(c).toMatchObject({ value: 'Methylthio', tone: 'call' })
+    expect(c.note).toMatch(/^75\.36% of 69 tag votes \(57 for a form, 1 conflicted, 11 abstained\), no database; experimental$/)
+    // Format 3 has no abstentions: the same rows read as 12 conflicts.
+    const f3 = text.replace('alk_run\tformat\t4\t-\t-', 'alk_run\tformat\t3\t-\t-')
+    expect(alkylationCall(parseReport(f3, '/d/a.alkylation.tsv')).abstained).toBe(0)
+    expect(tile(of(f3), 'alkylation').note).toMatch(/\(57 for a form, 12 conflicted\)/)
   })
 
   // Review n4: neither component calls on a shipped proteome with too short

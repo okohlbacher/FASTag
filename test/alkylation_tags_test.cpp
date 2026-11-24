@@ -52,11 +52,24 @@ static std::string withForm(const std::string& pep, const std::string& form)
   return pep.substr(0, c) + "C(" + form + ")" + pep.substr(c + 1);
 }
 
+/// Declares the scan window an instrument acquiring from @p lo m/z writes
+/// (mzML scan window lower/upper limit), up to 2000 m/z or the top peak.
+/// Codex6 review n1: an ion the alias reading gives (76.022, the unmodified
+/// C immonium) is absent as evidence only where it could have been seen.
+static void acquiredFrom(OpenMS::MSSpectrum& s, double lo)
+{
+  OpenMS::ScanWindow w;
+  w.begin = lo;
+  w.end = std::max(2000.0, s.empty() ? 0.0 : s.back().getMZ() + 1.0);
+  s.getInstrumentSettings().setScanWindows({w});
+}
+
 /// Adds the C immonium ion of @p form (AlkylationTags::immoniumMz) to a
 /// synthetic spectrum, at 0.3 (fragments 0.5-1, noise 0.02-0.22), as HCD
 /// spectra of a C peptide often carry it (49-61% of CAM peptide spectra on
-/// PXD020401 and PXD003531). Release-gate review n1: a vote whose C edge an
-/// alias reads as well needs it.
+/// PXD020401 and PXD003531), and declares it acquired from 50 m/z
+/// (acquiredFrom()). Release-gate review n1: a vote whose C edge an alias
+/// reads as well needs it.
 static void addImmonium(OpenMS::MSSpectrum& s, const std::string& form)
 {
   for (const auto& f : FASTag::Alkylation::forms())
@@ -64,6 +77,7 @@ static void addImmonium(OpenMS::MSSpectrum& s, const std::string& form)
     {
       s.emplace_back(FASTag::AlkylationTags::immoniumMz(f), 0.3f);
       s.sortByPosition();
+      acquiredFrom(s, 50.0);
       return;
     }
 }
@@ -115,7 +129,8 @@ static void tagChecked(AT::Tally& t, const OpenMS::MSSpectrum& spec, double prec
                        const FASTag::Tables& tabs, const AT::VoteContext& ctx, AT::Tally* raw = nullptr)
 {
   const OpenMS::MSSpectrum prep = FASTag::preparedPeaks(spec, prec_mz, charge, sp);
-  const AT::SpectrumPeaks pk{&prep, (prec_mz - OpenMS::Constants::PROTON_MASS_U) * charge};
+  // The spectrum as read, for the immonium check, as FASTag.cpp passes it.
+  const AT::SpectrumPeaks pk{&prep, (prec_mz - OpenMS::Constants::PROTON_MASS_U) * charge, &spec};
   AT::Vote v, w;
   for (const FASTag::Tag& tg : FASTag::tagSpectrum(spec, prec_mz, charge, sp, tabs))
   {
@@ -702,6 +717,7 @@ int main(int argc, char** argv)
         OpenMS::MSSpectrum pk;
         pk.emplace_back(AT::immoniumMz(cands[0]), 30.0f);  // the CAM immonium ion (review n1)
         for (double mz : tg.path_mz) pk.emplace_back(mz, 100.0f);
+        acquiredFrom(pk, 50.0);
         const AT::SpectrumPeaks sp{&pk, 4000.0};
         AT::Vote v, w;
         t.addTag(v, tg, ctx, sp);
@@ -972,6 +988,120 @@ int main(int argc, char** argv)
           "row alias_unconfirmed " + au + " of " + au_n);
   }
 
+  // ---- codex6 review n1, final-call control 1: the internal a-type ion of an
+  //      unmodified GC/CG (AC/CA) pair has the CAM (Propionamide) immonium m/z.
+  //      Both middle peaks lost in both series, that ion present and the
+  //      spectrum acquired from 100 m/z (76.022, the unmodified C immonium,
+  //      cannot be seen): the format 4 rule of f0211733 took the ion for the
+  //      reagent's immonium and counted the votes. Nothing tells the readings
+  //      apart, so they abstain and the final call is not the reagent.
+  {
+    FASTag::Param run;
+    run.tag_length = 3;
+    run.max_extension = 6;
+    run.mods = {{'C', cands[0].mass, "Carbamidomethyl", false}};
+    const FASTag::Param sp = AT::shadowParam(run, cands);
+    const FASTag::Tables tabs(sp);
+    const AT::VoteContext ctx = AT::voteContext(sp, cands, nullptr);
+    for (const char x : {'G', 'A'})
+    {
+      const int k = x == 'G' ? 0 : 1;
+      AT::Tally checked, raw;
+      unsigned seed = 1900;
+      int n = 0;
+      for (int rep = 0; rep < 2; ++rep)
+        for (const char* base : PEPTIDES)
+        {
+          std::string pep = base;
+          const std::size_t c = pep.find('C');
+          pep.insert((n % 2) == 0 ? c : c + 1, 1, x);
+          ComplementSynth::Spec s = ComplementSynth::make(pep, 2, false, 0, 0.0, 20, seed++);
+          const OpenMS::AASequence aa = OpenMS::AASequence::fromString(pep);
+          const double b_mid = aa.getPrefix(c + 1).getMonoWeight(OpenMS::Residue::BIon, 1);
+          const double y_mid = aa.getSuffix(aa.size() - c - 1).getMonoWeight(OpenMS::Residue::YIon, 1);
+          OpenMS::MSSpectrum kept;
+          for (const auto& pk : s.spec)
+            if (pk.getMZ() >= 100.0 && std::fabs(pk.getMZ() - b_mid) > 1e-6 && std::fabs(pk.getMZ() - y_mid) > 1e-6)
+              kept.push_back(pk);
+          // The pair's internal a-type ion: X + C - CO + H+, the reagent's immonium m/z.
+          const double internal_a = OpenMS::ResidueDB::getInstance()->getResidue(std::string(1, x))->getMonoWeight(
+                                        OpenMS::Residue::Internal) +
+                                    OpenMS::ResidueDB::getInstance()->getResidue("C")->getMonoWeight(OpenMS::Residue::Internal) -
+                                    (12.0 + 15.9949146196) + OpenMS::Constants::PROTON_MASS_U;
+          check(std::fabs(internal_a - AT::immoniumMz(cands[static_cast<std::size_t>(k)])) < 1e-4,
+                std::string(1, x) + "C internal a-ion " + std::to_string(internal_a) + " is the reagent immonium m/z");
+          kept.emplace_back(internal_a, 0.3f);
+          kept.sortByPosition();
+          acquiredFrom(kept, 100.0);
+          tagChecked(checked, kept, s.prec_mz, 2, sp, tabs, ctx, &raw);
+          ++n;
+        }
+      A::Settings st;
+      const A::Call cc = AT::callTags(checked, st, ctx);
+      const std::string fname = cands[static_cast<std::size_t>(k)].name;
+      std::cerr << "alias " << x << "C, both middle peaks lost, internal a-ion, from 100 m/z: checked " << fname << " "
+                << checked.votes[static_cast<std::size_t>(k)] << " alias_unconfirmed " << checked.alias_unconfirmed << " of "
+                << checked.spectra << " -> " << (cc.called ? A::className(cc.cls) : "no_call " + cc.reason) << "\n";
+      check(A::callAlkylation(raw.asAlkylationTally(cands), st).called, std::string(1, x) + "C internal a-ion: the unchecked vote calls (live)");
+      check(checked.alias_unconfirmed > 0, std::string(1, x) + "C internal a-ion: votes abstain");
+      check(checked.votes[static_cast<std::size_t>(k)] <= 2, std::string(1, x) + "C internal a-ion: at most 2 " + fname +
+                                                                  " votes survive (" +
+                                                                  std::to_string(checked.votes[static_cast<std::size_t>(k)]) + ")");
+      check(!(cc.called && cc.cls == cands[static_cast<std::size_t>(k)].cls),
+            std::string(1, x) + "C internal a-ion: the final call is not " + fname);
+    }
+  }
+
+  // ---- codex6 review n1, final-call control 2: abstentions are in the share.
+  //      55 CAM and 45 Methylthio candidate votes, 28 CAM ones abstaining
+  //      (alias_unconfirmed): 27 CAM and 45 Methylthio votes were a Methylthio
+  //      share of 0.625 over the 60% threshold; with the abstentions it is 0.45.
+  {
+    int cam = -1, mt = -1;
+    for (std::size_t g = 0; g < cands.size(); ++g)
+    {
+      if (cands[g].name == "Carbamidomethyl") cam = static_cast<int>(g);
+      if (cands[g].name == "Methylthio") mt = static_cast<int>(g);
+    }
+    check(cam >= 0 && mt >= 0, "Carbamidomethyl and Methylthio are candidates");
+    if (cam >= 0 && mt >= 0)
+    {
+      FASTag::Param p;
+      p.tol_ppm = true;
+      p.frag_tol = 10.0;
+      const AT::VoteContext ctx = AT::voteContext(AT::shadowParam(p, cands), cands, nullptr);
+      A::Settings st;
+      const auto tally = [&](std::uint64_t c, std::uint64_t m, std::uint64_t abst) {
+        AT::Tally t;
+        t.votes[static_cast<std::size_t>(cam)] = c;
+        t.votes[static_cast<std::size_t>(mt)] = m;
+        t.spectra = c + m;
+        t.alias_unconfirmed = abst;
+        return t;
+      };
+      const A::Call all = AT::callTags(tally(55, 45, 0), st, ctx);
+      check(!all.called, "55 CAM / 45 Methylthio: no call (" + all.reason + ")");
+      const A::Call abst = AT::callTags(tally(27, 45, 28), st, ctx);
+      check(!(abst.called && abst.cls == A::METHYLTHIO),
+            "27 CAM / 45 Methylthio / 28 CAM abstaining: not a Methylthio call (share " + std::to_string(abst.share) + ")");
+      check(!abst.called && abst.reason == "ambiguous" && std::fabs(abst.share - 0.45) < 1e-9 && abst.voted == 100,
+            "27 / 45 / 28 abstaining: ambiguous, share 0.45 of 100 (" + abst.reason + " " + std::to_string(abst.share) + " " +
+                std::to_string(abst.voted) + ")");
+      // The rule is live: without abstentions 27 / 45 is a Methylthio call.
+      const A::Call none = AT::callTags(tally(27, 45, 0), st, ctx);
+      check(none.called && none.cls == A::METHYLTHIO, "27 CAM / 45 Methylthio, none abstaining: Methylthio is called");
+      // The report says so.
+      std::string share_n, voted_d;
+      for (const auto& r : AT::rows(tally(27, 45, 28), abst, st, cands, AT::ReportInfo{}))
+      {
+        if (r.section == "alkylation_tags_call" && r.key == "share") share_n = r.n;
+        if (r.section == "alkylation_tags_call" && r.key == "voted") voted_d = r.description;
+      }
+      check(share_n == "100" && voted_d.find("28 abstained") != std::string::npos,
+            "the share's n is 100 and voted names the 28 abstentions (" + share_n + ", " + voted_d + ")");
+    }
+  }
+
   // ---- immoniumConfirms: the form's immonium, resolved from the alias's own
   {
     check(std::fabs(AT::immoniumMz(cands[0]) - 133.0430) < 1e-3, "CAM C immonium 133.043");
@@ -989,14 +1119,38 @@ int main(int argc, char** argv)
     check(cg && iso, "aliases C+G of CAM and C[Carbamidomethyl]+13C of Carboxymethyl listed");
     if (cg && iso)
     {
-      OpenMS::MSSpectrum with, without;
+      // Codex6 review n1: 133.0430 is also the internal a-type ion of
+      // unmodified GC/CG, so the CAM immonium tells C+G apart only with the
+      // unmodified C immonium (76.022) absent where it could have been seen.
+      OpenMS::MSSpectrum with, without, gc_ion, gc_c76, peaks_from_60;
       with.emplace_back(AT::immoniumMz(cands[0]), 10.0f);
       with.emplace_back(500.0, 100.0f);
+      acquiredFrom(with, 50.0);
       without.emplace_back(120.0, 10.0f);
       without.emplace_back(500.0, 100.0f);
-      const AT::SpectrumPeaks pw{&with, 1000.0}, po{&without, 1000.0};
-      check(AT::immoniumConfirms(0, *cg, cands, pw, p), "CAM immonium present: C+G confirmed as CAM");
+      acquiredFrom(without, 50.0);
+      // 133.043 alone, acquired from 100 m/z: 76.022 could not be seen.
+      gc_ion.emplace_back(AT::immoniumMz(cands[0]), 10.0f);
+      gc_ion.emplace_back(500.0, 100.0f);
+      acquiredFrom(gc_ion, 100.0);
+      // 133.043 with the unmodified C immonium beside it: the C+G reading's own ion.
+      gc_c76 = with;
+      gc_c76.emplace_back(AT::immoniumMz(cands[AT::UNMODIFIED]), 2.0f);
+      gc_c76.sortByPosition();
+      // No scan window: the peaks' range decides (a peak at 60 m/z puts 76.022 inside it).
+      peaks_from_60.emplace_back(60.0, 1.0f);
+      peaks_from_60.emplace_back(AT::immoniumMz(cands[0]), 10.0f);
+      peaks_from_60.emplace_back(500.0, 100.0f);
+      const AT::SpectrumPeaks pw{&with, 1000.0}, po{&without, 1000.0}, pg{&gc_ion, 1000.0}, p76{&gc_c76, 1000.0},
+          p60{&peaks_from_60, 1000.0};
+      check(AT::immoniumConfirms(0, *cg, cands, pw, p), "CAM immonium present, 76.022 seeable and absent: C+G confirmed as CAM");
       check(!AT::immoniumConfirms(0, *cg, cands, po, p), "no CAM immonium: not confirmed");
+      check(!AT::immoniumConfirms(0, *cg, cands, pg, p),
+            "133.043 (the GC internal a-ion too) with 76.022 outside the scan window: not confirmed");
+      check(!AT::immoniumConfirms(0, *cg, cands, p76, p), "133.043 with 76.022 present: not confirmed");
+      check(AT::immoniumConfirms(0, *cg, cands, p60, p), "no scan window, peaks from 60 m/z, no 76.022: confirmed");
+      peaks_from_60.erase(peaks_from_60.begin());
+      check(!AT::immoniumConfirms(0, *cg, cands, p60, p), "no scan window, peaks from 133 m/z: 76.022 unseeable, not confirmed");
       // raw takes precedence over the prepared peaks
       const AT::SpectrumPeaks pr{&without, 1000.0, &with};
       check(AT::immoniumConfirms(0, *cg, cands, pr, p), "the raw spectrum's immonium ion counts");

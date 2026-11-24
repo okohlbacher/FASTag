@@ -200,10 +200,13 @@ with `FASTAG_TAXONOMY_INDEX_AUTO` (on by default) each `cmake --build` looks in
 index and its dumps from there and the rest of `data/taxonomy` from the sources, as in a release;
 when the cache goes, the next build stages the dumps alone again. Already have a copy? `--from
 <FASTag-taxonomy-k7.tar.gz>`, `--from <a release's share-FASTag-taxonomy>` or `--from
-<tax_k7.taxdb>` checks it and links it into the cache (`--copy` copies). Or name it directly:
+<tax_k7.taxdb>` checks it and links it into the cache (`--copy` copies; a linked file is hashed
+again whenever a build or the debug app uses it, and one that resolves into the cache folder being
+replaced is copied). The fetch refuses to replace a `share-FASTag-taxonomy` that holds files other
+than a fetch's own. Or name it directly:
 `-DFASTAG_TAXONOMY_INDEX_DIR=<folder with tax_k7.taxdb, or the index file itself>` (a file is
-staged as `tax_k7.taxdb`, with the dumps of `data/taxonomy`; in copy mode, on Windows, it is copied
-again whenever another file is named, also one with an older time stamp). `-DFASTAG_TAXONOMY_INDEX_AUTO=OFF`
+staged as `tax_k7.taxdb`, with the dumps of `data/taxonomy`; in copy mode, on Windows, it is compared
+byte for byte with the staged copy on every build and copied again when it differs). `-DFASTAG_TAXONOMY_INDEX_AUTO=OFF`
 turns the lookup off. `tools/shipped_data.py list` prints every data file the CLI reads, and
 `test/shipped_data_test.py` (ctest `shipped_data_test`) checks that `data/`, `cmake --install`,
 the build tree, the release workflows and `gui/scripts/bundle-macos.sh` all have each one.

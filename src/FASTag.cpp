@@ -3935,7 +3935,8 @@ TOPPFASTag::ExitCodes TOPPFASTag::main_(int, const char**)
     // census 2: max_len and the residues of the reported tags (res_cover).
     static thread_local std::vector<std::pair<double, double>> cres;
     cres.clear();
-    bool cres_exact = true;  // census 3: every orientation known (res_cover_exact)
+    bool cres_exact = true;   // census 3: every orientation known and every residue placed (res_cover_exact)
+    bool cres_folded = false;  // census 3: some orientation unresolved, so every span is folded
     // census 3: each tag's span block [first, last) in cres and its mirror
     // axis (tags of different hypotheses have different axes), folded at
     // the end when any orientation is unresolved.
@@ -4104,14 +4105,20 @@ TOPPFASTag::ExitCodes TOPPFASTag::main_(int, const char**)
           std::reverse(rs.begin(), rs.end());
           if ((efwd ? entrap : filt).match(rs) == FASTag::FastaFilter::Hit::FORWARD) orient = Orient::Unresolved;
         }
-        if (orient == Orient::Unresolved) cres_exact = false;
+        if (orient == Orient::Unresolved)
+        {
+          cres_exact = false;
+          cres_folded = true;
+        }
         static const double WATER_MONO = EmpiricalFormula("H2O").getMonoWeight();
         const int zc = hy.charge > 0 ? hy.charge : 2;
         const double axis = hy.mz * zc - zc * Constants::PROTON_MASS_U - WATER_MONO
                           + FASTag::IonSeries::ionPair(t.ion_series).reversedOffset();
         const std::size_t cfirst = cres.size();
-        FASTag::Census::addResidueSpans(cres, t.nterm_mass, t.path_mz, t.step_res, t.charge, t.n_res, t.res_mass,
-                                        orient, axis);
+        // Codex6 review n7: a gap's residues add no span; res_cover is a lower bound then.
+        if (!FASTag::Census::addResidueSpans(cres, t.nterm_mass, t.path_mz, t.step_res, t.charge, t.n_res, t.res_mass,
+                                             orient, axis))
+          cres_exact = false;
         cres_blk.emplace_back(cfirst, cres.size(), axis);
       }
       if (!row_entrap) res.any_target = true;
@@ -4546,7 +4553,7 @@ TOPPFASTag::ExitCodes TOPPFASTag::main_(int, const char**)
         // an unresolved read of one stretch, and overlapping tags, count each
         // residue once; folding a folded span changes nothing. The longest
         // tag is the other lower bound.
-        if (!cres_exact)
+        if (cres_folded)
           for (const auto& [a, b, ax] : cres_blk) FASTag::Census::foldResidueSpans(cres, a, b, ax);
         crow.res_cover = FASTag::Census::resCoverLowerBound(cres, cmax_len);
         crow.res_cover_exact = cres_exact;

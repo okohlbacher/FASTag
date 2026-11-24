@@ -220,6 +220,8 @@ describe('alkylation (1.12 -alkylation_out)', () => {
       share: null,
       binned: 0,
       voted: 0,
+      // A format 1 report has no tag call, so nothing abstained.
+      abstained: 0,
       reason: 'few_cys_spectra',
       databaseSource: 'proteome',
       format: 1

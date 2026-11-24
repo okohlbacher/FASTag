@@ -27,10 +27,18 @@ no call; a FASTag without the shipped proteome stopped with exit code 6. Now:
 **Format 4 (release-gate review n1).** A vote whose C edge an alias reads as
 well (G + C for Carbamidomethyl, A + C for Propionamide, ...) and whose
 spectrum shows no trace of the alias (both middle peaks lost, in b and y, or
-removed by the peak selection) counts only when the spectrum holds the C
-immonium ion of its form (133.043 for Carbamidomethyl; below, "Independent
-evidence"). Without it the vote abstains: `alkt_form alias_unconfirmed` (new
-row), not in the share. The two readings have one mass, so in format 3 such a
+removed by the peak selection) counts only with evidence that tells the two
+readings apart (below, "Independent evidence"): the C immonium ion of its form
+(133.043 for Carbamidomethyl) and, for a two-residue alias, none of the
+immonium ions of its two residues (76.022 for unmodified C, 30.034 for G)
+wherever the spectrum could hold them, one of them at least inside its scan
+window. The CAM immonium ion alone is no such evidence: the internal a-type
+ion of an unmodified GC or CG has the same m/z, 133.0430. Without that
+evidence the vote abstains: `alkt_form alias_unconfirmed` (new row). The
+abstentions stay in the share's denominator (`share` n, `voted`), so a form
+whose votes abstain more often cannot lose the call to another by that alone:
+27 CAM and 45 Methylthio votes with 28 CAM ones abstaining are a Methylthio
+share of 0.45, not 0.625. The two readings have one mass, so in format 3 such a
 vote counted for the reagent with nothing to tell it from the unmodified
 reading.
 
@@ -167,7 +175,7 @@ The `alkylation_call` of format 1, renamed; format 3 adds `voted`.
 | `reagent` | the class: `Carbamidomethyl`, `Propionamide`, `Nethylmaleimide`, `Methylthio`, `Carboxymethyl` or `none` | `-` | spectra of the class (call) or `-` |
 | `mass` | the reagent's mass on C in Da; `-` for `none` | `-` | `-` |
 | `share` | class spectra / (binned + conflicted spectra) (format 3; up to format 2 / binned spectra) | the leading class's share, `-` when nothing is voted | binned + conflicted spectra (format 3) |
-| `voted` (format 3) | binned + conflicted spectra, the share's denominator | the same | binned spectra |
+| `voted` (format 3) | binned + conflicted spectra, the share's denominator; from format 4, when the call is the tags', also + the abstained votes (`alkt_form alias_unconfirmed`) | the same | binned spectra |
 | `reason` | `-` | `few_cys_spectra`, `ambiguous` or (shipped proteome only, 1.13) `tags_too_short` | `-` |
 
 Rule: the class with the most binned spectra is called when the binned spectra
@@ -209,10 +217,14 @@ A reader that only wants the call reads `alkylation_call status`, `reagent`,
 
 ## Stability
 
-- Format 4 (release-gate review n1) changed from format 3: the row
+- Format 4 (release-gate reviews n1) changed from format 3: the row
   `alkt_form alias_unconfirmed` after `unresolved`; votes it counts are no
-  longer in `spectra`, the form rows or the share. A format 3 reader that reads
-  rows by key still reads the call.
+  longer in `spectra` or the form rows, but they are in the tag call's share
+  denominator (`share` n and `voted` of `alkylation_tags_call`, and of
+  `alkylation_call` when its call is the tags'), and the `voted` description
+  names them. A format 3 reader that reads rows by key still reads the call;
+  one that takes `voted - binned` as the conflicts counts the abstentions as
+  conflicts.
 - Format 3 (review n1 to n3) changed from format 2: `share` is class /
   (binned + conflicted) and its `n` is that denominator; the row `voted`
   after `share` in `alkylation_placement_call` and `alkylation_call` (and
@@ -500,16 +512,43 @@ it apart; up to format 3 such a vote counted for the C form.
 **Independent evidence (format 4).** A C immonium ion (the C residue with its
 form, minus CO, protonated: 133.043 Carbamidomethyl, 147.059 Propionamide,
 201.069 Nethylmaleimide, 122.009 Methylthio, 134.027 Carboxymethyl, 76.022
-unmodified) does not depend on the ladder: it says a C of that form is in the
-peptide. A vote with an alias the spectrum does not explain counts only when
-that ion lies within the tagger's per-peak tolerance in the spectrum as read
-(before the peak selection) and cannot be the immonium ion, or its 13C peak, of
-a C form the alias reads instead (`AlkylationTags::immoniumConfirms`; at
-0.02 Da the CAM 13C immonium, 134.046, covers the Carboxymethyl one, so a
-Carboxymethyl vote against `C[Carbamidomethyl]+13C` then always abstains).
-Otherwise the vote abstains (`alias_unconfirmed`). Unmodified C has no alias
-and its immonium ion lies below most scan ranges; the rule never applies to it.
-A run whose C forms have no alias (Methylthio at 20 ppm) is unchanged.
+unmodified) does not depend on the ladder. A vote with an alias the spectrum
+does not explain counts only when that ion lies within the tagger's per-peak
+tolerance in the spectrum as read (before the peak selection), cannot be the
+immonium ion, or its 13C peak, of a C form the alias reads instead (at 0.02 Da
+the CAM 13C immonium, 134.046, covers the Carboxymethyl one, so a Carboxymethyl
+vote against `C[Carbamidomethyl]+13C` then always abstains), and no ion only
+the alias reading gives is there (`AlkylationTags::immoniumConfirms`,
+`aliasIons`).
+
+For a two-residue alias X + Y the form's immonium ion says nothing by itself
+(review codex6 n1): the internal a-type ion of the pair, X + Y - CO + H+, has
+the pair's mass less CO, which is the form's mass less CO, so an unmodified GC
+or CG gives 133.0430 just as C[Carbamidomethyl] does (and AC/CA the
+Propionamide immonium, 147.059). What only the pair reading gives are the
+immonium ions of X and Y (76.022 for unmodified C, 30.034 for G, 44.050 for
+A, 87.055 for N). The vote counts only when each of them that the spectrum
+could hold is absent, and at least one of them could be there: a position
+counts as seeable inside a scan window the spectrum declares (mzML `scan
+window lower limit` / `upper limit`), else inside the m/z range of its peaks.
+A spectrum acquired from 100 m/z can show neither 76.022 nor 30.034, so a
+CAM vote against C + G always abstains there. For a 13C alias the other form's
+immonium ion must be absent where it could be seen. Otherwise the vote
+abstains (`alias_unconfirmed`).
+
+The absence of 76.022 is weak evidence: an unmodified C peptide need not show
+its immonium ion, so an unmodified GC peptide whose spectrum lost both middle
+peaks, holds the internal ion 133.043 and was acquired from below 76 m/z can
+still vote Carbamidomethyl. No ladder peak helps either: for an exact alias
+the two readings predict the same b and y ions except the intermediate ones,
+which the alias check already tests in both series. Unmodified C has no alias,
+so the rule never applies to it. A run whose C forms have no alias (Methylthio
+at 20 ppm) is unchanged.
+
+The abstentions are in the share's denominator (`callTags`): they fall on the
+aliased forms only, so leaving them out would let another form clear
+`min_share` on the votes an aliased form lost (27 CAM and 45 Methylthio votes
+with 28 CAM ones abstaining: 0.625 without them, 0.45 with them, no call).
 
 How often the ion is there was measured against open Sage 0.14.6 searches (C
 unmodified or any of the five forms, variable; 1% spectrum q; 20 ppm), not
@@ -520,11 +559,15 @@ ones). So about half of the true CAM votes abstain, and a chance CAM reading in
 a spectrum without CAM survives about one time in 20.
 
 Three runs, `-extension 2 -fixed_modifications 'Carbamidomethyl (C)'`, all
-spectra, 20 ppm (the Characterize command), format 3 -> format 4:
+spectra, 20 ppm (the Characterize command), format 3 -> format 4. The format 4
+columns of PXD003531 and PXD020401 were measured with the first format 4 rule
+(f0211733: the form's immonium ion alone confirmed a pair alias, abstentions
+outside the share) and not again; PXD000001 is measured with the rule above
+(alias ions, abstentions in the share):
 
 | run | truth (open Sage search, C residues in 1% q PSMs) | format 3 votes | format 4 votes (alias_unconfirmed) | call |
 |---|---|---|---|---|
-| PXD000001 (Erwinia, TMT) | MMTS (SDRF); not searched | MeS 52, CAM 5, Prop 3, NEM 4, CM 2, unmod 2, conflict 1 of 69 | MeS 52, CAM 1, Prop 0, NEM 2, CM 1, unmod 2, conflict 1 of 59 (10) | Methylthio, share 0.754 -> 0.881 |
+| PXD000001 (Erwinia, TMT) | MMTS (SDRF); not searched | MeS 52, CAM 5, Prop 3, NEM 4, CM 2, unmod 2, conflict 1 of 69 | MeS 52, CAM 0, Prop 0, NEM 2, CM 1, unmod 2, conflict 1; 11 abstained, share of 69 (first format 4 rule: CAM 1, 10 abstained, share of 59) | Methylthio, share 0.754 -> 0.754 (first format 4 rule: 0.881) |
 | PXD003531 (human, TiO2 phospho-enriched: 36% phospho PSMs) | CAM 211, free 78, +58.005 48 (62% / 23% / 14%; 318 of 10,086 PSMs hold a C) | CAM 75, Prop 6, NEM 11, MeS 19, CM 21, unmod 24, conflict 8 of 164 | CAM 49, Prop 0, NEM 6, MeS 19, CM 6, unmod 24, conflict 8 of 112 (52) | no_call ambiguous, 0.457 -> 0.438 |
 | PXD020401 (mouse phagosomes) | NEM 2,418, CAM 1,777, free 161, +58.005 153, Prop 52, MeS 32 (NEM blocking, then CAM) | CAM 595, NEM 549, unmod 44, conflict 38 of 1,263 | CAM 366, NEM 405, unmod 44, conflict 38 of 865 (398) | no_call ambiguous, 0.471 -> 0.468 |
 
@@ -548,7 +591,14 @@ real C form still call that form (12 of 12 votes). Format 4: with both middle pe
 dropped the unchecked vote calls Carbamidomethyl (24 of 24) and Propionamide
 (23 of 24); the checked one sets all 24 aside (`alias_unconfirmed`) and makes
 no call; CAM spectra without their immonium ion abstain, with it they call CAM.
-The synthetic spectra of a C form carry its immonium ion.
+The synthetic spectra of a C form carry its immonium ion and declare a scan
+window from 50 m/z. Review codex6 n1, two more final-call controls: the GC/CG
+and AC/CA spectra with both middle peaks lost, the pair's internal a-type ion
+added (133.043 and 147.059, the reagent immonium m/z) and acquired from
+100 m/z, vote the reagent in the first format 4 rule (24 of 24) and all
+abstain now (no call); and a tally of 27 CAM, 45 Methylthio and 28 abstained
+CAM votes is no call (share 0.45 of 100), where it was a Methylthio call at
+0.625.
 
 **Development result (descriptive, not held-out).** On the 123 evaluable
 SDRF development runs of acceptance/1.12 (105 CAM, 17 none, 1 Methylthio),
@@ -627,11 +677,15 @@ spectra:
 
 `resolved_below_mz` is 24,600 m/z at 20 ppm, so no vote is set aside.
 
-Format 4 (immonium rule), `-extension 2 -fixed_modifications 'Carbamidomethyl (C)'`,
-all spectra (the Characterize command): 59 voting spectra, Methylthio 52, CAM 1,
+Format 4, `-extension 2 -fixed_modifications 'Carbamidomethyl (C)'`, all
+spectra (the Characterize command): 58 voting spectra, Methylthio 52, CAM 0,
 Propionamide 0, NEM 2, Carboxymethyl 1, unmodified 2, conflict 1 (1),
-`alias_unconfirmed` 10; Methylthio, share 0.881 (52 of 59). The other settings
-were not measured again.
+`alias_unconfirmed` 11; Methylthio, share 0.754 (52 of 69, the 11 abstentions
+in the denominator). The MS2 spectra are acquired from 100 m/z, so no CAM or
+Propionamide vote against its two-residue alias can count. The first format 4
+rule (f0211733, immonium alone, abstentions outside the share) gave CAM 1,
+`alias_unconfirmed` 10 and 0.881 (52 of 59). The other settings were not
+measured again.
 
 With `-fasta erwinia_carotovora.fasta` and the TMT labels as fixed
 modifications (`-tag_length 4 -extension 6`), the placements agree but are too
@@ -650,7 +704,7 @@ gui/src/digestReport.ts names none of its sections and refuses it.
 
 | key | value |
 |---|---|
-| `format` | 4 (3: no `alias_unconfirmed` row, a vote with an untraced alias counted; 2: no `resolved_below_mz`, `alias_rejected`, `unresolved` and `voted` rows, aliases not checked, conflicts out of the share; 1 until format 2 of `-alkylation_out`: no `twin.<form>` rows, aliases over the base residues only) |
+| `format` | 4 (3: no `alias_unconfirmed` row, a vote with an untraced alias counted, `voted` without abstentions; 2: no `resolved_below_mz`, `alias_rejected`, `unresolved` and `voted` rows, aliases not checked, conflicts out of the share; 1 until format 2 of `-alkylation_out`: no `twin.<form>` rows, aliases over the base residues only) |
 | `method` | `shadow_tags` |
 | `status` | `experimental`; the description gives the held-out result (passed at the margin: 40 of 57 runs called, 37 right) |
 | `forms` | the six candidate forms, comma-separated (n: 6) |
@@ -678,15 +732,16 @@ gui/src/digestReport.ts names none of its sections and refuses it.
 | `conflict` | votes whose tag holds two forms, or whose C edge an alias explains; they count against the share (n: `spectra`) |
 | `alias_rejected` (format 3) | of the conflicts, votes whose C edge the spectrum explains as an alias (or cannot test) (n: `conflict`) |
 | `unresolved` (format 3) | spectra that would vote with a C edge at or above its form's twin bound (`resolved_below_mz`); set aside, not in `spectra` or the share (n: `spectra` + this) |
-| `alias_unconfirmed` (format 4) | spectra that would vote with a C edge an alias also reads, the spectrum shows no trace of the alias, and the C immonium ion of the form is not seen; they abstain, not in `spectra` or the share (n: `spectra` + `unresolved` + this) |
+| `alias_unconfirmed` (format 4) | spectra that would vote with a C edge an alias also reads, the spectrum shows no trace of the alias, and nothing tells the readings apart (the C immonium ion of the form is not seen, or an immonium ion of the alias's own residues is, or none of them could be seen); they abstain: not in `spectra` or the form rows, but in the share's denominator (n: `spectra` + `unresolved` + this) |
 
 ### `alkylation_tags_call`
 
 `status` (`call` / `no_call`), `reagent`, `mass`, `share`, `voted` (format 3),
 `reason` (`-`, `unresolved_forms`, `few_cys_spectra` or `ambiguous`). These are
 the rows of `alkylation_call`, with the votes in place of the binned spectra:
-`share` is the leading form's votes over the votes plus the conflicts, and its
-`n` and `voted` are that denominator.
+`share` is the leading form's votes over the votes plus the conflicts plus
+(format 4) the abstentions (`alkt_form alias_unconfirmed`), and its `n` and
+`voted` are that denominator; the `voted` description gives the three parts.
 
 | option | default | |
 |---|---|---|

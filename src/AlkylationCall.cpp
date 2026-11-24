@@ -347,6 +347,10 @@ namespace FASTag::Alkylation
       r.push_back(Digest::Row{section, key, value, n, d});
     };
     const std::string name = c.cls >= 0 ? className(c.cls) : "-";
+    // The tag call's abstentions (AlkylationTags::callTags) are in the share's denominator.
+    const std::string parts = c.abstained ? " (binned, conflicted and abstained)" : " (binned plus conflicted)";
+    const std::string in_share = u(c.binned) + " binned to a class, " + u(c.voted - c.binned - c.abstained) + " conflicted" +
+                                 (c.abstained ? ", " + u(c.abstained) + " abstained (alkt_form alias_unconfirmed)" : "") + ".";
     const std::string from = !with_source ? std::string()
         : c.source == "placement"      ? " (from the placements on the database)"
         : c.source == "tags+placement" ? " (the tags and the placements agree)"
@@ -362,10 +366,9 @@ namespace FASTag::Alkylation
       add("mass", c.cls == NONE ? "-" : num(mass), "-",
           c.cls == NONE ? "A call of none has no reagent mass." : name + " adds " + num(mass) + " Da to C.");
       add("share", num(c.share), u(c.voted),
-          "A share of " + f3(c.share) + " of the " + u(c.voted) + " " + unit + " (binned plus conflicted) are " + name + ".");
+          "A share of " + f3(c.share) + " of the " + u(c.voted) + " " + unit + parts + " are " + name + ".");
       add("voted", u(c.voted), u(c.binned),
-          u(c.voted) + " " + unit + " are in the share: " + u(c.binned) + " binned to a class, " + u(c.voted - c.binned) +
-              " conflicted.");
+          u(c.voted) + " " + unit + " are in the share: " + in_share);
       add("reason", "-", "-", "The call is made.");
     }
     else
@@ -381,16 +384,15 @@ namespace FASTag::Alkylation
           : c.reason == "few_cys_spectra"
               ? "No alkylation is called: " + u(c.binned) + " " + unit + " are fewer than " + u(s.min_spectra) + "."
               : "No alkylation is called: the leading class " + name + " has " + u(c.top) + " of " + u(c.voted) + " " + unit +
-                    " (binned plus conflicted), short of " + u(s.min_spectra) + " and a share of " + num(s.min_share) + " (or tied).");
+                    parts + ", short of " + u(s.min_spectra) + " and a share of " + num(s.min_share) + " (or tied).");
       add("reagent", "-", "-", "No reagent is called.");
       add("mass", "-", "-", "No reagent is called.");
       add("share", c.voted ? num(c.share) : "-", u(c.voted),
           c.voted ? "The leading class " + name + " has a share of " + f3(c.share) + " of the " + u(c.voted) + " " + unit +
-                        " (binned plus conflicted)."
+                        parts + "."
                   : "Nothing is counted.");
       add("voted", u(c.voted), u(c.binned),
-          u(c.voted) + " " + unit + " are in the share: " + u(c.binned) + " binned to a class, " + u(c.voted - c.binned) +
-              " conflicted.");
+          u(c.voted) + " " + unit + " are in the share: " + in_share);
       add("reason", c.reason, "-", "The first no-call rule that applies is " + c.reason + ".");
     }
     if (with_source)

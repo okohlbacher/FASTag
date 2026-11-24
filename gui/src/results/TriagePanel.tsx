@@ -700,9 +700,10 @@ function CoverageChart({ st, source, keep }: { st: OverviewStats; source: string
           )}
           {st.coverFrom === 'res_cover' && st.coverFolded && st.coverFolded.folded > 0 && (
             <p className="caveat tri-note" role="note">
-              Approximate: orientation unresolved (folded, lower bound) for {int(st.coverFolded.folded)} of{' '}
+              Approximate: a lower bound (orientation unresolved, or a gap in a tag) for {int(st.coverFolded.folded)} of{' '}
               {int(st.coverFolded.of)} tagged spectra. Without a -fasta match a tag may be a b or a y read, so
-              residues covered counts mirror-image residues once.
+              residues covered counts mirror-image residues once; a gap does not say where its residues meet, so
+              they are left out (never below the longest tag).
             </p>
           )}
           {st.coverFrom === 'res_cover' && !st.coverFolded && (
@@ -747,7 +748,7 @@ function CoverageChart({ st, source, keep }: { st: OverviewStats; source: string
             ? 'Proxy: the union of the m/z ranges of all reported tags / (precursor mass − water); it mixes b and y ions and fragment charges.'
             : st.coverFrom
               ? st.coverFolded && st.coverFolded.folded > 0
-                ? 'Residues covered: the residues under the union of all reported tags (res_cover) / estimated length; approximate: orientation unresolved (folded, lower bound).'
+                ? 'Residues covered: the residues under the union of all reported tags (res_cover) / estimated length; approximate: a lower bound (orientation unresolved, or a gap in a tag).'
                 : 'Residues covered: the residues under the union of all reported tags (res_cover) / estimated length.'
               : ''}{' '}
           Line: median; band: middle half; hollow points: fewer than {FEW} spectra.

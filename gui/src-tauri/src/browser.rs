@@ -245,6 +245,11 @@ pub(crate) struct Index {
 /// its stamp taken from that handle. On Windows a kept handle would stop the
 /// CLI from renaming its new output onto the path, so each read opens the
 /// path again and must find the same file (volume, file index, size, time).
+/// That handle (open_read) shares read and delete but not write: while a
+/// read holds it no program can open the file for writing (the CLI can
+/// still rename a new output over the path), and it cannot be opened while
+/// a writer holds the file, whose last-write time Windows may not update
+/// until that writer closes it (codex6 review n5).
 struct Source {
     path: String,
     stamp: Stamp,
@@ -261,6 +266,31 @@ struct Stamp {
     len: u64,
     mtime: Option<SystemTime>,
     id: (u64, u64),
+}
+
+/// @p path opened for reading. On Windows with the share mode read | delete,
+/// no write (FILE_SHARE_READ | FILE_SHARE_DELETE): the open fails with a
+/// sharing violation while another handle may write the file, and while
+/// this handle is open no writer can open it; renaming or deleting the path
+/// stays possible. Elsewhere File::open (Unix keeps the handle, Source).
+pub(crate) fn open_read(path: &str) -> std::io::Result<File> {
+    #[cfg(windows)]
+    {
+        use std::os::windows::fs::OpenOptionsExt;
+        const FILE_SHARE_READ: u32 = 0x1;
+        const FILE_SHARE_DELETE: u32 = 0x4;
+        std::fs::OpenOptions::new().read(true).share_mode(FILE_SHARE_READ | FILE_SHARE_DELETE).open(path)
+    }
+    #[cfg(not(windows))]
+    {
+        File::open(path)
+    }
+}
+
+/// A Windows sharing violation (ERROR_SHARING_VIOLATION): another program
+/// holds the file open for writing.
+fn being_written(e: &std::io::Error) -> bool {
+    cfg!(windows) && e.raw_os_error() == Some(32)
 }
 
 fn stamp_of(f: &File) -> std::io::Result<Stamp> {
@@ -324,7 +354,15 @@ impl Index {
         #[cfg(not(unix))]
         let f = {
             let path = &self.src.path;
-            Arc::new(File::open(path).map_err(|e| format!("cannot open {path}: {e}"))?)
+            match open_read(path) {
+                Ok(f) => Arc::new(f),
+                // A writer has it open: what it holds is not the file indexed.
+                Err(e) if being_written(&e) => {
+                    self.src.stale.store(true, Ordering::Relaxed);
+                    return Err(format!("{path} {CHANGED}"));
+                }
+                Err(e) => return Err(format!("cannot open {path}: {e}")),
+            }
         };
         self.verify(&f)?;
         Ok(f)
@@ -1597,7 +1635,10 @@ fn field_at(raw: &[u8], col: usize) -> &[u8] {
 }
 
 pub(crate) fn build_index(path: &str, cancel: &Cancel) -> Result<Index, String> {
-    let file = File::open(path).map_err(|e| format!("cannot open {path}: {e}"))?;
+    // On Windows no writer while the offsets are read (open_read).
+    let file = open_read(path).map_err(|e| {
+        if being_written(&e) { format!("cannot open {path}: another program is writing it") } else { format!("cannot open {path}: {e}") }
+    })?;
     // The stamp of the very handle the offsets are read from.
     let stamp = stamp_of(&file).map_err(|e| format!("cannot read {path}: {e}"))?;
     let mut reader = BufReader::with_capacity(1 << 20, PosReader { f: &file, pos: 0 });
@@ -1708,7 +1749,7 @@ fn header_columns(raw: &[u8]) -> Vec<String> {
 type Head = (Vec<String>, Vec<Vec<String>>, bool);
 
 pub(crate) fn read_head(path: &str, max_rows: usize) -> Result<Head, String> {
-    let mut f = File::open(path).map_err(|e| format!("cannot open {path}: {e}"))?;
+    let mut f = open_read(path).map_err(|e| format!("cannot open {path}: {e}"))?;
     let mut buf = Vec::with_capacity(HEAD_BYTES);
     (&mut f)
         .take(HEAD_BYTES as u64 + 1)
@@ -3333,6 +3374,11 @@ pub(crate) fn export_to(
             }
         }
         w.flush().map_err(err)?;
+        // Codex6 review n5: the source checked again before the export is
+        // committed, from the handle every row came from: a file rewritten
+        // in place while it was read (same size and identity, a new time)
+        // fails here, and its rows are not committed.
+        index.verify(&src)?;
         Ok(total)
     };
     let written = write(&mut rw);
@@ -3730,6 +3776,79 @@ mod tests {
         assert_eq!(std::fs::read_to_string(&p).unwrap().lines().count(), 5);
         std::fs::remove_file(&p).ok();
         std::fs::remove_file(&dest).ok();
+    }
+
+    // Codex6 review n5: the export checked its source only when it opened
+    // it, then committed: a rewrite in place while the rows were read (same
+    // size and identity) went into the export. The source is checked again
+    // before the commit, and such an export writes nothing.
+    #[test]
+    fn an_export_whose_source_changes_while_it_is_read_is_not_committed() {
+        let p = fixture("export-inplace.tsv");
+        let dest = format!("{p}.out.tsv");
+        let cache = Arc::new(Shared::default());
+        let cols = vec!["tag".to_string(), "evalue".to_string()];
+        let before = std::fs::read(&p).unwrap();
+        let rewrite = || {
+            use std::io::{Seek, SeekFrom, Write};
+            let mut f = std::fs::OpenOptions::new().write(true).open(&p).unwrap();
+            // Same length: one data byte changed, the time moved on.
+            let at = before.iter().position(|&b| b == b'\n').unwrap() as u64 + 1;
+            f.seek(SeekFrom::Start(at)).unwrap();
+            f.write_all(b"X").unwrap();
+            f.set_modified(std::time::SystemTime::now() + std::time::Duration::from_secs(5)).unwrap();
+        };
+        let done = AtomicBool::new(false);
+        let progress = |k: usize, total: usize| {
+            // Every row read, the export not yet committed.
+            if k == total && total > 0 && !done.swap(true, Ordering::SeqCst) {
+                rewrite();
+            }
+        };
+        let r = export_to(&cache, &p, &ViewSpec::default(), &cols, &dest, ExportFormat::Tsv, &Cancel::default(), &progress);
+        assert!(done.load(Ordering::SeqCst), "the rewrite ran");
+        assert_eq!(std::fs::metadata(&p).unwrap().len(), before.len() as u64);
+        assert!(r.as_ref().is_err_and(|e| e.contains(CHANGED)), "{r:?}");
+        assert!(!std::path::Path::new(&dest).exists(), "a mixed export was committed");
+        let dir = std::path::Path::new(&p).parent().unwrap();
+        let name = std::path::Path::new(&dest).file_name().unwrap().to_string_lossy().to_string();
+        assert!(!std::fs::read_dir(dir).unwrap().flatten().any(|e| {
+            let n = e.file_name().to_string_lossy().to_string();
+            n.starts_with(&name) && n.ends_with(".part")
+        }));
+        // An unchanged source exports (read again: a new index).
+        let cache2 = Arc::new(Shared::default());
+        assert!(export(&cache2, &p, &ViewSpec::default(), &cols, &dest).is_ok());
+        std::fs::remove_file(&p).ok();
+        std::fs::remove_file(&dest).ok();
+    }
+
+    // Codex6 review n5, Windows only (untested on macOS and Linux): a writer
+    // that keeps its handle open may leave the last-write time unchanged, so
+    // a read must not open the file while a writer holds it, and while a
+    // read holds it no writer can open it; renaming a new file over the
+    // path (as the CLI commits its output) still works.
+    #[cfg(windows)]
+    #[test]
+    fn windows_reads_exclude_writers_but_not_renames() {
+        let p = fixture("export-share.tsv");
+        let idx = build_index(&p, &Cancel::default()).unwrap();
+        {
+            use std::io::Write;
+            let mut w = std::fs::OpenOptions::new().write(true).open(&p).unwrap();
+            w.write_all(b"s").unwrap();
+            // Same length, the writer still open: the read is refused.
+            let r = idx.reader();
+            assert!(r.as_ref().is_err_and(|e| e.contains(CHANGED)), "{:?}", r.err());
+        }
+        let idx = build_index(&p, &Cancel::default()).unwrap();
+        let held = idx.reader().unwrap();
+        assert!(std::fs::OpenOptions::new().write(true).open(&p).is_err(), "a writer opened the file a read holds");
+        let next = format!("{p}.next");
+        std::fs::write(&next, "spectrum\ttag\n").unwrap();
+        std::fs::rename(&next, &p).expect("a rename over a file a read holds");
+        drop(held);
+        std::fs::remove_file(&p).ok();
     }
 
     #[test]

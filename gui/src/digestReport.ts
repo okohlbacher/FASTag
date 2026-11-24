@@ -293,8 +293,13 @@ export interface AlkylationCall {
   /// Binned spectra (placements) or votes (tags) the call is based on.
   binned: number | null
   /// The share's denominator, the `share` row's n: from format 3 the binned
-  /// plus the conflicted votes (`voted`), up to format 2 the binned ones.
+  /// plus the conflicted votes (`voted`), up to format 2 the binned ones;
+  /// from format 4 also the abstained tag votes (`abstained`).
   voted: number | null
+  /// Format 4, a call taken from the tags: the votes that abstained for want
+  /// of evidence against an alias (`alkt_form alias_unconfirmed`), which are
+  /// in `voted`; 0 otherwise.
+  abstained: number
   /// `few_cys_spectra`, `ambiguous`, `tags_too_short` (format 1),
   /// `unresolved_forms` or `disagree` (format 2) on no_call.
   reason?: string
@@ -304,7 +309,8 @@ export interface AlkylationCall {
   /// `tags+placement`; absent in format 1 (placements only).
   source?: string
   /// The `alk_run format` value; a reader knows formats 1 to 4 (3 adds the
-  /// conflicts to the share's denominator, 4 the alias_unconfirmed row).
+  /// conflicts to the share's denominator, 4 the alias_unconfirmed row and
+  /// those abstentions to the tag call's denominator).
   format: number | null
   /// Format 2 with a database: the placement call on its own
   /// (`alkylation_placement_call`), whatever the call of the report took
@@ -347,6 +353,13 @@ export function alkylationCall(r: Report): AlkylationCall {
   const v = (k: string): string | undefined => value(r, 'alkylation_call', k)
   const { status, reagent, share, binned, voted, reason } = alkylationPart(r, 'alkylation_call')
   const placed = row(r, 'alkylation_placement_call', 'status') != null
+  const source = v('source')
+  const format = num(value(r, 'alk_run', 'format'))
+  // Codex6 review n1: from format 4 the tag call's denominator holds its
+  // abstentions; the call of the report is the tag call unless it comes
+  // from the placements (source), and a format 1 report has no tag call.
+  const fromTags = source === 'tags' || source === 'tags+placement'
+  const abstained = fromTags && format != null && format >= 4 ? (num(value(r, 'alkt_form', 'alias_unconfirmed')) ?? 0) : 0
   return {
     status,
     reagent,
@@ -354,10 +367,11 @@ export function alkylationCall(r: Report): AlkylationCall {
     share,
     binned,
     voted,
+    abstained,
     reason,
     databaseSource: value(r, 'alk_run', 'database_source'),
-    source: v('source'),
-    format: num(value(r, 'alk_run', 'format')),
+    source,
+    format,
     ...(placed ? { placement: alkylationPart(r, 'alkylation_placement_call') } : {})
   }
 }

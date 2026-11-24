@@ -120,8 +120,10 @@ fn sha256_file(p: &Path) -> Option<String> {
 /// tools/fetch_taxonomy_index.py fetched_complete (and stage-data.cmake)
 /// decide it: its completion marker .fastag-fetched names that manifest by
 /// data release and sha256 and lists each of its files with the pinned
-/// sha256 and size, and each is a regular file of that size in @p d. An
-/// interrupted or failed fetch has no such marker.
+/// sha256 and size, and each is a regular file of that size in @p d; a
+/// linked file (fetched --from without --copy) is also hashed again, since
+/// its target can change after the fetch at the same size (codex6 review
+/// n3). An interrupted or failed fetch has no such marker.
 fn fetched_complete(d: &Path, manifest: &Path) -> bool {
     let marker = d.join(".fastag-fetched");
     if std::fs::symlink_metadata(&marker).map(|m| !m.is_file()).unwrap_or(true) {
@@ -140,11 +142,14 @@ fn fetched_complete(d: &Path, manifest: &Path) -> bool {
     }
     files.iter().all(|(name, want)| {
         let Some(sha) = want["sha256"].as_str() else { return false };
-        let Ok(m) = std::fs::metadata(d.join(name)) else { return false };
+        let p = d.join(name);
+        let Ok(m) = std::fs::metadata(&p) else { return false };
         let size = m.len().to_string();
+        let linked = std::fs::symlink_metadata(&p).map(|l| l.file_type().is_symlink()).unwrap_or(true);
         m.is_file()
             && want["bytes"].as_u64().is_none_or(|b| b == m.len())
             && lines.iter().any(|f| f.as_slice() == ["file", name.as_str(), size.as_str(), sha])
+            && (!linked || sha256_file(&p).as_deref() == Some(sha))
     })
 }
 
@@ -631,6 +636,21 @@ mod tests {
         assert_eq!(dev_index(&r, Some(&src), Some(&cache)), Some(old.clone()));
         std::fs::write(new.join("tax_k7.taxdb"), "x").unwrap();
         assert_eq!(dev_index(&r, Some(&src), Some(&cache)), Some(new.clone()));
+        // Codex6 review n3: a linked index (fetch --from without --copy)
+        // whose target changes at the same size after the fetch: the marker
+        // and the size still match, the live sha256 does not.
+        #[cfg(unix)]
+        {
+            let target = root.join("linked-index");
+            std::fs::write(&target, "x").unwrap();
+            std::fs::remove_file(new.join("tax_k7.taxdb")).unwrap();
+            std::os::unix::fs::symlink(&target, new.join("tax_k7.taxdb")).unwrap();
+            assert_eq!(dev_index(&r, Some(&src), Some(&cache)), Some(new.clone()));
+            std::fs::write(&target, "y").unwrap();
+            assert_eq!(dev_index(&r, Some(&src), Some(&cache)), Some(old.clone()));
+            std::fs::write(&target, "x").unwrap();
+            assert_eq!(dev_index(&r, Some(&src), Some(&cache)), Some(new.clone()));
+        }
         // Every kind of dev CLI: from FASTAG_BIN, on PATH, a dev bundle of dumps only.
         for source in ["path", "bundled"] {
             assert_eq!(dev_index(&mk(source, None), Some(&src), Some(&cache)), Some(new.clone()), "{source}");
