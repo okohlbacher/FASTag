@@ -35,7 +35,7 @@ run bar, all visible at once, whatever the task:
 | Where | Control | Notes |
 |---|---|---|
 | Top bar | Setup / Results / Batch / History, Theme, Feedback, Help, status pill | not part of Setup; unchanged |
-| (above cards) | Leftovers warning; **Last run** block (status, duration, changed params, Reveal, Open folder) | shown after a run |
+| (above cards) | Leftovers warning | shown after a run |
 | 1 Input | One file / Batch switch; file chip with Choose file… / Change…; inspector (PreStartPanel: detected instrument, DIA check, Run anyway); head: **Open earlier results…**, (?) | Batch mode: Add files…, Add folder…, **Output folder** + Change…/Beside inputs, **SDRF file (optional)** Choose…/Replace…/Remove |
 | 2 Workflow | 7 radio tiles (label + "→ product"); blurb line; head: **Preset** select (Choose…, Save as preset…, Load ›, Load FASTag defaults, Delete preset), origin name "(modified)", Reset, Apply last-used (n), Undo, Learn more | Save as preset opens an inline name field + Save/Cancel |
 | 3 Settings | head: Search settings… ⌘K; the task's required inputs (Protein database + Browse… for Mass-shift, Database reduction); **Instrument** select (+ Custom tolerance); **Fixed modifications**; the task's basic fields; settings note (Database reduction) | Species: Report rank, Spectra to read. Generate tags: Seed length, Extension, E-value cutoff, Tags per spectrum, Per-residue confidence. Mass-shift: Extension, Missed cleavages |
@@ -169,7 +169,7 @@ Heading: **What do you want to do?** Under it, two fixed lines:
 - "Not sure? Start with **Characterize a run**: it reports protease, labels,
   glycopeptides and species from 10% of the spectra in a few minutes."
 
-The "start from" row above the tiles:
+The "start from" row (`StartRow`), at the right of the step 1 heading:
 
 - **Continue last run** (when the last session recorded settings, D6):
   "Continue: <workflow of the last run> with your last settings (n)". Click =
@@ -179,7 +179,7 @@ The "start from" row above the tiles:
   preset <name>. The same component sits in the step 3 head; it is rendered
   only in the visible step. Loading from step 1 goes to step 2 only if an
   input of the new task is missing; loading from step 3 stays on step 3.
-- **Open earlier results…** (link, right): `openResults()`, goes to Results.
+- **Open earlier results…** (link): `openResults()`, goes to Results.
 
 Tiles, in three groups, each a `<ul>` under an `h3`:
 
@@ -360,7 +360,7 @@ Heading: **Outputs and run**.
    Batch mode with the same settings; the Batch view opens as it does for the
    first queued file. Disabled while Identifications are set ("Not used in
    Batch mode: one ID file cannot belong to every input").
-5. The **Last run** block shows under the stepper on every step after a run, as it showed above the cards.
+5. There is no Last run block: a finished run opens in Results, and History lists every run with its status.
 
 ## 4. Changing the task from any step
 
@@ -495,7 +495,7 @@ Nothing is dropped. Every control of the audit (section 0):
 | Origin "(modified)", Reset, Undo | 2 Workflow head | Step 3 head; Undo also in the carry-over status line |
 | Apply last-used (n) | 2 Workflow head | Step 1 "Continue last run" |
 | Learn more (task) | 2 Workflow head | detail panel; step 3 head |
-| Open earlier results… | 1 Input head | Step 1, right of the start row |
+| Open earlier results… | 1 Input head | Step 1 heading, right |
 | One file / Batch switch, file chip, Choose/Change, Add files…, Add folder… | 1 Input | Step 2, Spectra |
 | Input checks (PreStartPanel) | 1 Input | Step 2, under the file |
 | Batch output folder (Change…, Beside inputs) | 1 Input | Step 2, next to the queue; step 4 read-only |
@@ -513,7 +513,7 @@ Nothing is dropped. Every control of the audit (section 0):
 | Taxonomy group for Species / Characterize | Advanced | Step 2 optional input (one entry); Advanced for others |
 | Filter / entrapment database, Shortest tag matched for Generate tags | Advanced | Step 2; Advanced for others |
 | Protein database of Characterize (alkylation) | Advanced | Advanced, unchanged (review decision 5) |
-| Last run block | above the cards | under the stepper, every step |
+| Last run block | above the cards | removed (Results and History) |
 | Leftovers warning | above the cards | under the stepper, every step |
 | Locked summary while running | replaces the form | unchanged, replaces the step bodies; stepper hidden |
 | Unplaced/unknown parameter warning | under the cards | under the step body, every step |

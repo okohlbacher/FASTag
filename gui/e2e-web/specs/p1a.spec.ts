@@ -11,7 +11,7 @@ test('the run bar names the phase the run is in, and the time left once measured
   await expect(page.locator('.runbar .pct')).toContainText('50% · 70 of 139 spectra')
   await expect(page.locator('.runbar .pct')).toContainText('left')
   await page.getByRole('button', { name: 'Cancel' }).click()
-  await expect(page.locator('.last-run')).toContainText('partial outputs removed')
+  await expect(page.locator('#run-status')).toContainText('partial outputs removed')
 })
 
 test('a batch keeps each job on its own Channel: run02 fails, run01 and run03 finish', async ({ page }) => {

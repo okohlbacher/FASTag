@@ -10,7 +10,7 @@ import { BRIEF_HINT, SECTIONS, SECTION_OF, PARAM_BY_NAME, type Dependency, type 
 import ParamField, { type ParamValue } from '../ParamField'
 import { disclosure } from '../disclosure'
 import { baseName } from '../digestReport'
-import { IconChevron, IconError, IconFile, IconLock, JobIcon } from '../icons'
+import { IconChevron, IconError, IconFile, IconLock } from '../icons'
 import { HelpButton, HelpLink } from '../help/HelpLink'
 import HelpPopover from '../help/HelpPopover'
 import { isMac, keyText } from './shortcuts'
@@ -18,9 +18,9 @@ import type { Session } from './useSession'
 import type { RunState } from '../run/useRun'
 import type { SdrfState } from '../sdrf/useSdrf'
 import { Leftovers } from '../Leftovers'
-import { dirName, perJobOutputs, revealLabel } from '../app/paths'
-import { clock, duration, shellLine } from '../app/format'
-import TaskStep, { OriginRow, youNeed } from './TaskStep'
+import { dirName, perJobOutputs } from '../app/paths'
+import { shellLine } from '../app/format'
+import TaskStep, { OriginRow, StartRow, youNeed } from './TaskStep'
 import { LANDING_TASK, taskById, type Task, type TaskId } from './tasks'
 import {
   ALL_SECTION_PARAMS,
@@ -173,7 +173,7 @@ export default function SetupForm({
   runBatchDisabled
 }: SetupFormProps): JSX.Element {
   const { input, out, values, setValue, openGroups, setOpenGroups, writingFiles, changedParams } = session
-  const { busy, jobs, lastRun, evidence, revealErr, reveal } = run
+  const { busy, jobs, revealErr } = run
   // The layout of steps 3 and 4: the task's, the landing task's for the
   // FASTag defaults (5.5). @p owner: the task step 2 is for (null: none).
   const task = taskById(session.task ?? LANDING_TASK)!
@@ -742,40 +742,6 @@ export default function SetupForm({
     </section>
   )
 
-  const lastRunBlock = lastRun && jobs.length === 0 && (
-    <section className="block last-run" aria-labelledby="last-run-h">
-      <h2 id="last-run-h">Last run</h2>
-      <div className={`last-run-name ${lastRun.ok ? 'ok' : lastRun.cancelled ? 'cancelled' : 'bad'}`}>
-        <JobIcon status={lastRun.ok ? 'done' : lastRun.cancelled ? 'cancelled' : 'failed'} />
-        <span>{baseName(lastRun.input)}</span>
-      </div>
-      <div className="muted">
-        {lastRun.ok ? 'Finished' : lastRun.cancelled ? 'Cancelled' : 'Failed'}{' '}
-        {lastRun.earlier ? `in an earlier session, ${new Date(lastRun.at).toLocaleString()}` : clock(lastRun.at)} · {duration(lastRun.ms)}
-        {lastRun.cleaned > 0 && ' · partial outputs removed'}
-        {lastRun.ok && evidence.ms2 != null && ` · ${evidence.ms2.toLocaleString('en-US')} MS2 spectra`}
-      </div>
-      {/* The form may be edited since: what this run was given. */}
-      {lastRun.changed && <code className="last-run-params">{lastRun.changed.length ? lastRun.changed.join(' ') : 'all defaults'}</code>}
-      {lastRun.ok && lastRun.out && (
-        <div className="row reveal">
-          <button type="button" className="secondary small" onClick={() => reveal(false)} title={lastRun.out}>
-            {revealLabel()}
-          </button>
-          <button type="button" className="secondary small" onClick={() => reveal(true)}>
-            Open folder
-          </button>
-        </div>
-      )}
-      {revealErr && (
-        <p className="warn" role="alert">
-          <IconError />
-          <span>{revealErr}</span>
-        </p>
-      )}
-    </section>
-  )
-
   // An input's errors, under its field: missing, wrong extension, not found.
   const inputNotes = (n: string, required = false): JSX.Element | null => {
     const notes: { warn: boolean; text: string }[] = []
@@ -1301,11 +1267,18 @@ export default function SetupForm({
             {said}
           </p>
           <Leftovers />
-          {lastRunBlock}
+          {/* The menu's Reveal output refused: say so, not swallow it. */}
+          {revealErr && (
+            <p className="warn" role="alert">
+              <IconError />
+              <span>{revealErr}</span>
+            </p>
+          )}
           {body(
             1,
             'What do you want to do?',
-            <TaskStep session={session} onContinue={confirm} onOpenResults={onOpenResults} />
+            <TaskStep session={session} onContinue={confirm} />,
+            <StartRow session={session} onOpenResults={onOpenResults} />
           )}
           {inputsStep}
           {settingsStep}

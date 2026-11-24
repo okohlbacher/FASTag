@@ -231,25 +231,19 @@ describe('App wiring', () => {
     await screen.findByText(/No example data: this installation has no example data/)
   })
 
-  it('Reveal and Open folder ask the backend for the finished run\'s -out only', async () => {
+  it('the menu\'s Reveal output asks the backend for the finished run\'s -out only', async () => {
     const mock = installMockBridge()
     await renderApp(mock)
-    expect(screen.queryByRole('button', { name: /Open folder/ })).toBeNull()
     await pickSingle(mock, '/d/a.mzML')
     await click(screen.getByRole('button', { name: 'Run' }))
     await waitFor(() => expect(mock.runCalls).toHaveLength(1))
     await act(async () => mock.emitDone({ ok: true, code: 0, runId: mock.lastRunId }))
-    // The Last run block is on Setup (P2a: a run moves to Results).
-    await goTo('setup')
-    await click(await screen.findByRole('button', { name: /Reveal in Finder|Show in Explorer|Show in folder/ }))
-    await click(screen.getByRole('button', { name: 'Open folder' }))
-    expect(mock.revealCalls).toEqual([
-      { path: '/d/a.tags.tsv', folder: false },
-      { path: '/d/a.tags.tsv', folder: true }
-    ])
-    // A refusal is shown, not swallowed.
+    await act(async () => mock.emitMenu('reveal'))
+    expect(mock.revealCalls).toEqual([{ path: '/d/a.tags.tsv', folder: false }])
+    // A refusal is shown on Setup, not swallowed.
     mock.revealError = new Error('/d/a.tags.tsv is not an output of a run of this app')
-    await click(screen.getByRole('button', { name: 'Open folder' }))
+    await act(async () => mock.emitMenu('reveal'))
+    await goTo('setup')
     expect(screen.getByRole('alert').textContent).toMatch(/not an output/)
   })
 })

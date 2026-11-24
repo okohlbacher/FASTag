@@ -118,7 +118,7 @@ async function runOn(s, input) {
   await s.click(await s.button('Run'))
 }
 
-const lastRun = (s) => s.exec("const e = document.querySelector('.last-run'); return e ? e.innerText : ''")
+const lastRun = (s) => s.exec("const e = document.getElementById('run-status'); return e ? e.textContent : ''")
 
 test('probe: the app finds its CLI and reads its version', { timeout: 120000 }, () =>
   withApp(async (s) => {

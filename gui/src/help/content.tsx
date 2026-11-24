@@ -119,8 +119,7 @@ export const START: HelpPage = {
           </p>
           <p>
             While a run goes, <strong>Changed from defaults</strong> lists the settings it was given that differ from
-            the defaults. Afterwards, <strong>Last run</strong> shows whether it finished, was cancelled or failed, and
-            the same list (&quot;all defaults&quot; when there is none), even if the form was edited since. Cancel
+            the defaults. Afterwards, <strong>History</strong> shows whether it finished, was cancelled or failed. Cancel
             stops a run at once, and the files at its output paths are removed, so no half-written table is
             later read as a result. If an output file already exists, the app asks before the run whether to
             overwrite it; a run that is then cancelled or fails removes it too. Closing the window or quitting while a run goes asks first: Cancel run and quit,

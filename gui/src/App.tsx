@@ -738,7 +738,7 @@ export default function App({ start }: { start?: Origin } = {}): JSX.Element {
         feedbackBusy={feedback.capturing}
       />
       {/* The run's live region: always in the page, whichever view is shown. */}
-      <p className="sr-only" role="status">
+      <p className="sr-only" role="status" id="run-status">
         {announce}
       </p>
       <p className="sr-only feedback-status" role="status">

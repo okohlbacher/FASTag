@@ -51,7 +51,7 @@ grid; see the Decision at the end of this section.
   **Decision:** batch is an input mode, as in FragPipe and MaxQuant. A
   separate W8 duplicated W2 and W7 and gave a single-file `-out` in a batch.
 - **Open results.** Open earlier results from the header (Results > Open…,
-  File > Open) and from a link "Open earlier results…" under the chooser. It
+  File > Open) and from a link "Open earlier results…" at the top right of step 1. It
   is not a card.
   **Decision:** it is navigation, not a run.
 - **Task IDs.** New IDs: `run-qc`, `mass-shift`, `species`, `db-reduction`,

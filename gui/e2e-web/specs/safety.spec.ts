@@ -58,15 +58,13 @@ test('a cancelled run says its partial outputs were removed', async ({ page }) =
   await page.getByRole('button', { name: 'Choose file…' }).click()
   await page.getByRole('button', { name: 'Run', exact: true }).click()
   await page.getByRole('button', { name: 'Cancel' }).click()
-  await expect(page.locator('.last-run')).toContainText('partial outputs removed')
+  await expect(page.locator('#run-status')).toContainText('partial outputs removed')
   await page.getByRole('button', { name: /^Log/ }).first().click()
   await expect(page.locator('pre.log')).toContainText('Removed the partial output /data/run01.tags.tsv')
 })
 
 test('an existing output is confirmed before the run; a cancelled run of an earlier session reads as cancelled', async ({ page }) => {
   await openApp(page, 'existing', 'defaults')
-  // The run record of the earlier session.
-  await expect(page.locator('.last-run')).toContainText('Cancelled in an earlier session')
   await goTo(page, 'Results')
   await page.getByRole('button', { name: 'Open a tags TSV…' }).click()
   await expect(page.locator('.tabpanel')).toContainText('The run that wrote /data/run01.tags.tsv was cancelled')

@@ -1,8 +1,8 @@
 // Step 1 of the Setup wizard (doc/GUI-SETUP-WIZARD.md 3): what the run is
 // for. Seven workflow tiles in three groups; the selected one fills one
 // shared detail panel. Selecting a tile changes nothing: Continue (or Enter
-// on a tile) confirms it and only then replaces the form. Above the tiles,
-// the start row: Continue last run, Presets and Open earlier results….
+// on a tile) confirms it and only then replaces the form. At the right of the
+// heading, StartRow: Continue last run, Presets and Open earlier results….
 // The preset controls of step 3 (origin, Reset, Undo, Save as preset) are
 // here too, as PresetMenu and OriginRow.
 
@@ -140,18 +140,43 @@ export function OriginRow({ session, learnMore }: { session: Session; learnMore?
   )
 }
 
+/// The start row, at the right of step 1's heading: Continue last run,
+/// Presets and Open earlier results….
+export function StartRow({ session, onOpenResults }: { session: Session; onOpenResults(): void }): JSX.Element {
+  const { lastUsed, lastUsedDiff } = session
+  const lastTask = session.lastWorkflow ? taskById(session.lastWorkflow) : undefined
+  return (
+    <div className="row tight start-row">
+      {lastUsed && lastUsedDiff.length > 0 && (
+        <button
+          type="button"
+          className="secondary small offer"
+          onClick={() => {
+            session.applyLastUsed()
+            leaveStep1(session)
+          }}
+          title={`The settings of your last run${lastTask ? ` (${lastTask.label})` : ''}: ${lastUsedDiff.map((n) => cliText(n, lastUsed[n])).join(' ')}`}
+        >
+          Continue last run ({lastUsedDiff.length})
+        </button>
+      )}
+      {session.step === 1 && <PresetMenu session={session} />}
+      <button type="button" className="link small" onClick={onOpenResults}>
+        Open earlier results…
+      </button>
+    </div>
+  )
+}
+
 export interface TaskStepProps {
   session: Session
   /// Confirm @p id: replace the form when it is another task, and move on.
   onContinue(id: TaskId): void
-  onOpenResults(): void
 }
 
-export default function TaskStep({ session, onContinue, onOpenResults }: TaskStepProps): JSX.Element {
+export default function TaskStep({ session, onContinue }: TaskStepProps): JSX.Element {
   const selected = taskById(session.tile) ?? TASKS[0]
   const grid = useRef<HTMLDivElement>(null)
-  const { lastUsed, lastUsedDiff } = session
-  const lastTask = session.lastWorkflow ? taskById(session.lastWorkflow) : undefined
   // Arrows move focus across all tiles (a plain focus group): focus selects.
   const onKey = (e: KeyboardEvent<HTMLButtonElement>, id: TaskId): void => {
     if (e.key === 'Enter') {
@@ -173,26 +198,6 @@ export default function TaskStep({ session, onContinue, onOpenResults }: TaskSte
         FASTag reads short amino-acid stretches (tags) from each MS/MS spectrum. It does not identify proteins with FDR control: use a
         search engine for that. Database reduction prepares the database and the settings for one.
       </p>
-      <div className="row tight start-row">
-        {lastUsed && lastUsedDiff.length > 0 && (
-          <button
-            type="button"
-            className="secondary small offer"
-            onClick={() => {
-              session.applyLastUsed()
-              leaveStep1(session)
-            }}
-            title={`The settings of your last run${lastTask ? ` (${lastTask.label})` : ''}: ${lastUsedDiff.map((n) => cliText(n, lastUsed[n])).join(' ')}`}
-          >
-            Continue last run ({lastUsedDiff.length})
-          </button>
-        )}
-        {session.step === 1 && <PresetMenu session={session} />}
-        <span className="spacer" />
-        <button type="button" className="link small" onClick={onOpenResults}>
-          Open earlier results…
-        </button>
-      </div>
       {session.presetError && (
         <p className="warn" role="alert">
           {session.presetError}

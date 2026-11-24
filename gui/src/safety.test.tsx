@@ -152,7 +152,6 @@ describe('P0a: partial outputs after a cancel or failure', () => {
     expect(screen.queryByRole('button', { name: 'Open it anyway' })).toBeNull()
     expect(logText(c)).toContain('Removed the partial output /d/a.tags.tsv')
     expect(logText(c)).toContain('Removed the partial output /d/a.digest.tsv')
-    expect(c.querySelector('.last-run')?.textContent).toMatch(/Cancelled .* · partial outputs removed/)
     expect(c.querySelector('[role="status"].sr-only')?.textContent).toBe('Cancelled a.mzML, partial outputs removed.')
     expect(screen.queryByRole('alert')).toBeNull()
   })
@@ -265,18 +264,6 @@ describe('P0a: existing outputs are confirmed before the run, never after', () =
     expect(mock.runCalls).toHaveLength(0)
     expect(c.querySelector('li.job.queued')).not.toBeNull()
     expect((screen.getByRole('button', { name: /^Run 1 remaining file$/ }) as HTMLButtonElement).disabled).toBe(false)
-  })
-
-  it('after a restart, the last run reads as cancelled from the run record', async () => {
-    const mock = installMockBridge()
-    mock.history = [rec('cancelled', '/d/a.tags.tsv')]
-    const c = await renderApp()
-    const last = c.querySelector('.last-run')?.textContent ?? ''
-    expect(last).toContain('a.mzML')
-    expect(last).toMatch(/Cancelled in an earlier session, .* · 1:30 · partial outputs removed/)
-    expect(c.querySelector('.last-run-name.cancelled')).not.toBeNull()
-    // Its parameters are not known: no "all defaults" claim.
-    expect(c.querySelector('.last-run-params')).toBeNull()
   })
 
   it('a tags file whose recorded run was cancelled opens as incomplete, not as a table', async () => {

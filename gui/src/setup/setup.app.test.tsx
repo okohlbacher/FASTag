@@ -28,7 +28,6 @@ describe('redesign: setup and run bar', () => {
     expect(container.querySelector('#p-tag_length')).toBeNull() // no editable field mid-run
     await emitDone(mock, 1, true)
     expect(container.querySelector('#p-tag_length')).not.toBeNull()
-    expect(controls.textContent).toMatch(/Last run.*a\.mzML.*Finished/)
   })
 
   it('counts the changed values of a group and of Advanced in their headers, and draws a value and its unit as one control', async () => {

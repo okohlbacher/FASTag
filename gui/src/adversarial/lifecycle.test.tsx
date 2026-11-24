@@ -284,25 +284,6 @@ describe('lifecycle: stale state across runs', () => {
   })
 })
 
-describe('lifecycle: last-run summary', () => {
-  it('the Last run block names the parameters the run was given, not the edited form', async () => {
-    const mock = installMockBridge()
-    await renderApp(mock)
-    await pickSingle(mock, '/d/a.mzML')
-    await act(async () => {
-      fireEvent.change(document.getElementById('p-tag_length') as HTMLInputElement, { target: { value: '4' } })
-    })
-    await click(runButton())
-    await done(mock, 1, true)
-    const params = (): string => document.querySelector('.last-run-params')?.textContent ?? ''
-    expect(params()).toContain('-tag_length 4')
-    await act(async () => {
-      fireEvent.change(document.getElementById('p-tag_length') as HTMLInputElement, { target: { value: '6' } })
-    })
-    expect(params()).toContain('-tag_length 4')
-  })
-})
-
 describe('lifecycle: run gating races', () => {
   it('the single Run button is disabled behind a batch queue', async () => {
     const mock = installMockBridge()
