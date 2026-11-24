@@ -95,7 +95,7 @@ const dbProductsOn = (values: V): string[] => PRODUCTS.filter((p) => p.db && isO
 /// not only the task.
 export function requiredInputs(task: Task | null, values?: V): string[] {
   const req = task?.required ?? []
-  if (!values || req.includes('recon_fasta') || !dbProductsOn(values).length) return req
+  if (!values || task?.dbOptional || req.includes('recon_fasta') || !dbProductsOn(values).length) return req
   return [...req, 'recon_fasta']
 }
 
@@ -107,7 +107,8 @@ export function requiredBy(task: Task | null, values: V, name: string): string {
 
 /// The input @p name stands in for in @p task (fasta for its required
 /// recon_fasta), or null.
-const standsInFor = (task: Task | null, name: string): string | null => (task?.required ?? []).find((r) => STANDS_IN[r] === name) ?? null
+const standsInFor = (task: Task | null, name: string): string | null =>
+  [...(task?.required ?? []), ...(task?.openInputs ?? [])].find((r) => STANDS_IN[r] === name) ?? null
 
 /// The menu and field label of an input. With @p task, a stand-in says
 /// what it also does there.
@@ -198,7 +199,7 @@ export function taskInputs(
     }
     // A stand-in (the Filter database of Mass-shift survey) is an optional
     // input like any other: its menu entry says that it stands in.
-    if (set || revealed.has(n)) shown.push(n)
+    if (set || revealed.has(n) || task?.openInputs?.includes(n)) shown.push(n)
     else if (!info?.after || setHasValue(values, info.after)) addable.push(n)
   }
   for (const n of PRIMARY_STEP2) {

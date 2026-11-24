@@ -143,7 +143,8 @@ export default function App({ start }: { start?: Origin } = {}): JSX.Element {
   taskRef.current = session.task
   const run = useRun(session, viewStore, {
     onStart: () => setView('results'),
-    landing: (wf) => (wf ? (LANDING_TAB[wf as TaskId] ?? null) : null),
+    // A Mass-shift survey without a database wrote the tags only: no Mass shifts tab to land on.
+    landing: (wf, params) => (wf === 'mass-shift' && params && !params['recon_out'] ? null : wf ? (LANDING_TAB[wf as TaskId] ?? null) : null),
     workflow: () => taskRef.current ?? null
   })
   const { running, batchRunning, busy, jobs } = run

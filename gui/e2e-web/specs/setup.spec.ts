@@ -78,27 +78,35 @@ test('Generate tags after Characterize leaves the Species tab for the requested 
   expect(await mockState<RunCall[]>(page, 'runCalls')).toHaveLength(2)
 })
 
-test('Mass-shift survey: the database is required, and the placements cannot be unchecked while the mass-shift table needs them', async ({ page }) => {
+test('Mass-shift survey: without a database only the tags run; a shipped proteome or a FASTA turns the shift reports on; the placements stay while the mass-shift table needs them', async ({ page }) => {
   await openApp(page)
   await chooseTask(page, 'Mass-shift survey')
   await toStep(page, 'Inputs')
   await page.getByRole('button', { name: 'Choose file…' }).click()
-  // The database sits beside the spectra, in Inputs.
+  // The database sits beside the spectra, in Inputs: a FASTA or a shipped proteome, not required (feedback 422372a2).
   await expect(page.locator('#step-2')).toContainText('Protein database')
-  await expect(page.locator('#step-2 .badge.todo')).toHaveText('required')
-  await expect(page.getByRole('button', { name: 'Run', exact: true })).toBeDisabled()
-  await expect(page.locator('.runbar')).toContainText('The placements need a protein database')
-  await page.locator('.runbar').getByRole('button', { name: 'Go to Inputs' }).click()
-  // The one step path: the Inputs heading takes focus.
-  await expect(page.locator('#step-h-2')).toBeFocused()
+  await expect(page.locator('#step-2 #p-recon_proteome')).toBeVisible()
+  await expect(page.locator('#step-2 .badge.todo')).toHaveCount(0)
+  await expect(page.getByRole('button', { name: 'Run', exact: true })).toBeEnabled()
+  await expect(page.locator('.plan-line')).toContainText('tags table only · 4 reports off: no protein database')
   await toStep(page, 'Outputs & run')
+  await expect(page.locator('#out-recon_out')).toBeDisabled()
+  await expect(page.locator('#out-recon_out')).not.toBeChecked()
+  await expect(page.locator('#out-recon_out-d')).toHaveText('needs a protein database')
+  await toStep(page, 'Inputs')
+  await page.locator('#p-recon_proteome').selectOption('human')
+  await toStep(page, 'Outputs & run')
+  await expect(page.locator('#out-recon_out')).toBeChecked()
   await expect(page.locator('#out-recon_out')).toBeDisabled()
   await expect(page.locator('#out-recon_out-d')).toContainText('needed by Mass-shift table')
   await expect(page.locator('#step-4')).toContainText('run01.delta.tsv')
+  await expect(page.locator('.plan-line')).not.toContainText('no protein database')
   await toStep(page, 'Inputs')
+  await page.locator('#p-recon_proteome').selectOption('')
   await page.locator('#p-recon_fasta').fill('/data/human.fasta')
   await toStep(page, 'Outputs & run')
   await expect(page.getByRole('button', { name: 'Run', exact: true })).toBeEnabled()
+  await expect(page.locator('#out-recon_out')).toBeChecked()
   // Unchecking the mass-shift table frees the placements.
   await page.locator('#out-delta_spectra_out').uncheck()
   await page.locator('#out-delta_counts_out').uncheck()

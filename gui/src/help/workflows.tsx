@@ -234,6 +234,13 @@ export const WORKFLOWS: HelpPage = {
             length 3). You can instead open a recon, delta or mass-gap report from an earlier run.
           </p>
           <p>
+            The database is your FASTA (<strong>Protein database</strong>) or a <strong>Shipped proteome</strong>{' '}
+            (human, mouse, yeast or E. coli), both in Inputs. Every shift report needs one, the mass-gap report
+            too: its gaps are those of the placements. Without a database the run writes the tags table only, and
+            Outputs marks the shift reports &ldquo;needs a protein database&rdquo;. A species report of the same file
+            names the organism under the proteome choice.
+          </p>
+          <p>
             <strong>Placed spectra</strong> counts the spectra placed on the database, unmodified ones (gap near
             0 Da) included; <strong>Shifted</strong> counts those with a gap of 0.5 Da or more.{' '}
             <strong>Placements</strong> counts table rows; one spectrum can have several placements.{' '}

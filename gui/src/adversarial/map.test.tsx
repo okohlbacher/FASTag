@@ -18,7 +18,7 @@ describe('map: param overlay vs CLI manifest', () => {
     expect(c).toContain('domain')
     expect(c).not.toContain('superkingdom')
   })
-  it('renders 155 parameters and hides 37: boilerplate, options the GUI drives itself, those removed in 1.14 and shortlist_defaults of 1.15.4', () => {
+  it('renders 156 parameters and hides 37: boilerplate, options the GUI drives itself, those removed in 1.14 and shortlist_defaults of 1.15.4', () => {
     // 1.10.0 added species_evidence (rendered) to the 1.9.0 set; 1.12.0 adds
     // 64 options (8 of them #17 -search_shifts), hidden until each has its GUI design, except
     // acquisition_check: its default refuses raw DIA, so the form offers warn/off.
@@ -42,7 +42,8 @@ describe('map: param overlay vs CLI manifest', () => {
     // 1.16 adds terminus and subsume_tags, rendered (Tag columns and files).
     // (The six tag-merging options of the development builds after 1.15.7,
     // four rendered and two hidden, were never released and are gone.)
-    expect(RENDERED.length).toBe(155)
+    // Feedback 422372a2 adds recon_proteome, rendered (Mass-shift survey, Inputs).
+    expect(RENDERED.length).toBe(156)
     // 1.13 digqual adds digest_quality, hidden as experimental.
     // TMT pseudo-residue and reporter filtering add two hidden experimental options.
     // post-1.13.1 adds search_missed_cleavages and search_nterm_acetyl (by engine), hidden.
@@ -64,7 +65,8 @@ describe('map: param overlay vs CLI manifest', () => {
     for (const n of manifest.params.map((p) => p.name).filter((n) => n.startsWith('label_discovery_'))) expect(HIDDEN_PARAMS).toContain(n)
     expect(RENDERED).toContain('acquisition_check')
     expect(PARAM_BY_NAME.get('acquisition_check')?.choices).toEqual(['refuse', 'warn', 'off'])
-    expect(manifest.params.length).toBe(192) // 1.15.5: 185 + shortlist_defaults, tolerance_by_analyzer, fragment_tolerance_itms; 1.16: + terminus, subsume_tags, fasta_proteins, data_paths
+    expect(RENDERED).toContain('recon_proteome')
+    expect(manifest.params.length).toBe(193) // 1.15.5: 185 + shortlist_defaults, tolerance_by_analyzer, fragment_tolerance_itms; 1.16: + terminus, subsume_tags, fasta_proteins, data_paths; feedback 422372a2: + recon_proteome
   })
   it('renders or hides every parameter of the manifest once (mzpeak_read_memory hidden)', () => {
     // In addition to the pinned counts above: every manifest parameter is

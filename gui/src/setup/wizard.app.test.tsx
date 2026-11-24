@@ -107,19 +107,22 @@ describe('wizard: inputs per task', () => {
     expect(field('fasta')).toBeNull()
   })
 
-  it('Mass-shift survey requires the protein database: said at the field once Next was tried; a wrong extension warns', async () => {
+  it('Mass-shift survey offers a FASTA or a shipped proteome and never blocks on it (feedback 422372a2); a wrong extension warns', async () => {
     const mock = installMockBridge()
     await renderColdApp(mock)
     await chooseTask('Mass-shift survey')
     expect(field('recon_fasta')).not.toBeNull()
-    expect(screen.queryByText(/^Required for Mass-shift survey: choose a protein FASTA/)).toBeNull()
-    expect(stepBtn(2).closest('li')!.className).toMatch(/blocked/)
-    expect(document.querySelector('.still-missing')!.textContent).toBe('Still missing: spectra, Protein database')
+    // The shipped proteomes, in step 2 beside it; none chosen at first.
+    const prot = document.getElementById('p-recon_proteome') as HTMLSelectElement
+    expect(prot.closest('[data-step]')!.getAttribute('data-step')).toBe('2')
+    expect([...prot.options].map((o) => o.textContent)).toEqual(['None', 'Human', 'Mouse', 'Yeast', 'E. coli'])
+    expect(prot.value).toBe('')
+    // Without a database only the spectra are missing.
+    expect(document.querySelector('.still-missing')!.textContent).toBe('Still missing: spectra')
     await click(screen.getByRole('button', { name: 'Next: Settings ›' }))
-    // Next is never a dead end: Settings opens; Inputs shows its errors.
     expect(currentStep()).toBe(3)
     showStep(2)
-    expect(screen.getByText('Required for Mass-shift survey: choose a protein FASTA.')).toBeDefined()
+    expect(screen.queryByText(/^Required for Mass-shift survey: choose a protein FASTA/)).toBeNull()
     await change(field('recon_fasta')!, '/d/proteins.txt')
     expect(screen.getByText('proteins.txt is not a FASTA file (.fasta, .fa, .faa).')).toBeDefined()
   })

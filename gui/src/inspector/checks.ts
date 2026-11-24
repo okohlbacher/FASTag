@@ -115,7 +115,7 @@ export function noTaxdbCheck(values: Record<string, ParamValue>, taxonomy: Taxon
 
 /// A shipped data file a run needs (FASTag.cpp): the digest tables of the
 /// mass-gap and digest reports and of the hand-off's protease check, and the
-/// alkylation report's proteome.
+/// alkylation report's and -recon_proteome's proteome.
 export interface DataNeed {
   // The output that needs it (its option).
   option: string
@@ -152,6 +152,13 @@ export function shippedDataNeeds(values: Record<string, ParamValue>, engine?: Pi
   const handoff = HANDOFF.filter(on)
   // With -digest_out the hand-off uses that report's models (above).
   if (handoff.length && !on('digest_out')) needs.push({ option: handoff[0], file: 'digest_models.tsv' })
+  // -recon_proteome (feedback 422372a2): the placements read a shipped
+  // proteome when no -recon_fasta is given and there is no hand-off (it
+  // needs a FASTA file; the CLI then ignores -recon_proteome). The
+  // alkylation report's placement check reads the same file.
+  const reconProt = text('recon_proteome').toLowerCase()
+  const reconShipped = on('recon_out') && !on('recon_fasta') && !handoff.length && SHIPPED_PROTEOME_NAMES.has(reconProt)
+  if (reconShipped) needs.push({ option: 'recon_proteome', file: `${reconProt}.fasta.gz`, proteome: reconProt })
   // The alkylation report reads a shipped proteome only when one is named
   // (auto, the default, reads none; an engine before 1.16 reads it as human)
   // and it places its tags on its own database: no -recon_fasta, no
@@ -222,7 +229,7 @@ export function missingDataChecks(values: Record<string, ParamValue>, data: Data
   for (const need of shippedDataNeeds(values, data)) {
     if (seen.has(need.option)) continue
     // An engine from before 1.16 reads auto as the human proteome.
-    const legacyAuto = need.proteome === 'human' && !data.autoDbFree && (String(values['alkylation_proteome'] ?? '').trim() || 'auto').toLowerCase() === 'auto'
+    const legacyAuto = need.option === 'alkylation_out' && need.proteome === 'human' && !data.autoDbFree && (String(values['alkylation_proteome'] ?? '').trim() || 'auto').toLowerCase() === 'auto'
     if (hasData(need, data)) {
       // It has the proteome: the run goes, but on a database the user did
       // not choose, where the app's copy promises the call from the tags.
@@ -231,24 +238,29 @@ export function missingDataChecks(values: Record<string, ParamValue>, data: Data
     }
     seen.add(need.option)
     const handoff = HANDOFF.includes(need.option)
-    const what = handoff ? 'the database reduction' : productText(need.option)
+    // -recon_proteome: the placements need it; without it they are off
+    // (Mass-shift survey) or read -fasta.
+    const recon = need.option === 'recon_proteome'
+    const what = handoff ? 'the database reduction' : productText(recon ? 'recon_out' : need.option)
     const Cap = what.charAt(0).toUpperCase() + what.slice(1)
     const how = need.proteome
       ? `${legacyAuto ? `${LEGACY_AUTO} Use the FASTag the app ships, or ` : ''}${legacyAuto ? 'give' : 'Give'} a protein database (FASTA) for the run, or use an installed FASTag (it has the proteomes in share/FASTag/alkylation), or set FASTAG_ALKYLATION_DIR to a folder that holds ${need.file} (data/alkylation in the FASTag sources) and start FASTag again.`
       : `Use an installed FASTag (cmake --install puts it in <prefix>/share/FASTag/digest), or set FASTAG_DIGEST_DIR to a folder that holds it (data/digest in the FASTag sources) and start FASTag again.`
     const without = handoff
       ? 'Or run without the protein shortlist, the reduced FASTA and the search-engine configuration.'
-      : `Or run without ${what}.`
+      : recon
+        ? 'Or choose no shipped proteome: the placements then wait for a protein database.'
+        : `Or run without ${what}.`
     checks.push({
       id: `no-shipped-data-${need.option}`,
       level: 'block',
       title: need.proteome
-        ? `${Cap} needs the shipped ${need.proteome} proteome (${need.file})`
+        ? `${Cap} ${recon ? 'need' : 'needs'} the shipped ${need.proteome} proteome (${need.file})`
         : `${Cap} needs FASTag's shipped data (${need.file})`,
       detail: `${lookedIn(need, data)} FASTag would stop before tagging. ${how} ${without}`,
       faq: 'faq-shipped-data',
       source: 'the settings and the installed files',
-      fix: handoff ? undefined : { label: `Run without ${what}`, params: { [need.option]: '' } }
+      fix: handoff ? undefined : recon ? { label: 'Use no shipped proteome', params: { recon_proteome: '' } } : { label: `Run without ${what}`, params: { [need.option]: '' } }
     })
   }
   return checks

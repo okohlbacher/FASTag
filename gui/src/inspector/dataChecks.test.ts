@@ -118,6 +118,28 @@ describe('shipped data before a run', () => {
     expect(missingDataChecks({ ...values, alkylation_proteome: 'yeast' }, withHuman).map((c) => c.id)).toEqual(['no-shipped-data-alkylation_out'])
   })
 
+  // Feedback 422372a2: -recon_proteome places the tags on a shipped proteome,
+  // which FASTag looks for as the alkylation report's (exit 6 without it).
+  it("a shipped proteome for the placements is checked like the alkylation report's", () => {
+    const values = { recon_out: 'r.tsv', delta_out: 'd.tsv', recon_proteome: 'mouse' }
+    expect(files(values)).toEqual(['recon_proteome:mouse.fasta.gz'])
+    // The alkylation report places on it too: one file, named once.
+    expect(files({ ...values, alkylation_out: 'a.tsv', alkylation_proteome: 'yeast' })).toEqual(['recon_proteome:mouse.fasta.gz'])
+    // The CLI ignores it with -recon_fasta, without -recon_out and with a hand-off.
+    expect(files({ ...values, recon_fasta: '/d/db.fasta' })).toEqual([])
+    expect(files({ recon_proteome: 'mouse' })).toEqual([])
+    expect(files({ ...values, fasta: '/d/db.fasta', shortlist_out: 's.tsv' })).toEqual(['shortlist_out:digest_models.tsv'])
+    const cs = missingDataChecks(values, { ...FULL, proteomes: ['human'] })
+    expect(cs.map((c) => [c.id, c.level])).toEqual([['no-shipped-data-recon_proteome', 'block']])
+    expect(cs[0].title).toBe('The tag placements need the shipped mouse proteome (mouse.fasta.gz)')
+    expect(cs[0].detail).toContain('It is not in /app/share/FASTag/alkylation.')
+    expect(cs[0].fix?.params).toEqual({ recon_proteome: '' })
+    expect(missingDataChecks({ ...values, ...cs[0].fix!.params }, BARE)).toEqual([])
+    expect(missingDataChecks(values, FULL)).toEqual([])
+    // An older engine: the legacy auto-as-human flag is the alkylation report's only.
+    expect(missingDataChecks({ ...values, recon_proteome: 'human' }, { ...FULL, autoDbFree: false })).toEqual([])
+  })
+
   it('Database reduction is blocked without a fix button', () => {
     const cs = missingDataChecks({ fasta: '/d/db.fasta', shortlist_out: 's.tsv', fasta_out: 'r.fasta' }, BARE)
     expect(cs.map((c) => c.id)).toEqual(['no-shipped-data-shortlist_out'])

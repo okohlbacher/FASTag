@@ -17,7 +17,9 @@ describe('round 15', () => {
     await renderColdApp(mock)
     await chooseTask('Mass-shift survey')
     const badge = (): Element | null => document.getElementById('p-recon_fasta')?.closest('.field')?.querySelector('.badge') ?? null
-    expect(badge()?.textContent).toBe('required')
+    // Feedback 422372a2: optional now (a shipped proteome or none also runs).
+    expect(document.getElementById('p-recon_fasta')).not.toBeNull()
+    expect(badge()?.textContent).not.toBe('required')
     showStep(1)
     await click(screen.getByRole('button', { name: 'Continue last run (1)' }))
     showStep(2)

@@ -68,12 +68,14 @@ test('Generate tags: no FASTA field in Inputs; the Filter database is an optiona
   await expect(page.locator('#p-fasta')).toBeFocused()
 })
 
-test('Mass-shift survey: the FASTA is required, a wrong extension warns, a missing file is named and blocks Run', async ({ page }) => {
+test('Mass-shift survey: the FASTA is optional, a wrong extension warns, a missing file is named and blocks Run', async ({ page }) => {
   await openApp(page)
   await chooseTask(page, 'Mass-shift survey')
   await page.getByRole('button', { name: 'Choose file…' }).click()
-  await expect(page.locator('#step-2 .badge.todo')).toHaveText('required')
-  await expect(page.locator('.still-missing')).toHaveText('Still missing: Protein database')
+  // Feedback 422372a2: no database needed to run (the shift reports wait for one).
+  await expect(page.locator('#step-2 .badge.todo')).toHaveCount(0)
+  await expect(page.locator('.still-missing')).toHaveCount(0)
+  await expect(page.getByRole('button', { name: 'Run', exact: true })).toBeEnabled()
   await page.locator('#p-recon_fasta').fill('/data/proteins.txt')
   await expect(page.locator('#step-2')).toContainText('proteins.txt is not a FASTA file (.fasta, .fa, .faa).')
   await page.locator('#p-recon_fasta').fill('/data/missing.fasta')

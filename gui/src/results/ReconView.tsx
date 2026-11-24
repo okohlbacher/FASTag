@@ -385,7 +385,7 @@ function PlacementTable({ t }: { t: ReconTable }): JSX.Element {
   const key = JSON.stringify(f)
   const rows = useMemo(() => filterRecon(t, JSON.parse(key) as ReconFilter), [t, key])
   const cols: Column[] = [
-    { id: 'spectrum', label: 'Spectrum', mono: true, text: (i) => t.spectra[t.spectrum[i]] },
+    { id: 'spectrum', label: 'Spectrum', mono: true, text: (i) => t.spectra[t.spectrum[i]], spectrum: (i) => t.spectra[t.spectrum[i]] },
     { id: 'tag', label: 'Tag', mono: true, text: (i) => t.tag[i] },
     { id: 'protein', label: 'Protein', text: (i) => t.protein[i] },
     { id: 'peptide', label: 'Peptide', mono: true, text: (i) => t.peptide[i] },
@@ -522,7 +522,7 @@ function IdTable({ t }: { t: ReconIdTable }): JSX.Element {
     return out.slice(0, k)
   }, [t, text])
   const cols: Column[] = [
-    { id: 'spectrum', label: 'Spectrum', mono: true, text: (i) => t.spectrum[i] },
+    { id: 'spectrum', label: 'Spectrum', mono: true, text: (i) => t.spectrum[i], spectrum: (i) => t.spectrum[i] },
     { id: 'sequence', label: 'Peptide', mono: true, text: (i) => t.sequence[i] },
     { id: 'accession', label: 'Protein', text: (i) => t.accession[i] },
     { id: 'score', label: 'E-value', num: true, text: (i) => (Number.isNaN(t.score[i]) ? '' : t.score[i].toExponential(2)), key: (i) => t.score[i] },

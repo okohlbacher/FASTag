@@ -84,7 +84,7 @@ const SECTION_DEFS: Omit<Section, 'open'>[] = [
   { title: 'Run QC', home: 'run-qc', blurb: 'Counts, resolution, charges, labels and instrument of the run, in one report.', params: ['qc_out'] },
   { title: 'Sampling and checks', home: 'global', blurb: 'How much of the run is read, the check for raw DIA data, and the check of the precursor charges.', params: ['subsample_fraction', 'acquisition_check', 'subsample_spectra', 'subsample_seed', 'acquisition_probe_spectra', 'check_header_charge', 'check_header_margin', 'check_header_out'] },
   { title: 'Placement on the database', home: 'mass-shift', blurb: 'Place tags on the proteins of a FASTA and keep the mass left over at each end.', params: ['recon_fasta', 'recon_missed_cleavages', 'recon_out', 'recon_id_out'] },
-  { title: 'Placement, advanced', home: 'mass-shift', blurb: 'Site localization, the shortest tag placed, and single-residue substitutions.', params: ['recon_localize', 'recon_min_length', 'recon_sub_tolerance', 'recon_sub_tolerance_unit'] },
+  { title: 'Placement, advanced', home: 'mass-shift', blurb: 'A shipped proteome, site localization, the shortest tag placed, and single-residue substitutions.', params: ['recon_proteome', 'recon_localize', 'recon_min_length', 'recon_sub_tolerance', 'recon_sub_tolerance_unit'] },
   { title: 'Mass-shift survey', home: 'mass-shift', blurb: 'The mass shifts between tag flanks and the database: a frequency table with sites and UniMod names.', params: ['delta_out', 'delta_spectra_out', 'delta_counts_out', 'massgap_out'] },
   { title: 'Mass-shift survey, advanced', home: 'mass-shift', experimental: true, blurb: 'How shifts are grouped, localized and named.', params: ['delta_select', 'delta_group', 'delta_isobar_tolerance', 'delta_isotope_flank', 'delta_loc_model', 'delta_loc_min_evidence', 'delta_loc_null', 'delta_name_tolerance', 'delta_name_tolerance_unit'] },
   { title: 'Mass-gap report', home: 'mass-shift', blurb: 'Peaks of the mass-gap distribution, explained as UniMod combinations.', params: ['massgap_max_mods', 'massgap_min_bin', 'massgap_min_share', 'massgap_min_spectra', 'massgap_silac_min', 'massgap_silac_share', 'massgap_top', 'massgap_window', 'massgap_window_da'] },
@@ -597,7 +597,11 @@ const CHOICE_WORDS: Record<string, string> = {
   idXML: 'idXML',
   mzid: 'mzIdentML',
   mzTab: 'mzTab',
-  tsv: 'TSV'
+  tsv: 'TSV',
+  human: 'Human',
+  mouse: 'Mouse',
+  yeast: 'Yeast',
+  ecoli: 'E. coli'
 }
 
 /// A choice of @p name in words: Sage for sage, Lys-C for lys-c, Genus for
@@ -605,7 +609,7 @@ const CHOICE_WORDS: Record<string, string> = {
 export function choiceText(name: string, choice: string): string {
   if (UNIT_PARAMS.has(name)) return choice
   // The choice that is not sent: the CLI decides (shortlist_specificity).
-  if (choice === '') return 'Automatic'
+  if (choice === '') return name === 'recon_proteome' ? 'None' : 'Automatic'
 
   if (Object.prototype.hasOwnProperty.call(CHOICE_WORDS, choice)) return CHOICE_WORDS[choice]
   const s = choice.replace(/_/g, ' ')
@@ -864,9 +868,10 @@ export const CONFLICTS: ((values: Record<string, unknown>, ctx: PreflightContext
           note: 'entrapment_fasta cannot be combined with species: entrapment matches would be counted as species evidence.'
         }
       : null,
-  // "-recon_out needs a database: give -recon_fasta (or -fasta)."
+  // "-recon_out needs a database: give -recon_fasta (or -fasta), or
+  // -recon_proteome for a shipped proteome."
   (values) =>
-    isActive('recon_out', values) && !isActive('recon_fasta', values) && !isActive('fasta', values)
+    isActive('recon_out', values) && !isActive('recon_fasta', values) && !isActive('fasta', values) && !isActive('recon_proteome', values)
       ? { params: ['recon_fasta', 'recon_out', 'fasta'], note: 'The placements need a protein database: choose one in Inputs.', neutral: true }
       : null,
   // "-shortlist_out needs a database: give -recon_fasta (or -fasta)."

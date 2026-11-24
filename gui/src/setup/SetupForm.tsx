@@ -18,6 +18,7 @@ import PageHeader from '../shell/PageHeader'
 import type { ActionNav } from '../run/RunBar'
 import type { Session } from './useSession'
 import type { RunState } from '../run/useRun'
+import { proteomeHint } from './proteomeHint'
 import type { SdrfState } from '../sdrf/useSdrf'
 import { Leftovers } from '../Leftovers'
 import { NotCheckedHelp } from '../inspector/NotCheckedHelp'
@@ -46,7 +47,7 @@ import {
 } from './inputs'
 import { IconCheck, IconUpload, TaskIcon } from '../icons'
 import { INSTRUMENTS, presetText, shownInstrument } from './presets'
-import { PRODUCT_OF, PRODUCTS, USI_PLACEHOLDER, fileName, isOn, missingDatabase, neededBy, productLabel, alkylationExtension, alkylationRaise, alkylationShipped, alkylationShort, alkylationTagOnly, toggleProduct, type Product } from './products'
+import { PRODUCT_OF, PRODUCTS, USI_PLACEHOLDER, fileName, hasDatabase, isOn, missingDatabase, neededBy, productLabel, alkylationExtension, alkylationRaise, alkylationShipped, alkylationShort, alkylationTagOnly, toggleProduct, type Product } from './products'
 
 // A parameter that exists in the CLI but nowhere in the layout would silently
 // be unreachable; surface it instead of hiding it.
@@ -421,10 +422,13 @@ export default function SetupForm({
   const productRow = (param: string): JSX.Element | null => {
     const p = PRODUCT_OF.get(param)
     if (!p) return null
-    const on = isOn(p, values) || (p.param === 'usi_collection' && usiEditing)
+    // Mass-shift survey (tasks.ts dbOptional): a report that needs a protein
+    // database is off, not a block, while none is chosen.
+    const noDb = !!owner?.dbOptional && !!p.db && !hasDatabase(p, values)
+    const on = !noDb && (isOn(p, values) || (p.param === 'usi_collection' && usiEditing))
     const needed = neededBy(p, values)
     const follows = p.follows ? PRODUCT_OF.get(p.follows) : undefined
-    const locked = p.param === 'out' || (on && needed.length > 0) || !!follows
+    const locked = p.param === 'out' || noDb || (on && needed.length > 0) || !!follows
     // A batch names each output after its input (jobOut, rebaseOutputs):
     // the rule, not one run's file.
     // Each job's names by the job's own rule (perJobOutputs over
@@ -436,6 +440,8 @@ export default function SetupForm({
     const why =
       p.param === 'out'
         ? 'always written'
+        : noDb
+          ? 'needs a protein database'
         : on && needed.length > 0
           ? // One line: two or more are counted, and named in the row's tooltip.
             needed.length > 1
@@ -834,11 +840,12 @@ export default function SetupForm({
     if (!d?.length || !hasValue(values, n)) return null
     return <div className="input-deps">{d.map((x) => field(x))}</div>
   }
-  const requiredInput = (n: string): JSX.Element => {
+  // The Filter database stands in (the CLI's own rule): said, not empty.
+  // Not while a shipped proteome is chosen: the CLI places on that first.
+  const standIn = (n: string): JSX.Element | null => {
     const alt = STANDS_IN[n]
     const spec = PARAM_BY_NAME.get(n)
-    // The Filter database stands in (the CLI's own rule): said, not empty.
-    if (alt && !hasValue(values, n) && hasValue(values, alt))
+    if (alt && !hasValue(values, n) && hasValue(values, alt) && !hasValue(values, 'recon_proteome'))
       return (
         <div className="field standin" key={n}>
           <span className="label-row">
@@ -854,27 +861,38 @@ export default function SetupForm({
           </p>
         </div>
       )
-    return (
+    return null
+  }
+  const requiredInput = (n: string): JSX.Element =>
+    standIn(n) ?? (
       <div key={n} className="input-block">
         {field(n, { brief: task.help[n] ?? INPUTS[n]?.why, required: true })}
         {inputNotes(n, true)}
       </div>
     )
+  // An input the task shows open (tasks.ts openInputs: Mass-shift survey's
+  // Protein database) has its stand-in said, and Remove only once it is set.
+  const optionalInput = (n: string): JSX.Element => {
+    const open = !!owner?.openInputs?.includes(n)
+    const alt = open ? standIn(n) : null
+    if (alt) return alt
+    return (
+      <div key={n} className="input-block optional">
+        {[n, ...(INPUTS[n]?.also ?? [])].map((m) =>
+          field(m, {
+            brief: m === n ? (open ? (task.help[n] ?? INPUTS[n]?.why) : (INPUTS[n]?.why ?? task.help[n])) : undefined
+          })
+        )}
+        {inputNotes(n)}
+        {dependentsOf(n)}
+        {(!open || hasValue(values, n)) && (
+          <button type="button" className="link small" aria-label={`Remove ${inputLabel(n)}`} onClick={() => session.removeInput(n)}>
+            Remove
+          </button>
+        )}
+      </div>
+    )
   }
-  const optionalInput = (n: string): JSX.Element => (
-    <div key={n} className="input-block optional">
-      {[n, ...(INPUTS[n]?.also ?? [])].map((m) =>
-        field(m, {
-          brief: m === n ? (INPUTS[n]?.why ?? task.help[n]) : undefined
-        })
-      )}
-      {inputNotes(n)}
-      {dependentsOf(n)}
-      <button type="button" className="link small" aria-label={`Remove ${inputLabel(n)}`} onClick={() => session.removeInput(n)}>
-        Remove
-      </button>
-    </div>
-  )
 
   const spectraBlock = (
     <div className="spectra-block">
@@ -1065,7 +1083,12 @@ export default function SetupForm({
         })}
         {aboutParams(owner)
           .filter((n) => !waitsOnShownFile(n))
-          .map((n) => field(n, { brief: task.help[n] }))}
+          .map((n) =>
+            field(n, {
+              // Shipped proteome: which one fits, from a species report of this file.
+              brief: n === 'recon_proteome' ? proteomeHint(!batch && run.speciesRun?.input === input ? run.species : null, String(values['recon_proteome'] ?? '')) : task.help[n]
+            })
+          )}
       </div>
     </section>
   )
@@ -1233,15 +1256,24 @@ export default function SetupForm({
           )}
         </div>
       )}
-      {missingDatabase(values) && (
-        <p className="hint">
-          Some of these need the protein database:{' '}
-          <button type="button" className="link small" onClick={() => go(2)}>
-            choose it in Inputs
-          </button>
-          .
-        </p>
-      )}
+      {missingDatabase(values) &&
+        (owner?.dbOptional ? (
+          <p className="hint" role="note">
+            No protein database: only the tags table is written. The shift reports need your FASTA or a shipped proteome:{' '}
+            <button type="button" className="link small" onClick={() => go(2)}>
+              choose one in Inputs
+            </button>
+            .
+          </p>
+        ) : (
+          <p className="hint">
+            Some of these need the protein database:{' '}
+            <button type="button" className="link small" onClick={() => go(2)}>
+              choose it in Inputs
+            </button>
+            .
+          </p>
+        ))}
       <ul className="products" aria-label="Products">
         {task.outputs.map(productRow)}
       </ul>

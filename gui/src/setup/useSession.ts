@@ -24,7 +24,7 @@ import { renameSearchConfig } from './products'
 import { defaultSpeciesOut, dirName, rebaseOutputs, stripExt } from '../app/paths'
 import { cliText, sameValue } from '../app/format'
 import { focusLater } from '../app/focus'
-import { DEFAULTS, LAST_WORKFLOW, baseOf, baseValues, originText, startValues, taskById, taskOf, type Origin, type TaskId } from './tasks'
+import { DEFAULTS, LAST_WORKFLOW, baseOf, baseValues, originText, runValues, startValues, taskById, taskOf, type Origin, type TaskId } from './tasks'
 import { applyPreset as presetValues, diffNames, droppedPaths, normalizePreset, presetDiff } from './presetDiff'
 import { carryInputs, carriedText, missingInputs, setOf, type Step } from './inputs'
 import { LANDING_TASK } from './tasks'
@@ -431,25 +431,28 @@ export function useSession(start: Origin = DEFAULTS, opts: { confirmed?: boolean
   // Values the CLI would refuse, field by field, and combinations it refuses
   // before reading a spectrum (rc 6): either keeps Run and Run batch disabled.
   const invalid = invalidParams(values)
-  const refused = conflicts(values, { taxdbK, input: mode === 'one' ? input : undefined, inputs: batchInputs })
+  // What a run is sent: Mass-shift survey's shift reports wait for a
+  // protein database (tasks.ts runValues), so they neither block nor run.
+  const sendable = runValues(taskOf(origin), values)
+  const refused = conflicts(sendable, { taxdbK, input: mode === 'one' ? input : undefined, inputs: batchInputs })
   const blocked = Object.keys(invalid).length > 0 || refused.length > 0
 
   // What a run writes, by file name: the tags, then each output it is sent.
   // Species and glyco reports go beside <out> when no path is given.
   const writingFiles: string[] = (() => {
     const files = [out]
-    if (speciesOn) files.push(String(values['species_out'] || '') || defaultSpeciesOut(out))
-    if (values['glyco'] === true) files.push(String(values['glyco_out'] || '') || `${stripExt(out)}.glyco.tsv`)
+    if (speciesOn) files.push(String(sendable['species_out'] || '') || defaultSpeciesOut(out))
+    if (sendable['glyco'] === true) files.push(String(sendable['glyco_out'] || '') || `${stripExt(out)}.glyco.tsv`)
     for (const name of RENDERED) {
       if (name === 'species_out' || name === 'glyco_out' || PARAM_BY_NAME.get(name)?.type !== 'output-file') continue
-      const v = String(values[name] || '')
-      if (v && !inertBecause(name, values)) files.push(v)
+      const v = String(sendable[name] || '')
+      if (v && !inertBecause(name, sendable)) files.push(v)
     }
     return files.filter(Boolean).map(baseName)
   })()
   // The parameters a run sends that differ from the defaults.
-  const changedParams = RENDERED.filter((n) => !inertBecause(n, values) && isChanged(n, values[n])).map((n) =>
-    cliText(n, values[n])
+  const changedParams = RENDERED.filter((n) => !inertBecause(n, sendable) && isChanged(n, sendable[n])).map((n) =>
+    cliText(n, sendable[n])
   )
 
   const fixes = speciesFixes(tooShort)

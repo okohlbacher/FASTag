@@ -306,7 +306,38 @@ export function productsOn(params: readonly string[], values: V): Product[] {
   return params.map((n) => PRODUCT_OF.get(n)).filter((p): p is Product => !!p && p.param !== 'out' && !p.column && isOn(p, values))
 }
 
+/// The products a shipped proteome (-recon_proteome) serves: the placements
+/// and what is made from them. The shortlist, reduced FASTA and engine
+/// configuration name their database to the engine: they need a FASTA file.
+const PROTEOME_SERVES = new Set(['recon_out', 'delta_out', 'delta_spectra_out', 'delta_counts_out', 'massgap_out', 'recon_id_out'])
+
+/// The database product @p p has one in @p values: a Protein or Filter
+/// database, or for the placements a shipped proteome.
+export function hasDatabase(p: Product, values: V): boolean {
+  return isActive('recon_fasta', values) || isActive('fasta', values) || (PROTEOME_SERVES.has(p.param) && text(values['recon_proteome']) !== '')
+}
+
 /// A product is on and its report needs the protein database, which is not set.
 export function missingDatabase(values: V): boolean {
-  return PRODUCTS.some((p) => p.db && isOn(p, values)) && !isActive('recon_fasta', values) && !isActive('fasta', values)
+  return PRODUCTS.some((p) => p.db && isOn(p, values) && !hasDatabase(p, values))
+}
+
+/// The products on in @p values that wait for a protein database (none is
+/// chosen for them), by label.
+export function waitingForDatabase(values: V): Product[] {
+  return PRODUCTS.filter((p) => p.db && isOn(p, values) && !hasDatabase(p, values))
+}
+
+/// @p values with every product that has no database off: what a workflow
+/// whose database reports wait for one (tasks.ts dbOptional) runs. The form
+/// keeps them on, so choosing a database brings them back.
+export function withoutDatabase(values: V): V {
+  const off = waitingForDatabase(values)
+  if (!off.length) return values
+  const next: V = { ...values }
+  for (const p of off) {
+    if (p.flag) next[p.flag] = false
+    next[p.param] = ''
+  }
+  return next
 }

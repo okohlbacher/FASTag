@@ -7,6 +7,8 @@ import { useEffect, useRef, useState, type JSX } from 'react'
 import type { Session } from './useSession'
 import type { RunState } from '../run/useRun'
 import { planLine } from './plan'
+import { runValues, taskById } from './tasks'
+import { waitingForDatabase } from './products'
 import { shellLine } from '../app/format'
 import { baseName } from '../digestReport'
 import { stripExt } from '../app/paths'
@@ -69,7 +71,17 @@ export default function PlanFooter({ session, run }: { session: Session; run: Ru
   }
 
   const label = originText.replace(/^preset /, '')
-  const plan = planLine(label === 'FASTag defaults' ? 'FASTag' : label, values, { input, files: run.jobs.length, outDir: run.outDir, batch: session.mode === 'batch' })
+  // What runs: Mass-shift survey's shift reports are off, and said so,
+  // until a protein database is chosen (tasks.ts runValues).
+  const owner = taskById(session.task ?? '')
+  const waiting = owner?.dbOptional ? waitingForDatabase(values).filter((p) => !p.follows).length : 0
+  const plan = planLine(label === 'FASTag defaults' ? 'FASTag' : label, runValues(owner, values), {
+    input,
+    files: run.jobs.length,
+    outDir: run.outDir,
+    batch: session.mode === 'batch',
+    waiting
+  })
   const assume = assumptions(values, session.instrument)
   return (
     <div className="plan-footer" role="region" aria-label="Plan">

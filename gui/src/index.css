@@ -1306,6 +1306,16 @@ kbd { font-family: var(--font-mono); font-size: var(--text-xs); color: var(--mut
 .overview .tile.tone-low .tile-value { color: var(--flag-text); }
 .overview .tile .tile-value.muted { color: var(--muted-foreground); }
 .overview .tile button { align-self: flex-start; }
+/* A tile with a detail tab is a link to it (tileLinks.ts): the label is the
+   button, the whole card takes the click, a chevron says it leads on. */
+button.tile-open { height: auto; padding: 0; border: none; background: none; color: inherit; font: inherit; text-transform: inherit; display: inline-flex; align-items: center; gap: 4px; text-align: left; white-space: normal; }
+button.tile-open:hover:not(:disabled) { background: none; border: none; }
+button.tile-open .chev-icon { opacity: 0.6; transition: transform 0.12s; }
+.overview .tile[data-link], .qc-tiles .stat[data-link] { cursor: pointer; }
+.overview .tile[data-link]:hover, .qc-tiles .stat[data-link]:hover { border-color: var(--control); }
+.overview .tile[data-link]:hover button.tile-open, .qc-tiles .stat[data-link]:hover button.tile-open { color: var(--primary-text); }
+.overview .tile[data-link]:hover .chev-icon, .qc-tiles .stat[data-link]:hover .chev-icon { opacity: 1; transform: translateX(2px); }
+@media (prefers-reduced-motion: reduce) { button.tile-open .chev-icon { transition: none; } }
 .overview ul.checks { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: var(--space-1); font-size: var(--text-sm); }
 .overview ul.checks li.ok::before { content: '✓ '; color: var(--ok); }
 .overview ul.checks li.flag { color: var(--flag-text); }

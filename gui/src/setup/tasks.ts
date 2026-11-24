@@ -10,6 +10,7 @@
 import type { ParamValue } from '../ParamField'
 import { initialValues } from './useSession'
 import { rebaseOutputs } from '../app/paths'
+import { withoutDatabase } from './products'
 
 export type TaskId = 'export-tags' | 'run-qc' | 'mass-shift' | 'species' | 'db-reduction' | 'triage' | 'characterize'
 
@@ -66,6 +67,12 @@ export interface Task {
   /// A line beside a product of this workflow that is off by default: what
   /// it needs here.
   productNotes?: Record<string, string>
+  /// Its database reports (products.ts db) wait for a protein database
+  /// instead of blocking Run: while none is chosen they are off, and the
+  /// run writes what needs none (runValues).
+  dbOptional?: true
+  /// Optional inputs step 2 shows open, not behind Add optional input.
+  openInputs?: string[]
   /// Groups of Advanced with another home (paramLayout SECTIONS) that lead
   /// with the workflow's own, by title: the settings of a report it writes
   /// by default (Characterize: species).
@@ -137,9 +144,9 @@ export const TASKS: readonly Task[] = [
     use: 'Unexpected or unknown modifications.',
     notFor: 'Confirmed identifications: shifts and placements are candidates without FDR control.',
     time: 'longer',
-    timeNote: 'places every tag on the FASTA',
+    timeNote: 'places every tag on the protein database',
     group: 'sample',
-    blurb: 'Blind modification search: mass shifts between tags and the database, with sites and UniMod names.',
+    blurb: 'Blind modification search: mass shifts between tags and a protein database (your FASTA or a shipped proteome), with sites and UniMod names.',
     products: 'shift table',
     values: {
       ...ALL,
@@ -150,9 +157,16 @@ export const TASKS: readonly Task[] = [
       extension: '3'
     },
     basic: ['extension', 'recon_missed_cleavages'],
-    required: ['recon_fasta'],
+    // Feedback 422372a2: the shifts are measured against a protein database,
+    // a FASTA of the user's or a shipped proteome. Without one the shift
+    // reports are off and the run writes the tags only (dbOptional).
+    optionalInputs: ['recon_fasta', 'fasta'],
+    openInputs: ['recon_fasta'],
+    about: ['recon_proteome'],
+    dbOptional: true,
     help: {
-      recon_fasta: 'The FASTA the tags are placed on (tryptic peptides); shifts are measured against it.',
+      recon_fasta: 'Your FASTA the tags are placed on (tryptic peptides); shifts are measured against it. Or choose a shipped proteome below.',
+      recon_proteome: 'The organism\'s shipped proteome, when you have no FASTA of your own.',
       extension: 'Longer tags place better.',
       recon_missed_cleavages: 'Missed trypsin cleavages per placement, 0 to 10.'
     },
@@ -356,6 +370,12 @@ export function originText(o: Origin): string {
   if (o.kind === 'builtin') return taskById(o.id)?.label ?? o.id
   if (o.kind === 'preset') return `preset ${o.name}`
   return 'FASTag defaults'
+}
+
+/// The values a run of @p task is sent: for a workflow whose database
+/// reports wait for a database (dbOptional), those without one are off.
+export function runValues<T extends Record<string, ParamValue>>(task: Task | null | undefined, values: T): T {
+  return task?.dbOptional ? (withoutDatabase(values) as T) : values
 }
 
 /// The values a session starting from @p base has, its reports beside

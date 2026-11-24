@@ -304,6 +304,13 @@ void TOPPFASTag::registerOptionsAndFlags_()
   registerInputFile_("recon_fasta", "<file>", "",
                      "Protein database for -recon_out. Default: the -fasta file", false);
   setValidFormats_("recon_fasta", ListUtils::create<std::string>("fasta"));
+  // Feedback 422372a2: a shipped proteome as the database of -recon_out, so
+  // a mass-shift survey of a common organism needs no FASTA of one's own.
+  registerStringOption_("recon_proteome", "<name>", "",
+                        "Shipped proteome for -recon_out when -recon_fasta is not given: human, mouse, yeast "
+                        "or ecoli (the UniProt reference proteomes of share/FASTag/alkylation). Used before "
+                        "-fasta. Tags place on them from 8 residues (human, mouse) or 7 (yeast, ecoli)", false);
+  setValidStrings_("recon_proteome", ListUtils::create<std::string>(",human,mouse,yeast,ecoli"));
   registerIntOption_("recon_missed_cleavages", "<n>", 1,
                      "Missed tryptic cleavages allowed in reconciliation windows (at most 10)", false);
   setMinInt_("recon_missed_cleavages", 0);

@@ -25,20 +25,11 @@ import ReconView from './ReconView'
 import ReportTable from './ReportTable'
 import { shownArtifact, type WorkflowReports } from './workflowReports'
 import GlycoTable from './GlycoTable'
+import { TAB_LABEL, focusTab } from './tileLinks'
 import SpectrumPanel, { type SpectrumSource, type SpectrumTarget } from '../spectrum/SpectrumPanel'
+import { SPECTRUM_NEEDS } from '../spectrum/support'
+import { NO_SPECTRA_FILE, SpectrumLinkContext, type SpectrumLink } from './spectrumLink'
 
-const TAB_LABEL: Record<Tab, string> = {
-  overview: 'Overview',
-  results: 'Tags',
-  spectrum: 'Spectrum',
-  qc: 'QC',
-  recon: 'Mass shifts',
-  species: 'Species',
-  shortlist: 'Shortlist',
-  triage: 'Triage',
-  digest: 'Digest',
-  glyco: 'Glyco'
-}
 // The order of every tab, after those a workflow puts first.
 const ORDER: Tab[] = ['overview', 'results', 'spectrum', 'qc', 'recon', 'species', 'shortlist', 'triage', 'digest', 'glyco']
 
@@ -223,6 +214,14 @@ export default function ResultTabs(p: ResultTabsProps): JSX.Element {
     // Keyboard focus follows the row to the Spectrum tab's heading.
     focusLater(() => document.querySelector<HTMLElement>('#tabpanel .sp-head h2'))
   }
+  // The scan cells of the other tables (Glyco, Triage, Recon, spectra per
+  // mass shift) open the Spectrum tab as Triage does: ◀ ▶ walk each tagged
+  // spectrum in file order, since those tables have no Tags-table view.
+  const spectrumLink: SpectrumLink = !spectrumOn
+    ? { off: p.spectrumSupport == null ? 'Still asking FASTag whether it can show spectra' : SPECTRUM_NEEDS }
+    : !path
+      ? { off: NO_SPECTRA_FILE }
+      : { open: (sp) => openSpectrum(sp, null) }
   // Arrow keys, Home and End move between the tabs (WAI-ARIA tabs pattern).
   function onTabKey(e: KeyboardEvent<HTMLDivElement>): void {
     const i = tabs.indexOf(tab)
@@ -383,6 +382,7 @@ export default function ResultTabs(p: ResultTabsProps): JSX.Element {
       {p.runningState}
 
       <div className="tabpanel" id="tabpanel" role="tabpanel" aria-labelledby={`tab-${tab}`}>
+        <SpectrumLinkContext.Provider value={spectrumLink}>
         {tab === 'overview' && p.overview ? (
           <div className="tablewrap">
             <OverviewPanel
@@ -395,6 +395,12 @@ export default function ResultTabs(p: ResultTabsProps): JSX.Element {
               busy={busy}
               actionable={!p.overview.locked}
               onAction={(a) => p.onOverviewAction?.(a)}
+              tabs={tabs}
+              onOpen={(to) => {
+                setTab(to.tab)
+                // Keyboard focus follows the tile to the heading it opens.
+                focusTab(to.tab, to.sections)
+              }}
             />
           </div>
         ) : (tab === 'qc' || tab === 'shortlist' || tab === 'triage') && wr[tab] ? (
@@ -471,7 +477,7 @@ export default function ResultTabs(p: ResultTabsProps): JSX.Element {
               />
             ) : (
               <EmptyState title="No spectrum chosen">
-                In Tags or Triage, choose a row and press Enter (or Open in Spectrum) to see its spectrum.
+                Click a scan in Tags, Triage, Glyco or Mass shifts, or choose a row and press Enter (or Open in Spectrum), to see its spectrum.
               </EmptyState>
             )}
           </div>
@@ -577,6 +583,7 @@ export default function ResultTabs(p: ResultTabsProps): JSX.Element {
             </EmptyState>
           </div>
         )}
+        </SpectrumLinkContext.Provider>
       </div>
       {p.children}
       </div>

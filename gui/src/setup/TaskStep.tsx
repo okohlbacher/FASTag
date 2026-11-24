@@ -17,8 +17,10 @@ import { TaskIcon } from '../icons'
 import { INPUTS, inputLabel, missingInputs } from './inputs'
 
 /// The badge of a tile: "needs FASTA" when a required input is a FASTA,
-/// "IDs optional" when identifications are an optional input.
+/// "IDs optional" when identifications are an optional input; "FASTA or
+/// shipped proteome" when its database reports take either (dbOptional).
 export function taskBadge(t: Task): string | null {
+  if (t.dbOptional) return 'FASTA or shipped proteome'
   if ((t.required ?? []).some((n) => (PARAM_BY_NAME.get(n)?.formats ?? []).includes('fasta'))) return 'needs FASTA'
   if ((t.optionalInputs ?? []).includes('census_ids')) return 'IDs optional'
   return null
@@ -27,7 +29,9 @@ export function taskBadge(t: Task): string | null {
 /// "spectra + a protein FASTA (Protein database)", from the task's inputs.
 export function youNeed(t: Task | null): string {
   const req = (t?.required ?? []).map((n) => (n === 'recon_fasta' ? 'a protein FASTA' : inputLabel(n)))
-  const opt = (t?.optionalInputs ?? []).filter((n) => !INPUTS[n]?.after).map((n) => inputLabel(n).replace(/^Your /, 'your ').toLowerCase())
+  const opt = (t?.optionalInputs ?? [])
+    .filter((n) => !INPUTS[n]?.after)
+    .map((n) => (t?.dbOptional && n === 'recon_fasta' ? 'protein database (your FASTA or a shipped proteome)' : inputLabel(n).replace(/^Your /, 'your ').toLowerCase()))
   return ['spectra', ...req].join(' + ') + (opt.length ? `; optional: ${opt.join(', ')}` : '')
 }
 

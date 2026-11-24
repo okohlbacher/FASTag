@@ -1209,6 +1209,21 @@
       ]
     },
     {
+      "name": "recon_proteome",
+      "type": "string",
+      "default": "",
+      "description": "Shipped proteome for -recon_out when -recon_fasta is not given: human, mouse, yeast or ecoli (the UniProt reference proteomes of share/FASTag/alkylation). Used before -fasta. Tags place on them from 8 residues (human, mouse) or 7 (yeast, ecoli)",
+      "required": false,
+      "toppAdvanced": false,
+      "choices": [
+        "",
+        "human",
+        "mouse",
+        "yeast",
+        "ecoli"
+      ]
+    },
+    {
       "name": "recon_sub_tolerance",
       "type": "double",
       "default": "5.0",

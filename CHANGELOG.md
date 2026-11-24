@@ -54,6 +54,32 @@
   with `-extension 2` (1 CAM vote now an alias conflict), no call at the defaults (8 votes). The held-out result
   (40 of 57 runs called, 37 right) was measured without these checks.
 
+- **Mass-shift survey without a FASTA of your own (feedback 422372a2).** New CLI option `-recon_proteome
+  <human|mouse|yeast|ecoli>`: the shipped UniProt reference proteome is the database of `-recon_out` (and of
+  `-delta_out`, `-massgap_out`, `-recon_id_out`) when `-recon_fasta` is not given; it is used before `-fasta`, and
+  `-alkylation_out` checks its call on its placements. It is ignored with a hand-off (`-shortlist_out`, `-fasta_out`,
+  `-search_config_out` need a FASTA file). The desktop app's check before a run blocks Run when the chosen proteome is
+  not among the engine's shipped data (`-data_paths`), with the fix "Use no shipped proteome".
+  In the GUI, Mass-shift survey no longer blocks Run with "Still missing: Protein database". Inputs offers your
+  FASTA or a shipped proteome, with the organism a species report of the same file names. Without a database
+  the run writes the tags table only: the shift reports are off, marked "needs a protein database", and the plan
+  says so. Every shift report needs a database, the mass-gap report included: its gaps are those of the
+  placements. On PXD003531 (human, Q Exactive) with `-recon_proteome human -extension 3`, 10,309 of 27,223
+  tagged MS2 place; the top mass-gap peak is Phospho (79.975 Da, 551 spectra).
+
+- **GUI: a scan opens its spectrum in every table.** In Glyco, Triage and Mass shifts (placements, identifications,
+  spectra per mass shift), the scan has the spectrum icon, as in Tags: a click on it, or Enter on its row, opens the
+  Spectrum tab at that spectrum; ◀ ▶ then walk the tagged spectra in file order. Where no spectrum can be shown (a
+  FASTag without `-dump_spectrum`, or a report opened without its tags table), the scan is plain text and its
+  tooltip says why.
+
+- **GUI: Overview tiles open their tab.** A click on an Overview tile, or Enter on its label, opens the tab
+  with its detail, at its section where there is one: Protease, Label and Alkylation open Digest at their section,
+  Top genus opens Species, Glyco opens Glyco, the QC tiles open QC, the Triage tiles open Triage, the mass-shift
+  tiles open Mass shifts. Focus moves to the heading that opens. A linked tile shows a chevron and a pointer; a
+  tile with no tab, or one that only offers to add its report, is no link. On the Run QC page, MS2 spectra and
+  Isobaric kit move to the Spectra and Reporter ions sections.
+
 - **CLI: the alkylation call needs no protein database (`-alkylation_out` format 2).** `-alkylation_out` now
   reads the cysteine forms in the tags (unmodified, Carbamidomethyl, Propionamide, Nethylmaleimide, Methylthio,
   Carboxymethyl; the method of `-alkylation_tags_out`) and calls the reagent, or says `no_call` with the reason and

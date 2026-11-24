@@ -783,7 +783,7 @@ export const RESULTS: HelpPage = {
       body: (
         <>
           <p>
-            In Tags, double-click a row, or choose it and press Enter (or Open in Spectrum). The Spectrum tab shows that spectrum with the
+            In Tags, double-click a row, or choose it and press Enter (or Open in Spectrum). In Glyco, Triage and Mass shifts, click a scan (it has the spectrum icon), or choose its row and press Enter. The Spectrum tab shows that spectrum with the
             peaks FASTag tagged: after centroiding, the precursor cut, deisotoping and the peak budget, as the run
             prepared them (FASTag prints them with -dump_spectrum, under the options of the run that wrote the
             table). The chosen tag&apos;s ladder is drawn on them: its ions one residue apart (the residue divided by

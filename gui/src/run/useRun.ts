@@ -5,7 +5,7 @@
 // (runJob.ts), and its log lines go to its log store (logStore.ts), not to
 // React state, so a Log batch re-renders only the drawer.
 
-import { LAST_WORKFLOW } from '../setup/tasks'
+import { LAST_WORKFLOW, runValues, taskById } from '../setup/tasks'
 import { useCallback, useEffect, useMemo, useReducer, useRef, type Dispatch, type SetStateAction } from 'react'
 import type { LogLine, ResolvedOutputs, RunRecord, RunResult, SpeciesReport } from '../types'
 import { recordOutputs } from '../shell/HistoryView'
@@ -130,7 +130,7 @@ export interface RunHooks {
   onStart?(): void
   // The landing tab of the workflow @p workflow (the run's own, from its
   // call: a Re-run lands where its recorded workflow does).
-  landing?(workflow: string | null): Tab | null
+  landing?(workflow: string | null, params?: Record<string, unknown>): Tab | null
   // The workflow a run is started from (its tab order and Overview).
   workflow?(): string | null
 }
@@ -354,10 +354,13 @@ export function useRun(s: RunInputs, view: ViewStore, hooks: RunHooks = {}) {
   // -recon_out), and an option outside the 1.15.3 set (ALWAYS_SENT) only
   // when it differs from the CLI default: the CLI reads some options by
   // whether they were given at all.
+  // The values a run of the form's workflow is sent (tasks.ts runValues):
+  // Mass-shift survey's shift reports stay off until a database is chosen.
+  const toRun = (v: Record<string, ParamValue>): Record<string, ParamValue> => runValues(taskById(hooks.workflow?.() ?? ''), v)
   const runParams = (inFile: string, outFile: string, overrides?: Record<string, ParamValue>): Record<string, unknown> => ({
     in: inFile,
     out: outFile,
-    params: sentValues({ ...values, ...overrides }, originValues)
+    params: sentValues(toRun({ ...values, ...overrides }), originValues)
   })
 
   // A run call with the workflow it is started from, which the run record
@@ -613,7 +616,7 @@ export function useRun(s: RunInputs, view: ViewStore, hooks: RunHooks = {}) {
         type: 'SHOWN',
         shown: { input: inFile, params: sentParams, log: ran.log.get(), reports: rep.reports, species, out: outFile, workflow: runWorkflow ?? undefined, census, texts }
       })
-      const landing = hooks.landing?.(runWorkflow)
+      const landing = hooks.landing?.(runWorkflow, sentParams)
       if (landing) {
         setTab(landing)
         return
@@ -735,7 +738,7 @@ export function useRun(s: RunInputs, view: ViewStore, hooks: RunHooks = {}) {
     if (jobs.length === 0 || batchRunning || running || blocked || asking.current) return
     // Checked again over the queue itself: the form's checks may not have
     // seen a file just added (the CLI would refuse each mzPeak job, rc 6).
-    const refusedNow = conflicts(values, { inputs: jobs.map((j) => j.input) })
+    const refusedNow = conflicts(toRun(values), { inputs: jobs.map((j) => j.input) })
     if (refusedNow.length) {
       dispatch({ type: 'FAILURE', failure: { title: 'Not started: the CLI would refuse these settings', reasons: refusedNow.map((c) => ({ text: c.note })) } })
       return

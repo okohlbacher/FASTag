@@ -383,6 +383,12 @@ if(FASTAG_BUILD_TESTS)
                    ${CMAKE_CURRENT_SOURCE_DIR}/test/fixtures/Ecoli_MS2_small.fasta
                    ${CMAKE_CURRENT_SOURCE_DIR}/test/fixtures/delta_sites.mgf)
   set_tests_properties(delta_sites_cli_test PROPERTIES SKIP_RETURN_CODE 77)
+  # Feedback 422372a2: -recon_proteome, a shipped proteome as the -recon_out database.
+  add_test(NAME recon_proteome_cli_test
+           COMMAND bash ${CMAKE_CURRENT_SOURCE_DIR}/test/recon_proteome_cli_test.sh $<TARGET_FILE:FASTag>
+                   ${CMAKE_CURRENT_SOURCE_DIR}/test/fixtures/Ecoli_MS2_small.mzML
+                   ${CMAKE_CURRENT_SOURCE_DIR}/test/fixtures/Ecoli_MS2_small.fasta)
+  set_tests_properties(recon_proteome_cli_test PROPERTIES SKIP_RETURN_CODE 77)
 
   # 1.16: Bruker timsTOF input (.d, .d.zip, dia-PASEF refusal) on a trimmed
   # real run; a build without WITH_OPENTIMS checks its refusal instead.

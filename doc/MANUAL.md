@@ -52,7 +52,8 @@ the Spectrum tab names such a protein with the positions but does not align the 
 
 ![The tags table](images/manual-03-tags.png)
 
-Select a row and press Enter (or **Open in Spectrum**) to see its evidence:
+Select a row and press Enter (or **Open in Spectrum**) to see its evidence. In the Glyco, Triage
+and Mass shifts tables, a click on a scan (it has the spectrum icon) opens it the same way.
 
 ![A tag drawn on its spectrum](images/manual-04-spectrum.png)
 
@@ -101,6 +102,14 @@ channel only TMTpro has), no kit is called: `reporter_kit` is `conflict`,
 kits the channels allow.
 `reporter_channel_<label>` counts the MS/MS spectra with each reporter above the noise
 threshold (3x the spectrum's median peak), out of the spectra that can show it.
+
+**Mass-shift survey** measures mass shifts against a protein database: your FASTA (Protein
+database), or a shipped proteome (human, mouse, yeast or E. coli) chosen beside it in Inputs.
+When a species report of the same file is open, the line under the choice names its organism.
+Without a database the run still starts, but writes the tags table only: the shift reports
+(placements, mass-shift table, spectra per shift, accounting, mass-gap report) are off and marked
+"needs a protein database", and the plan line says how many are off. The shipped proteomes place
+tags from 8 residues (human, mouse) or 7 (yeast, E. coli); the workflow's Extension 3 reaches 9.
 
 **Identifiability triage** writes one row per MS/MS spectrum (the census). Besides the best tag it
 gives `max_len`, the longest tag of the spectrum, and `res_cover`, how many residues of the

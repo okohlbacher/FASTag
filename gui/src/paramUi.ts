@@ -615,6 +615,19 @@ export const PARAM_UI: Record<string, ParamUi> = {
       tip: 'FASTag uses 1 by default. Database reduction sets 2 (the shortlist recipe), as FASTag does for MSFragger with trypsin.'
     }
   },
+  // Feedback 422372a2: a shipped proteome in place of a FASTA of one's own.
+  recon_proteome: {
+    section: 'Placement, advanced',
+    label: 'Shipped proteome',
+    depends: [
+      { on: 'recon_out', note: 'only the tag placements use it' },
+      { on: 'recon_fasta', replaced: true, say: 'a Protein database', note: 'the tags place on the Protein database' }
+    ],
+    help: {
+      text: 'A protein database shipped with FASTag, for the tag placements and the mass-shift reports: the UniProt reference proteome of human, mouse, yeast or E. coli (reviewed entries). None: give a FASTA of your own, or the placements are not written.',
+      tip: 'Tags place on these from 8 residues (human, mouse) or 7 (yeast, E. coli): at tag length 3, Extension 3 reaches 9. A Protein database you give is used instead.'
+    }
+  },
   recon_min_length: {
     section: 'Placement, advanced',
     label: 'Shortest tag placed',

@@ -22,6 +22,8 @@ import { shortlistFacts } from './overview'
 import TriageOverview, { NO_IDS } from './TriagePanel'
 import { OBSERVED_SHARE, TILE_KEYS, assessability, caveats, chargeBars, kitLine, msLevels, pctText, qcChannels, qcTiles, resolutionClasses, valueGroups, type Group as QcGroup, type ResClass } from './qcModel'
 import { BarChart, ResolutionChart, StackChart } from './QcCharts'
+import { QC_SECTION, QC_TILE_SECTION, focusHeading } from './tileLinks'
+import { IconChevron } from '../icons'
 
 export type ReportKind = 'qc' | 'shortlist' | 'triage' | 'generic'
 
@@ -160,7 +162,9 @@ function columnsOf(tsv: Tsv): Column[] {
       text: f.text ? (i: number) => f.text!(raw(i)) : raw,
       // A blank cell is no value: it sorts last, not as 0 (Number('')).
       key: num ? (i: number) => (raw(i).trim() === '' ? NaN : Number(raw(i))) : undefined,
-      cellTitle: f.title ? (i: number) => f.title!(raw(i)) : undefined
+      cellTitle: f.title ? (i: number) => f.title!(raw(i)) : undefined,
+      // The native ID: the scan links to the Spectrum tab (spectrumLink.ts).
+      spectrum: c === 'spectrum' ? (i: number) => (raw(i) === '-' ? '' : raw(i)) : undefined
     }
   })
 }
@@ -367,13 +371,36 @@ function QcView({ tsv }: { tsv: Tsv }): JSX.Element {
   const reporters = model.assess.length > 0 || model.channels.channels.length > 0 || rows.some((r) => r.key === 'reporter_kit')
   // Every MS2 assessable for every family: one sentence, not a chart of full bars.
   const assessAll = model.assess.length > 0 && model.assess.every((s) => s.segments.length === 1 && s.segments[0].id === 'assessable')
+  // The sections on the page a tile can move to.
+  const shownSections = new Set<string>([
+    ...(model.levels.length > 0 ? [QC_SECTION.spectra] : []),
+    ...(model.charge.length > 0 ? [QC_SECTION.charge] : []),
+    ...(reporters ? [QC_SECTION.reporters] : [])
+  ])
+  const toSection = (id: string): void => {
+    const el = document.getElementById(id)
+    if (el) focusHeading(el)
+  }
   return (
     <div className="qc-view">
       {model.tiles.length > 0 && (
         <dl className="qc-strip qc-tiles" aria-label="QC summary">
-          {model.tiles.map((x) => (
-            <div key={x.label} className={`stat${x.low ? ' low' : ''}`} title={x.title}>
-              <dt>{x.label}</dt>
+          {model.tiles.map((x) => {
+            // A tile with a section below moves to it (tileLinks.ts).
+            const to = QC_TILE_SECTION[x.label]
+            const go = to && shownSections.has(to) ? () => toSection(to) : null
+            return (
+            <div key={x.label} className={`stat${x.low ? ' low' : ''}`} data-link={go ? '' : undefined} title={x.title} onClick={go ? (e) => { if (!(e.target as HTMLElement).closest('button') && !window.getSelection()?.toString()) go() } : undefined}>
+              <dt>
+                {go ? (
+                  <button type="button" className="tile-open" onClick={go} aria-label={`${x.label}: go to its section`}>
+                    {x.label}
+                    <IconChevron size={10} />
+                  </button>
+                ) : (
+                  x.label
+                )}
+              </dt>
               <dd className={x.warn ? 'warn-text' : undefined}>{x.value}</dd>
               {x.sub && <dd className="qc-sub">{x.sub}</dd>}
               {x.meter != null && (
@@ -382,12 +409,13 @@ function QcView({ tsv }: { tsv: Tsv }): JSX.Element {
                 </dd>
               )}
             </div>
-          ))}
+            )
+          })}
         </dl>
       )}
       {model.levels.length > 0 && (
         <section className="qc-block" aria-label="Spectra">
-          <h3 className="section-label">Spectra</h3>
+          <h3 className="section-label" id={QC_SECTION.spectra}>Spectra</h3>
           <StackChart
             caption="Spectra per MS level, by analyser"
             rowName="MS level"
@@ -408,7 +436,7 @@ function QcView({ tsv }: { tsv: Tsv }): JSX.Element {
         <div className="qc-pair">
           {model.charge.length > 0 && (
             <section className="qc-block" aria-label="Precursor charge">
-              <h3 className="section-label">Precursor charge</h3>
+              <h3 className="section-label" id={QC_SECTION.charge}>Precursor charge</h3>
               <BarChart
                 caption="Share of the MS2 by precursor charge"
                 bars={model.charge}
@@ -446,7 +474,7 @@ function QcView({ tsv }: { tsv: Tsv }): JSX.Element {
       )}
       {reporters && (
         <section className="qc-block" aria-label="Reporter ions">
-          <h3 className="section-label">Reporter ions</h3>
+          <h3 className="section-label" id={QC_SECTION.reporters}>Reporter ions</h3>
           {model.kit && (
             <p className="qc-kit">
               Isobaric kit: <strong className={summary.some((s) => s.label === 'Isobaric kit' && s.warn) ? 'warn-text' : undefined}>{model.kit}</strong>

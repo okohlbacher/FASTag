@@ -1004,6 +1004,17 @@ TOPPFASTag::ExitCodes TOPPFASTag::main_(int, const char**)
   // The placement-report checks below keep their 1.11 meaning: placing for
   // -alkylation_out alone does not satisfy them (1.12 D #3g).
   const bool place_reports = place_on && !alkylation_only_db;
+  // Feedback 422372a2: -recon_proteome, a shipped proteome as the database
+  // of -recon_out (after -recon_fasta, before -fasta). The hand-off outputs
+  // name their database to the engine and still need a FASTA file.
+  const std::string recon_prot = getStringOption_("recon_proteome");
+  const bool recon_prot_on = !recon_prot.empty() && recon_on && !handoff_on && getStringOption_("recon_fasta").empty();
+  if (!recon_prot.empty() && !recon_prot_on)
+    OPENMS_LOG_WARN << "-recon_proteome is ignored: "
+                    << (!recon_on ? "it is only read with -recon_out."
+                        : !getStringOption_("recon_fasta").empty() ? "the tags place on -recon_fasta."
+                        : "-shortlist_out, -fasta_out and -search_config_out need a FASTA file (-recon_fasta).")
+                    << std::endl;
   if (!delta_out.empty() && !place_reports)
   {
     OPENMS_LOG_ERROR << "-delta_out requires -recon_out (the histogram is "
@@ -1156,10 +1167,72 @@ TOPPFASTag::ExitCodes TOPPFASTag::main_(int, const char**)
   // 1.13 (#24): a shipped proteome's manifest row (entries 0 = no manifest).
   FASTag::Alkylation::ShippedProteome alk_shipped;
   std::string alk_manifest;
+  // The shipped proteome @p name (human, mouse, yeast, ecoli) in @p path, its
+  // manifest row in alk_shipped; @p who starts each message, @p alt is the
+  // advice when it is missing. EXECUTION_OK when found.
+  const auto findShipped = [&](const std::string& name, const char* who, const char* alt, std::string& path) -> ExitCodes
+  {
+    const std::string dir = alkylationDir_();
+    path = dir.empty() ? std::string() : dir + "/" + name + ".fasta.gz";
+    // 1.13 (#24): the shipped directory's proteomes.tsv names each file and
+    // records its UniProt release, entries and sha256. A directory without
+    // it (a FASTAG_ALKYLATION_DIR of one's own) is read as in 1.12.
+    const std::string manifest = dir.empty() ? std::string() : dir + "/proteomes.tsv";
+    if (!manifest.empty() && File::exists(manifest))
+    {
+      std::ifstream mf(manifest.c_str(), std::ios::binary);
+      const std::string mtext((std::istreambuf_iterator<char>(mf)), std::istreambuf_iterator<char>());
+      if (!mf.good() && !mf.eof())
+      {
+        OPENMS_LOG_ERROR << who << ": cannot read '" << manifest << "'." << std::endl;
+        return INPUT_FILE_NOT_READABLE;
+      }
+      if (!FASTag::Alkylation::findShippedProteome(mtext, name, alk_shipped))
+      {
+        OPENMS_LOG_ERROR << who << ": '" << manifest << "' has no valid row for the " << name
+                         << " proteome (columns name, proteome, taxon, release, release_date, entries, "
+                            "sha256, fasta_sha256, file; one row per name)." << std::endl;
+        return INPUT_FILE_CORRUPT;
+      }
+      path = dir + "/" + alk_shipped.file;
+      alk_manifest = manifest;
+    }
+    if (path.empty() || !File::exists(path))
+    {
+      // Where it was looked for: the folder beside the digest data, or
+      // beside each place the digest data is looked for.
+      std::vector<std::string> alk_cands;
+      const std::string dd = digestDir_();
+      for (const std::string& c : dd.empty() ? digestCandidates_() : std::vector<std::string>{dd})
+        alk_cands.push_back(alkylationSibling_(c));
+      OPENMS_LOG_ERROR << who << ": no shipped " << name << " proteome found ("
+                       << searchedFor_("FASTAG_ALKYLATION_DIR", dir, alk_cands) << "). Give " << alt
+                       << ", or use an installed FASTag "
+                          "(cmake --install puts the proteomes in <prefix>/share/FASTag/alkylation), or set "
+                          "FASTAG_ALKYLATION_DIR to a folder that holds "
+                       << name << ".fasta.gz (data/alkylation in the FASTag sources)." << std::endl;
+      return ILLEGAL_PARAMETERS;
+    }
+    return EXECUTION_OK;
+  };
+  // -recon_proteome: the file -recon_out places on.
+  std::string recon_prot_path;
+  if (recon_prot_on)
+  {
+    const ExitCodes rc = findShipped(recon_prot, "-recon_proteome", "-recon_fasta <fasta>", recon_prot_path);
+    if (rc != EXECUTION_OK) return rc;
+  }
   if (alk_place)
   {
     const std::string prot = alk_prot_opt;
-    if (!getStringOption_("recon_fasta").empty() || !alkylation_only_db)
+    if (recon_prot_on)
+    {
+      if (optionNonDefault_("alkylation_proteome"))
+        OPENMS_LOG_WARN << "-alkylation_proteome is ignored: -alkylation_out reads the placements on "
+                           "-recon_proteome." << std::endl;
+      alk_db_source = "bundled:" + recon_prot;
+    }
+    else if (!getStringOption_("recon_fasta").empty() || !alkylation_only_db)
     {
       if (optionNonDefault_("alkylation_proteome"))
         OPENMS_LOG_WARN << "-alkylation_proteome is ignored: -alkylation_out reads the placements on "
@@ -1178,50 +1251,11 @@ TOPPFASTag::ExitCodes TOPPFASTag::main_(int, const char**)
       const bool named = prot == "human" || prot == "mouse" || prot == "yeast" || prot == "ecoli";
       if (named)
       {
-        const std::string name = prot;
-        const std::string dir = alkylationDir_();
-        std::string path = dir.empty() ? std::string() : dir + "/" + name + ".fasta.gz";
-        // 1.13 (#24): the shipped directory's proteomes.tsv names each file and
-        // records its UniProt release, entries and sha256. A directory without
-        // it (a FASTAG_ALKYLATION_DIR of one's own) is read as in 1.12.
-        const std::string manifest = dir.empty() ? std::string() : dir + "/proteomes.tsv";
-        if (!manifest.empty() && File::exists(manifest))
-        {
-          std::ifstream mf(manifest.c_str(), std::ios::binary);
-          const std::string mtext((std::istreambuf_iterator<char>(mf)), std::istreambuf_iterator<char>());
-          if (!mf.good() && !mf.eof())
-          {
-            OPENMS_LOG_ERROR << "-alkylation_out: cannot read '" << manifest << "'." << std::endl;
-            return INPUT_FILE_NOT_READABLE;
-          }
-          if (!FASTag::Alkylation::findShippedProteome(mtext, name, alk_shipped))
-          {
-            OPENMS_LOG_ERROR << "-alkylation_out: '" << manifest << "' has no valid row for the " << name
-                             << " proteome (columns name, proteome, taxon, release, release_date, entries, "
-                                "sha256, fasta_sha256, file; one row per name)." << std::endl;
-            return INPUT_FILE_CORRUPT;
-          }
-          path = dir + "/" + alk_shipped.file;
-          alk_manifest = manifest;
-        }
-        if (path.empty() || !File::exists(path))
-        {
-          // Where it was looked for: the folder beside the digest data, or
-          // beside each place the digest data is looked for.
-          std::vector<std::string> alk_cands;
-          const std::string dd = digestDir_();
-          for (const std::string& c : dd.empty() ? digestCandidates_() : std::vector<std::string>{dd})
-            alk_cands.push_back(alkylationSibling_(c));
-          OPENMS_LOG_ERROR << "-alkylation_out: no shipped " << name << " proteome found ("
-                           << searchedFor_("FASTAG_ALKYLATION_DIR", dir, alk_cands)
-                           << "). Give -alkylation_proteome <fasta> or -recon_fasta, or use an installed FASTag "
-                              "(cmake --install puts the proteomes in <prefix>/share/FASTag/alkylation), or set "
-                              "FASTAG_ALKYLATION_DIR to a folder that holds "
-                           << name << ".fasta.gz (data/alkylation in the FASTag sources)." << std::endl;
-          return ILLEGAL_PARAMETERS;
-        }
+        std::string path;
+        const ExitCodes rc = findShipped(prot, "-alkylation_out", "-alkylation_proteome <fasta> or -recon_fasta", path);
+        if (rc != EXECUTION_OK) return rc;
         alk_db = path;
-        alk_db_source = "bundled:" + name;
+        alk_db_source = "bundled:" + prot;
       }
       else if (File::exists(prot) && !File::isDirectory(prot))
       {
@@ -1242,39 +1276,43 @@ TOPPFASTag::ExitCodes TOPPFASTag::main_(int, const char**)
   if (place_on)
   {
     recon_db = getStringOption_("recon_fasta");
-    if (recon_db.empty()) recon_db = alkylation_only_db ? alk_db : fasta;
+    if (recon_db.empty()) recon_db = recon_prot_on ? recon_prot_path : alkylation_only_db ? alk_db : fasta;
     if (recon_db.empty())
     {
       OPENMS_LOG_ERROR << "-recon_out needs a database: give -recon_fasta "
-                          "(or -fasta)." << std::endl;
+                          "(or -fasta), or -recon_proteome for a shipped proteome." << std::endl;
       return ILLEGAL_PARAMETERS;
     }
     std::vector<FASTAFile::FASTAEntry> rentries;
     // #3g: the shipped proteomes are gzip-compressed, which FASTAFile cannot read.
     // 1.13 (#24): of a shipped proteome also the sha256 of the FASTA text read.
     std::string alk_fasta_sha;
-    if (alkylation_only_db)
+    // A shipped proteome (gzip-compressed): -alkylation_proteome's or -recon_proteome's.
+    const bool shipped_db = alkylation_only_db || recon_prot_on;
+    const char* shipped_who = recon_prot_on ? "-recon_proteome" : "-alkylation_out";
+    const char* shipped_alt = recon_prot_on ? "-recon_fasta <fasta>" : "-alkylation_proteome <fasta>";
+    if (shipped_db)
       FASTag::Alkylation::loadFasta(recon_db, rentries, alk_shipped.entries > 0 ? &alk_fasta_sha : nullptr);
     else FASTAFile().load(recon_db, rentries);
     // 1.13 (#24): a shipped proteome must be the FASTA its manifest records,
     // byte for byte (the report's database_release states that sha256), and
     // hold its entries; otherwise the file is truncated, edited or replaced.
-    if (alkylation_only_db && alk_shipped.entries > 0 && alk_fasta_sha != alk_shipped.fasta_sha256)
+    if (shipped_db && alk_shipped.entries > 0 && alk_fasta_sha != alk_shipped.fasta_sha256)
     {
-      OPENMS_LOG_ERROR << "-alkylation_out: the shipped " << alk_shipped.name << " proteome '" << recon_db
+      OPENMS_LOG_ERROR << shipped_who << ": the shipped " << alk_shipped.name << " proteome '" << recon_db
                        << "' reads as a FASTA with sha256 " << alk_fasta_sha << ", its proteomes.tsv records "
                        << alk_shipped.fasta_sha256 << " (UniProt " << alk_shipped.release
                        << "); the file is damaged or was replaced. Reinstall FASTag, or give "
-                          "-alkylation_proteome <fasta>." << std::endl;
+                       << shipped_alt << "." << std::endl;
       return INPUT_FILE_CORRUPT;
     }
-    if (alkylation_only_db && alk_shipped.entries > 0 && rentries.size() != alk_shipped.entries)
+    if (shipped_db && alk_shipped.entries > 0 && rentries.size() != alk_shipped.entries)
     {
-      OPENMS_LOG_ERROR << "-alkylation_out: the shipped " << alk_shipped.name << " proteome '" << recon_db
+      OPENMS_LOG_ERROR << shipped_who << ": the shipped " << alk_shipped.name << " proteome '" << recon_db
                        << "' holds " << rentries.size() << " entries, its proteomes.tsv records "
                        << alk_shipped.entries << " (UniProt " << alk_shipped.release
                        << "); the file is damaged or was replaced. Reinstall FASTag, or give "
-                          "-alkylation_proteome <fasta>." << std::endl;
+                       << shipped_alt << "." << std::endl;
       return INPUT_FILE_CORRUPT;
     }
     pindex.build(rentries, fixed_deltas, iso_tol);
@@ -1380,6 +1418,11 @@ TOPPFASTag::ExitCodes TOPPFASTag::main_(int, const char**)
                       << " residues, but this run's longest tag has " << max_len
                       << " (seed length + 2 x -extension); no tag will place and the placements will make no call "
                          "(the call comes from the tags alone). Give -tag_length " << rmin << " or more." << std::endl;
+    if (recon_prot_on && max_len < rmin)
+      OPENMS_LOG_WARN << "-recon_proteome: tags place on the shipped " << recon_prot << " proteome from " << rmin
+                      << " residues, but this run's longest tag has " << max_len
+                      << " (seed length + 2 x -extension); no tag will place. Raise -extension or -tag_length."
+                      << std::endl;
   }
 
   // ---- phase 2: report setup ---------------------------------------------
@@ -3136,6 +3179,8 @@ TOPPFASTag::ExitCodes TOPPFASTag::main_(int, const char**)
     // A named proteome (bundled:<name>) is read as much as a given one.
     if (!alk_db.empty()) guard.input("alkylation_proteome", alk_db);
     if (!alk_manifest.empty()) guard.input("alkylation_proteome", alk_manifest);
+    // -recon_proteome's shipped file (its manifest is alk_manifest above).
+    if (!recon_prot_path.empty()) guard.input("recon_proteome", recon_prot_path);
     // Inputs resolved from defaults: the shipped digest tables loaded above,
     // and the bundled taxonomy -species reads when no -taxdb set is given.
     for (const auto& ri : resolved_inputs) guard.input(ri.first.c_str(), ri.second);
