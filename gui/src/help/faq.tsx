@@ -129,12 +129,12 @@ export const FAQ: FaqEntry[] = [
       <>Checks before the run are still running, a check blocks the run, or a red flag has not been answered.</>,
       <>A value is marked red: FASTag would refuse it. The reason is written under the field and above the Run button.</>,
       <>Two settings do not go together, for example species detection with tags that are too short. The reason is written above the Run button.</>,
-      <>Files are queued for a batch: the Batch view has its own Run button. It is disabled when no files remain to run; failed files have a separate Retry failed button.</>,
+      <>Files are queued for a batch: the bar runs the queue (Run n files in Setup, Run n remaining files in Batch). When no files remain to run, Run is gone; if files failed, Retry failed takes its place.</>,
       <>A run is still going.</>
     ],
     fixes: [
-      <>Fix what the message above the Run button names. For an input check, wait for it to finish, then read its suggested fix. Choose Run anyway only after understanding a red flag; a blocking check cannot be overridden. See <L to="faq-inspector">What the checks mean</L>.</>,
-      <>If FASTag cannot start, see <L to="faq-will-not-start">Restoring the bundled program</L>. Reset… changes parameters only; it cannot fix missing files or an unavailable program.</>
+      <>Fix what the message above the Run button names. For an input check, wait for it to finish, then read its suggested fix. Run anyway sits in Inputs, beside the red flag (from Settings or Outputs, <strong>Review input checks</strong> in the bar's message goes there); choose it only after understanding the flag; a blocking check cannot be overridden. See <L to="faq-inspector">What the checks mean</L>.</>,
+      <>If FASTag cannot start, see <L to="faq-will-not-start">Restoring the bundled program</L>. Loading FASTag defaults changes parameters only; it cannot fix missing files or an unavailable program.</>
     ]
   },
   {

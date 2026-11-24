@@ -180,7 +180,7 @@ export async function toStep(s, name) {
   if (!n) throw new Error(`no Setup step ${name}`)
   if (n > 1)
     await s.exec(`const b = document.querySelector('nav[aria-label="Setup steps"] button[data-step-btn="2"]')
-      if (b && b.getAttribute('aria-disabled') === 'true') document.querySelector('.wizard-foot button.continue')?.click()`)
+      if (b && b.getAttribute('aria-disabled') === 'true') document.querySelector('.view-setup .actionbar button.continue')?.click()`)
   await s.exec(`const b = document.querySelector('nav[aria-label="Setup steps"] button[data-step-btn="' + arguments[0] + '"]')
     if (b && b.getAttribute('aria-current') !== 'step') b.click()`, String(n))
   await until(`Setup step ${name}`, () => s.exec("const e = document.getElementById('step-' + arguments[0]); return !!e && !e.hidden", String(n)), 5000)

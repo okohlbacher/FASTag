@@ -71,6 +71,12 @@ pub struct RunRecord {
     /// records before 1.15.4 and for runs of no workflow.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub workflow: Option<String>,
+    /// The databases the run read (-fasta, -entrapment_fasta), each as it
+    /// was when the run started (fasta.rs identity_of): the only files the
+    /// Spectrum tab's alignment of this run reads. Absent in records before
+    /// 1.16, which align nothing.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub databases: Vec<crate::fasta::DbIdentity>,
 }
 
 impl RunRecord {
@@ -376,6 +382,7 @@ mod tests {
             params: None,
             tags: None,
             workflow: None,
+            databases: Vec::new(),
         }
     }
 

@@ -106,6 +106,29 @@ describe('redesign: setup and run bar', () => {
     expect(container.querySelector('li.job.done')?.textContent).toContain('a.mzML')
   })
 
+  it('a batch whose only leftovers failed: Retry failed takes the filled slot in Batch and in Setup', async () => {
+    const mock = installMockBridge()
+    await renderApp(mock)
+    await addBatch(mock, ['/d/a.mzML', '/d/b.mzML'])
+    await startBatch()
+    await emitDone(mock, 1, false)
+    await waitFor(() => expect(mock.runCalls).toHaveLength(2))
+    await emitDone(mock, 2, true)
+    await screen.findByRole('alert')
+    // Batch: no inert Run 0; Retry failed is the one filled button.
+    const batchBar = document.querySelector<HTMLElement>('.view[data-view="batch"] .runbar')!
+    expect(within(batchBar).queryByRole('button', { name: /^Run \d+ remaining/ })).toBeNull()
+    expect(within(batchBar).getByRole('button', { name: 'Retry failed' }).classList.contains('primary')).toBe(true)
+    // Setup's last step: the same, in Run's slot of the action bar.
+    showStep(4)
+    const setupBar = document.querySelector<HTMLElement>('.view-setup .actionbar')!
+    const retry = within(setupBar).getByRole('button', { name: 'Retry failed' })
+    expect(retry.classList.contains('primary')).toBe(true)
+    expect(within(setupBar).queryByRole('button', { name: /^Run \d+ files?$/ })).toBeNull()
+    await click(retry)
+    expect(mock.runCalls.map((c) => c.in)).toEqual(['/d/a.mzML', '/d/b.mzML', '/d/a.mzML'])
+  })
+
   // The App-level guard of the Reset wiring (App.tsx onReset={session.reset}):
   // RunBar.test checks the confirmation with a stub, useSession.test the
   // defaults reset restores; only this test sees the two joined.

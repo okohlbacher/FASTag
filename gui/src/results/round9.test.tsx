@@ -140,7 +140,9 @@ describe('round 9, 4: values that replace the form are not raised', () => {
     await pickSingle(mock, '/d/x.mzML')
     mock.history = [rec('1', '/d/a.mzML', '/d/a.tags.tsv', { alkylation_out: '/d/a.alkylation.tsv', extension: '2', tag_length: '3' }, { workflow: 'characterize' })]
     const [row] = await historyRows()
-    await click(within(row).getByRole('button', { name: 'Settings into form' }))
+    // Settings into form is under the row's More menu.
+    await click(within(row).getByRole('button', { name: /^More actions for / }))
+    await click(within(row).getByRole('menuitem', { name: 'Settings into form' }))
     await goTo('setup')
     await flush()
     expect(await formValue('extension')).toBe('2')
@@ -244,7 +246,7 @@ describe('round 9, 14: a report of a run that did not finish opens marked', () =
     mock.history = [rec('1', '/d/a.mzML', '/d/a.tags.tsv', { qc_out: '/d/a.qc.tsv' }, { outputs: ['/d/a.tags.tsv', '/d/a.qc.tsv'], status: 'failed', exitCode: 2 })]
     await renderColdApp(mock)
     await goTo('results')
-    await click(screen.getByRole('button', { name: 'Open a FASTag report…' }))
+    await click(screen.getByRole('button', { name: 'Open report…' }))
     await waitFor(() => expect(screen.getByText('Reports may be partial.')).toBeTruthy())
     expect(screen.getByText('Reports may be partial.').parentElement!.textContent).toMatch(/a\.qc\.tsv \(failed/)
   })

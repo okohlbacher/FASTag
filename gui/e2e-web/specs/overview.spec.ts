@@ -148,7 +148,8 @@ test('focus does not fall to the page body when the run ends or is cancelled', a
   await toStep(page, 'Inputs')
   await page.getByRole('button', { name: 'Choose file…' }).click()
   await page.getByRole('button', { name: 'Run', exact: true }).click()
-  const cancel = page.getByRole('region', { name: 'Running' }).getByRole('button', { name: 'Cancel' })
+  // Cancel is the run status pill's (the one Cancel on every view).
+  const cancel = page.getByRole('group', { name: 'Run status' }).getByRole('button', { name: 'Cancel' })
   await cancel.focus()
   await page.keyboard.press('Enter')
   await expect(page.getByRole('region', { name: 'Running' })).toHaveCount(0)

@@ -222,7 +222,7 @@ export default function ReconView({ massgap, tables, gen = {}, notice, action, e
   const sources = [...new Set(files)]
   return (
     <div className="recon-view">
-      <ReportHeader id="recon-title" title="Mass shifts" paths={sources} help={{ to: 'workflow-reconciliation', label: 'How to read these reports' }} />
+      <ReportHeader id="recon-title" title="Mass shifts" paths={sources} />
       {notice && (
         <p className="caveat" role="status">
           {notice}

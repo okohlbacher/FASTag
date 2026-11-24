@@ -19,6 +19,7 @@
 import type { JSX, ReactNode } from 'react'
 import { HelpLink } from './HelpLink'
 import { WORKFLOWS } from './workflows'
+import { TASK_GROUPS, TILE_ORDER, taskById } from '../setup/tasks'
 
 export interface HelpSection {
   id: string
@@ -78,7 +79,7 @@ export const START: HelpPage = {
             <strong>Settings</strong>, <strong>Outputs &amp; run</strong>. Step 1 selects <strong>Generate tags</strong>, the
             default task: it generates sequence tags from all input spectra and includes per-residue confidence for
             downstream export. No FASTA file is needed. Click <strong>Continue with Generate tags</strong>. To inspect an
-            earlier analysis instead, click <strong>Open earlier results…</strong> in step 1.
+            earlier analysis instead, click <strong>Open earlier results…</strong> at the top right of Setup.
           </p>
           <ol>
             <li>
@@ -112,14 +113,15 @@ export const START: HelpPage = {
             that a feature is absent.
           </p>
           <p>
-            &quot;FASTag ready&quot; in the title bar means the FASTag program that comes with the app can be run; the
-            number beside it is its version. A field marked <em>changed</em> differs from the CLI default; the
-            selected task can set that value for you. The plan above Run lists the enabled analyses and what
-            differs from your task or preset.
+            &quot;FASTag ready&quot; in the app bar means the FASTag program that comes with the app can be run; its
+            version is in Help › About. A field marked <em>changed</em> differs from the CLI default; the
+            selected task can set that value for you. The plan at the left of the bar at the bottom lists the
+            enabled analyses and what the run assumes about the sample; Run and Next are at its right.
           </p>
           <p>
             While a run goes, <strong>Changed from defaults</strong> lists the settings it was given that differ from
-            the defaults. Afterwards, <strong>History</strong> shows whether it finished, was cancelled or failed. Cancel
+            the defaults. Afterwards, <strong>History</strong> shows whether it finished, was cancelled or failed.{' '}
+            <strong>Cancel</strong>, in the run status at the top right on every view (or Esc, or Cmd/Ctrl+.),
             stops a run at once, and the files at its output paths are removed, so no half-written table is
             later read as a result. If an output file already exists, the app asks before the run whether to
             overwrite it; a run that is then cancelled or fails removes it too. Closing the window or quitting while a run goes asks first: Cancel run and quit,
@@ -178,8 +180,9 @@ export const START: HelpPage = {
               in Batch to change the destination for pending or retried jobs; completed jobs keep their existing paths.
             </li>
             <li>
-              <strong>Run N remaining files</strong> runs the files not run yet. <strong>Retry failed</strong> runs
-              the failed ones again. Cancel stops the whole queue.
+              <strong>Run N remaining files</strong> (Batch view; <strong>Run N files</strong> in Setup&apos;s action
+              bar) runs the files not run yet. <strong>Retry failed</strong> runs the failed ones again, and is the
+              bar&apos;s button once only failed files are left. Cancel, in the run status at the top right, stops the whole queue.
             </li>
             <li>
               Each file keeps its own log: <strong>Log</strong> beside a file in the list shows it, and Show full log
@@ -212,8 +215,9 @@ export const START: HelpPage = {
             earlier outputs or loads their settings. Switch views with Cmd+1–4 on macOS or Ctrl+1–4 elsewhere.
           </p>
           <p>
-            Use <strong>Search parameters</strong> (Cmd/Ctrl+K, or / outside a text field) to find an editable
-            setting and jump to it. Use <strong>Search Help</strong> here for explanations, troubleshooting and
+            <strong>Help</strong> (the ? in the app bar, or F1) opens the page for the screen you are on. Use{' '}
+            <strong>Search settings</strong> in the app bar (Cmd/Ctrl+K, or / outside a text field) to find an editable
+            setting and jump to it, from any view. Use <strong>Search Help</strong> here for explanations, troubleshooting and
             command-line options. Entries marked <em>Not in the settings form</em> explain whether the app uses
             a dedicated control, manages the option itself, or leaves it to the command line.
           </p>
@@ -239,28 +243,64 @@ export const START: HelpPage = {
             only for Mass-shift survey and Database reduction; optional inputs are one click away under{' '}
             <strong>Add optional input</strong>. Settings shows the few settings the task needs; every other option is
             under Advanced, the task&apos;s own groups first. Outputs &amp; run lists the task&apos;s files as
-            checkboxes, named after the run, and the command line. <strong>Batch</strong> in Inputs runs the same
+            checkboxes, named after the run, and the command line behind <strong>Command line</strong>. <strong>Batch</strong> in Inputs runs the same
             task over several files, with an output folder and an optional SDRF. To look at earlier results, use{' '}
-            <strong>Open earlier results…</strong> in step 1 or the Results view.
+            <strong>Open earlier results…</strong> at the top right of Setup, or the Results view.
           </p>
           <p>
             A task replaces the settings but keeps the input files it uses and the instrument you chose; a line in
             Inputs says what it kept and dropped, and <strong>Undo</strong> brings back what it replaced. The head of
             Settings says when the form differs from the task (modified), and its <strong>Reset</strong> takes that
-            back. <strong>Presets</strong> (in steps 1 and 3) loads FASTag&apos;s own defaults or a preset of yours.
+            back. <strong>Presets</strong> (at the top right of every step) loads FASTag&apos;s own defaults or a preset of yours; on Settings it also offers <strong>Save as preset…</strong>.
           </p>
           <p>
             <strong>Save…</strong> stores what differs from the task or defaults the form started from, under a name.
             No paths are stored: input files such as a FASTA are left out, and a report is stored by its name and
             written next to the current tags file. The app also remembers the parameters of the last run, but they
-            are never used on their own: <strong>Continue last run (n)</strong> in step 1 offers the n settings of the last run,
-            and nothing of them is used until you click it. <strong>Reset…</strong> beside Run sets every parameter
+            are never used on their own: <strong>Continue last run (n)</strong> at the top right of step 1 offers the n settings of the last run,
+            and nothing of them is used until you click it. <strong>Presets → Load FASTag defaults</strong> sets every parameter
             back to FASTag&apos;s default.
           </p>
           <p>
             <strong>Export INI…</strong> writes the parameters a run would use as an INI file;{' '}
             <code>FASTag -ini file.ini</code> runs the command line with the same parameters.
           </p>
+        </>
+      )
+    },
+    {
+      id: 'start-tasks',
+      title: 'The seven tasks',
+      body: (
+        <>
+          <p>
+            Step 1 of Setup shows each task with what you get, what it needs and how long it runs. Here is when to
+            use each one, and what it is not for.
+          </p>
+          {TASK_GROUPS.map((g) => (
+            <div key={g.id} className="help-task-group">
+              <h4 className="sub-h">{g.title}</h4>
+              {TILE_ORDER.map((id) => taskById(id)!)
+                .filter((t) => t.group === g.id)
+                .map((t) => (
+                  <details key={t.id} className="help-entry" id={`task-${t.id}`}>
+                    <summary>{t.label}</summary>
+                    <p>{t.question}</p>
+                    <dl className="recipes">
+                      <dt>You get</dt>
+                      <dd>{t.gets}</dd>
+                      <dt>Use when</dt>
+                      <dd>{t.use}</dd>
+                      <dt>Not for</dt>
+                      <dd>{t.notFor}</dd>
+                    </dl>
+                    <p>
+                      <L to={t.docs.to}>{t.docs.label}</L>
+                    </p>
+                  </details>
+                ))}
+            </div>
+          ))}
         </>
       )
     },
@@ -288,11 +328,18 @@ export const START: HelpPage = {
       body: (
         <>
           <p>
-            <strong>Feedback</strong> in the top bar (also Help › Send Feedback…, Cmd/Ctrl+Shift+F) takes a screenshot
+            <strong>Feedback</strong> in the app bar (the speech-bubble icon; also Help › Send Feedback…, Cmd/Ctrl+Shift+F) takes a screenshot
             of the window, notes the app and engine versions, the system, the view and the settings, and opens a
             short form. <strong>Mark up…</strong> draws numbered boxes, arrows, lines and labels on the screenshot;
             a <strong>Redaction</strong> blacks out what must not be seen, for good. <strong>Remove screenshot</strong>{' '}
             leaves it out.
+          </p>
+          <p>
+            The form is a panel, not a blocking dialog: it sits at the bottom right and the app behind it still works,
+            so you can look around while you write. Drag its title bar to move it (or use the arrow keys on its move
+            handle), drag the corner to resize it, and collapse it to its title bar. F6 goes between the panel and the
+            app. <strong>Retake screenshot</strong> hides the panel and takes a new screenshot of the window as it is
+            now. Copy and paste work in every field, from the keyboard, the Edit menu and the right-click menu.
           </p>
           <p>
             <strong>Save</strong> keeps the report on this computer only, in the app&apos;s data folder under{' '}
@@ -570,7 +617,7 @@ export const RESULTS: HelpPage = {
             <tr><td>Gapped</td><td>1 when the tag crosses a missing peak (<L to="tags-gapped">gapped tag</L>).</td></tr>
             <tr><td>E-value</td><td>The score; lower is better (<L to="results-evalue">E-value</L>).</td></tr>
             <tr><td>Min. conf., Mean conf.</td><td>The weakest and the average observed-step score, 0 to 1 (<L to="results-conf">residue confidence</L>).</td></tr>
-            <tr><td>Database hit</td><td>Without a database filter: Not checked (-), the tags were not matched against a database. With one, only matching tags are written: In database (fwd, as written; rev, reversed), or Entrapment (efwd, erev: found only in the entrapment database).</td></tr>
+            <tr><td>Database hit</td><td>Without a database filter: Not checked (-), the tags were not matched against a database. With one, only matching tags are written: In database (fwd, as written; rev, reversed), or Entrapment (efwd, erev: found only in the entrapment database). With a database the app asks FASTag for up to 3 proteins per tag, and the cell names the first one as accession/gene@first–last residue (for example P0A6F5/groL@123–131), with "+n more" when the tag occurs in more proteins; the tooltip lists them all. The columns Proteins (position), Gene and Proteins (n) hold them all and can be shown under Columns. In the Spectrum tab, tags that occur in one protein only are drawn under that protein's residues, read from the database of the run that wrote the tags while it is still the file that run read. A protein whose identifier the database gives to more than one entry is named with its positions but not aligned.</td></tr>
             <tr><td>Database q-value</td><td>q_db, only with an <G to="gloss-entrapment">entrapment database</G> (<L to="results-nofdr">see below</L>).</td></tr>
             <tr><td>ProForma, Residue conf., USI</td><td>Optional columns (<L to="param-proforma">ProForma</L>, <L to="param-res_conf">per-residue confidence</L>, <L to="param-usi_collection">USI</L>), checked in Outputs &amp; run of Generate tags.</td></tr>
             <tr><td>Series, Terminus</td><td>Optional columns (<L to="param-terminus">series and terminus</L>): the series (b, y, c or z) of the one reading of a tag that reaches a peptide terminus in a way measured to hold (- when none or both do, or above 25 ppm or 0.02 Da), and every terminus found (for example C+K; - when neither reading reaches one).</td></tr>
@@ -744,8 +791,11 @@ export const RESULTS: HelpPage = {
             its b ladder and its y ladder (c and z for a c/z row) each get their own line when they lie on the
             peaks, labelled with the series as judged (below), with a dashed line down to each peak. A{' '}
             <L to="tags-gapped">gapped tag</L> crossed a missing peak, shown dashed. Choose another tag of the
-            spectrum in the table below to draw its ladder; ◀ and ▶ go to the previous and next tagged spectrum.
-            The wheel or + and − zoom, dragging or the arrow keys pan.
+            spectrum in the table below to draw its ladder. Point at a residue, or Tab to it, to pick out its two
+            peaks; its tooltip gives their m/z and the step&apos;s error. A position with no peak is flagged on its
+            line. ◀ and ▶ (Alt+← and Alt+→, or Page Up and Page Down) go to the previous and next spectrum in the
+            Tags table&apos;s order, as it was sorted and filtered; a spectrum opened from Triage steps through every
+            tagged spectrum in file order. The wheel or + and − zoom, dragging or the arrow keys pan.
           </p>
           <p>
             The table lists the tags FASTag wrote for the spectrum, best E-value first, with the series and how

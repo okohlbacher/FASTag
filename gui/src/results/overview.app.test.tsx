@@ -66,8 +66,8 @@ describe('Overview in the app', () => {
     await finish(mock, CLI_CASES.v112)
     await waitFor(() => expect(selectedTab()).toBe('Overview'))
     expect(mock.runCalls[0].params.alkylation_out ?? '').toBe('') // guard: off by default
-    // The Overview names the workflow and shows no tile for a report nobody asked for.
-    expect(document.querySelector('.overview-sub')!.textContent).toContain('Characterize a run')
+    // The Overview names the workflow (in the page header) and shows no tile for a report nobody asked for.
+    expect(document.querySelector('.view-results .page-header .run-workflow')!.textContent).toContain('Characterize a run')
     expect(screen.queryByRole('region', { name: 'Alkylation' })).toBeNull()
     const row = within(screen.getByRole('table', { name: 'Suggested search settings' })).getByRole('row', { name: /Fixed cysteine modification/ })
     expect(within(row).getByText('default')).toBeDefined()
@@ -153,13 +153,15 @@ describe('Overview in the app', () => {
     await waitFor(() => expect(document.activeElement).toBe(screen.getByRole('tab', { name: 'Overview' })))
   })
 
+  // Cancel is the run status pill's (the run's one Cancel on every view).
   it('focus does not fall to the page body after Cancel: the Results view gets it', async () => {
     const mock = installMockBridge()
     gate(mock, CLI_CASES.v112)
     await renderCharacterizeApp(mock)
     await click(fileButton('Choose file…'))
     await click(runButton())
-    const cancel = within(screen.getByRole('region', { name: 'Running' })).getByRole('button', { name: 'Cancel' })
+    expect(within(screen.getByRole('region', { name: 'Running' })).queryByRole('button', { name: 'Cancel' })).toBeNull()
+    const cancel = within(screen.getByRole('group', { name: 'Run status' })).getByRole('button', { name: 'Cancel' })
     cancel.focus()
     await click(cancel)
     await act(async () => {

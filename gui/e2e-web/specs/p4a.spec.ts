@@ -12,8 +12,7 @@ import { test, expect, goTo, openApp, mockState } from './fixtures'
 const TSV = readFileSync(fileURLToPath(new URL('../fixtures/ecoli.tags.tsv', import.meta.url)), 'utf8')
 const ROWS = TSV.split('\n').filter(Boolean).slice(1).map((l) => l.split('\t'))
 const TOTAL = ROWS.length.toLocaleString('en-US')
-// The tagged spectra in file order (◀ ▶), and the tags of each.
-const SPECTRA = [...new Set(ROWS.map((r) => r[0]))]
+// The tags of each spectrum.
 const count = (s: string): number => ROWS.filter((r) => r[0] === s).length
 
 async function openTags(page: Page, fixture: 'spectrum' | 'spectrum-1.11'): Promise<void> {
@@ -24,6 +23,26 @@ async function openTags(page: Page, fixture: 'spectrum' | 'spectrum-1.11'): Prom
 }
 
 const firstRow = (page: Page) => page.locator('.rt-rows .rt-row').first()
+/// The spectra in the order ◀ ▶ walk from the Tags table (feedback
+/// 20261124T073446Z_08bc8de4): its rows as sorted and filtered, each run
+/// of rows of one spectrum once (▶ goes to the next row of another
+/// spectrum). Read through the bridge with the view the table last asked for.
+async function tableOrder(page: Page): Promise<string[]> {
+  const calls = await mockState<{ path: string; view: Record<string, unknown> }[]>(page, 'resultsQueryCalls')
+  const last = [...calls].reverse().find((c) => !c.view.spectrumExact)!
+  const rows = await page.evaluate(
+    async ({ path, view }) => {
+      const out: string[] = []
+      for (;;) {
+        const pg = await window.fastag.resultsQuery(path, view, out.length, 1000)
+        pg.rows.forEach((r) => out.push(r[pg.columns.indexOf('spectrum')]))
+        if (pg.rows.length === 0 || out.length >= pg.matchedRows) return out
+      }
+    },
+    { path: last.path, view: last.view }
+  )
+  return rows.filter((sp, i) => i === 0 || rows[i - 1] !== sp)
+}
 // The heading shows the scan (scan=…), its title the full native ID.
 const heading = (page: Page) => page.locator('.sp-head h2')
 
@@ -54,9 +73,10 @@ test('Enter on a row opens its spectrum: FASTag\'s processed peaks with the tag\
   await expect(tags.getByText(/^not on the peaks/)).toHaveCount(0)
 })
 
-test('another tag redraws the ladder; zoom; ◀ ▶ walk the tagged spectra in file order', async ({ page }) => {
+test('another tag redraws the ladder; zoom; ◀ ▶ walk the Tags table order', async ({ page }) => {
   await openTags(page, 'spectrum')
   await firstRow(page).click()
+  const order = await tableOrder(page)
   await page.getByRole('button', { name: 'Open in Spectrum' }).click()
   await expect(page.getByTestId('ladder-verdict')).toBeVisible()
   const shown = (await heading(page).getAttribute('title'))!
@@ -76,11 +96,13 @@ test('another tag redraws the ladder; zoom; ◀ ▶ walk the tagged spectra in f
   await expect(range).not.toHaveText(whole!)
   await page.getByRole('button', { name: 'Whole spectrum' }).click()
   await expect(range).toHaveText(whole!)
-  // ▶ then ◀ (by file order of the tagged spectra).
-  const i = SPECTRA.indexOf(shown)
-  if (i + 1 < SPECTRA.length) {
+  // ▶ then ◀ (by the Tags table's order: the first row opened it).
+  expect(order[0]).toBe(shown)
+  await expect(page.getByRole('button', { name: 'Previous tagged spectrum' })).toBeDisabled()
+  const i = 0
+  if (i + 1 < order.length) {
     await page.getByRole('button', { name: 'Next tagged spectrum' }).click()
-    await expect(heading(page)).toHaveAttribute('title', SPECTRA[i + 1])
+    await expect(heading(page)).toHaveAttribute('title', order[i + 1])
     await expect(page.getByTestId('ladder-verdict')).toHaveText(/^on \d+ of/)
     await page.getByRole('button', { name: 'Previous tagged spectrum' }).click()
     await expect(heading(page)).toHaveAttribute('title', shown)
@@ -90,13 +112,18 @@ test('another tag redraws the ladder; zoom; ◀ ▶ walk the tagged spectra in f
 test('five spectra in a row: every tag of each on its peaks, walking ◀ or ▶', async ({ page }) => {
   await openTags(page, 'spectrum')
   await firstRow(page).click()
+  const order = await tableOrder(page)
   await page.getByRole('button', { name: 'Open in Spectrum' }).click()
-  // From wherever the best tag is, walk five spectra forward or back.
-  const start = SPECTRA.indexOf((await heading(page).getAttribute('title'))!)
-  const dir = start + 5 < SPECTRA.length ? 1 : -1
+  // From the first row of the table, walk five spectra forward in its order,
+  // with ▶ and the keys (Page Down, Alt+→).
+  const start = order.indexOf((await heading(page).getAttribute('title'))!)
+  expect(start).toBe(0)
   for (let k = 1; k <= 5; k++) {
-    await page.getByRole('button', { name: dir > 0 ? 'Next tagged spectrum' : 'Previous tagged spectrum' }).click()
-    const s = SPECTRA[start + dir * k]
+    if (k === 1) await page.getByRole('button', { name: 'Next tagged spectrum' }).click()
+    else if (k === 2) await page.keyboard.press('PageDown')
+    else if (k === 3) await page.keyboard.press('Alt+ArrowRight')
+    else await page.getByRole('button', { name: 'Next tagged spectrum' }).click()
+    const s = order[start + k]
     await expect(heading(page)).toHaveAttribute('title', s)
     const tags = page.getByRole('region', { name: 'Tags of this spectrum' })
     await expect(tags.locator('tbody tr')).toHaveCount(count(s))
@@ -134,4 +161,9 @@ test('a double-click on a row opens its spectrum: one view, the chosen tag drawn
   const labels = await page.locator('.sp-line .sp-series').evaluateAll((els) => els.map((e) => e.firstChild?.textContent ?? ''))
   expect(labels.length).toBeGreaterThan(0)
   for (const l of labels) expect(l).toMatch(/^(b|y|c|z)\??$|^(b or y|c or z)\?$/)
+  // No label left of the plot is cut at its edge (report 20261124T073546Z_233cbfac):
+  // the browser's own box of each starts inside the SVG.
+  const left = await page.locator('.sp-svg [data-left]').evaluateAll((els) => els.map((e) => (e as SVGGraphicsElement).getBBox().x))
+  expect(left.length).toBeGreaterThan(0)
+  for (const x of left) expect(x).toBeGreaterThanOrEqual(0)
 })

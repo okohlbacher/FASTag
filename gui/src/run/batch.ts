@@ -7,6 +7,7 @@ import { defaultOut } from '../app/paths'
 import { baseName } from '../digestReport'
 import { duration } from '../app/format'
 import type { LogStore } from './logStore'
+import type { Refusal } from '../inspector/checks'
 
 export interface BatchJob {
   input: string
@@ -25,6 +26,9 @@ export interface BatchJob {
   log?: LogStore
   // A job that did not finish: the partial outputs the backend removed.
   cleaned?: number
+  // A failed job FASTag refused (raw DIA, exit 11): the conversion to run
+  // first, shown beside the job in the queue.
+  refusal?: Refusal
 }
 
 // Folder @p dir with a trailing separator, its own: a Windows folder has no '/'.

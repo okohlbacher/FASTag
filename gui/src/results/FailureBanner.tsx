@@ -47,7 +47,15 @@ export default function FailureBanner(p: FailureBannerProps): JSX.Element {
           {r.what && <div className="what">{r.what}</div>}
           {/* FASTag refused the input (exit 11): what to run first. */}
           {r.refusal && <RefusalBlock windows={r.refusal.windows} medianWidth={r.refusal.medianWidth} command={r.refusal.command} />}
-          {r.text && (
+          {/* A refusal's block already says why and what to run; FASTag's
+              own sentence repeats both, so it is there on request. */}
+          {r.text && r.refusal && (
+            <details className="why-more">
+              <summary>FASTag&apos;s full message</summary>
+              <code className="why">{r.text}</code>
+            </details>
+          )}
+          {r.text && !r.refusal && (
             <>
               <div className="why-label">FASTag&apos;s reason:</div>
               <code className="why">{r.text}</code>

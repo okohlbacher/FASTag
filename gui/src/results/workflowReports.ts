@@ -8,6 +8,7 @@
 
 import type { ResolvedOutputs } from '../types'
 import { baseName } from '../digestReport'
+import type { TablePaths } from './tables'
 
 export interface WorkflowReports {
   qc?: string
@@ -127,4 +128,30 @@ export const TAB_OF: Record<WorkflowKind, 'qc' | 'shortlist' | 'triage' | 'recon
   censusSummary: 'triage',
   deltaSpectra: 'recon',
   deltaCounts: 'recon'
+}
+
+/// The file the Results page shows when no run names it (a file opened
+/// from disk): the tags table, else each viewer that opens alone, by
+/// priority, else the first Digest report. null: nothing shown.
+export function shownArtifact(
+  tags: string | null | undefined,
+  w: WorkflowReports,
+  tables: TablePaths,
+  list: { path: string }[]
+): string | null {
+  return (
+    tags ??
+    w.qc ??
+    w.shortlist ??
+    w.triage ??
+    w.censusSummary ??
+    w.deltaSpectra ??
+    w.deltaCounts ??
+    tables.glyco ??
+    tables.recon ??
+    tables.delta ??
+    tables.reconIds ??
+    list[0]?.path ??
+    null
+  )
 }

@@ -188,7 +188,11 @@ export default function DataTable({ label, columns, ids, total, empty, sort: ini
       {n === 0 ? (
         <div className="dt-empty">{empty ?? 'No rows match.'}</div>
       ) : (
-        <div className="dt-wrap" ref={wrapRef}>
+        <div
+          className="dt-wrap"
+          ref={wrapRef}
+          title={`Click a column to sort; in the table ↑ ↓, Page Up/Down, Home and End move the active row${onOpen ? `; Enter or a double-click: ${openLabel.toLowerCase()}` : ''}.`}
+        >
           <table
             ref={gridRef}
             className="taxa dt"
@@ -253,12 +257,6 @@ export default function DataTable({ label, columns, ids, total, empty, sort: ini
             </tbody>
           </table>
         </div>
-      )}
-      {n > 0 && (
-        <p className="dt-help">
-          Click a column to sort; in the table ↑ ↓, Page Up/Down, Home and End move the active row
-          {onOpen ? `; Enter or a double-click: ${openLabel.toLowerCase()}` : ''}.
-        </p>
       )}
     </div>
   )

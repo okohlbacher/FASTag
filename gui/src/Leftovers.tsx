@@ -4,7 +4,7 @@
 // backend lists can be removed.
 
 import { useEffect, useState, type JSX } from 'react'
-import { IconError } from './icons'
+import { IconError, IconFlag } from './icons'
 
 export function Leftovers(): JSX.Element | null {
   const [files, setFiles] = useState<string[]>([])
@@ -46,24 +46,35 @@ export function Leftovers(): JSX.Element | null {
     setBusy(false)
   }
 
+  const n = files.length
+  const one = n === 1
+  // One compact notice at the right of the stepper (SPEC: step 1 fits
+  // 1280 x 800 with all seven tiles): the title and the two choices; what
+  // the files are and their paths open from "Show" below it.
   return (
-    <section className="block leftovers" aria-labelledby="leftovers-h">
-      <h2 id="leftovers-h">{files.length ? 'Files left by an unfinished run' : 'Leftover files'}</h2>
-      {files.length > 0 && (
+    <section className={`leftovers${n ? ' has-files' : ''}`} aria-labelledby="leftovers-h">
+      {n > 0 && <IconFlag />}
+      <h2 id="leftovers-h">{n ? 'Files left by an unfinished run' : 'Leftover files'}</h2>
+      {n > 0 && (
         <>
-          <p className="muted">
-            A run that was cancelled, failed or was still going when FASTag ended left {files.length === 1 ? 'this file' : 'these files'}. {files.length === 1 ? 'It is' : 'They are'} incomplete.
-          </p>
-          <ul className="leftovers-list">
-            {files.map((f) => (
-              <li key={f}>
-                <code>{f}</code>
-              </li>
-            ))}
-          </ul>
-          <div className="row">
+          <details className="leftovers-files">
+            <summary>Show {one ? 'the file' : `${n} files`}</summary>
+            <div className="leftovers-pop">
+              <p className="muted">
+                {n} incomplete {one ? 'file' : 'files'} from a run that was cancelled, failed or still going when FASTag ended:
+              </p>
+              <ul className="leftovers-list">
+                {files.map((f) => (
+                  <li key={f}>
+                    <code>{f}</code>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          </details>
+          <div className="row leftovers-actions">
             <button type="button" className="secondary small" disabled={busy} onClick={() => void remove()}>
-              {files.length === 1 ? 'Remove it' : 'Remove them'}
+              {one ? 'Remove it' : 'Remove them'}
             </button>
             <button type="button" className="secondary small" disabled={busy} onClick={() => void keep()}>
               Keep

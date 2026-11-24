@@ -138,8 +138,22 @@ describe('Setup: the task chooser', () => {
     await click(screen.getByRole('button', { name: 'Add files…' }))
     await goTo('setup')
     await waitFor(() => expect(screen.getByText(/2 files in the batch/)).toBeDefined())
-    // The batch runs from step 2 too.
-    expect(screen.getByRole('button', { name: 'Run 2 files' })).toBeDefined()
+    // The batch runs from step 2 too: from the action bar, never the queue card.
+    const queueRun = (): HTMLElement => screen.getByRole('button', { name: 'Run 2 files' })
+    expect(queueRun()).toBeDefined()
+    expect(queueRun().closest('.actionbar')).not.toBeNull()
+    expect(queueRun().closest('.batch-input')).toBeNull()
+    expect(queueRun().classList.contains('primary')).toBe(false)
+    // Settings: beside Next, secondary; Outputs, the wizard's last step: filled.
+    showStep(3)
+    expect(queueRun().classList.contains('primary')).toBe(false)
+    expect(screen.getByRole('button', { name: /^Next: / }).classList.contains('primary')).toBe(true)
+    showStep(4)
+    expect(queueRun().classList.contains('primary')).toBe(true)
+    expect(document.querySelectorAll('.view-setup .actionbar button.primary')).toHaveLength(1)
+    await click(queueRun())
+    await waitFor(() => expect(mock.runCalls).toHaveLength(1))
+    expect(document.querySelector('nav[aria-label="Views"] button[data-view="batch"]')?.getAttribute('aria-current')).toBe('page')
   })
 
   it('a preset saved over Batch QC loads as Characterize a run in Batch mode', async () => {
@@ -169,12 +183,26 @@ describe('Setup: the task chooser', () => {
     await renderColdApp(mock)
     expect(within(tile('Run QC')).getByText('Is this run usable, and how was it measured?')).toBeDefined()
     expect(within(tile('Mass-shift survey')).getByText('needs FASTA')).toBeDefined()
-    expect(within(tile('Characterize a run')).getByText('Recommended to start')).toBeDefined()
-    expect(document.getElementById('not-search-engine')!.textContent).toMatch(/does not identify proteins with FDR control/)
+    expect(within(tile('Characterize a run')).getByText('Start here').getAttribute('title')).toBe('Recommended to start')
+    expect(document.getElementById('not-search-engine')!.textContent).toMatch(/It is not a search engine/)
     await click(tile('Run QC'))
     const detail = screen.getByRole('region', { name: /Run QC/ })
     expect(detail.textContent).toMatch(/You get.*QC report/)
-    expect(detail.textContent).toMatch(/Not for.*Characterize a run/)
+    // When to use it and what it is not for: in Help, one link away.
+    expect(detail.textContent).not.toMatch(/Not for/)
+    expect(within(detail).getByRole('button', { name: 'More about this task' }).getAttribute('data-help')).toBe('task-run-qc')
+    // ...and that link does reach it: Help opens on the task's entry, opened, with its limitation.
+    await click(within(detail).getByRole('button', { name: 'More about this task' }))
+    const help = await waitFor(() => screen.getByRole('complementary', { name: 'Help' }))
+    const entry = await waitFor(() => {
+      const e = help.querySelector<HTMLDetailsElement>('#task-run-qc')
+      expect(e).not.toBeNull()
+      return e!
+    })
+    expect(entry.open).toBe(true)
+    expect(entry.textContent).toMatch(/Not for.*Characterize a run/)
+    await click(screen.getByRole('button', { name: 'Close Help' }))
+    await waitFor(() => expect(screen.queryByRole('complementary', { name: 'Help' })).toBeNull())
     // Selecting is not choosing: the form is still Generate tags', nothing to undo.
     expect(tile('Run QC').getAttribute('aria-pressed')).toBe('true')
     expect(document.querySelector('nav[aria-label="Setup steps"] button[data-step-btn="2"]')!.getAttribute('aria-disabled')).toBe('true')
@@ -231,7 +259,9 @@ describe('Setup: hidden dependent fields', () => {
     const banners = group.querySelectorAll('.group-needs')
     expect(banners.length).toBeGreaterThan(0)
     // Round 6, 12: each report once, not one list per dependency.
-    expect(banners[0].textContent).toMatch(/^\d+ more settings appear with Digest report on or Label report on\./)
+    // The digest window is also read for the Run QC report (its kit call
+    // counts the label masses at the tag ends).
+    expect(banners[0].textContent).toMatch(/^\d+ more settings appear with Digest report on, Label report on or QC report on\./)
     // No waiting field is left in view, disabled.
     expect(group.querySelectorAll('.field.off')).toHaveLength(0)
     // The digest report's checkbox is in this group: no Turn on repeats it.

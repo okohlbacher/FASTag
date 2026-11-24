@@ -511,7 +511,7 @@ export function useRun(s: RunInputs, view: ViewStore, hooks: RunHooks = {}) {
     const outFile = outputs.out
     if (!outFile) {
       // Done without outputs: the reply that names them never came.
-      pushLog('The run finished, but the app did not learn where it wrote its outputs; open them with Open a tags TSV….')
+      pushLog('The run finished, but the app did not learn where it wrote its outputs; open them with Open tags….')
       return
     }
     const g = ++showGen.current
@@ -1173,6 +1173,12 @@ export function useRun(s: RunInputs, view: ViewStore, hooks: RunHooks = {}) {
     !!shownJob && !shownJob.batch && !!input && !!out && sameCall(shownJob.params, withWorkflow(runParams(input, out)))
   return {
     running,
+    // The input and -out of the job in flight (a single run, a History
+    // Re-run or the batch job going), null when none is: what the Results
+    // title, the run pill and the Running panel name. Not the form's
+    // input: a Re-run of A while Setup holds B runs A.
+    activeInput: running && active ? active.input : null,
+    activeOut: running && active ? active.out : null,
     batchRunning,
     batchEnd: state.batchEnd,
     busy: running || batchRunning,

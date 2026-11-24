@@ -1,6 +1,6 @@
 // The History view (GUI-DESIGN 3 S9, 6.5; P2a PR h), App-level: one row per
-// recorded run with Open, Copy command, Reveal, Settings into form (with
-// Undo) and Delete record; a run that did not finish is marked incomplete
+// recorded run with Open and, under its More menu (RowMenu), Copy command,
+// Reveal, Settings into form (with Undo), Re-run and Delete record; a run that did not finish is marked incomplete
 // and never opens as if complete (P0a). Copy command copies the argv the
 // record keeps, which is the command the run reply offered (fastag.rs
 // the_history_argv_is_the_command_line_the_run_was_started_with).
@@ -49,6 +49,18 @@ async function history(): Promise<HTMLElement[]> {
 }
 
 const btn = (row: HTMLElement, name: string): HTMLElement | null => within(row).queryByRole('button', { name })
+/// The row's More button (its menu of the other actions).
+const more = (row: HTMLElement): HTMLElement => within(row).getByRole('button', { name: /^More actions for / })
+/// A row action: Open is a button of its own; the others are items of the
+/// row's More menu, opened (once) to find them. Null when not offered.
+async function action(row: HTMLElement, name: string): Promise<HTMLElement | null> {
+  if (name === 'Open') return btn(row, name)
+  const m = within(row).queryByRole('button', { name: /^More actions for / })
+  if (!m) return null
+  if (m.getAttribute('aria-expanded') !== 'true') await click(m)
+  return within(row).queryByRole('menuitem', { name })
+}
+const note = (): HTMLElement => screen.getByRole('status', { name: 'History' })
 
 async function showWith(mock: MockBridge, records: RunRecord[]): Promise<HTMLElement[]> {
   mock.history = records
@@ -64,13 +76,15 @@ describe('History', () => {
       argv: ['/opt/FASTag', '-in', "/d/my data/it's.mzML", '-out', "/d/my data/it's.tags.tsv", '-fixed_mods', '', '-progress']
     })
     const [row] = await showWith(mock, [r])
-    await click(btn(row, 'Copy command')!)
+    await click((await action(row, 'Copy command'))!)
     expect(writeText).toHaveBeenCalledTimes(1)
     expect(writeText.mock.calls[0][0]).toBe(shellLine(r.argv))
     expect(writeText.mock.calls[0][0]).toBe(
       "/opt/FASTag -in '/d/my data/it'\\''s.mzML' -out '/d/my data/it'\\''s.tags.tsv' -fixed_mods '' -progress"
     )
-    expect(btn(row, 'Copied')).not.toBeNull()
+    // Said in the note (the item is gone with the menu); focus back on More.
+    expect(note().textContent).toBe("Copied the command of it's.mzML.")
+    expect(document.activeElement).toBe(more(row))
   })
 
   it('says so when the clipboard refuses the command', async () => {
@@ -80,7 +94,7 @@ describe('History', () => {
       configurable: true
     })
     const [row] = await showWith(mock, [rec('1', '/d/a.mzML', 'ok')])
-    await click(btn(row, 'Copy command')!)
+    await click((await action(row, 'Copy command'))!)
     expect(screen.getByText('The clipboard refused the command.')).toBeDefined()
   })
 
@@ -99,7 +113,7 @@ describe('History', () => {
     const rows = await history()
     expect(rows).toHaveLength(1)
     expect(rows[0].textContent).toMatch(/Failed \(exit 1\)/)
-    await click(btn(rows[0], 'Copy command')!)
+    await click((await action(rows[0], 'Copy command'))!)
     expect(writeText.mock.calls[1][0]).toBe(fromBanner)
   })
 
@@ -114,8 +128,8 @@ describe('History', () => {
     for (const r of rows.slice(0, 2)) {
       expect(r.textContent).toMatch(/incomplete/)
       expect(btn(r, 'Open')).toBeNull()
-      expect(btn(r, 'Reveal')).toBeNull()
-      expect(btn(r, 'Copy command')).not.toBeNull()
+      expect(await action(r, 'Reveal')).toBeNull()
+      expect(await action(r, 'Copy command')).not.toBeNull()
     }
     expect(rows[0].textContent).toMatch(/Cancelled/)
     expect(rows[1].textContent).toMatch(/Failed \(exit 2\)/)
@@ -132,7 +146,7 @@ describe('History', () => {
   it('Reveal shows the run\'s tags file through the backend\'s checked reveal', async () => {
     const mock = installMockBridge()
     const [row] = await showWith(mock, [rec('1', '/d/a.mzML', 'ok')])
-    await click(btn(row, 'Reveal')!)
+    await click((await action(row, 'Reveal'))!)
     expect(mock.revealCalls).toEqual([{ path: '/d/a.tags.tsv', folder: false }])
   })
 
@@ -142,22 +156,22 @@ describe('History', () => {
   it('Delete record asks first, removes the record only, says the files were kept, and keeps focus in the list', async () => {
     const mock = installMockBridge()
     const rows = await showWith(mock, [rec('2', '/d/b.mzML', 'ok'), rec('1', '/d/a.mzML', 'ok')])
-    await click(btn(rows[0], 'Delete record')!)
+    await click((await action(rows[0], 'Delete record'))!)
     // Asked, nothing deleted yet, focus on Keep.
     const ask = within(rows[0]).getByRole('group', { name: 'Delete this record?' })
     expect(mock.historyDeleteCalls).toEqual([])
     expect(document.activeElement).toBe(within(ask).getByRole('button', { name: 'Keep' }))
     await click(within(ask).getByRole('button', { name: 'Keep' }))
     expect(mock.historyDeleteCalls).toEqual([])
-    expect(document.activeElement).toBe(btn(rows[0], 'Delete record'))
+    expect(document.activeElement).toBe(more(rows[0]))
     // Escape keeps it too.
-    await click(btn(rows[0], 'Delete record')!)
+    await click((await action(rows[0], 'Delete record'))!)
     await act(async () => {
       ;(document.activeElement as HTMLElement).dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))
     })
     expect(within(rows[0]).queryByRole('group', { name: 'Delete this record?' })).toBeNull()
-    expect(document.activeElement).toBe(btn(rows[0], 'Delete record'))
-    await click(btn(rows[0], 'Delete record')!)
+    expect(document.activeElement).toBe(more(rows[0]))
+    await click((await action(rows[0], 'Delete record'))!)
     await click(within(rows[0]).getByRole('button', { name: 'Delete' }))
     await flush()
     expect(mock.historyDeleteCalls).toEqual(['2'])
@@ -167,7 +181,7 @@ describe('History', () => {
     // Focus is on the next row's first action, not on <body>.
     expect(document.activeElement).toBe(within(left[0]).getAllByRole('button')[0])
     // The last record: focus goes to the heading.
-    await click(btn(left[0], 'Delete record')!)
+    await click((await action(left[0], 'Delete record'))!)
     await click(within(left[0]).getByRole('button', { name: 'Delete' }))
     await flush()
     expect(screen.queryByRole('table', { name: 'Run history' })).toBeNull()
@@ -183,7 +197,7 @@ describe('History', () => {
     mock.existingOutputs = ['/d/a.tags.tsv']
     const cancelled = rec('2', '/d/a.mzML', 'cancelled', { cleanup: { removed: [], renamed: [], failed: ['/d/a.tags.tsv'] } })
     const rows = await showWith(mock, [cancelled, rec('1', '/d/a.mzML', 'ok')])
-    await click(btn(rows[0], 'Delete record')!)
+    await click((await action(rows[0], 'Delete record'))!)
     await click(within(rows[0]).getByRole('button', { name: 'Delete' }))
     await flush()
     expect(mock.historyDeleteCalls).toEqual(['2'])
@@ -193,7 +207,7 @@ describe('History', () => {
     expect(screen.getByRole('status', { name: 'History' }).textContent).toMatch(
       /record was kept: it is what marks \/d\/a\.tags\.tsv as incomplete/
     )
-    expect(document.activeElement).toBe(btn(left[0], 'Delete record'))
+    expect(document.activeElement).toBe(more(left[0]))
     // The file still opens marked incomplete, also from the older finished row.
     await click(btn(left[1], 'Open')!)
     await flush()
@@ -202,7 +216,7 @@ describe('History', () => {
     // The finished run's record is no marker: it may go.
     await goTo('history')
     const again = within(screen.getByRole('table', { name: 'Run history' })).getAllByRole('row').slice(1)
-    await click(btn(again[1], 'Delete record')!)
+    await click((await action(again[1], 'Delete record'))!)
     await click(within(again[1]).getByRole('button', { name: 'Delete' }))
     await flush()
     expect(mock.history.map((r) => r.id)).toEqual(['2'])
@@ -221,7 +235,7 @@ describe('History', () => {
     const params = { species: true, tag_length: '5' }
     mock.history = [rec('1', '/d/a.mzML', 'ok', { params })]
     const [row] = await history()
-    await click(btn(row, 'Re-run')!)
+    await click((await action(row, 'Re-run'))!)
     await flush()
     expect(mock.historyRerunCalls).toEqual(['1'])
     expect(mock.outputsCheckCalls[mock.outputsCheckCalls.length - 1]).toEqual({ in: '/d/a.mzML', out: '/d/a.tags.tsv', params })
@@ -242,6 +256,34 @@ describe('History', () => {
     expect(mock.history[0].input).toBe('/d/a.mzML')
   })
 
+  // Round-2 review (run identity): a Re-run of A while Setup holds B is A's
+  // run everywhere it is named while it goes: the Results title and its
+  // full-path tooltip, the run status pill and the Running panel.
+  it('a Re-run in flight names the recorded input, not the form\'s, in the Results title, the pill and the Running panel', async () => {
+    const mock = installMockBridge()
+    mock.recordRuns = true
+    await renderApp(mock)
+    await pickSingle(mock, '/d/B.mzML')
+    mock.history = [rec('1', '/d/A.mzML', 'ok', { params: { tag_length: '4' } })]
+    const [row] = await history()
+    await click((await action(row, 'Re-run'))!)
+    await flush()
+    expect(mock.runCalls[0]).toMatchObject({ in: '/d/A.mzML', out: '/d/A.tags.tsv' })
+    const title = document.querySelector('.view-results .page-header h2') as HTMLElement
+    expect(title.textContent).toBe('A.mzML')
+    expect(title.getAttribute('title')).toBe('/d/A.mzML')
+    const pill = screen.getByRole('group', { name: 'Run status' })
+    expect(pill.querySelector('.pill-file')?.textContent).toBe('A.mzML')
+    const panel = screen.getByRole('region', { name: 'Running' })
+    expect(panel.querySelector('.running-what .mono')?.textContent).toBe('A.mzML')
+    await act(async () => mock.emitDone({ ok: true, code: 0, runId: mock.lastRunId }))
+    await flush()
+    // Once done, the run shown is still A's, and the form still holds B.
+    expect((document.querySelector('.view-results .page-header h2') as HTMLElement).textContent).toBe('A.mzML')
+    await goTo('setup')
+    expect(document.querySelector('.input-card .fname')?.textContent).toBe('B.mzML')
+  })
+
   // Review round 3: the results of a Re-run are its record's workflow's,
   // whatever the form is set to, and its species report is read because
   // the record's parameters asked for one.
@@ -254,7 +296,7 @@ describe('History', () => {
     const params = { species: true, extension: '2' }
     mock.history = [rec('1', '/d/a.mzML', 'ok', { params, workflow: 'species' })]
     const [row] = await history()
-    await click(btn(row, 'Re-run')!)
+    await click((await action(row, 'Re-run'))!)
     await flush()
     expect(mock.runCalls[0]).toMatchObject({ in: '/d/a.mzML', params, workflow: 'species' })
     await act(async () => mock.emitDone({ ok: true, code: 0, runId: mock.lastRunId }))
@@ -262,7 +304,7 @@ describe('History', () => {
     const tabs = screen.getAllByRole('tab').map((t) => t.textContent ?? '')
     expect(tabs.slice(0, 2)).toEqual(['Overview', 'Species1'])
     await click(screen.getByRole('tab', { name: 'Overview' }))
-    expect(document.querySelector('.overview-sub strong')?.textContent).toBe('Species')
+    expect(document.querySelector('.page-header .run-workflow')?.textContent).toBe('Species')
     // The new record keeps the workflow too.
     expect(mock.history[0].workflow).toBe('species')
   })
@@ -273,24 +315,24 @@ describe('History', () => {
     await renderApp(mock)
     mock.history = [rec('1', '/d/a.mzML', 'ok', { params: { tag_length: '3' } })]
     const [row] = await history()
-    await click(btn(row, 'Re-run')!)
+    await click((await action(row, 'Re-run'))!)
     await flush()
     expect('workflow' in mock.runCalls[0]).toBe(false)
     await act(async () => mock.emitDone({ ok: true, code: 0, runId: mock.lastRunId }))
     await flush()
     await click(screen.getByRole('tab', { name: 'Overview' }))
-    expect(document.querySelector('.overview-sub strong')).toBeNull()
+    expect(document.querySelector('.page-header .run-workflow')).toBeNull()
   })
 
   it('Re-run is not offered for a record without its parameters, and is off while a run is busy', async () => {
     const mock = installMockBridge()
     const [row] = await showWith(mock, [rec('1', '/d/a.mzML', 'ok')])
-    expect(btn(row, 'Re-run')).toBeNull()
+    expect(await action(row, 'Re-run')).toBeNull()
     mock.history = [rec('2', '/d/b.mzML', 'failed', { params: {} }), ...mock.history]
     await pickSingle(mock, '/d/x.mzML')
     await click(runButton())
     const [busyRow] = await history()
-    expect((btn(busyRow, 'Re-run') as HTMLButtonElement).disabled).toBe(true)
+    expect(((await action(busyRow, 'Re-run')) as HTMLButtonElement).disabled).toBe(true)
   })
 
   it('Settings into form loads the run\'s input, output and parameters; Undo puts the form back', async () => {
@@ -299,7 +341,7 @@ describe('History', () => {
     await pickSingle(mock, '/d/x.mzML')
     mock.history = [rec('1', '/d/a.mzML', 'ok', { params: { species: true, tag_length: '5', not_a_param: 'x' } })]
     const [row] = await history()
-    await click(btn(row, 'Settings into form')!)
+    await click((await action(row, 'Settings into form'))!)
     const note = screen.getByRole('status', { name: 'History' })
     expect(note.textContent).toMatch(/a\.mzML/)
     await goTo('setup')
@@ -309,6 +351,31 @@ describe('History', () => {
     expect(document.querySelector('.input-card .fname')?.textContent).toBe('a.mzML')
     await goTo('history')
     await click(within(note).getByRole('button', { name: 'Undo' }))
+    await goTo('setup')
+    expect(await formValue('tag_length')).toBe('3')
+    expect(await formValue('species')).toBe(false)
+    expect((document.getElementById('out-name') as HTMLInputElement).value).toBe('x')
+    expect(document.querySelector('.input-card .fname')?.textContent).toBe('x.mzML')
+  })
+
+  // Codex review round 2 (history-undo): clipboard feedback is its own
+  // state, so a Copy command after Settings into form keeps the Undo.
+  it('a Copy command after Settings into form keeps the Undo, and Undo still puts the form back', async () => {
+    const mock = installMockBridge()
+    const writeText = clipboard()
+    await renderApp(mock)
+    await pickSingle(mock, '/d/x.mzML')
+    mock.history = [
+      rec('1', '/d/a.mzML', 'ok', { params: { species: true, tag_length: '5' } }),
+      rec('2', '/d/b.mzML', 'ok')
+    ]
+    const rows = await history()
+    await click((await action(rows[0], 'Settings into form'))!)
+    await click((await action(rows[1], 'Copy command'))!)
+    expect(writeText).toHaveBeenCalledTimes(1)
+    expect(note().textContent).toMatch(/settings of a\.mzML are in the form/)
+    expect(note().textContent).toMatch(/Copied the command of b\.mzML\./)
+    await click(within(note()).getByRole('button', { name: 'Undo' }))
     await goTo('setup')
     expect(await formValue('tag_length')).toBe('3')
     expect(await formValue('species')).toBe(false)
@@ -327,7 +394,7 @@ describe('History', () => {
     expect(before).not.toBe('run-qc')
     mock.history = [rec('1', '/d/a.mzML', 'ok', { workflow: 'run-qc', params: { qc_out: '/d/a.qc.tsv', threads: '0', subsample_fraction: '0.1' } })]
     const [row] = await history()
-    await click(btn(row, 'Settings into form')!)
+    await click((await action(row, 'Settings into form'))!)
     await goTo('setup')
     expect(chosen()).toBe('run-qc')
     // A run with its input lands on Outputs & run.
@@ -360,7 +427,7 @@ describe('History', () => {
     }
     mock.history = [rec('1', '/d/a.mzML', 'ok', { workflow: 'db-reduction', params })]
     const [row] = await history()
-    await click(btn(row, 'Settings into form')!)
+    await click((await action(row, 'Settings into form'))!)
     await goTo('setup')
     expect(document.querySelector<HTMLElement>('button.task-tile[aria-current="true"]')?.dataset.task).toBe('db-reduction')
     expect(await formValue('shortlist_max_evalue')).toBe('0.1')
@@ -418,7 +485,7 @@ describe('History', () => {
     await renderApp(mock)
     mock.history = [rec('1', '/d/a.mzML', 'ok', { params: { tag_length: '4' } })]
     const [row] = await history()
-    await click(btn(row, 'Settings into form')!)
+    await click((await action(row, 'Settings into form'))!)
     await goTo('setup')
     expect(document.querySelector('input[name="task"]:checked')).toBeNull()
   })
@@ -426,10 +493,86 @@ describe('History', () => {
   it('a record without the parameters (from 1.13) offers no Settings into form; Open is off while a run is busy', async () => {
     const mock = installMockBridge()
     const [row] = await showWith(mock, [rec('1', '/d/a.mzML', 'ok')])
-    expect(btn(row, 'Settings into form')).toBeNull()
+    expect(await action(row, 'Settings into form')).toBeNull()
     await pickSingle(mock, '/d/x.mzML')
     await click(runButton())
     const [busyRow] = await history()
     expect((btn(busyRow, 'Open') as HTMLButtonElement).disabled).toBe(true)
+  })
+
+  // C12: a record is two buttons, Open and More; the other actions are a
+  // keyboard-operable menu (WAI-ARIA menu button), so the row stays one
+  // button row and its file names keep their room.
+  it('a row shows Open and More only; More lists the other actions in order, Delete record apart', async () => {
+    const mock = installMockBridge()
+    const [row] = await showWith(mock, [rec('1', '/d/a.mzML', 'ok', { params: { tag_length: '4' } })])
+    const cell = row.querySelector('td.hist-actions') as HTMLElement
+    expect(within(cell).getAllByRole('button').map((b) => b.textContent)).toEqual(['Open', 'More'])
+    const m = more(row)
+    expect(m.getAttribute('aria-label')).toBe('More actions for a.mzML')
+    expect(m.getAttribute('aria-haspopup')).toBe('menu')
+    expect(m.getAttribute('aria-expanded')).toBe('false')
+    await click(m)
+    expect(m.getAttribute('aria-expanded')).toBe('true')
+    const menu = within(row).getByRole('menu')
+    expect(within(menu).getAllByRole('menuitem').map((b) => b.textContent)).toEqual([
+      'Reveal', 'Copy command', 'Settings into form', 'Re-run', 'Delete record'
+    ])
+    expect(within(menu).getAllByRole('separator')).toHaveLength(1)
+    expect(within(menu).getByRole('menuitem', { name: 'Delete record' }).getAttribute('data-action')).toBe('delete')
+    // A click outside closes it.
+    await act(async () => {
+      document.body.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }))
+    })
+    expect(within(row).queryByRole('menu')).toBeNull()
+    expect(m.getAttribute('aria-expanded')).toBe('false')
+  })
+
+  it('More works from the keyboard: ArrowDown opens on the first item, arrows move, Enter chooses, Escape and Tab return to More', async () => {
+    const mock = installMockBridge()
+    const writeText = clipboard()
+    const r = rec('1', '/d/a.mzML', 'ok', { params: { tag_length: '4' } })
+    const [row] = await showWith(mock, [r])
+    const m = more(row)
+    const key = async (k: string): Promise<void> => {
+      await act(async () => {
+        ;(document.activeElement as HTMLElement).dispatchEvent(new KeyboardEvent('keydown', { key: k, bubbles: true }))
+      })
+    }
+    m.focus()
+    await key('ArrowDown')
+    expect(document.activeElement).toBe(within(row).getByRole('menuitem', { name: 'Reveal' }))
+    await key('ArrowDown')
+    expect(document.activeElement).toBe(within(row).getByRole('menuitem', { name: 'Copy command' }))
+    await key('End')
+    expect(document.activeElement).toBe(within(row).getByRole('menuitem', { name: 'Delete record' }))
+    await key('ArrowDown') // wraps
+    expect(document.activeElement).toBe(within(row).getByRole('menuitem', { name: 'Reveal' }))
+    await key('ArrowUp')
+    expect(document.activeElement).toBe(within(row).getByRole('menuitem', { name: 'Delete record' }))
+    await key('Home')
+    expect(document.activeElement).toBe(within(row).getByRole('menuitem', { name: 'Reveal' }))
+    await key('Escape')
+    expect(within(row).queryByRole('menu')).toBeNull()
+    expect(document.activeElement).toBe(m)
+    // Tab closes it too, focus on More.
+    await key('ArrowUp')
+    expect(document.activeElement).toBe(within(row).getByRole('menuitem', { name: 'Delete record' }))
+    await key('Tab')
+    expect(within(row).queryByRole('menu')).toBeNull()
+    expect(document.activeElement).toBe(m)
+    // Enter on an item (a button's click) runs it and closes the menu.
+    await key('ArrowDown')
+    await key('ArrowDown')
+    await click(document.activeElement as HTMLElement)
+    expect(writeText).toHaveBeenCalledWith(shellLine(r.argv))
+    expect(within(row).queryByRole('menu')).toBeNull()
+    expect(document.activeElement).toBe(m)
+    // Delete record from the menu: the confirmation takes More's place, focus on Keep.
+    await click((await action(row, 'Delete record'))!)
+    expect(within(row).queryByRole('button', { name: /^More actions/ })).toBeNull()
+    const ask = within(row).getByRole('group', { name: 'Delete this record?' })
+    expect(document.activeElement).toBe(within(ask).getByRole('button', { name: 'Keep' }))
+    expect(row.querySelectorAll('td.hist-actions button.danger')).toHaveLength(1)
   })
 })

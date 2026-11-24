@@ -20,7 +20,9 @@
 //               given).
 //   reporters   isobaric reporter ions of OpenMS's kit channel tables (TMT
 //               6/10/11/16/18, iTRAQ 4/8): per kit present, absent or not
-//               assessable, and the kits compatible with what was seen.
+//               assessable, the kits compatible with what was seen, the
+//               one kit the label mass and the channels allow (reporter_kit)
+//               and, per channel of the family seen, the MS2 that show it.
 //   tag yield   the share of MS2 spectra with a reported tag at E <= 0.01, the
 //               census's best tag (Census::bestTag).
 //   redundancy  the share of MS2 spectra in clusters of size > 1: same charge,
@@ -65,7 +67,9 @@ namespace FASTag::RunQC
 {
   /// Version of the qc section; bumped when a key, its meaning or its order changes.
   /// 2: instrument_model, instrument_serial_number, start_timestamp.
-  inline constexpr int QC_VERSION = 2;
+  /// 3: reporter_kit, reporter_kit_candidates, reporter_family_evidence,
+  ///    reporter_label_delta and the reporter_channel_<label> counts.
+  inline constexpr int QC_VERSION = 3;
 
   // ---- run metadata ---------------------------------------------------------
 
@@ -259,7 +263,22 @@ namespace FASTag::RunQC
     {
       std::string name;                  ///< OpenMS method name, e.g. "tmt10plex"
       std::uint8_t family = 0;
-      std::uint32_t channels = 0;        ///< bit mask over mz
+      /// Bit mask over mz: the union of #patterns (every channel the kit can show).
+      std::uint32_t channels = 0;
+      /**
+        The channel sets of the kit's reagent generations, each a bit mask over
+        mz; the kit fits a run when one of them holds every observed channel.
+        One per kit (OpenMS's table), except tmt6plex, which has two: the
+        current sixplex 126/127N/128C/129N/130C/131 (OpenMS
+        TMTSixPlexQuantitationMethod, MSnbase TMT6b) and the original reagent
+        126/127C/128C/129C/130C/131 (Dayon et al. 2008; MSnbase TMT6; the
+        127C/129C m/z of OpenMS's TMT10 table).
+      */
+      std::vector<std::uint32_t> patterns;
+      /// The Digest::labelKeys() entry of the kit's label: TMT (229.162932 Da)
+      /// for TMT 6/10/11, TMTpro (304.207146 Da) for TMTpro 16/18 and iTRAQ8
+      /// (304.205, inside the label window), iTRAQ4 (144.102063 Da).
+      std::uint8_t label = 0;
     };
     std::vector<Kit> kits;               ///< tmt6plex .. tmt18plex, itraq4plex, itraq8plex
     std::array<double, 2> family_low{}, family_high{};  ///< lowest/highest channel m/z per family
@@ -349,6 +368,66 @@ namespace FASTag::RunQC
     @return The call.
   */
   ReporterCall callReporters(const ReporterTally& t, const ReporterTable& table, std::uint64_t n_ms3);
+
+  /// The label-mass evidence of a run: Digest::labelCall() over the tag ends
+  /// counted in the tagging loop (the -label_out call).
+  struct LabelEvidence
+  {
+    bool counted = false;  ///< tag ends were counted; false: no evidence
+    bool called = false;   ///< Digest::labelCall() made a call
+    std::string reason;    ///< no call: low_resolution or few_tags
+    std::uint64_t tags = 0;  ///< filtered tags counted
+    std::array<std::uint64_t, Digest::NUM_LABELS> ends{};        ///< per labelKeys(): N- and C-terminal ends near the label
+    std::array<std::uint64_t, Digest::NUM_LABELS> background{};  ///< the same at label + 0.5 Da
+    std::array<bool, Digest::NUM_LABELS> passed{};               ///< the label passed the call
+  };
+  /**
+    @brief The label-mass evidence from tag-end counts.
+    @param[in] tc The tag ends of the run.
+    @param[in] s The digest settings (window, low_resolution).
+    @return The evidence (counted = true).
+  */
+  LabelEvidence labelEvidence(const Digest::TerminusCounter& tc, const Digest::DigestSettings& s);
+
+  /// The run's isobaric kit: what was seen, not what it could be.
+  struct KitDecision
+  {
+    /// A kit name; "ambiguous" (several candidates), "conflict" (one label
+    /// passed, but no kit of it holds every observed channel: the label mass
+    /// and the channels disagree, so no kit is called), "none" (no family
+    /// present, at least one assessed) or "not_assessable" (no family could
+    /// be assessed).
+    std::string kit;
+    /// label_mass, reporters_only, label_conflict (kit "conflict"), or "-" without a present family.
+    std::string evidence = "-";
+    /// The smallest kit per label the channels (and label) allow, table order;
+    /// for a conflict, the kits the channels allow (of the other labels).
+    std::vector<std::string> candidates;
+    /// The labelKeys() entry that passed the label call: the one that decided
+    /// (label_mass) or the one the channels contradict (label_conflict); else -1.
+    int label = -1;
+    /// Why the label did not decide (reporters_only): not_counted,
+    /// low_resolution, few_tags, no_label, several_labels, label_conflict.
+    std::string why;
+  };
+  /**
+    @brief The kit of a run from the label mass and the observed channels.
+
+    For each label of a present reporter family (TMT, TMTpro; iTRAQ4,
+    iTRAQ8), the candidate is the smallest kit of that label whose channels
+    hold every observed channel; a larger kit whose extra channels were not
+    seen is never named. When exactly one label of a present family passed
+    the label call and it has a candidate, that candidate is the kit
+    (label_mass) and the other label's kits are not named. Otherwise
+    (reporters_only) the candidates of every label are listed, smallest
+    first per label, and the kit is the one candidate or "ambiguous".
+
+    @param[in] call The reporter call.
+    @param[in] table The channels.
+    @param[in] ev The label evidence.
+    @return The decision.
+  */
+  KitDecision decideKit(const ReporterCall& call, const ReporterTable& table, const LabelEvidence& ev);
 
   // ---- redundancy ----------------------------------------------------------
 
@@ -498,6 +577,8 @@ namespace FASTag::RunQC
       run_info_ = std::move(info);
       run_info_absent_ = std::move(absent_why);
     }
+    /// @brief The label-mass evidence for the kit call (labelEvidence()); none = reporters only.
+    void setLabelEvidence(const LabelEvidence& ev) { label_ev_ = ev; }
     /// @brief The reason resolution was not measured for every class (e.g. mzPeak input); "" = measured.
     void setProfileUnavailable(const std::string& why) { profile_unavailable_ = why; }
     /**
@@ -536,5 +617,6 @@ namespace FASTag::RunQC
     std::string profile_unavailable_;
     RunInfo run_info_;
     std::string run_info_absent_;
+    LabelEvidence label_ev_;
   };
 }

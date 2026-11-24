@@ -86,10 +86,11 @@ describe('dependencies', () => {
     expect(inertBecause('subsample_seed', { subsample_fraction: '0.1' })).toBeNull()
   })
 
-  it('arms the digest window from EITHER report', () => {
+  it('arms the digest window from ANY of its reports (digest, label, Run QC)', () => {
     expect(inertBecause('digest_window', off)).not.toBeNull()
     expect(inertBecause('digest_window', { digest_out: '/r/d.tsv' })).toBeNull()
     expect(inertBecause('digest_window', { label_out: '/r/l.tsv' })).toBeNull()
+    expect(inertBecause('digest_window', { qc_out: '/r/q.tsv' })).toBeNull()
   })
 
   it('needs both recon_out and massgap_out for the mass-gap knobs', () => {
@@ -211,6 +212,7 @@ describe('dependencies follow the CLI reader table', () => {
     '-digest_out': { on: [{ digest_out: 'd.tsv' }], off: [{}] },
     '-digest_out or -label_out': { on: [{ digest_out: 'd.tsv' }, { label_out: 'l.tsv' }], off: [{}] },
     '-label_out': { on: [{ label_out: 'l.tsv' }], off: [{ digest_out: 'd.tsv' }] },
+    '-digest_out, -label_out or -qc_out': { on: [{ digest_out: 'd.tsv' }, { label_out: 'l.tsv' }, { qc_out: 'q.tsv' }], off: [{}] },
     '-glyco': { on: [{ glyco: true }], off: [{}] },
     '-species': { on: [{ species: true }], off: [{}] },
     '-acquisition_check refuse or warn': { on: [{ acquisition_check: 'warn' }, { acquisition_check: 'refuse' }], off: [{ acquisition_check: 'off' }] },

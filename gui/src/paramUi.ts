@@ -557,7 +557,7 @@ export const PARAM_UI: Record<string, ParamUi> = {
   digest_window: {
     section: 'Digest and labels',
     depends: [
-      { on: ['digest_out', 'label_out'], note: 'neither the digest nor the label report is written' }
+      { on: ['digest_out', 'label_out', 'qc_out'], note: 'none of the digest, label or Run QC reports is written' }
     ],
     help: {
       text: 'How close the mass at a tag end must be to a residue or label mass to count.',
@@ -831,6 +831,12 @@ export const PARAM_UI: Record<string, ParamUi> = {
     hidden: 'dedicated output field',
     help: {
       text: 'The tags file. Set under Output as "Tags TSV".'
+    }
+  },
+  fasta_proteins: {
+    hidden: 'set by the GUI: 3 whenever a filter database is given, so the tables name the proteins of each database hit',
+    help: {
+      text: 'Proteins listed per database hit. With a filter database the app asks for up to 3 proteins per tag, with the position of the tag in each, and shows them in the Tags and Spectrum tables.'
     }
   },
   progress: {

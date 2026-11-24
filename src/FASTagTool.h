@@ -320,8 +320,10 @@ protected:
   /// adds the hypothesis columns after the other optional ones; @p
   /// ion_series (1.12 #15 phase B) the ion_series column after those; @p
   /// terminus (-terminus) the series and terminus columns last.
+  /// @p db_proteins (-fasta_proteins) the db_proteins, db_genes and
+  /// db_protein_count columns after those.
   static std::string tagHeader_(bool proforma, bool res_conf, bool usi, bool hyp = false, bool ion_series = false,
-                                bool terminus = false);
+                                bool terminus = false, bool db_proteins = false);
 
   /// One TSV row for one tag, appended to buf. File mode and -stream both call
   /// this, so the two formats cannot drift. readSpeciesFields_() reads columns
@@ -339,7 +341,8 @@ protected:
                            bool want_res_conf, const std::string& usi = std::string(),
                            const FASTag::Hyp::Hypothesis* hyp = nullptr,
                            bool want_series = false,
-                           const FASTag::Terminus::Call* term = nullptr);
+                           const FASTag::Terminus::Call* term = nullptr,
+                           const std::string* db_cells = nullptr);
 
   /// Reads back, from one appendTagRow_ line [start, nl) of @p r, the columns
   /// species detection needs: 0 (spectrum id), 1 (tag), 7 (gapped) and 8

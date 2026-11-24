@@ -1,4 +1,4 @@
-// The plan row of the run bar (doc/GUI-WORKFLOWS.md 3): what a run does in
+// The plan of the action bar (steps 2-4, Batch) (doc/GUI-WORKFLOWS.md 3): what a run does in
 // one line, Copy command line and Export INI…. Both send the request Run
 // would send (useRun paramsFor): the command line is fastag.rs build_args,
 // the INI is that argv merged by the CLI itself (ini.rs).
@@ -69,10 +69,18 @@ export default function PlanFooter({ session, run }: { session: Session; run: Ru
   }
 
   const label = originText.replace(/^preset /, '')
+  const plan = planLine(label === 'FASTag defaults' ? 'FASTag' : label, values, { input, files: run.jobs.length, outDir: run.outDir, batch: session.mode === 'batch' })
+  const assume = assumptions(values, session.instrument)
   return (
     <div className="plan-footer" role="region" aria-label="Plan">
-      <p className="plan-line">{planLine(label === 'FASTag defaults' ? 'FASTag' : label, values, { input, files: run.jobs.length, outDir: run.outDir, batch: session.mode === 'batch' })}</p>
-      <p className="plan-assume muted">Assumes: {assumptions(values, session.instrument)}</p>
+      <div className="plan-text">
+        <p className="plan-line" title={plan}>
+          {plan}
+        </p>
+        <p className="plan-assume muted" title={`Assumes: ${assume}`}>
+          Assumes: {assume}
+        </p>
+      </div>
       <div className="row tight plan-actions">
         <button type="button" className="secondary small" onClick={copy} disabled={!input || run.jobs.length > 0 || session.mode === 'batch'}>
           {copied === 'yes' ? 'Copied' : 'Copy command line'}

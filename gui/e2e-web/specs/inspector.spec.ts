@@ -52,7 +52,11 @@ test('without the probe: "not checked" before the run; after it the ion-trap red
   await chooseTask(page, 'Characterize a run')
   await toStep(page, 'Inputs')
   await page.getByRole('button', { name: 'Choose file…' }).click()
+  // No prose line under the card: the sentence is behind the (?) by the Instrument brief.
+  await expect(page.locator('p.not-checked')).toHaveCount(0)
+  await page.getByRole('button', { name: 'Why the file was not checked' }).click()
   await expect(page.locator('p.not-checked', { hasText: /^The instrument and checks come from the reports after the run\.$/ })).toBeVisible()
+  await page.keyboard.press('Escape')
   await page.getByRole('button', { name: 'Run', exact: true }).click()
   const after = page.getByRole('list', { name: 'Checks after the run' })
   const flag = after.locator('li.check').filter({ hasText: 'This run used 20 ppm; the MS2 look like ion trap' })

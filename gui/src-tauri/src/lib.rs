@@ -5,6 +5,7 @@ pub mod denovo;
 mod drop;
 mod events;
 mod examples;
+mod fasta;
 mod fastag;
 mod feedback;
 mod feedback_capture;
@@ -67,6 +68,20 @@ pub fn run() {
             |action| {
                 let _ = app.emit(menu::MENU_EVENT, action);
             },
+            // The Linux Edit items (menu.rs EditEntry::Ours): WebKitGTK's
+            // own editing command on the focused field of the main webview.
+            // No other platform has these ids.
+            |cmd| {
+                #[cfg(target_os = "linux")]
+                if let Some(w) = app.get_webview_window("main") {
+                    let _ = w.with_webview(move |pw| {
+                        use webkit2gtk::WebViewExt;
+                        pw.inner().execute_editing_command(cmd);
+                    });
+                }
+                #[cfg(not(target_os = "linux"))]
+                let _ = cmd;
+            },
         );
     });
     builder
@@ -127,6 +142,7 @@ pub fn run() {
         .manage(browser::BrowserCache::default())
         .manage(browser::SideTables::default())
         .manage(spectrum::SpectrumCache::default())
+        .manage(fasta::FastaCache::default())
         .invoke_handler(tauri::generate_handler![
             fastag::probe,
             examples::example_input,
@@ -163,6 +179,7 @@ pub fn run() {
             species::taxonomy_status,
             spectrum::spectrum_support,
             spectrum::spectrum_peaks,
+            fasta::fasta_segment,
             settings::load_settings,
             settings::save_last,
             settings::save_preset,

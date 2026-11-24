@@ -159,7 +159,7 @@ test('help: keyboard search opens a CLI entry and Escape restores focus without 
     await until('the cleared help query', () => s.exec("return document.querySelector('[aria-label=\"Search Help\"]').value === ''"))
     assert.equal(await s.exec("return !!document.getElementById('help-panel')"), true)
     await s.cmd('POST', `/element/${search}/value`, { text: '\uE00C' })
-    await until('Help to close and focus to return', () => s.exec("return !document.getElementById('help-panel') && document.activeElement?.textContent === 'Help'"))
+    await until('Help to close and focus to return', () => s.exec("return !document.getElementById('help-panel') && document.activeElement?.getAttribute('aria-label') === 'Help'"))
     assert.equal(await s.exec("return document.getElementById('p-tag_length').value"), before)
     gates.helpKeyboard = true
   }))
@@ -274,8 +274,8 @@ test('table: time to first rows on a generated 1M-row file (recorded)', { timeou
   await once(w, 'finish')
   await withApp(async (s) => {
     await s.exec('const p = arguments[0]; window.fastag.pickResults = async () => p', big)
-    await view(s, 'results') // P2a: "Open a tags TSV..." is in the empty Results view
-    const open = await s.button('Open a tags TSV…')
+    await view(s, 'results') // P2a: "Open tags..." is in the Results header
+    const open = await s.button('Open tags…')
     const t0 = Date.now()
     await s.click(open)
     await until('the first row', () => s.exec("return !!document.querySelector('.rt-rows [role=row]')"), 60000, 10)
@@ -307,7 +307,7 @@ test('spectrum: a row of the Tags table opens in the Spectrum tab with its ladde
       if (MODE === 'stub') assert.equal(support.supported, true, JSON.stringify(support))
       await s.exec('const p = arguments[0]; window.fastag.pickResults = async () => p', tags)
       await view(s, 'results')
-      await s.click(await s.button('Open a tags TSV…'))
+      await s.click(await s.button('Open tags…'))
       await s.waitText(/Showing 2,028 of 2,028/, 60000)
       const row = await until('the first row', async () => {
         const el = await s.exec("return document.querySelector('.rt-rows .rt-row')")

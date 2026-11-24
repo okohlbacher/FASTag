@@ -1,5 +1,6 @@
 // The window's keys and native menus (moved from App.tsx, P2a PR s). F1 (or
-// ?, outside a text field) opens Help; Esc closes it, or else cancels the run
+// ?, outside a text field) opens Help at @p topic, the page of the screen
+// shown, as the app bar's Help and Cmd/Ctrl+? do; Esc closes it, or else cancels the run
 // when nothing else is open (@p escape says whether it did). Cmd/Ctrl
 // shortcuts in the webview and the native menu items (menu.rs) run one action
 // each; a key both see acts once (deduper).
@@ -11,13 +12,13 @@ import { actionOfKey, deduper, type Action } from '../setup/shortcuts'
 const typing = (t: EventTarget | null): boolean =>
   t instanceof HTMLElement && (t.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName))
 
-export function useKeys(helpOpen: boolean, act: (a: Action) => void, escape: () => boolean): void {
+export function useKeys(helpOpen: boolean, act: (a: Action) => void, escape: () => boolean, topic: () => string): void {
   useEffect(() => {
     const onKey = (e: globalThis.KeyboardEvent): void => {
       if (e.key === 'F1' || (e.key === '?' && !typing(e.target))) {
         e.preventDefault()
         // Already open: stay where the reader is.
-        if (!helpOpen) openHelp()
+        if (!helpOpen) openHelp(topic())
       } else if (e.key === 'Escape' && helpOpen && !typing(e.target)) {
         e.preventDefault()
         closeHelp()
@@ -27,7 +28,7 @@ export function useKeys(helpOpen: boolean, act: (a: Action) => void, escape: () 
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-    // act and escape are read through refs by the caller.
+    // act, escape and topic are read through refs by the caller.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [helpOpen])
 

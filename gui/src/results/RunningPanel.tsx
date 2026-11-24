@@ -1,6 +1,7 @@
 // The Results pane while a run is going (GUI-DESIGN 3 S2, replaces "No
-// results yet"): the file, the phase, the progress with rate and ETA, Cancel
-// and Show log. A phase that prints no progress gets an indeterminate bar
+// results yet"): the file, the phase, the progress with rate and ETA, and
+// Show log. Cancel is the run status pill's in the app bar, the run's one
+// Cancel on every view. A phase that prints no progress gets an indeterminate bar
 // with its step label (progress.rs) and the time elapsed.
 
 import { useEffect, useLayoutEffect, useRef, useState, type JSX } from 'react'
@@ -14,7 +15,6 @@ export interface RunningPanelProps {
   progress: Progress | null
   startedAt: number
   cancelling: boolean
-  onCancel(): void
   onShowLog(): void
   /// Called when the state goes away (the run ended or was cancelled) while
   /// focus was inside it: the caller moves focus on, so it does not fall to
@@ -33,8 +33,8 @@ export default function RunningPanel(p: RunningPanelProps): JSX.Element {
   }, [])
   // Checked before React removes the section (a layout cleanup runs while
   // the node is still in the document). Focus inside it counts, and so does
-  // focus that left it for nowhere: Cancel turns disabled while cancelling,
-  // and the browser drops its focus to the page body before the run ends.
+  // focus that left it for nowhere: the browser can drop focus to the page
+  // body before the run ends.
   const ref = useRef<HTMLElement>(null)
   const inside = useRef(false)
   const lost = useRef(p.onFocusLost)
@@ -92,9 +92,6 @@ export default function RunningPanel(p: RunningPanelProps): JSX.Element {
       )}
       <p className="running-facts muted">{facts.join(' · ')}</p>
       <div className="row-actions">
-        <button type="button" className="danger small" onClick={p.onCancel} disabled={p.cancelling}>
-          Cancel
-        </button>
         <button type="button" className="secondary small" onClick={p.onShowLog}>
           Show log
         </button>

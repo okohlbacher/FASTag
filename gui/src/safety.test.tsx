@@ -272,7 +272,7 @@ describe('P0a: existing outputs are confirmed before the run, never after', () =
     const c = await renderApp()
     mock.nextPickResults = '/d/a.tags.tsv'
     await goTo('results') // the empty Tags pane (P2a: its own view)
-    await click(screen.getByRole('button', { name: 'Open a tags TSV…' }))
+    await click(screen.getByRole('button', { name: 'Open tags…' }))
     const panel = c.querySelector('.tabpanel')?.textContent ?? ''
     expect(panel).toContain('The run that wrote /d/a.tags.tsv was cancelled')
     expect(mock.resultsQueryCalls).toHaveLength(0)
@@ -286,7 +286,7 @@ describe('P0a: existing outputs are confirmed before the run, never after', () =
     await renderApp()
     mock.nextPickResults = '/d/a.tags.tsv'
     await goTo('results') // the empty Tags pane (P2a: its own view)
-    await click(screen.getByRole('button', { name: 'Open a tags TSV…' }))
+    await click(screen.getByRole('button', { name: 'Open tags…' }))
     await screen.findByText('Showing 3 of 3')
   })
 })
@@ -334,9 +334,9 @@ describe('P0a: open buttons while busy', () => {
   it('the empty pane cannot open a tags file or a report while a run writes', async () => {
     const mock = installMockBridge()
     await renderApp()
-    const openTags = (): HTMLButtonElement => screen.getByRole('button', { name: 'Open a tags TSV…' }) as HTMLButtonElement
+    const openTags = (): HTMLButtonElement => screen.getByRole('button', { name: 'Open tags…' }) as HTMLButtonElement
     const openReport = (): HTMLButtonElement =>
-      screen.getByRole('button', { name: 'Open a FASTag report…' }) as HTMLButtonElement
+      screen.getByRole('button', { name: 'Open report…' }) as HTMLButtonElement
     await goTo('results') // the empty Tags pane (P2a: its own view)
     expect(openTags().disabled).toBe(false)
     await pickSingle(mock, '/d/a.mzML')

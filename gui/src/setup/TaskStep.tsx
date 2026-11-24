@@ -1,12 +1,13 @@
 // Step 1 of the Setup wizard (doc/GUI-SETUP-WIZARD.md 3): what the run is
 // for. Seven workflow tiles in three groups; the selected one fills one
-// shared detail panel. Selecting a tile changes nothing: Continue (or Enter
-// on a tile) confirms it and only then replaces the form. At the right of the
-// heading, StartRow: Continue last run, Presets and Open earlier results….
-// The preset controls of step 3 (origin, Reset, Undo, Save as preset) are
-// here too, as PresetMenu and OriginRow.
+// shared detail card (You get, You need, Run time). Selecting a tile changes
+// nothing: Continue (or Enter on a tile) confirms it and only then replaces
+// the form. In the page header, StartRow: Continue last run, Presets and Open
+// earlier results…. The preset controls (Presets on every step, origin,
+// Reset, Undo and the preset name of step 3) are here too, as PresetMenu
+// and OriginRow.
 
-import { useRef, type JSX, type KeyboardEvent, type ReactNode } from 'react'
+import { useRef, type JSX, type KeyboardEvent } from 'react'
 import { PARAM_BY_NAME } from '../paramLayout'
 import { TASKS, TASK_GROUPS, TILE_ORDER, taskById, type Task, type TaskId } from './tasks'
 import type { Session } from './useSession'
@@ -50,7 +51,6 @@ export function PresetMenu({ session, withSave = false }: { session: Session; wi
       <span className="sublabel">Presets</span>
       <select
         id="origin"
-        className="small"
         ref={session.presetRef}
         value=""
         aria-label="Presets"
@@ -80,9 +80,9 @@ export function PresetMenu({ session, withSave = false }: { session: Session; wi
   )
 }
 
-/// Step 3's head: where the values came from, whether they still hold it
-/// (Reset), Undo, the presets and Save as preset (an inline name field).
-export function OriginRow({ session, learnMore }: { session: Session; learnMore?: ReactNode }): JSX.Element {
+/// Step 3's origin row: where the values came from, whether they still hold
+/// it (Reset), Undo, and the name field of Save as preset (header Presets).
+export function OriginRow({ session }: { session: Session }): JSX.Element {
   const modified = session.diff.length > 0
   if (session.savingName !== null)
     return (
@@ -100,7 +100,7 @@ export function OriginRow({ session, learnMore }: { session: Session; learnMore?
             if (e.key === 'Escape') session.cancelPreset()
           }}
         />
-        <button type="button" className="small" onClick={session.commitPreset}>
+        <button type="button" className="secondary small" onClick={session.commitPreset}>
           Save
         </button>
         <button type="button" className="secondary small" onClick={session.cancelPreset}>
@@ -133,15 +133,12 @@ export function OriginRow({ session, learnMore }: { session: Session; learnMore?
           Undo
         </button>
       )}
-      {session.step === 3 && <PresetMenu session={session} withSave />}
-      <span className="spacer" />
-      {learnMore}
     </div>
   )
 }
 
-/// The start row, at the right of step 1's heading: Continue last run,
-/// Presets and Open earlier results….
+/// The start row, the page actions of step 1: Continue last run, Presets
+/// and Open earlier results….
 export function StartRow({ session, onOpenResults }: { session: Session; onOpenResults(): void }): JSX.Element {
   const { lastUsed, lastUsedDiff } = session
   const lastTask = session.lastWorkflow ? taskById(session.lastWorkflow) : undefined
@@ -150,7 +147,7 @@ export function StartRow({ session, onOpenResults }: { session: Session; onOpenR
       {lastUsed && lastUsedDiff.length > 0 && (
         <button
           type="button"
-          className="secondary small offer"
+          className="secondary offer"
           onClick={() => {
             session.applyLastUsed()
             leaveStep1(session)
@@ -160,8 +157,8 @@ export function StartRow({ session, onOpenResults }: { session: Session; onOpenR
           Continue last run ({lastUsedDiff.length})
         </button>
       )}
-      {session.step === 1 && <PresetMenu session={session} />}
-      <button type="button" className="link small" onClick={onOpenResults}>
+      <PresetMenu session={session} />
+      <button type="button" onClick={onOpenResults}>
         Open earlier results…
       </button>
     </div>
@@ -194,20 +191,11 @@ export default function TaskStep({ session, onContinue }: TaskStepProps): JSX.El
   const current = session.taskConfirmed ? session.task : null
   return (
     <div className="task-step">
-      <p className="hint not-search" id="not-search-engine">
-        FASTag reads short amino-acid stretches (tags) from each MS/MS spectrum. It does not identify proteins with FDR control: use a
-        search engine for that. Database reduction prepares the database and the settings for one.
-      </p>
       {session.presetError && (
         <p className="warn" role="alert">
           {session.presetError}
         </p>
       )}
-      <p className="hint recommend">
-        Pick a task: it decides which files FASTag needs and what it writes; you can change it later. Not sure? Start with{' '}
-        <strong>Characterize a run</strong>: it reports protease, labels, glycopeptides and species from 10% of the spectra in a few
-        minutes.
-      </p>
       <div className="task-pick">
         <div className="task-grid" ref={grid}>
           {TASK_GROUPS.map((g) => (
@@ -231,16 +219,22 @@ export default function TaskStep({ session, onContinue }: TaskStepProps): JSX.El
                         onFocus={() => session.setTile(t.id)}
                         onKeyDown={(e) => onKey(e, t.id)}
                       >
-                        <span className="task-tile-head">
-                          <TaskIcon id={t.id} />
-                          <span className="task-tile-label">{t.label}</span>
-                          {current === t.id && <span className="chip">Current</span>}
-                        </span>
-                        {/* The badges flow after the question: no line of their own. */}
-                        <span className="task-tile-q" id={`tile-${t.id}-q`}>
-                          {t.question}
-                          {t.recommended && <span className="chip accent">Recommended to start</span>}
-                          {badge && <span className="badge">{badge}</span>}
+                        <TaskIcon id={t.id} />
+                        <span className="task-tile-text">
+                          {/* The chips sit after the label: no line of their own. */}
+                          <span className="task-tile-head">
+                            <span className="task-tile-label">{t.label}</span>
+                            {t.recommended && (
+                              <span className="chip accent" title="Recommended to start">
+                                Start here
+                              </span>
+                            )}
+                            {badge && <span className="badge">{badge}</span>}
+                            {current === t.id && <span className="chip">Current</span>}
+                          </span>
+                          <span className="task-tile-q" id={`tile-${t.id}-q`}>
+                            {t.question}
+                          </span>
                         </span>
                       </button>
                     </li>
@@ -254,22 +248,18 @@ export default function TaskStep({ session, onContinue }: TaskStepProps): JSX.El
           <h3 id="task-detail-h">
             <TaskIcon id={selected.id} /> {selected.label}
           </h3>
-          <p className="detail-q">{selected.question}</p>
           <dl>
             <dt>You get</dt>
             <dd>{selected.gets}</dd>
             <dt>You need</dt>
-            <dd>{youNeed(selected)}</dd>
-            <dt>Use when</dt>
-            <dd>{selected.use}</dd>
-            <dt>Not for</dt>
-            <dd>{selected.notFor}</dd>
+            <dd>{youNeed(selected).replace(/^s/, 'S')}</dd>
             <dt>Run time</dt>
             <dd>
-              {selected.time}: {selected.timeNote}
+              {selected.time === 'short' ? 'Short' : 'Longer'}: {selected.timeNote}
             </dd>
           </dl>
-          <HelpLink to={selected.docs.to}>Learn more: {selected.docs.label}</HelpLink>
+          {/* When to use it and what it is not for: in Help. */}
+          <HelpLink to={`task-${selected.id}`}>More about this task</HelpLink>
         </section>
       </div>
     </div>

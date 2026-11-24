@@ -621,7 +621,7 @@ export default function DigestPanel({ reports, errors, onOpen }: Props): JSX.Ele
     <div className="digest">
       {/* The tab's title row, as every report tab has (round 4, 19). */}
       {shown.length > 0 && (
-        <ReportHeader title="Digest and labels" paths={shown.map((r) => r.path)} help={{ to: 'digest', label: 'How to read these reports' }} />
+        <ReportHeader title="Digest and labels" paths={shown.map((r) => r.path)} />
       )}
       {errors.map((e) => (
         <p className="warn" key={e} role="alert">

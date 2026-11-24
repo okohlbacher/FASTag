@@ -27,6 +27,8 @@ import type {
   Settings,
   SpeciesReport,
   SpectrumDump,
+  FastaDatabase,
+  FastaSegment,
   SpectrumSupport,
   TaxdbInfo,
   TaxonomyStatus,
@@ -170,6 +172,8 @@ const api: FastagApi = {
   spectrumSupport: () => invoke<SpectrumSupport>('spectrum_support'),
   spectrumPeaks: (input: string, nativeId: string, params: Record<string, unknown> | null) =>
     invoke<SpectrumDump>('spectrum_peaks', { input, nativeId, params }),
+  fastaSegment: (tags: string, database: FastaDatabase, identifier: string, start: number, end: number) =>
+    invoke<FastaSegment>('fasta_segment', { tags, database, identifier, start, end }),
   report: (path: string) => invoke<string | null>('report_text', { path }),
   reportHead: (path: string) => invoke<string | null>('report_head', { path }),
   taxdbInfo: (explicit?: string) => invoke<TaxdbInfo | null>('taxdb_info', { explicit }),

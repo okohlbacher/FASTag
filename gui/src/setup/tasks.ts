@@ -57,7 +57,7 @@ export interface Task {
   time: 'short' | 'longer'
   timeNote: string
   group: TaskGroup
-  /// "Recommended to start" on its tile.
+  /// The "Start here" chip on its tile (title: "Recommended to start").
   recommended?: true
   /// One gray line under each basic field, for this workflow.
   help: Record<string, string>

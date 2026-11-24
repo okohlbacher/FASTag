@@ -2,6 +2,100 @@
 
 ## Unreleased
 
+- **GUI: the Feedback form no longer blocks the window.** It is a floating panel docked at the bottom right, with no
+  dimmed background: the app behind it stays usable (scroll, switch tabs, open another spectrum) and the form keeps
+  its text. Drag the title bar to move it (keyboard: arrow keys on Move, or Alt+arrow keys on the title bar), drag
+  the corner to resize it (or its arrow keys), collapse it to its title bar; the place is kept for the session.
+  Esc closes it only from inside the panel; F6 goes between the panel and the app. **Retake screenshot** hides the
+  panel and captures the window again, with the view and settings of that moment. The mark-up editor opens in the
+  same panel, wider, and moves and resizes the same way.
+- **GUI: an overview at the top of Results > Triage.** Tiles for the MS2 spectra, the processed ones, the share
+  with a strong tag (best E-value at or below the Triage E-value, the headline), the tagged share (not a quality
+  call) and, with identifications, the identified share. Three charts with a Bins view each: the peptide length the
+  precursor implies (averagine) by charge with the tag lengths on top, tags reported per spectrum by peaks with the
+  `-max_tags` cap, and coverage by estimated length (from `max_len` and `res_cover` of census 2; on an older census
+  from `best_len` and the `tag_cover` m/z span, marked approximate). It counts every row, whatever the table's
+  filter, and can be collapsed.
+- **GUI: a database hit names its protein.** With a filter database the app runs FASTag with `-fasta_proteins 3`
+  (unless the option is given). The Database hit cell of the Tags table and of the Spectrum tab's tags table shows
+  the first protein as accession/gene@range (`P0A6F5/groL@123–131`) and "+n more", in place of "In database"; the
+  tooltip lists every protein named. The columns Proteins (position), Gene and Proteins (n) are under Columns.
+  -fasta_proteins is passed only when the resolved FASTag CLI lists it (FASTAG_BIN with an older CLI): the run, the
+  Setup Copy command and History give that CLI the same command line without it, and its tables have no protein
+  columns.
+- **GUI: the tags of a spectrum aligned on their protein.** In the Spectrum tab, the tags that occur in one protein
+  only are drawn under that protein's residues, one block per protein (most tags first), reversed matches marked,
+  each letter on its own residues also when a tag letter stands for a same-mass residue pair (or a letter pair for
+  one residue), those residues underlined, and the peptide a cut after K or R gives shaded. Which letters stand for
+  which pairs follows the run's own `-fixed_modifications` and `-isobaric_tolerance`, derived as the CLI derives its
+  isobaric rules (with Dimethyl (K) fixed, K stands for GV; at tolerance 0, for nothing); where the run's rules give
+  no reading, or a fixed modification's mass is not known to the app, the tag's residues are only marked as a span,
+  with a note, rather than drawn one letter per residue. The residues
+  are read from the run's `-fasta` (or `-entrapment_fasta` for entrapment matches, marked as known false): only the
+  database of the run that wrote the tags, and only while it is the same file that run read (the same file, size
+  and modification time; a file replaced at that path, or a symlink pointed elsewhere, shows no alignment). Each
+  database is indexed once, in bounded memory also for long lines or very large files, so a protein is a seek and a
+  short read. Tags in several proteins are named, not aligned, and so is a protein whose identifier the database
+  gives to more than one entry (the run's positions may be of any of them): its positions are listed, with a note.
+- **GUI: Run QC shows the isobaric kit call and the reporter channels.** The QC strip shows the one kit of
+  `qc_version` 3 (`TMT 6-plex`), or "Ambiguous: A or B" when only the reporter channels decide, or, as a warning,
+  "Conflict: TMT label, reporters fit TMTpro 18-plex" when the label mass and the channels disagree, in place of the
+  list of compatible kits; a table gives, per channel, its m/z and the MS2 that show it;
+  channels the report does not call seen are dimmed. The batch summary uses the same call; a conflict, or a kit
+  value the app does not know, is no call and never counts towards or against the kit majority. Older reports still show
+  the compatible kits.
+- **GUI: Edit menu on Windows and Linux.** Cut, Copy, Paste and Select All, as on macOS, for every text field. On
+  Linux a click on them now acts, on X11 and Wayland: they run WebKitGTK's own editing command in the window (the
+  platform items only sent the keys through libxdo, which the app does not ship, so a click did nothing). Their
+  shortcuts are the window's own, as before, and are not shown in the Linux menu.
+- **CLI: Run QC names one isobaric kit, and counts each reporter channel (`qc_version` 3).** `-qc_out` gains
+  `reporter_kit`, `reporter_kit_candidates`, `reporter_family_evidence`, `reporter_label_delta` and, per channel,
+  `reporter_channel_<label>` with its `_share`, after `reporter_compatible_kits`. The label mass on the tag ends (the
+  `-label_out` label call; the tag ends are now also counted for `-qc_out`) decides TMT (229.162932 Da) or TMTpro
+  (304.207146 Da), and the kit is the smallest one of that label that holds every observed channel; larger kits with
+  unseen channels and kits of the other label are not named. TMT 6-plex is recognised in both reagent
+  generations: the current 126/127N/128C/129N/130C/131 and the original 126/127C/128C/129C/130C/131 (Dayon et al.
+  2008, MSnbase TMT6). So `reporter_tmt6plex` is now `present` for runs with the original reagent, and
+  `reporter_compatible_kits` lists `tmt6plex` first. The PXD000001 run used the original reagent. It was "compatible"
+  with `tmt10plex,tmt11plex,tmt16plex,tmt18plex` and is now `tmt6plex` (TMT label on 2251 tag ends); without the
+  original pattern it would have been called `tmt10plex`. Without a label decision (Da tolerance, too few tags) the
+  smallest kit per label is listed, `reporters_only`. When one label passes but none of its kits holds the observed
+  channels (TMT label, 134N seen), no kit is called: `reporter_kit` is `conflict`, `reporter_family_evidence` is
+  `label_conflict` with the label's tag ends, `reporter_label_delta` the label mass, and `reporter_kit_candidates`
+  the kits the channels allow. The channel rows count
+  the assessable MS2 with the reporter above the noise threshold (3x the median peak, 20 ppm); every channel of the
+  family is listed, unused ones with 0. `reporter_compatible_kits` and every other row are unchanged; the tag output
+  is unchanged. `-digest_window` is now also read for `-qc_out`.
+- **CLI: census format 3, `res_cover` no longer counts complementary b and y reads twice.** Format 2 placed every
+  tag as a y (or z•) read, so a b ladder and a y ladder over the same residues landed at mirror positions and
+  `res_cover` could exceed the peptide length (PXD000001: 1705 of 5594 spectra above (M − H2O)/110). Now a tag
+  that matches `-fasta` (or `-entrapment_fasta`) in one orientation only is placed by it, a reverse-only match as a
+  b (or c) read; any other tag (no `-fasta`, or a match both ways) is folded onto the lower half of the peptide, so
+  the two reads of a stretch count once and `res_cover` is a lower bound. A new column `res_cover_exact` after
+  `res_cover` is 1 when every reported tag of the spectrum was placed by its orientation and 0 when `res_cover` is
+  the folded lower bound; `census_version` is 3. On PXD000001 without `-fasta`, 77 spectra remain above the length
+  estimate. Readers that take columns by name are unaffected; `best_ion_series` and the later columns move one
+  to the right. The GUI's Triage overview marks the cover "approximate: orientation unresolved (folded, lower
+  bound)" for such spectra, and a format 2 census as placed by y reads only.
+- **GUI: the Triage overview reads the seed lengths from the census summary.** A census opened on its own (no
+  parameters of an app run) from `-tag_lengths 3 4 -max_tags 7` showed the cap as 7; the summary's
+  `run/tag_length` (`3,4`) now gives the number of lengths, so the cap is 14, and a multi-length run never takes
+  a single tag length from the parameters.
+- **CLI: census format 2, longest tag and residue cover.** `-census` writes two new columns after `tag_cover`:
+  `max_len`, the longest reported tag (differs from `best_len` under `-tag_lengths` or `-extension`), and `res_cover`,
+  the residues the reported tags cover together, with each tag placed through the precursor mass of the selected
+  hypothesis as the tag TSV writes it (a stretch read on b and y ions counts twice). The census summary gains the run
+  row `max_tags` (the cap of `n_found` and `n_reported`) and `census_version` is 2. Readers that take columns by name
+  are unaffected; `best_ion_series`, the `pre_*` columns, `ident_score`, `identified` and `triage` stay after them.
+  Every other output is unchanged.
+- **CLI: `-fasta_proteins <n>`, the proteins and positions of a database hit.** With `-fasta`, three new last
+  columns (before `q_db`): `db_proteins`, the first n proteins the tag occurs in as `identifier@start-end` (1-based,
+  `;`-separated), `db_genes`, their `GN=` values (`-` without one), and `db_protein_count`, all proteins. Only
+  occurrences in the orientation of `fasta_hit` count; targets come before decoys, each in database order;
+  `efwd`/`erev` rows name entrapment proteins. Off by default (0), so `-out` is unchanged without it; refused without
+  `-fasta`. Uses a suffix-array index over the database (about 6.5 bytes per residue), the `-recon_out` one when that
+  reads the same `-fasta`. A protein is named by its identifier only, so a `-fasta` (or `-entrapment_fasta`) whose
+  entries repeat an identifier gets one warning with their count and the first one.
 - **CLI: subsumed tags are left out of `-out` (`-subsume_tags`, on by default).** A tag whose path peaks are a
   contiguous run of another tag's of the same spectrum, on which that tag reads exactly its residues (same
   fragment charge, ion series and precursor hypothesis), is no longer written when that tag is at least as
@@ -71,6 +165,18 @@
   tab each residue of the tag now spans the two peaks whose mass difference it is, with a dashed line from the tag line
   down to each of those peaks. The b (or c) and y (or z) ladders get separate lines, labelled and in different colours,
   whenever both lie on the peaks; before, only one ladder was drawn.
+- **GUI: ◀ prev and next ▶ in the Spectrum tab work again, in the Tags table's order.** After a normal run both
+  buttons stayed disabled: the panel asked where the spectrum sat in a per-spectrum view that nothing had built, and
+  the backend answers only for built views. They now step to the previous or next spectrum in the Tags table's order
+  as it was sorted and filtered when the spectrum was opened (each tagged spectrum in file order when opened from
+  Triage), opening it on its first row in that order, wait for the E-value order when it is still being built, and
+  show where the spectrum is ("tag 12 of 340"). Alt+← and Alt+→, Page Up and Page Down do the same. An E-value
+  order still being built after the wait, or a lookup that fails, now says so on the buttons (with **Try again**)
+  instead of quietly walking file order or calling the spectrum the last one; only a spectrum that is not in the
+  table's filtered view is walked in file order, and the tooltips say so.
+- **GUI: Spectrum plot labels.** The left margin fits the widest label, so "b or y?" is no longer cut to "or y?".
+  A position with no peak is marked on every ladder line drawn, not only the chosen one. Hovering or focusing a
+  residue shows its two peaks and their drop lines, with both m/z values and the step's error in its tooltip.
 
 ## 1.15.7 (2026-11-21)
 

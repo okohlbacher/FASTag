@@ -5,7 +5,7 @@
 // preview equals the export (validated against the public schema), and the
 // sharing defaults are off. The redaction is checked in the saved PNG
 // itself: every pixel of the redact box, rounded outward, is opaque black.
-import { test, expect, openApp, mockState } from './fixtures'
+import { test, expect, goTo, openApp, mockState } from './fixtures'
 import localSchema from '../../src/feedback/schema/report.schema.json' with { type: 'json' }
 import publicSchema from '../../src/feedback/schema/feedback-public.schema.json' with { type: 'json' }
 import { validate } from '../../src/feedback/schemaCheck'
@@ -141,4 +141,92 @@ test('feedback: Escape closes, the text stays for the session, the shortcut open
   // Escape in the editor goes back to the report, not out of the dialog.
   await page.keyboard.press('Escape')
   await expect(dialog.getByLabel('Title')).toBeVisible()
+})
+
+// Feedback 2026-11-24: the form is a floating, non-modal panel, docked
+// bottom-right, so the screen it reports on stays visible and usable.
+test('feedback: a non-modal panel over the Spectrum tab, movable and collapsible, the app usable behind it', async ({ page }, info) => {
+  await openApp(page, 'spectrum')
+  await goTo(page, 'Results')
+  await page.getByRole('button', { name: 'Open tags…' }).click()
+  await page.locator('.rt-rows .rt-row').first().click()
+  await page.keyboard.press('Enter')
+  const spectrumTab = page.getByRole('tab', { name: 'Spectrum' })
+  await expect(spectrumTab).toHaveAttribute('aria-selected', 'true')
+  await page.getByRole('button', { name: 'Feedback', exact: true }).click()
+  const panel = page.getByRole('dialog', { name: 'Feedback' })
+  await expect(panel).toBeVisible()
+  await expect(panel).toHaveAttribute('aria-modal', 'false')
+  await expect(page.locator('.modal-backdrop')).toHaveCount(0)
+  // Docked bottom-right, 420 px wide, in the 1200 by 800 window.
+  const docked = (await panel.boundingBox())!
+  expect(Math.round(docked.width)).toBe(420)
+  expect(Math.round(docked.x + docked.width)).toBe(1200 - 16)
+  expect(Math.round(docked.y + docked.height)).toBe(800 - 16)
+  await panel.getByLabel('Title').fill('Ladder labels cut off')
+  for (const scheme of ['light', 'dark'] as const) {
+    await page.emulateMedia({ colorScheme: scheme })
+    await page.screenshot({ path: info.outputPath(`feedback-panel-spectrum-${scheme}.png`) })
+  }
+  await page.emulateMedia({ colorScheme: 'light' })
+
+  // The app behind is usable: another tab and back; Escape there is the app's.
+  await page.getByRole('tab', { name: 'Tags' }).click()
+  await expect(page.getByRole('tab', { name: 'Tags' })).toHaveAttribute('aria-selected', 'true')
+  await page.keyboard.press('Escape')
+  await expect(panel).toBeVisible()
+  await spectrumTab.click()
+  await expect(spectrumTab).toHaveAttribute('aria-selected', 'true')
+  await expect(panel.getByLabel('Title')).toHaveValue('Ladder labels cut off')
+
+  // Dragged by its title bar, and kept in the window.
+  const bar = panel.locator('.fb-bar h2')
+  const b = (await bar.boundingBox())!
+  const mid = b.y + b.height / 2
+  await page.mouse.move(b.x + 20, mid)
+  await page.mouse.down()
+  await page.mouse.move(b.x - 280, mid - 60, { steps: 6 })
+  await page.mouse.up()
+  const moved = (await panel.boundingBox())!
+  expect(Math.round(moved.x)).toBe(Math.round(docked.x) - 300)
+  expect(Math.round(moved.y)).toBe(Math.round(docked.y) - 60)
+  await page.mouse.move(b.x - 280, mid - 60)
+  await page.mouse.down()
+  await page.mouse.move(-500, -500, { steps: 4 })
+  await page.mouse.up()
+  const corner = (await panel.boundingBox())!
+  expect([Math.round(corner.x), Math.round(corner.y)]).toEqual([0, 0])
+
+  // Collapsed to its title bar, then expanded with the text kept.
+  await panel.getByRole('button', { name: 'Collapse Feedback' }).click()
+  await expect(panel.getByLabel('Title')).toBeHidden()
+  expect((await panel.boundingBox())!.height).toBeLessThan(60)
+  await panel.getByRole('button', { name: 'Expand Feedback' }).click()
+  await expect(panel.getByLabel('Title')).toHaveValue('Ladder labels cut off')
+
+  // Retake screenshot: a new capture, without the panel on it.
+  await panel.getByRole('button', { name: 'Retake screenshot' }).click()
+  await expect(panel.getByText('New screenshot taken.')).toBeVisible()
+  await expect(panel.getByRole('button', { name: 'Retake screenshot' })).toBeFocused()
+})
+
+// Report 20261121T143325Z_856491d9: copy and paste work in the fields.
+test('feedback: select all, copy and paste by keyboard in the text fields', async ({ page, browserName, context }) => {
+  if (browserName === 'chromium') await context.grantPermissions(['clipboard-read', 'clipboard-write'])
+  await openApp(page)
+  await page.getByRole('button', { name: 'Feedback', exact: true }).click()
+  const panel = page.getByRole('dialog', { name: 'Feedback' })
+  const title = panel.getByLabel('Title')
+  await title.fill('copied text')
+  await title.press('ControlOrMeta+A')
+  await title.press('ControlOrMeta+C')
+  const description = panel.getByLabel('Description')
+  await description.click()
+  await description.press('ControlOrMeta+V')
+  await expect(description).toHaveValue('copied text')
+  await description.press('ControlOrMeta+A')
+  await description.press('ControlOrMeta+X')
+  await expect(description).toHaveValue('')
+  await panel.getByLabel('Steps to reproduce').press('ControlOrMeta+V')
+  await expect(panel.getByLabel('Steps to reproduce')).toHaveValue('copied text')
 })

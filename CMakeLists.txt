@@ -545,6 +545,14 @@ if(FASTAG_BUILD_TESTS)
                    ${CMAKE_CURRENT_SOURCE_DIR}/test/fixtures/Ecoli_MS2_small.fasta
                    ${CMAKE_CURRENT_SOURCE_DIR}/test/fixtures/Ecoli_MS2_small.mgf ${CMAKE_CURRENT_SOURCE_DIR}/data/digest)
   set_tests_properties(subsume_cli_test PROPERTIES SKIP_RETURN_CODE 77)
+  # 1.16 (-fasta_proteins): the proteins, positions and genes of each -fasta
+  # hit; -out unchanged without it, orientation, entrapment, decoys last.
+  add_test(NAME fasta_proteins_cli_test
+           COMMAND bash ${CMAKE_CURRENT_SOURCE_DIR}/test/fasta_proteins_cli_test.sh $<TARGET_FILE:FASTag>
+                   ${CMAKE_CURRENT_SOURCE_DIR}/test/fixtures/Ecoli_MS2_small.mzML
+                   ${CMAKE_CURRENT_SOURCE_DIR}/test/fixtures/Ecoli_MS2_small.fasta
+                   ${CMAKE_CURRENT_SOURCE_DIR}/data/digest)
+  set_tests_properties(fasta_proteins_cli_test PROPERTIES SKIP_RETURN_CODE 77)
   # 1.15.5 (PREREG-lowres-defaults): -tolerance_by_analyzer and the complement window under Da.
   add_test(NAME tolerance_by_analyzer_cli_test
            COMMAND bash ${CMAKE_CURRENT_SOURCE_DIR}/test/tolerance_by_analyzer_cli_test.sh $<TARGET_FILE:FASTag>

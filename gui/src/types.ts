@@ -333,6 +333,11 @@ export interface FastagApi extends FeedbackApi {
   // `FASTag <the run's argv> -dump_spectrum <nativeId>` on @p input under
   // the run's @p params (null: the CLI's defaults); its JSON lines in stdout.
   spectrumPeaks: (input: string, nativeId: string, params: Record<string, unknown> | null) => Promise<SpectrumDump>
+  // Residues @p start..@p end (1-based) of the entry @p identifier of the
+  // database @p database (its -fasta or -entrapment_fasta) of the run that
+  // wrote the tags table @p tags. fasta.rs reads only the file that run
+  // recorded, while it is still that file.
+  fastaSegment: (tags: string, database: FastaDatabase, identifier: string, start: number, end: number) => Promise<FastaSegment>
   // Text of a digest/label/mass-gap report; null when the file does not exist.
   report: (path: string) => Promise<string | null>
   // The first 64 KiB of the same file (report.rs HEAD_BYTES): enough to tell
@@ -468,6 +473,24 @@ export interface SpectrumSupport {
   supported: boolean
   probed: boolean
   detail: string
+}
+
+// The option of a run's database: -fasta or -entrapment_fasta.
+export type FastaDatabase = 'fasta' | 'entrapment_fasta'
+
+// fasta.rs FastaSegment: residues start..end (1-based, inclusive, clipped to
+// the protein) of one entry of a run's database.
+export interface FastaSegment {
+  identifier: string
+  description: string
+  // The protein's length in residues (0 when ambiguous).
+  length: number
+  start: number
+  end: number
+  sequence: string
+  // The entries of the database with this identifier. More than one: the
+  // CLI's positions may be of any of them, so no residues are returned.
+  occurrences: number
 }
 
 // spectrum.rs SpectrumDump: one -dump_spectrum run (or the LRU's copy).

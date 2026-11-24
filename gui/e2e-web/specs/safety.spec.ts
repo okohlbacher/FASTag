@@ -31,12 +31,17 @@ test('while a run goes the open buttons are locked; the close guard asks, and Ke
   await toStep(page, 'Inputs')
   await page.getByRole('button', { name: 'Choose file…' }).click()
   await page.getByRole('button', { name: 'Run', exact: true }).click()
-  // P2a: the run moved to Results. P2b: its Cancel is the running state's
-  // there (GUI-DESIGN 3 S2; was the pill's), and the pill has none.
-  await expect(page.getByRole('region', { name: 'Running' }).getByRole('button', { name: 'Cancel' })).toBeVisible()
-  await expect(page.getByRole('group', { name: 'Run status' }).getByRole('button', { name: 'Cancel' })).toHaveCount(0)
-  await expect(page.getByRole('button', { name: 'Open a tags TSV…' })).toBeDisabled()
-  await expect(page.getByRole('button', { name: 'Open a FASTag report…' })).toBeDisabled()
+  // P2a: the run moved to Results. Cancel has one home on every view: the
+  // run status pill in the app bar; the running state keeps the progress
+  // and has no second Cancel (Codex round 2 "Cancel changes region").
+  const pillCancel = page.getByRole('group', { name: 'Run status' }).getByRole('button', { name: 'Cancel' })
+  await expect(pillCancel).toBeVisible()
+  await expect(page.getByRole('region', { name: 'Running' }).getByRole('button', { name: 'Cancel' })).toHaveCount(0)
+  await expect(page.getByRole('button', { name: 'Cancel', exact: true })).toHaveCount(1)
+  await expect(page.getByRole('button', { name: 'Open tags…' })).toBeDisabled()
+  await expect(page.getByRole('button', { name: 'Open report…' })).toBeDisabled()
+  // C3: no onboarding under the running state.
+  await expect(page.getByRole('heading', { name: 'No results yet' })).toHaveCount(0)
 
   await page.evaluate(() => (window as unknown as { __fastagE2E: { requestClose(w: string): void } }).__fastagE2E.requestClose('quit'))
   const dlg = page.getByRole('alertdialog')
@@ -46,6 +51,16 @@ test('while a run goes the open buttons are locked; the close guard asks, and Ke
   await expect(dlg).toBeHidden()
   await goTo(page, 'Setup')
   await expect(page.getByRole('button', { name: 'Running…' })).toBeVisible()
+  // The Setup footer shows the progress, not a second Cancel.
+  await expect(page.locator('.view-setup .runbar').getByRole('button', { name: 'Cancel' })).toHaveCount(0)
+  await expect(pillCancel).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Cancel', exact: true })).toHaveCount(1)
+  for (const v of ['Batch', 'History'] as const) {
+    await goTo(page, v)
+    await expect(pillCancel).toBeVisible()
+    await expect(page.getByRole('button', { name: 'Cancel', exact: true })).toHaveCount(1)
+  }
+  await goTo(page, 'Setup')
 
   await page.evaluate(() => (window as unknown as { __fastagE2E: { requestClose(w: string): void } }).__fastagE2E.requestClose('close'))
   await dlg.getByRole('button', { name: 'Cancel run and quit' }).click()
@@ -57,7 +72,7 @@ test('a cancelled run says its partial outputs were removed', async ({ page }) =
   await toStep(page, 'Inputs')
   await page.getByRole('button', { name: 'Choose file…' }).click()
   await page.getByRole('button', { name: 'Run', exact: true }).click()
-  await page.getByRole('button', { name: 'Cancel' }).click()
+  await page.getByRole('group', { name: 'Run status' }).getByRole('button', { name: 'Cancel' }).click()
   await expect(page.locator('#run-status')).toContainText('partial outputs removed')
   await page.getByRole('button', { name: /^Log/ }).first().click()
   await expect(page.locator('pre.log')).toContainText('Removed the partial output /data/run01.tags.tsv')
@@ -66,7 +81,7 @@ test('a cancelled run says its partial outputs were removed', async ({ page }) =
 test('an existing output is confirmed before the run; a cancelled run of an earlier session reads as cancelled', async ({ page }) => {
   await openApp(page, 'existing', 'defaults')
   await goTo(page, 'Results')
-  await page.getByRole('button', { name: 'Open a tags TSV…' }).click()
+  await page.getByRole('button', { name: 'Open tags…' }).click()
   await expect(page.locator('.tabpanel')).toContainText('The run that wrote /data/run01.tags.tsv was cancelled')
   await goTo(page, 'Setup')
   await toStep(page, 'Inputs')

@@ -1,0 +1,16 @@
+-threads 0: using 8 of 16 logical cores.
+Modifications: Carbamidomethyl (C, fixed)
+Filter index: 8986 keys
+Filter: 3 sequences, 876 residues; minimum tag length 4 (derived); 13 isobaric rules
+Protein index: 3 proteins
+139 MS2 spectra, 6615 tags -> 38 after filtering
+Subsumed tags dropped: 13
+  len         tags      matched    by chance enrichment
+    3          195            0           83          -
+    4          666           20           25       0.8x  <- at chance
+    5          933            1            2       0.4x  <- at chance
+    6         2341            8            0      19.7x
+    7         1442           10            0     587.1x
+    8          634            9            0   17666.8x
+    9          404            3            0  135850.7x
+FASTag took 0.21 s (wall), 0.92 s (CPU), 0.01 s (system), 0.91 s (user); Peak Memory Usage: 156 MB.

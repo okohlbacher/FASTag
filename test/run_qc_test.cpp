@@ -9,6 +9,10 @@
 //   reporters          OpenMS's channel tables, the 20 ppm match, the
 //                      signal-to-background rule, the assessability reasons
 //                      and the kit calls (TMT6, TMT10, TMTpro 18, none, MS3)
+//   kit decision       the label mass and the channels: one kit, the smallest
+//                      consistent with both; reporters_only fallback; iTRAQ
+//   channel counts     assessable MS2 with each reporter above the noise
+//                      threshold, every channel of the family listed
 //   redundancy         fingerprint removals, cosine, complete linkage with
 //                      the 60 s span, charge/ppm/mobility/cosine/matched
 //                      rules, the tag-driven variant, the component cap, and
@@ -35,6 +39,7 @@
 #include <OpenMS/METADATA/AcquisitionInfo.h>
 
 #include <algorithm>
+#include <bit>
 #include <cmath>
 #include <cstdio>
 #include <cstring>
@@ -118,7 +123,7 @@ namespace
       {
         std::vector<double> v;
         for (std::size_t c = 0; c < t.mz.size(); ++c)
-          if (k.channels & (1u << c)) v.push_back(t.mz[c]);
+          if (k.patterns.front() & (1u << c)) v.push_back(t.mz[c]);
         return v;
       }
     return {};
@@ -230,6 +235,12 @@ namespace
                 static_cast<int>(DUP_PEPTIDES.size()), DUP_COPIES);
     std::printf("reporter_assessable_TMT %d\nreporter_TMT_low_mass_cutoff %d\n", ftms2, itms2);
     std::printf("reporter_compatible_kits tmt10plex,tmt11plex,tmt16plex,tmt18plex\n");
+    // Da tolerance (the CLI test's): the label call cannot be made, so the
+    // reporters alone leave TMT10 or TMTpro16.
+    std::printf("reporter_kit ambiguous\nreporter_kit_candidates tmt10plex,tmt16plex\n"
+                "reporter_family_evidence reporters_only\nreporter_label_delta n/a\n");
+    std::printf("reporter_channel_126 %d\nreporter_channel_127C %d\nreporter_channel_131N %d\n"
+                "reporter_channel_131C 0\nreporter_channel_134N 0\n", ftms2, ftms2, ftms2);
   }
 
   // ---- unit checks -----------------------------------------------------------
@@ -354,7 +365,7 @@ namespace
     std::uint32_t seen = Q::reportersSeen(s, t);
     std::uint32_t want = 0;
     for (const auto& k : t.kits)
-      if (k.name == "tmt10plex") want = k.channels;
+      if (k.name == "tmt10plex") want = k.patterns.front();
     CHECK(seen == want, "TMT10 reporters seen");
     MSSpectrum shifted;
     for (int k = 0; k < 30; ++k) shifted.emplace_back(200.0 + 20.0 * k, 1000.0);
@@ -405,9 +416,20 @@ namespace
     };
     const auto kit_mask = [&](const char* n) {
       for (const auto& k : t.kits)
-        if (k.name == n) return k.channels;
+        if (k.name == n) return k.patterns.front();
       return 0u;
     };
+    // The original TMT 6-plex reagent (126, 127C, 128C, 129C, 130C, 131;
+    // MSnbase TMT6, PXD000001), from the m/z, not from the kit's patterns.
+    const auto mask_of = [&](std::initializer_list<double> mzs) {
+      std::uint32_t m = 0;
+      for (const double x : mzs)
+        for (std::size_t c = 0; c < t.mz.size(); ++c)
+          if (std::fabs(t.mz[c] - x) < 1e-4) m |= 1u << c;
+      return m;
+    };
+    const std::uint32_t orig6 = mask_of({126.127725, 127.131079, 128.134433, 129.137787, 130.141141, 131.138176});
+    CHECK(std::popcount(orig6) == 6, "original TMT6 channels are in the table: %d", std::popcount(orig6));
     const auto state = [&](const Q::ReporterCall& c, const char* n) {
       for (std::size_t k = 0; k < t.kits.size(); ++k)
         if (t.kits[k].name == n) return c.kits[k].state;
@@ -424,6 +446,11 @@ namespace
     c = Q::callReporters(tally(kit_mask("tmt6plex"), 0.9, 100, 0), t, 0);
     CHECK(join(c.compatible) == "tmt6plex,tmt10plex,tmt11plex,tmt16plex,tmt18plex", "TMT6 is ambiguous: %s",
           join(c.compatible).c_str());
+    c = Q::callReporters(tally(orig6, 0.9, 100, 0), t, 0);
+    CHECK(join(c.compatible) == "tmt6plex,tmt10plex,tmt11plex,tmt16plex,tmt18plex",
+          "original TMT6 (127C/129C): %s", join(c.compatible).c_str());
+    c = Q::callReporters(tally(orig6 | kit_mask("tmt6plex"), 0.9, 100, 0), t, 0);
+    CHECK(state(c, "tmt6plex") == "absent", "both TMT6 generations at once is not TMT6");
     c = Q::callReporters(tally(kit_mask("tmt18plex"), 0.9, 100, 0), t, 0);
     CHECK(join(c.compatible) == "tmt18plex", "TMTpro 18: %s", join(c.compatible).c_str());
     c = Q::callReporters(tally(kit_mask("itraq4plex"), 0.9, 100, 0), t, 0);
@@ -438,6 +465,99 @@ namespace
     c = Q::callReporters(tally(0, 0, 0, 500), t, 0);
     CHECK(state(c, "tmt10plex") == "not_assessable" && c.kits[1].reason == "ion_trap_ms2", "ion trap run: %s",
           c.kits[1].reason.c_str());
+
+    // ---- the kit decision: what was seen, not what it could be ----
+    const auto& keys = FASTag::Digest::labelKeys();
+    const auto label = [&](std::initializer_list<const char*> pass) {
+      Q::LabelEvidence ev;
+      ev.counted = ev.called = true;
+      ev.tags = 1000;
+      for (std::size_t l = 0; l < keys.size(); ++l)
+        for (const char* p : pass)
+          if (std::string(keys[l].name) == p)
+          {
+            ev.passed[l] = true;
+            ev.ends[l] = 400;
+          }
+      return ev;
+    };
+    const Q::LabelEvidence none_counted;
+    Q::LabelEvidence few = label({});
+    few.called = false;
+    few.reason = "few_tags";
+    const auto decide = [&](std::uint32_t channels, const Q::LabelEvidence& ev) {
+      return Q::decideKit(Q::callReporters(tally(channels, 0.9, 100, 0), t, 0), t, ev);
+    };
+    const std::uint32_t c131C = kit_mask("tmt11plex") & ~kit_mask("tmt10plex");
+    const std::uint32_t c134N = kit_mask("tmt18plex") & ~kit_mask("tmt16plex");
+    Q::KitDecision d = decide(kit_mask("tmt10plex"), label({"TMT"}));
+    CHECK(d.kit == "tmt10plex" && d.evidence == "label_mass" && join(d.candidates) == "tmt10plex" &&
+              keys[static_cast<std::size_t>(d.label)].name == std::string("TMT"),
+          "TMT10 channels + TMT label: %s %s [%s]", d.kit.c_str(), d.evidence.c_str(), join(d.candidates).c_str());
+    d = decide(kit_mask("tmt10plex") | c131C, label({"TMT"}));
+    CHECK(d.kit == "tmt11plex" && join(d.candidates) == "tmt11plex", "+131C: %s", d.kit.c_str());
+    d = decide(kit_mask("tmt6plex"), label({"TMT"}));
+    CHECK(d.kit == "tmt6plex", "TMT6 channels + TMT label: %s", d.kit.c_str());
+    d = decide(orig6, label({"TMT"}));
+    CHECK(d.kit == "tmt6plex" && d.evidence == "label_mass" && join(d.candidates) == "tmt6plex",
+          "original TMT6 channels + TMT label: %s [%s]", d.kit.c_str(), join(d.candidates).c_str());
+    d = decide(kit_mask("tmt16plex"), label({"TMTpro"}));
+    CHECK(d.kit == "tmt16plex" && d.evidence == "label_mass", "TMTpro16: %s", d.kit.c_str());
+    d = decide(kit_mask("tmt16plex") | c134N, label({"TMTpro"}));
+    CHECK(d.kit == "tmt18plex" && join(d.candidates) == "tmt18plex", "TMTpro + 134N: %s", d.kit.c_str());
+    d = decide(kit_mask("tmt10plex"), label({"TMTpro"}));
+    CHECK(d.kit == "tmt16plex" && join(d.candidates) == "tmt16plex", "TMT10 channels + TMTpro label: %s [%s]",
+          d.kit.c_str(), join(d.candidates).c_str());
+    d = decide(kit_mask("tmt10plex"), none_counted);
+    CHECK(d.kit == "ambiguous" && d.evidence == "reporters_only" && d.why == "not_counted" &&
+              join(d.candidates) == "tmt10plex,tmt16plex",
+          "TMT10 reporters only: %s %s %s [%s]", d.kit.c_str(), d.evidence.c_str(), d.why.c_str(),
+          join(d.candidates).c_str());
+    d = decide(kit_mask("tmt6plex"), few);
+    CHECK(d.kit == "ambiguous" && d.why == "few_tags" && join(d.candidates) == "tmt6plex,tmt16plex",
+          "TMT6 few tags: %s [%s]", d.why.c_str(), join(d.candidates).c_str());
+    d = decide(kit_mask("tmt18plex"), none_counted);
+    CHECK(d.kit == "tmt18plex" && d.evidence == "reporters_only" && join(d.candidates) == "tmt18plex",
+          "TMTpro18 channels alone: %s %s", d.kit.c_str(), d.evidence.c_str());
+    d = decide(kit_mask("tmt18plex"), label({"TMT"}));
+    CHECK(d.kit == "conflict" && d.evidence == "label_conflict" && d.why == "label_conflict" &&
+              join(d.candidates) == "tmt18plex" && d.label >= 0 &&
+              keys[static_cast<std::size_t>(d.label)].name == std::string("TMT"),
+          "TMT label, 134N seen: %s %s %s [%s]", d.kit.c_str(), d.evidence.c_str(), d.why.c_str(),
+          join(d.candidates).c_str());
+    d = decide(kit_mask("itraq8plex"), label({"iTRAQ4"}));
+    CHECK(d.kit == "conflict" && d.evidence == "label_conflict" && join(d.candidates) == "itraq8plex" &&
+              d.label >= 0 && keys[static_cast<std::size_t>(d.label)].name == std::string("iTRAQ4"),
+          "iTRAQ4 label, 8-plex-only channels: %s %s [%s]", d.kit.c_str(), d.evidence.c_str(),
+          join(d.candidates).c_str());
+    d = decide(kit_mask("tmt10plex"), label({"TMT", "TMTpro"}));
+    CHECK(d.kit == "ambiguous" && d.why == "several_labels", "two labels: %s %s", d.kit.c_str(), d.why.c_str());
+    d = decide(kit_mask("tmt10plex"), label({"iTRAQ4"}));
+    CHECK(d.kit == "ambiguous" && d.why == "no_label", "iTRAQ4 label with TMT reporters: %s %s", d.kit.c_str(),
+          d.why.c_str());
+    d = decide(kit_mask("itraq4plex"), label({"iTRAQ4"}));
+    CHECK(d.kit == "itraq4plex" && d.evidence == "label_mass", "iTRAQ4: %s", d.kit.c_str());
+    d = decide(kit_mask("itraq4plex"), label({"TMTpro"}));
+    CHECK(d.kit == "itraq8plex" && d.evidence == "label_mass", "iTRAQ4 channels + 304.2 label: %s", d.kit.c_str());
+    d = decide(kit_mask("itraq4plex"), none_counted);
+    CHECK(d.kit == "ambiguous" && join(d.candidates) == "itraq4plex,itraq8plex", "iTRAQ4 reporters only: [%s]",
+          join(d.candidates).c_str());
+    d = decide(kit_mask("itraq8plex"), none_counted);
+    CHECK(d.kit == "itraq8plex" && d.evidence == "reporters_only", "iTRAQ8 reporters only (113/119/121): %s",
+          d.kit.c_str());
+    d = decide(0, label({"TMT"}));
+    CHECK(d.kit == "none" && d.evidence == "-" && d.candidates.empty(), "unlabelled: %s", d.kit.c_str());
+    d = Q::decideKit(Q::callReporters(tally(0, 0, 0, 500), t, 0), t, label({"TMT"}));
+    CHECK(d.kit == "not_assessable", "ion trap run: %s", d.kit.c_str());
+    {
+      // TMT assessed and absent, iTRAQ cut off: none, not "not_assessable".
+      Q::ReporterTally r;
+      r.seen.assign(t.mz.size(), 0);
+      r.by_assess[0][0] = 100;
+      r.by_assess[1][static_cast<std::size_t>(Q::Assess::LOW_MASS_CUTOFF)] = 100;
+      d = Q::decideKit(Q::callReporters(r, t, 0), t, label({}));
+      CHECK(d.kit == "none", "TMT absent, iTRAQ cut off: %s", d.kit.c_str());
+    }
     c = Q::callReporters(tally(0, 0, 0, 0), t, 0);
     CHECK(c.kits[1].reason == "no_ms2", "no MS2: %s", c.kits[1].reason.c_str());
     c = Q::callReporters(tally(kit_mask("tmt10plex"), 0.9, 10, 1), t, 0);
@@ -586,11 +706,114 @@ namespace
     CHECK(one.find("resolution_source_FTMS_ms1\tmeasured") != std::string::npos, "MS1 resolution measured");
     CHECK(one.find("resolution_measured_FTMS_ms2\tn/a") != std::string::npos, "MS2 centroids: n/a");
     CHECK(one.find("ms2_tagged_e001\t24\t30") != std::string::npos, "tag yield count");
-    CHECK(one.find("qc_version\t2\t-\ninstrument_model\tn/a\t-\ninstrument_serial_number\tn/a\t-\n"
+    CHECK(one.find("qc_version\t3\t-\ninstrument_model\tn/a\t-\ninstrument_serial_number\tn/a\t-\n"
                    "start_timestamp\tn/a\t-\nspectra_input\t") != std::string::npos,
           "run metadata rows follow qc_version, n/a when not set");
     if (failures) std::printf("%s", one.c_str());
   }
+}
+
+// Channel counts: assessable MS2 with each reporter above the noise threshold.
+void channelCounts()
+{
+  const Q::ReporterTable t;
+  const auto mzOf = [&](const char* lab) {
+    for (std::size_t c = 0; c < t.mz.size(); ++c)
+      if (t.label[c] == lab) return t.mz[c];
+    return 0.0;
+  };
+  // 25 FTMS MS2 from 110: 126 and 129N in all at 5x the background, 127N in
+  // 10, 131C in 3 (counted, below the 20% share for "observed"), 128C in all
+  // at 2x (below the 3x threshold: never counted).
+  std::vector<MSSpectrum> run;
+  for (int k = 0; k < 25; ++k)
+  {
+    MSSpectrum s;
+    for (int j = 0; j < 30; ++j) s.emplace_back(200.0 + 20.0 * j, 1000.0);
+    s.emplace_back(mzOf("126"), 5000.0);
+    s.emplace_back(mzOf("129N"), 5000.0);
+    s.emplace_back(mzOf("128C"), 2000.0);
+    if (k < 10) s.emplace_back(mzOf("127N"), 5000.0);
+    if (k < 3) s.emplace_back(mzOf("131C"), 5000.0);
+    s.sortByPosition();
+    s.setMSLevel(2);
+    s.setRT(10.0 + k);
+    s.setMetaValue("filter string", "FTMS + c NSI d Full ms2 500.00@hcd30.00 [110.00-2000.00]");
+    ScanWindow w;
+    w.begin = 110.0;
+    w.end = 2000.0;
+    s.getInstrumentSettings().getScanWindows().push_back(w);
+    run.push_back(s);
+  }
+  const auto rows = [&](const Q::LabelEvidence* ev) {
+    Q::Collector c(run.size(), Q::InstrumentMap{}, 1, 0.02, false);
+    for (std::size_t i = 0; i < run.size(); ++i)
+    {
+      c.scan(0, i, run[i]);
+      c.ms2(0, i, run[i], 1.0, "");
+    }
+    c.finish();
+    if (ev) c.setLabelEvidence(*ev);
+    std::map<std::string, std::pair<std::string, std::string>> got;
+    for (const auto& r : c.rows(false)) got[r.key] = {r.value, r.n};
+    return got;
+  };
+  auto got = rows(nullptr);
+  CHECK(got["reporter_kit"].first == "ambiguous", "reporters only: %s", got["reporter_kit"].first.c_str());
+  CHECK(got["reporter_kit_candidates"].first == "tmt6plex,tmt16plex", "candidates %s",
+        got["reporter_kit_candidates"].first.c_str());
+  CHECK(got["reporter_family_evidence"].first == "reporters_only", "evidence");
+  CHECK(got["reporter_label_delta"].first == "n/a", "no label delta");
+  CHECK(got["reporter_channel_126"] == std::make_pair(std::string("25"), std::string("25")), "126: %s/%s",
+        got["reporter_channel_126"].first.c_str(), got["reporter_channel_126"].second.c_str());
+  CHECK(got["reporter_channel_127N"].first == "10" && got["reporter_channel_127N_share"].first == "0.4000",
+        "127N: %s %s", got["reporter_channel_127N"].first.c_str(), got["reporter_channel_127N_share"].first.c_str());
+  CHECK(got["reporter_channel_131C"].first == "3", "131C below the share is still counted: %s",
+        got["reporter_channel_131C"].first.c_str());
+  CHECK(got["reporter_channel_128C"].first == "0", "128C below 3x the median is not counted: %s",
+        got["reporter_channel_128C"].first.c_str());
+  CHECK(got["reporter_channel_135N"].first == "0", "every TMT/TMTpro channel listed without a label decision");
+  CHECK(!got.count("reporter_channel_113"), "no iTRAQ channel rows");
+  int n_chan = 0;
+  for (const auto& [k, v] : got)
+    if (k.rfind("reporter_channel_", 0) == 0 && k.find("_share") == std::string::npos) ++n_chan;
+  CHECK(n_chan == 18, "18 TMT/TMTpro channels, got %d", n_chan);
+
+  // The TMT label decides: tmt6plex; the channels of TMT 6/10/11 only.
+  Q::LabelEvidence ev;
+  ev.counted = ev.called = true;
+  ev.tags = 900;
+  ev.ends[0] = 300;
+  ev.background[0] = 2;
+  ev.passed[0] = true;  // labelKeys()[0] is TMT
+  got = rows(&ev);
+  CHECK(got["reporter_kit"].first == "tmt6plex" && got["reporter_kit"].second == "25", "TMT label: %s",
+        got["reporter_kit"].first.c_str());
+  CHECK(got["reporter_kit_candidates"].first == "tmt6plex", "one candidate");
+  CHECK(got["reporter_family_evidence"] == std::make_pair(std::string("label_mass"), std::string("300")),
+        "label_mass with its support: %s %s", got["reporter_family_evidence"].first.c_str(),
+        got["reporter_family_evidence"].second.c_str());
+  CHECK(got["reporter_label_delta"] == std::make_pair(std::string("229.162932"), std::string("900")), "delta %s",
+        got["reporter_label_delta"].first.c_str());
+  CHECK(got.count("reporter_channel_131C") && !got.count("reporter_channel_132N") && !got.count("reporter_channel_135N"),
+        "TMT: channels of TMT 6/10/11 only");
+  n_chan = 0;
+  for (const auto& [k, v] : got)
+    if (k.rfind("reporter_channel_", 0) == 0 && k.find("_share") == std::string::npos) ++n_chan;
+  CHECK(n_chan == 11, "11 TMT channels, got %d", n_chan);
+
+  // labelEvidence(): the -label_out call over tag-end counts.
+  FASTag::Digest::DigestSettings ds;
+  FASTag::Digest::TerminusCounter tc(ds.window);
+  // 300 tryptic tags (C-terminal K/R ends), 120 of them with a TMT N-terminal flank.
+  for (int k = 0; k < 300; ++k)
+    tc.add(k < 120 ? 229.162932 : 1000.0 + k, 128.09496, "PEPTIDE");
+  const Q::LabelEvidence le = Q::labelEvidence(tc, ds);
+  CHECK(le.counted && le.called && le.passed[0] && !le.passed[1] && le.ends[0] == 120, "labelEvidence: TMT %d %d %llu",
+        (int)le.called, (int)le.passed[0], (unsigned long long)le.ends[0]);
+  ds.low_resolution = true;
+  const Q::LabelEvidence lr = Q::labelEvidence(tc, ds);
+  CHECK(lr.counted && !lr.called && lr.reason == "low_resolution", "labelEvidence: Da tolerance");
 }
 
 // Run metadata: what OpenMS's readers put into ExperimentalSettings.
@@ -666,6 +889,7 @@ int main(int argc, char** argv)
   reporters();
   redundancy();
   collector();
+  channelCounts();
   runInfo();
   if (failures)
   {

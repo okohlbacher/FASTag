@@ -77,7 +77,7 @@ function GlycoBody({ t, minFraction }: { t: Glyco; minFraction: number | null })
   const ionIds = useMemo(() => Uint32Array.from(t.ionCounts, (_, i) => i), [t])
   return (
     <div className="glyco-view">
-      <ReportHeader title="Glycopeptides: oxonium ions per spectrum" paths={[t.path]} help={{ to: 'files-glyco', label: 'How to read glyco flags' }} />
+      <ReportHeader title="Glycopeptides: oxonium ions per spectrum" paths={[t.path]} />
       {t.warnings.map((w) => (
         <div className="caveat" key={w}>
           {w}

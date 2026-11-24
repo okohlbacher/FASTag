@@ -51,7 +51,7 @@ export const currentStep = (): number => Number(document.querySelector('nav[aria
 export function confirmTask(): void {
   showView('setup')
   const locked = document.querySelector('nav[aria-label="Setup steps"] button[data-step-btn="2"]')?.getAttribute('aria-disabled') === 'true'
-  const cont = document.querySelector<HTMLButtonElement>('.wizard-foot button.continue')
+  const cont = document.querySelector<HTMLButtonElement>('.view-setup .actionbar button.continue')
   if (locked && cont) act(() => void fireEvent.click(cont))
 }
 /// Show step @p step of Setup, synchronously (confirming the selected task

@@ -202,7 +202,7 @@ FASTAG_DIGEST_DIR="$TMP/none" "$BIN" "${COMMON[@]}" -out "$TMP/x.tsv" -digest_ou
 "$BIN" "${COMMON[@]}" -out "$TMP/w.tsv" -digest_tag_min 50 -digest_window 0.01 > "$TMP/log" 2>&1 \
   || fail "-digest_tag_min without -digest_out was refused"
 grep -q -- "-digest_tag_min is only read for -digest_out" "$TMP/log" || fail "no warning for -digest_tag_min"
-grep -q -- "-digest_window is only read for -digest_out or -label_out" "$TMP/log" || fail "no warning for -digest_window"
+grep -q -- "-digest_window is only read for -digest_out, -label_out or -qc_out" "$TMP/log" || fail "no warning for -digest_window"
 "$BIN" "${COMMON[@]}" -out "$TMP/w.tsv" -label_out "$TMP/w2.tsv" -digest_window 0.01 > "$TMP/log" 2>&1
 grep -q -- "-digest_window is only read" "$TMP/log" && fail "-digest_window warned although -label_out reads it"
 "$BIN" "${COMMON[@]}" -out "$TMP/w.tsv" -digest_silac_min 10 -glyco_out "$TMP/w3.tsv" > "$TMP/log" 2>&1 \

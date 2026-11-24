@@ -30,7 +30,7 @@ grid; see the Decision at the end of this section.
 | # | Workflow (label) | Purpose (blurb, shown under the chooser) | Required inputs | Outputs, on by default (off) | Results tabs opened |
 |---|---|---|---|---|---|
 | W1 | **Generate tags** (landing) | Sequence tags from every spectrum, with per-residue confidence, for de novo assembly and export. | spectra | tags.tsv (spectra with tags .mzML) | Overview, Tags, Spectrum |
-| W2 | **Run QC** | QC of one run: MS/MS counts and resolution by analyzer, charges, isobaric kit, tag yield, instrument, serial and start time. | spectra | qc.tsv; tags.tsv (always) | Overview, QC, Tags, Spectrum |
+| W2 | **Run QC** | QC of one run: MS/MS counts and resolution by analyzer, charges, isobaric kit (one call, with the count of each reporter channel), tag yield, instrument, serial and start time. | spectra | qc.tsv; tags.tsv (always) | Overview, QC, Tags, Spectrum |
 | W3 | **Mass-shift survey** (blind modification search) | Mass shifts between tags and the database: a frequency table, sites and UniMod names. | spectra, protein FASTA | recon.tsv, delta.tsv, delta_spectra.tsv, delta_counts.tsv (massgap.tsv, recon_id.tsv) | Overview, Mass shifts, Tags, Spectrum |
 | W4 | **Species** | Which taxa the sample contains, from the bundled taxonomy index. No FASTA needed. | spectra | species.tsv | Overview, Species, Tags, Spectrum |
 | W5 | **Database reduction** | A protein shortlist, a reduced FASTA and a Sage, Comet or MSFragger configuration for your search. | spectra, protein FASTA | shortlist.tsv, reduced.fasta, engine config | Overview, Shortlist, Tags, Spectrum |
@@ -51,8 +51,8 @@ grid; see the Decision at the end of this section.
   **Decision:** batch is an input mode, as in FragPipe and MaxQuant. A
   separate W8 duplicated W2 and W7 and gave a single-file `-out` in a batch.
 - **Open results.** Open earlier results from the header (Results > Open…,
-  File > Open) and from a link "Open earlier results…" at the top right of step 1. It
-  is not a card.
+  File > Open) and from "Open earlier results…" in the page header of every
+  Setup step. It is not a card.
   **Decision:** it is navigation, not a run.
 - **Task IDs.** New IDs: `run-qc`, `mass-shift`, `species`, `db-reduction`,
   `triage`. The IDs `export-tags` and `characterize` stay. Saved presets
@@ -186,6 +186,15 @@ does not duplicate any of these.
 > and where every control of this section went (its section 7). The
 > workflows, their values, the product wiring and Advanced below are
 > unchanged.
+>
+> **UI refresh (2026-11-24):** every view shares one frame: the app bar
+> (views, run status, Search settings ⌘K, Help, Feedback, Theme), a page
+> header (title, one context line, page actions, then the steps or the
+> result tabs), the 1200 px content column and, in Setup and Batch, a sticky
+> action bar with one filled button. Help is the app bar's Help button (F1),
+> which opens the page of the screen shown; the per-field (?) popovers stay,
+> the page-level "Learn more" and "How to read…" links of the layers below
+> are gone. See doc/GUI-SETUP-WIZARD.md section 1a.
 
 ```
 [Header: Setup | Run | Results | Batch | History      Open… | ? Help]
@@ -232,6 +241,20 @@ Rules:
   - New tabs: **QC** (qc.tsv as grouped key/value pairs), **Triage**
     (census_sorted with an identified/unidentified filter), and **Shortlist**
     (ranked proteins, "Reveal reduced FASTA / engine config").
+  - Triage opens with an **Overview** of every row (collapsible; the filter
+    does not change it): tiles for MS2 spectra, processed, the strong-tag
+    share (best E-value at or below the Triage E-value; the headline),
+    tagged (a tag passed -max_evalue; not a quality call) and identified
+    (only with -census_ids). Three charts: the peptide length the precursor
+    implies (averagine, 111.1254 Da per residue, by charge) with the tag
+    lengths on top; tags reported per spectrum by peaks (median, middle
+    half, the -max_tags cap); and the share of the peptide the tags cover by
+    estimated length (res_cover and max_len of census 2 and 3, else
+    best_len and the tag_cover m/z span, marked approximate; a census 3
+    res_cover with res_cover_exact 0 is marked approximate: orientation
+    unresolved, folded, lower bound; a census 2 res_cover as placed by y
+    reads only). The -max_tags cap is per seed length; the number of
+    lengths is read from the summary's run/tag_length first.
   - Until a view exists, the file opens in the generic table.
   - The Overview names the workflow, shows the evidence-cutoff caveat once
     at the top, and replaces CLI flags with "Run again with …" buttons.

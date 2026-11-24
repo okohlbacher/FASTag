@@ -53,6 +53,33 @@ test('a run moves to Results with the pill; it finishes into History', async ({ 
   await expect(page.getByText('Runs you start appear here.')).toHaveCount(0)
 })
 
+test('while a run goes, the run status pill shows the whole file name and its Cancel on every view, at 1280 and 1024', async ({ page }) => {
+  // The pill gains its own bar off Results and Setup (History, Batch): the
+  // file name must not be cut for it, nor Cancel pushed out of the pill.
+  await openApp(page, 'slow')
+  await toStep(page, 'Inputs')
+  await page.getByRole('button', { name: 'Choose file…' }).click()
+  await page.getByRole('button', { name: 'Run', exact: true }).click()
+  const pill = page.getByRole('group', { name: 'Run status' })
+  await expect(pill.getByRole('button', { name: 'Cancel' })).toBeVisible()
+  for (const size of [{ width: 1280, height: 800 }, { width: 1024, height: 700 }]) {
+    await page.setViewportSize(size)
+    for (const v of ['Results', 'Setup', 'Batch', 'History'] as const) {
+      await goTo(page, v)
+      await expect(pill.locator('.pill-file')).toHaveText('run01.mzML')
+      const fit = await pill.evaluate((el) => {
+        const f = el.querySelector('.pill-file') as HTMLElement
+        const c = [...el.querySelectorAll('button')].find((b) => b.textContent === 'Cancel') as HTMLElement
+        const p = el.getBoundingClientRect()
+        const r = c.getBoundingClientRect()
+        return { cut: f.scrollWidth > f.clientWidth, inside: r.left >= p.left && r.right <= p.right + 0.5 }
+      })
+      expect(fit, `${v} at ${size.width}`).toEqual({ cut: false, inside: true })
+    }
+  }
+  await pill.getByRole('button', { name: 'Cancel' }).click()
+})
+
 test('Help opens beside the view; its search finds a setting and opens it', async ({ page }) => {
   await openApp(page)
   // By keyboard: WebKit does not focus a clicked button, and focus returns
@@ -126,14 +153,14 @@ test('the theme button overrides the system theme with the D9 colours, and chang
   })
   const sys = await look()
   expect(sys.bg).toBe('rgb(255, 255, 255)') // --background, light
-  expect(sys.bar).toBe('rgb(243, 244, 247)') // --panel, light
+  expect(sys.bar).toBe('rgb(255, 255, 255)') // the app bar is the page: --background, light
   const theme = page.getByRole('button', { name: /^Theme: / })
   await theme.click() // System -> Light
   await theme.click() // Light -> Dark
   await expect(theme).toHaveAccessibleName('Theme: Dark')
   const dark = await look()
   expect(dark.bg).toBe('rgb(22, 24, 29)') // --background, dark
-  expect(dark.bar).toBe('rgb(29, 32, 38)') // --panel, dark
+  expect(dark.bar).toBe('rgb(22, 24, 29)') // --background, dark
   expect(dark.status).toBe(sys.status)
   // Remembered for the next start.
   await page.reload()

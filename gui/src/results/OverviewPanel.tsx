@@ -7,7 +7,6 @@
 import { useEffect, useRef, useState, type JSX } from 'react'
 import { baseName } from '../digestReport'
 import { leadTiles, settingWords, shownTiles, type Overview, type Tile, type TileAction } from './overview'
-import { HelpLink } from '../help/HelpLink'
 
 export interface OverviewPanelProps {
   overview: Overview
@@ -78,15 +77,6 @@ export default function OverviewPanel({ overview: o, input, busy, onAction, acti
       <h2>
         Overview of <span className="mono">{baseName(input)}</span>
       </h2>
-      <p className="overview-sub">
-        {workflow && (
-          <>
-            <strong>{workflow}</strong>
-            {' · '}
-          </>
-        )}
-        <HelpLink to="workflow-overview">How to read this overview</HelpLink>
-      </p>
       {missing.length > 0 && (
         <p className="caveat" role="status">
           Asked for, but not written: {missing.join(', ')}. The log says why.

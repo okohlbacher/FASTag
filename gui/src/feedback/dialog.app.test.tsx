@@ -1,12 +1,16 @@
 // The Feedback dialog at App level: one capture path (button, menu,
 // shortcut), focus and Escape, the sharing defaults, text kept for the
 // session, Save local only, the share step with its confirmation, the issue
-// URL, the reports list, and the mark-up editor's keyboard path.
+// URL, the reports list, and the mark-up editor's keyboard path. The
+// dialog is a floating, non-modal panel (feedback 2026-11-24): no scrim, the
+// app behind stays usable, it moves (pointer and keys), resizes, collapses,
+// retakes its screenshot, and every text field keeps the platform's copy,
+// cut, paste and select all (report 20261121T143325Z_856491d9).
 
 import { act, fireEvent, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { installMockBridge, type MockBridge } from '../testing/mockBridge'
-import { click, flush, key, renderApp } from '../testing/render'
+import { click, flush, goTo, key, renderApp } from '../testing/render'
 import localSchema from './schema/report.schema.json'
 import publicSchema from './schema/feedback-public.schema.json'
 import { validate } from './schemaCheck'
@@ -41,7 +45,7 @@ describe('feedback dialog', () => {
   it('opens from the top bar with focus on the title; Escape closes and focus returns', async () => {
     await renderApp(installMockBridge())
     const d = await open()
-    expect(d.getAttribute('aria-modal')).toBe('true')
+    expect(d.getAttribute('aria-modal')).toBe('false')
     expect(document.activeElement).toBe(within(d).getByLabelText('Title'))
     // Text-only: the capture failed in jsdom, and says why.
     expect(within(d).getByText(/No screenshot: .*no native webview.*no DOM raster/)).toBeTruthy()
@@ -261,5 +265,231 @@ describe('feedback dialog', () => {
     await act(async () => release())
     await flush()
     expect(screen.queryByRole('dialog')).toBeNull()
+  })
+
+  it('is a non-modal panel docked bottom-right: no scrim, nothing inert, the app usable behind it with the text kept', async () => {
+    const mock = installMockBridge()
+    await renderApp(mock)
+    const d = await open()
+    expect(d.getAttribute('aria-modal')).toBe('false')
+    expect(document.querySelector('.modal-backdrop')).toBeNull()
+    expect(document.querySelectorAll('[inert]')).toHaveLength(0)
+    // jsdom's window is 1024 by 768: 420 px wide, 16 px from the right and bottom.
+    expect([d.style.left, d.style.top, d.style.width, d.style.height]).toEqual(['588px', '112px', '420px', '640px'])
+    fireEvent.change(within(d).getByLabelText('Title'), { target: { value: 'Typed while looking' } })
+    // The app behind: another view, and a shortcut the panel used to swallow (About).
+    await goTo('results')
+    expect(document.querySelector('nav[aria-label="Views"] button[data-view="results"]')!.getAttribute('aria-current')).toBe('page')
+    expect(dialog()).toBe(d)
+    expect((within(d).getByLabelText('Title') as HTMLInputElement).value).toBe('Typed while looking')
+    // Tab is not trapped: the panel's last control does not wrap to its first.
+    const tab = new KeyboardEvent('keydown', { key: 'Tab', bubbles: true, cancelable: true })
+    within(d).getByRole('button', { name: 'Resize panel' }).dispatchEvent(tab)
+    expect(tab.defaultPrevented).toBe(false)
+    await act(async () => mock.emitMenu('about'))
+    expect(screen.getByRole('dialog', { name: 'About FASTag' })).toBeTruthy()
+  })
+
+  it('moves by dragging its title bar, stays in the window, and keeps its place for the session', async () => {
+    await renderApp(installMockBridge())
+    let d = await open()
+    const bar = d.querySelector<HTMLElement>('.fb-bar')!
+    await act(async () => {
+      fireEvent.pointerDown(bar, { clientX: 700, clientY: 130, button: 0, pointerId: 1 })
+      fireEvent.pointerMove(bar, { clientX: 500, clientY: 80, pointerId: 1 })
+      fireEvent.pointerUp(bar, { clientX: 500, clientY: 80, pointerId: 1 })
+    })
+    expect([d.style.left, d.style.top]).toEqual(['388px', '62px'])
+    // Far past the top-left corner: it stops at the window's edge.
+    await act(async () => {
+      fireEvent.pointerDown(bar, { clientX: 500, clientY: 80, button: 0, pointerId: 1 })
+      fireEvent.pointerMove(bar, { clientX: -4000, clientY: -4000, pointerId: 1 })
+      fireEvent.pointerUp(bar, { pointerId: 1 })
+    })
+    expect([d.style.left, d.style.top]).toEqual(['0px', '0px'])
+    // A drag that starts on a field or a button of the bar does not move it.
+    await act(async () => {
+      fireEvent.pointerDown(within(d).getByRole('button', { name: 'Close Feedback' }), { clientX: 10, clientY: 10, button: 0, pointerId: 1 })
+      fireEvent.pointerMove(bar, { clientX: 300, clientY: 300, pointerId: 1 })
+    })
+    expect([d.style.left, d.style.top]).toEqual(['0px', '0px'])
+    await click(within(d).getByRole('button', { name: 'Close' }))
+    d = await open()
+    expect([d.style.left, d.style.top]).toEqual(['0px', '0px'])
+  })
+
+  it('moves and resizes by keyboard, announced', async () => {
+    await renderApp(installMockBridge())
+    const d = await open()
+    const move = within(d).getByRole('button', { name: 'Move panel' })
+    move.focus()
+    await key({ key: 'ArrowLeft' }, move)
+    expect(d.style.left).toBe('572px')
+    await key({ key: 'ArrowUp', shiftKey: true }, move)
+    expect(d.style.top).toBe('48px')
+    expect(within(d).getByText(/^Moved: 572 px from the left, 48 px from the top\.$/)).toBeTruthy()
+    // Alt+arrow anywhere on the title bar.
+    await key({ key: 'ArrowLeft', altKey: true }, within(d).getByRole('button', { name: 'Collapse Feedback' }))
+    expect(d.style.left).toBe('556px')
+    // Alt+arrow in a text field is the field's (word by word on macOS).
+    const title = within(d).getByLabelText('Title')
+    const k = new KeyboardEvent('keydown', { key: 'ArrowLeft', altKey: true, bubbles: true, cancelable: true })
+    title.dispatchEvent(k)
+    expect(k.defaultPrevented).toBe(false)
+    expect(d.style.left).toBe('556px')
+    const size = within(d).getByRole('button', { name: 'Resize panel' })
+    await key({ key: 'ArrowLeft' }, size)
+    expect(d.style.width).toBe('404px')
+    await key({ key: 'ArrowDown', shiftKey: true }, size)
+    expect(d.style.height).toBe('704px')
+    expect(within(d).getByText('Size: 404 by 704 px.')).toBeTruthy()
+  })
+
+  it('collapses to its title bar toward the bottom and expands with the text kept; a trigger while open expands it', async () => {
+    await renderApp(installMockBridge())
+    const d = await open()
+    fireEvent.change(within(d).getByLabelText('Title'), { target: { value: 'Kept' } })
+    const toggle = within(d).getByRole('button', { name: 'Collapse Feedback' })
+    expect(toggle.getAttribute('aria-expanded')).toBe('true')
+    await click(toggle)
+    expect(d.classList.contains('collapsed')).toBe(true)
+    expect((d.querySelector('#fb-body') as HTMLElement).hidden).toBe(true)
+    expect(d.style.height).toBe('')
+    // The bar (44 px when unmeasured) keeps the panel's bottom edge.
+    expect(d.style.top).toBe(`${768 - 16 - 44}px`)
+    expect(toggle.getAttribute('aria-expanded')).toBe('false')
+    expect(toggle.getAttribute('aria-label')).toBe('Expand Feedback')
+    await click(toggle)
+    expect([d.style.top, d.style.height]).toEqual(['112px', '640px'])
+    expect((within(d).getByLabelText('Title') as HTMLInputElement).value).toBe('Kept')
+    // Collapsed, then the Feedback button again: expanded, focus in the panel.
+    await click(toggle)
+    feedbackButton().focus()
+    await click(feedbackButton())
+    await act(() => new Promise((r) => setTimeout(r, 0)))
+    expect(d.classList.contains('collapsed')).toBe(false)
+    expect(document.activeElement).toBe(within(d).getByLabelText('Title'))
+  })
+
+  it('Escape closes only from inside the panel; F6 goes between the panel and the app', async () => {
+    await renderApp(installMockBridge())
+    const d = await open()
+    const title = within(d).getByLabelText('Title')
+    // F6 from the panel: back to the app (the Feedback button had focus).
+    await key({ key: 'F6' }, title)
+    expect(document.activeElement).toBe(feedbackButton())
+    // Escape in the app leaves the panel open.
+    await act(async () => {
+      fireEvent.pointerDown(feedbackButton())
+    })
+    await key({ key: 'Escape' }, feedbackButton())
+    expect(screen.getByRole('dialog', { name: 'Feedback' })).toBe(d)
+    // F6 from the app: back where focus was in the panel.
+    await key({ key: 'F6' }, feedbackButton())
+    expect(document.activeElement).toBe(title)
+    await act(async () => {
+      fireEvent.keyDown(title, { key: 'Escape' })
+    })
+    expect(screen.queryByRole('dialog')).toBeNull()
+    expect(document.activeElement).toBe(feedbackButton())
+  })
+
+  it('Retake screenshot hides the panel and captures the window, and its view, again; the old marks go, saying so', async () => {
+    const mock = installMockBridge()
+    const spy = vi.spyOn(mock, 'feedbackCapture')
+    const first = document.createElement('canvas')
+    first.width = 120
+    first.height = 80
+    dom.next = () => Promise.resolve(first)
+    await renderApp(mock)
+    const d = await open()
+    expect(within(d).getByRole('img', { name: /120 by 80 pixels/ })).toBeTruthy()
+    // The screen changes while the report is written.
+    await goTo('results')
+    let release!: () => void
+    const second = document.createElement('canvas')
+    second.width = 200
+    second.height = 100
+    dom.next = () => new Promise((r) => (release = () => r(second)))
+    await click(within(d).getByRole('button', { name: 'Retake screenshot' }))
+    await waitFor(() => expect(spy).toHaveBeenCalledTimes(2))
+    // Not in the new screenshot: hidden while it is taken.
+    expect(d.hidden).toBe(true)
+    await act(async () => release())
+    await flush()
+    await waitFor(() => expect(d.hidden).toBe(false))
+    expect(within(d).getByRole('img', { name: /200 by 100 pixels, 0 marks/ })).toBeTruthy()
+    expect(within(d).getByText('New screenshot taken.')).toBeTruthy()
+    expect(document.activeElement).toBe(within(d).getByRole('button', { name: 'Retake screenshot' }))
+    // jsdom cannot encode a PNG: saved without the image, with the new capture's record and view.
+    await click(within(d).getByRole('button', { name: 'Remove screenshot' }))
+    fireEvent.change(within(d).getByLabelText('Title'), { target: { value: 'after retake' } })
+    await click(within(d).getByRole('button', { name: 'Save' }))
+    await waitFor(() => expect(mock.feedbackReports).toHaveLength(1))
+    expect(mock.feedbackReports[0].report.capture.attempt_id).toMatch(/-2$/)
+    expect(mock.feedbackReports[0].report.view).toMatchObject({ view: 'results' })
+  })
+
+  it('a cancelled retake (Esc) keeps the screenshot it had', async () => {
+    const mock = installMockBridge()
+    const first = document.createElement('canvas')
+    first.width = 120
+    first.height = 80
+    dom.next = () => Promise.resolve(first)
+    await renderApp(mock)
+    const d = await open()
+    dom.next = () => new Promise(() => {})
+    await click(within(d).getByRole('button', { name: 'Retake screenshot' }))
+    await waitFor(() => expect(d.hidden).toBe(true))
+    await key({ key: 'Escape' })
+    await flush()
+    await waitFor(() => expect(d.hidden).toBe(false))
+    expect(screen.getByRole('dialog', { name: 'Feedback' })).toBe(d)
+    expect(within(d).getByRole('img', { name: /120 by 80 pixels/ })).toBeTruthy()
+    expect(within(d).getByText(/Retake cancelled/)).toBeTruthy()
+  })
+
+  it('copy, cut, paste and select all reach every text field: nothing prevents them', async () => {
+    const mock = installMockBridge()
+    const img = document.createElement('canvas')
+    img.width = 120
+    img.height = 80
+    dom.next = () => Promise.resolve(img)
+    await renderApp(mock)
+    const d = await open()
+    // The platform's own handling: no handler of the app may cancel it.
+    const untouched = (el: HTMLElement): void => {
+      for (const k of ['c', 'v', 'x', 'a'])
+        for (const mod of [{ metaKey: true }, { ctrlKey: true }]) {
+          const e = new KeyboardEvent('keydown', { key: k, bubbles: true, cancelable: true, ...mod })
+          el.dispatchEvent(e)
+          expect(e.defaultPrevented, `${el.getAttribute('aria-label') ?? el.id} ${k}`).toBe(false)
+        }
+      for (const type of ['copy', 'cut', 'paste', 'contextmenu']) {
+        const e = new Event(type, { bubbles: true, cancelable: true })
+        el.dispatchEvent(e)
+        expect(e.defaultPrevented, `${type} on ${el.getAttribute('aria-label') ?? el.id}`).toBe(false)
+      }
+    }
+    const paste = (el: HTMLElement, text: string): void => {
+      untouched(el)
+      fireEvent.change(el, { target: { value: text } })
+      expect((el as HTMLInputElement).value).toBe(text)
+    }
+    for (const label of ['Title', 'Description', 'Steps to reproduce', 'Expected', 'Actual']) paste(within(d).getByLabelText(label), `pasted ${label}`)
+    expect(screen.getByRole('dialog', { name: 'Feedback' })).toBe(d)
+    // A text label of the mark-up.
+    await click(within(d).getByRole('button', { name: 'Mark up…' }))
+    await click(within(d).getByRole('button', { name: 'Text label' }))
+    await click(within(d).getByRole('button', { name: 'Add text label' }))
+    paste(within(d).getByLabelText('Shape 1 label text'), 'pasted label')
+    await click(within(d).getByRole('button', { name: 'Cancel' }))
+    expect((within(d).getByLabelText('Title') as HTMLInputElement).value).toBe('pasted Title')
+    // jsdom cannot encode a PNG.
+    await click(within(d).getByRole('button', { name: 'Remove screenshot' }))
+    await click(within(d).getByRole('button', { name: 'Save' }))
+    await waitFor(() => expect(within(dialog()).getByText('Saved. Share it?')).toBeTruthy())
+    expect(mock.feedbackReports[0].report).toMatchObject({ title: 'pasted Title', description: 'pasted Description', steps: 'pasted Steps to reproduce', expected: 'pasted Expected', actual: 'pasted Actual' })
+    paste(within(dialog()).getByLabelText('Issue address'), 'https://github.com/okohlbacher/FASTag/issues/9')
   })
 })

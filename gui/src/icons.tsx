@@ -55,6 +55,16 @@ export function IconFile(): JSX.Element {
   )
 }
 
+/// An arrow into a tray: the drop zone of step 2.
+export function IconUpload(): JSX.Element {
+  return (
+    <svg className="icon" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M12 15V4m0 0-4 4m4-4 4 4" />
+      <path d="M4 15v4h16v-4" />
+    </svg>
+  )
+}
+
 /// A small stick spectrum: opens a row's spectrum.
 export function IconSpectrum({ size = 14 }: { size?: number }): JSX.Element {
   return (

@@ -15,8 +15,9 @@ import { pathKey } from '../run/batch'
 import { evalueText, spectrumHint } from '../ResultsTable'
 import { PARAM_BY_NAME, choiceText, humanName } from '../paramLayout'
 import ReportHeader from './ReportHeader'
-import { unassessedKits } from './calls'
+import { evidenceText, isKitCallKey, kitCallOf, reporterChannels, unassessedKits, type ReporterChannel } from './calls'
 import { shortlistFacts } from './overview'
+import TriageOverview, { NO_IDS } from './TriagePanel'
 
 export type ReportKind = 'qc' | 'shortlist' | 'triage' | 'generic'
 
@@ -274,9 +275,9 @@ function commonN(lines: QcLine[]): string | null {
 
 /// The headline numbers of a QC report (MS/MS read, tag yield, instrument,
 /// serial, start time, isobaric kit), each when the report has it.
-export function qcSummary(rows: QcRow[]): { label: string; value: string; title?: string }[] {
+export function qcSummary(rows: QcRow[]): { label: string; value: string; title?: string; warn?: boolean }[] {
   const get = (k: string): QcRow | undefined => rows.find((r) => r.key === k)
-  const out: { label: string; value: string; title?: string }[] = []
+  const out: { label: string; value: string; title?: string; warn?: boolean }[] = []
   const ms2 = get('count_ms2')
   if (ms2) out.push({ label: 'MS2 spectra', value: isNum(ms2.value) ? fmtInt(Number(ms2.value)) : ms2.value, title: ms2.desc })
   const yieldRow = get('tag_yield')
@@ -294,6 +295,19 @@ export function qcSummary(rows: QcRow[]): { label: string; value: string; title?
   ] as const) {
     const r = get(k)
     if (r) out.push({ label, value: r.value, title: r.desc })
+  }
+  // qc_version 3: one kit, or the short list the channels leave, said
+  // with how it was decided; it replaces the list of compatible kits.
+  const call = kitCallOf(get)
+  if (call) {
+    out.push({
+      label: 'Isobaric kit',
+      value: call.text,
+      title: [evidenceText(call.evidence), call.note].filter(Boolean).join('. '),
+      // A conflict of label mass and channels is a warning, not a kit.
+      ...(call.evidence === 'label_conflict' ? { warn: true } : {})
+    })
+    return out
   }
   const kits = get('reporter_compatible_kits')
   // "none" also when no kit could be assessed (unassessedKits): that is no
@@ -322,9 +336,13 @@ export const summaryKeys = (summary: { label: string }[]): Set<string> => new Se
 
 function QcView({ tsv }: { tsv: Tsv }): JSX.Element {
   const rows = useMemo(() => qcRows(tsv), [tsv])
+  const channels = useMemo(() => reporterChannels(rows), [rows])
   const lines = useMemo(() => {
     const strip = summaryKeys(qcSummary(rows))
-    return qcLines(rows).filter((l) => !strip.has(l.key))
+    // With a kit call (qc_version 3) its rows are the strip and the channel
+    // table; the list of compatible kits is left out.
+    const v3 = rows.some((r) => r.key === 'reporter_kit')
+    return qcLines(rows).filter((l) => !strip.has(l.key) && !(v3 && (isKitCallKey(l.key) || l.key === 'reporter_compatible_kits')))
   }, [rows])
   const [all, setAll] = useState(false)
   const summary = qcSummary(rows)
@@ -338,11 +356,12 @@ function QcView({ tsv }: { tsv: Tsv }): JSX.Element {
           {summary.map((x) => (
             <div key={x.label} className="stat" title={x.title}>
               <dt>{x.label}</dt>
-              <dd>{x.value}</dd>
+              <dd className={x.warn ? 'warn-text' : undefined}>{x.value}</dd>
             </div>
           ))}
         </dl>
       )}
+      {channels.length > 0 && <ReporterChannels channels={channels} />}
       {hidden > 0 && (
         <label className="check-inline">
           <input type="checkbox" checked={all} onChange={(e) => setAll(e.target.checked)} /> Show {hidden} empty {hidden === 1 ? 'row' : 'rows'}
@@ -375,6 +394,56 @@ function QcView({ tsv }: { tsv: Tsv }): JSX.Element {
         )
       })}
     </div>
+  )
+}
+
+/// The reporter channels of the run (qc_version 3): in how many assessable
+/// MS2 each reporter ion was seen above the noise threshold.
+function ReporterChannels({ channels }: { channels: ReporterChannel[] }): JSX.Element {
+  const families = new Set(channels.map((c) => c.assessable))
+  const n = channels[0]?.assessable ?? 0
+  return (
+    <section className="qc-section" aria-label="Reporter channels">
+      <h3>
+        Reporter channels
+        <span className="muted small">
+          {' '}
+          · MS2 with the reporter ion within 20 ppm at 3× the median peak or more{families.size === 1 ? `, of ${fmtInt(n)} assessable MS2` : ''}
+        </span>
+      </h3>
+      <table className="kv qc-channels">
+        <thead>
+          <tr>
+            <th scope="col">Channel</th>
+            <th scope="col" className="num">
+              m/z
+            </th>
+            <th scope="col" className="num">
+              MS2 with the ion
+            </th>
+            <th scope="col" className="num">
+              Assessable MS2
+            </th>
+            <th scope="col" className="num">
+              Share
+            </th>
+          </tr>
+        </thead>
+        <tbody>
+          {channels.map((c) => (
+            <tr key={c.label} className={(c.observed ?? c.seen > 0) ? undefined : 'muted'}>
+              <th scope="row" className="mono">
+                {c.label}
+              </th>
+              <td className="num mono">{c.mz == null ? '–' : c.mz.toFixed(4)}</td>
+              <td className="num mono">{fmtInt(c.seen)}</td>
+              <td className="num mono">{fmtInt(c.assessable)}</td>
+              <td className="num mono">{c.share == null ? '–' : `${(c.share * 100).toFixed(1)}%`}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </section>
   )
 }
 
@@ -521,9 +590,17 @@ const FILTERS = [
 ] as const
 type Filter = (typeof FILTERS)[number]['id']
 
-const NO_IDS = 'Give the identifications of this run in Setup to mark identified spectra.'
 
-function TriageView({ tsv, path, openSpectrum }: { tsv: Tsv; path: string; openSpectrum?: (spectrum: string) => void }): JSX.Element {
+interface TriageViewProps {
+  tsv: Tsv
+  path: string
+  openSpectrum?: (spectrum: string) => void
+  params?: Record<string, unknown> | null
+  summaryPath?: string | null
+  summaryGen?: number
+}
+
+function TriageView({ tsv, path, openSpectrum, params, summaryPath, summaryGen }: TriageViewProps): JSX.Element {
   // The ranking first: rank, score, identified, candidate, status, then what the spectrum is.
   const columns = useMemo(() => {
     const all = columnsOf(tsv)
@@ -581,6 +658,9 @@ function TriageView({ tsv, path, openSpectrum }: { tsv: Tsv; path: string; openS
   }
   return (
     <>
+      {/* The overview of every row first, then the table it summarizes. */}
+      <TriageOverview tsv={tsv} params={params} summaryPath={summaryPath} summaryGen={summaryGen} source={baseName(path)} />
+      <h3 className="section-label tri-table-head">{label}</h3>
       <p className="report-sum">
         {fmtInt(tsv.rows.length)} MS2 spectra{scored ? ', ranked by how identifiable they are' : ' in file order (no identifiability score)'}
         {trc >= 0 && <>; {fmtInt(count('candidates'))} triage candidates</>}
@@ -641,6 +721,11 @@ export interface ReportTableProps {
   files?: { label: string; path: string }[]
   /// Triage: open the spectrum of a row (its native ID) in the Spectrum tab.
   openSpectrum?(spectrum: string): void
+  /// Triage: the parameters of the run that wrote the table, and its census
+  /// summary (the overview reads -max_tags, the Triage E-value and more).
+  params?: Record<string, unknown> | null
+  summaryPath?: string | null
+  summaryGen?: number
 }
 
 const REPORT_TITLE: Partial<Record<ReportKind, string>> = {
@@ -654,7 +739,7 @@ const REPORT_HELP: Partial<Record<ReportKind, { to: string; label: string }>> = 
   triage: { to: 'workflow-triage', label: 'How to read the ranking' }
 }
 
-export default function ReportTable({ kind, path, gen, files = [], openSpectrum }: ReportTableProps): JSX.Element {
+export default function ReportTable({ kind, path, gen, files = [], openSpectrum, params, summaryPath, summaryGen }: ReportTableProps): JSX.Element {
   const { tsv, error } = useReport(path, gen)
   // A census without a score is no ranking (TriageView says the same).
   const census = kind === 'triage' && !!tsv && !tsv.columns.includes('ident_score')
@@ -674,7 +759,7 @@ export default function ReportTable({ kind, path, gen, files = [], openSpectrum 
       ) : kind === 'shortlist' ? (
         <ShortlistView tsv={tsv} files={files} />
       ) : kind === 'triage' ? (
-        <TriageView tsv={tsv} path={path} openSpectrum={openSpectrum} />
+        <TriageView tsv={tsv} path={path} openSpectrum={openSpectrum} params={params} summaryPath={summaryPath} summaryGen={summaryGen} />
       ) : (
         <GenericView tsv={tsv} label={baseName(path)} />
       )}

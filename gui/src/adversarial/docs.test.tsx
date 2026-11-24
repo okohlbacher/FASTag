@@ -135,7 +135,7 @@ describe('docs: Digest tab vs doc/DESIGN-digest.md "GUI: Digest tab"', () => {
     await renderApp(mock)
     await goTo('results') // the report picker lives in the empty results pane
     mock.nextPickReport = '/rep1/Ecoli_MS2_small.label.tsv'
-    await click(screen.getByRole('button', { name: 'Open a FASTag report…' }))
+    await click(screen.getByRole('button', { name: 'Open report…' }))
     mock.nextPickReport = '/rep2/Ecoli_MS2_small.digest.tsv'
     await click(screen.getByRole('button', { name: 'Open another report…' }))
     // Another folder is another run: the label report is closed, with a note.

@@ -176,7 +176,7 @@ export default function ParamField({ spec, value, onChange, onPickFile, needs, u
           id={`p-${spec.name}`}
           aria-describedby={describedBy}
           aria-invalid={invalid ? true : undefined}
-          rows={Math.max(2, items.length + 1)}
+          rows={Math.max(1, items.length)}
           disabled={off}
           value={items.join('\n')}
           placeholder="one per line"

@@ -285,3 +285,132 @@ export function unassessedKits(kits: string | undefined, rows: Iterable<{ key: s
   if (states.length === 0 || !states.every((r) => r.value === 'not_assessable')) return null
   return [...new Set(states.map((r) => r.desc.replace(/^Not assessable: /, '').replace(/\.$/, '')).filter(Boolean))]
 }
+
+// ---- the kit call of qc_version 3 (RunQC.cpp decideKit) --------------------
+
+/// The kits as their makers name them.
+const KIT_WORDS: Record<string, string> = {
+  tmt6plex: 'TMT 6-plex',
+  tmt10plex: 'TMT 10-plex',
+  tmt11plex: 'TMT 11-plex',
+  tmt16plex: 'TMTpro 16-plex',
+  tmt18plex: 'TMTpro 18-plex',
+  itraq4plex: 'iTRAQ 4-plex',
+  itraq8plex: 'iTRAQ 8-plex'
+}
+export const kitText = (kit: string): string => KIT_WORDS[kit] ?? kit
+
+export interface KitCall {
+  // What the run shows: the kit, "Ambiguous: A or B", "Conflict: …", "None found" or "Not assessable".
+  text: string
+  // The kit called, or "none"; null when there is no call (ambiguous,
+  // conflict, not assessable, a kit value this GUI does not know).
+  call: string | null
+  // How the call was made: the label mass, the reporter channels only, or
+  // neither because the two disagree (label_conflict).
+  evidence: 'label_mass' | 'reporters_only' | 'label_conflict' | null
+  // The report's reason, in its words.
+  note: string
+}
+
+type QcGet = (key: string) => { value: string; desc: string } | undefined
+
+/** The kit call of a QC report (reporter_kit, qc_version 3 and later):
+ *  one kit, or the short list the channels leave when the label mass does
+ *  not decide the family. null for an older report, which has only
+ *  reporter_compatible_kits. */
+export function kitCallOf(get: QcGet): KitCall | null {
+  const kit = get('reporter_kit')
+  if (!kit) return null
+  const ev = get('reporter_family_evidence')
+  const evidence = ev?.value === 'label_mass' || ev?.value === 'reporters_only' || ev?.value === 'label_conflict' ? ev.value : null
+  const cands = (get('reporter_kit_candidates')?.value ?? '').split(',').map((c) => c.trim()).filter((c) => c !== '' && c !== 'none')
+  const note = [kit.desc, ev?.desc].filter((t) => t && t.trim() !== '').join(' ')
+  if (kit.value === 'ambiguous') return { text: `Ambiguous: ${cands.map(kitText).join(' or ') || 'no kit named'}`, call: null, evidence, note }
+  if (kit.value === 'not_assessable') return { text: 'Not assessable', call: null, evidence: null, note }
+  if (kit.value === 'none') return { text: 'None found', call: 'none', evidence: null, note }
+  // The label mass and the channels disagree: both said, no kit called, so
+  // the run neither counts towards nor flips a batch majority.
+  if (kit.value === 'conflict')
+    return {
+      text: `Conflict: ${conflictLabel(get) ?? 'the'} label, reporters fit ${cands.map(kitText).join(' or ') || 'no kit'}`,
+      call: null,
+      evidence: 'label_conflict',
+      note
+    }
+  // A kit value this GUI does not know is shown, but is no call.
+  return { text: kitText(kit.value), call: Object.prototype.hasOwnProperty.call(KIT_WORDS, kit.value) ? kit.value : null, evidence, note }
+}
+
+/// The label masses of Digest::labelKeys(), by reporter_label_delta.
+const LABEL_MASSES: [number, string][] = [
+  [229.162932, 'TMT'],
+  [304.207146, 'TMTpro'],
+  [144.102063, 'iTRAQ4']
+]
+
+/// The label a conflict names: from reporter_label_delta, else from the
+/// reporter_kit description ("the label mass says TMT (…").
+function conflictLabel(get: QcGet): string | null {
+  const delta = Number(get('reporter_label_delta')?.value)
+  if (Number.isFinite(delta)) {
+    const hit = LABEL_MASSES.find(([m]) => Math.abs(m - delta) < 0.01)
+    if (hit) return hit[1]
+  }
+  return /label mass says (\S+)/.exec(get('reporter_kit')?.desc ?? '')?.[1] ?? null
+}
+
+/// How a kit call was made, in words.
+export const evidenceText = (e: KitCall['evidence']): string =>
+  e === 'label_mass'
+    ? 'decided by the label mass on the tags'
+    : e === 'reporters_only'
+      ? 'from the reporter channels only; the label mass did not decide'
+      : e === 'label_conflict'
+        ? 'the label mass and the reporter channels disagree'
+        : ''
+
+export interface ReporterChannel {
+  label: string
+  // From the row's description; null when it names none.
+  mz: number | null
+  // Assessable MS2 with the reporter above the noise threshold.
+  seen: number
+  // The family's assessable MS2.
+  assessable: number
+  // seen / assessable; null when nothing was assessable.
+  share: number | null
+  // Among the channels the report calls seen (reporter_observed_<family>: in
+  // at least 20% of the assessable MS2); null in a report without that row.
+  observed: boolean | null
+}
+
+const CHANNEL = /^reporter_channel_(.+)$/
+
+/** The per-channel counts of a QC report (reporter_channel_<label> with
+ *  its _share row), in report order; none in an older report. */
+export function reporterChannels(rows: Iterable<{ key: string; value: string; n: string; desc: string }>): ReporterChannel[] {
+  const list = [...rows]
+  const byKey = new Map(list.map((r) => [r.key, r]))
+  const num = (v: string | undefined): number | null => (v != null && v.trim() !== '' && Number.isFinite(Number(v)) ? Number(v) : null)
+  // reporter_observed_TMT: 126:0.7632,128C:0.7849,... (or none).
+  const observedRows = list.filter((r) => r.key.startsWith('reporter_observed_'))
+  const observed = new Set(observedRows.flatMap((r) => r.value.split(',').map((x) => x.split(':')[0].trim())))
+  const out: ReporterChannel[] = []
+  for (const r of list) {
+    const m = CHANNEL.exec(r.key)
+    if (!m || r.key.endsWith('_share')) continue
+    const seen = num(r.value)
+    if (seen == null) continue
+    const mz = /m\/z ([0-9.]+)/.exec(r.desc)
+    const assessable = num(r.n) ?? 0
+    const sh = num(byKey.get(`${r.key}_share`)?.value)
+    out.push({ label: m[1], mz: mz ? Number(mz[1]) : null, seen, assessable, share: sh ?? (assessable > 0 ? seen / assessable : null), observed: observedRows.length > 0 ? observed.has(m[1]) : null })
+  }
+  return out
+}
+
+/// The rows of the kit call and the channel counts: shown as the call and
+/// its table, not again as key-value rows.
+export const isKitCallKey = (key: string): boolean =>
+  key === 'reporter_kit' || key === 'reporter_kit_candidates' || key === 'reporter_family_evidence' || key === 'reporter_label_delta' || CHANNEL.test(key)

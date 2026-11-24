@@ -7,7 +7,7 @@ import { act, fireEvent, screen, waitFor, within } from '@testing-library/react'
 import { describe, expect, it } from 'vitest'
 import { installMockBridge } from '../testing/mockBridge'
 import { shellLine } from '../app/format'
-import { chooseTask, click, currentStep, flush, goTo, key, renderApp, renderColdApp, runButton, showStep } from '../testing/render'
+import { addBatch, chooseTask, click, currentStep, flush, goTo, key, renderApp, renderColdApp, runButton, showStep } from '../testing/render'
 
 const field = (n: string): HTMLInputElement | null => document.getElementById(`p-${n}`) as HTMLInputElement | null
 const change = (el: Element, value: string): Promise<void> => act(async () => void fireEvent.change(el, { target: { value } }))
@@ -136,6 +136,57 @@ describe('wizard: inputs per task', () => {
     showStep(4)
     await click(screen.getByRole('button', { name: 'Go to Inputs' }))
     expect(currentStep()).toBe(2)
+    // The one step path: the heading takes focus, the step is said.
+    expect(document.activeElement?.id).toBe('step-h-2')
+    expect(screen.getByText('Step 2 of 4: Inputs')).toBeDefined()
+    // From the Inputs step itself, too.
+    field('recon_fasta')!.focus()
+    await click(screen.getByRole('button', { name: 'Go to Inputs' }))
+    expect(document.activeElement?.id).toBe('step-h-2')
+  })
+
+  it('in Batch, Go to Inputs shows Setup on the Inputs step, its heading focused', async () => {
+    const mock = installMockBridge()
+    await renderColdApp(mock)
+    await chooseTask('Mass-shift survey')
+    await addBatch(mock, ['/d/a.mzML', '/d/b.mzML'])
+    showStep(2)
+    await change(field('recon_fasta')!, '/d/missing.fasta')
+    await waitFor(() => expect(screen.getByText('Not found: /d/missing.fasta')).toBeDefined())
+    showStep(4)
+    await goTo('batch')
+    const go = within(document.querySelector<HTMLElement>('.view[data-view="batch"]')!).getByRole('button', { name: 'Go to Inputs' })
+    await click(go)
+    expect(document.querySelector<HTMLElement>('.view[data-view="setup"]')!.hidden).toBe(false)
+    expect(currentStep()).toBe(2)
+    expect(document.activeElement?.id).toBe('step-h-2')
+  })
+
+  it('with a queue, the Setup footer says why its Run n files is disabled, with Go to Inputs and the plan', async () => {
+    const mock = installMockBridge()
+    await renderColdApp(mock)
+    await chooseTask('Mass-shift survey')
+    await addBatch(mock, ['/d/a.mzML', '/d/b.mzML', '/d/c.mzML'])
+    await goTo('setup')
+    showStep(2)
+    await change(field('recon_fasta')!, '/d/missing.fasta')
+    await waitFor(() => expect(screen.getByText('Not found: /d/missing.fasta')).toBeDefined())
+    showStep(4)
+    const bar = document.querySelector<HTMLElement>('.view[data-view="setup"] .actionbar')!
+    const queueRun = within(bar).getByRole('button', { name: 'Run 3 files' }) as HTMLButtonElement
+    expect(queueRun.disabled).toBe(true)
+    // The reason is on this screen, beside the disabled Run, and names it.
+    const why = within(bar).getByRole('status')
+    expect(why.textContent).toContain('Not found: /d/missing.fasta. Choose it again in Inputs.')
+    expect(queueRun.getAttribute('aria-describedby')).toBe(why.id)
+    expect(within(bar).getByRole('region', { name: 'Plan' })).toBeDefined()
+    await click(within(bar).getByRole('button', { name: 'Go to Inputs' }))
+    expect(currentStep()).toBe(2)
+    expect(document.activeElement?.id).toBe('step-h-2')
+    // Fixed, the reason goes and the queue can run.
+    await change(field('recon_fasta')!, '/d/human.fasta')
+    await waitFor(() => expect(within(bar).queryByRole('status')).toBeNull())
+    expect((within(bar).getByRole('button', { name: 'Run 3 files' }) as HTMLButtonElement).disabled).toBe(false)
   })
 
   it.each([
@@ -180,7 +231,7 @@ describe('wizard: inputs per task', () => {
     await click(screen.getByRole('button', { name: 'choose it in Inputs' }))
     expect(currentStep()).toBe(2)
     expect(document.querySelector('.still-missing')!.textContent).toBe('Still missing: Protein database')
-    expect(document.querySelector('[data-step="2"] .lead')!.textContent).toBe('Characterize a run needs spectra; optional: your taxonomy. Also required for Tag placements: a protein FASTA.')
+    expect(document.querySelector('.page-header .lead')!.textContent).toBe('Needs spectra; optional: your taxonomy. Also required for Tag placements: a protein FASTA.')
     await change(field('recon_fasta')!, '/d/human.fasta')
     expect(stepBtn(2).closest('li')!.className).not.toMatch(/blocked/)
     expect((runButton() as HTMLButtonElement).disabled).toBe(false)
@@ -228,7 +279,7 @@ describe('wizard: inputs per task', () => {
     await chooseTask('Species')
     const about = screen.getByRole('region', { name: 'About these spectra' })
     expect(within(about).getByLabelText(/^Instrument/)).toBeDefined()
-    expect(about.textContent).toMatch(/Was the sample alkylated\?/)
+    expect(about.textContent).toMatch(/Remove if the sample was not alkylated\./)
     await change(document.getElementById('instrument')!, 'iontrap-cid')
     expect(about.textContent).toMatch(/Species calls are unreliable on ion-trap spectra/)
     // The plan line names the assumptions, from every step.
@@ -320,6 +371,22 @@ describe('wizard: short paths', () => {
     expect(currentStep()).toBe(3)
     fireEvent.keyDown(field('tag_length')!, { key: 'ArrowRight', altKey: true })
     expect(currentStep()).toBe(3)
+  })
+
+  it('Alt+Right and Alt+Left work from the action bar\'s Next and Back too', async () => {
+    const mock = installMockBridge()
+    await renderApp(mock)
+    expect(currentStep()).toBe(2)
+    const next = screen.getByRole('button', { name: /^Next: Settings/ })
+    next.focus()
+    await act(async () => void fireEvent.keyDown(next, { key: 'ArrowRight', altKey: true }))
+    expect(currentStep()).toBe(3)
+    expect(document.activeElement?.id).toBe('step-h-3')
+    const back = screen.getByRole('button', { name: /Back$/ })
+    back.focus()
+    await act(async () => void fireEvent.keyDown(back, { key: 'ArrowLeft', altKey: true }))
+    expect(currentStep()).toBe(2)
+    expect(document.activeElement?.id).toBe('step-h-2')
   })
 
   it('the command preview of step 4 is the command line Run starts', async () => {

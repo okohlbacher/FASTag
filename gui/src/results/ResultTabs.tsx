@@ -5,7 +5,7 @@
 // goes (S2).
 
 import { useEffect, useMemo, useState, type Dispatch, type JSX, type KeyboardEvent, type ReactNode, type SetStateAction } from 'react'
-import type { RunRecord, SpeciesReport, SpectrumSupport } from '../types'
+import type { ResultsView, RunRecord, SpeciesReport, SpectrumSupport } from '../types'
 import ResultsTable from '../ResultsTable'
 import FailureBanner from './FailureBanner'
 import SpeciesPanel from '../SpeciesPanel'
@@ -13,6 +13,8 @@ import DigestPanel from '../DigestPanel'
 import { baseName } from '../digestReport'
 import { IconClose, IconError, IconWarning } from '../icons'
 import { HelpButton, HelpLink } from '../help/HelpLink'
+import PageHeader from '../shell/PageHeader'
+import EmptyState from '../shell/EmptyState'
 import { focusLater } from '../app/focus'
 import type { Tab } from '../app/viewStore'
 import type { Evidence, Failure, Reports, Results } from '../run/useRun'
@@ -21,7 +23,7 @@ import OverviewPanel from './OverviewPanel'
 import { daSpeciesTolerance, type Overview, type TileAction } from './overview'
 import ReconView from './ReconView'
 import ReportTable from './ReportTable'
-import type { WorkflowReports } from './workflowReports'
+import { shownArtifact, type WorkflowReports } from './workflowReports'
 import GlycoTable from './GlycoTable'
 import SpectrumPanel, { type SpectrumSource, type SpectrumTarget } from '../spectrum/SpectrumPanel'
 
@@ -70,6 +72,9 @@ export type { WorkflowReports }
 export interface ResultTabsProps {
   tab: Tab
   setTab(t: Tab): void
+  /// Set to the tab actually shown (the store's tab may be one that is gone):
+  /// the app bar's Help opens that tab's page.
+  shownTab?: { current: Tab | null }
   species: SpeciesReport | null
   // The run the Species tab describes, as it was submitted.
   speciesRun: { input: string; enabled: boolean; params?: Record<string, unknown> | null } | null
@@ -100,6 +105,8 @@ export interface ResultTabsProps {
   onOverviewAction?(a: TileAction): void
   // Over the tabs while a single run goes (RunningPanel).
   runningState?: ReactNode
+  // Under the header: the checks of the run just finished (AfterRunPanel).
+  afterRun?: ReactNode
   // GUI-DESIGN S8: the Tags table's "Re-run to add Residue conf. (%)"
   // for a file without res_conf; null when the form would not repeat the
   // run that wrote the file shown.
@@ -116,6 +123,9 @@ export interface ResultTabsProps {
   spectrumRun?: { input: string; params: Record<string, unknown> } | null
   // The workflow of the run shown: its tabs come first, in its order.
   workflow?: string | null
+  // The input of the run going (a single run or the batch job running):
+  // the page title while running, never the input of a table kept from before.
+  activeInput?: string | null
 }
 
 /// The tags output a recorded run wrote (its -out), as one of its outputs.
@@ -154,6 +164,10 @@ export default function ResultTabs(p: ResultTabsProps): JSX.Element {
   // A tab whose content is gone (a new run started, or the Spectrum tab with
   // a CLI that cannot dump spectra) shows the first one left.
   const tab: Tab = tabs.includes(p.tab) ? p.tab : tabs[0]
+  const shownTab = p.shownTab
+  useEffect(() => {
+    if (shownTab) shownTab.current = tab
+  }, [shownTab, tab])
 
   // The Spectrum tab (P4): the spectrum opened from the Tags table, and
   // the input and parameters of the run that wrote the table shown.
@@ -200,9 +214,11 @@ export default function ResultTabs(p: ResultTabsProps): JSX.Element {
   const tagsPath = results?.path ?? (rec?.tags || null)
   // A target of another file (a new run, another TSV) is not shown.
   const shownTarget = target && target.path === path ? target : null
-  function openSpectrum(spectrum: string, rowId: number | null): void {
+  // view: the Tags table's sort and filters, whose order ◀ ▶ walk; null
+  // (Triage): every tagged spectrum in file order.
+  function openSpectrum(spectrum: string, rowId: number | null, view: ResultsView | null = null): void {
     if (!path) return
-    setTarget({ path, spectrum, rowId })
+    setTarget({ path, spectrum, rowId, view })
     setTab('spectrum')
     // Keyboard focus follows the row to the Spectrum tab's heading.
     focusLater(() => document.querySelector<HTMLElement>('#tabpanel .sp-head h2'))
@@ -222,9 +238,29 @@ export default function ResultTabs(p: ResultTabsProps): JSX.Element {
     document.getElementById(`tab-${tabs[to]}`)?.focus()
   }
 
-  return (
-    <section className="results" aria-label="Results">
-      <div className="tabs">
+  // The page title: the run going (never the run whose table is kept from
+  // before it), else the run shown, else the file shown.
+  const headerInput = running
+    ? (p.activeInput ?? null)
+    : (p.overview?.input ?? results?.input ?? speciesRun?.input ?? null)
+  const artifact = shownArtifact(results?.path, wr, tables, reports.list)
+  const shownFile = headerInput ?? artifact
+  // The tags table names itself (h2 and source) unless the header already
+  // names it: a file opened from disk, with no run on the page.
+  const tableTitled = !!results && !headerInput && !results.input && artifact === results.path
+  const workflowLabel = running ? null : (p.overview?.workflow ?? null)
+  // The workflow of the run shown, then where the file came from.
+  const from = running ? 'running' : !headerInput && artifact ? 'opened from disk' : null
+  const context =
+    workflowLabel || from ? (
+      <>
+        {workflowLabel && <strong className="run-workflow">{workflowLabel}</strong>}
+        {workflowLabel && from ? ' · ' : ''}
+        {from}
+      </>
+    ) : null
+  const tabStrip = (
+    <div className="tabs localnav">
         <div role="tablist" aria-label="Results" onKeyDown={onTabKey}>
           {tabs.map((t) => (
             <button
@@ -242,15 +278,32 @@ export default function ResultTabs(p: ResultTabsProps): JSX.Element {
             </button>
           ))}
         </div>
-        {/* Always reachable, also once a result fills the pane. */}
-        {/* Not while a run is writing the files they would open. */}
-        <button className="secondary" onClick={p.openResults} disabled={busy} title="Open an existing tags TSV">
-          Open tags…
-        </button>
-        <button className="secondary" onClick={p.openReport} disabled={busy} title="Open a report of an earlier run">
-          Open report…
-        </button>
-      </div>
+    </div>
+  )
+
+  return (
+    <section className="results" aria-label="Results">
+      <div className="results-col page-col">
+      <PageHeader
+        title={shownFile ? baseName(shownFile) : 'Results'}
+        titleClass={shownFile ? 'mono' : undefined}
+        titleTip={shownFile ?? undefined}
+        context={context}
+        actions={
+          <>
+            {/* Always reachable, also once a result fills the pane. */}
+            {/* Not while a run is writing the files they would open. */}
+            <button className="secondary" onClick={p.openResults} disabled={busy} title="Open an existing tags TSV">
+              Open tags…
+            </button>
+            <button className="secondary" onClick={p.openReport} disabled={busy} title="Open a report of an earlier run">
+              Open report…
+            </button>
+          </>
+        }
+        nav={tabStrip}
+      />
+      {p.afterRun}
 
       {failure && p.showFailure !== false && (
         <FailureBanner
@@ -353,6 +406,9 @@ export default function ResultTabs(p: ResultTabsProps): JSX.Element {
               gen={reports.workflowGen?.[tab]}
               files={tab === 'shortlist' ? wr.files : undefined}
               openSpectrum={tab === 'triage' && spectrumOn ? (sp) => openSpectrum(sp, null) : undefined}
+              params={tab === 'triage' ? (p.overview?.params ?? p.spectrumRun?.params ?? rec?.params ?? null) : undefined}
+              summaryPath={tab === 'triage' ? wr.censusSummary : undefined}
+              summaryGen={tab === 'triage' ? reports.workflowGen?.censusSummary : undefined}
             />
             {tab === 'triage' && wr.censusSummary && (
               <details className="raw">
@@ -414,13 +470,9 @@ export default function ResultTabs(p: ResultTabsProps): JSX.Element {
                 onLocate={(input) => path && setLocated((l) => ({ ...l, [path]: input }))}
               />
             ) : (
-              <div className="empty-state">
-                <h2>No spectrum chosen</h2>
-                <p>
-                  In Tags or Triage, choose a row and press Enter (or Open in Spectrum) to see its spectrum with
-                  FASTag&apos;s processed peaks and, for a tagged spectrum, the tag&apos;s ladder on them.
-                </p>
-              </div>
+              <EmptyState title="No spectrum chosen">
+                In Tags or Triage, choose a row and press Enter (or Open in Spectrum) to see its spectrum.
+              </EmptyState>
             )}
           </div>
         ) : tab === 'digest' ? (
@@ -504,6 +556,7 @@ export default function ResultTabs(p: ResultTabsProps): JSX.Element {
           <ResultsTable
             key={`${results.path}#${results.gen}`}
             path={results.path}
+            titled={tableTitled}
             source={results.input ? `from the run of ${results.input}` : 'opened from disk'}
             rerunResConf={p.rerunResConf}
             spectrum={{
@@ -511,31 +564,22 @@ export default function ResultTabs(p: ResultTabsProps): JSX.Element {
               open: openSpectrum
             }}
           />
+        ) : p.runningState ? null : running ? (
+          // A batch job writing its tags (the running panel is the Batch view's).
+          <div className="tablewrap">
+            <EmptyState title="Tags appear here when the run finishes." />
+          </div>
         ) : (
           <div className="tablewrap">
-            <div className="empty-state">
-              <h2>No results yet</h2>
-              <p>
-                Run FASTag on the chosen file, or open a tags TSV or a FASTag report (QC, species, shortlist,
-                triage, digest, label, mass-gap, mass-shift or glyco) from an earlier run.
-              </p>
-              <p>
-                New to FASTag? <HelpLink to="start">Read Getting started</HelpLink> (F1 opens Help at any time).
-              </p>
-              <div className="row-actions">
-                {/* Not while a run is writing the files they would open. */}
-                <button className="secondary big" onClick={p.openResults} disabled={busy}>
-                  Open a tags TSV…
-                </button>
-                <button className="secondary big" onClick={p.openReport} disabled={busy}>
-                  Open a FASTag report…
-                </button>
-              </div>
-            </div>
+            {/* The Open buttons are the page header's: none here twice. */}
+            <EmptyState title="No results yet">
+              Run FASTag in Setup, or open tags or a report of an earlier run with the buttons above.
+            </EmptyState>
           </div>
         )}
       </div>
       {p.children}
+      </div>
     </section>
   )
 }

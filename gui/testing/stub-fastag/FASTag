@@ -46,9 +46,11 @@
 #                   (default: that folder's dumps.ppm.jsonl, the real dumps of
 #                   the E. coli fixture) and exit, or exit 6 with the CLI's
 #                   message when it has none; writes no file
-#   STUB_CLI=1.11   answer as FASTag 1.11.0, which has neither: --helphelp
-#                   prints the real 1.11.0 listing to stderr, -dump_spectrum is refused as an
-#                   unknown option (gui/testing/stub-fastag-1.11/FASTag sets it)
+#   -fasta_proteins <n>  listed by --helphelp, as the current CLI has it
+#   STUB_CLI=1.11   answer as FASTag 1.11.0, which has neither -dump_spectrum
+#                   nor -fasta_proteins: --helphelp prints the real 1.11.0
+#                   listing to stderr, and both are refused as unknown options
+#                   (gui/testing/stub-fastag-1.11/FASTag sets it)
 #   STUB_DUMPS=<f>  the dumps -dump_spectrum serves
 # The same variables can also be set in <in>.stub, a file next to the input
 # that the stub sources: tests that start it through the GUI's own `run`
@@ -76,6 +78,7 @@ if [ "${1:-}" = "--helphelp" ]; then
   echo "  -in <file>*                      Input spectra"
   echo "  -out <file>*                     Tag list"
   echo "  -fasta <file>                    Report only tags that occur in this database"
+  echo "  -fasta_proteins <n>              List up to n proteins of each database hit"
   echo "  -dump_spectrum <text>            Print the prepared peaks and the tags of one spectrum as JSON lines and exit"
   if [ -n "${STUB_PROBE_INPUT:-}" ]; then
     echo "  -probe_input <file>              Print the metadata of a spectra file as JSON lines and exit"
@@ -103,6 +106,13 @@ fi
 in=""; out=""; reports=""; recon_out=""; delta_out=""; recon_id_out=""; species=0; glyco=0; species_out=""; glyco_out=""; ini=""; write_ini=""; dump=""; dumping=0
 while [ $# -gt 0 ]; do
   case "$1" in
+    -fasta_proteins)
+      # FASTag 1.11 has no such option: TOPP aborts before reading anything.
+      if [ "${STUB_CLI:-}" = "1.11" ]; then
+        echo "Unknown option(s) '[-fasta_proteins]' given. Aborting!" >&2
+        exit 6
+      fi
+      shift 2 ;;
     -ini) ini="$2"; shift 2 ;;
     -write_ini) write_ini="$2"; shift 2 ;;
     -dump_spectrum) dump="$2"; dumping=1; shift 2 ;;

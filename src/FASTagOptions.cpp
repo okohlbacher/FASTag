@@ -273,6 +273,18 @@ void TOPPFASTag::registerOptionsAndFlags_()
                      "in fasta_hit", false);
   setValidFormats_("entrapment_fasta", ListUtils::create<std::string>("fasta"));
 
+  // Which -fasta proteins a matching tag occurs in, and where. Opt-in: the
+  // three columns change -out's format, and the locate index costs ~6.5
+  // bytes per database residue (shared with -recon_out's when that reads
+  // the same -fasta).
+  registerIntOption_("fasta_proteins", "<n>", 0,
+                     "Name up to <n> of the -fasta proteins each matching tag occurs in. "
+                     "Appends the columns db_proteins (identifier@start-end, 1-based, "
+                     "';'-separated), db_genes (the GN= of each) and db_protein_count "
+                     "(all of them); entrapment matches name entrapment proteins. "
+                     "0 writes none. Requires -fasta", false);
+  setMinInt_("fasta_proteins", 0);
+
   // Tag reconciliation (placement plus gap interpretation, after TagRecon)
   // at proteome scale: place each reported tag onto tryptic windows of a
   // database by its flanking masses and localize/interpret the single mass

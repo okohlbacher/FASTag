@@ -5,7 +5,7 @@
 
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
-import SpectrumPanel from './SpectrumPanel'
+import SpectrumPanel, { leftMargin } from './SpectrumPanel'
 import { PROTON, WATER, residueMasses } from './ladder'
 import { installMockBridge } from '../testing/mockBridge'
 import type { ResultsPage } from '../types'
@@ -85,6 +85,15 @@ describe('Spectrum, the chosen tag', () => {
     await screen.findByTestId('ladder')
     fireEvent.click(screen.getAllByRole('row').find((r) => r.textContent?.startsWith('PT')) as HTMLElement)
     await waitFor(() => expect(labels(container)).toEqual(['b or y?', 'b or y?']))
+    // Never clipped (report 20261124T073546Z_233cbfac): each label, drawn
+    // right-aligned, starts inside the plot, and the plot starts at the margin.
+    const margin = leftMargin(['b or y?'])
+    expect(margin).toBeGreaterThan(48)
+    for (const t of Array.from(container.querySelectorAll<SVGTextElement>('.sp-line .sp-series'))) {
+      expect(t.getAttribute('text-anchor')).toBe('end')
+      expect(Number(t.getAttribute('x')) - (t.firstChild?.textContent ?? '').length * 0.62 * 12).toBeGreaterThanOrEqual(0)
+    }
+    expect(Number(container.querySelector('[data-axis]')!.getAttribute('x1'))).toBe(margin)
     expect(screen.getByTestId('ladder').textContent).toMatch(/^b or y\? ions \(read as b\): PT N→C/)
     expect(container.querySelectorAll('[data-testid=terminus-mark]').length).toBe(0)
     // The Ladder column of the tags table says the same.

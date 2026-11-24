@@ -250,23 +250,43 @@ describe('copy row and copy USI', () => {
   it('the Copy row and Copy USI buttons copy the active row, and wait for one', async () => {
     stubClipboard()
     await renderTable()
-    const row = screen.getByRole('button', { name: 'Copy row' })
-    const usi = screen.getByRole('button', { name: 'Copy USI' })
-    expect(row).toHaveProperty('disabled', true)
-    expect(usi).toHaveProperty('disabled', true)
+    // O2: no row chosen, no row actions in the toolbar.
+    expect(screen.queryByRole('button', { name: 'Copy row' })).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Copy USI' })).toBeNull()
+    expect(screen.queryByRole('group', { name: 'Active row' })).toBeNull()
     await click(document.querySelectorAll('.rt-rows .rt-row')[3])
+    expect(screen.getByRole('group', { name: 'Active row' })).toBeTruthy()
     await click(screen.getByRole('button', { name: 'Copy USI' }))
     expect(writeText).toHaveBeenLastCalledWith('mzspec:USI000000:run:scan:3')
     await click(screen.getByRole('button', { name: 'Copy row' }))
     expect(writeText).toHaveBeenLastCalledWith(SHOWN(ROWS[3]).join('\t'))
   })
 
+  it('a filter that drops the active row takes its buttons away, and focus goes back to the table', async () => {
+    const mock = await renderTable()
+    await click(document.querySelectorAll('.rt-rows .rt-row')[3])
+    const copy = screen.getByRole('button', { name: 'Copy row' })
+    act(() => copy.focus())
+    expect(document.activeElement).toBe(copy)
+    // No row matches the filter: the active row is gone.
+    mock.resultsQuery = (path, view, offset, limit) => {
+      mock.resultsQueryCalls.push({ path, view, offset, limit })
+      return Promise.resolve({ columns: mock.resultsColumns, totalRows: N, matchedRows: 0, rows: [], rowIds: [], ranked: true, pending: false })
+    }
+    // Committed with Enter as a key event: focus stays on Copy row.
+    const box = screen.getByLabelText('Spectrum contains')
+    fireEvent.change(box, { target: { value: 'nothing' } })
+    fireEvent.keyDown(box, { key: 'Enter' })
+    await waitFor(() => expect(screen.queryByRole('button', { name: 'Copy row' })).toBeNull())
+    await waitFor(() => expect(document.activeElement).toBe(table()))
+  })
+
   it('without a usi column Copy USI says how to get one, and copies nothing', async () => {
     stubClipboard()
     const cols = COLUMNS.slice(0, -1)
     await renderTable({ columns: cols, rows: ROWS.map((r) => r.slice(0, -1)) })
-    expect(screen.getByRole('button', { name: 'Copy USI' }).getAttribute('title')).toMatch(/turn on USI column under Outputs/)
     await key(table(), 'ArrowDown')
+    expect(screen.getByRole('button', { name: 'Copy USI' }).getAttribute('title')).toMatch(/turn on USI column under Outputs/)
     await key(activeRow()!, 'C', { metaKey: true, shiftKey: true })
     expect(writeText).not.toHaveBeenCalled()
     expect(await screen.findByText(/no USI column.*turn on USI column under Outputs/)).toBeDefined()

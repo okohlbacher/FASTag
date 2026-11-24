@@ -89,6 +89,8 @@ test('Mass-shift survey: the database is required, and the placements cannot be 
   await expect(page.getByRole('button', { name: 'Run', exact: true })).toBeDisabled()
   await expect(page.locator('.runbar')).toContainText('The placements need a protein database')
   await page.locator('.runbar').getByRole('button', { name: 'Go to Inputs' }).click()
+  // The one step path: the Inputs heading takes focus.
+  await expect(page.locator('#step-h-2')).toBeFocused()
   await toStep(page, 'Outputs & run')
   await expect(page.locator('#out-recon_out')).toBeDisabled()
   await expect(page.locator('#out-recon_out-d')).toContainText('needed by Mass-shift table')
@@ -177,7 +179,7 @@ test('arrowing through the tiles by keyboard browses them; only Continue replace
   await page.keyboard.press('ArrowRight')
   await page.keyboard.press('ArrowRight')
   await expect(page.locator('button.task-tile[data-task="species"]')).toBeFocused()
-  await expect(page.locator('#task-detail')).toContainText('Which organisms does my sample contain?')
+  await expect(page.locator('#task-detail')).toContainText('Only the species, ranked at a rank you choose.')
   // Browsing changed nothing.
   await expect(page.locator('#p-tag_length')).toHaveValue('5')
   await expect(page.locator('button.task-tile[data-task="export-tags"]')).toHaveAttribute('aria-current', 'true')
@@ -201,4 +203,50 @@ test('Batch is an input mode: Add files/folder, an output folder and an optional
   await expect(page.locator('#step-2')).toContainText('beside each input file')
   await expect(page.locator('#out-name')).toHaveCount(0)
   await expect(page.getByRole('button', { name: 'Or choose one file…' })).toHaveCount(0)
+})
+
+// C11: with Help open at 1024x700 the action bar has no room for the
+// still-missing chip, the plan and Back/Run/Next in one row. The left group
+// (chip and plan) takes its own row; nothing overlaps; the three buttons stay
+// together in one row. A toast floats above the bar, never over Run.
+test('the action bar wraps the plan above Back, Run and Next with Help open at 1024x700, and toasts sit above it', async ({ page }) => {
+  await page.setViewportSize({ width: 1024, height: 700 })
+  await openApp(page)
+  await chooseTask(page, 'Mass-shift survey')
+  await page.getByRole('button', { name: 'Help', exact: true }).click()
+  await expect(page.locator('#help-panel')).toBeVisible()
+  const bar = page.locator('.view-setup .actionbar')
+  await expect(bar.locator('.still-missing')).toBeVisible()
+  await expect(plan(page)).toBeVisible()
+  const box = async (sel: string) => (await bar.locator(sel).boundingBox())!
+  const nav = await Promise.all(['button.back', 'button.run-btn', 'button.next'].map(box))
+  const planButtons = await Promise.all(
+    ['Copy command line', 'Export INI…'].map(async (name) => (await plan(page).getByRole('button', { name }).boundingBox())!)
+  )
+  const chip = await box('.still-missing')
+  const hit = (a: { x: number; y: number; width: number; height: number }, b: typeof a): boolean =>
+    a.x < b.x + b.width && b.x < a.x + a.width && a.y < b.y + b.height && b.y < a.y + a.height
+  for (const n of nav) {
+    for (const p of [...planButtons, chip]) expect(hit(n, p)).toBe(false)
+  }
+  // One row: the same top for Back, Run and Next, left to right.
+  expect(Math.abs(nav[0].y - nav[1].y)).toBeLessThan(2)
+  expect(Math.abs(nav[1].y - nav[2].y)).toBeLessThan(2)
+  expect(nav[0].x + nav[0].width).toBeLessThanOrEqual(nav[1].x)
+  expect(nav[1].x + nav[1].width).toBeLessThanOrEqual(nav[2].x)
+  // The plan stays inside the bar, not drawn past its right edge.
+  const barBox = (await bar.boundingBox())!
+  for (const p of planButtons) expect(p.x + p.width).toBeLessThanOrEqual(barBox.x + barBox.width)
+
+  // A finished run's toast over Setup: above the bar, not over Next or Run.
+  await page.getByRole('button', { name: 'Close Help' }).click()
+  await chooseTask(page, 'Generate tags')
+  await page.getByRole('button', { name: 'Choose file…' }).click()
+  await page.getByRole('button', { name: 'Run', exact: true }).click()
+  await goTo(page, 'Setup')
+  const toast = page.getByRole('status', { name: 'Run finished' })
+  await expect(toast).toBeVisible()
+  const t = (await toast.boundingBox())!
+  const b2 = (await bar.boundingBox())!
+  expect(t.y + t.height).toBeLessThanOrEqual(b2.y + 0.5)
 })

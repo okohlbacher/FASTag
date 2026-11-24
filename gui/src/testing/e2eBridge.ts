@@ -47,6 +47,12 @@
 //               peaks of each spectrum (src/fixtures/cli/v112-ecoli-dump,
 //               the G1 CLI's output for those tags), and the run record of
 //               /data/run01.tags.tsv names its input and parameters
+//   dbhit       the spectrum scenario on the tags of a -fasta -fasta_proteins 3
+//               run of the development CLI (src/fixtures/cli-dev): the
+//               Database hit cells name the proteins, the Spectrum tab aligns
+//               the tags on /data/ecoli.fasta (the run's -fasta, served by
+//               fastaSegment), and the run's QC report is the qc_version 3
+//               one of PXD000001 (original TMT 6-plex, 127C/129C; its reporter channels)
 //   spectrum-1.11  the same with a CLI without -dump_spectrum (FASTag 1.11):
 //               no Spectrum tab, and the row action says so
 //   gate-batch  P2b Batch summary: Add folder… on /data lists eight spectra
@@ -97,6 +103,9 @@ import ecoliTags from '../../e2e-web/fixtures/ecoli.tags.tsv?raw'
 import ecoliResConf from '../fixtures/denovo/ecoli.res_conf.tags.tsv?raw'
 import ecoliDumps from '../fixtures/cli/v112-ecoli-dump/dumps.ppm.jsonl?raw'
 import ecoliDumpsDa from '../fixtures/cli/v112-ecoli-dump/dumps.da.jsonl?raw'
+import fastaTags from '../fixtures/cli-dev/ecoli-fasta-proteins/run01.tags.tsv?raw'
+import ecoliFasta from '../fixtures/cli-dev/ecoli-fasta-proteins/ecoli.fasta?raw'
+import tmtQcV3 from '../fixtures/cli-dev/pxd000001-qc/run.qc.tsv?raw'
 import { splitDumps } from '../spectrum/dump'
 import digestTsv from '../fixtures/digest.tsv?raw'
 import labelTsv from '../fixtures/label.tsv?raw'
@@ -354,7 +363,7 @@ export function installE2EBridge(): Origin | undefined {
   // Copy command line (Setup) answers the argv the run reply offers and
   // History records, as fastag.rs builds both with command_of.
   mock.commandOf = (call) => e2eCommand(mock.binaryInfo.bin, call as unknown as Record<string, unknown>, call.out)
-  const tags = parseTsv(fixture === 'denovo' ? ecoliResConf : ecoliTags)
+  const tags = parseTsv(fixture === 'denovo' ? ecoliResConf : fixture === 'dbhit' ? fastaTags : ecoliTags)
   if (fixture === 'denovo') mock.tagsFiles['/data/run01.tags.tsv'] = ecoliResConf
   mock.resultsColumns = tags.columns
   mock.resultsRows = tags.rows
@@ -538,12 +547,13 @@ export function installE2EBridge(): Origin | undefined {
   }
   // The tables each resultsQuery reads, by path (the tags elsewhere).
   const tables: Record<string, TableRows> = {}
-  if (fixture === 'spectrum' || fixture === 'spectrum-1.11') {
+  if (fixture === 'spectrum' || fixture === 'spectrum-1.11' || fixture === 'dbhit') {
     const has = fixture !== 'spectrum-1.11'
     mock.spectrumSupportResult = has
       ? { supported: true, probed: true, detail: 'the CLI has -dump_spectrum' }
       : { supported: false, probed: true, detail: 'the CLI has no -dump_spectrum' }
-    for (const d of splitDumps(ecoliDumps)) {
+    // dbhit ran at 0.3 Da: the peaks as dumped at that tolerance.
+    for (const d of splitDumps(fixture === 'dbhit' ? ecoliDumpsDa : ecoliDumps)) {
       const id = (JSON.parse(d.slice(0, d.indexOf('\n'))) as { native_id: string }).native_id
       mock.spectrumDumps[id] = d
     }
@@ -565,7 +575,23 @@ export function installE2EBridge(): Origin | undefined {
       }
     ]
   }
-  if (fixture === 'view' || fixture === 'denovo' || fixture === 'spectrum' || fixture === 'spectrum-1.11') {
+  if (fixture === 'dbhit') {
+    // The run's -fasta, and its record with it (the Spectrum tab reads the
+    // database path from the run's parameters).
+    const db: Record<string, string> = {}
+    let id = ''
+    for (const l of ecoliFasta.split(/\r?\n/)) {
+      if (l.startsWith('>')) {
+        id = l.slice(1).split(/\s/)[0]
+        db[id] = `${l.slice(1 + id.length).trim()}\t`
+      } else if (id) db[id] += l.replace(/[^A-Za-z]/g, '').toUpperCase()
+    }
+    mock.fastaFiles['/data/ecoli.fasta'] = db
+    const params = { threads: '1', fragment_tolerance: '0.3', fragment_tolerance_unit: 'Da', fasta: '/data/ecoli.fasta', extension: '3' }
+    mock.history = mock.history.map((r) => ({ ...r, params, argv: [...r.argv.slice(0, -1), '-fasta', '/data/ecoli.fasta', '-fasta_proteins', '3', '-progress'] }))
+    mock.reportFiles['/data/run01.qc.tsv'] = tmtQcV3
+  }
+  if (fixture === 'view' || fixture === 'denovo' || fixture === 'spectrum' || fixture === 'spectrum-1.11' || fixture === 'dbhit') {
     const ids = (view: ResultsView): number[] => viewIds(tags.columns, tags.rows, view)
     // The run's other tables are not open in a Results table: browser.rs
     // refuses them to resultsQuery, and tableQuery reads them.

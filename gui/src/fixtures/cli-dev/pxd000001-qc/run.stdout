@@ -1,0 +1,5 @@
+Modifications: Carbamidomethyl (C, fixed)
+QC report -> run.qc.tsv (0.12 s after the tagging loop)
+6103 MS2 spectra, 217250 tags
+Subsumed tags dropped: 0
+FASTag took 0.62 s (wall), 1.94 s (CPU), 0.08 s (system), 1.86 s (user); Peak Memory Usage: 132 MB.

@@ -259,3 +259,26 @@ describe('the key columns of a Run QC batch', () => {
     expect(qcCells(null).ms2.text).toBe('not written')
   })
 })
+
+describe('the kit column of a Run QC batch', () => {
+  it('a label/channel conflict neither counts towards nor flips the kit majority, and is never flagged', async () => {
+    const { CONFLICT_QC: conflict } = await import('../testing/kitFixtures')
+    const tmt6 = (await import('../fixtures/cli-dev/pxd000001-qc/run.qc.tsv?raw')).default
+    const base = dataOf(BATCH_CASES.pxd003531)
+    const run = (qcs: string[]) => {
+      const jobs = qcs.map((_, i) => job(`/q/run${i}.mzML`, 'done', { outputs: { out: `/q/run${i}.tags.tsv` } }))
+      return buildSummary(jobs, new Map(qcs.map((qc, i) => [`/q/run${i}.mzML`, { ...base, qc }])), 'run-qc')
+    }
+    // Two TMT 6-plex runs and three conflicts (whose channels fit only
+    // TMTpro 18-plex): two calls, no majority; the conflicts are no TMTpro call.
+    const s = run([tmt6, conflict, tmt6, conflict, conflict])
+    expect(s.rows.map((r) => r.cells.kit.call)).toEqual(['tmt6plex', null, 'tmt6plex', null, null])
+    expect(s.rows[1].cells.kit.text).toBe('Conflict: TMT label, reporters fit TMTpro 18-plex')
+    expect(s.majority.kit).toMatchObject({ value: null, calls: 2, why: 'few' })
+    expect(s.rows.some((r) => r.differs.kit)).toBe(false)
+    // Three TMT 6-plex runs and a conflict: TMT 6-plex, 3 of 3 calls; the conflict is not flagged.
+    const t = run([tmt6, tmt6, conflict, tmt6])
+    expect(t.majority.kit).toEqual({ value: 'tmt6plex', calls: 3, count: 3, why: 'majority' })
+    expect(t.rows.map((r) => r.differs.kit)).toEqual([false, false, false, false])
+  })
+})

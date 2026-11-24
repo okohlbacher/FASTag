@@ -89,6 +89,18 @@ export function useSession(start: Origin = DEFAULTS, opts: { confirmed?: boolean
       return n
     })
   }
+  // A step change asked to focus its heading and say where the user is
+  // (SetupForm does it once the step's heading is shown, so a caller in
+  // another view can switch to Setup first).
+  // The request also renders when @p n is the step shown already (a Go to
+  // Inputs from Inputs still moves focus to its heading).
+  const stepFocus = useRef(false)
+  const [, setStepFocusAsked] = useState(0)
+  const goStep = (n: Step): void => {
+    stepFocus.current = true
+    setStepFocusAsked((k) => k + 1)
+    setStep(n)
+  }
   const [carried, setCarried] = useState<CarryNote | null>(null)
   // Where the form's values came from, and the values that origin gives
   // (before reports are moved beside the input): the footer's diff is the
@@ -456,6 +468,8 @@ export function useSession(start: Origin = DEFAULTS, opts: { confirmed?: boolean
     setAdvancedOpen,
     step,
     setStep,
+    goStep,
+    stepFocus,
     // The step the task was changed from (step 1 returns there).
     cameFrom: (): Step => cameFrom.current,
     taskConfirmed,

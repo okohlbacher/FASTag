@@ -30,6 +30,8 @@ import type {
   Settings,
   SpeciesReport,
   SpectrumDump,
+  FastaDatabase,
+  FastaSegment,
   SpectrumSupport,
   TaxdbInfo,
   TaxonomyStatus,
@@ -136,6 +138,15 @@ export interface MockBridge extends FastagApi {
   spectrumDumps: Record<string, string>
   spectrumMissing: string[]
   spectrumCalls: { input: string; nativeId: string; params: Record<string, unknown> | null }[]
+  // fasta_segment: path -> identifier -> "description\tsequence" (or the
+  // sequence alone; an identifier given twice: a list of both). The file
+  // read is the run's: fastaRuns[tags][database], else the database in the
+  // parameters of the record that wrote @p tags (historyOf); a tags table
+  // of no run, or a run without that database, is refused as fasta.rs
+  // refuses it.
+  fastaFiles: Record<string, Record<string, string | string[]>>
+  fastaRuns: Record<string, Partial<Record<FastaDatabase, string>>>
+  fastaCalls: { tags: string; database: FastaDatabase; path: string | null; identifier: string; start: number; end: number }[]
   taxdbInfoResult: TaxdbInfo | null
   // Where a -species run finds the index (default: found, as an install
   // with the taxonomy asset unpacked); taxonomyStatusCalls: the -taxdb asked.
@@ -403,6 +414,9 @@ export function installMockBridge(): MockBridge {
     spectrumDumps: {},
     spectrumMissing: [],
     spectrumCalls: [],
+    fastaFiles: {},
+    fastaRuns: {},
+    fastaCalls: [],
     taxdbInfoResult: null,
     taxonomyStatusResult: { index: '/app/taxonomy/tax_k7.taxdb', dir: '/app/taxonomy', expected: '/app/taxonomy/tax_k7.taxdb', fromEnv: false },
     taxonomyStatusCalls: [],
@@ -623,6 +637,25 @@ export function installMockBridge(): MockBridge {
       else if (nativeId in mock.spectrumDumps) d = { ...base, ok: true, code: 0, missing: false, stdout: mock.spectrumDumps[nativeId], reason: null }
       else d = { ...base, ok: false, code: 6, missing: false, stdout: '', reason: `-dump_spectrum: no spectrum of '${input}' has the native ID '${nativeId}'.` }
       return Promise.resolve(d)
+    },
+    fastaSegment: (tags, database, identifier, start, end) => {
+      const run = mock.fastaRuns[tags] ?? (mock.history.find((r) => r.outputs.includes(tags))?.params as Record<string, unknown> | undefined)
+      const given = run?.[database]
+      const path = typeof given === 'string' && given !== '' ? given : null
+      mock.fastaCalls.push({ tags, database, path, identifier, start, end })
+      if (!run) return Promise.reject(`${tags} was not written by a run of this app`)
+      const db = path ? mock.fastaFiles[path] : undefined
+      if (!path || !db) return Promise.reject(`the run that wrote ${tags} recorded no -${database} database it read`)
+      const e = db[identifier]
+      if (e == null) return Promise.reject(`${identifier} is not in ${path}`)
+      if (Array.isArray(e)) return Promise.resolve({ identifier, description: '', length: 0, start, end, sequence: '', occurrences: e.length })
+      const tab = e.indexOf('\t')
+      const description = tab >= 0 ? e.slice(0, tab) : ''
+      const seq = tab >= 0 ? e.slice(tab + 1) : e
+      const s = Math.min(Math.max(1, start), seq.length)
+      const t = Math.min(Math.max(s, end), seq.length)
+      const out: FastaSegment = { identifier, description, length: seq.length, start: s, end: t, sequence: seq.slice(s - 1, t), occurrences: 1 }
+      return Promise.resolve(out)
     },
     resultsQuery: (path, view, offset, limit) => {
       mock.resultsQueryCalls.push({ path, view, offset, limit })

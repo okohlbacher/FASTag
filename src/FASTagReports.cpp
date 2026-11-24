@@ -26,7 +26,8 @@ void TOPPFASTag::appendField_(std::string& buf, const std::string& text)
   for (char c : text) buf += (c == '\t' || c == '\r' || c == '\n') ? ' ' : c;
 }
 
-std::string TOPPFASTag::tagHeader_(bool proforma, bool res_conf, bool usi, bool hyp, bool ion_series, bool terminus)
+std::string TOPPFASTag::tagHeader_(bool proforma, bool res_conf, bool usi, bool hyp, bool ion_series, bool terminus,
+                                   bool db_proteins)
 {
   std::string h = "spectrum\ttag\tlength\tcharge\tnterm_mass\tcterm_mass\textended"
                   "\tgapped\tevalue\tmin_conf\tmean_conf\tfasta_hit";
@@ -35,7 +36,8 @@ std::string TOPPFASTag::tagHeader_(bool proforma, bool res_conf, bool usi, bool 
   if (usi) h += "\tusi";
   if (hyp) h += "\tprec_charge\tcharge_src\tiso_offset\tselected";
   if (ion_series) h += "\tion_series";  // 1.12 #15 phase B: after #6's, by or cz
-  if (terminus) h += "\tseries\tterminus";  // -terminus: last
+  if (terminus) h += "\tseries\tterminus";  // -terminus
+  if (db_proteins) h += "\tdb_proteins\tdb_genes\tdb_protein_count";  // -fasta_proteins: last
   if (g_path_peaks) h += "\tpath_mz";  // FASTAG_PATH_PEAKS=1 (tests only)
   return h + "\n";
 }
@@ -46,7 +48,8 @@ void TOPPFASTag::appendTagRow_(std::string& buf, const FASTag::Tag& t,
                          bool want_res_conf, const std::string& usi,
                          const FASTag::Hyp::Hypothesis* hyp,
                          bool want_series,
-                         const FASTag::Terminus::Call* term)
+                         const FASTag::Terminus::Call* term,
+                         const std::string* db_cells)
 {
   using FASTag::appendNum;
   constexpr auto fixed = std::chars_format::fixed;
@@ -97,6 +100,7 @@ void TOPPFASTag::appendTagRow_(std::string& buf, const FASTag::Tag& t,
     buf += '\t'; buf += term->series;
     buf += '\t'; buf += term->terminus;
   }
+  if (db_cells) { buf += '\t'; buf += *db_cells; }  // -fasta_proteins (dbProteinCells)
   if (g_path_peaks)
   {
     buf += '\t';

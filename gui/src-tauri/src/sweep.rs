@@ -418,6 +418,7 @@ mod tests {
             params: None,
             tags: None,
             workflow: None,
+            databases: Vec::new(),
         }
     }
 

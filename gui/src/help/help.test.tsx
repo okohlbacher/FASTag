@@ -1,7 +1,7 @@
 // Help: every link lands on a section that exists, every parameter has a
 // settings entry, the troubleshooting covers what the app can show, and the
 // view is reachable and usable from the keyboard.
-import { act, fireEvent, render, screen, within } from '@testing-library/react'
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import App from '../App'
 import DigestPanel, { REASON } from '../DigestPanel'
@@ -9,7 +9,9 @@ import { parseReport } from '../digestReport'
 import { PARAM_BY_NAME, RENDERED, SECTIONS, defaultText } from '../paramLayout'
 import manifest from '../params.generated.json'
 import { installMockBridge } from '../testing/mockBridge'
-import { click, flush, showStep } from '../testing/render'
+import { click, flush, goTo, key, renderApp as renderSetupApp, renderColdApp, showStep } from '../testing/render'
+import { isMac } from '../setup/shortcuts'
+import qcTsv from '../fixtures/cli-1.15/ecoli_ms2_small_0.3da.qc.tsv?raw'
 import nocallTsv from '../fixtures/digest_nocall.tsv?raw'
 import digestTsv from '../fixtures/digest.tsv?raw'
 import labelTsv from '../fixtures/label.tsv?raw'
@@ -59,6 +61,21 @@ describe('help: settings reference', () => {
       expect(h.text, n).toMatch(/\.$/)
       if (h.tip) expect(h.tip, n).toMatch(/[.)]$/)
     }
+  })
+
+  // Cancel has one home, the run status pill in the app bar (shell/TopBar.tsx):
+  // Help says where it is, and never sends the user to a second Cancel.
+  it('Help places Cancel in the run status at the top right, on every view', () => {
+    let text = ''
+    for (const p of PAGES) {
+      resetHelp()
+      act(() => showHelpPage(p.id))
+      const { container, unmount } = render(<HelpView />)
+      text += ' ' + (container.textContent ?? '')
+      unmount()
+    }
+    expect(text).toMatch(/Cancel, in the run status at the top right on every view/)
+    expect(text).not.toMatch(/Cancel (in|on) the (action|run) bar|running state'?s? Cancel/i)
   })
 
   it('a default named in a tip is the CLI default', () => {
@@ -350,5 +367,95 @@ describe('help: in the app', () => {
     const entry = document.getElementById('faq-digest-low_resolution') as HTMLDetailsElement
     expect(entry.open).toBe(true)
     expect(entry.querySelector('summary')?.textContent).toMatch(/the fragment tolerance is in Da/)
+  })
+})
+
+// Help state, read beside the App.
+let probed = { open: false, target: null as { id: string } | null }
+function HelpProbe(): null {
+  const h = useHelp()
+  probed = { open: h.open, target: h.target }
+  return null
+}
+const helpButton = (): HTMLElement => screen.getByRole('button', { name: 'Help' })
+const panelOpen = (): boolean => !!screen.queryByRole('navigation', { name: 'Help pages' })
+
+describe('help: one page per screen, whichever way it opens', () => {
+  it('F1, ? and the app bar\'s Help open the page of the step shown, not the last page seen', async () => {
+    installMockBridge()
+    await renderSetupApp()
+    render(<HelpProbe />)
+    const openers: [string, () => Promise<void>][] = [
+      ['the app bar', () => click(helpButton())],
+      ['F1', () => key({ key: 'F1' })],
+      ['?', () => key({ key: '?' }, document.body)]
+    ]
+    for (const [, open] of openers) {
+      // The last page seen is another one.
+      await act(async () => openHelp('glossary'))
+      await act(async () => closeHelp())
+      await open()
+      expect(panelOpen()).toBe(true)
+      expect(probed.target?.id).toBe('files-inputs')
+      await key({ key: 'Escape' }, document.body)
+      expect(panelOpen()).toBe(false)
+    }
+  })
+
+  it('in Results, Help opens the page of the tab shown, not a stored tab that is gone', async () => {
+    const mock = installMockBridge()
+    mock.reportFiles['/old/run07.qc.tsv'] = qcTsv
+    mock.nextPickReport = '/old/run07.qc.tsv'
+    await renderColdApp(mock)
+    render(<HelpProbe />)
+    await goTo('results')
+    await click(screen.getByRole('button', { name: 'Open report…' }))
+    const selected = (): string | undefined => screen.getAllByRole('tab').find((t) => t.getAttribute('aria-selected') === 'true')?.textContent ?? undefined
+    await waitFor(() => expect(selected()).toBe('QC'))
+    // Export asks for the Tags tab, which this report has none of: QC stays shown.
+    await act(async () => mock.emitMenu('export'))
+    expect(screen.getAllByRole('tab').map((t) => t.textContent)).not.toContain('Tags')
+    expect(selected()).toBe('QC')
+    await click(helpButton())
+    expect(probed.target?.id).toBe('workflow-run-qc')
+  })
+})
+
+describe('search settings: one path from the button, the keys and the menu', () => {
+  const box = (): HTMLElement | null => screen.queryByRole('combobox', { name: /Search parameters/ })
+  const searchBtn = (): HTMLElement => screen.getByRole('button', { name: /Search settings…/ })
+  const mod = isMac() ? { metaKey: true } : { ctrlKey: true }
+  for (const [what, press] of [
+    ['Cmd/Ctrl+K', () => key({ key: 'k', ...mod }, document.body)],
+    ['/', () => key({ key: '/' }, document.body)]
+  ] as const) {
+    it(`${what} with Help open closes Help and opens the search; Esc returns to the Search button`, async () => {
+      installMockBridge()
+      await renderSetupApp()
+      render(<HelpProbe />)
+      await click(helpButton())
+      expect(panelOpen()).toBe(true)
+      await press()
+      expect(panelOpen()).toBe(false)
+      expect(box()).not.toBeNull()
+      // Closing Help gives focus to no opener: the search input keeps it.
+      await act(async () => { await new Promise((resolve) => setTimeout(resolve, 0)) })
+      expect(document.activeElement).toBe(box())
+      await act(async () => {
+        fireEvent.keyDown(box()!, { key: 'Escape' })
+      })
+      await act(async () => { await new Promise((resolve) => setTimeout(resolve, 0)) })
+      expect(box()).toBeNull()
+      expect(document.activeElement).toBe(searchBtn())
+    })
+  }
+
+  it('the native menu item with Help open does the same', async () => {
+    const mock = installMockBridge()
+    await renderSetupApp()
+    await click(helpButton())
+    await act(async () => mock.emitMenu('search-params'))
+    expect(panelOpen()).toBe(false)
+    expect(box()).not.toBeNull()
   })
 })

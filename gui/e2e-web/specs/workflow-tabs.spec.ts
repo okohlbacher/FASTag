@@ -27,9 +27,9 @@ for (const w of RUNS) {
     await expect
       .poll(async () => (await page.getByRole('tab').allTextContents()).map((t) => t.replace(/\d+$/, '')))
       .toEqual(w.tabs)
-    // The Overview names the workflow.
+    // The Overview names the workflow, in the page header.
     await page.getByRole('tab', { name: 'Overview' }).click()
-    await expect(page.locator('.overview-sub')).toContainText(w.name)
+    await expect(page.locator('.view-results .page-header .run-workflow')).toContainText(w.name)
   })
 }
 

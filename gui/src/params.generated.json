@@ -627,6 +627,15 @@
       ]
     },
     {
+      "name": "fasta_proteins",
+      "type": "int",
+      "default": "0",
+      "description": "Name up to <n> of the -fasta proteins each matching tag occurs in. Appends the columns db_proteins (identifier@start-end, 1-based, ';'-separated), db_genes (the GN= of each) and db_protein_count (all of them); entrapment matches name entrapment proteins. 0 writes none. Requires -fasta",
+      "required": false,
+      "toppAdvanced": false,
+      "min": 0
+    },
+    {
       "name": "fixed_modifications",
       "type": "string-list",
       "default": [

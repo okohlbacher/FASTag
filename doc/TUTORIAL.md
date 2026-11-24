@@ -122,6 +122,11 @@ informative lengths, add `-min_filter_length 5` (33 rows from 12 spectra), or ex
 off b ions). The rows with the lowest E-value are length-5 tags of rplF (`GWAQA`,
 E = 3.2e-7) and prsA (`SLGDA`).
 
+To see which protein a tag matched and where, add `-fasta_proteins 3`: three more columns,
+`db_proteins` (`VIMSS17368@61-65` for `GWAQA`: the protein and the 1-based positions of the
+match), `db_genes` (the `GN=` of the FASTA header, `-` here because this FASTA has none) and
+`db_protein_count` (how many proteins hold the tag).
+
 ### Step 3: where do the tags lie in the proteins?
 
 `-recon_out` places each reported tag on tryptic peptides of the database and checks both

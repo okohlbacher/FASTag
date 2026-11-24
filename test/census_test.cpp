@@ -1,7 +1,11 @@
 // Census (src/Census.h): the per-spectrum status, its precedence on synthetic
 // spectra run through the real tagger, the Gini coefficient, the best tag
 // (minimum E-value, not the first row), the interval-union tag_cover, the row
-// and summary formatting, tab escaping and the tally invariant.
+// and summary formatting, tab escaping and the tally invariant; census 2's
+// max_len and res_cover (residues of the reported tags placed through the
+// precursor mass) and the run row max_tags; census 3's orientation-aware
+// res_cover (complementary b/y and c/z-dot ladders over the same residues
+// count once).
 //
 // Every check here was mutation-checked: the rule it names was broken on
 // purpose and the check confirmed to fail.
@@ -20,6 +24,7 @@
 #include "Census.h"
 #include "CliParam.h"
 #include "FASTagger.h"
+#include "IonSeries.h"
 #include "SpectrumSampler.h"
 
 #include <OpenMS/CHEMISTRY/AASequence.h>
@@ -275,7 +280,7 @@ int main(int argc, char** argv)
     std::printf("5. tag_cover\n");
   }
 
-  // 6. Rows: 20 fields, tab escaping, empty fields where nothing was computed.
+  // 6. Rows: 22 fields, tab escaping, empty fields where nothing was computed.
   {
     auto fields = [](const std::string& line) {
       std::vector<std::string> f(1);
@@ -287,9 +292,14 @@ int main(int argc, char** argv)
       return f;
     };
     const auto hdr = fields(C::header());
-    CHECK(hdr.size() == 20, "header has %zu fields", hdr.size());
-    CHECK(hdr[0] == "index" && hdr[1] == "spectrum" && hdr[11] == "status" && hdr[19] == "tag_cover",
+    CHECK(hdr.size() == 23, "header has %zu fields", hdr.size());
+    CHECK(hdr[0] == "index" && hdr[1] == "spectrum" && hdr[11] == "status" && hdr[19] == "tag_cover"
+              && hdr[20] == "max_len" && hdr[21] == "res_cover" && hdr[22] == "res_cover_exact",
           "header columns out of place");
+    const auto hion = fields(C::header(true, true));
+    CHECK(hion.size() == 28 && hion[21] == "res_cover" && hion[22] == "res_cover_exact"
+              && hion[23] == "best_ion_series",
+          "max_len/res_cover/res_cover_exact are not before best_ion_series");
 
     double pmz = 0;
     const MSSpectrum clean = ladder("VGAHAGEYGAEALER", pmz);
@@ -299,10 +309,26 @@ int main(int argc, char** argv)
     C::appendRow(line, r, "scan=1\tx\ny");
     const auto f = fields(line);
     CHECK(line.back() == '\n' && std::count(line.begin(), line.end(), '\n') == 1, "row is not one line");
-    CHECK(f.size() == 20, "row has %zu fields", f.size());
+    CHECK(f.size() == 23, "row has %zu fields", f.size());
     CHECK(f[1] == "scan=1 x y", "native id not escaped: '%s'", f[1].c_str());
     CHECK(f[0] == "17" && f[4] == "0" && f[5] == "2" && f[11] == "tagged", "row values wrong");
-    CHECK(f[14].empty(), "best_evalue written without a best tag");
+    CHECK(f[14].empty() && f[20].empty() && f[21].empty() && f[22].empty(),
+          "best tag fields written without a best tag");
+    r.has_best = true;
+    r.best.n_res = 4;
+    r.max_len = 7;
+    r.res_cover = 11;
+    std::string lb;
+    C::appendRow(lb, r, "s");
+    const auto fb = fields(lb);
+    CHECK(fb.size() == 23 && fb[15] == "4" && fb[20] == "7" && fb[21] == "11" && fb[22] == "1",
+          "max_len/res_cover/res_cover_exact: '%s' '%s'",
+          fb.size() == 23 ? fb[20].c_str() : "?", fb.size() == 23 ? fb[21].c_str() : "?");
+    r.res_cover_exact = false;
+    std::string lx;
+    C::appendRow(lx, r, "s");
+    const auto fx = fields(lx);
+    CHECK(fx.size() == 23 && fx[22] == "0", "res_cover_exact 0 not written");
 
     C::Row e;
     e.status = C::Status::NO_PRECURSOR;
@@ -310,8 +336,8 @@ int main(int argc, char** argv)
     std::string le;
     C::appendRow(le, e, "s");
     const auto fe = fields(le);
-    CHECK(fe.size() == 20 && fe[3].empty() && fe[4].empty() && fe[5].empty() && fe[7].empty()
-              && fe[12].empty() && fe[13].empty(),
+    CHECK(fe.size() == 23 && fe[3].empty() && fe[4].empty() && fe[5].empty() && fe[7].empty()
+              && fe[12].empty() && fe[13].empty() && fe[22].empty(),
           "no_precursor row writes precursor or tagger fields");
     std::printf("6. rows\n");
   }
@@ -346,7 +372,7 @@ int main(int argc, char** argv)
       return nullptr;
     };
     for (const auto& r : rows) CHECK(r.section == "census", "row %s not in section census", r.key.c_str());
-    CHECK(find("census_version") && find("census_version")->value == "1", "census_version");
+    CHECK(find("census_version") && find("census_version")->value == "3", "census_version");
     CHECK(find("input_spectra") && find("input_spectra")->value == "12", "input_spectra");
     CHECK(find("ms2_seen") && find("ms2_seen")->value == "5", "ms2_seen");
     CHECK(find("ms2_processed") && find("ms2_processed")->value == "3", "ms2_processed");
@@ -373,6 +399,150 @@ int main(int argc, char** argv)
     CHECK(C::quantile(q, 0.5) == 3 && std::fabs(C::quantile(q, 0.1) - 1.4) < 1e-12 && C::quantile(q, 0.9) == 4.6,
           "quantile (type 7)");
     std::printf("7. tally and summary\n");
+  }
+
+  // 8. Census 2: residue cover by hand, then on real tags of a y-only ladder.
+  {
+    using Spans = std::vector<std::pair<double, double>>;
+    // Tag A: nterm 0, 1+, path 100..400 in steps of 100 -> residues [0,100],
+    // [100,200], [200,300] from the N-terminus.
+    Spans sp;
+    C::addResidueSpans(sp, 0, {100, 200, 300, 400}, {1, 1, 1}, 1, 3, 300);
+    CHECK(sp.size() == 3 && sp[0] == std::make_pair(0.0, 100.0) && sp[2] == std::make_pair(200.0, 300.0),
+          "tag A spans");
+    // Tag B: nterm 100, two of A's residues read elsewhere in m/z -> nothing new.
+    C::addResidueSpans(sp, 100, {500, 600, 700}, {1, 1}, 1, 2, 200);
+    // Tag D: A read 1.5 Da off -> the same three residues (midpoints inside A's).
+    C::addResidueSpans(sp, 1.5, {100, 200, 300, 400}, {}, 1, 3, 300);
+    // Tag C: nterm 260, 2+, steps of 50 m/z = 100 Da -> [260,360], [360,460]:
+    // midpoints 310 and 410, both new (310 is past A's last residue, 300).
+    C::addResidueSpans(sp, 260, {100, 150, 200}, {1, 1}, 2, 2, 200);
+    // Tag G: one gap step of two residues, nterm 1000 -> [1000,1100], [1100,1200].
+    C::addResidueSpans(sp, 1000, {100, 300}, {2}, 1, 2, 200);
+    // Tag E: no path -> res_mass split evenly: [2000,2050], [2050,2100].
+    C::addResidueSpans(sp, 2000, {}, {}, 1, 2, 100);
+    CHECK(sp.size() == 3 + 2 + 3 + 2 + 2 + 2, "spans %zu", sp.size());
+    Spans copy = sp;
+    const std::size_t n = C::residueCover(sp);
+    CHECK(n == 3 + 2 + 2 + 2, "res_cover %zu, want 9", n);
+    std::reverse(copy.begin(), copy.end());
+    CHECK(C::residueCover(copy) == n, "res_cover depends on the order");
+    Spans none;
+    CHECK(C::residueCover(none) == 0, "empty res_cover");
+
+    // A y-only ladder: every tag is a y read, so every residue boundary the
+    // tags give must be a prefix (b) residue sum of the peptide: the tags
+    // are placed through the precursor mass, not by their m/z.
+    const std::string pep = "VGAHAGEYGAEALER";
+    const AASequence aa = AASequence::fromString(pep);
+    const double pmz = (aa.getMonoWeight() + 2 * Constants::PROTON_MASS_U) / 2;
+    MSSpectrum y;
+    for (size_t i = 1; i < aa.size(); ++i) y.emplace_back(aa.getSuffix(i).getMonoWeight(Residue::YIon, 1), 1.0);
+    y.sortByPosition();
+    std::vector<double> prefix(1, 0.0);
+    for (size_t i = 1; i <= aa.size(); ++i)
+      prefix.push_back(aa.getPrefix(i).getMonoWeight(Residue::Internal));
+    const std::vector<FASTag::Tag> tags = FASTag::tagSpectrum(y, pmz, 2, p, tab);
+    CHECK(!tags.empty(), "no tags on the y ladder");
+    Spans ys;
+    std::size_t max_len = 0, bad = 0;
+    for (const FASTag::Tag& t : tags)
+    {
+      max_len = std::max(max_len, t.n_res);
+      Spans one;
+      C::addResidueSpans(one, t.nterm_mass, t.path_mz, t.step_res, t.charge, t.n_res, t.res_mass);
+      CHECK(one.size() == t.n_res, "tag %s gave %zu residues", t.seq.c_str(), one.size());
+      for (const auto& [lo, hi] : one)
+      {
+        bool lo_ok = false, hi_ok = false;
+        for (const double m : prefix)
+        {
+          lo_ok = lo_ok || std::fabs(lo - m) < 0.02;
+          hi_ok = hi_ok || std::fabs(hi - m) < 0.02;
+        }
+        // A gap's two residues split its mass: only its outer ends are boundaries.
+        if (t.gapped ? !(lo_ok || hi_ok) : !(lo_ok && hi_ok)) ++bad;
+      }
+      ys.insert(ys.end(), one.begin(), one.end());
+    }
+    CHECK(bad == 0, "%zu residues of the y tags are not at prefix masses", bad);
+    // y1..y14 bound residues 2..14 (13), and the tags cover them all.
+    const std::size_t yc = C::residueCover(ys);
+    CHECK(yc == 13 && yc >= max_len, "y-ladder res_cover %zu (max_len %zu)", yc, max_len);
+    std::printf("   y ladder: %zu tags, max_len %zu, res_cover %zu\n", tags.size(), max_len, yc);
+
+    // census 3: complementary ladders over the same residues (E P T of
+    // PEPTIDEK, residues 2..4, precursor 1+) count once. Each tag is built
+    // as FASTagger writes it: path_mz the 1+ ions ascending, one residue per
+    // step, and nterm_mass under the y (z-dot) assumption,
+    // nterm = M - (high_mz - H+) [- (H2O - offC) under c/z].
+    {
+      const AASequence pt = AASequence::fromString("PEPTIDEK");
+      const double M = pt.getMonoWeight();
+      const double H = Constants::PROTON_MASS_U;
+      const double W = EmpiricalFormula("H2O").getMonoWeight();
+      std::vector<double> pre(1, 0.0);
+      for (size_t i = 1; i <= pt.size(); ++i) pre.push_back(pt.getPrefix(i).getMonoWeight(Residue::Internal));
+      const double mres = pre.back();
+      for (const auto series : {FASTag::IonSeries::Series::BY, FASTag::IonSeries::Series::CZ})
+      {
+        const FASTag::IonSeries::IonPair ip = FASTag::IonSeries::ionPair(series);
+        const bool cz = series == FASTag::IonSeries::Series::CZ;
+        const char* nm = cz ? "c/z" : "b/y";
+        // N-terminal ions n_1..n_4 (P, PE, PEP, PEPT), C-terminal ions of the
+        // suffixes from residue 2..5 on (EPTIDEK .. IDEK).
+        std::vector<double> nmz, cmz;
+        for (size_t i = 1; i <= 4; ++i) nmz.push_back(pre[i] + ip.offN + H);
+        for (size_t i = 5; i >= 2; --i) cmz.push_back(mres - pre[i - 1] + ip.offC + H);
+        const double corr = cz ? (W - ip.offC) : 0.0;
+        const double n_nterm = M - (nmz.back() - H) - corr;  // the N-series tag, read as if C-series
+        const double c_nterm = M - (cmz.back() - H) - corr;
+        const double axis = M - W + ip.reversedOffset();
+        CHECK(std::fabs(c_nterm - pre[1]) < 1e-6, "%s: the C-series tag's nterm %.6f, want %.6f", nm, c_nterm, pre[1]);
+        const std::vector<std::uint8_t> one3 = {1, 1, 1};
+        const auto spans = [&](double nterm, const std::vector<double>& mz, C::Orientation o) {
+          Spans v;
+          C::addResidueSpans(v, nterm, mz, one3, 1, 3, mz.back() - mz.front(), o, axis);
+          return v;
+        };
+        // The 1.15 placement (every tag a C-series read) counts them twice.
+        Spans fw = spans(n_nterm, nmz, C::Orientation::Forward);
+        Spans fy = spans(c_nterm, cmz, C::Orientation::Forward);
+        fw.insert(fw.end(), fy.begin(), fy.end());
+        CHECK(C::residueCover(fw) == 6, "%s: both forward: res_cover %zu, want 6 (the mirror)", nm, C::residueCover(fw));
+        // Known orientation: the N-series tag reversed lands on the true residues.
+        Spans rb = spans(n_nterm, nmz, C::Orientation::Reversed);
+        const Spans ry = spans(c_nterm, cmz, C::Orientation::Forward);
+        std::sort(rb.begin(), rb.end());
+        Spans rys = ry;
+        std::sort(rys.begin(), rys.end());
+        bool same = rb.size() == 3 && rys.size() == 3;
+        for (size_t i = 0; same && i < 3; ++i)
+          same = std::fabs(rb[i].first - rys[i].first) < 1e-6 && std::fabs(rb[i].second - rys[i].second) < 1e-6
+              && std::fabs(rys[i].first - pre[i + 1]) < 1e-6 && std::fabs(rys[i].second - pre[i + 2]) < 1e-6;
+        CHECK(same, "%s: the reversed N-series spans are not the C-series spans at residues 2..4", nm);
+        Spans known = rb;
+        known.insert(known.end(), ry.begin(), ry.end());
+        CHECK(C::residueCover(known) == 3, "%s: known orientation: res_cover %zu, want 3", nm, C::residueCover(known));
+        // Unresolved: both folded onto the lower half, the lower bound.
+        Spans ub = spans(n_nterm, nmz, C::Orientation::Unresolved);
+        const Spans uy = spans(c_nterm, cmz, C::Orientation::Unresolved);
+        ub.insert(ub.end(), uy.begin(), uy.end());
+        CHECK(C::residueCover(ub) == 3, "%s: unresolved: res_cover %zu, want 3", nm, C::residueCover(ub));
+        // A tag across the centre is folded whole: its residues stay distinct.
+        Spans mid;
+        C::addResidueSpans(mid, 0.5 * axis - 150, {100, 200, 300, 400}, one3, 1, 3, 300, C::Orientation::Unresolved,
+                           axis);
+        CHECK(C::residueCover(mid) == 3, "%s: a centred tag folded to %zu residues", nm, C::residueCover(mid));
+      }
+      std::printf("   complementary ladders: b/y and c/z-dot count once\n");
+    }
+
+    const FASTag::Digest::Row mt = C::maxTagsRow(50, 2);
+    CHECK(mt.section == "run" && mt.key == "max_tags" && mt.value == "50" && mt.description.find("at most 100") != std::string::npos,
+          "max_tags row: %s %s '%s'", mt.section.c_str(), mt.value.c_str(), mt.description.c_str());
+    CHECK(C::maxTagsRow(0, 1).value == "0", "max_tags 0");
+    std::printf("8. census 2: max_len, res_cover, max_tags\n");
   }
 
   std::printf(failures ? "\n%d FAILURES\n" : "\nall checks passed\n", failures);

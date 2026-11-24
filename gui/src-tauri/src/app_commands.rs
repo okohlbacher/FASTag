@@ -40,6 +40,7 @@ pub const APP_COMMANDS: &[&str] = &[
     "taxonomy_status",
     "spectrum_support",
     "spectrum_peaks",
+    "fasta_segment",
     "load_settings",
     "save_last",
     "save_preset",

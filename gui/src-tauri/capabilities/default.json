@@ -42,6 +42,7 @@
     "allow-taxonomy-status",
     "allow-spectrum-support",
     "allow-spectrum-peaks",
+    "allow-fasta-segment",
     "allow-load-settings",
     "allow-save-last",
     "allow-save-preset",

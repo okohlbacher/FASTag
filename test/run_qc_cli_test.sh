@@ -11,6 +11,9 @@
 #   (e) the fixture's MS level counts equal its "ms level" cvParams
 #   (f) MGF input: written; every MS2 counted, analyser class unknown
 #   (g) five fields per line; the run rows first, then section qc
+#   (i) the kit call reads the label mass of the tag ends: with a Da
+#       tolerance no label call (low_resolution), at 10 ppm too few tags;
+#       either way reporters_only, never "no tag ends were counted"
 #   (h) run metadata: the fixture's instrument model, serial number
 #       (MS:1000529) and run startTimeStamp; MGF: all three n/a
 # Exits 77 (ctest SKIP) when the binary cannot start.
@@ -30,6 +33,7 @@ fail() { echo "FAIL: $*" >&2; exit 1; }
 run() { local log="$1"; shift; "$BIN" "$@" >"$log" 2>&1 || { cat "$log" >&2; fail "run failed: $*"; }; }
 # \r stripped: on Windows the QC file and the Python-written expectations end lines in CRLF.
 qcv() { awk -F'\t' -v k="$2" '{ sub(/\r$/, "") } $1 == "qc" && $2 == k { print $3; f = 1 } END { if (!f) print "MISSING" }' "$1"; }
+qcd() { awk -F'\t' -v k="$2" '{ sub(/\r$/, "") } $1 == "qc" && $2 == k { print $5 }' "$1"; }
 LOOSE=(-fragment_tolerance 0.3 -fragment_tolerance_unit Da)
 TIGHT=(-fragment_tolerance 0.02 -fragment_tolerance_unit Da)
 
@@ -46,7 +50,7 @@ tags.tsv" ] || fail "(a) a run without -qc_out wrote $(ls "$TMP/off" | tr '\n' '
 awk -F'\t' 'NF != 5 { bad = 1 } END { exit bad }' "$TMP/on/qc.tsv" || fail "(g) a line without five fields"
 first=$(awk -F'\t' 'NR == 2 { print $1 }' "$TMP/on/qc.tsv")
 [ "$first" = "run" ] || fail "(g) the first section is '$first', not run"
-[ "$(qcv "$TMP/on/qc.tsv" qc_version)" = "2" ] || fail "(g) qc_version"
+[ "$(qcv "$TMP/on/qc.tsv" qc_version)" = "3" ] || fail "(g) qc_version"
 
 # ---- (h) run metadata ---------------------------------------------------------------
 serial=$(grep -m1 -o 'accession="MS:1000529" name="instrument serial number" value="[^"]*"' "$IN" | sed 's/.*value="//; s/"$//')
@@ -104,6 +108,14 @@ want_share=$(awk -v a="$in_clusters" -v b="$red_n" 'BEGIN { printf "%.4f", a / b
 [ "$(qcv "$Q" reporter_tmt6plex)" = "absent" ] || fail "(b) TMT6 not absent"
 [ "$(qcv "$Q" reporter_itraq4plex)" = "absent" ] || fail "(b) iTRAQ4 not absent"
 [ "$(qcv "$Q" resolution_measured_FTMS_ms2)" = "n/a" ] || fail "(b) centroided MS2 resolution is not n/a"
+
+# ---- (i) the label evidence reaches the kit call ----------------------------------
+qcd "$Q" reporter_family_evidence | grep -q "fragment tolerance is in Da" \
+  || fail "(i) Da run: $(qcd "$Q" reporter_family_evidence)"
+run "$TMP/sp" -in "$SYN" -out "$TMP/sp.tsv" -fragment_tolerance 10 -fragment_tolerance_unit ppm -threads 2 -qc_out "$TMP/sqcp.tsv"
+[ "$(qcv "$TMP/sqcp.tsv" reporter_family_evidence)" = "reporters_only" ] || fail "(i) ppm run evidence"
+qcd "$TMP/sqcp.tsv" reporter_family_evidence | grep -q "too few tag ends" \
+  || fail "(i) ppm run: $(qcd "$TMP/sqcp.tsv" reporter_family_evidence)"
 
 # ---- (f) MGF ------------------------------------------------------------------------
 run "$TMP/m" -in "$MGF" -out "$TMP/m.tsv" "${LOOSE[@]}" -threads 2 -qc_out "$TMP/mqc.tsv"

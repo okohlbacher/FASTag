@@ -4,7 +4,7 @@
 // the public gate inputs (testing/batchFixtures.ts).
 
 import { act, screen, waitFor, within } from '@testing-library/react'
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { installMockBridge, type MockBridge } from '../testing/mockBridge'
 import { addBatch, click, goTo, renderColdApp, renderCharacterizeApp, startBatch, showStep } from '../testing/render'
 import { BATCH_CASES, DIA_REFUSAL, type BatchCase } from '../testing/batchFixtures'
@@ -99,6 +99,50 @@ describe('the batch summary', () => {
     expect(status).toContain('is raw DIA')
     expect(status).not.toContain('FASTAG_REFUSED')
     expect(cells(bodyRows()[1]).slice(3)).toEqual(['—', '—', '—', '—'])
+  })
+
+  // Codex round 2, 13: the recovery of a refused job is beside it in the
+  // queue, not only in the banner under it (which may be dismissed or below
+  // the fold): the short reason and the DIAspeXtract command to copy.
+  it('a refused job shows its short reason and its DIAspeXtract command beside it in the queue', async () => {
+    const writeText = vi.fn((_text: string) => Promise.resolve())
+    Object.defineProperty(navigator, 'clipboard', { value: { writeText }, configurable: true })
+    try {
+      const mock = installMockBridge()
+      await renderCharacterizeApp(mock)
+      serve(mock, 'a', BATCH_CASES.pxd003531)
+      await addBatch(mock, ['/d/a.mzML', '/d/dia.mzML'])
+      await startBatch()
+      await waitFor(() => expect(mock.runCalls).toHaveLength(1))
+      await act(async () => {
+        for (const l of BATCH_CASES.pxd003531.log.split('\n').filter(Boolean)) mock.emitLog(l)
+        mock.emitDone({ ok: true, code: 0, runId: mock.lastRunId })
+      })
+      await waitFor(() => expect(mock.runCalls).toHaveLength(2))
+      await act(async () => {
+        for (const l of DIA_REFUSAL.log.split('\n').filter(Boolean)) mock.emitLog(l)
+        mock.emitDone({ ok: false, code: 11, runId: mock.lastRunId })
+      })
+      const failed = await waitFor(() => {
+        const li = document.querySelector<HTMLElement>('ul.jobs li.job.failed')
+        expect(li).not.toBeNull()
+        return li!
+      })
+      // The banner is gone: the job still says what to do.
+      await click(within(screen.getByRole('alert')).getByRole('button', { name: 'Dismiss' }))
+      expect(screen.queryByRole('alert')).toBeNull()
+      expect(failed.querySelector('.js')?.textContent).toBe('Failed: raw DIA, not tagged (exit code 11)')
+      expect(failed.textContent).toContain('Make pseudo-DDA spectra with DIAspeXtract first.')
+      const copy = within(failed).getByRole('button', { name: 'Copy the DIAspeXtract command for dia.mzML' })
+      await click(copy)
+      expect(writeText).toHaveBeenCalledTimes(1)
+      expect(writeText.mock.calls[0][0]).toMatch(/^DIAspeXtract -in /)
+      expect(copy.textContent).toBe('Copied')
+      // A done job has none.
+      expect(document.querySelectorAll('ul.jobs .jrecover')).toHaveLength(1)
+    } finally {
+      Object.defineProperty(navigator, 'clipboard', { value: undefined, configurable: true })
+    }
   })
 
   it('exports the summary TSV: the table, cell for cell, through a .part-safe write', async () => {

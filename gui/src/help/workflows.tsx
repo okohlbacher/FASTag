@@ -49,7 +49,7 @@ export const WORKFLOWS: HelpPage = {
             <li>In Setup, choose the task, then switch Inputs (step 2) to <strong>Batch</strong> and add files or a folder. Every workflow runs on a batch; <strong>Characterize a run</strong> is the usual survey. An SDRF file is optional.</li>
             <li>Use <strong>Add files…</strong> (in Inputs; <strong>Add…</strong> in the Batch view) to select files or <strong>Add folder…</strong> for the spectra files directly inside a folder. Check the common settings in Setup; each file runs in turn with those settings.</li>
             <li>Use <strong>Change…</strong> beside Output folder (Inputs) or <strong>Choose output folder…</strong> (Batch view) if results should go elsewhere, for example when the inputs are read-only. <strong>Beside inputs</strong> restores the usual location. Changing the folder affects pending or retried jobs; completed jobs keep their existing output paths.</li>
-            <li><strong>Run N remaining files</strong> continues the queue. <strong>Retry failed</strong> retries failed jobs. Cancel stops the active job and the queue; it does not remove results of completed jobs.</li>
+            <li><strong>Run N files</strong> in the action bar of Setup (filled on Outputs) or <strong>Run N remaining files</strong> in the Batch view continues the queue. <strong>Retry failed</strong> retries failed jobs; once only failed files are left, it takes Run&apos;s place. Cancel, in the run status at the top right, stops the active job and the queue; it does not remove results of completed jobs.</li>
             <li>After processing stops, click a completed file to open its results. Each file&apos;s <strong>Log</strong> opens its own messages.</li>
           </ol>
           <p>
@@ -115,6 +115,10 @@ export const WORKFLOWS: HelpPage = {
             <strong>History</strong> lists runs started by this app, with their input, status, duration, tag count
             and output paths. It is a record of work, not a backup of the result files.
           </p>
+          <p>
+            Each row has <strong>Open</strong>; the other actions are under <strong>More</strong> (also from the
+            keyboard: arrow keys to move, Enter to choose, Escape to close).
+          </p>
           <ul>
             <li><strong>Open</strong> reads a completed run&apos;s output. <strong>Reveal</strong> locates it in the file manager. If it was moved or deleted, the recorded path cannot restore it.</li>
             <li><strong>Copy command</strong> copies the command recorded for that run, including its output paths.</li>
@@ -138,7 +142,8 @@ export const WORKFLOWS: HelpPage = {
         <>
           <p>
             <strong>Run QC</strong> writes a QC report of one run and opens it in the <strong>QC</strong> tab: MS/MS
-            counts and stated resolution by analyzer (ion trap, Orbitrap, TOF), precursor charges, the isobaric kit,
+            counts and stated resolution by analyzer (ion trap, Orbitrap, TOF), precursor charges, the isobaric kit (one kit, decided by the label mass on the tags where it
+            can be; otherwise the kits the reporter channels leave) with the number of spectra that show each reporter channel,
             tag yield and redundancy, and the instrument model, serial number and start time the file records.
           </p>
           <p>
@@ -190,6 +195,18 @@ export const WORKFLOWS: HelpPage = {
           <p>
             The score ranks spectra; it is not a quality call and not an error rate. It is experimental
             (<code>-census_score</code>): not yet validated on held-out data.
+          </p>
+          <p>
+            <strong>Reading the overview.</strong> Above the table, the overview counts every spectrum, whatever
+            the filter shows. The headline is the share with a <strong>strong tag</strong>: a best tag at or below
+            the Triage E-value. <strong>Tagged</strong> only says a tag passed <code>-max_evalue</code>; it is
+            not a quality call. The first chart sets the peptide length the precursor mass implies against the
+            length of the tags; if every tag has one length (no <code>-extension</code>), tag length says
+            nothing. The second shows how many tags a spectrum gives for its peaks, up to the{' '}
+            <code>-max_tags</code> cap (per seed length). The third shows how much of the peptide the tags
+            cover; on a census without <code>res_cover</code> it is approximate. Without a <code>-fasta</code>{' '}
+            match the app cannot tell a b from a y read, so the cover is folded: a lower bound, marked
+            &ldquo;approximate: orientation unresolved&rdquo;.
           </p>
         </>
       )

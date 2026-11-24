@@ -851,6 +851,7 @@ vendored.
 | `-search_decoy_prefix <s>` | `rev_` (Sage, MSFragger) / `DECOY_` (Comet) | Prefix of the decoys the engine generates (MSFragger: the decoys FASTag appends to `-fasta_out`, or the ones the input database holds) |
 | `-search_shifts <mode>`, `-search_shifts_out <file>`, `-shift_max_variable`, `-shift_max_offsets`, `-shift_expand_sites`, `-shift_site_min_share`, `-shift_site_min_count`, `-shift_site_min_ions` | none | Removed in 1.14 (failed both held-out tests, see Mass shifts as search configuration): accepted with a warning, no effect; `-search_config_out` is unchanged |
 | `-entrapment_fasta <file>` | none | Entrapment database (foreign species) calibrating a `q_db` column: the estimated false-match rate of the `-fasta` filter at each E-value (see q_db). Requires `-fasta` |
+| `-fasta_proteins <n>` | 0 | Name up to n of the `-fasta` proteins each written tag occurs in: appends `db_proteins` (`identifier@start-end`, 1-based, `;`-separated), `db_genes` (the `GN=` of each, `-` without one) and `db_protein_count` (all proteins), in the orientation of `fasta_hit`, targets before decoys; `efwd`/`erev` rows name `-entrapment_fasta` proteins. 0 writes none. Requires `-fasta` |
 | `-glyco` | off | Flag oxonium-bearing MS2 spectra to `<out>` with its extension replaced by `.glyco.tsv` (see Glyco flag) |
 | `-glyco_out <file>` | `<out>` with its extension replaced by `.glyco.tsv` | With `-glyco`: per-spectrum oxonium report |
 | `-glyco_min_fraction <f>` | 0.10 | With `-glyco`: summed oxonium intensity over base peak, the literature threshold |
@@ -1034,6 +1035,26 @@ matching tags are written, as `fwd` / `rev`, plus `efwd` / `erev` for
 entrapment-only matches under `-entrapment_fasta`. The `evalue` of a gapped row
 is the ranking value, E × `-gap_penalty`, so it can exceed `-max_evalue`; divide
 by the penalty for the raw E-value.
+
+**Database proteins** (`-fasta_proteins <n>`, 1.16). Three columns after the
+other optional ones (`q_db` stays last) say where each written tag lies in the
+`-fasta` database: `db_proteins`, the first n proteins as
+`identifier@start-end` (1-based residue positions of the database match,
+`;`-separated; a match through an isobaric respelling such as N for GG spans
+one residue more), `db_genes`, the `GN=` value of each (`-` where the header has
+none), and `db_protein_count`, the number of distinct proteins in all. Only
+occurrences in the orientation `fasta_hit` names count: a `fwd` row lists
+proteins holding the tag as written, a `rev` row proteins holding it reversed.
+Each protein is listed once, at its first occurrence; target proteins come
+before decoys (`rev_`, `DECOY_` and the other `-shortlist_decoy_affix`
+defaults), each in database order. `efwd`/`erev` rows name proteins of the
+`-entrapment_fasta`. The positions come from a suffix-array index over the
+database (about 6.5 bytes per residue, shared with `-recon_out` when it reads the
+same `-fasta`). Without the option `-out` is unchanged; the FASTag GUI sets it to
+3 whenever a FASTA is given. A protein is named by its identifier only: when
+entries of the database repeat an identifier, the run warns once (the count and
+the first one), and a position in such an identifier may be in any of its
+entries (the GUI does not align it).
 
 With a non-default `-unknown_charge` or `-isotope_error` (1.12), or `-check_header_charge both` (1.13), four columns
 follow the optional ones: `prec_charge` (the precursor charge the row was
@@ -1611,8 +1632,31 @@ all fragment charges), `n_compl` (kept peaks with a 1+ complement), `int_gini`
 the reported tag with the lowest E-value (not necessarily the first row with
 `-tag_lengths`): `best_evalue`, `best_len`, `best_min_conf`,
 `best_mean_conf`, `best_tic` (summed intensity of its peaks), plus
-`tag_cover` (m/z covered by the union of the reported tags). Fields that were
-not computed for a spectrum are empty.
+`tag_cover` (m/z covered by the union of the reported tags), `max_len`,
+`res_cover` and `res_cover_exact` (census formats 2 and 3, see below). Fields that were not computed for a
+spectrum are empty.
+
+`max_len` is the length of the longest reported tag, which differs from
+`best_len` under `-tag_lengths` or `-extension`. `res_cover` counts the
+residues of the peptide that the reported tags cover together. Each tag is
+first placed on the peptide as the tag TSV writes it (its low peak a y ion, or
+a z• ion under c/z): it starts `nterm_mass` from the N-terminus, so the
+precursor mass of the selected hypothesis maps the y ladder onto b positions,
+and each path step holds its residues (a gap's two residues share its mass). A
+tag read on the b (or c) ions lands so at its mirror image about
+S = M − H2O + (offC − offN) (M for b/y), and census format 3 corrects for it:
+a tag that matches `-fasta` (or `-entrapment_fasta`) in one orientation only is
+placed by it (a reverse-only match is a b or c read and is mirrored back to its
+true residues); any other tag, without `-fasta` or matching both ways, is
+folded as a whole onto the lower half (mirrored when its midpoint is above
+S/2), so a stretch read on both series lands on one interval.
+`res_cover_exact` is 1 when every reported tag was placed by its orientation
+and 0 when one was folded: `res_cover` is then a lower bound (residues that
+mirror each other about the centre count once). Residues of different tags are
+one residue when the midpoint of one lies inside the other; a residue counts
+once. Unlike `tag_cover`, which adds m/z over fragment charges and series,
+`res_cover` is in residues and can be compared with the peptide length.
+`res_cover` is at least `max_len`, and `max_len` is at least `best_len`.
 
 `status` is the first that applies: `empty` (no peaks), `no_precursor`,
 `no_signal` (no positive intensity), `bad_precursor` (m/z not finite or <= 0),
@@ -1623,7 +1667,11 @@ A status is not a quality call: `tagged` says a tag passed `-max_evalue`, not
 that it is right, and acquisition (DIA or DDA) is never a census status.
 
 The summary (`.census_summary.tsv`, the long form of the digest reports)
-starts with the `run` rows and adds section `census`: `census_version`,
+starts with the `run` rows, then the run row `max_tags` (the `-max_tags`
+cap that `n_found` and `n_reported` stop at, per seed length; 0 = no cap),
+and adds section `census`: `census_version` (3 after 1.15.7; 2 had no
+`res_cover_exact` and placed every tag as a y read; 1 had no `max_len`,
+`res_cover` or `max_tags`),
 `input_spectra` (all MS levels), `ms2_seen`, `ms2_processed`, `ms2_total`
 (empty when subsampling, because masked spectra are never read),
 `subsampled`, `subsample_basis`, `count_` and `share_` per status,
@@ -1712,7 +1760,7 @@ It reads the spectra the tagging pass reads anyway, plus at most 32 profile
 spectra per analyser class and MS level for the measured resolution, so it
 adds little to a run. With `-subsample_*` every count covers the spectra read
 (`spectra_read`, `subsampled`). It cannot be combined with `-stream`.
-`qc_version` (now 2) changes when a key, its meaning or its order changes.
+`qc_version` (now 3) changes when a key, its meaning or its order changes.
 
 - **Instrument and acquisition**, from the input's run metadata, for
   large-scale QC across runs. `instrument_model`: the PSI-MS model name
@@ -1767,13 +1815,54 @@ adds little to a run. With `-subsample_*` every count covers the spectra read
   family's lowest channel (`low_mass_cutoff`, e.g. ion-trap CID), when it was
   read out in an ion trap (`ion_trap_ms2`), or when it is empty. A family
   with 3 or more observed channels is present; then each kit is `present`
-  when every observed channel is one of its channels and `absent` otherwise,
-  and `reporter_compatible_kits` lists the present kits, smallest first (TMT6
+  when every observed channel is one of its channels and `absent` otherwise.
+  TMT 6-plex has two reagent generations and both count as `tmt6plex`: the
+  current 126/127N/128C/129N/130C/131 (OpenMS's table, MSnbase TMT6b) and
+  the original 126/127C/128C/129C/130C/131 (Dayon et al. 2008, MSnbase TMT6;
+  127C/129C at OpenMS's TMT10 m/z), which PXD000001 shows.
+  `reporter_compatible_kits` lists the present kits, smallest first (TMT6
   channels alone fit all five TMT kits; TMTpro shares TMT's masses). With
   fewer than 20 assessable MS2 a kit is `not_assessable` with the most
   frequent reason, and when the run has MS3 scans and no reporters in MS2 it
   is `not_assessable` (`sps_ms3_not_read`: an SPS-MS3 design puts the
   reporters in MS3, which FASTag does not read).
+- **Isobaric kit call.** `reporter_kit` names one kit: what was seen, not
+  what it could be. The label mass on the tag ends decides the family: TMT
+  (229.162932 Da, TMT 6/10/11) or TMTpro (304.207146 Da, TMTpro 16/18; for
+  iTRAQ reporters the same mass is iTRAQ8, 144.102063 Da iTRAQ4), by the
+  `-label_out` label call over the tags of the run (the tag ends are counted
+  for `-qc_out` too; the call needs a ppm fragment tolerance and 175
+  C-terminal tag ends). The kit is then the smallest kit of that label that
+  holds every observed channel: TMT channels without 131C are `tmt10plex`
+  (with both channels of an N/C pair, such as 127N and 127C; `tmt6plex`
+  when they are one 6-plex generation's), with 131C
+  `tmt11plex`; TMTpro without 134C/135N is `tmt16plex`. A larger kit whose
+  extra channels were not seen is never named, nor a kit of the other label.
+  `reporter_family_evidence` is `label_mass` (n = tag ends with the label;
+  `reporter_label_delta` gives the mass, n = filtered tags) or
+  `reporters_only` when the label does not decide (Da tolerance, too few
+  tags, no or two labels):
+  `reporter_kit_candidates` then lists the smallest kit per label the
+  channels allow (e.g. `tmt10plex,tmt16plex`) and `reporter_kit` is that kit
+  when only one is left, else `ambiguous`. When exactly one label passed but
+  none of its kits holds the observed channels (the TMT label with 134N
+  seen, say), the label mass and the channels disagree and no kit is called:
+  `reporter_kit` is `conflict`, `reporter_family_evidence` is
+  `label_conflict` (n = tag ends with the label; the description states both
+  pieces of evidence), `reporter_label_delta` gives the label's mass and
+  `reporter_kit_candidates` the kits the channels allow (e.g. `tmt18plex`).
+  The GUI shows "Conflict: TMT label, reporters fit TMTpro 18-plex" and
+  leaves the run out of the batch majority. Without a present family it is
+  `none`, or `not_assessable` when no family could be assessed.
+  `reporter_compatible_kits` is kept as before.
+- **Reporter channel counts.** `reporter_channel_<label>` (e.g.
+  `reporter_channel_127N`) counts the assessable MS2 of the family in which
+  the reporter is seen (within 20 ppm, at 3x the spectrum's median peak
+  intensity or more), n = the assessable MS2; `_share` is that count over
+  n, and the description gives the channel m/z. Every channel of the
+  decided label's kits is listed (TMT: the 11 of TMT 6/10/11, so unused
+  channels show 0); without a label decision every channel of each present
+  family (TMT and TMTpro: 18). No rows when no family is present.
 - **Tag yield.** `tag_yield`: the share of the MS2 spectra read whose best
   reported tag has E <= 0.01 (the census's best tag: after `-fasta` when it is
   given). It is the yield of the run as tagged: profile MS2 in an mzML are

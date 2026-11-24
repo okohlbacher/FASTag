@@ -1,0 +1,7 @@
+Modifications: Carbamidomethyl (C, fixed)
+Seed tag lengths: 3, 4
+Subsampling: tagging 60 of 7534 input spectra (seed 1)
+Census: 52 MS2 spectra read, 49 with a reported tag (0 placed), 3 no_tags -> run.census.tsv, summary -> run.census_summary.tsv
+52 MS2 spectra, 627 tags
+Subsumed tags dropped: 202
+FASTag took 0.11 s (wall), 0.23 s (CPU), 0.02 s (system), 0.21 s (user); Peak Memory Usage: 75 MB.

@@ -70,6 +70,8 @@
   --scrim: rgba(0, 0, 0, 0.35);
   --scrim-light: rgba(15, 18, 24, 0.25);
   --shadow: 0 8px 24px rgba(0, 0, 0, 0.18);
+  /* The edge of a table that scrolls sideways (.summary-wrap). */
+  --scroll-shadow: rgba(15, 18, 24, 0.16);
 
   /* Plot tokens: fixed light values for exported SVG/PNG figures, the same
      in both themes. */
@@ -104,6 +106,7 @@
     --brand-peaks: #939cab;
     --background: #16181d;
     --card: #16181d;
+    --scroll-shadow: rgba(0, 0, 0, 0.55);
     --panel: #1d2026;
     --border: rgba(255, 255, 255, 0.10);
     --foreground: #e6e8ec;
@@ -142,6 +145,7 @@
   --brand-peaks: #939cab;
   --background: #16181d;
   --card: #16181d;
+  --scroll-shadow: rgba(0, 0, 0, 0.55);
   --panel: #1d2026;
   --border: rgba(255, 255, 255, 0.10);
   --foreground: #e6e8ec;

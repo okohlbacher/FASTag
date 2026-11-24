@@ -18,7 +18,7 @@ describe('map: param overlay vs CLI manifest', () => {
     expect(c).toContain('domain')
     expect(c).not.toContain('superkingdom')
   })
-  it('renders 155 parameters and hides 35: boilerplate, options the GUI drives itself, those removed in 1.14 and shortlist_defaults of 1.15.4', () => {
+  it('renders 155 parameters and hides 36: boilerplate, options the GUI drives itself, those removed in 1.14 and shortlist_defaults of 1.15.4', () => {
     // 1.10.0 added species_evidence (rendered) to the 1.9.0 set; 1.12.0 adds
     // 64 options (8 of them #17 -search_shifts), hidden until each has its GUI design, except
     // acquisition_check: its default refuses raw DIA, so the form offers warn/off.
@@ -50,7 +50,8 @@ describe('map: param overlay vs CLI manifest', () => {
     // post-1.13.1 adds shortlist_exact_only (msfragger gapped default off), hidden as experimental.
     // 1.14 removes shortlist_exact_only (failed its held-out test): the name stays, hidden, advanced since.
     // 1.16 adds census_ids_accept (command-line only), hidden.
-    expect(HIDDEN_PARAMS.length).toBe(35)
+    // 1.16 adds fasta_proteins, hidden: the GUI sets it to 3 whenever a filter database is given.
+    expect(HIDDEN_PARAMS.length).toBe(36)
     for (const n of ['resolved_out', 'tag_graph_out', 'resolve_score', 'resolve_threshold', 'resolve_max_evalue', 'resolve_join'])
       expect([...RENDERED, ...HIDDEN_PARAMS]).not.toContain(n)
     for (const n of ['terminus', 'subsume_tags']) expect(RENDERED).toContain(n)
@@ -58,11 +59,11 @@ describe('map: param overlay vs CLI manifest', () => {
     for (const n of ['tolerance_by_analyzer', 'fragment_tolerance_itms']) expect(RENDERED).toContain(n)
     for (const n of ['qc_out', 'census_score', 'census_sorted_out', 'delta_spectra_out', 'census_ids_accept', 'search_missed_cleavages', 'tmt_pseudo_filter', 'digest_quality', 'alkylation_tags_out', 'ion_series_hybrid', 'complement_probe', 'shortlist_protease', 'check_header_out'])
       expect(RENDERED).toContain(n)
-    for (const n of ['shortlist_exact_only', 'species_reagents', 'ion_series_photo', 'label_call_min_tags', 'progress', 'probe_input', 'dump_spectrum']) expect(HIDDEN_PARAMS).toContain(n)
+    for (const n of ['shortlist_exact_only', 'species_reagents', 'ion_series_photo', 'label_call_min_tags', 'progress', 'probe_input', 'dump_spectrum', 'fasta_proteins']) expect(HIDDEN_PARAMS).toContain(n)
     for (const n of manifest.params.map((p) => p.name).filter((n) => n.startsWith('label_discovery_'))) expect(HIDDEN_PARAMS).toContain(n)
     expect(RENDERED).toContain('acquisition_check')
     expect(PARAM_BY_NAME.get('acquisition_check')?.choices).toEqual(['refuse', 'warn', 'off'])
-    expect(manifest.params.length).toBe(190) // 1.15.5: 185 + shortlist_defaults, tolerance_by_analyzer, fragment_tolerance_itms; 1.16: + terminus, subsume_tags
+    expect(manifest.params.length).toBe(191) // 1.15.5: 185 + shortlist_defaults, tolerance_by_analyzer, fragment_tolerance_itms; 1.16: + terminus, subsume_tags, fasta_proteins
   })
   it('renders or hides every parameter of the manifest once (mzpeak_read_memory hidden)', () => {
     // In addition to the pinned counts above: every manifest parameter is

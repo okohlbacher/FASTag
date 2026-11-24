@@ -199,7 +199,7 @@ test('Open report… opens a delta table in Mass shifts', async ({ page }) => {
     ;(window as unknown as { __fastagE2E: { mock: { nextPickReport: string } } }).__fastagE2E.mock.nextPickReport = '/data/run01.delta.tsv'
   })
   await goTo(page, 'Results')
-  await page.getByRole('button', { name: 'Open a FASTag report…' }).click()
+  await page.getByRole('button', { name: 'Open report…' }).click()
   await expect(page.getByRole('tab', { name: 'Mass shifts' })).toHaveAttribute('aria-selected', 'true')
   await expect(page.getByRole('grid', { name: 'Mass-shift table' })).toHaveAttribute('aria-rowcount', '274')
   await expect(page.locator('.mg-stick')).not.toHaveCount(0)

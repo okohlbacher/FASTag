@@ -161,7 +161,8 @@ describe('run/batch orchestration', () => {
     // The kill missed: the run finished ok anyway. Cancel still means
     // "don't show me results".
     await emitDone(mock, 1, true)
-    await waitFor(() => expect(screen.getByRole('button', { name: /^Run \d+ remaining file/ })).toBeDefined())
+    // Released: the bar is idle again; with nothing left, Run says so (no inert Run 0).
+    await waitFor(() => expect(screen.getByRole('button', { name: 'All files run' })).toBeDefined())
     expect(mock.resultsQueryCalls).toHaveLength(0)
     expect(screen.getByText('1/1 done')).toBeDefined()
   })
@@ -253,7 +254,7 @@ describe('run/batch orchestration', () => {
     expect(SPECTRA[0].extensions).toEqual(expect.arrayContaining(['mzML', 'mzpeak', 'mgf', 'MGF']))
     const mock = installMockBridge()
     await renderApp(mock)
-    expect(screen.getByText('Spectra: mzML, mzPeak, MGF, Thermo .raw or timsTOF .d.zip (drop a .d folder)')).toBeDefined()
+    expect(screen.getByText('mzML, mzPeak, MGF, Thermo .raw or timsTOF .d.zip (drop a .d folder)')).toBeDefined()
     await pickSingle(mock, '/d/run.mgf')
     expect(outField().value).toBe('run')
     await click(runButton())
@@ -337,7 +338,8 @@ describe('run/batch orchestration', () => {
     await startBatch()
     await waitFor(() => expect(mock.runCalls).toHaveLength(1))
     await emitDone(mock, 1, true)
-    await waitFor(() => expect(screen.getByRole('button', { name: /^Run \d+ remaining file/ })).toBeDefined())
+    // Released: the bar is idle again; with nothing left, Run says so (no inert Run 0).
+    await waitFor(() => expect(screen.getByRole('button', { name: 'All files run' })).toBeDefined())
     expect(logText(container)).toContain('Could not show the results: species boom')
     expect(screen.getByText('1/1 done')).toBeDefined()
   })

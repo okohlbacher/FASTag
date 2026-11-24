@@ -17,7 +17,7 @@
 import { baseName, type Report } from '../digestReport'
 import type { SpeciesReport } from '../types'
 import { alkylationCall as alkylationReportCall } from '../digestReport'
-import { censusFacts, labelCall, proteaseCall, speciesCall, parseLog, tiedLeaders, unassessedKits } from '../results/calls'
+import { censusFacts, evidenceText, kitCallOf, labelCall, proteaseCall, speciesCall, parseLog, tiedLeaders, unassessedKits } from '../results/calls'
 import { buildOverview, keyValues, reportRank, shortlistFacts, topShift, triageFacts, type Tile } from '../results/overview'
 import { jobWords, type BatchJob } from './batch'
 
@@ -187,8 +187,12 @@ export function qcCells(text: string | null | undefined): Record<(typeof QC_COLU
   // could be assessed: the reporter_<kit> states tell the two apart. Not
   // assessable is no call, and stays out of the majority.
   const why = unassessedKits(kit, [...rows].map(([key, value]) => ({ key, value, desc: notes.get(key) ?? '' })))
-  const kitCell: Cell =
-    kit == null
+  // qc_version 3: the kit call (one kit, or the short list) in place of the
+  // compatible kits.
+  const call = kitCallOf((k) => (rows.has(k) ? { value: rows.get(k)!, desc: notes.get(k) ?? '' } : undefined))
+  const kitCell: Cell = call
+    ? { text: call.text, call: call.call, note: [evidenceText(call.evidence), call.note].filter(Boolean).join('; ') || 'the isobaric kit of the run' }
+    : kit == null
       ? none('isobaric kit row')
       : why
         ? { text: 'Not assessable', call: null, note: `no kit could be assessed${why.length ? `: ${why.join('; ')}` : ''}` }
@@ -415,7 +419,7 @@ export function buildSummary(jobs: readonly BatchJob[], data: ReadonlyMap<string
     const doneCells = (): Record<SummaryColumn, Cell> =>
       // Done without outputs (runJob.ts): the reply naming them never came.
       !j.outputs
-        ? none('—', 'the app did not learn where this run wrote its outputs; open them with Open a tags TSV…')
+        ? none('—', 'the app did not learn where this run wrote its outputs; open them with Open tags…')
         : d?.failed
           ? none('unreadable', `its reports could not be read: ${d.failed}`)
           : none('reading…', 'its reports are being read')

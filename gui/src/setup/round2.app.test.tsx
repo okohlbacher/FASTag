@@ -20,7 +20,8 @@ describe('Batch mode', () => {
     expect((runButton() as HTMLButtonElement).disabled).toBe(true)
     const bar = document.querySelector('.view-setup .runbar')!
     expect(bar.textContent).toContain('no files yet')
-    expect(bar.textContent).toContain('Add files or a folder to run.')
+    // What is missing is said once, for the batch, not for the single file.
+    expect(bar.querySelector('.still-missing')!.textContent).toBe('Still missing: spectra')
     expect(bar.textContent).not.toContain('Choose an input file to run.')
     // The output folder is in Inputs, under the file list.
     const input = screen.getByRole('region', { name: /^Inputs for / })

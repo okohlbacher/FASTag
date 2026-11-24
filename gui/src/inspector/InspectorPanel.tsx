@@ -9,7 +9,7 @@ import { HelpLink } from '../help/HelpLink'
 import { shellLine } from '../app/format'
 import { focusLater } from '../app/focus'
 import { INSTRUMENTS, presetText } from '../setup/presets'
-import type { Check, CheckFix, Detected, Level } from './checks'
+import { NOT_CHECKED_NO_PROBE, type Check, type CheckFix, type Detected, type Level } from './checks'
 import type { ParamValue } from '../ParamField'
 
 const LEVEL_WORD: Record<Level, string> = { block: 'Blocks the run', flag: 'Red flag', warn: 'Warning', info: 'Note' }
@@ -161,6 +161,20 @@ function focusNext(section: HTMLElement | null, heading: HTMLElement | null): vo
   )
 }
 
+/// Focus the first check that holds Run (Review input checks, RunBar): a
+/// block, else the first red flag not yet answered, else the heading; once
+/// the render that shows Inputs has happened.
+export function focusHeldCheck(): void {
+  focusLater(() => {
+    const s = document.querySelector<HTMLElement>('section.inspector')
+    return (
+      s?.querySelector<HTMLElement>('li.check-block button, li.check-block a') ??
+      s?.querySelector<HTMLElement>('li.check[data-unanswered] .check-actions button') ??
+      document.getElementById('inspector-h')
+    )
+  })
+}
+
 /// The pre-start checks of the Spectra card.
 export function PreStartPanel(p: PreStartPanelProps): JSX.Element {
   // The fix of a check names the preset; the detected line offers it only
@@ -190,7 +204,10 @@ export function PreStartPanel(p: PreStartPanelProps): JSX.Element {
         </div>
       )}
       {p.pending && <p className="hint">Checking the file with FASTag…</p>}
-      {p.notChecked && <p className="hint not-checked">{p.notChecked}</p>}
+      {/* A CLI without the probe is no problem to act on: its sentence sits
+          behind the (?) of the Instrument brief (NotCheckedHelp); a failed or
+          unreadable probe stays a line here. */}
+      {p.notChecked && p.notChecked !== NOT_CHECKED_NO_PROBE && <p className="hint not-checked">{p.notChecked}</p>}
       {p.detected && (
         <DetectedLine
           detected={p.detected}
@@ -284,13 +301,11 @@ export function RefusalBlock(p: RefusalProps): JSX.Element {
     p.windows != null ? ` (${p.windows} isolation windows${p.medianWidth != null ? `, median width ${p.medianWidth} Th` : ''})` : ''
   return (
     <div className="refusal" data-refusal="raw_dia">
+      {/* One short explanation and one command (the CLI's own sentence,
+          which says the same, is behind a disclosure in the banner). */}
       <p>
-        FASTag did not tag this file: it is raw DIA{scheme}. Each MS2 spectrum mixes several peptides and its precursor
-        is an isolation window, so tags would get wrong flanking masses. FASTag wrote no output.
-      </p>
-      <p>
-        Generate pseudo-DDA spectra with <strong>DIAspeXtract</strong> first (diaTracer also works for .d), then run FASTag
-        on the .pseudo.mzML file it writes.
+        FASTag did not tag this file: it is raw DIA{scheme}. Make pseudo-DDA spectra with <strong>DIAspeXtract</strong>{' '}
+        first (diaTracer for .d), then run FASTag on the .pseudo.mzML file.
       </p>
       {p.command && <CopyCommand argv={p.command} label="Copy DIAspeXtract command" />}
     </div>

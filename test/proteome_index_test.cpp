@@ -306,6 +306,88 @@ int main()
     std::cout << "8. parallel suffix array == serial over " << text.size() << " chars\n";
   }
 
+  // --- 9. -fasta_proteins: every filter hit locates, in its orientation ---
+  {
+    // FastaFilter decides that a row hits; proteinHits() names where. A hit
+    // the index cannot find would write '-' for a matching tag.
+    const char AAI[] = "ACDEFGHIKLMNPQRSTVWY";
+    std::vector<std::string> seqs;
+    for (int p = 0; p < 12; ++p)
+    {
+      std::string s;
+      for (int i = 0; i < 150; ++i) s += AAI[rng() % 20];
+      seqs.push_back(s);
+    }
+    seqs.push_back(seqs[3]);  // a duplicate: two proteins for its tags
+    const std::vector<std::pair<char, double>> fixed = {{'C', 57.021464}};
+    for (const double tol : {0.0, 0.04})
+    {
+      ProteomeIndex idx;
+      idx.build(entries(seqs), fixed, tol);
+      FastaFilter filt(true);
+      filt.load(entries(seqs));
+      filt.setMinLen(5);
+      if (tol > 0) filt.deriveCollapses(tol, fixed);
+      filt.build(5, 8);
+      size_t hits = 0, rev_hits = 0, lost = 0, wrong = 0;
+      for (int trial = 0; trial < 4000; ++trial)
+      {
+        const std::string& s = seqs[rng() % seqs.size()];
+        const size_t k = 5 + rng() % 4;
+        std::string tag;
+        if (trial % 3 == 2)
+          for (size_t i = 0; i < k; ++i) tag += AAI[rng() % 20];  // mostly absent
+        else
+          tag = s.substr(rng() % (s.size() - k), k);
+        if (trial % 2) std::reverse(tag.begin(), tag.end());
+        const FastaFilter::Hit h = filt.match(tag);
+        if (h == FastaFilter::Hit::NONE) continue;
+        ++hits;
+        const bool rev = h == FastaFilter::Hit::REVERSE;
+        rev_hits += rev;
+        std::vector<ProteomeIndex::ProteinHit> ph;
+        idx.proteinHits(tag, rev, {}, ph);
+        if (ph.empty()) { ++lost; continue; }
+        std::string want;
+        for (char c : tag) want += c == 'I' ? 'L' : c;
+        if (rev) std::reverse(want.begin(), want.end());
+        for (size_t j = 0; j < ph.size(); ++j)
+        {
+          const auto& x = ph[j];
+          if (j && ph[j - 1].protein >= x.protein) ++wrong;  // distinct, database order
+          std::string seg = idx.proteinText(x.protein).substr(x.start - 1, x.end - x.start + 1);
+          for (char& c : seg) if (c == 'I') c = 'L';
+          if (x.start < 1 || seg.size() < want.size() || seg.size() > 2 * want.size()) ++wrong;
+          else if ((tol == 0 || seg.size() == want.size()) && seg != want) ++wrong;
+        }
+      }
+      check(hits > 1000 && rev_hits > 300, "9. enough filter hits sampled at tol " + std::to_string(tol));
+      check(lost == 0, "9. " + std::to_string(lost) + " filter hits located nothing at tol " + std::to_string(tol));
+      check(wrong == 0, "9. " + std::to_string(wrong) + " protein hits at a wrong place or order");
+    }
+    // Orientation, first occurrence, targets before decoys, the cells.
+    ProteomeIndex idx;
+    auto es = entries({"MKAAACDEFGHAAACDEFGH", "WWHGFEDCWW", "PPCDEFGHPP"});
+    es[0].identifier = "rev_P0";
+    idx.build(es, {}, 0);
+    std::vector<ProteomeIndex::ProteinHit> ph;
+    idx.proteinHits("CDEFGH", false, {1, 0, 0}, ph);
+    check(ph.size() == 2 && ph[0].protein == 2 && ph[1].protein == 0, "9. target before decoy, forward only");
+    check(ph.size() == 2 && ph[1].start == 6 && ph[1].end == 11, "9. first occurrence, 1-based");
+    idx.proteinHits("CDEFGH", true, {1, 0, 0}, ph);
+    check(ph.size() == 1 && ph[0].protein == 1 && ph[0].start == 3 && ph[0].end == 8, "9. reversed only");
+    idx.proteinHits("CDEFGH", false, {}, ph);
+    check(ph.size() == 2 && ph[0].protein == 0, "9. database order without decoy flags");
+    const std::vector<std::string> genes = {"geneA", "geneB", ""};
+    check(dbProteinCells(idx, genes, ph, 3) == "rev_P0@6-11;P2@3-8\tgeneA;-\t2", "9. cells: " + dbProteinCells(idx, genes, ph, 3));
+    check(dbProteinCells(idx, genes, ph, 1) == "rev_P0@6-11\tgeneA\t2", "9. cells, first n");
+    check(dbProteinCells(idx, genes, {}, 3) == "-\t-\t0", "9. cells, none");
+    check(fastaGeneName("Chaperonin OS=Escherichia coli OX=83333 GN=groL PE=1 SV=2") == "groL", "9. GN=");
+    check(fastaGeneName("GN=abc") == "abc" && fastaGeneName("no gene here") == "" &&
+          fastaGeneName("XGN=abc def") == "", "9. GN= edge cases");
+    std::cout << "9. filter hits locate in their orientation; protein cells\n";
+  }
+
   if (failures == 0) std::cout << "proteome_index_test: all checks passed\n";
   return failures == 0 ? 0 : 1;
 }

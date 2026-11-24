@@ -5,10 +5,20 @@
 // issue, then Open issue draft (the issue form with title, id and kind),
 // Copy diagnostics (the same export JSON) and Mark as submitted. The saved
 // reports can be listed, revealed and deleted here and from About.
+//
+// It is a floating panel, not a modal: no scrim, and the app behind stays
+// usable (scroll, switch tabs, open another spectrum) while the form keeps
+// its text. Docked bottom-right by default (floating.ts); its title bar
+// drags it (Move, or Alt+arrow keys on the title bar, moves it by keyboard),
+// the corner handle resizes it (or its arrow keys), Collapse leaves the
+// title bar alone. Tab goes on into the app (no focus trap); F6 jumps
+// between the panel and the app; Esc acts only when focus is in the panel.
+// Retake screenshot captures the window again without the panel on it.
 
-import { useEffect, useLayoutEffect, useRef, useState, type JSX, type ReactNode } from 'react'
-import { useModal } from '../shell/useModal'
+import { useEffect, useLayoutEffect, useRef, useState, type JSX, type KeyboardEvent, type PointerEvent, type ReactNode } from 'react'
+import { IconChevron, IconClose } from '../icons'
 import { buildDraft, CONSENT_TEXT_VERSION, type ImageState } from './draft'
+import { arrow, BAR_H, BIG_STEP, clampRect, collapsedY, defaultRect, expandedAt, moveRect, resizeRect, STEP, viewport, type Layout, type Rect, type Remembered } from './floating'
 import { encodePng } from './image'
 import MarkupEditor from './MarkupEditor'
 import { SCRUB_TAGS } from './scrub'
@@ -220,10 +230,21 @@ interface Props {
   setText(f: (t: DraftText) => DraftText): void
   onSaved(): void
   onClose(): void
+  // Retake screenshot (useFeedback): false when it was cancelled.
+  onRetake(): Promise<boolean>
+  // Hidden while a retake captures the window.
+  retaking: boolean
+  // Bumped by a trigger while open: expand and take focus.
+  raised: number
+  layouts: Remembered
+  setLayout(layout: Layout, r: Rect): void
 }
 
-export default function FeedbackDialog({ session, text, setText, onSaved, onClose }: Props): JSX.Element {
+const clampTo = (v: number, lo: number, hi: number): number => Math.min(Math.max(v, lo), Math.max(lo, hi))
+
+export default function FeedbackDialog({ session, text, setText, onSaved, onClose, onRetake, retaking, raised, layouts, setLayout }: Props): JSX.Element {
   const box = useRef<HTMLDivElement>(null)
+  const bar = useRef<HTMLDivElement>(null)
   const [step, setStep] = useState<Step>(session ? 'compose' : 'reports')
   const [prev, setPrev] = useState<Step>('compose')
   const frozen = session?.frozen
@@ -243,33 +264,199 @@ export default function FeedbackDialog({ session, text, setText, onSaved, onClos
     else if (step === 'reports' && session) setStep(prev)
     else onClose()
   }
-  const onKeyDown = useModal(box, escape)
+  const onKeyDown = (e: KeyboardEvent<HTMLElement>): void => {
+    if (e.key !== 'Escape') return
+    e.preventDefault()
+    e.stopPropagation()
+    escape()
+  }
   // Escape with focus on nothing (a step's control that had it is gone, or
-  // WebKit, which does not focus a clicked button) still reaches the dialog.
+  // WebKit, which does not focus a clicked button) still reaches the panel
+  // when it was the last thing clicked; else it is the app's. F6 moves focus
+  // between the panel and the app.
   const escapeRef = useRef(escape)
   escapeRef.current = escape
+  const pointerInside = useRef(true)
+  const lastInside = useRef<HTMLElement | null>(null)
+  const lastOutside = useRef<HTMLElement | null>(null)
   useEffect(() => {
+    const usable = (el: HTMLElement | null): el is HTMLElement => !!el && el.isConnected && !el.closest('[hidden], [inert]')
+    const onDown = (e: Event): void => {
+      pointerInside.current = e.target instanceof Node && !!box.current?.contains(e.target)
+    }
+    const onFocus = (e: FocusEvent): void => {
+      const t = e.target
+      if (!(t instanceof HTMLElement) || t === document.body) return
+      if (box.current?.contains(t)) lastInside.current = t
+      else lastOutside.current = t
+    }
     const onKey = (e: globalThis.KeyboardEvent): void => {
-      if (e.key !== 'Escape' || e.defaultPrevented) return
       const a = document.activeElement
-      if (a && a !== document.body && box.current?.contains(a)) return
+      const inside = !!a && a !== document.body && !!box.current?.contains(a)
+      if (e.key === 'F6' && !e.altKey && !e.ctrlKey && !e.metaKey) {
+        e.preventDefault()
+        if (inside) {
+          const to = usable(lastOutside.current) ? lastOutside.current : document.querySelector<HTMLElement>('.feedback-btn')
+          to?.focus()
+        } else focusPanel()
+        return
+      }
+      if (e.key !== 'Escape' || e.defaultPrevented || inside) return
+      if ((a && a !== document.body) || !pointerInside.current) return
       e.preventDefault()
+      e.stopPropagation()
       escapeRef.current()
     }
-    window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
+    document.addEventListener('pointerdown', onDown, true)
+    document.addEventListener('focusin', onFocus)
+    // Capture: before the app's own Escape (useKeys), which would cancel a run.
+    window.addEventListener('keydown', onKey, true)
+    return () => {
+      document.removeEventListener('pointerdown', onDown, true)
+      document.removeEventListener('focusin', onFocus)
+      window.removeEventListener('keydown', onKey, true)
+    }
+    // focusPanel reads refs only.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   // A new step gets focus on its heading (the compose step on its title field).
+  const stepSel = step === 'compose' ? '#fb-title' : step === 'share' ? '#fb-share-h' : step === 'reports' ? '#fb-reports-h' : '#fb-markup-h'
+  const stepRef = useRef(stepSel)
+  stepRef.current = stepSel
   const firstStep = useRef(true)
   useEffect(() => {
     if (firstStep.current) {
       firstStep.current = false
       if (step === 'compose') return
     }
-    const sel = step === 'compose' ? '#fb-title' : step === 'share' ? '#fb-share-h' : step === 'reports' ? '#fb-reports-h' : '#fb-markup-h'
-    setTimeout(() => box.current?.querySelector<HTMLElement>(sel)?.focus())
+    setTimeout(() => box.current?.querySelector<HTMLElement>(stepSel)?.focus())
+    // stepSel follows step.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [step])
+
+  // ---- The floating panel: where it is, collapsed or not.
+  const layout: Layout = step === 'markup' ? 'wide' : 'compact'
+  const [vp, setVp] = useState(viewport)
+  useEffect(() => {
+    const on = (): void => setVp(viewport())
+    window.addEventListener('resize', on)
+    return () => window.removeEventListener('resize', on)
+  }, [])
+  const [rects, setRects] = useState<Remembered>(layouts)
+  const rect = clampRect(rects[layout] ?? defaultRect(layout, vp), vp)
+  const put = (r: Rect): void => {
+    setRects((x) => ({ ...x, [layout]: r }))
+    setLayout(layout, r)
+  }
+  // The top of the title bar while collapsed (null: expanded).
+  const [cy, setCy] = useState<number | null>(null)
+  const collapsed = cy !== null
+  const barH = (): number => bar.current?.getBoundingClientRect().height || BAR_H
+  const shownY = collapsed ? clampTo(cy, 0, vp.h - barH()) : rect.y
+  const [moveNote, setMoveNote] = useState('')
+
+  const moveBy = (from: Rect, fromCy: number | null, dx: number, dy: number): void => {
+    if (fromCy === null) put(moveRect(from, dx, dy, vp))
+    else {
+      put(moveRect(from, dx, 0, vp))
+      setCy(clampTo(Math.round(fromCy + dy), 0, vp.h - barH()))
+    }
+  }
+  const toggle = (): void => {
+    if (collapsed) {
+      put(expandedAt(rect, shownY, barH(), vp))
+      setCy(null)
+    } else setCy(collapsedY(rect, barH(), vp))
+  }
+  function focusPanel(): void {
+    const to = lastInside.current?.isConnected && !lastInside.current.closest('[hidden]') ? lastInside.current : box.current?.querySelector<HTMLElement>(stepRef.current)
+    ;(to ?? box.current)?.focus()
+  }
+  // A trigger while open (the button, the menu, the shortcut): expand and focus.
+  const firstRaise = useRef(raised)
+  useEffect(() => {
+    if (raised === firstRaise.current) return
+    setCy((c) => {
+      if (c !== null) put(expandedAt(rect, clampTo(c, 0, vp.h - barH()), barH(), vp))
+      return null
+    })
+    setTimeout(focusPanel)
+    // Runs per trigger only.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [raised])
+
+  // Dragging the title bar or the corner handle (pointer captured, so a
+  // fast drag does not lose it).
+  const drag = useRef<{ kind: 'move' | 'size'; px: number; py: number; r: Rect; cy: number | null } | null>(null)
+  const startDrag = (kind: 'move' | 'size') => (e: PointerEvent<HTMLElement>): void => {
+    if (e.button !== 0) return
+    if (kind === 'move' && e.target instanceof Element && e.target.closest('button:not(.fb-grip), input, select, textarea, a')) return
+    e.preventDefault()
+    e.currentTarget.setPointerCapture?.(e.pointerId)
+    drag.current = { kind, px: e.clientX, py: e.clientY, r: rect, cy: collapsed ? shownY : null }
+  }
+  const onDrag = (e: PointerEvent<HTMLElement>): void => {
+    const d = drag.current
+    if (!d) return
+    const dx = e.clientX - d.px
+    const dy = e.clientY - d.py
+    if (d.kind === 'move') moveBy(d.r, d.cy, dx, dy)
+    else put(resizeRect(d.r, dx, dy, vp))
+  }
+  const endDrag = (): void => {
+    drag.current = null
+  }
+  // Alt+arrow keys on the title bar (plain arrows on Move) move the panel;
+  // arrows on the corner handle resize it. Shift: a bigger step.
+  const onBarKey = (e: KeyboardEvent<HTMLElement>): void => {
+    const a = arrow(e.key)
+    const onGrip = e.target instanceof Element && !!e.target.closest('.fb-grip')
+    if (!a || e.ctrlKey || e.metaKey || !(e.altKey || onGrip)) return
+    e.preventDefault()
+    e.stopPropagation()
+    const k = e.shiftKey ? BIG_STEP : STEP
+    moveBy(rect, collapsed ? shownY : null, a.dx * k, a.dy * k)
+    setMoveNote(`Moved: ${Math.round(clampTo(rect.x + a.dx * k, 0, vp.w - rect.w))} px from the left, ${Math.round(clampTo(shownY + a.dy * k, 0, vp.h - (collapsed ? barH() : rect.h)))} px from the top.`)
+  }
+  const onSizeKey = (e: KeyboardEvent<HTMLElement>): void => {
+    const a = arrow(e.key)
+    if (!a || e.ctrlKey || e.metaKey) return
+    e.preventDefault()
+    e.stopPropagation()
+    const k = e.shiftKey ? BIG_STEP : STEP
+    const r = resizeRect(rect, a.dx * k, a.dy * k, vp)
+    put(r)
+    setMoveNote(`Size: ${r.w} by ${r.h} px.`)
+  }
+
+  // ---- Retake screenshot: a new capture of the window as it is now.
+  const [shotNote, setShotNote] = useState('')
+  const retakeBtn = useRef<HTMLButtonElement>(null)
+  const attempt = frozen?.attemptId
+  const firstAttempt = useRef(attempt)
+  const marksBefore = useRef(0)
+  useEffect(() => {
+    if (attempt === firstAttempt.current || !frozen) return
+    firstAttempt.current = attempt
+    const n = marksBefore.current
+    setImg({ image: frozen.image, removed: false, shapes: [] })
+    setShotNote(`New screenshot taken.${n ? ` The ${n === 1 ? 'mark' : `${n} marks`} on the old one ${n === 1 ? 'was' : 'were'} dropped.` : ''}`)
+    // A new attempt id is a new capture.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [attempt])
+  async function retake(): Promise<void> {
+    marksBefore.current = img.image ? img.shapes.length : 0
+    setShotNote('')
+    const ok = await onRetake()
+    if (!ok) setShotNote('Retake cancelled; the screenshot stays as it was.')
+  }
+  // Shown again after a retake: focus back on Retake screenshot.
+  const wasRetaking = useRef(false)
+  useEffect(() => {
+    if (wasRetaking.current && !retaking) retakeBtn.current?.focus()
+    wasRetaking.current = retaking
+  }, [retaking])
 
   const share = savedText?.share ?? text.share
   const exportNow = async (id: string, inc: Share): Promise<void> => {
@@ -372,10 +559,42 @@ export default function FeedbackDialog({ session, text, setText, onSaved, onClos
         ? `No screenshot: ${img.removedReason ?? 'removed'}.`
         : `No screenshot: ${f.error ?? 'the capture failed'}. The report is saved as text only.`
 
+  const title = session ? 'Feedback' : 'Feedback reports'
   return (
-    <div className="modal-backdrop fb-backdrop">
-      <div className="modal fb-dialog" role="dialog" aria-modal="true" aria-labelledby="fb-h" ref={box} onKeyDown={onKeyDown}>
-        <h2 id="fb-h">{session ? 'Feedback' : 'Feedback reports'}</h2>
+    <div
+      className={`fb-panel fb-dialog${collapsed ? ' collapsed' : ''}${layout === 'wide' ? ' wide' : ''}`}
+      role="dialog"
+      aria-modal="false"
+      aria-labelledby="fb-h"
+      data-feedback-ui=""
+      data-layout={layout}
+      ref={box}
+      tabIndex={-1}
+      hidden={retaking}
+      onKeyDown={onKeyDown}
+      style={{ left: rect.x, top: shownY, width: rect.w, height: collapsed ? undefined : rect.h }}
+    >
+      <div className="fb-bar" ref={bar} onPointerDown={startDrag('move')} onPointerMove={onDrag} onPointerUp={endDrag} onPointerCancel={endDrag} onKeyDown={onBarKey}>
+        <button type="button" className="icon-btn fb-grip" aria-label="Move panel" aria-describedby="fb-move-hint" title="Drag to move, or use the arrow keys">
+          <span aria-hidden="true">⠿</span>
+        </button>
+        <h2 id="fb-h">{title}</h2>
+        <span id="fb-move-hint" className="sr-only">
+          Arrow keys move the panel; Alt and the arrow keys do so anywhere on the title bar. F6 goes between the panel and the app.
+        </span>
+        <button type="button" className="icon-btn fb-collapse" aria-expanded={!collapsed} aria-controls="fb-body" aria-label={collapsed ? `Expand ${title}` : `Collapse ${title}`} title={collapsed ? 'Expand' : 'Collapse'} onClick={toggle}>
+          <span className={`chev${collapsed ? '' : ' open'}`}>
+            <IconChevron />
+          </span>
+        </button>
+        <button type="button" className="icon-btn fb-close" aria-label={`Close ${title}`} title="Close" onClick={onClose}>
+          <IconClose />
+        </button>
+      </div>
+      <p className="sr-only" role="status" aria-live="polite">
+        {moveNote}
+      </p>
+      <div className="fb-body" id="fb-body" hidden={collapsed}>
         <p className="fb-error" role="alert" aria-live="assertive">
           {error}
         </p>
@@ -447,20 +666,28 @@ export default function FeedbackDialog({ session, text, setText, onSaved, onClos
                     {captureLine}
                   </p>
                 )}
-                {img.image && (
-                  <div className="row">
-                    <button type="button" className="secondary small" onClick={() => setStep('markup')}>
-                      Mark up…
-                    </button>
-                    <button
-                      type="button"
-                      className="secondary small"
-                      onClick={() => setImg({ image: null, removed: true, removedReason: 'removed by the user', shapes: [] })}
-                    >
-                      Remove screenshot
-                    </button>
-                  </div>
-                )}
+                <div className="row fb-shot-actions">
+                  {img.image && (
+                    <>
+                      <button type="button" className="secondary small" onClick={() => setStep('markup')}>
+                        Mark up…
+                      </button>
+                      <button
+                        type="button"
+                        className="secondary small"
+                        onClick={() => setImg({ image: null, removed: true, removedReason: 'removed by the user', shapes: [] })}
+                      >
+                        Remove screenshot
+                      </button>
+                    </>
+                  )}
+                  <button type="button" className="secondary small" ref={retakeBtn} onClick={() => void retake()} disabled={retaking} title="Hides this panel and takes a new screenshot of the window">
+                    Retake screenshot
+                  </button>
+                </div>
+                <p className="hint" role="status" aria-live="polite">
+                  {shotNote}
+                </p>
                 <fieldset className="fb-include">
                   <legend>What is included when you share</legend>
                   {SHARE_ITEMS.map((s) => (
@@ -498,7 +725,7 @@ export default function FeedbackDialog({ session, text, setText, onSaved, onClos
               <button type="button" className="secondary" onClick={onClose}>
                 Close
               </button>
-              <button type="submit" disabled={busy}>
+              <button type="submit" className="primary" disabled={busy}>
                 {busy ? 'Saving…' : 'Save'}
               </button>
             </div>
@@ -538,7 +765,7 @@ export default function FeedbackDialog({ session, text, setText, onSaved, onClos
               </span>
             </label>
             <div className="row">
-              <button type="button" onClick={() => void openDraft()} disabled={!confirmed || !exported}>
+              <button type="button" className="primary" onClick={() => void openDraft()} disabled={!confirmed || !exported}>
                 Open issue draft
               </button>
               <button type="button" className="secondary" onClick={() => void copyDiagnostics()} disabled={!exported}>
@@ -578,6 +805,19 @@ export default function FeedbackDialog({ session, text, setText, onSaved, onClos
 
         {step === 'reports' && <Reports onBack={session ? () => setStep(prev) : onClose} backLabel={session ? 'Back' : 'Close'} />}
       </div>
+      {!collapsed && (
+        <button
+          type="button"
+          className="fb-resize"
+          aria-label="Resize panel"
+          title="Drag, or use the arrow keys, to resize"
+          onPointerDown={startDrag('size')}
+          onPointerMove={onDrag}
+          onPointerUp={endDrag}
+          onPointerCancel={endDrag}
+          onKeyDown={onSizeKey}
+        />
+      )}
     </div>
   )
 }

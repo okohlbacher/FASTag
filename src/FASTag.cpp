@@ -9,6 +9,8 @@
 #include "FASTagTool.h"
 #include "Terminus.h"
 
+#include <unordered_set>
+
 #ifdef FASTAG_MIMALLOC
 #include <mimalloc.h> // Windows: mimalloc with CRT redirection (CMakeLists.txt)
 #endif
@@ -29,6 +31,29 @@ namespace
   /// Thrown by the tagging loop at the first MS2 with an ion mobility per
   /// peak when -out_spectra is mzPeak, which cannot store it.
   struct IonMobilityRefused {};
+
+  /// -fasta_proteins writes a protein as its identifier only: warn once per
+  /// database (@p what) whose entries repeat an identifier, since a hit in
+  /// one of them cannot be told from one in another (the GUI does not align
+  /// such an identifier).
+  void warnRepeatedIdentifiers_(const std::vector<FASTAFile::FASTAEntry>& entries, const char* what)
+  {
+    std::unordered_set<std::string> seen;
+    seen.reserve(entries.size());
+    size_t repeated = 0;
+    const std::string* first = nullptr;
+    for (const auto& e : entries)
+    {
+      if (seen.insert(e.identifier).second) continue;
+      if (!first) first = &e.identifier;
+      ++repeated;
+    }
+    if (repeated == 0) return;
+    OPENMS_LOG_WARN << "-fasta_proteins: " << repeated << (repeated == 1 ? " entry" : " entries") << " of the " << what
+                    << " repeat an earlier identifier (first: " << *first << "); db_proteins names a protein by its "
+                    << "identifier only, so a hit in such an entry cannot be told from one in another entry of that "
+                    << "identifier." << std::endl;
+  }
 
 
   /// Directory holding the shipped digest data (protease models, mass-gap
@@ -414,6 +439,7 @@ TOPPFASTag::ExitCodes TOPPFASTag::main_(int, const char**)
     static const StreamRefusal stream_refusals[] = {
         {"fasta", nullptr},
         {"entrapment_fasta", nullptr},
+        {"fasta_proteins", nullptr},
         {"recon_out", nullptr},
         {"species_out", nullptr},
         {"taxdb", nullptr},
@@ -773,6 +799,21 @@ TOPPFASTag::ExitCodes TOPPFASTag::main_(int, const char**)
                         "give -fasta too." << std::endl;
     return ILLEGAL_PARAMETERS;
   }
+  // -fasta_proteins: the proteins (and positions) of each written -fasta hit.
+  const int fasta_proteins = getIntOption_("fasta_proteins");
+  if (fasta_proteins > 0 && !filtering)
+  {
+    OPENMS_LOG_ERROR << "-fasta_proteins names the -fasta proteins a tag matches; "
+                        "give -fasta too." << std::endl;
+    return ILLEGAL_PARAMETERS;
+  }
+  // Their locate indexes (the -recon_out one when it reads the same -fasta),
+  // gene names and decoy flags, per protein ordinal; the entrapment ones
+  // annotate efwd/erev rows.
+  FASTag::ProteomeIndex db_index_own, db_entrap_index;
+  const FASTag::ProteomeIndex* db_index = nullptr;
+  std::vector<std::string> db_genes, db_entrap_genes;
+  std::vector<char> db_decoy, db_entrap_decoy;
   if (entrap_on && lengths.size() > 1)
   {
     // q_db is one curve over the run's E-values. Pooling several seed
@@ -1211,6 +1252,8 @@ TOPPFASTag::ExitCodes TOPPFASTag::main_(int, const char**)
         // ---- 1.12 A: tag-end counting readers ----
         || handoff_on  // #5 protease check
         // ---- 1.12 D: tag-end counting readers ----
+        // -qc_out (qc_version 3): the label mass decides the isobaric kit.
+        || !getStringOption_("qc_out").empty()
         ;
   };
   const bool count_on = needCounting();
@@ -1308,7 +1351,7 @@ TOPPFASTag::ExitCodes TOPPFASTag::main_(int, const char**)
         {"digest_models", "-digest_out", digest_on},
         {"digest_tag_min", "-digest_out", digest_on},
         {"digest_background_share", "-digest_out", digest_on},
-        {"digest_window", "-digest_out or -label_out", count_on},
+        {"digest_window", "-digest_out, -label_out or -qc_out", count_on},
         {"digest_silac_min", "-label_out", label_on},
         {"glyco_out", "-glyco", glyco_flag},
         {"glyco_min_fraction", "-glyco", glyco_flag},
@@ -1876,6 +1919,38 @@ TOPPFASTag::ExitCodes TOPPFASTag::main_(int, const char**)
       OPENMS_LOG_INFO << "Entrapment: " << entrap.sequenceCount() << " sequences, "
                       << entrap.residueCount() << " residues, "
                       << entrap.indexedKeys() << " keys" << std::endl;
+      if (fasta_proteins > 0)
+      {
+        db_entrap_index.build(eentries, fixed_deltas, iso_tol);
+        warnRepeatedIdentifiers_(eentries, "-entrapment_fasta");
+        const std::vector<std::string> affixes = FASTag::Shortlist::defaultDecoyAffixes();
+        for (const auto& e : eentries)
+        {
+          db_entrap_genes.push_back(FASTag::fastaGeneName(e.description));
+          db_entrap_decoy.push_back(FASTag::Shortlist::isDecoy(e.identifier, affixes) ? 1 : 0);
+        }
+      }
+    }
+    if (fasta_proteins > 0)
+    {
+      // The -recon_out index serves when it was built from this -fasta (same
+      // fixed modifications and isobaric tolerance, database order).
+      if (place_on && recon_db == fasta && !alkylation_only_db && pindex.proteinCount() == entries.size())
+        db_index = &pindex;
+      else
+      {
+        db_index_own.build(entries, fixed_deltas, iso_tol);
+        db_index = &db_index_own;
+      }
+      warnRepeatedIdentifiers_(entries, "-fasta");
+      const std::vector<std::string> affixes = FASTag::Shortlist::defaultDecoyAffixes();
+      for (const auto& e : entries)
+      {
+        db_genes.push_back(FASTag::fastaGeneName(e.description));
+        db_decoy.push_back(FASTag::Shortlist::isDecoy(e.identifier, affixes) ? 1 : 0);
+      }
+      OPENMS_LOG_INFO << "Protein index: " << db_index->proteinCount() << " proteins"
+                      << (db_index == &pindex ? " (the reconciliation index)" : "") << std::endl;
     }
   }
 
@@ -3030,7 +3105,8 @@ TOPPFASTag::ExitCodes TOPPFASTag::main_(int, const char**)
     return CANNOT_WRITE_OUTPUT_FILE;
   }
   const bool want_proforma = getFlag_("proforma");
-  tsv << tagHeader_(want_proforma, p.per_residue_conf, !usi_prefix.empty(), hyp_on, ion_column, terminus_on);
+  tsv << tagHeader_(want_proforma, p.per_residue_conf, !usi_prefix.empty(), hyp_on, ion_column, terminus_on,
+                    fasta_proteins > 0);
   // -terminus: the run's termini (its terminal modifications, residues and
   // precursor isotope offsets).
   std::vector<std::string> mod_names = getStringList_("fixed_modifications");
@@ -3620,6 +3696,11 @@ TOPPFASTag::ExitCodes TOPPFASTag::main_(int, const char**)
     // -census: the reported rows (scratch reused per thread) and placements.
     static thread_local std::vector<FASTag::Census::TagView> ctags;
     ctags.clear();
+    // census 2: max_len and the residues of the reported tags (res_cover).
+    static thread_local std::vector<std::pair<double, double>> cres;
+    cres.clear();
+    bool cres_exact = true;  // census 3: every orientation known (res_cover_exact)
+    size_t cmax_len = 0;
     size_t cplaced = 0;
     const auto census_view = [](const FASTag::Tag& t) {
       FASTag::Census::TagView v;
@@ -3763,6 +3844,32 @@ TOPPFASTag::ExitCodes TOPPFASTag::main_(int, const char**)
       {
         ctags.push_back(census_view(t));
         if (!written) ++census_dropped;
+        cmax_len = std::max(cmax_len, t.n_res);
+        // census 3: a -fasta match in one orientation only tells the read's
+        // orientation (fwd: a y or z-dot read, rev: a b or c read; match()
+        // says FORWARD when both hit, so a forward hit is checked reversed
+        // too). Otherwise the tag is folded and res_cover is the lower bound
+        // (res_cover_exact 0). The mirror axis is the hypothesis' neutral
+        // mass less H2O plus the series' reversed-read offset, the tagger's
+        // precursor mass (charge <= 0 tagged as 2).
+        using Orient = FASTag::Census::Orientation;
+        const bool tfwd = std::strcmp(hit, "fwd") == 0, efwd = std::strcmp(hit, "efwd") == 0;
+        Orient orient = (tfwd || efwd) ? Orient::Forward
+                      : (std::strcmp(hit, "rev") == 0 || std::strcmp(hit, "erev") == 0) ? Orient::Reversed
+                                                                                        : Orient::Unresolved;
+        if (orient == Orient::Forward)
+        {
+          std::string rs = FASTag::baseSequence(t.seq);
+          std::reverse(rs.begin(), rs.end());
+          if ((efwd ? entrap : filt).match(rs) == FASTag::FastaFilter::Hit::FORWARD) orient = Orient::Unresolved;
+        }
+        if (orient == Orient::Unresolved) cres_exact = false;
+        static const double WATER_MONO = EmpiricalFormula("H2O").getMonoWeight();
+        const int zc = hy.charge > 0 ? hy.charge : 2;
+        const double axis = hy.mz * zc - zc * Constants::PROTON_MASS_U - WATER_MONO
+                          + FASTag::IonSeries::ionPair(t.ion_series).reversedOffset();
+        FASTag::Census::addResidueSpans(cres, t.nterm_mass, t.path_mz, t.step_res, t.charge, t.n_res, t.res_mass,
+                                        orient, axis);
       }
       if (!row_entrap) res.any_target = true;
       if (written)
@@ -3782,9 +3889,22 @@ TOPPFASTag::ExitCodes TOPPFASTag::main_(int, const char**)
           tpk.isotope = hy.iso;
           term = FASTag::Terminus::seriesCall(t, tpk, termini);
         }
+        // -fasta_proteins: the proteins of the database that matched, in the
+        // orientation the filter reported (it tries forward first).
+        std::string db_cells;
+        if (db_index)
+        {
+          const bool rev = hit[0] == 'r' || (hit[0] == 'e' && hit[1] == 'r');
+          const FASTag::ProteomeIndex& ix = row_entrap ? db_entrap_index : *db_index;
+          std::vector<FASTag::ProteomeIndex::ProteinHit> ph;
+          ix.proteinHits(FASTag::baseSequence(t.seq), rev, row_entrap ? db_entrap_decoy : db_decoy, ph);
+          db_cells = FASTag::dbProteinCells(ix, row_entrap ? db_entrap_genes : db_genes, ph,
+                                            static_cast<size_t>(fasta_proteins));
+        }
         const size_t row_start = buf.size();
         appendTagRow_(buf, t, spec.getNativeID(), hit, want_proforma, proforma_fixed,
-                     p.per_residue_conf, usi, hyp_on ? &hy : nullptr, ion_column, terminus_on ? &term : nullptr);
+                     p.per_residue_conf, usi, hyp_on ? &hy : nullptr, ion_column, terminus_on ? &term : nullptr,
+                     db_index ? &db_cells : nullptr);
         if (species_all) res.sbuf.append(buf, row_start, std::string::npos);
       }
       else
@@ -4177,6 +4297,9 @@ TOPPFASTag::ExitCodes TOPPFASTag::main_(int, const char**)
         crow.has_best = true;
         crow.best = ctags[best];
         crow.tag_cover = FASTag::Census::tagCoverOf(ctags);
+        crow.max_len = cmax_len;
+        crow.res_cover = FASTag::Census::residueCover(cres);
+        crow.res_cover_exact = cres_exact;
       }
       const size_t pre = FASTag::Census::bestTag(cpre);
       if (census_score_on && pre != FASTag::Census::NO_INDEX)
@@ -5160,6 +5283,7 @@ TOPPFASTag::ExitCodes TOPPFASTag::main_(int, const char**)
     }
     const FASTag::Census::Tally& tally = run_acc.f.census;
     std::vector<FD::Row> rows = FASTag::RunReport::runRows(run_meta, FASTag::RunReport::Emit::VERSIONED);
+    rows.push_back(FASTag::Census::maxTagsRow(p.max_tag_count, lengths.size()));  // census 2
     for (FD::Row& r : FASTag::Census::summaryRows(tally, static_cast<std::uint64_t>(n_total), subsampling))
       rows.push_back(std::move(r));
     if (census_ids_on)
@@ -5251,6 +5375,13 @@ TOPPFASTag::ExitCodes TOPPFASTag::main_(int, const char**)
                           << e.what() << "); it is skipped." << std::endl;
         }
       }
+    }
+    // The label mass of the tag ends (the -label_out call) decides the kit family.
+    if (count_on)
+    {
+      FD::TerminusCounter qc_tc(digest_settings.window);
+      for (const PerThread& pt : per_thread) qc_tc.merge(pt.digest);
+      qc->setLabelEvidence(FASTag::RunQC::labelEvidence(qc_tc, digest_settings));
     }
     std::vector<FD::Row> rows = FASTag::RunReport::runRows(run_meta, FASTag::RunReport::Emit::VERSIONED);
     for (FD::Row& r : qc->rows(subsampling)) rows.push_back(std::move(r));

@@ -41,6 +41,15 @@ on each side (`nterm_mass`, `cterm_mass`), the E-value (smaller is better) and, 
 it occurs. Filter by text, length, E-value or database hit; **Export shown rows…** saves what is
 shown.
 
+With a FASTA, the CLI option `-fasta_proteins <n>` (which the GUI sets to 3) also writes which
+proteins the tag occurs in and where: `db_proteins` lists up to n of them as
+`identifier@start-end` (1-based positions in the protein), `db_genes` their gene names (`GN=` in
+the FASTA header, `-` when there is none) and `db_protein_count` how many proteins hold the tag in
+all. Only matches in the orientation `fasta_hit` names count, target proteins come before decoys,
+and entrapment matches name proteins of the entrapment database. A protein is named by its
+identifier only, so give each entry its own: when entries repeat an identifier the run warns, and
+the Spectrum tab names such a protein with the positions but does not align the tags on it.
+
 ![The tags table](images/manual-03-tags.png)
 
 Select a row and press Enter (or **Open in Spectrum**) to see its evidence:
@@ -73,6 +82,27 @@ presence call: short tags cannot resolve close species, and "no call" does not m
 the runner-up model and FASTag's reasoning:
 
 ![Protease call](images/manual-08-digest.png)
+
+**Run QC** (`-qc_out`) names the isobaric kit of a labelled run (`reporter_kit`): the label
+mass on the tag ends decides TMT (229.163 Da) or TMTpro (304.207 Da), and the kit is the
+smallest one of that label that holds every reporter channel seen, so the PXD000001 run is
+`tmt6plex` (the original TMT 6-plex reagent, with 127C and 129C; the current one has 127N and
+129N, and both count as TMT 6-plex). Larger kits whose extra channels were not seen are not
+listed. When the label mass cannot decide (a Da fragment tolerance, too few tags),
+`reporter_kit_candidates` lists the smallest kit per label, for example `tmt10plex,tmt16plex`,
+marked `reporters_only`. When the label mass and the channels disagree (a TMT label, but a
+channel only TMTpro has), no kit is called: `reporter_kit` is `conflict`,
+`reporter_family_evidence` is `label_conflict`, and the report names both the label and the
+kits the channels allow.
+`reporter_channel_<label>` counts the MS/MS spectra with each reporter above the noise
+threshold (3x the spectrum's median peak), out of the spectra that can show it.
+
+**Identifiability triage** writes one row per MS/MS spectrum (the census). Besides the best tag it
+gives `max_len`, the longest tag of the spectrum, and `res_cover`, how many residues of the
+peptide the spectrum's tags cover together. A tag read on b ions is placed by its orientation
+when the `-fasta` match tells it; otherwise the tags are folded so that a stretch read on b and
+on y ions counts once, and `res_cover` is a lower bound (`res_cover_exact` 0). The run summary
+gives `max_tags`, the cap on the tags per spectrum.
 
 ## 4. Getting help
 

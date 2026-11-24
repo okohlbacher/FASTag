@@ -260,7 +260,7 @@ pub fn probe_with(
 // (path and mtime), not for every file the inspector looks at.
 static CAPS: Mutex<Option<(PathBuf, Option<SystemTime>, Capabilities)>> = Mutex::new(None);
 
-fn cached_capabilities(r: &Resolved) -> Capabilities {
+pub(crate) fn cached_capabilities(r: &Resolved) -> Capabilities {
     let mtime = std::fs::metadata(&r.bin).and_then(|m| m.modified()).ok();
     if let Ok(g) = CAPS.lock() {
         if let Some((p, t, c)) = g.as_ref() {
@@ -276,6 +276,14 @@ fn cached_capabilities(r: &Resolved) -> Capabilities {
         }
     }
     c
+}
+
+/// Whether the binary @p r resolves to lists @p opt (no dash) in its
+/// --helphelp (cached_capabilities). A --helphelp that failed or timed out
+/// lists nothing, so an optional flag gated on it is left out.
+pub(crate) fn cli_has(r: &Resolved, opt: &str) -> bool {
+    let c = cached_capabilities(r);
+    c.ok && c.options.iter().any(|o| o == opt)
 }
 
 #[tauri::command]

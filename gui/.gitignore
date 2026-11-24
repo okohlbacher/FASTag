@@ -44,3 +44,9 @@ e2e-tauri/results
 !src/fixtures/real/**/*.tsv
 # ...and the recorded 1.15 CLI outputs (gui/src/fixtures/cli-1.15/)
 !src/fixtures/cli-1.15/**/*.tsv
+# ...and the development CLI outputs the tests read (gui/src/fixtures/cli-dev/README.md)
+!src/fixtures/cli-dev/**/*.tsv
+# ...and the 1.12 CLI outputs and SDRF fixtures (tracked since before these
+# rules; listed so re-adding them needs no -f)
+!src/fixtures/cli-1.12/*.tsv
+!src/fixtures/sdrf/*.tsv

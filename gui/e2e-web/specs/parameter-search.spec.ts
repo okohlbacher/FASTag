@@ -44,3 +44,20 @@ test('parameter search contains focus, scrolls keyboard results and returns focu
   await page.getByRole('button', { name: 'Setup', exact: true }).click()
   await expect(dialog).toHaveCount(0)
 })
+
+test('with Help open, Cmd/Ctrl+K and / close Help and open the search, as the button does; Escape returns to the button', async ({ page }) => {
+  await openApp(page)
+  const trigger = page.getByRole('button', { name: /Search settings…/ })
+  const dialog = page.getByRole('dialog', { name: 'Search parameters' })
+  const pages = page.getByRole('navigation', { name: 'Help pages' })
+  for (const press of ['ControlOrMeta+k', '/']) {
+    await page.getByRole('button', { name: 'Help', exact: true }).click()
+    await expect(pages).toBeVisible()
+    await page.locator('body').press(press)
+    await expect(pages).toHaveCount(0)
+    await expect(dialog.getByRole('combobox')).toBeFocused()
+    await page.keyboard.press('Escape')
+    await expect(dialog).toHaveCount(0)
+    await expect(trigger).toBeFocused()
+  }
+})
