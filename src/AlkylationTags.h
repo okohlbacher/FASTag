@@ -61,6 +61,12 @@
 // votes abstain more often cannot win by that alone. A complementary-series
 // peak tells nothing more: for an exact alias the two readings predict the
 // same b and y ions except the intermediate ones aliasExplains() tests.
+// Codex7 review n1: for an exact alias (aliasNeedsDatabase(): the alias
+// reading's ion lies within the tolerance of the form's immonium ion; C + G
+// for Carbamidomethyl, A + C for Propionamide) even that rule cannot tell
+// the readings apart, so the run's tag-only call never names such a form:
+// aliasGuard() makes it no_call alias_needs_database with the candidate,
+// and Alkylation::combineCalls() names it when a placement call agrees.
 // Measured on PXD020401 and PXD003531 with an open Sage search: the CAM
 // immonium is in 49-61% of the spectra of CAM peptides and in 3.5-4.6% of
 // those of peptides without CAM; the NEM one in 46% of NEM peptides.
@@ -108,7 +114,9 @@ namespace FASTag::AlkylationTags
   /// pair's steps could be seen and are not; else it abstains (alkt_form
   /// alias_unconfirmed, new row). The abstentions are in the share's
   /// denominator (alkylation_tags_call share n, voted). The alias.<form>
-  /// descriptions say so.
+  /// descriptions say so. Codex7 review n1 (format 4 unreleased, amended):
+  /// alkt_form needs_database.<form>; a call of such a form is no_call
+  /// alias_needs_database with the row candidate after reason (aliasGuard()).
   inline constexpr int REPORT_FORMAT = 4;
 
   /// @brief The 13C - 12C spacing (Da) the alias check uses for isotope-shifted edges.
@@ -426,6 +434,38 @@ namespace FASTag::AlkylationTags
   bool immoniumConfirms(int k, const Alias& a, const std::vector<Alkylation::Form>& cands, const SpectrumPeaks& sp,
                         const Param& p);
 
+  /**
+    @brief Whether no spectrum can tell the C form of alias @p a from the alias reading (an exact alias at the run's tolerance).
+
+    The alias reading has an ion at the m/z of the form's C immonium ion
+    (immoniumMz()) less the alias's mass difference: for a pair X + Y the
+    internal a-type ion X + Y - CO + H+, for a 13C alias the other form's
+    immonium ion + 13C. When that ion lies within the tagger's per-peak
+    tolerance at both m/z (tolAt) of the immonium, it can fill the
+    immonium's window, so immoniumConfirms() cannot separate the readings:
+    C[Carbamidomethyl] = C + G and C[Propionamide] = A + C at every
+    tolerance; at 0.02 Da also N + N and M + P for C[Nethylmaleimide] (0.029
+    and 0.036 Da) and C[Carbamidomethyl]+13C for C[Carboxymethyl] (0.019 Da);
+    at 20 ppm (0.005 Da at 133 m/z) none of these three. A tag-only call
+    never names such a form (aliasGuard()).
+
+    @param[in] a the alias (of form a.form)
+    @param[in] cands the candidate forms
+    @param[in] p the Param whose frag_tol and tol_ppm give the tolerance
+    @return true when the alias needs a database to be ruled out
+  */
+  bool aliasNeedsDatabase(const Alias& a, const std::vector<Alkylation::Form>& cands, const Param& p);
+
+  /**
+    @brief Per candidate, its aliases that need a database (aliasNeedsDatabase()).
+    @param[in] al the aliases per candidate (aliasList())
+    @param[in] cands the candidate forms
+    @param[in] p the Param whose frag_tol and tol_ppm give the tolerance
+    @return one entry per candidate: "C+G:0.0000" entries as in aliases(), comma-separated, "-" when none
+  */
+  std::vector<std::string> databaseAliases(const std::vector<std::vector<Alias>>& al,
+                                           const std::vector<Alkylation::Form>& cands, const Param& p);
+
   /// @brief What aliasExplains() found.
   enum class AliasCheck
   {
@@ -463,6 +503,8 @@ namespace FASTag::AlkylationTags
     Param tol;                                     ///< frag_tol and tol_ppm of the shadow pass
     std::array<double, NUM_CANDIDATES> resolved_below{};  ///< per candidate, resolvedBelowMz() of its twin distance
     double resolved_below_mz = 0.0;                ///< the smallest of them: the run's report row
+    /// Per candidate, whether one of its aliases needs a database (aliasNeedsDatabase()).
+    std::array<bool, NUM_CANDIDATES> needs_database{};
   };
 
   /**
@@ -597,6 +639,25 @@ namespace FASTag::AlkylationTags
     @return the call
   */
   Alkylation::Call callTags(const Tally& t, const Alkylation::Settings& s, const VoteContext& ctx);
+
+  /**
+    @brief The tag-only call of a run: callTags() without naming a form only a database can confirm.
+
+    Release-gate decision (codex7 n1): the immonium rule cannot separate an
+    exact alias (aliasNeedsDatabase()): an unmodified GC or CG gives the
+    C[Carbamidomethyl] immonium m/z as its internal ion, and the absence of
+    the unmodified C immonium ion is weak evidence. So a call of a form with
+    such an alias (ctx.needs_database) becomes no_call alias_needs_database;
+    cls, top, binned, voted, abstained and share stay those of the call, so
+    the report names the candidate. Alkylation::combineCalls() names it when
+    the placement call on a database agrees. Every other call or no call is
+    returned unchanged; the vote counting (callTags()) is not touched.
+
+    @param[in] c the call of callTags()
+    @param[in] ctx the run's vote context
+    @return the guarded call
+  */
+  Alkylation::Call aliasGuard(const Alkylation::Call& c, const VoteContext& ctx);
 
   /**
     @brief The alkt_run, alkt_form and alkylation_tags_call rows of -alkylation_tags_out.

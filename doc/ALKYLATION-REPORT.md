@@ -42,6 +42,45 @@ share of 0.45, not 0.625. The two readings have one mass, so in format 3 such a
 vote counted for the reagent with nothing to tell it from the unmodified
 reading.
 
+**Format 4, aliases that need a database (codex7 review n1; format 4 is not
+released, so its definition is amended, not bumped).** The immonium rule above
+cannot separate an *exact* alias: C[Carbamidomethyl] = C + G and
+C[Propionamide] = A + C to the last digit, the pair's internal a-type ion has
+the reagent's immonium m/z, and the absence of the unmodified C immonium
+(76.022) is weak evidence. So a tag-only call never names such a form. A form
+needs a database when one of its aliases (`alias.<form>`) puts an ion within
+the tolerance of the form's C immonium ion: the alias reading's ion at that
+position is immoniumOf(alias mass) (a pair's internal a-ion, or the other
+form's immonium ion + 13C), and the two m/z must lie at most the tagger's
+per-peak tolerance at each of them apart (`AlkylationTags::aliasNeedsDatabase`).
+The new rows `alkt_form needs_database.<form>` list those aliases. From the
+masses:
+
+| form | aliases (distance, Da) | 20 ppm (2 x tol at the immonium m/z) | 0.02 Da (0.04) | 0.3 Da |
+|---|---|---|---|---|
+| Carbamidomethyl (immonium 133.043) | C+G 0.0000, C[Carboxymethyl]-13C 0.0193 | C+G (0.0053) | both | both |
+| Propionamide (147.059) | A+C 0.0000, S+S 0.0178 | A+C (0.0059) | both | both |
+| Nethylmaleimide (201.069) | N+N 0.0290, M+P 0.0364 | none (0.0080) | both | both and more |
+| Methylthio (122.009) | none | none | none | none |
+| Carboxymethyl (134.027) | C[Carbamidomethyl]+13C 0.0193 | none (0.0054) | it | it |
+| unmodified (76.022) | none | none | none | none |
+
+So at 20 ppm (the Characterize default) CAM and Propionamide need a database
+and NEM does not; at a 0.02 Da tolerance NEM and Carboxymethyl do too.
+
+When the tag call's winner needs a database, the tag call is `no_call` with
+reason `alias_needs_database` (`AlkylationTags::aliasGuard`); its counts and
+share stay as they were, and the new row `candidate` (after `reason`, in
+`alkylation_tags_call` and, when the call of the report is that no call, in
+`alkylation_call`) names the form, with its votes as `n`. The vote counting,
+the immonium rule and the abstentions are unchanged. With a database
+(`-fasta`, `-recon_fasta`, `-recon_proteome` or `-alkylation_proteome` with a
+shipped proteome or a FASTA) the combined call names the candidate when the
+placement call calls the same class (`source tags+placement`); a placement
+call of another class is `disagree`, no placement call keeps
+`alias_needs_database`. PXD000001 (Characterize, 20 ppm) is unaffected:
+Methylthio has no alias, and the call stays Methylthio, 52 of 69 votes (0.754).
+
 **Format 3 (review of 1.13, n1 to n3).** Three changes to the call, all in the
 reported counts:
 - a conflicted vote counts against the share: share = class votes /
@@ -189,11 +228,12 @@ shorter than `alk_run min_tag_length` is `tags_too_short` instead: no tag could
 place, which says nothing about the run's Cys spectra. The other database
 sources keep the 1.12 reasons (and the log warns there too).
 
-### `alkylation_call` (the call of the report; always these seven rows, this order)
+### `alkylation_call` (the call of the report; these seven rows, this order, and `candidate` before `source` on `alias_needs_database`)
 
 | key | value |
 |---|---|
 | `status`, `reagent`, `mass`, `share`, `voted`, `reason` | as in `alkylation_placement_call`, of the call named in `source`; `n` counts votes (tags) or binned spectra (placements), and the share's `n` (and `voted`) adds the conflicts |
+| `candidate` (format 4, reason `alias_needs_database` only) | the form the tags favour, which only a database can confirm; `n` its votes (`reagent` stays `-`) |
 | `source` | `tags`, `placement` or `tags+placement` |
 
 Rule (`Alkylation::combineCalls`):
@@ -201,12 +241,17 @@ Rule (`Alkylation::combineCalls`):
 - only one of the two calls: that one (`tags` or `placement`);
 - both call the same class: that call, with the tag call's counts
   (`tags+placement`);
+- the tags make `no_call alias_needs_database` (format 4) and the placements
+  call that class: that call, with the tag call's counts (`tags+placement`;
+  the `source` description says the placements confirm the candidate); no
+  placement call keeps the tag no call (`tags`);
 - both call, but different classes: `no_call`, reason `disagree`
   (`tags+placement`); each call is in its own section;
 - neither calls: the tag call's `no_call` and reason (`tags`).
 
-`reason` is one of `few_cys_spectra`, `ambiguous`, `unresolved_forms` (tags)
-or `disagree`; `tags_too_short` is only in `alkylation_placement_call`.
+`reason` is one of `few_cys_spectra`, `ambiguous`, `unresolved_forms` (tags),
+`alias_needs_database` (tags, format 4) or `disagree`; `tags_too_short` is only
+in `alkylation_placement_call`.
 
 The counts are in the report whether it calls or not: `alkt_run spectra`
 (voting spectra), the six `alkt_form <form>` vote rows and `residues.<form>`;
@@ -217,7 +262,10 @@ A reader that only wants the call reads `alkylation_call status`, `reagent`,
 
 ## Stability
 
-- Format 4 (release-gate reviews n1) changed from format 3: the row
+- Format 4 (release-gate reviews n1) changed from format 3: the rows
+  `alkt_form needs_database.<form>` after the `twin.<form>` rows and the reason
+  `alias_needs_database` with its row `candidate` after `reason` (codex7
+  review n1, before format 4 was released); the row
   `alkt_form alias_unconfirmed` after `unresolved`; votes it counts are no
   longer in `spectra` or the form rows, but they are in the tag call's share
   denominator (`share` n and `voted` of `alkylation_tags_call`, and of
@@ -729,6 +777,7 @@ gui/src/digestReport.ts names none of its sections and refuses it.
 | `residues.<form>` | C residues of the form in all counted tags (n: all C residues) |
 | `alias.<form>` | two-step sums over the run's alphabet and the C forms (`C+G:0.0000`, `A+M[Oxidation]:...`) and 13C-shifted other C forms (`C[Carbamidomethyl]+13C:0.0193`) within twice the edge tolerance of the C form, by distance, comma-separated, or `-` |
 | `twin.<form>` (format 2) | single steps that read like the C form: another C form (`C[Carboxymethyl]:0.9840`, `C` for unmodified) or a residue of the run's alphabet (`K[Name]:0.0004`), by distance, or `-`; any twin makes `forms_resolved` `no` |
+| `needs_database.<form>` (format 4) | the aliases of `alias.<form>` that put an ion within the tolerance of the form's C immonium ion (`C+G:0.0000`), so no spectrum tells them apart, or `-`; a tag call of such a form is `no_call alias_needs_database` |
 | `conflict` | votes whose tag holds two forms, or whose C edge an alias explains; they count against the share (n: `spectra`) |
 | `alias_rejected` (format 3) | of the conflicts, votes whose C edge the spectrum explains as an alias (or cannot test) (n: `conflict`) |
 | `unresolved` (format 3) | spectra that would vote with a C edge at or above its form's twin bound (`resolved_below_mz`); set aside, not in `spectra` or the share (n: `spectra` + this) |
@@ -737,7 +786,8 @@ gui/src/digestReport.ts names none of its sections and refuses it.
 ### `alkylation_tags_call`
 
 `status` (`call` / `no_call`), `reagent`, `mass`, `share`, `voted` (format 3),
-`reason` (`-`, `unresolved_forms`, `few_cys_spectra` or `ambiguous`). These are
+`reason` (`-`, `unresolved_forms`, `few_cys_spectra`, `ambiguous` or (format
+4) `alias_needs_database`, then the row `candidate`). These are
 the rows of `alkylation_call`, with the votes in place of the binned spectra:
 `share` is the leading form's votes over the votes plus the conflicts plus
 (format 4) the abstentions (`alkt_form alias_unconfirmed`), and its `n` and

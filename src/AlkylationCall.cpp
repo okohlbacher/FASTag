@@ -302,18 +302,27 @@ namespace FASTag::Alkylation
     Call out = tags;
     out.source = "tags";
     if (!placement) return out;
-    if (placement->called && !tags.called)
+    // Codex7 review n1: a tag candidate only a database can confirm
+    // (AlkylationTags::aliasGuard) is called when the placements agree.
+    const bool candidate = tags.called || tags.reason == ALIAS_NEEDS_DATABASE;
+    if (placement->called && !candidate)
     {
       out = *placement;
       out.source = "placement";
     }
-    else if (placement->called && tags.called)
+    else if (placement->called && candidate)
     {
       out.source = "tags+placement";
       if (placement->cls != tags.cls)
       {
         out.called = false;
         out.reason = "disagree";
+      }
+      else
+      {
+        out.called = true;
+        out.reason = "-";
+        out.confirmed = !tags.called;
       }
     }
     return out;
@@ -381,6 +390,11 @@ namespace FASTag::Alkylation
           : c.reason == "disagree"
               ? "No alkylation is called: the tags call " + name + ", the placements on the database call another class "
                 "(alkylation_tags_call, alkylation_placement_call)."
+          : c.reason == ALIAS_NEEDS_DATABASE
+              ? "No alkylation is called: the candidate is " + name + " (" + u(c.top) + " of " + u(c.voted) + " " + unit +
+                    "), but an alias of C[" + name + "] reads the same in every spectrum (alkt_form needs_database." + name +
+                    "), so the tags alone cannot confirm it; a placement call on a protein database (-fasta, -recon_fasta "
+                    "or -alkylation_proteome) that calls it too does."
           : c.reason == "few_cys_spectra"
               ? "No alkylation is called: " + u(c.binned) + " " + unit + " are fewer than " + u(s.min_spectra) + "."
               : "No alkylation is called: the leading class " + name + " has " + u(c.top) + " of " + u(c.voted) + " " + unit +
@@ -394,11 +408,18 @@ namespace FASTag::Alkylation
       add("voted", u(c.voted), u(c.binned),
           u(c.voted) + " " + unit + " are in the share: " + in_share);
       add("reason", c.reason, "-", "The first no-call rule that applies is " + c.reason + ".");
+      if (c.reason == ALIAS_NEEDS_DATABASE)
+        add("candidate", name, u(c.top),
+            "The candidate is " + name + ", with " + u(c.top) + " " + unit + ", a share of " + f3(c.share) +
+                "; it needs a protein database to confirm.");
     }
     if (with_source)
       add("source", c.source, "-",
           c.source == "placement"        ? "The call is that of the placements on the database; the tags make none."
-          : c.source == "tags+placement" ? "Both the tags and the placements on the database make a call."
+          : c.source == "tags+placement"
+              ? (c.confirmed ? "The placements on the database confirm the tags' candidate, which the tags alone do not call "
+                               "(alkylation_tags_call alias_needs_database)."
+                             : "Both the tags and the placements on the database make a call.")
                                          : "The call is that of the tags (no database, or the placements make none).");
     return r;
   }

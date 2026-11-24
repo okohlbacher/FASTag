@@ -3789,14 +3789,28 @@ mod tests {
         let cache = Arc::new(Shared::default());
         let cols = vec!["tag".to_string(), "evalue".to_string()];
         let before = std::fs::read(&p).unwrap();
+        // Codex7 review n5: on Windows the export's read handle shares no
+        // write (open_read), so the writer is refused with a sharing
+        // violation and no rewrite in place can happen while it reads; the
+        // test asserts that refusal there instead of unwrapping the open.
+        let rewritten = AtomicBool::new(false);
         let rewrite = || {
             use std::io::{Seek, SeekFrom, Write};
-            let mut f = std::fs::OpenOptions::new().write(true).open(&p).unwrap();
+            let mut f = match std::fs::OpenOptions::new().write(true).open(&p) {
+                Ok(f) => f,
+                Err(e) => {
+                    assert!(cfg!(windows), "a writer was refused off Windows: {e}");
+                    assert_eq!(e.raw_os_error(), Some(32), "not a sharing violation: {e}");
+                    return;
+                }
+            };
+            assert!(!cfg!(windows), "a writer opened the file the export reads (Windows)");
             // Same length: one data byte changed, the time moved on.
             let at = before.iter().position(|&b| b == b'\n').unwrap() as u64 + 1;
             f.seek(SeekFrom::Start(at)).unwrap();
             f.write_all(b"X").unwrap();
             f.set_modified(std::time::SystemTime::now() + std::time::Duration::from_secs(5)).unwrap();
+            rewritten.store(true, Ordering::SeqCst);
         };
         let done = AtomicBool::new(false);
         let progress = |k: usize, total: usize| {
@@ -3808,8 +3822,19 @@ mod tests {
         let r = export_to(&cache, &p, &ViewSpec::default(), &cols, &dest, ExportFormat::Tsv, &Cancel::default(), &progress);
         assert!(done.load(Ordering::SeqCst), "the rewrite ran");
         assert_eq!(std::fs::metadata(&p).unwrap().len(), before.len() as u64);
-        assert!(r.as_ref().is_err_and(|e| e.contains(CHANGED)), "{r:?}");
-        assert!(!std::path::Path::new(&dest).exists(), "a mixed export was committed");
+        if cfg!(windows) {
+            // The writer was refused: the source is unchanged and the export
+            // of it is committed whole.
+            assert!(!rewritten.load(Ordering::SeqCst));
+            assert_eq!(std::fs::read(&p).unwrap(), before, "the source changed although its writer was refused");
+            assert!(r.as_ref().is_ok_and(|&n| n > 0), "{r:?}");
+            assert!(std::path::Path::new(&dest).exists(), "the export of an unchanged source was not committed");
+            std::fs::remove_file(&dest).unwrap();
+        } else {
+            assert!(rewritten.load(Ordering::SeqCst), "the rewrite in place ran");
+            assert!(r.as_ref().is_err_and(|e| e.contains(CHANGED)), "{r:?}");
+            assert!(!std::path::Path::new(&dest).exists(), "a mixed export was committed");
+        }
         let dir = std::path::Path::new(&p).parent().unwrap();
         let name = std::path::Path::new(&dest).file_name().unwrap().to_string_lossy().to_string();
         assert!(!std::fs::read_dir(dir).unwrap().flatten().any(|e| {

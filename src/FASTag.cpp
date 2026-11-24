@@ -6481,8 +6481,10 @@ TOPPFASTag::ExitCodes TOPPFASTag::main_(int, const char**)
   if (alkylation_on)
   {
     const FASTag::AlkylationTags::Tally& tt = run_acc.d.alkt;
+    // Codex7 review n1: the tag call never names a form with an exact alias
+    // (aliasGuard); the placements on a database can confirm it.
     const FASTag::Alkylation::Call tag_call =
-        FASTag::AlkylationTags::callTags(tt, alk_settings, alkt_ctx);
+        FASTag::AlkylationTags::aliasGuard(FASTag::AlkylationTags::callTags(tt, alk_settings, alkt_ctx), alkt_ctx);
     const FASTag::Alkylation::Call call = FASTag::Alkylation::combineCalls(tag_call, alk_place ? &alk_call : nullptr);
     std::vector<FD::Row> rows = FASTag::RunReport::runRows(run_meta, FASTag::RunReport::Emit::VERSIONED);
     if (alk_place)
@@ -6517,7 +6519,11 @@ TOPPFASTag::ExitCodes TOPPFASTag::main_(int, const char**)
     OPENMS_LOG_INFO << "Alkylation: " << tt.spectra << " of " << tt.spectra_tagged << " spectra vote from their tags"
                     << (alk_place ? ", " + std::to_string(run_acc.d.alk.spectra) + " have a single-Cys placement" : std::string())
                     << ", " << (call.called ? std::string("call ") + FASTag::Alkylation::className(call.cls)
-                                            : "no_call " + call.reason)
+                                            : "no_call " + call.reason +
+                                                  (call.reason == FASTag::Alkylation::ALIAS_NEEDS_DATABASE
+                                                       ? std::string(" (candidate ") + FASTag::Alkylation::className(call.cls) +
+                                                             ", needs a protein database to confirm)"
+                                                       : std::string()))
                     << " (" << call.source << ") -> " << alkylation_out << std::endl;
   }
 
@@ -6528,7 +6534,8 @@ TOPPFASTag::ExitCodes TOPPFASTag::main_(int, const char**)
     FASTag::Alkylation::Settings as;
     as.min_spectra = static_cast<std::uint64_t>(getIntOption_("alkylation_min_spectra"));
     as.min_share = getDoubleOption_("alkylation_min_share");
-    const FASTag::Alkylation::Call call = FASTag::AlkylationTags::callTags(at, as, alkt_ctx);
+    const FASTag::Alkylation::Call call =
+        FASTag::AlkylationTags::aliasGuard(FASTag::AlkylationTags::callTags(at, as, alkt_ctx), alkt_ctx);
     std::vector<FD::Row> rows = FASTag::RunReport::runRows(run_meta, FASTag::RunReport::Emit::VERSIONED);
     for (FD::Row& r : FASTag::AlkylationTags::rows(at, call, as, alkt_cands, alkt_info)) rows.push_back(std::move(r));
     FASTag::PartFile part(alkylation_tags_out);
@@ -6541,7 +6548,10 @@ TOPPFASTag::ExitCodes TOPPFASTag::main_(int, const char**)
     OPENMS_LOG_INFO << "Alkylation (tags, no database): " << at.spectra << " of " << at.spectra_tagged
                     << " spectra vote, "
                     << (call.called ? std::string("call ") + FASTag::Alkylation::className(call.cls)
-                                    : "no_call " + call.reason)
+                                    : "no_call " + call.reason +
+                                          (call.reason == FASTag::Alkylation::ALIAS_NEEDS_DATABASE
+                                               ? std::string(" (candidate ") + FASTag::Alkylation::className(call.cls) + ")"
+                                               : std::string()))
                     << " -> " << alkylation_tags_out << std::endl;
   }
 

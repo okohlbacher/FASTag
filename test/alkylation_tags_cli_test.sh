@@ -30,6 +30,10 @@ alk() { tr -d '\r' < "$1" | awk -F'\t' '$1 != "run"'; }
 run() { "$BIN" -threads 2 "$@" > "$TMP/log" 2>&1 || { cat "$TMP/log" >&2; fail "FASTag $*"; }; }
 val() { tr -d '\r' < "$1" | awk -F'\t' -v s="$2" -v k="$3" '$1 == s && $2 == k { print $3; exit }'; }
 call() { if [ "$(val "$1" alkylation_tags_call status)" = call ]; then val "$1" alkylation_tags_call reagent; else echo "no_call:$(val "$1" alkylation_tags_call reason)"; fi; }
+# Codex7 review n1: a tag-only call never names a form with an exact alias at
+# the run's tolerance (CAM = C + G); it is no_call alias_needs_database and
+# the candidate row names the form. "SEC:Name" when so, else call().
+cand() { if [ "$(val "$1" "$2" reason)" = alias_needs_database ]; then echo "candidate:$(val "$1" "$2" candidate)"; else echo "other:$(val "$1" "$2" status):$(val "$1" "$2" reason)"; fi; }
 
 for f in Carbamidomethyl Nethylmaleimide unmodified mixed; do
   "$GEN" --write-mzml "$TMP/$f.mzML" "$f" 60 || fail "cannot write the synthetic $f mzML"
@@ -47,7 +51,14 @@ for f in Carbamidomethyl Nethylmaleimide unmodified; do
   [ ! -e "$TMP/$f.alkt.tsv.part" ] || fail "a .part file was left for $f"
   grep -q "Alkylation (tags, no database)" "$TMP/log" || fail "no log line for $f"
 done
-[ "$(call "$TMP/Carbamidomethyl.alkt.tsv")" = Carbamidomethyl ] || fail "CAM spectra: call $(call "$TMP/Carbamidomethyl.alkt.tsv")"
+[ "$(cand "$TMP/Carbamidomethyl.alkt.tsv" alkylation_tags_call)" = candidate:Carbamidomethyl ] \
+  || fail "CAM spectra: $(call "$TMP/Carbamidomethyl.alkt.tsv") (want no_call alias_needs_database, candidate Carbamidomethyl)"
+[ "$(val "$TMP/Carbamidomethyl.alkt.tsv" alkylation_tags_call reagent)" = - ] || fail "CAM spectra: the tag-only call names a reagent"
+[ "$(val "$TMP/Carbamidomethyl.alkt.tsv" alkt_form needs_database.Carbamidomethyl)" = "C+G:0.0000" ] \
+  || fail "20 ppm: needs_database.Carbamidomethyl '$(val "$TMP/Carbamidomethyl.alkt.tsv" alkt_form needs_database.Carbamidomethyl)'"
+for f in Nethylmaleimide Methylthio Carboxymethyl unmodified; do
+  [ "$(val "$TMP/Carbamidomethyl.alkt.tsv" alkt_form needs_database.$f)" = - ] || fail "20 ppm: needs_database.$f is not -"
+done
 [ "$(call "$TMP/Nethylmaleimide.alkt.tsv")" = Nethylmaleimide ] || fail "NEM spectra: call $(call "$TMP/Nethylmaleimide.alkt.tsv")"
 [ "$(call "$TMP/unmodified.alkt.tsv")" = none ] || fail "unmodified spectra: call $(call "$TMP/unmodified.alkt.tsv")"
 awk -v m="$(val "$TMP/Nethylmaleimide.alkt.tsv" alkylation_tags_call mass)" 'BEGIN { d = m - 125.047679; exit !(d < 1e-4 && d > -1e-4) }' \
@@ -82,7 +93,8 @@ for f in Carbamidomethyl Nethylmaleimide unmodified; do
   grep -q "Recon index" "$TMP/log" && fail "$f: a database was indexed"
   grep -q "^Alkylation: .* spectra vote from their tags, .*(tags) -> " "$TMP/log" || fail "$f: no -alkylation_out log line"
 done
-[ "$(val "$TMP/Carbamidomethyl.alk.tsv" alkylation_call reagent)" = Carbamidomethyl ] || fail "-alkylation_out CAM call"
+[ "$(cand "$TMP/Carbamidomethyl.alk.tsv" alkylation_call)" = candidate:Carbamidomethyl ] \
+  && [ "$(val "$TMP/Carbamidomethyl.alk.tsv" alkylation_call reagent)" = - ] || fail "-alkylation_out CAM: not a candidate without a database"
 [ "$(val "$TMP/Nethylmaleimide.alk.tsv" alkylation_call reagent)" = Nethylmaleimide ] || fail "-alkylation_out NEM call"
 [ "$(val "$TMP/unmodified.alk.tsv" alkylation_call reagent)" = none ] || fail "-alkylation_out unmodified call"
 # the tag-only alk_run: six rows, no placement section
@@ -109,7 +121,36 @@ run -in "$TMP/Carbamidomethyl.mzML" -out "$TMP/vm.tsv" "${COMMON[@]}" -variable_
   -alkylation_out "$TMP/vm.alk.tsv"
 [ "$(val "$TMP/vm.alk.tsv" alkt_form twin.Carbamidomethyl) $(val "$TMP/vm.alk.tsv" alkt_run forms_resolved)" = "- yes" ] \
   || fail "Oxidation (M) made a twin"
-[ "$(val "$TMP/vm.alk.tsv" alkylation_call reagent)" = Carbamidomethyl ] || fail "with Oxidation (M): no CAM call"
+[ "$(cand "$TMP/vm.alk.tsv" alkylation_call)" = candidate:Carbamidomethyl ] || fail "with Oxidation (M): no CAM candidate"
+
+# ---- codex7 review n1: a database confirms the candidate. A FASTA of the
+# synthetic peptides (one protein each); short tags (length 3, extension 1)
+# leave the C outside many tags, so the placement call under the default fixed
+# CAM is made and agrees: -alkylation_out names Carbamidomethyl (source
+# tags+placement). NEM spectra are called from the tags as before.
+{
+  i=0
+  for pep in LTSEFCYQEK DVHLPWCEFR SYELPDCQVK NFEECLTSVR TPEVCDHLWK QLSECYFTER VLDECFNPSK WYEPCLSVDR \
+             HTDFCEVLPK SPLECQYTWR FEDSCVLQPK TYLVCEDHFR; do
+    i=$((i + 1))
+    printf '>sp|SYN%02d|SYN%02d_TEST synthetic\n%s\n' "$i" "$i" "$pep"
+  done
+} > "$TMP/syn.fasta"
+run -in "$TMP/Carbamidomethyl.mzML" -out "$TMP/db.tsv" -tag_length 3 -extension 1 -fragment_tolerance 20 \
+  -fragment_tolerance_unit ppm -fasta "$TMP/syn.fasta" -alkylation_out "$TMP/db.alk.tsv"
+[ "$(val "$TMP/db.alk.tsv" alkylation_placement_call status) $(val "$TMP/db.alk.tsv" alkylation_placement_call reagent)" \
+  = "call Carbamidomethyl" ] || fail "synthetic FASTA: the placement call is not CAM ($(val "$TMP/db.alk.tsv" alkylation_placement_call reason))"
+[ "$(cand "$TMP/db.alk.tsv" alkylation_tags_call)" = candidate:Carbamidomethyl ] || fail "with a FASTA: the tag call names CAM"
+[ "$(val "$TMP/db.alk.tsv" alkylation_call status) $(val "$TMP/db.alk.tsv" alkylation_call reagent) $(val "$TMP/db.alk.tsv" alkylation_call source)" \
+  = "call Carbamidomethyl tags+placement" ] || fail "with a FASTA: the combined call does not name CAM from tags+placement"
+grep -q "call Carbamidomethyl (tags+placement)" "$TMP/log" || fail "with a FASTA: log line"
+run -in "$TMP/Nethylmaleimide.mzML" -out "$TMP/dbn.tsv" "${COMMON[@]}" -alkylation_out "$TMP/dbn.alk.tsv"
+[ "$(val "$TMP/dbn.alk.tsv" alkylation_call reagent) $(val "$TMP/dbn.alk.tsv" alkylation_call source)" = "Nethylmaleimide tags" ] \
+  || fail "NEM at 20 ppm is no longer called from the tags"
+grep -q "no_call alias_needs_database (candidate Carbamidomethyl, needs a protein database to confirm)" "$TMP/log" && fail "NEM log names CAM"
+run -in "$TMP/Carbamidomethyl.mzML" -out "$TMP/dbc.tsv" "${COMMON[@]}" -alkylation_out "$TMP/dbc.alk.tsv"
+grep -q "no_call alias_needs_database (candidate Carbamidomethyl, needs a protein database to confirm) (tags)" "$TMP/log" \
+  || fail "no database: the log does not name the candidate"
 
 # ---- report structure
 R="$TMP/Carbamidomethyl.alkt.tsv"
@@ -141,7 +182,7 @@ same "$TMP/t1.alk" "$TMP/cap.alk" "-max_tags/-max_evalue changed the alkylation 
 
 # ---- -alkylation_min_share applies (two thirds CAM, one third NEM)
 run -in "$TMP/mixed.mzML" -out "$TMP/mx.tsv" "${COMMON[@]}" -alkylation_tags_out "$TMP/mx.alkt.tsv"
-[ "$(call "$TMP/mx.alkt.tsv")" = Carbamidomethyl ] || fail "mixed (2:1) spectra: call $(call "$TMP/mx.alkt.tsv")"
+[ "$(cand "$TMP/mx.alkt.tsv" alkylation_tags_call)" = candidate:Carbamidomethyl ] || fail "mixed (2:1) spectra: $(call "$TMP/mx.alkt.tsv")"
 run -in "$TMP/mixed.mzML" -out "$TMP/mx2.tsv" "${COMMON[@]}" -alkylation_tags_out "$TMP/mx2.alkt.tsv" -alkylation_min_share 0.9
 [ "$(call "$TMP/mx2.alkt.tsv")" = "no_call:ambiguous" ] || fail "mixed with -alkylation_min_share 0.9: $(call "$TMP/mx2.alkt.tsv")"
 grep -q -- "-alkylation_min_share is only read for" "$TMP/log" && fail "warned about -alkylation_min_share with -alkylation_tags_out"
@@ -163,7 +204,7 @@ run -in "$TMP/Carbamidomethyl.mzML" -out "$TMP/da.tsv" -tag_length 4 -extension 
 # edges below 984 m/z resolve, and the run is called
 run -in "$TMP/Carbamidomethyl.mzML" -out "$TMP/p500.tsv" -tag_length 4 -extension 6 -fragment_tolerance 500 \
   -fragment_tolerance_unit ppm -alkylation_tags_out "$TMP/p500.alkt.tsv"
-[ "$(call "$TMP/p500.alkt.tsv")" = Carbamidomethyl ] || fail "500 ppm: $(call "$TMP/p500.alkt.tsv")"
+[ "$(cand "$TMP/p500.alkt.tsv" alkylation_tags_call)" = candidate:Carbamidomethyl ] || fail "500 ppm: $(call "$TMP/p500.alkt.tsv")"
 [ "$(val "$TMP/p500.alkt.tsv" alkt_run forms_resolved)" = no ] || fail "500 ppm: forms_resolved at 1000 m/z is not no"
 case "$(val "$TMP/p500.alkt.tsv" alkt_run resolved_below_mz)" in 984.01*) ;; *) fail "500 ppm: resolved_below_mz $(val "$TMP/p500.alkt.tsv" alkt_run resolved_below_mz)";; esac
 # the share's n is the votes plus the conflicts (review n3), and the voted row says so

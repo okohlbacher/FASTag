@@ -60,6 +60,7 @@ import hashlib
 import json
 import os
 import shutil
+import stat
 import sys
 import tarfile
 import tempfile
@@ -171,10 +172,31 @@ def own_entry(name, files):
     return name in files or name in ("MANIFEST.json", "species_call.tsv", MARKER) or name.startswith(".marker-")
 
 
+def own_kind(path, name, files):
+    """Whether the entry @p path (named @p name) is of the kind a fetch writes
+    there (codex7 review n3), by lstat, never through a link: a regular file,
+    or, for a pinned name (@p files), also a link to a regular file (a fetch
+    --from a folder links them; removing the folder removes only the link).
+    A directory, or a link to anything else, under a fetch's own name is not
+    a fetch's: replacing the folder would delete it recursively."""
+    st = os.lstat(path)
+    if stat.S_ISREG(st.st_mode):
+        return True
+    if name in files and stat.S_ISLNK(st.st_mode):
+        try:
+            return stat.S_ISREG(os.stat(path).st_mode)
+        except OSError:  # a dangling link
+            return False
+    return False
+
+
 def refuse_unowned(folder, files):
     """Refuses to replace @p folder unless it is a link (only the link goes),
     absent, or a real folder holding nothing but a fetch's own entries
-    (own_entry): anything else there is the user's and is never deleted."""
+    (own_entry), each of the kind a fetch writes (own_kind: a regular file,
+    or a pinned file's link): anything else there is the user's and is never
+    deleted. A directory named like a pinned file (tax_k7.taxdb/) is the
+    user's too."""
     if folder.is_symlink() or not folder.exists():
         return
     if not folder.is_dir():
@@ -183,6 +205,11 @@ def refuse_unowned(folder, files):
     if extra:
         raise SystemExit("%s holds files that are not a fetch's (%s); refused, nothing deleted (move them away, "
                          "or give --dest another folder)" % (folder, ", ".join(extra[:5]) + (" ..." if len(extra) > 5 else "")))
+    odd = sorted(e.name for e in os.scandir(folder) if not own_kind(os.path.join(folder, e.name), e.name, files))
+    if odd:
+        raise SystemExit("%s holds %s under a fetch's file name but not as a fetch writes it (a folder, or a link to "
+                         "no regular file); refused, nothing deleted (move them away, or give --dest another folder)"
+                         % (folder, ", ".join(odd[:5]) + (" ..." if len(odd) > 5 else "")))
 
 
 def inside(path, folder):

@@ -81,6 +81,10 @@ namespace FASTag::Alkylation
   /// 4 (release-gate review n1): the tag call's votes need the C immonium ion when
   /// an alias without a trace reads their C edge (alkt_form alias_unconfirmed,
   /// AlkylationTags::REPORT_FORMAT 4); the alkt_* sections gain that row.
+  /// Codex7 review n1 (still format 4, unreleased): a tag call never names a
+  /// form with an alias no spectrum separates (alkt_form needs_database.<form>):
+  /// it is no_call alias_needs_database with the row candidate after reason,
+  /// and the combined call names it only when the placement call agrees.
   inline constexpr int REPORT_FORMAT = 4;
 
   /**
@@ -320,7 +324,7 @@ namespace FASTag::Alkylation
   {
     bool called = false;         ///< a class was called
     int cls = -1;                ///< the call (called) or the leading class
-    std::string reason = "-";    ///< no call: few_cys_spectra, ambiguous, (shipped proteome) tags_too_short, (tags) unresolved_forms, (combined) disagree
+    std::string reason = "-";    ///< no call: few_cys_spectra, ambiguous, (shipped proteome) tags_too_short, (tags) unresolved_forms, alias_needs_database, (combined) disagree
     /// combineCalls() only: the call the result is taken from, "tags",
     /// "placement" or "tags+placement" (both agree, or disagree).
     std::string source = "-";
@@ -330,7 +334,14 @@ namespace FASTag::Alkylation
     /// of evidence against an alias (Tally::alias_unconfirmed); 0 otherwise.
     std::uint64_t abstained = 0;
     double share = 0.0;          ///< top / voted (0 when nothing is voted)
+    /// combineCalls() only: the call names a tag candidate that the tags
+    /// alone do not call (reason alias_needs_database), because the
+    /// placement call agrees.
+    bool confirmed = false;
   };
+
+  /// @brief The no-call reason of a tag call whose winner has an exact alias (AlkylationTags::aliasGuard()).
+  inline constexpr const char* ALIAS_NEEDS_DATABASE = "alias_needs_database";
   /**
     @brief Makes the call from the run totals.
 
@@ -369,6 +380,11 @@ namespace FASTag::Alkylation
       - only one of them calls: that call (source tags or placement);
       - both call the same class: that call (source tags+placement), with the
         tag call's counts;
+      - the tags make no_call alias_needs_database (a candidate only a
+        database can confirm) and the placements call that class: that call
+        (source tags+placement, Call::confirmed), with the tag call's counts;
+        no placement call keeps the no call (source tags), another class is
+        disagree;
       - both call, different classes: no_call, reason disagree (source
         tags+placement);
       - neither calls: the tag call's no_call and reason (source tags).

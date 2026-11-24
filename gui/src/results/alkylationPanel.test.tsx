@@ -57,6 +57,43 @@ describe('Digest tab: the alkylation call by its source', () => {
     expect(f2).not.toMatch(/not tested again/)
   })
 
+  // Codex7 review n1: a tag candidate with an exact alias (CAM = C + G) is
+  // named as a candidate that needs a protein database, with the hint to
+  // run again with one; with a database whose placements make no call, that.
+  const candidate = (source: string, extra = ''): string =>
+    [
+      'section\tkey\tvalue\tn\tdescription',
+      'alk_run\tformat\t4\t-\t-',
+      `alk_run\tdatabase_source\t${source}\t-\t-`,
+      'alkylation_call\tstatus\tno_call\t40\t-',
+      'alkylation_call\treagent\t-\t-\t-',
+      'alkylation_call\tmass\t-\t-\t-',
+      'alkylation_call\tshare\t0.9\t40\t-',
+      'alkylation_call\tvoted\t40\t40\t-',
+      'alkylation_call\treason\talias_needs_database\t-\t-',
+      'alkylation_call\tcandidate\tCarbamidomethyl\t36\t-',
+      'alkylation_call\tsource\ttags\t-\t-',
+      extra
+    ].join('\n')
+  it('a candidate only a database confirms: named, with the hint to add a FASTA or a shipped proteome', () => {
+    const t = block(candidate('none'))
+    expect(t).toMatch(/No callCandidate: Carbamidomethyl — needs a protein database to confirm/)
+    expect(t).toMatch(/To confirm it, run again with a FASTA \(Protein database\) or a shipped proteome \(Alkylation proteome\)/)
+    expect(t).not.toMatch(/ReagentCarbamidomethyl/)
+  })
+
+  it('a candidate the placements on a database do not confirm says so', () => {
+    const t = block(
+      candidate(
+        'bundled:human',
+        'alkylation_placement_call\tstatus\tno_call\t3\t-\nalkylation_placement_call\treason\tfew_cys_spectra\t-\t-'
+      )
+    )
+    expect(t).toMatch(/Candidate: Carbamidomethyl — needs a protein database to confirm/)
+    expect(t).toMatch(/The placements on the database do not confirm it \(too few spectra with one cysteine\)/)
+    expect(t).not.toMatch(/To confirm it, run again/)
+  })
+
   it('format 1 (placements only) keeps its words', () => {
     const t = block(ALKYLATION)
     expect(t).toMatch(/too few spectra with one cysteine/)

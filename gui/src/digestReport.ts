@@ -301,8 +301,13 @@ export interface AlkylationCall {
   /// in `voted`; 0 otherwise.
   abstained: number
   /// `few_cys_spectra`, `ambiguous`, `tags_too_short` (format 1),
-  /// `unresolved_forms` or `disagree` (format 2) on no_call.
+  /// `unresolved_forms` or `disagree` (format 2), `alias_needs_database`
+  /// (format 4) on no_call.
   reason?: string
+  /// Format 4, no_call `alias_needs_database`: the form the tags favour,
+  /// which an alias of the same mass leaves for a protein database to
+  /// confirm (the `candidate` row).
+  candidate?: string
   /// `none` (format 2: no database), `recon_fasta`, `fasta`, `proteome` or `bundled:<name>`.
   databaseSource?: string
   /// Format 2: where the call comes from, `tags`, `placement` or
@@ -360,9 +365,11 @@ export function alkylationCall(r: Report): AlkylationCall {
   // from the placements (source), and a format 1 report has no tag call.
   const fromTags = source === 'tags' || source === 'tags+placement'
   const abstained = fromTags && format != null && format >= 4 ? (num(value(r, 'alkt_form', 'alias_unconfirmed')) ?? 0) : 0
+  const candidate = reason === 'alias_needs_database' ? v('candidate') : undefined
   return {
     status,
     reagent,
+    ...(candidate && candidate !== '-' ? { candidate } : {}),
     mass: status === 'call' ? num(v('mass')) : null,
     share,
     binned,

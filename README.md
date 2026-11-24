@@ -825,7 +825,7 @@ vendored.
 | `-digest_flank2 <off\|auto>` | off | Experimental: where y1 is cut off or the P1 counts are too few, score the two-residue flank sums m(P2) + m(P1) instead |
 | `-digest_min_confidence <f>` / `-digest_calibration <file>` | 0 / shipped | Experimental: write the calibrated `p_correct` of a call and withhold one below the threshold (`low_confidence`); the shipped calibration is unfitted (p_correct 0.5) |
 | `-digest_quality <enzyme\|auto>` | none | Experimental (1.13): append missed-cleavage and non-specific-end measurements (section `quality`) to `-digest_out` for a model of the protease table (e.g. `Trypsin`) or for the report's own call (`auto`); see doc/DESIGN-digest.md, "Digestion quality" |
-| `-alkylation_out <file>` | none | Experimental: which reagent alkylated the cysteines, or none. **Needs no database**: the call is read off the C residues in the tags (the method of `-alkylation_tags_out`), with the counts per C form, and `no_call` with the reason when too few spectra vote. Give `-extension` for more votes (tested with `-tag_length 4 -extension 6`). With `-recon_fasta`, `-fasta` or an explicit `-alkylation_proteome` it also places single-Cys peptides on that database as a check (see Digest, label and mass-gap reports; format 2 in doc/ALKYLATION-REPORT.md) |
+| `-alkylation_out <file>` | none | Experimental: which reagent alkylated the cysteines, or none. **Needs no database**: the call is read off the C residues in the tags (the method of `-alkylation_tags_out`), with the counts per C form, and `no_call` with the reason when too few spectra vote. A reagent whose C has the mass of two residues (Carbamidomethyl = C + G, Propionamide = A + C) is only a candidate from the tags (`no_call` `alias_needs_database`, row `candidate`) and is called when the placements on a database agree. Give `-extension` for more votes (tested with `-tag_length 4 -extension 6`). With `-recon_fasta`, `-fasta` or an explicit `-alkylation_proteome` it also places single-Cys peptides on that database as a check (see Digest, label and mass-gap reports; format 2 in doc/ALKYLATION-REPORT.md) |
 | `-alkylation_proteome <name\|file>` | auto | Database `-alkylation_out` checks its tag call on, when nothing else places. `auto`: `-recon_fasta` or `-fasta` when given, else **no database** (before, `auto` meant the shipped human proteome). `human`, `mouse`, `yeast`, `ecoli` name the shipped UniProt reference proteomes (release 2026_04, reviewed entries, `share/FASTag/alkylation/<name>.fasta.gz`, CC BY 4.0), or give a FASTA file (`.gz` allowed); ignored with `-recon_fasta`. The shipped proteomes need `-tag_length 8` (human, mouse) or `-tag_length 7` (yeast, ecoli): shorter tags do not place on them, and the placement call is then `no_call` with reason `tags_too_short` (the tag call is unaffected). The report's `database_release` row names the release and the FASTA's sha256, which FASTag checks the file against (doc/ALKYLATION-REPORT.md, Shipped proteomes) |
 | `-alkylation_min_spectra <n>` / `-alkylation_min_share <f>` / `-alkylation_window <Da>` | 10 / 0.6 / 0 | Advanced: votes (or placed spectra) and share a call needs; placement bin window, read only with a database (0 = 0.02 Da on ppm runs, 0.5 Da on Da runs) |
 | `-alkylation_tags_out <file>` | none | Experimental (1.13), advanced; its held-out test passed at the margin (40 of 57 runs called, 37 right; see Validation), and unalkylated runs are rarely called: the database-free alkylation call. Every MS2 spectrum is tagged a second time with unmodified C and one alternative C edge per reagent; a spectrum votes when its best such tag (E <= 1e-4) holds a C inside the tag (use with `-extension`; measured with `-tag_length 4 -extension 6`; without extension few spectra vote), and the call uses `-alkylation_min_spectra` / `-alkylation_min_share`. Every other output is unchanged (format in doc/ALKYLATION-REPORT.md, section `-alkylation_tags_out`) |
@@ -1480,16 +1480,24 @@ options and their values.
   the C edge's own m/z). Two-step readings (C + G for Carbamidomethyl, an
   edge over a missing peak) and 13C-shifted ones are checked against the
   spectrum: a vote whose edge the spectrum explains so is a conflict, and
-  conflicts count against the share. The counts are in the report
-  whether or not it calls. With a database (`-recon_fasta`, `-fasta`, an
+  conflicts count against the share. A reagent whose C has the mass of two
+  residues to within the tolerance at its immonium ion (Carbamidomethyl =
+  C + G and Propionamide = A + C at any tolerance; also Nethylmaleimide and
+  Carboxymethyl at 0.02 Da, not at 20 ppm; `alkt_form needs_database.<form>`)
+  is never called from the tags alone, since no ion tells the readings apart:
+  the call is `no_call` `alias_needs_database` with the row `candidate`
+  naming it, and the placements on a database confirm it. Methylthio has no
+  such reading. The counts are in the report whether or not it calls. With a
+  database (`-recon_fasta`, `-fasta`, an
   explicit `-alkylation_proteome`, or another report that places tags) it
   also makes the 1.12 placement call: each MS2 spectrum votes once with its
   best tag placed on a peptide with exactly one C on the gap side, and the
   reagent mass is the gap plus the fixed C modification (on a labelled run
   the fixed terminal label is first taken off a gap on its side). The report's
-  call combines the two: one call alone is taken, two that agree are taken,
-  two that differ are `no_call` `disagree`. Every other output is the same
-  with and without it. Format 3: sections `alk_run`, `alk_cys` and
+  call combines the two: one call alone is taken, two that agree are taken
+  (also a tag candidate the placements call), two that differ are `no_call`
+  `disagree`. Every other output is the same
+  with and without it. Format 4: sections `alk_run`, `alk_cys` and
   `alkylation_placement_call` (with a database), `alkt_run`, `alkt_form`,
   `alkylation_tags_call` and `alkylation_call`; documented and versioned in
   doc/ALKYLATION-REPORT.md. Until this version the default `auto` placed on the

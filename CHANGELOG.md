@@ -2,6 +2,28 @@
 
 ## Unreleased
 
+- **Alkylation report: the tags alone never call a reagent whose cysteine has the mass of two residues.**
+  C[Carbamidomethyl] = C + G and C[Propionamide] = A + C exactly, and the immonium rule below cannot tell them
+  apart (the pair's internal a-type ion has the reagent's immonium m/z; the missing 76.022 ion of unmodified C is
+  weak evidence). A tag call whose winner has such an alias (one that puts an ion within the tolerance of the
+  form's C immonium ion: CAM and Propionamide at any tolerance, Nethylmaleimide (N + N 0.029, M + P 0.036 Da) and
+  Carboxymethyl (CAM + 13C 0.019 Da) at 0.02 Da but not at 20 ppm; new rows `alkt_form needs_database.<form>`) is
+  now `no_call` with the new reason `alias_needs_database`; the votes and share are reported as before and the new
+  row `candidate` names the form. With a database (`-fasta`, `-recon_fasta`, `-recon_proteome` or
+  `-alkylation_proteome`) whose placement call calls the same class, `alkylation_call` names it (`source
+  tags+placement`). The vote counting is unchanged; Methylthio has no alias and still calls from the tags:
+  PXD000001 (Characterize) Methylthio, 52 of 69 votes (0.754). The desktop app's Overview tile and Digest tab show
+  "Candidate: Carbamidomethyl — needs a protein database to confirm" with a hint to run again with a FASTA or a
+  shipped proteome. Report format 4 (unreleased) is amended, not bumped (doc/ALKYLATION-REPORT.md).
+- **Taxonomy fetch: a destination whose fetch-named entry is a directory is refused.** `tools/fetch_taxonomy_index.py`
+  replaced a destination folder holding only a fetch's names, so a directory named `tax_k7.taxdb` (or
+  `MANIFEST.json`) passed and was deleted recursively once the new fetch was published. Every entry under a
+  fetch's name must now be what a fetch writes (by `lstat`): a regular file, or for a pinned file a link to one;
+  anything else refuses the fetch and is left intact.
+- **Desktop app, Windows CI: the browser tests are required.** The export test that rewrites its source while it is
+  read now asserts, on Windows, that the writer is refused (the read handle shares no write) and the unchanged
+  export is committed, instead of panicking; a new required step runs the `browser::` tests and checks the two
+  share-mode tests by name, so a failure there fails the job.
 - **Alkylation report format 4: a vote that an alias reads as well needs evidence that tells the readings apart.** A C edge
   with the mass of two residues (C[Carbamidomethyl] = G + C, C[Propionamide] = A + C, C[Nethylmaleimide] ~ N + N)
   whose spectrum lost both middle peaks (in b and y, or in the peak selection) has nothing in the ladders to tell

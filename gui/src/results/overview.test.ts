@@ -7,7 +7,7 @@ import { alkylationCall, parseReport } from '../digestReport'
 import ALKYLATION_TAGS from '../fixtures/alkylation-tags.tsv?raw'
 import { CLI_CASES, logLines, type CliCase } from '../testing/cliFixtures'
 import { speciesFromTsv } from '../testing/speciesTsv'
-import { addNote, buildOverview, MIN_TAGGED, type Overview, type Tile } from './overview'
+import { addNote, alkylationReason, buildOverview, MIN_TAGGED, type Overview, type Tile } from './overview'
 
 function overviewOf(c: CliCase, extra: { instrument?: string | null } = {}): Overview {
   const reports = [parseReport(c.digest, `/d/${c.name}.digest.tsv`), parseReport(c.label, `/d/${c.name}.label.tsv`)]
@@ -425,6 +425,22 @@ describe('Overview model: the alkylation report', () => {
     expect(c.note).toMatch(/75% of 8 spectra whose tags read a cysteine, no database; experimental/)
     const u = tile(of(tagReport('no_call', 'unresolved_forms')), 'alkylation')
     expect(u.note).toMatch(/cannot tell two cysteine forms apart/)
+  })
+
+  // Codex7 review n1: a tag-only CAM call is no call alias_needs_database;
+  // the tile names the candidate and asks for a protein database.
+  it('a tag candidate with an exact alias: "Candidate: Carbamidomethyl", needs a protein database', () => {
+    const text = tagReport(
+      'no_call',
+      'alias_needs_database',
+      'alkylation_call\tcandidate\tCarbamidomethyl\t36\t-\nalkylation_call\tshare\t0.9\t40\t-\nalkylation_call\tvoted\t40\t40\t-'
+    )
+    const r = parseReport(text, '/d/a.alkylation.tsv')
+    expect(r.kind).toBe('alkylation')
+    const t = tile(of(text), 'alkylation')
+    expect(t).toMatchObject({ value: 'Candidate: Carbamidomethyl', tone: 'nocall' })
+    expect(t.note).toMatch(/^needs a protein database to confirm \(90% of 40 tag votes\); run again with a FASTA \(Protein database\) or a shipped proteome/)
+    expect(alkylationReason('alias_needs_database')).toMatch(/needs a protein database/)
   })
 
   // Release-gate review n4: 18 CAM + 2 other + 4 conflicts is a share of

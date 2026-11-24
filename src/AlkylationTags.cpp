@@ -402,6 +402,34 @@ namespace FASTag::AlkylationTags
     return tested || a.kind != Alias::Kind::PAIR;
   }
 
+  bool aliasNeedsDatabase(const Alias& a, const std::vector<Alkylation::Form>& cands, const Param& p)
+  {
+    if (a.form < 0 || static_cast<std::size_t>(a.form) >= cands.size()) return false;
+    // Codex7 review n1: the alias reading's ion at the immonium position is
+    // immoniumOf(a.mass): a pair's internal a-type ion (X + Y - CO + H+), or
+    // the other form's immonium + 13C (C + other + shift - CO + H+). A peak
+    // of it lies within its own tolerance of that m/z, the immonium window
+    // within the tolerance of the immonium m/z; both overlap when the two
+    // m/z are at most the sum apart, and the readings have one ion.
+    const double imm = immoniumMz(cands[static_cast<std::size_t>(a.form)]);
+    const double ion = immoniumOf(a.mass);
+    return std::fabs(ion - imm) <= tolAt(p, imm) + tolAt(p, ion);
+  }
+
+  std::vector<std::string> databaseAliases(const std::vector<std::vector<Alias>>& al,
+                                           const std::vector<Alkylation::Form>& cands, const Param& p)
+  {
+    std::vector<std::string> out;
+    for (const std::vector<Alias>& list : al)
+    {
+      std::vector<std::pair<double, std::string>> hits;
+      for (const Alias& a : list)
+        if (aliasNeedsDatabase(a, cands, p)) hits.emplace_back(a.dist, a.name);
+      out.push_back(joinHits(std::move(hits)));
+    }
+    return out;
+  }
+
   VoteContext voteContext(const Param& p, const std::vector<Alkylation::Form>& cands, const std::vector<Step>* alpha)
   {
     VoteContext ctx;
@@ -412,6 +440,8 @@ namespace FASTag::AlkylationTags
     // own two windows (addTag()).
     const double widest = p.tol_ppm ? 5000.0 * p.frag_tol * 1e-6 : p.frag_tol;
     ctx.aliases = aliasList(cands, widest, alpha);
+    for (std::size_t k = 0; k < ctx.needs_database.size() && k < ctx.aliases.size(); ++k)
+      for (const Alias& a : ctx.aliases[k]) ctx.needs_database[k] = ctx.needs_database[k] || aliasNeedsDatabase(a, cands, p);
     const std::vector<double> d = twinDistances(cands, alpha);
     ctx.resolved_below_mz = std::numeric_limits<double>::infinity();
     for (std::size_t k = 0; k < ctx.resolved_below.size() && k < d.size(); ++k)
@@ -461,6 +491,20 @@ namespace FASTag::AlkylationTags
   Alkylation::Call callTags(const Tally& t, const Alkylation::Settings& s, const VoteContext& ctx)
   {
     return callAt(t, s, ctx.cands, ctx.resolved_below_mz);
+  }
+
+  Alkylation::Call aliasGuard(const Alkylation::Call& c, const VoteContext& ctx)
+  {
+    Alkylation::Call out = c;
+    if (!c.called) return out;
+    for (std::size_t k = 0; k < ctx.cands.size() && k < ctx.needs_database.size(); ++k)
+      if (ctx.cands[k].cls == c.cls && ctx.needs_database[k])
+      {
+        out.called = false;
+        out.reason = Alkylation::ALIAS_NEEDS_DATABASE;
+        break;
+      }
+    return out;
   }
 
   std::array<std::uint32_t, NUM_CANDIDATES> formsInTag(const std::string& seq, const std::vector<Alkylation::Form>& cands)
@@ -824,6 +868,25 @@ namespace FASTag::AlkylationTags
                    : "One edge of this mass also reads as another C form or a residue (reading:distance in Da): the forms "
                      "cannot be told apart, so no call is made.");
     }
+    // Codex7 review n1: the aliases no spectrum separates from the form.
+    {
+      Param tp;
+      tp.tol_ppm = info.tol_ppm;
+      tp.frag_tol = info.tol_ppm ? info.tol_da * 1e3 : info.tol_da;  // edgeToleranceDa(): ppm at 1000 m/z
+      const std::vector<std::string> nd = databaseAliases(aliasList(cands, info.tol_da, alpha), cands, tp);
+      for (int k = 0; k < NUM_CANDIDATES; ++k)
+      {
+        const auto& f = cands[static_cast<std::size_t>(k)];
+        const std::string& v = nd[static_cast<std::size_t>(k)];
+        add("alkt_form", "needs_database." + f.name, v, "-",
+            v == "-" ? "No alias of C[" + f.name + "] gives an ion within the tolerance of its immonium ion at " +
+                           num(immoniumMz(f)) + " m/z: the tags alone can call " + f.name + "."
+                     : "These aliases of C[" + f.name + "] (reading:distance in Da) give an ion within the tolerance of its "
+                       "immonium ion at " + num(immoniumMz(f)) + " m/z (a pair's internal a-ion, or a 13C immonium ion), so "
+                       "no spectrum tells them apart: the tags alone do not call " + f.name +
+                       " (no_call alias_needs_database); the placements on a protein database can confirm it.");
+      }
+    }
     add("alkt_form", "conflict", u(t.conflict), u(t.spectra),
         u(t.conflict) + " voting spectra have a best tag (or tags of equal E-value) with C residues of two forms, or one "
                         "an alias explains; they count against the share.");
@@ -865,6 +928,10 @@ namespace FASTag::AlkylationTags
       add(sec, "status", "no_call", u(c.binned),
           c.reason == "unresolved_forms"
               ? std::string("No alkylation is called: the fragment tolerance does not resolve the C forms where the votes are.")
+          : c.reason == Alkylation::ALIAS_NEEDS_DATABASE
+              ? "No alkylation is called: the votes favour " + name + " (" + u(c.top) + " of " + u(c.voted) +
+                    " votes), but an alias of C[" + name + "] reads the same in every spectrum (alkt_form needs_database." +
+                    name + "); a protein database (-fasta, -recon_fasta or -alkylation_proteome) can confirm it."
           : c.reason == "few_cys_spectra"
               ? "No alkylation is called: " + u(c.binned) + " votes are fewer than " + u(s.min_spectra) + "."
               : "No alkylation is called: the leading class " + name + " has " + u(c.top) + " of " + u(c.voted) +
@@ -878,6 +945,10 @@ namespace FASTag::AlkylationTags
                   : "No spectrum votes.");
       add(sec, "voted", u(c.voted), u(c.binned), votedText(c));
       add(sec, "reason", c.reason, "-", "The first no-call rule that applies is " + c.reason + ".");
+      if (c.reason == Alkylation::ALIAS_NEEDS_DATABASE)
+        add(sec, "candidate", name, u(c.top),
+            "The candidate is " + name + ", with " + u(c.top) + " votes, a share of " + f3(c.share) +
+                "; it needs a protein database to confirm.");
     }
     return r;
   }

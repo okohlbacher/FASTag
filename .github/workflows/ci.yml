@@ -1832,6 +1832,23 @@ jobs:
           foreach ($t in 'a_committed_output_opens_after_a_restart_from_its_run_record', 'open_identities_use_the_plain_canonical_spelling') {
             if (-not ($log | Select-String -SimpleMatch "reveal::tests::$t ... ok")) { Write-Error "required test $t did not pass"; exit 1 }
           }
+      # Required (codex7 review n5): the browser module's reads and exports
+      # depend on the Windows share modes (open_read: no writer while a read
+      # holds the file). The whole module must pass, and each named test must
+      # report ok, so a rename or a filter that matches nothing fails; the
+      # full suite below stays informational.
+      - name: Backend browser tests (Windows)
+        working-directory: gui/src-tauri
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $log = cargo test --lib browser::
+          $code = $LASTEXITCODE
+          $log | Out-Host
+          if ($code -ne 0) { exit $code }
+          foreach ($t in 'an_export_whose_source_changes_while_it_is_read_is_not_committed', 'windows_reads_exclude_writers_but_not_renames') {
+            if (-not ($log | Select-String -SimpleMatch "browser::tests::$t ... ok")) { Write-Error "required test $t did not pass"; exit 1 }
+          }
       - name: Backend unit tests (Windows)
         working-directory: gui/src-tauri
         shell: pwsh

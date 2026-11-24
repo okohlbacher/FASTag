@@ -905,8 +905,10 @@ void TOPPFASTag::registerOptionsAndFlags_()
                       "Report which reagent alkylated the cysteines (or none). No database is needed: the call is "
                       "read off the C residues in the tags (a second tagging pass with unmodified C and one C edge "
                       "per reagent). With -recon_fasta, -fasta or -alkylation_proteome the placements of single-Cys "
-                      "peptides on that database are added. Votes per C form and the call; give -extension "
-                      "(tested with -tag_length 4 -extension 6), without it few spectra vote",
+                      "peptides on that database are added. A reagent whose C has the mass of two residues "
+                      "(Carbamidomethyl = C + G, Propionamide = A + C) is only a candidate from the tags (no_call "
+                      "alias_needs_database) and is called when those placements agree. Votes per C form and the call; "
+                      "give -extension (tested with -tag_length 4 -extension 6), without it few spectra vote",
                       false);
   setValidFormats_("alkylation_out", ListUtils::create<std::string>("tsv"));
   registerStringOption_("alkylation_proteome", "<name>", "auto",

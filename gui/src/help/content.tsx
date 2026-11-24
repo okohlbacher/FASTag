@@ -1072,6 +1072,18 @@ export const DIGEST: HelpPage = {
             <L to="param-alkylation_out">alkylation report</L>, a default report of Characterize a run, makes that
             call from the cysteine forms in the tags, with no database. With a shipped proteome named (human, mouse, yeast, E. coli) it also places tags on it as a check; that needs tags of 8 residues (human, mouse) or 7 (yeast, E. coli), so turning it on then raises Extension to 3 or 2 (not on a FASTA of your own, as the proteome or as Protein database, nor with another report that places tags).
           </p>
+          <p>
+            Some reagents leave a cysteine with the mass of two plain residues: carbamidomethyl C equals C + G and
+            propionamide C equals A + C, to the last digit. A tag that skips a missing peak reads an unmodified GC
+            or AC as the reagent, and no ion of the spectrum tells the two readings apart (the immonium ion of the
+            reagent has the mass of the pair&apos;s internal ion). So the tags alone never call such a reagent: the
+            report shows <strong>Candidate: Carbamidomethyl — needs a protein database to confirm</strong>. Run
+            again with a FASTA as <L to="param-fasta">Protein database</L> or a shipped proteome as{' '}
+            <L to="param-alkylation_proteome">Alkylation proteome</L>: when the placements of single-cysteine
+            peptides on it call the same reagent, the report calls it. Which forms need this depends on the
+            fragment tolerance (at 0.02 Da also N-ethylmaleimide and carboxymethyl, at 20 ppm not); methylthio has
+            no such reading and is called from the tags alone.
+          </p>
         </>
       )
     }

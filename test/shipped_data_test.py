@@ -572,6 +572,45 @@ try:
     except SystemExit:
         if text(os.path.join(uf, "my-notes.txt")) != "mine":
             fail("(h) fetch_taxonomy_index.publish deleted the user's file")
+    # Codex7 review n3: a directory named like a pinned file (or like the
+    # fetch's MANIFEST.json) passed the name check, and a successful
+    # publication then deleted it recursively. It is the user's: refused by
+    # the fetch and by publish(), and left intact.
+    for pinned in ("tax_k7.taxdb", "MANIFEST.json"):
+        dd = os.path.join(fx, "dir-" + pinned)
+        df = os.path.join(dd, "share-FASTag-taxonomy")
+        write(os.path.join(df, pinned, "inside.txt"), "kept")
+        write(os.path.join(df, "nodes.dmp"), "dumps")
+        r = run_fetch("--from", tgz, "--dest", dd)
+        if r.returncode == 0 or not os.path.isdir(os.path.join(df, pinned)) \
+                or text(os.path.join(df, pinned, "inside.txt")) != "kept" or text(os.path.join(df, "nodes.dmp")) != "dumps":
+            fail("(h) fetch_taxonomy_index.py replaced a destination folder whose %s is a directory: %s %s"
+                 % (pinned, r.stdout, os.listdir(df) if os.path.isdir(df) else "(gone)"))
+        try:
+            fti.refuse_unowned(fti.Path(df), man["files"])
+            fail("(h) fetch_taxonomy_index.refuse_unowned accepted a directory named %s" % pinned)
+        except SystemExit:
+            pass
+        pt = os.path.join(fx, "pub-dir-" + pinned)
+        write(os.path.join(pt, "tax_k7.taxdb"), "new")
+        try:
+            fti.publish(fti.Path(pt), fti.Path(df), man["files"])
+            fail("(h) fetch_taxonomy_index.publish replaced a folder whose %s is a directory" % pinned)
+        except SystemExit:
+            if text(os.path.join(df, pinned, "inside.txt")) != "kept":
+                fail("(h) fetch_taxonomy_index.publish deleted the directory named %s" % pinned)
+    if SYMLINK:
+        # ... and a link under a pinned name to a directory (not to a file).
+        ld = os.path.join(fx, "dirlink")
+        lf = os.path.join(ld, "share-FASTag-taxonomy")
+        tgt = os.path.join(fx, "dirlink-target")
+        write(os.path.join(tgt, "inside.txt"), "kept")
+        os.makedirs(lf)
+        os.symlink(tgt, os.path.join(lf, "tax_k7.taxdb"))
+        r = run_fetch("--from", tgz, "--dest", ld)
+        if r.returncode == 0 or not os.path.islink(os.path.join(lf, "tax_k7.taxdb")) \
+                or text(os.path.join(tgt, "inside.txt")) != "kept":
+            fail("(h) fetch_taxonomy_index.py replaced a folder whose tax_k7.taxdb links to a directory: %s" % r.stdout)
     # (b) publication fails (the new folder is no complete fetch once in
     # place): the earlier complete fetch is put back, unchanged.
     try:

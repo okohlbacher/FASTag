@@ -492,6 +492,40 @@ int main(int argc, char** argv)
       std::cerr << "checked " << form << ": " << t.votes[static_cast<std::size_t>(k)] << " of " << t.spectra << " (alias_rejected "
                 << t.alias_rejected << ")\n";
       check(t.votes[static_cast<std::size_t>(k)] >= 8, form + ": at least 8 of 12 spectra vote their form");
+      // Codex7 review n1: the run's tag-only call (aliasGuard) never names a
+      // form with an exact alias at 20 ppm (CAM = C + G, Propionamide = A + C);
+      // it names the candidate, and a placement call that agrees confirms it.
+      // NEM (N + N 0.029, M + P 0.036 Da), Methylthio, Carboxymethyl and
+      // unmodified C keep the call.
+      const A::Call g = AT::aliasGuard(c, ctx);
+      const bool exact = k == 0 || k == 1;
+      check(ctx.needs_database[static_cast<std::size_t>(k)] == exact, form + ": needs_database at 20 ppm");
+      if (exact)
+      {
+        check(!g.called && g.reason == A::ALIAS_NEEDS_DATABASE && g.cls == c.cls && g.top == c.top && g.voted == c.voted &&
+                  g.share == c.share,
+              form + ": tag-only no_call alias_needs_database, candidate kept: " + (g.called ? "call" : g.reason));
+        A::Call place;  // the placements on a database call the same form
+        place.called = true;
+        place.cls = c.cls;
+        place.top = place.binned = place.voted = 20;
+        place.share = 1.0;
+        const A::Call both = A::combineCalls(g, &place);
+        check(both.called && both.cls == c.cls && both.source == "tags+placement" && both.confirmed && both.top == c.top,
+              form + ": an agreeing placement call names it (tags+placement)");
+        A::Call other = place;
+        other.cls = A::METHYLTHIO;
+        const A::Call dis = A::combineCalls(g, &other);
+        check(!dis.called && dis.reason == "disagree", form + ": a placement call of another form disagrees");
+        A::Call none;  // the placements make no call
+        none.reason = "few_cys_spectra";
+        const A::Call alone = A::combineCalls(g, &none);
+        check(!alone.called && alone.reason == A::ALIAS_NEEDS_DATABASE && alone.source == "tags",
+              form + ": no placement call: still alias_needs_database");
+        check(!A::combineCalls(g, nullptr).called, form + ": no database: no call");
+      }
+      else
+        check(g.called && g.cls == c.cls && A::combineCalls(g, nullptr).called, form + ": tag-only call unchanged");
       if (k == 2)
       {
         // Control: the run's own alphabet (fixed CAM) never spells a NEM C, so
@@ -1166,6 +1200,90 @@ int main(int argc, char** argv)
       da.frag_tol = 0.02;
       check(!AT::immoniumConfirms(4, *iso, cands, pc, da), "0.02 Da: the CAM 13C immonium is in the window, not confirmed");
     }
+  }
+
+  // ---- codex7 review n1: which aliases need a database, from the masses.
+  //      The alias reading's ion at the immonium position (a pair's internal
+  //      a-ion, a 13C immonium) fills the form's immonium window when the two
+  //      m/z are at most the sum of their tolerances apart.
+  {
+    FASTag::Param ppm;  // 20 ppm: 0.0027 Da at the CAM immonium (133.043)
+    FASTag::Param da02;
+    da02.tol_ppm = false;
+    da02.frag_tol = 0.02;
+    FASTag::Param da005 = da02;
+    da005.frag_tol = 0.005;
+    FASTag::Param da03 = da02;
+    da03.frag_tol = 0.3;
+    const auto nd = [&](const FASTag::Param& p) { return AT::databaseAliases(AT::aliasList(cands, AT::edgeToleranceDa(p)), cands, p); };
+    const auto n20 = nd(ppm), n02 = nd(da02), n005 = nd(da005), n03 = nd(da03);
+    check(n20[0] == "C+G:0.0000" && n20[1] == "A+C:0.0000" && n20[2] == "-" && n20[3] == "-" && n20[4] == "-" && n20[5] == "-",
+          "20 ppm: only C+G (CAM) and A+C (Propionamide) need a database: " + n20[0] + " | " + n20[1] + " | " + n20[2] + " | " +
+              n20[4]);
+    check(n02[2] == "N+N:0.0290,M+P:0.0364" && n02[4] == "C[Carbamidomethyl]+13C:0.0193" && n02[3] == "-" &&
+              n02[1].find("S+S:0.0178") != std::string::npos,
+          "0.02 Da: NEM (N+N, M+P), Carboxymethyl (CAM+13C) and S+S need a database too: " + n02[2] + " | " + n02[4]);
+    check(n005[0] == "C+G:0.0000" && n005[2] == "-" && n005[4] == "-", "0.005 Da: NEM and Carboxymethyl separate: " + n005[2]);
+    check(n03[3] == "-", "0.3 Da: Methylthio has no alias at all: " + n03[3]);
+    const AT::VoteContext c20 = AT::voteContext(AT::shadowParam(ppm, cands), cands);
+    const AT::VoteContext c02 = AT::voteContext(AT::shadowParam(da02, cands), cands);
+    check(c20.needs_database[0] && c20.needs_database[1] && !c20.needs_database[2] && !c20.needs_database[3] &&
+              !c20.needs_database[4] && !c20.needs_database[5],
+          "20 ppm context: CAM and Propionamide need a database");
+    check(c02.needs_database[2] && c02.needs_database[4] && !c02.needs_database[3], "0.02 Da context: NEM and Carboxymethyl too");
+
+    // the guard on tallies: a CAM-dominated run and a Methylthio one
+    A::Settings st;
+    AT::Tally cam;
+    cam.spectra = 40;
+    cam.votes[0] = 36;
+    cam.votes[3] = 4;
+    const A::Call raw = AT::callTags(cam, st, c20);
+    const A::Call g = AT::aliasGuard(raw, c20);
+    check(raw.called && raw.cls == A::CARBAMIDOMETHYL, "the votes favour CAM (the vote counting is unchanged)");
+    check(!g.called && g.reason == "alias_needs_database" && g.cls == A::CARBAMIDOMETHYL && g.top == 36 && g.voted == 40,
+          "CAM-dominated run, no database: no_call alias_needs_database, candidate CAM 36 of 40");
+    AT::Tally mes;
+    mes.spectra = 40;
+    mes.votes[3] = 36;
+    mes.votes[0] = 4;
+    const A::Call gm = AT::aliasGuard(AT::callTags(mes, st, c20), c20);
+    check(gm.called && gm.cls == A::METHYLTHIO, "Methylthio-dominated run: still called from the tags alone");
+    AT::Tally nem;
+    nem.spectra = 40;
+    nem.votes[2] = 40;
+    check(AT::aliasGuard(AT::callTags(nem, st, c20), c20).called, "NEM at 20 ppm: called (its aliases separate)");
+    check(AT::aliasGuard(AT::callTags(nem, st, c02), c02).reason == "alias_needs_database", "NEM at 0.02 Da: needs a database");
+
+    // the report rows: needs_database.<form> and the candidate row
+    AT::ReportInfo info;
+    info.tol_da = AT::edgeToleranceDa(ppm);
+    info.tol_ppm = true;
+    const auto rows = AT::rows(cam, g, st, cands, info);
+    std::string nd_cam, nd_mes, cand, cand_n, reagent, reason, keys;
+    for (const auto& r : rows)
+    {
+      if (r.section == "alkt_form" && r.key == "needs_database.Carbamidomethyl") nd_cam = r.value;
+      if (r.section == "alkt_form" && r.key == "needs_database.Methylthio") nd_mes = r.value;
+      if (r.section != "alkylation_tags_call") continue;
+      keys += (keys.empty() ? "" : ",") + r.key;
+      if (r.key == "candidate") { cand = r.value; cand_n = r.n; }
+      if (r.key == "reagent") reagent = r.value;
+      if (r.key == "reason") reason = r.value;
+    }
+    check(nd_cam == "C+G:0.0000" && nd_mes == "-", "rows needs_database: " + nd_cam + " / " + nd_mes);
+    check(keys == "status,reagent,mass,share,voted,reason,candidate" && cand == "Carbamidomethyl" && cand_n == "36" &&
+              reagent == "-" && reason == "alias_needs_database",
+          "alkylation_tags_call names the candidate: " + keys + " " + cand);
+    const auto crows = A::callRows("alkylation_call", A::combineCalls(g, nullptr), st, forms, "votes", true);
+    std::string ckeys, ccand;
+    for (const auto& r : crows)
+    {
+      ckeys += (ckeys.empty() ? "" : ",") + r.key;
+      if (r.key == "candidate") ccand = r.value;
+    }
+    check(ckeys == "status,reagent,mass,share,voted,reason,candidate,source" && ccand == "Carbamidomethyl",
+          "alkylation_call names the candidate: " + ckeys);
   }
 
   if (failures)

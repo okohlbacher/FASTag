@@ -2,7 +2,7 @@ import { useState, type JSX, type ReactNode } from 'react'
 import SequenceLogo, { LogoLegend } from './SequenceLogo'
 import { HelpButton, HelpLink } from './help/HelpLink'
 import ReportHeader from './results/ReportHeader'
-import { alkylationReason } from './results/overview'
+import { alkylationReason, CANDIDATE_HINT, CANDIDATE_NOTE } from './results/overview'
 import { labelCall } from './results/calls'
 import {
   alkylationCall,
@@ -616,7 +616,11 @@ function Alkylation({ report }: { report: Report }): JSX.Element {
       <Heading id="dg-alk" title="Alkylation" report={report} help="digest-gaps" />
       <dl className="stats">
         <Stat label={c.status === 'call' ? 'Reagent' : 'No call'} big>
-          {c.status === 'call' ? reagentOf(c.reagent) : alkylationReason(c.reason, c.source)}
+          {c.status === 'call'
+            ? reagentOf(c.reagent)
+            : c.reason === 'alias_needs_database'
+              ? CANDIDATE_NOTE(c.candidate ?? 'a reagent')
+              : alkylationReason(c.reason, c.source)}
         </Stat>
         {c.binned != null && <Stat label={fromTags ? 'Votes from tags' : 'Spectra with one cysteine'}>{fmt(c.binned)}</Stat>}
         {c.share != null && c.status === 'call' && <Stat label="Share">{pct(c.share)}</Stat>}
@@ -627,6 +631,15 @@ function Alkylation({ report }: { report: Report }): JSX.Element {
         )}
         {db && <Stat label="Database">{db}</Stat>}
       </dl>
+      {c.reason === 'alias_needs_database' && (
+        <p className="hint" data-testid="alk-candidate-hint">
+          {c.candidate ?? 'This reagent'}&apos;s cysteine has the mass of two residues (carbamidomethyl C = C + G,
+          propionamide C = A + C), so no spectrum tells them apart without a protein database.{' '}
+          {c.databaseSource && c.databaseSource !== 'none'
+            ? `The placements on the database do not confirm it (${alkylationReason(p?.reason)}).`
+            : `To confirm it, ${CANDIDATE_HINT}.`}
+        </p>
+      )}
       <p className="hint">
         {c.source === 'tags'
           ? tagTested(c.format)

@@ -879,10 +879,19 @@ export function alkylationReason(reason: string | undefined, source?: string): s
       return 'the fragment tolerance cannot tell two cysteine forms apart'
     case 'disagree':
       return 'the tags and the placements on the database call different reagents'
+    case 'alias_needs_database':
+      return 'the reagent the tags favour has the mass of two residues, so it needs a protein database to confirm'
     default:
       return reason ? reason.replace(/_/g, ' ') : 'no reason given'
   }
 }
+
+/// Codex7 review n1: what the Overview tile and the Digest panel say of a
+/// tag candidate only a protein database can confirm (no_call
+/// alias_needs_database).
+export const CANDIDATE_NOTE = (name: string): string => `Candidate: ${name} — needs a protein database to confirm`
+export const CANDIDATE_HINT =
+  'run again with a FASTA (Protein database) or a shipped proteome (Alkylation proteome): its placements confirm the candidate'
 
 /// The tile of an alkylation report (-alkylation_out): its call or its no
 /// call with the reason; too short tags offer the run with extension 3.
@@ -913,6 +922,18 @@ function alkylationReportTile(c: AlkylationReport, params: Record<string, unknow
       tone: 'call',
       note: `${c.share != null ? `${pct(c.share)} of ` : ''}${counted}; ${fromTags ? 'experimental' : 'not validated'}`
     }
+  // Codex7 review n1: the tags favour a form whose C reads like two residues
+  // (CAM = C + G): named as the candidate only, to confirm with a database.
+  if (c.reason === 'alias_needs_database') {
+    const name = c.candidate ?? 'a reagent'
+    const placed = c.databaseSource != null && c.databaseSource !== 'none'
+    return {
+      ...base,
+      value: `Candidate: ${name}`,
+      tone: 'nocall',
+      note: `needs a protein database to confirm${c.share != null ? ` (${pct(c.share)} of ${fmt(c.voted)} tag votes)` : ''}; ${placed ? `the placements on the database do not confirm it (${alkylationReason(c.placement?.reason)})` : CANDIDATE_HINT}`
+    }
+  }
   // Too short tags for the proteome: the call's reason (format 1, where it is
   // the placement call), or the placement call's in format 2, where the
   // report's call is then the tag call's no call (neither calls).
